@@ -425,6 +425,42 @@ async function seedReceiving(): Promise<void> {
   );
 }
 
+/**
+ * Backfill idempotente: garante que todo ReceiptLine confirmado (inclusive
+ * os criados diretamente por este seed, ou por sessoes anteriores antes do
+ * InventoryMovement existir) tenha exatamente um InventoryMovement
+ * RECEIPT_IN. `inventoryMovement: { is: null }` so casa ReceiptLines que
+ * ainda nao tem o movimento — seguro rodar de novo a qualquer momento.
+ */
+async function backfillInventoryMovements(): Promise<void> {
+  const pendingLines = await prisma.receiptLine.findMany({
+    where: { inventoryMovement: { is: null } },
+    include: { receipt: true },
+  });
+
+  for (const line of pendingLines) {
+    await prisma.inventoryMovement.create({
+      data: {
+        itemId: line.itemId,
+        lotId: line.lotId,
+        type: "RECEIPT_IN",
+        quantity: line.receivedQuantity,
+        occurredAt: line.receipt.receivedAt,
+        sourceType: "RECEIPT",
+        sourceId: line.id,
+        receiptLineId: line.id,
+        createdBy: line.receipt.createdBy ?? "Ambiente local",
+      },
+    });
+  }
+
+  if (pendingLines.length > 0) {
+    console.log(
+      `Backfill: ${pendingLines.length} InventoryMovement(s) RECEIPT_IN criado(s) para ReceiptLines existentes.`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   await seedUnits();
   await seedItems();
@@ -433,6 +469,7 @@ async function main(): Promise<void> {
   await seedProducts();
   await seedPurchaseOrders();
   await seedReceiving();
+  await backfillInventoryMovements();
 }
 
 main()

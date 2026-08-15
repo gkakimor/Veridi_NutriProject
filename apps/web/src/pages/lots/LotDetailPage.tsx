@@ -178,7 +178,7 @@ export function LotDetailPage() {
 
         <FormSection
           title="Quantidade e validade"
-          subtitle="Quantidade originalmente recebida — não é saldo atual."
+          subtitle="Quantidade originalmente recebida — não é saldo atual. Saldo atual vem do histórico de movimentações (abaixo)."
         >
           <dl className="definition-list">
             <dt>Quantidade recebida</dt>
@@ -189,6 +189,23 @@ export function LotDetailPage() {
             <dd>{formatDate(lot.expiryDate)}</dd>
             <dt>Localização</dt>
             <dd>{lot.location ?? "—"}</dd>
+          </dl>
+        </FormSection>
+
+        <FormSection title="Saldo" subtitle="Derivado do histórico de movimentações — nunca uma coluna própria do lote.">
+          <dl className="definition-list">
+            <dt>On Hand</dt>
+            <dd>
+              {lot.onHand} {lot.unitCode}
+            </dd>
+            <dt>Reservado</dt>
+            <dd>
+              {lot.reserved} {lot.unitCode}
+            </dd>
+            <dt>Disponível</dt>
+            <dd>
+              {lot.available} {lot.unitCode}
+            </dd>
           </dl>
         </FormSection>
 

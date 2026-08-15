@@ -373,6 +373,24 @@ On Order does not become Available until receiving is confirmed.
 
 Negative On Hand/Available is not silently allowed.
 
+## Durable rules confirmed at implementation
+
+- The `InventoryMovement` ledger is the only source of truth for physical
+  quantities. `Lot.initialReceivedQuantity` is never treated as a balance.
+  On Hand is always derived (algebraic sum of movements), never a stored
+  column on `Item`/`Lot`.
+- Available respects the lot's operational status: only `AVAILABLE` and
+  non-expired lots count; `AWAITING_RELEASE`/`BLOCKED` still count in On
+  Hand but contribute 0 to Available — blocked material never disappears
+  from stock. Releasing/blocking a lot never creates an `InventoryMovement`
+  — it changes Available, never On Hand.
+- On Order is always derived from `ORDERED`/`PARTIALLY_RECEIVED` Purchase
+  Order lines' open quantity — never a second persisted quantity.
+- Negative stock is prevented structurally: outbound adjustments/loss lock
+  the relevant scope (lot, or item when there is no lot) and validate
+  against the current On Hand before writing, the same concurrency pattern
+  used for Receiving's over-receipt guard.
+
 ---
 
 # 15. Inventory movement ledger
@@ -420,6 +438,15 @@ Workflow:
 Do not directly overwrite On Hand.
 
 Advanced cycle-count scheduling remains future scope.
+
+## Durable rules confirmed at implementation
+
+- Manual adjustment and stock count never edit a balance directly — both
+  only ever create `InventoryMovement` rows (`ADJUSTMENT_IN`/
+  `ADJUSTMENT_OUT`/`LOSS`), reason required whenever there is a difference
+  or an outbound quantity.
+- A stock count with no difference creates no movement at all — nothing to
+  audit when the count matches the system.
 
 ---
 

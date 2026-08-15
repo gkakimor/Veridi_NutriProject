@@ -48,8 +48,14 @@ export interface LotDTO {
   expiryDate: string | null;
   /** Calculado (`expiryDate < hoje`), nunca escrito por job — sem scheduler nesta entrega. */
   isExpired: boolean;
-  /** Quanto entrou neste recebimento — NÃO é saldo atual. Saldo virá de Inventory Movements. */
+  /** Quanto entrou neste recebimento — NÃO é saldo atual. Saldo vem do InventoryMovement ledger. */
   initialReceivedQuantity: string;
+  /** Derivado do InventoryMovement ledger — nunca uma coluna armazenada em Lot. */
+  onHand: string;
+  /** Sempre "0" nesta entrega — Reservation pertence ao módulo de OP. */
+  reserved: string;
+  /** `onHand` se status AVAILABLE e não vencido; "0" caso contrário (bloqueado/aguardando/vencido). */
+  available: string;
   status: LotStatus;
   location: string | null;
   receiptId: string;

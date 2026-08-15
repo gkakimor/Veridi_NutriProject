@@ -36,6 +36,23 @@ enum LotStatus {
   EXPIRED
 }
 
+/// Tipos iniciais do ledger de estoque. Preparado para expansao futura
+/// (PRODUCTION_CONSUMPTION, RETURN_TO_STOCK, FINISHED_GOOD_PRODUCTION) —
+/// nao criados agora porque nao ha uso ainda (Producao fora desta entrega).
+enum InventoryMovementType {
+  RECEIPT_IN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  LOSS
+}
+
+enum InventoryMovementSourceType {
+  RECEIPT
+  MANUAL_ADJUSTMENT
+  STOCK_COUNT
+  MANUAL_LOSS
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -89,6 +106,7 @@ model Item {
   purchaseOrderLines PurchaseOrderLine[]
   receiptLines        ReceiptLine[]
   lots                Lot[]
+  inventoryMovements  InventoryMovement[]
 
   @@index([type])
   @@index([active])
@@ -345,6 +363,10 @@ model ReceiptLine {
 
   createdAt DateTime @default(now())
 
+  /// 1:1 com o InventoryMovement RECEIPT_IN gerado ao confirmar o
+  /// recebimento — ver InventoryMovement.receiptLineId.
+  inventoryMovement InventoryMovement?
+
   @@index([purchaseOrderLineId])
   @@index([itemId])
   @@map("receipt_lines")
@@ -387,8 +409,57 @@ model Lot {
   createdAt DateTime @default(now())
   createdBy String?
 
+  inventoryMovements InventoryMovement[]
+
   @@index([itemId])
   @@index([supplierId])
   @@index([status])
   @@map("lots")
+}
+
+/// Ledger de movimentacoes fisicas de estoque — fonte de verdade das
+/// quantidades (On Hand = soma algebrica por item/lote). Historico
+/// imutavel: nunca editado/excluido; erro operacional se corrige com novo
+/// movimento compensatorio. Lot.initialReceivedQuantity NAO e saldo — o
+/// saldo sempre vem daqui.
+model InventoryMovement {
+  id String @id @default(uuid())
+
+  /// onDelete Cascade so importa para limpeza de fixture de teste — em
+  /// producao Item/Lot/ReceiptLine nunca sao excluidos fisicamente.
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  /// Null quando o item nao controla lote (Item.controlsLot = false).
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  type InventoryMovementType
+
+  /// Sempre positivo (magnitude) — o sinal na soma do On Hand vem do
+  /// `type` (RECEIPT_IN/ADJUSTMENT_IN = +, ADJUSTMENT_OUT/LOSS = -), nunca
+  /// de um valor negativo armazenado.
+  quantity Decimal @db.Decimal(18, 6)
+
+  occurredAt DateTime
+
+  sourceType InventoryMovementSourceType
+  sourceId   String?
+
+  /// Preenchido so para RECEIPT_IN — FK real 1:1 com ReceiptLine, garante
+  /// no banco que um ReceiptLine confirmado gera no maximo um RECEIPT_IN.
+  receiptLineId String?      @unique
+  receiptLine   ReceiptLine? @relation(fields: [receiptLineId], references: [id], onDelete: Cascade)
+
+  /// Obrigatorio (validado no service) para ajuste/perda; sempre null em RECEIPT_IN.
+  reason String?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@index([itemId])
+  @@index([lotId])
+  @@index([type])
+  @@index([occurredAt])
+  @@map("inventory_movements")
 }

@@ -815,6 +815,116 @@ describe("Receiving", () => {
     await app.close();
   });
 
+  it("gera exatamente um InventoryMovement RECEIPT_IN por ReceiptLine, ligado ao lote", async () => {
+    const app = buildApp();
+    await app.ready();
+    const prisma = getPrisma();
+
+    const po = await createOrderedPurchaseOrder(app, [
+      { itemId: rawMaterialItemId, orderedQuantity: "10" },
+    ]);
+    const poLineId = po.lines[0].id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/purchase-orders/${po.id}/receipts`,
+      payload: {
+        receivedAt: new Date().toISOString(),
+        lines: [
+          {
+            purchaseOrderLineId: poLineId,
+            receivedQuantity: "10",
+            supplierLot: "L1",
+            expiryDate: FUTURE_EXPIRY,
+          },
+        ],
+      },
+    });
+
+    const receiptLineId = response.json().lines[0].id;
+    const lotId = response.json().lines[0].lotId;
+
+    const movements = await prisma.inventoryMovement.findMany({ where: { receiptLineId } });
+    expect(movements).toHaveLength(1);
+    expect(movements[0]?.type).toBe("RECEIPT_IN");
+    expect(movements[0]?.quantity.toString()).toBe("10");
+    expect(movements[0]?.lotId).toBe(lotId);
+    expect(movements[0]?.sourceType).toBe("RECEIPT");
+
+    await app.close();
+  });
+
+  it("recebimento sem lote gera InventoryMovement com lotId null", async () => {
+    const app = buildApp();
+    await app.ready();
+    const prisma = getPrisma();
+
+    const po = await createOrderedPurchaseOrder(app, [
+      { itemId: noLotItemId, orderedQuantity: "50" },
+    ]);
+    const poLineId = po.lines[0].id;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/purchase-orders/${po.id}/receipts`,
+      payload: {
+        receivedAt: new Date().toISOString(),
+        lines: [{ purchaseOrderLineId: poLineId, receivedQuantity: "50" }],
+      },
+    });
+
+    const receiptLineId = response.json().lines[0].id;
+    const movements = await prisma.inventoryMovement.findMany({ where: { receiptLineId } });
+    expect(movements).toHaveLength(1);
+    expect(movements[0]?.lotId).toBeNull();
+
+    await app.close();
+  });
+
+  it("falha transacional (over-receipt em uma linha) não deixa InventoryMovement órfão", async () => {
+    const app = buildApp();
+    await app.ready();
+    const prisma = getPrisma();
+
+    const po = await createOrderedPurchaseOrder(app, [
+      { itemId: rawMaterialItemId, orderedQuantity: "10" },
+      { itemId: packagingItemId, orderedQuantity: "5" },
+    ]);
+    const rawLineId = po.lines.find((l: { itemId: string }) => l.itemId === rawMaterialItemId).id;
+    const packagingLineId = po.lines.find(
+      (l: { itemId: string }) => l.itemId === packagingItemId,
+    ).id;
+
+    const beforeMovements = await prisma.inventoryMovement.count({
+      where: { itemId: { in: [rawMaterialItemId, packagingItemId] } },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/purchase-orders/${po.id}/receipts`,
+      payload: {
+        receivedAt: new Date().toISOString(),
+        lines: [
+          {
+            purchaseOrderLineId: rawLineId,
+            receivedQuantity: "10",
+            supplierLot: "L1",
+            expiryDate: FUTURE_EXPIRY,
+          },
+          { purchaseOrderLineId: packagingLineId, receivedQuantity: "999", supplierLot: "L-PKG" },
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(400);
+
+    const afterMovements = await prisma.inventoryMovement.count({
+      where: { itemId: { in: [rawMaterialItemId, packagingItemId] } },
+    });
+    expect(afterMovements).toBe(beforeMovements);
+
+    await app.close();
+  });
+
   it("concorrência: duas tentativas simultâneas não permitem over-receipt combinado", async () => {
     const app = buildApp();
     await app.ready();

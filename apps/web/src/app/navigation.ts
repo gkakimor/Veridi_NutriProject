@@ -57,17 +57,17 @@ export const navigation: NavGroup[] = [
   {
     title: "Estoque",
     items: [
-      { label: "Visão Geral", path: "/estoque", implemented: false },
+      { label: "Visão Geral", path: "/estoque", implemented: true },
       { label: "Lotes", path: "/estoque/lotes", implemented: true },
       {
         label: "Movimentações",
         path: "/estoque/movimentacoes",
-        implemented: false,
+        implemented: true,
       },
       {
         label: "Inventário Físico",
         path: "/estoque/inventario",
-        implemented: false,
+        implemented: true,
       },
     ],
   },

@@ -1,7 +1,9 @@
+import { Prisma } from "@prisma/client";
 import type { Item, Lot, PurchaseOrder, Receipt, ReceiptLine, Supplier } from "@prisma/client";
 import type { LotDTO, LotListResponse } from "@veridi/shared";
 import { LOT_QR_PREFIX, normalizeLotLookupCode } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { getOnHandByLots, isLotAvailableForUse, isLotExpired } from "../../lib/inventory-ledger.js";
 import { InvalidLotTransitionError, LotNotFoundError } from "./lots.errors.js";
 import type { ListLotsQuery } from "./lots.schemas.js";
 
@@ -21,9 +23,10 @@ const lotInclude = {
   receiptLine: { include: { receipt: { include: { purchaseOrder: true } } } },
 } as const;
 
-function toLotDTO(lot: LotWithRelations): LotDTO {
+type LotDTOWithoutStock = Omit<LotDTO, "onHand" | "reserved" | "available">;
+
+function toLotDTO(lot: LotWithRelations): LotDTOWithoutStock {
   const receiptLine = lot.receiptLine;
-  const isExpired = lot.expiryDate ? lot.expiryDate.getTime() < Date.now() : false;
 
   return {
     id: lot.id,
@@ -38,7 +41,7 @@ function toLotDTO(lot: LotWithRelations): LotDTO {
     supplierName: lot.supplier.legalName,
     supplierLot: lot.supplierLot,
     expiryDate: lot.expiryDate ? lot.expiryDate.toISOString() : null,
-    isExpired,
+    isExpired: isLotExpired(lot),
     initialReceivedQuantity: lot.initialReceivedQuantity.toString(),
     status: lot.status,
     location: lot.location,
@@ -54,6 +57,30 @@ function toLotDTO(lot: LotWithRelations): LotDTO {
     blockedBy: lot.blockedBy,
     blockReason: lot.blockReason,
   };
+}
+
+/**
+ * On Hand/Available do lote, derivados do InventoryMovement ledger — nunca
+ * uma coluna em Lot. Reserved e sempre "0" nesta entrega (Reservation
+ * pertence ao modulo de OP). Versao em lote evita N+1 em listagens.
+ */
+async function attachStock(lots: LotWithRelations[]): Promise<LotDTO[]> {
+  const onHandByLot = await getOnHandByLots(
+    getPrisma(),
+    lots.map((lot) => lot.id),
+  );
+
+  return lots.map((lot) => {
+    const dto = toLotDTO(lot);
+    const onHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
+    const available = isLotAvailableForUse(lot) ? onHand : new Prisma.Decimal(0);
+    return {
+      ...dto,
+      onHand: onHand.toString(),
+      reserved: "0",
+      available: available.toString(),
+    };
+  });
 }
 
 async function requireLot(id: string): Promise<Lot> {
@@ -90,7 +117,7 @@ export async function listLots(query: ListLotsQuery): Promise<LotListResponse> {
   ]);
 
   return {
-    lots: lots.map(toLotDTO),
+    lots: await attachStock(lots),
     page: query.page,
     pageSize: query.pageSize,
     total,
@@ -99,7 +126,9 @@ export async function listLots(query: ListLotsQuery): Promise<LotListResponse> {
 
 export async function getLotById(id: string): Promise<LotDTO | null> {
   const lot = await getPrisma().lot.findUnique({ where: { id }, include: lotInclude });
-  return lot ? toLotDTO(lot) : null;
+  if (!lot) return null;
+  const [dto] = await attachStock([lot]);
+  return dto!;
 }
 
 /**
@@ -116,7 +145,9 @@ export async function lookupLotByCode(rawCode: string): Promise<LotDTO | null> {
     where: { code: normalized },
     include: lotInclude,
   });
-  return lot ? toLotDTO(lot) : null;
+  if (!lot) return null;
+  const [dto] = await attachStock([lot]);
+  return dto!;
 }
 
 export async function releaseLot(id: string): Promise<LotDTO> {

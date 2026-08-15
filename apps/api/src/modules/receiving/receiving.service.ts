@@ -234,6 +234,7 @@ export async function createReceipt(
         },
       });
 
+      let lotId: string | null = null;
       if (line.item.controlsLot) {
         const lotCode = await nextLotCode(tx, input.receivedAt);
         const lot = await tx.lot.create({
@@ -249,8 +250,25 @@ export async function createReceipt(
             createdBy: SYSTEM_ACTOR,
           },
         });
+        lotId = lot.id;
         await tx.receiptLine.update({ where: { id: receiptLine.id }, data: { lotId: lot.id } });
       }
+
+      // Fonte de verdade do estoque fisico: sem este movimento a
+      // confirmacao do recebimento inteiro reverte (mesma transacao).
+      await tx.inventoryMovement.create({
+        data: {
+          itemId: line.item.id,
+          lotId,
+          type: "RECEIPT_IN",
+          quantity: line.input.receivedQuantity,
+          occurredAt: input.receivedAt,
+          sourceType: "RECEIPT",
+          sourceId: receiptLine.id,
+          receiptLineId: receiptLine.id,
+          createdBy: SYSTEM_ACTOR,
+        },
+      });
     }
 
     // Status da OC deriva 100% dos ReceiptLines reais — sem segunda fonte

@@ -18,6 +18,7 @@ FAST MVP.
 **Delivery 06 — Ordem de Compra: concluído.**
 **Delivery 07 — Recebimento + Lote Interno: concluído.**
 **Delivery 08 — QR Code + Etiqueta de Lote + Scan/Consulta: concluído.**
+**Delivery 09 — Estoque + Movimentações + Inventário Físico: concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -29,9 +30,9 @@ Recebimento; será reutilizado em Ordem de Produção. Rota de impressão
 (etiqueta de lote) é um terceiro padrão: página fora do `AppShell`, sem
 topbar/sidebar. Ver `docs/UI_BRAND.md`.
 
-13 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
-Usuários; Bloco B: falta Estoque/On Hand, Movimentações e FEFO — OC,
-Recebimento, Lotes e QR/Etiqueta já implementados).
+12 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
+Usuários; Bloco B: falta só FEFO — OC, Recebimento, Lotes, QR/Etiqueta e
+Estoque/Movimentações já implementados).
 
 ## Stack instalada
 
@@ -52,13 +53,16 @@ Recebimento, Lotes e QR/Etiqueta já implementados).
 apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  vira overlay em mobile), Cadastros >
                  Itens/Fornecedores/Clientes/Produtos, Compras > Ordens de
-                 Compra/Recebimentos, Estoque > Lotes (scan/QR/etiqueta)
+                 Compra/Recebimentos, Estoque > Visão Geral/Lotes (scan/QR/
+                 etiqueta)/Movimentações/Inventário Físico
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders,
-                 /receipts, /lots (+ /lots/lookup)
+                 /receipts, /lots (+ /lots/lookup), /inventory,
+                 /inventory-movements, /inventory-adjustments, /stock-counts
 packages/shared contratos compartilhados (Health, Item, UnitOfMeasure,
                  Supplier, Customer, Product, PurchaseOrder, Receipt, Lot
-                 [qrPayload], CNPJ, UFs)
+                 [qrPayload, onHand/reserved/available], InventoryMovement,
+                 CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -642,6 +646,164 @@ esperados nos casos de "não encontrado", não exceções).
 
 ---
 
+# Delivery 09 — Estoque + Movimentações + Inventário Físico
+
+Fonte de verdade do estoque físico. Fecha o Bloco B exceto FEFO. Entrega
+validada só em desktop web (estratégia Desktop Web First — ver decisão
+durável abaixo).
+
+## InventoryMovement — o ledger
+
+Nova entidade `InventoryMovement`: `itemId`, `lotId?` (null quando o item
+não controla lote), `type` (`RECEIPT_IN`/`ADJUSTMENT_IN`/`ADJUSTMENT_OUT`/
+`LOSS` — enum preparado para `PRODUCTION_CONSUMPTION`/`RETURN_TO_STOCK`/
+`FINISHED_GOOD_PRODUCTION` futuros, não criados agora), `quantity`
+(`Decimal(18,6)`, sempre a magnitude positiva — o sinal na soma vem do
+`type`, nunca um valor negativo armazenado), `occurredAt`, `sourceType`
+(`RECEIPT`/`MANUAL_ADJUSTMENT`/`STOCK_COUNT`/`MANUAL_LOSS`), `sourceId?`,
+`receiptLineId?` (FK única 1:1 com `ReceiptLine`, só para `RECEIPT_IN` —
+garante no banco que um recebimento confirmado gera no máximo um
+movimento), `reason?`, `createdBy`. Histórico imutável: sem endpoint de
+edição, sem DELETE. Migration `20260819090000_inventory_movements` +
+`20260819091500_inventory_movements_cascade` (FKs para Item/Lot/ReceiptLine
+viram `ON DELETE CASCADE` — só importa para limpeza de fixture de teste;
+em produção nenhum dos três é excluído fisicamente).
+
+`Lot.initialReceivedQuantity` **nunca** virou saldo — continua só "o que
+entrou naquele recebimento". Saldo (`On Hand`) é sempre a soma algébrica
+dos movimentos, calculada em `apps/api/src/lib/inventory-ledger.ts`
+(`getOnHand`/`getOnHandByItems`/`getOnHandByLots`, batelados para evitar
+N+1 em listagens) — nunca uma coluna própria em `Item` ou `Lot`.
+
+## Recebimento passa a gerar estoque
+
+`receiving.service.ts#createReceipt` ganhou um passo a mais dentro da
+**mesma transação** que já cria `Receipt`/`ReceiptLine`/`Lot`: cria um
+`InventoryMovement` `RECEIPT_IN` por `ReceiptLine` (quantidade sempre
+positiva, `lotId` do lote criado ou `null` quando o item não controla
+lote). Como está na mesma transação, a confirmação do recebimento só
+conclui se o movimento também for criado — nenhum código extra de
+"tudo ou nada" foi necessário.
+
+## Backfill dos dados existentes
+
+`prisma/seed.ts` ganhou `backfillInventoryMovements()`, chamada ao final
+de `main()`: busca `ReceiptLine`s sem `InventoryMovement` associado
+(`inventoryMovement: { is: null }`) e cria o `RECEIPT_IN` que faltava —
+idempotente (roda de novo sem duplicar). Rodado uma vez contra o ambiente
+de dev existente (10 `ReceiptLine`s de sessões anteriores ao ledger
+existir, incluindo os dois criados por `seedReceiving()`); confirmado
+`movements === receiptLines` e zero linhas órfãs depois.
+
+## On Hand / Reserved / Available / On Order
+
+`Reserved` é sempre `"0"` nesta entrega — Reservation pertence ao módulo
+de OP; o contrato (`InventoryItemSummaryDTO`/`InventoryItemDetailDTO`/
+`LotDTO`) já expõe o campo para não quebrar quando Reservation existir.
+`Available`: para item sem controle de lote é igual a `On Hand`; para
+item com controle de lote soma só o `On Hand` dos lotes com
+`status = AVAILABLE` e não vencidos — um lote `AWAITING_RELEASE` ou
+`BLOCKED` continua contando em `On Hand`, mas contribui `0` para
+`Available` (material bloqueado não some do estoque). Liberar/bloquear um
+lote (`POST /lots/:id/release|block`) nunca cria `InventoryMovement` — só
+`Available` muda, `On Hand` fica igual (mesma separação de sempre entre
+qualidade e quantidade física).
+
+`On Order` é somado a partir das `PurchaseOrderLine`s de OCs
+`ORDERED`/`PARTIALLY_RECEIVED` (`orderedQuantity - recebido real`,
+reaproveitando a mesma lógica de `openQuantity` de Ordem de Compra) —
+`DRAFT`/`CANCELLED` não contam, `RECEIVED` tem aberto zero. Nunca
+persiste uma segunda quantidade.
+
+`Lot`/lookup/scan (`GET /lots`, `/lots/:id`, `/lots/lookup`) ganharam
+`onHand`/`reserved`/`available` no mesmo `LotDTO` — `toLotDTO` virou puro
+(sem I/O) e um `attachStock()` batelado adiciona o saldo por cima, uma
+query para a página inteira em vez de N+1.
+
+## Endpoints
+
+`GET /inventory` (resumo por item; filtros busca/tipo/"somente com
+estoque" — paginação feita em memória após calcular saldo, decisão
+deliberada de simplicidade sobre otimização prematura), `GET
+/inventory/:itemId` (resumo + breakdown por lote, ordenado por validade
+para apresentação — não é FEFO), `GET /inventory-movements` (ledger,
+somente leitura), `POST /inventory-adjustments` (ajuste manual —
+`ADJUSTMENT_IN`/`ADJUSTMENT_OUT`/`LOSS`, motivo obrigatório), `POST
+/stock-counts` (inventário físico). Nenhum `POST /inventory-movements`
+genérico — operações de domínio explícitas, mesmo padrão de Recebimento/
+Lotes.
+
+## Ajuste manual e inventário físico — nunca editam saldo direto
+
+Os dois fluxos só criam `InventoryMovement`. Saída/perda: trava a linha
+que representa o escopo do saldo (`SELECT … FOR UPDATE` no `Lot` quando
+há lote, no `Item` quando não há — mesmo padrão de lock do Recebimento),
+soma os movimentos existentes sob o lock, rejeita se a quantidade exceder
+o `On Hand` — nunca permite saldo negativo. Testado com duas saídas
+concorrentes reais (`Promise.all`): no máximo uma passa.
+
+Inventário físico: usuário informa a contagem; sistema calcula a
+diferença contra o saldo do sistema (sob o mesmo lock); sem diferença,
+**nenhum movimento é criado** (contagem confere, nada para auditar);
+com diferença, motivo é obrigatório e cria exatamente um `ADJUSTMENT_IN`
+(diferença positiva) ou `ADJUSTMENT_OUT` (negativa) com
+`sourceType: STOCK_COUNT` — matematicamente nunca pode deixar o saldo
+negativo (a magnitude do ajuste é sempre ≤ o saldo do sistema). Sem
+entidade `StockCount` própria — decisão deliberada de simplicidade
+("Precisamos pelo menos conseguir auditar ajustes que realmente alteram
+saldo", não um módulo de cycle count).
+
+## Frontend (Desktop Web First)
+
+Estoque → **Visão Geral** (`/estoque`, tabela Código/Item/Tipo/Un./On
+Hand/Reservado/Disponível/Em Compra + busca/tipo/"somente com estoque"),
+**detalhe do item** (`/estoque/:itemId`, resumo de disponibilidade +
+breakdown por lote quando `controlsLot`, botões "Ajustar estoque" e "Ver
+movimentações"), **Movimentações** (`/estoque/movimentacoes`, ledger
+read-only com link para Item/Lote/Recebimento; aceita `?itemId=` para
+filtrar a partir do detalhe do item), **Inventário Físico**
+(`/estoque/inventario`, fluxo completo de contagem). Novo componente
+`AdjustStockDialog` (diálogo reutilizável de ajuste). `LotDetailPage`
+ganhou a seção "Saldo" (On Hand/Reservado/Disponível), deixando visualmente
+clara a diferença entre "Quantidade recebida" (histórico, imutável) e
+saldo atual — QR/etiqueta continuam intocados.
+
+**Bug real encontrado e corrigido nesta entrega:** `StockCountPage`
+pedia `listItems({ pageSize: 200 })`, mas o schema de `/items` limita
+`pageSize` a 100 — a API respondia 400 silenciosamente (erro engolido
+pelo `.catch`) e o select de item nunca populava. Corrigido para 100.
+
+## Testes
+
+22 novos testes de API: 3 em `receiving.test.ts` (um `RECEIPT_IN` exato
+por `ReceiptLine`, `lotId` null sem controle de lote, falha transacional
+não deixa movimento órfão) + 19 em `inventory.test.ts` (entrada/ajuste/
+perda alteram `On Hand` corretamente, múltiplos movimentos, nunca saldo
+negativo, concorrência real de duas saídas simultâneas, qualidade —
+`AWAITING_RELEASE`/liberar/bloquear afetando só `Available`, `On Order`
+por status de OC — `ORDERED`/`PARTIALLY_RECEIVED`/`DRAFT`/`CANCELLED`/
+`RECEIVED`, inventário físico — diferença positiva/negativa/sem diferença/
+motivo obrigatório). Total da API: 127 testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (127 API + 7 web) — ok. Backfill rodado
+contra o ambiente de dev real. Validado visualmente via Playwright **só
+desktop** (Desktop Web First): Visão Geral, detalhe de item com lote
+bloqueado (`On Hand` 60 / `Available` 0, exemplo real do handoff),
+diálogo "Ajustar estoque", Movimentações (geral e filtrada por item),
+fluxo completo de Inventário Físico (contagem → diferença → motivo →
+confirmação → `ADJUSTMENT_OUT` gerado → `On Hand` do lote refletindo o
+ajuste no detalhe do lote), regressão em Itens/Fornecedores/Ordens de
+Compra/Recebimentos/Lotes/Dashboard. Console limpo em todas as telas.
+
+## Pendente (não bloqueante)
+
+- Nenhuma pendência real. Responsividade mobile/tablet desta entrega fica
+  para a rodada de hardening (Desktop Web First).
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -748,6 +910,20 @@ esperados nos casos de "não encontrado", não exceções).
   validação do fluxo funcional completo. Suporte já existente permanece,
   mas novas entregas não devem gastar tempo com otimizações específicas
   para dispositivos menores sem solicitação explícita.
+- `InventoryMovement` é a única fonte de verdade das quantidades físicas.
+  `Lot.initialReceivedQuantity` nunca é saldo. `On Hand` é sempre derivado
+  (soma algébrica dos movimentos), nunca uma coluna em `Item`/`Lot`.
+- `Available` respeita o status operacional do lote: só lotes `AVAILABLE`
+  e não vencidos contam; `AWAITING_RELEASE`/`BLOCKED` continuam em `On
+  Hand` mas contribuem 0 para `Available`. Liberar/bloquear um lote nunca
+  cria `InventoryMovement` — muda `Available`, nunca `On Hand`.
+- `On Order` é sempre derivado das `PurchaseOrderLine`s de OCs
+  `ORDERED`/`PARTIALLY_RECEIVED` — nunca uma segunda quantidade persistida.
+- Ajuste manual e inventário físico nunca editam saldo diretamente — só
+  criam `InventoryMovement` (`ADJUSTMENT_IN`/`ADJUSTMENT_OUT`/`LOSS`),
+  sempre com motivo obrigatório quando há diferença/saída. Estoque nunca
+  fica negativo — saída/perda é travada e validada contra o saldo atual
+  sob lock, mesmo padrão de concorrência do Recebimento.
 
 ---
 
@@ -789,15 +965,16 @@ esperados nos casos de "não encontrado", não exceções).
 
 # Next recommended implementation
 
-Resta do Bloco A: **Usuários**. Bloco B segue com **Estoque/On Hand +
-Inventory Movements** (ledger a partir dos `Receipt`s/`Lot`s já modelados —
-`Lot.initialReceivedQuantity` explicitamente não é saldo) e depois FEFO —
-a definir por próximo handoff de Product Ownership. QR/Etiqueta (item 9 do
-Bloco B) já está implementado. Reutilizar: `FullWorkspaceModal` +
-`components.css` para cadastros simples; padrão de página própria (ver
-Ordem de Compra/Recebimento) para novos documentos transacionais (ex.:
-Ordem de Produção); `LotScanner`/`QrCode` para os próximos fluxos scan-first
-(Picking/Consumo).
+Resta do Bloco A: **Usuários**. Resta do Bloco B: só **FEFO** (aloca por
+`Lot.expiryDate` entre os lotes `AVAILABLE`/não vencidos já expostos por
+`GET /inventory/:itemId`) — a definir por próximo handoff de Product
+Ownership. Depois começa o Bloco C (Formulações). Reutilizar:
+`FullWorkspaceModal` + `components.css` para cadastros simples; padrão de
+página própria (ver Ordem de Compra/Recebimento) para novos documentos
+transacionais (ex.: Ordem de Produção); `LotScanner`/`QrCode` para os
+próximos fluxos scan-first (Picking/Consumo); `apps/api/src/lib/
+inventory-ledger.ts` para qualquer cálculo futuro de saldo (Reservation
+substituirá o `reserved: "0"` fixo quando existir).
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

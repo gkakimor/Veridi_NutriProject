@@ -16,6 +16,10 @@ import { LotsPage } from "./pages/lots/LotsPage";
 import { LotDetailPage } from "./pages/lots/LotDetailPage";
 import { LotScanPage } from "./pages/lots/LotScanPage";
 import { LotLabelPrintPage } from "./pages/lots/LotLabelPrintPage";
+import { InventoryOverviewPage } from "./pages/inventory/InventoryOverviewPage";
+import { InventoryItemDetailPage } from "./pages/inventory/InventoryItemDetailPage";
+import { InventoryMovementsPage } from "./pages/inventory/InventoryMovementsPage";
+import { StockCountPage } from "./pages/inventory/StockCountPage";
 
 export function App() {
   return (
@@ -36,9 +40,13 @@ export function App() {
           <Route path="/compras/recebimentos" element={<ReceiptsPage />} />
           <Route path="/compras/recebimentos/novo" element={<ReceivePurchaseOrderPage />} />
           <Route path="/compras/recebimentos/:id" element={<ReceiptDetailPage />} />
+          <Route path="/estoque" element={<InventoryOverviewPage />} />
+          <Route path="/estoque/movimentacoes" element={<InventoryMovementsPage />} />
+          <Route path="/estoque/inventario" element={<StockCountPage />} />
           <Route path="/estoque/lotes" element={<LotsPage />} />
           <Route path="/estoque/lotes/escanear" element={<LotScanPage />} />
           <Route path="/estoque/lotes/:id" element={<LotDetailPage />} />
+          <Route path="/estoque/:itemId" element={<InventoryItemDetailPage />} />
 
           {navItems
             .filter((item) => !item.implemented)
