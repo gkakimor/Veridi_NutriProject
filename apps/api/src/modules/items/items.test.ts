@@ -255,4 +255,26 @@ describe("Items", () => {
 
     await app.close();
   });
+
+  it("PATCH com externalBarcode vazio limpa o barcode existente (persiste null)", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, {
+      name: "Item com barcode",
+      externalBarcode: `BC${Date.now()}`,
+    });
+    const id = created.json().id;
+    expect(created.json().externalBarcode).not.toBeNull();
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/items/${id}`,
+      payload: { externalBarcode: "" },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().externalBarcode).toBeNull();
+
+    await app.close();
+  });
 });

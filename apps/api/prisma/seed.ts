@@ -1,7 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 import type { ItemType, UomDimension } from "@prisma/client";
-import { ITEM_TYPE_DEFAULTS } from "@veridi/shared";
+import { CUSTOMER_CODE_PREFIX, ITEM_TYPE_DEFAULTS, SUPPLIER_CODE_PREFIX } from "@veridi/shared";
 import { nextItemCode } from "../src/modules/items/item-codes.js";
+import { nextSequenceCode } from "../src/lib/sequence-code.js";
 
 const prisma = new PrismaClient();
 
@@ -73,9 +74,75 @@ async function seedItems(): Promise<void> {
   }
 }
 
+interface SeedSupplier {
+  legalName: string;
+  tradeName?: string;
+  cnpj?: string;
+}
+
+const suppliers: SeedSupplier[] = [
+  { legalName: "Nutrimax Ingredientes Ltda", tradeName: "Nutrimax", cnpj: "11222333000181" },
+  { legalName: "Embalplast Industrial S.A.", tradeName: "Embalplast", cnpj: "44555666000122" },
+];
+
+async function seedSuppliers(): Promise<void> {
+  for (const supplier of suppliers) {
+    const existing = await prisma.supplier.findFirst({
+      where: { legalName: supplier.legalName },
+    });
+    if (existing) continue;
+
+    const code = await nextSequenceCode(prisma, "supplier_code_seq", SUPPLIER_CODE_PREFIX);
+    await prisma.supplier.create({
+      data: {
+        code,
+        legalName: supplier.legalName,
+        tradeName: supplier.tradeName ?? null,
+        cnpj: supplier.cnpj ?? null,
+      },
+    });
+    console.log(`Fornecedor criado: ${code} — ${supplier.legalName}`);
+  }
+}
+
+interface SeedCustomer {
+  legalName: string;
+  tradeName?: string;
+  city?: string;
+  state?: string;
+}
+
+const customers: SeedCustomer[] = [
+  { legalName: "Vida Saudável Comércio de Suplementos Ltda", tradeName: "Vida Saudável", city: "São Paulo", state: "SP" },
+  { legalName: "Farmácia Bem Estar Ltda", tradeName: "Bem Estar", city: "Curitiba", state: "PR" },
+];
+
+async function seedCustomers(): Promise<void> {
+  for (const customer of customers) {
+    const existing = await prisma.customer.findFirst({
+      where: { legalName: customer.legalName },
+    });
+    if (existing) continue;
+
+    const code = await nextSequenceCode(prisma, "customer_code_seq", CUSTOMER_CODE_PREFIX);
+    await prisma.customer.create({
+      data: {
+        code,
+        legalName: customer.legalName,
+        tradeName: customer.tradeName ?? null,
+        city: customer.city ?? null,
+        state: customer.state ?? null,
+      },
+    });
+    console.log(`Cliente criado: ${code} — ${customer.legalName}`);
+  }
+}
+
 async function main(): Promise<void> {
   await seedUnits();
   await seedItems();
+  await seedSuppliers();
+  await seedCustomers();
 }
 
 main()

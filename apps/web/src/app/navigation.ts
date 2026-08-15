@@ -29,11 +29,11 @@ export const navigation: NavGroup[] = [
     title: "Cadastros",
     items: [
       { label: "Usuários", path: "/cadastros/usuarios", implemented: false },
-      { label: "Clientes", path: "/cadastros/clientes", implemented: false },
+      { label: "Clientes", path: "/cadastros/clientes", implemented: true },
       {
         label: "Fornecedores",
         path: "/cadastros/fornecedores",
-        implemented: false,
+        implemented: true,
       },
       { label: "Itens", path: "/cadastros/itens", implemented: true },
       { label: "Produtos", path: "/cadastros/produtos", implemented: false },

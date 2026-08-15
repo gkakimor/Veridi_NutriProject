@@ -1,0 +1,234 @@
+import { useCallback, useEffect, useState } from "react";
+import type { SupplierDTO } from "@veridi/shared";
+import { formatCnpj } from "@veridi/shared";
+import { listSuppliers, setSupplierActive } from "../../lib/suppliers-api";
+import { SupplierFormDrawer } from "./SupplierFormDrawer";
+
+type ActiveFilter = "all" | "active" | "inactive";
+type DrawerState =
+  | { mode: "closed" }
+  | { mode: "create" }
+  | { mode: "edit"; supplier: SupplierDTO };
+
+const PAGE_SIZE = 20;
+
+/** Cadastros → Fornecedores. Mesmo padrao de tabela densa + drawer de Items. */
+export function SuppliersPage() {
+  const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+
+  const [drawerState, setDrawerState] = useState<DrawerState>({ mode: "closed" });
+
+  useEffect(() => {
+    const handle = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, activeFilter]);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    setError(null);
+
+    const params: Parameters<typeof listSuppliers>[0] = { page, pageSize: PAGE_SIZE };
+    if (search) params.search = search;
+    if (activeFilter !== "all") params.active = activeFilter === "active";
+
+    listSuppliers(params)
+      .then((result) => {
+        setSuppliers(result.suppliers);
+        setTotal(result.total);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Falha ao carregar fornecedores");
+      })
+      .finally(() => setLoading(false));
+  }, [page, search, activeFilter]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  async function handleToggleActive(supplier: SupplierDTO) {
+    const nextActive = !supplier.active;
+    const question = nextActive
+      ? `Reativar "${supplier.legalName}"?`
+      : `Inativar "${supplier.legalName}"? O fornecedor continua visível no histórico.`;
+    if (!window.confirm(question)) return;
+
+    try {
+      await setSupplierActive(supplier.id, nextActive);
+      reload();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Falha ao atualizar status");
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  return (
+    <>
+      <div className="page__header">
+        <div>
+          <h1 className="page__title">Fornecedores</h1>
+          <p className="page__subtitle">
+            Base de fornecedores utilizada em compras, recebimento e
+            rastreabilidade.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn btn--primary"
+          onClick={() => setDrawerState({ mode: "create" })}
+        >
+          Novo fornecedor
+        </button>
+      </div>
+
+      <div className="toolbar">
+        <div className="toolbar__search">
+          <label className="sr-only" htmlFor="suppliers-search">
+            Buscar fornecedores
+          </label>
+          <input
+            id="suppliers-search"
+            type="search"
+            placeholder="Buscar por código, razão social, fantasia ou CNPJ…"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+          />
+        </div>
+
+        <label className="sr-only" htmlFor="suppliers-active-filter">
+          Filtrar por status
+        </label>
+        <select
+          id="suppliers-active-filter"
+          value={activeFilter}
+          onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
+        >
+          <option value="all">Todos os status</option>
+          <option value="active">Ativos</option>
+          <option value="inactive">Inativos</option>
+        </select>
+      </div>
+
+      {error && <p className="form-alert">{error}</p>}
+
+      <div className="table-container">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Razão Social / Nome</th>
+              <th>Nome Fantasia</th>
+              <th>CNPJ</th>
+              <th>Telefone</th>
+              <th>Status</th>
+              <th aria-hidden="true" />
+            </tr>
+          </thead>
+          <tbody>
+            {suppliers.map((supplier) => (
+              <tr key={supplier.id}>
+                <td className="is-code">{supplier.code}</td>
+                <td>{supplier.legalName}</td>
+                <td>{supplier.tradeName ?? "—"}</td>
+                <td>{supplier.cnpj ? formatCnpj(supplier.cnpj) : "—"}</td>
+                <td>{supplier.phone ?? "—"}</td>
+                <td>
+                  <span
+                    className={
+                      supplier.active ? "badge badge--active" : "badge badge--inactive"
+                    }
+                  >
+                    {supplier.active ? "Ativo" : "Inativo"}
+                  </span>
+                </td>
+                <td>
+                  <div className="table__actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => setDrawerState({ mode: "edit", supplier })}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        supplier.active
+                          ? "btn btn--danger btn--sm"
+                          : "btn btn--secondary btn--sm"
+                      }
+                      onClick={() => handleToggleActive(supplier)}
+                    >
+                      {supplier.active ? "Inativar" : "Reativar"}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+
+            {!loading && suppliers.length === 0 && (
+              <tr>
+                <td colSpan={7} className="table__empty">
+                  Nenhum fornecedor encontrado.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="pagination">
+        <span>
+          {total} {total === 1 ? "fornecedor" : "fornecedores"}
+        </span>
+        <div className="table__actions">
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            disabled={page <= 1}
+            onClick={() => setPage((current) => current - 1)}
+          >
+            Anterior
+          </button>
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            Próxima
+          </button>
+        </div>
+      </div>
+
+      {drawerState.mode !== "closed" && (
+        <SupplierFormDrawer
+          key={drawerState.mode === "edit" ? drawerState.supplier.id : "create"}
+          mode={drawerState.mode}
+          supplier={drawerState.mode === "edit" ? drawerState.supplier : null}
+          onClose={() => setDrawerState({ mode: "closed" })}
+          onSaved={() => {
+            setDrawerState({ mode: "closed" });
+            reload();
+          }}
+        />
+      )}
+    </>
+  );
+}

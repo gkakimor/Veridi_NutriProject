@@ -12,8 +12,10 @@ FAST MVP.
 
 **Delivery 01 — bootstrap do monorepo: concluído.**
 **Delivery 02 — Cadastro de Itens (Bloco A): concluído.**
+**Delivery 03 — Cadastro de Clientes e Fornecedores (Bloco A): concluído.**
 
-20 dos 21 módulos do MVP ainda não foram implementados.
+18 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta
+Usuários e Produtos).
 
 ## Stack instalada
 
@@ -31,9 +33,12 @@ FAST MVP.
 ## Estrutura criada
 
 ```text
-apps/web        React + Vite + TS strict, shell operacional Veridi, Cadastros > Itens
-apps/api        Fastify + TS strict, Prisma; /health, /items, /units
-packages/shared contratos compartilhados (Health, Item, UnitOfMeasure)
+apps/web        React + Vite + TS strict, shell operacional Veridi,
+                 Cadastros > Itens / Fornecedores / Clientes
+apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
+                 /suppliers, /customers
+packages/shared contratos compartilhados (Health, Item, UnitOfMeasure,
+                 Supplier, Customer, CNPJ, UFs brasileiras)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -132,11 +137,91 @@ corretos, busca filtrando em tempo real.
 
 ## Pendente (não bloqueante)
 
-- Botão "Novo item"/edição não limpa barcode existente ao salvar campo vazio
-  (limitação do `exactOptionalPropertyTypes`; PATCH sem a chave mantém valor
-  atual). Ajustar se virar necessidade real.
 - Confirmação de inativação usa `window.confirm` nativo — trocar por modal
   Veridi se/quando o padrão de confirmação for definido para outras telas.
+
+---
+
+# Delivery 03 — Clientes e Fornecedores
+
+Segundo e terceiro cadastros do Bloco A, reaproveitando o padrão
+técnico/visual de Items (drawer contextual + tabela densa).
+
+## Correção em Items
+
+PATCH aceitava `externalBarcode` vazio no schema (o backend já convertia
+`""` para `null`), mas o drawer só enviava a chave quando havia valor —
+campo limpo na UI nunca chegava ao PATCH. Corrigido em
+`ItemFormDrawer.tsx`: no modo edição a chave é sempre enviada (mesmo
+vazia); no create, só quando preenchida. Teste adicionado em
+`items.test.ts`.
+
+## Modelo de dados
+
+- `Supplier`/`Customer`: `id` (uuid), `code` (único, imutável, sequence
+  dedicada), `legalName`, `tradeName?`, `cnpj?` (só dígitos, unicidade via
+  índice parcial — não representável em `@@unique` do Prisma, mesmo caso
+  das sequences), `email?`, `phone?`, `notes?`, `active`, `createdAt`,
+  `updatedAt`. `Customer` soma `city?`/`state?` (UF maiúscula validada
+  contra lista fechada). Migration `20260815120000_customers_and_suppliers`.
+- Códigos `FOR-000001`/`CLI-000001`: `lib/sequence-code.ts` generaliza a
+  lógica de `nextval` atômico já usada em Items — `item-codes.ts` virou um
+  wrapper fino sobre ela. Reuso de infraestrutura, sem fundir os domínios
+  (não existe `Party`/`BusinessEntity`; Supplier e Customer são módulos
+  separados com schema/service/routes próprios).
+
+## Padrão de campo opcional "limpável"
+
+`lib/cnpj-schema.ts` define `optionalNullableText`/`optionalCnpjSchema`:
+chave ausente no PATCH → não mexe; string vazia → `null` (limpa); valor →
+seta. Serviços usam o mesmo idiom de `input.campo !== undefined ? {...} :
+{}` de Items, que distingue `undefined`/`null`/valor sob
+`exactOptionalPropertyTypes`. Aplicado desde o início em Suppliers/
+Customers para não repetir o bug corrigido em Items.
+
+## CNPJ e UF
+
+`@veridi/shared` ganhou `normalizeCnpj`/`formatCnpj` (só dígitos ↔
+`00.000.000/0000-00`) e `BR_STATE_CODES`, usados por API e web. Validação
+de CNPJ é só formato básico (14 dígitos) — sem dígito verificador nem
+consulta à Receita, conforme escopo. Duplicidade de CNPJ: pré-checagem via
+`findFirst` (mensagem amigável) + captura de `P2002` no `create`/`update`
+como rede de segurança contra corrida (a garantia real de unicidade é o
+índice parcial no Postgres).
+
+## Backend
+
+`GET/POST /suppliers`, `GET/PATCH /suppliers/:id`,
+`POST /suppliers/:id/activate|deactivate` — mesmo shape para `/customers`
+(com filtro extra `state`). Sem DELETE físico.
+
+## Frontend
+
+Cadastros → Fornecedores / Clientes: mesma tabela densa + drawer
+contextual de Items. `components.css` ganhou estilo de `textarea` (campo
+Observações), reaproveitado pelos dois formulários. Nenhuma abstração de
+formulário genérico criada — duplicação pequena entre os dois drawers foi
+aceita conforme orientação do handoff.
+
+## Testes
+
+18 novos testes (`suppliers.test.ts` + `customers.test.ts`): geração de
+código, imutabilidade do código, validações obrigatórias, normalização de
+CNPJ, rejeição de formato inválido, duplicidade de CNPJ, busca, filtro
+ativo/UF, inativar/reativar. Mais 1 teste em `items.test.ts` para o fix do
+barcode. Total da API: 35 testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` — ok. Seed rodado (2 fornecedores, 2
+clientes). Telas verificadas visualmente via Playwright headless
+(screenshot + console sem erros): listagem de Fornecedores e Clientes,
+drawer de novo fornecedor preenchido, Items intacto.
+
+## Pendente (não bloqueante)
+
+- Nenhuma pendência nova. Segue a mesma pendência de `window.confirm` já
+  registrada no Delivery 02.
 
 ---
 

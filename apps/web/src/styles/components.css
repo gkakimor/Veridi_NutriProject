@@ -90,15 +90,29 @@
 .toolbar input[type="search"],
 .toolbar select,
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
-  height: 34px;
   padding: 0 var(--sp-3);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   font-size: var(--fs-base);
+  font-family: inherit;
+}
+
+.toolbar input[type="search"],
+.toolbar select,
+.field input,
+.field select {
+  height: 34px;
+}
+
+.field textarea {
+  padding-top: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  resize: vertical;
 }
 
 .toolbar select {
@@ -108,7 +122,8 @@
 .toolbar input[type="search"]:focus,
 .toolbar select:focus,
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   outline: none;
   box-shadow: var(--focus-ring);
 }

@@ -90,7 +90,11 @@ export function ItemFormDrawer({
       unitCode: form.unitCode,
       controlsLot: form.controlsLot,
       controlsExpiry: form.controlsExpiry,
-      ...(trimmedBarcode ? { externalBarcode: trimmedBarcode } : {}),
+      // No edit sempre envia a chave (mesmo vazia) para permitir limpar um
+      // barcode existente; no create so envia quando preenchido.
+      ...(mode === "edit" || trimmedBarcode
+        ? { externalBarcode: trimmedBarcode }
+        : {}),
     };
 
     try {

@@ -65,3 +65,62 @@ model Item {
   @@index([externalBarcode])
   @@map("items")
 }
+
+/// Fornecedor. Cadastro base: sem preco, avaliacao, dados bancarios ou
+/// vinculo com Item neste momento (entra em Compras/Recebimento).
+model Supplier {
+  id   String @id @default(uuid())
+
+  /// Codigo interno gerado pelo backend (sequence dedicada, FOR-000001).
+  /// Imutavel apos a criacao.
+  code String @unique
+
+  legalName String
+  tradeName String?
+
+  /// Somente digitos. Unicidade (quando informado) garantida por indice
+  /// parcial na migration — Prisma nao modela unique index parcial.
+  cnpj  String?
+  email String?
+  phone String?
+  notes String?
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+  @@map("suppliers")
+}
+
+/// Cliente. Cadastro base: sem CRM, tabela de preco ou pedido neste momento.
+model Customer {
+  id   String @id @default(uuid())
+
+  /// Codigo interno gerado pelo backend (sequence dedicada, CLI-000001).
+  /// Imutavel apos a criacao.
+  code String @unique
+
+  legalName String
+  tradeName String?
+
+  /// Somente digitos. Unicidade (quando informado) garantida por indice
+  /// parcial na migration — Prisma nao modela unique index parcial.
+  cnpj  String?
+  email String?
+  phone String?
+  city  String?
+
+  /// UF brasileira, sempre maiuscula.
+  state String?
+  notes String?
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+  @@map("customers")
+}

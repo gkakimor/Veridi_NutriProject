@@ -4,6 +4,8 @@ import { navItems } from "./app/navigation";
 import { DashboardPage } from "./pages/DashboardPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ItemsPage } from "./pages/items/ItemsPage";
+import { SuppliersPage } from "./pages/suppliers/SuppliersPage";
+import { CustomersPage } from "./pages/customers/CustomersPage";
 
 export function App() {
   return (
@@ -12,6 +14,8 @@ export function App() {
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
           <Route path="/cadastros/itens" element={<ItemsPage />} />
+          <Route path="/cadastros/fornecedores" element={<SuppliersPage />} />
+          <Route path="/cadastros/clientes" element={<CustomersPage />} />
 
           {navItems
             .filter((item) => !item.implemented)
