@@ -78,13 +78,15 @@ describe("Suppliers", () => {
     const app = buildApp();
     await app.ready();
 
+    const digits = `33444555${Date.now().toString().slice(-6)}`;
+    const masked = `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
     const response = await createTestSupplier(app, {
       legalName: "Fornecedor com CNPJ",
-      cnpj: "11.222.333/0001-81",
+      cnpj: masked,
     });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json().cnpj).toBe("11222333000181");
+    expect(response.json().cnpj).toBe(digits);
 
     await app.close();
   });

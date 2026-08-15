@@ -2,17 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import type { CustomerDTO } from "@veridi/shared";
 import { BR_STATE_CODES, formatCnpj } from "@veridi/shared";
 import { listCustomers, setCustomerActive } from "../../lib/customers-api";
-import { CustomerFormDrawer } from "./CustomerFormDrawer";
+import { CustomerFormModal } from "./CustomerFormModal";
 
 type ActiveFilter = "all" | "active" | "inactive";
-type DrawerState =
+type ModalState =
   | { mode: "closed" }
   | { mode: "create" }
   | { mode: "edit"; customer: CustomerDTO };
 
 const PAGE_SIZE = 20;
 
-/** Cadastros → Clientes. Mesmo padrao de tabela densa + drawer de Items. */
+/** Cadastros → Clientes. Mesmo padrao de tabela densa + modal de Items. */
 export function CustomersPage() {
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -25,7 +25,7 @@ export function CustomersPage() {
   const [stateFilter, setStateFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
-  const [drawerState, setDrawerState] = useState<DrawerState>({ mode: "closed" });
+  const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -90,9 +90,9 @@ export function CustomersPage() {
         <button
           type="button"
           className="btn btn--primary"
-          onClick={() => setDrawerState({ mode: "create" })}
+          onClick={() => setModalState({ mode: "create" })}
         >
-          Novo cliente
+          + Novo cliente
         </button>
       </div>
 
@@ -143,7 +143,7 @@ export function CustomersPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table">
+        <table className="table table--clickable-rows">
           <thead>
             <tr>
               <th>Código</th>
@@ -158,7 +158,16 @@ export function CustomersPage() {
           </thead>
           <tbody>
             {customers.map((customer) => (
-              <tr key={customer.id}>
+              <tr
+                key={customer.id}
+                tabIndex={0}
+                onClick={() => setModalState({ mode: "edit", customer })}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    setModalState({ mode: "edit", customer });
+                  }
+                }}
+              >
                 <td className="is-code">{customer.code}</td>
                 <td>{customer.legalName}</td>
                 <td>{customer.tradeName ?? "—"}</td>
@@ -178,12 +187,12 @@ export function CustomersPage() {
                     {customer.active ? "Ativo" : "Inativo"}
                   </span>
                 </td>
-                <td>
+                <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
-                      onClick={() => setDrawerState({ mode: "edit", customer })}
+                      onClick={() => setModalState({ mode: "edit", customer })}
                     >
                       Editar
                     </button>
@@ -212,11 +221,14 @@ export function CustomersPage() {
             )}
           </tbody>
         </table>
+        <div className="table-foot">
+          {total} {total === 1 ? "cliente" : "clientes"}
+        </div>
       </div>
 
       <div className="pagination">
         <span>
-          {total} {total === 1 ? "cliente" : "clientes"}
+          Página {page} de {totalPages}
         </span>
         <div className="table__actions">
           <button
@@ -227,9 +239,6 @@ export function CustomersPage() {
           >
             Anterior
           </button>
-          <span>
-            Página {page} de {totalPages}
-          </span>
           <button
             type="button"
             className="btn btn--secondary btn--sm"
@@ -241,14 +250,14 @@ export function CustomersPage() {
         </div>
       </div>
 
-      {drawerState.mode !== "closed" && (
-        <CustomerFormDrawer
-          key={drawerState.mode === "edit" ? drawerState.customer.id : "create"}
-          mode={drawerState.mode}
-          customer={drawerState.mode === "edit" ? drawerState.customer : null}
-          onClose={() => setDrawerState({ mode: "closed" })}
+      {modalState.mode !== "closed" && (
+        <CustomerFormModal
+          key={modalState.mode === "edit" ? modalState.customer.id : "create"}
+          mode={modalState.mode}
+          customer={modalState.mode === "edit" ? modalState.customer : null}
+          onClose={() => setModalState({ mode: "closed" })}
           onSaved={() => {
-            setDrawerState({ mode: "closed" });
+            setModalState({ mode: "closed" });
             reload();
           }}
         />

@@ -4,8 +4,10 @@ import type { CustomerDTO } from "@veridi/shared";
 import { BR_STATE_CODES } from "@veridi/shared";
 import { createCustomer, updateCustomer } from "../../lib/customers-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
+import { FormSection } from "../../components/FormSection";
 
-interface CustomerFormDrawerProps {
+interface CustomerFormModalProps {
   mode: "create" | "edit";
   customer: CustomerDTO | null;
   onClose: () => void;
@@ -48,13 +50,8 @@ function initialState(customer: CustomerDTO | null): FormState {
   };
 }
 
-/** Drawer contextual de criacao/edicao de cliente — mesmo padrao de Items. */
-export function CustomerFormDrawer({
-  mode,
-  customer,
-  onClose,
-  onSaved,
-}: CustomerFormDrawerProps) {
+/** Modal fullscreen de criacao/edicao de cliente — mesmo padrao de Items. */
+export function CustomerFormModal({ mode, customer, onClose, onSaved }: CustomerFormModalProps) {
   const [form, setForm] = useState<FormState>(() => initialState(customer));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,45 +111,62 @@ export function CustomerFormDrawer({
     }
   }
 
-  return (
-    <>
-      <button
-        type="button"
-        className="drawer__scrim"
-        aria-label="Fechar"
-        onClick={onClose}
-      />
-      <div
-        className="drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="customer-drawer-title"
-      >
-        <div className="drawer__header">
-          <div>
-            <h2 className="drawer__title" id="customer-drawer-title">
-              {mode === "create" ? "Novo cliente" : customer?.legalName}
-            </h2>
-            {mode === "edit" && customer && (
-              <p className="field-readonly-value">Código: {customer.code}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            className="drawer__close"
-            aria-label="Fechar"
-            onClick={onClose}
-          >
-            ×
+  const codeChip = mode === "create" ? "Código gerado ao salvar" : customer?.code;
+
+  const footer =
+    mode === "create" ? (
+      <>
+        <span className="modal-fullscreen__foot-meta">
+          O cliente será criado como <b>Ativo</b>.
+        </span>
+        <div className="modal-fullscreen__actions">
+          <button type="button" className="btn btn--ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" form="customer-form" className="btn btn--accent" disabled={saving}>
+            {saving ? "Criando…" : "Criar cliente"}
           </button>
         </div>
+      </>
+    ) : (
+      <>
+        <span className="modal-fullscreen__foot-meta">
+          Última alteração:{" "}
+          {customer ? new Date(customer.updatedAt).toLocaleDateString("pt-BR") : "—"}
+        </span>
+        <div className="modal-fullscreen__actions">
+          <button type="button" className="btn btn--ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" form="customer-form" className="btn btn--accent" disabled={saving}>
+            {saving ? "Salvando…" : "Salvar alterações"}
+          </button>
+        </div>
+      </>
+    );
 
-        <form onSubmit={handleSubmit} style={{ display: "contents" }}>
-          <div className="drawer__body">
-            {error && <p className="form-alert">{error}</p>}
+  return (
+    <FullWorkspaceModal
+      open
+      onClose={onClose}
+      crumb="Cadastros / Clientes"
+      crumbActive={mode === "create" ? "Novo" : "Editar"}
+      title={mode === "create" ? "Novo cliente" : customer?.legalName}
+      {...(codeChip ? { codeChip } : {})}
+      footer={footer}
+    >
+      <form id="customer-form" onSubmit={handleSubmit}>
+        {error && <p className="form-alert">{error}</p>}
 
-            <div className="field">
-              <label htmlFor="customer-legal-name">Razão Social / Nome *</label>
+        <FormSection
+          title="Identificação"
+          subtitle="Dados basicos do cliente usados em produtos e ordens de producao."
+        >
+          <div className="field-grid-2">
+            <div className="field field--full">
+              <label htmlFor="customer-legal-name">
+                Razão Social / Nome <span className="req">*</span>
+              </label>
               <input
                 id="customer-legal-name"
                 type="text"
@@ -194,7 +208,11 @@ export function CustomerFormDrawer({
                 <p className="field__error">{fieldErrors["cnpj"]}</p>
               )}
             </div>
+          </div>
+        </FormSection>
 
+        <FormSection title="Contato e localização">
+          <div className="field-grid-2">
             <div className="field">
               <label htmlFor="customer-email">Email</label>
               <input
@@ -251,39 +269,38 @@ export function CustomerFormDrawer({
                 <p className="field__error">{fieldErrors["state"]}</p>
               )}
             </div>
+          </div>
+        </FormSection>
 
-            <div className="field">
-              <label htmlFor="customer-notes">Observações</label>
-              <textarea
-                id="customer-notes"
-                rows={3}
-                value={form.notes}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, notes: event.target.value }))
-                }
-              />
+        <FormSection title="Observações">
+          <div className="field">
+            <label htmlFor="customer-notes">Notas internas</label>
+            <textarea
+              id="customer-notes"
+              rows={3}
+              value={form.notes}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, notes: event.target.value }))
+              }
+            />
+          </div>
+        </FormSection>
+
+        {mode === "edit" && customer && (
+          <FormSection title="Status">
+            <div className="status-line">
+              <span
+                className={customer.active ? "badge badge--active" : "badge badge--inactive"}
+              >
+                {customer.active ? "Ativo" : "Inativo"}
+              </span>
+              <span className="field__hint">
+                Use "Inativar"/"Reativar" na lista para alterar o status.
+              </span>
             </div>
-
-            {mode === "edit" && customer && (
-              <div className="field">
-                <span>Status</span>
-                <p className="field-readonly-value">
-                  {customer.active ? "Ativo" : "Inativo"}
-                </p>
-                <p className="field__hint">
-                  Use "Inativar"/"Reativar" na lista para alterar o status.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="drawer__footer">
-            <button type="submit" className="btn btn--primary" disabled={saving}>
-              {saving ? "Salvando…" : "Salvar"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
+          </FormSection>
+        )}
+      </form>
+    </FullWorkspaceModal>
   );
 }

@@ -1,4 +1,4 @@
-# Veridi Nutrition — UI & Brand Rules v0.4
+# Veridi Nutrition — UI & Brand Rules v2
 
 ## Objective
 Create a professional internal industrial ERP that feels unmistakably Veridi Nutrition while remaining optimized for:
@@ -47,52 +47,85 @@ Do not introduce:
 
 # 2. Veridi identity
 
-Use a Veridi-oriented green system.
-
-Recommended compatible token reskin:
+Use a Veridi-oriented green system. Canonical tokens (`apps/web/src/styles/tokens.css`),
+source of truth for all colors/shape — feature CSS uses only these names:
 
 ```css
 :root {
-  --navy-deep: #0f3d34;
-  --navy: #174f43;
-  --navy-hover: #1d5e50;
-  --title-dark: #174f43;
+  /* ===== Marca ===== */
+  --v-green-950: #082a20;
+  --v-green-900: #0c3629;
+  --v-green-800: #124534;
+  --v-green-700: #1b5e43;
+  --v-green-600: #247650;
+  --v-lime: #c6f04a;
+  --v-lime-ink: #1e2b10;
 
-  --primary: #217362;
-  --primary-hover: #2a806e;
-  --primary-soft: #e7f1ee;
-  --link: #217362;
+  /* ===== Neutros ===== */
+  --canvas: #f6f8f5;
+  --surface: #ffffff;
+  --ink: #17251e;
+  --ink-2: #5d6c63;
+  --ink-3: #8b978f;
+  --line: #e3e9e2;
+  --line-strong: #cfd8cf;
 
-  --accent: #afcb08;
+  /* ===== Semânticos ===== */
+  --ok-bg: #e4f5e9;
+  --ok-fg: #1b6b3c;
+  --warn-bg: #fbf3dc;
+  --warn-fg: #8a6a12;
+  --err-bg: #fbe9e7;
+  --err-fg: #b3362a;
+
+  /* ===== Tipografia ===== */
+  --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* ===== Forma ===== */
+  --radius: 10px;
+  --radius-sm: 7px;
+  --shadow-1: 0 1px 2px rgba(12, 54, 41, 0.06), 0 1px 3px rgba(12, 54, 41, 0.08);
+  --shadow-modal: 0 24px 64px rgba(8, 42, 32, 0.28);
 }
 ```
 
-Keep existing neutral families unless Product Ownership approves a redesign.
+`--font-ui`/`--font-code` fall back to system fonts — never load Inter/IBM Plex
+Mono (or any font) from Google Fonts or another CDN. No external font
+dependency is a hard requirement, not an optimization.
 
 ## Roles
-Dark green:
+Dark green (`--v-green-900`/`--v-green-950`):
 - structural chrome;
-- masthead;
-- navigation active structure;
-- headings where appropriate.
+- topbar;
+- sidebar;
+- modal-header code chip background.
 
-Primary green:
-- single primary action;
+`--v-green-800` — hover/active state on structural (dark) surfaces only
+(sidebar link hover/active, topbar toggle hover).
+
+Institutional green (`--v-green-700`):
 - links;
-- focus ring;
-- scan/confirm;
-- active selection.
+- focus ring/border;
+- single primary action that opens/creates a record (e.g. "+ Novo item");
+- section labels inside a form (uppercase eyebrow).
 
-Lime:
-- restrained brand/accent;
-- logo detail;
-- subtle positive accents.
+Lime (`--v-lime`):
+- active nav-item indicator (inset left bar);
+- the commit action inside an editing surface (`Criar item`, `Salvar
+  alterações` — `.btn--accent`);
+- code chip text on a dark chip;
+- restrained brand/accent.
 
 Do not use lime as:
 - large background;
 - normal body text;
 - destructive/safety state;
 - only carrier of status.
+
+Only one primary/accent action per surface: `--v-green-700` for the action
+that opens a CRUD surface, `--v-lime` (`.btn--accent`) for the action that
+commits it. They never compete on the same surface.
 
 ---
 
@@ -119,20 +152,40 @@ The Veridi ERP default desktop shell is:
 ```
 
 Default:
-- dark-green top masthead;
-- left navigation;
+- dark-green top topbar (52px);
+- left sidebar (236px, collapsible via the topbar menu toggle — always
+  visible, not only on small screens);
 - main workspace;
-- contextual right drawer only when useful;
 - no permanent global command toolbar;
 - no permanent bottom status bar.
 
-Use a drawer for:
-- quick details;
-- filters;
-- secondary properties;
-- contextual history.
+## CRUD editing surface — fullscreen modal (default since v2)
 
-Do not reserve right-side screen width permanently.
+Creating/editing a record (Items, Suppliers, Customers, Products, and
+similar registration screens) uses a **fullscreen modal inside the
+workspace**, not a side drawer:
+- starts below the topbar, covers the workspace (topbar + sidebar stay
+  visible and interactive);
+- header: breadcrumb (`Cadastros / Itens / Editar`) + title + immutable
+  code as `CodeChip` (dark chip, `--font-code`, lime text) + "Fechar"
+  (semantic red, closes without saving);
+- body: scrollable, organized into `FormSection` cards (uppercase
+  `--v-green-700` label + optional subtitle);
+- footer: fixed, one meta line (last change date, or "será criado como
+  Ativo") + Cancelar (neutral) + commit action (`.btn--accent`, lime).
+- closes on Escape or the header/footer buttons; the document itself never
+  scrolls, only the modal body does.
+
+Implementation: `FullWorkspaceModal` + `FormSection` + `ToggleCard` +
+`CodeChip` (`apps/web/src/components/`). The modal's horizontal offset
+follows the sidebar's collapsed state automatically via the
+`--sidebar-current-w` CSS custom property set on `.shell` — no JS wiring
+needed between the shell and the modal.
+
+A right-side drawer is no longer the default for CRUD create/edit forms.
+It remains a valid pattern only for lightweight, non-CRUD contextual
+panels (quick details, filters, secondary properties) if that need
+arises — none exist yet.
 
 ---
 
@@ -207,24 +260,31 @@ Do not use inline editing when it risks hiding an important state transition.
 
 # 6. Primary-action hierarchy
 
-At most one green primary action per surface.
+At most one dominant action per surface.
 
-Examples:
+On the list/page level (`--v-green-700`, `.btn--primary`) — opens a CRUD
+surface or starts a flow:
 - New Purchase Order
-- Confirm Order
 - Receive Material
-- Confirm Receipt
 - Release OP
 - Scan Lot
+
+Inside an editing surface (fullscreen modal), the action that commits the
+record uses lime (`--v-lime`, `.btn--accent`) instead — it is a different
+action from the page-level primary, never both green and lime competing on
+the same surface:
+- Criar item / Salvar alterações
+- Confirm Order
+- Confirm Receipt
 - Confirm Picking
 - Confirm Consumption
 - Record Production
 
 Secondary actions:
-- outlined;
-- ghost;
+- outlined (`.btn--secondary`);
+- ghost (`.btn--ghost`) — e.g. Cancelar;
 - dark structural;
-- destructive style where needed.
+- destructive/semantic-red style where needed (e.g. modal "Fechar").
 
 ---
 

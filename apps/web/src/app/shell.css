@@ -1,21 +1,40 @@
 /*
- * Shell operacional Veridi: masthead + sidebar esquerda + workspace.
+ * Shell operacional Veridi: topbar + sidebar esquerda recolhivel + workspace.
  * Sem toolbar global permanente. Sem status bar permanente.
  * Sem painel de propriedades permanente.
  */
 
 .shell {
+  --sidebar-current-w: var(--sidebar-w);
+
   display: grid;
-  grid-template-rows: var(--masthead-h) 1fr;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr;
+  grid-template-columns: var(--sidebar-current-w) 1fr;
   grid-template-areas:
     "masthead masthead"
     "sidebar  workspace";
   height: 100%;
   min-height: 0;
+  transition: grid-template-columns var(--transition);
 }
 
-/* ---------------- Masthead ---------------- */
+.shell.shell--nav-collapsed {
+  --sidebar-current-w: 0px;
+}
+
+.shell.shell--nav-collapsed .sidebar {
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell {
+    transition: none;
+  }
+}
+
+/* ---------------- Topbar ---------------- */
 
 .masthead {
   grid-area: masthead;
@@ -23,8 +42,28 @@
   align-items: center;
   gap: var(--sp-4);
   padding: 0 var(--sp-4);
-  background: var(--navy-deep);
-  color: var(--text-on-dark);
+  background: var(--v-green-900);
+  border-bottom: 1px solid var(--v-green-950);
+}
+
+.masthead__toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--on-dark-2);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.masthead__toggle:hover {
+  background: var(--v-green-800);
+  color: var(--on-dark);
 }
 
 .masthead__brand {
@@ -34,7 +73,7 @@
   font-size: var(--fs-md);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.01em;
-  color: var(--text-on-dark);
+  color: var(--on-dark);
   flex-shrink: 0;
 }
 
@@ -45,39 +84,55 @@
 .masthead__mark {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--navy-deep);
+  background: var(--v-lime);
+  color: var(--v-lime-ink);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
 }
 
 .masthead__sub {
-  color: var(--text-on-dark-muted);
+  color: var(--on-dark-3);
   font-size: var(--fs-xs);
   font-weight: var(--fw-regular);
+  margin-left: 2px;
 }
 
 .masthead__search {
   flex: 1;
-  max-width: 420px;
+  max-width: 460px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--sp-3);
+  color: var(--on-dark-2);
+}
+
+.masthead__search svg {
+  flex-shrink: 0;
 }
 
 .masthead__search input {
-  width: 100%;
-  height: 30px;
-  padding: 0 var(--sp-3);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-on-dark);
+  flex: 1;
+  height: 32px;
+  border: none;
+  background: none;
+  color: var(--on-dark);
+  outline: none;
   font-size: var(--fs-sm);
 }
 
 .masthead__search input::placeholder {
-  color: var(--text-on-dark-muted);
+  color: var(--on-dark-3);
+}
+
+.masthead__search input:disabled {
+  cursor: not-allowed;
 }
 
 .masthead__user {
@@ -85,32 +140,19 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  color: var(--text-on-dark-muted);
+  color: var(--on-dark-2);
   font-size: var(--fs-sm);
   flex-shrink: 0;
-}
-
-.masthead__toggle {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-on-dark);
-  cursor: pointer;
 }
 
 /* ---------------- Sidebar ---------------- */
 
 .sidebar {
   grid-area: sidebar;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  background: var(--v-green-900);
   overflow-y: auto;
-  padding: var(--sp-3) 0 var(--sp-6);
+  overflow-x: hidden;
+  padding: var(--sp-3) var(--sp-2) var(--sp-6);
   min-height: 0;
 }
 
@@ -119,12 +161,13 @@
 }
 
 .sidebar__group-title {
-  padding: 0 var(--sp-4) var(--sp-1);
-  color: var(--text-subtle);
-  font-size: var(--fs-xs);
+  padding: 0 var(--sp-2) var(--sp-1);
+  color: var(--on-dark-3);
+  font-size: 10.5px;
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.09em;
+  white-space: nowrap;
 }
 
 .sidebar__link {
@@ -132,45 +175,51 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-4);
-  border-left: 2px solid transparent;
-  color: var(--text);
-  font-size: var(--fs-base);
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--on-dark-2);
+  font-size: 13.5px;
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
   transition: background var(--transition), color var(--transition);
 }
 
 .sidebar__link:hover {
-  background: var(--surface-muted);
+  background: var(--v-green-800);
+  color: var(--on-dark);
   text-decoration: none;
 }
 
 .sidebar__link.is-active {
-  background: var(--primary-soft);
-  border-left-color: var(--primary);
-  color: var(--navy-deep);
-  font-weight: var(--fw-medium);
+  background: var(--v-green-800);
+  color: var(--on-dark);
+  box-shadow: inset 3px 0 0 var(--v-lime);
 }
 
 .sidebar__tag {
   flex-shrink: 0;
   white-space: nowrap;
-  color: var(--text-subtle);
-  font-size: var(--fs-xs);
+  color: var(--on-dark-3);
+  font-size: 10px;
   font-weight: var(--fw-regular);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 1px 7px;
 }
 
 /* ---------------- Workspace ---------------- */
 
 .workspace {
   grid-area: workspace;
+  position: relative;
   overflow-y: auto;
   min-height: 0;
-  padding: var(--sp-5) var(--sp-6) var(--sp-8);
+  padding: var(--sp-6) var(--sp-8);
 }
 
 .page__header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: var(--sp-4);
   margin-bottom: var(--sp-5);
@@ -178,21 +227,23 @@
 
 .page__title {
   font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
 }
 
 .page__subtitle {
   margin-top: var(--sp-1);
-  color: var(--text-muted);
-  font-size: var(--fs-base);
+  color: var(--ink-2);
+  font-size: 13.5px;
 }
 
 /* ---------------- Superficies ---------------- */
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-1);
   padding: var(--sp-5);
 }
 
@@ -206,7 +257,7 @@
 }
 
 .muted {
-  color: var(--text-muted);
+  color: var(--ink-2);
 }
 
 .status-line {
@@ -220,16 +271,16 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--text-subtle);
+  background: var(--ink-3);
   flex-shrink: 0;
 }
 
 .status-dot--up {
-  background: var(--success);
+  background: var(--ok-fg);
 }
 
 .status-dot--down {
-  background: var(--danger);
+  background: var(--err-fg);
 }
 
 .definition-list {
@@ -241,7 +292,7 @@
 }
 
 .definition-list dt {
-  color: var(--text-muted);
+  color: var(--ink-2);
 }
 
 .definition-list dd {
@@ -250,45 +301,13 @@
 
 /* ---------------- Responsivo ---------------- */
 
-/* Tablet: sidebar recolhivel */
+/* Tablet/mobile: mesmo mecanismo de recolher, sem overlay separado. */
 @media (max-width: 1024px) {
-  .shell {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "masthead"
-      "workspace";
-  }
-
-  .masthead__toggle {
-    display: inline-flex;
-  }
-
-  .sidebar {
-    position: fixed;
-    top: var(--masthead-h);
-    left: 0;
-    bottom: 0;
-    width: var(--sidebar-w);
-    z-index: 20;
-    box-shadow: var(--shadow);
-    transform: translateX(-100%);
-    transition: transform var(--transition);
-  }
-
-  .sidebar.is-open {
-    transform: translateX(0);
-  }
-
-  .sidebar__scrim {
-    position: fixed;
-    inset: var(--masthead-h) 0 0 0;
-    z-index: 10;
-    background: rgba(15, 61, 52, 0.32);
-    border: 0;
+  .workspace {
+    padding: var(--sp-4) var(--sp-4) var(--sp-6);
   }
 }
 
-/* Mobile: operacao enxuta */
 @media (max-width: 640px) {
   .masthead__sub,
   .masthead__user span {

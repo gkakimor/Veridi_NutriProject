@@ -1,7 +1,7 @@
 /*
- * Componentes reutilizaveis de tela CRUD (botoes, toolbar, tabela, badge,
- * paginacao, drawer, formulario). Usa somente tokens de tokens.css.
- * Primeira tela a usar este arquivo: Itens — padrao para os proximos cadastros.
+ * Componentes reutilizaveis de tela CRUD (botoes, toolbar, tabela, chip,
+ * paginacao, formulario, modal fullscreen). Usa somente tokens de tokens.css.
+ * Padrao visual v2 — ver docs/UI_BRAND.md.
  */
 
 /* ---------------- Botoes ---------------- */
@@ -14,13 +14,13 @@
   height: 34px;
   padding: 0 var(--sp-4);
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   background: transparent;
   font-size: var(--fs-base);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-semibold);
   cursor: pointer;
   transition: background var(--transition), border-color var(--transition),
-    color var(--transition);
+    color var(--transition), filter var(--transition);
 }
 
 .btn:disabled {
@@ -35,41 +35,51 @@
 }
 
 .btn--primary {
-  background: var(--primary);
-  color: var(--text-on-dark);
+  background: var(--v-green-700);
+  color: var(--on-dark);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--primary-hover);
+  filter: brightness(1.08);
+}
+
+/* Acao de commit dentro de uma superficie de edicao (modal/drawer). */
+.btn--accent {
+  background: var(--v-lime);
+  color: var(--v-lime-ink);
+}
+
+.btn--accent:hover:not(:disabled) {
+  filter: brightness(0.96);
 }
 
 .btn--secondary {
   background: var(--surface);
-  border-color: var(--border-strong);
-  color: var(--text);
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
 
 .btn--secondary:hover:not(:disabled) {
-  background: var(--surface-muted);
+  background: var(--canvas);
 }
 
 .btn--ghost {
-  color: var(--text-muted);
+  color: var(--ink-2);
 }
 
 .btn--ghost:hover:not(:disabled) {
-  background: var(--surface-muted);
-  color: var(--text);
+  background: var(--canvas);
+  color: var(--ink);
 }
 
 .btn--danger {
   background: var(--surface);
-  border-color: var(--danger);
-  color: var(--danger);
+  border-color: var(--err-fg);
+  color: var(--err-fg);
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: var(--danger-soft);
+  background: var(--err-bg);
 }
 
 /* ---------------- Toolbar / filtros ---------------- */
@@ -94,10 +104,10 @@
 .field textarea {
   width: 100%;
   padding: 0 var(--sp-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
   background: var(--surface);
-  color: var(--text);
+  color: var(--ink);
   font-size: var(--fs-base);
   font-family: inherit;
 }
@@ -125,16 +135,18 @@
 .field select:focus,
 .field textarea:focus {
   outline: none;
-  box-shadow: var(--focus-ring);
+  border-color: var(--v-green-700);
+  box-shadow: 0 0 0 3px rgba(27, 94, 67, 0.12);
 }
 
 /* ---------------- Tabela ---------------- */
 
 .table-container {
   overflow-x: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 
 .table {
@@ -148,16 +160,16 @@
   padding: var(--sp-3) var(--sp-4);
   text-align: left;
   white-space: nowrap;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
 }
 
 .table th {
-  background: var(--surface-muted);
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
+  background: var(--canvas);
+  color: var(--ink-3);
+  font-size: 11px;
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.07em;
 }
 
 .table tbody tr:last-child td {
@@ -165,12 +177,21 @@
 }
 
 .table tbody tr:hover {
-  background: var(--surface-muted);
+  background: var(--canvas);
 }
 
-.table td.is-code {
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
+/* Tabela cuja linha inteira e clicavel (abre edicao). */
+.table--clickable-rows tbody tr {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.table td.is-code,
+.code {
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  font-weight: var(--fw-medium);
+  color: var(--v-green-700);
 }
 
 .table__actions {
@@ -183,30 +204,54 @@
 .table__empty {
   padding: var(--sp-6);
   text-align: center;
-  color: var(--text-muted);
+  color: var(--ink-2);
   white-space: normal;
 }
 
-/* ---------------- Badge de status ---------------- */
+.table-foot {
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  border-top: 1px solid var(--line);
+  background: var(--canvas);
+}
+
+/* ---------------- Chips de status/tipo ---------------- */
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  padding: 2px var(--sp-2);
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
+  padding: 3px var(--sp-2);
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: var(--fw-semibold);
 }
 
 .badge--active {
-  background: var(--success-soft);
-  color: var(--success);
+  background: var(--ok-bg);
+  color: var(--ok-fg);
 }
 
 .badge--inactive {
-  background: var(--border);
-  color: var(--text-muted);
+  background: var(--line);
+  color: var(--ink-2);
+}
+
+.badge--neutral {
+  background: var(--canvas);
+  color: var(--ink-2);
+  font-weight: var(--fw-medium);
+}
+
+.badge--warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+.badge--err {
+  background: var(--err-bg);
+  color: var(--err-fg);
 }
 
 /* ---------------- Paginacao ---------------- */
@@ -218,71 +263,259 @@
   justify-content: space-between;
   gap: var(--sp-3);
   margin-top: var(--sp-4);
-  color: var(--text-muted);
+  color: var(--ink-2);
   font-size: var(--fs-sm);
 }
 
-/* ---------------- Drawer contextual ---------------- */
+/* ---------------- Modal fullscreen (padrao CRUD) ---------------- */
+/* Cobre apenas o workspace: topbar e sidebar continuam visiveis.
+   `--sidebar-current-w` e definido em .shell e reflete o estado recolhido. */
 
-.drawer__scrim {
+.modal-overlay {
   position: fixed;
-  inset: 0;
-  background: rgba(15, 61, 52, 0.32);
-  border: 0;
-  z-index: 30;
-}
-
-.drawer {
-  position: fixed;
-  top: 0;
+  top: var(--topbar-h);
+  left: var(--sidebar-current-w, var(--sidebar-w));
   right: 0;
   bottom: 0;
-  width: min(420px, 100vw);
+  z-index: 50;
+  background: rgba(8, 42, 32, 0.45);
+  backdrop-filter: blur(2px);
+  transition: left var(--transition);
+}
+
+.modal-fullscreen {
+  position: fixed;
+  top: var(--topbar-h);
+  left: var(--sidebar-current-w, var(--sidebar-w));
+  right: 0;
+  bottom: 0;
+  z-index: 51;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--canvas);
+  border-left: 1px solid var(--line);
+  animation: modalIn 0.18s ease;
+  transition: left var(--transition);
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-fullscreen {
+    animation: none;
+  }
+}
+
+.modal-fullscreen__head {
   background: var(--surface);
-  box-shadow: var(--shadow);
-  z-index: 31;
+  border-bottom: 1px solid var(--line);
+  padding: 0 var(--sp-8);
+  min-height: 64px;
   display: flex;
-  flex-direction: column;
-}
-
-.drawer__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-5);
-  border-bottom: 1px solid var(--border);
-}
-
-.drawer__title {
-  font-size: var(--fs-lg);
-}
-
-.drawer__close {
-  background: transparent;
-  border: 0;
-  color: var(--text-muted);
-  font-size: var(--fs-xl);
-  line-height: 1;
-  cursor: pointer;
-  padding: 0;
-}
-
-.drawer__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--sp-5);
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--sp-4);
 }
 
-.drawer__footer {
+.modal-fullscreen__crumb {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.modal-fullscreen__crumb b {
+  color: var(--ink-2);
+  font-weight: var(--fw-medium);
+}
+
+.modal-fullscreen__title {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-4) var(--sp-5);
-  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.modal-fullscreen__title h2 {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+}
+
+.code-chip {
+  font-family: var(--font-code);
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  background: var(--v-green-900);
+  color: var(--v-lime);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.modal-fullscreen__close {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--err-fg);
+  background: var(--err-bg);
+  border: 1px solid var(--err-border);
+  transition: background var(--transition), transform 0.06s;
+}
+
+.modal-fullscreen__close:hover {
+  background: var(--err-bg-hover);
+}
+
+.modal-fullscreen__close:active {
+  transform: scale(0.97);
+}
+
+.modal-fullscreen__body {
+  overflow-y: auto;
+  padding: var(--sp-8);
+}
+
+.modal-fullscreen__form-wrap {
+  max-width: 880px;
+  margin: 0 auto;
+  display: grid;
+  gap: var(--sp-5);
+}
+
+.modal-fullscreen__foot {
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding: var(--sp-4) var(--sp-8);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.modal-fullscreen__foot-meta {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.modal-fullscreen__actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-3);
+}
+
+@media (max-width: 640px) {
+  .modal-fullscreen__head,
+  .modal-fullscreen__foot {
+    padding-left: var(--sp-4);
+    padding-right: var(--sp-4);
+  }
+
+  .modal-fullscreen__body {
+    padding: var(--sp-4);
+  }
+}
+
+/* ---------------- Secao de formulario ---------------- */
+
+.form-section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  padding: var(--sp-6);
+}
+
+.form-section h3 {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--v-green-700);
+  margin-bottom: var(--sp-1);
+}
+
+.form-section__sub {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  margin-bottom: var(--sp-4);
+}
+
+.field-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+}
+
+.field-grid-2 .field--full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .field-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------- Toggle card ---------------- */
+
+.toggle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+}
+
+@media (max-width: 720px) {
+  .toggle-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.toggle-card {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-4);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.toggle-card:has(input:checked) {
+  border-color: var(--v-green-700);
+  background: var(--selected-bg);
+}
+
+.toggle-card input {
+  margin-top: 2px;
+  accent-color: var(--v-green-700);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.toggle-card b {
+  display: block;
+  font-size: 13.5px;
+  margin-bottom: 2px;
+}
+
+.toggle-card span {
+  font-size: 12.5px;
+  color: var(--ink-2);
 }
 
 /* ---------------- Formulario ---------------- */
@@ -294,19 +527,23 @@
 }
 
 .field label {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--text);
+  font-size: 12.5px;
+  font-weight: var(--fw-semibold);
+  color: var(--ink-2);
+}
+
+.field label .req {
+  color: var(--err-fg);
 }
 
 .field__hint {
   font-size: var(--fs-xs);
-  color: var(--text-subtle);
+  color: var(--ink-3);
 }
 
 .field__error {
   font-size: var(--fs-xs);
-  color: var(--danger);
+  color: var(--err-fg);
 }
 
 .field--checkbox {
@@ -320,26 +557,22 @@
 }
 
 .field-readonly-value {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--fs-base);
-  color: var(--text);
+  color: var(--ink);
 }
 
 .form-alert {
   padding: var(--sp-3);
-  border-radius: var(--radius);
-  background: var(--danger-soft);
-  color: var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--err-bg);
+  color: var(--err-fg);
   font-size: var(--fs-sm);
 }
 
 /* ---------------- Responsivo ---------------- */
 
 @media (max-width: 640px) {
-  .drawer {
-    width: 100vw;
-  }
-
   .toolbar select {
     width: 100%;
   }

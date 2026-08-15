@@ -3,10 +3,10 @@ import type { ItemDTO, ItemType, UnitOfMeasureDTO } from "@veridi/shared";
 import { ITEM_TYPE_LABELS } from "@veridi/shared";
 import { listItems, setItemActive } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
-import { ItemFormDrawer } from "./ItemFormDrawer";
+import { ItemFormModal } from "./ItemFormModal";
 
 type ActiveFilter = "all" | "active" | "inactive";
-type DrawerState =
+type ModalState =
   | { mode: "closed" }
   | { mode: "create" }
   | { mode: "edit"; item: ItemDTO };
@@ -15,7 +15,7 @@ const PAGE_SIZE = 20;
 
 /**
  * Cadastros → Itens. Primeira tela CRUD do MVP: define o padrao de
- * tabela densa + drawer contextual para os proximos cadastros.
+ * tabela densa + modal fullscreen para os proximos cadastros.
  */
 export function ItemsPage() {
   const [items, setItems] = useState<ItemDTO[]>([]);
@@ -30,9 +30,7 @@ export function ItemsPage() {
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
-  const [drawerState, setDrawerState] = useState<DrawerState>({
-    mode: "closed",
-  });
+  const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
 
   // Debounce da busca: evita 1 requisicao por tecla digitada.
   useEffect(() => {
@@ -111,9 +109,9 @@ export function ItemsPage() {
         <button
           type="button"
           className="btn btn--primary"
-          onClick={() => setDrawerState({ mode: "create" })}
+          onClick={() => setModalState({ mode: "create" })}
         >
-          Novo item
+          + Novo item
         </button>
       </div>
 
@@ -168,7 +166,7 @@ export function ItemsPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table">
+        <table className="table table--clickable-rows">
           <thead>
             <tr>
               <th>Código</th>
@@ -183,10 +181,23 @@ export function ItemsPage() {
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id}>
+              <tr
+                key={item.id}
+                tabIndex={0}
+                onClick={() => setModalState({ mode: "edit", item })}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    setModalState({ mode: "edit", item });
+                  }
+                }}
+              >
                 <td className="is-code">{item.code}</td>
                 <td>{item.name}</td>
-                <td>{ITEM_TYPE_LABELS[item.type]}</td>
+                <td>
+                  <span className="badge badge--neutral">
+                    {ITEM_TYPE_LABELS[item.type]}
+                  </span>
+                </td>
                 <td>{item.unit.code}</td>
                 <td>{item.controlsLot ? "Sim" : "Não"}</td>
                 <td>{item.controlsExpiry ? "Sim" : "Não"}</td>
@@ -199,12 +210,12 @@ export function ItemsPage() {
                     {item.active ? "Ativo" : "Inativo"}
                   </span>
                 </td>
-                <td>
+                <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
-                      onClick={() => setDrawerState({ mode: "edit", item })}
+                      onClick={() => setModalState({ mode: "edit", item })}
                     >
                       Editar
                     </button>
@@ -231,11 +242,14 @@ export function ItemsPage() {
             )}
           </tbody>
         </table>
+        <div className="table-foot">
+          {total} {total === 1 ? "item" : "itens"}
+        </div>
       </div>
 
       <div className="pagination">
         <span>
-          {total} {total === 1 ? "item" : "itens"}
+          Página {page} de {totalPages}
         </span>
         <div className="table__actions">
           <button
@@ -246,9 +260,6 @@ export function ItemsPage() {
           >
             Anterior
           </button>
-          <span>
-            Página {page} de {totalPages}
-          </span>
           <button
             type="button"
             className="btn btn--secondary btn--sm"
@@ -260,15 +271,15 @@ export function ItemsPage() {
         </div>
       </div>
 
-      {drawerState.mode !== "closed" && (
-        <ItemFormDrawer
-          key={drawerState.mode === "edit" ? drawerState.item.id : "create"}
-          mode={drawerState.mode}
-          item={drawerState.mode === "edit" ? drawerState.item : null}
+      {modalState.mode !== "closed" && (
+        <ItemFormModal
+          key={modalState.mode === "edit" ? modalState.item.id : "create"}
+          mode={modalState.mode}
+          item={modalState.mode === "edit" ? modalState.item : null}
           units={units}
-          onClose={() => setDrawerState({ mode: "closed" })}
+          onClose={() => setModalState({ mode: "closed" })}
           onSaved={() => {
-            setDrawerState({ mode: "closed" });
+            setModalState({ mode: "closed" });
             reload();
           }}
         />

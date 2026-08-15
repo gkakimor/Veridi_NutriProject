@@ -1,54 +1,53 @@
 /*
- * Veridi Nutrition — design tokens
+ * Veridi Nutrition — design tokens v2
  * Fonte autoritativa: docs/UI_BRAND.md
  *
  * REGRA: CSS de feature usa SOMENTE tokens. Nao usar hex cru em telas.
  */
 
 :root {
-  /* ---- Identidade Veridi: verde estrutural ---- */
-  --navy-deep: #0f3d34;
-  --navy: #174f43;
-  --navy-hover: #1d5e50;
-  --title-dark: #174f43;
+  /* ===== Marca ===== */
+  --v-green-950: #082a20;
+  --v-green-900: #0c3629;
+  --v-green-800: #124534;
+  --v-green-700: #1b5e43;
+  --v-green-600: #247650;
+  --v-lime: #c6f04a;
+  --v-lime-ink: #1e2b10;
 
-  /* ---- Verde primario: acao unica, links, foco, selecao ---- */
-  --primary: #217362;
-  --primary-hover: #2a806e;
-  --primary-soft: #e7f1ee;
-  --link: #217362;
-
-  /* ---- Lime: acento de marca, uso restrito ---- */
-  --accent: #afcb08;
-
-  /* ---- Neutros ---- */
-  --canvas: #f4f6f5;
+  /* ===== Neutros ===== */
+  --canvas: #f6f8f5;
   --surface: #ffffff;
-  --surface-muted: #fafbfb;
-  --border: #dfe4e2;
-  --border-strong: #c4ccc9;
+  --ink: #17251e;
+  --ink-2: #5d6c63;
+  --ink-3: #8b978f;
+  --line: #e3e9e2;
+  --line-strong: #cfd8cf;
 
-  --text: #16211e;
-  --text-muted: #5b6a66;
-  --text-subtle: #7d8b87;
-  --text-on-dark: #eef4f2;
-  --text-on-dark-muted: #a9c3bb;
+  /* ===== Semanticos ===== */
+  --ok-bg: #e4f5e9;
+  --ok-fg: #1b6b3c;
 
-  /* ---- Estado ---- */
-  --danger: #b3261e;
-  --danger-soft: #fdecea;
-  --warning: #8a5a00;
-  --warning-soft: #fdf4e3;
-  --success: #1d6b3f;
-  --success-soft: #e8f3ec;
-  --info: #1f5673;
-  --info-soft: #e9f1f5;
+  --warn-bg: #fbf3dc;
+  --warn-fg: #8a6a12;
 
-  /* ---- Tipografia compacta (sem fontes externas) ---- */
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas,
-    monospace;
+  --err-bg: #fbe9e7;
+  --err-fg: #b3362a;
+  --err-border: #f0c6c0;
+  --err-bg-hover: #f6d7d2;
+
+  /* Selecionado (ex.: toggle-card marcado) — tinta suave sobre verde institucional. */
+  --selected-bg: #f1f8f1;
+
+  /* Hierarquia de texto sobre superficies escuras estruturais (topbar/sidebar)
+     e sobre botoes de cor solida. */
+  --on-dark: #ffffff;
+  --on-dark-2: #c9dacf;
+  --on-dark-3: #8fa99a;
+
+  /* ===== Tipografia ===== */
+  --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, monospace;
 
   --fs-xs: 0.75rem;
   --fs-sm: 0.8125rem;
@@ -73,21 +72,19 @@
   --sp-6: 24px;
   --sp-8: 32px;
 
-  /* ---- Raios pequenos ---- */
-  --radius-sm: 3px;
-  --radius: 5px;
-  --radius-lg: 8px;
+  /* ===== Forma ===== */
+  --radius: 10px;
+  --radius-sm: 7px;
 
-  /* ---- Sombras sutis ---- */
-  --shadow-sm: 0 1px 2px rgba(15, 61, 52, 0.06);
-  --shadow: 0 1px 3px rgba(15, 61, 52, 0.1), 0 1px 2px rgba(15, 61, 52, 0.06);
+  --shadow-1: 0 1px 2px rgba(12, 54, 41, 0.06), 0 1px 3px rgba(12, 54, 41, 0.08);
+  --shadow-modal: 0 24px 64px rgba(8, 42, 32, 0.28);
 
   /* ---- Layout do shell ---- */
-  --masthead-h: 52px;
-  --sidebar-w: 248px;
+  --topbar-h: 52px;
+  --sidebar-w: 236px;
 
   /* ---- Foco acessivel ---- */
-  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary);
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--v-green-700);
 
   --transition: 120ms ease;
 }

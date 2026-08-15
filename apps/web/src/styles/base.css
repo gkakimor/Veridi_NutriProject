@@ -15,8 +15,8 @@ body,
 body {
   margin: 0;
   background: var(--canvas);
-  color: var(--text);
-  font-family: var(--font-sans);
+  color: var(--ink);
+  font-family: var(--font-ui);
   font-size: var(--fs-base);
   line-height: var(--lh-base);
   -webkit-font-smoothing: antialiased;
@@ -27,7 +27,7 @@ h2,
 h3,
 h4 {
   margin: 0;
-  color: var(--title-dark);
+  color: var(--ink);
   line-height: var(--lh-tight);
   font-weight: var(--fw-semibold);
 }
@@ -37,7 +37,7 @@ p {
 }
 
 a {
-  color: var(--link);
+  color: var(--v-green-700);
   text-decoration: none;
 }
 

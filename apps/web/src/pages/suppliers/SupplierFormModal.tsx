@@ -3,8 +3,10 @@ import type { FormEvent } from "react";
 import type { SupplierDTO } from "@veridi/shared";
 import { createSupplier, updateSupplier } from "../../lib/suppliers-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
+import { FormSection } from "../../components/FormSection";
 
-interface SupplierFormDrawerProps {
+interface SupplierFormModalProps {
   mode: "create" | "edit";
   supplier: SupplierDTO | null;
   onClose: () => void;
@@ -34,13 +36,8 @@ function initialState(supplier: SupplierDTO | null): FormState {
   return { legalName: "", tradeName: "", cnpj: "", email: "", phone: "", notes: "" };
 }
 
-/** Drawer contextual de criacao/edicao de fornecedor — mesmo padrao de Items. */
-export function SupplierFormDrawer({
-  mode,
-  supplier,
-  onClose,
-  onSaved,
-}: SupplierFormDrawerProps) {
+/** Modal fullscreen de criacao/edicao de fornecedor — mesmo padrao de Items. */
+export function SupplierFormModal({ mode, supplier, onClose, onSaved }: SupplierFormModalProps) {
   const [form, setForm] = useState<FormState>(() => initialState(supplier));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,45 +93,62 @@ export function SupplierFormDrawer({
     }
   }
 
-  return (
-    <>
-      <button
-        type="button"
-        className="drawer__scrim"
-        aria-label="Fechar"
-        onClick={onClose}
-      />
-      <div
-        className="drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="supplier-drawer-title"
-      >
-        <div className="drawer__header">
-          <div>
-            <h2 className="drawer__title" id="supplier-drawer-title">
-              {mode === "create" ? "Novo fornecedor" : supplier?.legalName}
-            </h2>
-            {mode === "edit" && supplier && (
-              <p className="field-readonly-value">Código: {supplier.code}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            className="drawer__close"
-            aria-label="Fechar"
-            onClick={onClose}
-          >
-            ×
+  const codeChip = mode === "create" ? "Código gerado ao salvar" : supplier?.code;
+
+  const footer =
+    mode === "create" ? (
+      <>
+        <span className="modal-fullscreen__foot-meta">
+          O fornecedor será criado como <b>Ativo</b>.
+        </span>
+        <div className="modal-fullscreen__actions">
+          <button type="button" className="btn btn--ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" form="supplier-form" className="btn btn--accent" disabled={saving}>
+            {saving ? "Criando…" : "Criar fornecedor"}
           </button>
         </div>
+      </>
+    ) : (
+      <>
+        <span className="modal-fullscreen__foot-meta">
+          Última alteração:{" "}
+          {supplier ? new Date(supplier.updatedAt).toLocaleDateString("pt-BR") : "—"}
+        </span>
+        <div className="modal-fullscreen__actions">
+          <button type="button" className="btn btn--ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" form="supplier-form" className="btn btn--accent" disabled={saving}>
+            {saving ? "Salvando…" : "Salvar alterações"}
+          </button>
+        </div>
+      </>
+    );
 
-        <form onSubmit={handleSubmit} style={{ display: "contents" }}>
-          <div className="drawer__body">
-            {error && <p className="form-alert">{error}</p>}
+  return (
+    <FullWorkspaceModal
+      open
+      onClose={onClose}
+      crumb="Cadastros / Fornecedores"
+      crumbActive={mode === "create" ? "Novo" : "Editar"}
+      title={mode === "create" ? "Novo fornecedor" : supplier?.legalName}
+      {...(codeChip ? { codeChip } : {})}
+      footer={footer}
+    >
+      <form id="supplier-form" onSubmit={handleSubmit}>
+        {error && <p className="form-alert">{error}</p>}
 
-            <div className="field">
-              <label htmlFor="supplier-legal-name">Razão Social / Nome *</label>
+        <FormSection
+          title="Identificação"
+          subtitle="Dados basicos do fornecedor usados em compras e recebimento."
+        >
+          <div className="field-grid-2">
+            <div className="field field--full">
+              <label htmlFor="supplier-legal-name">
+                Razão Social / Nome <span className="req">*</span>
+              </label>
               <input
                 id="supplier-legal-name"
                 type="text"
@@ -176,7 +190,11 @@ export function SupplierFormDrawer({
                 <p className="field__error">{fieldErrors["cnpj"]}</p>
               )}
             </div>
+          </div>
+        </FormSection>
 
+        <FormSection title="Contato" subtitle="Usados para tratativas de compra e recebimento.">
+          <div className="field-grid-2">
             <div className="field">
               <label htmlFor="supplier-email">Email</label>
               <input
@@ -200,39 +218,38 @@ export function SupplierFormDrawer({
                 }
               />
             </div>
+          </div>
+        </FormSection>
 
-            <div className="field">
-              <label htmlFor="supplier-notes">Observações</label>
-              <textarea
-                id="supplier-notes"
-                rows={3}
-                value={form.notes}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, notes: event.target.value }))
-                }
-              />
+        <FormSection title="Observações">
+          <div className="field">
+            <label htmlFor="supplier-notes">Notas internas</label>
+            <textarea
+              id="supplier-notes"
+              rows={3}
+              value={form.notes}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, notes: event.target.value }))
+              }
+            />
+          </div>
+        </FormSection>
+
+        {mode === "edit" && supplier && (
+          <FormSection title="Status">
+            <div className="status-line">
+              <span
+                className={supplier.active ? "badge badge--active" : "badge badge--inactive"}
+              >
+                {supplier.active ? "Ativo" : "Inativo"}
+              </span>
+              <span className="field__hint">
+                Use "Inativar"/"Reativar" na lista para alterar o status.
+              </span>
             </div>
-
-            {mode === "edit" && supplier && (
-              <div className="field">
-                <span>Status</span>
-                <p className="field-readonly-value">
-                  {supplier.active ? "Ativo" : "Inativo"}
-                </p>
-                <p className="field__hint">
-                  Use "Inativar"/"Reativar" na lista para alterar o status.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="drawer__footer">
-            <button type="submit" className="btn btn--primary" disabled={saving}>
-              {saving ? "Salvando…" : "Salvar"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
+          </FormSection>
+        )}
+      </form>
+    </FullWorkspaceModal>
   );
 }

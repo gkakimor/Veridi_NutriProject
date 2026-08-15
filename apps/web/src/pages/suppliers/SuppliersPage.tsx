@@ -2,17 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import type { SupplierDTO } from "@veridi/shared";
 import { formatCnpj } from "@veridi/shared";
 import { listSuppliers, setSupplierActive } from "../../lib/suppliers-api";
-import { SupplierFormDrawer } from "./SupplierFormDrawer";
+import { SupplierFormModal } from "./SupplierFormModal";
 
 type ActiveFilter = "all" | "active" | "inactive";
-type DrawerState =
+type ModalState =
   | { mode: "closed" }
   | { mode: "create" }
   | { mode: "edit"; supplier: SupplierDTO };
 
 const PAGE_SIZE = 20;
 
-/** Cadastros → Fornecedores. Mesmo padrao de tabela densa + drawer de Items. */
+/** Cadastros → Fornecedores. Mesmo padrao de tabela densa + modal de Items. */
 export function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -24,7 +24,7 @@ export function SuppliersPage() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
-  const [drawerState, setDrawerState] = useState<DrawerState>({ mode: "closed" });
+  const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -88,9 +88,9 @@ export function SuppliersPage() {
         <button
           type="button"
           className="btn btn--primary"
-          onClick={() => setDrawerState({ mode: "create" })}
+          onClick={() => setModalState({ mode: "create" })}
         >
-          Novo fornecedor
+          + Novo fornecedor
         </button>
       </div>
 
@@ -125,7 +125,7 @@ export function SuppliersPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table">
+        <table className="table table--clickable-rows">
           <thead>
             <tr>
               <th>Código</th>
@@ -139,7 +139,16 @@ export function SuppliersPage() {
           </thead>
           <tbody>
             {suppliers.map((supplier) => (
-              <tr key={supplier.id}>
+              <tr
+                key={supplier.id}
+                tabIndex={0}
+                onClick={() => setModalState({ mode: "edit", supplier })}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    setModalState({ mode: "edit", supplier });
+                  }
+                }}
+              >
                 <td className="is-code">{supplier.code}</td>
                 <td>{supplier.legalName}</td>
                 <td>{supplier.tradeName ?? "—"}</td>
@@ -154,12 +163,12 @@ export function SuppliersPage() {
                     {supplier.active ? "Ativo" : "Inativo"}
                   </span>
                 </td>
-                <td>
+                <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
-                      onClick={() => setDrawerState({ mode: "edit", supplier })}
+                      onClick={() => setModalState({ mode: "edit", supplier })}
                     >
                       Editar
                     </button>
@@ -188,11 +197,14 @@ export function SuppliersPage() {
             )}
           </tbody>
         </table>
+        <div className="table-foot">
+          {total} {total === 1 ? "fornecedor" : "fornecedores"}
+        </div>
       </div>
 
       <div className="pagination">
         <span>
-          {total} {total === 1 ? "fornecedor" : "fornecedores"}
+          Página {page} de {totalPages}
         </span>
         <div className="table__actions">
           <button
@@ -203,9 +215,6 @@ export function SuppliersPage() {
           >
             Anterior
           </button>
-          <span>
-            Página {page} de {totalPages}
-          </span>
           <button
             type="button"
             className="btn btn--secondary btn--sm"
@@ -217,14 +226,14 @@ export function SuppliersPage() {
         </div>
       </div>
 
-      {drawerState.mode !== "closed" && (
-        <SupplierFormDrawer
-          key={drawerState.mode === "edit" ? drawerState.supplier.id : "create"}
-          mode={drawerState.mode}
-          supplier={drawerState.mode === "edit" ? drawerState.supplier : null}
-          onClose={() => setDrawerState({ mode: "closed" })}
+      {modalState.mode !== "closed" && (
+        <SupplierFormModal
+          key={modalState.mode === "edit" ? modalState.supplier.id : "create"}
+          mode={modalState.mode}
+          supplier={modalState.mode === "edit" ? modalState.supplier : null}
+          onClose={() => setModalState({ mode: "closed" })}
           onSaved={() => {
-            setDrawerState({ mode: "closed" });
+            setModalState({ mode: "closed" });
             reload();
           }}
         />

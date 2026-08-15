@@ -13,6 +13,15 @@ FAST MVP.
 **Delivery 01 — bootstrap do monorepo: concluído.**
 **Delivery 02 — Cadastro de Itens (Bloco A): concluído.**
 **Delivery 03 — Cadastro de Clientes e Fornecedores (Bloco A): concluído.**
+**Delivery 04 — Veridi UI design system v2: concluído.**
+
+Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
+`--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) e o modal
+fullscreen dentro do workspace (`FullWorkspaceModal`) são o padrão oficial
+para toda tela CRUD (list + create/edit) — já aplicado em Itens,
+Fornecedores e Clientes; próximos cadastros (Usuários, Produtos, etc.)
+devem nascer nesse padrão em vez do drawer lateral antigo. Ver
+`docs/UI_BRAND.md`.
 
 18 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta
 Usuários e Produtos).

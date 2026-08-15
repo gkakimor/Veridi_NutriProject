@@ -1,35 +1,40 @@
-import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { useState } from "react";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { navigation } from "./navigation";
 import "./shell.css";
 
 /**
  * Shell operacional Veridi.
  *
- * Estrutura fixa: masthead superior verde-escuro, navegacao a esquerda,
- * workspace principal. Drawer contextual a direita entra por tela, quando
- * util — nao existe painel permanente.
+ * Estrutura fixa: topbar verde-escuro, navegacao a esquerda recolhivel,
+ * workspace principal. Modais fullscreen de CRUD cobrem apenas o workspace
+ * (ver `FullWorkspaceModal`) — topbar e sidebar continuam visiveis.
  */
 export function AppShell() {
-  const [navOpen, setNavOpen] = useState(false);
-  const location = useLocation();
-
-  // Em tablet/mobile a navegacao e sobreposta: fecha ao trocar de rota.
-  useEffect(() => {
-    setNavOpen(false);
-  }, [location.pathname]);
+  const [navCollapsed, setNavCollapsed] = useState(false);
 
   return (
-    <div className="shell">
+    <div className={navCollapsed ? "shell shell--nav-collapsed" : "shell"}>
       <header className="masthead">
         <button
           type="button"
           className="masthead__toggle"
-          aria-label={navOpen ? "Fechar navegação" : "Abrir navegação"}
-          aria-expanded={navOpen}
-          onClick={() => setNavOpen((open) => !open)}
+          aria-label={navCollapsed ? "Mostrar menu" : "Esconder menu"}
+          aria-expanded={!navCollapsed}
+          onClick={() => setNavCollapsed((collapsed) => !collapsed)}
         >
-          <span aria-hidden="true">☰</span>
+          <svg
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
         </button>
 
         <Link to="/" className="masthead__brand">
@@ -41,6 +46,18 @@ export function AppShell() {
         </Link>
 
         <div className="masthead__search">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4-4" />
+          </svg>
           <label className="sr-only" htmlFor="global-search">
             Buscar ou escanear
           </label>
@@ -57,19 +74,7 @@ export function AppShell() {
         </div>
       </header>
 
-      {navOpen && (
-        <button
-          type="button"
-          className="sidebar__scrim"
-          aria-label="Fechar navegação"
-          onClick={() => setNavOpen(false)}
-        />
-      )}
-
-      <nav
-        className={navOpen ? "sidebar is-open" : "sidebar"}
-        aria-label="Navegação principal"
-      >
+      <nav className="sidebar" aria-label="Navegação principal">
         {navigation.map((group, index) => (
           <div className="sidebar__group" key={group.title ?? `grupo-${index}`}>
             {group.title !== null && (
