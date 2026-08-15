@@ -40,6 +40,8 @@ interface LineRow {
   unitCode: string;
   orderedQuantity: string;
   unitPrice: string;
+  receivedQuantity: string;
+  openQuantity: string;
 }
 
 function statusBadgeClass(status: PurchaseOrderStatus): string {
@@ -80,6 +82,8 @@ function lineFromDTO(line: PurchaseOrderDTO["lines"][number]): LineRow {
     unitCode: line.unitCode,
     orderedQuantity: line.orderedQuantity,
     unitPrice: line.unitPrice ?? "",
+    receivedQuantity: line.receivedQuantity,
+    openQuantity: line.openQuantity,
   };
 }
 
@@ -162,6 +166,7 @@ export function PurchaseOrderPage() {
   const isForecastEditable = !purchaseOrder || status !== "CANCELLED";
   const isCancellable = !isNew && (status === "DRAFT" || status === "ORDERED");
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
+  const isReceivable = !isNew && (status === "ORDERED" || status === "PARTIALLY_RECEIVED");
 
   const supplierOptions: SupplierOption[] = useMemo(() => {
     if (!purchaseOrder || activeSuppliers.some((s) => s.id === purchaseOrder.supplierId)) {
@@ -194,7 +199,17 @@ export function PurchaseOrderPage() {
   function handleAddLine() {
     setLines((prev) => [
       ...prev,
-      { key: nextRowKey(), itemId: "", itemCode: "", itemName: "", unitCode: "", orderedQuantity: "", unitPrice: "" },
+      {
+        key: nextRowKey(),
+        itemId: "",
+        itemCode: "",
+        itemName: "",
+        unitCode: "",
+        orderedQuantity: "",
+        unitPrice: "",
+        receivedQuantity: "0",
+        openQuantity: "0",
+      },
     ]);
   }
 
@@ -526,7 +541,17 @@ export function PurchaseOrderPage() {
                           }
                         />
                       ) : (
-                        line.orderedQuantity
+                        <>
+                          {line.orderedQuantity}
+                          {status !== "CANCELLED" && (
+                            <>
+                              <br />
+                              <span className="field__hint">
+                                Recebido: {line.receivedQuantity} · Aberto: {line.openQuantity}
+                              </span>
+                            </>
+                          )}
+                        </>
                       )}
                     </td>
                     <td>{line.unitCode || "—"}</td>
@@ -633,6 +658,16 @@ export function PurchaseOrderPage() {
               onClick={() => setConfirmDialogOpen(true)}
             >
               Confirmar pedido
+            </button>
+          )}
+          {isReceivable && (
+            <button
+              type="button"
+              className="btn btn--accent"
+              disabled={saving}
+              onClick={() => navigate(`/compras/recebimentos/novo?purchaseOrderId=${id}`)}
+            >
+              Receber materiais
             </button>
           )}
         </div>

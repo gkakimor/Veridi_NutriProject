@@ -68,6 +68,12 @@ Exact prefixes are presentation-level and may evolve.
 
 Inactive items remain historically visible.
 
+Each item also carries `requiresQualityRelease` (boolean, editable, default by
+type — true for RAW_MATERIAL/FINISHED_PRODUCT, false for PACKAGING): decides
+whether a lot received for that item starts `AWAITING_RELEASE` or already
+`AVAILABLE`. It is a per-item setting the user can override, never inferred
+permanently from `type` alone.
+
 ---
 
 # 5. Products
@@ -241,6 +247,33 @@ quality-sensitive received material begins as AWAITING_RELEASE.
 Only AVAILABLE lots participate in normal FEFO allocation.
 
 Full laboratory inspection and COA workflows are outside MVP.
+
+## Durable rules confirmed at implementation (Receiving + Lots)
+
+- Receipt is created already confirmed — no persisted DRAFT. Once created it
+  is historical/read-only; there is no edit endpoint and no physical delete.
+  It stays legible even if the Supplier or Item involved is later
+  inactivated (reads are never filtered by `active`).
+- `Lot.initialReceivedQuantity` is only how much arrived in that specific
+  receipt — never a current balance. There is no `currentQuantity`/On Hand
+  on Lot; physical balance is deferred entirely to the future Inventory
+  Movements ledger. Lists and screens referring to this value are always
+  labeled "Recebido", never "Saldo".
+- Supplier lot (`ReceiptLine.supplierLot`/`Lot.supplierLot`) and internal
+  lot (`Lot.code`, `LT-YYYYMMDD-NNNNNN`) are always two distinct fields; the
+  supplier's identification is stored as given (trimmed only), never
+  replaced by the internal code.
+- Quality gate at receiving time: `Lot.status` starts `AWAITING_RELEASE`
+  when `Item.requiresQualityRelease` is true, `AVAILABLE` otherwise. Only
+  two explicit transitions exist this delivery — release
+  (`AWAITING_RELEASE → AVAILABLE`) and block (`AWAITING_RELEASE|AVAILABLE →
+  BLOCKED`, reason required) — never a free-form status PATCH. `EXPIRED` is
+  computed for display (`expiryDate < today`) whenever relevant, not written
+  by any job/scheduler.
+- Over-receipt is prevented by locking the `PurchaseOrder` row
+  (`SELECT … FOR UPDATE`) inside the confirming transaction before summing
+  `ReceiptLine`s and comparing against `orderedQuantity` — simple row
+  locking, not full `SERIALIZABLE` isolation.
 
 ---
 

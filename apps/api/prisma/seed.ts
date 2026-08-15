@@ -5,10 +5,12 @@ import {
   ITEM_TYPE_DEFAULTS,
   PRODUCT_CODE_PREFIX,
   PURCHASE_ORDER_CODE_PREFIX,
+  RECEIPT_CODE_PREFIX,
   SUPPLIER_CODE_PREFIX,
 } from "@veridi/shared";
 import { nextItemCode } from "../src/modules/items/item-codes.js";
 import { nextSequenceCode } from "../src/lib/sequence-code.js";
+import { nextLotCode } from "../src/lib/lot-code.js";
 
 const prisma = new PrismaClient();
 
@@ -284,6 +286,145 @@ async function seedPurchaseOrders(): Promise<void> {
   }
 }
 
+/**
+ * OC confirmada + recebimento parcial: gera 1 lote AWAITING_RELEASE
+ * (Vitamina C — requiresQualityRelease=true por padrão) e 1 lote AVAILABLE
+ * (Pote 500g — requiresQualityRelease=false por padrão). A OC de embalagem
+ * criada em seedPurchaseOrders continua ORDERED e intocada (nao recebida).
+ */
+async function seedReceiving(): Promise<void> {
+  const marker = "Seed dev — recebimento parcial de Vitamina C + Pote 500g";
+  const existing = await prisma.purchaseOrder.findFirst({ where: { notes: marker } });
+  if (existing) return;
+
+  const supplier = await prisma.supplier.findFirst({
+    where: { legalName: "Nutrimax Ingredientes Ltda" },
+  });
+  const vitaminC = await prisma.item.findFirst({
+    where: { name: "Vitamina C", type: "RAW_MATERIAL" },
+  });
+  const pote = await prisma.item.findFirst({ where: { name: "Pote 500g", type: "PACKAGING" } });
+  if (!supplier || !vitaminC || !pote) return;
+
+  const code = await nextSequenceCode(prisma, "purchase_order_code_seq", PURCHASE_ORDER_CODE_PREFIX);
+  const po = await prisma.purchaseOrder.create({
+    data: {
+      code,
+      supplierId: supplier.id,
+      supplierCode: supplier.code,
+      supplierName: supplier.legalName,
+      supplierCnpj: supplier.cnpj,
+      orderDate: new Date(),
+      notes: marker,
+      status: "ORDERED",
+      orderedAt: new Date(),
+      orderedBy: "Ambiente local",
+      lines: {
+        create: [
+          {
+            itemId: vitaminC.id,
+            itemCode: vitaminC.code,
+            itemName: vitaminC.name,
+            unitCode: vitaminC.unitCode,
+            orderedQuantity: "80",
+          },
+          {
+            itemId: pote.id,
+            itemCode: pote.code,
+            itemName: pote.name,
+            unitCode: pote.unitCode,
+            orderedQuantity: "200",
+          },
+        ],
+      },
+    },
+    include: { lines: true },
+  });
+
+  const vitaminCLine = po.lines.find((line) => line.itemId === vitaminC.id)!;
+  const poteLine = po.lines.find((line) => line.itemId === pote.id)!;
+
+  const receivedAt = new Date();
+  const receiptCode = await nextSequenceCode(prisma, "receipt_code_seq", RECEIPT_CODE_PREFIX);
+  const receipt = await prisma.receipt.create({
+    data: {
+      code: receiptCode,
+      purchaseOrderId: po.id,
+      supplierId: supplier.id,
+      receivedAt,
+      invoiceNumber: "NF 55001",
+      createdBy: "Ambiente local",
+    },
+  });
+
+  // Vitamina C: controla lote + validade + qualidade -> AWAITING_RELEASE.
+  const vitaminCExpiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  const vitaminCReceiptLine = await prisma.receiptLine.create({
+    data: {
+      receiptId: receipt.id,
+      purchaseOrderLineId: vitaminCLine.id,
+      itemId: vitaminC.id,
+      receivedQuantity: "50",
+      unitCode: vitaminCLine.unitCode,
+      supplierLot: "NUT-2026-0815",
+      expiryDate: vitaminCExpiry,
+      location: "MP / Estante B / Posição 03",
+    },
+  });
+  const vitaminCLot = await prisma.lot.create({
+    data: {
+      code: await nextLotCode(prisma, receivedAt),
+      itemId: vitaminC.id,
+      supplierId: supplier.id,
+      supplierLot: "NUT-2026-0815",
+      expiryDate: vitaminCExpiry,
+      initialReceivedQuantity: "50",
+      status: "AWAITING_RELEASE",
+      location: "MP / Estante B / Posição 03",
+      createdBy: "Ambiente local",
+    },
+  });
+  await prisma.receiptLine.update({
+    where: { id: vitaminCReceiptLine.id },
+    data: { lotId: vitaminCLot.id },
+  });
+
+  // Pote 500g: controla lote mas nao exige liberacao da Qualidade -> AVAILABLE.
+  const poteReceiptLine = await prisma.receiptLine.create({
+    data: {
+      receiptId: receipt.id,
+      purchaseOrderLineId: poteLine.id,
+      itemId: pote.id,
+      receivedQuantity: "200",
+      unitCode: poteLine.unitCode,
+      supplierLot: "NUT-POTE-2026",
+      location: "ME / Estante A / Posição 01",
+    },
+  });
+  const poteLot = await prisma.lot.create({
+    data: {
+      code: await nextLotCode(prisma, receivedAt),
+      itemId: pote.id,
+      supplierId: supplier.id,
+      supplierLot: "NUT-POTE-2026",
+      initialReceivedQuantity: "200",
+      status: "AVAILABLE",
+      location: "ME / Estante A / Posição 01",
+      createdBy: "Ambiente local",
+    },
+  });
+  await prisma.receiptLine.update({ where: { id: poteReceiptLine.id }, data: { lotId: poteLot.id } });
+
+  await prisma.purchaseOrder.update({
+    where: { id: po.id },
+    data: { status: "PARTIALLY_RECEIVED" },
+  });
+
+  console.log(
+    `Recebimento criado: ${receiptCode} (OC ${code}) — lote Vitamina C AWAITING_RELEASE, lote Pote 500g AVAILABLE`,
+  );
+}
+
 async function main(): Promise<void> {
   await seedUnits();
   await seedItems();
@@ -291,6 +432,7 @@ async function main(): Promise<void> {
   await seedCustomers();
   await seedProducts();
   await seedPurchaseOrders();
+  await seedReceiving();
 }
 
 main()

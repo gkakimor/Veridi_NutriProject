@@ -28,11 +28,11 @@ export const ITEM_TYPE_PREFIXES: Record<ItemType, string> = {
  */
 export const ITEM_TYPE_DEFAULTS: Record<
   ItemType,
-  { controlsLot: boolean; controlsExpiry: boolean }
+  { controlsLot: boolean; controlsExpiry: boolean; requiresQualityRelease: boolean }
 > = {
-  RAW_MATERIAL: { controlsLot: true, controlsExpiry: true },
-  PACKAGING: { controlsLot: true, controlsExpiry: false },
-  FINISHED_PRODUCT: { controlsLot: true, controlsExpiry: true },
+  RAW_MATERIAL: { controlsLot: true, controlsExpiry: true, requiresQualityRelease: true },
+  PACKAGING: { controlsLot: true, controlsExpiry: false, requiresQualityRelease: false },
+  FINISHED_PRODUCT: { controlsLot: true, controlsExpiry: true, requiresQualityRelease: true },
 };
 
 export type UomDimension = "MASS" | "COUNT" | "VOLUME";
@@ -52,6 +52,7 @@ export interface ItemDTO {
   unit: UnitOfMeasureDTO;
   controlsLot: boolean;
   controlsExpiry: boolean;
+  requiresQualityRelease: boolean;
   externalBarcode: string | null;
   active: boolean;
   createdAt: string;
@@ -71,6 +72,7 @@ export interface CreateItemInput {
   unitCode: string;
   controlsLot?: boolean;
   controlsExpiry?: boolean;
+  requiresQualityRelease?: boolean;
   externalBarcode?: string;
 }
 
@@ -80,5 +82,6 @@ export interface UpdateItemInput {
   unitCode?: string;
   controlsLot?: boolean;
   controlsExpiry?: boolean;
+  requiresQualityRelease?: boolean;
   externalBarcode?: string;
 }

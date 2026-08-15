@@ -50,7 +50,7 @@ export const navigation: NavGroup[] = [
       {
         label: "Recebimentos",
         path: "/compras/recebimentos",
-        implemented: false,
+        implemented: true,
       },
     ],
   },
@@ -58,7 +58,7 @@ export const navigation: NavGroup[] = [
     title: "Estoque",
     items: [
       { label: "Visão Geral", path: "/estoque", implemented: false },
-      { label: "Lotes", path: "/estoque/lotes", implemented: false },
+      { label: "Lotes", path: "/estoque/lotes", implemented: true },
       {
         label: "Movimentações",
         path: "/estoque/movimentacoes",

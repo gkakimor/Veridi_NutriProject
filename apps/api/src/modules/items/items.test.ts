@@ -58,12 +58,13 @@ describe("Items", () => {
     expect(body.code).toMatch(/^MP-\d{6}$/);
     expect(body.controlsLot).toBe(true);
     expect(body.controlsExpiry).toBe(true);
+    expect(body.requiresQualityRelease).toBe(true);
     expect(body.active).toBe(true);
 
     await app.close();
   });
 
-  it("gera código ME-###### para embalagem, com controlsExpiry=false por padrão", async () => {
+  it("gera código ME-###### para embalagem, com controlsExpiry=false e requiresQualityRelease=false por padrão", async () => {
     const app = buildApp();
     await app.ready();
 
@@ -77,6 +78,30 @@ describe("Items", () => {
     const body = response.json();
     expect(body.code).toMatch(/^ME-\d{6}$/);
     expect(body.controlsExpiry).toBe(false);
+    expect(body.requiresQualityRelease).toBe(false);
+
+    await app.close();
+  });
+
+  it("permite editar requiresQualityRelease independente do tipo", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, {
+      type: "PACKAGING",
+      name: "Embalagem com liberação Teste",
+      unitCode: "un",
+    });
+    expect(created.json().requiresQualityRelease).toBe(false);
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/items/${created.json().id}`,
+      payload: { requiresQualityRelease: true },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().requiresQualityRelease).toBe(true);
 
     await app.close();
   });

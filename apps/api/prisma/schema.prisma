@@ -29,6 +29,13 @@ enum PurchaseOrderStatus {
   CANCELLED
 }
 
+enum LotStatus {
+  AWAITING_RELEASE
+  AVAILABLE
+  BLOCKED
+  EXPIRED
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -62,6 +69,13 @@ model Item {
   unit            UnitOfMeasure @relation(fields: [unitCode], references: [code])
   controlsLot     Boolean       @default(true)
   controlsExpiry  Boolean       @default(true)
+
+  /// Se um lote recebido deste item fica AWAITING_RELEASE (precisa
+  /// liberacao da Qualidade) ou ja nasce AVAILABLE. Default por tipo
+  /// (ITEM_TYPE_DEFAULTS em @veridi/shared), editavel pelo usuario — nao
+  /// inferido permanentemente so pelo type.
+  requiresQualityRelease Boolean @default(true)
+
   externalBarcode String?
   active          Boolean       @default(true)
 
@@ -73,6 +87,8 @@ model Item {
   product Product?
 
   purchaseOrderLines PurchaseOrderLine[]
+  receiptLines        ReceiptLine[]
+  lots                Lot[]
 
   @@index([type])
   @@index([active])
@@ -105,6 +121,8 @@ model Supplier {
   updatedAt DateTime @updatedAt
 
   purchaseOrders PurchaseOrder[]
+  receipts       Receipt[]
+  lots           Lot[]
 
   @@index([active])
   @@map("suppliers")
@@ -218,7 +236,8 @@ model PurchaseOrder {
   cancelledBy  String?
   cancelReason String?
 
-  lines PurchaseOrderLine[]
+  lines    PurchaseOrderLine[]
+  receipts Receipt[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -247,10 +266,129 @@ model PurchaseOrderLine {
   orderedQuantity Decimal  @db.Decimal(18, 6)
   unitPrice       Decimal? @db.Decimal(14, 4)
 
+  receiptLines ReceiptLine[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   /// Mesmo Item nao pode aparecer duas vezes na mesma OC (MVP).
   @@unique([purchaseOrderId, itemId])
   @@map("purchase_order_lines")
+}
+
+/// Evento de recebimento CONFIRMADO de uma Ordem de Compra. Sem DRAFT
+/// persistido — o frontend monta tudo e confirma de uma vez. Historico/
+/// somente-leitura depois de criado; nunca excluido.
+///
+/// Nao duplica snapshot de fornecedor: reaproveita o snapshot ja congelado
+/// em PurchaseOrder (supplierCode/supplierName/supplierCnpj), suficiente
+/// e imutavel. supplierId fica aqui so para filtro direto.
+model Receipt {
+  id String @id @default(uuid())
+
+  /// Codigo interno gerado pelo backend (sequence dedicada, REC-000001).
+  code String @unique
+
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  receivedAt        DateTime
+  invoiceNumber     String?
+  documentReference String?
+  notes             String?
+
+  lines ReceiptLine[]
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  @@index([purchaseOrderId])
+  @@index([supplierId])
+  @@map("receipts")
+}
+
+/// Linha de recebimento — quanto de uma PurchaseOrderLine chegou fisicamente
+/// neste Receipt. Item code/nome ja estao congelados na PurchaseOrderLine
+/// vinculada; nao duplica aqui.
+model ReceiptLine {
+  id String @id @default(uuid())
+
+  receiptId String
+  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  purchaseOrderLineId String
+  purchaseOrderLine    PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id])
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  receivedQuantity Decimal @db.Decimal(18, 6)
+  unitCode         String
+
+  /// Identificacao do fornecedor para o lote — nunca substituida pelo
+  /// nosso codigo interno. Obrigatoria quando Item.controlsLot=true.
+  supplierLot String?
+
+  /// Obrigatoria quando Item.controlsExpiry=true; nunca anterior a receivedAt.
+  expiryDate DateTime?
+
+  /// Local fisico simples (string livre) — sem Warehouse/Zone/Bin ainda.
+  location String?
+
+  /// Preenchido apos a criacao do Lot (mesma transacao) quando
+  /// Item.controlsLot=true. Null quando o item nao controla lote.
+  lotId String? @unique
+  lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([purchaseOrderLineId])
+  @@index([itemId])
+  @@map("receipt_lines")
+}
+
+/// Lote interno — criado automaticamente quando Item.controlsLot=true.
+/// `initialReceivedQuantity` e so o quanto entrou neste recebimento: NAO e
+/// saldo atual. Saldo fisico vira do ledger de Inventory Movements, ainda
+/// nao implementado.
+model Lot {
+  id String @id @default(uuid())
+
+  /// LT-YYYYMMDD-NNNNNN — data do recebimento + sequence global
+  /// (nao reinicia por dia). Gerado pelo backend, imutavel, unico.
+  code String @unique
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  receiptLine ReceiptLine?
+
+  supplierLot String?
+  expiryDate  DateTime?
+
+  initialReceivedQuantity Decimal @db.Decimal(18, 6)
+
+  status   LotStatus @default(AVAILABLE)
+  location String?
+
+  releasedAt DateTime?
+  releasedBy String?
+
+  blockedAt   DateTime?
+  blockedBy   String?
+  blockReason String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  @@index([itemId])
+  @@index([supplierId])
+  @@index([status])
+  @@map("lots")
 }

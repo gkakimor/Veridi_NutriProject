@@ -42,6 +42,10 @@ export interface PurchaseOrderLineDTO {
   unitPrice: string | null;
   /** `orderedQuantity × unitPrice`, `null` se a linha não tiver preço. */
   lineTotal: string | null;
+  /** Derivado da soma dos ReceiptLines confirmados — nunca uma coluna mutável própria. */
+  receivedQuantity: string;
+  /** `orderedQuantity - receivedQuantity`. */
+  openQuantity: string;
 }
 
 export interface PurchaseOrderDTO {

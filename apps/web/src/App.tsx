@@ -9,6 +9,11 @@ import { CustomersPage } from "./pages/customers/CustomersPage";
 import { ProductsPage } from "./pages/products/ProductsPage";
 import { PurchaseOrdersPage } from "./pages/purchase-orders/PurchaseOrdersPage";
 import { PurchaseOrderPage } from "./pages/purchase-orders/PurchaseOrderPage";
+import { ReceiptsPage } from "./pages/receiving/ReceiptsPage";
+import { ReceivePurchaseOrderPage } from "./pages/receiving/ReceivePurchaseOrderPage";
+import { ReceiptDetailPage } from "./pages/receiving/ReceiptDetailPage";
+import { LotsPage } from "./pages/lots/LotsPage";
+import { LotDetailPage } from "./pages/lots/LotDetailPage";
 
 export function App() {
   return (
@@ -23,6 +28,11 @@ export function App() {
           <Route path="/compras/ordens" element={<PurchaseOrdersPage />} />
           <Route path="/compras/ordens/nova" element={<PurchaseOrderPage />} />
           <Route path="/compras/ordens/:id" element={<PurchaseOrderPage />} />
+          <Route path="/compras/recebimentos" element={<ReceiptsPage />} />
+          <Route path="/compras/recebimentos/novo" element={<ReceivePurchaseOrderPage />} />
+          <Route path="/compras/recebimentos/:id" element={<ReceiptDetailPage />} />
+          <Route path="/estoque/lotes" element={<LotsPage />} />
+          <Route path="/estoque/lotes/:id" element={<LotDetailPage />} />
 
           {navItems
             .filter((item) => !item.implemented)

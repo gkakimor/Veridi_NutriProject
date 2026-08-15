@@ -1,40 +1,7 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-
-/**
- * Decimal como string — nunca usar float JS como fonte de precisao para
- * quantidade/preco. Aceita number tambem (conveniencia de payload), mas
- * sempre normaliza para string antes de repassar ao Prisma.
- */
-function decimalStringSchema(options: { allowZero?: boolean } = {}) {
-  return z
-    .union([z.string(), z.number()])
-    .transform((value) => String(value).trim())
-    .refine((value) => /^\d+(\.\d+)?$/.test(value), { message: "Valor decimal inválido" })
-    .refine((value) => (options.allowZero ? Number(value) >= 0 : Number(value) > 0), {
-      message: options.allowZero
-        ? "Valor não pode ser negativo"
-        : "Valor deve ser maior que zero",
-    });
-}
-
-/** Data obrigatoria. */
-const requiredDateSchema = z.coerce.date({ errorMap: () => ({ message: "Data inválida" }) });
-
-/** Data opcional e limpavel: chave ausente = nao mexe; "" = null; valor = seta. */
-const optionalNullableDateSchema = z
-  .string()
-  .trim()
-  .optional()
-  .transform((value) => {
-    if (value === undefined) return undefined;
-    if (value.length === 0) return null;
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? new Date(NaN) : parsed;
-  })
-  .refine((value) => value === undefined || value === null || !Number.isNaN(value.getTime()), {
-    message: "Data inválida",
-  });
+import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { optionalNullableDateSchema, requiredDateSchema } from "../../lib/date-schema.js";
 
 const purchaseOrderLineInputSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),

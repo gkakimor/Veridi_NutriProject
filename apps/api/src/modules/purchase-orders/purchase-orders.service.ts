@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { Item, PurchaseOrder, PurchaseOrderLine, Supplier } from "@prisma/client";
+import type { Item, PurchaseOrder, PurchaseOrderLine, ReceiptLine, Supplier } from "@prisma/client";
 import type { PurchaseOrderDTO, PurchaseOrderLineDTO, PurchaseOrderListResponse } from "@veridi/shared";
 import { PURCHASE_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -32,15 +32,26 @@ const CODE_SEQUENCE = "purchase_order_code_seq";
  */
 const SYSTEM_ACTOR = "Ambiente local";
 
-type PurchaseOrderWithLines = PurchaseOrder & { lines: PurchaseOrderLine[] };
+type LineWithReceipts = PurchaseOrderLine & { receiptLines: ReceiptLine[] };
+type PurchaseOrderWithLines = PurchaseOrder & { lines: LineWithReceipts[] };
+
+/** Include padrao para carregar uma OC com o suficiente para o DTO (linhas + recebido). */
+const purchaseOrderInclude = {
+  lines: { include: { receiptLines: true } },
+} as const;
 
 /** Dinheiro (BRL) sempre com 2 casas decimais na saida da API. */
 function formatMoney(value: Prisma.Decimal): string {
   return value.toFixed(2);
 }
 
-function toLineDTO(line: PurchaseOrderLine): PurchaseOrderLineDTO {
+function toLineDTO(line: LineWithReceipts): PurchaseOrderLineDTO {
   const lineTotal = line.unitPrice ? line.orderedQuantity.times(line.unitPrice) : null;
+  const receivedQuantity = line.receiptLines.reduce(
+    (sum, receiptLine) => sum.plus(receiptLine.receivedQuantity),
+    new Prisma.Decimal(0),
+  );
+  const openQuantity = line.orderedQuantity.minus(receivedQuantity);
   return {
     id: line.id,
     itemId: line.itemId,
@@ -50,6 +61,8 @@ function toLineDTO(line: PurchaseOrderLine): PurchaseOrderLineDTO {
     orderedQuantity: line.orderedQuantity.toString(),
     unitPrice: line.unitPrice ? formatMoney(line.unitPrice) : null,
     lineTotal: lineTotal ? formatMoney(lineTotal) : null,
+    receivedQuantity: receivedQuantity.toString(),
+    openQuantity: openQuantity.toString(),
   };
 }
 
@@ -141,7 +154,7 @@ function lineCreateData(purchaseOrderId: string, validated: ValidatedLine) {
 async function requirePurchaseOrder(id: string): Promise<PurchaseOrderWithLines> {
   const po = await getPrisma().purchaseOrder.findUnique({
     where: { id },
-    include: { lines: true },
+    include: purchaseOrderInclude,
   });
   if (!po) throw new PurchaseOrderNotFoundError(id);
   return po;
@@ -165,7 +178,7 @@ export async function listPurchaseOrders(
   const [purchaseOrders, total] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where,
-      include: { lines: true },
+      include: purchaseOrderInclude,
       orderBy: { code: "desc" },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
@@ -184,7 +197,7 @@ export async function listPurchaseOrders(
 export async function getPurchaseOrderById(id: string): Promise<PurchaseOrderDTO | null> {
   const po = await getPrisma().purchaseOrder.findUnique({
     where: { id },
-    include: { lines: true },
+    include: purchaseOrderInclude,
   });
   return po ? toPurchaseOrderDTO(po) : null;
 }

@@ -22,6 +22,7 @@ interface FormState {
   unitCode: string;
   controlsLot: boolean;
   controlsExpiry: boolean;
+  requiresQualityRelease: boolean;
   externalBarcode: string;
 }
 
@@ -33,6 +34,7 @@ function initialState(item: ItemDTO | null): FormState {
       unitCode: item.unitCode,
       controlsLot: item.controlsLot,
       controlsExpiry: item.controlsExpiry,
+      requiresQualityRelease: item.requiresQualityRelease,
       externalBarcode: item.externalBarcode ?? "",
     };
   }
@@ -42,6 +44,7 @@ function initialState(item: ItemDTO | null): FormState {
     unitCode: "",
     controlsLot: true,
     controlsExpiry: true,
+    requiresQualityRelease: true,
     externalBarcode: "",
   };
 }
@@ -65,6 +68,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
         type: nextType,
         controlsLot: defaults.controlsLot,
         controlsExpiry: defaults.controlsExpiry,
+        requiresQualityRelease: defaults.requiresQualityRelease,
       };
     });
   }
@@ -87,6 +91,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
       unitCode: form.unitCode,
       controlsLot: form.controlsLot,
       controlsExpiry: form.controlsExpiry,
+      requiresQualityRelease: form.requiresQualityRelease,
       // No edit sempre envia a chave (mesmo vazia) para permitir limpar um
       // barcode existente; no create so envia quando preenchido.
       ...(mode === "edit" || trimmedBarcode
@@ -271,6 +276,15 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
               }
               label="Controla validade"
               description="Habilita FEFO: o sistema sugere primeiro o lote que vence antes."
+            />
+            <ToggleCard
+              id="item-requires-quality-release"
+              checked={form.requiresQualityRelease}
+              onChange={(checked) =>
+                setForm((prev) => ({ ...prev, requiresQualityRelease: checked }))
+              }
+              label="Requer liberação da Qualidade"
+              description="Novos lotes recebidos ficam indisponíveis até serem liberados."
             />
           </div>
         </FormSection>

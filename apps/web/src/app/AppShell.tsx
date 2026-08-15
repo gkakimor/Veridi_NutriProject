@@ -1,7 +1,21 @@
 import { useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { navigation } from "./navigation";
+import { navigation, navItems } from "./navigation";
 import "./shell.css";
+
+/**
+ * NavLink sem `end` casa por prefixo (ex.: "/estoque" tambem "ativa" em
+ * "/estoque/lotes"). Isso e o comportamento certo quando a subrota NAO tem
+ * item de sidebar proprio (ex.: "/compras/ordens/:id" sob "Ordens de
+ * Compra"), mas quebra quando dois itens de sidebar tem essa relacao de
+ * prefixo entre si (ex.: "Visão Geral" = "/estoque" vs "Lotes" =
+ * "/estoque/lotes"). Nesse segundo caso os dois ficariam marcados como
+ * ativos ao mesmo tempo — exige match exato (`end`).
+ */
+function needsExactMatch(path: string): boolean {
+  if (path === "/") return true;
+  return navItems.some((other) => other.path !== path && other.path.startsWith(`${path}/`));
+}
 
 /**
  * Shell operacional Veridi.
@@ -84,7 +98,7 @@ export function AppShell() {
               <NavLink
                 key={item.path}
                 to={item.path}
-                end={item.path === "/"}
+                end={needsExactMatch(item.path)}
                 className={({ isActive }) =>
                   isActive ? "sidebar__link is-active" : "sidebar__link"
                 }

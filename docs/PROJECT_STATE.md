@@ -16,18 +16,19 @@ FAST MVP.
 **Delivery 04 — Veridi UI design system v2: concluído.**
 **Delivery 05 — Cadastro de Produtos: concluído.**
 **Delivery 06 — Ordem de Compra: concluído.**
+**Delivery 07 — Recebimento + Lote Interno: concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
 oficial de identidade. Para telas CRUD simples (list + create/edit) o
 padrão é `FullWorkspaceModal` — aplicado em Itens, Fornecedores, Clientes,
-Produtos. Para **documentos transacionais** (primeiro caso: Ordem de
-Compra) o padrão é **página própria dentro do workspace**
-(`/compras/ordens/nova` e `/compras/ordens/:id`), não modal — será
-reutilizado em Ordem de Produção. Ver `docs/UI_BRAND.md`.
+Produtos. Para **documentos transacionais** o padrão é **página própria
+dentro do workspace** (não modal) — aplicado em Ordem de Compra e agora
+Recebimento; será reutilizado em Ordem de Produção. Ver `docs/UI_BRAND.md`.
 
-16 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
-Usuários; Bloco B iniciado com Ordem de Compra).
+14 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
+Usuários; Bloco B: falta Estoque/Movimentações/FEFO — OC, Recebimento e
+Lotes já implementados).
 
 ## Stack instalada
 
@@ -47,11 +48,14 @@ Usuários; Bloco B iniciado com Ordem de Compra).
 ```text
 apps/web        React + Vite + TS strict, shell operacional Veridi,
                  Cadastros > Itens/Fornecedores/Clientes/Produtos,
-                 Compras > Ordens de Compra
+                 Compras > Ordens de Compra/Recebimentos,
+                 Estoque > Lotes
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
-                 /suppliers, /customers, /products, /purchase-orders
+                 /suppliers, /customers, /products, /purchase-orders,
+                 /receipts, /lots
 packages/shared contratos compartilhados (Health, Item, UnitOfMeasure,
-                 Supplier, Customer, Product, PurchaseOrder, CNPJ, UFs)
+                 Supplier, Customer, Product, PurchaseOrder, Receipt, Lot,
+                 CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -410,6 +414,131 @@ Regressão checada nos Cadastros (Items/Suppliers/Customers/Products).
 
 ---
 
+# Delivery 07 — Recebimento + Lote Interno
+
+Primeira entrega que fecha um ciclo completo: OC → Recebimento → Lote
+interno. Segundo documento transacional (página própria, não modal) —
+confirma o padrão como reutilizável.
+
+## Pequena evolução em Item
+
+`requiresQualityRelease` (boolean, editável, default por tipo — true para
+RAW_MATERIAL/FINISHED_PRODUCT, false para PACKAGING) — decide se o lote
+recebido nasce `AWAITING_RELEASE` ou já `AVAILABLE`. Novo toggle-card em
+Cadastros → Itens → Controles de rastreabilidade.
+
+## Modelo de dados
+
+- `Receipt`: `code` (sequence `receipt_code_seq`, prefixo `REC`),
+  `purchaseOrderId`, `supplierId`, `receivedAt`, `invoiceNumber?`,
+  `documentReference?`, `notes?`, `createdBy`. Criado já confirmado — sem
+  DRAFT persistido. Não duplica snapshot do fornecedor: reaproveita o que
+  já está congelado em `PurchaseOrder` (`supplierCode`/`supplierName`).
+- `ReceiptLine`: `purchaseOrderLineId`, `itemId`, `receivedQuantity`
+  (`Decimal(18,6)`), `unitCode`, `supplierLot?`, `expiryDate?`,
+  `location?`, `lotId?` (preenchido após criar o `Lot`, mesma transação).
+  Item code/nome vêm por join da `PurchaseOrderLine` (já imutável) — sem
+  duplicar snapshot de novo.
+- `Lot`: `code` (`LT-YYYYMMDD-NNNNNN`), `itemId`, `supplierId`,
+  `receiptLineId` (1:1), `supplierLot?`, `expiryDate?`,
+  `initialReceivedQuantity`, `status`, `location?`, campos de
+  auditoria de liberação/bloqueio. **Não tem `currentQuantity`** —
+  `initialReceivedQuantity` é só o que entrou naquele recebimento, nunca
+  saldo; saldo fica para o futuro ledger de Inventory Movements.
+- Migration `20260818090000_receiving_and_lots`.
+
+## PurchaseOrderLine.received/openQuantity
+
+Continuam **derivados**, nunca uma coluna própria: `toLineDTO` soma os
+`ReceiptLine`s de cada linha via `Prisma.Decimal` (`.plus()`) a cada
+leitura. `GET /purchase-orders/:id` (e a listagem) já retornam
+`receivedQuantity`/`openQuantity` por linha — sem segunda fonte de
+verdade mutável.
+
+## Atomicidade e concorrência
+
+`POST /purchase-orders/:id/receipts` roda inteiro em uma `$transaction`:
+1. trava a `PurchaseOrder` (`SELECT … FOR UPDATE`) — serializa recebimentos
+   concorrentes da mesma OC e reconfirma o status sob lock;
+2. cria `Receipt`;
+3. por linha: soma `ReceiptLine`s já existentes (dentro da transação, já
+   sob lock), calcula `openQuantity`, rejeita se a quantidade pedida
+   exceder o aberto;
+4. cria `ReceiptLine` e, se `Item.controlsLot`, cria `Lot` e liga
+   `receiptLine.lotId`;
+5. recalcula status da OC a partir dos `ReceiptLine`s reais
+   (`PARTIALLY_RECEIVED` ou `RECEIVED`).
+
+Qualquer erro em qualquer etapa reverte a transação inteira — nada fica
+parcialmente persistido. Lock de linha simples (`FOR UPDATE`) escolhido em
+vez de isolamento `SERIALIZABLE` — mais simples de raciocinar, resolve o
+over-receipt concorrente sem precisar de retry em conflito de
+serialização. Testado com duas requisições simultâneas reais (`Promise.all`
+contra o mesmo `app.inject`).
+
+## Regras de recebimento
+
+Só recebem `ORDERED`/`PARTIALLY_RECEIVED` (revalidado sob lock). Parcial é
+o padrão — cada linha pode receber de 0 até o aberto, em quantos
+recebimentos forem necessários. `supplierLot` obrigatório quando
+`controlsLot`; `expiryDate` obrigatório quando `controlsExpiry` e nunca
+anterior a `receivedAt`. Item sem `controlsLot`: `ReceiptLine` normal, sem
+`Lot`.
+
+## Qualidade (Lot)
+
+`status` inicial: `AWAITING_RELEASE` se `item.requiresQualityRelease`,
+senão `AVAILABLE`. Só duas transições explícitas —
+`POST /lots/:id/release` (`AWAITING_RELEASE → AVAILABLE`) e
+`POST /lots/:id/block` (`AWAITING_RELEASE`/`AVAILABLE → BLOCKED`, motivo
+obrigatório) — nunca PATCH de status livre. `EXPIRED` é calculado para
+exibição (`expiryDate < hoje`), não escrito por nenhum job.
+
+## Frontend
+
+Compras → Recebimentos (lista + `/compras/recebimentos/novo`, que aceita
+`?purchaseOrderId=` vindo do botão "Receber materiais" no detalhe da OC,
+ou deixa escolher a OC quando aberto direto do menu) + detalhe read-only.
+Estoque → Lotes (lista + detalhe com liberar/bloquear). Ambos seguem o
+padrão de página própria + `FormSection` + `ConfirmDialog` (bloqueio
+reaproveita o diálogo de motivo obrigatório, mesmo padrão do cancelamento
+de OC). Detalhe da OC agora mostra "Recebido: X · Aberto: Y" por linha e
+ganhou o botão "Receber materiais" quando `ORDERED`/`PARTIALLY_RECEIVED`.
+
+**Bug real encontrado e corrigido nesta entrega:** `NavLink` sem `end`
+casa por prefixo — "Visão Geral" (`/estoque`) e "Lotes" (`/estoque/lotes`)
+ficavam ativos ao mesmo tempo. `AppShell` agora calcula `end` automaticamente
+para qualquer item de navegação cujo path seja prefixo de outro item.
+
+## Testes
+
+23 novos testes (`receiving.test.ts`: 19 + `lots.test.ts`: 3, mais 1 em
+`items.test.ts` para `requiresQualityRelease`): recebimento de
+ORDERED/PARTIALLY_RECEIVED, rejeição de DRAFT/CANCELLED/RECEIVED, parcial,
+múltiplos recebimentos completando a OC, over-receipt rejeitado,
+quantidade ≤0 rejeitada, geração/unicidade de código de lote, supplierLot/
+expiryDate obrigatórios quando aplicável, validade anterior rejeitada, sem
+Lot quando `controlsLot=false`, `AWAITING_RELEASE`/`AVAILABLE` por
+`requiresQualityRelease`, release/block (motivo obrigatório), atomicidade
+(linha inválida não deixa Receipt/Lot parcial), concorrência real (duas
+requisições simultâneas, no máximo uma passa). Total da API: 100 testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` — ok. Seed rodado (OC confirmada com
+recebimento parcial: 1 lote `AWAITING_RELEASE` + 1 `AVAILABLE`; a OC de
+embalagem da entrega anterior segue `ORDERED` intocada). Fluxo completo
+validado via Playwright contra o app real (não só o seed): criar OC →
+confirmar → receber parcialmente pela UI → lote criado → OC exibindo
+`PARTIALLY_RECEIVED`/Recebido/Aberto corretos → liberar lote → bloquear
+lote com motivo. Console limpo em todas as telas. Tablet ok.
+
+## Pendente (não bloqueante)
+
+- Nenhuma.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -485,6 +614,17 @@ Regressão checada nos Cadastros (Items/Suppliers/Customers/Products).
 - A PO line's unit always comes from the item's stock unit; only
   RAW_MATERIAL/PACKAGING can be purchased; same item can't repeat in a PO.
 - Cancelling a PO requires a reason and records who/when; never deletes it.
+- Only ORDERED/PARTIALLY_RECEIVED POs can receive; a PO's received/open
+  quantity is always derived from real ReceiptLines, never a stored column.
+- Receipt is created already confirmed (no persisted DRAFT) and is
+  historical/read-only from then on; never deleted.
+- Lot.initialReceivedQuantity is what arrived in that receipt only — never
+  a current balance; On Hand comes later from Inventory Movements.
+- A lot's Quality gate starts AWAITING_RELEASE or AVAILABLE per the item's
+  requiresQualityRelease; only explicit release/block transitions exist,
+  block requires a reason.
+- Supplier lot and internal lot code are always stored as two distinct
+  fields; the supplier's own identification is never overwritten by ours.
 
 ---
 
@@ -521,12 +661,13 @@ Regressão checada nos Cadastros (Items/Suppliers/Customers/Products).
 
 # Next recommended implementation
 
-Resta do Bloco A: **Usuários**. Bloco B segue com **Recebimento**
-(consome as OCs ORDERED/PARTIALLY_RECEIVED já modeladas) — a definir por
-próximo handoff de Product Ownership. Reutilizar: `FullWorkspaceModal` +
-`components.css` para cadastros simples; padrão de página própria (ver
-Ordem de Compra) para o próprio Recebimento, que também é um documento
-transacional.
+Resta do Bloco A: **Usuários**. Bloco B segue com **Estoque/On Hand +
+Inventory Movements** (ledger a partir dos `Receipt`s/`Lot`s já modelados —
+`Lot.initialReceivedQuantity` explicitamente não é saldo) e depois
+FEFO/QR/Etiqueta — a definir por próximo handoff de Product Ownership.
+Reutilizar: `FullWorkspaceModal` + `components.css` para cadastros
+simples; padrão de página própria (ver Ordem de Compra/Recebimento) para
+novos documentos transacionais (ex.: Ordem de Produção).
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

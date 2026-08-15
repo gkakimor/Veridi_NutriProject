@@ -12,6 +12,7 @@ export const createItemSchema = z.object({
   unitCode: z.string().trim().min(1, "Unidade é obrigatória"),
   controlsLot: z.boolean().optional(),
   controlsExpiry: z.boolean().optional(),
+  requiresQualityRelease: z.boolean().optional(),
   externalBarcode: z.string().trim().max(64).optional(),
 });
 
@@ -21,6 +22,7 @@ export const updateItemSchema = z.object({
   unitCode: z.string().trim().min(1, "Unidade é obrigatória").optional(),
   controlsLot: z.boolean().optional(),
   controlsExpiry: z.boolean().optional(),
+  requiresQualityRelease: z.boolean().optional(),
   externalBarcode: z.string().trim().max(64).optional(),
 });
 

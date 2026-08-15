@@ -26,6 +26,7 @@ function toItemDTO(item: ItemWithUnit): ItemDTO {
     },
     controlsLot: item.controlsLot,
     controlsExpiry: item.controlsExpiry,
+    requiresQualityRelease: item.requiresQualityRelease,
     externalBarcode: item.externalBarcode,
     active: item.active,
     createdAt: item.createdAt.toISOString(),
@@ -104,6 +105,8 @@ export async function createItem(input: CreateItemInput): Promise<ItemDTO> {
       unitCode: input.unitCode,
       controlsLot: input.controlsLot ?? defaults.controlsLot,
       controlsExpiry: input.controlsExpiry ?? defaults.controlsExpiry,
+      requiresQualityRelease:
+        input.requiresQualityRelease ?? defaults.requiresQualityRelease,
       externalBarcode: input.externalBarcode ? input.externalBarcode : null,
     },
     include: { unit: true },
@@ -130,6 +133,9 @@ export async function updateItem(
         : {}),
       ...(input.controlsExpiry !== undefined
         ? { controlsExpiry: input.controlsExpiry }
+        : {}),
+      ...(input.requiresQualityRelease !== undefined
+        ? { requiresQualityRelease: input.requiresQualityRelease }
         : {}),
       ...(input.externalBarcode !== undefined
         ? { externalBarcode: input.externalBarcode ? input.externalBarcode : null }
