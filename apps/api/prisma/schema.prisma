@@ -60,6 +60,10 @@ model Item {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Produto que usa este item (type = FINISHED_PRODUCT) como saida
+  /// fisica. 1:1 no MVP — ver Product.finishedProductItemId.
+  product Product?
+
   @@index([type])
   @@index([active])
   @@index([externalBarcode])
@@ -121,6 +125,47 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  products Product[]
+
   @@index([active])
   @@map("customers")
+}
+
+/// Definicao comercial/industrial do produto fabricado pela Veridi.
+/// Distinto de Item: Item e a entidade fisica controlada em estoque
+/// (inclusive o Item FINISHED_PRODUCT correspondente); Product e a
+/// definicao comercial a que pertencerao formulacoes e OPs no futuro.
+/// Cadastro base: sem formulacao, OP, preco ou multiplos SKUs neste momento.
+model Product {
+  id   String @id @default(uuid())
+
+  /// Codigo interno gerado pelo backend (sequence dedicada, PROD-000001).
+  /// Imutavel apos a criacao.
+  code String @unique
+
+  name String
+
+  /// Cliente opcional. Associacao historica preservada mesmo se o
+  /// Customer for inativado depois — regra de negocio validada no service,
+  /// nao no schema.
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  /// Item FINISHED_PRODUCT opcional, 1:1 (unique mesmo sendo nullable —
+  /// Postgres permite multiplos NULL em indice unique, sem precisar de
+  /// indice parcial). type/active validados no service na criacao do
+  /// vinculo; associacao historica preservada se o Item for inativado depois.
+  finishedProductItemId String? @unique
+  finishedProductItem   Item?   @relation(fields: [finishedProductItemId], references: [id])
+
+  externalCode String?
+  notes        String?
+  active       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+  @@index([customerId])
+  @@map("products")
 }

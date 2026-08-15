@@ -3,6 +3,7 @@ import type { CustomerDTO } from "@veridi/shared";
 import { BR_STATE_CODES, formatCnpj } from "@veridi/shared";
 import { listCustomers, setCustomerActive } from "../../lib/customers-api";
 import { CustomerFormModal } from "./CustomerFormModal";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -26,6 +27,7 @@ export function CustomersPage() {
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
+  const [confirmDeactivate, setConfirmDeactivate] = useState<CustomerDTO | null>(null);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -60,15 +62,17 @@ export function CustomersPage() {
     reload();
   }, [reload]);
 
-  async function handleToggleActive(customer: CustomerDTO) {
-    const nextActive = !customer.active;
-    const question = nextActive
-      ? `Reativar "${customer.legalName}"?`
-      : `Inativar "${customer.legalName}"? O cliente continua visível no histórico.`;
-    if (!window.confirm(question)) return;
+  function handleToggleActive(customer: CustomerDTO) {
+    if (customer.active) {
+      setConfirmDeactivate(customer);
+      return;
+    }
+    void applyActive(customer, true);
+  }
 
+  async function applyActive(customer: CustomerDTO, active: boolean) {
     try {
-      await setCustomerActive(customer.id, nextActive);
+      await setCustomerActive(customer.id, active);
       reload();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Falha ao atualizar status");
@@ -262,6 +266,26 @@ export function CustomersPage() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmDeactivate !== null}
+        title="Inativar cliente?"
+        message={
+          <>
+            "{confirmDeactivate?.legalName}" deixará de aparecer para novos
+            produtos e ordens de produção. O registro não será excluído — o
+            histórico será preservado e ele pode ser reativado a qualquer
+            momento.
+          </>
+        }
+        confirmLabel="Inativar"
+        onCancel={() => setConfirmDeactivate(null)}
+        onConfirm={() => {
+          const target = confirmDeactivate;
+          setConfirmDeactivate(null);
+          if (target) void applyActive(target, false);
+        }}
+      />
     </>
   );
 }

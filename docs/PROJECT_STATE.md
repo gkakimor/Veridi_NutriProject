@@ -14,17 +14,16 @@ FAST MVP.
 **Delivery 02 — Cadastro de Itens (Bloco A): concluído.**
 **Delivery 03 — Cadastro de Clientes e Fornecedores (Bloco A): concluído.**
 **Delivery 04 — Veridi UI design system v2: concluído.**
+**Delivery 05 — Cadastro de Produtos: concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) e o modal
 fullscreen dentro do workspace (`FullWorkspaceModal`) são o padrão oficial
-para toda tela CRUD (list + create/edit) — já aplicado em Itens,
-Fornecedores e Clientes; próximos cadastros (Usuários, Produtos, etc.)
-devem nascer nesse padrão em vez do drawer lateral antigo. Ver
-`docs/UI_BRAND.md`.
+para toda tela CRUD (list + create/edit) — aplicado em Itens, Fornecedores,
+Clientes e Produtos. Ver `docs/UI_BRAND.md`.
 
-18 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta
-Usuários e Produtos).
+17 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta
+só Usuários).
 
 ## Stack instalada
 
@@ -43,11 +42,11 @@ Usuários e Produtos).
 
 ```text
 apps/web        React + Vite + TS strict, shell operacional Veridi,
-                 Cadastros > Itens / Fornecedores / Clientes
+                 Cadastros > Itens / Fornecedores / Clientes / Produtos
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
-                 /suppliers, /customers
+                 /suppliers, /customers, /products
 packages/shared contratos compartilhados (Health, Item, UnitOfMeasure,
-                 Supplier, Customer, CNPJ, UFs brasileiras)
+                 Supplier, Customer, Product, CNPJ, UFs brasileiras)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -229,8 +228,80 @@ drawer de novo fornecedor preenchido, Items intacto.
 
 ## Pendente (não bloqueante)
 
-- Nenhuma pendência nova. Segue a mesma pendência de `window.confirm` já
-  registrada no Delivery 02.
+- Resolvido no Delivery 05: `window.confirm` substituído por `ConfirmDialog`.
+
+---
+
+# Delivery 05 — Cadastro de Produtos
+
+Quinto cadastro do Bloco A — encerra o Bloco A exceto Usuários. Primeiro
+módulo a introduzir relações opcionais entre entidades (Product → Customer,
+Product → Item).
+
+## Modelagem: Product ≠ Item
+
+`Item` continua sendo a entidade física controlada em estoque (inclusive o
+`FINISHED_PRODUCT` correspondente). `Product` é a definição comercial/
+industrial — é a ela que Formulações e Ordens de Produção pertencerão no
+futuro. Nunca fundidos numa entidade só.
+
+- `Product`: `id`, `code` (único, imutável, sequence `product_code_seq`,
+  prefixo `PROD`), `name`, `customerId?` → `Customer`, `finishedProductItemId?`
+  → `Item`, `externalCode?`, `notes?`, `active`, `createdAt`/`updatedAt`.
+- `finishedProductItemId` é `@unique` mesmo sendo nullable — Postgres aceita
+  múltiplos `NULL` num índice unique, então a garantia 1:1 (um Item
+  FINISHED_PRODUCT pertence a no máximo um Product) sai de graça, sem
+  precisar do truque de índice parcial usado para CNPJ.
+- Migration `20260816090000_products`.
+
+## Regras de vínculo (Customer/Item)
+
+Vínculo **novo** (create, ou PATCH mudando para um id diferente) exige que o
+Customer esteja ativo e que o Item seja `FINISHED_PRODUCT` ativo e ainda não
+associado a outro Product. Vínculo **inalterado** (mesmo id reenviado no
+PATCH) não é revalidado — é assim que a associação histórica sobrevive a uma
+inativação posterior do Customer/Item, sem forçar o usuário a desvincular
+para editar outro campo. `products.service.ts` compara o valor novo com o
+atual antes de decidir se valida.
+
+## Frontend
+
+Cadastros → Produtos: mesmo padrão de Itens (tabela densa clicável, modal
+fullscreen com `FormSection`/`FullWorkspaceModal`). Selects de Cliente/Item
+carregam só ativos (`?active=true&pageSize=100`); se o Product editado já
+aponta para um Customer/Item inativado, ele é injetado manualmente nas
+opções (marcado "(inativo)") para não sumir do formulário. Sem
+autocomplete/lib de select — lista simples, estruturada para trocar por
+busca assíncrona depois sem mexer em regra de domínio.
+
+## ConfirmDialog
+
+Componente único (`components/ConfirmDialog.tsx`) substitui `window.confirm`
+nas 4 telas (Items, Suppliers, Customers, Products) para a ação Inativar.
+Mensagem contextual deixa explícito que não há exclusão física e que o
+histórico é preservado. Reativar não pede confirmação (ação reversível e já
+óbvia na UI).
+
+## Testes
+
+19 novos testes (`products.test.ts`): geração de código, imutabilidade,
+criação com/sem cliente, cliente inexistente/inativo rejeitado na nova
+associação, item FINISHED_PRODUCT aceito, RAW_MATERIAL/PACKAGING/item
+inexistente/item inativo rejeitados, duplicidade de vínculo 1:1, associação
+histórica preservada (cliente e item), busca, filtros, inativar/reativar,
+limpar `externalCode`. Total da API: 54 testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` — ok. Seed rodado (2 Items PA + 2 Products,
+1 com cliente+item vinculados, 1 sem nenhum). Validado visualmente via
+Playwright: listagem, criação com vínculo de cliente, edição mostrando
+vínculos existentes, `ConfirmDialog` de inativação, layout tablet (900px).
+Fluxo real de inativar/reativar em Items testado ponta a ponta contra a API.
+
+## Pendente (não bloqueante)
+
+- Nenhuma.
 
 ---
 
@@ -330,9 +401,9 @@ drawer de novo fornecedor preenchido, Items intacto.
 
 # Next recommended implementation
 
-Restam do Bloco A: **Usuários, Clientes, Fornecedores, Produtos** — a
-definir por próximo handoff de Product Ownership. Reutilizar o padrão
-estabelecido pelo Cadastro de Itens (tabela + drawer + `components.css`).
+Resta do Bloco A: **Usuários** — a definir por próximo handoff de Product
+Ownership. Reutilizar o padrão estabelecido por Itens/Fornecedores/
+Clientes/Produtos (tabela + `FullWorkspaceModal` + `components.css`).
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

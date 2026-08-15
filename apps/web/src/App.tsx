@@ -6,6 +6,7 @@ import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ItemsPage } from "./pages/items/ItemsPage";
 import { SuppliersPage } from "./pages/suppliers/SuppliersPage";
 import { CustomersPage } from "./pages/customers/CustomersPage";
+import { ProductsPage } from "./pages/products/ProductsPage";
 
 export function App() {
   return (
@@ -16,6 +17,7 @@ export function App() {
           <Route path="/cadastros/itens" element={<ItemsPage />} />
           <Route path="/cadastros/fornecedores" element={<SuppliersPage />} />
           <Route path="/cadastros/clientes" element={<CustomersPage />} />
+          <Route path="/cadastros/produtos" element={<ProductsPage />} />
 
           {navItems
             .filter((item) => !item.implemented)

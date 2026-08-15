@@ -1,25 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ItemDTO, ItemType, UnitOfMeasureDTO } from "@veridi/shared";
-import { ITEM_TYPE_LABELS } from "@veridi/shared";
-import { listItems, setItemActive } from "../../lib/items-api";
-import { listUnits } from "../../lib/units-api";
-import { ItemFormModal } from "./ItemFormModal";
+import type { CustomerDTO, ProductDTO } from "@veridi/shared";
+import { listProducts, setProductActive } from "../../lib/products-api";
+import { listCustomers } from "../../lib/customers-api";
+import { ProductFormModal } from "./ProductFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
   | { mode: "closed" }
   | { mode: "create" }
-  | { mode: "edit"; item: ItemDTO };
+  | { mode: "edit"; product: ProductDTO };
 
 const PAGE_SIZE = 20;
 
-/**
- * Cadastros → Itens. Primeira tela CRUD do MVP: define o padrao de
- * tabela densa + modal fullscreen para os proximos cadastros.
- */
-export function ItemsPage() {
-  const [items, setItems] = useState<ItemDTO[]>([]);
+/** Cadastros → Produtos. Mesmo padrao de tabela densa + modal de Items. */
+export function ProductsPage() {
+  const [products, setProducts] = useState<ProductDTO[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -27,14 +23,13 @@ export function ItemsPage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<ItemType | "">("");
+  const [customerFilter, setCustomerFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
-  const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
+  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
-  const [confirmDeactivate, setConfirmDeactivate] = useState<ItemDTO | null>(null);
+  const [confirmDeactivate, setConfirmDeactivate] = useState<ProductDTO | null>(null);
 
-  // Debounce da busca: evita 1 requisicao por tecla digitada.
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(handle);
@@ -42,59 +37,52 @@ export function ItemsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, typeFilter, activeFilter]);
+  }, [search, customerFilter, activeFilter]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
-    const params: Parameters<typeof listItems>[0] = {
-      page,
-      pageSize: PAGE_SIZE,
-    };
+    const params: Parameters<typeof listProducts>[0] = { page, pageSize: PAGE_SIZE };
     if (search) params.search = search;
-    if (typeFilter) params.type = typeFilter;
+    if (customerFilter) params.customerId = customerFilter;
     if (activeFilter !== "all") params.active = activeFilter === "active";
 
-    listItems(params)
+    listProducts(params)
       .then((result) => {
-        setItems(result.items);
+        setProducts(result.products);
         setTotal(result.total);
       })
       .catch((err: unknown) => {
-        setError(
-          err instanceof Error ? err.message : "Falha ao carregar itens",
-        );
+        setError(err instanceof Error ? err.message : "Falha ao carregar produtos");
       })
       .finally(() => setLoading(false));
-  }, [page, search, typeFilter, activeFilter]);
+  }, [page, search, customerFilter, activeFilter]);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
   useEffect(() => {
-    listUnits()
-      .then(setUnits)
-      .catch(() => setUnits([]));
+    listCustomers({ pageSize: 100 })
+      .then((result) => setCustomers(result.customers))
+      .catch(() => setCustomers([]));
   }, []);
 
-  function handleToggleActive(item: ItemDTO) {
-    if (item.active) {
-      setConfirmDeactivate(item);
+  function handleToggleActive(product: ProductDTO) {
+    if (product.active) {
+      setConfirmDeactivate(product);
       return;
     }
-    void applyActive(item, true);
+    void applyActive(product, true);
   }
 
-  async function applyActive(item: ItemDTO, active: boolean) {
+  async function applyActive(product: ProductDTO, active: boolean) {
     try {
-      await setItemActive(item.id, active);
+      await setProductActive(product.id, active);
       reload();
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Falha ao atualizar status",
-      );
+      window.alert(err instanceof Error ? err.message : "Falha ao atualizar status");
     }
   }
 
@@ -104,10 +92,9 @@ export function ItemsPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Itens</h1>
+          <h1 className="page__title">Produtos</h1>
           <p className="page__subtitle">
-            Matérias-primas, embalagens e produtos acabados controlados pela
-            operação.
+            Produtos comerciais e industriais fabricados pela Veridi.
           </p>
         </div>
         <button
@@ -115,51 +102,47 @@ export function ItemsPage() {
           className="btn btn--primary"
           onClick={() => setModalState({ mode: "create" })}
         >
-          + Novo item
+          + Novo produto
         </button>
       </div>
 
       <div className="toolbar">
         <div className="toolbar__search">
-          <label className="sr-only" htmlFor="items-search">
-            Buscar itens
+          <label className="sr-only" htmlFor="products-search">
+            Buscar produtos
           </label>
           <input
-            id="items-search"
+            id="products-search"
             type="search"
-            placeholder="Buscar por código, nome ou barcode…"
+            placeholder="Buscar por código, nome, referência ou cliente…"
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
           />
         </div>
 
-        <label className="sr-only" htmlFor="items-type-filter">
-          Filtrar por tipo
+        <label className="sr-only" htmlFor="products-customer-filter">
+          Filtrar por cliente
         </label>
         <select
-          id="items-type-filter"
-          value={typeFilter}
-          onChange={(event) =>
-            setTypeFilter(event.target.value as ItemType | "")
-          }
+          id="products-customer-filter"
+          value={customerFilter}
+          onChange={(event) => setCustomerFilter(event.target.value)}
         >
-          <option value="">Todos os tipos</option>
-          {Object.entries(ITEM_TYPE_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
+          <option value="">Todos os clientes</option>
+          {customers.map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customer.code} — {customer.tradeName ?? customer.legalName}
             </option>
           ))}
         </select>
 
-        <label className="sr-only" htmlFor="items-active-filter">
+        <label className="sr-only" htmlFor="products-active-filter">
           Filtrar por status
         </label>
         <select
-          id="items-active-filter"
+          id="products-active-filter"
           value={activeFilter}
-          onChange={(event) =>
-            setActiveFilter(event.target.value as ActiveFilter)
-          }
+          onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
         >
           <option value="all">Todos os status</option>
           <option value="active">Ativos</option>
@@ -174,44 +157,48 @@ export function ItemsPage() {
           <thead>
             <tr>
               <th>Código</th>
-              <th>Nome</th>
-              <th>Tipo</th>
-              <th>Unidade</th>
-              <th>Lote</th>
-              <th>Validade</th>
+              <th>Produto</th>
+              <th>Cliente</th>
+              <th>Item acabado</th>
+              <th>Referência</th>
               <th>Status</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {products.map((product) => (
               <tr
-                key={item.id}
+                key={product.id}
                 tabIndex={0}
-                onClick={() => setModalState({ mode: "edit", item })}
+                onClick={() => setModalState({ mode: "edit", product })}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
-                    setModalState({ mode: "edit", item });
+                    setModalState({ mode: "edit", product });
                   }
                 }}
               >
-                <td className="is-code">{item.code}</td>
-                <td>{item.name}</td>
+                <td className="is-code">{product.code}</td>
+                <td>{product.name}</td>
                 <td>
-                  <span className="badge badge--neutral">
-                    {ITEM_TYPE_LABELS[item.type]}
-                  </span>
+                  {product.customer
+                    ? product.customer.tradeName ?? product.customer.legalName
+                    : "—"}
                 </td>
-                <td>{item.unit.code}</td>
-                <td>{item.controlsLot ? "Sim" : "Não"}</td>
-                <td>{item.controlsExpiry ? "Sim" : "Não"}</td>
+                <td>
+                  {product.finishedProductItem ? (
+                    <span className="code">{product.finishedProductItem.code}</span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td>{product.externalCode ?? "—"}</td>
                 <td>
                   <span
                     className={
-                      item.active ? "badge badge--active" : "badge badge--inactive"
+                      product.active ? "badge badge--active" : "badge badge--inactive"
                     }
                   >
-                    {item.active ? "Ativo" : "Inativo"}
+                    {product.active ? "Ativo" : "Inativo"}
                   </span>
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
@@ -219,35 +206,37 @@ export function ItemsPage() {
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
-                      onClick={() => setModalState({ mode: "edit", item })}
+                      onClick={() => setModalState({ mode: "edit", product })}
                     >
                       Editar
                     </button>
                     <button
                       type="button"
                       className={
-                        item.active ? "btn btn--danger btn--sm" : "btn btn--secondary btn--sm"
+                        product.active
+                          ? "btn btn--danger btn--sm"
+                          : "btn btn--secondary btn--sm"
                       }
-                      onClick={() => handleToggleActive(item)}
+                      onClick={() => handleToggleActive(product)}
                     >
-                      {item.active ? "Inativar" : "Reativar"}
+                      {product.active ? "Inativar" : "Reativar"}
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
 
-            {!loading && items.length === 0 && (
+            {!loading && products.length === 0 && (
               <tr>
-                <td colSpan={8} className="table__empty">
-                  Nenhum item encontrado.
+                <td colSpan={7} className="table__empty">
+                  Nenhum produto encontrado.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
         <div className="table-foot">
-          {total} {total === 1 ? "item" : "itens"}
+          {total} {total === 1 ? "produto" : "produtos"}
         </div>
       </div>
 
@@ -276,11 +265,10 @@ export function ItemsPage() {
       </div>
 
       {modalState.mode !== "closed" && (
-        <ItemFormModal
-          key={modalState.mode === "edit" ? modalState.item.id : "create"}
+        <ProductFormModal
+          key={modalState.mode === "edit" ? modalState.product.id : "create"}
           mode={modalState.mode}
-          item={modalState.mode === "edit" ? modalState.item : null}
-          units={units}
+          product={modalState.mode === "edit" ? modalState.product : null}
           onClose={() => setModalState({ mode: "closed" })}
           onSaved={() => {
             setModalState({ mode: "closed" });
@@ -291,12 +279,13 @@ export function ItemsPage() {
 
       <ConfirmDialog
         open={confirmDeactivate !== null}
-        title="Inativar item?"
+        title="Inativar produto?"
         message={
           <>
-            "{confirmDeactivate?.name}" deixará de aparecer para novas compras
-            e produções. O registro não será excluído — o histórico será
-            preservado e ele pode ser reativado a qualquer momento.
+            "{confirmDeactivate?.name}" deixará de aparecer para novas
+            formulações e ordens de produção. O registro não será excluído —
+            o histórico será preservado e ele pode ser reativado a qualquer
+            momento.
           </>
         }
         confirmLabel="Inativar"

@@ -6,6 +6,7 @@ import { itemsRoutes } from "./modules/items/items.routes.js";
 import { unitsRoutes } from "./modules/units/units.routes.js";
 import { suppliersRoutes } from "./modules/suppliers/suppliers.routes.js";
 import { customersRoutes } from "./modules/customers/customers.routes.js";
+import { productsRoutes } from "./modules/products/products.routes.js";
 
 /**
  * Monta a instancia Fastify.
@@ -31,6 +32,7 @@ export function buildApp() {
   app.register(unitsRoutes);
   app.register(suppliersRoutes);
   app.register(customersRoutes);
+  app.register(productsRoutes);
 
   return app;
 }

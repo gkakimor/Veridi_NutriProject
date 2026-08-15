@@ -76,6 +76,29 @@ A product represents the output/commercial product that can have formulations an
 
 A product may eventually be customer-specific, but do not force that complexity unless needed.
 
+Product is distinct from Item:
+- Item is the physical entity controlled in inventory (including the
+  FINISHED_PRODUCT item that is physically moved/stocked);
+- Product is the commercial/industrial definition that formulations,
+  versions and Production Orders will belong to.
+
+Do not merge Product and Item into a single entity.
+
+A Product may optionally reference:
+- a Customer (`customerId`, nullable — a product may have no customer yet);
+- a FINISHED_PRODUCT Item (`finishedProductItemId`, nullable).
+
+Cardinality (MVP): when set, the Product ↔ Item link is 1:1 — a
+FINISHED_PRODUCT item is associated with at most one Product. This may be
+revisited if multiple SKUs/packagings per commercial definition become a
+real need; do not model that ahead of time.
+
+A new association (create, or changing an existing link to a different
+Customer/Item) requires the target to be active. An existing association
+is never invalidated by the Customer/Item being inactivated later —
+historical links are preserved and keep displaying, without forcing the
+user to clear them to edit unrelated fields.
+
 ---
 
 # 6. Purchase Orders

@@ -3,6 +3,7 @@ import type { SupplierDTO } from "@veridi/shared";
 import { formatCnpj } from "@veridi/shared";
 import { listSuppliers, setSupplierActive } from "../../lib/suppliers-api";
 import { SupplierFormModal } from "./SupplierFormModal";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -25,6 +26,7 @@ export function SuppliersPage() {
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
+  const [confirmDeactivate, setConfirmDeactivate] = useState<SupplierDTO | null>(null);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -58,15 +60,17 @@ export function SuppliersPage() {
     reload();
   }, [reload]);
 
-  async function handleToggleActive(supplier: SupplierDTO) {
-    const nextActive = !supplier.active;
-    const question = nextActive
-      ? `Reativar "${supplier.legalName}"?`
-      : `Inativar "${supplier.legalName}"? O fornecedor continua visível no histórico.`;
-    if (!window.confirm(question)) return;
+  function handleToggleActive(supplier: SupplierDTO) {
+    if (supplier.active) {
+      setConfirmDeactivate(supplier);
+      return;
+    }
+    void applyActive(supplier, true);
+  }
 
+  async function applyActive(supplier: SupplierDTO, active: boolean) {
     try {
-      await setSupplierActive(supplier.id, nextActive);
+      await setSupplierActive(supplier.id, active);
       reload();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Falha ao atualizar status");
@@ -238,6 +242,26 @@ export function SuppliersPage() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmDeactivate !== null}
+        title="Inativar fornecedor?"
+        message={
+          <>
+            "{confirmDeactivate?.legalName}" deixará de aparecer para novas
+            compras e recebimentos. O registro não será excluído — o
+            histórico será preservado e ele pode ser reativado a qualquer
+            momento.
+          </>
+        }
+        confirmLabel="Inativar"
+        onCancel={() => setConfirmDeactivate(null)}
+        onConfirm={() => {
+          const target = confirmDeactivate;
+          setConfirmDeactivate(null);
+          if (target) void applyActive(target, false);
+        }}
+      />
     </>
   );
 }

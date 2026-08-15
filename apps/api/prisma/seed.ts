@@ -1,6 +1,11 @@
 import { PrismaClient } from "@prisma/client";
 import type { ItemType, UomDimension } from "@prisma/client";
-import { CUSTOMER_CODE_PREFIX, ITEM_TYPE_DEFAULTS, SUPPLIER_CODE_PREFIX } from "@veridi/shared";
+import {
+  CUSTOMER_CODE_PREFIX,
+  ITEM_TYPE_DEFAULTS,
+  PRODUCT_CODE_PREFIX,
+  SUPPLIER_CODE_PREFIX,
+} from "@veridi/shared";
 import { nextItemCode } from "../src/modules/items/item-codes.js";
 import { nextSequenceCode } from "../src/lib/sequence-code.js";
 
@@ -33,6 +38,8 @@ const items: SeedItem[] = [
   { type: "RAW_MATERIAL", name: "Bisglicinato de Magnésio", unitCode: "kg" },
   { type: "PACKAGING", name: "Pote 500g", unitCode: "un" },
   { type: "PACKAGING", name: "Tampa Pote 500g", unitCode: "un" },
+  { type: "FINISHED_PRODUCT", name: "Magnésio Quelato 60 cápsulas", unitCode: "un" },
+  { type: "FINISHED_PRODUCT", name: "Vitamina C 1000mg 30 cápsulas", unitCode: "un" },
 ];
 
 async function seedUnits(): Promise<void> {
@@ -138,11 +145,60 @@ async function seedCustomers(): Promise<void> {
   }
 }
 
+interface SeedProduct {
+  name: string;
+  customerLegalName?: string;
+  finishedItemName?: string;
+  externalCode?: string;
+}
+
+const products: SeedProduct[] = [
+  {
+    name: "Magnésio Quelato 60 cápsulas",
+    customerLegalName: "Vida Saudável Comércio de Suplementos Ltda",
+    finishedItemName: "Magnésio Quelato 60 cápsulas",
+    externalCode: "VS-MG-60",
+  },
+  {
+    name: "Vitamina C 1000mg 30 cápsulas",
+    finishedItemName: "Vitamina C 1000mg 30 cápsulas",
+  },
+];
+
+async function seedProducts(): Promise<void> {
+  for (const product of products) {
+    const existing = await prisma.product.findFirst({ where: { name: product.name } });
+    if (existing) continue;
+
+    const customer = product.customerLegalName
+      ? await prisma.customer.findFirst({ where: { legalName: product.customerLegalName } })
+      : null;
+    const finishedItem = product.finishedItemName
+      ? await prisma.item.findFirst({
+          where: { name: product.finishedItemName, type: "FINISHED_PRODUCT" },
+        })
+      : null;
+
+    const code = await nextSequenceCode(prisma, "product_code_seq", PRODUCT_CODE_PREFIX);
+    await prisma.product.create({
+      data: {
+        code,
+        name: product.name,
+        customerId: customer?.id ?? null,
+        finishedProductItemId: finishedItem?.id ?? null,
+        externalCode: product.externalCode ?? null,
+      },
+    });
+    console.log(`Produto criado: ${code} — ${product.name}`);
+  }
+}
+
 async function main(): Promise<void> {
   await seedUnits();
   await seedItems();
   await seedSuppliers();
   await seedCustomers();
+  await seedProducts();
 }
 
 main()

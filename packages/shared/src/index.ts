@@ -13,3 +13,4 @@ export * from "./cnpj.js";
 export * from "./br-states.js";
 export * from "./suppliers.js";
 export * from "./customers.js";
+export * from "./products.js";
