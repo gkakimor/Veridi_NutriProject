@@ -7,6 +7,8 @@ import { ItemsPage } from "./pages/items/ItemsPage";
 import { SuppliersPage } from "./pages/suppliers/SuppliersPage";
 import { CustomersPage } from "./pages/customers/CustomersPage";
 import { ProductsPage } from "./pages/products/ProductsPage";
+import { PurchaseOrdersPage } from "./pages/purchase-orders/PurchaseOrdersPage";
+import { PurchaseOrderPage } from "./pages/purchase-orders/PurchaseOrderPage";
 
 export function App() {
   return (
@@ -18,6 +20,9 @@ export function App() {
           <Route path="/cadastros/fornecedores" element={<SuppliersPage />} />
           <Route path="/cadastros/clientes" element={<CustomersPage />} />
           <Route path="/cadastros/produtos" element={<ProductsPage />} />
+          <Route path="/compras/ordens" element={<PurchaseOrdersPage />} />
+          <Route path="/compras/ordens/nova" element={<PurchaseOrderPage />} />
+          <Route path="/compras/ordens/:id" element={<PurchaseOrderPage />} />
 
           {navItems
             .filter((item) => !item.implemented)

@@ -4,6 +4,7 @@ import {
   CUSTOMER_CODE_PREFIX,
   ITEM_TYPE_DEFAULTS,
   PRODUCT_CODE_PREFIX,
+  PURCHASE_ORDER_CODE_PREFIX,
   SUPPLIER_CODE_PREFIX,
 } from "@veridi/shared";
 import { nextItemCode } from "../src/modules/items/item-codes.js";
@@ -193,12 +194,103 @@ async function seedProducts(): Promise<void> {
   }
 }
 
+interface SeedPurchaseOrderLine {
+  itemName: string;
+  itemType: ItemType;
+  quantity: string;
+  unitPrice?: string;
+}
+
+interface SeedPurchaseOrder {
+  supplierLegalName: string;
+  notes: string;
+  confirm: boolean;
+  lines: SeedPurchaseOrderLine[];
+}
+
+const purchaseOrders: SeedPurchaseOrder[] = [
+  {
+    supplierLegalName: "Nutrimax Ingredientes Ltda",
+    notes: "Seed dev — rascunho de reposição de Vitamina C",
+    confirm: false,
+    lines: [{ itemName: "Vitamina C", itemType: "RAW_MATERIAL", quantity: "50" }],
+  },
+  {
+    supplierLegalName: "Embalplast Industrial S.A.",
+    notes: "Seed dev — pedido confirmado de potes",
+    confirm: true,
+    lines: [{ itemName: "Pote 500g", itemType: "PACKAGING", quantity: "1000", unitPrice: "2.50" }],
+  },
+];
+
+async function seedPurchaseOrders(): Promise<void> {
+  for (const po of purchaseOrders) {
+    const existing = await prisma.purchaseOrder.findFirst({ where: { notes: po.notes } });
+    if (existing) continue;
+
+    const supplier = await prisma.supplier.findFirst({
+      where: { legalName: po.supplierLegalName },
+    });
+    if (!supplier) continue;
+
+    const lineItems: { item: { id: string; code: string; name: string; unitCode: string }; quantity: string; unitPrice?: string }[] = [];
+    for (const line of po.lines) {
+      const item = await prisma.item.findFirst({
+        where: { name: line.itemName, type: line.itemType },
+      });
+      if (!item) continue;
+      lineItems.push({ item, quantity: line.quantity, unitPrice: line.unitPrice });
+    }
+    if (lineItems.length === 0) continue;
+
+    const code = await nextSequenceCode(
+      prisma,
+      "purchase_order_code_seq",
+      PURCHASE_ORDER_CODE_PREFIX,
+    );
+
+    const created = await prisma.purchaseOrder.create({
+      data: {
+        code,
+        supplierId: supplier.id,
+        supplierCode: supplier.code,
+        supplierName: supplier.legalName,
+        supplierCnpj: supplier.cnpj,
+        orderDate: new Date(),
+        notes: po.notes,
+        lines: {
+          create: lineItems.map((line) => ({
+            itemId: line.item.id,
+            itemCode: line.item.code,
+            itemName: line.item.name,
+            unitCode: line.item.unitCode,
+            orderedQuantity: line.quantity,
+            unitPrice: line.unitPrice ?? null,
+          })),
+        },
+      },
+    });
+
+    if (po.confirm) {
+      await prisma.purchaseOrder.update({
+        where: { id: created.id },
+        data: { status: "ORDERED", orderedAt: new Date(), orderedBy: "Ambiente local" },
+      });
+    }
+
+    console.log(
+      `Ordem de compra criada: ${code} — ${po.supplierLegalName}${po.confirm ? " (confirmada)" : " (rascunho)"}`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   await seedUnits();
   await seedItems();
   await seedSuppliers();
   await seedCustomers();
   await seedProducts();
+  await seedPurchaseOrders();
 }
 
 main()

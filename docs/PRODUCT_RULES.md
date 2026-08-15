@@ -140,6 +140,27 @@ MVP does not include:
 - supplier scoring;
 - accounts payable.
 
+## Durable rules confirmed at implementation
+
+- Only RAW_MATERIAL/PACKAGING items can be purchased; FINISHED_PRODUCT is
+  never a valid PO line item.
+- A line's unit of measure always comes from the item's own stock unit —
+  no arbitrary/incompatible unit choice on the line.
+- The same item cannot appear in two lines of the same PO; combine into one
+  line instead.
+- Editable transitions this delivery: DRAFT → ORDERED, DRAFT → CANCELLED,
+  ORDERED → CANCELLED. PARTIALLY_RECEIVED/RECEIVED are modeled but not yet
+  reachable — Receiving owns those transitions.
+- DRAFT is fully editable (supplier, dates, lines, quantities, prices).
+  ORDERED locks everything except expected delivery date and notes.
+  CANCELLED is read-only. Confirming re-validates supplier and every line's
+  item (existence/type/active) at that moment, not just at each draft save.
+- Confirming freezes the document: supplier and item identity/name/unit are
+  snapshotted onto the PO/line at write time, so later edits to the
+  Supplier/Item master data never change how a confirmed PO reads.
+- Cancelling requires a reason and records who/when; it never deletes the
+  PO and never blocks re-reading its history.
+
 ---
 
 # 7. Receiving

@@ -45,7 +45,7 @@ export const navigation: NavGroup[] = [
       {
         label: "Ordens de Compra",
         path: "/compras/ordens",
-        implemented: false,
+        implemented: true,
       },
       {
         label: "Recebimentos",

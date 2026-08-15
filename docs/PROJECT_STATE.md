@@ -15,15 +15,19 @@ FAST MVP.
 **Delivery 03 — Cadastro de Clientes e Fornecedores (Bloco A): concluído.**
 **Delivery 04 — Veridi UI design system v2: concluído.**
 **Delivery 05 — Cadastro de Produtos: concluído.**
+**Delivery 06 — Ordem de Compra: concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
-`--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) e o modal
-fullscreen dentro do workspace (`FullWorkspaceModal`) são o padrão oficial
-para toda tela CRUD (list + create/edit) — aplicado em Itens, Fornecedores,
-Clientes e Produtos. Ver `docs/UI_BRAND.md`.
+`--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
+oficial de identidade. Para telas CRUD simples (list + create/edit) o
+padrão é `FullWorkspaceModal` — aplicado em Itens, Fornecedores, Clientes,
+Produtos. Para **documentos transacionais** (primeiro caso: Ordem de
+Compra) o padrão é **página própria dentro do workspace**
+(`/compras/ordens/nova` e `/compras/ordens/:id`), não modal — será
+reutilizado em Ordem de Produção. Ver `docs/UI_BRAND.md`.
 
-17 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta
-só Usuários).
+16 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
+Usuários; Bloco B iniciado com Ordem de Compra).
 
 ## Stack instalada
 
@@ -42,11 +46,12 @@ só Usuários).
 
 ```text
 apps/web        React + Vite + TS strict, shell operacional Veridi,
-                 Cadastros > Itens / Fornecedores / Clientes / Produtos
+                 Cadastros > Itens/Fornecedores/Clientes/Produtos,
+                 Compras > Ordens de Compra
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
-                 /suppliers, /customers, /products
+                 /suppliers, /customers, /products, /purchase-orders
 packages/shared contratos compartilhados (Health, Item, UnitOfMeasure,
-                 Supplier, Customer, Product, CNPJ, UFs brasileiras)
+                 Supplier, Customer, Product, PurchaseOrder, CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -305,6 +310,106 @@ Fluxo real de inativar/reativar em Items testado ponta a ponta contra a API.
 
 ---
 
+# Delivery 06 — Ordem de Compra
+
+Primeira feature transacional (Bloco B). Primeiro modelo com máquina de
+estados explícita, snapshots históricos e página própria (não modal).
+
+## Máquina de estados
+
+`DRAFT → ORDERED → CANCELLED` e `DRAFT → CANCELLED` são as únicas
+transições executáveis nesta entrega, via operações de domínio dedicadas
+(`POST .../confirm`, `POST .../cancel`) — nunca um PATCH de status livre.
+`PARTIALLY_RECEIVED`/`RECEIVED` já existem no enum para o próximo módulo
+(Recebimento), mas são inalcançáveis agora.
+
+Regras de edição por status: DRAFT permite tudo (fornecedor, datas, linhas,
+quantidades, preços); ORDERED só previsão de entrega e observações;
+CANCELLED é somente leitura. `confirmPurchaseOrder` revalida fornecedor e
+cada item de linha (existe/tipo/ativo) no momento da confirmação — não
+confia apenas nas validações de saves anteriores do rascunho.
+
+## Modelo de dados
+
+- `PurchaseOrder`: `code` (sequence `purchase_order_code_seq`, prefixo
+  `OC`), `supplierId` (obrigatório), snapshot do fornecedor
+  (`supplierCode`/`supplierName`/`supplierCnpj`), `orderDate`,
+  `expectedDeliveryDate?`, `status`, `notes?`, campos de auditoria
+  (`orderedAt`/`orderedBy`, `cancelledAt`/`cancelledBy`/`cancelReason`).
+- `PurchaseOrderLine`: `itemId`, snapshot do item (`itemCode`/`itemName`/
+  `unitCode`), `orderedQuantity` (`Decimal(18,6)`), `unitPrice?`
+  (`Decimal(14,4)`). `@@unique([purchaseOrderId, itemId])` — mesmo item não
+  pode repetir na OC, garantido no banco.
+- Migration `20260817090000_purchase_orders`.
+
+## Snapshot histórico (sem infraestrutura de versionamento)
+
+Em vez de um sistema genérico de versionamento, o fornecedor e cada item
+de linha são copiados (código/nome/unidade/CNPJ) diretamente para colunas
+da própria `PurchaseOrder`/`PurchaseOrderLine`. Enquanto DRAFT, todo save
+revalida e no caso do fornecedor reescreve o snapshot; ao confirmar, o
+documento para de aceitar edição desses campos e o snapshot fica congelado
+por construção — nenhuma lógica extra de "freeze" foi necessária.
+
+## Precisão decimal
+
+`orderedQuantity`/`unitPrice` nunca passam por `number` do JS como fonte
+de precisão: schema Zod aceita string (ou number, mas normaliza para
+string) e valida com regex antes de repassar ao Prisma `Decimal`. Cálculo
+de `lineTotal`/`orderTotal` usa `Prisma.Decimal.times()/.plus()` (decimal.js
+por baixo, não float), formatado com `.toFixed(2)` (BRL) na saída da API —
+nunca persistido como coluna derivada. Sem linha com preço → `orderTotal`
+é `null`, não `0`.
+
+## Backend
+
+`GET/POST /purchase-orders`, `GET/PATCH /purchase-orders/:id`,
+`POST /purchase-orders/:id/confirm`, `POST /purchase-orders/:id/cancel`.
+Criar/editar/confirmar/cancelar são transacionais (`$transaction`). Só
+RAW_MATERIAL/PACKAGING ativos entram em linha; FINISHED_PRODUCT rejeitado.
+Sem DELETE físico.
+
+## Frontend — página de documento (não FullWorkspaceModal)
+
+Decisão de padrão: **CRUD simples usa `FullWorkspaceModal`; documento
+transacional usa página própria dentro do workspace**
+(`/compras/ordens/nova`, `/compras/ordens/:id`) — topbar/sidebar visíveis,
+sem cobrir o workspace como modal. Reaproveita `FormSection` (mesmas
+seções em cards) e `ConfirmDialog`. Este último ganhou a prop
+`confirmTone` (`"danger"` padrão para Inativar, `"accent"` para ações de
+commit positivas como "Confirmar pedido") — sem isso o botão de confirmar
+pedido saía vermelho, semanticamente errado. Cancelamento usa um diálogo
+próprio (mesmas classes CSS do `ConfirmDialog`) com campo de motivo
+obrigatório, caso não coberto pelo componente genérico.
+
+## Testes
+
+23 novos testes (`purchase-orders.test.ts`): geração de código,
+imutabilidade, fornecedor obrigatório/ativo, RAW_MATERIAL/PACKAGING
+aceitos, FINISHED_PRODUCT/item inativo/inexistente rejeitados, quantidade
+> 0, item duplicado rejeitado, edição em DRAFT, confirmação (com bloqueio
+sem linhas), bloqueios de edição em ORDERED (fornecedor/linhas) e
+permissões (previsão/observações), cancelamento exige motivo,
+CANCELLED não reabre nem edita, snapshot histórico do fornecedor
+preservado após alteração do cadastro, cálculo decimal de totais. Total
+da API: 77 testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` — ok. Seed rodado (1 OC DRAFT, 1 OC
+ORDERED, usando Suppliers/Items existentes). Validado visualmente via
+Playwright: listagem com Total formatado em BRL, documento de rascunho
+editável, diálogo de confirmação (texto exato do handoff), estado
+pós-confirmação (campos travados, só previsão/observações editáveis),
+cancelamento com motivo obrigatório e bloco de histórico, layout tablet.
+Regressão checada nos Cadastros (Items/Suppliers/Customers/Products).
+
+## Pendente (não bloqueante)
+
+- Nenhuma.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -370,15 +475,30 @@ Fluxo real de inativar/reativar em Items testado ponta a ponta contra a API.
 - Finished product traces back to actual consumed lots.
 - Raw-material lot traces forward to produced finished lots.
 - Inventory corrections create auditable adjustment/reversal events.
+- Purchase Order: only DRAFT→ORDERED, DRAFT→CANCELLED, ORDERED→CANCELLED
+  are executable this delivery; no free-form status change via PATCH.
+- A DRAFT PO is fully editable; ORDERED locks everything except expected
+  delivery date and notes; CANCELLED is read-only.
+- Confirming a PO re-validates supplier/items and freezes a snapshot
+  (supplier + line item code/name/unit) so later master-data edits never
+  change how a confirmed PO reads.
+- A PO line's unit always comes from the item's stock unit; only
+  RAW_MATERIAL/PACKAGING can be purchased; same item can't repeat in a PO.
+- Cancelling a PO requires a reason and records who/when; never deletes it.
 
 ---
 
 # Durable UI decisions
-- Veridi green visual identity.
-- Existing token/design-system philosophy stays.
+- Veridi green visual identity, v2 token set (`--v-green-*`/`--v-lime`/
+  `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code`, no CDN fonts).
 - Old permanent Explorer/Workspace/Properties shell is not used.
-- Default shell = top masthead + left sidebar + main workspace.
-- Contextual right drawer only when useful.
+- Default shell = top topbar + left sidebar (collapsible) + main workspace.
+- Simple CRUD (list + create/edit) uses `FullWorkspaceModal` — covers only
+  the workspace, topbar/sidebar stay visible.
+- A transactional document (PO, future OP) uses its own page inside the
+  workspace instead — not a modal.
+- `ConfirmDialog` for destructive/cautionary confirms (tone "danger") and
+  for positive commit confirms (tone "accent"); never `window.confirm`.
 - No permanent global toolbar.
 - No permanent bottom status bar.
 - Desktop is dense/data-oriented.
@@ -401,9 +521,12 @@ Fluxo real de inativar/reativar em Items testado ponta a ponta contra a API.
 
 # Next recommended implementation
 
-Resta do Bloco A: **Usuários** — a definir por próximo handoff de Product
-Ownership. Reutilizar o padrão estabelecido por Itens/Fornecedores/
-Clientes/Produtos (tabela + `FullWorkspaceModal` + `components.css`).
+Resta do Bloco A: **Usuários**. Bloco B segue com **Recebimento**
+(consome as OCs ORDERED/PARTIALLY_RECEIVED já modeladas) — a definir por
+próximo handoff de Product Ownership. Reutilizar: `FullWorkspaceModal` +
+`components.css` para cadastros simples; padrão de página própria (ver
+Ordem de Compra) para o próprio Recebimento, que também é um documento
+transacional.
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

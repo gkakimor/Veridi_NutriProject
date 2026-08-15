@@ -613,6 +613,64 @@
   margin-top: var(--sp-2);
 }
 
+/* ---------------- Documento transacional (OC, futura OP) ---------------- */
+/* Pagina propria dentro do workspace — topbar/sidebar continuam visiveis,
+   NAO usa FullWorkspaceModal. Ver docs/UI_BRAND.md. */
+
+.doc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+.doc-crumb {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  margin-bottom: var(--sp-1);
+}
+
+.doc-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.doc-title h1 {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+}
+
+.doc-body {
+  max-width: 1040px;
+  display: grid;
+  gap: var(--sp-5);
+}
+
+.doc-actions {
+  max-width: 1040px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+}
+
+.doc-actions__primary {
+  display: flex;
+  gap: var(--sp-3);
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.line-actions {
+  margin-top: var(--sp-3);
+}
+
 /* ---------------- Responsivo ---------------- */
 
 @media (max-width: 640px) {

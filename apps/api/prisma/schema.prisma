@@ -21,6 +21,14 @@ enum UomDimension {
   VOLUME
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -64,6 +72,8 @@ model Item {
   /// fisica. 1:1 no MVP — ver Product.finishedProductItemId.
   product Product?
 
+  purchaseOrderLines PurchaseOrderLine[]
+
   @@index([type])
   @@index([active])
   @@index([externalBarcode])
@@ -93,6 +103,8 @@ model Supplier {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
 
   @@index([active])
   @@map("suppliers")
@@ -168,4 +180,77 @@ model Product {
   @@index([active])
   @@index([customerId])
   @@map("products")
+}
+
+/// Ordem de Compra — primeira feature transacional. DRAFT e livremente
+/// editavel; ao confirmar (ORDERED) o conteudo (fornecedor/itens/
+/// quantidades/precos) fica congelado — so previsao de entrega e
+/// observacoes continuam editaveis. Sem exclusao fisica; cancelar preserva
+/// o documento no historico.
+model PurchaseOrder {
+  id String @id @default(uuid())
+
+  /// Codigo interno gerado pelo backend (sequence dedicada, OC-000001).
+  /// Imutavel apos a criacao.
+  code String @unique
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  /// Snapshot do fornecedor no momento do pedido. Acompanha edicoes
+  /// enquanto DRAFT (revalidado a cada save); congela ao confirmar.
+  /// Fonte de verdade para exibir o documento, independente de mudancas
+  /// futuras no cadastro de Supplier.
+  supplierCode String
+  supplierName String
+  supplierCnpj String?
+
+  orderDate            DateTime
+  expectedDeliveryDate DateTime?
+
+  status PurchaseOrderStatus @default(DRAFT)
+  notes  String?
+
+  orderedAt DateTime?
+  orderedBy String?
+
+  cancelledAt  DateTime?
+  cancelledBy  String?
+  cancelReason String?
+
+  lines PurchaseOrderLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([supplierId])
+  @@map("purchase_orders")
+}
+
+/// Linha de Ordem de Compra. So existem/mudam enquanto a OC e DRAFT —
+/// congeladas junto com o documento ao confirmar.
+model PurchaseOrderLine {
+  id String @id @default(uuid())
+
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  /// Snapshot do item no momento da linha — mesma logica do supplier acima.
+  itemCode String
+  itemName String
+  unitCode String
+
+  orderedQuantity Decimal  @db.Decimal(18, 6)
+  unitPrice       Decimal? @db.Decimal(14, 4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Mesmo Item nao pode aparecer duas vezes na mesma OC (MVP).
+  @@unique([purchaseOrderId, itemId])
+  @@map("purchase_order_lines")
 }

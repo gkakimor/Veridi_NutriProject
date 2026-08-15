@@ -7,14 +7,18 @@ interface ConfirmDialogProps {
   message: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** "danger" (padrao) para acoes cautelares (Inativar); "accent" para acoes de commit positivas (Confirmar pedido). */
+  confirmTone?: "danger" | "accent";
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 /**
  * Confirmacao Veridi generica — usada para inativar em Items, Suppliers,
- * Customers e Products. Nao e um framework de modais: um unico componente
- * simples, centrado, com Escape fechando (equivale a cancelar).
+ * Customers e Products, e para confirmacoes de commit em documentos
+ * transacionais (ex.: Confirmar pedido de OC). Nao e um framework de
+ * modais: um unico componente simples, centrado, com Escape fechando
+ * (equivale a cancelar).
  */
 export function ConfirmDialog({
   open,
@@ -22,6 +26,7 @@ export function ConfirmDialog({
   message,
   confirmLabel = "Confirmar",
   cancelLabel = "Cancelar",
+  confirmTone = "danger",
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -53,7 +58,11 @@ export function ConfirmDialog({
           <button type="button" className="btn btn--ghost" onClick={onCancel}>
             {cancelLabel}
           </button>
-          <button type="button" className="btn btn--danger" onClick={onConfirm}>
+          <button
+            type="button"
+            className={confirmTone === "accent" ? "btn btn--accent" : "btn btn--danger"}
+            onClick={onConfirm}
+          >
             {confirmLabel}
           </button>
         </div>
