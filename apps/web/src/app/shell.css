@@ -1,0 +1,315 @@
+/*
+ * Shell operacional Veridi: masthead + sidebar esquerda + workspace.
+ * Sem toolbar global permanente. Sem status bar permanente.
+ * Sem painel de propriedades permanente.
+ */
+
+.shell {
+  display: grid;
+  grid-template-rows: var(--masthead-h) 1fr;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-areas:
+    "masthead masthead"
+    "sidebar  workspace";
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---------------- Masthead ---------------- */
+
+.masthead {
+  grid-area: masthead;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-4);
+  background: var(--navy-deep);
+  color: var(--text-on-dark);
+}
+
+.masthead__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.01em;
+  color: var(--text-on-dark);
+  flex-shrink: 0;
+}
+
+.masthead__brand:hover {
+  text-decoration: none;
+}
+
+.masthead__mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--navy-deep);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.masthead__sub {
+  color: var(--text-on-dark-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+}
+
+.masthead__search {
+  flex: 1;
+  max-width: 420px;
+}
+
+.masthead__search input {
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-on-dark);
+  font-size: var(--fs-sm);
+}
+
+.masthead__search input::placeholder {
+  color: var(--text-on-dark-muted);
+}
+
+.masthead__user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-on-dark-muted);
+  font-size: var(--fs-sm);
+  flex-shrink: 0;
+}
+
+.masthead__toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-on-dark);
+  cursor: pointer;
+}
+
+/* ---------------- Sidebar ---------------- */
+
+.sidebar {
+  grid-area: sidebar;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: var(--sp-3) 0 var(--sp-6);
+  min-height: 0;
+}
+
+.sidebar__group {
+  margin-bottom: var(--sp-4);
+}
+
+.sidebar__group-title {
+  padding: 0 var(--sp-4) var(--sp-1);
+  color: var(--text-subtle);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sidebar__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border-left: 2px solid transparent;
+  color: var(--text);
+  font-size: var(--fs-base);
+  transition: background var(--transition), color var(--transition);
+}
+
+.sidebar__link:hover {
+  background: var(--surface-muted);
+  text-decoration: none;
+}
+
+.sidebar__link.is-active {
+  background: var(--primary-soft);
+  border-left-color: var(--primary);
+  color: var(--navy-deep);
+  font-weight: var(--fw-medium);
+}
+
+.sidebar__tag {
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: var(--text-subtle);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+}
+
+/* ---------------- Workspace ---------------- */
+
+.workspace {
+  grid-area: workspace;
+  overflow-y: auto;
+  min-height: 0;
+  padding: var(--sp-5) var(--sp-6) var(--sp-8);
+}
+
+.page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+.page__title {
+  font-size: var(--fs-xl);
+}
+
+.page__subtitle {
+  margin-top: var(--sp-1);
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+}
+
+/* ---------------- Superficies ---------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: var(--sp-5);
+}
+
+.card + .card {
+  margin-top: var(--sp-4);
+}
+
+.card__title {
+  font-size: var(--fs-md);
+  margin-bottom: var(--sp-2);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-base);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+  flex-shrink: 0;
+}
+
+.status-dot--up {
+  background: var(--success);
+}
+
+.status-dot--down {
+  background: var(--danger);
+}
+
+.definition-list {
+  display: grid;
+  grid-template-columns: minmax(140px, max-content) 1fr;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0;
+  font-size: var(--fs-base);
+}
+
+.definition-list dt {
+  color: var(--text-muted);
+}
+
+.definition-list dd {
+  margin: 0;
+}
+
+/* ---------------- Responsivo ---------------- */
+
+/* Tablet: sidebar recolhivel */
+@media (max-width: 1024px) {
+  .shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "masthead"
+      "workspace";
+  }
+
+  .masthead__toggle {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: var(--masthead-h);
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-w);
+    z-index: 20;
+    box-shadow: var(--shadow);
+    transform: translateX(-100%);
+    transition: transform var(--transition);
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .sidebar__scrim {
+    position: fixed;
+    inset: var(--masthead-h) 0 0 0;
+    z-index: 10;
+    background: rgba(15, 61, 52, 0.32);
+    border: 0;
+  }
+}
+
+/* Mobile: operacao enxuta */
+@media (max-width: 640px) {
+  .masthead__sub,
+  .masthead__user span {
+    display: none;
+  }
+
+  .workspace {
+    padding: var(--sp-4) var(--sp-3) var(--sp-6);
+  }
+
+  .page__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .definition-list {
+    grid-template-columns: 1fr;
+    gap: var(--sp-1);
+  }
+
+  .definition-list dd {
+    margin-bottom: var(--sp-2);
+  }
+}

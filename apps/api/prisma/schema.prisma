@@ -1,0 +1,28 @@
+// Veridi Nutrition — schema Prisma
+//
+// BOOTSTRAP: este schema contem apenas o minimo necessario para comprovar
+// que a cadeia API -> Prisma -> PostgreSQL funciona (migration + round-trip).
+//
+// As entidades reais (itens, fornecedores, ordens de compra, lotes, estoque,
+// movimentacoes, formulacoes, OP, produto acabado) serao modeladas nos
+// handoffs de cada modulo. Nao modelar o banco completo antes das features.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Tabela tecnica de bootstrap.
+/// Existe unicamente para validar migration + leitura/escrita via Prisma.
+/// Pode ser removida quando a primeira migration de dominio real entrar.
+model BootstrapProbe {
+  id        String   @id @default(uuid())
+  label     String
+  createdAt DateTime @default(now())
+
+  @@map("_bootstrap_probe")
+}

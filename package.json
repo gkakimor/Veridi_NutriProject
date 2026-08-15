@@ -1,0 +1,33 @@
+{
+  "name": "veridi",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Veridi Nutrition — sistema de gestao industrial (FAST MVP)",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c green,cyan \"pnpm --filter @veridi/api dev\" \"pnpm --filter @veridi/web dev\"",
+    "dev:api": "pnpm --filter @veridi/api dev",
+    "dev:web": "pnpm --filter @veridi/web dev",
+    "build": "pnpm --filter @veridi/shared build && pnpm --filter @veridi/api build && pnpm --filter @veridi/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @veridi/api db:generate",
+    "db:migrate": "pnpm --filter @veridi/api db:migrate",
+    "db:deploy": "pnpm --filter @veridi/api db:deploy"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma"
+    ]
+  }
+}
