@@ -15,6 +15,26 @@ Priority order:
 
 Do not overengineer.
 
+## Platform priority (FAST MVP)
+Desktop web is the primary development and validation target during this
+phase. Mobile/tablet hardening is a later, separate round.
+
+When a handoff does not explicitly mention mobile/tablet:
+- implement for desktop web;
+- validate for desktop web (functional flow, API, business rules,
+  typecheck, build, relevant tests, desktop Playwright when useful,
+  clean console);
+- do not expand scope into responsive polish, multi-breakpoint
+  screenshots, touch ergonomics, or physical-device camera testing.
+
+Do not invent mobile/tablet work as an unrequested improvement. Existing
+mobile/tablet/scan support (e.g. the mobile sidebar overlay, the lot scan
+page, camera QR scanning) stays in place and must not be removed or
+refactored away — just don't spend additional time refining it without an
+explicit ask. Full mobile/tablet validation becomes standard again only
+when Product Ownership starts the responsive/mobile hardening phase. See
+`docs/UI_BRAND.md` and `docs/PROJECT_STATE.md`.
+
 ## Product ownership
 Business/product decisions come from Product/Project Owner handoffs supplied in chat.
 

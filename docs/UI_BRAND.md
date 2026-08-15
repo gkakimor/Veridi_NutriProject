@@ -13,6 +13,26 @@ This is not a marketing website.
 
 ---
 
+# Platform priority — FAST MVP
+
+**Desktop web is the primary development and validation target during the
+FAST MVP phase.** Goal: validate the complete functional Veridi flow
+(business rules, data integrity, operational flow, desktop UX) before
+investing in mobile/tablet-specific refinement.
+
+Tablet/mobile is a **later hardening target**, after the Web MVP flow is
+validated — not a per-feature requirement right now.
+
+The scan-first principles below (Receiving, Picking, QR/lot scanning)
+remain documented as the intended future direction and stay implemented
+where they already exist (mobile sidebar overlay, scan page, camera QR).
+They are not, during this phase, a mandatory implementation/validation
+criterion for new features unless a handoff explicitly asks for
+mobile/tablet work. See `CLAUDE.md` and `docs/PROJECT_STATE.md` for the
+durable rule.
+
+---
+
 # 1. Design-system foundation
 
 Keep the existing portable design-system strengths:

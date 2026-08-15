@@ -743,6 +743,11 @@ esperados nos casos de "não encontrado", não exceções).
   Capacidades 22–25 são candidatos ao MVP ampliado após conclusão das
   dependências de Estoque, Formulações, OP e Produto Acabado. Nenhuma
   implementação iniciada.
+- FAST MVP adotou estratégia Desktop Web First. Mobile/tablet e
+  refinamentos responsivos ficam para uma rodada de hardening após
+  validação do fluxo funcional completo. Suporte já existente permanece,
+  mas novas entregas não devem gastar tempo com otimizações específicas
+  para dispositivos menores sem solicitação explícita.
 
 ---
 
