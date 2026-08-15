@@ -10,7 +10,7 @@ FAST MVP.
 
 # Current implemented state
 
-**Delivery 01 — bootstrap do monorepo: concluído (código).**
+**Delivery 01 — bootstrap do monorepo: concluído (código + ambiente local Windows).**
 
 Nenhum dos 21 módulos do MVP foi implementado. A fundação existe e está validada.
 
@@ -96,20 +96,36 @@ Bugs encontrados na primeira execução real do script e corrigidos na origem:
 
 ---
 
-# Pendências de ambiente
+# Ambiente local (Windows) — concluído
 
-Bloqueio de ferramenta, não de código: as sessões que geraram e revisaram este
-bootstrap rodam na nuvem, sem shell na máquina Windows. **Na máquina local ainda
-falta rodar `.\scripts\bootstrap-local.ps1`**, que cobre: Git (+ identidade),
-Node LTS, pnpm, PostgreSQL, role/database `veridi_dev`, `.env`, `pnpm install`,
-`prisma generate`, `migrate deploy`, typecheck/build/test, smoke test de
-`pnpm dev` + `GET /health`, e `git init` + origin + commit + push.
+`.\scripts\bootstrap-local.ps1` foi substituído por execução manual equivalente
+em 2026-08-15 (o script existe no repo para reruns futuros, mas esta rodada foi
+feita passo a passo porque o Postgres exigiu uma intervenção fora do script).
 
-Único passo ainda não exercitado em nenhum ambiente: **`prisma generate` e
-`prisma migrate deploy`**. `binaries.prisma.sh` está fora da allowlist de rede
-dos containers de validação, então os engines nativos não podem ser baixados
-lá. Schema e migration foram validados direto contra o PostgreSQL; o download
-dos engines deve funcionar normalmente na máquina local.
+- Git 2.54, Node 24, pnpm 10.28 (instalado via `npm install -g pnpm`; `corepack
+  enable` falhou por falta de permissão em `C:\Program Files\nodejs\yarn`),
+  PostgreSQL 16 (via winget) — todos confirmados/instalados.
+- Instalador silencioso do PostgreSQL não define senha do superuser `postgres`
+  e a sessão não tinha controle do Service Control Manager (sem privilégio de
+  admin), então criar o role `veridi_dev` exigiu: editar `pg_hba.conf` para
+  `trust` local temporariamente (autorizado pelo usuário), pedir ao usuário
+  para reiniciar o serviço `postgresql-x64-16` manualmente (PowerShell como
+  Administrador), criar role/database, reverter `pg_hba.conf` para
+  `scram-sha-256`, e pedir novo restart do serviço. Login de `veridi_dev`
+  verificado depois com `scram-sha-256` já restaurado.
+- `.env` criado a partir de `.env.example`, senha gerada aleatoriamente
+  (alfanumérica, sem necessidade de percent-encoding).
+- `pnpm install`, `pnpm db:generate`, `prisma migrate deploy` — ok, sem
+  bloqueio de rede (diferente do container de validação anterior).
+- `pnpm typecheck`, `pnpm build`, `pnpm test` — ok.
+- `git init` + `origin` + commit `chore: bootstrap Veridi MVP` + push para
+  `https://github.com/gkakimor/Veridi_NutriProject.git` (branch `main`) — ok.
+- `pnpm dev` + `GET /health` — ok, `{"status":"ok","database":"up",...}`;
+  banco realmente conectado, não só o processo de pé. Web subiu em `5174`
+  (porta `5173` ocupada por outro processo local, não investigado).
+
+Nenhuma pendência de ambiente restante. Próxima sessão pode ir direto para
+implementação de features.
 
 ---
 
