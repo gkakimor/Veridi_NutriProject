@@ -35,7 +35,7 @@ export const navigation: NavGroup[] = [
         path: "/cadastros/fornecedores",
         implemented: false,
       },
-      { label: "Itens", path: "/cadastros/itens", implemented: false },
+      { label: "Itens", path: "/cadastros/itens", implemented: true },
       { label: "Produtos", path: "/cadastros/produtos", implemented: false },
     ],
   },

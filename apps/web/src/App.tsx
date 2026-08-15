@@ -3,6 +3,7 @@ import { AppShell } from "./app/AppShell";
 import { navItems } from "./app/navigation";
 import { DashboardPage } from "./pages/DashboardPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { ItemsPage } from "./pages/items/ItemsPage";
 
 export function App() {
   return (
@@ -10,6 +11,7 @@ export function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
+          <Route path="/cadastros/itens" element={<ItemsPage />} />
 
           {navItems
             .filter((item) => !item.implemented)

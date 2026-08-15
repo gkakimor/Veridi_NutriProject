@@ -10,9 +10,10 @@ FAST MVP.
 
 # Current implemented state
 
-**Delivery 01 — bootstrap do monorepo: concluído (código + ambiente local Windows).**
+**Delivery 01 — bootstrap do monorepo: concluído.**
+**Delivery 02 — Cadastro de Itens (Bloco A): concluído.**
 
-Nenhum dos 21 módulos do MVP foi implementado. A fundação existe e está validada.
+20 dos 21 módulos do MVP ainda não foram implementados.
 
 ## Stack instalada
 
@@ -30,9 +31,9 @@ Nenhum dos 21 módulos do MVP foi implementado. A fundação existe e está vali
 ## Estrutura criada
 
 ```text
-apps/web        React + Vite + TS strict, shell operacional Veridi
-apps/api        Fastify + TS strict, Prisma, rota GET /health
-packages/shared contratos compartilhados (hoje: HealthResponse)
+apps/web        React + Vite + TS strict, shell operacional Veridi, Cadastros > Itens
+apps/api        Fastify + TS strict, Prisma; /health, /items, /units
+packages/shared contratos compartilhados (Health, Item, UnitOfMeasure)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -48,84 +49,94 @@ Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
 - `@fastify/cors` liberado em desenvolvimento; restrito a `WEB_ORIGIN` em produção.
 - Prisma Client com inicialização preguiçosa: falha de conexão vira
   `database: "down"` em `/health`, não derruba o processo.
-- Schema Prisma contém **apenas** a tabela técnica `_bootstrap_probe`, para
-  provar migration + round-trip. Deve ser removida na primeira migration de
-  domínio real. As entidades de negócio serão modeladas por handoff.
+- Tabela técnica `_bootstrap_probe` removida na migration `items_and_uom`
+  (primeira migration de domínio real), conforme planejado.
 
-## Validação executada
+## Ambiente local (Windows)
 
-Ambiente de validação: container Linux (Node 22, pnpm 10.28, PostgreSQL 16),
-partindo de um clone limpo, com o `bootstrap-local.ps1` real executado sob
-PowerShell 7.4.
+Setup manual equivalente a `scripts\bootstrap-local.ps1` concluído em
+2026-08-15: Git, Node 24, pnpm 10.28, PostgreSQL 16 instalados; role/database
+`veridi_dev` criados (instalador silencioso do Postgres não define senha do
+superuser — precisou de `trust` temporário em `pg_hba.conf`, revertido para
+`scram-sha-256` em seguida); `.env` local criado. Sem pendência de ambiente.
 
-- `pnpm install` — ok (o `prepare` de `@veridi/shared` gera `dist` no install)
-- `pnpm typecheck` (shared, api, web) — ok
-- `pnpm build` (tsc shared + api + `vite build` web) — ok
-- `pnpm test` — 1 teste, rota `/health`, passou
-- `migration.sql` aplicada em PostgreSQL 16 real, conectando como `veridi_dev`
-- `pnpm dev` sobe api + web; a API atende em `127.0.0.1:3333`
-- role/database criados do zero pelo script, com senha contendo `@ : / #`;
-  login verificado depois
-- `.env` gravado em UTF-8 **sem BOM**; `git ls-files` confirma que só
-  `.env.example` é versionado
-- fluxo Git completo (init → origin → commit → push) contra remoto de teste;
-  rerun é idempotente e recusa push sobre remoto que já tem branches
-
-## Correções de bootstrap (durables)
-
-Bugs encontrados na primeira execução real do script e corrigidos na origem:
-
-- **`@veridi/shared` precisa de `dist` antes de qualquer typecheck/dev/test.**
-  `packages/shared/package.json` ganhou `"prepare": "pnpm run build"`, que o
-  pnpm roda no `install`. Sem isso, um clone limpo falha em `pnpm typecheck`.
-- **`VITE_API_URL` era silenciosamente ignorado.** O Vite lê `.env` a partir do
-  diretório do app, não da raiz do monorepo; `apps/web/vite.config.ts` agora
-  define `envDir` para a raiz.
-- **Raiz não expunha `db:deploy`.** Adicionado, para o bootstrap não precisar
-  chamar `prisma migrate deploy` por baixo dos scripts do workspace
-  (`db:migrate` é `migrate dev`, interativo, e não serve para bootstrap).
-- **O script ignorava exit codes de comandos externos.** `$ErrorActionPreference`
-  não cobre executáveis nativos: `prisma generate`, `typecheck`, `build` e
-  `test` falhavam e o script seguia imprimindo "OK" até commitar e publicar um
-  bootstrap quebrado. Agora todo comando externo passa por `Invoke-Native`.
-- **Senha do banco entrava crua na `DATABASE_URL` e no SQL.** Agora é
-  percent-encoded na URL e escapada no literal SQL; `.env` é fonte da verdade
-  em reexecuções.
-- **Identidade do Git não era garantida** — `git commit` falharia numa
-  instalação nova do Git, no fim de tudo. Agora é checada no início.
+`git init` + origin + push para `https://github.com/gkakimor/Veridi_NutriProject.git`
+(branch `main`) feito nesta mesma sessão.
 
 ---
 
-# Ambiente local (Windows) — concluído
+# Delivery 02 — Cadastro de Itens
 
-`.\scripts\bootstrap-local.ps1` foi substituído por execução manual equivalente
-em 2026-08-15 (o script existe no repo para reruns futuros, mas esta rodada foi
-feita passo a passo porque o Postgres exigiu uma intervenção fora do script).
+Primeiro slice CRUD real do MVP (Bloco A). Define o padrão visual/técnico
+para os próximos cadastros (Usuários, Clientes, Fornecedores, Produtos).
 
-- Git 2.54, Node 24, pnpm 10.28 (instalado via `npm install -g pnpm`; `corepack
-  enable` falhou por falta de permissão em `C:\Program Files\nodejs\yarn`),
-  PostgreSQL 16 (via winget) — todos confirmados/instalados.
-- Instalador silencioso do PostgreSQL não define senha do superuser `postgres`
-  e a sessão não tinha controle do Service Control Manager (sem privilégio de
-  admin), então criar o role `veridi_dev` exigiu: editar `pg_hba.conf` para
-  `trust` local temporariamente (autorizado pelo usuário), pedir ao usuário
-  para reiniciar o serviço `postgresql-x64-16` manualmente (PowerShell como
-  Administrador), criar role/database, reverter `pg_hba.conf` para
-  `scram-sha-256`, e pedir novo restart do serviço. Login de `veridi_dev`
-  verificado depois com `scram-sha-256` já restaurado.
-- `.env` criado a partir de `.env.example`, senha gerada aleatoriamente
-  (alfanumérica, sem necessidade de percent-encoding).
-- `pnpm install`, `pnpm db:generate`, `prisma migrate deploy` — ok, sem
-  bloqueio de rede (diferente do container de validação anterior).
-- `pnpm typecheck`, `pnpm build`, `pnpm test` — ok.
-- `git init` + `origin` + commit `chore: bootstrap Veridi MVP` + push para
-  `https://github.com/gkakimor/Veridi_NutriProject.git` (branch `main`) — ok.
-- `pnpm dev` + `GET /health` — ok, `{"status":"ok","database":"up",...}`;
-  banco realmente conectado, não só o processo de pé. Web subiu em `5174`
-  (porta `5173` ocupada por outro processo local, não investigado).
+## Modelo de dados
 
-Nenhuma pendência de ambiente restante. Próxima sessão pode ir direto para
-implementação de features.
+- `Item`: `id` (uuid), `code` (único, imutável), `type`
+  (`RAW_MATERIAL`/`PACKAGING`/`FINISHED_PRODUCT`), `name`, `unitCode` (FK),
+  `controlsLot`, `controlsExpiry`, `externalBarcode?`, `active`,
+  `createdAt`/`updatedAt`. Sem exclusão física.
+- `UnitOfMeasure`: `code`, `label`, `dimension` (`MASS`/`COUNT`/`VOLUME`),
+  `toBaseFactor`. Sem tela administrativa — seed controlado pelo backend
+  (`prisma/seed.ts`): mg/g/kg, un, mL/L.
+- Migration `20260815090000_items_and_uom` também remove `_bootstrap_probe`.
+
+## Geração de código interno (MP-000001 / ME-000001 / PA-000001)
+
+Uma **sequence Postgres por tipo** (`item_code_raw_material_seq`,
+`item_code_packaging_seq`, `item_code_finished_product_seq`). `nextval` é
+atômico — seguro contra concorrência, sem `MAX(code)+1`. Código nunca é
+aceito do cliente; gerado sempre no `POST /items`, imutável depois.
+
+## Conversão de unidade (fundação)
+
+`apps/api/src/modules/items/uom.ts` — `convertUom(quantidade, de, para,
+unidades)` converte dentro da mesma dimensão via fator para a unidade-base;
+rejeita dimensões incompatíveis (ex.: kg → un). Testada, mas ainda não
+exposta em nenhuma rota — não há cálculo de formulação no MVP ainda.
+
+## Backend
+
+`GET /items` (search/type/active/page/pageSize), `GET /items/:id`,
+`POST /items`, `PATCH /items/:id`, `POST /items/:id/activate`,
+`POST /items/:id/deactivate`. Validação com Zod. `GET /units` (somente
+leitura, popula o select do formulário). Defaults de `controlsLot`/
+`controlsExpiry` por tipo ficam em `@veridi/shared` (`ITEM_TYPE_DEFAULTS`) —
+aplicados pelo backend quando o cliente omite, editáveis antes de salvar.
+
+## Frontend
+
+Cadastros → Itens: tabela densa (código/nome/tipo/unidade/lote/validade/
+status/ações) + toolbar de busca (debounced) e filtros de tipo/status +
+paginação. Drawer contextual à direita para criar/editar (única ação
+primária: Salvar); código somente leitura na edição. Inativação via
+confirmação nativa (`window.confirm`), sem exclusão. Novo
+`apps/web/src/styles/components.css` (botões, tabela, badge, drawer, campo)
+— reutilizável pelos próximos cadastros.
+
+## Testes
+
+16 testes em `apps/api` (contra o Postgres de dev real, mesmo padrão do
+`health.test.ts`): geração de código por tipo, unicidade (constraint de
+banco), validações obrigatórias, unidade inexistente rejeitada, inativar/
+reativar sem exclusão, busca por código/nome/barcode, filtros de tipo/status,
+mais 5 testes puros de `convertUom` (mg→g, g→kg, mL→L, dimensão incompatível,
+unidade desconhecida).
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` — ok. Seed rodado (2 matérias-primas, 2
+embalagens). Tela verificada visualmente via Playwright headless (screenshot
++ `console --errors` limpo): listagem, drawer de criação com defaults
+corretos, busca filtrando em tempo real.
+
+## Pendente (não bloqueante)
+
+- Botão "Novo item"/edição não limpa barcode existente ao salvar campo vazio
+  (limitação do `exactOptionalPropertyTypes`; PATCH sem a chave mantém valor
+  atual). Ajustar se virar necessidade real.
+- Confirmação de inativação usa `window.confirm` nativo — trocar por modal
+  Veridi se/quando o padrão de confirmação for definido para outras telas.
 
 ---
 
@@ -225,13 +236,11 @@ implementação de features.
 
 # Next recommended implementation
 
-**Cadastro de Itens** — primeiro slice vertical do Bloco A: modelo Prisma,
-migration, serviço, rotas REST validadas com Zod, e tela de lista/formulário
-reutilizando o shell e os tokens existentes.
+Restam do Bloco A: **Usuários, Clientes, Fornecedores, Produtos** — a
+definir por próximo handoff de Product Ownership. Reutilizar o padrão
+estabelecido pelo Cadastro de Itens (tabela + drawer + `components.css`).
 
-Esse slice define o padrão CRUD que os demais cadastros vão reutilizar.
-
-Não criar as tabelas futuras antes do primeiro slice funcionar.
+Não criar as tabelas futuras antes do próximo slice ser confirmado.
 
 ---
 

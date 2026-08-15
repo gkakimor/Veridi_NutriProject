@@ -1,11 +1,4 @@
 // Veridi Nutrition — schema Prisma
-//
-// BOOTSTRAP: este schema contem apenas o minimo necessario para comprovar
-// que a cadeia API -> Prisma -> PostgreSQL funciona (migration + round-trip).
-//
-// As entidades reais (itens, fornecedores, ordens de compra, lotes, estoque,
-// movimentacoes, formulacoes, OP, produto acabado) serao modeladas nos
-// handoffs de cada modulo. Nao modelar o banco completo antes das features.
 
 generator client {
   provider = "prisma-client-js"
@@ -16,13 +9,59 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Tabela tecnica de bootstrap.
-/// Existe unicamente para validar migration + leitura/escrita via Prisma.
-/// Pode ser removida quando a primeira migration de dominio real entrar.
-model BootstrapProbe {
-  id        String   @id @default(uuid())
-  label     String
-  createdAt DateTime @default(now())
+enum ItemType {
+  RAW_MATERIAL
+  PACKAGING
+  FINISHED_PRODUCT
+}
 
-  @@map("_bootstrap_probe")
+enum UomDimension {
+  MASS
+  COUNT
+  VOLUME
+}
+
+/// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
+/// controlado pelo backend (prisma/seed.ts).
+///
+/// `toBaseFactor` e o fator de conversao para a unidade-base da dimensao
+/// (MASS -> g, VOLUME -> L, COUNT -> un), fundacao para conversao entre
+/// unidades compativeis quando formulacoes existirem. Conversao entre
+/// dimensoes diferentes nunca e permitida.
+model UnitOfMeasure {
+  code         String       @id
+  label        String
+  dimension    UomDimension
+  toBaseFactor Decimal      @db.Decimal(18, 6)
+
+  items Item[]
+
+  @@map("units_of_measure")
+}
+
+/// Item controlado pela operacao (materia-prima, embalagem ou produto acabado).
+/// Cadastro base: sem estoque, fornecedor, preco ou lote fisico neste momento.
+model Item {
+  id   String   @id @default(uuid())
+  type ItemType
+
+  /// Codigo interno gerado pelo backend (sequence dedicada por tipo,
+  /// MP-000001 / ME-000001 / PA-000001). Imutavel apos a criacao.
+  code String @unique
+
+  name            String
+  unitCode        String
+  unit            UnitOfMeasure @relation(fields: [unitCode], references: [code])
+  controlsLot     Boolean       @default(true)
+  controlsExpiry  Boolean       @default(true)
+  externalBarcode String?
+  active          Boolean       @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([active])
+  @@index([externalBarcode])
+  @@map("items")
 }

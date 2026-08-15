@@ -2,6 +2,8 @@ import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { env } from "./config/env.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
+import { itemsRoutes } from "./modules/items/items.routes.js";
+import { unitsRoutes } from "./modules/units/units.routes.js";
 
 /**
  * Monta a instancia Fastify.
@@ -23,6 +25,8 @@ export function buildApp() {
   });
 
   app.register(healthRoutes);
+  app.register(itemsRoutes);
+  app.register(unitsRoutes);
 
   return app;
 }

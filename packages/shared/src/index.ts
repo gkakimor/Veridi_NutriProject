@@ -8,3 +8,4 @@
  */
 
 export * from "./health.js";
+export * from "./items.js";
