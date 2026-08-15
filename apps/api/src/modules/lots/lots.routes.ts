@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
-import { blockLot, getLotById, listLots, releaseLot } from "./lots.service.js";
+import { blockLot, getLotById, listLots, lookupLotByCode, releaseLot } from "./lots.service.js";
 import { InvalidLotTransitionError, LotNotFoundError } from "./lots.errors.js";
-import { blockLotSchema, listLotsQuerySchema } from "./lots.schemas.js";
+import { blockLotSchema, listLotsQuerySchema, lookupLotQuerySchema } from "./lots.schemas.js";
 
 function formatZodError(error: ZodError) {
   return error.issues.map((issue) => ({
@@ -27,6 +27,19 @@ export const lotsRoutes: FastifyPluginAsync = async (app) => {
 
     const result = await listLots(parsed.data);
     return reply.send(result);
+  });
+
+  app.get("/lots/lookup", async (request, reply) => {
+    const parsed = lookupLotQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    const lot = await lookupLotByCode(parsed.data.code);
+    if (!lot) return reply.status(404).send({ error: "not_found" });
+    return reply.send(lot);
   });
 
   app.get("/lots/:id", async (request, reply) => {

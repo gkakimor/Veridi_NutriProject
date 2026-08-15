@@ -1,5 +1,21 @@
 /** Contratos do módulo de Lotes internos, consumidos por `apps/api` e `apps/web`. */
 
+/**
+ * Prefixo do payload de QR do lote. O QR identifica só o lote interno —
+ * nunca dados mutáveis (quantidade/status/localização/validade/fornecedor).
+ * Ex.: `LOT:LT-20260815-000123`.
+ */
+export const LOT_QR_PREFIX = "LOT:";
+
+/** Remove o prefixo `LOT:` (se presente) e normaliza espaços/caixa do código escaneado/digitado. */
+export function normalizeLotLookupCode(raw: string): string {
+  const trimmed = raw.trim();
+  const withoutPrefix = trimmed.toUpperCase().startsWith(LOT_QR_PREFIX)
+    ? trimmed.slice(LOT_QR_PREFIX.length)
+    : trimmed;
+  return withoutPrefix.trim().toUpperCase();
+}
+
 export type LotStatus = "AWAITING_RELEASE" | "AVAILABLE" | "BLOCKED" | "EXPIRED";
 
 export const LOT_STATUSES: readonly LotStatus[] = [
@@ -19,6 +35,8 @@ export const LOT_STATUS_LABELS: Record<LotStatus, string> = {
 export interface LotDTO {
   id: string;
   code: string;
+  /** `LOT:<code>` — payload determinístico codificado no QR. */
+  qrPayload: string;
   itemId: string;
   itemCode: string;
   itemName: string;

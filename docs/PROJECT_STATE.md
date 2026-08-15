@@ -17,18 +17,21 @@ FAST MVP.
 **Delivery 05 — Cadastro de Produtos: concluído.**
 **Delivery 06 — Ordem de Compra: concluído.**
 **Delivery 07 — Recebimento + Lote Interno: concluído.**
+**Delivery 08 — QR Code + Etiqueta de Lote + Scan/Consulta: concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
 oficial de identidade. Para telas CRUD simples (list + create/edit) o
 padrão é `FullWorkspaceModal` — aplicado em Itens, Fornecedores, Clientes,
 Produtos. Para **documentos transacionais** o padrão é **página própria
-dentro do workspace** (não modal) — aplicado em Ordem de Compra e agora
-Recebimento; será reutilizado em Ordem de Produção. Ver `docs/UI_BRAND.md`.
+dentro do workspace** (não modal) — aplicado em Ordem de Compra e
+Recebimento; será reutilizado em Ordem de Produção. Rota de impressão
+(etiqueta de lote) é um terceiro padrão: página fora do `AppShell`, sem
+topbar/sidebar. Ver `docs/UI_BRAND.md`.
 
-14 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
-Usuários; Bloco B: falta Estoque/Movimentações/FEFO — OC, Recebimento e
-Lotes já implementados).
+13 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
+Usuários; Bloco B: falta Estoque/On Hand, Movimentações e FEFO — OC,
+Recebimento, Lotes e QR/Etiqueta já implementados).
 
 ## Stack instalada
 
@@ -46,16 +49,16 @@ Lotes já implementados).
 ## Estrutura criada
 
 ```text
-apps/web        React + Vite + TS strict, shell operacional Veridi,
-                 Cadastros > Itens/Fornecedores/Clientes/Produtos,
-                 Compras > Ordens de Compra/Recebimentos,
-                 Estoque > Lotes
+apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
+                 vira overlay em mobile), Cadastros >
+                 Itens/Fornecedores/Clientes/Produtos, Compras > Ordens de
+                 Compra/Recebimentos, Estoque > Lotes (scan/QR/etiqueta)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders,
-                 /receipts, /lots
+                 /receipts, /lots (+ /lots/lookup)
 packages/shared contratos compartilhados (Health, Item, UnitOfMeasure,
-                 Supplier, Customer, Product, PurchaseOrder, Receipt, Lot,
-                 CNPJ, UFs)
+                 Supplier, Customer, Product, PurchaseOrder, Receipt, Lot
+                 [qrPayload], CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -539,6 +542,106 @@ lote com motivo. Console limpo em todas as telas. Tablet ok.
 
 ---
 
+# Delivery 08 — QR Code + Etiqueta de Lote + Scan/Consulta
+
+Primeira feature scan-first (mobile/tablet/desktop). QR é só identificador
+do lote interno — nunca dado mutável, nunca autorização.
+
+## Payload do QR e lookup
+
+`qrPayload` (`LOT:<code>`) é derivado no `toLotDTO`, nunca uma coluna nova —
+reaproveita `Lot.code` (identidade já existente). `GET /lots/lookup?code=`
+(`lots.service.ts#lookupLotByCode`) aceita o código puro ou o payload com
+prefixo (`normalizeLotLookupCode` em `@veridi/shared`), resolve **só** por
+`findUnique({ where: { code } })` — estruturalmente nunca casa por
+`supplierLot`, nunca cria/altera nada. 404 claro se não encontrado. Um
+código inventado não tem efeito nenhum além de "não encontrado".
+
+## Geração do QR (sem persistir imagem)
+
+`QrCode` (`components/QrCode.tsx`) gera SVG no cliente via `qrcode`
+(`QRCode.toString(value, { type: "svg" })`) a partir do `qrPayload` — nunca
+armazenado como imagem no backend, sempre gerado on demand.
+
+## Scanner de câmera
+
+`LotScanner` (`components/LotScanner.tsx`): `getUserMedia` + `<canvas>` +
+`jsQR` num loop de `requestAnimationFrame`; permissão de câmera só é pedida
+ao clicar "Abrir câmera"; digitação manual sempre visível (fallback nunca
+escondido); botão "Cancelar" para a câmera. Isolado para reuso futuro em
+Recebimento/Picking/Consumo — sem abstração de "scanner industrial" ainda.
+
+## Etiqueta e impressão
+
+`LotLabel` (conteúdo humano-legível: item, lote fornecedor, lote interno,
+validade [+ "VENCIDO" se expirado], quantidade recebida, localização, QR) +
+`LotLabelPrintPage` (rota `/estoque/lotes/:id/etiqueta`, **fora** do
+`AppShell` — sem topbar/sidebar). Impressão é só via navegador
+(`window.print()`) nesta entrega — sem servidor de impressão/ZPL/Zebra.
+Dimensão da etiqueta (`--label-w: 100mm; --label-h: 70mm` em
+`lot-label-print.css`) é uma **decisão temporária** documentada no próprio
+CSS, centralizada para trocar fácil quando a impressora real for definida.
+Etiqueta nunca mostra saldo/reservado/preço/OC completa/dado financeiro.
+
+## Consulta (topbar e mobile)
+
+Busca da topbar (`AppShell`) ganhou lookup funcional só de lote nesta
+entrega (Item/OC/OP ficam para depois): Enter → `lookupLot` → navega para
+o detalhe, ou mostra erro Veridi-branded inline. Nova rota
+`/estoque/lotes/escanear` (`LotScanPage`): câmera OU digitação → card
+compacto de resultado (código, item, status, validade, localização, "Ver
+detalhes") — não reproduz a tabela desktop inteira em mobile.
+
+## Bug real corrigido: sidebar mobile
+
+`shell.css` nunca tinha sido validado em largura de celular real (só
+tablet, ≥834px, em entregas anteriores). Em ≤640px a sidebar ocupava
+espaço fixo no grid e espremia o workspace a ~150px. Corrigido: sidebar
+some do grid a esse breakpoint e vira overlay `position: fixed` (mesmo
+padrão de z-index/backdrop do `modal-overlay`), escondida por padrão
+(`AppShell` inicializa `navCollapsed` via `matchMedia`), abre com o botão
+de hambúrguer já existente, fecha tocando no backdrop ou navegando.
+Desktop/tablet inalterados (fix só dentro do media query).
+
+## Frontend — outras integrações
+
+Lotes → botão "Escanear QR" (topo) + ação "QR / Etiqueta" por linha.
+Detalhe do lote → nova seção "QR Code" com "Imprimir etiqueta". Detalhe do
+Recebimento → cada linha com lote ganha "Imprimir etiqueta" ao lado de "Ver
+lote", visível assim que o Receipt é confirmado (nunca imprime sozinho).
+Linha sem `Lot` (item sem controle de lote): nenhuma ação de QR/etiqueta.
+
+## Testes
+
+5 novos testes de backend (`lots.test.ts`): resolve por código puro,
+resolve por `LOT:<code>`, 404 para código inventado, nunca resolve por
+`supplierLot`, `qrPayload` determinístico e distinto por lote. Total da
+API: 105 testes. Primeira suíte de frontend do projeto
+(`@testing-library/react` + `jsdom`, novo `vite.config.ts#test`):
+`LotScanner` (normalização/trim da digitação manual, fallback sem câmera
+obrigatória), `LotScanPage` (navegação após scan válido, erro Veridi-
+branded quando não encontrado), `LotLabel` (renderiza os dados corretos do
+lote, nunca saldo/reservado/OC). 7 testes web.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (105 API + 7 web) — ok. Validado
+visualmente via Playwright: lista de lotes com "Escanear QR", detalhe com
+QR Code, etiqueta (tela e emulação `@media print`), lookup pela topbar
+(sucesso e não-encontrado), detalhe do Recebimento com "Imprimir etiqueta"
+por lote, fluxo de scan manual (sucesso e não-encontrado), fallback de
+câmera sem permissão, tablet (834px) e mobile real (390px, antes e depois
+do fix de sidebar). Console limpo (os únicos logs são 404 de rede
+esperados nos casos de "não encontrado", não exceções).
+
+## Pendente (não bloqueante)
+
+- Nenhuma pendência real. Item/OC/OP na busca da topbar, câmera em
+  dispositivo físico real e impressora/dimensão definitiva de etiqueta
+  ficam para quando o próximo handoff pedir.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -625,6 +728,17 @@ lote com motivo. Console limpo em todas as telas. Tablet ok.
   block requires a reason.
 - Supplier lot and internal lot code are always stored as two distinct
   fields; the supplier's own identification is never overwritten by ours.
+- A lot's QR payload (`LOT:<code>`) is an immutable identifier only —
+  reuses `Lot.code`, never a new identity/UUID, never encodes
+  quantity/status/location/expiry/supplier; the QR image is never stored,
+  always generated on demand. QR/scanned input is never trusted beyond
+  identity — lookup only, never creates or mutates a lot.
+- Label printing is browser-only in this MVP (no print server/ZPL/Zebra);
+  the label stays human-readable without a scanner and never shows
+  available/reserved balance, price, full PO, or other financial data.
+- The lot scanner always offers manual entry alongside camera — camera is
+  never mandatory, and camera permission is requested only when scanning
+  starts.
 
 ---
 
@@ -643,6 +757,11 @@ lote com motivo. Console limpo em todas as telas. Tablet ok.
 - No permanent bottom status bar.
 - Desktop is dense/data-oriented.
 - Receiving/picking are mobile/tablet scan-first.
+- On mobile widths (≤640px) the sidebar becomes an off-canvas overlay
+  (hidden by default, opened via the existing hamburger button) instead of
+  squeezing the workspace — same z-index/backdrop idiom as `modal-overlay`.
+- A dedicated print route (e.g. lot label) renders outside `AppShell` —
+  no topbar/sidebar, own small print stylesheet.
 - No UI framework.
 
 ---
@@ -663,11 +782,13 @@ lote com motivo. Console limpo em todas as telas. Tablet ok.
 
 Resta do Bloco A: **Usuários**. Bloco B segue com **Estoque/On Hand +
 Inventory Movements** (ledger a partir dos `Receipt`s/`Lot`s já modelados —
-`Lot.initialReceivedQuantity` explicitamente não é saldo) e depois
-FEFO/QR/Etiqueta — a definir por próximo handoff de Product Ownership.
-Reutilizar: `FullWorkspaceModal` + `components.css` para cadastros
-simples; padrão de página própria (ver Ordem de Compra/Recebimento) para
-novos documentos transacionais (ex.: Ordem de Produção).
+`Lot.initialReceivedQuantity` explicitamente não é saldo) e depois FEFO —
+a definir por próximo handoff de Product Ownership. QR/Etiqueta (item 9 do
+Bloco B) já está implementado. Reutilizar: `FullWorkspaceModal` +
+`components.css` para cadastros simples; padrão de página própria (ver
+Ordem de Compra/Recebimento) para novos documentos transacionais (ex.:
+Ordem de Produção); `LotScanner`/`QrCode` para os próximos fluxos scan-first
+(Picking/Consumo).
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

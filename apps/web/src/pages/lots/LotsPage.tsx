@@ -87,6 +87,13 @@ export function LotsPage() {
             Lotes internos gerados a partir de recebimentos. Sem saldo de estoque ainda.
           </p>
         </div>
+        <button
+          type="button"
+          className="btn btn--primary"
+          onClick={() => navigate("/estoque/lotes/escanear")}
+        >
+          Escanear QR
+        </button>
       </div>
 
       <div className="toolbar">
@@ -171,6 +178,13 @@ export function LotsPage() {
                       onClick={() => navigate(`/estoque/lotes/${lot.id}`)}
                     >
                       Abrir
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => navigate(`/estoque/lotes/${lot.id}/etiqueta`)}
+                    >
+                      QR / Etiqueta
                     </button>
                   </div>
                 </td>

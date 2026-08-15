@@ -133,13 +133,22 @@ export function ReceiptDetailPage() {
                     <td>{line.location ?? "—"}</td>
                     <td>
                       {line.lotId ? (
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/estoque/lotes/${line.lotId}`)}
-                        >
-                          <span className="code">{line.lotCode}</span>
-                        </button>
+                        <div className="table__actions">
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() => navigate(`/estoque/lotes/${line.lotId}`)}
+                          >
+                            <span className="code">{line.lotCode}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() => navigate(`/estoque/lotes/${line.lotId}/etiqueta`)}
+                          >
+                            Imprimir etiqueta
+                          </button>
+                        </div>
                       ) : (
                         "—"
                       )}

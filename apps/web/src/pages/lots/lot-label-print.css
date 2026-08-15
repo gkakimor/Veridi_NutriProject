@@ -1,0 +1,122 @@
+/*
+ * Etiqueta de lote — impressão via navegador (MVP; sem servidor de impressão
+ * ou driver Zebra/ZPL ainda). Dimensão abaixo é uma DECISÃO TEMPORÁRIA — não
+ * há impressora industrial definida ainda. Centralizada aqui para ser trocada
+ * facilmente quando o hardware real for escolhido.
+ */
+
+:root {
+  --label-w: 100mm;
+  --label-h: 70mm;
+}
+
+.lot-label-print {
+  min-height: 100vh;
+  background: var(--canvas);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+}
+
+.lot-label-print__toolbar {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+.lot-label-print__sheet {
+  background: #ffffff;
+  width: var(--label-w);
+  height: var(--label-h);
+  box-shadow: var(--shadow-1);
+  padding: 4mm;
+  box-sizing: border-box;
+}
+
+.lot-label {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2mm;
+  font-family: var(--font-ui);
+  color: #17251e;
+}
+
+.lot-label__header {
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.08em;
+}
+
+.lot-label__item {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #d8ded6;
+  padding-bottom: 2mm;
+}
+
+.lot-label__item-code {
+  font-family: var(--font-code);
+  font-size: 10px;
+}
+
+.lot-label__item-name {
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+}
+
+.lot-label__body {
+  flex: 1;
+  display: flex;
+  gap: 3mm;
+  justify-content: space-between;
+}
+
+.lot-label__fields {
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 2mm;
+  row-gap: 1mm;
+  font-size: 10px;
+  align-content: start;
+}
+
+.lot-label__fields dt {
+  color: #5d6c63;
+}
+
+.lot-label__fields dd {
+  font-weight: var(--fw-medium);
+}
+
+.lot-label__expired {
+  color: #b3362a;
+  font-weight: var(--fw-semibold);
+}
+
+.lot-label__qr {
+  flex-shrink: 0;
+}
+
+@media print {
+  .lot-label-print__toolbar {
+    display: none;
+  }
+
+  .lot-label-print {
+    background: #ffffff;
+    padding: 0;
+  }
+
+  .lot-label-print__sheet {
+    box-shadow: none;
+  }
+
+  @page {
+    size: var(--label-w) var(--label-h);
+    margin: 0;
+  }
+}

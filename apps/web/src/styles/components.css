@@ -671,6 +671,92 @@
   margin-top: var(--sp-3);
 }
 
+/* ---------------- QR / Scanner de lote ---------------- */
+
+.qr-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.qr-code svg {
+  width: 100%;
+  height: 100%;
+}
+
+.qr-code--error {
+  color: var(--err-fg);
+  font-size: var(--fs-xs);
+  text-align: center;
+  padding: var(--sp-2);
+}
+
+.lot-detail-qr {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+}
+
+.lot-detail-qr__meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+
+.lot-scanner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.lot-scanner__preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+
+.lot-scanner__video {
+  width: 100%;
+  max-width: 420px;
+  border-radius: var(--radius);
+  background: var(--v-green-950);
+}
+
+.lot-scanner__manual {
+  max-width: 420px;
+}
+
+.lot-scanner__manual-row {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.lot-scanner__manual-row input {
+  flex: 1;
+}
+
+.lot-scan-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.lot-scan-result__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.lot-scan-result__item {
+  font-size: var(--fs-base);
+}
+
 /* ---------------- Responsivo ---------------- */
 
 @media (max-width: 640px) {

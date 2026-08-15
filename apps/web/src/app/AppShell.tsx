@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import type { FormEvent } from "react";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { lookupLot } from "../lib/lots-api";
 import { navigation, navItems } from "./navigation";
 import "./shell.css";
 
@@ -24,8 +26,40 @@ function needsExactMatch(path: string): boolean {
  * workspace principal. Modais fullscreen de CRUD cobrem apenas o workspace
  * (ver `FullWorkspaceModal`) — topbar e sidebar continuam visiveis.
  */
+/** Em telas de celular a sidebar começa recolhida (vira overlay sob demanda). */
+function startsCollapsed(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches;
+}
+
 export function AppShell() {
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const navigate = useNavigate();
+  const [navCollapsed, setNavCollapsed] = useState(startsCollapsed);
+
+  const [searchValue, setSearchValue] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  async function handleSearchSubmit(event: FormEvent) {
+    event.preventDefault();
+    const query = searchValue.trim();
+    if (!query) return;
+
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const lot = await lookupLot(query);
+      if (lot) {
+        setSearchValue("");
+        navigate(`/estoque/lotes/${lot.id}`);
+      } else {
+        setSearchError(`Lote "${query}" não encontrado.`);
+      }
+    } catch {
+      setSearchError("Falha ao consultar lote.");
+    } finally {
+      setSearching(false);
+    }
+  }
 
   return (
     <div className={navCollapsed ? "shell shell--nav-collapsed" : "shell"}>
@@ -59,28 +93,36 @@ export function AppShell() {
           <span className="masthead__sub">Nutrition</span>
         </Link>
 
-        <div className="masthead__search">
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="M21 21l-4-4" />
-          </svg>
-          <label className="sr-only" htmlFor="global-search">
-            Buscar ou escanear
-          </label>
-          <input
-            id="global-search"
-            type="search"
-            placeholder="Buscar ou escanear…"
-            disabled
-          />
+        <div className="masthead__search-wrap">
+          <form className="masthead__search" onSubmit={handleSearchSubmit}>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4-4" />
+            </svg>
+            <label className="sr-only" htmlFor="global-search">
+              Buscar ou escanear lote
+            </label>
+            <input
+              id="global-search"
+              type="search"
+              placeholder="Buscar ou escanear lote, item, OP…"
+              value={searchValue}
+              disabled={searching}
+              onChange={(event) => {
+                setSearchValue(event.target.value);
+                if (searchError) setSearchError(null);
+              }}
+            />
+          </form>
+          {searchError && <div className="masthead__search-feedback">{searchError}</div>}
         </div>
 
         <div className="masthead__user">
@@ -102,6 +144,9 @@ export function AppShell() {
                 className={({ isActive }) =>
                   isActive ? "sidebar__link is-active" : "sidebar__link"
                 }
+                onClick={() => {
+                  if (window.matchMedia("(max-width: 640px)").matches) setNavCollapsed(true);
+                }}
               >
                 <span>{item.label}</span>
                 {!item.implemented && (
@@ -112,6 +157,14 @@ export function AppShell() {
           </div>
         ))}
       </nav>
+
+      {!navCollapsed && (
+        <div
+          className="sidebar-backdrop"
+          aria-hidden="true"
+          onClick={() => setNavCollapsed(true)}
+        />
+      )}
 
       <main className="workspace">
         <Outlet />

@@ -336,6 +336,21 @@ Do not rely on QR alone.
 
 MVP printing may use browser-printable label layouts.
 
+## Durable rules confirmed at implementation (QR / Label / Scan)
+
+- QR payload (`LOT:<internal-lot-code>`) is an immutable identifier only —
+  it never encodes quantity, status, location, expiry, or supplier; the
+  application always resolves current data from the database after lookup.
+- QR/scanned/typed input is never trusted beyond identity: lookup is
+  read-only, and a fabricated code never creates or mutates a lot.
+- MVP printing is browser-only (`window.print()`) — no print server, ZPL,
+  or Zebra SDK integration yet.
+- The label stays human-readable without a scanner and never shows
+  available/reserved balance, price, full PO, or other financial data.
+- Lot scanning always offers manual code entry alongside the camera —
+  camera access is never mandatory, and permission is requested only when
+  scanning actually starts.
+
 ---
 
 # 14. Inventory quantities

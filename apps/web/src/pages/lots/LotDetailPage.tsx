@@ -5,6 +5,7 @@ import { LOT_STATUS_LABELS } from "@veridi/shared";
 import { blockLot, getLot, releaseLot } from "../../lib/lots-api";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { QrCode } from "../../components/QrCode";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -243,6 +244,22 @@ export function LotDetailPage() {
                 Bloquear
               </button>
             )}
+          </div>
+        </FormSection>
+
+        <FormSection title="QR Code" subtitle="Identifica só o lote interno — nunca dados mutáveis.">
+          <div className="lot-detail-qr">
+            <QrCode value={lot.qrPayload} size={112} label={`Código QR do lote ${lot.code}`} />
+            <div className="lot-detail-qr__meta">
+              <span className="field-readonly-value">{lot.qrPayload}</span>
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                onClick={() => navigate(`/estoque/lotes/${lot.id}/etiqueta`)}
+              >
+                Imprimir etiqueta
+              </button>
+            </div>
           </div>
         </FormSection>
 

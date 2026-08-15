@@ -100,9 +100,13 @@
   margin-left: 2px;
 }
 
-.masthead__search {
+.masthead__search-wrap {
+  position: relative;
   flex: 1;
   max-width: 460px;
+}
+
+.masthead__search {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -111,6 +115,21 @@
   border-radius: var(--radius-sm);
   padding: 0 var(--sp-3);
   color: var(--on-dark-2);
+}
+
+.masthead__search-feedback {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--err-bg);
+  color: var(--err-fg);
+  border: 1px solid var(--err-border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow-1);
 }
 
 .masthead__search svg {
@@ -146,6 +165,11 @@
 }
 
 /* ---------------- Sidebar ---------------- */
+
+/* Só vira overlay clicável em telas de celular — ver media query abaixo. */
+.sidebar-backdrop {
+  display: none;
+}
 
 .sidebar {
   grid-area: sidebar;
@@ -312,6 +336,38 @@
   .masthead__sub,
   .masthead__user span {
     display: none;
+  }
+
+  /* Sidebar vira overlay sob demanda — nao espreme o workspace. */
+  .shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "masthead"
+      "workspace";
+  }
+
+  .sidebar {
+    position: fixed;
+    top: var(--topbar-h);
+    left: 0;
+    bottom: 0;
+    width: min(80vw, var(--sidebar-w));
+    z-index: 60;
+    box-shadow: var(--shadow-modal);
+    transform: translateX(-100%);
+    transition: transform var(--transition);
+  }
+
+  .shell:not(.shell--nav-collapsed) .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    z-index: 55;
+    background: rgba(8, 42, 32, 0.45);
   }
 
   .workspace {

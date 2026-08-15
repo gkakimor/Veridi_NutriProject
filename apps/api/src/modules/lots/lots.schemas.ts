@@ -13,5 +13,10 @@ export const listLotsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const lookupLotQuerySchema = z.object({
+  code: z.string().trim().min(1, "Informe o código do lote"),
+});
+
 export type BlockLotInput = z.infer<typeof blockLotSchema>;
 export type ListLotsQuery = z.infer<typeof listLotsQuerySchema>;
+export type LookupLotQuery = z.infer<typeof lookupLotQuerySchema>;

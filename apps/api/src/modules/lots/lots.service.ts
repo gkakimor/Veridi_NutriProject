@@ -1,5 +1,6 @@
 import type { Item, Lot, PurchaseOrder, Receipt, ReceiptLine, Supplier } from "@prisma/client";
 import type { LotDTO, LotListResponse } from "@veridi/shared";
+import { LOT_QR_PREFIX, normalizeLotLookupCode } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { InvalidLotTransitionError, LotNotFoundError } from "./lots.errors.js";
 import type { ListLotsQuery } from "./lots.schemas.js";
@@ -27,6 +28,7 @@ function toLotDTO(lot: LotWithRelations): LotDTO {
   return {
     id: lot.id,
     code: lot.code,
+    qrPayload: `${LOT_QR_PREFIX}${lot.code}`,
     itemId: lot.itemId,
     itemCode: lot.item.code,
     itemName: lot.item.name,
@@ -97,6 +99,23 @@ export async function listLots(query: ListLotsQuery): Promise<LotListResponse> {
 
 export async function getLotById(id: string): Promise<LotDTO | null> {
   const lot = await getPrisma().lot.findUnique({ where: { id }, include: lotInclude });
+  return lot ? toLotDTO(lot) : null;
+}
+
+/**
+ * Resolve um codigo escaneado/digitado para o lote interno. Aceita o
+ * codigo puro (`LT-...`) ou o payload completo do QR (`LOT:LT-...`);
+ * nunca casa por `supplierLot` — QR e busca de lote sao sempre pelo
+ * codigo interno. So faz leitura: um codigo inventado nunca cria/altera nada.
+ */
+export async function lookupLotByCode(rawCode: string): Promise<LotDTO | null> {
+  const normalized = normalizeLotLookupCode(rawCode);
+  if (!normalized) return null;
+
+  const lot = await getPrisma().lot.findUnique({
+    where: { code: normalized },
+    include: lotInclude,
+  });
   return lot ? toLotDTO(lot) : null;
 }
 

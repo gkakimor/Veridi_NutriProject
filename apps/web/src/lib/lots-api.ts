@@ -29,6 +29,13 @@ export async function getLot(id: string): Promise<LotDTO> {
   return (await parseJsonOrThrow(response)) as LotDTO;
 }
 
+/** Resolve um código escaneado/digitado (puro ou `LOT:<codigo>`). `null` se não encontrado. */
+export async function lookupLot(code: string): Promise<LotDTO | null> {
+  const response = await fetch(`${API_URL}/lots/lookup?code=${encodeURIComponent(code)}`);
+  if (response.status === 404) return null;
+  return (await parseJsonOrThrow(response)) as LotDTO;
+}
+
 export async function releaseLot(id: string): Promise<LotDTO> {
   const response = await fetch(`${API_URL}/lots/${id}/release`, { method: "POST" });
   return (await parseJsonOrThrow(response)) as LotDTO;

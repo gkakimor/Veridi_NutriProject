@@ -14,11 +14,16 @@ import { ReceivePurchaseOrderPage } from "./pages/receiving/ReceivePurchaseOrder
 import { ReceiptDetailPage } from "./pages/receiving/ReceiptDetailPage";
 import { LotsPage } from "./pages/lots/LotsPage";
 import { LotDetailPage } from "./pages/lots/LotDetailPage";
+import { LotScanPage } from "./pages/lots/LotScanPage";
+import { LotLabelPrintPage } from "./pages/lots/LotLabelPrintPage";
 
 export function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Rota de impressão: fora do AppShell — sem topbar/sidebar. */}
+        <Route path="/estoque/lotes/:id/etiqueta" element={<LotLabelPrintPage />} />
+
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
           <Route path="/cadastros/itens" element={<ItemsPage />} />
@@ -32,6 +37,7 @@ export function App() {
           <Route path="/compras/recebimentos/novo" element={<ReceivePurchaseOrderPage />} />
           <Route path="/compras/recebimentos/:id" element={<ReceiptDetailPage />} />
           <Route path="/estoque/lotes" element={<LotsPage />} />
+          <Route path="/estoque/lotes/escanear" element={<LotScanPage />} />
           <Route path="/estoque/lotes/:id" element={<LotDetailPage />} />
 
           {navItems

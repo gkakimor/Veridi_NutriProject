@@ -152,4 +152,128 @@ describe("Lots", () => {
 
     await app.close();
   });
+
+  it("qrPayload é determinístico e distinto por lote", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const first = await app.inject({ method: "GET", url: `/lots/${fixtureLotIds[0]}` });
+    const firstAgain = await app.inject({ method: "GET", url: `/lots/${fixtureLotIds[0]}` });
+    const second = await app.inject({ method: "GET", url: `/lots/${fixtureLotIds[1]}` });
+
+    expect(first.json().qrPayload).toBe(`LOT:${first.json().code}`);
+    expect(first.json().qrPayload).toBe(firstAgain.json().qrPayload);
+    expect(first.json().qrPayload).not.toBe(second.json().qrPayload);
+
+    await app.close();
+  });
+});
+
+describe("Lot lookup (QR/scan)", () => {
+  const prisma = getPrisma();
+  let lookupSupplierId: string;
+  let lookupItemId: string;
+  let lookupLotId: string;
+  let lookupCode: string;
+  let lookupSupplierLot: string;
+
+  beforeAll(async () => {
+    await prisma.unitOfMeasure.upsert({
+      where: { code: "kg" },
+      update: {},
+      create: { code: "kg", label: "Quilograma", dimension: "MASS", toBaseFactor: 1000 },
+    });
+
+    const stamp = Date.now();
+    const supplier = await prisma.supplier.create({
+      data: { code: `FOR-LOOKUP-${stamp}`, legalName: `Fornecedor Lookup Teste ${stamp}` },
+    });
+    lookupSupplierId = supplier.id;
+
+    const item = await prisma.item.create({
+      data: {
+        type: "RAW_MATERIAL",
+        code: `MP-LOOKUP-${stamp}`,
+        name: `Item Lookup Teste ${stamp}`,
+        unitCode: "kg",
+        controlsLot: true,
+      },
+    });
+    lookupItemId = item.id;
+
+    lookupCode = `LT-LOOKUPTEST-${stamp}`;
+    lookupSupplierLot = `SUPPLOT-${stamp}`;
+    const lot = await prisma.lot.create({
+      data: {
+        code: lookupCode,
+        itemId: lookupItemId,
+        supplierId: lookupSupplierId,
+        supplierLot: lookupSupplierLot,
+        initialReceivedQuantity: "1",
+        status: "AVAILABLE",
+      },
+    });
+    lookupLotId = lot.id;
+  });
+
+  afterAll(async () => {
+    await prisma.lot.deleteMany({ where: { id: lookupLotId } });
+    await prisma.item.deleteMany({ where: { id: lookupItemId } });
+    await prisma.supplier.deleteMany({ where: { id: lookupSupplierId } });
+  });
+
+  it("resolve pelo código interno puro", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const response = await app.inject({ method: "GET", url: `/lots/lookup?code=${lookupCode}` });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().id).toBe(lookupLotId);
+
+    await app.close();
+  });
+
+  it("resolve pelo payload completo do QR (LOT:<codigo>)", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/lots/lookup?code=${encodeURIComponent(`LOT:${lookupCode}`)}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().id).toBe(lookupLotId);
+
+    await app.close();
+  });
+
+  it("não encontra código de lote inválido/inventado", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/lots/lookup?code=LT-INVENTADO-000000`,
+    });
+
+    expect(response.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it("nunca resolve por supplierLot — só pelo código interno", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/lots/lookup?code=${lookupSupplierLot}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+
+    await app.close();
+  });
 });

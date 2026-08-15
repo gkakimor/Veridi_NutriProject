@@ -153,11 +153,17 @@ The Veridi ERP default desktop shell is:
 
 Default:
 - dark-green top topbar (52px);
-- left sidebar (236px, collapsible via the topbar menu toggle — always
-  visible, not only on small screens);
+- left sidebar (236px, collapsible via the topbar menu toggle);
 - main workspace;
 - no permanent global command toolbar;
 - no permanent bottom status bar.
+
+On mobile widths (≤640px) the sidebar is **not** a permanently visible
+pushed column — it starts hidden and becomes an off-canvas overlay
+(`position: fixed`, same z-index/backdrop idiom as the fullscreen modal)
+opened via the same topbar hamburger toggle, closing on backdrop tap or on
+navigating to a page. This keeps the workspace at full width on a phone
+screen instead of being squeezed by a fixed-width sidebar column.
 
 ## CRUD editing surface — fullscreen modal (default since v2)
 
