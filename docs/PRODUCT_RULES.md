@@ -666,3 +666,90 @@ These should not stop early development until their feature is reached:
 - loss/yield categories;
 - printer/label dimensions;
 - detailed report layouts.
+
+---
+
+# 29. Customer Orders & Fulfillment Plan (Block D — future, not started)
+
+Registered from Product Ownership brainstorm. No schema defined; no
+implementation started. Depends on Inventory, Reservation, Formulations,
+Production Order and Finished Product being complete first.
+
+## Customer Order
+Launched internally — there is no customer-facing portal in MVP. Will
+eventually hold: customer, products, requested quantities, relevant dates,
+status, history. Detailed schema not defined now.
+
+## Fulfillment Plan
+Concept: turns commercial demand into an operational view. For each
+product conceptually shows: Product, Ordered, Available stock, Reserve,
+Produce, Situation. Default behavior: use available finished product
+first, produce only the deficit; the user may change the proposal before
+confirming operational decisions.
+
+**The Fulfillment Plan is an analysis/projection, never a second source of
+truth for stock quantities.** Real facts are always recorded through
+reservations, Production Orders, receipts, production, movements and
+shipments.
+
+## Finished-Product Reservation
+Reserving finished product for a Customer Order removes it from other
+orders' availability. Will be linked to the Order and to the
+Item/finished product, must use real available stock, must prevent
+over-reservation, and must be traceable. When finished-product lot control
+exists, physical allocation must also be traceable by lot.
+
+## Deficit and suggested production
+When requested quantity exceeds available finished product, the
+Fulfillment Plan computes the deficit to produce and may suggest/create
+Production Orders in DRAFT. It never auto-releases an OP, never
+auto-starts production, never auto-consumes stock — the user reviews and
+confirms through the normal Production flow. Suggested OPs keep a link
+back to their originating Customer Order.
+
+## Production Order origin (future field)
+An OP will be able to identify its origin as `CUSTOMER_ORDER` /
+`STOCK_PRODUCTION` / `MANUAL` (displayed as "Pedido do Cliente" / "Produção
+para Estoque" / "Manual"). An OP originating from a Customer Order keeps a
+reference to it. Do not change the current OP schema until this feature is
+actually implemented.
+
+## Material impact
+Suggested OPs use the applicable active Formulation to compute raw
+material/packaging needs. The Fulfillment Plan should eventually show,
+per material: Required, Available, Reserved, On Order, Shortage. "On
+Order" stays informative — material not yet received never counts as
+available for production release (consistent with section 14/20).
+
+## Purchase suggestion
+When raw material/packaging is short, the system may generate a purchase
+suggestion/draft. It never confirms a Purchase Order automatically.
+Conceptual flow: shortage → purchase suggestion → user review → PO DRAFT →
+user confirms the PO later. This is an Evolução Incremental item (26),
+outside MVP Core initially.
+
+## Shipping
+When finished product is available: Order → Picking → Shipping. Partial
+delivery must be possible eventually. No advanced logistics/WMS now.
+
+## Invoicing
+Invoicing reflects what is actually delivered, not necessarily the
+originally ordered quantity (e.g. order 1000, deliver 600 → invoice 600).
+Partial deliveries/invoicing must be supported eventually. Commercial
+invoicing and Brazilian fiscal NF issuance are related but distinct
+concepts — do not merge them prematurely; fiscal integration remains its
+own future evolution (see `docs/BACKLOG.md`).
+
+## Automation principle
+The system may **analyze and suggest** automatically. It must never
+**execute irreversible operational actions** automatically. Examples: an
+order may suggest a reservation; a deficit may suggest an OP DRAFT; a
+material shortage may suggest a purchase/PO DRAFT. Users remain
+responsible for confirming reservations, Purchase Orders, OP release,
+consumption, production, shipping and invoicing.
+
+## Conceptual flow (not an implementation plan)
+Customer Order → check finished-product stock → reserve available product
+→ identify deficit → suggest production → generate draft OPs → calculate
+raw-material/packaging needs → identify shortages → suggest purchases →
+produce → make finished product available → picking/shipping → invoicing.

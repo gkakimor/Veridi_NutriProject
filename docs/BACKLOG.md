@@ -16,6 +16,11 @@ Do not implement backlog items unless Product Ownership explicitly promotes them
 
 High-value because current Veridi spreadsheets already reason about material shortage and purchase need.
 
+Overlaps with Block D item 26 (Purchase Suggestion, `docs/MVP_PLAN.md`) —
+that item is deficit-driven from a Customer Order's material impact;
+reorder point is stock-level-driven independent of any order. Related but
+not the same trigger; both feed a PO DRAFT, never a confirmed PO.
+
 ## Purchase planning / basic MRP
 Use:
 - planned production;
@@ -26,6 +31,9 @@ Use:
 to suggest purchase needs.
 
 Do not implement full MRP inside initial MVP.
+
+Block D item 26 (Purchase Suggestion) is the Customer-Order-driven subset
+of this same idea; see `docs/MVP_PLAN.md` and `docs/PRODUCT_RULES.md` §29.
 
 ## Expiry alerts
 - configurable days-to-expiry;
@@ -194,9 +202,12 @@ Formal workflows.
 - approval.
 
 ## Orders
-- customer order;
-- production linkage;
-- finished-goods allocation.
+Moved to **Block D — Orders & Fulfillment** (`docs/MVP_PLAN.md`,
+`docs/PRODUCT_RULES.md` §29): Customer Order, Fulfillment Plan,
+Finished-Product Reservation, Suggested Production Orders (MVP Ampliado
+candidates, 22–25), Purchase Suggestion, Picking/Shipping, Invoicing
+(Evolução Incremental, 26–28). Kept here as a pointer only — do not
+duplicate scope notes in both places.
 
 ## WhatsApp CRM
 - conversation consolidation;
@@ -213,6 +224,12 @@ Not recommended until the consultative sales model proves a need.
 
 ## Fiscal invoice
 Integrate with a Brazilian fiscal provider/API.
+
+Distinct from commercial Invoicing (Block D item 28, `docs/MVP_PLAN.md`
+and `docs/PRODUCT_RULES.md` §29), which reflects quantity actually
+delivered. The two concepts are related but must not be merged
+prematurely — this fiscal/NF integration remains its own future
+evolution.
 
 ## Costing / CMV
 The current spreadsheets already show rich costing needs:

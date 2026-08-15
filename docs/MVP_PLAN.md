@@ -41,7 +41,40 @@ The MVP should be operationally useful from the first releases and must not atte
 20. Partial Production / Completion
 21. Finished Product
 
-The 21-step sequence stays fixed unless Product Ownership explicitly changes it.
+## Block D — Orders & Fulfillment (roadmap, not yet started)
+22. Customer Order
+23. Availability Analysis / Fulfillment Plan
+24. Finished-Product Reservation
+25. Suggested Production Orders
+26. Purchase Suggestion
+27. Picking / Shipping
+28. Invoicing
+
+Block D depends on the foundation from Blocks B/C already existing/planned:
+Inventory, Reservation, Formulations, Production Order, Finished Product. It
+must not be implemented before those dependencies are complete.
+
+The 21-step Block A–C sequence stays fixed unless Product Ownership
+explicitly changes it. Block D is additive roadmap, registered for
+planning — it does not change the Block A–C sequence or priority.
+
+---
+
+# Roadmap classification
+
+**MVP Core** — steps 1–21 (Blocks A–C). Current implementation scope.
+
+**MVP Ampliado (strong candidates)** — steps 22–25 (Customer Order,
+Availability Analysis / Fulfillment Plan, Finished-Product Reservation,
+Suggested Production Orders). Not scheduled; promotion to implementation
+requires an explicit Product Owner decision once Block B/C dependencies
+above are done.
+
+**Evolução incremental** — steps 26–28 (Purchase Suggestion, Picking /
+Shipping, Invoicing). Later-stage capabilities, further out than 22–25.
+
+Classification does not imply a start date. No Block D item is implemented
+or scheduled as of this registration.
 
 ---
 

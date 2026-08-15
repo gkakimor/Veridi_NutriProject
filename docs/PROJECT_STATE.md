@@ -739,6 +739,10 @@ esperados nos casos de "não encontrado", não exceções).
 - The lot scanner always offers manual entry alongside camera — camera is
   never mandatory, and camera permission is requested only when scanning
   starts.
+- Roadmap expandido com Bloco D — Pedidos & Atendimento (22–28).
+  Capacidades 22–25 são candidatos ao MVP ampliado após conclusão das
+  dependências de Estoque, Formulações, OP e Produto Acabado. Nenhuma
+  implementação iniciada.
 
 ---
 
