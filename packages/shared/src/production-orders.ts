@@ -84,10 +84,21 @@ export interface ProductionOrderRequirementDTO {
   availabilityStatus: MaterialAvailabilityStatus;
   /** Sugestão FEFO/FIFO — nunca reserva, nunca persiste (a alocação oficial só existe em `ProductionOrderDTO.reservation` após RELEASED). */
   suggestedAllocations: SuggestedLotAllocationDTO[];
+  /** Soma das linhas de reserva ATIVAS desta OP para este Requirement (próprias — nunca de outra OP). */
+  allocatedQuantity: string;
+  /** Soma do ProductionConsumption já confirmado para este Requirement. */
+  consumedQuantity: string;
+  /** `allocatedQuantity - consumedQuantity`, nunca negativo — o que ainda falta consumir do que foi reservado. */
+  remainingReservedQuantity: string;
+  /** Linhas de reserva (Picking/Consumo) deste Requirement — inclui linhas substituídas (histórico, `releasedAt` preenchido). */
+  reservationLines: MaterialReservationLineDTO[];
 }
 
 /** ACTIVE conta em Reserved; RELEASED (reserva liberada, ex.: cancelamento de OP RELEASED) não conta mais. */
 export type MaterialReservationStatus = "ACTIVE" | "RELEASED";
+
+/** `PENDING` até o Picking confirmar fisicamente a linha; `CONFIRMED` depois. */
+export type PickingStatus = "PENDING" | "CONFIRMED";
 
 export interface MaterialReservationLineDTO {
   id: string;
@@ -97,10 +108,38 @@ export interface MaterialReservationLineDTO {
   /** `null` quando o item não controla lote — quantidade reservada no nível do Item. */
   lotId: string | null;
   lotCode: string | null;
+  supplierLot: string | null;
   expiryDate: string | null;
   location: string | null;
+  lotStatus: string | null;
   quantity: string;
   unitCode: string;
+  /** Soma do ProductionConsumption desta linha. */
+  consumedQuantity: string;
+  /** `quantity - consumedQuantity`, nunca negativo. */
+  remainingQuantity: string;
+  pickingStatus: PickingStatus;
+  pickedAt: string | null;
+  pickedBy: string | null;
+  /** Preenchidos quando esta linha foi substituída no Picking — nunca apagada, só marcada. */
+  releasedAt: string | null;
+  releasedBy: string | null;
+  releaseReason: string | null;
+  /** `id` da linha original que esta linha substitui, quando esta linha nasceu de uma substituição. */
+  replacesLineId: string | null;
+}
+
+export interface ProductionConsumptionDTO {
+  id: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  lotId: string | null;
+  lotCode: string | null;
+  quantity: string;
+  unitCode: string;
+  consumedAt: string;
+  consumedBy: string | null;
 }
 
 /**
@@ -153,6 +192,11 @@ export interface ProductionOrderDTO {
   releasedBy: string | null;
   /** `null` até o RELEASE. Depois disso, a alocação oficial de materiais da OP. */
   reservation: MaterialReservationDTO | null;
+  /** Preenchido no PRIMEIRO consumo real confirmado (RELEASED → IN_PRODUCTION). */
+  startedAt: string | null;
+  startedBy: string | null;
+  /** Histórico completo de eventos de consumo — nunca só o total agregado. */
+  consumptions: ProductionConsumptionDTO[];
   cancelledAt: string | null;
   cancelledBy: string | null;
   cancelReason: string | null;
@@ -186,4 +230,23 @@ export interface UpdateProductionOrderInput {
 
 export interface CancelProductionOrderInput {
   reason: string;
+}
+
+export interface ConfirmPickingInput {
+  /** Código puro (`LT-...`) ou payload de QR (`LOT:LT-...`). Omitido para item sem controle de lote. */
+  lotCode?: string;
+}
+
+export interface SubstituteReservationLineInput {
+  /** Código puro (`LT-...`) ou payload de QR (`LOT:LT-...`) do lote alternativo. */
+  lotCode: string;
+}
+
+export interface RecordConsumptionEntryInput {
+  reservationLineId: string;
+  quantity: string;
+}
+
+export interface RecordConsumptionInput {
+  entries: RecordConsumptionEntryInput[];
 }

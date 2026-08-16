@@ -60,42 +60,81 @@ export async function getOnHandByLots(
 }
 
 /**
- * Reserved por item — soma das MaterialReservationLine de reservas ACTIVE.
- * RELEASED (reserva liberada, ex.: cancelamento de OP RELEASED) nunca
- * conta. Nunca uma segunda quantidade fora da tabela de reserva.
+ * Consumido por MaterialReservationLine — soma dos ProductionConsumption
+ * de cada linha. Base do calculo de Reserved remanescente (linha reservada
+ * menos o que ja foi efetivamente consumido).
+ */
+export async function getConsumedByReservationLines(
+  prisma: PrismaOrTx,
+  reservationLineIds: string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  if (reservationLineIds.length === 0) return new Map();
+  const grouped = await prisma.productionConsumption.groupBy({
+    by: ["reservationLineId"],
+    where: { reservationLineId: { in: reservationLineIds } },
+    _sum: { quantity: true },
+  });
+  const map = new Map<string, Prisma.Decimal>();
+  for (const row of grouped) {
+    map.set(row.reservationLineId, row._sum.quantity ?? new Prisma.Decimal(0));
+  }
+  return map;
+}
+
+/**
+ * Reserved por item — soma das MaterialReservationLine de reservas ACTIVE,
+ * excluindo linhas substituidas (`releasedAt` preenchido — ver Picking) e
+ * descontando o que ja foi efetivamente consumido
+ * (`quantity - consumido`, nunca negativo). RELEASED (reserva liberada,
+ * ex.: cancelamento de OP RELEASED) nunca conta. Nunca uma segunda
+ * quantidade fora da tabela de reserva/consumo.
  */
 export async function getReservedByItems(
   prisma: PrismaOrTx,
   itemIds: string[],
 ): Promise<Map<string, Prisma.Decimal>> {
   if (itemIds.length === 0) return new Map();
-  const grouped = await prisma.materialReservationLine.groupBy({
-    by: ["itemId"],
-    where: { itemId: { in: itemIds }, reservation: { status: "ACTIVE" } },
-    _sum: { quantity: true },
+  const lines = await prisma.materialReservationLine.findMany({
+    where: { itemId: { in: itemIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
+    select: { id: true, itemId: true, quantity: true },
   });
+  const consumedByLine = await getConsumedByReservationLines(
+    prisma,
+    lines.map((line) => line.id),
+  );
+
   const map = new Map<string, Prisma.Decimal>();
-  for (const row of grouped) {
-    map.set(row.itemId, row._sum.quantity ?? new Prisma.Decimal(0));
+  for (const line of lines) {
+    const consumed = consumedByLine.get(line.id) ?? new Prisma.Decimal(0);
+    const remaining = Prisma.Decimal.max(line.quantity.minus(consumed), 0);
+    const current = map.get(line.itemId) ?? new Prisma.Decimal(0);
+    map.set(line.itemId, current.plus(remaining));
   }
   return map;
 }
 
-/** Versao por lote de `getReservedByItems` — mesma regra ACTIVE-only. */
+/** Versao por lote de `getReservedByItems` — mesma regra (ACTIVE, nao substituida, liquida de consumo). */
 export async function getReservedByLots(
   prisma: PrismaOrTx,
   lotIds: string[],
 ): Promise<Map<string, Prisma.Decimal>> {
   if (lotIds.length === 0) return new Map();
-  const grouped = await prisma.materialReservationLine.groupBy({
-    by: ["lotId"],
-    where: { lotId: { in: lotIds }, reservation: { status: "ACTIVE" } },
-    _sum: { quantity: true },
+  const lines = await prisma.materialReservationLine.findMany({
+    where: { lotId: { in: lotIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
+    select: { id: true, lotId: true, quantity: true },
   });
+  const consumedByLine = await getConsumedByReservationLines(
+    prisma,
+    lines.map((line) => line.id),
+  );
+
   const map = new Map<string, Prisma.Decimal>();
-  for (const row of grouped) {
-    if (!row.lotId) continue;
-    map.set(row.lotId, row._sum.quantity ?? new Prisma.Decimal(0));
+  for (const line of lines) {
+    if (!line.lotId) continue;
+    const consumed = consumedByLine.get(line.id) ?? new Prisma.Decimal(0);
+    const remaining = Prisma.Decimal.max(line.quantity.minus(consumed), 0);
+    const current = map.get(line.lotId) ?? new Prisma.Decimal(0);
+    map.set(line.lotId, current.plus(remaining));
   }
   return map;
 }

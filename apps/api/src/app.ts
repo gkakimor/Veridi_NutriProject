@@ -13,6 +13,7 @@ import { lotsRoutes } from "./modules/lots/lots.routes.js";
 import { inventoryRoutes } from "./modules/inventory/inventory.routes.js";
 import { formulationsRoutes } from "./modules/formulations/formulations.routes.js";
 import { productionOrdersRoutes } from "./modules/production-orders/production-orders.routes.js";
+import { pickingRoutes } from "./modules/production-orders/picking.routes.js";
 
 /**
  * Monta a instancia Fastify.
@@ -45,6 +46,7 @@ export function buildApp() {
   app.register(inventoryRoutes);
   app.register(formulationsRoutes);
   app.register(productionOrdersRoutes);
+  app.register(pickingRoutes);
 
   return app;
 }

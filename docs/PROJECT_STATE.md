@@ -23,6 +23,7 @@ FAST MVP.
 **Delivery 11 — Formulações + Versionamento (+ hardening de Item): concluído.**
 **Delivery 12 — Ordem de Produção + Cálculo de Necessidade de Materiais: concluído.**
 **Delivery 13 — Material Reservation + Release da Ordem de Produção: concluído.**
+**Delivery 14 — Picking + Consumo Real de Materiais: concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -30,14 +31,16 @@ oficial de identidade. Para telas CRUD simples (list + create/edit) o
 padrão é `FullWorkspaceModal` — aplicado em Itens, Fornecedores, Clientes,
 Produtos. Para **documentos transacionais** o padrão é **página própria
 dentro do workspace** (não modal) — aplicado em Ordem de Compra,
-Recebimento, Formulação (editor de versão) e Ordem de Produção. Rota
-de impressão (etiqueta de lote) é um terceiro padrão: página fora do
-`AppShell`, sem topbar/sidebar. Ver `docs/UI_BRAND.md`.
+Recebimento, Formulação (editor de versão) e Ordem de Produção (agora com
+Picking/Consumo Real embutidos). Rota de impressão (etiqueta de lote) é
+um terceiro padrão: página fora do `AppShell`, sem topbar/sidebar. Ver
+`docs/UI_BRAND.md`.
 
-6 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
+4 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
 Usuários; Bloco B completo; Bloco C: Formulações + Versionamento + OP +
-Requirement Calculation + Reservation implementados, falta QR Picking,
-Actual Consumption, Partial Production, Finished Product).
+Requirement Calculation + Reservation + QR Picking + Actual Consumption
+implementados, falta Partial Production/conclusão da OP e Finished
+Product).
 
 ## Stack instalada
 
@@ -62,8 +65,9 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  Lotes (scan/QR/etiqueta)/Movimentações/Inventário Físico,
                  Produção > Formulações (histórico de versões + editor
                  DRAFT) / Ordens de Produção (lista + documento
-                 DRAFT/PLANNED/RELEASED/CANCELLED, seção Materiais
-                 Reservados)
+                 DRAFT/PLANNED/RELEASED/IN_PRODUCTION/CANCELLED, seções
+                 Materiais Reservados/Picking/Consumo Real) / Picking /
+                 Consumo (lista RELEASED/IN_PRODUCTION)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders,
                  /receipts, /lots (+ /lots/lookup), /inventory,
@@ -71,13 +75,15 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /inventory/:itemId/allocation-suggestion (FEFO/FIFO, ciente
                  de Reserved), /formulations, /products/:id/formulations,
                  /formulation-versions, /production-orders (+ /plan,
-                 /release, /cancel)
+                 /release, /cancel, /picking/:lineId/confirm,
+                 /picking/:lineId/substitute, /consumptions)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder,
                  Receipt, Lot [qrPayload, onHand/reserved/available real],
-                 InventoryMovement, AllocationSuggestion,
-                 FormulationVersion/Component, ProductionOrder/Requirement,
-                 MaterialReservation/Line, CNPJ, UFs)
+                 InventoryMovement [PRODUCTION_CONSUMPTION],
+                 AllocationSuggestion, FormulationVersion/Component,
+                 ProductionOrder/Requirement, MaterialReservation/Line
+                 [Picking/substituição], ProductionConsumption, CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -1356,6 +1362,161 @@ evento é o 404 pré-existente de `favicon.ico`).
 
 ---
 
+# Delivery 14 — Picking + Consumo Real de Materiais
+
+Fecha o ciclo físico da OP: confere fisicamente o que foi reservado
+(Picking, nunca altera estoque) e registra quanto realmente entrou na
+produção (Consumo, sempre altera estoque). Primeiro consumo real leva
+RELEASED → IN_PRODUCTION. Validada só em desktop web (Desktop Web First).
+
+## Picking — confirmação sem framework genérico
+
+Em vez de uma entidade `ProductionPicking` separada, os campos de
+auditoria (`pickedAt`/`pickedBy`) foram adicionados direto em
+`MaterialReservationLine` — o Picking É a confirmação física daquela
+linha, não um conceito à parte. Confirma a linha **inteira** de uma vez
+(sem partial picking nesta fase); item sem lote confirma só a separação
+(sem código para conferir). Nunca cria `InventoryMovement`, nunca
+recalcula ou reserva de novo. Revalida a elegibilidade do lote reservado
+no momento do Picking (pode ter vencido/sido bloqueado entre o RELEASE e
+agora) — se inelegível, bloqueia e orienta substituição, mesmo que o
+código escaneado seja exatamente o esperado.
+
+## Substituição de lote — genealogia preservada
+
+Mismatch (lote escaneado ≠ lote reservado) nunca é aceito silenciosamente
+— mostra os dois códigos e exige ação explícita ("Usar lote diferente").
+`MaterialReservationLine` ganhou `releasedAt/By/Reason` (mesmo padrão já
+usado em `MaterialReservation`) e um self-relation `replacesLineId`: a
+linha original é marcada como liberada (não deletada), e uma linha nova
+aponta de volta para ela — "OP reservou originalmente LT-A, mas usou LT-B
+no Picking" é sempre reconstruível. A linha nova já nasce com Picking
+confirmado (escolher o lote alternativo já é a confirmação física).
+Substituição só é permitida antes de qualquer Picking/consumo naquela
+linha, e só quando um único lote alternativo (mesmo Item, `AVAILABLE`,
+não vencido, Available líquido suficiente, lote diferente do atual)
+cobre a quantidade inteira — nunca fraciona uma linha entre vários lotes
+alternativos nesta fase. Transacional com o mesmo lock de Item do
+RELEASE — duas substituições não conseguem reservar o mesmo saldo
+alternativo simultaneamente.
+
+## Consumo real — nova entidade + `InventoryMovement`
+
+`ProductionConsumption` (histórico, imutável) — cada confirmação gera
+exatamente 1 `InventoryMovement` `PRODUCTION_CONSUMPTION` (relação 1:1
+real via `InventoryMovement.productionConsumptionId`, mesmo padrão já
+usado para `ReceiptLine`). Exige Picking confirmado na linha antes de
+consumir. Pode ser parcial e repetido várias vezes, nunca excedendo o que
+ainda resta reservado na linha (`quantity - já consumido`) —
+overconsumption é rejeitado, nunca silenciosamente limitado. Revalida o
+lote de novo no momento do consumo (independente do que valia no
+Picking). Primeiro consumo confirmado da OP: `RELEASED → IN_PRODUCTION`,
+grava `startedAt`/`startedBy` — sem botão separado "Iniciar produção".
+
+## Reserved/Available depois do consumo — matemática centralizada
+
+`getReservedByItems`/`getReservedByLots` (`inventory-ledger.ts`) deixaram
+de somar só `MaterialReservationLine.quantity` e passaram a subtrair o
+consumido por linha (`getConsumedByReservationLines`, novo) e excluir
+linhas substituídas (`releasedAt` preenchido) — nenhum cálculo específico
+de Produção em paralelo. Resultado: consumir estoque já reservado nunca
+reduz `Available` de novo (On Hand e Reserved caem juntos, na mesma
+quantidade). Exemplo coberto por teste: On Hand 100/Reserved 30/Available
+70 → consome 10 → On Hand 90/Reserved 20/Available 70 → consome mais 18 →
+On Hand 72/Reserved 2/Available 70. O restante não consumido (ex.: 2 kg)
+permanece reservado enquanto a OP estiver `IN_PRODUCTION` — não é
+liberado automaticamente (ficará para o futuro fluxo de conclusão da OP).
+
+## Requirement ganha progresso de execução
+
+`ProductionOrderRequirementDTO` ganhou `allocatedQuantity` (o que esta OP
+tem ativamente reservado, próprio — nunca de outra OP),
+`consumedQuantity`, `remainingReservedQuantity` e `reservationLines`
+(linhas, incluindo substituídas, para a UI de Picking/Consumo). O ajuste
+"a OP nunca compete contra si mesma no Available" (Delivery 13) evoluiu
+para somar de volta o `remainingReservedQuantity` (líquido de consumo),
+não mais a reserva bruta original — assim uma OP em produção nunca mostra
+falta contra materiais que ela mesma já garantiu e parcialmente já usou.
+
+## Hardening: cancelamento trava em IN_PRODUCTION
+
+`cancelProductionOrder` passou a rejeitar explicitamente `IN_PRODUCTION`
+("já houve consumo real de material") — reverter exigiria uma regra de
+devolução/estorno que não existe ainda. `RELEASED` sem consumo continua
+cancelável normalmente pelo fluxo já existente.
+
+## Backend
+
+`POST /production-orders/:id/picking/:reservationLineId/confirm`,
+`POST /production-orders/:id/picking/:reservationLineId/substitute`,
+`POST /production-orders/:id/consumptions` (`picking.service.ts`, módulo
+novo, dedicado — mantém `production-orders.service.ts` focado no
+lifecycle da OP). Sem `POST /reservations`/endpoint genérico de
+movimentação — Consumo nunca passa pelo endpoint de Adjustment. Leitura
+de Picking/Consumo embutida em `GET /production-orders/:id`
+(`reservation.lines[]` enriquecido + `requirements[].reservationLines[]`
++ `consumptions[]` + `startedAt/startedBy`) — sem `GET .../consumptions`
+dedicado, decisão de simplicidade ("estrutura equivalente coerente").
+Concorrência: RELEASE, substituição e consumo travam `Item`s (e, no
+consumo, também as `MaterialReservationLine`s) em ordem determinística
+ascendente — mesmo padrão em todo o módulo.
+
+## Frontend
+
+Reaproveita `LotScanner` (câmera + digitação manual) já existente, sem
+nova rodada de otimização mobile. `ProductionOrderPage` ganhou as seções
+"Picking" (Item/Lote esperado/Validade/Localização/Reservado/Status/Ação
+— escanear ou "Confirmar separação" para item sem lote) e "Consumo Real"
+(Reservado/Consumido/Restante/input "Consumir agora" + histórico completo
+Data/Item/Lote/Quantidade/Usuário — nunca só o total agregado), visíveis
+quando `RELEASED`/`IN_PRODUCTION`. Diálogo de mismatch mostra os dois
+códigos lado a lado (Esperado/Informado) com "Cancelar"/"Usar lote
+diferente". Nova página **Produção → Picking / Consumo**
+(`/producao/picking`) lista só OPs `RELEASED`/`IN_PRODUCTION`
+("X/Y lotes conferidos", "X/Y materiais consumidos") e abre a mesma
+`ProductionOrderPage` — sem duplicar a lógica de renderização da OP.
+
+## Testes
+
+27 novos testes de API: 15 em `picking.test.ts` (confirmação com código
+puro/QR `LOT:`/item sem lote, picking duplicado rejeitado, mismatch com
+lote de outro item, lote vencido/bloqueado/aguardando rejeitados,
+substituição preserva histórico e não muda Reserved/On Hand do item,
+Available migra corretamente entre lotes, rejeita lote insuficiente/outro
+item/status inválido/substituição pós-consumo, concorrência de duas
+substituições no mesmo lote alternativo) + 12 em `consumption.test.ts`
+(exige Picking, primeiro consumo muda status e grava
+startedAt/startedBy, cria Consumption+Movement exatos, item sem lote,
+parcial/múltiplos consumos acumulam, exatamente igual ao reservado, não
+excede reservado, lote inelegível entre Picking e consumo rejeitado,
+histórico preserva todos os eventos, cancelamento bloqueado em
+IN_PRODUCTION, matemática crítica Reserved/Available, concorrência real
+de duas requisições disputando o restante da mesma linha). Total da API:
+237 testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (237 API + 7 web) — ok. Validado
+visualmente via Playwright **só desktop**: OP RELEASED com seções Picking
+(item com lote via digitação manual + item sem lote via "Confirmar
+separação") e Consumo Real, primeiro consumo mudando status para "Em
+produção", consumos parciais acumulando no histórico com On
+Hand/Reserved/Available corretos na Visão Geral do Estoque, mismatch de
+lote com diálogo Esperado/Informado, substituição preservando histórico
+(linha antiga com nota "Lote substituído no Picking", linha nova já
+conferida), listagem Picking/Consumo com contadores corretos. Regressão
+em OP/Reservation/Inventory/FEFO/Lotes. Console limpo (únicos eventos são
+o 404 pré-existente de `favicon.ico` e o 409 esperado da tentativa de
+mismatch, ambos sem relação com exceções reais).
+
+## Pendente (não bloqueante)
+
+- Nenhuma pendência real dentro do escopo. Produção Parcial/conclusão da
+  OP e Produto Acabado ficam para os próximos módulos, por decisão
+  explícita do handoff — não avançar além de Picking/Consumo agora.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -1380,8 +1541,8 @@ evento é o 404 pré-existente de `favicon.ico`).
 15. OP ✓
 16. Requirement Calculation ✓
 17. Reservation ✓
-18. QR Picking
-19. Actual Consumption
+18. QR Picking ✓
+19. Actual Consumption ✓
 20. Partial Production / Completion
 21. Finished Product
 
@@ -1424,6 +1585,24 @@ evento é o 404 pré-existente de `favicon.ico`).
   adjustments/loss/Stock Count can never eat into reserved stock, and a
   lot with an active reservation can't be blocked — see
   `docs/PRODUCT_RULES.md` §14/§17/§19-21 for full detail.
+- Confirmed at implementation (Delivery 14): Picking confirms a whole
+  `MaterialReservationLine` (no partial picking), never moves stock,
+  never re-reserves — only physical conference. A lot mismatch always
+  requires an explicit "use different lot" action; substitution preserves
+  full genealogy (`replacesLineId`, original line marked `releasedAt`,
+  never deleted) and is only allowed before any Picking/consumption on
+  that line, one alternate lot covering the whole quantity. Consumption
+  requires Picking first, can be partial/repeated but never exceeds what
+  a line still has reserved, and always creates exactly one
+  `ProductionConsumption` + one `InventoryMovement`
+  `PRODUCTION_CONSUMPTION` (real 1:1). The first confirmed consumption of
+  an OP is what moves it `RELEASED → IN_PRODUCTION` — no separate "start
+  production" action. Reserved/Available math is centralized (never a
+  Production-only calculation): consuming already-reserved stock drops On
+  Hand and Reserved together, so Available never moves again. Unused
+  remainder after consumption stays reserved while `IN_PRODUCTION` — not
+  auto-released. `IN_PRODUCTION` cannot be cancelled in this phase — see
+  `docs/PRODUCT_RULES.md` §22-23 for full detail.
 - Formula ACTIVE versions remain historical/immutable.
 - OP keeps exact formula version.
 - Insufficient Available stock blocks OP release by default.
@@ -1564,20 +1743,21 @@ evento é o 404 pré-existente de `favicon.ico`).
 # Next recommended implementation
 
 Resta do Bloco A: **Usuários**. Bloco B está completo. Bloco C:
-Formulações + Versionamento + OP + Requirement Calculation + Reservation
-completos, próximo é **Picking / QR Picking** (confirmação física dos
-lotes já reservados em `MaterialReservationLine`, seguida de Consumo
-real/`PRODUCTION_CONSUMPTION`) — a definir por próximo handoff de Product
+Formulações + Versionamento + OP + Requirement Calculation + Reservation +
+QR Picking + Actual Consumption completos, próximo é **Partial
+Production / conclusão da OP** (output do produto acabado, liberar o
+saldo reservado não consumido, `IN_PRODUCTION → COMPLETED`) seguido de
+**Finished Product** — a definir por próximo handoff de Product
 Ownership. Reutilizar: `FullWorkspaceModal` + `components.css` para
 cadastros simples; padrão de página própria (ver Ordem de
 Compra/Recebimento/editor de Formulação/OP) para novos documentos
-transacionais; `LotScanner`/`QrCode` para os fluxos scan-first de
-Picking; `apps/api/src/lib/inventory-ledger.ts`
-(`getReservedByItems/Lots`, `getAvailableByItems`) e
-`allocation.service.ts#getAllocationSuggestion` (já aceita `tx` como
-parâmetro) para qualquer cálculo futuro de saldo/alocação —
-`MaterialReservationLine` já modela exatamente `OP → Requirement → Lote
-reservado → Quantidade` que o Picking precisa confirmar fisicamente.
+transacionais; `apps/api/src/lib/inventory-ledger.ts`
+(`getReservedByItems/Lots`, `getAvailableByItems`,
+`getConsumedByReservationLines`) para qualquer cálculo futuro de saldo;
+`ProductionConsumption` já modela `OP → Requirement → Lote → Quantidade
+consumida`, base direta para o cálculo de rendimento/yield quando a
+conclusão da OP existir; `MaterialReservationLine.remainingQuantity` é
+exatamente o saldo que a conclusão da OP precisará liberar.
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

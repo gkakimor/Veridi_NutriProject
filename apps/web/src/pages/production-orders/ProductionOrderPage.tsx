@@ -1,20 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ProductDTO, ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
 import { PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
 import {
   cancelProductionOrder,
+  confirmPicking,
   createProductionOrder,
   getProductionOrder,
   planProductionOrder,
+  recordConsumption,
   releaseProductionOrder,
+  substituteReservationLine,
   updateProductionOrder,
 } from "../../lib/production-orders-api";
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
-import { ApiValidationError } from "../../lib/api-errors";
+import { ApiValidationError, LotMismatchApiError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { LotScanner } from "../../components/LotScanner";
 
 interface FormulationVersionOption {
   id: string;
@@ -77,6 +81,17 @@ export function ProductionOrderPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
 
+  const [scannerLineId, setScannerLineId] = useState<string | null>(null);
+  const [pickingBusyLineId, setPickingBusyLineId] = useState<string | null>(null);
+  const [mismatchDialog, setMismatchDialog] = useState<{
+    lineId: string;
+    expectedLotCode: string;
+    scannedLotCode: string;
+  } | null>(null);
+  const [substituting, setSubstituting] = useState(false);
+  const [consumeQuantities, setConsumeQuantities] = useState<Record<string, string>>({});
+  const [consumingLineId, setConsumingLineId] = useState<string | null>(null);
+
   const syncFormFromServer = useCallback((order: ProductionOrderDTO) => {
     setProductId(order.productId);
     setFormulationVersionId(order.formulationVersionId ?? "");
@@ -134,6 +149,14 @@ export function ProductionOrderPage() {
   const selectedProduct = activeProducts.find((product) => product.id === productId) ?? null;
   const hasNoActiveFormulation =
     isDraft && productId.length > 0 && !formulationOptions.some((version) => version.status === "ACTIVE");
+
+  const isReleasedOrInProduction = status === "RELEASED" || status === "IN_PRODUCTION";
+  // Linhas ativas (nao substituidas) de todos os Requirements — base do
+  // Picking e do Consumo Real. Linhas substituidas (releasedAt != null)
+  // ficam so no historico dentro de "Materiais Reservados".
+  const activeReservationLines = (productionOrder?.requirements ?? []).flatMap((requirement) =>
+    requirement.reservationLines.filter((line) => line.releasedAt === null),
+  );
 
   function handleProductChange(nextProductId: string) {
     setProductId(nextProductId);
@@ -253,6 +276,80 @@ export function ProductionOrderPage() {
       setError(err instanceof Error ? err.message : "Falha ao cancelar ordem de produção");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleConfirmNoLotPicking(lineId: string) {
+    if (!id) return;
+    setPickingBusyLineId(lineId);
+    setError(null);
+    try {
+      const updated = await confirmPicking(id, lineId);
+      setProductionOrder(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao confirmar separação");
+    } finally {
+      setPickingBusyLineId(null);
+    }
+  }
+
+  async function handleLotScanned(lineId: string, rawValue: string) {
+    if (!id) return;
+    setScannerLineId(null);
+    setPickingBusyLineId(lineId);
+    setError(null);
+    try {
+      const updated = await confirmPicking(id, lineId, rawValue);
+      setProductionOrder(updated);
+    } catch (err) {
+      if (err instanceof LotMismatchApiError) {
+        setMismatchDialog({
+          lineId,
+          expectedLotCode: err.expectedLotCode,
+          scannedLotCode: err.scannedLotCode,
+        });
+      } else {
+        setError(err instanceof Error ? err.message : "Falha ao confirmar picking");
+      }
+    } finally {
+      setPickingBusyLineId(null);
+    }
+  }
+
+  async function handleUseDifferentLot() {
+    if (!id || !mismatchDialog) return;
+    setSubstituting(true);
+    setError(null);
+    try {
+      const updated = await substituteReservationLine(
+        id,
+        mismatchDialog.lineId,
+        mismatchDialog.scannedLotCode,
+      );
+      setProductionOrder(updated);
+      setMismatchDialog(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao substituir lote");
+    } finally {
+      setSubstituting(false);
+    }
+  }
+
+  async function handleConsumeNow(lineId: string) {
+    if (!id) return;
+    const quantity = (consumeQuantities[lineId] ?? "").trim();
+    if (!quantity) return;
+
+    setConsumingLineId(lineId);
+    setError(null);
+    try {
+      const updated = await recordConsumption(id, [{ reservationLineId: lineId, quantity }]);
+      setProductionOrder(updated);
+      setConsumeQuantities((prev) => ({ ...prev, [lineId]: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao registrar consumo");
+    } finally {
+      setConsumingLineId(null);
     }
   }
 
@@ -517,6 +614,206 @@ export function ProductionOrderPage() {
           </FormSection>
         )}
 
+        {productionOrder && isReleasedOrInProduction && (
+          <FormSection
+            title="Picking"
+            subtitle="Conferência física do material/lote separado — nunca altera estoque."
+          >
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Lote esperado</th>
+                    <th>Validade</th>
+                    <th>Localização</th>
+                    <th>Reservado</th>
+                    <th>Status</th>
+                    <th aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeReservationLines.map((line) => (
+                    <Fragment key={line.id}>
+                      <tr>
+                        <td>
+                          <span className="code">{line.itemCode}</span> {line.itemName}
+                          {line.replacesLineId && (
+                            <>
+                              <br />
+                              <span className="field__hint">Lote substituído no Picking</span>
+                            </>
+                          )}
+                        </td>
+                        <td>{line.lotId ? line.lotCode : "— (sem controle de lote)"}</td>
+                        <td>
+                          {line.expiryDate ? new Date(line.expiryDate).toLocaleDateString("pt-BR") : "—"}
+                        </td>
+                        <td>{line.location ?? "—"}</td>
+                        <td>
+                          {line.quantity} {line.unitCode}
+                        </td>
+                        <td>
+                          <span
+                            className={
+                              line.pickingStatus === "CONFIRMED" ? "badge badge--active" : "badge badge--neutral"
+                            }
+                          >
+                            {line.pickingStatus === "CONFIRMED" ? "Conferido" : "Pendente"}
+                          </span>
+                        </td>
+                        <td>
+                          {line.pickingStatus !== "CONFIRMED" &&
+                            (line.lotId ? (
+                              <button
+                                type="button"
+                                className="btn btn--secondary btn--sm"
+                                disabled={pickingBusyLineId === line.id}
+                                onClick={() =>
+                                  setScannerLineId(scannerLineId === line.id ? null : line.id)
+                                }
+                              >
+                                {scannerLineId === line.id ? "Fechar" : "Escanear / Informar lote"}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn--secondary btn--sm"
+                                disabled={pickingBusyLineId === line.id}
+                                onClick={() => handleConfirmNoLotPicking(line.id)}
+                              >
+                                {pickingBusyLineId === line.id ? "Confirmando…" : "Confirmar separação"}
+                              </button>
+                            ))}
+                        </td>
+                      </tr>
+                      {scannerLineId === line.id && (
+                        <tr>
+                          <td colSpan={7}>
+                            <LotScanner onDetect={(rawValue) => handleLotScanned(line.id, rawValue)} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+
+                  {activeReservationLines.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="table__empty">
+                        Nenhuma linha de reserva para conferir.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </FormSection>
+        )}
+
+        {productionOrder && isReleasedOrInProduction && (
+          <FormSection
+            title="Consumo Real"
+            subtitle="Registra quanto efetivamente entrou na produção — baixa o estoque físico e reduz a reserva remanescente."
+          >
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Lote</th>
+                    <th>Reservado</th>
+                    <th>Consumido</th>
+                    <th>Restante</th>
+                    <th>Consumir agora</th>
+                    <th aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeReservationLines.map((line) => (
+                    <tr key={line.id}>
+                      <td>
+                        <span className="code">{line.itemCode}</span> {line.itemName}
+                      </td>
+                      <td>{line.lotCode ?? "—"}</td>
+                      <td>
+                        {line.quantity} {line.unitCode}
+                      </td>
+                      <td>{line.consumedQuantity}</td>
+                      <td>{line.remainingQuantity}</td>
+                      <td>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          disabled={line.pickingStatus !== "CONFIRMED" || Number(line.remainingQuantity) <= 0}
+                          value={consumeQuantities[line.id] ?? ""}
+                          onChange={(event) =>
+                            setConsumeQuantities((prev) => ({ ...prev, [line.id]: event.target.value }))
+                          }
+                        />
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn--accent btn--sm"
+                          disabled={
+                            line.pickingStatus !== "CONFIRMED" ||
+                            Number(line.remainingQuantity) <= 0 ||
+                            !(consumeQuantities[line.id] ?? "").trim() ||
+                            consumingLineId === line.id
+                          }
+                          onClick={() => handleConsumeNow(line.id)}
+                        >
+                          {consumingLineId === line.id ? "Confirmando…" : "Confirmar consumo"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {activeReservationLines.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="table__empty">
+                        Nenhuma linha de reserva para consumir.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {productionOrder.consumptions.length > 0 && (
+              <div className="table-container table-container--spaced">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Item</th>
+                      <th>Lote</th>
+                      <th>Quantidade</th>
+                      <th>Usuário</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productionOrder.consumptions.map((consumption) => (
+                      <tr key={consumption.id}>
+                        <td>{formatDateTime(consumption.consumedAt)}</td>
+                        <td>
+                          <span className="code">{consumption.itemCode}</span> {consumption.itemName}
+                        </td>
+                        <td>{consumption.lotCode ?? "—"}</td>
+                        <td>
+                          {consumption.quantity} {consumption.unitCode}
+                        </td>
+                        <td>{consumption.consumedBy ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </FormSection>
+        )}
+
         <FormSection title="Observações">
           <div className="field">
             <label htmlFor="op-notes">Notas internas</label>
@@ -593,6 +890,50 @@ export function ProductionOrderPage() {
         onCancel={() => setReleaseDialogOpen(false)}
         onConfirm={handleRelease}
       />
+
+      {mismatchDialog && (
+        <>
+          <div className="confirm-overlay" />
+          <div
+            className="confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="mismatch-title"
+          >
+            <h2 id="mismatch-title">Lote informado é diferente do esperado</h2>
+            <dl className="definition-list">
+              <dt>Lote reservado</dt>
+              <dd>
+                <span className="code">{mismatchDialog.expectedLotCode}</span>
+              </dd>
+              <dt>Lote informado</dt>
+              <dd>
+                <span className="code">{mismatchDialog.scannedLotCode}</span>
+              </dd>
+            </dl>
+            <p className="field__hint">
+              Usar o lote diferente substitui a reserva original — o histórico é preservado.
+            </p>
+            <div className="confirm-dialog__actions">
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => setMismatchDialog(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn--accent"
+                disabled={substituting}
+                onClick={handleUseDifferentLot}
+              >
+                {substituting ? "Substituindo…" : "Usar lote diferente"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {cancelDialogOpen && (
         <>

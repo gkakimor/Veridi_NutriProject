@@ -25,6 +25,7 @@ import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPag
 import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
 import { ProductionOrdersPage } from "./pages/production-orders/ProductionOrdersPage";
 import { ProductionOrderPage } from "./pages/production-orders/ProductionOrderPage";
+import { PickingConsumptionPage } from "./pages/production-orders/PickingConsumptionPage";
 
 export function App() {
   return (
@@ -61,6 +62,7 @@ export function App() {
           <Route path="/producao/ordens" element={<ProductionOrdersPage />} />
           <Route path="/producao/ordens/nova" element={<ProductionOrderPage />} />
           <Route path="/producao/ordens/:id" element={<ProductionOrderPage />} />
+          <Route path="/producao/picking" element={<PickingConsumptionPage />} />
 
           {navItems
             .filter((item) => !item.implemented)

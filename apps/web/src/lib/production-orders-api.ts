@@ -80,3 +80,47 @@ export async function cancelProductionOrder(
   });
   return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
 }
+
+export async function confirmPicking(
+  productionOrderId: string,
+  reservationLineId: string,
+  lotCode?: string,
+): Promise<ProductionOrderDTO> {
+  const response = await fetch(
+    `${API_URL}/production-orders/${productionOrderId}/picking/${reservationLineId}/confirm`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(lotCode ? { lotCode } : {}),
+    },
+  );
+  return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}
+
+export async function substituteReservationLine(
+  productionOrderId: string,
+  reservationLineId: string,
+  lotCode: string,
+): Promise<ProductionOrderDTO> {
+  const response = await fetch(
+    `${API_URL}/production-orders/${productionOrderId}/picking/${reservationLineId}/substitute`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lotCode }),
+    },
+  );
+  return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}
+
+export async function recordConsumption(
+  productionOrderId: string,
+  entries: { reservationLineId: string; quantity: string }[],
+): Promise<ProductionOrderDTO> {
+  const response = await fetch(`${API_URL}/production-orders/${productionOrderId}/consumptions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entries }),
+  });
+  return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}

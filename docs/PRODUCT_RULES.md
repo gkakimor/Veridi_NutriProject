@@ -758,6 +758,38 @@ If scanned lot differs:
 
 Never silently accept a mismatch.
 
+## Durable rules confirmed at implementation
+
+- Picking confirms the **whole** `MaterialReservationLine` at once in this
+  phase — no partial picking. It never creates an `InventoryMovement` and
+  never re-reserves; it only records `pickedAt`/`pickedBy` on the line.
+  Reusing the existing QR normalization/lookup (`LOT:<code>` or the bare
+  code) — no second lot-resolution path.
+- The reserved lot's eligibility (status/expiry) is revalidated again at
+  Picking time, not just at RELEASE — a lot that expired or got blocked
+  between RELEASE and Picking blocks the confirm even if the operator
+  scans exactly the expected code, with an explicit error pointing at
+  substitution as the resolution.
+- A mismatch (scanned lot ≠ reserved lot) never substitutes silently: it
+  surfaces both codes and requires an explicit "use different lot" action.
+  Substitution only proceeds before any Picking/consumption on that line,
+  and only when a single alternate lot (same item, `AVAILABLE`, not
+  expired, not the same lot, with enough net Available) can cover the
+  *entire* reserved quantity — no splitting one line across several
+  alternate lots in this phase.
+- Substitution never overwrites history: the original line is marked
+  `releasedAt` (freed, no longer counted in Reserved) and a new line is
+  created pointing back to it via `replacesLineId` — genealogy is always
+  reconstructable. The new line is born already Picking-confirmed (the
+  act of choosing the alternate lot *is* the physical confirmation).
+  Reserved for the item as a whole does not change — it is the same
+  quantity, just moved to a different lot; only that lot's own
+  Reserved/Available shift.
+- Substitution is transactional and lock-protected the same way RELEASE
+  is (lock the `Item` row before recomputing the alternate lot's net
+  Available) — two substitutions racing for the same alternate lot can
+  never both succeed.
+
 ---
 
 # 23. Actual consumption
@@ -768,7 +800,8 @@ Example:
 - reserved = 30 kg;
 - consumed = 28 kg;
 - consume 28 kg from On Hand;
-- release remaining 2 kg reservation.
+- remaining 2 kg stays reserved while the OP is still in production (see
+  durable rules below — it is not auto-released in this phase).
 
 Actual consumption stores:
 - OP;
@@ -776,6 +809,42 @@ Actual consumption stores:
 - actual lot;
 - quantity;
 - user/time.
+
+## Durable rules confirmed at implementation
+
+- Consumption requires Picking to already be confirmed on that
+  `MaterialReservationLine` — there is no path from Reservation straight
+  to Consumption without physical conference (for a no-lot item,
+  confirming the separation itself satisfies Picking).
+- Consumption can be partial and repeated any number of times, but the
+  accumulated quantity for a line can never exceed what that line still
+  has reserved (`quantity - already consumed`) — overconsumption is
+  rejected outright in this phase, never silently capped.
+- Every confirmed consumption creates exactly one `ProductionConsumption`
+  (immutable, never edited/deleted) and exactly one `InventoryMovement`
+  `PRODUCTION_CONSUMPTION` (outbound, real 1:1 relation) — never a
+  generic adjustment endpoint. The lot (when the item controls one) is
+  revalidated again at consumption time, independent of what it was at
+  Picking time.
+- Consuming already-reserved stock never double-counts against
+  Available: Reserved (remaining) and On Hand drop by the same amount, so
+  Available for the rest of the system stays exactly where it was before
+  the consumption — this is centralized in the same `inventory-ledger.ts`
+  functions used everywhere else, never a Production-only calculation.
+- The **first** confirmed consumption of an OP is what transitions
+  `RELEASED → IN_PRODUCTION` (recording `startedAt`/`startedBy`) — there
+  is no separate "start production" action in this phase.
+- Whatever remains reserved after consumption (e.g. 2 kg of a 30 kg line)
+  stays reserved while the OP is `IN_PRODUCTION` — it is never
+  auto-released mid-production. Releasing an unused remainder is deferred
+  to the future OP-completion flow.
+- An OP cannot be cancelled once it reaches `IN_PRODUCTION` in this phase
+  — physical consumption already happened, and reversing it needs a
+  return/reversal flow that does not exist yet.
+- Consumption is concurrency-protected the same way RELEASE is (lock the
+  `Item` rows, deterministic order, before computing remaining reserved
+  quantity) — two requests racing to consume the same line's remainder
+  can never together exceed it.
 
 ---
 

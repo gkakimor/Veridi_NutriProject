@@ -36,14 +36,15 @@ enum LotStatus {
   EXPIRED
 }
 
-/// Tipos iniciais do ledger de estoque. Preparado para expansao futura
-/// (PRODUCTION_CONSUMPTION, RETURN_TO_STOCK, FINISHED_GOOD_PRODUCTION) —
-/// nao criados agora porque nao ha uso ainda (Producao fora desta entrega).
+/// Tipos do ledger de estoque. Preparado para expansao futura
+/// (RETURN_TO_STOCK, FINISHED_GOOD_PRODUCTION) — nao criados agora porque
+/// Producao/Produto Acabado ainda nao existem.
 enum InventoryMovementType {
   RECEIPT_IN
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
   LOSS
+  PRODUCTION_CONSUMPTION
 }
 
 enum InventoryMovementSourceType {
@@ -51,6 +52,7 @@ enum InventoryMovementSourceType {
   MANUAL_ADJUSTMENT
   STOCK_COUNT
   MANUAL_LOSS
+  PRODUCTION_CONSUMPTION
 }
 
 enum FormulationVersionStatus {
@@ -145,6 +147,7 @@ model Item {
   productionOrderRequirements ProductionOrderRequirement[]
   productionOrdersAsFinishedItem ProductionOrder[] @relation("ProductionOrderFinishedItem")
   materialReservationLines MaterialReservationLine[]
+  productionConsumptions ProductionConsumption[]
 
   @@index([type])
   @@index([active])
@@ -534,6 +537,7 @@ model Lot {
 
   inventoryMovements InventoryMovement[]
   materialReservationLines MaterialReservationLine[]
+  productionConsumptions ProductionConsumption[]
 
   @@index([itemId])
   @@index([supplierId])
@@ -574,6 +578,11 @@ model InventoryMovement {
   /// no banco que um ReceiptLine confirmado gera no maximo um RECEIPT_IN.
   receiptLineId String?      @unique
   receiptLine   ReceiptLine? @relation(fields: [receiptLineId], references: [id], onDelete: Cascade)
+
+  /// Preenchido so para PRODUCTION_CONSUMPTION — FK real 1:1, garante no
+  /// banco que um ProductionConsumption gera no maximo um movimento.
+  productionConsumptionId String?                @unique
+  productionConsumption   ProductionConsumption? @relation(fields: [productionConsumptionId], references: [id], onDelete: Cascade)
 
   /// Obrigatorio (validado no service) para ajuste/perda; sempre null em RECEIPT_IN.
   reason String?
@@ -642,6 +651,12 @@ model ProductionOrder {
   releasedAt DateTime?
   releasedBy String?
 
+  /// Preenchido no PRIMEIRO consumo real confirmado (RELEASED ->
+  /// IN_PRODUCTION). Nao existe botao "Iniciar producao" separado — o
+  /// primeiro Consumo confirmado e o que caracteriza o inicio.
+  startedAt DateTime?
+  startedBy String?
+
   cancelledAt  DateTime?
   cancelledBy  String?
   cancelReason String?
@@ -655,6 +670,8 @@ model ProductionOrder {
   /// No maximo uma reserva operacional por OP, criada no RELEASE. Nunca
   /// recriada mesmo se a OP RELEASED for cancelada (fica historica).
   reservation MaterialReservation?
+
+  consumptions ProductionConsumption[]
 
   @@index([status])
   @@index([productId])
@@ -694,6 +711,7 @@ model ProductionOrderRequirement {
   createdAt DateTime @default(now())
 
   reservationLines MaterialReservationLine[]
+  consumptions ProductionConsumption[]
 
   @@unique([productionOrderId, itemId])
   @@map("production_order_requirements")
@@ -748,10 +766,74 @@ model MaterialReservationLine {
 
   quantity Decimal @db.Decimal(18, 6)
 
+  /// Confirmacao fisica (Picking) desta linha — nunca cria
+  /// InventoryMovement, nunca recalcula/reserva de novo. So pode ser
+  /// confirmada uma vez; sem partial picking nesta fase (confirma a linha
+  /// inteira).
+  pickedAt DateTime?
+  pickedBy String?
+
+  /// Preenchidos quando esta linha e substituida no Picking (lote
+  /// diferente do reservado, escolhido explicitamente pelo operador) —
+  /// nunca apagada, so marcada como liberada. Reserved considera so linhas
+  /// com releasedAt null.
+  releasedAt    DateTime?
+  releasedBy    String?
+  releaseReason String?
+
+  /// Self-relacao: a linha NOVA de uma substituicao aponta para a linha
+  /// ORIGINAL que ela substitui — preserva a genealogia completa (nunca
+  /// sobrescreve lotId apagando o lote originalmente reservado).
+  replacesLineId String?                  @unique
+  replacesLine   MaterialReservationLine? @relation("ReservationLineSubstitution", fields: [replacesLineId], references: [id])
+  replacedByLine MaterialReservationLine? @relation("ReservationLineSubstitution")
+
   createdAt DateTime @default(now())
+
+  consumptions ProductionConsumption[]
 
   @@index([itemId])
   @@index([lotId])
   @@index([reservationId])
   @@map("material_reservation_lines")
+}
+
+/// Evento REAL e imutavel de consumo de material — nunca editado/deletado.
+/// Consumo pode ser parcial e acontecer varias vezes para a mesma
+/// ReservationLine, ate o limite do que foi reservado (nunca overconsumption
+/// nesta fase). Gera exatamente 1 InventoryMovement PRODUCTION_CONSUMPTION
+/// (relacao 1:1 garantida — ver InventoryMovement.productionConsumptionId).
+model ProductionConsumption {
+  id String @id @default(uuid())
+
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id])
+
+  productionOrderRequirementId String
+  productionOrderRequirement   ProductionOrderRequirement @relation(fields: [productionOrderRequirementId], references: [id])
+
+  /// Exige Picking confirmado nesta linha antes do primeiro consumo.
+  reservationLineId String
+  reservationLine   MaterialReservationLine @relation(fields: [reservationLineId], references: [id])
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  /// Null quando o item nao controla lote.
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  quantity Decimal @db.Decimal(18, 6)
+
+  consumedAt DateTime
+  consumedBy String?
+
+  createdAt DateTime @default(now())
+
+  inventoryMovement InventoryMovement?
+
+  @@index([productionOrderId])
+  @@index([reservationLineId])
+  @@index([itemId])
+  @@map("production_consumptions")
 }

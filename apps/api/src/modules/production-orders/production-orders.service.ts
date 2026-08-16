@@ -7,11 +7,14 @@ import type {
   MaterialReservation,
   MaterialReservationLine,
   Product,
+  ProductionConsumption,
   ProductionOrder,
   ProductionOrderRequirement,
 } from "@prisma/client";
 import type {
   MaterialReservationDTO,
+  MaterialReservationLineDTO,
+  ProductionConsumptionDTO,
   ProductionOrderDTO,
   ProductionOrderListResponse,
   ProductionOrderMaterialsStatus,
@@ -22,6 +25,7 @@ import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   getAvailableByItems,
+  getConsumedByReservationLines,
   getOnHandByItems,
   getOnOrderByItems,
   getReservedByItems,
@@ -54,11 +58,13 @@ type ProductWithRelations = Product & { customer: Customer | null; finishedProdu
 type RequirementWithItem = ProductionOrderRequirement & { item: Item };
 type ReservationLineWithRelations = MaterialReservationLine & { item: Item; lot: Lot | null };
 type ReservationWithLines = MaterialReservation & { lines: ReservationLineWithRelations[] };
+type ConsumptionWithRelations = ProductionConsumption & { item: Item; lot: Lot | null };
 type POWithRelations = ProductionOrder & {
   product: ProductWithRelations;
   formulationVersion: FormulationVersion | null;
   requirements: RequirementWithItem[];
   reservation: ReservationWithLines | null;
+  consumptions: ConsumptionWithRelations[];
 };
 
 const productionOrderInclude = {
@@ -66,9 +72,47 @@ const productionOrderInclude = {
   formulationVersion: true,
   requirements: { include: { item: true }, orderBy: { position: "asc" as const } },
   reservation: { include: { lines: { include: { item: true, lot: true } } } },
+  consumptions: {
+    include: { item: true, lot: true },
+    orderBy: { createdAt: "asc" as const },
+  },
 } as const;
 
-function toReservationDTO(reservation: ReservationWithLines): MaterialReservationDTO {
+function toReservationLineDTO(
+  line: ReservationLineWithRelations,
+  consumedByLine: Map<string, Prisma.Decimal>,
+): MaterialReservationLineDTO {
+  const consumed = consumedByLine.get(line.id) ?? new Prisma.Decimal(0);
+  const remaining = Prisma.Decimal.max(line.quantity.minus(consumed), 0);
+  return {
+    id: line.id,
+    itemId: line.itemId,
+    itemCode: line.item.code,
+    itemName: line.item.name,
+    lotId: line.lotId,
+    lotCode: line.lot ? line.lot.code : null,
+    supplierLot: line.lot ? line.lot.supplierLot : null,
+    expiryDate: line.lot?.expiryDate ? line.lot.expiryDate.toISOString() : null,
+    location: line.lot ? line.lot.location : null,
+    lotStatus: line.lot ? line.lot.status : null,
+    quantity: line.quantity.toString(),
+    unitCode: line.item.unitCode,
+    consumedQuantity: consumed.toString(),
+    remainingQuantity: remaining.toString(),
+    pickingStatus: line.pickedAt ? "CONFIRMED" : "PENDING",
+    pickedAt: line.pickedAt ? line.pickedAt.toISOString() : null,
+    pickedBy: line.pickedBy,
+    releasedAt: line.releasedAt ? line.releasedAt.toISOString() : null,
+    releasedBy: line.releasedBy,
+    releaseReason: line.releaseReason,
+    replacesLineId: line.replacesLineId,
+  };
+}
+
+function toReservationDTO(
+  reservation: ReservationWithLines,
+  consumedByLine: Map<string, Prisma.Decimal>,
+): MaterialReservationDTO {
   return {
     id: reservation.id,
     productionOrderId: reservation.productionOrderId,
@@ -78,18 +122,22 @@ function toReservationDTO(reservation: ReservationWithLines): MaterialReservatio
     releasedAt: reservation.releasedAt ? reservation.releasedAt.toISOString() : null,
     releasedBy: reservation.releasedBy,
     releaseReason: reservation.releaseReason,
-    lines: reservation.lines.map((line) => ({
-      id: line.id,
-      itemId: line.itemId,
-      itemCode: line.item.code,
-      itemName: line.item.name,
-      lotId: line.lotId,
-      lotCode: line.lot ? line.lot.code : null,
-      expiryDate: line.lot?.expiryDate ? line.lot.expiryDate.toISOString() : null,
-      location: line.lot ? line.lot.location : null,
-      quantity: line.quantity.toString(),
-      unitCode: line.item.unitCode,
-    })),
+    lines: reservation.lines.map((line) => toReservationLineDTO(line, consumedByLine)),
+  };
+}
+
+function toConsumptionDTO(consumption: ConsumptionWithRelations): ProductionConsumptionDTO {
+  return {
+    id: consumption.id,
+    itemId: consumption.itemId,
+    itemCode: consumption.item.code,
+    itemName: consumption.item.name,
+    lotId: consumption.lotId,
+    lotCode: consumption.lot ? consumption.lot.code : null,
+    quantity: consumption.quantity.toString(),
+    unitCode: consumption.item.unitCode,
+    consumedAt: consumption.consumedAt.toISOString(),
+    consumedBy: consumption.consumedBy,
   };
 }
 
@@ -186,7 +234,8 @@ async function regenerateRequirements(
  */
 async function attachRequirementAvailability(
   requirements: RequirementWithItem[],
-  ownActiveReservationLines: readonly { itemId: string; quantity: Prisma.Decimal }[] = [],
+  reservationLinesByRequirement: Map<string, ReservationLineWithRelations[]>,
+  consumedByLine: Map<string, Prisma.Decimal>,
 ): Promise<ProductionOrderRequirementDTO[]> {
   if (requirements.length === 0) return [];
 
@@ -204,23 +253,28 @@ async function attachRequirementAvailability(
     getReservedByItems(prisma, itemIds),
   ]);
 
-  // A OP RELEASED ja reservou a propria necessidade — Available/Falta
-  // exibidos para ELA MESMA nunca podem contar a propria reserva como se
-  // fosse concorrencia. "Disponivel para esta OP" = Available global +
-  // o que ela mesma ja reservou daquele item (nunca conta contra si).
-  const ownReservedByItem = new Map<string, Prisma.Decimal>();
-  for (const line of ownActiveReservationLines) {
-    const current = ownReservedByItem.get(line.itemId) ?? new Prisma.Decimal(0);
-    ownReservedByItem.set(line.itemId, current.plus(line.quantity));
-  }
-
   const results: ProductionOrderRequirementDTO[] = [];
   for (const requirement of requirements) {
+    const linesForRequirement = reservationLinesByRequirement.get(requirement.id) ?? [];
+    // So linhas ainda ativas (nao substituidas no Picking) contam como a
+    // alocacao atual desta OP para este Requirement.
+    const activeLines = linesForRequirement.filter((line) => line.releasedAt === null);
+    const allocatedQuantity = activeLines.reduce((sum, line) => sum.plus(line.quantity), new Prisma.Decimal(0));
+    const lineConsumedQuantity = activeLines.reduce(
+      (sum, line) => sum.plus(consumedByLine.get(line.id) ?? new Prisma.Decimal(0)),
+      new Prisma.Decimal(0),
+    );
+    const remainingReservedQuantity = Prisma.Decimal.max(allocatedQuantity.minus(lineConsumedQuantity), 0);
+
     const onHand = onHandByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
     const onOrder = onOrderByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
     const reserved = reservedByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
-    const ownReserved = ownReservedByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
-    const available = (availableByItem.get(requirement.itemId) ?? new Prisma.Decimal(0)).plus(ownReserved);
+    // A propria OP nunca compete contra si mesma: "Disponivel para esta OP"
+    // soma de volta o que ela mesma ainda tem reservado (liquido de
+    // consumo) daquele item — nunca conta a propria reserva como shortage.
+    const available = (availableByItem.get(requirement.itemId) ?? new Prisma.Decimal(0)).plus(
+      remainingReservedQuantity,
+    );
     const shortage = Prisma.Decimal.max(requirement.requiredQuantity.minus(available), 0);
 
     // On Order e so informativo — nunca reduz o shortage operacional.
@@ -254,15 +308,34 @@ async function attachRequirementAvailability(
         location: allocation.location,
         suggestedQuantity: allocation.suggestedQuantity,
       })),
+      allocatedQuantity: allocatedQuantity.toString(),
+      consumedQuantity: lineConsumedQuantity.toString(),
+      remainingReservedQuantity: remainingReservedQuantity.toString(),
+      reservationLines: linesForRequirement.map((line) => toReservationLineDTO(line, consumedByLine)),
     });
   }
   return results;
 }
 
 async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionOrderDTO> {
-  const ownActiveReservationLines =
-    order.reservation && order.reservation.status === "ACTIVE" ? order.reservation.lines : [];
-  const requirements = await attachRequirementAvailability(order.requirements, ownActiveReservationLines);
+  const allLines = order.reservation && order.reservation.status === "ACTIVE" ? order.reservation.lines : [];
+  const consumedByLine = await getConsumedByReservationLines(
+    getPrisma(),
+    allLines.map((line) => line.id),
+  );
+
+  const reservationLinesByRequirement = new Map<string, ReservationLineWithRelations[]>();
+  for (const line of allLines) {
+    const list = reservationLinesByRequirement.get(line.productionOrderRequirementId) ?? [];
+    list.push(line);
+    reservationLinesByRequirement.set(line.productionOrderRequirementId, list);
+  }
+
+  const requirements = await attachRequirementAvailability(
+    order.requirements,
+    reservationLinesByRequirement,
+    consumedByLine,
+  );
   const shortageItemCount = requirements.filter((r) => r.availabilityStatus === "SHORTAGE").length;
   const materialsStatus: ProductionOrderMaterialsStatus =
     shortageItemCount > 0 ? "MATERIAL_SHORTAGE" : "MATERIALS_AVAILABLE";
@@ -308,7 +381,10 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     plannedBy: order.plannedBy,
     releasedAt: order.releasedAt ? order.releasedAt.toISOString() : null,
     releasedBy: order.releasedBy,
-    reservation: order.reservation ? toReservationDTO(order.reservation) : null,
+    reservation: order.reservation ? toReservationDTO(order.reservation, consumedByLine) : null,
+    startedAt: order.startedAt ? order.startedAt.toISOString() : null,
+    startedBy: order.startedBy,
+    consumptions: order.consumptions.map(toConsumptionDTO),
     cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,
     cancelledBy: order.cancelledBy,
     cancelReason: order.cancelReason,
@@ -651,6 +727,11 @@ export async function cancelProductionOrder(id: string, reason: string): Promise
   await getPrisma().$transaction(async (tx) => {
     const current = await tx.productionOrder.findUnique({ where: { id } });
     if (!current) throw new ProductionOrderNotFoundError(id);
+    if (current.status === "IN_PRODUCTION") {
+      throw new InvalidTransitionError(
+        "Ordem em produção não pode ser cancelada — já houve consumo real de material.",
+      );
+    }
     if (current.status !== "DRAFT" && current.status !== "PLANNED" && current.status !== "RELEASED") {
       throw new InvalidTransitionError(
         "Somente rascunhos, ordens planejadas ou liberadas podem ser canceladas.",

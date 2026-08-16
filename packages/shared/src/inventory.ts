@@ -4,17 +4,23 @@ import type { ItemType } from "./items.js";
 import type { LotStatus } from "./lots.js";
 
 /**
- * Tipos iniciais do ledger. Preparado para expansão futura
- * (PRODUCTION_CONSUMPTION, RETURN_TO_STOCK, FINISHED_GOOD_PRODUCTION) — não
- * criados agora porque Produção está fora desta entrega.
+ * Tipos do ledger. Preparado para expansão futura (RETURN_TO_STOCK,
+ * FINISHED_GOOD_PRODUCTION) — não criados agora porque Produto Acabado
+ * está fora desta entrega.
  */
-export type InventoryMovementType = "RECEIPT_IN" | "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "LOSS";
+export type InventoryMovementType =
+  | "RECEIPT_IN"
+  | "ADJUSTMENT_IN"
+  | "ADJUSTMENT_OUT"
+  | "LOSS"
+  | "PRODUCTION_CONSUMPTION";
 
 export const INVENTORY_MOVEMENT_TYPES: readonly InventoryMovementType[] = [
   "RECEIPT_IN",
   "ADJUSTMENT_IN",
   "ADJUSTMENT_OUT",
   "LOSS",
+  "PRODUCTION_CONSUMPTION",
 ];
 
 export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, string> = {
@@ -22,6 +28,7 @@ export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, strin
   ADJUSTMENT_IN: "Ajuste de entrada",
   ADJUSTMENT_OUT: "Ajuste de saída",
   LOSS: "Perda",
+  PRODUCTION_CONSUMPTION: "Consumo de produção",
 };
 
 /**
@@ -33,19 +40,22 @@ export const INVENTORY_MOVEMENT_DIRECTION: Record<InventoryMovementType, 1 | -1>
   ADJUSTMENT_IN: 1,
   ADJUSTMENT_OUT: -1,
   LOSS: -1,
+  PRODUCTION_CONSUMPTION: -1,
 };
 
 export type InventoryMovementSourceType =
   | "RECEIPT"
   | "MANUAL_ADJUSTMENT"
   | "STOCK_COUNT"
-  | "MANUAL_LOSS";
+  | "MANUAL_LOSS"
+  | "PRODUCTION_CONSUMPTION";
 
 export const INVENTORY_MOVEMENT_SOURCE_LABELS: Record<InventoryMovementSourceType, string> = {
   RECEIPT: "Recebimento",
   MANUAL_ADJUSTMENT: "Ajuste manual",
   STOCK_COUNT: "Inventário físico",
   MANUAL_LOSS: "Perda manual",
+  PRODUCTION_CONSUMPTION: "Consumo de produção",
 };
 
 export interface InventoryMovementDTO {

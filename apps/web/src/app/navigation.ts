@@ -87,7 +87,7 @@ export const navigation: NavGroup[] = [
       {
         label: "Picking / Consumo",
         path: "/producao/picking",
-        implemented: false,
+        implemented: true,
       },
       {
         label: "Produto Acabado",
