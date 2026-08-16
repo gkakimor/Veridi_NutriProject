@@ -340,6 +340,10 @@ model User {
   rejectedSamples     ProjectSample[] @relation("SampleRejectedBy")
   cancelledSamples    ProjectSample[] @relation("SampleCancelledBy")
   sampleConsumptions  SampleConsumption[] @relation("SampleConsumptionBy")
+  createdSupplierItems SupplierItem[] @relation("SupplierItemCreatedBy")
+  updatedSupplierItems SupplierItem[] @relation("SupplierItemUpdatedBy")
+  supplierItemQualifications SupplierItemQualificationHistory[] @relation("SupplierItemQualificationBy")
+  createdSupplierItemOffers  SupplierItemOffer[] @relation("SupplierItemOfferCreatedBy")
 
   @@index([active])
   @@map("users")
@@ -827,6 +831,127 @@ model SampleConsumption {
   @@map("sample_consumptions")
 }
 
+/// Relacao estavel Item x Fornecedor.
+///
+/// Preco e MOQ NAO ficam aqui: mudam ao longo do tempo e pertencem a
+/// `SupplierItemOffer` (imutavel). Aqui fica o que e estavel: existe a
+/// relacao, qual o codigo do item no fornecedor, se esta homologada e se e
+/// o fornecedor preferencial.
+model SupplierItem {
+  id String @id @default(uuid())
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  /// Codigo/referencia que o FORNECEDOR usa para este item. Nao confundir
+  /// com Item.code (interno) nem Item.externalCode (planilha legada).
+  supplierItemCode String?
+
+  qualificationStatus SupplierItemQualificationStatus @default(PENDING)
+
+  /// Decisao operacional/comercial — NAO significa "mais barato". So
+  /// relacao ativa e APPROVED pode ser preferencial, e existe no maximo
+  /// uma por Item (indice parcial unico na migration).
+  preferred Boolean @default(false)
+
+  /// Diferente de homologacao: o fornecedor pode continuar homologado e
+  /// simplesmente ter deixado de comercializar o item.
+  active Boolean @default(true)
+
+  commercialNotes String?
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("SupplierItemCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+
+  updatedAt             DateTime @updatedAt
+  updatedByUserId       String?
+  updatedByUser         User?    @relation("SupplierItemUpdatedBy", fields: [updatedByUserId], references: [id])
+  updatedByNameSnapshot String?
+
+  qualificationHistory SupplierItemQualificationHistory[]
+  offers               SupplierItemOffer[]
+
+  @@unique([supplierId, itemId])
+  @@index([itemId])
+  @@index([supplierId])
+  @@index([qualificationStatus])
+  @@map("supplier_items")
+}
+
+/// Historico imutavel de homologacao — quem aprovou/bloqueou e quando.
+/// `updatedAt` nao conta historia.
+model SupplierItemQualificationHistory {
+  id String @id @default(uuid())
+
+  supplierItemId String
+  supplierItem   SupplierItem @relation(fields: [supplierItemId], references: [id], onDelete: Cascade)
+
+  fromStatus SupplierItemQualificationStatus?
+  toStatus   SupplierItemQualificationStatus
+  note       String?
+
+  changedAt             DateTime @default(now())
+  changedByUserId       String?
+  changedByUser         User?    @relation("SupplierItemQualificationBy", fields: [changedByUserId], references: [id])
+  changedByNameSnapshot String?
+
+  @@index([supplierItemId])
+  @@map("supplier_item_qualification_history")
+}
+
+/// Cotacao/referencia comercial de um fornecedor para um item.
+///
+/// IMUTAVEL: mudou preco, MOQ, moeda ou vigencia, cria-se uma nova oferta.
+/// NAO e custo real de aquisicao (isso continua sendo ReceiptLine) e NAO
+/// entra na hierarquia de custo REAL/30D/90D/LAST_REAL/NO_COST.
+model SupplierItemOffer {
+  id String @id @default(uuid())
+
+  supplierItemId String
+  supplierItem   SupplierItem @relation(fields: [supplierItemId], references: [id], onDelete: Cascade)
+
+  /// Sempre informado: preco desconhecido nao gera oferta. Zero e zero
+  /// explicito, nunca "nao sei".
+  unitPrice    Decimal @db.Decimal(14, 4)
+  currencyCode String  @db.VarChar(3)
+
+  /// Unidade a que o preco se refere (R$ 120/kg, R$ 0,15/un).
+  priceUomCode String
+  priceUom     UnitOfMeasure @relation("OfferPriceUom", fields: [priceUomCode], references: [code])
+
+  /// Pedido minimo faz parte das condicoes DAQUELE preco. `null` significa
+  /// nao informado — nunca zero.
+  minimumOrderQuantity Decimal?       @db.Decimal(18, 6)
+  minimumOrderUomCode  String?
+  minimumOrderUom      UnitOfMeasure? @relation("OfferMoqUom", fields: [minimumOrderUomCode], references: [code])
+
+  /// `null` = observacao historica de preco, NAO preco vigente. Oferta sem
+  /// vigencia nunca vira Current Offer.
+  effectiveAt DateTime?
+  validUntil  DateTime?
+
+  source SupplierItemOfferSource @default(MANUAL)
+
+  /// Chave estavel da linha legada — idempotencia do importador.
+  sourceKey String? @unique
+
+  notes String?
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("SupplierItemOfferCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+
+  @@index([supplierItemId])
+  @@index([effectiveAt])
+  @@map("supplier_item_offers")
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -841,12 +966,27 @@ model UnitOfMeasure {
   toBaseFactor Decimal      @db.Decimal(18, 6)
 
   items Item[]
+  offerPrices SupplierItemOffer[] @relation("OfferPriceUom")
+  offerMoqs   SupplierItemOffer[] @relation("OfferMoqUom")
   productsAsDoseUom Product[] @relation("ProductDoseUom")
   projectsAsDoseUom Project[] @relation("ProjectDoseUom")
   quoteVersions     QuoteVersion[] @relation("QuoteUom")
   sampleOutputs     ProjectSample[] @relation("SampleOutputUom")
 
   @@map("units_of_measure")
+}
+
+/// Homologacao da relacao Item x Fornecedor. E POR ITEM: um fornecedor
+/// homologado para acido ascorbico nao esta homologado para tudo.
+enum SupplierItemQualificationStatus {
+  PENDING
+  APPROVED
+  BLOCKED
+}
+
+enum SupplierItemOfferSource {
+  MANUAL
+  LEGACY_IMPORT
 }
 
 /// Item controlado pela operacao (materia-prima, embalagem ou produto acabado).
@@ -911,6 +1051,7 @@ model Item {
   /// fisica. 1:1 no MVP — ver Product.finishedProductItemId.
   product Product?
 
+  supplierItems       SupplierItem[]
   purchaseOrderLines PurchaseOrderLine[]
   receiptLines        ReceiptLine[]
   lots                Lot[]
@@ -958,6 +1099,7 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  supplierItems  SupplierItem[]
   purchaseOrders PurchaseOrder[]
   receipts       Receipt[]
   lots           Lot[]

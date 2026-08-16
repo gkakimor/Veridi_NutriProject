@@ -15,6 +15,7 @@ export * from "./controlled-documents.js";
 export * from "./attachments.js";
 export * from "./projects.js";
 export * from "./samples.js";
+export * from "./supplier-items.js";
 export * from "./cnpj.js";
 export * from "./br-states.js";
 export * from "./suppliers.js";

@@ -7,6 +7,12 @@ import {
 } from "./project-analysis.js";
 import { normalizeName, readLegacySampleRows, resolveSamples } from "./sample-analysis.js";
 import {
+  legacyOfferSourceKey,
+  normalizeSupplierName,
+  parseMinimumOrder,
+  readLegacySupplierPriceRows,
+} from "./supplier-price-analysis.js";
+import {
   COMPARISON_TOLERANCE,
   readCmvProducts,
   reconstructGroup,
@@ -248,8 +254,128 @@ async function main(): Promise<void> {
     "  nenhum consumo historico de material foi reconstruido (o corpus nao tem essa informacao).",
   );
 
+  // Capacidade 40 — precos de fornecedor. Somente leitura/estatistica: o
+  // que nao for interpretavel com seguranca vira finding, nunca palpite.
+  const priceRows = readLegacySupplierPriceRows(findings);
+  const itemsByExternal = new Map(items.map((item) => [item.externalCode, item]));
+  const supplierNames = new Set(suppliers.map((supplier) => normalizeSupplierName(supplier.legalName)));
+
+  const distinctItemCodes = new Set(priceRows.map((row) => row.itemExternalCode));
+  const distinctSupplierNames = new Set(priceRows.map((row) => normalizeSupplierName(row.supplierName)));
+  const unresolvedItems = new Set<string>();
+  const unresolvedSuppliers = new Set<string>();
+  const pairs = new Map<string, { prices: Set<string>; moqs: Set<string>; rows: number }>();
+  const sourceKeys = new Set<string>();
+
+  let priceValid = 0;
+  let priceInvalid = 0;
+  let priceUomIncompatible = 0;
+  let moqPresent = 0;
+  let moqParsed = 0;
+  let moqAssumedItemUnit = 0;
+  let moqAmbiguous = 0;
+  let qualifiedRows = 0;
+  let bestPriceRows = 0;
+
+  for (const row of priceRows) {
+    const item = itemsByExternal.get(row.itemExternalCode);
+    if (!item) unresolvedItems.add(row.itemExternalCode);
+    const supplierKey = normalizeSupplierName(row.supplierName);
+    if (!supplierNames.has(supplierKey)) unresolvedSuppliers.add(row.supplierName);
+
+    if (row.qualified) qualifiedRows += 1;
+    if (row.bestPriceFlag) bestPriceRows += 1;
+
+    const pairKey = `${row.itemExternalCode}::${supplierKey}`;
+    const pair = pairs.get(pairKey) ?? { prices: new Set<string>(), moqs: new Set<string>(), rows: 0 };
+    pair.rows += 1;
+    if (row.rawPrice) pair.prices.add(row.rawPrice);
+    if (row.rawMinimumOrder) pair.moqs.add(row.rawMinimumOrder);
+    pairs.set(pairKey, pair);
+
+    if (row.price === null) {
+      priceInvalid += 1;
+      findings.add(
+        "SUPPLIER_PRICE_INVALID",
+        "SupplierItemOffer",
+        `${row.itemExternalCode}/${row.supplierName}`,
+        `preco nao interpretavel: "${row.rawPrice}" — oferta nao sera criada`,
+      );
+    } else {
+      priceValid += 1;
+      // O preco do corpus e SEMPRE por quilo (header preco_brl_kg). Item
+      // que nao e de massa nao aceita esse preco sem adivinhar.
+      if (item && item.unitCode !== "kg" && item.unitCode !== "g" && item.unitCode !== "mg") {
+        priceUomIncompatible += 1;
+        findings.add(
+          "SUPPLIER_PRICE_UOM_INCOMPATIBLE",
+          "SupplierItemOffer",
+          `${row.itemExternalCode}/${row.supplierName}`,
+          `preco por kg em item na unidade ${item.unitCode} — oferta nao sera criada`,
+        );
+      }
+    }
+
+    if (row.rawMinimumOrder) {
+      moqPresent += 1;
+      const parsed = parseMinimumOrder(row.rawMinimumOrder);
+      if (!parsed) {
+        moqAmbiguous += 1;
+        findings.add(
+          "SUPPLIER_MOQ_AMBIGUOUS",
+          "SupplierItemOffer",
+          `${row.itemExternalCode}/${row.supplierName}`,
+          `pedido minimo nao interpretavel: "${row.rawMinimumOrder}" — oferta sem MOQ estruturado`,
+        );
+      } else {
+        moqParsed += 1;
+        if (parsed.uomCode === null) moqAssumedItemUnit += 1;
+      }
+    }
+
+    sourceKeys.add(legacyOfferSourceKey(row));
+  }
+
+  const pairsWithMultiplePrices = [...pairs.values()].filter((pair) => pair.prices.size > 1).length;
+  const pairsWithMultipleMoqs = [...pairs.values()].filter((pair) => pair.moqs.size > 1).length;
+  const pairsWithMultipleRows = [...pairs.values()].filter((pair) => pair.rows > 1).length;
+
+  console.log("\nPRECOS DE FORNECEDOR (somente leitura)");
+  console.log(`  linhas ${priceRows.length}`);
+  console.log(
+    `  cod_item distintos ${distinctItemCodes.size} - nao resolvidos ${unresolvedItems.size}`,
+  );
+  console.log(
+    `  fornecedores distintos ${distinctSupplierNames.size} - nao resolvidos ${unresolvedSuppliers.size}`,
+  );
+  console.log(
+    `  pares item+fornecedor ${pairs.size} - com mais de uma observacao ${pairsWithMultipleRows}`,
+  );
+  console.log(
+    `  pares com precos diferentes ${pairsWithMultiplePrices} - com MOQ diferente ${pairsWithMultipleMoqs}`,
+  );
+  console.log(
+    `  precos validos ${priceValid} - invalidos ${priceInvalid} - unidade incompativel ${priceUomIncompatible}`,
+  );
+  console.log(
+    `  MOQ informado ${moqPresent} - interpretado ${moqParsed} (sem unidade, assumida a do item ${moqAssumedItemUnit}) - ambiguo ${moqAmbiguous}`,
+  );
+  console.log(`  moeda: unica (BRL) - o corpus nao traz coluna de moeda`);
+  console.log(
+    `  vocabulario de homologacao: apenas "SIM" (${qualifiedRows} linhas); ausencia = PENDENTE, nunca BLOQUEADO`,
+  );
+  console.log(
+    `  indicador "melhor_preco" em ${bestPriceRows} linhas — estatistica de snapshot de CMV, NAO vira fornecedor preferencial`,
+  );
+  console.log(
+    `  chaves de idempotencia distintas ${sourceKeys.size} (observacoes identicas colapsam de proposito)`,
+  );
+  console.log(
+    "  ATENCAO: o arquivo NAO tem data de cotacao — toda oferta legada entra sem vigencia e nunca vira preco atual.",
+  );
+
   console.log("\nNÃO IMPORTADO NESTA CAPACIDADE");
-  console.log("  estoque_saldos, compras_recebimentos, precos_fornecedores,");
+  console.log("  estoque_saldos, compras_recebimentos,");
   console.log("  cmv_* e in28_limites — capacidades 40-41, Bloco G e Bloco H.");
   console.log("  amostras: só as resolvíveis por nome exato de projeto entram no seed.");
 

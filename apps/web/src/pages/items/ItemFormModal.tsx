@@ -6,6 +6,7 @@ import { createItem, updateItem } from "../../lib/items-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
+import { SupplierItemsSection } from "../../components/SupplierItemsSection";
 import {
   ITEM_FAMILIES,
   ITEM_FAMILY_LABELS,
@@ -478,6 +479,10 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
           </FormSection>
         )}
       </form>
+
+      {/* Fornecedores existem depois que o item existe — o modal de criacao
+          continua enxuto. */}
+      {mode === "edit" && item && <SupplierItemsSection scope="item" id={item.id} />}
     </FullWorkspaceModal>
   );
 }

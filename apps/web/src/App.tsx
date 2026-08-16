@@ -24,6 +24,7 @@ import { LotScanPage } from "./pages/lots/LotScanPage";
 import { LotLabelPrintPage } from "./pages/lots/LotLabelPrintPage";
 import { SampleLabelPrintPage } from "./pages/samples/SampleLabelPrintPage";
 import { SamplesPage } from "./pages/samples/SamplesPage";
+import { SupplierItemsPage } from "./pages/supplier-items/SupplierItemsPage";
 import { SampleDetailPage } from "./pages/samples/SampleDetailPage";
 import { InventoryOverviewPage } from "./pages/inventory/InventoryOverviewPage";
 import { InventoryItemDetailPage } from "./pages/inventory/InventoryItemDetailPage";
@@ -168,6 +169,7 @@ function AuthenticatedApp() {
           <Route path="/producao/produto-acabado" element={<FinishedGoodsPage />} />
           <Route path="/comercial/projetos" element={<ProjectsPage />} />
           <Route path="/comercial/projetos/:id" element={<ProjectDetailPage />} />
+          <Route path="/compras/item-fornecedor" element={<SupplierItemsPage />} />
           <Route path="/comercial/amostras" element={<SamplesPage />} />
           <Route path="/comercial/amostras/:id" element={<SampleDetailPage />} />
           <Route path="/comercial/pedidos" element={<CustomerOrdersPage />} />

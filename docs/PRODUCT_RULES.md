@@ -201,6 +201,72 @@ user to clear them to edit unrelated fields.
   no Project is invented, no consumption is fabricated and no outcome
   (approved/rejected) is guessed.
 
+# 5.3 Item × Supplier, qualification, MOQ and prices (capability 40)
+
+- Price, MOQ and supplier code never live on the Item. One item may have
+  several suppliers with different conditions, so the relation itself is the
+  entity: **SupplierItem**, unique per (supplier, item).
+- The supplier's own code for the item is recorded separately; it is neither
+  the internal code nor the legacy spreadsheet code.
+- **Qualification is per item, not per supplier.** A supplier approved for
+  one raw material is not automatically approved for everything.
+  `PENDING` means "no approved qualification on record" — it is an absence,
+  never a rejection; only `BLOCKED` is a deliberate refusal.
+- Approving or blocking is Quality's decision; Purchasing registers the
+  relation, the commercial code, the prices and the preferred supplier, and
+  either side may send a relation back to pending. Every transition is kept
+  in an immutable history with who and when.
+- **Approved and preferred are different concepts.** At most one preferred
+  supplier per item (enforced by a partial unique index, with the previous
+  one cleared in the same transaction). Only an active, approved relation can
+  be preferred, and blocking or deactivating clears it in the same
+  transaction. Preferred is an operational/commercial decision — it is
+  **never** recalculated because another offer got cheaper.
+- A relation being inactive is different from being unqualified: a supplier
+  may stay approved and simply stop selling that item. Relations are never
+  hard-deleted while offers or history exist.
+- Price and MOQ belong to an **immutable offer**. Correcting a price, a MOQ,
+  a currency or a validity period is always a new offer — history is never
+  rewritten. A price is always present in an offer: unknown price means no
+  offer at all, and zero is an explicitly stated zero.
+- Every offer states the unit its price refers to, and that unit must be
+  compatible with the item's stock unit. MOQ is optional; `null` means "not
+  informed", never zero, and when informed it needs a positive quantity and
+  a unit.
+- The **current offer** is the most recent one whose effective date has
+  started and whose validity has not expired. An offer with no effective
+  date is a historical price observation and can never be the current price —
+  the UI may show it as a legacy reference, never as "current price".
+- Currencies are recorded, never converted: no FX in this phase, and no
+  cross-currency "cheapest" ranking. USD 10 is not compared with BRL 60.
+- Purchase Suggestion only recommends **approved and active** relations of
+  active suppliers. The recommendation is conservative: the preferred one,
+  or the single approved one; with several approved and none preferred the
+  system chooses nobody — and it never picks the cheapest by itself. Blocked
+  relations never appear as candidates.
+- MOQ produces a recommendation, never a block: when the units are
+  comparable, the recommended quantity becomes `max(shortage, MOQ)`; when
+  they are not, the MOQ is shown in its original unit and nothing is
+  adjusted automatically.
+- Missing qualification does not stop anything: no supplier registered for
+  an item still shows the shortage, and manual purchase orders remain
+  possible (emergency, sample, brand-new supplier). Qualification guides;
+  it is not a global purchasing gate in this phase.
+- A draft Purchase Order line may be pre-filled from the current offer, but
+  only when the currency is BRL and the price unit converts safely to the
+  line's unit. The line is a **snapshot** of the negotiated/expected price:
+  a later offer never changes an existing order.
+- A supplier offer is a **commercial reference, not an actual acquisition
+  cost**. It stays out of the `REAL → 30D → 90D → LAST_REAL → NO_COST`
+  hierarchy and never silently changes item or formulation cost — that
+  remains driven by real receipts.
+- Legacy prices are imported as observations: the historical export has no
+  quotation date, so they carry no effective date and never become current
+  prices. A "best price" flag in a costing snapshot is not an official
+  preferred supplier and never sets `preferred`. Suppliers are resolved by
+  exact name, never fuzzy-matched, and no supplier is created just to hold a
+  legacy price.
+
 ---
 
 # 6. Purchase Orders

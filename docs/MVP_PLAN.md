@@ -86,7 +86,7 @@ not yet represented in the domain.
 37. Documentary quality / CoA / attachments ✓
 38. Projects + versioned quotations ✓
 39. Samples / pilots / trials ✓
-40. Item × Supplier / MOQ / approval
+40. Item × Supplier / MOQ / approval ✓
 41. Veridi spreadsheet importer
 42. Operational adherence UX
 
@@ -134,7 +134,8 @@ dashboard, reports and exports remain the foundation.
 → 37 Documentary quality / CoA / attachments ✓
 → 38 Projects + versioned quotations ✓
 → 39 Samples / pilots / trials ✓
-→ 40-42 Block F (Veridi adherence / private label)
+→ 40 Item × Supplier / qualification / MOQ / prices ✓
+→ 41-42 Block F (Veridi adherence / private label)
 → 43-47 Block G (industrial costing & pricing)
 → ⛔ GATE: Block H (regulatory/labelling) needs a new domain/regulatory
    validation from Product Ownership before being specified

@@ -51,6 +51,7 @@ export const navigation: NavGroup[] = [
         path: "/compras/recebimentos",
         implemented: true,
       },
+      { label: "Item × Fornecedor", path: "/compras/item-fornecedor", implemented: true },
     ],
   },
   {

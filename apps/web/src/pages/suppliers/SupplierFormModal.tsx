@@ -5,6 +5,7 @@ import { createSupplier, updateSupplier } from "../../lib/suppliers-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
+import { SupplierItemsSection } from "../../components/SupplierItemsSection";
 
 interface SupplierFormModalProps {
   mode: "create" | "edit";
@@ -250,6 +251,10 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
           </FormSection>
         )}
       </form>
+
+      {mode === "edit" && supplier && (
+        <SupplierItemsSection scope="supplier" id={supplier.id} />
+      )}
     </FullWorkspaceModal>
   );
 }

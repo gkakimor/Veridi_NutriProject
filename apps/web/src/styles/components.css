@@ -801,3 +801,12 @@
     padding: var(--sp-2) var(--sp-3);
   }
 }
+
+/* Fornecedores homologados na Sugestão de Compra — lista compacta, sem
+   marcador: é informação de apoio à decisão, não navegação. */
+.candidate-list {
+  list-style: none;
+  display: grid;
+  gap: 2px;
+  font-size: var(--fs-sm);
+}

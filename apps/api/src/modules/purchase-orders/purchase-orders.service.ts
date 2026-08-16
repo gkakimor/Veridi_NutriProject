@@ -265,7 +265,12 @@ export async function createDraftPurchaseOrderInTx(
     supplier: Supplier;
     orderDate: Date;
     customerOrderId: string;
-    lines: { item: Item; orderedQuantity: Prisma.Decimal }[];
+    /**
+     * `unitPrice` é o preço de referência já resolvido pelo chamador
+     * (oferta vigente do fornecedor). A linha é um SNAPSHOT do preço
+     * esperado: alterar a oferta depois nunca muda uma OC existente.
+     */
+    lines: { item: Item; orderedQuantity: Prisma.Decimal; unitPrice?: Prisma.Decimal | null }[];
   },
 ): Promise<string> {
   const po = await tx.purchaseOrder.create({
@@ -290,7 +295,7 @@ export async function createDraftPurchaseOrderInTx(
         itemName: line.item.name,
         unitCode: line.item.unitCode,
         orderedQuantity: line.orderedQuantity,
-        unitPrice: null,
+        unitPrice: line.unitPrice ?? null,
       })),
     });
   }

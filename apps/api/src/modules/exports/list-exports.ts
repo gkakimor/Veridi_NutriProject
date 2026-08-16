@@ -17,6 +17,7 @@ import type {
   ReceiptDTO,
   ReceiptLineDTO,
   ShipmentDTO,
+  SupplierItemDTO,
   SupplierDTO,
 } from "@veridi/shared";
 import {
@@ -38,11 +39,13 @@ import {
   PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
   SHIPMENT_STATUS_LABELS,
+  SUPPLIER_ITEM_QUALIFICATION_LABELS,
 } from "@veridi/shared";
 import { csvBoolean, csvCode, csvDate, csvDateTime, csvDecimal, csvMoney, csvText } from "../../lib/csv.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import { listCustomers } from "../customers/customers.service.js";
 import { listSuppliers } from "../suppliers/suppliers.service.js";
+import { listSupplierItems } from "../supplier-items/supplier-items.service.js";
 import { listItems } from "../items/items.service.js";
 import { listProducts } from "../products/products.service.js";
 import { listProjects } from "../projects/projects.service.js";
@@ -60,6 +63,7 @@ import { listShipments } from "../shipments/shipments.service.js";
 import { listBillings } from "../billings/billings.service.js";
 import { listCustomersQuerySchema } from "../customers/customers.schemas.js";
 import { listSuppliersQuerySchema } from "../suppliers/suppliers.schemas.js";
+import { listSupplierItemsQuerySchema } from "../supplier-items/supplier-items.schemas.js";
 import { listItemsQuerySchema } from "../items/items.schemas.js";
 import { listProductsQuerySchema } from "../products/products.schemas.js";
 import { listProjectsQuerySchema } from "../projects/projects.schemas.js";
@@ -80,6 +84,7 @@ import { listShipmentsQuerySchema } from "../shipments/shipments.schemas.js";
 import { listBillingsQuerySchema } from "../billings/billings.schemas.js";
 import type { ListCustomersQuery } from "../customers/customers.schemas.js";
 import type { ListSuppliersQuery } from "../suppliers/suppliers.schemas.js";
+import type { ListSupplierItemsQuery } from "../supplier-items/supplier-items.schemas.js";
 import type { ListItemsQuery } from "../items/items.schemas.js";
 import type { ListProductsQuery } from "../products/products.schemas.js";
 import type { ListProjectsQuery } from "../projects/projects.schemas.js";
@@ -346,6 +351,58 @@ const projectsExport = defineCsvExport({
   ],
 });
 
+const supplierItemsExport = defineCsvExport({
+  path: "/supplier-items/export.csv",
+  slug: "item-fornecedor",
+  schema: listSupplierItemsQuerySchema,
+  fetch: async (query: ListSupplierItemsQuery) =>
+    (await listSupplierItems(query, ALL_ROWS)).supplierItems,
+  columns: [
+    { header: "Item", value: (row: SupplierItemDTO) => csvCode(row.itemCode) },
+    { header: "Descrição", value: (row: SupplierItemDTO) => csvText(row.itemName) },
+    { header: "Código legado", value: (row: SupplierItemDTO) => csvCode(row.itemExternalCode) },
+    { header: "Fornecedor", value: (row: SupplierItemDTO) => csvText(row.supplierName) },
+    { header: "Código do fornecedor", value: (row: SupplierItemDTO) => csvCode(row.supplierCode) },
+    {
+      header: "Código do item no fornecedor",
+      value: (row: SupplierItemDTO) => csvCode(row.supplierItemCode),
+    },
+    {
+      header: "Homologação",
+      value: (row: SupplierItemDTO) =>
+        SUPPLIER_ITEM_QUALIFICATION_LABELS[row.qualificationStatus],
+    },
+    { header: "Preferencial", value: (row: SupplierItemDTO) => csvBoolean(row.preferred) },
+    { header: "Ativo", value: (row: SupplierItemDTO) => csvBoolean(row.active) },
+    // Só oferta vigente vira "preço atual"; referência legada sem data nunca entra aqui.
+    {
+      header: "Preço atual",
+      value: (row: SupplierItemDTO) => csvDecimal(row.currentOffer?.unitPrice ?? null),
+    },
+    {
+      header: "Moeda",
+      value: (row: SupplierItemDTO) => csvCode(row.currentOffer?.currencyCode ?? null),
+    },
+    {
+      header: "Unidade do preço",
+      value: (row: SupplierItemDTO) => csvCode(row.currentOffer?.priceUomCode ?? null),
+    },
+    {
+      header: "Pedido mínimo",
+      value: (row: SupplierItemDTO) => csvDecimal(row.currentOffer?.minimumOrderQuantity ?? null),
+    },
+    {
+      header: "Unidade do pedido mínimo",
+      value: (row: SupplierItemDTO) => csvCode(row.currentOffer?.minimumOrderUomCode ?? null),
+    },
+    { header: "Referências históricas", value: (row: SupplierItemDTO) => String(row.offerCount) },
+    {
+      header: "Vigência da oferta atual",
+      value: (row: SupplierItemDTO) => csvDate(row.currentOffer?.effectiveAt ?? null),
+    },
+  ],
+});
+
 const samplesExport = defineCsvExport({
   path: "/project-samples/export.csv",
   slug: "amostras",
@@ -554,6 +611,7 @@ export const listCsvExports: CsvExportRoute[] = [
   lotsExport,
   projectsExport,
   samplesExport,
+  supplierItemsExport,
   customerMaterialsExport,
   movementsExport,
   formulationsExport,

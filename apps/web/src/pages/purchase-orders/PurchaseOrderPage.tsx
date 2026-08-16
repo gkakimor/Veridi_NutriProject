@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { PurchaseOrderDTO, PurchaseOrderStatus } from "@veridi/shared";
-import { PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
+import type { PurchaseOrderDTO, PurchaseOrderStatus, SupplierItemDTO } from "@veridi/shared";
+import { PURCHASE_ORDER_STATUS_LABELS, SUPPLIER_ITEM_QUALIFICATION_LABELS } from "@veridi/shared";
 import {
   cancelPurchaseOrder,
   confirmPurchaseOrder,
@@ -10,6 +10,7 @@ import {
   updatePurchaseOrder,
 } from "../../lib/purchase-orders-api";
 import { listSuppliers } from "../../lib/suppliers-api";
+import { listSupplierItems } from "../../lib/supplier-items-api";
 import { listItems } from "../../lib/items-api";
 import { formatBRL } from "../../lib/currency";
 import { ApiValidationError } from "../../lib/api-errors";
@@ -163,6 +164,27 @@ export function PurchaseOrderPage() {
 
   const status: PurchaseOrderStatus = purchaseOrder?.status ?? "DRAFT";
   const isDraftEditable = isNew || status === "DRAFT";
+
+  // Relacoes item x fornecedor do fornecedor escolhido — apoio visual na
+  // DRAFT. A OC continua livre: homologacao orienta, nunca bloqueia compra
+  // (emergencia, amostra, fornecedor novo).
+  const [supplierItemsByItem, setSupplierItemsByItem] = useState<Record<string, SupplierItemDTO>>(
+    {},
+  );
+
+  useEffect(() => {
+    if (!supplierId) {
+      setSupplierItemsByItem({});
+      return;
+    }
+    listSupplierItems({ supplierId, pageSize: 100 })
+      .then((result) =>
+        setSupplierItemsByItem(
+          Object.fromEntries(result.supplierItems.map((row) => [row.itemId, row])),
+        ),
+      )
+      .catch(() => setSupplierItemsByItem({}));
+  }, [supplierId]);
   const isForecastEditable = !purchaseOrder || status !== "CANCELLED";
   const isCancellable = !isNew && (status === "DRAFT" || status === "ORDERED");
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
@@ -558,6 +580,25 @@ export function PurchaseOrderPage() {
                         <span className="code">{line.itemCode}</span>
                       )}
                       {!isDraftEditable && <span> {line.itemName}</span>}
+                      {(() => {
+                        const relation = supplierItemsByItem[line.itemId];
+                        if (!line.itemId || !relation) return null;
+                        const offer = relation.currentOffer;
+                        return (
+                          <div className="field__hint">
+                            {SUPPLIER_ITEM_QUALIFICATION_LABELS[relation.qualificationStatus]}
+                            {relation.preferred ? " · preferencial" : ""}
+                            {offer
+                              ? ` · referência ${offer.unitPrice} ${offer.currencyCode}/${offer.priceUomCode}`
+                              : relation.latestLegacyOffer
+                                ? " · só referência histórica de preço"
+                                : ""}
+                            {offer?.minimumOrderQuantity
+                              ? ` · mínimo ${offer.minimumOrderQuantity} ${offer.minimumOrderUomCode ?? ""}`
+                              : ""}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td>
                       {isDraftEditable ? (

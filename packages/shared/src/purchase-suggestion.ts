@@ -29,6 +29,46 @@ export interface PurchaseSuggestionRowDTO {
   suggestedAdditionalPurchase: string;
   /** `max(suggestedAdditionalPurchase - draftPurchaseQuantity, 0)` — o que ainda falta rascunhar. */
   newSuggestedPurchase: string;
+  /** Fornecedores homologados e ativos para este item; vazio não impede ver a falta. */
+  supplierCandidates: PurchaseSupplierCandidateDTO[];
+  /**
+   * Fornecedor recomendado: o preferencial, ou o único homologado. Com
+   * vários homologados e nenhum preferencial fica `null` — o sistema nunca
+   * escolhe "o mais barato" sozinho.
+   */
+  recommendedSupplierItemId: string | null;
+}
+
+/**
+ * Fornecedor homologado candidato para cobrir a falta de um item.
+ *
+ * Preço aqui é REFERÊNCIA comercial (oferta vigente), nunca custo real. O
+ * MOQ é recomendação: nada bloqueia a compra abaixo dele, porque o sistema
+ * não sabe se o fornecedor realmente recusa.
+ */
+export interface PurchaseSupplierCandidateDTO {
+  supplierItemId: string;
+  supplierId: string;
+  supplierCode: string;
+  supplierName: string;
+  supplierItemCode: string | null;
+  preferred: boolean;
+  /** Oferta vigente; `null` quando só existem referências históricas. */
+  referenceUnitPrice: string | null;
+  referenceCurrencyCode: string | null;
+  referencePriceUomCode: string | null;
+  /** Preço convertido para a unidade de estoque do item — só quando a conversão é segura. */
+  referencePriceInItemUom: string | null;
+  minimumOrderQuantity: string | null;
+  minimumOrderUomCode: string | null;
+  /** MOQ na unidade do item; `null` quando as unidades não são convertíveis. */
+  minimumOrderInItemUom: string | null;
+  /** `max(falta, MOQ)` quando comparável; caso contrário a própria falta. */
+  recommendedPurchaseQuantity: string;
+  /** `true` só quando o MOQ elevou a quantidade recomendada. */
+  moqRaisedQuantity: boolean;
+  /** Existe referência histórica sem vigência confiável (nunca é preço atual). */
+  hasLegacyPriceReference: boolean;
 }
 
 export interface PendingProductionOrderDTO {

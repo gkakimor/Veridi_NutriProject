@@ -232,7 +232,16 @@ export function CustomerOrderPage() {
         setDraftInputs((prev) => {
           const next: Record<string, { quantity: string; supplierId: string }> = {};
           for (const row of result.rows) {
-            next[row.itemId] = prev[row.itemId] ?? { quantity: row.newSuggestedPurchase, supplierId: "" };
+            // Pre-seleciona SO o fornecedor recomendado (preferencial ou
+            // unico homologado). Com varios homologados e nenhum
+            // preferencial nada e escolhido: a decisao e do usuario.
+            const recommended = row.supplierCandidates.find(
+              (candidate) => candidate.supplierItemId === row.recommendedSupplierItemId,
+            );
+            next[row.itemId] = prev[row.itemId] ?? {
+              quantity: recommended?.recommendedPurchaseQuantity ?? row.newSuggestedPurchase,
+              supplierId: recommended?.supplierId ?? "",
+            };
           }
           return next;
         });
@@ -523,7 +532,19 @@ export function CustomerOrderPage() {
   }
 
   function handleDraftSupplierChange(itemId: string, supplierId: string) {
-    setDraftInputs((prev) => ({ ...prev, [itemId]: { quantity: prev[itemId]?.quantity ?? "0", supplierId } }));
+    // Trocar de fornecedor troca as condicoes comerciais: a quantidade
+    // recomendada acompanha o MOQ daquele fornecedor (quando comparavel).
+    const candidate = suggestion?.rows
+      .find((row) => row.itemId === itemId)
+      ?.supplierCandidates.find((option) => option.supplierId === supplierId);
+
+    setDraftInputs((prev) => ({
+      ...prev,
+      [itemId]: {
+        quantity: candidate?.recommendedPurchaseQuantity ?? prev[itemId]?.quantity ?? "0",
+        supplierId,
+      },
+    }));
   }
 
   async function handleGenerateDrafts() {
@@ -971,6 +992,50 @@ export function CustomerOrderPage() {
                           <tr key={row.itemId}>
                             <td>
                               <span className="code">{row.itemCode}</span> {row.itemName}
+                              {/* Quem pode fornecer fica junto do material: e a
+                                  informacao que sustenta a decisao de compra. */}
+                              {row.supplierCandidates.length === 0 ? (
+                                <div className="field__hint">
+                                  Nenhum fornecedor homologado cadastrado para este item.
+                                </div>
+                              ) : (
+                                <ul className="candidate-list">
+                                  {row.supplierCandidates.map((candidate) => (
+                                    <li key={candidate.supplierItemId}>
+                                      {candidate.supplierName}
+                                      {candidate.preferred && (
+                                        <span className="badge badge--active"> Preferencial</span>
+                                      )}
+                                      {candidate.referenceUnitPrice ? (
+                                        <span className="field__hint">
+                                          {" "}
+                                          {candidate.referenceUnitPrice}{" "}
+                                          {candidate.referenceCurrencyCode}/
+                                          {candidate.referencePriceUomCode}
+                                        </span>
+                                      ) : candidate.hasLegacyPriceReference ? (
+                                        <span className="field__hint"> referência histórica</span>
+                                      ) : (
+                                        <span className="field__hint"> sem preço vigente</span>
+                                      )}
+                                      {candidate.minimumOrderQuantity && (
+                                        <span className="field__hint">
+                                          {" "}
+                                          · mínimo {candidate.minimumOrderQuantity}{" "}
+                                          {candidate.minimumOrderUomCode}
+                                          {candidate.moqRaisedQuantity && " (eleva a quantidade)"}
+                                        </span>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                              {row.supplierCandidates.length > 1 &&
+                                row.recommendedSupplierItemId === null && (
+                                  <div className="field__hint">
+                                    Vários homologados e nenhum preferencial — escolha o fornecedor.
+                                  </div>
+                                )}
                             </td>
                             <td>
                               {row.remainingRequired} {row.unitCode}
@@ -995,11 +1060,35 @@ export function CustomerOrderPage() {
                                 onChange={(event) => handleDraftSupplierChange(row.itemId, event.target.value)}
                               >
                                 <option value="">Selecionar…</option>
-                                {activeSuppliers.map((supplier) => (
-                                  <option key={supplier.id} value={supplier.id}>
-                                    {supplier.code} — {supplier.tradeName ?? supplier.legalName}
-                                  </option>
-                                ))}
+                                {row.supplierCandidates.length > 0 && (
+                                  <optgroup label="Homologados">
+                                    {row.supplierCandidates.map((candidate) => (
+                                      <option
+                                        key={candidate.supplierItemId}
+                                        value={candidate.supplierId}
+                                      >
+                                        {candidate.supplierCode} — {candidate.supplierName}
+                                        {candidate.preferred ? " (preferencial)" : ""}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                )}
+                                {/* Compra emergencial/amostra continua possivel: a
+                                    homologacao orienta, nao bloqueia o modulo de compras. */}
+                                <optgroup label="Demais fornecedores ativos">
+                                  {activeSuppliers
+                                    .filter(
+                                      (supplier) =>
+                                        !row.supplierCandidates.some(
+                                          (candidate) => candidate.supplierId === supplier.id,
+                                        ),
+                                    )
+                                    .map((supplier) => (
+                                      <option key={supplier.id} value={supplier.id}>
+                                        {supplier.code} — {supplier.tradeName ?? supplier.legalName}
+                                      </option>
+                                    ))}
+                                </optgroup>
                               </select>
                             </td>
                           </tr>

@@ -59,6 +59,9 @@ convertendo projeto em Produto.**
 **Delivery 31 — Amostras / pilotos / testes Tn (Bloco F, capacidade 39):
 concluído — amostra com identidade própria, consumo real de material com
 tipo de movimento próprio e decisão separada da aprovação comercial.**
+**Delivery 32 — Item × Fornecedor / homologação / MOQ / preços (Bloco F,
+capacidade 40): concluído — relação Item×Supplier com homologação por item,
+fornecedor preferencial e histórico imutável de preços.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2915,6 +2918,89 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 32 — Item × Fornecedor / homologação / MOQ / preços (Bloco F, capacidade 40)
+
+## A relação é a entidade
+Preço, MOQ e código do fornecedor NÃO entram no Item: um item tem vários
+fornecedores com condições diferentes. `SupplierItem` é único por
+(fornecedor, item) e guarda o que é estável — existe a relação, qual o
+código do item no catálogo do fornecedor, homologação, preferencial, ativo.
+
+- **Homologação é por item**, não pelo fornecedor inteiro:
+  `PENDING/APPROVED/BLOCKED`. Pendente é ausência de homologação aprovada —
+  nunca reprovação; só `BLOCKED` é recusa deliberada.
+- Homologar/bloquear é da Qualidade; cadastrar relação, código comercial,
+  preços e preferencial é de Compras; voltar para pendente é dos dois.
+  `SupplierItemQualificationHistory` é imutável e registra quem e quando.
+- **Homologado ≠ preferencial.** No máximo um preferencial por item
+  (índice parcial único + CHECK no banco); o anterior é desmarcado na mesma
+  transação. Bloquear ou inativar derruba o preferencial junto. Preferencial
+  é decisão operacional: **nunca** muda porque outra oferta ficou mais barata.
+- `active` é diferente de homologação: o fornecedor pode continuar
+  homologado e ter parado de vender aquele item.
+
+## Preço e MOQ vivem em oferta imutável
+`SupplierItemOffer` é cotação/referência comercial. Corrigir preço, MOQ,
+moeda ou vigência é sempre registrar outra — histórico não se reescreve.
+
+- Preço sempre presente (desconhecido não gera oferta; zero é zero
+  explícito), com unidade própria compatível com a unidade do item. MOQ é
+  opcional: `null` é "não informado", nunca zero.
+- **Oferta vigente** = `effectiveAt` preenchido, já iniciado e não expirado,
+  a mais recente. Oferta SEM vigência é observação histórica e nunca vira
+  preço atual — a UI mostra "referência legada", jamais "preço atual".
+- Moeda é registrada, nunca convertida: sem câmbio nesta fase e sem ranking
+  de "mais barato" entre moedas diferentes.
+- `sourceKey` (hash do conteúdo da linha legada) dá idempotência ao
+  importador — reordenar a planilha não duplica oferta.
+
+## Sugestão de Compra e OC
+Candidatos = relações ativas e homologadas de fornecedor ativo. Recomendação
+conservadora: o preferencial, ou o único homologado; com vários homologados
+e nenhum preferencial **ninguém é escolhido** — e o sistema nunca seleciona o
+mais barato sozinho. Bloqueado nunca é candidato.
+
+- MOQ é recomendação: quando as unidades são comparáveis a quantidade
+  recomendada vira `max(falta, MOQ)`; quando não são, o MOQ aparece na
+  unidade original e nada é ajustado. Nada é bloqueado.
+- Sem fornecedor homologado a falta continua visível, e compra manual
+  segue possível (emergência, amostra, fornecedor novo) — homologação
+  orienta, não é trava global de compra nesta fase.
+- A linha da OC DRAFT é pré-preenchida pela oferta vigente **só** em BRL e
+  com unidade convertível (R$ 0,10/g vira R$ 100,00/kg, em Decimal). A linha
+  é snapshot: oferta nova não muda OC existente.
+- Requirement `CUSTOMER` continua sem consultar fornecedor (capacidade 35
+  intacta).
+
+## Oferta ≠ custo real
+`SupplierItemOffer` é referência comercial. **Não** entra na hierarquia
+`REAL → 30D → 90D → LAST_REAL → NO_COST`, não altera `getItemCostReference`
+nem custo de formulação/OP: custo real continua vindo do recebimento. O
+custo prospectivo é assunto do Bloco G.
+
+## Corpus
+`precos_fornecedores.csv` (786 linhas, header `preco_brl_kg`, sem coluna de
+moeda e **sem data de cotação**): 346 códigos de item (60 não resolvidos),
+100 fornecedores (0 não resolvidos), 721 pares item+fornecedor, 63 com mais
+de uma observação, 61 com preços diferentes. Preços válidos 773, inválidos
+13, 86 com unidade incompatível (preço por kg em item contado em unidade).
+MOQ informado em 706 linhas, interpretado em 692 (441 numéricos puros
+assumem a unidade do item), 14 ambíguos (`1mil`, `KG`, `-`) — importados sem
+MOQ estruturado e reportados.
+
+Seed importou **639 relações** e **602 ofertas** (`LEGACY_IMPORT`, todas sem
+vigência), com de-para em `de-para-item-fornecedor.csv`. `homologado=SIM`
+(560 linhas) vira `APPROVED`; ausência vira `PENDING`, nunca `BLOCKED`.
+`melhor_preco` (466 linhas) é só estatística de snapshot de CMV: nenhuma
+relação importada nasce preferencial.
+
+## Não implementado de propósito
+RFQ, portal/scorecard de fornecedor, auditoria documental de fornecedor,
+lead time e performance de entrega, câmbio/FX, tier pricing, contratos,
+contas a pagar, custo real via oferta, CMV/margem/comissão e R-18.
+
+---
+
 # Delivery 31 — Amostras / pilotos / testes Tn (Bloco F, capacidade 39)
 
 ## Amostra não é lote nem Ordem de Produção
@@ -3724,12 +3810,13 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **capacidade 40** (Bloco F). A base de
+Próximo passo do roadmap oficial: **capacidade 41 — importador
+definitivo das planilhas Veridi** (Bloco F). A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
 o que existe hoje é ferramenta de dados de desenvolvimento. Depois seguem
-40-42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+41-42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.

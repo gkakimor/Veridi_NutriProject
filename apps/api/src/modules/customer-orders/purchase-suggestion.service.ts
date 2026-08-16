@@ -6,8 +6,9 @@ import type {
   PendingProductionOrderDTO,
   PurchaseSuggestionDTO,
   PurchaseSuggestionRowDTO,
+  PurchaseSupplierCandidateDTO,
 } from "@veridi/shared";
-import { PURCHASE_ORDER_CODE_PREFIX } from "@veridi/shared";
+import { DEFAULT_OFFER_CURRENCY, PURCHASE_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getAvailableByItems, getConsumedByReservationLines, getOnOrderByItems, getReservedByItems } from "../../lib/inventory-ledger.js";
@@ -19,6 +20,12 @@ import {
   InvalidLineItemTypeError,
 } from "../purchase-orders/purchase-orders.errors.js";
 import { createDraftPurchaseOrderInTx } from "../purchase-orders/purchase-orders.service.js";
+import {
+  convertPriceToUom,
+  convertQuantityToUom,
+  pickCurrentOffer,
+} from "../supplier-items/supplier-items.service.js";
+import type { UnitOfMeasureDecimalLike } from "../items/uom.js";
 import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
 import { getCustomerOrderById } from "./customer-orders.service.js";
 import { itemScopesFor } from "./fulfillment-plan.service.js";
@@ -32,6 +39,104 @@ import type { GeneratePurchaseDraftsInput } from "./purchase-suggestion.schemas.
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
 const PURCHASE_ORDER_CODE_SEQUENCE = "purchase_order_code_seq";
+
+/**
+ * Fornecedores homologados candidatos por item.
+ *
+ * Só entram relações ativas, homologadas e de fornecedor ativo (§40).
+ * Preço e MOQ vêm da oferta VIGENTE — referência histórica sem vigência
+ * nunca é tratada como preço atual, só é sinalizada. A recomendação é
+ * conservadora: o preferencial, ou o único homologado; com vários
+ * homologados e nenhum preferencial ninguém é escolhido automaticamente, e
+ * o sistema jamais escolhe "o mais barato" sozinho (§41).
+ */
+async function buildSupplierCandidatesByItem(
+  prisma: PrismaOrTx,
+  itemIds: string[],
+  quantityToBuyByItem: Map<string, Prisma.Decimal>,
+): Promise<Map<string, { candidates: PurchaseSupplierCandidateDTO[]; recommended: string | null }>> {
+  const result = new Map<
+    string,
+    { candidates: PurchaseSupplierCandidateDTO[]; recommended: string | null }
+  >();
+  if (itemIds.length === 0) return result;
+
+  const [supplierItems, units] = await Promise.all([
+    prisma.supplierItem.findMany({
+      where: {
+        itemId: { in: itemIds },
+        active: true,
+        qualificationStatus: "APPROVED",
+        supplier: { is: { active: true } },
+      },
+      include: { item: true, supplier: true, offers: true },
+      orderBy: [{ preferred: "desc" }, { supplier: { code: "asc" } }],
+    }),
+    prisma.unitOfMeasure.findMany(),
+  ]);
+
+  const now = new Date();
+  for (const supplierItem of supplierItems) {
+    const itemUnit = supplierItem.item.unitCode;
+    const quantityToBuy = quantityToBuyByItem.get(supplierItem.itemId) ?? new Prisma.Decimal(0);
+    const offer = pickCurrentOffer(supplierItem.offers, now);
+
+    const priceInItemUom = offer
+      ? convertPriceToUom(offer.unitPrice, offer.priceUomCode, itemUnit, units)
+      : null;
+
+    const moqInItemUom =
+      offer?.minimumOrderQuantity && offer.minimumOrderUomCode
+        ? convertQuantityToUom(
+            offer.minimumOrderQuantity,
+            offer.minimumOrderUomCode,
+            itemUnit,
+            units,
+          )
+        : null;
+
+    // MOQ é recomendação, nunca bloqueio — e só ajusta a quantidade quando
+    // as unidades são comparáveis (§48-50).
+    const recommendedQuantity =
+      moqInItemUom && moqInItemUom.greaterThan(quantityToBuy) ? moqInItemUom : quantityToBuy;
+
+    const candidate: PurchaseSupplierCandidateDTO = {
+      supplierItemId: supplierItem.id,
+      supplierId: supplierItem.supplierId,
+      supplierCode: supplierItem.supplier.code,
+      supplierName: supplierItem.supplier.legalName,
+      supplierItemCode: supplierItem.supplierItemCode,
+      preferred: supplierItem.preferred,
+      referenceUnitPrice: offer ? offer.unitPrice.toString() : null,
+      referenceCurrencyCode: offer ? offer.currencyCode : null,
+      referencePriceUomCode: offer ? offer.priceUomCode : null,
+      referencePriceInItemUom: priceInItemUom ? priceInItemUom.toString() : null,
+      minimumOrderQuantity: offer?.minimumOrderQuantity
+        ? offer.minimumOrderQuantity.toString()
+        : null,
+      minimumOrderUomCode: offer?.minimumOrderUomCode ?? null,
+      minimumOrderInItemUom: moqInItemUom ? moqInItemUom.toString() : null,
+      recommendedPurchaseQuantity: recommendedQuantity.toString(),
+      moqRaisedQuantity: recommendedQuantity.greaterThan(quantityToBuy),
+      hasLegacyPriceReference: supplierItem.offers.some((row) => row.effectiveAt === null),
+    };
+
+    const bucket = result.get(supplierItem.itemId) ?? { candidates: [], recommended: null };
+    bucket.candidates.push(candidate);
+    result.set(supplierItem.itemId, bucket);
+  }
+
+  for (const bucket of result.values()) {
+    const preferred = bucket.candidates.find((candidate) => candidate.preferred);
+    bucket.recommended = preferred
+      ? preferred.supplierItemId
+      : bucket.candidates.length === 1
+        ? bucket.candidates[0]!.supplierItemId
+        : null;
+  }
+
+  return result;
+}
 
 async function computeDraftPurchaseQuantityByItem(
   prisma: PrismaOrTx,
@@ -173,7 +278,7 @@ async function buildPurchaseSuggestion(
     computeDraftPurchaseQuantityByItem(prisma, customerOrderId, itemIds),
   ]);
 
-  const rows: PurchaseSuggestionRowDTO[] = itemIds.map((itemId) => {
+  const partialRows = itemIds.map((itemId) => {
     const info = aggregated.get(itemId)!;
     const globalReserved = globalReservedByItem.get(itemId) ?? new Prisma.Decimal(0);
     // Available global ja e liquido de TODAS as reservas (inclusive a
@@ -207,6 +312,23 @@ async function buildPurchaseSuggestion(
       draftPurchaseQuantity: draftPurchaseQuantity.toString(),
       suggestedAdditionalPurchase: suggestedAdditionalPurchase.toString(),
       newSuggestedPurchase: newSuggestedPurchase.toString(),
+      quantityToBuy: newSuggestedPurchase,
+    };
+  });
+
+  // Fornecedores homologados por item — leitura, nunca decisão automática.
+  const candidatesByItem = await buildSupplierCandidatesByItem(
+    prisma,
+    itemIds,
+    new Map(partialRows.map((row) => [row.itemId, row.quantityToBuy])),
+  );
+
+  const rows: PurchaseSuggestionRowDTO[] = partialRows.map(({ quantityToBuy: _unused, ...row }) => {
+    const bucket = candidatesByItem.get(row.itemId);
+    return {
+      ...row,
+      supplierCandidates: bucket?.candidates ?? [],
+      recommendedSupplierItemId: bucket?.recommended ?? null,
     };
   });
 
@@ -276,6 +398,35 @@ export async function getPurchaseSuggestion(customerOrderId: string): Promise<Pu
     );
   }
   return buildPurchaseSuggestion(prisma, customerOrderId);
+}
+
+/**
+ * Preco de referencia para pre-preencher a linha da OC DRAFT.
+ *
+ * Tres recusas deliberadas, todas silenciosas (a OC simplesmente nasce sem
+ * preco, nunca com um numero inventado):
+ * 1. sem oferta VIGENTE — referencia legada sem data nao e preco atual;
+ * 2. moeda diferente de BRL — a OC nao tem moeda propria nesta fase e
+ *    converter USD em BRL escondido seria falsificar valor. FX e Bloco G;
+ * 3. unidade do preco incompativel com a unidade da linha.
+ */
+async function resolveReferenceUnitPrice(
+  tx: Prisma.TransactionClient,
+  supplierId: string,
+  item: Item,
+  units: UnitOfMeasureDecimalLike[],
+): Promise<Prisma.Decimal | null> {
+  const supplierItem = await tx.supplierItem.findUnique({
+    where: { supplierId_itemId: { supplierId, itemId: item.id } },
+    include: { offers: true },
+  });
+  if (!supplierItem) return null;
+
+  const offer = pickCurrentOffer(supplierItem.offers);
+  if (!offer) return null;
+  if (offer.currencyCode !== DEFAULT_OFFER_CURRENCY) return null;
+
+  return convertPriceToUom(offer.unitPrice, offer.priceUomCode, item.unitCode, units);
 }
 
 /** Mesma regra de `assertSupplierActive`, so que sob a transacao ja travada. */
@@ -376,13 +527,24 @@ export async function generatePurchaseDrafts(
       linesBySupplier.set(line.supplierId, list);
     }
 
+    const units = await tx.unitOfMeasure.findMany();
+
     for (const [supplierId, lines] of linesBySupplier) {
       const supplier = await assertSupplierActiveInTx(tx, supplierId);
 
-      const validatedLines: { item: Item; orderedQuantity: Prisma.Decimal }[] = [];
+      const validatedLines: {
+        item: Item;
+        orderedQuantity: Prisma.Decimal;
+        unitPrice?: Prisma.Decimal | null;
+      }[] = [];
       for (const line of lines) {
         const item = await assertLineItemValidInTx(tx, line.itemId);
-        validatedLines.push({ item, orderedQuantity: line.quantity });
+        const unitPrice = await resolveReferenceUnitPrice(tx, supplierId, item, units);
+        validatedLines.push({
+          item,
+          orderedQuantity: line.quantity,
+          ...(unitPrice ? { unitPrice } : {}),
+        });
       }
 
       await createDraftPurchaseOrderInTx(tx, {

@@ -10,6 +10,12 @@ import {
   readLegacyProjectRows,
 } from "./project-analysis.js";
 import { normalizeName, readLegacySampleRows, resolveSamples } from "./sample-analysis.js";
+import {
+  legacyOfferSourceKey,
+  normalizeSupplierName,
+  parseMinimumOrder,
+  readLegacySupplierPriceRows,
+} from "./supplier-price-analysis.js";
 import { nextSequenceCode } from "../../apps/api/src/lib/sequence-code.js";
 import type { MappedItem } from "./mapping.js";
 import {
@@ -36,6 +42,8 @@ import {
 
 const prisma = new PrismaClient();
 const ACTOR = "Importação Veridi";
+/** Unidades de massa do registro — usadas só para conferir compatibilidade do MOQ legado. */
+const MASS_UOM_CODES = new Set(["mg", "g", "kg"]);
 const HUNDRED = new Prisma.Decimal(100);
 
 const UNITS = [
@@ -174,6 +182,31 @@ async function writeCrossReference(): Promise<void> {
       row.code,
       row.project.code,
       `T${row.testSequence}`,
+    ]),
+  );
+  const supplierItems = await prisma.supplierItem.findMany({
+    orderBy: [{ item: { code: "asc" } }, { supplier: { code: "asc" } }],
+    include: { item: true, supplier: true, _count: { select: { offers: true } } },
+  });
+  write(
+    "de-para-item-fornecedor.csv",
+    [
+      "cod_item_planilha",
+      "codigo_veridi",
+      "fornecedor",
+      "codigo_fornecedor",
+      "homologacao",
+      "preferencial",
+      "ofertas",
+    ],
+    supplierItems.map((row) => [
+      row.item.externalCode,
+      row.item.code,
+      row.supplier.legalName,
+      row.supplier.code,
+      row.qualificationStatus,
+      row.preferred ? "SIM" : "NAO",
+      String(row._count.offers),
     ]),
   );
   // Fornecedor não tem código na planilha — o de-para é pelo nome.
@@ -666,6 +699,169 @@ async function main(): Promise<void> {
     );
   }
 
+  /* ── Item x Fornecedor (capacidade 40) ── */
+  //
+  // `precos_fornecedores.csv` nao tem data de cotacao nem coluna de moeda:
+  // toda oferta entra em BRL, por quilo (header `preco_brl_kg`) e SEM
+  // vigencia — observacao historica de preco, nunca preco atual. O
+  // indicador "melhor_preco" da planilha e apenas um snapshot de CMV e
+  // NUNCA vira fornecedor preferencial: nenhuma relacao importada nasce
+  // preferred.
+  const priceRows = readLegacySupplierPriceRows(findings);
+
+  const [dbItems, dbSuppliers] = await Promise.all([
+    prisma.item.findMany({ where: { externalCode: { not: null } } }),
+    prisma.supplier.findMany(),
+  ]);
+  const itemByExternalCode = new Map(dbItems.map((item) => [item.externalCode!, item]));
+  const supplierByName = new Map(
+    dbSuppliers.map((supplier) => [normalizeSupplierName(supplier.legalName), supplier]),
+  );
+
+  // Homologacao e por PAR item+fornecedor: basta uma linha marcada como
+  // homologada para a relacao entrar homologada.
+  const qualifiedPairs = new Set<string>();
+  for (const row of priceRows) {
+    if (row.qualified) {
+      qualifiedPairs.add(`${row.itemExternalCode}::${normalizeSupplierName(row.supplierName)}`);
+    }
+  }
+
+  let supplierItemsCreated = 0;
+  let supplierItemsSkipped = 0;
+  let offersCreated = 0;
+  let offersSkipped = 0;
+  const supplierItemIdByPair = new Map<string, string>();
+
+  for (const row of priceRows) {
+    const item = itemByExternalCode.get(row.itemExternalCode);
+    if (!item) {
+      findings.add(
+        "SUPPLIER_ITEM_ITEM_UNRESOLVED",
+        "SupplierItem",
+        row.itemExternalCode,
+        "cod_item sem Item correspondente — relacao nao importada",
+      );
+      supplierItemsSkipped += 1;
+      continue;
+    }
+
+    const supplierKey = normalizeSupplierName(row.supplierName);
+    const supplier = supplierByName.get(supplierKey);
+    if (!supplier) {
+      // Nunca criar Supplier so para acomodar um preco legado.
+      findings.add(
+        "SUPPLIER_ITEM_SUPPLIER_UNRESOLVED",
+        "SupplierItem",
+        row.supplierName,
+        "fornecedor sem correspondencia exata de nome — relacao nao importada",
+      );
+      supplierItemsSkipped += 1;
+      continue;
+    }
+
+    const pairKey = `${row.itemExternalCode}::${supplierKey}`;
+    let supplierItemId = supplierItemIdByPair.get(pairKey);
+
+    if (!supplierItemId) {
+      const existing = await prisma.supplierItem.findUnique({
+        where: { supplierId_itemId: { supplierId: supplier.id, itemId: item.id } },
+      });
+      if (existing) {
+        supplierItemId = existing.id;
+      } else {
+        const qualified = qualifiedPairs.has(pairKey);
+        const created = await prisma.supplierItem.create({
+          data: {
+            itemId: item.id,
+            supplierId: supplier.id,
+            // Homologado quando a planilha diz explicitamente; ausencia e
+            // desconhecimento (PENDING), nunca bloqueio.
+            qualificationStatus: qualified ? "APPROVED" : "PENDING",
+            preferred: false,
+            createdByNameSnapshot: ACTOR,
+            updatedByNameSnapshot: ACTOR,
+          },
+        });
+        await prisma.supplierItemQualificationHistory.create({
+          data: {
+            supplierItemId: created.id,
+            fromStatus: null,
+            toStatus: "PENDING",
+            note: "Relacao importada da planilha",
+            changedByNameSnapshot: ACTOR,
+          },
+        });
+        if (qualified) {
+          await prisma.supplierItemQualificationHistory.create({
+            data: {
+              supplierItemId: created.id,
+              fromStatus: "PENDING",
+              toStatus: "APPROVED",
+              note: "Homologacao marcada na planilha (sem data nem responsavel no export)",
+              changedByNameSnapshot: ACTOR,
+            },
+          });
+        }
+        supplierItemId = created.id;
+        supplierItemsCreated += 1;
+      }
+      supplierItemIdByPair.set(pairKey, supplierItemId);
+    }
+
+    // Preco ilegivel nao vira oferta — mas a relacao ja foi preservada.
+    if (row.price === null) {
+      offersSkipped += 1;
+      continue;
+    }
+    // O corpus so tem preco por quilo: item que nao e de massa nao aceita
+    // esse preco sem adivinhar a unidade real.
+    const priceUomCode = "kg";
+    if (item.unitCode !== "kg" && item.unitCode !== "g" && item.unitCode !== "mg") {
+      offersSkipped += 1;
+      continue;
+    }
+
+    const sourceKey = legacyOfferSourceKey(row);
+    const alreadyImported = await prisma.supplierItemOffer.findUnique({ where: { sourceKey } });
+    if (alreadyImported) continue;
+
+    const parsedMoq = parseMinimumOrder(row.rawMinimumOrder);
+    // MOQ so entra estruturado quando a unidade e compativel com a do item;
+    // numero puro assume a unidade do item (registrado no validator).
+    const moqUom = parsedMoq ? (parsedMoq.uomCode ?? item.unitCode) : null;
+    const moqCompatible =
+      moqUom !== null && MASS_UOM_CODES.has(moqUom) === MASS_UOM_CODES.has(item.unitCode);
+    if (parsedMoq && !moqCompatible) {
+      findings.add(
+        "SUPPLIER_MOQ_UOM_INCOMPATIBLE",
+        "SupplierItemOffer",
+        `${row.itemExternalCode}/${row.supplierName}`,
+        `pedido minimo "${row.rawMinimumOrder}" incompativel com a unidade do item (${item.unitCode}) — oferta sem MOQ`,
+      );
+    }
+
+    await prisma.supplierItemOffer.create({
+      data: {
+        supplierItemId,
+        unitPrice: row.price,
+        currencyCode: "BRL",
+        priceUomCode,
+        ...(parsedMoq && moqCompatible
+          ? { minimumOrderQuantity: parsedMoq.quantity, minimumOrderUomCode: moqUom! }
+          : {}),
+        // Sem data confiavel no export: observacao historica, nunca vigente.
+        effectiveAt: null,
+        validUntil: null,
+        source: "LEGACY_IMPORT",
+        sourceKey,
+        notes: row.sourceName,
+        createdByNameSnapshot: ACTOR,
+      },
+    });
+    offersCreated += 1;
+  }
+
   /* ── Resumo ── */
   const [suppliers, customers, itemCount, productCount, versions] = await Promise.all([
     prisma.supplier.count(),
@@ -691,6 +887,15 @@ async function main(): Promise<void> {
   console.log(
     `  Amostras historicas: ${samplesCreated} importadas, ${samplesSkipped} nao resolvidas`,
   );
+  const [supplierItemCount, offerCount] = await Promise.all([
+    prisma.supplierItem.count(),
+    prisma.supplierItemOffer.count(),
+  ]);
+  console.log(`  Relacoes item x fornecedor: ${supplierItemCount} (novas ${supplierItemsCreated})`);
+  console.log(`    linhas de preco nao importadas: ${supplierItemsSkipped}`);
+  console.log(`  Ofertas de fornecedor: ${offerCount} (novas ${offersCreated})`);
+  console.log(`    linhas sem oferta (preco/unidade nao utilizaveis): ${offersSkipped}`);
+  console.log("    todas legadas entram SEM vigencia — referencia historica, nunca preco atual.");
   console.log(`  Formulações ACTIVE: ${versions}`);
   console.log(`    PER_DOSE reconstruídas: ${perDoseVersions}`);
   console.log(`    FIXED_BASIS pelo consumo histórico: ${legacyVersions}`);
