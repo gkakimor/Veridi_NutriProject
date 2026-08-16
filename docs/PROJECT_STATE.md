@@ -19,6 +19,7 @@ FAST MVP.
 **Delivery 07 — Recebimento + Lote Interno: concluído.**
 **Delivery 08 — QR Code + Etiqueta de Lote + Scan/Consulta: concluído.**
 **Delivery 09 — Estoque + Movimentações + Inventário Físico: concluído.**
+**Delivery 10 — FEFO (sugestão e alocação de lotes): concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -30,9 +31,9 @@ Recebimento; será reutilizado em Ordem de Produção. Rota de impressão
 (etiqueta de lote) é um terceiro padrão: página fora do `AppShell`, sem
 topbar/sidebar. Ver `docs/UI_BRAND.md`.
 
-12 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
-Usuários; Bloco B: falta só FEFO — OC, Recebimento, Lotes, QR/Etiqueta e
-Estoque/Movimentações já implementados).
+11 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
+Usuários; Bloco B está completo — OC, Recebimento, Lotes, QR/Etiqueta,
+Estoque/Movimentações e FEFO implementados).
 
 ## Stack instalada
 
@@ -58,11 +59,12 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders,
                  /receipts, /lots (+ /lots/lookup), /inventory,
-                 /inventory-movements, /inventory-adjustments, /stock-counts
+                 /inventory-movements, /inventory-adjustments, /stock-counts,
+                 /inventory/:itemId/allocation-suggestion (FEFO/FIFO)
 packages/shared contratos compartilhados (Health, Item, UnitOfMeasure,
                  Supplier, Customer, Product, PurchaseOrder, Receipt, Lot
                  [qrPayload, onHand/reserved/available], InventoryMovement,
-                 CNPJ, UFs)
+                 AllocationSuggestion, CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -804,6 +806,96 @@ Compra/Recebimentos/Lotes/Dashboard. Console limpo em todas as telas.
 
 ---
 
+# Delivery 10 — FEFO (sugestão e alocação de lotes)
+
+Encerra o Bloco B. Serviço reutilizável de domínio que responde "dado um
+Item e uma quantidade necessária, quais lotes usar primeiro" — só cálculo,
+nunca reserva/baixa estoque/cria movimentação. Validada só em desktop web
+(Desktop Web First).
+
+## Algoritmo
+
+`apps/api/src/modules/inventory/allocation.service.ts#getAllocationSuggestion(itemId,
+requiredQuantity)`. Três estratégias, mesma interface:
+- **FEFO** (`Item.controlsExpiry=true`): ordena lotes elegíveis por
+  `expiryDate` ascendente.
+- **FIFO** (`Item.controlsLot=true`, `controlsExpiry=false`): ordena por
+  data de recebimento mais antiga (do `Receipt` via `ReceiptLine`, com
+  fallback para `Lot.createdAt` quando não há `ReceiptLine`).
+- **NO_LOT** (`Item.controlsLot=false`): sem escolha de lote — retorna
+  disponibilidade direta (`On Hand` do item), `allocations: []`. Nunca
+  cria lote artificial.
+
+Desempate sempre determinístico, nunca aleatório entre requisições: mesma
+validade → recebimento mais antigo; empate completo → `Lot.code`
+(`localeCompare`). Aloca sequencialmente até a quantidade necessária ser
+atendida ou os lotes elegíveis se esgotarem; `shortageQuantity =
+max(0, required - allocated)` — falta é resultado operacional válido,
+nunca erro HTTP (endpoint sempre `200`, mesmo com `shortageQuantity > 0`).
+
+## Reuso de disponibilidade (sem cálculo paralelo)
+
+Elegibilidade de lote e `On Hand` reaproveitam exatamente
+`isLotAvailableForUse`/`getOnHand`/`getOnHandByLots` de
+`apps/api/src/lib/inventory-ledger.ts` (mesmas funções da Visão Geral do
+Estoque e do detalhe do Lote) — zero lógica de disponibilidade duplicada.
+Elegível = `On Hand` do lote > 0 **e** `status` efetivo `AVAILABLE`
+(considerando expiração calculada, não só o status persistido) — exclui
+`AWAITING_RELEASE`/`BLOCKED`/vencido, mesmo que o banco ainda diga
+`AVAILABLE`. `On Order` nunca entra na alocação (material em compra não
+está fisicamente disponível).
+
+## Endpoint
+
+`GET /inventory/:itemId/allocation-suggestion?quantity=<decimal>` —
+somente leitura, `404` se o item não existir, `400` de validação para
+quantidade inválida. Resposta: `itemId`/`itemCode`/`itemName`/`unitCode`,
+`strategy`, `requiredQuantity`, `availableQuantity` (soma de todos os
+lotes elegíveis, não só os usados), `allocatedQuantity`,
+`shortageQuantity`, `allocations[]` (`lotId`/`lotCode`/`supplierLot`/
+`expiryDate`/`location`/`availableQuantity`/`suggestedQuantity`) — só
+lotes com `suggestedQuantity > 0` aparecem. Nenhuma tabela nova, nenhuma
+"suggested allocation" persistida.
+
+## Frontend
+
+`InventoryItemDetailPage` ganhou a seção "Ordem de Consumo / Sugestão
+FEFO": campo de quantidade necessária + "Calcular sugestão" + resumo
+(Estratégia/Necessário/Disponível/Falta — falta com badge de aviso) +
+tabela Ordem/Lote/Validade/Localização/Disponível/Sugerido. Primeira linha
+mostra texto explícito ("Recomendado — vence primeiro" para FEFO,
+"Recomendado — recebido primeiro" para FIFO) — nunca só cor. Cálculo é
+sob demanda (não roda ao carregar a página), reforçando visualmente que é
+uma consulta, não um estado persistido.
+
+## Testes
+
+17 novos testes (`allocation.test.ts`): validade mais próxima primeiro,
+múltiplos lotes com uso parcial do último, quantidade exata, shortage
+(200 ok, não erro), ignora saldo zero/`AWAITING_RELEASE`/`BLOCKED`/
+vencido, reflete ajuste de estoque (ledger) na sugestão, `On Order` fora
+da alocação, precisão decimal, qualidade (`AWAITING_RELEASE` que venceria
+primeiro só entra depois de liberado), empate por recebimento e por
+código, FIFO por recebimento mais antigo, item sem lote sem allocation
+fictício, item inexistente → 404. Total da API: 144 testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (144 API + 7 web) — ok. Validado
+visualmente via Playwright **só desktop**: FEFO com múltiplos lotes
+(cenário exato do handoff, 70kg → 30+40), shortage, lote bloqueado +
+aguardando liberação ignorados (Vitamina C real do seed), FIFO para item
+sem validade (Pote 500g). Regressão em Visão Geral/Lotes/Movimentações/
+Inventário Físico/Recebimentos/Ordens de Compra. Console limpo.
+
+## Pendente (não bloqueante)
+
+- Nenhuma pendência real. Override manual de lote (usuário escolher lote
+  diferente do sugerido) fica para quando Picking/OP existirem — princípio
+  já documentado em `docs/PRODUCT_RULES.md`.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -924,6 +1016,15 @@ Compra/Recebimentos/Lotes/Dashboard. Console limpo em todas as telas.
   sempre com motivo obrigatório quando há diferença/saída. Estoque nunca
   fica negativo — saída/perda é travada e validada contra o saldo atual
   sob lock, mesmo padrão de concorrência do Recebimento.
+- FEFO é a estratégia padrão para itens com validade; FIFO (recebimento
+  mais antigo) é o fallback para itens que controlam lote sem validade.
+  Só lote `AVAILABLE` (efetivo, considerando expiração calculada) com
+  saldo > 0 participa da alocação. A sugestão de alocação é sempre
+  recomendação/cálculo — nunca reserva, baixa estoque ou cria
+  `InventoryMovement`; nada é persistido. `On Order` nunca satisfaz
+  necessidade física (não entra na alocação). O usuário poderá no futuro
+  substituir o lote sugerido por outro, desde que `AVAILABLE` e com
+  saldo — FEFO é default, não uma regra que torna outro lote impossível.
 
 ---
 
@@ -965,16 +1066,16 @@ Compra/Recebimentos/Lotes/Dashboard. Console limpo em todas as telas.
 
 # Next recommended implementation
 
-Resta do Bloco A: **Usuários**. Resta do Bloco B: só **FEFO** (aloca por
-`Lot.expiryDate` entre os lotes `AVAILABLE`/não vencidos já expostos por
-`GET /inventory/:itemId`) — a definir por próximo handoff de Product
-Ownership. Depois começa o Bloco C (Formulações). Reutilizar:
-`FullWorkspaceModal` + `components.css` para cadastros simples; padrão de
-página própria (ver Ordem de Compra/Recebimento) para novos documentos
-transacionais (ex.: Ordem de Produção); `LotScanner`/`QrCode` para os
-próximos fluxos scan-first (Picking/Consumo); `apps/api/src/lib/
-inventory-ledger.ts` para qualquer cálculo futuro de saldo (Reservation
-substituirá o `reserved: "0"` fixo quando existir).
+Resta do Bloco A: **Usuários**. Bloco B está completo. Próximo é o Bloco C
+— começa por **Formulações** — a definir por próximo handoff de Product
+Ownership. Reutilizar: `FullWorkspaceModal` + `components.css` para
+cadastros simples; padrão de página própria (ver Ordem de Compra/
+Recebimento) para novos documentos transacionais (ex.: Ordem de
+Produção); `LotScanner`/`QrCode` para os próximos fluxos scan-first
+(Picking/Consumo); `apps/api/src/lib/inventory-ledger.ts` para qualquer
+cálculo futuro de saldo (Reservation substituirá o `reserved: "0"` fixo
+quando existir); `allocation.service.ts#getAllocationSuggestion` será
+reutilizado pela futura Reserva de OP para criar alocações reais.
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

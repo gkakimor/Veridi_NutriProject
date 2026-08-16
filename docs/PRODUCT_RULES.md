@@ -469,6 +469,30 @@ The UI must state the recommendation in text:
 
 Do not use color alone.
 
+## Durable rules confirmed at implementation
+
+- FEFO is the default strategy for lot-controlled items with expiry
+  tracking. FIFO (earliest receiving date) is the fallback for
+  lot-controlled items that don't track expiry — same service interface,
+  strategy chosen from the item's own `controlsExpiry` flag. Items
+  without lot control have no lot to choose; the service returns
+  availability directly, never a fabricated lot.
+- Only a lot that is effectively `AVAILABLE` (status plus computed
+  expiration, not just the persisted status) and has On Hand greater than
+  zero participates in an allocation — `AWAITING_RELEASE`/`BLOCKED`/
+  expired lots are excluded even if the database still says `AVAILABLE`.
+- The allocation suggestion is purely a recommendation/calculation — it
+  never reserves stock, never deducts stock, never creates an
+  `InventoryMovement`, and nothing about it is persisted. It reuses the
+  exact same On Hand/Available/lot-eligibility rules as the Inventory
+  screens — never a parallel/divergent interpretation.
+- On Order never satisfies a physical allocation need — material not yet
+  received is excluded from allocations even when it appears informative
+  elsewhere (e.g. the Inventory overview).
+- A user will eventually be able to substitute the suggested lot with a
+  different one (in Picking/OP): FEFO is the default recommendation, not
+  a rule that makes any other AVAILABLE lot with stock impossible to use.
+
 ---
 
 # 18. Formulations

@@ -149,6 +149,10 @@
   box-shadow: var(--shadow-1);
 }
 
+.table-container--spaced {
+  margin-top: var(--sp-4);
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { getAllocationSuggestion } from "./allocation.service.js";
 import {
   createInventoryAdjustment,
   createStockCount,
@@ -17,6 +18,7 @@ import {
   UnexpectedLotError,
 } from "./inventory.errors.js";
 import {
+  allocationSuggestionQuerySchema,
   createInventoryAdjustmentSchema,
   listInventoryMovementsQuerySchema,
   listInventoryQuerySchema,
@@ -93,6 +95,27 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
     const detail = await getInventoryByItemId(itemId);
     if (!detail) return reply.status(404).send({ error: "not_found" });
     return reply.send(detail);
+  });
+
+  // Somente leitura: nunca reserva/baixa estoque, so calcula sob demanda.
+  app.get("/inventory/:itemId/allocation-suggestion", async (request, reply) => {
+    const { itemId } = request.params as { itemId: string };
+    const parsed = allocationSuggestionQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    try {
+      const suggestion = await getAllocationSuggestion(itemId, parsed.data.quantity);
+      return reply.send(suggestion);
+    } catch (error) {
+      if (error instanceof ItemNotFoundError) {
+        return reply.status(404).send({ error: "not_found" });
+      }
+      throw error;
+    }
   });
 
   app.post("/inventory-adjustments", async (request, reply) => {

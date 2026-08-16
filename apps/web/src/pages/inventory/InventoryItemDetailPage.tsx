@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { InventoryItemDetailDTO } from "@veridi/shared";
+import type { AllocationSuggestionDTO, InventoryItemDetailDTO } from "@veridi/shared";
 import { ITEM_TYPE_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
-import { getInventoryItem } from "../../lib/inventory-api";
+import { getAllocationSuggestion, getInventoryItem } from "../../lib/inventory-api";
 import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
 
@@ -33,6 +34,11 @@ export function InventoryItemDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
 
+  const [requiredQuantity, setRequiredQuantity] = useState("");
+  const [suggestion, setSuggestion] = useState<AllocationSuggestionDTO | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
+
   const load = useCallback(() => {
     if (!itemId) return;
     setLoading(true);
@@ -46,6 +52,23 @@ export function InventoryItemDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function handleCalculateSuggestion(event: FormEvent) {
+    event.preventDefault();
+    if (!itemId || !requiredQuantity.trim()) return;
+
+    setSuggestionLoading(true);
+    setSuggestionError(null);
+    setSuggestion(null);
+    try {
+      const result = await getAllocationSuggestion(itemId, requiredQuantity.trim());
+      setSuggestion(result);
+    } catch (err) {
+      setSuggestionError(err instanceof Error ? err.message : "Falha ao calcular sugestão");
+    } finally {
+      setSuggestionLoading(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -188,6 +211,118 @@ export function InventoryItemDetailPage() {
             </div>
           </FormSection>
         )}
+
+        <FormSection
+          title="Ordem de Consumo / Sugestão FEFO"
+          subtitle="Recomendação de cálculo — não reserva, não baixa estoque, não cria movimentação."
+        >
+          <form className="field-grid-2" onSubmit={handleCalculateSuggestion}>
+            <div className="field">
+              <label htmlFor="fefo-quantity">
+                Quantidade necessária ({detail.unitCode})
+              </label>
+              <input
+                id="fefo-quantity"
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
+                value={requiredQuantity}
+                onChange={(event) => setRequiredQuantity(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>&nbsp;</label>
+              <button
+                type="submit"
+                className="btn btn--primary btn--sm"
+                disabled={!requiredQuantity.trim() || suggestionLoading}
+              >
+                {suggestionLoading ? "Calculando…" : "Calcular sugestão"}
+              </button>
+            </div>
+          </form>
+
+          {suggestionError && <p className="form-alert">{suggestionError}</p>}
+
+          {suggestion && (
+            <div className="line-actions">
+              <dl className="definition-list">
+                <dt>Estratégia</dt>
+                <dd>{suggestion.strategy}</dd>
+                <dt>Necessário</dt>
+                <dd>
+                  {suggestion.requiredQuantity} {detail.unitCode}
+                </dd>
+                <dt>Disponível</dt>
+                <dd>
+                  {suggestion.availableQuantity} {detail.unitCode}
+                </dd>
+                <dt>Falta</dt>
+                <dd>
+                  {Number(suggestion.shortageQuantity) > 0 ? (
+                    <span className="badge badge--err">
+                      Falta: {suggestion.shortageQuantity} {detail.unitCode}
+                    </span>
+                  ) : (
+                    <span className="badge badge--active">Sem falta</span>
+                  )}
+                </dd>
+              </dl>
+
+              {suggestion.allocations.length > 0 && (
+                <div className="table-container table-container--spaced">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Ordem</th>
+                        <th>Lote</th>
+                        <th>Validade</th>
+                        <th>Localização</th>
+                        <th>Disponível</th>
+                        <th>Sugerido</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suggestion.allocations.map((allocation, index) => (
+                        <tr key={allocation.lotId}>
+                          <td>{index + 1}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              onClick={() => navigate(`/estoque/lotes/${allocation.lotId}`)}
+                            >
+                              <span className="code">{allocation.lotCode}</span>
+                            </button>
+                            {index === 0 && (
+                              <div className="field__hint">
+                                {suggestion.strategy === "FIFO"
+                                  ? "Recomendado — recebido primeiro"
+                                  : "Recomendado — vence primeiro"}
+                              </div>
+                            )}
+                          </td>
+                          <td>{formatDate(allocation.expiryDate)}</td>
+                          <td>{allocation.location ?? "—"}</td>
+                          <td>
+                            {allocation.availableQuantity} {detail.unitCode}
+                          </td>
+                          <td>
+                            {allocation.suggestedQuantity} {detail.unitCode}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {suggestion.strategy === "NO_LOT" && (
+                <p className="field__hint">Item sem controle de lote — não há alocação por lote.</p>
+              )}
+            </div>
+          )}
+        </FormSection>
       </div>
 
       {adjustOpen && (

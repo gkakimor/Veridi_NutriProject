@@ -1,0 +1,129 @@
+import { Prisma } from "@prisma/client";
+import type { AllocationSuggestionDTO, AllocationStrategy, LotAllocationDTO } from "@veridi/shared";
+import { getPrisma } from "../../db/prisma.js";
+import { getOnHand, getOnHandByLots, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
+import { ItemNotFoundError } from "./inventory.errors.js";
+
+/**
+ * `receivedAt` real do lote vem do Receipt (via ReceiptLine), nao de
+ * `Lot.createdAt` — a data de negocio pode ser retroativa em relacao ao
+ * momento em que a linha foi gravada. Fallback para `createdAt` cobre o
+ * caso defensivo de um lote sem ReceiptLine.
+ */
+const lotWithReceivedAtInclude = {
+  receiptLine: { include: { receipt: true } },
+} as const;
+
+type LotWithReceivedAt = Prisma.LotGetPayload<{ include: typeof lotWithReceivedAtInclude }>;
+
+function receivedAtOf(lot: LotWithReceivedAt): Date {
+  return lot.receiptLine?.receipt.receivedAt ?? lot.createdAt;
+}
+
+/**
+ * Sugestao de alocacao de lotes — FEFO (validade) para itens com
+ * `controlsExpiry`, FIFO (recebimento mais antigo) como fallback para
+ * itens com `controlsLot` sem validade, `NO_LOT` quando o item nao
+ * controla lote. Nunca reserva/baixa estoque/cria InventoryMovement —
+ * puro calculo sob demanda, sempre a partir das mesmas regras de
+ * disponibilidade do ledger (nunca uma segunda interpretacao de
+ * On Hand/Available/elegibilidade de lote).
+ */
+export async function getAllocationSuggestion(
+  itemId: string,
+  requiredQuantity: string,
+): Promise<AllocationSuggestionDTO> {
+  const prisma = getPrisma();
+  const item = await prisma.item.findUnique({ where: { id: itemId } });
+  if (!item) throw new ItemNotFoundError(itemId);
+
+  const required = new Prisma.Decimal(requiredQuantity);
+
+  if (!item.controlsLot) {
+    const onHand = await getOnHand(prisma, { itemId: item.id });
+    const available = onHand.greaterThan(0) ? onHand : new Prisma.Decimal(0);
+    const allocated = Prisma.Decimal.min(required, available);
+    const shortage = Prisma.Decimal.max(required.minus(allocated), 0);
+
+    return {
+      itemId: item.id,
+      itemCode: item.code,
+      itemName: item.name,
+      unitCode: item.unitCode,
+      strategy: "NO_LOT",
+      requiredQuantity: required.toString(),
+      availableQuantity: available.toString(),
+      allocatedQuantity: allocated.toString(),
+      shortageQuantity: shortage.toString(),
+      allocations: [],
+    };
+  }
+
+  const strategy: AllocationStrategy = item.controlsExpiry ? "FEFO" : "FIFO";
+
+  const lots = await prisma.lot.findMany({
+    where: { itemId: item.id },
+    include: lotWithReceivedAtInclude,
+  });
+  const onHandByLot = await getOnHandByLots(
+    prisma,
+    lots.map((lot) => lot.id),
+  );
+
+  const eligible = lots
+    .map((lot) => ({ lot, onHand: onHandByLot.get(lot.id) ?? new Prisma.Decimal(0) }))
+    .filter(({ lot, onHand }) => isLotAvailableForUse(lot) && onHand.greaterThan(0));
+
+  // Determinismo: mesma comparacao para FEFO (validade) e FIFO
+  // (recebimento) — desempate sempre por recebimento mais antigo e depois
+  // por codigo do lote, nunca aleatorio entre requisicoes.
+  eligible.sort((a, b) => {
+    if (strategy === "FEFO") {
+      const expiryA = a.lot.expiryDate?.getTime() ?? Number.POSITIVE_INFINITY;
+      const expiryB = b.lot.expiryDate?.getTime() ?? Number.POSITIVE_INFINITY;
+      if (expiryA !== expiryB) return expiryA - expiryB;
+    }
+    const receivedA = receivedAtOf(a.lot).getTime();
+    const receivedB = receivedAtOf(b.lot).getTime();
+    if (receivedA !== receivedB) return receivedA - receivedB;
+    return a.lot.code.localeCompare(b.lot.code);
+  });
+
+  const availableQuantity = eligible.reduce((sum, entry) => sum.plus(entry.onHand), new Prisma.Decimal(0));
+
+  let remaining = required;
+  const allocations: LotAllocationDTO[] = [];
+  for (const entry of eligible) {
+    if (remaining.lessThanOrEqualTo(0)) break;
+
+    const suggested = Prisma.Decimal.min(remaining, entry.onHand);
+    if (suggested.lessThanOrEqualTo(0)) continue;
+
+    allocations.push({
+      lotId: entry.lot.id,
+      lotCode: entry.lot.code,
+      supplierLot: entry.lot.supplierLot,
+      expiryDate: entry.lot.expiryDate ? entry.lot.expiryDate.toISOString() : null,
+      location: entry.lot.location,
+      availableQuantity: entry.onHand.toString(),
+      suggestedQuantity: suggested.toString(),
+    });
+    remaining = remaining.minus(suggested);
+  }
+
+  const allocatedQuantity = required.minus(remaining);
+  const shortageQuantity = Prisma.Decimal.max(remaining, 0);
+
+  return {
+    itemId: item.id,
+    itemCode: item.code,
+    itemName: item.name,
+    unitCode: item.unitCode,
+    strategy,
+    requiredQuantity: required.toString(),
+    availableQuantity: availableQuantity.toString(),
+    allocatedQuantity: allocatedQuantity.toString(),
+    shortageQuantity: shortageQuantity.toString(),
+    allocations,
+  };
+}

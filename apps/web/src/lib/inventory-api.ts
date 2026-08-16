@@ -1,4 +1,5 @@
 import type {
+  AllocationSuggestionDTO,
   CreateInventoryAdjustmentInput,
   InventoryItemDetailDTO,
   InventoryListResponse,
@@ -79,4 +80,15 @@ export async function createStockCount(input: StockCountInput): Promise<StockCou
     body: JSON.stringify(input),
   });
   return (await parseJsonOrThrow(response)) as StockCountResultDTO;
+}
+
+/** Somente leitura — nunca reserva/baixa estoque, só calcula sob demanda. */
+export async function getAllocationSuggestion(
+  itemId: string,
+  quantity: string,
+): Promise<AllocationSuggestionDTO> {
+  const response = await fetch(
+    `${API_URL}/inventory/${itemId}/allocation-suggestion?quantity=${encodeURIComponent(quantity)}`,
+  );
+  return (await parseJsonOrThrow(response)) as AllocationSuggestionDTO;
 }

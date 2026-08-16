@@ -33,7 +33,12 @@ export const stockCountSchema = z.object({
   reason: z.string().trim().min(3).optional(),
 });
 
+export const allocationSuggestionQuerySchema = z.object({
+  quantity: decimalStringSchema(),
+});
+
 export type ListInventoryQuery = z.infer<typeof listInventoryQuerySchema>;
 export type ListInventoryMovementsQuery = z.infer<typeof listInventoryMovementsQuerySchema>;
 export type CreateInventoryAdjustmentInput = z.infer<typeof createInventoryAdjustmentSchema>;
 export type StockCountInput = z.infer<typeof stockCountSchema>;
+export type AllocationSuggestionQuery = z.infer<typeof allocationSuggestionQuerySchema>;
