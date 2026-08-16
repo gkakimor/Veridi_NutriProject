@@ -971,11 +971,13 @@ These should not stop early development until their feature is reached:
 
 ---
 
-# 29. Customer Orders & Fulfillment Plan (Block D — future, not started)
+# 29. Customer Orders & Fulfillment Plan (Block D)
 
-Registered from Product Ownership brainstorm. No schema defined; no
-implementation started. Depends on Inventory, Reservation, Formulations,
-Production Order and Finished Product being complete first.
+Customer Order, Fulfillment Plan, Finished-Product Reservation and
+Suggested Production Orders (22-25) are implemented as of Delivery 16 —
+see "Durable rules confirmed at implementation" below. Purchase
+suggestion (26), Shipping (27) and Invoicing (28) remain future/not
+started.
 
 ## Customer Order
 Launched internally — there is no customer-facing portal in MVP. Will
@@ -1022,6 +1024,62 @@ material/packaging needs. The Fulfillment Plan should eventually show,
 per material: Required, Available, Reserved, On Order, Shortage. "On
 Order" stays informative — material not yet received never counts as
 available for production release (consistent with section 14/20).
+
+## Durable rules confirmed at implementation (§22-25, Delivery 16)
+
+- A Customer Order is commercial demand only — it is never a source of
+  truth for stock quantities. `DRAFT` is freely editable; `CONFIRMED`
+  freezes customer/products/quantities via a historical snapshot (same
+  pattern as Purchase Order) and is the only status from which the
+  Fulfillment Plan becomes available; `IN_FULFILLMENT` happens only when
+  a Plan is applied. No free-form status change.
+- The Fulfillment Plan is pure analysis/projection — reading it (`GET
+  .../fulfillment-plan`) never persists a reservation or an OP. Default
+  proposal is stock-first: `reserve = min(ordered, available)`,
+  `produce = ordered - reserve`. The user may rebalance reserve/produce
+  per line before applying, as long as they sum to exactly the ordered
+  quantity — this delivery requires 100% coverage between the two, no
+  partial plan.
+- Applying the Plan (`POST .../apply-fulfillment-plan`) always
+  revalidates availability at that moment under lock — it never trusts a
+  client-supplied `available`/`reserve` number as truth. It is fully
+  transactional: reservation and generated OPs succeed or fail together,
+  never partially applied.
+- Finished-product reservation lives in its own context
+  (`CustomerOrderReservation`/`Line`) — never reuses `MaterialReservation`
+  (which stays raw-material/packaging of a Production Order only). Both
+  feed the same central `Reserved` calculation, never a parallel
+  calculation per module; finished-goods reservation never creates an
+  `InventoryMovement`. Lot allocation for the reservation reuses the
+  exact same FEFO/FIFO allocation service used everywhere else in the
+  system — no second, finished-goods-only allocation service.
+  Blocked/awaiting-release/expired/zero-balance lots are excluded exactly
+  like any other reservation, and "On Order" never counts toward
+  reservable availability.
+  A deficit generates at most one DRAFT `ProductionOrder` per Customer
+  Order line (never more, never auto-split), with `origin:
+  CUSTOMER_ORDER` and a link back to both the order and the specific
+  line. It is created even when the Product has no ACTIVE Formulation
+  version — shown as a visible pending item rather than silently blocked
+  or silently skipped. The generated OP never auto-PLANs or
+  auto-RELEASEs; it follows the exact same manual lifecycle as any other
+  OP, and never reserves raw material by itself (raw-material reservation
+  still only happens when the user releases the OP through the normal
+  flow).
+  Material impact simulation for the Plan reuses the exact same
+  formulation/basis-quantity/UOM-conversion math used to compute a real
+  OP's Requirements (extracted into a shared `computeFormulationRequirements`
+  function) — never a second implementation of that math. The same
+  material appearing in more than one Product's suggested production
+  within the same order is aggregated into a single row. The Plan never
+  reserves raw material — it only shows the impact so the user can judge
+  feasibility before applying.
+- `IN_FULFILLMENT` cannot be cancelled through the simple cancel flow
+  while an `ACTIVE` finished-goods reservation or a generated
+  `ProductionOrder` still exists — operational commitments already exist
+  and must be resolved first; nothing is auto-released or auto-cancelled
+  in cascade. A full operational cancellation/replanning flow is future
+  work.
 
 ## Purchase suggestion
 When raw material/packaging is short, the system may generate a purchase

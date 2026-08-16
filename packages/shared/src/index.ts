@@ -22,3 +22,5 @@ export * from "./allocation.js";
 export * from "./formulations.js";
 export * from "./production-orders.js";
 export * from "./traceability.js";
+export * from "./customer-orders.js";
+export * from "./fulfillment-plan.js";

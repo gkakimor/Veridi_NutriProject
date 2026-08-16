@@ -26,6 +26,8 @@ import { FormulationVersionPage } from "./pages/formulations/FormulationVersionP
 import { ProductionOrdersPage } from "./pages/production-orders/ProductionOrdersPage";
 import { ProductionOrderPage } from "./pages/production-orders/ProductionOrderPage";
 import { PickingConsumptionPage } from "./pages/production-orders/PickingConsumptionPage";
+import { CustomerOrdersPage } from "./pages/customer-orders/CustomerOrdersPage";
+import { CustomerOrderPage } from "./pages/customer-orders/CustomerOrderPage";
 
 export function App() {
   return (
@@ -63,6 +65,9 @@ export function App() {
           <Route path="/producao/ordens/nova" element={<ProductionOrderPage />} />
           <Route path="/producao/ordens/:id" element={<ProductionOrderPage />} />
           <Route path="/producao/picking" element={<PickingConsumptionPage />} />
+          <Route path="/comercial/pedidos" element={<CustomerOrdersPage />} />
+          <Route path="/comercial/pedidos/novo" element={<CustomerOrderPage />} />
+          <Route path="/comercial/pedidos/:id" element={<CustomerOrderPage />} />
 
           {navItems
             .filter((item) => !item.implemented)

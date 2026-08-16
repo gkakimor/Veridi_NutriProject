@@ -82,22 +82,33 @@ export async function getConsumedByReservationLines(
 }
 
 /**
- * Reserved por item — soma das MaterialReservationLine de reservas ACTIVE,
- * excluindo linhas substituidas (`releasedAt` preenchido — ver Picking) e
- * descontando o que ja foi efetivamente consumido
- * (`quantity - consumido`, nunca negativo). RELEASED (reserva liberada,
- * ex.: cancelamento de OP RELEASED) nunca conta. Nunca uma segunda
- * quantidade fora da tabela de reserva/consumo.
+ * Reserved por item — soma de DOIS compromissos, nunca um calculo paralelo
+ * por modulo:
+ * 1. MaterialReservationLine de reservas ACTIVE (materia-prima/embalagem de
+ *    OP), excluindo linhas substituidas (`releasedAt` preenchido — ver
+ *    Picking) e descontando o que ja foi efetivamente consumido
+ *    (`quantity - consumido`, nunca negativo);
+ * 2. CustomerOrderReservationLine de reservas ACTIVE (produto acabado de
+ *    Pedido do Cliente) — quantidade cheia, sem desconto de consumo (nao ha
+ *    conceito de consumo parcial de PA reservado nesta fase).
+ * RELEASED (reserva liberada) nunca conta em nenhum dos dois. Nunca uma
+ * segunda quantidade fora das tabelas de reserva/consumo.
  */
 export async function getReservedByItems(
   prisma: PrismaOrTx,
   itemIds: string[],
 ): Promise<Map<string, Prisma.Decimal>> {
   if (itemIds.length === 0) return new Map();
-  const lines = await prisma.materialReservationLine.findMany({
-    where: { itemId: { in: itemIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
-    select: { id: true, itemId: true, quantity: true },
-  });
+  const [lines, customerOrderLines] = await Promise.all([
+    prisma.materialReservationLine.findMany({
+      where: { itemId: { in: itemIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
+      select: { id: true, itemId: true, quantity: true },
+    }),
+    prisma.customerOrderReservationLine.findMany({
+      where: { itemId: { in: itemIds }, reservation: { status: "ACTIVE" } },
+      select: { itemId: true, quantity: true },
+    }),
+  ]);
   const consumedByLine = await getConsumedByReservationLines(
     prisma,
     lines.map((line) => line.id),
@@ -110,19 +121,29 @@ export async function getReservedByItems(
     const current = map.get(line.itemId) ?? new Prisma.Decimal(0);
     map.set(line.itemId, current.plus(remaining));
   }
+  for (const line of customerOrderLines) {
+    const current = map.get(line.itemId) ?? new Prisma.Decimal(0);
+    map.set(line.itemId, current.plus(line.quantity));
+  }
   return map;
 }
 
-/** Versao por lote de `getReservedByItems` — mesma regra (ACTIVE, nao substituida, liquida de consumo). */
+/** Versao por lote de `getReservedByItems` — mesma regra (os dois compromissos, ACTIVE, liquida de consumo so para MP). */
 export async function getReservedByLots(
   prisma: PrismaOrTx,
   lotIds: string[],
 ): Promise<Map<string, Prisma.Decimal>> {
   if (lotIds.length === 0) return new Map();
-  const lines = await prisma.materialReservationLine.findMany({
-    where: { lotId: { in: lotIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
-    select: { id: true, lotId: true, quantity: true },
-  });
+  const [lines, customerOrderLines] = await Promise.all([
+    prisma.materialReservationLine.findMany({
+      where: { lotId: { in: lotIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
+      select: { id: true, lotId: true, quantity: true },
+    }),
+    prisma.customerOrderReservationLine.findMany({
+      where: { lotId: { in: lotIds }, reservation: { status: "ACTIVE" } },
+      select: { lotId: true, quantity: true },
+    }),
+  ]);
   const consumedByLine = await getConsumedByReservationLines(
     prisma,
     lines.map((line) => line.id),
@@ -135,6 +156,11 @@ export async function getReservedByLots(
     const remaining = Prisma.Decimal.max(line.quantity.minus(consumed), 0);
     const current = map.get(line.lotId) ?? new Prisma.Decimal(0);
     map.set(line.lotId, current.plus(remaining));
+  }
+  for (const line of customerOrderLines) {
+    if (!line.lotId) continue;
+    const current = map.get(line.lotId) ?? new Prisma.Decimal(0);
+    map.set(line.lotId, current.plus(line.quantity));
   }
   return map;
 }

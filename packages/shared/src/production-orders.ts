@@ -39,12 +39,12 @@ export const PRODUCTION_ORDER_STATUS_LABELS: Record<ProductionOrderStatus, strin
   CANCELLED: "Cancelada",
 };
 
-/** CUSTOMER_ORDER fica para o Bloco D — não criar referência fake agora. */
-export type ProductionOrderOrigin = "MANUAL" | "STOCK_PRODUCTION";
+export type ProductionOrderOrigin = "MANUAL" | "STOCK_PRODUCTION" | "CUSTOMER_ORDER";
 
 export const PRODUCTION_ORDER_ORIGIN_LABELS: Record<ProductionOrderOrigin, string> = {
   MANUAL: "Manual",
   STOCK_PRODUCTION: "Produção para Estoque",
+  CUSTOMER_ORDER: "Pedido do Cliente",
 };
 
 /** Estado visual derivado — nunca persistido como status da OP. */
@@ -206,6 +206,10 @@ export interface ProductionOrderDTO {
   outputs: ProductionOutputDTO[];
   /** Lotes de produto acabado desta OP que ainda podem receber novo Output — para o seletor "Lote existente desta OP". */
   eligibleFinishedLots: EligibleFinishedLotDTO[];
+  /** Preenchidos só quando `origin = "CUSTOMER_ORDER"` — a OP nasce DRAFT e segue o fluxo normal (nunca pula PLAN/RELEASE). */
+  customerOrderId: string | null;
+  customerOrderCode: string | null;
+  customerOrderLineId: string | null;
   /** Preenchidos em IN_PRODUCTION → COMPLETED. */
   completedAt: string | null;
   completedBy: string | null;

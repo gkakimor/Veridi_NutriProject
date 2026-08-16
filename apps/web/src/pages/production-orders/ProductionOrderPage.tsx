@@ -7,7 +7,7 @@ import type {
   ProductionOrderStatus,
   ProductionOutputDestination,
 } from "@veridi/shared";
-import { PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
+import { PRODUCTION_ORDER_ORIGIN_LABELS, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
 import {
   cancelProductionOrder,
   completeProductionOrder,
@@ -503,6 +503,29 @@ export function ProductionOrderPage() {
             {productionOrder.cancelReason && (
               <p className="field__hint">Motivo: {productionOrder.cancelReason}</p>
             )}
+          </FormSection>
+        )}
+
+        {productionOrder && productionOrder.origin !== "MANUAL" && (
+          <FormSection title="Origem">
+            <dl className="definition-list">
+              <dt>Origem</dt>
+              <dd>{PRODUCTION_ORDER_ORIGIN_LABELS[productionOrder.origin]}</dd>
+              {productionOrder.customerOrderId && (
+                <>
+                  <dt>Pedido</dt>
+                  <dd>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => navigate(`/comercial/pedidos/${productionOrder.customerOrderId}`)}
+                    >
+                      {productionOrder.customerOrderCode}
+                    </button>
+                  </dd>
+                </>
+              )}
+            </dl>
           </FormSection>
         )}
 

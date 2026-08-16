@@ -90,6 +90,23 @@ enum ProductionOrderStatus {
 enum ProductionOrderOrigin {
   MANUAL
   STOCK_PRODUCTION
+  CUSTOMER_ORDER
+}
+
+/// DRAFT editavel; CONFIRMED congela cliente/produtos/quantidades (snapshot)
+/// e habilita o Plano de Atendimento; IN_FULFILLMENT ocorre quando o Plano e
+/// aplicado (reserva de PA + OPs DRAFT geradas). READY/PARTIALLY_SHIPPED/
+/// SHIPPED ficam para expedicao futura, nao alcancaveis ainda.
+enum CustomerOrderStatus {
+  DRAFT
+  CONFIRMED
+  IN_FULFILLMENT
+  CANCELLED
+}
+
+enum CustomerOrderReservationStatus {
+  ACTIVE
+  RELEASED
 }
 
 /// ACTIVE conta em Reserved; RELEASED (a reserva foi liberada — ex.:
@@ -159,6 +176,7 @@ model Item {
   productionOrdersAsFinishedItem ProductionOrder[] @relation("ProductionOrderFinishedItem")
   materialReservationLines MaterialReservationLine[]
   productionConsumptions ProductionConsumption[]
+  customerOrderReservationLines CustomerOrderReservationLine[]
 
   @@index([type])
   @@index([active])
@@ -226,6 +244,7 @@ model Customer {
   updatedAt DateTime @updatedAt
 
   products Product[]
+  customerOrders CustomerOrder[]
 
   @@index([active])
   @@map("customers")
@@ -267,6 +286,8 @@ model Product {
 
   formulationVersions FormulationVersion[]
   productionOrders    ProductionOrder[]
+  customerOrderLines  CustomerOrderLine[]
+  customerOrderReservationLines CustomerOrderReservationLine[]
 
   @@index([active])
   @@index([customerId])
@@ -571,6 +592,7 @@ model Lot {
   materialReservationLines MaterialReservationLine[]
   productionConsumptions ProductionConsumption[]
   productionOutputs ProductionOutput[]
+  customerOrderReservationLines CustomerOrderReservationLine[]
 
   @@index([itemId])
   @@index([supplierId])
@@ -664,6 +686,16 @@ model ProductionOrder {
   status ProductionOrderStatus @default(DRAFT)
   origin ProductionOrderOrigin @default(MANUAL)
 
+  /// Preenchidos so quando origin = CUSTOMER_ORDER — a OP nasce DRAFT e
+  /// segue o fluxo normal (PLAN/RELEASE manuais), nunca pula etapa por
+  /// causa da origem. customerOrderLineId identifica a linha especifica
+  /// atendida (uma OP por linha nesta fase).
+  customerOrderId String?
+  customerOrder   CustomerOrder? @relation(fields: [customerOrderId], references: [id])
+
+  customerOrderLineId String?
+  customerOrderLine   CustomerOrderLine? @relation(fields: [customerOrderLineId], references: [id])
+
   notes String?
 
   /// Snapshot historico — preenchido so ao planejar (PLANNED). Enquanto
@@ -727,6 +759,7 @@ model ProductionOrder {
 
   @@index([status])
   @@index([productId])
+  @@index([customerOrderId])
   @@map("production_orders")
 }
 
@@ -921,4 +954,144 @@ model ProductionOutput {
   @@index([productionOrderId])
   @@index([lotId])
   @@map("production_outputs")
+}
+
+/// Demanda comercial do Cliente — nunca fonte de verdade de estoque/producao
+/// por si so. DRAFT livremente editavel; CONFIRMED congela cliente/produtos/
+/// quantidades via snapshot (mesmo padrao de Ordem de Compra) e habilita o
+/// Plano de Atendimento; IN_FULFILLMENT ocorre quando o Plano e aplicado
+/// (reserva de Produto Acabado + OPs DRAFT geradas). Sem exclusao fisica.
+model CustomerOrder {
+  id String @id @default(uuid())
+
+  /// Codigo interno gerado pelo backend (sequence dedicada, PED-000001).
+  /// Imutavel apos a criacao.
+  code String @unique
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  orderDate             DateTime  @default(now())
+  requestedDeliveryDate DateTime?
+
+  status CustomerOrderStatus @default(DRAFT)
+  notes  String?
+
+  /// Snapshot historico — preenchido so ao confirmar. Enquanto DRAFT, o
+  /// service le Customer ao vivo via join (mesmo padrao de OP/OC).
+  customerCode      String?
+  customerName      String?
+  customerTradeName String?
+  customerCnpj      String?
+
+  confirmedAt DateTime?
+  confirmedBy String?
+
+  cancelledAt  DateTime?
+  cancelledBy  String?
+  cancelReason String?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines            CustomerOrderLine[]
+  reservations     CustomerOrderReservation[]
+  productionOrders ProductionOrder[]
+
+  @@index([status])
+  @@index([customerId])
+  @@map("customer_orders")
+}
+
+/// Linha do Pedido — um Product por Pedido (garantido no banco). DRAFT:
+/// substituida em bloco (delete+recreate) a cada save, mesmo padrao de
+/// Ordem de Compra/Formulacao. CONFIRMED: congela via snapshot, imutavel.
+model CustomerOrderLine {
+  id String @id @default(uuid())
+
+  customerOrderId String
+  customerOrder   CustomerOrder @relation(fields: [customerOrderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  orderedQuantity Decimal @db.Decimal(18, 6)
+  unitCode        String
+
+  /// Ordem de exibicao estavel.
+  position Int
+
+  /// Snapshot historico — preenchido so ao confirmar o Pedido.
+  productCode      String?
+  productName      String?
+  finishedItemId   String?
+  finishedItemCode String?
+  finishedItemName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reservationLines CustomerOrderReservationLine[]
+  productionOrders ProductionOrder[]
+
+  @@unique([customerOrderId, productId])
+  @@map("customer_order_lines")
+}
+
+/// Reserva de PRODUTO ACABADO por Pedido — contexto proprio, nunca reaproveita
+/// MaterialReservation (materia-prima/embalagem de OP). Criada so ao aplicar
+/// o Plano de Atendimento. Nunca cria InventoryMovement.
+model CustomerOrderReservation {
+  id String @id @default(uuid())
+
+  customerOrderId String
+  customerOrder   CustomerOrder @relation(fields: [customerOrderId], references: [id])
+
+  status CustomerOrderReservationStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  releasedAt    DateTime?
+  releasedBy    String?
+  releaseReason String?
+
+  lines CustomerOrderReservationLine[]
+
+  @@index([customerOrderId])
+  @@index([status])
+  @@map("customer_order_reservations")
+}
+
+/// Alocacao oficial por item/lote de produto acabado de uma reserva de
+/// Pedido — soma-se a `MaterialReservationLine` no calculo central de
+/// Reserved em `inventory-ledger.ts` (nunca um segundo calculo paralelo).
+/// Lote nulo so quando o Finished Product Item nao controla lote (mesmo
+/// padrao de MaterialReservationLine).
+model CustomerOrderReservationLine {
+  id String @id @default(uuid())
+
+  reservationId String
+  reservation   CustomerOrderReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  customerOrderLineId String
+  customerOrderLine   CustomerOrderLine @relation(fields: [customerOrderLineId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  quantity Decimal @db.Decimal(18, 6)
+
+  createdAt DateTime @default(now())
+
+  @@index([itemId])
+  @@index([lotId])
+  @@map("customer_order_reservation_lines")
 }

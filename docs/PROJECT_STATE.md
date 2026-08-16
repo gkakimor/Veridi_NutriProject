@@ -25,6 +25,7 @@ FAST MVP.
 **Delivery 13 — Material Reservation + Release da Ordem de Produção: concluído.**
 **Delivery 14 — Picking + Consumo Real de Materiais: concluído.**
 **Delivery 15 — Produção Parcial + Produto Acabado + Rastreabilidade: concluído.**
+**Delivery 16 — Pedido do Cliente + Plano de Atendimento (Bloco D): concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -40,8 +41,10 @@ um terceiro padrão: página fora do `AppShell`, sem topbar/sidebar. Ver
 Bloco C completo (Formulações + Versionamento + OP + Requirement
 Calculation + Reservation + QR Picking + Actual Consumption + Partial
 Production/conclusão da OP + Finished Product + Rastreabilidade
-bidirecional). Só falta Usuários (Bloco A) dentro do escopo MVP travado;
-Bloco D (Pedido do Cliente/Atendimento) é escopo ampliado, não iniciado.
+bidirecional). Bloco D — Pedido do Cliente/Plano de Atendimento/Reserva de
+Produto Acabado/Geração de OPs Sugeridas (22-25) — também completo. Só
+falta Usuários (Bloco A) dentro do escopo MVP travado; Sugestão de
+Compra/Expedição/Faturamento (26-28) ainda não iniciados.
 
 ## Stack instalada
 
@@ -70,8 +73,12 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  DRAFT) / Ordens de Produção (lista + documento
                  DRAFT/PLANNED/RELEASED/IN_PRODUCTION/COMPLETED/CANCELLED,
                  seções Materiais Reservados/Picking/Consumo Real/Produção
-                 [apontamentos parciais + conclusão]) / Picking / Consumo
-                 (lista RELEASED/IN_PRODUCTION)
+                 [apontamentos parciais + conclusão]/Origem [Pedido do
+                 Cliente, quando aplicável]) / Picking / Consumo (lista
+                 RELEASED/IN_PRODUCTION), Comercial > Pedidos (lista +
+                 documento DRAFT/CONFIRMED/IN_FULFILLMENT/CANCELLED, seções
+                 Produtos/Plano de Atendimento [editável antes de aplicar]/
+                 Reservas de Produto Acabado/OPs Geradas)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders,
                  /receipts, /lots (+ /lots/lookup, /lots/:id/traceability),
@@ -81,7 +88,9 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /products/:id/formulations, /formulation-versions,
                  /production-orders (+ /plan, /release, /cancel,
                  /picking/:lineId/confirm, /picking/:lineId/substitute,
-                 /consumptions, /outputs, /complete)
+                 /consumptions, /outputs, /complete), /customer-orders (+
+                 /confirm, /cancel, /fulfillment-plan,
+                 /apply-fulfillment-plan)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder,
                  Receipt, Lot [origin RECEIPT/PRODUCTION, businessLotNumber,
@@ -90,10 +99,14 @@ packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  FINISHED_GOOD_PRODUCTION], AllocationSuggestion,
                  FormulationVersion/Component, ProductionOrder/Requirement
                  [outputs, eligibleFinishedLots, producedQuantity/
-                 remainingQuantity, completedAt/By/Reason],
+                 remainingQuantity, completedAt/By/Reason, origin inclui
+                 CUSTOMER_ORDER, customerOrderId/customerOrderLineId],
                  MaterialReservation/Line [Picking/substituição],
                  ProductionConsumption, ProductionOutput, LotTraceabilityDTO
-                 [FINISHED_GOOD backward / RAW_MATERIAL forward], CNPJ, UFs)
+                 [FINISHED_GOOD backward / RAW_MATERIAL forward],
+                 CustomerOrder/Line [snapshot no CONFIRM],
+                 CustomerOrderReservation/Line [Produto Acabado, FEFO],
+                 FulfillmentPlanDTO/MaterialImpactRowDTO, CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -1712,6 +1725,164 @@ quebrado pelas mudanças de schema/DTO).
 
 ---
 
+# Delivery 16 — Pedido do Cliente + Plano de Atendimento (Bloco D)
+
+Conecta demanda comercial à operação: Pedido do Cliente → Plano de
+Atendimento (análise) → reserva de Produto Acabado + OP DRAFT para o
+déficit. Fecha o Bloco D core (22-25). Validada só em desktop web — sem
+ferramenta de browser disponível nesta sessão, ver "Pendente".
+
+## Modelagem — CustomerOrder/Line + CustomerOrderReservation/Line
+
+- `CustomerOrder`: `code` (sequence `customer_order_code_seq`, prefixo
+  `PED`), `customerId`, `orderDate`, `requestedDeliveryDate?`, `status`
+  (`DRAFT`/`CONFIRMED`/`IN_FULFILLMENT`/`CANCELLED` — `READY`/
+  `PARTIALLY_SHIPPED`/`SHIPPED` ainda não modelados), snapshot histórico
+  nullable do cliente (`customerCode/Name/TradeName/Cnpj`, preenchido só
+  no CONFIRM), auditoria de confirmação/cancelamento.
+- `CustomerOrderLine`: `productId`, `orderedQuantity`, `unitCode` (sempre
+  derivado do Finished Product Item — nunca aceito do cliente),
+  `position`, snapshot histórico nullable (`productCode/Name`,
+  `finishedItemId/Code/Name`). `@@unique([customerOrderId, productId])` —
+  mesmo Product não repete no pedido, garantido no banco.
+- `CustomerOrderReservation`/`CustomerOrderReservationLine`: contexto
+  próprio de reserva de PRODUTO ACABADO — nunca reaproveita
+  `MaterialReservation` (matéria-prima/embalagem de OP). Linha aponta
+  `itemId`/`lotId?` (null só quando o Finished Item não controla lote,
+  mesmo padrão de `MaterialReservationLine`). Nunca cria
+  `InventoryMovement`. Histórica: nunca deletada, mesmo `RELEASED`.
+- `ProductionOrder` ganhou `customerOrderId?`/`customerOrderLineId?` e o
+  enum `ProductionOrderOrigin` ganhou `CUSTOMER_ORDER` (OPs antigas
+  seguem `MANUAL` via default, sem migration de dados). Migration
+  `20260825090000_customer_orders`.
+
+## Reserved global — um único cálculo, duas fontes
+
+`getReservedByItems`/`getReservedByLots` (`inventory-ledger.ts`) passaram
+a somar **dois** compromissos por Item/Lote: `MaterialReservationLine`
+ACTIVE (matéria-prima/embalagem, líquido de consumo) **e**
+`CustomerOrderReservationLine` ACTIVE (produto acabado, quantidade cheia
+— não há consumo parcial de PA reservado nesta fase). Nenhum módulo
+recalcula Reserved em paralelo — Requirements de OP, FEFO, Lote,
+Inventário e o próprio Plano de Atendimento leem exatamente a mesma
+função. `Available = On Hand - Reserved` continua a mesma regra de
+sempre.
+
+## Plano de Atendimento — análise, nunca fonte de verdade
+
+`GET /customer-orders/:id/fulfillment-plan` — só para pedidos
+`CONFIRMED`, nunca persiste nada. Por linha: `Available` real (ledger) →
+`suggestedReserve = min(ordered, available)`,
+`suggestedProduce = ordered - suggestedReserve` (estoque primeiro).
+`situation` é `ESTOQUE_SUFICIENTE`/`REQUER_PRODUCAO` (há Formulação
+ACTIVE)/`SEM_FORMULACAO_ATIVA` (sem — o Plano ainda mostra o número, só
+não persiste OP sem produto revisado). Impacto de materiais agrega a
+mesma matéria-prima entre Products diferentes do pedido (ex.: 30 kg +
+20 kg de Vitamina C = 50 kg) usando o **mesmo** cálculo de requirement de
+OP — `computeFormulationRequirements` foi extraído de
+`production-orders.service.ts` para `requirement-calc.ts` justamente para
+ser reutilizado aqui sem duplicar a matemática de formulação/UOM.
+
+## Aplicar o Plano — transacional, FEFO reaproveitado
+
+`POST /customer-orders/:id/apply-fulfillment-plan`: usuário pode ajustar
+Reservar/Produzir por linha (desde que a soma bata exatamente com o
+pedido); backend nunca confia no `available` calculado pelo client —
+recalcula tudo sob lock. Trava a OP/Items envolvidos em ordem
+determinística (mesmo padrão do RELEASE de OP), roda
+`getAllocationSuggestion` (o **mesmo** serviço de FEFO/FIFO já usado por
+Estoque/OP — nenhum `finishedGoodsAllocationService` duplicado) para
+resolver os lotes de cada reserva. Cria no máximo 1
+`CustomerOrderReservation` e no máximo 1 `ProductionOrder` DRAFT por
+linha com déficit (`origin: CUSTOMER_ORDER`, vinculada a
+`customerOrderId`/`customerOrderLineId`, `plannedQuantity` =
+quantidade a produzir escolhida). OP nasce DRAFT mesmo sem Formulação
+ACTIVE (nunca bloqueia a aplicação por isso) — segue o fluxo normal,
+nunca PLAN/RELEASE automático. Pedido vira `IN_FULFILLMENT` só no fim,
+se tudo aplicar; qualquer falha reverte a transação inteira (reserva e
+OPs geradas juntas, nunca parcial).
+
+## Concorrência
+
+Dois Pedidos disputando o mesmo saldo de Produto Acabado: `Item` travado
+em ordem determinística antes de recalcular disponibilidade (idêntico ao
+RELEASE de OP) — só um consegue reservar quando o saldo não cobre os
+dois, nunca `Reserved > On Hand`. Testado com duas requisições `apply`
+simultâneas reais.
+
+## Cancelamento restrito em IN_FULFILLMENT
+
+DRAFT/CONFIRMED cancelam livremente (motivo obrigatório, mesmo padrão de
+sempre). `IN_FULFILLMENT` só cancela se não houver
+`CustomerOrderReservation` ACTIVE nem `ProductionOrder` gerada — como o
+Plano aplicado normalmente sempre gera pelo menos uma das duas, isso
+bloqueia o cancelamento simples na prática (esperado: já existem
+compromissos operacionais). Nunca cancela/libera nada em cascata
+automaticamente — fluxo de cancelamento operacional completo fica para
+evolução futura.
+
+## Backend
+
+Módulo novo `customer-orders/` (mesmo padrão de `picking.*` dentro de
+`production-orders/`): `customer-orders.{errors,schemas,service,routes}.ts`
+(CRUD/confirm/cancel, mesmo esqueleto de `purchase-orders.service.ts`) +
+`fulfillment-plan.{errors,schemas,service,routes}.ts` (análise + aplicar).
+`production-orders.service.ts` ganhou `createDraftProductionOrderInTx`
+(cria OP DRAFT dentro de uma transação já aberta — efeito colateral
+atômico de aplicar o Plano) e passou a incluir `customerOrder` no DTO
+(`customerOrderId`/`customerOrderCode`/`customerOrderLineId`).
+
+## Frontend
+
+Comercial → **Pedidos** (`/comercial/pedidos`, lista Pedido/Cliente/
+Data/Entrega/Produtos/Quantidade/Atendimento/Status) → **documento**
+(`/comercial/pedidos/:id`, mesmo padrão de página própria de Ordem de
+Compra): seção Produtos (DRAFT editável), seção **Plano de Atendimento**
+(só quando `CONFIRMED`, inputs Reservar/Produzir sincronizados — editar
+um recalcula o outro para sempre somar o pedido, impacto de materiais
+abaixo, "Aplicar Plano" desabilitado até toda linha bater a soma), seções
+**Reservas de Produto Acabado** e **OPs Geradas** (após aplicado, links
+navegam para a OP). `ProductionOrderPage` ganhou seção "Origem" (Manual/
+Pedido do Cliente com link de volta) quando `origin !== "MANUAL"`.
+
+## Testes
+
+19 novos testes de API: 9 em `customer-orders.test.ts` (código PED-
+000001, cliente obrigatório/ativo, Product ativo/Finished Item válido/
+quantidade > 0, Product duplicado rejeitado, DRAFT editável, confirmação
+exige linha e congela snapshot, CONFIRMED trava produtos, snapshot
+preservado após inativar cliente/produto, cancelamento com motivo) + 10
+em `fulfillment-plan.test.ts` (matemática default 600/1200/0 disponível,
+Plano nunca alterando estoque/criando OP, impacto de material agregado
+entre Products, ajuste manual aceito/cobertura incompleta/reserva acima
+do disponível rejeitados, FEFO em múltiplos lotes com On Hand/Reserved/
+Available exatos e zero `InventoryMovement` novo, concorrência real de
+dois Pedidos disputando o mesmo saldo, OP gerada com origin/vínculo/
+DRAFT corretos, cancelamento bloqueado em IN_FULFILLMENT). Total da API:
+**280 testes** (261 + 19). Web: 8 testes (regressão, nenhum novo teste de
+componente fica dentro do orçamento desta entrega).
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (280 API + 8 web) — ok em todo o
+monorepo. Regressão completa de Produção/Estoque/Lotes/Reservation
+confirmada (zero teste quebrado pela extensão de `getReservedByItems/
+Lots` e pela extração de `computeFormulationRequirements`).
+
+## Pendente (real)
+
+- **Sem validação visual via Playwright/browser nesta sessão** — mesma
+  limitação de ambiente já registrada na Delivery 15. Fluxo comercial
+  (lista de Pedidos, documento, Plano editável, aplicação, navegação
+  Pedido↔OP) validado só via testes de integração reais (API) e
+  typecheck/build do frontend — não confirma renderização/UX real no
+  navegador.
+- Sugestão de Compra (26), Expedição/Picking de Pedido (27) e Faturamento
+  (28) não iniciados — próximo passo natural do roadmap, aguardando novo
+  handoff.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -1740,6 +1911,15 @@ quebrado pelas mudanças de schema/DTO).
 19. Actual Consumption ✓
 20. Partial Production / Completion ✓
 21. Finished Product ✓
+
+## Block D — Orders & Fulfillment
+22. Customer Order ✓
+23. Availability Analysis / Fulfillment Plan ✓
+24. Finished-Product Reservation ✓
+25. Suggested Production Orders ✓
+26. Purchase Suggestion
+27. Picking / Shipping
+28. Invoicing
 
 ---
 
@@ -1819,6 +1999,29 @@ quebrado pelas mudanças de schema/DTO).
   Requirement/Reservation/FEFO suggestion; a lot only reserved and never
   actually consumed never appears as "used". See
   `docs/PRODUCT_RULES.md` for full detail.
+- Confirmed at implementation (Delivery 16): a Customer Order is commercial
+  demand only — it is never a source of stock truth by itself. The
+  Fulfillment Plan is pure analysis/projection (never persists a reservation
+  or OP on `GET`); applying it always revalidates availability under lock at
+  that moment, never trusting a client-supplied number. Default proposal is
+  stock-first (`reserve = min(ordered, available)`,
+  `produce = ordered - reserve`), but the user can rebalance
+  reserve/produce per line as long as they sum to exactly the ordered
+  quantity. Finished-goods reservation (`CustomerOrderReservationLine`) is
+  a separate context from `MaterialReservation` (raw-material/packaging of
+  an OP) — both feed the same central `Reserved` calculation in
+  `inventory-ledger.ts`, never a parallel calculation per module; finished
+  goods reservation never creates an `InventoryMovement`. A deficit always
+  generates at most one DRAFT `ProductionOrder` per order line
+  (`origin: CUSTOMER_ORDER`, linked back to the order/line) — it never
+  auto-PLANs/RELEASEs, and is created even without an ACTIVE formulation
+  version (shown as a visible pending item, never silently blocked). FEFO
+  allocation for finished goods reuses the exact same
+  `allocation.service.ts` used everywhere else — no second allocation
+  service. Material impact simulation reuses the exact same formulation/UOM
+  math as OP requirement calculation (extracted into
+  `requirement-calc.ts`) — the Plan never reserves raw material, it only
+  shows the impact. See `docs/PRODUCT_RULES.md` for full detail.
 - Formula ACTIVE versions remain historical/immutable.
 - OP keeps exact formula version.
 - Insufficient Available stock blocks OP release by default.
@@ -1958,23 +2161,25 @@ quebrado pelas mudanças de schema/DTO).
 
 # Next recommended implementation
 
-Bloco C está completo (13-21, incluindo Partial Production/Finished
-Product/Rastreabilidade). Resta do Bloco A: **Usuários**. Próximo passo
-natural de negócio é o **Bloco D — Pedidos & Atendimento** (Pedido do
-Cliente, Plano de Atendimento, reserva de PA para pedido, expedição,
-faturamento) — **não iniciado nesta entrega, por instrução explícita do
-handoff**; aguarda novo handoff de Product Ownership antes de começar.
-Reutilizar quando começar: `FullWorkspaceModal` + `components.css` para
-cadastros simples; padrão de página própria (ver Ordem de
-Compra/Recebimento/editor de Formulação/OP) para novos documentos
-transacionais; `apps/api/src/lib/inventory-ledger.ts`
-(`getReservedByItems/Lots`, `getAvailableByItems`,
-`getConsumedByReservationLines`) para qualquer cálculo futuro de saldo;
-`getProducedQuantity`/`ProductionOutput`/`Lot.origin=PRODUCTION` já
-modelam o Produto Acabado físico — base direta para reserva de PA por
-Pedido do Cliente quando o Bloco D existir; `traceability.service.ts` já
-resolve genealogia real, reutilizável para qualquer tela futura de
-rastreabilidade por Pedido/Expedição.
+Blocos A-C completos (exceto Usuários) e Bloco D core (22-25 — Pedido do
+Cliente, Plano de Atendimento, Reserva de Produto Acabado, OPs Sugeridas)
+também completo. Próximo passo natural de negócio é a evolução
+incremental do Bloco D: **Sugestão de Compra (26)**, **Expedição/Picking
+de Pedido (27)** e **Faturamento (28)** — **não iniciados nesta entrega,
+por instrução explícita do handoff**; aguardam novo handoff de Product
+Ownership antes de começar. Reutilizar quando começar: `FullWorkspaceModal`
++ `components.css` para cadastros simples; padrão de página própria (ver
+Ordem de Compra/Recebimento/editor de Formulação/OP/Pedido) para novos
+documentos transacionais; `apps/api/src/lib/inventory-ledger.ts`
+(`getReservedByItems/Lots` já somam MaterialReservation + 
+CustomerOrderReservation, `getAvailableByItems`,
+`getOnOrderByItems`) para qualquer cálculo futuro de saldo — Sugestão de
+Compra precisará comparar `Shortage` (já calculado no Plano) contra
+`On Order`; `CustomerOrderReservation`/`CustomerOrderLine` já modelam o
+compromisso comercial — Expedição consumirá essas reservas fisicamente
+(gerando `InventoryMovement` de saída, ainda não implementado);
+`traceability.service.ts` já resolve genealogia real, reutilizável para
+qualquer tela futura de rastreabilidade por Pedido/Expedição.
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

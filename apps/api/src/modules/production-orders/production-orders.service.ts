@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type {
   Customer,
+  CustomerOrder,
   FormulationVersion,
   Item,
   Lot,
@@ -35,8 +36,8 @@ import {
   getReservedByItems,
   isLotExpired,
 } from "../../lib/inventory-ledger.js";
-import { convertUomDecimal } from "../items/uom.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
+import { computeFormulationRequirements } from "./requirement-calc.js";
 import {
   FormulationVersionNotFoundError,
   FormulationVersionProductMismatchError,
@@ -73,6 +74,7 @@ type POWithRelations = ProductionOrder & {
   consumptions: ConsumptionWithRelations[];
   outputs: OutputWithRelations[];
   finishedItem: Item | null;
+  customerOrder: CustomerOrder | null;
 };
 
 const productionOrderInclude = {
@@ -89,6 +91,7 @@ const productionOrderInclude = {
     orderBy: { createdAt: "asc" as const },
   },
   finishedItem: true,
+  customerOrder: true,
 } as const;
 
 /** Soma dos ProductionOutput da OP — nunca uma segunda coluna manual. Aceita `tx` para uso dentro de transacao. */
@@ -233,33 +236,22 @@ async function regenerateRequirements(
   await tx.productionOrderRequirement.deleteMany({ where: { productionOrderId } });
   if (!formulationVersionId) return;
 
-  const version = await tx.formulationVersion.findUnique({
-    where: { id: formulationVersionId },
-    include: { components: { include: { item: true }, orderBy: { position: "asc" } } },
-  });
-  if (!version || version.components.length === 0) return;
-
-  const units = await tx.unitOfMeasure.findMany();
-  const factor = plannedQuantity.dividedBy(version.basisQuantity);
+  const rows = await computeFormulationRequirements(tx, formulationVersionId, plannedQuantity);
+  if (rows.length === 0) return;
 
   await tx.productionOrderRequirement.createMany({
-    data: version.components.map((component, index) => {
-      const item = component.item;
-      const formulaResult = component.quantity.times(factor);
-      const requiredQuantity = convertUomDecimal(formulaResult, component.unitCode, item.unitCode, units);
-      return {
-        productionOrderId,
-        itemId: item.id,
-        itemCode: item.code,
-        itemName: item.name,
-        itemType: item.type,
-        formulaQuantity: component.quantity,
-        formulaUnitCode: component.unitCode,
-        requiredQuantity,
-        stockUnitCode: item.unitCode,
-        position: index,
-      };
-    }),
+    data: rows.map((row) => ({
+      productionOrderId,
+      itemId: row.itemId,
+      itemCode: row.itemCode,
+      itemName: row.itemName,
+      itemType: row.itemType,
+      formulaQuantity: row.formulaQuantity,
+      formulaUnitCode: row.formulaUnitCode,
+      requiredQuantity: row.requiredQuantity,
+      stockUnitCode: row.stockUnitCode,
+      position: row.position,
+    })),
   });
 }
 
@@ -461,6 +453,9 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     remainingQuantity: remainingQuantity.toString(),
     outputs: order.outputs.map(toOutputDTO),
     eligibleFinishedLots,
+    customerOrderId: order.customerOrderId,
+    customerOrderCode: order.customerOrder ? order.customerOrder.code : null,
+    customerOrderLineId: order.customerOrderLineId,
     completedAt: order.completedAt ? order.completedAt.toISOString() : null,
     completedBy: order.completedBy,
     completionReason: order.completionReason,
@@ -545,6 +540,42 @@ export async function createProductionOrder(
   });
 
   return (await getProductionOrderById(orderId))!;
+}
+
+/**
+ * Cria uma OP DRAFT dentro de uma transacao ja aberta (usado pelo Plano de
+ * Atendimento — a OP e um dos efeitos colaterais atomicos de aplicar o
+ * Plano). Nunca PLAN/RELEASE automatico — a OP nasce DRAFT e segue o fluxo
+ * normal, mesmo comportamento de `createProductionOrder`. `code` ja deve
+ * ter sido gerado (sequence) antes de entrar na transacao.
+ */
+export async function createDraftProductionOrderInTx(
+  tx: Prisma.TransactionClient,
+  params: {
+    code: string;
+    productId: string;
+    outputUnitCode: string;
+    formulationVersionId: string | null;
+    plannedQuantity: Prisma.Decimal;
+    customerOrderId: string;
+    customerOrderLineId: string;
+  },
+): Promise<string> {
+  const created = await tx.productionOrder.create({
+    data: {
+      code: params.code,
+      productId: params.productId,
+      formulationVersionId: params.formulationVersionId,
+      plannedQuantity: params.plannedQuantity,
+      outputUnitCode: params.outputUnitCode,
+      origin: "CUSTOMER_ORDER",
+      customerOrderId: params.customerOrderId,
+      customerOrderLineId: params.customerOrderLineId,
+      createdBy: SYSTEM_ACTOR,
+    },
+  });
+  await regenerateRequirements(tx, created.id, params.formulationVersionId, params.plannedQuantity);
+  return created.id;
 }
 
 export async function updateProductionOrder(
