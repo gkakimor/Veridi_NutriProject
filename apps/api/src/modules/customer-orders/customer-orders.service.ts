@@ -1,8 +1,22 @@
-import type { Customer, CustomerOrder, CustomerOrderLine, CustomerOrderReservation, CustomerOrderReservationLine, Item, Product, ProductionOrder } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type {
+  Customer,
+  CustomerOrder,
+  CustomerOrderLine,
+  CustomerOrderReservation,
+  CustomerOrderReservationLine,
+  Item,
+  Product,
+  ProductionOrder,
+  PurchaseOrder,
+  PurchaseOrderLine,
+  Supplier,
+} from "@prisma/client";
 import type {
   CustomerOrderDTO,
   CustomerOrderGeneratedProductionOrderDTO,
   CustomerOrderLineDTO,
+  CustomerOrderLinkedPurchaseOrderDTO,
   CustomerOrderListResponse,
   CustomerOrderReservationDTO,
   CustomerOrderReservationLineDTO,
@@ -39,11 +53,13 @@ type LineWithProduct = CustomerOrderLine & { product: ProductWithFinishedItem };
 type ReservationLineWithRelations = CustomerOrderReservationLine & { product: Product; item: Item; lot: { code: string; businessLotNumber: string | null } | null };
 type ReservationWithLines = CustomerOrderReservation & { lines: ReservationLineWithRelations[] };
 type GeneratedOrder = ProductionOrder & { product: Product };
+type LinkedPurchaseOrder = PurchaseOrder & { supplier: Supplier; lines: PurchaseOrderLine[] };
 type OrderWithRelations = CustomerOrder & {
   customer: Customer;
   lines: LineWithProduct[];
   reservations: ReservationWithLines[];
   productionOrders: GeneratedOrder[];
+  purchaseOrders: LinkedPurchaseOrder[];
 };
 
 const customerOrderInclude = {
@@ -54,6 +70,7 @@ const customerOrderInclude = {
     orderBy: { createdAt: "asc" as const },
   },
   productionOrders: { include: { product: true }, orderBy: { createdAt: "asc" as const } },
+  purchaseOrders: { include: { supplier: true, lines: true }, orderBy: { createdAt: "asc" as const } },
 } as const;
 
 function toLineDTO(line: LineWithProduct): CustomerOrderLineDTO {
@@ -116,6 +133,24 @@ function toGeneratedProductionOrderDTO(order: GeneratedOrder): CustomerOrderGene
   };
 }
 
+function toLinkedPurchaseOrderDTO(po: LinkedPurchaseOrder): CustomerOrderLinkedPurchaseOrderDTO {
+  let orderTotal: Prisma.Decimal | null = null;
+  for (const line of po.lines) {
+    if (!line.unitPrice) continue;
+    const lineTotal = line.orderedQuantity.times(line.unitPrice);
+    orderTotal = orderTotal ? orderTotal.plus(lineTotal) : lineTotal;
+  }
+  return {
+    id: po.id,
+    code: po.code,
+    supplierId: po.supplierId,
+    supplierName: po.supplier.legalName,
+    lineCount: po.lines.length,
+    status: po.status,
+    orderTotal: orderTotal ? orderTotal.toFixed(2) : null,
+  };
+}
+
 function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
   const usingSnapshot = order.customerCode !== null;
   // No maximo uma reserva e criada por Pedido nesta fase (nunca reaplica o
@@ -137,6 +172,7 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
     lines: order.lines.map(toLineDTO),
     reservation: reservation ? toReservationDTO(reservation) : null,
     generatedProductionOrders: order.productionOrders.map(toGeneratedProductionOrderDTO),
+    linkedPurchaseOrders: order.purchaseOrders.map(toLinkedPurchaseOrderDTO),
     confirmedAt: order.confirmedAt ? order.confirmedAt.toISOString() : null,
     confirmedBy: order.confirmedBy,
     cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,

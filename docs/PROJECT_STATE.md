@@ -26,6 +26,7 @@ FAST MVP.
 **Delivery 14 — Picking + Consumo Real de Materiais: concluído.**
 **Delivery 15 — Produção Parcial + Produto Acabado + Rastreabilidade: concluído.**
 **Delivery 16 — Pedido do Cliente + Plano de Atendimento (Bloco D): concluído.**
+**Delivery 17 — Sugestão de Compra + Geração de OC DRAFT (Bloco D, capacidade 26): concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -42,9 +43,9 @@ Bloco C completo (Formulações + Versionamento + OP + Requirement
 Calculation + Reservation + QR Picking + Actual Consumption + Partial
 Production/conclusão da OP + Finished Product + Rastreabilidade
 bidirecional). Bloco D — Pedido do Cliente/Plano de Atendimento/Reserva de
-Produto Acabado/Geração de OPs Sugeridas (22-25) — também completo. Só
-falta Usuários (Bloco A) dentro do escopo MVP travado; Sugestão de
-Compra/Expedição/Faturamento (26-28) ainda não iniciados.
+Produto Acabado/Geração de OPs Sugeridas/Sugestão de Compra (22-26) —
+também completo. Só falta Usuários (Bloco A) dentro do escopo MVP
+travado; Expedição/Faturamento (27-28) ainda não iniciados.
 
 ## Stack instalada
 
@@ -78,21 +79,26 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  RELEASED/IN_PRODUCTION), Comercial > Pedidos (lista +
                  documento DRAFT/CONFIRMED/IN_FULFILLMENT/CANCELLED, seções
                  Produtos/Plano de Atendimento [editável antes de aplicar]/
-                 Reservas de Produto Acabado/OPs Geradas)
+                 Sugestão de Compra [quantidade+fornecedor editáveis]/
+                 Ordens de Compra Vinculadas/Reservas de Produto Acabado/
+                 OPs Geradas)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
-                 /suppliers, /customers, /products, /purchase-orders,
-                 /receipts, /lots (+ /lots/lookup, /lots/:id/traceability),
-                 /inventory, /inventory-movements, /inventory-adjustments,
-                 /stock-counts, /inventory/:itemId/allocation-suggestion
-                 (FEFO/FIFO, ciente de Reserved), /formulations,
+                 /suppliers, /customers, /products, /purchase-orders (+
+                 /confirm, /cancel), /receipts, /lots (+ /lots/lookup,
+                 /lots/:id/traceability), /inventory, /inventory-movements,
+                 /inventory-adjustments, /stock-counts,
+                 /inventory/:itemId/allocation-suggestion (FEFO/FIFO,
+                 ciente de Reserved), /formulations,
                  /products/:id/formulations, /formulation-versions,
                  /production-orders (+ /plan, /release, /cancel,
                  /picking/:lineId/confirm, /picking/:lineId/substitute,
                  /consumptions, /outputs, /complete), /customer-orders (+
                  /confirm, /cancel, /fulfillment-plan,
-                 /apply-fulfillment-plan)
+                 /apply-fulfillment-plan, /purchase-suggestion,
+                 /purchase-drafts)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
-                 UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder,
+                 UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder
+                 [origin MANUAL/CUSTOMER_ORDER, customerOrderId/Code],
                  Receipt, Lot [origin RECEIPT/PRODUCTION, businessLotNumber,
                  producedQuantity, qrPayload, onHand/reserved/available
                  real], InventoryMovement [PRODUCTION_CONSUMPTION,
@@ -104,9 +110,14 @@ packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  MaterialReservation/Line [Picking/substituição],
                  ProductionConsumption, ProductionOutput, LotTraceabilityDTO
                  [FINISHED_GOOD backward / RAW_MATERIAL forward],
-                 CustomerOrder/Line [snapshot no CONFIRM],
-                 CustomerOrderReservation/Line [Produto Acabado, FEFO],
-                 FulfillmentPlanDTO/MaterialImpactRowDTO, CNPJ, UFs)
+                 CustomerOrder/Line [snapshot no CONFIRM,
+                 linkedPurchaseOrders], CustomerOrderReservation/Line
+                 [Produto Acabado, FEFO], FulfillmentPlanDTO/
+                 MaterialImpactRowDTO, PurchaseSuggestionDTO/
+                 PurchaseSuggestionRowDTO [remainingRequired/ownReserved/
+                 globalReserved/available/onOrder/operationalShortage/
+                 draftPurchaseQuantity/suggestedAdditionalPurchase/
+                 newSuggestedPurchase], CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -1883,6 +1894,153 @@ Lots` e pela extração de `computeFormulationRequirements`).
 
 ---
 
+# Delivery 17 — Sugestão de Compra + Geração de OC DRAFT
+
+Fecha o fluxo: déficit de produto acabado → OP DRAFT → necessidade de
+matéria-prima/embalagem → disponibilidade atual → Sugestão de Compra →
+usuário escolhe fornecedor/quantidade → OC(s) DRAFT agrupadas por
+fornecedor. Encerra a capacidade 26 do Bloco D. Validada só em desktop
+web — sem ferramenta de browser disponível nesta sessão, ver "Pendente".
+
+## Nenhum segundo módulo de compras
+
+A saída operacional continua sendo `PurchaseOrder` existente, `status =
+DRAFT` — nunca uma entidade `SuggestedPurchaseOrder`/`ProcurementOrder`
+paralela. `PurchaseOrder` ganhou `origin` (`MANUAL`/`CUSTOMER_ORDER`,
+default `MANUAL` — OCs antigas sem migration de dados) e
+`customerOrderId?` (permite navegar Pedido↔OC nos dois sentidos).
+Migration `20260826090000_purchase_order_origin`.
+
+## Sugestão de Compra — análise, nunca fonte de verdade
+
+`GET /customer-orders/:id/purchase-suggestion` — só para pedidos
+`IN_FULFILLMENT`, nunca persiste `shortage`/`suggestedQuantity`/
+`available`/`onOrder`. Necessidade vem dos `ProductionOrderRequirement`
+REAIS das OPs `CUSTOMER_ORDER` deste Pedido (nunca recalcula fórmula em
+paralelo — Requirement já é a necessidade técnica oficial). Só
+participam OPs `DRAFT`/`PLANNED`/`RELEASED`/`IN_PRODUCTION`;
+`CANCELLED`/`COMPLETED` nunca contribuem (a necessidade já foi
+encerrada ou nunca existiu). OP sem Requirement (sem Formulação ACTIVE)
+vira "pendência de planejamento" — nunca finge que não há necessidade.
+
+Matemática por Item, agregada entre todas as OPs/Products do Pedido:
+- `remainingRequired = max(requiredQuantity - consumido, 0)`, somado;
+- `ownReserved` = reserva `ACTIVE` das próprias OPs deste Pedido para
+  aquele Requirement, líquida de consumo (mesma fórmula de
+  `remainingReservedQuantity` já usada na leitura da OP), somada;
+- `operationalShortage = max(remainingRequired - ownReserved -
+  globalAvailable, 0)` — `globalAvailable` já é líquido de TODAS as
+  reservas (inclusive a própria), somar `ownReserved` de volta é
+  exatamente "não tratar a própria reserva como indisponível para si
+  mesma" (mesmo princípio já usado nos Requirements de OP desde a
+  Delivery 12);
+- `suggestedAdditionalPurchase = max(operationalShortage - onOrder, 0)`
+  — On Order nunca reduz a falta física, só a recomendação de compra;
+- `draftPurchaseQuantity` = soma das `PurchaseOrderLine` de OCs `DRAFT`
+  já vinculadas a este Pedido (`customerOrderId`) para aquele Item —
+  nunca conta em On Order, mas evita sugestão/criação repetida;
+- `newSuggestedPurchase = max(suggestedAdditionalPurchase -
+  draftPurchaseQuantity, 0)`.
+
+## Geração de OC DRAFT — agrupada por fornecedor, nunca ORDERED
+
+`POST /customer-orders/:id/purchase-drafts`: usuário escolhe fornecedor
++ quantidade por material (quantidade sugerida é só default, editável,
+inclusive acima da sugestão — nunca bloqueado); `quantity = 0` nunca
+cria linha; se tudo vier `0`, nenhuma OC é criada, mensagem clara. Nunca
+confia em shortage/available enviado pelo client — só usa
+`itemId`/`supplierId`/`quantity`, revalidando Item (RAW_MATERIAL/
+PACKAGING ativo, mesma regra de `assertLineItemValid`) e Supplier
+(ativo, mesma regra de `assertSupplierActive`) sob lock. Agrupa por
+Supplier: materiais do mesmo fornecedor entram na mesma OC, nunca uma
+OC por item. Toda OC nasce `DRAFT` — nunca chama o endpoint de
+confirmação automaticamente; `unitPrice` sempre `null` (usuário preenche
+depois no fluxo normal da OC); `orderDate` = agora, `expectedDeliveryDate
+= null` (nunca copia `requestedDeliveryDate` do Pedido — conceitos
+diferentes). `CustomerOrder` continua `IN_FULFILLMENT` — gerar OC nunca
+cria um status novo.
+
+## Concorrência
+
+Lock no `CustomerOrder` (`FOR UPDATE`) serializa duas gerações
+simultâneas, mais lock determinístico nos `Supplier`s envolvidos (mesmo
+padrão do RELEASE de OP/Aplicar Plano) — nunca corrompe dados sob
+corrida. O sistema não impede o usuário de deliberadamente comprar acima
+da sugestão nem em duas requisições concorrentes explícitas — só garante
+que a escrita em si nunca corrompe.
+
+## Ciclo de vida coerente, sempre lido ao vivo
+
+`draftPurchaseQuantity`/On Order nunca guardam a quantidade original da
+sugestão — leem sempre as `PurchaseOrderLine` atuais. Se o usuário editar
+a OC DRAFT depois (quantidade, itens), a próxima Sugestão de Compra já
+reflete o valor atual. Cancelar a OC vinculada devolve a necessidade
+(deixa de contar em Draft e em On Order). Confirmar a OC (`DRAFT →
+ORDERED`) move a cobertura de `draftPurchaseQuantity` para `onOrder`
+automaticamente — nenhuma integração especial foi necessária, ambos já
+liam o estado atual das `PurchaseOrderLine`/`PurchaseOrder.status`.
+Recebimento (`On Hand` sobe, `On Order` desce) já é automático pelo
+mesmo motivo — nenhum código novo tocou o fluxo de Recebimento.
+
+## Backend
+
+Módulo novo `purchase-suggestion.{errors,schemas,service,routes}.ts`
+dentro de `customer-orders/` (mesmo padrão de `fulfillment-plan.*`
+sibling). `purchase-orders.service.ts` ganhou `createDraftPurchaseOrderInTx`
+(efeito colateral atômico de gerar OCs a partir da Sugestão) e exportou
+`assertSupplierActive`/`assertLineItemValid` para reuso — nunca duplicar
+a regra "Item RAW_MATERIAL/PACKAGING ativo" / "Supplier ativo" em um
+segundo lugar (a geração usa variantes locais operando sob a mesma
+transação/lock, já que os validadores exportados sempre leem via
+conexão própria).
+
+## Frontend
+
+`CustomerOrderPage` ganhou a seção **Sugestão de Compra** (só quando
+`IN_FULFILLMENT` — tabela Material/Necessário restante/Reservado p/ este
+Pedido/Disponível/Em Compra/Falta física/Já em rascunho/Comprar
+sugerido/Comprar agora [input]/Fornecedor [select], "Gerar OCs em
+rascunho" com `ConfirmDialog`) e **Ordens de Compra Vinculadas** (após
+gerar, tabela OC/Fornecedor/Itens/Status/Valor, abre a OC existente).
+`PurchaseOrderPage` ganhou uma seção discreta "Origem" (Pedido do
+Cliente + link de volta) quando `origin !== "MANUAL"` — sem redesenhar a
+tela, OC manual continua idêntica.
+
+## Testes
+
+14 novos testes em `purchase-suggestion.test.ts`: agregação do mesmo
+Item entre Products, consumo real reduzindo `remainingRequired`/reserva
+própria contando como cobertura, OP sem Requirements vira pendência,
+`CANCELLED`/`COMPLETED` não contribuem, On Order não reduz falta física
+mas reduz compra sugerida, matemática crítica completa (Remaining
+100/Own 30/Available 20/On Order 20/Draft 10 → New Suggested 20,
+conferida exatamente contra o exemplo do handoff), gate `IN_FULFILLMENT`,
+geração de OC DRAFT (origin/vínculo/nunca ORDERED/unitPrice null/
+agrupamento por fornecedor/fornecedor inativo e item inválido
+rejeitados/quantidade zero não cria linha/tudo zero rejeitado/pedido
+errado rejeitado), ciclo Draft→Confirmado (draftPurchaseQuantity desce,
+On Order sobe) e cancelamento (devolve a necessidade), concorrência real
+de duas gerações simultâneas. Total da API: **294 testes** (280 + 14).
+Web: 8 testes (regressão).
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (294 API + 8 web) — ok em todo o
+monorepo. Regressão completa de CustomerOrder/Production/Purchasing/
+Inventory confirmada.
+
+## Pendente (real)
+
+- **Sem validação visual via Playwright/browser nesta sessão** — mesma
+  limitação de ambiente já registrada nas Deliveries 15-16. Fluxo de
+  Sugestão de Compra (números, seleção de fornecedor, geração agrupada,
+  navegação Pedido↔OC) validado só via testes de integração reais (API)
+  e typecheck/build do frontend.
+- Expedição (27) e Faturamento (28) não iniciados — próximo passo natural
+  do roadmap, aguardando novo handoff.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -1917,7 +2075,7 @@ Lots` e pela extração de `computeFormulationRequirements`).
 23. Availability Analysis / Fulfillment Plan ✓
 24. Finished-Product Reservation ✓
 25. Suggested Production Orders ✓
-26. Purchase Suggestion
+26. Purchase Suggestion ✓
 27. Picking / Shipping
 28. Invoicing
 
@@ -2022,6 +2180,28 @@ Lots` e pela extração de `computeFormulationRequirements`).
   math as OP requirement calculation (extracted into
   `requirement-calc.ts`) — the Plan never reserves raw material, it only
   shows the impact. See `docs/PRODUCT_RULES.md` for full detail.
+- Confirmed at implementation (Delivery 17): Purchase Suggestion is
+  analysis only — physical shortage (`operationalShortage`) and
+  suggested-additional-purchase are distinct concepts, never persisted;
+  both are always recomputed live from real `ProductionOrderRequirement`s
+  of the Customer Order's linked Production Orders (never a parallel
+  formula recalculation), net of real consumption. A Production Order's
+  own active reservation for that need counts as guaranteed coverage
+  (added back on top of the already-reservation-net `Available`), never
+  treated as unavailable to itself. `On Order` (`ORDERED`/
+  `PARTIALLY_RECEIVED` only, never `DRAFT`) never reduces physical
+  shortage — it only reduces the *suggested* additional purchase. DRAFT
+  Purchase Order lines already linked to this Customer Order are read
+  live (never a frozen snapshot of the original suggestion) specifically
+  to avoid suggesting/creating the same purchase repeatedly; cancelling
+  that linked PO hands the need back, confirming it moves the same
+  quantity from "draft" into "On Order" with no special integration
+  needed. The system never chooses a Supplier automatically and never
+  confirms a generated Purchase Order automatically — it always creates
+  `PurchaseOrder` rows in `DRAFT`, grouped one-PO-per-chosen-Supplier,
+  reusing the exact same `PurchaseOrder` entity/lifecycle (never a second
+  purchasing module) with `origin: CUSTOMER_ORDER` and a link back to the
+  order. See `docs/PRODUCT_RULES.md` for full detail.
 - Formula ACTIVE versions remain historical/immutable.
 - OP keeps exact formula version.
 - Insufficient Available stock blocks OP release by default.
@@ -2161,25 +2341,28 @@ Lots` e pela extração de `computeFormulationRequirements`).
 
 # Next recommended implementation
 
-Blocos A-C completos (exceto Usuários) e Bloco D core (22-25 — Pedido do
-Cliente, Plano de Atendimento, Reserva de Produto Acabado, OPs Sugeridas)
-também completo. Próximo passo natural de negócio é a evolução
-incremental do Bloco D: **Sugestão de Compra (26)**, **Expedição/Picking
+Blocos A-C completos (exceto Usuários) e Bloco D até a capacidade 26
+(Pedido do Cliente, Plano de Atendimento, Reserva de Produto Acabado, OPs
+Sugeridas, Sugestão de Compra) também completo. Próximo passo natural de
+negócio é a evolução incremental restante do Bloco D: **Expedição/Picking
 de Pedido (27)** e **Faturamento (28)** — **não iniciados nesta entrega,
 por instrução explícita do handoff**; aguardam novo handoff de Product
 Ownership antes de começar. Reutilizar quando começar: `FullWorkspaceModal`
 + `components.css` para cadastros simples; padrão de página própria (ver
 Ordem de Compra/Recebimento/editor de Formulação/OP/Pedido) para novos
 documentos transacionais; `apps/api/src/lib/inventory-ledger.ts`
-(`getReservedByItems/Lots` já somam MaterialReservation + 
-CustomerOrderReservation, `getAvailableByItems`,
-`getOnOrderByItems`) para qualquer cálculo futuro de saldo — Sugestão de
-Compra precisará comparar `Shortage` (já calculado no Plano) contra
-`On Order`; `CustomerOrderReservation`/`CustomerOrderLine` já modelam o
-compromisso comercial — Expedição consumirá essas reservas fisicamente
-(gerando `InventoryMovement` de saída, ainda não implementado);
-`traceability.service.ts` já resolve genealogia real, reutilizável para
-qualquer tela futura de rastreabilidade por Pedido/Expedição.
+(`getReservedByItems/Lots` já somam MaterialReservation +
+CustomerOrderReservation, `getAvailableByItems`, `getOnOrderByItems`)
+para qualquer cálculo futuro de saldo; `CustomerOrderReservation`/
+`CustomerOrderLine` já modelam o compromisso comercial — Expedição
+consumirá essas reservas fisicamente (gerando `InventoryMovement` de
+saída, ainda não implementado, provável novo `InventoryMovementType`
+tipo `SHIPMENT`); `PurchaseOrder.origin`/`customerOrderId` e
+`createDraftPurchaseOrderInTx` já estabelecem o padrão "endpoint gera
+documento DRAFT vinculado, usuário confirma depois" — Faturamento poderá
+seguir o mesmo padrão; `traceability.service.ts` já resolve genealogia
+real, reutilizável para qualquer tela futura de rastreabilidade por
+Pedido/Expedição.
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

@@ -6,6 +6,8 @@ import type {
   CustomerOrderListResponse,
   CustomerOrderStatus,
   FulfillmentPlanDTO,
+  GeneratePurchaseDraftsInput,
+  PurchaseSuggestionDTO,
   UpdateCustomerOrderInput,
 } from "@veridi/shared";
 import { API_URL } from "./api";
@@ -86,6 +88,23 @@ export async function applyFulfillmentPlan(
   input: ApplyFulfillmentPlanInput,
 ): Promise<CustomerOrderDTO> {
   const response = await fetch(`${API_URL}/customer-orders/${customerOrderId}/apply-fulfillment-plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await parseJsonOrThrow(response)) as CustomerOrderDTO;
+}
+
+export async function getPurchaseSuggestion(customerOrderId: string): Promise<PurchaseSuggestionDTO> {
+  const response = await fetch(`${API_URL}/customer-orders/${customerOrderId}/purchase-suggestion`);
+  return (await parseJsonOrThrow(response)) as PurchaseSuggestionDTO;
+}
+
+export async function generatePurchaseDrafts(
+  customerOrderId: string,
+  input: GeneratePurchaseDraftsInput,
+): Promise<CustomerOrderDTO> {
+  const response = await fetch(`${API_URL}/customer-orders/${customerOrderId}/purchase-drafts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

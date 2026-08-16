@@ -1081,12 +1081,48 @@ available for production release (consistent with section 14/20).
   in cascade. A full operational cancellation/replanning flow is future
   work.
 
-## Purchase suggestion
-When raw material/packaging is short, the system may generate a purchase
+## Purchase suggestion (implemented, Delivery 17)
+When raw material/packaging is short, the system generates a purchase
 suggestion/draft. It never confirms a Purchase Order automatically.
-Conceptual flow: shortage → purchase suggestion → user review → PO DRAFT →
-user confirms the PO later. This is an Evolução Incremental item (26),
-outside MVP Core initially.
+Flow: shortage → purchase suggestion → user reviews/picks Supplier and
+quantity → PO DRAFT created (grouped by Supplier) → user confirms the PO
+later through the normal Purchase Order flow.
+
+### Durable rules confirmed at implementation
+
+- The Purchase Suggestion is analysis only — `operationalShortage`
+  (physical shortage) and `suggestedAdditionalPurchase`/
+  `newSuggestedPurchase` (purchase recommendation) are distinct concepts,
+  never persisted as source of truth. Both are always recomputed live
+  from the real `ProductionOrderRequirement`s of the Customer Order's
+  linked, non-cancelled/non-completed Production Orders — never a
+  parallel formula recalculation (Requirement is already the OP's
+  official technical need), net of real consumption.
+- A Production Order's own active material reservation for that specific
+  need counts as guaranteed coverage for its own Customer Order — never
+  treated as unavailable to itself, matching the same principle already
+  used for OP Requirement availability since Delivery 12.
+- `On Order` (confirmed POs only, `ORDERED`/`PARTIALLY_RECEIVED` — never
+  `DRAFT`) never resolves/reduces physical shortage; it only reduces the
+  *suggested additional purchase* (a planning recommendation, not
+  physical truth) — the UI must keep these two numbers visually distinct.
+- DRAFT Purchase Order lines already linked to a Customer Order are
+  always read live (current line quantities, never a frozen snapshot of
+  the original suggestion) specifically to avoid suggesting/creating the
+  same purchase repeatedly. Cancelling that linked PO hands the need
+  back to the suggestion; confirming it moves the same coverage from
+  "draft" into "On Order" automatically, with no special integration
+  code — both read the current `PurchaseOrder`/`PurchaseOrderLine` state.
+- The system never chooses a Supplier automatically (no last-used/
+  cheapest/most-frequent heuristic) — the user always picks Supplier and
+  quantity per material; quantity is editable and may exceed the
+  suggestion (e.g. buying ahead for stock) without being blocked.
+- Generation always creates `PurchaseOrder` rows in `DRAFT` status,
+  grouped one PO per chosen Supplier (never one PO per item) — reusing
+  the exact same `PurchaseOrder` entity/lifecycle, never a second
+  purchasing module (`SuggestedPurchaseOrder`/`ProcurementOrder` etc.).
+  The generated PO carries `origin: CUSTOMER_ORDER` and a link back to
+  the order, navigable in both directions (Order ↔ PO).
 
 ## Shipping
 When finished product is available: Order → Picking → Shipping. Partial

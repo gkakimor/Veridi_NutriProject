@@ -29,6 +29,11 @@ enum PurchaseOrderStatus {
   CANCELLED
 }
 
+enum PurchaseOrderOrigin {
+  MANUAL
+  CUSTOMER_ORDER
+}
+
 enum LotStatus {
   AWAITING_RELEASE
   AVAILABLE
@@ -405,6 +410,14 @@ model PurchaseOrder {
   status PurchaseOrderStatus @default(DRAFT)
   notes  String?
 
+  origin PurchaseOrderOrigin @default(MANUAL)
+
+  /// Preenchido so quando origin = CUSTOMER_ORDER — a OC nasce DRAFT e
+  /// segue o fluxo normal (nunca ORDERED automatico). Vinculo permite
+  /// navegar Pedido -> OC e OC -> Pedido.
+  customerOrderId String?
+  customerOrder   CustomerOrder? @relation(fields: [customerOrderId], references: [id])
+
   orderedAt DateTime?
   orderedBy String?
 
@@ -420,6 +433,7 @@ model PurchaseOrder {
 
   @@index([status])
   @@index([supplierId])
+  @@index([customerOrderId])
   @@map("purchase_orders")
 }
 
@@ -998,6 +1012,7 @@ model CustomerOrder {
   lines            CustomerOrderLine[]
   reservations     CustomerOrderReservation[]
   productionOrders ProductionOrder[]
+  purchaseOrders   PurchaseOrder[]
 
   @@index([status])
   @@index([customerId])

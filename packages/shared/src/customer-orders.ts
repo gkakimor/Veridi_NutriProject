@@ -71,6 +71,16 @@ export interface CustomerOrderReservationDTO {
   lines: CustomerOrderReservationLineDTO[];
 }
 
+export interface CustomerOrderLinkedPurchaseOrderDTO {
+  id: string;
+  code: string;
+  supplierId: string;
+  supplierName: string;
+  lineCount: number;
+  status: string;
+  orderTotal: string | null;
+}
+
 export interface CustomerOrderGeneratedProductionOrderDTO {
   id: string;
   code: string;
@@ -100,6 +110,8 @@ export interface CustomerOrderDTO {
   reservation: CustomerOrderReservationDTO | null;
   /** OPs DRAFT geradas ao aplicar o Plano — uma por linha com déficit. */
   generatedProductionOrders: CustomerOrderGeneratedProductionOrderDTO[];
+  /** OCs (qualquer status) vinculadas a este Pedido pela Sugestão de Compra. */
+  linkedPurchaseOrders: CustomerOrderLinkedPurchaseOrderDTO[];
   confirmedAt: string | null;
   confirmedBy: string | null;
   cancelledAt: string | null;

@@ -37,7 +37,8 @@ type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 const SYSTEM_ACTOR = "Ambiente local";
 const PRODUCTION_ORDER_CODE_SEQUENCE = "production_order_code_seq";
 
-async function itemScopesFor(prisma: PrismaOrTx, itemIds: string[]) {
+/** Reutilizado por `purchase-suggestion.service.ts` — nunca duplicar. */
+export async function itemScopesFor(prisma: PrismaOrTx, itemIds: string[]) {
   if (itemIds.length === 0) return [];
   const items = await prisma.item.findMany({ where: { id: { in: itemIds } } });
   return items.map((item) => ({ id: item.id, controlsLot: item.controlsLot }));

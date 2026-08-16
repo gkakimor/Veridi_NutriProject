@@ -1,18 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { CustomerDTO, CustomerOrderDTO, CustomerOrderStatus, FulfillmentPlanDTO, ProductDTO } from "@veridi/shared";
-import { CUSTOMER_ORDER_STATUS_LABELS } from "@veridi/shared";
+import type {
+  CustomerDTO,
+  CustomerOrderDTO,
+  CustomerOrderStatus,
+  FulfillmentPlanDTO,
+  ProductDTO,
+  PurchaseSuggestionDTO,
+  SupplierDTO,
+} from "@veridi/shared";
+import { CUSTOMER_ORDER_STATUS_LABELS, PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
 import {
   applyFulfillmentPlan,
   cancelCustomerOrder,
   confirmCustomerOrder,
   createCustomerOrder,
+  generatePurchaseDrafts,
   getCustomerOrder,
   getFulfillmentPlan,
+  getPurchaseSuggestion,
   updateCustomerOrder,
 } from "../../lib/customer-orders-api";
 import { listCustomers } from "../../lib/customers-api";
 import { listProducts } from "../../lib/products-api";
+import { listSuppliers } from "../../lib/suppliers-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -119,6 +130,13 @@ export function CustomerOrderPage() {
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [applying, setApplying] = useState(false);
 
+  const [suggestion, setSuggestion] = useState<PurchaseSuggestionDTO | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [activeSuppliers, setActiveSuppliers] = useState<SupplierDTO[]>([]);
+  const [draftInputs, setDraftInputs] = useState<Record<string, { quantity: string; supplierId: string }>>({});
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
   const syncFormFromServer = useCallback((order: CustomerOrderDTO) => {
     setCustomerId(order.customerId);
     setRequestedDeliveryDate(toDateInputValue(order.requestedDeliveryDate));
@@ -153,6 +171,7 @@ export function CustomerOrderPage() {
   const isCancellable = !isNew && (status === "DRAFT" || status === "CONFIRMED");
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
   const showPlan = !isNew && status === "CONFIRMED";
+  const showPurchaseSuggestion = !isNew && status === "IN_FULFILLMENT";
   const hasFulfillmentResult =
     !!customerOrder && (customerOrder.reservation !== null || customerOrder.generatedProductionOrders.length > 0);
 
@@ -177,6 +196,40 @@ export function CustomerOrderPage() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Falha ao carregar plano de atendimento"))
       .finally(() => setPlanLoading(false));
   }, [showPlan, id]);
+
+  const reloadSuggestion = useCallback(() => {
+    if (!id) return;
+    setSuggestionLoading(true);
+    getPurchaseSuggestion(id)
+      .then((result) => {
+        setSuggestion(result);
+        setDraftInputs((prev) => {
+          const next: Record<string, { quantity: string; supplierId: string }> = {};
+          for (const row of result.rows) {
+            next[row.itemId] = prev[row.itemId] ?? { quantity: row.newSuggestedPurchase, supplierId: "" };
+          }
+          return next;
+        });
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Falha ao carregar sugestão de compra"))
+      .finally(() => setSuggestionLoading(false));
+  }, [id]);
+
+  useEffect(() => {
+    if (!showPurchaseSuggestion || !id) {
+      setSuggestion(null);
+      return;
+    }
+    reloadSuggestion();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPurchaseSuggestion, id]);
+
+  useEffect(() => {
+    if (!showPurchaseSuggestion) return;
+    listSuppliers({ active: true, pageSize: 100 })
+      .then((result) => setActiveSuppliers(result.suppliers))
+      .catch(() => setActiveSuppliers([]));
+  }, [showPurchaseSuggestion]);
 
   const customerOptions: CustomerDTO[] = useMemo(() => {
     if (!customerOrder || activeCustomers.some((c) => c.id === customerOrder.customerId)) {
@@ -393,6 +446,41 @@ export function CustomerOrderPage() {
       setError(err instanceof Error ? err.message : "Falha ao aplicar plano de atendimento");
     } finally {
       setApplying(false);
+    }
+  }
+
+  const draftLinesToGenerate = useMemo(() => {
+    return Object.entries(draftInputs)
+      .filter(([, value]) => Number(value.quantity || "0") > 0)
+      .map(([itemId, value]) => ({ itemId, quantity: value.quantity, supplierId: value.supplierId }));
+  }, [draftInputs]);
+
+  const draftLinesMissingSupplier = draftLinesToGenerate.some((line) => !line.supplierId);
+  const noAdditionalPurchaseSuggested =
+    !!suggestion && suggestion.rows.every((row) => Number(row.newSuggestedPurchase) === 0);
+
+  function handleDraftQuantityChange(itemId: string, quantity: string) {
+    setDraftInputs((prev) => ({ ...prev, [itemId]: { quantity, supplierId: prev[itemId]?.supplierId ?? "" } }));
+  }
+
+  function handleDraftSupplierChange(itemId: string, supplierId: string) {
+    setDraftInputs((prev) => ({ ...prev, [itemId]: { quantity: prev[itemId]?.quantity ?? "0", supplierId } }));
+  }
+
+  async function handleGenerateDrafts() {
+    if (!id) return;
+    setGenerateDialogOpen(false);
+    setGenerating(true);
+    setError(null);
+    try {
+      const updated = await generatePurchaseDrafts(id, { lines: draftLinesToGenerate });
+      setCustomerOrder(updated);
+      syncFormFromServer(updated);
+      reloadSuggestion();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao gerar Ordens de Compra");
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -702,6 +790,153 @@ export function CustomerOrderPage() {
           </FormSection>
         )}
 
+        {showPurchaseSuggestion && (
+          <FormSection
+            title="Sugestão de Compra"
+            subtitle="Análise dinâmica a partir das OPs deste Pedido — falta física e compra sugerida são conceitos diferentes."
+          >
+            {suggestionLoading && <p className="field__hint">Calculando…</p>}
+            {suggestion && suggestion.pendingProductionOrders.length > 0 && (
+              <div className="status-line">
+                {suggestion.pendingProductionOrders.map((op) => (
+                  <p key={op.id} className="field__hint">
+                    Pendência de planejamento: {op.code} ({op.productCode} — {op.productName}) ainda não possui
+                    requisitos de materiais.
+                  </p>
+                ))}
+              </div>
+            )}
+            {suggestion && suggestion.rows.length > 0 && (
+              <>
+                <div className="table-container">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Material</th>
+                        <th>Necessário restante</th>
+                        <th>Reservado p/ este Pedido</th>
+                        <th>Disponível</th>
+                        <th>Em Compra</th>
+                        <th>Falta física</th>
+                        <th>Já em rascunho</th>
+                        <th>Comprar sugerido</th>
+                        <th>Comprar agora</th>
+                        <th>Fornecedor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suggestion.rows.map((row) => {
+                        const input = draftInputs[row.itemId] ?? { quantity: "0", supplierId: "" };
+                        return (
+                          <tr key={row.itemId}>
+                            <td>
+                              <span className="code">{row.itemCode}</span> {row.itemName}
+                            </td>
+                            <td>
+                              {row.remainingRequired} {row.unitCode}
+                            </td>
+                            <td>{row.ownReserved}</td>
+                            <td>{row.available}</td>
+                            <td>{row.onOrder}</td>
+                            <td>{row.operationalShortage}</td>
+                            <td>{row.draftPurchaseQuantity}</td>
+                            <td>{row.newSuggestedPurchase}</td>
+                            <td>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={input.quantity}
+                                onChange={(event) => handleDraftQuantityChange(row.itemId, event.target.value)}
+                              />
+                            </td>
+                            <td>
+                              <select
+                                value={input.supplierId}
+                                onChange={(event) => handleDraftSupplierChange(row.itemId, event.target.value)}
+                              >
+                                <option value="">Selecionar…</option>
+                                {activeSuppliers.map((supplier) => (
+                                  <option key={supplier.id} value={supplier.id}>
+                                    {supplier.code} — {supplier.tradeName ?? supplier.legalName}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {draftLinesMissingSupplier && (
+                  <p className="field__hint">Selecione o fornecedor para cada material com quantidade a comprar.</p>
+                )}
+
+                <div className="line-actions">
+                  <button
+                    type="button"
+                    className="btn btn--accent btn--sm"
+                    disabled={draftLinesToGenerate.length === 0 || draftLinesMissingSupplier || generating}
+                    onClick={() => setGenerateDialogOpen(true)}
+                  >
+                    {generating ? "Gerando…" : "Gerar OCs em rascunho"}
+                  </button>
+                </div>
+              </>
+            )}
+            {suggestion && suggestion.rows.length === 0 && suggestion.pendingProductionOrders.length === 0 && (
+              <p className="field__hint">Nenhuma compra adicional sugerida neste momento.</p>
+            )}
+            {suggestion && noAdditionalPurchaseSuggested && suggestion.rows.length > 0 && (
+              <p className="field__hint">Nenhuma compra adicional sugerida neste momento.</p>
+            )}
+          </FormSection>
+        )}
+
+        {customerOrder && customerOrder.linkedPurchaseOrders.length > 0 && (
+          <FormSection title="Ordens de Compra Vinculadas">
+            <div className="table-container">
+              <table className="table table--clickable-rows">
+                <thead>
+                  <tr>
+                    <th>OC</th>
+                    <th>Fornecedor</th>
+                    <th>Itens</th>
+                    <th>Status</th>
+                    <th>Valor</th>
+                    <th aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerOrder.linkedPurchaseOrders.map((po) => (
+                    <tr key={po.id} tabIndex={0} onClick={() => navigate(`/compras/ordens/${po.id}`)}>
+                      <td className="is-code">{po.code}</td>
+                      <td>{po.supplierName}</td>
+                      <td>{po.lineCount}</td>
+                      <td>
+                        <span className="badge badge--neutral">
+                          {PURCHASE_ORDER_STATUS_LABELS[po.status as keyof typeof PURCHASE_ORDER_STATUS_LABELS] ?? po.status}
+                        </span>
+                      </td>
+                      <td>{po.orderTotal ?? "—"}</td>
+                      <td onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => navigate(`/compras/ordens/${po.id}`)}
+                        >
+                          Abrir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </FormSection>
+        )}
+
         {hasFulfillmentResult && (
           <>
             {customerOrder?.reservation && (
@@ -830,6 +1065,16 @@ export function CustomerOrderPage() {
         confirmTone="accent"
         onCancel={() => setApplyDialogOpen(false)}
         onConfirm={handleApplyPlan}
+      />
+
+      <ConfirmDialog
+        open={generateDialogOpen}
+        title="Gerar Ordens de Compra em rascunho?"
+        message="Serão criadas OCs DRAFT agrupadas por fornecedor; nenhuma OC será enviada/confirmada automaticamente; preços permanecerão em branco; as OCs poderão ser revisadas no módulo de Compras."
+        confirmLabel="Gerar OCs em rascunho"
+        confirmTone="accent"
+        onCancel={() => setGenerateDialogOpen(false)}
+        onConfirm={handleGenerateDrafts}
       />
 
       {cancelDialogOpen && (

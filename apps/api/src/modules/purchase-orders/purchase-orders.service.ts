@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { Item, PurchaseOrder, PurchaseOrderLine, ReceiptLine, Supplier } from "@prisma/client";
+import type { CustomerOrder, Item, PurchaseOrder, PurchaseOrderLine, ReceiptLine, Supplier } from "@prisma/client";
 import type { PurchaseOrderDTO, PurchaseOrderLineDTO, PurchaseOrderListResponse } from "@veridi/shared";
 import { PURCHASE_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -33,11 +33,12 @@ const CODE_SEQUENCE = "purchase_order_code_seq";
 const SYSTEM_ACTOR = "Ambiente local";
 
 type LineWithReceipts = PurchaseOrderLine & { receiptLines: ReceiptLine[] };
-type PurchaseOrderWithLines = PurchaseOrder & { lines: LineWithReceipts[] };
+type PurchaseOrderWithLines = PurchaseOrder & { lines: LineWithReceipts[]; customerOrder: CustomerOrder | null };
 
 /** Include padrao para carregar uma OC com o suficiente para o DTO (linhas + recebido). */
 const purchaseOrderInclude = {
   lines: { include: { receiptLines: true } },
+  customerOrder: true,
 } as const;
 
 /** Dinheiro (BRL) sempre com 2 casas decimais na saida da API. */
@@ -89,6 +90,9 @@ function toPurchaseOrderDTO(po: PurchaseOrderWithLines): PurchaseOrderDTO {
     notes: po.notes,
     lines,
     orderTotal: orderTotal ? formatMoney(orderTotal) : null,
+    origin: po.origin,
+    customerOrderId: po.customerOrderId,
+    customerOrderCode: po.customerOrder ? po.customerOrder.code : null,
     orderedAt: po.orderedAt ? po.orderedAt.toISOString() : null,
     orderedBy: po.orderedBy,
     cancelledAt: po.cancelledAt ? po.cancelledAt.toISOString() : null,
@@ -99,16 +103,24 @@ function toPurchaseOrderDTO(po: PurchaseOrderWithLines): PurchaseOrderDTO {
   };
 }
 
-/** Vinculo a um Supplier (create, ou troca em DRAFT): precisa existir e estar ativo. */
-async function assertSupplierActive(id: string): Promise<Supplier> {
+/**
+ * Vinculo a um Supplier (create, ou troca em DRAFT): precisa existir e
+ * estar ativo. Exportado — reutilizado pela Sugestão de Compra
+ * (`purchase-suggestion.service.ts`) para validar o Supplier escolhido
+ * pelo usuário antes de gerar a OC DRAFT, mesma regra, nunca duplicada.
+ */
+export async function assertSupplierActive(id: string): Promise<Supplier> {
   const supplier = await getPrisma().supplier.findUnique({ where: { id } });
   if (!supplier) throw new SupplierNotFoundError(id);
   if (!supplier.active) throw new InactiveSupplierError(id);
   return supplier;
 }
 
-/** Item de linha: precisa existir, ser RAW_MATERIAL/PACKAGING e estar ativo. */
-async function assertLineItemValid(id: string): Promise<Item> {
+/**
+ * Item de linha: precisa existir, ser RAW_MATERIAL/PACKAGING e estar
+ * ativo. Exportado pelo mesmo motivo de `assertSupplierActive`.
+ */
+export async function assertLineItemValid(id: string): Promise<Item> {
   const item = await getPrisma().item.findUnique({ where: { id } });
   if (!item) throw new LineItemNotFoundError(id);
   if (item.type !== "RAW_MATERIAL" && item.type !== "PACKAGING") {
@@ -237,6 +249,53 @@ export async function createPurchaseOrder(
   });
 
   return (await getPurchaseOrderById(created.id))!;
+}
+
+/**
+ * Cria uma OC DRAFT dentro de uma transacao ja aberta — usado pela
+ * Sugestao de Compra (efeito colateral atomico de gerar rascunhos
+ * agrupados por fornecedor). Nunca ORDERED — a OC nasce DRAFT e segue o
+ * fluxo normal (usuario revisa/preenche preco/confirma manualmente).
+ * `code` ja deve ter sido gerado (sequence) antes de entrar na transacao.
+ */
+export async function createDraftPurchaseOrderInTx(
+  tx: Prisma.TransactionClient,
+  params: {
+    code: string;
+    supplier: Supplier;
+    orderDate: Date;
+    customerOrderId: string;
+    lines: { item: Item; orderedQuantity: Prisma.Decimal }[];
+  },
+): Promise<string> {
+  const po = await tx.purchaseOrder.create({
+    data: {
+      code: params.code,
+      supplierId: params.supplier.id,
+      supplierCode: params.supplier.code,
+      supplierName: params.supplier.legalName,
+      supplierCnpj: params.supplier.cnpj,
+      orderDate: params.orderDate,
+      origin: "CUSTOMER_ORDER",
+      customerOrderId: params.customerOrderId,
+    },
+  });
+
+  if (params.lines.length > 0) {
+    await tx.purchaseOrderLine.createMany({
+      data: params.lines.map((line) => ({
+        purchaseOrderId: po.id,
+        itemId: line.item.id,
+        itemCode: line.item.code,
+        itemName: line.item.name,
+        unitCode: line.item.unitCode,
+        orderedQuantity: line.orderedQuantity,
+        unitPrice: null,
+      })),
+    });
+  }
+
+  return po.id;
 }
 
 export async function updatePurchaseOrder(

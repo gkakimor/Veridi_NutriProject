@@ -17,6 +17,7 @@ import { pickingRoutes } from "./modules/production-orders/picking.routes.js";
 import { productionRoutes } from "./modules/production-orders/production.routes.js";
 import { customerOrdersRoutes } from "./modules/customer-orders/customer-orders.routes.js";
 import { fulfillmentPlanRoutes } from "./modules/customer-orders/fulfillment-plan.routes.js";
+import { purchaseSuggestionRoutes } from "./modules/customer-orders/purchase-suggestion.routes.js";
 
 /**
  * Monta a instancia Fastify.
@@ -53,6 +54,7 @@ export function buildApp() {
   app.register(productionRoutes);
   app.register(customerOrdersRoutes);
   app.register(fulfillmentPlanRoutes);
+  app.register(purchaseSuggestionRoutes);
 
   return app;
 }

@@ -403,6 +403,25 @@ export function PurchaseOrderPage() {
       <div className="doc-body">
       {error && <p className="form-alert">{error}</p>}
 
+      {purchaseOrder && purchaseOrder.origin === "CUSTOMER_ORDER" && (
+        <FormSection title="Origem">
+          <dl className="definition-list">
+            <dt>Origem</dt>
+            <dd>Pedido do Cliente</dd>
+            <dt>Pedido</dt>
+            <dd>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => navigate(`/comercial/pedidos/${purchaseOrder.customerOrderId}`)}
+              >
+                {purchaseOrder.customerOrderCode}
+              </button>
+            </dd>
+          </dl>
+        </FormSection>
+      )}
+
       {purchaseOrder?.status === "CANCELLED" && (
         <FormSection title="Cancelamento">
           <div className="status-line">

@@ -31,6 +31,14 @@ export const OPEN_PURCHASE_ORDER_STATUSES: readonly PurchaseOrderStatus[] = [
   "PARTIALLY_RECEIVED",
 ];
 
+/** `CUSTOMER_ORDER` só é atribuída internamente pela Sugestão de Compra — nunca aceito do client no endpoint público. */
+export type PurchaseOrderOrigin = "MANUAL" | "CUSTOMER_ORDER";
+
+export const PURCHASE_ORDER_ORIGIN_LABELS: Record<PurchaseOrderOrigin, string> = {
+  MANUAL: "Manual",
+  CUSTOMER_ORDER: "Pedido do Cliente",
+};
+
 export interface PurchaseOrderLineDTO {
   id: string;
   itemId: string;
@@ -62,6 +70,10 @@ export interface PurchaseOrderDTO {
   lines: PurchaseOrderLineDTO[];
   /** Soma dos `lineTotal` conhecidos; `null` se nenhuma linha tiver preço. */
   orderTotal: string | null;
+  origin: PurchaseOrderOrigin;
+  /** Preenchidos só quando `origin = "CUSTOMER_ORDER"`. */
+  customerOrderId: string | null;
+  customerOrderCode: string | null;
   orderedAt: string | null;
   orderedBy: string | null;
   cancelledAt: string | null;
