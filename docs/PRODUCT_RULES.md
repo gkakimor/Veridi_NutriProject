@@ -571,6 +571,27 @@ Old OPs never change because a new formula is activated.
   created/copied with — it stays historically correct even if a
   component's Item is later inactivated or renamed.
 
+### Industrial formulation v2 (capability 34)
+
+- A version declares a **calculation mode**: `FIXED_BASIS` (original
+  model, still the default) or `PER_DOSE` (industry practice: quantity
+  per dose × doses per package). `PER_DOSE` requires `dosesPerPackage`.
+- Each component declares its own **basis** — `FIXED_BASIS`, `PER_DOSE`
+  or `PER_FINISHED_UNIT`. Packaging is per finished unit even inside a
+  per-dose formula. There is no formula expression engine.
+- `purityPercentApplied` and `overagePercent` are **snapshots** on the
+  component, re-frozen on the Production Order requirement. Editing
+  `Item.defaultPurityPercent` afterwards never rewrites an existing
+  formulation or an existing Production Order.
+- Purity `null` means **unknown**: no correction is applied. It is never
+  treated as 100%.
+- Physical requirement = theoretical ÷ (purity/100) × (1 + overage/100),
+  always in Decimal. Theoretical and physical are both persisted on the
+  requirement, so the shop floor sees what was corrected and why.
+- Legacy reference fields (historical total / unit / batch units) are
+  documentation of the imported spreadsheet line — never inputs to any
+  calculation.
+
 ---
 
 # 19. Production Orders

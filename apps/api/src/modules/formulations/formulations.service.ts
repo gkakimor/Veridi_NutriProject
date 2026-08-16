@@ -14,6 +14,7 @@ import type {
   FormulationVersionListResponse,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { computeComponentRequirement } from "../../lib/formulation-math.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
@@ -51,6 +52,7 @@ type VersionWithRelations = FormulationVersion & {
 function toComponentDTO(
   component: ComponentWithItem,
   units: readonly UnitOfMeasure[],
+  version: { basisQuantity: Prisma.Decimal; dosesPerPackage: number | null },
 ): FormulationComponentDTO {
   const item = component.item;
   let stockEquivalentQuantity: Prisma.Decimal;
@@ -62,6 +64,22 @@ function toComponentDTO(
     stockEquivalentQuantity = component.quantity;
   }
 
+  // Previa por UNIDADE acabada — mesma matematica do Requirement da OP,
+  // nunca uma conta paralela so para a tela.
+  const perUnit = computeComponentRequirement(
+    {
+      basis: component.basis,
+      quantity: component.quantity,
+      unitCode: component.unitCode,
+      stockUnitCode: item.unitCode,
+      purityPercentApplied: component.purityPercentApplied,
+      overagePercent: component.overagePercent,
+    },
+    new Prisma.Decimal(1),
+    { basisQuantity: version.basisQuantity, dosesPerPackage: version.dosesPerPackage },
+    [...units],
+  );
+
   return {
     id: component.id,
     itemId: component.itemId,
@@ -71,6 +89,18 @@ function toComponentDTO(
     itemActive: item.active,
     quantity: component.quantity.toString(),
     unitCode: component.unitCode,
+    basis: component.basis,
+    purityPercentApplied: component.purityPercentApplied
+      ? component.purityPercentApplied.toString()
+      : null,
+    overagePercent: component.overagePercent ? component.overagePercent.toString() : null,
+    legacyTotalQuantity: component.legacyTotalQuantity
+      ? component.legacyTotalQuantity.toString()
+      : null,
+    legacyTotalUnitCode: component.legacyTotalUnitCode,
+    legacyBatchUnits: component.legacyBatchUnits ? component.legacyBatchUnits.toString() : null,
+    theoreticalPerUnit: perUnit.theoreticalQuantity.toString(),
+    physicalPerUnit: perUnit.requiredQuantity.toString(),
     stockEquivalentQuantity: stockEquivalentQuantity.toString(),
     stockUnitCode: item.unitCode,
     notes: component.notes,
@@ -91,6 +121,8 @@ function toVersionDTO(
     versionLabel: `V${version.versionNumber}`,
     status: version.status,
     basisQuantity: version.basisQuantity.toString(),
+    calculationMode: version.calculationMode,
+    dosesPerPackage: version.dosesPerPackage,
     outputItemId: version.outputItemId,
     outputItemCode: version.outputItemCode,
     outputItemName: version.outputItemName,
@@ -99,7 +131,7 @@ function toVersionDTO(
     components: version.components
       .slice()
       .sort((a, b) => a.position - b.position)
-      .map((component) => toComponentDTO(component, units)),
+      .map((component) => toComponentDTO(component, units, version)),
     createdAt: version.createdAt.toISOString(),
     createdBy: version.createdBy,
     activatedAt: version.activatedAt ? version.activatedAt.toISOString() : null,
@@ -285,6 +317,11 @@ export async function createNewVersionFromActive(
         versionNumber: nextVersionNumber,
         status: "DRAFT",
         basisQuantity: source.basisQuantity,
+        // A nova versao nasce identica a ativa: copiar so os componentes
+        // deixaria linhas PER_DOSE numa versao FIXED_BASIS sem doses —
+        // formula quebrada no primeiro calculo.
+        calculationMode: source.calculationMode,
+        dosesPerPackage: source.dosesPerPackage,
         outputItemId: source.outputItemId,
         outputItemCode: source.outputItemCode,
         outputItemName: source.outputItemName,
@@ -296,6 +333,24 @@ export async function createNewVersionFromActive(
             itemId: component.itemId,
             quantity: component.quantity,
             unitCode: component.unitCode,
+            ...(component.basis !== undefined ? { basis: component.basis } : {}),
+            // Pureza/overage sao SNAPSHOT: gravados aqui e nunca mais
+            // reescritos por mudanca no cadastro do Item.
+            ...(component.purityPercentApplied !== undefined
+              ? { purityPercentApplied: component.purityPercentApplied }
+              : {}),
+            ...(component.overagePercent !== undefined
+              ? { overagePercent: component.overagePercent }
+              : {}),
+            ...(component.legacyTotalQuantity !== undefined
+              ? { legacyTotalQuantity: component.legacyTotalQuantity }
+              : {}),
+            ...(component.legacyTotalUnitCode !== undefined
+              ? { legacyTotalUnitCode: component.legacyTotalUnitCode }
+              : {}),
+            ...(component.legacyBatchUnits !== undefined
+              ? { legacyBatchUnits: component.legacyBatchUnits }
+              : {}),
             notes: component.notes,
             position: component.position,
           })),
@@ -362,6 +417,12 @@ export async function updateFormulationVersion(
       where: { id },
       data: {
         ...(input.basisQuantity !== undefined ? { basisQuantity: input.basisQuantity } : {}),
+        ...(input.calculationMode !== undefined
+          ? { calculationMode: input.calculationMode }
+          : {}),
+        ...(input.dosesPerPackage !== undefined
+          ? { dosesPerPackage: input.dosesPerPackage }
+          : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
       },
     });
@@ -375,6 +436,24 @@ export async function updateFormulationVersion(
             itemId: component.itemId,
             quantity: component.quantity,
             unitCode: component.unitCode,
+            ...(component.basis !== undefined ? { basis: component.basis } : {}),
+            // Pureza/overage sao SNAPSHOT: gravados aqui e nunca mais
+            // reescritos por mudanca no cadastro do Item.
+            ...(component.purityPercentApplied !== undefined
+              ? { purityPercentApplied: component.purityPercentApplied }
+              : {}),
+            ...(component.overagePercent !== undefined
+              ? { overagePercent: component.overagePercent }
+              : {}),
+            ...(component.legacyTotalQuantity !== undefined
+              ? { legacyTotalQuantity: component.legacyTotalQuantity }
+              : {}),
+            ...(component.legacyTotalUnitCode !== undefined
+              ? { legacyTotalUnitCode: component.legacyTotalUnitCode }
+              : {}),
+            ...(component.legacyBatchUnits !== undefined
+              ? { legacyBatchUnits: component.legacyBatchUnits }
+              : {}),
             ...(component.notes !== undefined ? { notes: component.notes } : {}),
             position: index,
           })),

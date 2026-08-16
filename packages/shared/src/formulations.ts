@@ -16,6 +16,38 @@ export const FORMULATION_VERSION_STATUS_LABELS: Record<FormulationVersionStatus,
   INACTIVE: "Inativa",
 };
 
+/**
+ * Modo de cálculo da versão. `FIXED_BASIS` é o modelo original ("estas
+ * quantidades produzem esta base"); `PER_DOSE` declara a fórmula por dose
+ * do produto acabado, como a indústria trabalha.
+ */
+export type FormulationCalculationMode = "FIXED_BASIS" | "PER_DOSE";
+
+export const FORMULATION_CALCULATION_MODES: readonly FormulationCalculationMode[] = [
+  "FIXED_BASIS",
+  "PER_DOSE",
+];
+
+export const FORMULATION_CALCULATION_MODE_LABELS: Record<FormulationCalculationMode, string> = {
+  FIXED_BASIS: "Base fixa",
+  PER_DOSE: "Por dose",
+};
+
+/** Base de cálculo do COMPONENTE — declarada linha a linha. */
+export type FormulationComponentBasis = "FIXED_BASIS" | "PER_DOSE" | "PER_FINISHED_UNIT";
+
+export const FORMULATION_COMPONENT_BASES: readonly FormulationComponentBasis[] = [
+  "FIXED_BASIS",
+  "PER_DOSE",
+  "PER_FINISHED_UNIT",
+];
+
+export const FORMULATION_COMPONENT_BASIS_LABELS: Record<FormulationComponentBasis, string> = {
+  FIXED_BASIS: "Base da fórmula",
+  PER_DOSE: "Por dose",
+  PER_FINISHED_UNIT: "Por unidade acabada",
+};
+
 export interface FormulationComponentDTO {
   id: string;
   itemId: string;
@@ -26,9 +58,26 @@ export interface FormulationComponentDTO {
   /** Decimal como string — nunca float JS. */
   quantity: string;
   unitCode: string;
+  basis: FormulationComponentBasis;
+  /**
+   * SNAPSHOT da pureza aplicada (0 < x <= 100). `null` significa
+   * DESCONHECIDA: nenhuma correção é aplicada — nunca se assume 100%.
+   * Alterar `Item.defaultPurityPercent` depois não muda esta versão.
+   */
+  purityPercentApplied: string | null;
+  /** Perda/excesso de processo em %; `null` = não informado. */
+  overagePercent: string | null;
+  /** Referência histórica da planilha — nunca entra no cálculo. */
+  legacyTotalQuantity: string | null;
+  legacyTotalUnitCode: string | null;
+  legacyBatchUnits: string | null;
   /** Só exibição — equivalente na unidade de estoque do Item; nunca fonte de verdade. */
   stockEquivalentQuantity: string;
   stockUnitCode: string;
+  /** Necessidade teórica para uma unidade acabada, antes de pureza/overage. */
+  theoreticalPerUnit: string;
+  /** Necessidade física para uma unidade acabada, já com pureza/overage. */
+  physicalPerUnit: string;
   notes: string | null;
   position: number;
 }
@@ -43,6 +92,9 @@ export interface FormulationVersionDTO {
   versionLabel: string;
   status: FormulationVersionStatus;
   basisQuantity: string;
+  calculationMode: FormulationCalculationMode;
+  /** Obrigatório no modo `PER_DOSE`; `null` no `FIXED_BASIS`. */
+  dosesPerPackage: number | null;
   outputItemId: string;
   outputItemCode: string;
   outputItemName: string;
@@ -86,6 +138,12 @@ export interface FormulationComponentInput {
   itemId: string;
   quantity: string;
   unitCode: string;
+  basis?: FormulationComponentBasis;
+  purityPercentApplied?: string | null;
+  overagePercent?: string | null;
+  legacyTotalQuantity?: string | null;
+  legacyTotalUnitCode?: string | null;
+  legacyBatchUnits?: string | null;
   notes?: string;
 }
 
@@ -95,6 +153,8 @@ export interface CreateFormulationVersionInput {
 
 export interface UpdateFormulationVersionInput {
   basisQuantity?: string;
+  calculationMode?: FormulationCalculationMode;
+  dosesPerPackage?: number | string | null;
   notes?: string;
   components?: FormulationComponentInput[];
 }

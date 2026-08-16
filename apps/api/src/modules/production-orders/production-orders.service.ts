@@ -244,6 +244,11 @@ async function regenerateRequirements(
       itemType: row.itemType,
       formulaQuantity: row.formulaQuantity,
       formulaUnitCode: row.formulaUnitCode,
+      // Congela tambem o teorico e os fatores aplicados: a OP guarda o
+      // "porque" do peso, nao so o numero final.
+      theoreticalQuantity: row.theoreticalQuantity,
+      purityPercentApplied: row.purityPercentApplied,
+      overagePercent: row.overagePercent,
       requiredQuantity: row.requiredQuantity,
       stockUnitCode: row.stockUnitCode,
       position: row.position,

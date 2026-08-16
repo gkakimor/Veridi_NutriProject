@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { FormulationCostEstimateDTO, FormulationVersionDTO, UnitOfMeasureDTO } from "@veridi/shared";
+import type {
+  FormulationCalculationMode,
+  FormulationComponentBasis,
+  FormulationCostEstimateDTO,
+  FormulationVersionDTO,
+  UnitOfMeasureDTO,
+} from "@veridi/shared";
 import {
   COST_QUALITY_LABELS,
   COST_SOURCE_LABELS,
+  FORMULATION_CALCULATION_MODES,
+  FORMULATION_CALCULATION_MODE_LABELS,
+  FORMULATION_COMPONENT_BASES,
+  FORMULATION_COMPONENT_BASIS_LABELS,
   FORMULATION_VERSION_STATUS_LABELS,
 } from "@veridi/shared";
 import {
@@ -38,8 +48,12 @@ interface ComponentRow {
   stockUnitCode: string;
   quantity: string;
   unitCode: string;
+  basis: FormulationComponentBasis;
+  purityPercentApplied: string;
+  overagePercent: string;
   notes: string;
   stockEquivalentQuantity: string;
+  physicalPerUnit: string;
 }
 
 function statusBadgeClass(status: FormulationVersionDTO["status"]): string {
@@ -69,8 +83,12 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
     stockUnitCode: component.stockUnitCode,
     quantity: component.quantity,
     unitCode: component.unitCode,
+    basis: component.basis,
+    purityPercentApplied: component.purityPercentApplied ?? "",
+    overagePercent: component.overagePercent ?? "",
     notes: component.notes ?? "",
     stockEquivalentQuantity: component.stockEquivalentQuantity,
+    physicalPerUnit: component.physicalPerUnit,
   };
 }
 
@@ -88,6 +106,8 @@ export function FormulationVersionPage() {
   const [notFound, setNotFound] = useState(false);
 
   const [basisQuantity, setBasisQuantity] = useState("");
+  const [calculationMode, setCalculationMode] = useState<FormulationCalculationMode>("FIXED_BASIS");
+  const [dosesPerPackage, setDosesPerPackage] = useState("");
   const [notes, setNotes] = useState("");
   const [components, setComponents] = useState<ComponentRow[]>([]);
 
@@ -102,6 +122,8 @@ export function FormulationVersionPage() {
 
   const syncFromServer = useCallback((dto: FormulationVersionDTO) => {
     setBasisQuantity(dto.basisQuantity);
+    setCalculationMode(dto.calculationMode);
+    setDosesPerPackage(dto.dosesPerPackage === null ? "" : String(dto.dosesPerPackage));
     setNotes(dto.notes ?? "");
     setComponents(dto.components.map(rowFromDTO));
   }, []);
@@ -194,14 +216,24 @@ export function FormulationVersionPage() {
         stockUnitCode: "",
         quantity: "",
         unitCode: "",
+        // Componente novo herda o modo da versão: numa fórmula por dose, a
+        // linha por dose é o caso normal.
+        basis: calculationMode === "PER_DOSE" ? "PER_DOSE" : "FIXED_BASIS",
+        purityPercentApplied: "",
+        overagePercent: "",
         notes: "",
         stockEquivalentQuantity: "",
+        physicalPerUnit: "",
       },
     ]);
   }
 
   function handleRemoveComponent(key: string) {
     setComponents((prev) => prev.filter((row) => row.key !== key));
+  }
+
+  function handleComponentBasisChange(key: string, basis: FormulationComponentBasis) {
+    setComponents((prev) => prev.map((row) => (row.key === key ? { ...row, basis } : row)));
   }
 
   function handleComponentItemChange(key: string, itemId: string) {
@@ -225,7 +257,7 @@ export function FormulationVersionPage() {
 
   function handleComponentFieldChange(
     key: string,
-    field: "quantity" | "unitCode" | "notes",
+    field: "quantity" | "unitCode" | "notes" | "purityPercentApplied" | "overagePercent",
     value: string,
   ) {
     setComponents((prev) => prev.map((row) => (row.key === key ? { ...row, [field]: value } : row)));
@@ -243,12 +275,18 @@ export function FormulationVersionPage() {
         itemId: row.itemId,
         quantity: row.quantity.trim(),
         unitCode: row.unitCode,
+        basis: row.basis,
+        // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
+        purityPercentApplied: row.purityPercentApplied.trim() || null,
+        overagePercent: row.overagePercent.trim() || null,
         ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
       }));
 
     try {
       const updated = await updateFormulationVersion(versionId, {
         basisQuantity: basisQuantity.trim(),
+        calculationMode,
+        dosesPerPackage: dosesPerPackage.trim() || null,
         notes: notes.trim(),
         components: componentsPayload,
       });
@@ -390,11 +428,60 @@ export function FormulationVersionPage() {
               <p className="field__error">{fieldErrors["basisQuantity"]}</p>
             )}
           </div>
+
+          <div className="field field--narrow">
+            <label htmlFor="version-mode">Modo de cálculo</label>
+            {isDraft ? (
+              <select
+                id="version-mode"
+                value={calculationMode}
+                onChange={(event) =>
+                  setCalculationMode(event.target.value as FormulationCalculationMode)
+                }
+              >
+                {FORMULATION_CALCULATION_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {FORMULATION_CALCULATION_MODE_LABELS[mode]}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="field-readonly-value">
+                {FORMULATION_CALCULATION_MODE_LABELS[version.calculationMode]}
+              </p>
+            )}
+            <p className="field__hint">
+              Base fixa: as quantidades produzem a base declarada. Por dose: a fórmula é declarada
+              por dose do produto acabado.
+            </p>
+          </div>
+
+          {calculationMode === "PER_DOSE" && (
+            <div className="field field--narrow">
+              <label htmlFor="version-doses">
+                Doses por embalagem <span className="req">*</span>
+              </label>
+              {isDraft ? (
+                <input
+                  id="version-doses"
+                  type="text"
+                  inputMode="numeric"
+                  value={dosesPerPackage}
+                  onChange={(event) => setDosesPerPackage(event.target.value)}
+                />
+              ) : (
+                <p className="field-readonly-value">{version.dosesPerPackage ?? "—"}</p>
+              )}
+              {fieldErrors["dosesPerPackage"] && (
+                <p className="field__error">{fieldErrors["dosesPerPackage"]}</p>
+              )}
+            </div>
+          )}
         </FormSection>
 
         <FormSection
           title="Componentes"
-          subtitle="Somente matérias-primas e embalagens. Unidade pode diferir da unidade de estoque, desde que compatível."
+          subtitle="Pureza vazia = desconhecida (nenhuma correção é aplicada). Embalagem normalmente usa base por unidade acabada. O físico por unidade já inclui pureza e overage."
         >
           <div className="table-container">
             <table className="table">
@@ -402,9 +489,13 @@ export function FormulationVersionPage() {
                 <tr>
                   <th>Item</th>
                   <th>Tipo</th>
+                  <th>Base</th>
                   <th>Quantidade</th>
                   <th>Unidade</th>
+                  <th>Pureza %</th>
+                  <th>Overage %</th>
                   <th>Equivalente estoque</th>
+                  <th>Físico / unidade</th>
                   {isDraft && <th aria-hidden="true" />}
                 </tr>
               </thead>
@@ -435,6 +526,28 @@ export function FormulationVersionPage() {
                       )}
                     </td>
                     <td>{row.stockUnitCode || "—"}</td>
+                    <td>
+                      {isDraft ? (
+                        <select
+                          aria-label="Base de cálculo do componente"
+                          value={row.basis}
+                          onChange={(event) =>
+                            handleComponentBasisChange(
+                              row.key,
+                              event.target.value as FormulationComponentBasis,
+                            )
+                          }
+                        >
+                          {FORMULATION_COMPONENT_BASES.map((basis) => (
+                            <option key={basis} value={basis}>
+                              {FORMULATION_COMPONENT_BASIS_LABELS[basis]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        FORMULATION_COMPONENT_BASIS_LABELS[row.basis]
+                      )}
+                    </td>
                     <td>
                       {isDraft ? (
                         <input
@@ -470,7 +583,46 @@ export function FormulationVersionPage() {
                       )}
                     </td>
                     <td>
+                      {isDraft ? (
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label="Pureza aplicada"
+                          placeholder="—"
+                          value={row.purityPercentApplied}
+                          onChange={(event) =>
+                            handleComponentFieldChange(
+                              row.key,
+                              "purityPercentApplied",
+                              event.target.value,
+                            )
+                          }
+                        />
+                      ) : (
+                        row.purityPercentApplied || "—"
+                      )}
+                    </td>
+                    <td>
+                      {isDraft ? (
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label="Overage do componente"
+                          placeholder="—"
+                          value={row.overagePercent}
+                          onChange={(event) =>
+                            handleComponentFieldChange(row.key, "overagePercent", event.target.value)
+                          }
+                        />
+                      ) : (
+                        row.overagePercent || "—"
+                      )}
+                    </td>
+                    <td>
                       {row.stockEquivalentQuantity} {row.stockUnitCode}
+                    </td>
+                    <td>
+                      {row.physicalPerUnit ? `${row.physicalPerUnit} ${row.stockUnitCode}` : "—"}
                     </td>
                     {isDraft && (
                       <td>
@@ -489,7 +641,7 @@ export function FormulationVersionPage() {
 
                 {components.length === 0 && (
                   <tr>
-                    <td colSpan={isDraft ? 6 : 5} className="table__empty">
+                    <td colSpan={isDraft ? 10 : 9} className="table__empty">
                       Nenhum componente adicionado.
                     </td>
                   </tr>

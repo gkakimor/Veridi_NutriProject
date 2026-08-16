@@ -41,6 +41,9 @@ capacidade 31): concluído.**
 concluído — Bloco E encerrado.**
 **Delivery 25 — Cadastros Industriais v2 (Bloco F, capacidade 33):
 concluído.**
+**Delivery 26 — Formulação Industrial v2 (Bloco F, capacidade 34):
+concluído — dose, pureza e overage; base DEV reconstruível a partir do
+corpus real (fora do repositório).**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2897,6 +2900,81 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 26 — Formulação Industrial v2 (Bloco F, capacidade 34)
+
+A formulação passa a suportar o jeito industrial de declarar fórmula
+(**por dose**), com **pureza** e **overage** explícitos, sem abandonar o
+modelo original.
+
+## Modo de cálculo (versão) e base (componente)
+- `FormulationVersion.calculationMode`: `FIXED_BASIS` (default, modelo
+  original — "estas quantidades produzem esta base") ou `PER_DOSE`.
+- `FormulationVersion.dosesPerPackage`: obrigatório em `PER_DOSE`.
+- `FormulationComponent.basis`: `FIXED_BASIS` | `PER_DOSE` |
+  `PER_FINISHED_UNIT`. A base é **por componente**: uma mesma versão tem
+  ativos por dose e embalagem por unidade acabada sem engine de expressão.
+- Compatibilidade: tudo que existia continua `FIXED_BASIS` e calcula
+  exatamente como antes (417 testes de API passam sem alteração de
+  expectativa).
+
+## Pureza e overage — snapshot, nunca cadastro vivo
+- `purityPercentApplied` e `overagePercent` são congelados no componente
+  (e de novo no `ProductionOrderRequirement`). Mudar
+  `Item.defaultPurityPercent` depois **não** altera formulação nem OP.
+- `null` de pureza significa **DESCONHECIDA**: nenhuma correção é
+  aplicada. Nunca se assume 100%.
+- Campos `legacyTotalQuantity`/`legacyTotalUnitCode`/`legacyBatchUnits`
+  guardam a referência histórica importada — nunca entram no cálculo.
+
+## Fonte única do cálculo
+`apps/api/src/lib/formulation-math.ts`:
+
+```
+teórico = quantidade × fator(basis)
+   FIXED_BASIS        → produzido ÷ basisQuantity
+   PER_DOSE           → dosesPorEmbalagem × produzido
+   PER_FINISHED_UNIT  → produzido
+físico  = teórico ÷ (pureza/100) × (1 + overage/100)
+```
+
+Tudo em `Prisma.Decimal`; quantidades persistem em `Decimal(18,6)` como no
+resto do sistema. `requirement-calc.ts` e o preview do editor consomem a
+mesma função — não existe segunda implementação da conta.
+
+## Frontend
+Editor de versão: modo de cálculo, doses por embalagem (só em `PER_DOSE`),
+e por linha `Base`, `Pureza %`, `Overage %`, além da coluna **Físico /
+unidade** (já com pureza e overage). Campo vazio grava `null`.
+
+## Corpus real da Veridi (base DEV)
+Ferramenta de dados fora da aplicação, em `scripts/veridi-data/`:
+`pnpm veridi:data:validate` (**nunca escreve**) e `pnpm veridi:data:seed`
+(`--reset` zera só a base local; aborta se `NODE_ENV=production`, host
+não-local ou nome de banco com "prod").
+
+- CSVs reais ficam em `.local-data/` (no `.gitignore`) — cliente, CNPJ,
+  fornecedor, fórmula e preço reais **nunca** são versionados.
+- Código interno continua sendo a identidade operacional; o código da
+  planilha vai para `Customer.externalCode`/`Item.externalCode`/
+  `Product.externalCode` (índice **não** único — o legado tem duplicidade
+  real). O seed usa as **mesmas sequences Postgres** da aplicação, então
+  código de seed e código criado pela tela nunca colidem, e ainda escreve
+  um de-para legado × interno em `.local-data/veridi/de-para/`.
+- A fórmula histórica foi **deduzida e conferida** contra
+  `total_kg_com_pureza_overage`: 27 componentes comparáveis, 27 batem com
+  tolerância 1e-5 (folga da planilha, que arredonda em 8 casas), 0
+  divergentes. A conta nunca foi ajustada para forçar coincidência —
+  divergência viraria finding.
+- Só se importa `PER_DOSE` quando o próprio corpus sustenta a separação
+  dose × pureza × overage; caso contrário entra `FIXED_BASIS` com o
+  consumo histórico real e um finding.
+- **Não importado de propósito**: saldo de estoque (a planilha tem
+  negativos), compras/recebimentos, preços de fornecedor, amostras,
+  projetos como entidade, CMV e IN28 — cada um é capacidade futura.
+- Testes seguem sintéticos: `pnpm test` não depende de `.local-data`.
+
+---
+
 # Delivery 25 — Cadastros Industriais v2 (Bloco F, capacidade 33)
 
 Primeira capacidade do Bloco F. Enriquece Customer/Item/Product com o que a
@@ -3282,10 +3360,12 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **capacidade 34 — Formulação Industrial
-v2 (dose, pureza e overage)**, que usará `Item.defaultPurityPercent` como
-default e congelará `purityPercentApplied` no componente. Depois seguem
-35-42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+Próximo passo do roadmap oficial: **capacidade 35** (Bloco F). A base de
+desenvolvimento é reconstruível a partir do corpus real da Veridi
+(`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
+versionados); o importador definitivo continua sendo a **capacidade 41** —
+o que existe hoje é ferramenta de dados de desenvolvimento. Depois seguem
+36-42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.

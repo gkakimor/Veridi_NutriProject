@@ -73,6 +73,24 @@ enum LotOrigin {
   PRODUCTION
 }
 
+/// Como a versao calcula a necessidade de material.
+/// FIXED_BASIS: "estas quantidades produzem `basisQuantity`" (modelo
+/// original, preservado). PER_DOSE: a formula e declarada por DOSE do
+/// produto acabado, do jeito que a industria realmente trabalha.
+enum FormulationCalculationMode {
+  FIXED_BASIS
+  PER_DOSE
+}
+
+/// Base de calculo do COMPONENTE. Uma mesma versao PER_DOSE tem
+/// ingredientes por dose e embalagem por unidade acabada — cada linha
+/// declara a propria base, sem engine de expressao.
+enum FormulationComponentBasis {
+  FIXED_BASIS
+  PER_DOSE
+  PER_FINISHED_UNIT
+}
+
 enum FormulationVersionStatus {
   DRAFT
   ACTIVE
@@ -185,6 +203,10 @@ model Item {
   /// inferido permanentemente so pelo type.
   requiresQualityRelease Boolean @default(true)
 
+  /// Codigo do sistema legado (planilhas) — reconciliacao da importacao,
+  /// nunca identidade operacional.
+  externalCode String?
+
   /// Fonte / forma quimica realmente utilizada (ex.: "Cloridrato de
   /// tiamina" para o item "Vitamina B1"). Texto livre nesta fase — nao
   /// existe entidade Source.
@@ -234,6 +256,7 @@ model Item {
   @@index([active])
   @@index([externalBarcode])
   @@index([family])
+  @@index([externalCode])
   @@map("items")
 }
 
@@ -346,6 +369,11 @@ model Customer {
   email String?
   phone String?
 
+  /// Codigo do sistema legado (planilhas). Serve para importacao e
+  /// reconciliacao — NUNCA substitui `code`, que continua sendo a
+  /// identidade operacional do ERP.
+  externalCode String?
+
   /// Endereco estruturado. Todos opcionais: clientes cadastrados antes da
   /// capacidade 33 continuam validos com os campos em null.
   street     String?
@@ -369,6 +397,7 @@ model Customer {
   customerOrders CustomerOrder[]
 
   @@index([active])
+  @@index([externalCode])
   @@map("customers")
 }
 
@@ -469,6 +498,15 @@ model FormulationVersion {
   /// da OP (nao implementado ainda).
   basisQuantity Decimal @db.Decimal(18, 6)
 
+  /// Modo de calculo da versao. FIXED_BASIS preserva o comportamento
+  /// original; PER_DOSE declara a formula por DOSE do produto acabado, do
+  /// jeito que a industria trabalha.
+  calculationMode FormulationCalculationMode @default(FIXED_BASIS)
+
+  /// Doses por embalagem — obrigatorio no modo PER_DOSE, nulo no
+  /// FIXED_BASIS. E o elo entre "mg por dose" e a unidade vendida.
+  dosesPerPackage Int?
+
   /// Snapshot do output no momento da criacao/copia da versao — nunca
   /// depende da associacao ATUAL do Product (que pode mudar depois),
   /// preservando o significado historico da versao.
@@ -510,11 +548,34 @@ model FormulationComponent {
   itemId String
   item   Item   @relation(fields: [itemId], references: [id])
 
+  /// Significado depende de `basis`: quantidade para a base da versao
+  /// (FIXED_BASIS), por dose (PER_DOSE) ou por unidade acabada
+  /// (PER_FINISHED_UNIT — embalagem).
   quantity Decimal @db.Decimal(18, 6)
 
   /// Pode diferir da unidade de estoque do Item, desde que mesma dimensao
   /// (ex.: item em kg, componente em g) — validado via lib/uom existente.
   unitCode String
+
+  basis FormulationComponentBasis @default(FIXED_BASIS)
+
+  /// SNAPSHOT da pureza aplicada nesta formulacao (0 < x <= 100). Copiada
+  /// de Item.defaultPurityPercent quando existir no momento da criacao —
+  /// alterar o Item depois NUNCA muda esta versao. `null` = pureza
+  /// desconhecida: nenhuma correcao e aplicada (jamais assume 100% para
+  /// "consertar" o numero).
+  purityPercentApplied Decimal? @db.Decimal(6, 3)
+
+  /// Perda/excesso de processo em % (>= 0). `null` = nao informado; nunca
+  /// e inferido matematicamente so para bater com um total historico.
+  overagePercent Decimal? @db.Decimal(6, 3)
+
+  /// Referencia historica da planilha (total que a fabrica pesava e o
+  /// tamanho do lote correspondente). NUNCA entra no calculo — existe para
+  /// comparar ERP x historico durante a migracao.
+  legacyTotalQuantity Decimal? @db.Decimal(18, 6)
+  legacyTotalUnitCode String?
+  legacyBatchUnits    Decimal? @db.Decimal(18, 6)
 
   notes String?
 
@@ -971,8 +1032,15 @@ model ProductionOrderRequirement {
   formulaQuantity Decimal @db.Decimal(18, 6)
   formulaUnitCode String
 
-  /// formulaQuantity x productionFactor, ja convertida para a unidade de
-  /// estoque do Item — fonte de verdade da necessidade tecnica da OP.
+  /// Necessidade TEORICA (antes de pureza/overage), na unidade de estoque.
+  theoreticalQuantity Decimal? @db.Decimal(18, 6)
+
+  /// Pureza/overage efetivamente aplicados — congelados junto com a OP.
+  purityPercentApplied Decimal? @db.Decimal(6, 3)
+  overagePercent       Decimal? @db.Decimal(6, 3)
+
+  /// Necessidade FISICA final (ja com pureza/overage), convertida para a
+  /// unidade de estoque do Item — fonte de verdade da necessidade da OP.
   requiredQuantity Decimal @db.Decimal(18, 6)
   stockUnitCode    String
 
