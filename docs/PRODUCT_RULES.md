@@ -1297,7 +1297,7 @@ produce → make finished product available → picking/shipping → invoicing.
 
 ---
 
-# 30. Block E — Management, Reports & Exports (Dashboard: Delivery 21; Reports: Delivery 23)
+# 30. Block E — Management, Reports & Exports (Dashboard: Delivery 21; Reports: Delivery 23; Exports: Delivery 24)
 
 Product Ownership decision registered during Delivery 18. A **transversal
 layer** (steps 29–31), executed only **after** Purchase Suggestion (26),
@@ -1375,6 +1375,40 @@ the official roadmap ordering.
   meanings mixed silently inside one report.
 - Reports never invent a relationship: they navigate the ones that already
   exist. Genealogy is always real consumption and real output.
+
+## Durable rules confirmed at implementation (Exports, §32)
+
+- Export policy by surface: tabular listing → CSV; report → CSV + print;
+  transactional document → print; traceability → print; create/edit form →
+  no export at all.
+- Exporting never creates a source of truth. No export/report record, no
+  stored file, no cached CSV: every export runs the same read model with
+  the same filters at request time.
+- **CSV is generated server-side and always contains the complete filtered
+  result** — never the rendered rows, never only the current page. The UI
+  page-size cap applies to navigation only; exports use an explicit
+  unpaginated path, never an oversized `pageSize`.
+- CSV format is fixed for Brazilian spreadsheets: UTF-8 with BOM, `;`
+  separator, CRLF, Portuguese headers, pt-BR dates and decimals. Decimals
+  come from the stored decimal string, never through a JS float.
+- Business codes, CNPJ, barcodes and lot numbers are exported as text and
+  never replaced by a technical UUID; file names are readable and
+  deterministic.
+- User-provided text is neutralized against spreadsheet formula injection
+  on export only — the stored value is never altered.
+- PDF is produced by the browser: print-oriented HTML plus `@media print`
+  and `window.print()`. FAST MVP has no backend PDF engine, no headless
+  browser and no stored PDFs.
+- Printed reports carry the whole filtered result, plus the report name,
+  the filters actually applied and the generation timestamp. No user name
+  is invented while there is no authenticated identity.
+- Printed documents show the historical snapshot the document already
+  froze, never the current master data; a DRAFT prints clearly marked as
+  such; and the Billing print always states that it is not a Nota Fiscal.
+- Unknown money is never printed or exported as zero: the CSV cell stays
+  empty and the print shows "—". Incomplete pricing/cost keeps its
+  semantics — a known subtotal is labelled a subtotal and the cost quality
+  travels with the number.
 
 ---
 

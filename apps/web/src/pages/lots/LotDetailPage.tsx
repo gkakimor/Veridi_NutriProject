@@ -177,9 +177,18 @@ export function LotDetailPage() {
             </span>
           </div>
         </div>
-        <button type="button" className="btn btn--ghost" onClick={() => navigate("/estoque/lotes")}>
-          ← Voltar
-        </button>
+        <div className="table__actions">
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => navigate(`/estoque/lotes/${lot.id}/rastreabilidade/imprimir`)}
+          >
+            Imprimir rastreabilidade
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => navigate("/estoque/lotes")}>
+            ← Voltar
+          </button>
+        </div>
       </div>
 
       <div className="doc-body">

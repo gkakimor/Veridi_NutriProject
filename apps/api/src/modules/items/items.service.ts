@@ -2,6 +2,8 @@ import type { Item, UnitOfMeasure } from "@prisma/client";
 import type { ItemDTO, ItemListResponse } from "@veridi/shared";
 import { ITEM_TYPE_DEFAULTS } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextItemCode } from "./item-codes.js";
 import { ItemNotFoundError, StructuralFieldLockedError, UnitNotFoundError } from "./items.errors.js";
 import type {
@@ -84,6 +86,7 @@ async function getOperationallyUsedItemIds(itemIds: string[]): Promise<Set<strin
 
 export async function listItems(
   query: ListItemsQuery,
+  pagination: Pagination = query,
 ): Promise<ItemListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
@@ -103,8 +106,7 @@ export async function listItems(
       where,
       include: { unit: true },
       orderBy: { code: "asc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.item.count({ where }),
   ]);
@@ -113,9 +115,7 @@ export async function listItems(
 
   return {
     items: items.map((item) => toItemDTO(item, usedIds.has(item.id))),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

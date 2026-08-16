@@ -3,6 +3,8 @@ import type { Customer, Item, Product } from "@prisma/client";
 import type { ProductDTO, ProductListResponse } from "@veridi/shared";
 import { PRODUCT_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   CustomerNotFoundError,
@@ -101,6 +103,7 @@ async function requireProduct(id: string): Promise<Product> {
 
 export async function listProducts(
   query: ListProductsQuery,
+  pagination: Pagination = query,
 ): Promise<ProductListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
@@ -130,17 +133,14 @@ export async function listProducts(
       where,
       include: { customer: true, finishedProductItem: true },
       orderBy: { code: "asc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.product.count({ where }),
   ]);
 
   return {
     products: products.map(toProductDTO),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

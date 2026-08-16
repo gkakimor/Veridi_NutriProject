@@ -43,11 +43,16 @@ export function InventoryPositionReportPage() {
     () => ({ search, itemType, status, onlyWithBalance, page, pageSize: PAGE_SIZE }),
     [search, itemType, status, onlyWithBalance, page],
   );
-  const { data, loading, error } = useReport(getInventoryPositionReport, filters);
+  const { data, loading, error, print, preparingPrint } = useReport(getInventoryPositionReport, filters);
 
   return (
     <ReportPage
       title="R-01 · Posição de Estoque"
+      csvPath="/reports/inventory/position/export.csv"
+      csvFilters={filters}
+      total={data?.total}
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle="Saldo atual por item e lote, sempre calculado a partir das movimentações."
       loading={loading}
       error={error}
@@ -176,11 +181,16 @@ export function ExpiryReportPage() {
     }),
     [window, search, from, to, page],
   );
-  const { data, loading, error } = useReport(getExpiryReport, filters);
+  const { data, loading, error, print, preparingPrint } = useReport(getExpiryReport, filters);
 
   return (
     <ReportPage
       title="R-02 · Vencimentos"
+      csvPath="/reports/inventory/expiry/export.csv"
+      csvFilters={filters}
+      total={data?.total}
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle="Lotes vencidos e vencendo, considerando a validade efetiva e o saldo atual."
       loading={loading}
       error={error}
@@ -298,11 +308,16 @@ export function MovementsReportPage() {
     }),
     [search, type, from, to, page],
   );
-  const { data, loading, error } = useReport(getMovementsReport, filters);
+  const { data, loading, error, print, preparingPrint } = useReport(getMovementsReport, filters);
 
   return (
     <ReportPage
       title="R-03 · Movimentações"
+      csvPath="/reports/inventory/movements/export.csv"
+      csvFilters={filters}
+      total={data?.total}
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle="Toda entrada e saída de estoque no período, com o documento que a originou."
       loading={loading}
       error={error}

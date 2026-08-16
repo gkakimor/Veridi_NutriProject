@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { SupplierDTO } from "@veridi/shared";
 import { formatCnpj } from "@veridi/shared";
 import { listSuppliers, setSupplierActive } from "../../lib/suppliers-api";
@@ -96,7 +97,8 @@ export function SuppliersPage() {
         >
           + Novo fornecedor
         </button>
-      </div>
+        <ExportCsvButton path="/suppliers/export.csv" filters={{ search, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

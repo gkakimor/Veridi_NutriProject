@@ -33,6 +33,15 @@ import { ShipmentsPage } from "./pages/shipments/ShipmentsPage";
 import { ShipmentPage } from "./pages/shipments/ShipmentPage";
 import { BillingsPage } from "./pages/billings/BillingsPage";
 import { BillingPage } from "./pages/billings/BillingPage";
+import {
+  BillingPrintPage,
+  CustomerOrderPrintPage,
+  LotTraceabilityPrintPage,
+  ProductionOrderPrintPage,
+  PurchaseOrderPrintPage,
+  ReceiptPrintPage,
+  ShipmentPrintPage,
+} from "./pages/print/PrintPages";
 import { ReportsHubPage } from "./pages/reports/ReportsHubPage";
 import {
   ExpiryReportPage,
@@ -66,8 +75,15 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rota de impressão: fora do AppShell — sem topbar/sidebar. */}
+        {/* Rotas de impressão: fora do AppShell — sem topbar/sidebar. */}
         <Route path="/estoque/lotes/:id/etiqueta" element={<LotLabelPrintPage />} />
+        <Route path="/estoque/lotes/:id/rastreabilidade/imprimir" element={<LotTraceabilityPrintPage />} />
+        <Route path="/comercial/pedidos/:id/imprimir" element={<CustomerOrderPrintPage />} />
+        <Route path="/compras/ordens/:id/imprimir" element={<PurchaseOrderPrintPage />} />
+        <Route path="/compras/recebimentos/:id/imprimir" element={<ReceiptPrintPage />} />
+        <Route path="/producao/ordens/:id/imprimir" element={<ProductionOrderPrintPage />} />
+        <Route path="/comercial/expedicoes/:id/imprimir" element={<ShipmentPrintPage />} />
+        <Route path="/comercial/faturamento/:id/imprimir" element={<BillingPrintPage />} />
 
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />

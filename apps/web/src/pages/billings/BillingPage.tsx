@@ -175,9 +175,18 @@ export function BillingPage() {
             <span className={statusBadgeClass(billing.status)}>{BILLING_STATUS_LABELS[billing.status]}</span>
           </div>
         </div>
-        <button type="button" className="btn btn--ghost" onClick={() => navigate("/comercial/faturamento")}>
-          ← Voltar
-        </button>
+        <div className="table__actions">
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => navigate(`/comercial/faturamento/${billing.id}/imprimir`)}
+          >
+            Imprimir
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => navigate("/comercial/faturamento")}>
+            ← Voltar
+          </button>
+        </div>
       </div>
 
       <div className="doc-body">

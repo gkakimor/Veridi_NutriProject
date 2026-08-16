@@ -3,6 +3,8 @@ import type { Supplier } from "@prisma/client";
 import type { SupplierDTO, SupplierListResponse } from "@veridi/shared";
 import { SUPPLIER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { DuplicateCnpjError, SupplierNotFoundError } from "./suppliers.errors.js";
 import type {
@@ -50,6 +52,7 @@ async function requireSupplier(id: string): Promise<Supplier> {
 
 export async function listSuppliers(
   query: ListSuppliersQuery,
+  pagination: Pagination = query,
 ): Promise<SupplierListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
@@ -68,17 +71,14 @@ export async function listSuppliers(
     prisma.supplier.findMany({
       where,
       orderBy: { code: "asc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.supplier.count({ where }),
   ]);
 
   return {
     suppliers: suppliers.map(toSupplierDTO),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

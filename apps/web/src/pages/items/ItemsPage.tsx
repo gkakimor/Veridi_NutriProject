@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { ItemDTO, ItemType, UnitOfMeasureDTO } from "@veridi/shared";
 import { ITEM_TYPE_LABELS } from "@veridi/shared";
 import { listItems, setItemActive } from "../../lib/items-api";
@@ -117,7 +118,8 @@ export function ItemsPage() {
         >
           + Novo item
         </button>
-      </div>
+        <ExportCsvButton path="/items/export.csv" filters={{ search, type: typeFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

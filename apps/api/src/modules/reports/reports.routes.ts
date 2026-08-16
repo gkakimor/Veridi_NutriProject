@@ -24,6 +24,8 @@ import {
   getOrderOperation,
 } from "./commercial-reports.service.js";
 import { getAwaitingBillingReport, getBillingPeriodReport } from "./billing-reports.service.js";
+import { ALL_ROWS } from "../../lib/pagination.js";
+import type { Pagination } from "../../lib/pagination.js";
 import {
   awaitingBillingQuerySchema,
   billingPeriodQuerySchema,
@@ -61,7 +63,7 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
   function register<TSchema extends ZodTypeAny>(
     path: string,
     schema: TSchema,
-    handler: (query: TSchema["_output"]) => Promise<unknown>,
+    handler: (query: TSchema["_output"], pagination?: Pagination) => Promise<unknown>,
   ) {
     app.get(path, async (request, reply) => {
       const parsed = schema.safeParse(request.query);
@@ -70,7 +72,10 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
           .status(400)
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
-      const result = await handler(parsed.data);
+      // `all=true` devolve o resultado filtrado completo (impressão); a
+      // paginação continua sendo o padrão da tela.
+      const query = parsed.data as { all?: boolean };
+      const result = await handler(parsed.data, query.all === true ? ALL_ROWS : undefined);
       if (result === null) return reply.status(404).send({ error: "not_found" });
       return reply.send(result);
     });

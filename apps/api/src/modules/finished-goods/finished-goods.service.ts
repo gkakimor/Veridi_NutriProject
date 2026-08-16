@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import type { CostQuality, CostSource, FinishedGoodRowDTO, FinishedGoodsListResponse } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import {
   getOnHandByLots,
   getReservedByLots,
@@ -20,6 +22,7 @@ import type { ListFinishedGoodsQuery } from "./finished-goods.schemas.js";
  */
 export async function listFinishedGoods(
   query: ListFinishedGoodsQuery,
+  pagination: Pagination = query,
 ): Promise<FinishedGoodsListResponse> {
   const prisma = getPrisma();
 
@@ -59,8 +62,7 @@ export async function listFinishedGoods(
         productionOrder: { include: { product: true } },
       },
       orderBy: { code: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.lot.count({ where }),
   ]);
@@ -137,5 +139,5 @@ export async function listFinishedGoods(
     };
   });
 
-  return { rows, page: query.page, pageSize: query.pageSize, total };
+  return { rows, ...pageMeta(pagination, total) };
 }

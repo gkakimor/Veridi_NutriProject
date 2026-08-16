@@ -11,6 +11,8 @@ import type {
   StockCountResultDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import {
   getAvailableByItems,
   getOnHand,
@@ -128,7 +130,10 @@ async function buildItemSummaries(
   });
 }
 
-export async function listInventory(query: ListInventoryQuery): Promise<InventoryListResponse> {
+export async function listInventory(
+  query: ListInventoryQuery,
+  pagination: Pagination = query,
+): Promise<InventoryListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = { active: true };
 
@@ -147,11 +152,7 @@ export async function listInventory(query: ListInventoryQuery): Promise<Inventor
     ? summaries.filter((summary) => new Prisma.Decimal(summary.onHand).greaterThan(0))
     : summaries;
 
-  const total = filtered.length;
-  const start = (query.page - 1) * query.pageSize;
-  const page = filtered.slice(start, start + query.pageSize);
-
-  return { items: page, page: query.page, pageSize: query.pageSize, total };
+  return { items: slicePage(filtered, pagination), ...pageMeta(pagination, filtered.length) };
 }
 
 export async function getInventoryByItemId(itemId: string): Promise<InventoryItemDetailDTO | null> {
@@ -204,6 +205,7 @@ export async function getInventoryByItemId(itemId: string): Promise<InventoryIte
 
 export async function listInventoryMovements(
   query: ListInventoryMovementsQuery,
+  pagination: Pagination = query,
 ): Promise<InventoryMovementListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
@@ -224,17 +226,14 @@ export async function listInventoryMovements(
       where,
       include: movementInclude,
       orderBy: { occurredAt: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.inventoryMovement.count({ where }),
   ]);
 
   return {
     movements: movements.map(toMovementDTO),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

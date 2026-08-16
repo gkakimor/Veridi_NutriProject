@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { FinishedGoodRowDTO, LotStatus, ProductDTO } from "@veridi/shared";
 import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, LOT_STATUSES, LOT_STATUS_LABELS } from "@veridi/shared";
@@ -130,7 +131,12 @@ export function FinishedGoodsPage() {
             vêm das fontes originais.
           </p>
         </div>
-      </div>
+        <ExportCsvButton path="/finished-goods/export.csv" filters={{
+            search,
+            status: statusFilter === "all" ? undefined : statusFilter,
+            productId: productFilter === "all" ? undefined : productFilter,
+          }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

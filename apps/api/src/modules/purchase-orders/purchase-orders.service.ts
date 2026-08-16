@@ -3,6 +3,8 @@ import type { CustomerOrder, Item, PurchaseOrder, PurchaseOrderLine, ReceiptLine
 import type { PurchaseOrderDTO, PurchaseOrderLineDTO, PurchaseOrderListResponse } from "@veridi/shared";
 import { PURCHASE_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   DuplicateLineItemError,
@@ -174,6 +176,7 @@ async function requirePurchaseOrder(id: string): Promise<PurchaseOrderWithLines>
 
 export async function listPurchaseOrders(
   query: ListPurchaseOrdersQuery,
+  pagination: Pagination = query,
 ): Promise<PurchaseOrderListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
@@ -192,17 +195,14 @@ export async function listPurchaseOrders(
       where,
       include: purchaseOrderInclude,
       orderBy: { code: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.purchaseOrder.count({ where }),
   ]);
 
   return {
     purchaseOrders: purchaseOrders.map(toPurchaseOrderDTO),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

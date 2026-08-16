@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { LotDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS } from "@veridi/shared";
@@ -94,7 +95,8 @@ export function LotsPage() {
         >
           Escanear QR
         </button>
-      </div>
+        <ExportCsvButton path="/lots/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

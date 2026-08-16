@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { CustomerDTO } from "@veridi/shared";
 import { BR_STATE_CODES, formatCnpj } from "@veridi/shared";
 import { listCustomers, setCustomerActive } from "../../lib/customers-api";
@@ -98,7 +99,8 @@ export function CustomersPage() {
         >
           + Novo cliente
         </button>
-      </div>
+        <ExportCsvButton path="/customers/export.csv" filters={{ search, state: stateFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

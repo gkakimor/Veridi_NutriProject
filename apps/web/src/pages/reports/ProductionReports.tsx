@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
+import type {
+  ProductionOrderDTO,
+  ProductionOrderStatus,
+  TraceabilityConsumedRowDTO,
+  TraceabilityProducedRowDTO,
+} from "@veridi/shared";
 import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
 import {
   getConsumptionReport,
@@ -42,11 +47,16 @@ export function RequirementsReportPage() {
     () => ({ search, status, onlyShortage, page, pageSize: PAGE_SIZE }),
     [search, status, onlyShortage, page],
   );
-  const { data, loading, error } = useReport(getRequirementsReport, filters);
+  const { data, loading, error, print, preparingPrint } = useReport(getRequirementsReport, filters);
 
   return (
     <ReportPage
       title="R-04 · Necessidade / Falta para OP"
+      csvPath="/reports/production/requirements/export.csv"
+      csvFilters={filters}
+      total={data?.total}
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle="Material necessário por Ordem de Produção aberta. A reserva da própria OP não gera falta, e 'Em compra' nunca reduz a falta."
       loading={loading}
       error={error}
@@ -145,11 +155,16 @@ export function PlannedActualReportPage() {
     }),
     [status, search, includeCost, from, to, page],
   );
-  const { data, loading, error } = useReport(getPlannedActualReport, filters);
+  const { data, loading, error, print, preparingPrint } = useReport(getPlannedActualReport, filters);
 
   return (
     <ReportPage
       title="R-05 · Planejado x Realizado"
+      csvPath="/reports/production/planned-actual/export.csv"
+      csvFilters={filters}
+      total={data?.total}
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle={
         status === "COMPLETED"
           ? "OPs concluídas no período (por data de conclusão). Produzido vem dos apontamentos reais."
@@ -258,13 +273,15 @@ export function ProductionTraceabilityReportPage() {
   const [productionOrderId, setProductionOrderId] = useState("");
 
   const filters = useMemo(() => ({ productionOrderId }), [productionOrderId]);
-  const { data, loading, error } = useReport(getProductionTraceabilityReport, filters, {
+  const { data, loading, error, print, preparingPrint } = useReport(getProductionTraceabilityReport, filters, {
     enabled: productionOrderId !== "",
   });
 
   return (
     <ReportPage
       title="R-06 · Rastreabilidade por OP"
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle="Genealogia real: só o que foi efetivamente consumido e apontado — reserva e sugestão FEFO não entram."
       loading={loading}
       error={error}
@@ -315,7 +332,7 @@ export function ProductionTraceabilityReportPage() {
             <ReportTable
               columns={["Item", "Lote interno", "Lote fornecedor", "Fornecedor", "Quantidade"]}
               emptyMessage="Nenhum consumo registrado nesta OP."
-              rows={data.consumed.map((row) => (
+              rows={data.consumed.map((row: TraceabilityConsumedRowDTO) => (
                 <tr key={`${row.itemId}-${row.lotId ?? "sem-lote"}`}>
                   <td>
                     <span className="code">{row.itemCode}</span> {row.itemName}
@@ -338,7 +355,7 @@ export function ProductionTraceabilityReportPage() {
             <ReportTable
               columns={["Lote interno", "Lote Veridi", "Quantidade", "Validade", "Qualidade"]}
               emptyMessage="Nenhum apontamento de produção nesta OP."
-              rows={data.produced.map((row) => (
+              rows={data.produced.map((row: TraceabilityProducedRowDTO) => (
                 <tr key={row.lotId}>
                   <td>
                     <DocLink code={row.lotCode} to={`/estoque/lotes/${row.lotId}`} />
@@ -376,11 +393,16 @@ export function ConsumptionReportPage() {
     }),
     [search, from, to, page],
   );
-  const { data, loading, error } = useReport(getConsumptionReport, filters);
+  const { data, loading, error, print, preparingPrint } = useReport(getConsumptionReport, filters);
 
   return (
     <ReportPage
       title="R-07 · Consumo por período"
+      csvPath="/reports/production/consumption/export.csv"
+      csvFilters={filters}
+      total={data?.total}
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle="Consumo real de materiais, com o custo do lote consumido e sua origem."
       loading={loading}
       error={error}

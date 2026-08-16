@@ -6,6 +6,8 @@ import type {
   ReportPageDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import type { AwaitingBillingQuery, BillingPeriodQuery } from "./reports.schemas.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -22,6 +24,7 @@ export interface BillingPeriodReportDTO extends ReportPageDTO<BillingPeriodRowDT
  */
 export async function getBillingPeriodReport(
   query: BillingPeriodQuery,
+  pagination: Pagination = query,
 ): Promise<BillingPeriodReportDTO> {
   const prisma = getPrisma();
 
@@ -54,8 +57,7 @@ export async function getBillingPeriodReport(
       where,
       include: { lines: true, customerOrder: { select: { customerId: true } } },
       orderBy: [{ issuedAt: "desc" }, { code: "desc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.billing.count({ where }),
     // Resumo cobre o FILTRO inteiro, não a página — senão o total mudaria
@@ -100,9 +102,7 @@ export async function getBillingPeriodReport(
 
   return {
     rows,
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
     summary: {
       billingCount: allForSummary.length,
       billingsWithCompletePricing: completeCount,
@@ -118,6 +118,7 @@ export async function getBillingPeriodReport(
  */
 export async function getAwaitingBillingReport(
   query: AwaitingBillingQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<AwaitingBillingReportRowDTO>> {
   const prisma = getPrisma();
   const now = new Date();
@@ -146,8 +147,7 @@ export async function getAwaitingBillingReport(
         billings: { where: { status: "DRAFT" }, select: { id: true, code: true } },
       },
       orderBy: [{ confirmedAt: "asc" }, { code: "asc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.shipment.count({ where }),
   ]);
@@ -173,5 +173,5 @@ export async function getAwaitingBillingReport(
     };
   });
 
-  return { rows, page: query.page, pageSize: query.pageSize, total };
+  return { rows, ...pageMeta(pagination, total) };
 }

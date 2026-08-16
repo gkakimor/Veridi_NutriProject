@@ -3,6 +3,8 @@ import type { Customer } from "@prisma/client";
 import type { CustomerDTO, CustomerListResponse } from "@veridi/shared";
 import { CUSTOMER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { CustomerNotFoundError, DuplicateCnpjError } from "./customers.errors.js";
 import type {
@@ -52,6 +54,7 @@ async function requireCustomer(id: string): Promise<Customer> {
 
 export async function listCustomers(
   query: ListCustomersQuery,
+  pagination: Pagination = query,
 ): Promise<CustomerListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
@@ -71,17 +74,14 @@ export async function listCustomers(
     prisma.customer.findMany({
       where,
       orderBy: { code: "asc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.customer.count({ where }),
   ]);
 
   return {
     customers: customers.map(toCustomerDTO),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

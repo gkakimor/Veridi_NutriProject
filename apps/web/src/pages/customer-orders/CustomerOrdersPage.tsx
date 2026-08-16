@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { CustomerDTO, CustomerOrderDTO, CustomerOrderStatus } from "@veridi/shared";
 import {
@@ -106,7 +107,8 @@ export function CustomerOrdersPage() {
         >
           + Novo pedido
         </button>
-      </div>
+        <ExportCsvButton path="/customer-orders/export.csv" filters={{ search, customerId: customerFilter, status: statusFilter === "all" ? undefined : statusFilter }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

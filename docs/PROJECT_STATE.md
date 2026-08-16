@@ -37,6 +37,8 @@ concluído (fechamento operacional Produto Acabado → identificação física �
 Expedição).**
 **Delivery 23 — Relatórios gerenciais e operacionais R-01…R-17 (Bloco E,
 capacidade 31): concluído.**
+**Delivery 24 — Exportações CSV + Impressão/PDF (Bloco E, capacidade 32):
+concluído — Bloco E encerrado.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -54,10 +56,10 @@ Calculation + Reservation + QR Picking + Actual Consumption + Partial
 Production/conclusão da OP + Finished Product + Rastreabilidade
 bidirecional). Bloco D **completo** (22-28: Pedido do Cliente, Plano de Atendimento,
 Reserva de Produto Acabado, OPs Sugeridas, Sugestão de Compra, Expedição,
-Faturamento) + **Fundação de Custos (29)**. **Bloco E: Dashboard operacional (30) e
-Relatórios (31) concluídos.** Só falta Usuários (Bloco A) dentro do escopo
-MVP travado; o próximo passo do Bloco E é Exportações CSV/PDF/Impressão
-(32) — não iniciada.
+Faturamento) + **Fundação de Custos (29)**. **Bloco E completo: Dashboard (30),
+Relatórios (31) e Exportações CSV/Impressão (32).** Só falta Usuários
+(Bloco A) dentro do escopo MVP travado; o próximo passo é a **validação
+ponta a ponta / demo**.
 
 ## Stack instalada
 
@@ -132,6 +134,11 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /formulation-versions/:id/cost-estimate,
                  /production-orders/:id/material-cost, /finished-goods,
                  /dashboard (read model único do cockpit),
+                 /reports/* (+ `all=true` para o resultado filtrado
+                 completo usado na impressão),
+                 */export.csv (30 exportações: 15 listagens + 15
+                 relatórios tabulares, sempre o resultado filtrado
+                 inteiro),
                  /reports/* (17 read models somente leitura: inventory/
                  position|expiry|movements, production/requirements|
                  planned-actual|traceability|consumption, purchasing/
@@ -2878,6 +2885,73 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 24 — Exportações CSV + Impressão/PDF (Bloco E, capacidade 32)
+
+Última capacidade estrutural antes da validação ponta a ponta. **Nenhuma
+fonte de verdade nova**: não existe `ExportRecord`, `GeneratedReport`,
+`PdfDocument` nem CSV em cache; nada é armazenado.
+
+**Política oficial aplicada:** listagem → CSV; relatório → CSV +
+Imprimir/PDF; documento transacional → Imprimir/PDF; rastreabilidade →
+Imprimir/PDF; formulário de criar/editar → sem exportação.
+
+- **Filtro × paginação virou conceito explícito** (`lib/pagination.ts`,
+  `ALL_ROWS`): todo serviço de listagem e de relatório aceita o modo
+  "resultado completo" usando os MESMOS filtros. Nada de `pageSize`
+  gigante como gambiarra, e o teto de 500 da tela não limita a
+  exportação. O R-17 passou a derivar do R-13 por esse caminho.
+- **CSV server-side** (`lib/csv.ts`): UTF-8 **com BOM**, separador `;`,
+  CRLF, cabeçalhos em português, datas e decimais pt-BR. Decimal sempre
+  via `Prisma.Decimal` — nunca float. Célula desconhecida fica VAZIA:
+  custo/preço ausente jamais vira `0`, e quando há custo a coluna de
+  qualidade/origem viaja junto.
+- **Segurança**: helper central neutraliza CSV/Spreadsheet Formula
+  Injection (`=`, `+`, `-`, `@`) só na REPRESENTAÇÃO exportada — o valor
+  persistido nunca muda. Códigos de negócio, CNPJ, lote e código de barras
+  saem como texto; UUID técnico nunca substitui código de negócio. Nome de
+  arquivo legível e determinístico (`veridi_<slug>_<data>.csv`).
+- **30 endpoints `.../export.csv`** declarados um a um (nunca um endpoint
+  genérico que receba tabela/consulta arbitrária): 15 listagens (Clientes,
+  Fornecedores, Itens, Produtos, OCs, Recebimentos, Estoque, Lotes,
+  Movimentações, Formulações, OPs, Produto Acabado, Pedidos, Expedições,
+  Faturamento) e 15 relatórios tabulares (R-01…R-05, R-07…R-13, R-15…R-17).
+  R-06 e R-14 são consultas de documento único: a saída deles é a
+  impressão. O Dashboard **não** ganhou CSV — é cockpit.
+- **Impressão/PDF sem motor de PDF**: HTML + `@media print` +
+  `window.print()`. `print/PrintLayout.tsx` e `print/documents.tsx`
+  concentram cabeçalho, metadados e tabelas; A4 retrato por padrão;
+  topbar, sidebar, botões, inputs e paginação somem no papel. Rotas de
+  impressão ficam fora do `AppShell`, mesmo padrão da etiqueta de lote:
+  Pedido, OC, Recebimento, OP, Expedição, Faturamento e Rastreabilidade de
+  lote.
+- **Relatórios imprimem o resultado FILTRADO COMPLETO**, não a página: o
+  botão busca o relatório com `all=true` (caminho explícito no schema),
+  renderiza tudo e chama `window.print()`. O cabeçalho impresso traz
+  Veridi Nutrition, nome do relatório, filtros aplicados, data de geração e
+  a contagem de registros. Sem identidade autenticada no MVP, nenhum nome
+  de usuário é inventado.
+- **Semântica financeira preservada**: valor previsto da OC e total do
+  Faturamento só aparecem com precificação completa; custo `PARTIAL`
+  imprime "Indisponível — subtotal conhecido X" com a qualidade visível.
+  O Faturamento impresso exibe obrigatoriamente
+  "Documento comercial/operacional — não é Nota Fiscal"
+  (`BILLING_NON_FISCAL_NOTICE`, testado). Documento DRAFT é rotulado
+  "Rascunho".
+- Documentos históricos imprimem o snapshot que já está congelado no
+  próprio documento, nunca o cadastro atual.
+- Testes: `exports.test.ts` (BOM/separador/CRLF/escape/acentuação,
+  injeção de fórmula, Decimal, arquivo, download HTTP, 30 registros
+  filtrados contra página de 10, filtro idêntico, códigos preservados,
+  R-01, R-05/R-07 com qualidade de custo, R-15/R-17 com preço incompleto,
+  `all=true` trazendo 8 de 8 contra página de 3) e
+  `print/documents.test.tsx` (não é Nota Fiscal, snapshot, total ausente
+  com preço incompleto, rascunho, custo PARTIAL sem total artificial).
+- **Não implementado de propósito**: XLSX, template Excel, PDF no backend,
+  Puppeteer/wkhtmltopdf, armazenamento de arquivos, envio por e-mail,
+  agendamento, assinatura digital, DANFE/NF-e, importação de CSV.
+
+---
+
 # Delivery 23 — Relatórios R-01…R-17 (Bloco E, capacidade 31)
 
 `Gestão → Relatórios`: 17 consultas somente leitura sobre as entidades que
@@ -3136,15 +3210,13 @@ Fundação de Custos) — faltava só a visão. Nada de domínio novo foi criado
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 **Fundação de Custos (29)** e **Dashboard operacional (30)** concluídos,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
-na Expedição e os **Relatórios R-01…R-17 (31)**.
-Próximo passo do roadmap oficial: **Exportações CSV/PDF/Impressão (32)**,
-depois validação ponta a ponta / demo, responsivo e hardening técnico.
-**A exportação não foi iniciada, por instrução explícita do handoff**;
-aguarda novo handoff de Product Ownership. Reaproveitar no 32: os read
-models de `modules/reports/`, que já separam filtro de paginação — o CSV
-deve pedir o resultado filtrado COMPLETO aos mesmos serviços, nunca
-reconstruir a partir da página renderizada; e a rota de impressão da
-etiqueta de lote (fora do `AppShell`) como padrão de impressão/PDF.
+na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
+Impressão/PDF (32)** — Bloco E encerrado.
+Próximo passo do roadmap oficial: **validação ponta a ponta / demo**,
+depois responsivo/mobile e hardening técnico. Nada disso foi iniciado —
+aguarda handoff de Product Ownership. Para a demo, já existem: CSV em
+todas as listagens e nos relatórios tabulares, impressão/PDF dos
+documentos e da rastreabilidade, e o Dashboard como visão de abertura.
 Reutilizar quando começar: `FullWorkspaceModal`
 + `components.css` para cadastros simples; padrão de página própria (ver
 Ordem de Compra/Recebimento/editor de Formulação/OP/Pedido) para novos

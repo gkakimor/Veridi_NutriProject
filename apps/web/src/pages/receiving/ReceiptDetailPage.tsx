@@ -92,13 +92,22 @@ export function ReceiptDetailPage() {
             <span className="badge badge--active">Confirmado</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => navigate("/compras/recebimentos")}
-        >
-          ← Voltar
-        </button>
+        <div className="table__actions">
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => navigate(`/compras/recebimentos/${receipt.id}/imprimir`)}
+          >
+            Imprimir
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => navigate("/compras/recebimentos")}
+          >
+            ← Voltar
+          </button>
+        </div>
       </div>
 
       <div className="doc-body">

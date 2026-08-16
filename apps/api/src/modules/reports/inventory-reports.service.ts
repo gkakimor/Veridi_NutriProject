@@ -14,17 +14,14 @@ import {
   isLotAvailableForUse,
   isLotExpired,
 } from "../../lib/inventory-ledger.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import type { ExpiryQuery, InventoryPositionQuery, MovementsQuery } from "./reports.schemas.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function paginate<T>(rows: T[], page: number, pageSize: number): ReportPageDTO<T> {
-  return {
-    rows: rows.slice((page - 1) * pageSize, page * pageSize),
-    page,
-    pageSize,
-    total: rows.length,
-  };
+function paginate<T>(rows: T[], pagination: Pagination): ReportPageDTO<T> {
+  return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
 }
 
 /**
@@ -35,6 +32,7 @@ function paginate<T>(rows: T[], page: number, pageSize: number): ReportPageDTO<T
  */
 export async function getInventoryPosition(
   query: InventoryPositionQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<InventoryPositionRowDTO>> {
   const prisma = getPrisma();
 
@@ -138,7 +136,7 @@ export async function getInventoryPosition(
     });
   }
 
-  return paginate(rows, query.page, query.pageSize);
+  return paginate(rows, pagination);
 }
 
 /**
@@ -146,7 +144,10 @@ export async function getInventoryPosition(
  * status persistido (nenhum job marca EXPIRED). Ordena do mais critico
  * (vencido ha mais tempo) para o mais distante.
  */
-export async function getExpiryReport(query: ExpiryQuery): Promise<ReportPageDTO<ExpiryRowDTO>> {
+export async function getExpiryReport(
+  query: ExpiryQuery,
+  pagination: Pagination = query,
+): Promise<ReportPageDTO<ExpiryRowDTO>> {
   const prisma = getPrisma();
   const now = new Date();
 
@@ -231,7 +232,7 @@ export async function getExpiryReport(query: ExpiryQuery): Promise<ReportPageDTO
     });
   }
 
-  return paginate(rows, query.page, query.pageSize);
+  return paginate(rows, pagination);
 }
 
 /**
@@ -242,6 +243,7 @@ export async function getExpiryReport(query: ExpiryQuery): Promise<ReportPageDTO
  */
 export async function getMovementsReport(
   query: MovementsQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<MovementReportRowDTO>> {
   const prisma = getPrisma();
 
@@ -283,8 +285,7 @@ export async function getMovementsReport(
         shipmentLine: { include: { shipment: true } },
       },
       orderBy: { occurredAt: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.inventoryMovement.count({ where }),
   ]);
@@ -332,5 +333,5 @@ export async function getMovementsReport(
     };
   });
 
-  return { rows, page: query.page, pageSize: query.pageSize, total };
+  return { rows, ...pageMeta(pagination, total) };
 }

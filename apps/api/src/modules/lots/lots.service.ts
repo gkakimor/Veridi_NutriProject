@@ -11,6 +11,8 @@ import type {
 import type { LotDTO, LotListResponse } from "@veridi/shared";
 import { LOT_QR_PREFIX, normalizeLotLookupCode } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import {
   getOnHandByLots,
   getReservedByLots,
@@ -129,7 +131,9 @@ async function requireLot(id: string): Promise<Lot> {
   return lot;
 }
 
-export async function listLots(query: ListLotsQuery): Promise<LotListResponse> {
+export async function listLots(
+  query: ListLotsQuery,
+  pagination: Pagination = query,): Promise<LotListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
 
@@ -150,17 +154,14 @@ export async function listLots(query: ListLotsQuery): Promise<LotListResponse> {
       where,
       include: lotInclude,
       orderBy: { code: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.lot.count({ where }),
   ]);
 
   return {
     lots: await attachStock(lots),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

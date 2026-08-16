@@ -14,6 +14,8 @@ import type {
   FormulationVersionListResponse,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
 import {
   ComponentItemNotFoundError,
@@ -127,6 +129,7 @@ async function requireVersion(id: string): Promise<VersionWithRelations> {
 
 export async function listFormulations(
   query: ListFormulationsQuery,
+  pagination: Pagination = query,
 ): Promise<FormulationListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
@@ -153,8 +156,7 @@ export async function listFormulations(
       where,
       include: { customer: true, finishedProductItem: true },
       orderBy: { code: "asc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.product.count({ where }),
   ]);
@@ -194,7 +196,7 @@ export async function listFormulations(
     };
   });
 
-  return { formulations, page: query.page, pageSize: query.pageSize, total };
+  return { formulations, ...pageMeta(pagination, total) };
 }
 
 export async function listFormulationVersionsByProduct(

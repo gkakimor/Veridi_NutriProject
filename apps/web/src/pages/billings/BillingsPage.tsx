@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { AwaitingBillingRowDTO, BillingDTO, BillingStatus } from "@veridi/shared";
 import {
@@ -118,7 +119,8 @@ export function BillingsPage() {
             Faturamento comercial/operacional do que foi realmente expedido — não emite Nota Fiscal.
           </p>
         </div>
-      </div>
+        <ExportCsvButton path="/billings/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
+</div>
 
       {error && <p className="form-alert">{error}</p>}
 

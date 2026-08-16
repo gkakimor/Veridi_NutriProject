@@ -10,6 +10,8 @@ import type {
 import type { ReceiptDTO, ReceiptLineDTO, ReceiptListResponse } from "@veridi/shared";
 import { RECEIPT_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { nextLotCode } from "../../lib/lot-code.js";
 import {
@@ -88,7 +90,9 @@ function toReceiptDTO(receipt: ReceiptWithRelations): ReceiptDTO {
   };
 }
 
-export async function listReceipts(query: ListReceiptsQuery): Promise<ReceiptListResponse> {
+export async function listReceipts(
+  query: ListReceiptsQuery,
+  pagination: Pagination = query,): Promise<ReceiptListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
 
@@ -113,17 +117,14 @@ export async function listReceipts(query: ListReceiptsQuery): Promise<ReceiptLis
       where,
       include: receiptInclude,
       orderBy: { code: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.receipt.count({ where }),
   ]);
 
   return {
     receipts: receipts.map(toReceiptDTO),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

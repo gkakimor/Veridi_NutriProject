@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { InventoryMovementDTO, InventoryMovementType } from "@veridi/shared";
 import { INVENTORY_MOVEMENT_DIRECTION, INVENTORY_MOVEMENT_TYPE_LABELS } from "@veridi/shared";
@@ -72,7 +73,8 @@ export function InventoryMovementsPage() {
             Histórico imutável de estoque — entradas e saídas nunca são editadas.
           </p>
         </div>
-      </div>
+        <ExportCsvButton path="/inventory-movements/export.csv" filters={{ search, type: typeFilter === "all" ? undefined : typeFilter, itemId }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

@@ -506,9 +506,20 @@ export function ProductionOrderPage() {
             )}
           </div>
         </div>
-        <button type="button" className="btn btn--ghost" onClick={() => navigate("/producao/ordens")}>
-          ← Voltar
-        </button>
+        <div className="table__actions">
+          {productionOrder && (
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={() => navigate(`/producao/ordens/${productionOrder.id}/imprimir`)}
+            >
+              Imprimir
+            </button>
+          )}
+          <button type="button" className="btn btn--ghost" onClick={() => navigate("/producao/ordens")}>
+            ← Voltar
+          </button>
+        </div>
       </div>
 
       <div className="doc-body">

@@ -20,6 +20,8 @@ import type {
 } from "@veridi/shared";
 import { SHIPMENT_CODE_PREFIX, normalizeLotLookupCode } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getOnHand, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
 import { CustomerOrderNotFoundError } from "../customer-orders/customer-orders.errors.js";
@@ -321,7 +323,9 @@ async function toShipmentDTO(shipment: ShipmentWithRelations): Promise<ShipmentD
   };
 }
 
-export async function listShipments(query: ListShipmentsQuery): Promise<ShipmentListResponse> {
+export async function listShipments(
+  query: ListShipmentsQuery,
+  pagination: Pagination = query,): Promise<ShipmentListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
 
@@ -340,17 +344,14 @@ export async function listShipments(query: ListShipmentsQuery): Promise<Shipment
       where,
       include: shipmentInclude,
       orderBy: { code: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.shipment.count({ where }),
   ]);
 
   return {
     shipments: await Promise.all(shipments.map(toShipmentDTO)),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

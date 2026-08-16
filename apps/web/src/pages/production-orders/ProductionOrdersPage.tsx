@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
 import { PRODUCTION_ORDER_STATUSES, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
@@ -112,7 +113,8 @@ export function ProductionOrdersPage() {
         >
           + Nova OP
         </button>
-      </div>
+        <ExportCsvButton path="/production-orders/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

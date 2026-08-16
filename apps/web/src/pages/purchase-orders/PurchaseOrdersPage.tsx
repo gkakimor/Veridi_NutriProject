@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { PurchaseOrderDTO, PurchaseOrderStatus, SupplierDTO } from "@veridi/shared";
 import { PURCHASE_ORDER_STATUSES, PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
@@ -103,7 +104,8 @@ export function PurchaseOrdersPage() {
         >
           + Nova OC
         </button>
-      </div>
+        <ExportCsvButton path="/purchase-orders/export.csv" filters={{ search, supplierId: supplierFilter, status: statusFilter === "all" ? undefined : statusFilter }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

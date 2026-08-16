@@ -10,6 +10,14 @@ export const BILLING_CODE_PREFIX = "FAT";
 /** `ISSUED` é histórico imutável — correção pós-emissão é evolução futura. */
 export type BillingStatus = "DRAFT" | "ISSUED" | "CANCELLED";
 
+/**
+ * Aviso obrigatório em qualquer apresentação impressa do Faturamento.
+ * O documento é comercial/operacional: não emite Nota Fiscal, não gera
+ * DANFE/XML e não substitui a obrigação fiscal.
+ */
+export const BILLING_NON_FISCAL_NOTICE =
+  "Documento comercial/operacional — não é Nota Fiscal.";
+
 export const BILLING_STATUS_LABELS: Record<BillingStatus, string> = {
   DRAFT: "Rascunho",
   ISSUED: "Emitido",

@@ -7,6 +7,8 @@ import type {
   ReportPageDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import type { OnOrderQuery, PurchaseOrdersQuery, ReceiptsQuery } from "./reports.schemas.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -21,6 +23,7 @@ const OPEN_STATUSES = ["ORDERED", "PARTIALLY_RECEIVED"] as const;
  */
 export async function getPurchaseOrdersReport(
   query: PurchaseOrdersQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<PurchaseOrderReportRowDTO>> {
   const prisma = getPrisma();
 
@@ -55,8 +58,7 @@ export async function getPurchaseOrdersReport(
         _count: { select: { receipts: true } },
       },
       orderBy: [{ orderDate: "desc" }, { code: "desc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.purchaseOrder.count({ where }),
   ]);
@@ -88,7 +90,7 @@ export async function getPurchaseOrdersReport(
     };
   });
 
-  return { rows, page: query.page, pageSize: query.pageSize, total };
+  return { rows, ...pageMeta(pagination, total) };
 }
 
 /**
@@ -99,6 +101,7 @@ export async function getPurchaseOrdersReport(
  */
 export async function getReceiptsReport(
   query: ReceiptsQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<ReceiptReportRowDTO>> {
   const prisma = getPrisma();
 
@@ -145,8 +148,7 @@ export async function getReceiptsReport(
         receipt: { include: { purchaseOrder: true, supplier: true } },
       },
       orderBy: [{ receipt: { receivedAt: "desc" } }, { createdAt: "asc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.receiptLine.count({ where }),
   ]);
@@ -175,7 +177,7 @@ export async function getReceiptsReport(
     costQuality: line.actualUnitCost ? "REAL" : "NO_COST",
   }));
 
-  return { rows, page: query.page, pageSize: query.pageSize, total };
+  return { rows, ...pageMeta(pagination, total) };
 }
 
 /** Linhas de OC abertas (ORDERED/PARTIALLY_RECEIVED com saldo > 0). */
@@ -243,14 +245,12 @@ async function getOpenPurchaseLines(query: OnOrderQuery) {
 }
 
 /** R-10 — Em Compra. Fotografia atual; DRAFT nunca conta como compra em curso. */
-export async function getOnOrderReport(query: OnOrderQuery): Promise<ReportPageDTO<OnOrderRowDTO>> {
+export async function getOnOrderReport(
+  query: OnOrderQuery,
+  pagination: Pagination = query,
+): Promise<ReportPageDTO<OnOrderRowDTO>> {
   const rows = await getOpenPurchaseLines(query);
-  return {
-    rows: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
-    page: query.page,
-    pageSize: query.pageSize,
-    total: rows.length,
-  };
+  return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
 }
 
 /**
@@ -259,6 +259,7 @@ export async function getOnOrderReport(query: OnOrderQuery): Promise<ReportPageD
  */
 export async function getLatePurchaseOrdersReport(
   query: OnOrderQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<LatePurchaseOrderRowDTO>> {
   const now = new Date();
   const open = await getOpenPurchaseLines(query);
@@ -271,10 +272,5 @@ export async function getLatePurchaseOrdersReport(
     }))
     .sort((a, b) => b.daysLate - a.daysLate);
 
-  return {
-    rows: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
-    page: query.page,
-    pageSize: query.pageSize,
-    total: rows.length,
-  };
+  return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
 }

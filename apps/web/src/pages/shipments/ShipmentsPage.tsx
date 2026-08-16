@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { ShipmentDTO, ShipmentStatus } from "@veridi/shared";
 import { SHIPMENT_STATUSES, SHIPMENT_STATUS_LABELS } from "@veridi/shared";
@@ -81,7 +82,8 @@ export function ShipmentsPage() {
             Saída física de produto acabado — só uma expedição confirmada altera o estoque.
           </p>
         </div>
-      </div>
+        <ExportCsvButton path="/shipments/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

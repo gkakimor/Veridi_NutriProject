@@ -31,6 +31,8 @@ import type {
 } from "@veridi/shared";
 import { CUSTOMER_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   CancellationBlockedError,
@@ -409,7 +411,9 @@ async function requireOrder(id: string): Promise<OrderWithRelations> {
   return order;
 }
 
-export async function listCustomerOrders(query: ListCustomerOrdersQuery): Promise<CustomerOrderListResponse> {
+export async function listCustomerOrders(
+  query: ListCustomerOrdersQuery,
+  pagination: Pagination = query,): Promise<CustomerOrderListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
 
@@ -429,17 +433,14 @@ export async function listCustomerOrders(query: ListCustomerOrdersQuery): Promis
       where,
       include: customerOrderInclude,
       orderBy: { code: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.customerOrder.count({ where }),
   ]);
 
   return {
     customerOrders: orders.map(toCustomerOrderDTO),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

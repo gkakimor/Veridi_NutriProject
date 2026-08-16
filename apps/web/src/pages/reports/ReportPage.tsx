@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
+import type { ReportFilters } from "../../lib/reports-api";
 import "./reports.css";
+import "../../print/print.css";
 
 /**
  * Estrutura comum dos relatórios: título, filtros, resumo e tabela — nesta
@@ -12,17 +15,31 @@ export function ReportPage({
   title,
   subtitle,
   filters,
+  appliedFilters,
   summary,
   loading,
   error,
+  csvPath,
+  csvFilters,
+  onPrint,
+  preparingPrint,
+  total,
   children,
 }: {
   title: string;
   subtitle: string;
   filters: ReactNode;
+  /** Filtros realmente aplicados — impressos no cabeçalho do papel. */
+  appliedFilters?: { label: string; value: string }[];
   summary?: ReactNode;
   loading: boolean;
   error: string | null;
+  /** Rota `.../export.csv` do mesmo read model. */
+  csvPath?: string;
+  csvFilters?: ReportFilters;
+  onPrint?: () => void;
+  preparingPrint?: boolean | undefined;
+  total?: number | undefined;
   children: ReactNode;
 }) {
   const navigate = useNavigate();
@@ -35,10 +52,48 @@ export function ReportPage({
           <h1 className="page__title">{title}</h1>
           <p className="page__subtitle">{subtitle}</p>
         </div>
-        <button type="button" className="btn btn--ghost" onClick={() => navigate("/relatorios")}>
-          ← Relatórios
-        </button>
+        <div className="table__actions">
+          {csvPath && <ExportCsvButton path={csvPath} filters={csvFilters ?? {}} />}
+          {onPrint && (
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={preparingPrint}
+              onClick={onPrint}
+            >
+              {preparingPrint ? "Preparando…" : "Imprimir / Salvar PDF"}
+            </button>
+          )}
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigate("/relatorios")}>
+            ← Relatórios
+          </button>
+        </div>
       </div>
+
+      {/* Cabeçalho do papel: identidade, relatório, filtros aplicados e data.
+          Aparece só na impressão. */}
+      <div className="print-only print-doc__header">
+        <div>
+          <div className="print-doc__brand">Veridi Nutrition</div>
+          <div className="print-doc__kind">{title}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div className="print-doc__status">Gerado em {new Date().toLocaleString("pt-BR")}</div>
+          {total !== undefined && (
+            <div className="print-doc__status">{total} registros</div>
+          )}
+        </div>
+      </div>
+      {appliedFilters && appliedFilters.length > 0 && (
+        <dl className="print-only print-doc__meta">
+          {appliedFilters.map((applied) => (
+            <div key={applied.label}>
+              <dt>{applied.label}</dt>
+              <dd>{applied.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       <div className="toolbar report-filters">{filters}</div>
 

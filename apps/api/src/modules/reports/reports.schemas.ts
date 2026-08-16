@@ -23,6 +23,17 @@ function booleanFlag(defaultValue: boolean) {
 export const paginationFields = {
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(500).default(25),
+  /**
+   * Caminho explícito para o resultado FILTRADO COMPLETO — usado pela
+   * impressão, que precisa do relatório inteiro e não da página aberta. O
+   * teto de `pageSize` continua valendo só para a navegação da tela.
+   */
+  all: z
+    .union([z.boolean(), z.string()])
+    .default(false)
+    .transform((value) =>
+      typeof value === "boolean" ? value : !["false", "0", "no", ""].includes(value.trim().toLowerCase()),
+    ),
 };
 
 /**

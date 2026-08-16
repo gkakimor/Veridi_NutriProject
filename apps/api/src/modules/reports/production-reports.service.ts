@@ -13,6 +13,8 @@ import { getConsumedByReservationLines, isLotExpired } from "../../lib/inventory
 import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { getConsumedLotCostReference } from "../../lib/cost-reference.js";
 import { getProductionOrderMaterialCost } from "../costs/costs.service.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import type {
   ConsumptionQuery,
   PlannedActualQuery,
@@ -30,6 +32,7 @@ const OPEN_STATUSES = ["DRAFT", "PLANNED", "RELEASED", "IN_PRODUCTION"] as const
  */
 export async function getRequirementsReport(
   query: RequirementsQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<ProductionRequirementRowDTO>> {
   const prisma = getPrisma();
 
@@ -105,12 +108,7 @@ export async function getRequirementsReport(
     }
   }
 
-  return {
-    rows: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
-    page: query.page,
-    pageSize: query.pageSize,
-    total: rows.length,
-  };
+  return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
 }
 
 /**
@@ -121,6 +119,7 @@ export async function getRequirementsReport(
  */
 export async function getPlannedActualReport(
   query: PlannedActualQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<PlannedActualRowDTO>> {
   const prisma = getPrisma();
   const status = query.status ?? "COMPLETED";
@@ -154,8 +153,7 @@ export async function getPlannedActualReport(
       where,
       include: { product: true, outputs: true },
       orderBy: [{ [dateField]: "desc" }, { code: "desc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.productionOrder.count({ where }),
   ]);
@@ -199,7 +197,7 @@ export async function getPlannedActualReport(
     };
   });
 
-  return { rows, page: query.page, pageSize: query.pageSize, total };
+  return { rows, ...pageMeta(pagination, total) };
 }
 
 /**
@@ -303,6 +301,7 @@ export async function getProductionTraceability(
  */
 export async function getConsumptionReport(
   query: ConsumptionQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<ConsumptionRowDTO>> {
   const prisma = getPrisma();
 
@@ -339,8 +338,7 @@ export async function getConsumptionReport(
         productionOrder: { include: { product: true } },
       },
       orderBy: { consumedAt: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.productionConsumption.count({ where }),
   ]);
@@ -379,5 +377,5 @@ export async function getConsumptionReport(
     }),
   );
 
-  return { rows, page: query.page, pageSize: query.pageSize, total };
+  return { rows, ...pageMeta(pagination, total) };
 }

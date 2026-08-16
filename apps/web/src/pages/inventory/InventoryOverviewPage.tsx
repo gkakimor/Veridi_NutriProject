@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { InventoryItemSummaryDTO, ItemType } from "@veridi/shared";
 import { ITEM_TYPES, ITEM_TYPE_LABELS } from "@veridi/shared";
@@ -71,7 +72,8 @@ export function InventoryOverviewPage() {
             On Hand, disponível e em compra por item — derivados do histórico de movimentações.
           </p>
         </div>
-      </div>
+        <ExportCsvButton path="/inventory/export.csv" filters={{ search, type: typeFilter === "all" ? undefined : typeFilter, onlyWithStock }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

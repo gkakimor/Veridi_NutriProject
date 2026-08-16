@@ -10,6 +10,8 @@ import type {
 } from "@veridi/shared";
 import { BILLING_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   ActiveBillingAlreadyExistsError,
@@ -163,7 +165,9 @@ export async function getBillingStatusByShipments(
   return map;
 }
 
-export async function listBillings(query: ListBillingsQuery): Promise<BillingListResponse> {
+export async function listBillings(
+  query: ListBillingsQuery,
+  pagination: Pagination = query,): Promise<BillingListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
 
@@ -185,17 +189,14 @@ export async function listBillings(query: ListBillingsQuery): Promise<BillingLis
       where,
       include: billingInclude,
       orderBy: { code: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.billing.count({ where }),
   ]);
 
   return {
     billings: billings.map(toBillingDTO),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

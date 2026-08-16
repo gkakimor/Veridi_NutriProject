@@ -27,6 +27,8 @@ import type {
 } from "@veridi/shared";
 import { PRODUCTION_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getConsumedByReservationLines, isLotExpired } from "../../lib/inventory-ledger.js";
@@ -459,6 +461,7 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
 
 export async function listProductionOrders(
   query: ListProductionOrdersQuery,
+  pagination: Pagination = query,
 ): Promise<ProductionOrderListResponse> {
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
@@ -479,17 +482,14 @@ export async function listProductionOrders(
       where,
       include: productionOrderInclude,
       orderBy: { code: "desc" },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.productionOrder.count({ where }),
   ]);
 
   return {
     productionOrders: await Promise.all(orders.map(toProductionOrderDTO)),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
+    ...pageMeta(pagination, total),
   };
 }
 

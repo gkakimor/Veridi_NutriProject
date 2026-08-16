@@ -10,6 +10,8 @@ import { getPrisma } from "../../db/prisma.js";
 import { getBilledByOrderLines } from "../billings/billings.service.js";
 import { deriveOrderBillingStatus } from "../customer-orders/customer-orders.service.js";
 import { getReservedRemainingByLines, getShippedByOrderLines } from "../shipments/shipments.service.js";
+import type { Pagination } from "../../lib/pagination.js";
+import { ALL_ROWS, pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import type {
   CustomerOrdersQuery,
   FulfillmentQuery,
@@ -58,6 +60,7 @@ function orderWhere(query: {
  */
 export async function getCustomerOrdersReport(
   query: CustomerOrdersQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<CustomerOrderReportRowDTO>> {
   const prisma = getPrisma();
   const where = orderWhere(query);
@@ -72,8 +75,7 @@ export async function getCustomerOrdersReport(
         billings: { select: { id: true, status: true } },
       },
       orderBy: [{ orderDate: "desc" }, { code: "desc" }],
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
+      ...pageArgs(pagination),
     }),
     prisma.customerOrder.count({ where }),
   ]);
@@ -101,7 +103,7 @@ export async function getCustomerOrdersReport(
     billingCount: order.billings.filter((billing) => billing.status !== "CANCELLED").length,
   }));
 
-  return { rows, page: query.page, pageSize: query.pageSize, total };
+  return { rows, ...pageMeta(pagination, total) };
 }
 
 /** Linhas de Pedido com todos os agregados operacionais já resolvidos em lote. */
@@ -186,6 +188,7 @@ async function loadOrderLineAggregates(orderIds: string[], lineIds: string[]) {
  */
 export async function getFulfillmentReport(
   query: FulfillmentQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<FulfillmentRowDTO>> {
   const prisma = getPrisma();
   const where = {
@@ -246,12 +249,7 @@ export async function getFulfillmentReport(
     }
   }
 
-  return {
-    rows: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
-    page: query.page,
-    pageSize: query.pageSize,
-    total: rows.length,
-  };
+  return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
 }
 
 /**
@@ -261,8 +259,11 @@ export async function getFulfillmentReport(
  */
 export async function getOrderDeliveredBilledReport(
   query: FulfillmentQuery,
+  pagination: Pagination = query,
 ): Promise<ReportPageDTO<OrderDeliveredBilledRowDTO>> {
-  const fulfillment = await getFulfillmentReport({ ...query, page: 1, pageSize: Number.MAX_SAFE_INTEGER });
+  // Deriva do MESMO read model do R-13: pede o conjunto inteiro e pagina
+  // depois, nunca uma segunda montagem da consulta.
+  const fulfillment = await getFulfillmentReport(query, ALL_ROWS);
 
   const rows = fulfillment.rows.map((row): OrderDeliveredBilledRowDTO => {
     const shipped = new Prisma.Decimal(row.shippedQuantity);
@@ -287,12 +288,7 @@ export async function getOrderDeliveredBilledReport(
     };
   });
 
-  return {
-    rows: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
-    page: query.page,
-    pageSize: query.pageSize,
-    total: rows.length,
-  };
+  return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
 }
 
 /**

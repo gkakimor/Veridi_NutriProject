@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { CustomerDTO, ProductDTO } from "@veridi/shared";
 import { listProducts, setProductActive } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
@@ -104,7 +105,8 @@ export function ProductsPage() {
         >
           + Novo produto
         </button>
-      </div>
+        <ExportCsvButton path="/products/export.csv" filters={{ search, customerId: customerFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

@@ -402,9 +402,18 @@ export function ShipmentPage() {
             </span>
           </div>
         </div>
-        <button type="button" className="btn btn--ghost" onClick={() => navigate("/comercial/expedicoes")}>
-          ← Voltar
-        </button>
+        <div className="table__actions">
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => navigate(`/comercial/expedicoes/${shipment.id}/imprimir`)}
+          >
+            Imprimir
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => navigate("/comercial/expedicoes")}>
+            ← Voltar
+          </button>
+        </div>
       </div>
 
       <div className="doc-body">

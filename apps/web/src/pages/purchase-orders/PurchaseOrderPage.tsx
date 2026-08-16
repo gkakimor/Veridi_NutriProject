@@ -395,9 +395,20 @@ export function PurchaseOrderPage() {
             )}
           </div>
         </div>
-        <button type="button" className="btn btn--ghost" onClick={() => navigate("/compras/ordens")}>
-          ← Voltar
-        </button>
+        <div className="table__actions">
+          {purchaseOrder && (
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={() => navigate(`/compras/ordens/${purchaseOrder.id}/imprimir`)}
+            >
+              Imprimir
+            </button>
+          )}
+          <button type="button" className="btn btn--ghost" onClick={() => navigate("/compras/ordens")}>
+            ← Voltar
+          </button>
+        </div>
       </div>
 
       <div className="doc-body">

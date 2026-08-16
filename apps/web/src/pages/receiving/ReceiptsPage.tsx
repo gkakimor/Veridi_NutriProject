@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { ReceiptDTO } from "@veridi/shared";
 import { listReceipts } from "../../lib/receiving-api";
@@ -71,7 +72,8 @@ export function ReceiptsPage() {
         >
           Receber OC
         </button>
-      </div>
+        <ExportCsvButton path="/receipts/export.csv" filters={{ search }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

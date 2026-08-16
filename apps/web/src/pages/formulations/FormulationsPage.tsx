@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { FormulationSummaryDTO } from "@veridi/shared";
 import { listFormulations } from "../../lib/formulations-api";
@@ -77,7 +78,8 @@ export function FormulationsPage() {
             Uma versão ativa por produto — mudanças sempre criam uma nova versão.
           </p>
         </div>
-      </div>
+        <ExportCsvButton path="/formulations/export.csv" filters={{ search }} />
+</div>
 
       <div className="toolbar">
         <div className="toolbar__search">

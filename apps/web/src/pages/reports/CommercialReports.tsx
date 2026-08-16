@@ -81,11 +81,16 @@ export function CustomerOrdersReportPage() {
     }),
     [search, customerId, status, from, to, page],
   );
-  const { data, loading, error } = useReport(getCustomerOrdersReport, filters);
+  const { data, loading, error, print, preparingPrint } = useReport(getCustomerOrdersReport, filters);
 
   return (
     <ReportPage
       title="R-12 · Pedidos do Cliente"
+      csvPath="/reports/commercial/orders/export.csv"
+      csvFilters={filters}
+      total={data?.total}
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle="Pedidos por data, com o estado operacional e o de faturamento derivados dos documentos."
       loading={loading}
       error={error}
@@ -183,11 +188,16 @@ export function FulfillmentReportPage() {
     () => ({ search, customerId, status, page, pageSize: PAGE_SIZE }),
     [search, customerId, status, page],
   );
-  const { data, loading, error } = useReport(getFulfillmentReport, filters);
+  const { data, loading, error, print, preparingPrint } = useReport(getFulfillmentReport, filters);
 
   return (
     <ReportPage
       title="R-13 · Atendimento dos Pedidos"
+      csvPath="/reports/commercial/fulfillment/export.csv"
+      csvFilters={filters}
+      total={data?.total}
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle="Por produto do pedido: reservado, produzido, expedido e faturado — conceitos distintos, nunca inferidos um do outro."
       loading={loading}
       error={error}
@@ -288,13 +298,15 @@ export function OrderOperationReportPage() {
   }, []);
 
   const filters = useMemo(() => ({ customerOrderId }), [customerOrderId]);
-  const { data, loading, error } = useReport(getOrderOperationReport, filters, {
+  const { data, loading, error, print, preparingPrint } = useReport(getOrderOperationReport, filters, {
     enabled: customerOrderId !== "",
   });
 
   return (
     <ReportPage
       title="R-14 · Pedido → Operação"
+      onPrint={print}
+      preparingPrint={preparingPrint}
       subtitle="Cadeia operacional de um pedido: reserva, produção, compras, expedição e faturamento."
       loading={loading}
       error={error}
