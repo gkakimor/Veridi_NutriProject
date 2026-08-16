@@ -27,15 +27,9 @@ import type {
 } from "@veridi/shared";
 import { PRODUCTION_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
-import {
-  getAvailableByItems,
-  getConsumedByReservationLines,
-  getOnHandByItems,
-  getOnOrderByItems,
-  getReservedByItems,
-  isLotExpired,
-} from "../../lib/inventory-ledger.js";
+import { getConsumedByReservationLines, isLotExpired } from "../../lib/inventory-ledger.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
 import { computeFormulationRequirements } from "./requirement-calc.js";
 import {
@@ -270,18 +264,22 @@ async function attachRequirementAvailability(
   if (requirements.length === 0) return [];
 
   const prisma = getPrisma();
-  const itemScopes = requirements.map((requirement) => ({
-    id: requirement.itemId,
-    controlsLot: requirement.item.controlsLot,
-  }));
-  const itemIds = itemScopes.map((scope) => scope.id);
 
-  const [onHandByItem, availableByItem, onOrderByItem, reservedByItem] = await Promise.all([
-    getOnHandByItems(prisma, itemIds),
-    getAvailableByItems(prisma, itemScopes),
-    getOnOrderByItems(prisma, itemIds),
-    getReservedByItems(prisma, itemIds),
-  ]);
+  // Mesma matematica de disponibilidade/falta usada pelos relatorios —
+  // calculo unico, nunca uma segunda interpretacao de shortage.
+  const availabilityByRequirement = await computeRequirementAvailability(
+    prisma,
+    requirements.map((requirement) => ({
+      requirementId: requirement.id,
+      itemId: requirement.itemId,
+      controlsLot: requirement.item.controlsLot,
+      requiredQuantity: requirement.requiredQuantity,
+      activeReservationLines: (reservationLinesByRequirement.get(requirement.id) ?? [])
+        .filter((line) => line.releasedAt === null)
+        .map((line) => ({ id: line.id, quantity: line.quantity })),
+    })),
+    consumedByLine,
+  );
 
   const results: ProductionOrderRequirementDTO[] = [];
   for (const requirement of requirements) {
@@ -294,18 +292,9 @@ async function attachRequirementAvailability(
       (sum, line) => sum.plus(consumedByLine.get(line.id) ?? new Prisma.Decimal(0)),
       new Prisma.Decimal(0),
     );
-    const remainingReservedQuantity = Prisma.Decimal.max(allocatedQuantity.minus(lineConsumedQuantity), 0);
-
-    const onHand = onHandByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
-    const onOrder = onOrderByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
-    const reserved = reservedByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
-    // A propria OP nunca compete contra si mesma: "Disponivel para esta OP"
-    // soma de volta o que ela mesma ainda tem reservado (liquido de
-    // consumo) daquele item — nunca conta a propria reserva como shortage.
-    const available = (availableByItem.get(requirement.itemId) ?? new Prisma.Decimal(0)).plus(
-      remainingReservedQuantity,
-    );
-    const shortage = Prisma.Decimal.max(requirement.requiredQuantity.minus(available), 0);
+    const availability = availabilityByRequirement.get(requirement.id)!;
+    const { onHand, reserved, available, onOrder, shortage } = availability;
+    const remainingReservedQuantity = availability.remainingReserved;
 
     // On Order e so informativo — nunca reduz o shortage operacional.
     const suggestion = await getAllocationSuggestion(

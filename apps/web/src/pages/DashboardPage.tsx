@@ -15,45 +15,10 @@ import {
 } from "@veridi/shared";
 import type { InventoryMovementType } from "@veridi/shared";
 import { getDashboard } from "../lib/dashboard-api";
+import type { PeriodPreset } from "../lib/period";
+import { PERIOD_PRESET_LABELS, dateInputValueOffset, resolvePeriodBounds } from "../lib/period";
 import { formatBRL } from "../lib/currency";
 import "./dashboard.css";
-
-type PeriodPreset = "today" | "7d" | "30d" | "custom";
-
-const PRESET_LABELS: Record<PeriodPreset, string> = {
-  today: "Hoje",
-  "7d": "7 dias",
-  "30d": "30 dias",
-  custom: "Personalizado",
-};
-
-/**
- * O frontend resolve os limites do período e os envia explicitamente. Assim
- * "Hoje" é o dia do operador, e não o dia do fuso do servidor.
- */
-function resolveBounds(preset: PeriodPreset, customFrom: string, customTo: string): { from: string; to: string } {
-  const now = new Date();
-  if (preset === "custom") {
-    const from = customFrom ? new Date(`${customFrom}T00:00:00`) : startOfDay(now);
-    const to = customTo ? new Date(`${customTo}T23:59:59.999`) : now;
-    return { from: from.toISOString(), to: to.toISOString() };
-  }
-  const daysBack = preset === "today" ? 0 : preset === "7d" ? 6 : 29;
-  const from = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack));
-  return { from: from.toISOString(), to: now.toISOString() };
-}
-
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
-}
-
-function todayInputValue(offsetDays = 0): string {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
-}
 
 function severityBadgeClass(severity: AttentionSeverity): string {
   switch (severity) {
@@ -215,14 +180,14 @@ export function DashboardPage() {
   const navigate = useNavigate();
 
   const [preset, setPreset] = useState<PeriodPreset>("today");
-  const [customFrom, setCustomFrom] = useState(todayInputValue(-6));
-  const [customTo, setCustomTo] = useState(todayInputValue());
+  const [customFrom, setCustomFrom] = useState(dateInputValueOffset(-6));
+  const [customTo, setCustomTo] = useState(dateInputValueOffset(0));
   const [data, setData] = useState<DashboardDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const bounds = useMemo(
-    () => resolveBounds(preset, customFrom, customTo),
+    () => resolvePeriodBounds(preset, customFrom, customTo),
     [preset, customFrom, customTo],
   );
 
@@ -257,14 +222,14 @@ export function DashboardPage() {
 
       <div className="dash-filter">
         <span className="dash-filter__label">Período:</span>
-        {(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((option) => (
+        {(Object.keys(PERIOD_PRESET_LABELS) as PeriodPreset[]).map((option) => (
           <button
             key={option}
             type="button"
             className={preset === option ? "btn btn--primary btn--sm" : "btn btn--secondary btn--sm"}
             onClick={() => setPreset(option)}
           >
-            {PRESET_LABELS[option]}
+            {PERIOD_PRESET_LABELS[option]}
           </button>
         ))}
         {preset === "custom" && (

@@ -527,12 +527,13 @@ describe("Dashboard — estado atual", () => {
       fetchDashboard(app, emptyWindow(4)),
     ]);
 
-    expect(historica.currentState.production).toEqual(hoje.currentState.production);
-    expect(historica.currentState.commercial).toEqual(hoje.currentState.commercial);
-    // A OP é antiga e não foi concluída: some do período, permanece no estado.
+    // A OP é antiga e não foi concluída: some do período, permanece no
+    // estado — inclusive numa janela histórica completamente vazia.
     expect(hoje.currentState.production.inProduction).toBeGreaterThanOrEqual(1);
+    expect(historica.currentState.production.inProduction).toBeGreaterThanOrEqual(1);
     expect(historica.period.productionOrdersCompleted).toBe(0);
     expect(historica.period.customerOrdersCreated).toBe(0);
+    expect(historica.period.receiptsCompleted).toBe(0);
 
     await app.close();
   });

@@ -35,6 +35,8 @@ FAST MVP.
 **Delivery 22 — QR de Produto Acabado + Conferência de lote na Expedição:
 concluído (fechamento operacional Produto Acabado → identificação física →
 Expedição).**
+**Delivery 23 — Relatórios gerenciais e operacionais R-01…R-17 (Bloco E,
+capacidade 31): concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -52,10 +54,10 @@ Calculation + Reservation + QR Picking + Actual Consumption + Partial
 Production/conclusão da OP + Finished Product + Rastreabilidade
 bidirecional). Bloco D **completo** (22-28: Pedido do Cliente, Plano de Atendimento,
 Reserva de Produto Acabado, OPs Sugeridas, Sugestão de Compra, Expedição,
-Faturamento) + **Fundação de Custos (29)**. **Bloco E iniciado: Dashboard
-operacional (30) concluído.** Só falta Usuários (Bloco A) dentro do escopo
-MVP travado; os próximos passos do Bloco E são Relatórios (31) e
-Exportações CSV/PDF (32) — nenhum deles iniciado.
+Faturamento) + **Fundação de Custos (29)**. **Bloco E: Dashboard operacional (30) e
+Relatórios (31) concluídos.** Só falta Usuários (Bloco A) dentro do escopo
+MVP travado; o próximo passo do Bloco E é Exportações CSV/PDF/Impressão
+(32) — não iniciada.
 
 ## Stack instalada
 
@@ -104,7 +106,10 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  pós-confirmação com auditoria de conferência, seção
                  Faturamento) + Faturamento (lista
                  "Aguardando faturamento" + documentos, documento próprio
-                 DRAFT/ISSUED/CANCELLED com preço opcional)
+                 DRAFT/ISSUED/CANCELLED com preço opcional), Gestão >
+                 Relatórios (hub R-01…R-17 agrupado por domínio + uma
+                 página por relatório, filtros server-side, paginação e
+                 links para os documentos)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders (+
                  /confirm, /cancel), /receipts, /lots (+ /lots/lookup,
@@ -126,7 +131,13 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /items/:id/cost-reference,
                  /formulation-versions/:id/cost-estimate,
                  /production-orders/:id/material-cost, /finished-goods,
-                 /dashboard (read model único do cockpit)
+                 /dashboard (read model único do cockpit),
+                 /reports/* (17 read models somente leitura: inventory/
+                 position|expiry|movements, production/requirements|
+                 planned-actual|traceability|consumption, purchasing/
+                 orders|receipts|on-order|late, commercial/orders|
+                 fulfillment|order-operation, billing/period|awaiting|
+                 order-delivered-billed)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder
                  [origin MANUAL/CUSTOMER_ORDER, customerOrderId/Code],
@@ -2867,6 +2878,64 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 23 — Relatórios R-01…R-17 (Bloco E, capacidade 31)
+
+`Gestão → Relatórios`: 17 consultas somente leitura sobre as entidades que
+já são fonte de verdade. **Nenhuma tabela de relatório, nenhum agregado
+persistido, nenhum data warehouse, nenhum BI configurável.**
+
+- Cada relatório tem endpoint próprio em `GET /reports/...` e um read model
+  em `modules/reports/` separado por domínio (estoque, produção, compras,
+  comercial, faturamento). Clareza acima de abstração: não existe framework
+  genérico de relatórios.
+- **Filtro e paginação são conceitos separados.** O filtro define o
+  resultado (`total` é sempre o resultado filtrado inteiro), a página só a
+  fatia devolvida — é isso que permitirá a exportação (32) reutilizar os
+  MESMOS read models pedindo tudo, sem reconstruir CSV a partir da tela.
+  Todos os filtros são server-side.
+- **Datas operacionais corretas por domínio**: movimento por `occurredAt`,
+  recebimento por `receivedAt`, consumo por `consumedAt`, OP concluída por
+  `completedAt` (outros status usam `createdAt`, explicitamente, nunca
+  misturado), expedição por `confirmedAt`, faturamento por `issuedAt`,
+  pedido por `orderDate`. `updatedAt` nunca é usado como atalho.
+- **Timezone**: o frontend resolve os limites e envia ISO, reaproveitando o
+  helper extraído do Dashboard (`apps/web/src/lib/period.ts`) — estratégia
+  única de datas, sem off-by-one na virada do dia.
+- **UOM e Decimal**: cada linha carrega a própria unidade; nada soma
+  grandezas incompatíveis (R-12 lista os códigos dos produtos em vez de
+  somar quantidades). Nenhum cálculo passa por float.
+- **Custos** vêm sempre da Fundação de Custos com a qualidade explícita
+  (`REAL/ESTIMATED/PARTIAL/NO_COST`); custo desconhecido aparece como "Sem
+  custo" e nunca como zero. Valor previsto de OC e valor de faturamento só
+  existem com precificação completa; o total do período do R-15 só existe
+  quando TODOS os documentos filtrados estão completos.
+- **Cálculo único, nunca paralelo**: a falta de material do R-04 usa o novo
+  `lib/requirement-availability.ts`, extraído do próprio documento da OP e
+  agora compartilhado pelos dois (a reserva da própria OP volta ao
+  disponível, e `On Order` continua sem reduzir a falta). O status de
+  faturamento do Pedido usa `deriveOrderBillingStatus`, exportado do módulo
+  de Pedidos. R-06 usa só `ProductionConsumption`/`ProductionOutput` —
+  reserva/FEFO nunca são genealogia.
+- **Performance**: disponibilidade resolvida de uma vez para todos os
+  requirements; expedido/faturado/reservado/produzido agregados em lote por
+  linha de Pedido (R-13/R-17); custo do R-05 é opcional e resolvido uma vez
+  por OP da página. Sem cache/Redis.
+- Links operacionais em todos os códigos (OC, REC, LT, OP, PED, EXP, FAT),
+  estados vazios específicos por relatório e estrutura semântica
+  Título → Filtros → Resumo → Tabela, pensada para a impressão futura.
+- **Exportação não foi implementada** (CSV/PDF/`window.print`), por
+  instrução — fica para a capacidade 32.
+- Testes (`reports.test.ts`, 13 casos): saldo do ledger com e sem lote e
+  Qualidade zerando o disponível; janelas de vencimento incluindo lote
+  zerado fora; tipos de movimento com origem/motivo/usuário; falta com
+  reserva própria e On Order; planejado × produzido com rendimento;
+  genealogia real; consumo com custo real e sem custo; OC com preço
+  completo × incompleto; recebimento linha a linha; em compra e atrasadas;
+  e o caso integrado de Pedido com dois produtos (A 500/500/500 e B
+  300/200/100 com 100 expedido não faturado) cobrindo R-12 a R-17.
+
+---
+
 # Delivery 22 — QR de Produto Acabado + Conferência de lote na Expedição
 
 Fechamento operacional entre produzir, identificar fisicamente e expedir.
@@ -3067,17 +3136,15 @@ Fundação de Custos) — faltava só a visão. Nada de domínio novo foi criado
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 **Fundação de Custos (29)** e **Dashboard operacional (30)** concluídos,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
-na Expedição (não altera o roadmap).
-Próximo passo do roadmap oficial: **Relatórios (31)** — incluindo R-14
-Pedido → Operação, R-15 Faturamento por período, R-16 Aguardando
-faturamento, R-17 Pedido × Entregue × Faturado — e depois exportações
-CSV/PDF/impressão (32), e só então validação ponta a ponta / demo,
-responsivo e hardening técnico. **Relatórios não foram iniciados, por
-instrução explícita do handoff**; aguarda novo handoff de Product
-Ownership. Reaproveitar no 31: `modules/dashboard/dashboard.queries.ts`
-(itens distintos em compra, OC atrasada, pedidos aguardando produção/
-expedição) e `attention.service.ts`, que já resolvem essas perguntas sem
-tabela agregada.
+na Expedição e os **Relatórios R-01…R-17 (31)**.
+Próximo passo do roadmap oficial: **Exportações CSV/PDF/Impressão (32)**,
+depois validação ponta a ponta / demo, responsivo e hardening técnico.
+**A exportação não foi iniciada, por instrução explícita do handoff**;
+aguarda novo handoff de Product Ownership. Reaproveitar no 32: os read
+models de `modules/reports/`, que já separam filtro de paginação — o CSV
+deve pedir o resultado filtrado COMPLETO aos mesmos serviços, nunca
+reconstruir a partir da página renderizada; e a rota de impressão da
+etiqueta de lote (fora do `AppShell`) como padrão de impressão/PDF.
 Reutilizar quando começar: `FullWorkspaceModal`
 + `components.css` para cadastros simples; padrão de página própria (ver
 Ordem de Compra/Recebimento/editor de Formulação/OP/Pedido) para novos

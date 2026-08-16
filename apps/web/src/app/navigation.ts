@@ -106,7 +106,7 @@ export const navigation: NavGroup[] = [
   },
   {
     title: null,
-    items: [{ label: "Relatórios", path: "/relatorios", implemented: false }],
+    items: [{ label: "Relatórios", path: "/relatorios", implemented: true }],
   },
 ];
 

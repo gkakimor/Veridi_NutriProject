@@ -64,7 +64,7 @@ payment** (future financial layer, out of scope).
 
 ## Block E — Management, Reports & Exports (transversal layer)
 30. Executive/Operational Dashboard ✓
-31. Reports
+31. Reports ✓
 32. CSV / PDF / Print exports
 
 Block E is a **transversal layer**, executed only **after** 26 (Purchase
@@ -82,7 +82,7 @@ operational entities — it never introduces a new source of truth.
 → 28 Invoicing ✓
 → 29 Material cost foundation ✓
 → 30 Executive/Operational Dashboard ✓
-→ 31 Reports
+→ 31 Reports ✓
 → 32 CSV/PDF/Print exports
 → end-to-end validation / demo
 → responsive/mobile hardening

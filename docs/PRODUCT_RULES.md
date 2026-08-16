@@ -1297,7 +1297,7 @@ produce → make finished product available → picking/shipping → invoicing.
 
 ---
 
-# 30. Block E — Management, Reports & Exports (Dashboard implemented, Delivery 21)
+# 30. Block E — Management, Reports & Exports (Dashboard: Delivery 21; Reports: Delivery 23)
 
 Product Ownership decision registered during Delivery 18. A **transversal
 layer** (steps 29–31), executed only **after** Purchase Suggestion (26),
@@ -1355,6 +1355,26 @@ the official roadmap ordering.
   cost — they never show money derived from incomplete data.
 - The client always sends explicit temporal bounds, so "today" is the
   operator's day rather than the server timezone's.
+
+## Durable rules confirmed at implementation (Reports, §31)
+
+- Every report is a read model over the existing operational entities. No
+  report table, no persisted aggregate, no warehouse, no configurable BI.
+- **Filters and pagination are separate concepts**: filters define the
+  result (and the reported total is the whole filtered result), pagination
+  only the returned slice. Exports must ask the same services for the
+  complete filtered result — never rebuild output from a rendered page.
+- A number shown in two places has exactly one implementation. Material
+  shortage lives in a single shared calculation used by both the
+  production order document and its report; the order's billing status
+  comes from the same derivation the order screen uses.
+- Each report filters by the operational date of its own domain (movement
+  `occurredAt`, receipt `receivedAt`, consumption `consumedAt`, production
+  `completedAt` when completed, shipment `confirmedAt`, billing
+  `issuedAt`, order `orderDate`) — never `updatedAt`, and never two date
+  meanings mixed silently inside one report.
+- Reports never invent a relationship: they navigate the ones that already
+  exist. Genealogy is always real consumption and real output.
 
 ---
 

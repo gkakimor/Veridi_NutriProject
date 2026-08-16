@@ -182,8 +182,17 @@ function toBillingSummaryDTO(billing: BillingWithLines): CustomerOrderBillingSum
  * faturado; `PARTIALLY_BILLED` quando já há quantidade faturada mas ainda
  * falta algo (expedido não faturado ou expedição futura pendente).
  */
-function deriveBillingStatus(
-  order: OrderWithRelations,
+/**
+ * Status de faturamento do Pedido — derivado do que foi REALMENTE expedido
+ * e faturado. Exportado para os relatorios usarem exatamente a mesma regra,
+ * nunca uma segunda interpretacao.
+ */
+export function deriveOrderBillingStatus(
+  order: {
+    status: string;
+    lines: { id: string; orderedQuantity: Prisma.Decimal }[];
+    shipments: { status: string }[];
+  },
   shippedByLine: Map<string, Prisma.Decimal>,
   billedByLine: Map<string, Prisma.Decimal>,
 ): CustomerOrderBillingStatus {
@@ -325,7 +334,7 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
     linkedPurchaseOrders: order.purchaseOrders.map(toLinkedPurchaseOrderDTO),
     shipments: order.shipments.map(toShipmentSummaryDTO),
     billings: order.billings.map(toBillingSummaryDTO),
-    billingStatus: deriveBillingStatus(order, shippedByLine, billedByLine),
+    billingStatus: deriveOrderBillingStatus(order, shippedByLine, billedByLine),
     confirmedAt: order.confirmedAt ? order.confirmedAt.toISOString() : null,
     confirmedBy: order.confirmedBy,
     cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,

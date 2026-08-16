@@ -23,6 +23,7 @@ import { billingsRoutes } from "./modules/billings/billings.routes.js";
 import { costsRoutes } from "./modules/costs/costs.routes.js";
 import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
 import { finishedGoodsRoutes } from "./modules/finished-goods/finished-goods.routes.js";
+import { reportsRoutes } from "./modules/reports/reports.routes.js";
 
 /**
  * Monta a instancia Fastify.
@@ -65,6 +66,7 @@ export function buildApp() {
   app.register(costsRoutes);
   app.register(dashboardRoutes);
   app.register(finishedGoodsRoutes);
+  app.register(reportsRoutes);
 
   return app;
 }

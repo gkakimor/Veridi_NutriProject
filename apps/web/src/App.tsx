@@ -33,6 +33,34 @@ import { ShipmentsPage } from "./pages/shipments/ShipmentsPage";
 import { ShipmentPage } from "./pages/shipments/ShipmentPage";
 import { BillingsPage } from "./pages/billings/BillingsPage";
 import { BillingPage } from "./pages/billings/BillingPage";
+import { ReportsHubPage } from "./pages/reports/ReportsHubPage";
+import {
+  ExpiryReportPage,
+  InventoryPositionReportPage,
+  MovementsReportPage,
+} from "./pages/reports/InventoryReports";
+import {
+  ConsumptionReportPage,
+  PlannedActualReportPage,
+  ProductionTraceabilityReportPage,
+  RequirementsReportPage,
+} from "./pages/reports/ProductionReports";
+import {
+  LatePurchaseOrdersReportPage,
+  OnOrderReportPage,
+  PurchaseOrdersReportPage,
+  ReceiptsReportPage,
+} from "./pages/reports/PurchasingReports";
+import {
+  CustomerOrdersReportPage,
+  FulfillmentReportPage,
+  OrderOperationReportPage,
+} from "./pages/reports/CommercialReports";
+import {
+  AwaitingBillingReportPage,
+  BillingPeriodReportPage,
+  OrderDeliveredBilledReportPage,
+} from "./pages/reports/BillingReports";
 
 export function App() {
   return (
@@ -78,6 +106,29 @@ export function App() {
           <Route path="/comercial/expedicoes/:id" element={<ShipmentPage />} />
           <Route path="/comercial/faturamento" element={<BillingsPage />} />
           <Route path="/comercial/faturamento/:id" element={<BillingPage />} />
+
+          {/* Gestão → Relatórios (R-01…R-17), todos somente leitura. */}
+          <Route path="/relatorios" element={<ReportsHubPage />} />
+          <Route path="/relatorios/estoque/posicao" element={<InventoryPositionReportPage />} />
+          <Route path="/relatorios/estoque/vencimentos" element={<ExpiryReportPage />} />
+          <Route path="/relatorios/estoque/movimentacoes" element={<MovementsReportPage />} />
+          <Route path="/relatorios/producao/necessidades" element={<RequirementsReportPage />} />
+          <Route path="/relatorios/producao/planejado-realizado" element={<PlannedActualReportPage />} />
+          <Route path="/relatorios/producao/rastreabilidade" element={<ProductionTraceabilityReportPage />} />
+          <Route path="/relatorios/producao/consumo" element={<ConsumptionReportPage />} />
+          <Route path="/relatorios/compras/ordens" element={<PurchaseOrdersReportPage />} />
+          <Route path="/relatorios/compras/recebimentos" element={<ReceiptsReportPage />} />
+          <Route path="/relatorios/compras/em-compra" element={<OnOrderReportPage />} />
+          <Route path="/relatorios/compras/atrasadas" element={<LatePurchaseOrdersReportPage />} />
+          <Route path="/relatorios/comercial/pedidos" element={<CustomerOrdersReportPage />} />
+          <Route path="/relatorios/comercial/atendimento" element={<FulfillmentReportPage />} />
+          <Route path="/relatorios/comercial/pedido-operacao" element={<OrderOperationReportPage />} />
+          <Route path="/relatorios/faturamento/periodo" element={<BillingPeriodReportPage />} />
+          <Route path="/relatorios/faturamento/pendentes" element={<AwaitingBillingReportPage />} />
+          <Route
+            path="/relatorios/faturamento/pedido-entregue-faturado"
+            element={<OrderDeliveredBilledReportPage />}
+          />
 
           {navItems
             .filter((item) => !item.implemented)
