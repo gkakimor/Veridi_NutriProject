@@ -16,6 +16,7 @@ import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getOnHand, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
 import { CustomerOrderNotFoundError } from "../customer-orders/customer-orders.errors.js";
+import { getBillingStatusByShipments } from "../billings/billings.service.js";
 import {
   DraftShipmentAlreadyExistsError,
   EmptyShipmentError,
@@ -174,6 +175,11 @@ function toShipmentLineDTO(
 }
 
 async function toShipmentDTO(shipment: ShipmentWithRelations): Promise<ShipmentDTO> {
+  const billingInfo = (await getBillingStatusByShipments(getPrisma(), [shipment.id])).get(shipment.id) ?? {
+    status: "PENDING" as const,
+    billingId: null,
+    billingCode: null,
+  };
   // Numa Expedicao CONFIRMED o "reservado disponivel" ja considera a
   // propria saida — a UI read-only mostra o historico, nao um teto de
   // edicao. Em DRAFT e o teto real do que ainda pode ser enviado.
@@ -197,6 +203,9 @@ async function toShipmentDTO(shipment: ShipmentWithRelations): Promise<ShipmentD
       toShipmentLineDTO(line, reservedRemainingByLine.get(line.customerOrderReservationLineId) ?? new Prisma.Decimal(0)),
     ),
     totalQuantity: totalQuantity.toString(),
+    billingStatus: billingInfo.status,
+    billingId: billingInfo.billingId,
+    billingCode: billingInfo.billingCode,
     confirmedAt: shipment.confirmedAt ? shipment.confirmedAt.toISOString() : null,
     confirmedBy: shipment.confirmedBy,
     cancelledAt: shipment.cancelledAt ? shipment.cancelledAt.toISOString() : null,

@@ -12,10 +12,13 @@ import type {
   SupplierDTO,
 } from "@veridi/shared";
 import {
+  BILLING_STATUS_LABELS,
+  CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
   SHIPMENT_STATUS_LABELS,
 } from "@veridi/shared";
+import { formatBRL } from "../../lib/currency";
 import {
   applyFulfillmentPlan,
   cancelCustomerOrder,
@@ -1135,6 +1138,89 @@ export function CustomerOrderPage() {
                 </tbody>
               </table>
             </div>
+          </FormSection>
+        )}
+
+        {customerOrder && customerOrder.billingStatus !== "NOT_READY" && (
+          <FormSection
+            title="Faturamento"
+            subtitle="Faturamento comercial do que foi realmente expedido — não emite Nota Fiscal."
+          >
+            <dl className="definition-list">
+              <dt>Pedido</dt>
+              <dd>
+                {customerOrder.lines.reduce((sum, line) => sum + Number(line.orderedQuantity), 0)}
+              </dd>
+              <dt>Expedido</dt>
+              <dd>
+                {customerOrder.lines.reduce((sum, line) => sum + Number(line.shippedQuantity), 0)}
+              </dd>
+              <dt>Faturado</dt>
+              <dd>
+                {customerOrder.lines.reduce((sum, line) => sum + Number(line.billedQuantity), 0)}
+              </dd>
+              <dt>A faturar (expedido)</dt>
+              <dd>
+                {customerOrder.lines.reduce((sum, line) => sum + Number(line.unbilledShippedQuantity), 0)}
+              </dd>
+              <dt>Situação</dt>
+              <dd>
+                <span
+                  className={
+                    customerOrder.billingStatus === "BILLED" ? "badge badge--active" : "badge badge--warn"
+                  }
+                >
+                  {CUSTOMER_ORDER_BILLING_STATUS_LABELS[customerOrder.billingStatus]}
+                </span>
+              </dd>
+            </dl>
+
+            {customerOrder.billings.length > 0 && (
+              <div className="table-container table-container--spaced">
+                <table className="table table--clickable-rows">
+                  <thead>
+                    <tr>
+                      <th>Faturamento</th>
+                      <th>Expedição</th>
+                      <th>Quantidade</th>
+                      <th>Valor</th>
+                      <th>Status</th>
+                      <th aria-hidden="true" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customerOrder.billings.map((billing) => (
+                      <tr
+                        key={billing.id}
+                        tabIndex={0}
+                        onClick={() => navigate(`/comercial/faturamento/${billing.id}`)}
+                      >
+                        <td className="is-code">{billing.code}</td>
+                        <td className="is-code">{billing.shipmentCode}</td>
+                        <td>{billing.totalQuantity}</td>
+                        <td>{billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}</td>
+                        <td>
+                          <span className="badge badge--neutral">
+                            {BILLING_STATUS_LABELS[
+                              billing.status as keyof typeof BILLING_STATUS_LABELS
+                            ] ?? billing.status}
+                          </span>
+                        </td>
+                        <td onClick={(event) => event.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() => navigate(`/comercial/faturamento/${billing.id}`)}
+                          >
+                            Abrir
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </FormSection>
         )}
 

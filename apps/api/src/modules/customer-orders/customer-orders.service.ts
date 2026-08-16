@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type {
+  Billing,
+  BillingLine,
   Customer,
   CustomerOrder,
   CustomerOrderLine,
@@ -16,6 +18,8 @@ import type {
   Supplier,
 } from "@prisma/client";
 import type {
+  CustomerOrderBillingStatus,
+  CustomerOrderBillingSummaryDTO,
   CustomerOrderDTO,
   CustomerOrderGeneratedProductionOrderDTO,
   CustomerOrderLineDTO,
@@ -59,6 +63,7 @@ type ReservationWithLines = CustomerOrderReservation & { lines: ReservationLineW
 type GeneratedOrder = ProductionOrder & { product: Product };
 type LinkedPurchaseOrder = PurchaseOrder & { supplier: Supplier; lines: PurchaseOrderLine[] };
 type ShipmentWithLines = Shipment & { lines: ShipmentLine[] };
+type BillingWithLines = Billing & { lines: BillingLine[] };
 type OrderWithRelations = CustomerOrder & {
   customer: Customer;
   lines: LineWithProduct[];
@@ -66,6 +71,7 @@ type OrderWithRelations = CustomerOrder & {
   productionOrders: GeneratedOrder[];
   purchaseOrders: LinkedPurchaseOrder[];
   shipments: ShipmentWithLines[];
+  billings: BillingWithLines[];
 };
 
 const customerOrderInclude = {
@@ -78,6 +84,7 @@ const customerOrderInclude = {
   productionOrders: { include: { product: true }, orderBy: { createdAt: "asc" as const } },
   purchaseOrders: { include: { supplier: true, lines: true }, orderBy: { createdAt: "asc" as const } },
   shipments: { include: { lines: true }, orderBy: { createdAt: "asc" as const } },
+  billings: { include: { lines: true }, orderBy: { createdAt: "asc" as const } },
 } as const;
 
 /**
@@ -109,10 +116,29 @@ export function shippedByReservationLine(shipments: ShipmentWithLines[]): Map<st
   return map;
 }
 
-function toLineDTO(line: LineWithProduct, shippedByLine: Map<string, Prisma.Decimal>): CustomerOrderLineDTO {
+/** Faturado por CustomerOrderLine — só Billings ISSUED contam. */
+export function billedByOrderLine(billings: BillingWithLines[]): Map<string, Prisma.Decimal> {
+  const map = new Map<string, Prisma.Decimal>();
+  for (const billing of billings) {
+    if (billing.status !== "ISSUED") continue;
+    for (const line of billing.lines) {
+      const current = map.get(line.customerOrderLineId) ?? new Prisma.Decimal(0);
+      map.set(line.customerOrderLineId, current.plus(line.quantity));
+    }
+  }
+  return map;
+}
+
+function toLineDTO(
+  line: LineWithProduct,
+  shippedByLine: Map<string, Prisma.Decimal>,
+  billedByLine: Map<string, Prisma.Decimal>,
+): CustomerOrderLineDTO {
   const usingSnapshot = line.productCode !== null;
   const shipped = shippedByLine.get(line.id) ?? new Prisma.Decimal(0);
   const outstanding = Prisma.Decimal.max(line.orderedQuantity.minus(shipped), 0);
+  const billed = billedByLine.get(line.id) ?? new Prisma.Decimal(0);
+  const unbilledShipped = Prisma.Decimal.max(shipped.minus(billed), 0);
   return {
     id: line.id,
     productId: line.productId,
@@ -126,7 +152,56 @@ function toLineDTO(line: LineWithProduct, shippedByLine: Map<string, Prisma.Deci
     position: line.position,
     shippedQuantity: shipped.toString(),
     outstandingQuantity: outstanding.toString(),
+    billedQuantity: billed.toString(),
+    unbilledShippedQuantity: unbilledShipped.toString(),
   };
+}
+
+function toBillingSummaryDTO(billing: BillingWithLines): CustomerOrderBillingSummaryDTO {
+  const totalQuantity = billing.lines.reduce((sum, line) => sum.plus(line.quantity), new Prisma.Decimal(0));
+  const hasCompletePricing = billing.lines.length > 0 && billing.lines.every((line) => line.unitPrice !== null);
+  const totalAmount = hasCompletePricing
+    ? billing.lines.reduce((sum, line) => sum.plus(line.quantity.times(line.unitPrice!)), new Prisma.Decimal(0))
+    : null;
+  return {
+    id: billing.id,
+    code: billing.code,
+    shipmentId: billing.shipmentId,
+    shipmentCode: billing.shipmentCode ?? "",
+    status: billing.status,
+    totalQuantity: totalQuantity.toString(),
+    totalAmount: totalAmount ? totalAmount.toFixed(2) : null,
+    issuedAt: billing.issuedAt ? billing.issuedAt.toISOString() : null,
+  };
+}
+
+/**
+ * Estado de faturamento DERIVADO do Pedido — nunca persistido e nunca
+ * misturado ao `status` operacional. `NOT_READY` sem expedição confirmada;
+ * `BILLED` só quando o Pedido está `SHIPPED` e tudo que foi pedido já foi
+ * faturado; `PARTIALLY_BILLED` quando já há quantidade faturada mas ainda
+ * falta algo (expedido não faturado ou expedição futura pendente).
+ */
+function deriveBillingStatus(
+  order: OrderWithRelations,
+  shippedByLine: Map<string, Prisma.Decimal>,
+  billedByLine: Map<string, Prisma.Decimal>,
+): CustomerOrderBillingStatus {
+  const hasConfirmedShipment = order.shipments.some((shipment) => shipment.status === "CONFIRMED");
+  if (!hasConfirmedShipment) return "NOT_READY";
+
+  let totalOrdered = new Prisma.Decimal(0);
+  let totalShipped = new Prisma.Decimal(0);
+  let totalBilled = new Prisma.Decimal(0);
+  for (const line of order.lines) {
+    totalOrdered = totalOrdered.plus(line.orderedQuantity);
+    totalShipped = totalShipped.plus(shippedByLine.get(line.id) ?? new Prisma.Decimal(0));
+    totalBilled = totalBilled.plus(billedByLine.get(line.id) ?? new Prisma.Decimal(0));
+  }
+
+  if (totalBilled.lessThanOrEqualTo(0)) return "PENDING";
+  if (order.status === "SHIPPED" && totalBilled.greaterThanOrEqualTo(totalOrdered)) return "BILLED";
+  return "PARTIALLY_BILLED";
 }
 
 function toReservationLineDTO(
@@ -230,6 +305,7 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
 
   const shippedByLine = shippedByOrderLine(order.shipments);
   const shippedByResLine = shippedByReservationLine(order.shipments);
+  const billedByLine = billedByOrderLine(order.billings);
 
   return {
     id: order.id,
@@ -243,11 +319,13 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
     requestedDeliveryDate: order.requestedDeliveryDate ? order.requestedDeliveryDate.toISOString() : null,
     status: order.status,
     notes: order.notes,
-    lines: order.lines.map((line) => toLineDTO(line, shippedByLine)),
+    lines: order.lines.map((line) => toLineDTO(line, shippedByLine, billedByLine)),
     reservation: reservation ? toReservationDTO(reservation, shippedByResLine) : null,
     generatedProductionOrders: order.productionOrders.map(toGeneratedProductionOrderDTO),
     linkedPurchaseOrders: order.purchaseOrders.map(toLinkedPurchaseOrderDTO),
     shipments: order.shipments.map(toShipmentSummaryDTO),
+    billings: order.billings.map(toBillingSummaryDTO),
+    billingStatus: deriveBillingStatus(order, shippedByLine, billedByLine),
     confirmedAt: order.confirmedAt ? order.confirmedAt.toISOString() : null,
     confirmedBy: order.confirmedBy,
     cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,

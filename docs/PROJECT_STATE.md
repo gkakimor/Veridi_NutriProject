@@ -28,6 +28,7 @@ FAST MVP.
 **Delivery 16 — Pedido do Cliente + Plano de Atendimento (Bloco D): concluído.**
 **Delivery 17 — Sugestão de Compra + Geração de OC DRAFT (Bloco D, capacidade 26): concluído.**
 **Delivery 18 — Separação + Expedição (Bloco D, capacidade 27): concluído.**
+**Delivery 19 — Faturamento (Bloco D, capacidade 28): concluído — Bloco D funcionalmente encerrado.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -43,12 +44,11 @@ um terceiro padrão: página fora do `AppShell`, sem topbar/sidebar. Ver
 Bloco C completo (Formulações + Versionamento + OP + Requirement
 Calculation + Reservation + QR Picking + Actual Consumption + Partial
 Production/conclusão da OP + Finished Product + Rastreabilidade
-bidirecional). Bloco D — Pedido do Cliente/Plano de Atendimento/Reserva de
-Produto Acabado/Geração de OPs Sugeridas/Sugestão de Compra/Expedição
-(22-27) — também completo. Só falta Usuários (Bloco A) dentro do escopo
-MVP travado; Faturamento (28) é o próximo, seguido do **Bloco E —
-Gestão, Relatórios & Exportações** (29-31), camada transversal já
-oficializada no roadmap mas ainda não iniciada.
+bidirecional). Bloco D **completo** (22-28: Pedido do Cliente, Plano de Atendimento,
+Reserva de Produto Acabado, OPs Sugeridas, Sugestão de Compra, Expedição,
+Faturamento). Só falta Usuários (Bloco A) dentro do escopo MVP travado; o
+próximo passo é o **Bloco E — Gestão, Relatórios & Exportações** (29-31),
+camada transversal já oficializada no roadmap mas ainda não iniciada.
 
 ## Stack instalada
 
@@ -87,9 +87,12 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  fornecedor editáveis]/Reserva de Produto Acabado
                  [complementar + Preparar Expedição]/Expedições/Ordens de
                  Compra Vinculadas/Reservas de Produto Acabado [com
-                 realocação]/OPs Geradas) + Expedições (lista + documento
-                 DRAFT/CONFIRMED/CANCELLED, separação editável e bloco
-                 read-only pós-confirmação)
+                 realocação]/Faturamento [progresso + documentos]/OPs
+                 Geradas) + Expedições (lista + documento DRAFT/CONFIRMED/
+                 CANCELLED, separação editável, bloco read-only
+                 pós-confirmação, seção Faturamento) + Faturamento (lista
+                 "Aguardando faturamento" + documentos, documento próprio
+                 DRAFT/ISSUED/CANCELLED com preço opcional)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders (+
                  /confirm, /cancel), /receipts, /lots (+ /lots/lookup,
@@ -105,7 +108,8 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /apply-fulfillment-plan, /purchase-suggestion,
                  /purchase-drafts, /shipments, /reservation-status,
                  /reserve-available, /reallocate-reservation-line),
-                 /shipments (+ /confirm, /cancel)
+                 /shipments (+ /confirm, /cancel), /billings (+ /awaiting,
+                 /issue, /cancel)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder
                  [origin MANUAL/CUSTOMER_ORDER, customerOrderId/Code],
@@ -130,7 +134,10 @@ packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  newSuggestedPurchase], Shipment/ShipmentLine [DRAFT/
                  CONFIRMED/CANCELLED, reservedRemaining, snapshot],
                  ReservationStatusDTO [stillToReserve/
-                 suggestedAdditionalReserve], CNPJ, UFs)
+                 suggestedAdditionalReserve], Billing/BillingLine [DRAFT/
+                 ISSUED/CANCELLED, unitPrice opcional, totalAmount +
+                 hasCompletePricing], AwaitingBillingRowDTO,
+                 CustomerOrderBillingStatus derivado, CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -2207,6 +2214,139 @@ Inventory confirmada (zero teste quebrado pela mudança de
 
 ---
 
+# Delivery 19 — Faturamento (Bloco D, capacidade 28)
+
+Fecha o Bloco D: Pedido → Reserva → Produção quando necessária → Expedição
+CONFIRMED → aguardando faturamento → Faturamento DRAFT → ISSUED. Validada
+só em desktop web — sem ferramenta de browser nesta sessão, ver
+"Pendente".
+
+## Comercial, nunca fiscal
+
+Entidade `Billing` (UI "Faturamento") — deliberadamente **não** chamada de
+`FiscalInvoice`/`NFe`. Nada de NF-e, DANFE, XML, SEFAZ, impostos, contas a
+receber ou pagamento. O `ConfirmDialog` de emissão diz explicitamente que
+a ação não emite Nota Fiscal.
+
+## Modelagem — Billing/BillingLine
+
+- `Billing`: `code` (sequence `billing_code_seq`, prefixo `FAT`),
+  `customerOrderId`, `shipmentId`, `status` (`DRAFT`/`ISSUED`/
+  `CANCELLED`), `externalReference?` (referência livre a documento
+  externo/ERP, ex.: "NF 12345" — o sistema nunca valida nem emite),
+  `notes?`, snapshot histórico (cliente + código do Pedido + código/data
+  da Expedição, reaproveitando os snapshots já existentes), auditoria de
+  emissão/cancelamento. **No máximo um Billing ativo (DRAFT ou ISSUED)
+  por Expedição**, garantido por índice único parcial — mesma técnica já
+  usada para a DRAFT única de Expedição; um CANCELLED libera a vaga.
+- `BillingLine`: cópia fiel de uma `ShipmentLine` (`quantity` idêntica,
+  nunca recalculada do Pedido, nunca editável) + snapshot próprio
+  (product/item/lote/businessLotNumber) + `unitPrice?` opcional.
+  `lineTotal` nunca é persistido — sempre derivado com Decimal.
+  Migration `20260828090000_billings`.
+
+## Fonte da quantidade: só Expedição CONFIRMED
+
+`POST /billings` exige `Shipment.status === CONFIRMED` (DRAFT e CANCELLED
+rejeitados), copia todas as linhas sob lock da Expedição e valida a
+ausência de Billing ativo. A emissão revalida a Expedição de novo — nunca
+confia só na validação feita na criação do rascunho. Enquanto DRAFT só
+`unitPrice`/`notes`/`externalReference` são editáveis; a API sequer
+endereça quantidade/lote/produto.
+
+## Preço opcional, valor só com pricing completo
+
+Preço **nunca** é gate para emitir: o MVP precisa suportar faturamento
+operacional mesmo quando os valores comerciais são controlados fora do
+sistema. Preço negativo é rejeitado, zero é aceito (bonificação), e o
+campo é limpável (`""` → `null`). `totalAmount` só existe quando **todas**
+as linhas têm preço (`hasCompletePricing`) — somar parcialmente e
+apresentar como total do documento seria enganoso. Essa semântica é
+exatamente o que o Bloco E vai usar: *quantidade faturada* sempre
+confiável, *valor faturado* só com pricing completo. Tudo em `Decimal`,
+sem float JS; BRL na exibição.
+
+## Progresso Pedido/Expedido/Faturado
+
+`billedQuantity` por linha do Pedido é derivado das `BillingLine` de
+Billings **ISSUED** — DRAFT e CANCELLED nunca contam, nunca uma coluna
+mutável. `unbilledShippedQuantity = shipped - billed`. O estado de
+faturamento do Pedido (`NOT_READY`/`PENDING`/`PARTIALLY_BILLED`/`BILLED`)
+é **derivado**, nunca persistido e nunca misturado ao
+`CustomerOrder.status`, que continua representando só o fluxo
+operacional/logístico. Cada Expedição confirmada deriva
+`PENDING`/`DRAFT`/`ISSUED`. Cenário completo coberto por teste: pedido
+1000 → expede 400 e fatura → `PARTIALLY_SHIPPED`/`PARTIALLY_BILLED` →
+expede 600 → `SHIPPED`/`PARTIALLY_BILLED` (600 expedidos não faturados) →
+fatura → `SHIPPED`/`BILLED`.
+
+## Estoque intocado
+
+Billing **nunca** cria `InventoryMovement` e nunca altera On Hand/
+Reserved/Available — a saída física já aconteceu no `SHIPMENT_OUT` da
+Expedição. Também não altera a Expedição nem o status do Pedido. Coberto
+por teste explícito (contagem de movimentos antes/depois de criar e
+emitir).
+
+## Aguardando faturamento
+
+`GET /billings/awaiting` — read model simples de Expedições CONFIRMED sem
+Billing ISSUED, diferenciando "Pendente" de "Em preparação" (já tem
+rascunho). Base direta do futuro relatório R-16 e do Dashboard, sem
+nenhuma tabela agregada.
+
+## Backend
+
+Módulo novo `billings/` (`billings.{errors,schemas,service,routes}.ts`).
+`customer-orders.service.ts` ganhou `billedByOrderLine`,
+`deriveBillingStatus` e os campos de progresso no DTO;
+`shipments.service.ts` passou a expor `billingStatus`/`billingId`/
+`billingCode` reutilizando `getBillingStatusByShipments` — nunca um
+segundo cálculo.
+
+## Frontend
+
+Comercial → **Faturamento** (página operacional: "Aguardando faturamento"
+com ação "Preparar faturamento", e abaixo a lista de documentos) +
+documento próprio (preço editável por linha, total ou "Valores
+incompletos", emitir/cancelar). `ShipmentPage` ganhou a seção Faturamento
+(situação + preparar/abrir); `CustomerOrderPage` ganhou a seção
+Faturamento (Pedido/Expedido/Faturado/A faturar/Situação + tabela de
+documentos); a lista de Pedidos ganhou a coluna Faturamento. Navegação
+bidirecional completa: Pedido ↔ Expedição ↔ Faturamento.
+
+## Testes
+
+16 novos testes em `billings.test.ts`: criação (FAT-000001, cópia fiel das
+linhas, Expedição DRAFT/CANCELLED rejeitadas, um ativo por Expedição +
+índice parcial validado contornando o service, CANCELLED libera a vaga,
+concorrência de duas criações simultâneas, quantidade/lote/linhas não
+editáveis), preço (opcional, total só com pricing completo, negativo
+rejeitado, zero aceito, limpável, Decimal exato), emissão (sem preço,
+`issuedAt`/`issuedBy`, imutável, não reemite, não altera Expedição/status
+do Pedido/estoque/movimentos, concorrência de duas emissões) e progresso
+(DRAFT não conta como faturado, cenário completo 1000 → BILLED, faturar
+Pedido `PARTIALLY_SHIPPED`, aguardando faturamento com as três
+situações). Total da API: **329 testes** (313 + 16). Web: 8 testes
+(regressão).
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (329 API + 8 web) — ok em todo o
+monorepo. Regressão completa de CustomerOrder/Shipment/Inventory/
+Production confirmada.
+
+## Pendente (real)
+
+- **Sem validação visual via Playwright/browser nesta sessão** — mesma
+  limitação de ambiente das Deliveries 15-18. Fluxo de faturamento
+  validado só via testes de integração reais (API) e typecheck/build do
+  frontend.
+- **Bloco E — Gestão, Relatórios & Exportações** (29-31) é o próximo
+  passo do roadmap; nada iniciado nesta entrega.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -2243,7 +2383,7 @@ Inventory confirmada (zero teste quebrado pela mudança de
 25. Suggested Production Orders ✓
 26. Purchase Suggestion ✓
 27. Picking / Shipping ✓
-28. Invoicing
+28. Invoicing ✓
 
 ## Block E — Management, Reports & Exports (transversal, registered)
 29. Executive/Operational Dashboard
@@ -2400,6 +2540,30 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial) e
   Shipment is immutable; undoing a physical exit needs a future
   return/re-entry flow. Future Invoicing is based on what was actually
   shipped. See `docs/PRODUCT_RULES.md` §27 for full detail.
+- Confirmed at implementation (Delivery 19): Billing is a commercial/
+  operational document, never fiscal (no NF-e/DANFE/SEFAZ/taxes/
+  receivables) — the entity is `Billing`, never `FiscalInvoice`/`NFe`.
+  The billable quantity always comes from a CONFIRMED Shipment's lines,
+  never from ordered/reserved/planned/produced quantity and never
+  recalculated from the order. Each Shipment is billed in full by one
+  Billing in this phase (partial billing inside a shipment, and a Billing
+  consolidating several shipments, are explicit future evolutions); an
+  order still bills partially through multiple shipments. At most one
+  active Billing (DRAFT/ISSUED) per Shipment, enforced by a partial
+  unique index — a CANCELLED one frees the slot. Billing lines are never
+  free: no add/remove, no quantity/lot/product/unit change; while DRAFT
+  only price, notes and external reference are editable, and ISSUED is
+  fully immutable. Price is optional and never a gate for issuing (never
+  invented, never taken from a Purchase Order); a total amount exists
+  only when every line is priced — *billed quantity* is always
+  trustworthy, *billed value* only with complete pricing. `billedQuantity`
+  is derived from ISSUED billings only (DRAFT/CANCELLED never count), and
+  the order's billing state is derived, never persisted and never merged
+  into `CustomerOrder.status`. Billing never creates an inventory
+  movement and never changes stock, the shipment or the order status —
+  the physical exit already happened at `SHIPMENT_OUT`. A shipment of a
+  merely `PARTIALLY_SHIPPED` order can be billed normally. See
+  `docs/PRODUCT_RULES.md` §28 for full detail.
 - Registered at Delivery 18 (Product Ownership decision, not implemented):
   **Block E — Management, Reports & Exports** (29-31) is a transversal
   layer executed after Invoicing (28) and before the end-to-end demo.
@@ -2550,28 +2714,27 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial) e
 
 # Next recommended implementation
 
-Blocos A-C completos (exceto Usuários) e Bloco D até a capacidade 27
-(Pedido do Cliente, Plano de Atendimento, Reserva de Produto Acabado, OPs
-Sugeridas, Sugestão de Compra, Expedição) também completo. Próximo passo
-do roadmap oficial: **Faturamento (28)** — baseado no que foi
-efetivamente expedido (`ShipmentLine` de Expedições CONFIRMED, nunca no
-pedido/reserva/planejado) — seguido do **Bloco E — Gestão, Relatórios &
-Exportações (29-31)**, camada transversal já oficializada mas ainda não
-iniciada, e só então validação ponta a ponta / demo. **Nada disso foi
-iniciado nesta entrega, por instrução explícita do handoff**; aguardam
-novo handoff de Product Ownership. Reutilizar quando começar: `FullWorkspaceModal`
+Blocos A-C completos (exceto Usuários) e **Bloco D completo (22-28)**.
+Próximo passo do roadmap oficial: **Bloco E — Gestão, Relatórios &
+Exportações (29-31)** — Dashboard operacional, Relatórios (incluindo
+R-14 Pedido → Operação, R-15 Faturamento por período, R-16 Aguardando
+faturamento, R-17 Pedido × Entregue × Faturado) e exportações CSV/PDF/
+impressão — e só então validação ponta a ponta / demo, responsivo e
+hardening técnico. **Nada disso foi iniciado nesta entrega, por instrução
+explícita do handoff**; aguarda novo handoff de Product Ownership.
+Reutilizar quando começar: `FullWorkspaceModal`
 + `components.css` para cadastros simples; padrão de página própria (ver
 Ordem de Compra/Recebimento/editor de Formulação/OP/Pedido) para novos
 documentos transacionais; `apps/api/src/lib/inventory-ledger.ts`
 (`getReservedByItems/Lots` já somam MaterialReservation +
 CustomerOrderReservation líquida de expedição, `getAvailableByItems`,
 `getOnOrderByItems`) para qualquer cálculo futuro de saldo;
-`Shipment`/`ShipmentLine` CONFIRMED são a base direta do Faturamento (a
-quantidade real expedida, com snapshot próprio já preservado);
-`PurchaseOrder.origin`/`customerOrderId` e
-`createDraftPurchaseOrderInTx` já estabelecem o padrão "endpoint gera
-documento DRAFT vinculado, usuário confirma depois" — Faturamento deve
-seguir exatamente o mesmo padrão; `traceability.service.ts` já resolve
+`Billing`/`BillingLine` ISSUED são a base direta dos relatórios de
+faturamento (R-15 por `issuedAt`, R-17 Pedido × Entregue × Faturado), e
+`GET /billings/awaiting` já é o read model de R-16 — nenhuma tabela
+agregada precisa ser criada; `hasCompletePricing` é a chave para separar
+"quantidade faturada" (sempre confiável) de "valor faturado" nos KPIs;
+`traceability.service.ts` já resolve
 genealogia real, reutilizável para qualquer tela futura de
 rastreabilidade por Pedido/Expedição; a rota de impressão da etiqueta de
 lote (fora do `AppShell`, CSS de impressão próprio) é o padrão a

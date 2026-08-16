@@ -30,6 +30,8 @@ import { CustomerOrdersPage } from "./pages/customer-orders/CustomerOrdersPage";
 import { CustomerOrderPage } from "./pages/customer-orders/CustomerOrderPage";
 import { ShipmentsPage } from "./pages/shipments/ShipmentsPage";
 import { ShipmentPage } from "./pages/shipments/ShipmentPage";
+import { BillingsPage } from "./pages/billings/BillingsPage";
+import { BillingPage } from "./pages/billings/BillingPage";
 
 export function App() {
   return (
@@ -72,6 +74,8 @@ export function App() {
           <Route path="/comercial/pedidos/:id" element={<CustomerOrderPage />} />
           <Route path="/comercial/expedicoes" element={<ShipmentsPage />} />
           <Route path="/comercial/expedicoes/:id" element={<ShipmentPage />} />
+          <Route path="/comercial/faturamento" element={<BillingsPage />} />
+          <Route path="/comercial/faturamento/:id" element={<BillingPage />} />
 
           {navItems
             .filter((item) => !item.implemented)

@@ -1180,13 +1180,62 @@ logistics/WMS.
   (`ShipmentLine` quantities of CONFIRMED shipments) — never on the
   originally ordered, reserved or planned quantity.
 
-## Invoicing
-Invoicing reflects what is actually delivered, not necessarily the
-originally ordered quantity (e.g. order 1000, deliver 600 → invoice 600).
-Partial deliveries/invoicing must be supported eventually. Commercial
-invoicing and Brazilian fiscal NF issuance are related but distinct
-concepts — do not merge them prematurely; fiscal integration remains its
-own future evolution (see `docs/BACKLOG.md`).
+## Invoicing (implemented, Delivery 19)
+Invoicing reflects what is actually delivered, not the originally ordered
+quantity (e.g. order 1000, deliver 600 → invoice 600). Partial invoicing
+is supported through multiple shipments. Commercial invoicing and
+Brazilian fiscal NF issuance are related but distinct concepts and are
+**not** merged — fiscal integration remains its own future evolution (see
+`docs/BACKLOG.md`).
+
+### Durable rules confirmed at implementation (§28)
+
+- Billing is a **commercial/operational** document, never a fiscal one:
+  no NF-e, DANFE, XML, SEFAZ, taxes, receivables or payment. The entity
+  is deliberately named `Billing` (UI "Faturamento"), never
+  `FiscalInvoice`/`NFe`, and the issue dialog states explicitly that the
+  action does not issue a Nota Fiscal.
+- The billable quantity always comes from a **CONFIRMED Shipment**
+  (`ShipmentLine.quantity`) — never from the ordered, reserved, planned
+  or produced quantity, and never recalculated from the Customer Order.
+  A shipment that is still DRAFT or was cancelled can never be billed.
+- In the FAST MVP each Shipment is billed **in full** by one Billing —
+  partial billing inside a single shipment is an explicit future
+  evolution. A Customer Order still supports partial billing naturally,
+  because it can have several shipments (one Billing each). A Billing
+  never consolidates multiple shipments in this phase.
+- At most **one active Billing (DRAFT or ISSUED) per Shipment**,
+  guaranteed by a partial unique index — a CANCELLED billing frees the
+  slot so a new draft can be prepared.
+- Billing lines are never free: the frontend cannot add/remove a line or
+  change quantity, lot, product or unit. While DRAFT only `unitPrice`,
+  notes and the external reference are editable; once ISSUED the whole
+  document is immutable (correction after issuing is future work).
+- **Price is optional and never a gate for issuing.** The MVP has no
+  reliable commercial price on the order, so a quantitative billing is
+  valid without any price; a price is never invented, and never taken
+  from a Purchase Order (cost is not sale price). Prices are BRL when
+  informed.
+- A total amount only exists when **every** line has a price
+  (`hasCompletePricing`) — summing only some lines and presenting it as
+  the document total would be misleading. This is the semantics the
+  future dashboard relies on: *billed quantity* is always trustworthy,
+  *billed value* only when pricing is complete.
+- `billedQuantity` per order line is always derived from `BillingLine`s
+  of **ISSUED** billings — DRAFT and CANCELLED never count, and it is
+  never a mutable column. `unbilledShippedQuantity = shipped - billed`.
+- The Customer Order's billing state (`NOT_READY`/`PENDING`/
+  `PARTIALLY_BILLED`/`BILLED`) is **derived**, never persisted and never
+  merged into `CustomerOrder.status`, which keeps representing only the
+  operational/logistics flow. Likewise each confirmed Shipment derives
+  `PENDING`/`DRAFT`/`ISSUED`.
+- Billing **never** creates an inventory movement and never changes On
+  Hand/Reserved/Available: the physical exit already happened as the
+  shipment's `SHIPMENT_OUT`. It also never changes the Shipment or the
+  Customer Order status.
+- A shipment of an order that is only `PARTIALLY_SHIPPED` can be billed
+  normally — a fully shipped order is not a precondition.
+- Navigation stays bidirectional: Order → Shipment → Billing and back.
 
 ## Automation principle
 The system may **analyze and suggest** automatically. It must never

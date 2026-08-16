@@ -1,5 +1,7 @@
 /** Contratos do módulo de Pedido do Cliente + Plano de Atendimento, consumidos por `apps/api` e `apps/web`. */
 
+import type { CustomerOrderBillingStatus } from "./billings.js";
+
 export const CUSTOMER_ORDER_CODE_PREFIX = "PED";
 
 /**
@@ -52,6 +54,10 @@ export interface CustomerOrderLineDTO {
   shippedQuantity: string;
   /** `orderedQuantity - shippedQuantity`, nunca negativo. */
   outstandingQuantity: string;
+  /** Soma das BillingLines de Faturamentos ISSUED — DRAFT/CANCELLED nunca contam. */
+  billedQuantity: string;
+  /** `shippedQuantity - billedQuantity`, nunca negativo — expedido ainda não faturado. */
+  unbilledShippedQuantity: string;
 }
 
 export interface CustomerOrderReservationLineDTO {
@@ -108,6 +114,18 @@ export interface CustomerOrderShipmentSummaryDTO {
   lineCount: number;
 }
 
+export interface CustomerOrderBillingSummaryDTO {
+  id: string;
+  code: string;
+  shipmentId: string;
+  shipmentCode: string;
+  status: string;
+  totalQuantity: string;
+  /** `null` quando alguma linha está sem preço. */
+  totalAmount: string | null;
+  issuedAt: string | null;
+}
+
 export interface CustomerOrderLinkedPurchaseOrderDTO {
   id: string;
   code: string;
@@ -151,6 +169,10 @@ export interface CustomerOrderDTO {
   linkedPurchaseOrders: CustomerOrderLinkedPurchaseOrderDTO[];
   /** Expedições deste Pedido (qualquer status) — só CONFIRMED conta como expedido. */
   shipments: CustomerOrderShipmentSummaryDTO[];
+  /** Faturamentos deste Pedido (qualquer status) — só ISSUED conta como faturado. */
+  billings: CustomerOrderBillingSummaryDTO[];
+  /** Estado de faturamento DERIVADO — nunca persistido, nunca misturado ao `status`. */
+  billingStatus: CustomerOrderBillingStatus;
   confirmedAt: string | null;
   confirmedBy: string | null;
   cancelledAt: string | null;

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CustomerDTO, CustomerOrderDTO, CustomerOrderStatus } from "@veridi/shared";
-import { CUSTOMER_ORDER_STATUSES, CUSTOMER_ORDER_STATUS_LABELS } from "@veridi/shared";
+import {
+  CUSTOMER_ORDER_BILLING_STATUS_LABELS,
+  CUSTOMER_ORDER_STATUSES,
+  CUSTOMER_ORDER_STATUS_LABELS,
+} from "@veridi/shared";
 import { listCustomerOrders } from "../../lib/customer-orders-api";
 import { listCustomers } from "../../lib/customers-api";
 
@@ -164,6 +168,7 @@ export function CustomerOrdersPage() {
               <th>Produtos</th>
               <th>Quantidade</th>
               <th>Atendimento</th>
+              <th>Faturamento</th>
               <th>Status</th>
               <th aria-hidden="true" />
             </tr>
@@ -193,6 +198,7 @@ export function CustomerOrdersPage() {
                         ? "Em atendimento"
                         : "Não analisado"}
                   </td>
+                  <td>{CUSTOMER_ORDER_BILLING_STATUS_LABELS[order.billingStatus]}</td>
                   <td>
                     <span className={statusBadgeClass(order.status)}>
                       {CUSTOMER_ORDER_STATUS_LABELS[order.status]}
@@ -215,7 +221,7 @@ export function CustomerOrdersPage() {
 
             {!loading && customerOrders.length === 0 && (
               <tr>
-                <td colSpan={9} className="table__empty">
+                <td colSpan={10} className="table__empty">
                   Nenhum pedido encontrado.
                 </td>
               </tr>

@@ -48,10 +48,11 @@ The MVP should be operationally useful from the first releases and must not atte
 25. Suggested Production Orders ✓
 26. Purchase Suggestion ✓
 27. Picking / Shipping ✓
-28. Invoicing
+28. Invoicing ✓
 
 Block D depends on the foundation from Blocks B/C: Inventory, Reservation,
 Formulations, Production Order, Finished Product — all complete.
+**Block D is functionally complete as of Delivery 19.**
 
 ## Block E — Management, Reports & Exports (transversal layer)
 29. Executive/Operational Dashboard
@@ -70,7 +71,7 @@ entities — it never introduces a new source of truth.
 ```text
 26 Purchase Suggestion ✓
 → 27 Shipping ✓
-→ 28 Invoicing
+→ 28 Invoicing ✓
 → 29 Executive/Operational Dashboard
 → 30 Reports
 → 31 CSV/PDF/Print exports
@@ -90,10 +91,11 @@ Fulfillment Plan, Finished-Product Reservation, Suggested Production
 Orders). Complete.
 
 **Evolução incremental** — steps 26–28 (Purchase Suggestion, Picking /
-Shipping, Invoicing). 26 and 27 complete; 28 (Invoicing) is next.
+Shipping, Invoicing). Complete.
 
 **Transversal layer** — steps 29–31 (Block E). Registered officially, not
-started. Must not begin before Invoicing (28) is done.
+started — its dependency (Invoicing, 28) is now done, so it is the next
+scheduled work.
 
 ---
 

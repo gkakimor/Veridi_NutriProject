@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ShipmentDTO, ShipmentStatus } from "@veridi/shared";
-import { SHIPMENT_STATUS_LABELS } from "@veridi/shared";
+import { SHIPMENT_BILLING_STATUS_LABELS, SHIPMENT_STATUS_LABELS } from "@veridi/shared";
 import { cancelShipment, confirmShipment, getShipment, updateShipment } from "../../lib/shipments-api";
+import { createBilling } from "../../lib/billings-api";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
@@ -48,6 +49,7 @@ export function ShipmentPage() {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [preparingBilling, setPreparingBilling] = useState(false);
 
   const syncFromServer = useCallback((next: ShipmentDTO) => {
     setShipment(next);
@@ -129,6 +131,24 @@ export function ShipmentPage() {
       setError(err instanceof Error ? err.message : "Falha ao cancelar expedição");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handlePrepareBilling() {
+    if (!shipment) return;
+    if (shipment.billingId) {
+      navigate(`/comercial/faturamento/${shipment.billingId}`);
+      return;
+    }
+    setPreparingBilling(true);
+    setError(null);
+    try {
+      const billing = await createBilling(shipment.id);
+      navigate(`/comercial/faturamento/${billing.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao preparar faturamento");
+    } finally {
+      setPreparingBilling(false);
     }
   }
 
@@ -291,6 +311,43 @@ export function ShipmentPage() {
             />
           </div>
         </FormSection>
+
+        {shipment.status === "CONFIRMED" && (
+          <FormSection
+            title="Faturamento"
+            subtitle="Faturamento comercial/operacional — não emite Nota Fiscal e não movimenta estoque."
+          >
+            <div className="status-line">
+              <span
+                className={
+                  shipment.billingStatus === "ISSUED"
+                    ? "badge badge--active"
+                    : shipment.billingStatus === "DRAFT"
+                      ? "badge badge--warn"
+                      : "badge badge--neutral"
+                }
+              >
+                {SHIPMENT_BILLING_STATUS_LABELS[shipment.billingStatus]}
+              </span>
+              {shipment.billingCode && <span className="field__hint">{shipment.billingCode}</span>}
+            </div>
+
+            <div className="line-actions">
+              <button
+                type="button"
+                className={shipment.billingId ? "btn btn--ghost btn--sm" : "btn btn--accent btn--sm"}
+                disabled={preparingBilling}
+                onClick={handlePrepareBilling}
+              >
+                {shipment.billingId
+                  ? `Abrir ${shipment.billingCode}`
+                  : preparingBilling
+                    ? "Preparando…"
+                    : "Preparar faturamento"}
+              </button>
+            </div>
+          </FormSection>
+        )}
 
         {shipment.status === "CONFIRMED" && (
           <FormSection title="Auditoria">

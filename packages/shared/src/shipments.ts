@@ -6,6 +6,8 @@
  * pedida/reservada/planejada.
  */
 
+import type { ShipmentBillingStatus } from "./billings.js";
+
 export const SHIPMENT_CODE_PREFIX = "EXP";
 
 /** `CONFIRMED` é histórico imutável — reversão exigiria devolução/reentrada explícita, fora desta fase. */
@@ -54,6 +56,11 @@ export interface ShipmentDTO {
   lines: ShipmentLineDTO[];
   /** Soma das quantidades das linhas. */
   totalQuantity: string;
+  /** Estado de faturamento derivado — só relevante quando `CONFIRMED`. */
+  billingStatus: ShipmentBillingStatus;
+  /** Preenchidos quando existe um Billing ativo (DRAFT/ISSUED) para esta Expedição. */
+  billingId: string | null;
+  billingCode: string | null;
   confirmedAt: string | null;
   confirmedBy: string | null;
   cancelledAt: string | null;
