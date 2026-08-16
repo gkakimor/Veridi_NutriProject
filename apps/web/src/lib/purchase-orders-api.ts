@@ -6,7 +6,7 @@ import type {
   PurchaseOrderStatus,
   UpdatePurchaseOrderInput,
 } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListPurchaseOrdersParams {
@@ -27,19 +27,19 @@ export async function listPurchaseOrders(
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
-  const response = await fetch(`${API_URL}/purchase-orders?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/purchase-orders?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as PurchaseOrderListResponse;
 }
 
 export async function getPurchaseOrder(id: string): Promise<PurchaseOrderDTO> {
-  const response = await fetch(`${API_URL}/purchase-orders/${id}`);
+  const response = await apiFetch(`${API_URL}/purchase-orders/${id}`);
   return (await parseJsonOrThrow(response)) as PurchaseOrderDTO;
 }
 
 export async function createPurchaseOrder(
   input: CreatePurchaseOrderInput,
 ): Promise<PurchaseOrderDTO> {
-  const response = await fetch(`${API_URL}/purchase-orders`, {
+  const response = await apiFetch(`${API_URL}/purchase-orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -51,7 +51,7 @@ export async function updatePurchaseOrder(
   id: string,
   input: UpdatePurchaseOrderInput,
 ): Promise<PurchaseOrderDTO> {
-  const response = await fetch(`${API_URL}/purchase-orders/${id}`, {
+  const response = await apiFetch(`${API_URL}/purchase-orders/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -60,7 +60,7 @@ export async function updatePurchaseOrder(
 }
 
 export async function confirmPurchaseOrder(id: string): Promise<PurchaseOrderDTO> {
-  const response = await fetch(`${API_URL}/purchase-orders/${id}/confirm`, {
+  const response = await apiFetch(`${API_URL}/purchase-orders/${id}/confirm`, {
     method: "POST",
   });
   return (await parseJsonOrThrow(response)) as PurchaseOrderDTO;
@@ -70,7 +70,7 @@ export async function cancelPurchaseOrder(
   id: string,
   input: CancelPurchaseOrderInput,
 ): Promise<PurchaseOrderDTO> {
-  const response = await fetch(`${API_URL}/purchase-orders/${id}/cancel`, {
+  const response = await apiFetch(`${API_URL}/purchase-orders/${id}/cancel`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

@@ -28,7 +28,6 @@ export const navigation: NavGroup[] = [
   {
     title: "Cadastros",
     items: [
-      { label: "Usuários", path: "/cadastros/usuarios", implemented: false },
       { label: "Clientes", path: "/cadastros/clientes", implemented: true },
       {
         label: "Fornecedores",
@@ -60,6 +59,17 @@ export const navigation: NavGroup[] = [
       { label: "Pedidos", path: "/comercial/pedidos", implemented: true },
       { label: "Expedições", path: "/comercial/expedicoes", implemented: true },
       { label: "Faturamento", path: "/comercial/faturamento", implemented: true },
+    ],
+  },
+  {
+    title: "Administração",
+    items: [
+      { label: "Usuários", path: "/administracao/usuarios", implemented: true },
+      {
+        label: "Documentos controlados",
+        path: "/administracao/documentos",
+        implemented: true,
+      },
     ],
   },
   {

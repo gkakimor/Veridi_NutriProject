@@ -154,6 +154,68 @@
   cursor: not-allowed;
 }
 
+.masthead__role {
+  opacity: 0.75;
+}
+
+/* Sair fica discreto: é ação rara, não deve competir com a operação. */
+.masthead__logout {
+  background: transparent;
+  border: 1px solid var(--on-dark-3, rgba(255, 255, 255, 0.3));
+  color: inherit;
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px 10px;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.masthead__logout:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Login fora do shell — página própria, centralizada. */
+.login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--bg, #f5f6f4);
+  padding: var(--sp-4, 16px);
+}
+
+.login__card {
+  width: min(380px, 100%);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #dfe3dd);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--sp-5, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3, 12px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.login__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2, 8px);
+}
+
+.login__mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--v-lime, #b9d94a);
+  color: var(--v-green-900, #123522);
+  font-weight: 700;
+}
+
+.login__title {
+  margin: 0;
+  font-size: var(--fs-lg, 18px);
+}
+
 .masthead__user {
   margin-left: auto;
   display: flex;

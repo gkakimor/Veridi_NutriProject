@@ -4,7 +4,7 @@ import type {
   CustomerListResponse,
   UpdateCustomerInput,
 } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListCustomersParams {
@@ -25,14 +25,14 @@ export async function listCustomers(
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
-  const response = await fetch(`${API_URL}/customers?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/customers?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as CustomerListResponse;
 }
 
 export async function createCustomer(
   input: CreateCustomerInput,
 ): Promise<CustomerDTO> {
-  const response = await fetch(`${API_URL}/customers`, {
+  const response = await apiFetch(`${API_URL}/customers`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -44,7 +44,7 @@ export async function updateCustomer(
   id: string,
   input: UpdateCustomerInput,
 ): Promise<CustomerDTO> {
-  const response = await fetch(`${API_URL}/customers/${id}`, {
+  const response = await apiFetch(`${API_URL}/customers/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -56,7 +56,7 @@ export async function setCustomerActive(
   id: string,
   active: boolean,
 ): Promise<CustomerDTO> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/customers/${id}/${active ? "activate" : "deactivate"}`,
     { method: "POST" },
   );

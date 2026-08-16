@@ -84,6 +84,8 @@ export function ProductionOrderPage() {
   const [productId, setProductId] = useState("");
   const [formulationVersionId, setFormulationVersionId] = useState("");
   const [plannedQuantity, setPlannedQuantity] = useState("");
+  const [numberOfParts, setNumberOfParts] = useState("1");
+  const [labelInstructions, setLabelInstructions] = useState("");
   const [notes, setNotes] = useState("");
 
   const [activeProducts, setActiveProducts] = useState<ProductDTO[]>([]);
@@ -130,6 +132,8 @@ export function ProductionOrderPage() {
     setProductId(order.productId);
     setFormulationVersionId(order.formulationVersionId ?? "");
     setPlannedQuantity(order.plannedQuantity);
+    setNumberOfParts(String(order.numberOfParts));
+    setLabelInstructions(order.labelInstructions ?? "");
     setNotes(order.notes ?? "");
   }, []);
 
@@ -248,6 +252,8 @@ export function ProductionOrderPage() {
       productId,
       ...(formulationVersionId ? { formulationVersionId } : {}),
       ...(plannedQuantity.trim() ? { plannedQuantity: plannedQuantity.trim() } : {}),
+      numberOfParts: Number(numberOfParts) || 1,
+      labelInstructions: labelInstructions.trim(),
       notes: notes.trim(),
     };
 
@@ -526,6 +532,60 @@ export function ProductionOrderPage() {
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
 
+        {productionOrder && productionOrder.status !== "DRAFT" && productionOrder.status !== "PLANNED" && (
+          <FormSection
+            title="Execução"
+            subtitle={
+              productionOrder.numberOfParts > 1
+                ? `Produção fracionada em ${productionOrder.numberOfParts} partes — a pesagem real é registrada na Folha de Receita.`
+                : "A pesagem real por parte pode ser registrada na Folha de Receita (R.COQ.003)."
+            }
+          >
+            <div className="line-actions">
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => navigate(`/producao/ordens/${productionOrder.id}/receita`)}
+              >
+                Folha de Receita
+              </button>
+            </div>
+          </FormSection>
+        )}
+
+        {productionOrder && (
+          <FormSection
+            title="Dados para impressão do lote"
+            subtitle="Sugestões — o operador confirma ou informa outro valor no apontamento de produção."
+          >
+            <dl className="definition-list">
+              <dt>Lote comercial sugerido</dt>
+              <dd>{productionOrder.suggestedBusinessLotNumber ?? "—"}</dd>
+              <dt>Vida útil do produto</dt>
+              <dd>
+                {productionOrder.shelfLifeMonths
+                  ? `${productionOrder.shelfLifeMonths} meses`
+                  : "—"}
+              </dd>
+            </dl>
+            <div className="field">
+              <label htmlFor="op-label-instructions">Observações de rótulo</label>
+              {isDraft ? (
+                <textarea
+                  id="op-label-instructions"
+                  rows={2}
+                  value={labelInstructions}
+                  onChange={(event) => setLabelInstructions(event.target.value)}
+                />
+              ) : (
+                <p className="field-readonly-value">
+                  {productionOrder.labelInstructions ?? "—"}
+                </p>
+              )}
+            </div>
+          </FormSection>
+        )}
+
         {productionOrder?.status === "CANCELLED" && (
           <FormSection title="Cancelamento">
             <div className="status-line">
@@ -650,6 +710,32 @@ export function ProductionOrderPage() {
               <label>Unidade</label>
               <p className="field-readonly-value">
                 {productionOrder?.outputUnitCode ?? "definida pelo item de produto acabado"}
+              </p>
+            </div>
+
+            <div className="field">
+              <label htmlFor="op-parts">Dividir produção em</label>
+              {isDraft ? (
+                <input
+                  id="op-parts"
+                  type="number"
+                  min={1}
+                  max={99}
+                  value={numberOfParts}
+                  onChange={(event) => setNumberOfParts(event.target.value)}
+                />
+              ) : (
+                <p className="field-readonly-value">{productionOrder?.numberOfParts ?? 1}</p>
+              )}
+              <p className="field__hint">
+                partes. Congela na liberação — a Folha de Receita e a execução dependem disso.
+              </p>
+            </div>
+
+            <div className="field">
+              <label>Número oficial</label>
+              <p className="field-readonly-value">
+                {productionOrder?.officialNumber ?? "gerado na liberação da OP"}
               </p>
             </div>
           </div>

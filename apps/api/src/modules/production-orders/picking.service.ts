@@ -217,10 +217,32 @@ export async function substituteReservationLine(
 export async function recordConsumption(
   productionOrderId: string,
   entries: readonly { reservationLineId: string; quantity: string }[],
+  actor?: { id: string; name: string },
 ): Promise<ProductionOrderDTO> {
   if (entries.length === 0) throw new EmptyConsumptionBatchError();
 
   await getPrisma().$transaction(async (tx) => {
+    await recordConsumptionInTx(tx, productionOrderId, entries, actor);
+  });
+
+  return (await getProductionOrderById(productionOrderId))!;
+}
+
+/**
+ * Mesmo consumo real, executado DENTRO de uma transacao ja aberta. E o
+ * unico caminho de baixa de estoque de producao: a Folha de Receita
+ * (capacidade 36) chama esta funcao em vez de criar um movimento paralelo.
+ * Devolve os ids dos ProductionConsumption criados, na ordem das entradas.
+ */
+export async function recordConsumptionInTx(
+  tx: Prisma.TransactionClient,
+  productionOrderId: string,
+  entries: readonly { reservationLineId: string; quantity: string }[],
+  actor?: { id: string; name: string },
+): Promise<string[]> {
+  const consumedBy = actor?.name ?? SYSTEM_ACTOR;
+  const createdConsumptionIds: string[] = [];
+  {
     const currentStatus = await lockOrderAndAssertReleasable(tx, productionOrderId);
 
     const lineIds = [...new Set(entries.map((entry) => entry.reservationLineId))].sort();
@@ -302,9 +324,11 @@ export async function recordConsumption(
           lotId: entry.lotId,
           quantity: entry.quantity,
           consumedAt,
-          consumedBy: SYSTEM_ACTOR,
+          consumedBy,
         },
       });
+
+      createdConsumptionIds.push(consumption.id);
 
       await tx.inventoryMovement.create({
         data: {
@@ -316,7 +340,7 @@ export async function recordConsumption(
           sourceType: "PRODUCTION_CONSUMPTION",
           sourceId: productionOrderId,
           productionConsumptionId: consumption.id,
-          createdBy: SYSTEM_ACTOR,
+          createdBy: consumedBy,
         },
       });
     }
@@ -324,10 +348,10 @@ export async function recordConsumption(
     if (currentStatus === "RELEASED") {
       await tx.productionOrder.update({
         where: { id: productionOrderId },
-        data: { status: "IN_PRODUCTION", startedAt: consumedAt, startedBy: SYSTEM_ACTOR },
+        data: { status: "IN_PRODUCTION", startedAt: consumedAt, startedBy: consumedBy },
       });
     }
-  });
+  }
 
-  return (await getProductionOrderById(productionOrderId))!;
+  return createdConsumptionIds;
 }

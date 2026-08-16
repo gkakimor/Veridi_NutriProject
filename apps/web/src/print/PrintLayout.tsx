@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { ControlledDocumentRevisionDTO } from "@veridi/shared";
 import "./print.css";
 
 /**
@@ -17,6 +18,8 @@ export function PrintLayout({
   meta,
   children,
   generatedFor,
+  documentCode,
+  revision,
 }: {
   /** Tipo do documento/relatório: "ORDEM DE COMPRA", "R-01 · Posição de Estoque"… */
   kind: string;
@@ -29,6 +32,14 @@ export function PrintLayout({
   children: ReactNode;
   /** Complemento do rodapé (ex.: total de registros do relatório). */
   generatedFor?: string;
+  /** Código do documento controlado (R.PRO.002, R.COQ.003). */
+  documentCode?: string;
+  /**
+   * Revisão vigente congelada no documento. Isto é suporte documental e de
+   * auditoria — o sistema não declara certificação GMP nem conformidade
+   * ANVISA em lugar nenhum.
+   */
+  revision?: ControlledDocumentRevisionDTO | null;
 }) {
   return (
     <article className="print-doc">
@@ -38,11 +49,41 @@ export function PrintLayout({
           <div className="print-doc__kind">{kind}</div>
         </div>
         <div style={{ textAlign: "right" }}>
+          {documentCode && <div className="print-doc__doc-code">{documentCode}</div>}
           <div className="print-doc__code">{code}</div>
           {status && <div className="print-doc__status">{status}</div>}
           {isDraft && <div className="print-doc__draft">Rascunho</div>}
         </div>
       </header>
+
+      {documentCode && (
+        <dl className="print-doc__meta print-doc__control">
+          <div>
+            <dt>Código do documento</dt>
+            <dd>{documentCode}</dd>
+          </div>
+          <div>
+            <dt>Revisão</dt>
+            <dd>{revision ? revision.revision : "—"}</dd>
+          </div>
+          <div>
+            <dt>Data da revisão</dt>
+            <dd>
+              {revision?.revisionDate
+                ? new Date(revision.revisionDate).toLocaleDateString("pt-BR")
+                : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt>Elaboração</dt>
+            <dd>{revision?.preparedByName ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>Aprovação</dt>
+            <dd>{revision?.approvedByName ?? "—"}</dd>
+          </div>
+        </dl>
+      )}
 
       {notice && <p className="print-doc__notice">{notice}</p>}
 
@@ -60,9 +101,9 @@ export function PrintLayout({
       {children}
 
       <footer className="print-doc__foot">
-        Gerado em {new Date().toLocaleString("pt-BR")}
+        Gerado pelo sistema em {new Date().toLocaleString("pt-BR")}
         {generatedFor ? ` · ${generatedFor}` : ""}
-        {/* Sem autenticação no MVP: não se inventa nome de usuário aqui. */}
+        {/* Carimbo de geração — NÃO é assinatura digital. */}
       </footer>
     </article>
   );

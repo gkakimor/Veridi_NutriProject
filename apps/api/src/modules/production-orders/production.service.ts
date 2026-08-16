@@ -3,6 +3,7 @@ import type { ProductionOrderDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextLotCode } from "../../lib/lot-code.js";
 import { isLotExpired } from "../../lib/inventory-ledger.js";
+import { suggestedExpiryDate } from "../../lib/date-months.js";
 import { InvalidTransitionError, MissingFinishedItemError, ProductionOrderNotFoundError } from "./production-orders.errors.js";
 import { getProductionOrderById } from "./production-orders.service.js";
 import {
@@ -77,8 +78,13 @@ export async function registerProductionOutput(
 
       let expiryDate: Date | null = null;
       if (finishedItem.controlsExpiry) {
-        if (!input.expiryDate) throw new MissingFinishedExpiryDateError();
-        expiryDate = input.expiryDate;
+        // Validade informada SEMPRE prevalece. Sem ela, a vida útil do
+        // produto gera uma sugestão — o sistema nunca inventa validade
+        // quando o produto não tem vida útil cadastrada.
+        const product = await tx.product.findUnique({ where: { id: order.productId } });
+        expiryDate =
+          input.expiryDate ?? suggestedExpiryDate(producedAt, product?.shelfLifeMonths ?? null);
+        if (!expiryDate) throw new MissingFinishedExpiryDateError();
         if (expiryDate.getTime() < producedAt.getTime()) throw new ExpiryBeforeProducedAtError();
       }
 

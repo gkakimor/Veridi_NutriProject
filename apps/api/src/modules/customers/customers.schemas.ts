@@ -34,6 +34,7 @@ export const createCustomerSchema = z.object({
   city: optionalNullableText(100),
   state: optionalStateSchema,
   notes: optionalNullableText(1000),
+  businessLotSuffix: optionalNullableText(20),
 });
 
 export const updateCustomerSchema = z.object({
@@ -55,6 +56,7 @@ export const updateCustomerSchema = z.object({
   city: optionalNullableText(100),
   state: optionalStateSchema,
   notes: optionalNullableText(1000),
+  businessLotSuffix: optionalNullableText(20),
 });
 
 export const listCustomersQuerySchema = z.object({

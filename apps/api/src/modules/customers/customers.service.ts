@@ -48,6 +48,7 @@ function toCustomerDTO(customer: Customer): CustomerDTO {
     city: customer.city,
     state: customer.state,
     notes: customer.notes,
+    businessLotSuffix: customer.businessLotSuffix,
     active: customer.active,
     createdAt: customer.createdAt.toISOString(),
     updatedAt: customer.updatedAt.toISOString(),
@@ -130,6 +131,9 @@ export async function createCustomer(
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
         ...addressData(input),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        ...(input.businessLotSuffix !== undefined
+          ? { businessLotSuffix: input.businessLotSuffix }
+          : {}),
       },
     });
     return toCustomerDTO(customer);
@@ -159,6 +163,9 @@ export async function updateCustomer(
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
         ...addressData(input),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        ...(input.businessLotSuffix !== undefined
+          ? { businessLotSuffix: input.businessLotSuffix }
+          : {}),
       },
     });
     return toCustomerDTO(customer);

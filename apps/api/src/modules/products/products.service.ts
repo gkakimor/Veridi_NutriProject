@@ -77,6 +77,7 @@ function toProductDTO(product: ProductWithRelations): ProductDTO {
     unitsPerShippingBox: product.unitsPerShippingBox,
     targetAgeGroup: product.targetAgeGroup,
     shelfLifeMonths: product.shelfLifeMonths,
+    businessLotCode: product.businessLotCode,
     minimumBatchQuantity: product.minimumBatchQuantity
       ? product.minimumBatchQuantity.toString()
       : null,
@@ -210,6 +211,7 @@ function industrialData(input: CreateProductInput | UpdateProductInput) {
       : {}),
     ...(input.targetAgeGroup !== undefined ? { targetAgeGroup: input.targetAgeGroup } : {}),
     ...(input.shelfLifeMonths !== undefined ? { shelfLifeMonths: input.shelfLifeMonths } : {}),
+    ...(input.businessLotCode !== undefined ? { businessLotCode: input.businessLotCode } : {}),
     ...(input.minimumBatchQuantity !== undefined
       ? { minimumBatchQuantity: input.minimumBatchQuantity }
       : {}),

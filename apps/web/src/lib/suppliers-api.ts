@@ -4,7 +4,7 @@ import type {
   SupplierListResponse,
   UpdateSupplierInput,
 } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListSuppliersParams {
@@ -23,14 +23,14 @@ export async function listSuppliers(
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
-  const response = await fetch(`${API_URL}/suppliers?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/suppliers?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as SupplierListResponse;
 }
 
 export async function createSupplier(
   input: CreateSupplierInput,
 ): Promise<SupplierDTO> {
-  const response = await fetch(`${API_URL}/suppliers`, {
+  const response = await apiFetch(`${API_URL}/suppliers`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -42,7 +42,7 @@ export async function updateSupplier(
   id: string,
   input: UpdateSupplierInput,
 ): Promise<SupplierDTO> {
-  const response = await fetch(`${API_URL}/suppliers/${id}`, {
+  const response = await apiFetch(`${API_URL}/suppliers/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -54,7 +54,7 @@ export async function setSupplierActive(
   id: string,
   active: boolean,
 ): Promise<SupplierDTO> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/suppliers/${id}/${active ? "activate" : "deactivate"}`,
     { method: "POST" },
   );

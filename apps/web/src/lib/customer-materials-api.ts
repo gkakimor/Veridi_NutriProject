@@ -1,5 +1,5 @@
 import type { CustomerMaterialsResponse, LotStatus } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListCustomerMaterialsParams {
@@ -25,6 +25,6 @@ export async function listCustomerMaterials(
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
-  const response = await fetch(`${API_URL}/inventory/customer-materials?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/inventory/customer-materials?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as CustomerMaterialsResponse;
 }

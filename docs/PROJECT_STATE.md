@@ -47,6 +47,9 @@ corpus real (fora do repositório).**
 **Delivery 27 — Material de propriedade do cliente (Bloco F, capacidade
 35): concluído — dono do estoque físico, recebimento sem OC, FEFO/reserva
 por proprietário.**
+**Delivery 28 — GMP: usuários, documentos controlados, OP industrial e
+Folha de Receita (Bloco F, capacidade 36): concluído — o sistema passa a
+ter identidade real de usuário e execução de produção por parte.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2903,6 +2906,81 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 28 — GMP, usuários e OP industrial (Bloco F, capacidade 36)
+
+## Usuários e autenticação
+- `User` (código `USR-000001`, e-mail único normalizado, perfil, ativo) +
+  `UserSession`. Senha com **scrypt** (`node:crypto`, salt por usuário);
+  o banco guarda só o hash, e a sessão guarda só o hash do token.
+- Sessão opaca de 12h em **cookie HttpOnly** (`SameSite=Lax`, `Secure` em
+  produção). O token nunca volta no corpo da resposta nem vai para o
+  localStorage. Logout revoga; inativar usuário derruba a sessão na hora.
+- Hook global de autenticação: toda rota operacional exige sessão. Únicas
+  exceções: `/health` e as próprias rotas de `/auth`.
+- `requireCurrentUser`/`requireRole` são o caminho único para saber quem
+  está agindo. RBAC simples: só ADMIN administra usuários e documentos
+  controlados; sem matriz por botão.
+- `pnpm user:bootstrap-admin` cria o primeiro ADMIN a partir de
+  env/args — nenhuma senha padrão existe no repositório, e em produção o
+  comando se recusa a criar um segundo ADMIN.
+- Testes: `src/test-support/authenticated-app.ts` (`buildTestApp(role)`)
+  anexa um cookie de sessão REAL — autenticação de verdade nos testes, não
+  bypass. Foi o que permitiu manter os 433 testes anteriores intactos.
+
+## Documentos controlados
+`ControlledDocumentRevision` para `R.PRO.002` (OP) e `R.COQ.003` (Folha de
+Receita): código, revisão, data, elaborado/aprovado por (id + snapshot de
+nome), ativo. Revisão é imutável; ativar uma nova inativa a anterior sob
+lock e preserva o histórico. Não é GED, não há editor de template, e o
+sistema **não declara** conformidade GMP/ANVISA em lugar nenhum — o rodapé
+do documento é carimbo de geração, não assinatura digital.
+
+## OP industrial
+- Numeração **oficial anual** `023/26`, gerada na primeira transição para
+  RELEASED (rascunho não gasta numeração), com contador por ano travado
+  (`FOR UPDATE`) — nunca `MAX+1`. `OP-000123` continua sendo a identidade
+  interna; os dois convivem.
+- RELEASE congela: snapshot completo do cliente (com endereço), as
+  revisões ativas dos dois documentos e as partes da produção.
+- `numberOfParts` (1–99) e `labelInstructions` são editáveis só até o
+  RELEASE.
+- `lib/part-split.ts` divide em Decimal com a última parte absorvendo o
+  resto: a soma das partes é exatamente o total. Só matéria-prima é
+  fracionada — embalagem aparece com o total da OP.
+
+## Folha de Receita (R.COQ.003)
+- `ProductionOrderPart` (PENDING/IN_PROGRESS/COMPLETED) + `RecipeWeighing`
+  (planejado, pesado, lote, operador, data/hora, observação).
+- **Pesagem confirmada = consumo real**: o serviço chama o MESMO
+  `recordConsumptionInTx` do consumo direto, dentro da transação, e liga a
+  pesagem ao `ProductionConsumption` criado. `RecipeWeighing` nunca
+  movimenta estoque por conta própria — o ledger continua sendo a única
+  fonte quantitativa. Confirmar a mesma pesagem de novo não gera segunda
+  baixa (`productionConsumptionId` único).
+- Validação do lote reaproveita as regras existentes: Item, Qualidade,
+  validade, reserva e **proprietário** (capacidade 35) — lote do cliente B
+  nunca entra na OP do cliente A.
+- Diferença planejado × pesado é registrada e destacada; concluir a parte
+  exige ao menos uma pesagem por matéria-prima planejada, nunca igualdade
+  exata. Nenhuma tolerância foi inventada.
+- Fluxo antigo intacto: OP de 1 parte segue por Picking/Consumo como antes.
+
+## Impressão e sugestões de lote
+`R.PRO.002` ganhou cabeçalho controlado, cliente congelado com endereço,
+matérias-primas e embalagens separadas, quantidade por parte e a seção
+"Dados para impressão do lote". `R.COQ.003` é documento novo, com uma
+seção por parte. Vida útil gera **sugestão** de validade (soma de meses de
+calendário, com fim de mês tratado) e a máscara `AAMM + produto + cliente`
+gera **sugestão** de lote comercial — as duas nunca sobrescrevem valor
+informado, e `Lot.code` continua sendo a identidade única.
+
+## Não implementado de propósito
+Assinatura/certificado digital, GED, workflow regulatório, tolerâncias GMP
+inventadas, equipamentos/work centers/capacidade de misturador, mão de
+obra, CoA, anexos, reset de senha por e-mail, MFA, SSO e RBAC granular.
+
+---
+
 # Delivery 27 — Material de propriedade do cliente (Bloco F, capacidade 35)
 
 A Veridi é terceirizadora: parte do material dentro da fábrica é do
@@ -3437,7 +3515,8 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **capacidade 36** (Bloco F). A base de
+Próximo passo do roadmap oficial: **capacidade 37 — Qualidade
+documental / CoA / Anexos** (Bloco F). A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —

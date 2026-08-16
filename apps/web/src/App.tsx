@@ -1,5 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./app/AppShell";
+import { AuthProvider, useAuth } from "./app/AuthProvider";
+import { LoginPage } from "./pages/LoginPage";
+import { UsersPage } from "./pages/admin/UsersPage";
+import { ControlledDocumentsPage } from "./pages/admin/ControlledDocumentsPage";
+import { RecipeSheetPage } from "./pages/production-orders/RecipeSheetPage";
 import { navItems } from "./app/navigation";
 import { DashboardPage } from "./pages/DashboardPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
@@ -40,6 +45,7 @@ import {
   CustomerOrderPrintPage,
   LotTraceabilityPrintPage,
   ProductionOrderPrintPage,
+  RecipeSheetPrintPage,
   PurchaseOrderPrintPage,
   ReceiptPrintPage,
   ShipmentPrintPage,
@@ -73,7 +79,22 @@ import {
   OrderDeliveredBilledReportPage,
 } from "./pages/reports/BillingReports";
 
-export function App() {
+/**
+ * Sem sessão o app inteiro é a tela de Login — inclusive as rotas de
+ * impressão, que também consomem a API autenticada.
+ */
+function AuthenticatedApp() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="login">
+        <p>Carregando…</p>
+      </div>
+    );
+  }
+  if (!user) return <LoginPage />;
+
   return (
     <BrowserRouter>
       <Routes>
@@ -84,6 +105,10 @@ export function App() {
         <Route path="/compras/ordens/:id/imprimir" element={<PurchaseOrderPrintPage />} />
         <Route path="/compras/recebimentos/:id/imprimir" element={<ReceiptPrintPage />} />
         <Route path="/producao/ordens/:id/imprimir" element={<ProductionOrderPrintPage />} />
+        <Route
+          path="/producao/ordens/:id/receita/imprimir"
+          element={<RecipeSheetPrintPage />}
+        />
         <Route path="/comercial/expedicoes/:id/imprimir" element={<ShipmentPrintPage />} />
         <Route path="/comercial/faturamento/:id/imprimir" element={<BillingPrintPage />} />
 
@@ -123,7 +148,13 @@ export function App() {
           <Route path="/producao/ordens" element={<ProductionOrdersPage />} />
           <Route path="/producao/ordens/nova" element={<ProductionOrderPage />} />
           <Route path="/producao/ordens/:id" element={<ProductionOrderPage />} />
+          <Route path="/producao/ordens/:id/receita" element={<RecipeSheetPage />} />
           <Route path="/producao/picking" element={<PickingConsumptionPage />} />
+          <Route path="/administracao/usuarios" element={<UsersPage />} />
+          <Route
+            path="/administracao/documentos"
+            element={<ControlledDocumentsPage />}
+          />
           <Route path="/producao/produto-acabado" element={<FinishedGoodsPage />} />
           <Route path="/comercial/pedidos" element={<CustomerOrdersPage />} />
           <Route path="/comercial/pedidos/novo" element={<CustomerOrderPage />} />
@@ -170,5 +201,13 @@ export function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <AuthenticatedApp />
+    </AuthProvider>
   );
 }

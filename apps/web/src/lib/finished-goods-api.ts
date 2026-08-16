@@ -1,5 +1,5 @@
 import type { FinishedGoodsListResponse, LotStatus } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListFinishedGoodsParams {
@@ -26,6 +26,6 @@ export async function listFinishedGoods(
     if (value !== undefined && value !== "") query.set(key, String(value));
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  const response = await fetch(`${API_URL}/finished-goods${suffix}`);
+  const response = await apiFetch(`${API_URL}/finished-goods${suffix}`);
   return (await parseJsonOrThrow(response)) as FinishedGoodsListResponse;
 }

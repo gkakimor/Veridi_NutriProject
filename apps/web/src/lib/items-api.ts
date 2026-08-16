@@ -5,7 +5,7 @@ import type {
   ItemType,
   UpdateItemInput,
 } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListItemsParams {
@@ -26,17 +26,17 @@ export async function listItems(
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
-  const response = await fetch(`${API_URL}/items?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/items?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as ItemListResponse;
 }
 
 export async function getItem(id: string): Promise<ItemDTO> {
-  const response = await fetch(`${API_URL}/items/${id}`);
+  const response = await apiFetch(`${API_URL}/items/${id}`);
   return (await parseJsonOrThrow(response)) as ItemDTO;
 }
 
 export async function createItem(input: CreateItemInput): Promise<ItemDTO> {
-  const response = await fetch(`${API_URL}/items`, {
+  const response = await apiFetch(`${API_URL}/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -48,7 +48,7 @@ export async function updateItem(
   id: string,
   input: UpdateItemInput,
 ): Promise<ItemDTO> {
-  const response = await fetch(`${API_URL}/items/${id}`, {
+  const response = await apiFetch(`${API_URL}/items/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -60,7 +60,7 @@ export async function setItemActive(
   id: string,
   active: boolean,
 ): Promise<ItemDTO> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/items/${id}/${active ? "activate" : "deactivate"}`,
     { method: "POST" },
   );

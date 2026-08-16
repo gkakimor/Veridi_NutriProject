@@ -27,6 +27,7 @@ const industrialProductFields = {
   unitsPerShippingBox: optionalPositiveInt("Unidades por caixa deve ser maior que zero"),
   targetAgeGroup: optionalEnum(["ADULT", "CHILD", "PREGNANT", "LACTATING", "OTHER"]),
   shelfLifeMonths: optionalPositiveInt("Vida útil deve ser maior que zero"),
+  businessLotCode: optionalNullableText(20),
   minimumBatchQuantity: optionalPositiveDecimal("Lote mínimo deve ser maior que zero"),
 };
 

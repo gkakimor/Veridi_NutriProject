@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type {
+  ControlledDocumentRevision,
   Customer,
   CustomerOrder,
   FormulationVersion,
@@ -34,6 +35,10 @@ import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getConsumedByReservationLines, isLotExpired } from "../../lib/inventory-ledger.js";
 import type { InventoryOwnerScope } from "../../lib/inventory-ledger.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
+import { nextOfficialNumber } from "../../lib/production-order-number.js";
+import { suggestBusinessLotNumber } from "../../lib/business-lot.js";
+import { toControlledDocumentRevisionDTO } from "../controlled-documents/controlled-documents.service.js";
+import { getActiveRevision } from "../controlled-documents/controlled-documents.service.js";
 import { computeFormulationRequirements } from "./requirement-calc.js";
 import {
   CustomerMismatchError,
@@ -66,6 +71,8 @@ type ConsumptionWithRelations = ProductionConsumption & { item: Item; lot: Lot |
 type OutputWithRelations = ProductionOutput & { lot: Lot | null };
 type POWithRelations = ProductionOrder & {
   customer: Customer | null;
+  productionOrderRevision: ControlledDocumentRevision | null;
+  recipeSheetRevision: ControlledDocumentRevision | null;
   product: ProductWithRelations;
   formulationVersion: FormulationVersion | null;
   requirements: RequirementWithItem[];
@@ -78,6 +85,8 @@ type POWithRelations = ProductionOrder & {
 
 const productionOrderInclude = {
   customer: true,
+  productionOrderRevision: true,
+  recipeSheetRevision: true,
   product: { include: { customer: true, finishedProductItem: true } },
   formulationVersion: true,
   requirements: { include: { item: true }, orderBy: { position: "asc" as const } },
@@ -516,6 +525,33 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     customerCode: usingSnapshot ? order.customerCode : (order.product.customer?.code ?? null),
     customerName: usingSnapshot ? order.customerName : (order.product.customer?.legalName ?? null),
     customerCnpj: usingSnapshot ? order.customerCnpj : (order.product.customer?.cnpj ?? null),
+    // Endereço: snapshot congelado quando existir; antes do RELEASE, o
+    // cadastro atual (o documento oficial ainda não foi emitido).
+    customerTradeName: order.customerTradeName ?? order.product.customer?.tradeName ?? null,
+    customerZipCode: order.customerZipCode ?? order.product.customer?.zipCode ?? null,
+    customerStreet: order.customerStreet ?? order.product.customer?.street ?? null,
+    customerNumber: order.customerNumber ?? order.product.customer?.number ?? null,
+    customerComplement: order.customerComplement ?? order.product.customer?.complement ?? null,
+    customerDistrict: order.customerDistrict ?? order.product.customer?.district ?? null,
+    customerCity: order.customerCity ?? order.product.customer?.city ?? null,
+    customerState: order.customerState ?? order.product.customer?.state ?? null,
+    officialNumber: order.officialNumber,
+    numberOfParts: order.numberOfParts,
+    labelInstructions: order.labelInstructions,
+    shelfLifeMonths: order.product.shelfLifeMonths,
+    // Sugestão de lote comercial — nunca obrigatória, nunca substitui o
+    // código interno do lote.
+    suggestedBusinessLotNumber: suggestBusinessLotNumber({
+      producedAt: new Date(),
+      productBusinessLotCode: order.product.businessLotCode,
+      customerBusinessLotSuffix: orderCustomer ? (order.customer?.businessLotSuffix ?? order.product.customer?.businessLotSuffix ?? null) : null,
+    }),
+    productionOrderRevision: order.productionOrderRevision
+      ? toControlledDocumentRevisionDTO(order.productionOrderRevision)
+      : null,
+    recipeSheetRevision: order.recipeSheetRevision
+      ? toControlledDocumentRevisionDTO(order.recipeSheetRevision)
+      : null,
     requirements,
     plannedAt: order.plannedAt ? order.plannedAt.toISOString() : null,
     plannedBy: order.plannedBy,
@@ -607,6 +643,10 @@ export async function createProductionOrder(
         // OP manual herda o cliente do Produto. Mudar Product.customerId
         // depois nunca reescreve esta OP.
         ...(product.customerId ? { customerId: product.customerId } : {}),
+        ...(input.numberOfParts !== undefined ? { numberOfParts: input.numberOfParts } : {}),
+        ...(input.labelInstructions !== undefined
+          ? { labelInstructions: input.labelInstructions }
+          : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         createdBy: SYSTEM_ACTOR,
       },
@@ -669,10 +709,14 @@ export async function updateProductionOrder(
     throw new OrderLockedError("Ordem de produção cancelada é somente leitura.");
   }
 
+  // numberOfParts e instruções de rótulo congelam no RELEASE: folha de
+  // receita, partes geradas e documento impresso dependem deles.
   const touchesStructural =
     input.productId !== undefined ||
     input.formulationVersionId !== undefined ||
-    input.plannedQuantity !== undefined;
+    input.plannedQuantity !== undefined ||
+    input.numberOfParts !== undefined ||
+    input.labelInstructions !== undefined;
 
   if (current.status !== "DRAFT" && touchesStructural) {
     throw new OrderLockedError(
@@ -725,6 +769,10 @@ export async function updateProductionOrder(
             }
           : {}),
         ...(input.plannedQuantity !== undefined ? { plannedQuantity } : {}),
+        ...(input.numberOfParts !== undefined ? { numberOfParts: input.numberOfParts } : {}),
+        ...(input.labelInstructions !== undefined
+          ? { labelInstructions: input.labelInstructions }
+          : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
       },
     });
@@ -835,7 +883,11 @@ export async function planProductionOrder(id: string): Promise<ProductionOrderDT
  * nunca satisfaz a exigencia. Nao exige RELEASED -> mais nada nesta
  * entrega (Picking/Consumo ficam para o proximo modulo).
  */
-export async function releaseProductionOrder(id: string): Promise<ProductionOrderDTO> {
+export async function releaseProductionOrder(
+  id: string,
+  /** Usuário da sessão — o RELEASE é ação auditada. */
+  actor?: { id: string; name: string },
+): Promise<ProductionOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
     const lockedRows = await tx.$queryRaw<{ status: string }[]>`
       SELECT status FROM production_orders WHERE id = ${id} FOR UPDATE
@@ -931,6 +983,25 @@ export async function releaseProductionOrder(id: string): Promise<ProductionOrde
       );
     }
 
+    const releasedAt = new Date();
+
+    // Numeração OFICIAL do documento — só agora, na primeira liberação:
+    // rascunho descartado nunca gasta numeração. Concurrency-safe (linha do
+    // ano travada dentro desta transação).
+    const official = await nextOfficialNumber(tx, releasedAt);
+
+    // Congela as revisões dos documentos controlados vigentes: mudar a
+    // revisão ativa depois nunca reescreve esta OP.
+    const [productionOrderRevision, recipeSheetRevision] = await Promise.all([
+      getActiveRevision("PRODUCTION_ORDER", tx),
+      getActiveRevision("RECIPE_SHEET", tx),
+    ]);
+
+    // Snapshot do cliente para o documento impresso — endereço incluído.
+    const customer = order.customerId
+      ? await tx.customer.findUnique({ where: { id: order.customerId } })
+      : null;
+
     const reservation = await tx.materialReservation.create({
       data: { productionOrderId: id, status: "ACTIVE", createdBy: SYSTEM_ACTOR },
     });
@@ -944,9 +1015,44 @@ export async function releaseProductionOrder(id: string): Promise<ProductionOrde
       })),
     });
 
+    // Partes/frações da execução nascem aqui, a partir de numberOfParts.
+    await tx.productionOrderPart.createMany({
+      data: Array.from({ length: order.numberOfParts }, (_, index) => ({
+        productionOrderId: id,
+        partNumber: index + 1,
+        status: "PENDING" as const,
+      })),
+    });
+
     await tx.productionOrder.update({
       where: { id },
-      data: { status: "RELEASED", releasedAt: new Date(), releasedBy: SYSTEM_ACTOR },
+      data: {
+        status: "RELEASED",
+        releasedAt,
+        releasedBy: actor?.name ?? SYSTEM_ACTOR,
+        officialNumber: official.value,
+        officialNumberYear: official.year,
+        officialNumberSequence: official.sequence,
+        ...(productionOrderRevision
+          ? { productionOrderRevisionId: productionOrderRevision.id }
+          : {}),
+        ...(recipeSheetRevision ? { recipeSheetRevisionId: recipeSheetRevision.id } : {}),
+        ...(customer
+          ? {
+              customerCode: customer.code,
+              customerName: customer.legalName,
+              customerCnpj: customer.cnpj,
+              customerTradeName: customer.tradeName,
+              customerZipCode: customer.zipCode,
+              customerStreet: customer.street,
+              customerNumber: customer.number,
+              customerComplement: customer.complement,
+              customerDistrict: customer.district,
+              customerCity: customer.city,
+              customerState: customer.state,
+            }
+          : {}),
+      },
     });
   });
 

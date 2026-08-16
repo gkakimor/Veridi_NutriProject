@@ -5,7 +5,7 @@ import type {
   FormulationVersionListResponse,
   UpdateFormulationVersionInput,
 } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListFormulationsParams {
@@ -22,19 +22,19 @@ export async function listFormulations(
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
-  const response = await fetch(`${API_URL}/formulations?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/formulations?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as FormulationListResponse;
 }
 
 export async function listFormulationVersionsByProduct(
   productId: string,
 ): Promise<FormulationVersionListResponse> {
-  const response = await fetch(`${API_URL}/products/${productId}/formulations`);
+  const response = await apiFetch(`${API_URL}/products/${productId}/formulations`);
   return (await parseJsonOrThrow(response)) as FormulationVersionListResponse;
 }
 
 export async function getFormulationVersion(id: string): Promise<FormulationVersionDTO> {
-  const response = await fetch(`${API_URL}/formulation-versions/${id}`);
+  const response = await apiFetch(`${API_URL}/formulation-versions/${id}`);
   return (await parseJsonOrThrow(response)) as FormulationVersionDTO;
 }
 
@@ -42,7 +42,7 @@ export async function createFirstFormulationVersion(
   productId: string,
   input: CreateFormulationVersionInput = {},
 ): Promise<FormulationVersionDTO> {
-  const response = await fetch(`${API_URL}/products/${productId}/formulation-versions`, {
+  const response = await apiFetch(`${API_URL}/products/${productId}/formulation-versions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -54,7 +54,7 @@ export async function updateFormulationVersion(
   id: string,
   input: UpdateFormulationVersionInput,
 ): Promise<FormulationVersionDTO> {
-  const response = await fetch(`${API_URL}/formulation-versions/${id}`, {
+  const response = await apiFetch(`${API_URL}/formulation-versions/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -63,7 +63,7 @@ export async function updateFormulationVersion(
 }
 
 export async function activateFormulationVersion(id: string): Promise<FormulationVersionDTO> {
-  const response = await fetch(`${API_URL}/formulation-versions/${id}/activate`, {
+  const response = await apiFetch(`${API_URL}/formulation-versions/${id}/activate`, {
     method: "POST",
   });
   return (await parseJsonOrThrow(response)) as FormulationVersionDTO;
@@ -72,7 +72,7 @@ export async function activateFormulationVersion(id: string): Promise<Formulatio
 export async function createNewFormulationVersion(
   sourceVersionId: string,
 ): Promise<FormulationVersionDTO> {
-  const response = await fetch(`${API_URL}/formulation-versions/${sourceVersionId}/new-version`, {
+  const response = await apiFetch(`${API_URL}/formulation-versions/${sourceVersionId}/new-version`, {
     method: "POST",
   });
   return (await parseJsonOrThrow(response)) as FormulationVersionDTO;

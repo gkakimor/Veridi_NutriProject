@@ -1,5 +1,5 @@
 import type { DashboardDTO } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 /**
@@ -9,6 +9,6 @@ import { parseJsonOrThrow } from "./api-errors";
  */
 export async function getDashboard(from: string, to: string): Promise<DashboardDTO> {
   const query = new URLSearchParams({ from, to });
-  const response = await fetch(`${API_URL}/dashboard?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/dashboard?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as DashboardDTO;
 }

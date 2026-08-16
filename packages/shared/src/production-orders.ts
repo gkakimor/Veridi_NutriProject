@@ -3,6 +3,7 @@
 import type { ItemType } from "./items.js";
 import type { LotStatus } from "./lots.js";
 import type { InventoryOwnerType, SupplyResponsibility } from "./ownership.js";
+import type { ControlledDocumentRevisionDTO } from "./controlled-documents.js";
 
 export const PRODUCTION_ORDER_CODE_PREFIX = "OP";
 
@@ -198,8 +199,33 @@ export interface ProductionOrderDTO {
   customerCode: string | null;
   customerName: string | null;
   customerCnpj: string | null;
+  /** Snapshot do cliente para o documento impresso — congelado no RELEASE. */
+  customerTradeName: string | null;
+  customerZipCode: string | null;
+  customerStreet: string | null;
+  customerNumber: string | null;
+  customerComplement: string | null;
+  customerDistrict: string | null;
+  customerCity: string | null;
+  customerState: string | null;
   /** `true` quando existe ao menos um Requirement com fornecimento do cliente. */
   hasCustomerSuppliedRequirements: boolean;
+  /**
+   * Numeração OFICIAL anual do documento (`023/26`), gerada no RELEASE.
+   * `code` (OP-000123) continua sendo a identidade interna.
+   */
+  officialNumber: string | null;
+  /** Em quantas frações a produção é executada. Congelado no RELEASE. */
+  numberOfParts: number;
+  /** Observações de rotulagem para a impressão do lote. */
+  labelInstructions: string | null;
+  /** Vida útil do produto (meses) — base da validade sugerida do lote. */
+  shelfLifeMonths: number | null;
+  /** Sugestão de lote comercial a partir da máscara configurada; `null` sem configuração. */
+  suggestedBusinessLotNumber: string | null;
+  /** Revisões dos documentos controlados congeladas nesta OP. */
+  productionOrderRevision: ControlledDocumentRevisionDTO | null;
+  recipeSheetRevision: ControlledDocumentRevisionDTO | null;
   requirements: ProductionOrderRequirementDTO[];
   plannedAt: string | null;
   plannedBy: string | null;
@@ -326,4 +352,102 @@ export interface RegisterProductionOutputInput {
 export interface CompleteProductionOrderInput {
   /** Obrigatório quando `remainingQuantity > 0`. */
   completionReason?: string;
+}
+
+/* ─────────────── Folha de Receita (R.COQ.003) ─────────────── */
+
+export type ProductionPartStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED";
+
+export const PRODUCTION_PART_STATUS_LABELS: Record<ProductionPartStatus, string> = {
+  PENDING: "Pendente",
+  IN_PROGRESS: "Em execução",
+  COMPLETED: "Concluída",
+};
+
+/** Uma pesagem real registrada por um operador identificado. */
+export interface RecipeWeighingDTO {
+  id: string;
+  productionOrderPartId: string;
+  productionOrderRequirementId: string;
+  itemCode: string;
+  itemName: string;
+  lotId: string | null;
+  lotCode: string | null;
+  supplierLot: string | null;
+  ownerType: InventoryOwnerType;
+  plannedQuantity: string;
+  actualQuantity: string;
+  uomCode: string;
+  executedByUserId: string;
+  /** Nome no momento do registro — impressão histórica não depende do cadastro atual. */
+  executedByName: string;
+  executedAt: string;
+  /** Consumo real gerado por esta pesagem — a baixa de estoque oficial. */
+  productionConsumptionId: string | null;
+  notes: string | null;
+}
+
+export interface RecipeSheetRequirementDTO {
+  requirementId: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  sourceName: string | null;
+  declaredNutrient: string | null;
+  supplyResponsibility: SupplyResponsibility;
+  expectedOwnerCustomerName: string | null;
+  /** Quanto esta parte deve pesar (divisão determinística em Decimal). */
+  plannedQuantity: string;
+  weighedQuantity: string;
+  /** `pesado - planejado`: registrado e destacado, nunca bloqueado por tolerância inventada. */
+  differenceQuantity: string;
+  unitCode: string;
+  reservedLots: { lotId: string | null; lotCode: string | null; quantity: string }[];
+}
+
+export interface RecipeSheetPartDTO {
+  id: string;
+  partNumber: number;
+  status: ProductionPartStatus;
+  startedAt: string | null;
+  startedByName: string | null;
+  completedAt: string | null;
+  completedByName: string | null;
+  requirements: RecipeSheetRequirementDTO[];
+  weighings: RecipeWeighingDTO[];
+}
+
+export interface RecipeSheetPackagingDTO {
+  requirementId: string;
+  itemCode: string;
+  itemName: string;
+  supplyResponsibility: SupplyResponsibility;
+  /** Embalagem nunca é fracionada: aparece com o total da OP. */
+  totalQuantity: string;
+  unitCode: string;
+}
+
+export interface RecipeSheetDTO {
+  productionOrderId: string;
+  /** Revisão do R.COQ.003 congelada nesta OP — a impressão usa esta, não a ativa de hoje. */
+  recipeSheetRevision: ControlledDocumentRevisionDTO | null;
+  productionOrderCode: string;
+  officialNumber: string | null;
+  productCode: string;
+  productName: string;
+  customerName: string | null;
+  formulationVersionLabel: string | null;
+  plannedQuantity: string;
+  outputUnitCode: string;
+  numberOfParts: number;
+  status: ProductionOrderStatus;
+  parts: RecipeSheetPartDTO[];
+  packagingRequirements: RecipeSheetPackagingDTO[];
+}
+
+export interface RegisterWeighingInput {
+  requirementId: string;
+  lotCode: string;
+  actualQuantity: string;
+  notes?: string;
 }

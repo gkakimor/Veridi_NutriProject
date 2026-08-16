@@ -4,6 +4,7 @@ import type {
   LotDTO,
   LotTraceabilityDTO,
   ProductionOrderDTO,
+  RecipeSheetDTO,
   ProductionOrderMaterialCostDTO,
   PurchaseOrderDTO,
   ReceiptDTO,
@@ -11,6 +12,9 @@ import type {
 } from "@veridi/shared";
 import {
   BILLING_NON_FISCAL_NOTICE,
+  CONTROLLED_DOCUMENT_CODES,
+  PRODUCTION_PART_STATUS_LABELS,
+  SUPPLY_RESPONSIBILITY_LABELS,
   BILLING_STATUS_LABELS,
   COST_QUALITY_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
@@ -207,20 +211,144 @@ export function ProductionOrderPrintDocument({
   return (
     <PrintLayout
       kind="Ordem de Produção"
-      code={order.code}
+      // Numeração OFICIAL quando já existe (nasce no RELEASE); antes disso,
+      // o código interno — e o documento sai marcado como rascunho.
+      code={order.officialNumber ?? order.code}
       status={PRODUCTION_ORDER_STATUS_LABELS[order.status]}
-      isDraft={order.status === "DRAFT"}
+      isDraft={order.status === "DRAFT" || order.status === "PLANNED"}
+      documentCode={CONTROLLED_DOCUMENT_CODES.PRODUCTION_ORDER}
+      revision={order.productionOrderRevision}
       meta={[
+        { label: "OP interna", value: order.code },
         { label: "Produto", value: `${order.productCode} — ${order.productName}` },
         { label: "Formulação", value: printOrDash(order.formulationVersionLabel) },
         { label: "Planejado", value: `${order.plannedQuantity} ${order.outputUnitCode}` },
         { label: "Produzido", value: `${order.producedQuantity} ${order.outputUnitCode}` },
+        {
+          label: "Partes",
+          value: order.numberOfParts > 1 ? `${order.numberOfParts} partes` : "Parte única",
+        },
         { label: "Início", value: formatPrintDateTime(order.startedAt) },
         { label: "Conclusão", value: formatPrintDateTime(order.completedAt) },
         { label: "Pedido do cliente", value: printOrDash(order.customerOrderCode) },
       ]}
     >
-      <PrintSection title="Necessidade de materiais">
+      <PrintSection title="Cliente">
+        {/* Snapshot congelado no RELEASE — nunca o cadastro atual. */}
+        <dl className="print-doc__meta">
+          <div>
+            <dt>Cliente</dt>
+            <dd>
+              {printOrDash(order.customerCode)} — {printOrDash(order.customerName)}
+            </dd>
+          </div>
+          <div>
+            <dt>Nome fantasia</dt>
+            <dd>{printOrDash(order.customerTradeName)}</dd>
+          </div>
+          <div>
+            <dt>CNPJ</dt>
+            <dd>{printOrDash(order.customerCnpj)}</dd>
+          </div>
+          <div>
+            <dt>Endereço</dt>
+            <dd>
+              {[
+                order.customerStreet,
+                order.customerNumber,
+                order.customerComplement,
+                order.customerDistrict,
+              ]
+                .filter(Boolean)
+                .join(", ") || "—"}
+            </dd>
+          </div>
+          <div>
+            <dt>Cidade / UF</dt>
+            <dd>
+              {[order.customerCity, order.customerState].filter(Boolean).join(" / ") || "—"}
+            </dd>
+          </div>
+          <div>
+            <dt>CEP</dt>
+            <dd>{printOrDash(order.customerZipCode)}</dd>
+          </div>
+        </dl>
+      </PrintSection>
+      <PrintSection title="Matérias-primas">
+        <PrintTable
+          columns={[
+            "Item",
+            "Necessário",
+            "Unidade",
+            "Fornecimento",
+            "Proprietário esperado",
+            "Por parte",
+          ]}
+          isEmpty={order.requirements.filter((row) => row.itemType === "RAW_MATERIAL").length === 0}
+          emptyMessage="Ordem sem matéria-prima calculada."
+        >
+          {order.requirements
+            .filter((requirement) => requirement.itemType === "RAW_MATERIAL")
+            .map((requirement) => (
+              <tr key={requirement.id}>
+                <td>
+                  {requirement.itemCode} — {requirement.itemName}
+                </td>
+                <td className="is-number">{requirement.requiredQuantity}</td>
+                <td>{requirement.stockUnitCode}</td>
+                <td>{SUPPLY_RESPONSIBILITY_LABELS[requirement.supplyResponsibility]}</td>
+                <td>{printOrDash(requirement.eligibleOwnerCustomerName)}</td>
+                <td className="is-number">
+                  {order.numberOfParts > 1
+                    ? `${(Number(requirement.requiredQuantity) / order.numberOfParts).toFixed(6)} × ${order.numberOfParts}`
+                    : "—"}
+                </td>
+              </tr>
+            ))}
+        </PrintTable>
+      </PrintSection>
+
+      <PrintSection title="Materiais de embalagem">
+        <PrintTable
+          columns={["Item", "Necessário", "Unidade", "Fornecimento", "Proprietário esperado"]}
+          isEmpty={order.requirements.filter((row) => row.itemType !== "RAW_MATERIAL").length === 0}
+          emptyMessage="Sem embalagem nesta ordem."
+        >
+          {order.requirements
+            .filter((requirement) => requirement.itemType !== "RAW_MATERIAL")
+            .map((requirement) => (
+              <tr key={requirement.id}>
+                <td>
+                  {requirement.itemCode} — {requirement.itemName}
+                </td>
+                <td className="is-number">{requirement.requiredQuantity}</td>
+                <td>{requirement.stockUnitCode}</td>
+                <td>{SUPPLY_RESPONSIBILITY_LABELS[requirement.supplyResponsibility]}</td>
+                <td>{printOrDash(requirement.eligibleOwnerCustomerName)}</td>
+              </tr>
+            ))}
+        </PrintTable>
+      </PrintSection>
+
+      <PrintSection title="Dados para impressão do lote">
+        <dl className="print-doc__meta">
+          <div>
+            <dt>Lote comercial sugerido</dt>
+            <dd>{printOrDash(order.suggestedBusinessLotNumber)}</dd>
+          </div>
+          <div>
+            <dt>Vida útil</dt>
+            <dd>{order.shelfLifeMonths ? `${order.shelfLifeMonths} meses` : "—"}</dd>
+          </div>
+          <div>
+            <dt>Observações de rótulo</dt>
+            <dd>{printOrDash(order.labelInstructions)}</dd>
+          </div>
+        </dl>
+      </PrintSection>
+
+      <PrintSection title="Disponibilidade de materiais">
         <PrintTable
           columns={["Item", "Necessário", "Reservado", "Disponível", "Falta", "Unidade"]}
           isEmpty={order.requirements.length === 0}
@@ -487,6 +615,117 @@ export function LotTraceabilityPrintDocument({
                     .map((finished) => `${finished.lotCode} (${finished.producedQuantity})`)
                     .join(", ") || "—"}
                 </td>
+              </tr>
+            ))}
+          </PrintTable>
+        </PrintSection>
+      )}
+    </PrintLayout>
+  );
+}
+
+/**
+ * Folha de Receita (R.COQ.003) impressa — registro de execução por parte,
+ * com pesagem real, lote e operador. Cada parte é uma seção própria; o
+ * objetivo é um documento A4 legível, não reproduzir a planilha.
+ */
+export function RecipeSheetPrintDocument({ sheet }: { sheet: RecipeSheetDTO }) {
+  return (
+    <PrintLayout
+      kind="Folha de Receita"
+      code={sheet.officialNumber ?? sheet.productionOrderCode}
+      status={PRODUCTION_ORDER_STATUS_LABELS[sheet.status]}
+      documentCode={CONTROLLED_DOCUMENT_CODES.RECIPE_SHEET}
+      revision={sheet.recipeSheetRevision}
+      meta={[
+        { label: "OP interna", value: sheet.productionOrderCode },
+        { label: "Produto", value: `${sheet.productCode} — ${sheet.productName}` },
+        { label: "Cliente", value: printOrDash(sheet.customerName) },
+        { label: "Formulação", value: printOrDash(sheet.formulationVersionLabel) },
+        { label: "Planejado", value: `${sheet.plannedQuantity} ${sheet.outputUnitCode}` },
+        { label: "Partes", value: String(sheet.numberOfParts) },
+      ]}
+    >
+      {sheet.parts.map((part) => (
+        <PrintSection
+          key={part.id}
+          title={`Parte ${part.partNumber} / ${sheet.numberOfParts} — ${PRODUCTION_PART_STATUS_LABELS[part.status]}`}
+        >
+          <PrintTable
+            columns={[
+              "Item",
+              "Fonte",
+              "Lote interno",
+              "Lote fornecedor",
+              "Proprietário",
+              "Planejado",
+              "Pesado",
+              "Unidade",
+              "Data/hora",
+              "Executado por",
+              "Observação",
+            ]}
+            isEmpty={part.weighings.length === 0}
+            emptyMessage="Nenhuma pesagem registrada nesta parte."
+          >
+            {part.weighings.map((weighing) => (
+              <tr key={weighing.id}>
+                <td>
+                  {weighing.itemCode} — {weighing.itemName}
+                </td>
+                <td>
+                  {printOrDash(
+                    part.requirements.find(
+                      (requirement) =>
+                        requirement.requirementId === weighing.productionOrderRequirementId,
+                    )?.sourceName ?? null,
+                  )}
+                </td>
+                <td>{printOrDash(weighing.lotCode)}</td>
+                <td>{printOrDash(weighing.supplierLot)}</td>
+                <td>{weighing.ownerType === "CUSTOMER" ? "Cliente" : "Veridi"}</td>
+                <td className="is-number">{weighing.plannedQuantity}</td>
+                <td className="is-number">{weighing.actualQuantity}</td>
+                <td>{weighing.uomCode}</td>
+                <td>{formatPrintDateTime(weighing.executedAt)}</td>
+                <td>{weighing.executedByName}</td>
+                <td>{printOrDash(weighing.notes)}</td>
+              </tr>
+            ))}
+          </PrintTable>
+
+          <p>
+            {part.startedByName && (
+              <>
+                <strong>Iniciada por:</strong> {part.startedByName} em{" "}
+                {formatPrintDateTime(part.startedAt)}.{" "}
+              </>
+            )}
+            {part.completedByName && (
+              <>
+                <strong>Concluída por:</strong> {part.completedByName} em{" "}
+                {formatPrintDateTime(part.completedAt)}.
+              </>
+            )}
+          </p>
+        </PrintSection>
+      ))}
+
+      {sheet.packagingRequirements.length > 0 && (
+        <PrintSection title="Materiais de embalagem (total da OP)">
+          <PrintTable
+            columns={["Item", "Fornecimento", "Total", "Unidade"]}
+            isEmpty={false}
+            emptyMessage=""
+          >
+            {sheet.packagingRequirements.map((row) => (
+              <tr key={row.requirementId}>
+                <td>
+                  {row.itemCode} — {row.itemName}
+                </td>
+                <td>{SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}</td>
+                <td className="is-number">{row.totalQuantity}</td>
+                <td>{row.unitCode}</td>
               </tr>
             ))}
           </PrintTable>

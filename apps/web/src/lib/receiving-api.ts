@@ -5,7 +5,7 @@ import type {
   ReceiptListResponse,
   ReceiptSourceType,
 } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListReceiptsParams {
@@ -30,12 +30,12 @@ export async function listReceipts(
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
-  const response = await fetch(`${API_URL}/receipts?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/receipts?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as ReceiptListResponse;
 }
 
 export async function getReceipt(id: string): Promise<ReceiptDTO> {
-  const response = await fetch(`${API_URL}/receipts/${id}`);
+  const response = await apiFetch(`${API_URL}/receipts/${id}`);
   return (await parseJsonOrThrow(response)) as ReceiptDTO;
 }
 
@@ -43,7 +43,7 @@ export async function createReceipt(
   purchaseOrderId: string,
   input: CreateReceiptInput,
 ): Promise<ReceiptDTO> {
-  const response = await fetch(`${API_URL}/purchase-orders/${purchaseOrderId}/receipts`, {
+  const response = await apiFetch(`${API_URL}/purchase-orders/${purchaseOrderId}/receipts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -55,7 +55,7 @@ export async function createReceipt(
 export async function createCustomerSuppliedReceipt(
   input: CreateCustomerSuppliedReceiptInput,
 ): Promise<ReceiptDTO> {
-  const response = await fetch(`${API_URL}/receipts/customer-supplied`, {
+  const response = await apiFetch(`${API_URL}/receipts/customer-supplied`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

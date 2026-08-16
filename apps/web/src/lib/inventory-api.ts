@@ -10,7 +10,7 @@ import type {
   StockCountInput,
   StockCountResultDTO,
 } from "@veridi/shared";
-import { API_URL } from "./api";
+import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListInventoryParams {
@@ -29,12 +29,12 @@ export async function listInventory(params: ListInventoryParams = {}): Promise<I
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
-  const response = await fetch(`${API_URL}/inventory?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/inventory?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as InventoryListResponse;
 }
 
 export async function getInventoryItem(itemId: string): Promise<InventoryItemDetailDTO> {
-  const response = await fetch(`${API_URL}/inventory/${itemId}`);
+  const response = await apiFetch(`${API_URL}/inventory/${itemId}`);
   return (await parseJsonOrThrow(response)) as InventoryItemDetailDTO;
 }
 
@@ -58,14 +58,14 @@ export async function listInventoryMovements(
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 
-  const response = await fetch(`${API_URL}/inventory-movements?${query.toString()}`);
+  const response = await apiFetch(`${API_URL}/inventory-movements?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as InventoryMovementListResponse;
 }
 
 export async function createInventoryAdjustment(
   input: CreateInventoryAdjustmentInput,
 ): Promise<InventoryMovementDTO> {
-  const response = await fetch(`${API_URL}/inventory-adjustments`, {
+  const response = await apiFetch(`${API_URL}/inventory-adjustments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -74,7 +74,7 @@ export async function createInventoryAdjustment(
 }
 
 export async function createStockCount(input: StockCountInput): Promise<StockCountResultDTO> {
-  const response = await fetch(`${API_URL}/stock-counts`, {
+  const response = await apiFetch(`${API_URL}/stock-counts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -87,7 +87,7 @@ export async function getAllocationSuggestion(
   itemId: string,
   quantity: string,
 ): Promise<AllocationSuggestionDTO> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/inventory/${itemId}/allocation-suggestion?quantity=${encodeURIComponent(quantity)}`,
   );
   return (await parseJsonOrThrow(response)) as AllocationSuggestionDTO;

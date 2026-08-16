@@ -33,6 +33,8 @@ export interface CustomerDTO {
   city: string | null;
   state: string | null;
   notes: string | null;
+  /** Sufixo do cliente na máscara de lote comercial (ex.: "A3") — só alimenta a sugestão. */
+  businessLotSuffix: string | null;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +61,7 @@ export interface CreateCustomerInput {
   city?: string;
   state?: string;
   notes?: string;
+  businessLotSuffix?: string | null;
 }
 
 /** Formata o CEP guardado (só dígitos) para exibição. */
@@ -77,4 +80,5 @@ export interface UpdateCustomerInput {
   city?: string;
   state?: string;
   notes?: string;
+  businessLotSuffix?: string | null;
 }

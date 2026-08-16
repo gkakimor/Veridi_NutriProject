@@ -98,6 +98,8 @@ export interface ProductDTO {
   targetAgeGroup: TargetAgeGroup | null;
   /** Vida útil padrão em meses — referência, não altera lote automaticamente. */
   shelfLifeMonths: number | null;
+  /** Código do produto na máscara de lote comercial (ex.: "0340") — só alimenta a sugestão. */
+  businessLotCode: string | null;
   /** Na unidade do Finished Product Item (por isso não há `minimumBatchUom`). */
   minimumBatchQuantity: string | null;
   /** Versão ACTIVE da formulação, quando existir. */
@@ -135,6 +137,7 @@ export interface CreateProductInput {
   unitsPerShippingBox?: number | string | null;
   targetAgeGroup?: TargetAgeGroup | "" | null;
   shelfLifeMonths?: number | string | null;
+  businessLotCode?: string | null;
   minimumBatchQuantity?: string | null;
   externalCode?: string;
   notes?: string;

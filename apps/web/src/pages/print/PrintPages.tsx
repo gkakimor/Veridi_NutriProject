@@ -8,6 +8,7 @@ import type {
   LotTraceabilityDTO,
   ProductionOrderDTO,
   ProductionOrderMaterialCostDTO,
+  RecipeSheetDTO,
   PurchaseOrderDTO,
   ReceiptDTO,
   ShipmentDTO,
@@ -17,6 +18,7 @@ import { getPurchaseOrder } from "../../lib/purchase-orders-api";
 import { getReceipt } from "../../lib/receiving-api";
 import { getProductionOrder } from "../../lib/production-orders-api";
 import { getProductionOrderMaterialCost } from "../../lib/costs-api";
+import { getRecipeSheet } from "../../lib/recipe-api";
 import { getShipment } from "../../lib/shipments-api";
 import { getBilling } from "../../lib/billings-api";
 import { getLot, getLotTraceability } from "../../lib/lots-api";
@@ -25,6 +27,7 @@ import {
   CustomerOrderPrintDocument,
   LotTraceabilityPrintDocument,
   ProductionOrderPrintDocument,
+  RecipeSheetPrintDocument,
   PurchaseOrderPrintDocument,
   ReceiptPrintDocument,
   ShipmentPrintDocument,
@@ -125,6 +128,17 @@ export function ProductionOrderPrintPage() {
       }}
       render={({ order, cost }) => <ProductionOrderPrintDocument order={order} cost={cost} />}
       backTo={`/producao/ordens/${id}`}
+    />
+  );
+}
+
+export function RecipeSheetPrintPage() {
+  const { id } = useParams<{ id: string }>();
+  return (
+    <PrintScreen<RecipeSheetDTO>
+      load={() => getRecipeSheet(id!)}
+      render={(sheet) => <RecipeSheetPrintDocument sheet={sheet} />}
+      backTo={`/producao/ordens/${id}/receita`}
     />
   );
 }

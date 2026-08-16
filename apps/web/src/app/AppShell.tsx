@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { USER_ROLE_LABELS } from "@veridi/shared";
 import { lookupLot } from "../lib/lots-api";
+import { useAuth } from "./AuthProvider";
 import { navigation, navItems } from "./navigation";
 import "./shell.css";
 
@@ -33,6 +35,7 @@ function startsCollapsed(): boolean {
 
 export function AppShell() {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [navCollapsed, setNavCollapsed] = useState(startsCollapsed);
 
   const [searchValue, setSearchValue] = useState("");
@@ -126,7 +129,19 @@ export function AppShell() {
         </div>
 
         <div className="masthead__user">
-          <span>Ambiente local</span>
+          {user ? (
+            <>
+              <span>
+                {user.name}
+                <span className="masthead__role"> · {USER_ROLE_LABELS[user.role]}</span>
+              </span>
+              <button type="button" className="masthead__logout" onClick={() => void signOut()}>
+                Sair
+              </button>
+            </>
+          ) : (
+            <span>Ambiente local</span>
+          )}
         </div>
       </header>
 

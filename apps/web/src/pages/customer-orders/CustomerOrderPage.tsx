@@ -306,6 +306,7 @@ export function CustomerOrderPage() {
         city: customerOrder.customerAddress.city,
         state: customerOrder.customerAddress.state,
         notes: null,
+        businessLotSuffix: null,
         active: false,
         createdAt: "",
         updatedAt: "",

@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import type { ZodError } from "zod";
 import {
   cancelProductionOrder,
@@ -152,7 +153,9 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
   app.post("/production-orders/:id/release", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const order = await releaseProductionOrder(id);
+      // RELEASE é ação auditada: quem liberou vem da sessão.
+      const actor = requireCurrentUser(request);
+      const order = await releaseProductionOrder(id, { id: actor.id, name: actor.name });
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
