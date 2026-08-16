@@ -6,10 +6,13 @@ import type {
   CustomerOrderReservation,
   CustomerOrderReservationLine,
   Item,
+  Lot,
   Product,
   ProductionOrder,
   PurchaseOrder,
   PurchaseOrderLine,
+  Shipment,
+  ShipmentLine,
   Supplier,
 } from "@prisma/client";
 import type {
@@ -20,6 +23,7 @@ import type {
   CustomerOrderListResponse,
   CustomerOrderReservationDTO,
   CustomerOrderReservationLineDTO,
+  CustomerOrderShipmentSummaryDTO,
 } from "@veridi/shared";
 import { CUSTOMER_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -50,16 +54,18 @@ const CODE_SEQUENCE = "customer_order_code_seq";
 
 type ProductWithFinishedItem = Product & { finishedProductItem: Item | null };
 type LineWithProduct = CustomerOrderLine & { product: ProductWithFinishedItem };
-type ReservationLineWithRelations = CustomerOrderReservationLine & { product: Product; item: Item; lot: { code: string; businessLotNumber: string | null } | null };
+type ReservationLineWithRelations = CustomerOrderReservationLine & { product: Product; item: Item; lot: Lot | null };
 type ReservationWithLines = CustomerOrderReservation & { lines: ReservationLineWithRelations[] };
 type GeneratedOrder = ProductionOrder & { product: Product };
 type LinkedPurchaseOrder = PurchaseOrder & { supplier: Supplier; lines: PurchaseOrderLine[] };
+type ShipmentWithLines = Shipment & { lines: ShipmentLine[] };
 type OrderWithRelations = CustomerOrder & {
   customer: Customer;
   lines: LineWithProduct[];
   reservations: ReservationWithLines[];
   productionOrders: GeneratedOrder[];
   purchaseOrders: LinkedPurchaseOrder[];
+  shipments: ShipmentWithLines[];
 };
 
 const customerOrderInclude = {
@@ -71,10 +77,42 @@ const customerOrderInclude = {
   },
   productionOrders: { include: { product: true }, orderBy: { createdAt: "asc" as const } },
   purchaseOrders: { include: { supplier: true, lines: true }, orderBy: { createdAt: "asc" as const } },
+  shipments: { include: { lines: true }, orderBy: { createdAt: "asc" as const } },
 } as const;
 
-function toLineDTO(line: LineWithProduct): CustomerOrderLineDTO {
+/**
+ * Expedido por CustomerOrderLine — soma das ShipmentLine de Expedicoes
+ * CONFIRMED. Sempre derivado, nunca uma coluna mutavel na linha do Pedido.
+ */
+export function shippedByOrderLine(shipments: ShipmentWithLines[]): Map<string, Prisma.Decimal> {
+  const map = new Map<string, Prisma.Decimal>();
+  for (const shipment of shipments) {
+    if (shipment.status !== "CONFIRMED") continue;
+    for (const line of shipment.lines) {
+      const current = map.get(line.customerOrderLineId) ?? new Prisma.Decimal(0);
+      map.set(line.customerOrderLineId, current.plus(line.quantity));
+    }
+  }
+  return map;
+}
+
+/** Expedido por CustomerOrderReservationLine — base do `reservedRemaining`. */
+export function shippedByReservationLine(shipments: ShipmentWithLines[]): Map<string, Prisma.Decimal> {
+  const map = new Map<string, Prisma.Decimal>();
+  for (const shipment of shipments) {
+    if (shipment.status !== "CONFIRMED") continue;
+    for (const line of shipment.lines) {
+      const current = map.get(line.customerOrderReservationLineId) ?? new Prisma.Decimal(0);
+      map.set(line.customerOrderReservationLineId, current.plus(line.quantity));
+    }
+  }
+  return map;
+}
+
+function toLineDTO(line: LineWithProduct, shippedByLine: Map<string, Prisma.Decimal>): CustomerOrderLineDTO {
   const usingSnapshot = line.productCode !== null;
+  const shipped = shippedByLine.get(line.id) ?? new Prisma.Decimal(0);
+  const outstanding = Prisma.Decimal.max(line.orderedQuantity.minus(shipped), 0);
   return {
     id: line.id,
     productId: line.productId,
@@ -86,10 +124,17 @@ function toLineDTO(line: LineWithProduct): CustomerOrderLineDTO {
     orderedQuantity: line.orderedQuantity.toString(),
     unitCode: line.unitCode,
     position: line.position,
+    shippedQuantity: shipped.toString(),
+    outstandingQuantity: outstanding.toString(),
   };
 }
 
-function toReservationLineDTO(line: ReservationLineWithRelations): CustomerOrderReservationLineDTO {
+function toReservationLineDTO(
+  line: ReservationLineWithRelations,
+  shippedByResLine: Map<string, Prisma.Decimal>,
+): CustomerOrderReservationLineDTO {
+  const shipped = shippedByResLine.get(line.id) ?? new Prisma.Decimal(0);
+  const remaining = Prisma.Decimal.max(line.quantity.minus(shipped), 0);
   return {
     id: line.id,
     customerOrderLineId: line.customerOrderLineId,
@@ -100,12 +145,24 @@ function toReservationLineDTO(line: ReservationLineWithRelations): CustomerOrder
     lotId: line.lotId,
     lotCode: line.lot ? line.lot.code : null,
     businessLotNumber: line.lot ? line.lot.businessLotNumber : null,
+    expiryDate: line.lot?.expiryDate ? line.lot.expiryDate.toISOString() : null,
+    location: line.lot ? line.lot.location : null,
+    lotStatus: line.lot ? line.lot.status : null,
     quantity: line.quantity.toString(),
     unitCode: line.item.unitCode,
+    shippedQuantity: shipped.toString(),
+    reservedRemaining: remaining.toString(),
+    releasedAt: line.releasedAt ? line.releasedAt.toISOString() : null,
+    releasedBy: line.releasedBy,
+    releaseReason: line.releaseReason,
+    replacesLineId: line.replacesLineId,
   };
 }
 
-function toReservationDTO(reservation: ReservationWithLines): CustomerOrderReservationDTO {
+function toReservationDTO(
+  reservation: ReservationWithLines,
+  shippedByResLine: Map<string, Prisma.Decimal>,
+): CustomerOrderReservationDTO {
   return {
     id: reservation.id,
     status: reservation.status,
@@ -114,7 +171,19 @@ function toReservationDTO(reservation: ReservationWithLines): CustomerOrderReser
     releasedAt: reservation.releasedAt ? reservation.releasedAt.toISOString() : null,
     releasedBy: reservation.releasedBy,
     releaseReason: reservation.releaseReason,
-    lines: reservation.lines.map(toReservationLineDTO),
+    lines: reservation.lines.map((line) => toReservationLineDTO(line, shippedByResLine)),
+  };
+}
+
+function toShipmentSummaryDTO(shipment: ShipmentWithLines): CustomerOrderShipmentSummaryDTO {
+  const totalQuantity = shipment.lines.reduce((sum, line) => sum.plus(line.quantity), new Prisma.Decimal(0));
+  return {
+    id: shipment.id,
+    code: shipment.code,
+    status: shipment.status,
+    shipmentDate: shipment.shipmentDate ? shipment.shipmentDate.toISOString() : null,
+    totalQuantity: totalQuantity.toString(),
+    lineCount: shipment.lines.length,
   };
 }
 
@@ -153,9 +222,14 @@ function toLinkedPurchaseOrderDTO(po: LinkedPurchaseOrder): CustomerOrderLinkedP
 
 function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
   const usingSnapshot = order.customerCode !== null;
-  // No maximo uma reserva e criada por Pedido nesta fase (nunca reaplica o
-  // Plano) — a primeira (e unica) e a que importa.
-  const reservation = order.reservations[0] ?? null;
+  // A reserva ACTIVE e a operacional; RELEASED (ex.: pos-SHIPPED) fica so
+  // como historico. A Reserva Complementar sempre acrescenta linhas a
+  // ACTIVE existente, nunca cria uma segunda em paralelo.
+  const reservation =
+    order.reservations.find((r) => r.status === "ACTIVE") ?? order.reservations[0] ?? null;
+
+  const shippedByLine = shippedByOrderLine(order.shipments);
+  const shippedByResLine = shippedByReservationLine(order.shipments);
 
   return {
     id: order.id,
@@ -169,10 +243,11 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
     requestedDeliveryDate: order.requestedDeliveryDate ? order.requestedDeliveryDate.toISOString() : null,
     status: order.status,
     notes: order.notes,
-    lines: order.lines.map(toLineDTO),
-    reservation: reservation ? toReservationDTO(reservation) : null,
+    lines: order.lines.map((line) => toLineDTO(line, shippedByLine)),
+    reservation: reservation ? toReservationDTO(reservation, shippedByResLine) : null,
     generatedProductionOrders: order.productionOrders.map(toGeneratedProductionOrderDTO),
     linkedPurchaseOrders: order.purchaseOrders.map(toLinkedPurchaseOrderDTO),
+    shipments: order.shipments.map(toShipmentSummaryDTO),
     confirmedAt: order.confirmedAt ? order.confirmedAt.toISOString() : null,
     confirmedBy: order.confirmedBy,
     cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,
@@ -328,12 +403,18 @@ export async function updateCustomerOrder(
   const touchesAnyField =
     touchesLockedFields || input.requestedDeliveryDate !== undefined || input.notes !== undefined;
 
-  if (current.status === "CANCELLED" || current.status === "IN_FULFILLMENT") {
+  const operationallyLocked =
+    current.status === "CANCELLED" ||
+    current.status === "IN_FULFILLMENT" ||
+    current.status === "PARTIALLY_SHIPPED" ||
+    current.status === "SHIPPED";
+
+  if (operationallyLocked) {
     if (touchesAnyField) {
       throw new OrderLockedError(
         current.status === "CANCELLED"
           ? "Pedido cancelado é somente leitura."
-          : "Pedido em atendimento é somente leitura — produtos e reservas já foram aplicados.",
+          : "Pedido já em execução operacional é somente leitura — produtos, reservas e/ou expedições já foram aplicados.",
       );
     }
   } else if (current.status !== "DRAFT" && touchesLockedFields) {
@@ -464,6 +545,14 @@ export async function cancelCustomerOrder(id: string, reason: string): Promise<C
     if (!current) throw new CustomerOrderNotFoundError(id);
     if (current.status === "CANCELLED") {
       throw new InvalidTransitionError("Pedido já está cancelado.");
+    }
+
+    // Ja houve saida fisica — cancelar exigiria devolucao/reentrada
+    // explicita, fora do escopo desta fase.
+    if (current.status === "PARTIALLY_SHIPPED" || current.status === "SHIPPED") {
+      throw new CancellationBlockedError(
+        "Pedido já possui expedição confirmada — a saída física não pode ser desfeita por um cancelamento simples.",
+      );
     }
 
     if (current.status === "IN_FULFILLMENT") {

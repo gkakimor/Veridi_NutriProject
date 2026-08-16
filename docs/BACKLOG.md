@@ -58,6 +58,14 @@ Internal QR remains Veridi's operational lot identity.
 
 Do not build dashboards before core data is trustworthy.
 
+**Note:** a basic management layer was promoted out of this backlog into
+the MVP as **Block E — Management, Reports & Exports** (steps 29–31, see
+`docs/MVP_PLAN.md` and `docs/PRODUCT_RULES.md` §30): operational cockpit
+dashboard, reports, and CSV/PDF/print exports, to be executed after
+Invoicing (28) and before the end-to-end demo. The deeper analytical
+capabilities listed above (trends, lead times, supplier performance,
+yield analytics) remain backlog — Block E is a cockpit, not BI.
+
 ---
 
 # Quality / Compliance

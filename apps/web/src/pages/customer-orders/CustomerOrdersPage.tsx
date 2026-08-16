@@ -16,7 +16,10 @@ function statusBadgeClass(status: CustomerOrderStatus): string {
     case "CONFIRMED":
       return "badge badge--active";
     case "IN_FULFILLMENT":
+    case "PARTIALLY_SHIPPED":
       return "badge badge--warn";
+    case "SHIPPED":
+      return "badge badge--active";
     case "CANCELLED":
       return "badge badge--err";
   }
@@ -184,9 +187,11 @@ export function CustomerOrdersPage() {
                   <td>{order.lines.length}</td>
                   <td>{totalQuantity}</td>
                   <td>
-                    {order.reservation || order.generatedProductionOrders.length > 0
-                      ? "Em atendimento"
-                      : "Não analisado"}
+                    {order.shipments.some((shipment) => shipment.status === "CONFIRMED")
+                      ? "Expedido"
+                      : order.reservation || order.generatedProductionOrders.length > 0
+                        ? "Em atendimento"
+                        : "Não analisado"}
                   </td>
                   <td>
                     <span className={statusBadgeClass(order.status)}>

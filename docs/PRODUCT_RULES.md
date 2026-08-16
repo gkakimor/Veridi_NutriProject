@@ -1124,9 +1124,61 @@ later through the normal Purchase Order flow.
   The generated PO carries `origin: CUSTOMER_ORDER` and a link back to
   the order, navigable in both directions (Order ↔ PO).
 
-## Shipping
-When finished product is available: Order → Picking → Shipping. Partial
-delivery must be possible eventually. No advanced logistics/WMS now.
+## Shipping (implemented, Delivery 18)
+When finished product is available: Order → separation (Shipment DRAFT) →
+confirmed Shipment. Partial delivery is supported. No advanced
+logistics/WMS.
+
+### Durable rules confirmed at implementation (§27)
+
+- Three distinct concepts, never conflated: **reservation** (stock
+  committed to the order), **separation** (what a given Shipment DRAFT
+  intends to send) and **confirmed shipment** (what physically left).
+  Only a CONFIRMED Shipment changes stock — a DRAFT never touches On
+  Hand, Reserved or the order's status, and cancelling a DRAFT changes
+  nothing.
+- A Shipment can only draw from quantity currently reserved **to that
+  same Customer Order** — never free stock, never another order's
+  reservation, never a production MaterialReservation, never
+  On-Order/planned-to-produce quantity. Finished product that was
+  produced later must be **explicitly reserved** to the order first; it
+  is never auto-reserved just because a ProductionOutput was recorded.
+- Confirming a Shipment creates exactly one `SHIPMENT_OUT` inventory
+  movement per shipment line (real 1:1 relation), reducing On Hand and
+  Reserved together — so shipping already-reserved stock never reduces
+  Available twice. `Reserved` from a Customer Order contributes only its
+  *remaining* (not-yet-shipped) quantity, computed centrally in the
+  inventory ledger, never in a parallel per-module calculation.
+- `shippedQuantity` (per order line) and `reservedRemaining` (per
+  reservation line) are always **derived** from confirmed ShipmentLines —
+  never mutable columns.
+- The Customer Order becomes `PARTIALLY_SHIPPED`/`SHIPPED` strictly as a
+  consequence of real confirmed shipments; there is no manual "mark as
+  shipped" action and no free-form status PATCH. `SHIPPED` means every
+  order line had its full ordered quantity physically shipped, and any
+  still-active reservation is released in that same transaction
+  (`ORDER_SHIPPED`) — never leaving a live commitment behind, and never
+  creating an inventory movement for the release.
+- Lot eligibility is **revalidated at confirmation time**: a lot that
+  expired, was blocked or is awaiting Quality release cannot ship even if
+  the reservation predates that change. Physical On Hand is checked too —
+  a shipment can never exceed the lot's real balance.
+- A reservation whose lot became ineligible can be **explicitly
+  reallocated** for its not-yet-shipped remainder (FEFO/FIFO, same
+  allocation service). The original line is never deleted — it is marked
+  released and the new lines point back via `replacesLineId`; already
+  shipped quantity keeps referencing the original line and lot, so
+  genealogy is preserved.
+- A lot with remaining reserved quantity — from *either* a production
+  MaterialReservation or a Customer Order reservation — cannot be
+  blocked. Both commitments are checked through the same central
+  calculation, never just one of them.
+- A CONFIRMED Shipment is historical and immutable: it cannot be edited,
+  re-confirmed or cancelled. Undoing a physical exit would require an
+  explicit return/re-entry flow, which is future work.
+- Future Invoicing is based on **what was actually shipped**
+  (`ShipmentLine` quantities of CONFIRMED shipments) — never on the
+  originally ordered, reserved or planned quantity.
 
 ## Invoicing
 Invoicing reflects what is actually delivered, not necessarily the
@@ -1149,3 +1201,37 @@ Customer Order → check finished-product stock → reserve available product
 → identify deficit → suggest production → generate draft OPs → calculate
 raw-material/packaging needs → identify shortages → suggest purchases →
 produce → make finished product available → picking/shipping → invoicing.
+
+---
+
+# 30. Block E — Management, Reports & Exports (registered, not started)
+
+Product Ownership decision registered during Delivery 18. A **transversal
+layer** (steps 29–31), executed only **after** Purchase Suggestion (26),
+Shipping (27) and Invoicing (28), and **before** end-to-end validation /
+final demo. Nothing here is implemented yet — see `docs/MVP_PLAN.md` for
+the official roadmap ordering.
+
+## Durable principles
+
+- Dashboards and reports are **never a source of truth**. They read the
+  operational entities that already are.
+- KPIs derive from operational entities (orders, lots, movements,
+  production, shipments) — never from a parallel aggregate table
+  maintained by hand.
+- Always distinguish **current state** (On Hand today, open orders now)
+  from **period metrics** (produced this month, shipped last week). Mixing
+  the two is the classic source of misleading numbers.
+- Prefer an **operational cockpit** over complex BI: few charts, mostly
+  dense tables and clear numbers that drive a decision today.
+- Export rules by surface type:
+  - tabular listing → CSV;
+  - report → CSV + print/PDF;
+  - transactional document → print/PDF;
+  - traceability → print/PDF;
+  - editing surface → no export.
+- FAST MVP implements printing as **print-oriented HTML +
+  `window.print()`** — no PDF library, consistent with the existing lot
+  label print route.
+- CSV export always respects the currently applied filters and exports the
+  **complete filtered result**, not just the visible page.

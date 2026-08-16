@@ -7,9 +7,15 @@ import type {
   FulfillmentPlanDTO,
   ProductDTO,
   PurchaseSuggestionDTO,
+  ReservationStatusDTO,
+  ShipmentStatus,
   SupplierDTO,
 } from "@veridi/shared";
-import { CUSTOMER_ORDER_STATUS_LABELS, PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
+import {
+  CUSTOMER_ORDER_STATUS_LABELS,
+  PURCHASE_ORDER_STATUS_LABELS,
+  SHIPMENT_STATUS_LABELS,
+} from "@veridi/shared";
 import {
   applyFulfillmentPlan,
   cancelCustomerOrder,
@@ -24,6 +30,12 @@ import {
 import { listCustomers } from "../../lib/customers-api";
 import { listProducts } from "../../lib/products-api";
 import { listSuppliers } from "../../lib/suppliers-api";
+import {
+  createShipmentDraft,
+  getReservationStatus,
+  reallocateReservationLine,
+  reserveAvailable,
+} from "../../lib/shipments-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -44,7 +56,10 @@ function statusBadgeClass(status: CustomerOrderStatus): string {
     case "CONFIRMED":
       return "badge badge--active";
     case "IN_FULFILLMENT":
+    case "PARTIALLY_SHIPPED":
       return "badge badge--warn";
+    case "SHIPPED":
+      return "badge badge--active";
     case "CANCELLED":
       return "badge badge--err";
   }
@@ -137,6 +152,12 @@ export function CustomerOrderPage() {
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
 
+  const [reservationStatus, setReservationStatus] = useState<ReservationStatusDTO | null>(null);
+  const [reserveInputs, setReserveInputs] = useState<Record<string, string>>({});
+  const [reserving, setReserving] = useState(false);
+  const [reallocatingLineId, setReallocatingLineId] = useState<string | null>(null);
+  const [preparingShipment, setPreparingShipment] = useState(false);
+
   const syncFormFromServer = useCallback((order: CustomerOrderDTO) => {
     setCustomerId(order.customerId);
     setRequestedDeliveryDate(toDateInputValue(order.requestedDeliveryDate));
@@ -172,6 +193,8 @@ export function CustomerOrderPage() {
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
   const showPlan = !isNew && status === "CONFIRMED";
   const showPurchaseSuggestion = !isNew && status === "IN_FULFILLMENT";
+  /** Reserva complementar/expedição continuam disponíveis até o pedido ser totalmente expedido. */
+  const isOperational = !isNew && (status === "IN_FULFILLMENT" || status === "PARTIALLY_SHIPPED");
   const hasFulfillmentResult =
     !!customerOrder && (customerOrder.reservation !== null || customerOrder.generatedProductionOrders.length > 0);
 
@@ -230,6 +253,31 @@ export function CustomerOrderPage() {
       .then((result) => setActiveSuppliers(result.suppliers))
       .catch(() => setActiveSuppliers([]));
   }, [showPurchaseSuggestion]);
+
+  const reloadReservationStatus = useCallback(() => {
+    if (!id) return;
+    getReservationStatus(id)
+      .then((result) => {
+        setReservationStatus(result);
+        setReserveInputs((prev) => {
+          const next: Record<string, string> = {};
+          for (const line of result.lines) {
+            next[line.customerOrderLineId] =
+              prev[line.customerOrderLineId] ?? line.suggestedAdditionalReserve;
+          }
+          return next;
+        });
+      })
+      .catch(() => setReservationStatus(null));
+  }, [id]);
+
+  useEffect(() => {
+    if (!isOperational || !id) {
+      setReservationStatus(null);
+      return;
+    }
+    reloadReservationStatus();
+  }, [isOperational, id, reloadReservationStatus]);
 
   const customerOptions: CustomerDTO[] = useMemo(() => {
     if (!customerOrder || activeCustomers.some((c) => c.id === customerOrder.customerId)) {
@@ -484,6 +532,63 @@ export function CustomerOrderPage() {
     }
   }
 
+  async function handleReserveAvailable() {
+    if (!id || !reservationStatus) return;
+    const lines = reservationStatus.lines
+      .map((line) => ({
+        customerOrderLineId: line.customerOrderLineId,
+        quantity: (reserveInputs[line.customerOrderLineId] ?? "0").trim() || "0",
+      }))
+      .filter((line) => Number(line.quantity) > 0);
+    if (lines.length === 0) return;
+
+    setReserving(true);
+    setError(null);
+    try {
+      const updated = await reserveAvailable(id, { lines });
+      setCustomerOrder(updated);
+      syncFormFromServer(updated);
+      setReserveInputs({});
+      reloadReservationStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao reservar produto acabado");
+    } finally {
+      setReserving(false);
+    }
+  }
+
+  async function handleReallocate(reservationLineId: string) {
+    if (!id) return;
+    setReallocatingLineId(reservationLineId);
+    setError(null);
+    try {
+      const updated = await reallocateReservationLine(id, {
+        customerOrderReservationLineId: reservationLineId,
+      });
+      setCustomerOrder(updated);
+      syncFormFromServer(updated);
+      reloadReservationStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao realocar reserva");
+    } finally {
+      setReallocatingLineId(null);
+    }
+  }
+
+  async function handlePrepareShipment() {
+    if (!id) return;
+    setPreparingShipment(true);
+    setError(null);
+    try {
+      const shipment = await createShipmentDraft(id);
+      navigate(`/comercial/expedicoes/${shipment.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao preparar expedição");
+    } finally {
+      setPreparingShipment(false);
+    }
+  }
+
   if (!isNew && loading) {
     return (
       <div className="page__header">
@@ -591,6 +696,8 @@ export function CustomerOrderPage() {
                   <th>Produto</th>
                   <th>Quantidade</th>
                   <th>Un.</th>
+                  {!isDraft && <th>Expedido</th>}
+                  {!isDraft && <th>Falta expedir</th>}
                   {isDraft && <th aria-hidden="true" />}
                 </tr>
               </thead>
@@ -630,6 +737,17 @@ export function CustomerOrderPage() {
                       )}
                     </td>
                     <td>{line.unitCode || "—"}</td>
+                    {!isDraft && (
+                      <td>
+                        {customerOrder?.lines.find((l) => l.productId === line.productId)?.shippedQuantity ?? "—"}
+                      </td>
+                    )}
+                    {!isDraft && (
+                      <td>
+                        {customerOrder?.lines.find((l) => l.productId === line.productId)?.outstandingQuantity ??
+                          "—"}
+                      </td>
+                    )}
                     {isDraft && (
                       <td>
                         <button
@@ -647,7 +765,7 @@ export function CustomerOrderPage() {
 
                 {lines.length === 0 && (
                   <tr>
-                    <td colSpan={isDraft ? 4 : 3} className="table__empty">
+                    <td colSpan={isDraft ? 4 : 5} className="table__empty">
                       Nenhum produto adicionado.
                     </td>
                   </tr>
@@ -894,6 +1012,132 @@ export function CustomerOrderPage() {
           </FormSection>
         )}
 
+        {isOperational && reservationStatus && (
+          <FormSection
+            title="Reserva de Produto Acabado"
+            subtitle="Produto produzido depois do Plano precisa ser explicitamente reservado antes de poder ser expedido."
+          >
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Pedido</th>
+                    <th>Expedido</th>
+                    <th>Reservado restante</th>
+                    <th>Falta reservar</th>
+                    <th>Disponível agora</th>
+                    <th>Reservar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reservationStatus.lines.map((line) => (
+                    <tr key={line.customerOrderLineId}>
+                      <td>
+                        <span className="code">{line.productCode}</span> {line.productName}
+                      </td>
+                      <td>
+                        {line.orderedQuantity} {line.unitCode}
+                      </td>
+                      <td>{line.shippedQuantity}</td>
+                      <td>{line.reservedRemaining}</td>
+                      <td>{line.stillToReserve}</td>
+                      <td>{line.currentAvailable}</td>
+                      <td>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          disabled={Number(line.stillToReserve) <= 0}
+                          value={reserveInputs[line.customerOrderLineId] ?? ""}
+                          onChange={(event) =>
+                            setReserveInputs((prev) => ({
+                              ...prev,
+                              [line.customerOrderLineId]: event.target.value,
+                            }))
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="line-actions">
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                disabled={
+                  reserving ||
+                  reservationStatus.lines.every(
+                    (line) => Number(reserveInputs[line.customerOrderLineId] ?? "0") <= 0,
+                  )
+                }
+                onClick={handleReserveAvailable}
+              >
+                {reserving ? "Reservando…" : "Reservar disponível"}
+              </button>
+              <button
+                type="button"
+                className="btn btn--accent btn--sm"
+                disabled={preparingShipment}
+                onClick={handlePrepareShipment}
+              >
+                {preparingShipment ? "Preparando…" : "Preparar Expedição"}
+              </button>
+            </div>
+          </FormSection>
+        )}
+
+        {customerOrder && customerOrder.shipments.length > 0 && (
+          <FormSection title="Expedições" subtitle="Somente uma expedição confirmada altera o estoque.">
+            <div className="table-container">
+              <table className="table table--clickable-rows">
+                <thead>
+                  <tr>
+                    <th>Expedição</th>
+                    <th>Data</th>
+                    <th>Quantidade</th>
+                    <th>Status</th>
+                    <th aria-hidden="true" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerOrder.shipments.map((shipment) => (
+                    <tr
+                      key={shipment.id}
+                      tabIndex={0}
+                      onClick={() => navigate(`/comercial/expedicoes/${shipment.id}`)}
+                    >
+                      <td className="is-code">{shipment.code}</td>
+                      <td>
+                        {shipment.shipmentDate
+                          ? new Date(shipment.shipmentDate).toLocaleDateString("pt-BR")
+                          : "—"}
+                      </td>
+                      <td>{shipment.totalQuantity}</td>
+                      <td>
+                        <span className="badge badge--neutral">
+                          {SHIPMENT_STATUS_LABELS[shipment.status as ShipmentStatus] ?? shipment.status}
+                        </span>
+                      </td>
+                      <td onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => navigate(`/comercial/expedicoes/${shipment.id}`)}
+                        >
+                          Abrir
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </FormSection>
+        )}
+
         {customerOrder && customerOrder.linkedPurchaseOrders.length > 0 && (
           <FormSection title="Ordens de Compra Vinculadas">
             <div className="table-container">
@@ -940,34 +1184,73 @@ export function CustomerOrderPage() {
         {hasFulfillmentResult && (
           <>
             {customerOrder?.reservation && (
-              <FormSection title="Reservas de Produto Acabado">
+              <FormSection
+                title="Reservas de Produto Acabado"
+                subtitle="Lote inelegível (vencido/bloqueado) pode ser realocado — o já expedido continua no lote original."
+              >
                 <div className="table-container">
                   <table className="table">
                     <thead>
                       <tr>
                         <th>Produto</th>
                         <th>Lote</th>
-                        <th>Quantidade</th>
+                        <th>Reservado</th>
+                        <th>Expedido</th>
+                        <th>Restante</th>
+                        <th>Situação</th>
+                        <th aria-hidden="true" />
                       </tr>
                     </thead>
                     <tbody>
-                      {customerOrder.reservation.lines.map((line) => (
-                        <tr key={line.id}>
-                          <td>
-                            <span className="code">{line.productCode}</span> {line.productName}
-                          </td>
-                          <td>
-                            {line.lotCode ?? "— (sem controle de lote)"}
-                            {line.businessLotNumber ? ` — ${line.businessLotNumber}` : ""}
-                          </td>
-                          <td>
-                            {line.quantity} {line.unitCode}
-                          </td>
-                        </tr>
-                      ))}
+                      {customerOrder.reservation.lines.map((line) => {
+                        const isReleased = line.releasedAt !== null;
+                        const canReallocate =
+                          isOperational && !isReleased && Number(line.reservedRemaining) > 0;
+                        return (
+                          <tr key={line.id}>
+                            <td>
+                              <span className="code">{line.productCode}</span> {line.productName}
+                            </td>
+                            <td>
+                              {line.lotCode ?? "— (sem controle de lote)"}
+                              {line.businessLotNumber ? ` — ${line.businessLotNumber}` : ""}
+                              {line.replacesLineId && (
+                                <>
+                                  <br />
+                                  <span className="field__hint">Realocado de outra linha</span>
+                                </>
+                              )}
+                            </td>
+                            <td>
+                              {line.quantity} {line.unitCode}
+                            </td>
+                            <td>{line.shippedQuantity}</td>
+                            <td>{line.reservedRemaining}</td>
+                            <td>
+                              {isReleased ? (
+                                <span className="badge badge--neutral">Realocada</span>
+                              ) : (
+                                <span className="badge badge--active">Ativa</span>
+                              )}
+                            </td>
+                            <td>
+                              {canReallocate && (
+                                <button
+                                  type="button"
+                                  className="btn btn--ghost btn--sm"
+                                  disabled={reallocatingLineId === line.id}
+                                  onClick={() => handleReallocate(line.id)}
+                                >
+                                  {reallocatingLineId === line.id ? "Realocando…" : "Realocar"}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {customerOrder.reservation.lines.length === 0 && (
                         <tr>
-                          <td colSpan={3} className="table__empty">
+                          <td colSpan={7} className="table__empty">
                             Nenhuma reserva de produto acabado.
                           </td>
                         </tr>

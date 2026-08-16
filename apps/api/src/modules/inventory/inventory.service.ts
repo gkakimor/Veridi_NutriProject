@@ -43,20 +43,24 @@ import type {
 const SYSTEM_ACTOR = "Ambiente local";
 
 type ReceiptLineChain = ReceiptLine & { receipt: Receipt & { purchaseOrder: PurchaseOrder } };
+type ShipmentLineChain = { shipment: { id: string; code: string } };
 type MovementWithRelations = InventoryMovement & {
   item: Item;
   lot: Lot | null;
   receiptLine: ReceiptLineChain | null;
+  shipmentLine: ShipmentLineChain | null;
 };
 
 const movementInclude = {
   item: true,
   lot: true,
   receiptLine: { include: { receipt: { include: { purchaseOrder: true } } } },
+  shipmentLine: { include: { shipment: true } },
 } as const;
 
 function toMovementDTO(movement: MovementWithRelations): InventoryMovementDTO {
   const receiptLine = movement.receiptLine;
+  const shipmentLine = movement.shipmentLine;
   return {
     id: movement.id,
     itemId: movement.itemId,
@@ -74,6 +78,8 @@ function toMovementDTO(movement: MovementWithRelations): InventoryMovementDTO {
     receiptCode: receiptLine ? receiptLine.receipt.code : null,
     purchaseOrderId: receiptLine ? receiptLine.receipt.purchaseOrderId : null,
     purchaseOrderCode: receiptLine ? receiptLine.receipt.purchaseOrder.code : null,
+    shipmentId: shipmentLine ? shipmentLine.shipment.id : null,
+    shipmentCode: shipmentLine ? shipmentLine.shipment.code : null,
     reason: movement.reason,
     createdBy: movement.createdBy,
     createdAt: movement.createdAt.toISOString(),

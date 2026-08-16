@@ -5,16 +5,24 @@ export const CUSTOMER_ORDER_CODE_PREFIX = "PED";
 /**
  * DRAFT editável; CONFIRMED congela cliente/produtos/quantidades (snapshot)
  * e habilita o Plano de Atendimento; IN_FULFILLMENT ocorre quando o Plano é
- * aplicado (reserva de Produto Acabado + OPs DRAFT geradas para o déficit).
- * READY/PARTIALLY_SHIPPED/SHIPPED ficam para expedição futura — ainda não
- * alcançáveis.
+ * aplicado (reserva de Produto Acabado + OPs DRAFT geradas para o déficit);
+ * PARTIALLY_SHIPPED/SHIPPED são derivados de Expedições CONFIRMED reais —
+ * nunca definidos manualmente. `READY` não existe nesta fase.
  */
-export type CustomerOrderStatus = "DRAFT" | "CONFIRMED" | "IN_FULFILLMENT" | "CANCELLED";
+export type CustomerOrderStatus =
+  | "DRAFT"
+  | "CONFIRMED"
+  | "IN_FULFILLMENT"
+  | "PARTIALLY_SHIPPED"
+  | "SHIPPED"
+  | "CANCELLED";
 
 export const CUSTOMER_ORDER_STATUS_LABELS: Record<CustomerOrderStatus, string> = {
   DRAFT: "Rascunho",
   CONFIRMED: "Confirmado",
   IN_FULFILLMENT: "Em atendimento",
+  PARTIALLY_SHIPPED: "Parcialmente expedido",
+  SHIPPED: "Expedido",
   CANCELLED: "Cancelado",
 };
 
@@ -22,6 +30,8 @@ export const CUSTOMER_ORDER_STATUSES: readonly CustomerOrderStatus[] = [
   "DRAFT",
   "CONFIRMED",
   "IN_FULFILLMENT",
+  "PARTIALLY_SHIPPED",
+  "SHIPPED",
   "CANCELLED",
 ];
 
@@ -38,6 +48,10 @@ export interface CustomerOrderLineDTO {
   orderedQuantity: string;
   unitCode: string;
   position: number;
+  /** Soma das ShipmentLines de Expedições CONFIRMED — sempre derivada, nunca coluna própria. */
+  shippedQuantity: string;
+  /** `orderedQuantity - shippedQuantity`, nunca negativo. */
+  outstandingQuantity: string;
 }
 
 export interface CustomerOrderReservationLineDTO {
@@ -51,8 +65,21 @@ export interface CustomerOrderReservationLineDTO {
   lotId: string | null;
   lotCode: string | null;
   businessLotNumber: string | null;
+  expiryDate: string | null;
+  location: string | null;
+  lotStatus: string | null;
   quantity: string;
   unitCode: string;
+  /** Soma já expedida desta linha (Expedições CONFIRMED). */
+  shippedQuantity: string;
+  /** `quantity - shippedQuantity`, nunca negativo — o que ainda pode ser expedido/realocado. */
+  reservedRemaining: string;
+  /** Preenchidos quando o remanescente foi realocado para outro lote — nunca apagada. */
+  releasedAt: string | null;
+  releasedBy: string | null;
+  releaseReason: string | null;
+  /** `id` da linha original que esta linha substitui, quando nasceu de uma realocação. */
+  replacesLineId: string | null;
 }
 
 /**
@@ -69,6 +96,16 @@ export interface CustomerOrderReservationDTO {
   releasedBy: string | null;
   releaseReason: string | null;
   lines: CustomerOrderReservationLineDTO[];
+}
+
+export interface CustomerOrderShipmentSummaryDTO {
+  id: string;
+  code: string;
+  status: string;
+  shipmentDate: string | null;
+  /** Soma das quantidades das linhas desta Expedição. */
+  totalQuantity: string;
+  lineCount: number;
 }
 
 export interface CustomerOrderLinkedPurchaseOrderDTO {
@@ -112,6 +149,8 @@ export interface CustomerOrderDTO {
   generatedProductionOrders: CustomerOrderGeneratedProductionOrderDTO[];
   /** OCs (qualquer status) vinculadas a este Pedido pela Sugestão de Compra. */
   linkedPurchaseOrders: CustomerOrderLinkedPurchaseOrderDTO[];
+  /** Expedições deste Pedido (qualquer status) — só CONFIRMED conta como expedido. */
+  shipments: CustomerOrderShipmentSummaryDTO[];
   confirmedAt: string | null;
   confirmedBy: string | null;
   cancelledAt: string | null;

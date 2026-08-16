@@ -214,12 +214,15 @@ export async function blockLot(id: string, reason: string): Promise<LotDTO> {
     );
   }
 
-  // Uma OP RELEASED pode estar contando com este lote — bloquear agora
-  // corromperia a reserva ativa. Nao cancela a OP/reserva automaticamente.
+  // Uma OP RELEASED ou um Pedido do Cliente pode estar contando com este
+  // lote — bloquear agora corromperia a reserva ativa. `getReservedByLots`
+  // ja cobre os dois compromissos (MaterialReservation de producao e
+  // CustomerOrderReservation de produto acabado), liquidos de consumo/
+  // expedicao — nunca checar so um deles. Nao cancela nada em cascata.
   const reserved = (await getReservedByLots(getPrisma(), [id])).get(id) ?? new Prisma.Decimal(0);
   if (reserved.greaterThan(0)) {
     throw new InvalidLotTransitionError(
-      "Este lote possui reservas ativas de Ordens de Produção — não pode ser bloqueado nesta fase.",
+      "Este lote possui quantidade reservada — não pode ser bloqueado nesta fase.",
     );
   }
 

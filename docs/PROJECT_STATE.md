@@ -27,6 +27,7 @@ FAST MVP.
 **Delivery 15 — Produção Parcial + Produto Acabado + Rastreabilidade: concluído.**
 **Delivery 16 — Pedido do Cliente + Plano de Atendimento (Bloco D): concluído.**
 **Delivery 17 — Sugestão de Compra + Geração de OC DRAFT (Bloco D, capacidade 26): concluído.**
+**Delivery 18 — Separação + Expedição (Bloco D, capacidade 27): concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -43,9 +44,11 @@ Bloco C completo (Formulações + Versionamento + OP + Requirement
 Calculation + Reservation + QR Picking + Actual Consumption + Partial
 Production/conclusão da OP + Finished Product + Rastreabilidade
 bidirecional). Bloco D — Pedido do Cliente/Plano de Atendimento/Reserva de
-Produto Acabado/Geração de OPs Sugeridas/Sugestão de Compra (22-26) —
-também completo. Só falta Usuários (Bloco A) dentro do escopo MVP
-travado; Expedição/Faturamento (27-28) ainda não iniciados.
+Produto Acabado/Geração de OPs Sugeridas/Sugestão de Compra/Expedição
+(22-27) — também completo. Só falta Usuários (Bloco A) dentro do escopo
+MVP travado; Faturamento (28) é o próximo, seguido do **Bloco E —
+Gestão, Relatórios & Exportações** (29-31), camada transversal já
+oficializada no roadmap mas ainda não iniciada.
 
 ## Stack instalada
 
@@ -77,11 +80,16 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  [apontamentos parciais + conclusão]/Origem [Pedido do
                  Cliente, quando aplicável]) / Picking / Consumo (lista
                  RELEASED/IN_PRODUCTION), Comercial > Pedidos (lista +
-                 documento DRAFT/CONFIRMED/IN_FULFILLMENT/CANCELLED, seções
-                 Produtos/Plano de Atendimento [editável antes de aplicar]/
-                 Sugestão de Compra [quantidade+fornecedor editáveis]/
-                 Ordens de Compra Vinculadas/Reservas de Produto Acabado/
-                 OPs Geradas)
+                 documento DRAFT/CONFIRMED/IN_FULFILLMENT/
+                 PARTIALLY_SHIPPED/SHIPPED/CANCELLED, seções Produtos
+                 [expedido/falta expedir]/Plano de Atendimento [editável
+                 antes de aplicar]/Sugestão de Compra [quantidade+
+                 fornecedor editáveis]/Reserva de Produto Acabado
+                 [complementar + Preparar Expedição]/Expedições/Ordens de
+                 Compra Vinculadas/Reservas de Produto Acabado [com
+                 realocação]/OPs Geradas) + Expedições (lista + documento
+                 DRAFT/CONFIRMED/CANCELLED, separação editável e bloco
+                 read-only pós-confirmação)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders (+
                  /confirm, /cancel), /receipts, /lots (+ /lots/lookup,
@@ -95,7 +103,9 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /consumptions, /outputs, /complete), /customer-orders (+
                  /confirm, /cancel, /fulfillment-plan,
                  /apply-fulfillment-plan, /purchase-suggestion,
-                 /purchase-drafts)
+                 /purchase-drafts, /shipments, /reservation-status,
+                 /reserve-available, /reallocate-reservation-line),
+                 /shipments (+ /confirm, /cancel)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder
                  [origin MANUAL/CUSTOMER_ORDER, customerOrderId/Code],
@@ -117,7 +127,10 @@ packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  PurchaseSuggestionRowDTO [remainingRequired/ownReserved/
                  globalReserved/available/onOrder/operationalShortage/
                  draftPurchaseQuantity/suggestedAdditionalPurchase/
-                 newSuggestedPurchase], CNPJ, UFs)
+                 newSuggestedPurchase], Shipment/ShipmentLine [DRAFT/
+                 CONFIRMED/CANCELLED, reservedRemaining, snapshot],
+                 ReservationStatusDTO [stillToReserve/
+                 suggestedAdditionalReserve], CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -2041,6 +2054,159 @@ Inventory confirmada.
 
 ---
 
+# Delivery 18 — Separação + Expedição (Bloco D, capacidade 27)
+
+Fecha o fluxo físico de saída: Pedido IN_FULFILLMENT → produto acabado
+reservado → separação → expedição parcial ou total → `SHIPMENT_OUT` →
+On Hand e Reserved caem juntos → status do Pedido derivado. Validada só
+em desktop web — sem ferramenta de browser nesta sessão, ver "Pendente".
+
+## Modelagem — Shipment/ShipmentLine
+
+- `Shipment`: `code` (sequence `shipment_code_seq`, prefixo `EXP`),
+  `customerOrderId`, `status` (`DRAFT`/`CONFIRMED`/`CANCELLED`),
+  `shipmentDate?`, `notes?`, auditoria de confirmação/cancelamento.
+  **No máximo uma DRAFT por Pedido**, garantido por índice parcial
+  (`WHERE status = 'DRAFT'`) — mesma técnica do CNPJ opcional e da versão
+  ACTIVE única de formulação; validado por teste que insere direto no
+  banco contornando o service.
+- `ShipmentLine`: sempre ligada a uma `CustomerOrderReservationLine`
+  específica (só se expede o que está reservado AO MESMO Pedido) +
+  `customerOrderLineId`/`productId`/`itemId`/`lotId`/`quantity`/
+  `unitCode`/`position`, com snapshot histórico preenchido na
+  confirmação (product/finishedItem/lot/businessLotNumber) — base do
+  futuro Faturamento.
+- `InventoryMovement` ganhou `SHIPMENT_OUT`/`sourceType: SHIPMENT` +
+  `shipmentLineId?` único (FK 1:1 real, mesmo padrão de
+  `receiptLineId`/`productionConsumptionId`/`productionOutputId`).
+- `CustomerOrderStatus` ganhou `PARTIALLY_SHIPPED`/`SHIPPED`;
+  `CustomerOrderReservationLine` ganhou `releasedAt/By/Reason` +
+  `replacesLineId` (1:N — diferente da substituição 1:1 do Picking, aqui
+  o remanescente pode ser dividido em vários lotes). Migrations
+  `20260827090000_shipments` + `20260827091500_reservation_line_realloc_one_to_many`.
+
+## Reserved/Available — expedir nunca reduz Available duas vezes
+
+`getReservedByItems/Lots` passaram a considerar, para reserva de Pedido,
+apenas o **remanescente**: `quantity - expedido em Shipments CONFIRMED`,
+excluindo linhas realocadas (`releasedAt`). Mesma filosofia já usada para
+`MaterialReservation - ProductionConsumption`. Resultado (teste
+obrigatório do handoff, coberto exatamente): On Hand 1000/Reserved 600/
+Available 400 → expede 200 → 800/400/400 → expede os 400 → 400/0/400.
+Nenhum módulo recalcula isso em paralelo.
+
+## Separação × Expedição confirmada
+
+`POST /customer-orders/:id/shipments` cria a DRAFT já pré-preenchida com
+o reservado disponível de cada lote, limitado pelo que ainda falta
+expedir de cada linha do Pedido. DRAFT nunca altera On Hand/Reserved/
+status do Pedido, e cancelar (motivo obrigatório) não altera nada —
+permite preparar outra depois. `PATCH /shipments/:id` ajusta quantidades
+(`0 <= qty <= reservedRemaining`).
+
+`POST /shipments/:id/confirm` é a **única** operação que altera estoque:
+transação única que trava Shipment → Pedido → Items → Lotes em ordem
+determinística, revalida a reserva, revalida a elegibilidade do lote
+AGORA (vencido/bloqueado/aguardando Qualidade é rejeitado mesmo que a
+reserva seja anterior), confere saldo físico real, cria exatamente 1
+`SHIPMENT_OUT` por linha, grava o snapshot e recalcula o status do
+Pedido. Rollback completo em qualquer falha. CONFIRMED é imutável — não
+edita, não reconfirma, não cancela.
+
+## Status do Pedido é sempre derivado
+
+`PARTIALLY_SHIPPED`/`SHIPPED` saem 100% das ShipmentLines confirmadas —
+não existe botão "marcar como enviado" nem PATCH manual de status.
+`SHIPPED` = toda linha teve a quantidade pedida integralmente expedida; a
+reserva ACTIVE remanescente é liberada na mesma transação
+(`ORDER_SHIPPED`), sem gerar `InventoryMovement`. Depois de `SHIPPED`:
+nada de nova expedição, nova reserva, edição de linhas ou cancelamento
+simples.
+
+## Reserva complementar — resolve a lacuna do produto produzido depois
+
+`GET /customer-orders/:id/reservation-status` calcula por linha:
+`ordered`/`shipped`/`reservedRemaining`/`stillToReserve = ordered -
+shipped - reservedRemaining`/`currentAvailable`/
+`suggestedAdditionalReserve = min(stillToReserve, currentAvailable)`.
+`POST .../reserve-available` é **explícito** (nunca automático ao criar
+um `ProductionOutput`): trava Pedido + Items, recalcula Available,
+aloca por FEFO/FIFO com o MESMO `allocation.service.ts` e acrescenta
+linhas à reserva ACTIVE existente — nunca sobrescreve histórico, nunca
+cria `InventoryMovement`. Lote produzido em `AWAITING_RELEASE` aparece em
+On Hand mas com Available 0 e não é reservável; após a liberação da
+Qualidade passa a ser — sem nenhuma integração especial (coberto por
+teste ponta a ponta).
+
+## Realocação de reserva
+
+`POST .../reallocate-reservation-line` realoca o remanescente não
+expedido de uma linha cujo lote deixou de ser elegível — evita Pedido
+permanentemente travado. A linha original nunca é apagada: fica marcada
+como liberada e as novas linhas (podem ser várias, FEFO) apontam de volta
+via `replacesLineId`. O já expedido continua referenciando a linha e o
+lote originais — genealogia preservada, confirmado por teste. Sem
+estoque suficiente → rollback completo (a linha original permanece
+ativa).
+
+## Hardening — bloqueio de lote
+
+`blockLot` já usava `getReservedByLots`, que agora cobre os **dois**
+compromissos (produção e Pedido do Cliente) — a regra passou a valer para
+reserva de produto acabado sem código novo; só a mensagem foi
+generalizada ("Este lote possui quantidade reservada").
+
+## Backend
+
+Módulo novo `shipments/` (`shipments.{errors,schemas,service,routes}.ts`
++ `reservation-status.service.ts`). `inventory.service.ts` passou a expor
+`shipmentId`/`shipmentCode` no movimento, para a tela de Movimentações
+existente identificar a Expedição de origem — sem tela paralela.
+
+## Frontend
+
+Comercial → **Expedições** (lista + documento próprio: separação editável
+em DRAFT, bloco read-only após confirmar — estruturado para a futura
+versão de impressão ser um recorte direto). `CustomerOrderPage` ganhou
+**Reserva de Produto Acabado** (status + "Reservar disponível" +
+"Preparar Expedição"), **Expedições** (histórico com link) e realocação
+na tabela de reservas; a tabela de Produtos passou a mostrar Expedido/
+Falta expedir. Movimentações linkam `SHIPMENT_OUT` → Expedição.
+
+## Testes
+
+19 novos testes em `shipments.test.ts`: DRAFT (código EXP-000001, não
+altera estoque, uma DRAFT por pedido garantida no banco, teto do
+reservado, cancelamento com motivo), confirmação (matemática crítica
+completa do handoff, exatamente 1 `SHIPMENT_OUT` por linha identificável
+pela Expedição, parcial → `PARTIALLY_SHIPPED` → `SHIPPED`, expedição
+única direto para `SHIPPED`, FEFO em múltiplos lotes, lote bloqueado/
+vencido/aguardando rejeitado, CONFIRMED imutável, `SHIPPED` bloqueia
+tudo, concorrência real de duas confirmações simultâneas), reserva
+complementar (AWAITING_RELEASE → liberação Quality, teto do pendente,
+concorrência entre dois Pedidos) e realocação (genealogia preservada,
+rollback sem estoque), mais o hardening de bloqueio de lote. Total da
+API: **313 testes** (294 + 19). Web: 8 testes (regressão).
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (313 API + 8 web) — ok em todo o
+monorepo. Regressão completa de CustomerOrder/Production/Purchasing/
+Inventory confirmada (zero teste quebrado pela mudança de
+`getReservedByItems/Lots`).
+
+## Pendente (real)
+
+- **Sem validação visual via Playwright/browser nesta sessão** — mesma
+  limitação de ambiente já registrada nas Deliveries 15-17. Fluxo de
+  expedição validado só via testes de integração reais (API) e
+  typecheck/build do frontend.
+- Faturamento (28) não iniciado; **Bloco E — Gestão, Relatórios &
+  Exportações** (29-31) oficializado no roadmap nesta entrega, sem
+  nenhuma implementação.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -2076,8 +2242,17 @@ Inventory confirmada.
 24. Finished-Product Reservation ✓
 25. Suggested Production Orders ✓
 26. Purchase Suggestion ✓
-27. Picking / Shipping
+27. Picking / Shipping ✓
 28. Invoicing
+
+## Block E — Management, Reports & Exports (transversal, registered)
+29. Executive/Operational Dashboard
+30. Reports
+31. CSV / PDF / Print exports
+
+Executado só **depois** de 26/27/28 e **antes** da validação ponta a
+ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial) e
+`docs/PRODUCT_RULES.md` §30 (princípios duráveis).
 
 ---
 
@@ -2202,6 +2377,40 @@ Inventory confirmada.
   reusing the exact same `PurchaseOrder` entity/lifecycle (never a second
   purchasing module) with `origin: CUSTOMER_ORDER` and a link back to the
   order. See `docs/PRODUCT_RULES.md` for full detail.
+- Confirmed at implementation (Delivery 18): reservation, separation and
+  confirmed shipment are three distinct concepts — only a CONFIRMED
+  Shipment changes stock; a DRAFT never touches On Hand/Reserved/order
+  status. A Shipment can only draw from quantity reserved to that same
+  Customer Order — finished product produced later must be explicitly
+  reserved first, never auto-reserved by a ProductionOutput. Confirming
+  creates exactly one `SHIPMENT_OUT` per line (real 1:1) and drops On Hand
+  and Reserved together, so shipping already-reserved stock never reduces
+  Available twice; a Customer Order reservation contributes only its
+  not-yet-shipped remainder, computed centrally in the ledger.
+  `shippedQuantity`/`reservedRemaining` are always derived from confirmed
+  ShipmentLines. `PARTIALLY_SHIPPED`/`SHIPPED` derive strictly from real
+  shipments — no manual "mark as shipped", no status PATCH — and reaching
+  `SHIPPED` releases any leftover active reservation in the same
+  transaction, without an inventory movement. Lot eligibility and physical
+  On Hand are revalidated at confirmation time. An ineligible lot's
+  not-yet-shipped remainder can be explicitly reallocated (FEFO, 1:N),
+  never deleting the original line — already-shipped quantity keeps
+  pointing at the original line/lot. A lot with remaining reserved
+  quantity from *either* commitment cannot be blocked. A CONFIRMED
+  Shipment is immutable; undoing a physical exit needs a future
+  return/re-entry flow. Future Invoicing is based on what was actually
+  shipped. See `docs/PRODUCT_RULES.md` §27 for full detail.
+- Registered at Delivery 18 (Product Ownership decision, not implemented):
+  **Block E — Management, Reports & Exports** (29-31) is a transversal
+  layer executed after Invoicing (28) and before the end-to-end demo.
+  Dashboards/reports are never a source of truth; KPIs derive from
+  operational entities; current state and period metrics stay clearly
+  separated; operational cockpit over complex BI. Export rules by surface:
+  listing → CSV; report → CSV + print/PDF; transactional document →
+  print/PDF; traceability → print/PDF; editing surface → no export. FAST
+  MVP uses print-oriented HTML + `window.print()` (no PDF library), and
+  CSV always exports the complete filtered result, not just the visible
+  page. See `docs/MVP_PLAN.md` and `docs/PRODUCT_RULES.md` §30.
 - Formula ACTIVE versions remain historical/immutable.
 - OP keeps exact formula version.
 - Insufficient Available stock blocks OP release by default.
@@ -2341,28 +2550,33 @@ Inventory confirmada.
 
 # Next recommended implementation
 
-Blocos A-C completos (exceto Usuários) e Bloco D até a capacidade 26
+Blocos A-C completos (exceto Usuários) e Bloco D até a capacidade 27
 (Pedido do Cliente, Plano de Atendimento, Reserva de Produto Acabado, OPs
-Sugeridas, Sugestão de Compra) também completo. Próximo passo natural de
-negócio é a evolução incremental restante do Bloco D: **Expedição/Picking
-de Pedido (27)** e **Faturamento (28)** — **não iniciados nesta entrega,
-por instrução explícita do handoff**; aguardam novo handoff de Product
-Ownership antes de começar. Reutilizar quando começar: `FullWorkspaceModal`
+Sugeridas, Sugestão de Compra, Expedição) também completo. Próximo passo
+do roadmap oficial: **Faturamento (28)** — baseado no que foi
+efetivamente expedido (`ShipmentLine` de Expedições CONFIRMED, nunca no
+pedido/reserva/planejado) — seguido do **Bloco E — Gestão, Relatórios &
+Exportações (29-31)**, camada transversal já oficializada mas ainda não
+iniciada, e só então validação ponta a ponta / demo. **Nada disso foi
+iniciado nesta entrega, por instrução explícita do handoff**; aguardam
+novo handoff de Product Ownership. Reutilizar quando começar: `FullWorkspaceModal`
 + `components.css` para cadastros simples; padrão de página própria (ver
 Ordem de Compra/Recebimento/editor de Formulação/OP/Pedido) para novos
 documentos transacionais; `apps/api/src/lib/inventory-ledger.ts`
 (`getReservedByItems/Lots` já somam MaterialReservation +
-CustomerOrderReservation, `getAvailableByItems`, `getOnOrderByItems`)
-para qualquer cálculo futuro de saldo; `CustomerOrderReservation`/
-`CustomerOrderLine` já modelam o compromisso comercial — Expedição
-consumirá essas reservas fisicamente (gerando `InventoryMovement` de
-saída, ainda não implementado, provável novo `InventoryMovementType`
-tipo `SHIPMENT`); `PurchaseOrder.origin`/`customerOrderId` e
+CustomerOrderReservation líquida de expedição, `getAvailableByItems`,
+`getOnOrderByItems`) para qualquer cálculo futuro de saldo;
+`Shipment`/`ShipmentLine` CONFIRMED são a base direta do Faturamento (a
+quantidade real expedida, com snapshot próprio já preservado);
+`PurchaseOrder.origin`/`customerOrderId` e
 `createDraftPurchaseOrderInTx` já estabelecem o padrão "endpoint gera
-documento DRAFT vinculado, usuário confirma depois" — Faturamento poderá
-seguir o mesmo padrão; `traceability.service.ts` já resolve genealogia
-real, reutilizável para qualquer tela futura de rastreabilidade por
-Pedido/Expedição.
+documento DRAFT vinculado, usuário confirma depois" — Faturamento deve
+seguir exatamente o mesmo padrão; `traceability.service.ts` já resolve
+genealogia real, reutilizável para qualquer tela futura de
+rastreabilidade por Pedido/Expedição; a rota de impressão da etiqueta de
+lote (fora do `AppShell`, CSS de impressão próprio) é o padrão a
+reaproveitar no Bloco E para impressão/PDF, e a página da Expedição já
+foi estruturada como bloco read-only pensando nisso.
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

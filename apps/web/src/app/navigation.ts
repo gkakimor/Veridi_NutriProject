@@ -56,7 +56,10 @@ export const navigation: NavGroup[] = [
   },
   {
     title: "Comercial",
-    items: [{ label: "Pedidos", path: "/comercial/pedidos", implemented: true }],
+    items: [
+      { label: "Pedidos", path: "/comercial/pedidos", implemented: true },
+      { label: "Expedições", path: "/comercial/expedicoes", implemented: true },
+    ],
   },
   {
     title: "Estoque",

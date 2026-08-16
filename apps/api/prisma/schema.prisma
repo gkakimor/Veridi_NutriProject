@@ -51,6 +51,7 @@ enum InventoryMovementType {
   LOSS
   PRODUCTION_CONSUMPTION
   FINISHED_GOOD_PRODUCTION
+  SHIPMENT_OUT
 }
 
 enum InventoryMovementSourceType {
@@ -60,6 +61,7 @@ enum InventoryMovementSourceType {
   MANUAL_LOSS
   PRODUCTION_CONSUMPTION
   FINISHED_GOOD_PRODUCTION
+  SHIPMENT
 }
 
 /// Lote recebido (RECEIPT, Supplier/Receipt/OC) ou lote produzido
@@ -106,12 +108,23 @@ enum CustomerOrderStatus {
   DRAFT
   CONFIRMED
   IN_FULFILLMENT
+  PARTIALLY_SHIPPED
+  SHIPPED
   CANCELLED
 }
 
 enum CustomerOrderReservationStatus {
   ACTIVE
   RELEASED
+}
+
+/// DRAFT e so separacao (nunca altera estoque); CONFIRMED e a saida fisica
+/// real (gera SHIPMENT_OUT) e e historico imutavel — reversao exigiria
+/// devolucao/reentrada explicita, nao implementada nesta fase.
+enum ShipmentStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
 }
 
 /// ACTIVE conta em Reserved; RELEASED (a reserva foi liberada — ex.:
@@ -182,6 +195,7 @@ model Item {
   materialReservationLines MaterialReservationLine[]
   productionConsumptions ProductionConsumption[]
   customerOrderReservationLines CustomerOrderReservationLine[]
+  shipmentLines ShipmentLine[]
 
   @@index([type])
   @@index([active])
@@ -293,6 +307,7 @@ model Product {
   productionOrders    ProductionOrder[]
   customerOrderLines  CustomerOrderLine[]
   customerOrderReservationLines CustomerOrderReservationLine[]
+  shipmentLines       ShipmentLine[]
 
   @@index([active])
   @@index([customerId])
@@ -607,6 +622,7 @@ model Lot {
   productionConsumptions ProductionConsumption[]
   productionOutputs ProductionOutput[]
   customerOrderReservationLines CustomerOrderReservationLine[]
+  shipmentLines ShipmentLine[]
 
   @@index([itemId])
   @@index([supplierId])
@@ -658,6 +674,11 @@ model InventoryMovement {
   /// banco que um ProductionOutput gera no maximo um movimento.
   productionOutputId String?            @unique
   productionOutput   ProductionOutput? @relation(fields: [productionOutputId], references: [id], onDelete: Cascade)
+
+  /// Preenchido so para SHIPMENT_OUT — FK real 1:1, garante no banco que
+  /// uma ShipmentLine confirmada gera no maximo um movimento de saida.
+  shipmentLineId String?       @unique
+  shipmentLine   ShipmentLine? @relation(fields: [shipmentLineId], references: [id], onDelete: Cascade)
 
   /// Obrigatorio (validado no service) para ajuste/perda; sempre null em RECEIPT_IN.
   reason String?
@@ -1013,6 +1034,7 @@ model CustomerOrder {
   reservations     CustomerOrderReservation[]
   productionOrders ProductionOrder[]
   purchaseOrders   PurchaseOrder[]
+  shipments        Shipment[]
 
   @@index([status])
   @@index([customerId])
@@ -1049,6 +1071,7 @@ model CustomerOrderLine {
 
   reservationLines CustomerOrderReservationLine[]
   productionOrders ProductionOrder[]
+  shipmentLines    ShipmentLine[]
 
   @@unique([customerOrderId, productId])
   @@map("customer_order_lines")
@@ -1104,9 +1127,119 @@ model CustomerOrderReservationLine {
 
   quantity Decimal @db.Decimal(18, 6)
 
+  /// Preenchidos quando o remanescente desta linha e realocado para outro
+  /// lote (ex.: lote venceu antes da expedicao) — nunca apagada, so
+  /// marcada. Reserved considera so linhas com releasedAt null; o que ja
+  /// foi expedido continua referenciando esta linha historica.
+  releasedAt    DateTime?
+  releasedBy    String?
+  releaseReason String?
+
+  /// Self-relacao: a linha NOVA de uma realocacao aponta para a ORIGINAL
+  /// que ela substitui. Diferente de MaterialReservationLine (substituicao
+  /// 1:1 no Picking), aqui e 1:N — o remanescente pode ser dividido em
+  /// varios lotes pelo allocation service.
+  replacesLineId  String?
+  replacesLine    CustomerOrderReservationLine?  @relation("CustomerReservationLineSubstitution", fields: [replacesLineId], references: [id])
+  replacedByLines CustomerOrderReservationLine[] @relation("CustomerReservationLineSubstitution")
+
   createdAt DateTime @default(now())
+
+  shipmentLines ShipmentLine[]
 
   @@index([itemId])
   @@index([lotId])
   @@map("customer_order_reservation_lines")
+}
+
+/// Expedicao (saida fisica de produto acabado de um Pedido). DRAFT e so
+/// separacao — nunca altera estoque nem conta como expedido. CONFIRMED e a
+/// realidade fisica: gera exatamente 1 InventoryMovement SHIPMENT_OUT por
+/// linha e e historico imutavel (nunca cancelavel nesta fase). No maximo
+/// uma DRAFT ativa por Pedido (garantido por indice parcial na migration).
+model Shipment {
+  id String @id @default(uuid())
+
+  /// Codigo interno gerado pelo backend (sequence dedicada, EXP-000001).
+  /// Imutavel apos a criacao.
+  code String @unique
+
+  customerOrderId String
+  customerOrder   CustomerOrder @relation(fields: [customerOrderId], references: [id])
+
+  status ShipmentStatus @default(DRAFT)
+
+  /// Preenchida na confirmacao — data da saida fisica real.
+  shipmentDate DateTime?
+  notes        String?
+
+  confirmedAt DateTime?
+  confirmedBy String?
+
+  cancelledAt  DateTime?
+  cancelledBy  String?
+  cancelReason String?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines ShipmentLine[]
+
+  @@index([customerOrderId])
+  @@index([status])
+  @@map("shipments")
+}
+
+/// Linha de expedicao — sempre ligada a uma CustomerOrderReservationLine
+/// especifica (so se expede o que esta reservado AO MESMO Pedido, nunca
+/// estoque livre/reserva de outro Pedido/reserva de material de producao).
+/// Snapshot preenchido na confirmacao, para leitura historica e base do
+/// futuro Faturamento (que se baseia no realmente expedido).
+model ShipmentLine {
+  id String @id @default(uuid())
+
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  customerOrderLineId String
+  customerOrderLine   CustomerOrderLine @relation(fields: [customerOrderLineId], references: [id])
+
+  customerOrderReservationLineId String
+  customerOrderReservationLine   CustomerOrderReservationLine @relation(fields: [customerOrderReservationLineId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  /// Nullable por simetria com as demais linhas do sistema, mas o service
+  /// exige lote real — Finished Product do MVP sempre controla lote.
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  quantity Decimal @db.Decimal(18, 6)
+  unitCode String
+
+  /// Ordem de exibicao estavel.
+  position Int
+
+  /// Snapshot historico — preenchido so na confirmacao.
+  productCode       String?
+  productName       String?
+  finishedItemCode  String?
+  finishedItemName  String?
+  lotCode           String?
+  businessLotNumber String?
+
+  createdAt DateTime @default(now())
+
+  inventoryMovement InventoryMovement?
+
+  @@index([shipmentId])
+  @@index([customerOrderLineId])
+  @@index([customerOrderReservationLineId])
+  @@index([lotId])
+  @@map("shipment_lines")
 }

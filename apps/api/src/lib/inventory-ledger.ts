@@ -82,6 +82,33 @@ export async function getConsumedByReservationLines(
 }
 
 /**
+ * Expedido por CustomerOrderReservationLine — soma das ShipmentLine de
+ * Expedicoes CONFIRMED. Base do `reservedRemaining` do produto acabado:
+ * expedir estoque ja reservado baixa On Hand e Reserved juntos, entao
+ * Available nunca cai duas vezes (mesmo principio do Consumo x
+ * MaterialReservation na producao). DRAFT/CANCELLED nunca contam.
+ */
+export async function getShippedByCustomerReservationLines(
+  prisma: PrismaOrTx,
+  reservationLineIds: string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  if (reservationLineIds.length === 0) return new Map();
+  const grouped = await prisma.shipmentLine.groupBy({
+    by: ["customerOrderReservationLineId"],
+    where: {
+      customerOrderReservationLineId: { in: reservationLineIds },
+      shipment: { status: "CONFIRMED" },
+    },
+    _sum: { quantity: true },
+  });
+  const map = new Map<string, Prisma.Decimal>();
+  for (const row of grouped) {
+    map.set(row.customerOrderReservationLineId, row._sum.quantity ?? new Prisma.Decimal(0));
+  }
+  return map;
+}
+
+/**
  * Reserved por item — soma de DOIS compromissos, nunca um calculo paralelo
  * por modulo:
  * 1. MaterialReservationLine de reservas ACTIVE (materia-prima/embalagem de
@@ -89,10 +116,11 @@ export async function getConsumedByReservationLines(
  *    Picking) e descontando o que ja foi efetivamente consumido
  *    (`quantity - consumido`, nunca negativo);
  * 2. CustomerOrderReservationLine de reservas ACTIVE (produto acabado de
- *    Pedido do Cliente) — quantidade cheia, sem desconto de consumo (nao ha
- *    conceito de consumo parcial de PA reservado nesta fase).
+ *    Pedido do Cliente), excluindo linhas realocadas (`releasedAt`
+ *    preenchido) e descontando o que ja foi efetivamente expedido
+ *    (`quantity - expedido`, nunca negativo).
  * RELEASED (reserva liberada) nunca conta em nenhum dos dois. Nunca uma
- * segunda quantidade fora das tabelas de reserva/consumo.
+ * segunda quantidade fora das tabelas de reserva/consumo/expedicao.
  */
 export async function getReservedByItems(
   prisma: PrismaOrTx,
@@ -105,14 +133,20 @@ export async function getReservedByItems(
       select: { id: true, itemId: true, quantity: true },
     }),
     prisma.customerOrderReservationLine.findMany({
-      where: { itemId: { in: itemIds }, reservation: { status: "ACTIVE" } },
-      select: { itemId: true, quantity: true },
+      where: { itemId: { in: itemIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
+      select: { id: true, itemId: true, quantity: true },
     }),
   ]);
-  const consumedByLine = await getConsumedByReservationLines(
-    prisma,
-    lines.map((line) => line.id),
-  );
+  const [consumedByLine, shippedByLine] = await Promise.all([
+    getConsumedByReservationLines(
+      prisma,
+      lines.map((line) => line.id),
+    ),
+    getShippedByCustomerReservationLines(
+      prisma,
+      customerOrderLines.map((line) => line.id),
+    ),
+  ]);
 
   const map = new Map<string, Prisma.Decimal>();
   for (const line of lines) {
@@ -122,13 +156,15 @@ export async function getReservedByItems(
     map.set(line.itemId, current.plus(remaining));
   }
   for (const line of customerOrderLines) {
+    const shipped = shippedByLine.get(line.id) ?? new Prisma.Decimal(0);
+    const remaining = Prisma.Decimal.max(line.quantity.minus(shipped), 0);
     const current = map.get(line.itemId) ?? new Prisma.Decimal(0);
-    map.set(line.itemId, current.plus(line.quantity));
+    map.set(line.itemId, current.plus(remaining));
   }
   return map;
 }
 
-/** Versao por lote de `getReservedByItems` — mesma regra (os dois compromissos, ACTIVE, liquida de consumo so para MP). */
+/** Versao por lote de `getReservedByItems` — mesma regra (os dois compromissos, ACTIVE, liquidos de consumo/expedicao). */
 export async function getReservedByLots(
   prisma: PrismaOrTx,
   lotIds: string[],
@@ -140,14 +176,20 @@ export async function getReservedByLots(
       select: { id: true, lotId: true, quantity: true },
     }),
     prisma.customerOrderReservationLine.findMany({
-      where: { lotId: { in: lotIds }, reservation: { status: "ACTIVE" } },
-      select: { lotId: true, quantity: true },
+      where: { lotId: { in: lotIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
+      select: { id: true, lotId: true, quantity: true },
     }),
   ]);
-  const consumedByLine = await getConsumedByReservationLines(
-    prisma,
-    lines.map((line) => line.id),
-  );
+  const [consumedByLine, shippedByLine] = await Promise.all([
+    getConsumedByReservationLines(
+      prisma,
+      lines.map((line) => line.id),
+    ),
+    getShippedByCustomerReservationLines(
+      prisma,
+      customerOrderLines.map((line) => line.id),
+    ),
+  ]);
 
   const map = new Map<string, Prisma.Decimal>();
   for (const line of lines) {
@@ -159,8 +201,10 @@ export async function getReservedByLots(
   }
   for (const line of customerOrderLines) {
     if (!line.lotId) continue;
+    const shipped = shippedByLine.get(line.id) ?? new Prisma.Decimal(0);
+    const remaining = Prisma.Decimal.max(line.quantity.minus(shipped), 0);
     const current = map.get(line.lotId) ?? new Prisma.Decimal(0);
-    map.set(line.lotId, current.plus(line.quantity));
+    map.set(line.lotId, current.plus(remaining));
   }
   return map;
 }

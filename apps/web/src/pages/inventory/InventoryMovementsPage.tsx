@@ -174,6 +174,14 @@ export function InventoryMovementsPage() {
                     >
                       <span className="code">{movement.receiptCode}</span>
                     </button>
+                  ) : movement.shipmentId ? (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => navigate(`/comercial/expedicoes/${movement.shipmentId}`)}
+                    >
+                      <span className="code">{movement.shipmentCode}</span>
+                    </button>
                   ) : (
                     "—"
                   )}

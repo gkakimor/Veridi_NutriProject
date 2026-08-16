@@ -13,7 +13,8 @@ export type InventoryMovementType =
   | "ADJUSTMENT_OUT"
   | "LOSS"
   | "PRODUCTION_CONSUMPTION"
-  | "FINISHED_GOOD_PRODUCTION";
+  | "FINISHED_GOOD_PRODUCTION"
+  | "SHIPMENT_OUT";
 
 export const INVENTORY_MOVEMENT_TYPES: readonly InventoryMovementType[] = [
   "RECEIPT_IN",
@@ -22,6 +23,7 @@ export const INVENTORY_MOVEMENT_TYPES: readonly InventoryMovementType[] = [
   "LOSS",
   "PRODUCTION_CONSUMPTION",
   "FINISHED_GOOD_PRODUCTION",
+  "SHIPMENT_OUT",
 ];
 
 export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, string> = {
@@ -31,6 +33,7 @@ export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, strin
   LOSS: "Perda",
   PRODUCTION_CONSUMPTION: "Consumo de produção",
   FINISHED_GOOD_PRODUCTION: "Entrada — Produção",
+  SHIPMENT_OUT: "Saída — Expedição",
 };
 
 /**
@@ -44,6 +47,7 @@ export const INVENTORY_MOVEMENT_DIRECTION: Record<InventoryMovementType, 1 | -1>
   LOSS: -1,
   PRODUCTION_CONSUMPTION: -1,
   FINISHED_GOOD_PRODUCTION: 1,
+  SHIPMENT_OUT: -1,
 };
 
 export type InventoryMovementSourceType =
@@ -52,7 +56,8 @@ export type InventoryMovementSourceType =
   | "STOCK_COUNT"
   | "MANUAL_LOSS"
   | "PRODUCTION_CONSUMPTION"
-  | "FINISHED_GOOD_PRODUCTION";
+  | "FINISHED_GOOD_PRODUCTION"
+  | "SHIPMENT";
 
 export const INVENTORY_MOVEMENT_SOURCE_LABELS: Record<InventoryMovementSourceType, string> = {
   RECEIPT: "Recebimento",
@@ -61,6 +66,7 @@ export const INVENTORY_MOVEMENT_SOURCE_LABELS: Record<InventoryMovementSourceTyp
   MANUAL_LOSS: "Perda manual",
   PRODUCTION_CONSUMPTION: "Consumo de produção",
   FINISHED_GOOD_PRODUCTION: "Produção",
+  SHIPMENT: "Expedição",
 };
 
 export interface InventoryMovementDTO {
@@ -81,6 +87,9 @@ export interface InventoryMovementDTO {
   receiptCode: string | null;
   purchaseOrderId: string | null;
   purchaseOrderCode: string | null;
+  /** Preenchidos só para `SHIPMENT_OUT` — identifica a Expedição de origem. */
+  shipmentId: string | null;
+  shipmentCode: string | null;
   reason: string | null;
   createdBy: string | null;
   createdAt: string;

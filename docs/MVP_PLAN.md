@@ -41,40 +41,59 @@ The MVP should be operationally useful from the first releases and must not atte
 20. Partial Production / Completion
 21. Finished Product
 
-## Block D — Orders & Fulfillment (roadmap, not yet started)
-22. Customer Order
-23. Availability Analysis / Fulfillment Plan
-24. Finished-Product Reservation
-25. Suggested Production Orders
-26. Purchase Suggestion
-27. Picking / Shipping
+## Block D — Orders & Fulfillment
+22. Customer Order ✓
+23. Availability Analysis / Fulfillment Plan ✓
+24. Finished-Product Reservation ✓
+25. Suggested Production Orders ✓
+26. Purchase Suggestion ✓
+27. Picking / Shipping ✓
 28. Invoicing
 
-Block D depends on the foundation from Blocks B/C already existing/planned:
-Inventory, Reservation, Formulations, Production Order, Finished Product. It
-must not be implemented before those dependencies are complete.
+Block D depends on the foundation from Blocks B/C: Inventory, Reservation,
+Formulations, Production Order, Finished Product — all complete.
 
-The 21-step Block A–C sequence stays fixed unless Product Ownership
-explicitly changes it. Block D is additive roadmap, registered for
-planning — it does not change the Block A–C sequence or priority.
+## Block E — Management, Reports & Exports (transversal layer)
+29. Executive/Operational Dashboard
+30. Reports
+31. CSV / PDF / Print exports
+
+Block E is a **transversal layer**, executed only **after** 26 (Purchase
+Suggestion), 27 (Shipping) and 28 (Invoicing) are done, and **before**
+end-to-end validation / final demo. It reads existing operational
+entities — it never introduces a new source of truth.
+
+---
+
+# Official roadmap (Product Ownership decision)
+
+```text
+26 Purchase Suggestion ✓
+→ 27 Shipping ✓
+→ 28 Invoicing
+→ 29 Executive/Operational Dashboard
+→ 30 Reports
+→ 31 CSV/PDF/Print exports
+→ end-to-end validation / demo
+→ responsive/mobile hardening
+→ later technical hardening
+```
 
 ---
 
 # Roadmap classification
 
-**MVP Core** — steps 1–21 (Blocks A–C). Current implementation scope.
+**MVP Core** — steps 1–21 (Blocks A–C). Complete except Users.
 
-**MVP Ampliado (strong candidates)** — steps 22–25 (Customer Order,
-Availability Analysis / Fulfillment Plan, Finished-Product Reservation,
-Suggested Production Orders). Not scheduled; promotion to implementation
-requires an explicit Product Owner decision once Block B/C dependencies
-above are done.
+**MVP Ampliado** — steps 22–25 (Customer Order, Availability Analysis /
+Fulfillment Plan, Finished-Product Reservation, Suggested Production
+Orders). Complete.
 
 **Evolução incremental** — steps 26–28 (Purchase Suggestion, Picking /
-Shipping, Invoicing). Later-stage capabilities, further out than 22–25.
+Shipping, Invoicing). 26 and 27 complete; 28 (Invoicing) is next.
 
-Classification does not imply a start date. No Block D item is implemented
-or scheduled as of this registration.
+**Transversal layer** — steps 29–31 (Block E). Registered officially, not
+started. Must not begin before Invoicing (28) is done.
 
 ---
 
