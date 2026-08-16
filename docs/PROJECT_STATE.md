@@ -53,6 +53,9 @@ ter identidade real de usuário e execução de produção por parte.**
 **Delivery 29 — Qualidade documental / CoA / Anexos (Bloco F, capacidade
 37): concluído — laudo por lote com estado próprio, anexos auditáveis e
 fila da Qualidade.**
+**Delivery 30 — Projetos + Orçamentos versionados (Bloco F, capacidade
+38): concluído — o funil private label entra no sistema, com aprovação
+convertendo projeto em Produto.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2909,6 +2912,67 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 30 — Projetos + Orçamentos versionados (Bloco F, capacidade 38)
+
+## Project ≠ Product
+`Project` é o funil comercial ANTES do produto existir; `Product` é o
+produto aprovado e operacional. Aprovar o projeto é o momento em que um
+vira o outro — nunca conversão automática no cadastro.
+
+- Código próprio `PROJ-000001` + `externalCode` da planilha (`0001PL`),
+  que pode coincidir com `Product.externalCode`.
+- Cliente obrigatório; trocável só enquanto não houver orçamento
+  formalizado (`SENT`/`ACCEPTED`/…), porque depois disso mudaria história.
+- Pipeline `WAITING/SAMPLE/APPROVED/CANCELLED/STAND_BY` com
+  `ProjectStatusHistory` imutável. Aprovado/cancelado são terminais e
+  somente leitura. Cancelar exige motivo (`OTHER` exige descrição).
+- Conceito e canal são vocabulário ABERTO: texto livre com sugestão dos
+  valores já usados (`GET /projects/vocabulary`), nunca enum.
+- Brief técnico (forma, apresentação, dose, vida útil…) fica no projeto e
+  é copiado para o Product na aprovação.
+
+## Orçamentos versionados
+`QuoteVersion` com código global `ORC-000001` + `V1..Vn`
+(`@@unique(projectId, versionNumber)`), status
+`DRAFT/SENT/ACCEPTED/REJECTED/SUPERSEDED/ARCHIVED`.
+
+- Índice parcial garante **um único rascunho por projeto**; pedir "nova
+  versão" com rascunho aberto devolve o próprio rascunho.
+- Enviar exige quantidade, unidade e preço, congela o snapshot do cliente
+  e do projeto e torna a versão imutável. Renegociar cria versão nova, e a
+  anterior apresentada vira `SUPERSEDED`.
+- Total é derivado (`quantidade × preço`, Decimal) e nunca persistido.
+  Preço `null` é "não precificado" — jamais vira zero.
+- Aceitar/recusar só valem sobre versão enviada; no máximo uma aceita
+  vigente por projeto. Aceite é registro operacional, não assinatura.
+
+## Aprovação → Product
+Transacional: trava o projeto, exige orçamento `ACCEPTED`, cria (ou
+preserva) o `Product` com item de produto acabado 1:1, copia o brief e cria
+**FormulationVersion V1 DRAFT**. Nunca ACTIVE — o comercial aprova o
+negócio, não a receita. Aprovar duas vezes não cria segundo produto.
+
+## Corpus e importação
+`projetos.csv` (250 linhas) e `dominios_pipeline.csv` entraram no
+`veridi:data:validate`: 248 projetos distintos, 80 clientes (0 não
+resolvidos), 9 versões legadas de orçamento.
+
+**Achado importante**: o export NÃO traz status nem motivo de cancelamento
+por projeto — só o vocabulário. O seed importa 248 projetos como
+`LEGACY_IMPORT`; os 214 que casam com um `Product` existente (mesmo código
+legado E mesmo cliente) entram como `APPROVED` — o produto só existe no ERP
+porque o projeto foi aprovado —, e os 34 sem produto entram como `WAITING`,
+com finding por projeto. Nenhum Product foi criado para "completar" FK, e
+código legado batendo com produto de OUTRO cliente vira finding sem
+vínculo. As versões históricas (V1..Vn) entram como `ARCHIVED`, sem preço.
+
+## Não implementado de propósito
+Kanban, CRM, lead/contato, e-mail/WhatsApp, assinatura eletrônica,
+entidade de Amostra (capacidade 39), custo/margem/comissão automáticos
+(Bloco G), tabela de preço por faixa, conversão de moeda e R-18.
+
+---
+
 # Delivery 29 — Qualidade documental / CoA / Anexos (Bloco F, capacidade 37)
 
 ## Dois estados que não se confundem
@@ -3585,8 +3649,8 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **capacidade 38 — Projetos +
-Orçamentos versionados** (Bloco F). A base de
+Próximo passo do roadmap oficial: **capacidade 39 — Amostras / Pilotos /
+Testes** (Bloco F). A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —

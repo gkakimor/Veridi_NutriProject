@@ -92,6 +92,44 @@ enum ControlledDocumentType {
   RECIPE_SHEET
 }
 
+/// Pipeline comercial do projeto — vocabulario observado na operacao real
+/// da Veridi, nao um workflow configuravel.
+enum ProjectStatus {
+  WAITING
+  SAMPLE
+  APPROVED
+  CANCELLED
+  STAND_BY
+}
+
+/// Motivo do cancelamento. OTHER exige texto livre complementar.
+enum ProjectCancelReason {
+  PRICE
+  COMPETITOR
+  PROJECT_CHANGED
+  NOT_MET
+  OTHER
+}
+
+/// Origem do registro. LEGACY_IMPORT existe para explicar estados
+/// historicos incompletos sem afrouxar as regras do fluxo novo.
+enum ProjectSource {
+  MANUAL
+  LEGACY_IMPORT
+}
+
+/// Ciclo do orcamento. So DRAFT e editavel; SUPERSEDED marca a versao
+/// substituida por uma nova negociacao; ARCHIVED cobre historico legado
+/// incompleto (sem preco, sem evidencia de envio).
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+  ARCHIVED
+}
+
 /// Estado DOCUMENTAL do laudo/CoA do lote — independente do status
 /// operacional (LotStatus). Aprovar o CoA nunca libera o lote sozinho: a
 /// liberacao da Qualidade continua sendo acao explicita.
@@ -111,6 +149,7 @@ enum AttachmentType {
   INVOICE
   LABEL_ART
   TECHNICAL_SHEET
+  BRIEFING
   OTHER
 }
 
@@ -266,6 +305,13 @@ model User {
   uploadedAttachments Attachment[] @relation("AttachmentUploadedBy")
   archivedAttachments Attachment[] @relation("AttachmentArchivedBy")
   reviewedCoaLots     Lot[]        @relation("CoaReviewedBy")
+  responsibleProjects Project[]    @relation("ProjectResponsible")
+  createdProjects     Project[]    @relation("ProjectCreatedBy")
+  projectStatusChanges ProjectStatusHistory[] @relation("ProjectStatusChangedBy")
+  createdQuotes       QuoteVersion[] @relation("QuoteCreatedBy")
+  sentQuotes          QuoteVersion[] @relation("QuoteSentBy")
+  acceptedQuotes      QuoteVersion[] @relation("QuoteAcceptedBy")
+  rejectedQuotes      QuoteVersion[] @relation("QuoteRejectedBy")
 
   @@index([active])
   @@map("users")
@@ -429,6 +475,9 @@ model Attachment {
   productId String?
   product   Product? @relation(fields: [productId], references: [id])
 
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+
   originalFileName String
   mimeType         String
   sizeBytes        Int
@@ -451,8 +500,181 @@ model Attachment {
   @@index([lotId])
   @@index([receiptId])
   @@index([productId])
+  @@index([projectId])
   @@index([documentType])
   @@map("attachments")
+}
+
+/// Projeto private label — o funil comercial ANTES do produto existir.
+///
+/// Project e Product sao coisas diferentes: Project e o desenvolvimento/
+/// negociacao; Product e o produto aprovado e operacional. A aprovacao do
+/// projeto e o momento em que um vira o outro.
+model Project {
+  id String @id @default(uuid())
+
+  /// PROJ-000001 — sequence dedicada, mesmo padrao dos demais codigos.
+  code String @unique
+
+  /// Codigo da planilha historica (ex.: `0001PL`). Convive com `code`;
+  /// pode coincidir com `Product.externalCode` — isso e esperado.
+  externalCode String?
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  name String
+
+  /// Vocabulario ABERTO (Detox, Sono, Massa Muscular...) — texto livre com
+  /// sugestao pelos valores ja existentes, nunca enum rigido.
+  concept String?
+  /// Canal do cliente (Academia, Distribuidora, Farm. Manip....). Idem.
+  channel String?
+
+  status ProjectStatus @default(WAITING)
+  source ProjectSource @default(MANUAL)
+
+  responsibleUserId String?
+  responsibleUser   User?   @relation("ProjectResponsible", fields: [responsibleUserId], references: [id])
+
+  entryDate DateTime
+  notes     String?
+
+  cancelReason        ProjectCancelReason?
+  cancelReasonDetails String?
+  cancelledAt         DateTime?
+  approvedAt          DateTime?
+
+  /// Perfil tecnico pretendido — BRIEF, nao Product. Copiado para o Product
+  /// na aprovacao; a partir dai as duas entidades seguem separadas.
+  dosageForm           DosageForm?
+  presentationType     PresentationType?
+  doseAmount           Decimal?          @db.Decimal(18, 6)
+  doseUomCode          String?
+  doseUom              UnitOfMeasure?    @relation("ProjectDoseUom", fields: [doseUomCode], references: [code])
+  dosesPerPackage      Int?
+  targetAgeGroup       TargetAgeGroup?
+  minimumBatchQuantity Decimal?          @db.Decimal(18, 6)
+  shelfLifeMonths      Int?
+
+  /// Produto resultante. Null enquanto o projeto nao foi aprovado — e
+  /// tambem em projeto legado aprovado sem produto correspondente.
+  productId String?  @unique
+  product   Product? @relation(fields: [productId], references: [id])
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("ProjectCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+  updatedAt             DateTime @updatedAt
+
+  quoteVersions QuoteVersion[]
+  statusHistory ProjectStatusHistory[]
+  attachments   Attachment[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([externalCode])
+  @@map("projects")
+}
+
+/// Historico imutavel do pipeline. `updatedAt` nao conta historia.
+model ProjectStatusHistory {
+  id String @id @default(uuid())
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  fromStatus ProjectStatus?
+  toStatus   ProjectStatus
+  reason     String?
+
+  changedAt             DateTime @default(now())
+  changedByUserId       String?
+  changedByUser         User?    @relation("ProjectStatusChangedBy", fields: [changedByUserId], references: [id])
+  changedByNameSnapshot String?
+
+  @@index([projectId])
+  @@map("project_status_history")
+}
+
+/// Versao de orcamento. A negociacao acontece por VERSAO: enviado congela
+/// snapshot e vira imutavel; nova proposta e sempre uma versao nova.
+model QuoteVersion {
+  id String @id @default(uuid())
+
+  /// ORC-000001 — identidade global; `versionNumber` sozinho nao identifica.
+  code String @unique
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  externalCode  String?
+
+  status QuoteStatus   @default(DRAFT)
+  source ProjectSource @default(MANUAL)
+
+  quoteDate  DateTime
+  validUntil DateTime?
+
+  quotedQuantity Decimal?       @db.Decimal(18, 6)
+  uomCode        String?
+  uom            UnitOfMeasure? @relation("QuoteUom", fields: [uomCode], references: [code])
+
+  /// `null` = ainda nao precificado. `0` e preco zero explicito — os dois
+  /// nunca se confundem.
+  unitPrice    Decimal? @db.Decimal(14, 4)
+  currencyCode String   @default("BRL")
+
+  commercialNotes String?
+  paymentTerms    String?
+  leadTimeDays    Int?
+
+  sentAt             DateTime?
+  sentByUserId       String?
+  sentByUser         User?     @relation("QuoteSentBy", fields: [sentByUserId], references: [id])
+  sentByNameSnapshot String?
+
+  acceptedAt             DateTime?
+  acceptedByUserId       String?
+  acceptedByUser         User?     @relation("QuoteAcceptedBy", fields: [acceptedByUserId], references: [id])
+  acceptedByNameSnapshot String?
+
+  rejectedAt             DateTime?
+  rejectedByUserId       String?
+  rejectedByUser         User?     @relation("QuoteRejectedBy", fields: [rejectedByUserId], references: [id])
+  rejectedByNameSnapshot String?
+  rejectionReason        String?
+
+  /// Snapshot congelado no envio — imprimir amanha nao depende do cadastro
+  /// atual do cliente nem do projeto.
+  customerCode       String?
+  customerName       String?
+  customerTradeName  String?
+  customerCnpj       String?
+  customerZipCode    String?
+  customerStreet     String?
+  customerNumber     String?
+  customerComplement String?
+  customerDistrict   String?
+  customerCity       String?
+  customerState      String?
+  projectCode        String?
+  projectName        String?
+  projectConcept     String?
+  projectChannel     String?
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("QuoteCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+  updatedAt             DateTime @updatedAt
+
+  @@unique([projectId, versionNumber])
+  @@index([projectId])
+  @@index([status])
+  @@map("quote_versions")
 }
 
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
@@ -470,6 +692,8 @@ model UnitOfMeasure {
 
   items Item[]
   productsAsDoseUom Product[] @relation("ProductDoseUom")
+  projectsAsDoseUom Project[] @relation("ProjectDoseUom")
+  quoteVersions     QuoteVersion[] @relation("QuoteUom")
 
   @@map("units_of_measure")
 }
@@ -700,6 +924,7 @@ model Customer {
   ownedLots Lot[]
   receipts Receipt[]
   productionOrders ProductionOrder[]
+  projects Project[]
 
   @@index([active])
   @@index([externalCode])
@@ -777,6 +1002,7 @@ model Product {
   productionOrders    ProductionOrder[]
   customerOrderLines  CustomerOrderLine[]
   attachments         Attachment[]
+  project             Project?
   customerOrderReservationLines CustomerOrderReservationLine[]
   shipmentLines       ShipmentLine[]
   billingLines        BillingLine[]

@@ -4,6 +4,7 @@ import type {
   LotDTO,
   LotTraceabilityDTO,
   ProductionOrderDTO,
+  QuoteVersionDTO,
   RecipeSheetDTO,
   ProductionOrderMaterialCostDTO,
   PurchaseOrderDTO,
@@ -14,6 +15,7 @@ import {
   BILLING_NON_FISCAL_NOTICE,
   CONTROLLED_DOCUMENT_CODES,
   PRODUCTION_PART_STATUS_LABELS,
+  QUOTE_STATUS_LABELS,
   SUPPLY_RESPONSIBILITY_LABELS,
   BILLING_STATUS_LABELS,
   COST_QUALITY_LABELS,
@@ -731,6 +733,102 @@ export function RecipeSheetPrintDocument({ sheet }: { sheet: RecipeSheetDTO }) {
           </PrintTable>
         </PrintSection>
       )}
+    </PrintLayout>
+  );
+}
+
+/**
+ * Orçamento comercial. Documento de negociação — não é documento fiscal, e
+ * o rodapé diz isso explicitamente. Rascunho é impresso marcado como tal,
+ * para nunca ser confundido com uma proposta formalmente apresentada.
+ */
+export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
+  const isDraft = quote.status === "DRAFT";
+
+  return (
+    <PrintLayout
+      kind="Orçamento comercial"
+      code={`${quote.code} · V${quote.versionNumber}`}
+      status={QUOTE_STATUS_LABELS[quote.status]}
+      isDraft={isDraft}
+      notice="Documento comercial — não é documento fiscal."
+      meta={[
+        { label: "Projeto", value: printOrDash(quote.projectCode ?? quote.projectName) },
+        { label: "Conceito", value: printOrDash(quote.projectConcept) },
+        { label: "Canal", value: printOrDash(quote.projectChannel) },
+        { label: "Data", value: formatPrintDate(quote.quoteDate) },
+        { label: "Validade", value: formatPrintDate(quote.validUntil) },
+        { label: "Enviado em", value: formatPrintDateTime(quote.sentAt) },
+      ]}
+    >
+      <PrintSection title="Cliente">
+        {/* Snapshot congelado no envio — nunca o cadastro atual. */}
+        <dl className="print-doc__meta">
+          <div>
+            <dt>Cliente</dt>
+            <dd>
+              {printOrDash(quote.customerCode)} — {printOrDash(quote.customerName)}
+            </dd>
+          </div>
+          <div>
+            <dt>Nome fantasia</dt>
+            <dd>{printOrDash(quote.customerTradeName)}</dd>
+          </div>
+          <div>
+            <dt>CNPJ</dt>
+            <dd>{printOrDash(quote.customerCnpj)}</dd>
+          </div>
+          <div>
+            <dt>Endereço</dt>
+            <dd>
+              {[quote.customerStreet, quote.customerNumber, quote.customerComplement, quote.customerDistrict]
+                .filter(Boolean)
+                .join(", ") || "—"}
+            </dd>
+          </div>
+          <div>
+            <dt>Cidade / UF</dt>
+            <dd>{[quote.customerCity, quote.customerState].filter(Boolean).join(" / ") || "—"}</dd>
+          </div>
+          <div>
+            <dt>CEP</dt>
+            <dd>{printOrDash(quote.customerZipCode)}</dd>
+          </div>
+        </dl>
+      </PrintSection>
+
+      <PrintSection title="Proposta">
+        <PrintTable
+          columns={["Produto", "Quantidade", "Unidade", "Preço unitário", "Moeda", "Total"]}
+          isEmpty={false}
+          emptyMessage=""
+        >
+          <tr>
+            <td>{printOrDash(quote.projectName)}</td>
+            <td className="is-number">{printOrDash(quote.quotedQuantity)}</td>
+            <td>{printOrDash(quote.uomCode)}</td>
+            {/* Preço ausente é "não precificado" — nunca zero. */}
+            <td className="is-number">{quote.unitPrice ? formatBRL(quote.unitPrice) : "—"}</td>
+            <td>{quote.currencyCode}</td>
+            <td className="is-number">{quote.total ? formatBRL(quote.total) : "—"}</td>
+          </tr>
+        </PrintTable>
+
+        <dl className="print-doc__meta">
+          <div>
+            <dt>Condições de pagamento</dt>
+            <dd>{printOrDash(quote.paymentTerms)}</dd>
+          </div>
+          <div>
+            <dt>Prazo de entrega</dt>
+            <dd>{quote.leadTimeDays ? `${quote.leadTimeDays} dias` : "—"}</dd>
+          </div>
+          <div>
+            <dt>Observações</dt>
+            <dd>{printOrDash(quote.commercialNotes)}</dd>
+          </div>
+        </dl>
+      </PrintSection>
     </PrintLayout>
   );
 }

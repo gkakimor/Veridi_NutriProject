@@ -10,6 +10,7 @@ import type {
   ItemDTO,
   LotDTO,
   ProductDTO,
+  ProjectDTO,
   ProductionOrderDTO,
   PurchaseOrderDTO,
   ReceiptDTO,
@@ -29,6 +30,8 @@ import {
   INVENTORY_MOVEMENT_TYPE_LABELS,
   ITEM_TYPE_LABELS,
   COA_STATUS_LABELS,
+  PROJECT_CANCEL_REASON_LABELS,
+  PROJECT_STATUS_LABELS,
   LOT_STATUS_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
@@ -40,6 +43,7 @@ import { listCustomers } from "../customers/customers.service.js";
 import { listSuppliers } from "../suppliers/suppliers.service.js";
 import { listItems } from "../items/items.service.js";
 import { listProducts } from "../products/products.service.js";
+import { listProjects } from "../projects/projects.service.js";
 import { listPurchaseOrders } from "../purchase-orders/purchase-orders.service.js";
 import { listReceipts } from "../receiving/receiving.service.js";
 import { listInventory, listInventoryMovements } from "../inventory/inventory.service.js";
@@ -55,6 +59,7 @@ import { listCustomersQuerySchema } from "../customers/customers.schemas.js";
 import { listSuppliersQuerySchema } from "../suppliers/suppliers.schemas.js";
 import { listItemsQuerySchema } from "../items/items.schemas.js";
 import { listProductsQuerySchema } from "../products/products.schemas.js";
+import { listProjectsQuerySchema } from "../projects/projects.schemas.js";
 import { listPurchaseOrdersQuerySchema } from "../purchase-orders/purchase-orders.schemas.js";
 import { listReceiptsQuerySchema } from "../receiving/receiving.schemas.js";
 import {
@@ -73,6 +78,7 @@ import type { ListCustomersQuery } from "../customers/customers.schemas.js";
 import type { ListSuppliersQuery } from "../suppliers/suppliers.schemas.js";
 import type { ListItemsQuery } from "../items/items.schemas.js";
 import type { ListProductsQuery } from "../products/products.schemas.js";
+import type { ListProjectsQuery } from "../projects/projects.schemas.js";
 import type { ListPurchaseOrdersQuery } from "../purchase-orders/purchase-orders.schemas.js";
 import type { ListReceiptsQuery } from "../receiving/receiving.schemas.js";
 import type {
@@ -309,6 +315,32 @@ const lotsExport = defineCsvExport({
   ],
 });
 
+const projectsExport = defineCsvExport({
+  path: "/projects/export.csv",
+  slug: "projetos",
+  schema: listProjectsQuerySchema,
+  fetch: async (query: ListProjectsQuery) => (await listProjects(query, ALL_ROWS)).projects,
+  columns: [
+    { header: "Código", value: (row: ProjectDTO) => csvCode(row.code) },
+    { header: "Código legado", value: (row: ProjectDTO) => csvCode(row.externalCode) },
+    { header: "Data de entrada", value: (row: ProjectDTO) => csvDate(row.entryDate) },
+    { header: "Cliente", value: (row: ProjectDTO) => csvText(row.customerName) },
+    { header: "Projeto", value: (row: ProjectDTO) => csvText(row.name) },
+    { header: "Conceito", value: (row: ProjectDTO) => csvText(row.concept) },
+    { header: "Canal", value: (row: ProjectDTO) => csvText(row.channel) },
+    { header: "Responsável", value: (row: ProjectDTO) => csvText(row.responsibleUserName) },
+    { header: "Status", value: (row: ProjectDTO) => PROJECT_STATUS_LABELS[row.status] },
+    {
+      header: "Motivo do cancelamento",
+      value: (row: ProjectDTO) =>
+        row.cancelReason ? PROJECT_CANCEL_REASON_LABELS[row.cancelReason] : "",
+    },
+    { header: "Último orçamento", value: (row: ProjectDTO) => csvCode(row.latestQuoteLabel) },
+    { header: "Orçamento aceito", value: (row: ProjectDTO) => csvCode(row.acceptedQuoteLabel) },
+    { header: "Produto resultante", value: (row: ProjectDTO) => csvCode(row.productCode) },
+  ],
+});
+
 const customerMaterialsExport = defineCsvExport({
   path: "/inventory/customer-materials/export.csv",
   slug: "materiais-de-clientes",
@@ -488,6 +520,7 @@ export const listCsvExports: CsvExportRoute[] = [
   receiptsExport,
   inventoryExport,
   lotsExport,
+  projectsExport,
   customerMaterialsExport,
   movementsExport,
   formulationsExport,

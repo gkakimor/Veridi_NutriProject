@@ -32,13 +32,16 @@ import {
 export type AttachmentContext =
   | { kind: "LOT"; id: string }
   | { kind: "RECEIPT"; id: string }
-  | { kind: "PRODUCT"; id: string };
+  | { kind: "PRODUCT"; id: string }
+  | { kind: "PROJECT"; id: string };
 
 /** Cada contexto aceita um conjunto próprio de documentos. */
 const ALLOWED_TYPES: Record<AttachmentContext["kind"], AttachmentType[]> = {
   LOT: ["COA", "OTHER"],
   RECEIPT: ["INVOICE", "OTHER"],
   PRODUCT: ["LABEL_ART", "TECHNICAL_SHEET", "OTHER"],
+  // Projeto recebe briefing e material técnico — nunca laudo nem nota.
+  PROJECT: ["BRIEFING", "LABEL_ART", "TECHNICAL_SHEET", "OTHER"],
 };
 
 export function toAttachmentDTO(attachment: Attachment): AttachmentDTO {
@@ -48,6 +51,7 @@ export function toAttachmentDTO(attachment: Attachment): AttachmentDTO {
     lotId: attachment.lotId,
     receiptId: attachment.receiptId,
     productId: attachment.productId,
+    projectId: attachment.projectId,
     originalFileName: attachment.originalFileName,
     mimeType: attachment.mimeType,
     sizeBytes: attachment.sizeBytes,
@@ -68,6 +72,8 @@ function contextWhere(context: AttachmentContext): Prisma.AttachmentWhereInput {
       return { receiptId: context.id };
     case "PRODUCT":
       return { productId: context.id };
+    case "PROJECT":
+      return { projectId: context.id };
   }
 }
 
@@ -78,7 +84,9 @@ async function assertContextExists(context: AttachmentContext): Promise<void> {
       ? await prisma.lot.findUnique({ where: { id: context.id }, select: { id: true } })
       : context.kind === "RECEIPT"
         ? await prisma.receipt.findUnique({ where: { id: context.id }, select: { id: true } })
-        : await prisma.product.findUnique({ where: { id: context.id }, select: { id: true } });
+        : context.kind === "PRODUCT"
+          ? await prisma.product.findUnique({ where: { id: context.id }, select: { id: true } })
+          : await prisma.project.findUnique({ where: { id: context.id }, select: { id: true } });
 
   if (!exists) throw new AttachmentContextNotFoundError(context.kind, context.id);
 }
@@ -138,6 +146,7 @@ export async function uploadAttachment(
         ...(context.kind === "LOT" ? { lotId: context.id } : {}),
         ...(context.kind === "RECEIPT" ? { receiptId: context.id } : {}),
         ...(context.kind === "PRODUCT" ? { productId: context.id } : {}),
+        ...(context.kind === "PROJECT" ? { projectId: context.id } : {}),
         originalFileName: displayName,
         mimeType,
         sizeBytes: stored.sizeBytes,

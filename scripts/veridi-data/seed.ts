@@ -4,6 +4,11 @@ import path from "node:path";
 import { CORPUS_DIR, FindingLog, corpusAvailable } from "./corpus.js";
 import { assertLocalDevEnvironment } from "./environment.js";
 import { doseToKg, readCmvProducts, reconstructGroup } from "./formulation-analysis.js";
+import {
+  groupLegacyProjects,
+  legacyQuoteVersions,
+  readLegacyProjectRows,
+} from "./project-analysis.js";
 import { nextSequenceCode } from "../../apps/api/src/lib/sequence-code.js";
 import type { MappedItem } from "./mapping.js";
 import {
@@ -68,6 +73,14 @@ async function nextCustomerCode(): Promise<string> {
 
 async function nextSupplierCode(): Promise<string> {
   return nextSequenceCode(prisma, "supplier_code_seq", "FOR");
+}
+
+async function nextProjectCode(): Promise<string> {
+  return nextSequenceCode(prisma, "project_code_seq", "PROJ");
+}
+
+async function nextQuoteCode(): Promise<string> {
+  return nextSequenceCode(prisma, "quote_code_seq", "ORC");
 }
 
 async function nextProductCode(): Promise<string> {
@@ -439,6 +452,128 @@ async function main(): Promise<void> {
     else legacyVersions += 1;
   }
 
+  /* ── Projetos historicos (capacidade 38) ── */
+  //
+  // O export do pipeline NAO traz status nem motivo de cancelamento por
+  // linha. Duas decisoes explicitas, ambas reportadas como finding:
+  //  1. projeto ligado a um Product existente entra como APPROVED — o
+  //     produto so existe no ERP porque o projeto foi aprovado e produzido;
+  //  2. projeto sem Product entra como WAITING, porque o estagio real e
+  //     desconhecido — nada e adivinhado a partir do nome ou do canal.
+  const projectRows = readLegacyProjectRows(findings);
+  const projectGroups = groupLegacyProjects(projectRows, findings);
+
+  let projectsCreatedTotal = 0;
+  let projectsLinkedToProduct = 0;
+  let projectsWithoutProduct = 0;
+  let legacyQuotesCreated = 0;
+
+  for (const group of projectGroups.values()) {
+    const first = group.rows[0]!;
+    const customerId = customerIdByExternal.get(group.customerExternalCode) ?? null;
+    if (!customerId) {
+      findings.add(
+        "PROJECT_CUSTOMER_UNRESOLVED",
+        "Project",
+        group.key,
+        "cliente do projeto nao encontrado na base — projeto nao importado",
+      );
+      continue;
+    }
+
+    // Vinculo com o Product existente exige codigo legado E cliente iguais.
+    const productMatch = await prisma.product.findFirst({
+      where: { externalCode: group.productExternalCode },
+    });
+    let productId: string | null = null;
+    if (productMatch) {
+      if (productMatch.customerId === customerId) {
+        productId = productMatch.id;
+      } else {
+        findings.add(
+          "PROJECT_PRODUCT_CUSTOMER_MISMATCH",
+          "Project",
+          group.productExternalCode,
+          "codigo legado bate com um Product de OUTRO cliente — vinculo nao criado",
+        );
+      }
+    }
+
+    const existing = await prisma.project.findFirst({
+      where: { externalCode: group.productExternalCode, customerId },
+    });
+
+    let projectId: string;
+    if (existing) {
+      // Idempotencia: o seed nunca sobrescreve o que o sistema editou; so
+      // completa o vinculo com o Product quando ele ainda falta.
+      projectId = existing.id;
+      if (!existing.productId && productId) {
+        await prisma.project.update({ where: { id: existing.id }, data: { productId } });
+      }
+    } else {
+      const status = productId ? "APPROVED" : "WAITING";
+      const created = await prisma.project.create({
+        data: {
+          code: await nextProjectCode(),
+          externalCode: group.productExternalCode,
+          customerId,
+          name: first.productName,
+          channel: first.channel,
+          status,
+          source: "LEGACY_IMPORT",
+          entryDate: first.entryDate ?? new Date(),
+          notes: first.notes,
+          ...(productId ? { productId } : {}),
+        },
+      });
+      await prisma.projectStatusHistory.create({
+        data: {
+          projectId: created.id,
+          fromStatus: null,
+          toStatus: status,
+          reason: "Importado da planilha (estagio historico nao exportado)",
+        },
+      });
+      projectId = created.id;
+      projectsCreatedTotal += 1;
+
+      findings.add(
+        "PROJECT_LEGACY_STATUS_NOT_EXPORTED",
+        "Project",
+        group.productExternalCode,
+        productId
+          ? "status assumido APPROVED por existir Product operacional — confirmar com o PO"
+          : "status assumido WAITING — o export nao traz o estagio real",
+      );
+    }
+
+    if (productId) projectsLinkedToProduct += 1;
+    else projectsWithoutProduct += 1;
+
+    // Versoes historicas de orcamento: o corpus so tem o rotulo (V1..Vn),
+    // sem preco nem evidencia de envio — entram como ARCHIVED.
+    for (const version of legacyQuoteVersions(group)) {
+      const already = await prisma.quoteVersion.findFirst({
+        where: { projectId, versionNumber: version.versionNumber },
+      });
+      if (already) continue;
+
+      await prisma.quoteVersion.create({
+        data: {
+          code: await nextQuoteCode(),
+          projectId,
+          versionNumber: version.versionNumber,
+          externalCode: version.externalCode,
+          status: "ARCHIVED",
+          source: "LEGACY_IMPORT",
+          quoteDate: first.entryDate ?? new Date(),
+        },
+      });
+      legacyQuotesCreated += 1;
+    }
+  }
+
   /* ── Resumo ── */
   const [suppliers, customers, itemCount, productCount, versions] = await Promise.all([
     prisma.supplier.count(),
@@ -453,6 +588,14 @@ async function main(): Promise<void> {
   console.log(`  Clientes: ${customers} (novos ${customersCreated})`);
   console.log(`  Itens: ${itemCount} (novos ${itemsCreated})`);
   console.log(`  Produtos: ${productCount} (novos ${productsCreated})`);
+  const [projectCount, quoteCount] = await Promise.all([
+    prisma.project.count(),
+    prisma.quoteVersion.count(),
+  ]);
+  console.log(`  Projetos: ${projectCount} (novos ${projectsCreatedTotal})`);
+  console.log(`    ligados a Product existente: ${projectsLinkedToProduct}`);
+  console.log(`    sem Product correspondente: ${projectsWithoutProduct}`);
+  console.log(`  Versoes de orcamento (historico): ${quoteCount} (novas ${legacyQuotesCreated})`);
   console.log(`  Formulações ACTIVE: ${versions}`);
   console.log(`    PER_DOSE reconstruídas: ${perDoseVersions}`);
   console.log(`    FIXED_BASIS pelo consumo histórico: ${legacyVersions}`);

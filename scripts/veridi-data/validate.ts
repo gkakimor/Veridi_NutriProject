@@ -1,5 +1,11 @@
 import { CORPUS_DIR, FindingLog, cleanText, corpusAvailable, readCorpusCsv, safeDecimal } from "./corpus.js";
 import {
+  groupLegacyProjects,
+  legacyQuoteVersions,
+  readLegacyProjectRows,
+  readPipelineVocabulary,
+} from "./project-analysis.js";
+import {
   COMPARISON_TOLERANCE,
   readCmvProducts,
   reconstructGroup,
@@ -173,6 +179,43 @@ async function main(): Promise<void> {
       .join(", ")}`,
   );
   console.log("  nenhum Item foi classificado automaticamente a partir deste histórico.");
+
+  // Capacidade 38 — pipeline comercial historico. So leitura/estatistica:
+  // nada e importado aqui, e nenhum status e adivinhado.
+  const pipeline = readPipelineVocabulary();
+  const projectRows = readLegacyProjectRows(findings);
+  const projectGroups = groupLegacyProjects(projectRows, findings);
+
+  const customerCodes = new Set(projectRows.map((row) => row.customerExternalCode));
+  const productCodes = new Set(projectRows.map((row) => row.productExternalCode));
+  const quoteCodes = new Set(
+    projectRows.map((row) => row.quoteExternalCode).filter((code): code is string => code !== null),
+  );
+  const channels = new Set(
+    projectRows.map((row) => row.channel).filter((value): value is string => value !== null),
+  );
+  const legacyCustomerCodes = new Set(mapCustomers(new FindingLog()).map((row) => row.externalCode));
+  const unresolvedCustomers = [...customerCodes].filter((code) => !legacyCustomerCodes.has(code));
+  const legacyQuoteCount = [...projectGroups.values()].reduce(
+    (total, group) => total + legacyQuoteVersions(group).length,
+    0,
+  );
+
+  console.log("\nPIPELINE COMERCIAL (somente leitura)");
+  console.log(`  linhas de projeto ${projectRows.length} - projetos distintos ${projectGroups.size}`);
+  console.log(`  clientes distintos ${customerCodes.size} - nao resolvidos ${unresolvedCustomers.length}`);
+  console.log(`  codigos de produto distintos ${productCodes.size}`);
+  console.log(`  codigos de orcamento distintos ${quoteCodes.size} - versoes legadas ${legacyQuoteCount}`);
+  console.log(`  canais no historico ${channels.size}: ${[...channels].sort().join(", ")}`);
+  console.log(
+    `  vocabulario do pipeline: ${pipeline.statuses.length} status, ${pipeline.cancelReasons.length} motivos de cancelamento, ${pipeline.concepts.length} conceitos, ${pipeline.channels.length} canais`,
+  );
+  console.log(
+    "  ATENCAO: o export nao traz status nem motivo de cancelamento por projeto — o estagio do",
+  );
+  console.log(
+    "  pipeline historico precisa ser reconciliado com o Product Owner (nada foi inferido).",
+  );
 
   console.log("\nNÃO IMPORTADO NESTA CAPACIDADE");
   console.log("  estoque_saldos, compras_recebimentos, precos_fornecedores, amostras,");

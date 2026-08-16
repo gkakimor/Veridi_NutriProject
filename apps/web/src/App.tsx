@@ -28,6 +28,8 @@ import { InventoryMovementsPage } from "./pages/inventory/InventoryMovementsPage
 import { StockCountPage } from "./pages/inventory/StockCountPage";
 import { CustomerMaterialsPage } from "./pages/inventory/CustomerMaterialsPage";
 import { CoaQueuePage } from "./pages/quality/CoaQueuePage";
+import { ProjectsPage } from "./pages/projects/ProjectsPage";
+import { ProjectDetailPage } from "./pages/projects/ProjectDetailPage";
 import { FormulationsPage } from "./pages/formulations/FormulationsPage";
 import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPage";
 import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
@@ -46,6 +48,7 @@ import {
   CustomerOrderPrintPage,
   LotTraceabilityPrintPage,
   ProductionOrderPrintPage,
+  QuotePrintPage,
   RecipeSheetPrintPage,
   PurchaseOrderPrintPage,
   ReceiptPrintPage,
@@ -103,6 +106,7 @@ function AuthenticatedApp() {
         <Route path="/estoque/lotes/:id/etiqueta" element={<LotLabelPrintPage />} />
         <Route path="/estoque/lotes/:id/rastreabilidade/imprimir" element={<LotTraceabilityPrintPage />} />
         <Route path="/comercial/pedidos/:id/imprimir" element={<CustomerOrderPrintPage />} />
+        <Route path="/comercial/orcamentos/:id/imprimir" element={<QuotePrintPage />} />
         <Route path="/compras/ordens/:id/imprimir" element={<PurchaseOrderPrintPage />} />
         <Route path="/compras/recebimentos/:id/imprimir" element={<ReceiptPrintPage />} />
         <Route path="/producao/ordens/:id/imprimir" element={<ProductionOrderPrintPage />} />
@@ -158,6 +162,8 @@ function AuthenticatedApp() {
             element={<ControlledDocumentsPage />}
           />
           <Route path="/producao/produto-acabado" element={<FinishedGoodsPage />} />
+          <Route path="/comercial/projetos" element={<ProjectsPage />} />
+          <Route path="/comercial/projetos/:id" element={<ProjectDetailPage />} />
           <Route path="/comercial/pedidos" element={<CustomerOrdersPage />} />
           <Route path="/comercial/pedidos/novo" element={<CustomerOrderPage />} />
           <Route path="/comercial/pedidos/:id" element={<CustomerOrderPage />} />

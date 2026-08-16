@@ -116,6 +116,47 @@ is never invalidated by the Customer/Item being inactivated later —
 historical links are preserved and keep displaying, without forcing the
 user to clear them to edit unrelated fields.
 
+# 5.1 Projects and versioned quotes (capability 38)
+
+- A **Project** is the commercial funnel before the product exists; a
+  **Product** is the approved, operational product. Approving the project
+  is exactly the moment one becomes the other — never an automatic
+  conversion at registration time.
+- A private-label project always belongs to a customer. The customer can
+  still be changed while nothing was formally quoted; once a quote is
+  sent, changing it would rewrite commercial history, so it is blocked.
+- Pipeline vocabulary is Veridi's own: waiting, sample, approved,
+  cancelled, stand-by. Approved and cancelled are terminal in this phase,
+  and every transition is recorded in an immutable status history —
+  `updatedAt` does not tell history.
+- Cancelling requires a reason, and "other" requires the description.
+- Concept and channel are **open vocabulary**: free text with suggestions
+  from values already in use. A closed enum would freeze a vocabulary that
+  the business keeps extending.
+- The project carries a technical **brief** (dosage form, presentation,
+  doses, shelf life…). It is intent, not the product record; it is copied
+  into the Product at approval, and from then on the two live separate
+  lives.
+- Quotes are **versioned**. Only the draft is editable, and there is at
+  most one open draft per project. Sending freezes the customer and
+  project snapshot, so printing it tomorrow never depends on the current
+  registration. A new negotiation is always a new version, and the
+  previously presented version becomes superseded.
+- Quantity and price are Decimal; the total is derived, never stored. A
+  `null` price means "not priced yet" and never becomes zero.
+- Accepting a quote is an operational record that the customer agreed to
+  that version — it is not an electronic signature.
+- Approving a project requires an accepted quote, and the whole approval
+  is one transaction: the project only ends up approved if the Product is
+  created or linked in the same step. Approving twice never creates a
+  second product.
+- The formulation created at approval is always a DRAFT V1: the commercial
+  side approves the business, not the recipe. Only engineering activates a
+  version.
+- Legacy projects may represent incomplete historical states. They are
+  imported as `LEGACY_IMPORT`, never invent a Product to satisfy a foreign
+  key, and never overwrite what the system itself has edited.
+
 ---
 
 # 6. Purchase Orders

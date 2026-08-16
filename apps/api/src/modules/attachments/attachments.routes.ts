@@ -76,6 +76,7 @@ export const attachmentsRoutes: FastifyPluginAsync = async (app) => {
       { path: "lots", kind: "LOT", uploadRoles: ["PURCHASING", "QUALITY", "ADMIN"] },
       { path: "receipts", kind: "RECEIPT", uploadRoles: ["PURCHASING", "QUALITY", "ADMIN"] },
       { path: "products", kind: "PRODUCT", uploadRoles: ["COMMERCIAL", "QUALITY", "ADMIN"] },
+      { path: "projects", kind: "PROJECT", uploadRoles: ["COMMERCIAL", "QUALITY", "ADMIN"] },
     ];
 
   for (const context of contexts) {

@@ -7,13 +7,20 @@
  * autenticada — e nunca é excluído pela operação: arquiva-se.
  */
 
-export type AttachmentType = "COA" | "INVOICE" | "LABEL_ART" | "TECHNICAL_SHEET" | "OTHER";
+export type AttachmentType =
+  | "COA"
+  | "INVOICE"
+  | "LABEL_ART"
+  | "TECHNICAL_SHEET"
+  | "BRIEFING"
+  | "OTHER";
 
 export const ATTACHMENT_TYPE_LABELS: Record<AttachmentType, string> = {
   COA: "Laudo / CoA",
   INVOICE: "Nota fiscal",
   LABEL_ART: "Arte de rótulo",
   TECHNICAL_SHEET: "Ficha técnica",
+  BRIEFING: "Briefing",
   OTHER: "Outro",
 };
 
@@ -21,6 +28,13 @@ export const ATTACHMENT_TYPE_LABELS: Record<AttachmentType, string> = {
 export const LOT_ATTACHMENT_TYPES: readonly AttachmentType[] = ["COA", "OTHER"];
 export const RECEIPT_ATTACHMENT_TYPES: readonly AttachmentType[] = ["INVOICE", "OTHER"];
 export const PRODUCT_ATTACHMENT_TYPES: readonly AttachmentType[] = [
+  "LABEL_ART",
+  "TECHNICAL_SHEET",
+  "OTHER",
+];
+/** Projeto aceita briefing e material técnico — nunca laudo nem nota fiscal. */
+export const PROJECT_ATTACHMENT_TYPES: readonly AttachmentType[] = [
+  "BRIEFING",
   "LABEL_ART",
   "TECHNICAL_SHEET",
   "OTHER",
@@ -41,6 +55,7 @@ export interface AttachmentDTO {
   lotId: string | null;
   receiptId: string | null;
   productId: string | null;
+  projectId: string | null;
   /** Nome sanitizado só para exibição/download — nunca é caminho de arquivo. */
   originalFileName: string;
   mimeType: string;

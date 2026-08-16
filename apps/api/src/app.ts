@@ -6,6 +6,7 @@ import { authenticationHook } from "./lib/current-user.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { attachmentsRoutes } from "./modules/attachments/attachments.routes.js";
 import { qualityRoutes } from "./modules/quality/quality.routes.js";
+import { projectsRoutes } from "./modules/projects/projects.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
 import { controlledDocumentsRoutes } from "./modules/controlled-documents/controlled-documents.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
@@ -69,6 +70,7 @@ export function buildApp() {
   app.register(controlledDocumentsRoutes);
   app.register(attachmentsRoutes);
   app.register(qualityRoutes);
+  app.register(projectsRoutes);
   app.register(itemsRoutes);
   app.register(unitsRoutes);
   app.register(suppliersRoutes);

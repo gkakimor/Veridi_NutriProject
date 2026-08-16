@@ -8,6 +8,7 @@ import type {
   LotTraceabilityDTO,
   ProductionOrderDTO,
   ProductionOrderMaterialCostDTO,
+  QuoteVersionDTO,
   RecipeSheetDTO,
   PurchaseOrderDTO,
   ReceiptDTO,
@@ -19,6 +20,7 @@ import { getReceipt } from "../../lib/receiving-api";
 import { getProductionOrder } from "../../lib/production-orders-api";
 import { getProductionOrderMaterialCost } from "../../lib/costs-api";
 import { getRecipeSheet } from "../../lib/recipe-api";
+import { getQuoteVersion } from "../../lib/projects-api";
 import { getShipment } from "../../lib/shipments-api";
 import { getBilling } from "../../lib/billings-api";
 import { getLot, getLotTraceability } from "../../lib/lots-api";
@@ -27,6 +29,7 @@ import {
   CustomerOrderPrintDocument,
   LotTraceabilityPrintDocument,
   ProductionOrderPrintDocument,
+  QuotePrintDocument,
   RecipeSheetPrintDocument,
   PurchaseOrderPrintDocument,
   ReceiptPrintDocument,
@@ -139,6 +142,17 @@ export function RecipeSheetPrintPage() {
       load={() => getRecipeSheet(id!)}
       render={(sheet) => <RecipeSheetPrintDocument sheet={sheet} />}
       backTo={`/producao/ordens/${id}/receita`}
+    />
+  );
+}
+
+export function QuotePrintPage() {
+  const { id } = useParams<{ id: string }>();
+  return (
+    <PrintScreen<QuoteVersionDTO>
+      load={() => getQuoteVersion(id!)}
+      render={(quote) => <QuotePrintDocument quote={quote} />}
+      backTo={`/comercial/projetos/${id}`}
     />
   );
 }
