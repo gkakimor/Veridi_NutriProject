@@ -241,20 +241,35 @@ evolution.
 
 ## Costing / CMV
 The current spreadsheets already show rich costing needs:
-- raw material;
-- packaging;
+- raw material ✓ (MVP step 29);
+- packaging ✓ (MVP step 29);
+- production ✓ (material only, MVP step 29);
 - labor;
-- production;
-- freight;
+- freight / landed cost;
 - taxes;
 - commissions;
 - markup;
 - margin.
 
-Future dedicated costing module.
+**Partially promoted into the MVP as step 29 — Material cost foundation**
+(see `docs/MVP_PLAN.md` and `docs/PRODUCT_RULES.md` §31): effective
+acquisition cost at receiving, weighted-average cost reference with
+30d/90d/last-real fallback, formulation cost estimate and production
+material cost from the lots actually consumed, with explicit
+`REAL`/`ESTIMATED`/`PARTIAL`/`NO_COST` quality.
+
+Still backlog: labor, energy, depreciation, overhead, standard cost,
+accounting FIFO/LIFO inventory valuation, month-end closing, gross/net
+margin, landed-cost freight apportionment and a supplier price list. The
+schema deliberately names the concept *effective acquisition cost* so
+freight and directly attributable expenses can be folded in later.
 
 ## Accounts payable / finance
-Not part of the operational MVP.
+Not part of the operational MVP. Explicitly distinct from step 29: the
+cost foundation answers *what the material cost*, never *when and how
+much money actually left the cash register* — the latter (payables, due
+dates, instalments, cash flow, interest, payments) remains future work
+and must never be inferred from cost or from Purchase Order prices.
 
 ---
 

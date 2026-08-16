@@ -58,6 +58,14 @@ function toReceiptLineDTO(line: ReceiptLineWithRelations): ReceiptLineDTO {
     location: line.location,
     lotId: line.lotId,
     lotCode: line.lot ? line.lot.code : null,
+    // Preco previsto da OC — so referencia visual, nunca custo real.
+    purchaseUnitPrice: line.purchaseOrderLine.unitPrice
+      ? line.purchaseOrderLine.unitPrice.toFixed(4)
+      : null,
+    actualUnitCost: line.actualUnitCost ? line.actualUnitCost.toFixed(4) : null,
+    costUpdatedAt: line.costUpdatedAt ? line.costUpdatedAt.toISOString() : null,
+    costUpdatedBy: line.costUpdatedBy,
+    costNote: line.costNote,
   };
 }
 
@@ -221,6 +229,13 @@ export async function createReceipt(
       const expiryDate = line.input.expiryDate ?? null;
       const location = line.input.location?.trim() || null;
 
+      // Custo efetivo e SEMPRE opcional — o recebimento fisico nunca falha
+      // por falta de custo, e o preco da OC nunca e copiado como real.
+      const actualUnitCost =
+        line.input.actualUnitCost !== undefined && line.input.actualUnitCost !== ""
+          ? new Prisma.Decimal(line.input.actualUnitCost)
+          : null;
+
       const receiptLine = await tx.receiptLine.create({
         data: {
           receiptId: receipt.id,
@@ -231,6 +246,10 @@ export async function createReceipt(
           supplierLot,
           expiryDate,
           location,
+          actualUnitCost,
+          ...(actualUnitCost
+            ? { costUpdatedAt: new Date(), costUpdatedBy: SYSTEM_ACTOR }
+            : {}),
         },
       });
 

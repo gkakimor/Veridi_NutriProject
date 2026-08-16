@@ -1284,3 +1284,85 @@ the official roadmap ordering.
   label print route.
 - CSV export always respects the currently applied filters and exports the
   **complete filtered result**, not just the visible page.
+
+---
+
+# 31. Material cost foundation (implemented, Delivery 20)
+
+Operational costing base, established **before** any dashboard/report
+tries to show money. Deliberately stops short of accounting/finance.
+
+## Three distinct concepts — never collapsed
+
+1. **PO price** (`PurchaseOrderLine.unitPrice`) — expected/negotiated.
+2. **Effective acquisition cost** (`ReceiptLine.actualUnitCost`) — the
+   real cost reference of the material actually received.
+3. **Amount actually paid** — future financial layer (accounts payable),
+   explicitly out of scope. Never inferred from cost or from the PO.
+
+Guiding principle: *first know what the material/product cost; only later
+evolve to know when and how much money actually left the cash register.*
+
+## Durable rules confirmed at implementation
+
+- The PO price is **never** copied into real cost automatically, and
+  **never** used as a silent last-resort fallback. It may be shown as a
+  visual reference while receiving (and an explicit "use the PO price"
+  action is acceptable), but cost only becomes real when a human states
+  it. If there is no real cost history, the answer is `NO_COST` — not the
+  PO price.
+- Cost is **always optional**: a physical receipt never fails for lack of
+  cost, and the effective cost can be informed later, through a costing
+  operation that never reopens the physical document (it can never change
+  quantity, item, lot or supplier).
+- Unknown cost is `null`, **never `0`**. A `0` is an explicitly informed
+  value (e.g. a bonus shipment) and is never reinterpreted as unknown.
+  Negative costs are rejected.
+- Cost is expressed **per the item's stock unit**, and updating it never
+  creates an inventory movement and never touches On Hand / Reserved /
+  Available / On Order. Cost and physical quantity are different
+  dimensions.
+- Fallback hierarchy, with no other silent step:
+  `REAL → ESTIMATED_30D → ESTIMATED_90D → LAST_REAL_COST → NO_COST`.
+- Averages are **weighted by received quantity**, never simple averages
+  (10 kg @ 10 + 90 kg @ 20 is 19, not 15), and only ever consume
+  ReceiptLines whose cost was actually informed — never PO prices,
+  earlier estimates, billing prices or finished-goods costs.
+- The reference date is always respected: receipts **after** it never
+  enter the calculation, so a historical query (e.g. the cost of an old
+  consumption) never uses purchases that happened later. For a production
+  consumption the reference date is its own `consumedAt`, never "today".
+- Production material cost is computed strictly from the
+  `ProductionConsumption` actually recorded — never from Requirements,
+  Reservations, FEFO suggestions or the planned formulation. **The lot
+  actually consumed wins**: its effective cost is the absolute priority
+  (`REAL`), and only when that lot has no informed cost does it fall back
+  to the item's history. A consumption with no lot can never be
+  classified as `REAL` — there is no traceability to a specific
+  acquisition.
+- A formulation cost is **always an estimate**, even when every component
+  has a recent real reference — a formula is a plan, not an outcome. It
+  is never persisted inside the version: the formula is historical and
+  immutable, the cost reference is not.
+- Cost quality is always explicit (`REAL`/`ESTIMATED`/`PARTIAL`/
+  `NO_COST`) and **a partial cost must never look complete**: when some
+  items lack a cost, the known subtotal is reported separately and the
+  total stays unavailable rather than under-reporting.
+- Material cost per produced unit always divides by the **actually
+  produced** quantity (sum of `ProductionOutput`), never by the planned
+  quantity — that is what makes yield/loss show up naturally. With no
+  production yet, the unit cost is unavailable rather than a division by
+  zero.
+- Improving data is allowed and desirable: informing an acquisition cost
+  later automatically upgrades the quality of past production costs. The
+  old estimate is never frozen just to prevent that improvement.
+- All costing arithmetic uses Decimal, never JS floats. Prices are BRL.
+- Finished-product cost comes from its Production Order — never from a
+  Billing sale price. Cost and sale price are never mixed, and **no
+  margin/profit is computed** in this phase (other cost components are
+  still missing).
+- Freight/landed cost is not modelled yet; the concept is deliberately
+  named *effective acquisition cost* so goods + attributable freight +
+  directly attributable expenses can be folded in later without breaking
+  the schema. Packaging is normal material cost, exactly like raw
+  material.

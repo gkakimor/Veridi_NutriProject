@@ -29,6 +29,7 @@ FAST MVP.
 **Delivery 17 — Sugestão de Compra + Geração de OC DRAFT (Bloco D, capacidade 26): concluído.**
 **Delivery 18 — Separação + Expedição (Bloco D, capacidade 27): concluído.**
 **Delivery 19 — Faturamento (Bloco D, capacidade 28): concluído — Bloco D funcionalmente encerrado.**
+**Delivery 20 — Fundação de Custos (capacidade 29): concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -46,9 +47,10 @@ Calculation + Reservation + QR Picking + Actual Consumption + Partial
 Production/conclusão da OP + Finished Product + Rastreabilidade
 bidirecional). Bloco D **completo** (22-28: Pedido do Cliente, Plano de Atendimento,
 Reserva de Produto Acabado, OPs Sugeridas, Sugestão de Compra, Expedição,
-Faturamento). Só falta Usuários (Bloco A) dentro do escopo MVP travado; o
-próximo passo é o **Bloco E — Gestão, Relatórios & Exportações** (29-31),
-camada transversal já oficializada no roadmap mas ainda não iniciada.
+Faturamento) + **Fundação de Custos (29)**. Só falta Usuários (Bloco A)
+dentro do escopo MVP travado; o próximo passo é o **Bloco E — Gestão,
+Relatórios & Exportações** (30-32), camada transversal já oficializada no
+roadmap mas ainda não iniciada.
 
 ## Stack instalada
 
@@ -109,7 +111,10 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /purchase-drafts, /shipments, /reservation-status,
                  /reserve-available, /reallocate-reservation-line),
                  /shipments (+ /confirm, /cancel), /billings (+ /awaiting,
-                 /issue, /cancel)
+                 /issue, /cancel), /receipt-lines/:id/acquisition-cost,
+                 /items/:id/cost-reference,
+                 /formulation-versions/:id/cost-estimate,
+                 /production-orders/:id/material-cost
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder
                  [origin MANUAL/CUSTOMER_ORDER, customerOrderId/Code],
@@ -137,7 +142,11 @@ packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  suggestedAdditionalReserve], Billing/BillingLine [DRAFT/
                  ISSUED/CANCELLED, unitPrice opcional, totalAmount +
                  hasCompletePricing], AwaitingBillingRowDTO,
-                 CustomerOrderBillingStatus derivado, CNPJ, UFs)
+                 CustomerOrderBillingStatus derivado, CostReferenceDTO
+                 [CostSource REAL/ESTIMATED_30D/ESTIMATED_90D/
+                 LAST_REAL_COST/NO_COST], FormulationCostEstimateDTO,
+                 ProductionOrderMaterialCostDTO [CostQuality REAL/
+                 ESTIMATED/PARTIAL/NO_COST], CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -2347,6 +2356,147 @@ Production confirmada.
 
 ---
 
+# Delivery 20 — Fundação de Custos (capacidade 29)
+
+Base de custeio operacional confiável, estabelecida **antes** de qualquer
+Dashboard/Relatório tentar mostrar dinheiro. Validada só em desktop web —
+sem ferramenta de browser nesta sessão, ver "Pendente".
+
+## Três conceitos distintos, nunca colapsados
+
+1. **Preço da OC** (`PurchaseOrderLine.unitPrice`) — previsto/negociado;
+2. **Custo efetivo de aquisição** (`ReceiptLine.actualUnitCost`) — a
+   referência real de custo do material recebido;
+3. **Valor efetivamente pago** — camada financeira futura, fora do MVP,
+   nunca inferido a partir do custo ou da OC.
+
+Princípio registrado: *primeiro saber quanto o material/produto custou;
+depois evoluir para saber quando e quanto dinheiro saiu do caixa.*
+
+## Modelagem
+
+`ReceiptLine` ganhou `actualUnitCost?` (Decimal 14,4, por unidade de
+estoque) + `costUpdatedAt/By/Note`. Nomeado "de aquisição" de propósito,
+para no futuro comportar mercadoria + frete + despesas atribuíveis sem
+quebrar o schema. `PurchaseOrderLine.unitPrice` teve a semântica
+documentada como preço previsto. **Nenhum backfill** de preço de OC para
+custo real — violaria a semântica. Migration
+`20260829090000_acquisition_cost`.
+
+## Custo opcional, nunca zero por omissão
+
+O recebimento físico jamais falha por falta de custo: `actualUnitCost` é
+sempre opcional na criação e pode ser informado depois via
+`PUT /receipt-lines/:id/acquisition-cost` — operação de **custeio**, que
+nunca reabre o documento físico (não altera quantidade/item/lote/
+fornecedor) e **nunca cria InventoryMovement nem toca On Hand/Reserved/
+Available/On Order**. Desconhecido é `null`; `0` é um valor
+explicitamente informado (ex.: bonificação) e nunca reinterpretado como
+desconhecido; negativo é rejeitado. Custo pode ser corrigido e limpo.
+
+## Serviço central de referência de custo
+
+`apps/api/src/lib/cost-reference.ts` — `getItemCostReference(prisma,
+itemId, referenceDate)` com hierarquia sem nenhum atalho silencioso:
+`ESTIMATED_30D → ESTIMATED_90D → LAST_REAL_COST → NO_COST`. **O preço da
+OC jamais é usado como último recurso**: sem histórico real o resultado é
+`NO_COST` com `unitCost = null`.
+
+Médias são **ponderadas por quantidade recebida**
+(`Σ(qtd × custo) / Σ(qtd)`), nunca médias simples — 10kg@10 + 90kg@20 dá
+19, não 15 (teste obrigatório). Só entram ReceiptLines com custo
+realmente informado; preço de OC, estimativas anteriores, Billing e custo
+de produto acabado nunca participam. A `referenceDate` é sempre
+respeitada: recebimentos posteriores a ela nunca entram no cálculo.
+
+`getConsumedLotCostReference` dá prioridade absoluta ao **lote realmente
+consumido** (`REAL`); só quando esse lote não tem custo informado — ou
+quando o consumo não tem lote — cai no fallback do Item, sempre com o
+`consumedAt` do próprio consumo, nunca "hoje". Consumo sem lote nunca é
+classificado como `REAL`.
+
+## Custo da formulação e da OP
+
+`GET /formulation-versions/:id/cost-estimate` reaproveita a MESMA
+conversão de UOM dos Requirements (`convertUomDecimal`) e é **sempre uma
+estimativa**, mesmo com todos os componentes em referência recente — a
+fórmula é um plano, e nada é persistido na versão (histórica/imutável).
+Qualidade: `ESTIMATED`/`PARTIAL`/`NO_COST`.
+
+`GET /production-orders/:id/material-cost` usa exclusivamente o
+`ProductionConsumption` realmente registrado — nunca Requirement,
+Reservation, sugestão FEFO ou formulação planejada. Qualidade agregada:
+`REAL` (todos os consumos com custo do lote efetivamente consumido),
+`ESTIMATED` (todos calculáveis, ao menos um por fallback), `PARTIAL`
+(alguns sem custo) ou `NO_COST`.
+
+**Custo parcial nunca parece completo**: em `PARTIAL` o
+`knownMaterialCostSubtotal` é reportado à parte e o `totalMaterialCost`
+fica `null`, junto com a lista de itens sem custo.
+
+`materialUnitCost` divide **sempre pela produção real** (soma dos
+`ProductionOutput`), nunca pela planejada — é isso que faz o rendimento/
+perda aparecer naturalmente (teste: R$ 8.910 / 990 un = R$ 9,00/un, nunca
+dividido por 1000). Sem produção ainda, o unitário fica indisponível em
+vez de dividir por zero.
+
+## Melhoria retroativa é desejável
+
+Informar o custo depois melhora automaticamente o custo de OPs passadas
+(`NO_COST` → `REAL`) — nenhuma estimativa antiga é congelada para impedir
+isso. Mas o fallback histórico continua usando a data correta, então
+compras posteriores ao consumo nunca entram numa estimativa retroativa.
+
+## Frontend
+
+Recebimento: campo "Custo efetivo de aquisição" opcional por linha, com o
+preço previsto da OC exibido como referência e botão explícito "Usar
+preço da OC" (nunca automático). Receipt Detail: colunas Preço previsto /
+Custo efetivo + ação "Definir/Atualizar custo" sem reabrir o documento.
+Lot Detail: lote recebido mostra "Custo de aquisição" (`REAL`) ou a
+referência estimada do Item claramente rotulada como estimativa; lote
+produzido mostra "Custo material da produção" vindo da OP, com aviso em
+`PARTIAL` e a nota de que todos os lotes da OP compartilham o mesmo
+unitário (sem rateio fictício). Item Detail: seção "Referência de custo"
+(valor, origem, data, detalhe da janela). Formulação: seção read-only
+"Custo estimado de materiais". OP: seção "Custo de materiais" (resumo +
+detalhe por consumo, com a origem de cada custo).
+
+## Testes
+
+17 novos testes em `costs.test.ts`: recebimento sem custo, preço da OC
+nunca virando real, negativo rejeitado / zero válido e distinto de null,
+definir custo depois sem tocar quantidade/estoque/movimentos, correção e
+limpeza, **média ponderada obrigatória (19, nunca 15)**, hierarquia
+30d/90d/último/sem custo, recebimento posterior à data de referência
+ignorado, formulação com UOM g→kg e mg→kg + embalagem + `basisQuantity`,
+`PARTIAL`/`NO_COST` de formulação, **teste crítico de rastreabilidade de
+custo (LT-A R$10 × LT-B R$30, consumiu LT-B → R$ 300, nunca a média)**,
+**custo material/unidade com produção real (8910/990 = 9,00)**, fallback
+do lote sem custo, `PARTIAL` da OP, **backfill melhorando a OP
+automaticamente**, consumo sem output sem divisão por zero, precisão
+Decimal. Total da API: **346 testes** (329 + 17). Web: 8 testes
+(regressão).
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (346 API + 8 web) — ok em todo o
+monorepo. Regressão completa de Purchasing/Receiving/Production/Inventory
+confirmada; nenhum impacto no estoque quantitativo.
+
+## Pendente (real)
+
+- **Sem validação visual via Playwright/browser nesta sessão** — mesma
+  limitação das Deliveries 15-19. Custos validados só via testes de
+  integração reais (API) e typecheck/build do frontend.
+- Seed de demonstração não foi ampliado com cenários de custo (evitando
+  inflar o seed); os cenários `REAL`/`ESTIMATED`/`PARTIAL` estão cobertos
+  por teste e podem ser reproduzidos manualmente na UI.
+- **Bloco E — Gestão, Relatórios & Exportações** (30-32) é o próximo
+  passo; nada iniciado nesta entrega.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -2385,14 +2535,18 @@ Production confirmada.
 27. Picking / Shipping ✓
 28. Invoicing ✓
 
-## Block E — Management, Reports & Exports (transversal, registered)
-29. Executive/Operational Dashboard
-30. Reports
-31. CSV / PDF / Print exports
+## Cost foundation (transversal prerequisite)
+29. Material cost foundation ✓
 
-Executado só **depois** de 26/27/28 e **antes** da validação ponta a
-ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial) e
-`docs/PRODUCT_RULES.md` §30 (princípios duráveis).
+## Block E — Management, Reports & Exports (transversal, registered)
+30. Executive/Operational Dashboard
+31. Reports
+32. CSV / PDF / Print exports
+
+Executado só **depois** de 26/27/28/29 e **antes** da validação ponta a
+ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
+`docs/PRODUCT_RULES.md` §30 (princípios de Dashboard/Relatórios) e §31
+(regras duráveis de custo).
 
 ---
 
@@ -2564,6 +2718,31 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial) e
   the physical exit already happened at `SHIPMENT_OUT`. A shipment of a
   merely `PARTIALLY_SHIPPED` order can be billed normally. See
   `docs/PRODUCT_RULES.md` §28 for full detail.
+- Confirmed at implementation (Delivery 20): **PO price ≠ real cost ≠
+  payment**. The PO price is never auto-copied into real cost and never
+  used as a silent fallback; real cost is born at receiving
+  (`ReceiptLine.actualUnitCost`) and is always optional — a physical
+  receipt never fails for lack of cost, and the cost can be informed
+  later through a costing operation that never reopens the physical
+  document and never creates an inventory movement or touches On Hand/
+  Reserved/Available/On Order. Unknown cost is `null`, never `0` (a `0`
+  is an explicitly informed value); negatives are rejected. Fallback is
+  strictly `REAL → ESTIMATED_30D → ESTIMATED_90D → LAST_REAL_COST →
+  NO_COST`, with averages **weighted by received quantity** and fed only
+  by actually-informed real costs. The reference date is always honoured
+  — receipts after it never count, and a consumption always uses its own
+  `consumedAt`, never "today". Production material cost comes strictly
+  from the real `ProductionConsumption`, and **the lot actually consumed
+  wins** over any item average or FEFO expectation; a lot-less
+  consumption is never `REAL`. A formulation cost is always an estimate
+  and never persisted in the version. Cost quality is always explicit,
+  and **a partial cost never looks complete** (subtotal reported apart,
+  total unavailable). Material cost per unit always divides by the
+  actually produced quantity, never the planned one, so yield/loss shows
+  up naturally. Informing a cost later is allowed to retroactively
+  improve past production costs. Finished-product cost comes from its
+  Production Order, never from a Billing sale price, and no margin is
+  computed. See `docs/PRODUCT_RULES.md` §31 for full detail.
 - Registered at Delivery 18 (Product Ownership decision, not implemented):
   **Block E — Management, Reports & Exports** (29-31) is a transversal
   layer executed after Invoicing (28) and before the end-to-end demo.
@@ -2714,14 +2893,15 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial) e
 
 # Next recommended implementation
 
-Blocos A-C completos (exceto Usuários) e **Bloco D completo (22-28)**.
-Próximo passo do roadmap oficial: **Bloco E — Gestão, Relatórios &
-Exportações (29-31)** — Dashboard operacional, Relatórios (incluindo
-R-14 Pedido → Operação, R-15 Faturamento por período, R-16 Aguardando
-faturamento, R-17 Pedido × Entregue × Faturado) e exportações CSV/PDF/
-impressão — e só então validação ponta a ponta / demo, responsivo e
-hardening técnico. **Nada disso foi iniciado nesta entrega, por instrução
-explícita do handoff**; aguarda novo handoff de Product Ownership.
+Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)** e
+**Fundação de Custos (29)** concluída. Próximo passo do roadmap oficial:
+**Bloco E — Gestão, Relatórios & Exportações (30-32)** — Dashboard
+operacional, Relatórios (incluindo R-14 Pedido → Operação, R-15
+Faturamento por período, R-16 Aguardando faturamento, R-17 Pedido ×
+Entregue × Faturado) e exportações CSV/PDF/impressão — e só então
+validação ponta a ponta / demo, responsivo e hardening técnico. **Nada
+disso foi iniciado nesta entrega, por instrução explícita do handoff**;
+aguarda novo handoff de Product Ownership.
 Reutilizar quando começar: `FullWorkspaceModal`
 + `components.css` para cadastros simples; padrão de página própria (ver
 Ordem de Compra/Recebimento/editor de Formulação/OP/Pedido) para novos
@@ -2734,6 +2914,10 @@ faturamento (R-15 por `issuedAt`, R-17 Pedido × Entregue × Faturado), e
 `GET /billings/awaiting` já é o read model de R-16 — nenhuma tabela
 agregada precisa ser criada; `hasCompletePricing` é a chave para separar
 "quantidade faturada" (sempre confiável) de "valor faturado" nos KPIs;
+`apps/api/src/lib/cost-reference.ts` + `modules/costs/costs.service.ts`
+são a fonte única de custo (item/formulação/OP) — qualquer KPI de custo
+deve consumi-los e propagar a qualidade `REAL/ESTIMATED/PARTIAL/NO_COST`
+em vez de exibir um número sem contexto;
 `traceability.service.ts` já resolve
 genealogia real, reutilizável para qualquer tela futura de
 rastreabilidade por Pedido/Expedição; a rota de impressão da etiqueta de

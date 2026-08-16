@@ -16,6 +16,13 @@ export interface ReceiptLineDTO {
   location: string | null;
   lotId: string | null;
   lotCode: string | null;
+  /** Preço previsto/negociado da linha da OC — referência visual, nunca custo real. */
+  purchaseUnitPrice: string | null;
+  /** Custo efetivo de aquisição por unidade de estoque. `null` = desconhecido (nunca `0`). */
+  actualUnitCost: string | null;
+  costUpdatedAt: string | null;
+  costUpdatedBy: string | null;
+  costNote: string | null;
 }
 
 export interface ReceiptDTO {
@@ -49,6 +56,12 @@ export interface CreateReceiptLineInput {
   supplierLot?: string;
   expiryDate?: string;
   location?: string;
+  /**
+   * Custo efetivo de aquisição por unidade de estoque — SEMPRE opcional:
+   * o recebimento físico nunca falha por falta de custo. Nunca preenchido
+   * automaticamente a partir do preço da OC.
+   */
+  actualUnitCost?: string;
 }
 
 export interface CreateReceiptInput {

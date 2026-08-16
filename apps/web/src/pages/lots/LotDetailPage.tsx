@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { LotDTO, LotTraceabilityDTO } from "@veridi/shared";
-import { LOT_STATUS_LABELS } from "@veridi/shared";
+import type { CostReferenceDTO, LotDTO, LotTraceabilityDTO, ProductionOrderMaterialCostDTO } from "@veridi/shared";
+import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
 import { blockLot, getLot, getLotTraceability, releaseLot } from "../../lib/lots-api";
+import { getItemCostReference, getProductionOrderMaterialCost } from "../../lib/costs-api";
+import { getReceipt } from "../../lib/receiving-api";
+import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { QrCode } from "../../components/QrCode";
@@ -42,6 +45,12 @@ export function LotDetailPage() {
   const [saving, setSaving] = useState(false);
 
   const [traceability, setTraceability] = useState<LotTraceabilityDTO | null>(null);
+  /** Custo real deste lote recebido (via ReceiptLine) — `null` se desconhecido. */
+  const [lotActualCost, setLotActualCost] = useState<string | null>(null);
+  /** Referência estimada do Item — usada só quando o lote não tem custo real. */
+  const [itemCostReference, setItemCostReference] = useState<CostReferenceDTO | null>(null);
+  /** Custo material da OP que produziu este lote (origin=PRODUCTION). */
+  const [productionCost, setProductionCost] = useState<ProductionOrderMaterialCostDTO | null>(null);
 
   const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
@@ -63,6 +72,43 @@ export function LotDetailPage() {
   useEffect(() => {
     if (id) load(id);
   }, [id]);
+
+  // Custo do lote: recebido usa o custo efetivo da própria aquisição
+  // (REAL); produzido usa o custo material da OP. Sem custo real, mostra
+  // a referência estimada do Item — sempre rotulada como estimativa.
+  useEffect(() => {
+    setLotActualCost(null);
+    setItemCostReference(null);
+    setProductionCost(null);
+    if (!lot) return;
+
+    if (lot.origin === "PRODUCTION") {
+      if (lot.productionOrderId) {
+        getProductionOrderMaterialCost(lot.productionOrderId)
+          .then(setProductionCost)
+          .catch(() => setProductionCost(null));
+      }
+      return;
+    }
+
+    if (lot.receiptId) {
+      getReceipt(lot.receiptId)
+        .then((receipt) => {
+          const line = receipt.lines.find((receiptLine) => receiptLine.lotId === lot.id);
+          setLotActualCost(line?.actualUnitCost ?? null);
+          if (!line?.actualUnitCost) {
+            getItemCostReference(lot.itemId)
+              .then(setItemCostReference)
+              .catch(() => setItemCostReference(null));
+          }
+        })
+        .catch(() => setLotActualCost(null));
+    } else {
+      getItemCostReference(lot.itemId)
+        .then(setItemCostReference)
+        .catch(() => setItemCostReference(null));
+    }
+  }, [lot]);
 
   async function handleRelease() {
     if (!id) return;
@@ -248,6 +294,92 @@ export function LotDetailPage() {
             </dd>
           </dl>
         </FormSection>
+
+        {lot.origin === "PRODUCTION" ? (
+          <FormSection
+            title="Custo material da produção"
+            subtitle="Derivado do que a Ordem de Produção realmente consumiu — nunca de custo de aquisição de fornecedor."
+          >
+            {productionCost ? (
+              <>
+                <dl className="definition-list">
+                  <dt>Custo material / unidade</dt>
+                  <dd>
+                    {productionCost.materialUnitCost
+                      ? `${formatBRL(productionCost.materialUnitCost)} / ${productionCost.outputUnitCode}`
+                      : "Indisponível"}
+                  </dd>
+                  <dt>Qualidade</dt>
+                  <dd>
+                    <span
+                      className={
+                        productionCost.quality === "REAL"
+                          ? "badge badge--active"
+                          : productionCost.quality === "ESTIMATED"
+                            ? "badge badge--neutral"
+                            : "badge badge--warn"
+                      }
+                    >
+                      {COST_QUALITY_LABELS[productionCost.quality]}
+                    </span>
+                  </dd>
+                </dl>
+                {productionCost.quality === "PARTIAL" && (
+                  <p className="field__hint">
+                    Custo parcial: existem materiais consumidos sem referência de custo.
+                  </p>
+                )}
+                <p className="field__hint">
+                  Todos os lotes produzidos por esta OP compartilham a mesma referência de custo material
+                  unitário — não há rateio por lote.
+                </p>
+              </>
+            ) : (
+              <p className="field__hint">Custo material indisponível para a Ordem de Produção de origem.</p>
+            )}
+          </FormSection>
+        ) : (
+          <FormSection title="Custo de aquisição">
+            {lotActualCost !== null ? (
+              <dl className="definition-list">
+                <dt>Custo de aquisição</dt>
+                <dd>
+                  {formatBRL(lotActualCost)} / {lot.unitCode}
+                </dd>
+                <dt>Origem</dt>
+                <dd>
+                  <span className="badge badge--active">{COST_SOURCE_LABELS.REAL}</span>
+                </dd>
+              </dl>
+            ) : itemCostReference ? (
+              <>
+                <dl className="definition-list">
+                  <dt>Referência estimada</dt>
+                  <dd>
+                    {itemCostReference.unitCost
+                      ? `${formatBRL(itemCostReference.unitCost)} / ${lot.unitCode}`
+                      : "Sem custo"}
+                  </dd>
+                  <dt>Origem</dt>
+                  <dd>
+                    <span
+                      className={
+                        itemCostReference.source === "NO_COST" ? "badge badge--warn" : "badge badge--neutral"
+                      }
+                    >
+                      {COST_SOURCE_LABELS[itemCostReference.source]}
+                    </span>
+                  </dd>
+                </dl>
+                <p className="field__hint">
+                  Referência estimada do item — este lote não possui custo efetivo de aquisição informado.
+                </p>
+              </>
+            ) : (
+              <p className="field__hint">Sem custo.</p>
+            )}
+          </FormSection>
+        )}
 
         <FormSection title="Qualidade">
           <div className="status-line">

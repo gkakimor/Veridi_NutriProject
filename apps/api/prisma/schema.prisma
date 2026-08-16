@@ -481,6 +481,11 @@ model PurchaseOrderLine {
   unitCode String
 
   orderedQuantity Decimal  @db.Decimal(18, 6)
+
+  /// PRECO PREVISTO/NEGOCIADO — nunca custo real nem valor pago. Serve
+  /// como referencia visual no Recebimento, mas o custo so vira real
+  /// quando informado explicitamente em ReceiptLine.actualUnitCost.
+  /// Nunca alimenta as medias de custo real.
   unitPrice       Decimal? @db.Decimal(14, 4)
 
   receiptLines ReceiptLine[]
@@ -559,6 +564,18 @@ model ReceiptLine {
   /// Item.controlsLot=true. Null quando o item nao controla lote.
   lotId String? @unique
   lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  /// CUSTO EFETIVO DE AQUISICAO por unidade de estoque do Item. Nunca
+  /// copiado automaticamente de PurchaseOrderLine.unitPrice (que e so
+  /// preco previsto/negociado) e nunca confundido com valor pago (camada
+  /// financeira futura). `null` = desconhecido; `0` e um valor
+  /// explicitamente informado, nunca reinterpretado como desconhecido.
+  /// Nomeado "de aquisicao" para no futuro comportar mercadoria + frete +
+  /// despesas diretamente atribuiveis, sem quebrar o schema.
+  actualUnitCost Decimal? @db.Decimal(14, 4)
+  costUpdatedAt  DateTime?
+  costUpdatedBy  String?
+  costNote       String?
 
   createdAt DateTime @default(now())
 

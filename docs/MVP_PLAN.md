@@ -54,15 +54,23 @@ Block D depends on the foundation from Blocks B/C: Inventory, Reservation,
 Formulations, Production Order, Finished Product — all complete.
 **Block D is functionally complete as of Delivery 19.**
 
+## Cost foundation (transversal prerequisite)
+29. Material cost foundation ✓
+
+Establishes trustworthy operational costing before any dashboard/report
+tries to show money. Strictly separates **PO price** (expected/negotiated)
+from **effective acquisition cost** (the real reference) from **actual
+payment** (future financial layer, out of scope).
+
 ## Block E — Management, Reports & Exports (transversal layer)
-29. Executive/Operational Dashboard
-30. Reports
-31. CSV / PDF / Print exports
+30. Executive/Operational Dashboard
+31. Reports
+32. CSV / PDF / Print exports
 
 Block E is a **transversal layer**, executed only **after** 26 (Purchase
-Suggestion), 27 (Shipping) and 28 (Invoicing) are done, and **before**
-end-to-end validation / final demo. It reads existing operational
-entities — it never introduces a new source of truth.
+Suggestion), 27 (Shipping), 28 (Invoicing) and 29 (Cost foundation) are
+done, and **before** end-to-end validation / final demo. It reads existing
+operational entities — it never introduces a new source of truth.
 
 ---
 
@@ -72,13 +80,19 @@ entities — it never introduces a new source of truth.
 26 Purchase Suggestion ✓
 → 27 Shipping ✓
 → 28 Invoicing ✓
-→ 29 Executive/Operational Dashboard
-→ 30 Reports
-→ 31 CSV/PDF/Print exports
+→ 29 Material cost foundation ✓
+→ 30 Executive/Operational Dashboard
+→ 31 Reports
+→ 32 CSV/PDF/Print exports
 → end-to-end validation / demo
 → responsive/mobile hardening
 → later technical hardening
 ```
+
+Guiding principle registered with the cost foundation: **first know what
+the material/product cost; only later evolve to know when and how much
+money actually left the cash register.** Accounts payable and the wider
+financial layer stay in the backlog.
 
 ---
 
@@ -93,9 +107,12 @@ Orders). Complete.
 **Evolução incremental** — steps 26–28 (Purchase Suggestion, Picking /
 Shipping, Invoicing). Complete.
 
-**Transversal layer** — steps 29–31 (Block E). Registered officially, not
-started — its dependency (Invoicing, 28) is now done, so it is the next
-scheduled work.
+**Cost foundation** — step 29. Complete. Prerequisite for any money-aware
+dashboard/report.
+
+**Transversal layer** — steps 30–32 (Block E). Registered officially, not
+started — its dependencies (Invoicing 28, Cost foundation 29) are done,
+so it is the next scheduled work.
 
 ---
 

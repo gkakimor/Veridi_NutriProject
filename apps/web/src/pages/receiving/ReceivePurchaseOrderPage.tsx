@@ -5,6 +5,7 @@ import { getPurchaseOrder, listPurchaseOrders } from "../../lib/purchase-orders-
 import { getItem } from "../../lib/items-api";
 import { createReceipt } from "../../lib/receiving-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
@@ -22,6 +23,10 @@ interface LineDraft {
   supplierLot: string;
   expiryDate: string;
   location: string;
+  /** Preço previsto da OC — só referência visual, nunca custo real. */
+  purchaseUnitPrice: string | null;
+  /** Custo efetivo de aquisição — sempre opcional. */
+  actualUnitCost: string;
 }
 
 /**
@@ -76,6 +81,10 @@ export function ReceivePurchaseOrderPage() {
           supplierLot: "",
           expiryDate: "",
           location: "",
+          purchaseUnitPrice: line.unitPrice,
+          // NUNCA pré-preenchido com o preço da OC — custo real exige
+          // decisão explícita do usuário.
+          actualUnitCost: "",
         })),
       );
     } catch (err) {
@@ -127,6 +136,7 @@ export function ReceivePurchaseOrderPage() {
         ...(line.supplierLot.trim() ? { supplierLot: line.supplierLot.trim() } : {}),
         ...(line.expiryDate ? { expiryDate: new Date(line.expiryDate).toISOString() } : {}),
         ...(line.location.trim() ? { location: line.location.trim() } : {}),
+        ...(line.actualUnitCost.trim() ? { actualUnitCost: line.actualUnitCost.trim() } : {}),
       })),
     };
 
@@ -329,6 +339,44 @@ export function ReceivePurchaseOrderPage() {
                     />
                   </div>
                 )}
+
+                <div className="field">
+                  <label htmlFor={`cost-${line.purchaseOrderLineId}`}>
+                    Custo efetivo de aquisição ({line.unitCode})
+                  </label>
+                  <input
+                    id={`cost-${line.purchaseOrderLineId}`}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Opcional"
+                    value={line.actualUnitCost}
+                    onChange={(event) =>
+                      handleLineChange(line.purchaseOrderLineId, "actualUnitCost", event.target.value)
+                    }
+                  />
+                  <p className="field__hint">
+                    {line.purchaseUnitPrice
+                      ? `Preço previsto da OC: ${formatBRL(line.purchaseUnitPrice)} / ${line.unitCode}. `
+                      : ""}
+                    Opcional — o recebimento não depende do custo. Informe apenas o custo realmente
+                    praticado; o preço da OC nunca é assumido como custo real.
+                  </p>
+                  {line.purchaseUnitPrice && (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() =>
+                        handleLineChange(
+                          line.purchaseOrderLineId,
+                          "actualUnitCost",
+                          line.purchaseUnitPrice!,
+                        )
+                      }
+                    >
+                      Usar preço da OC
+                    </button>
+                  )}
+                </div>
 
                 {line.controlsLot && (
                   <div className="field">

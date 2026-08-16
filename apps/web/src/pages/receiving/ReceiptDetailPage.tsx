@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ReceiptDTO } from "@veridi/shared";
 import { getReceipt } from "../../lib/receiving-api";
+import { setAcquisitionCost } from "../../lib/costs-api";
+import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 
 function formatDate(value: string | null): string {
@@ -9,7 +11,12 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleDateString("pt-BR");
 }
 
-/** Detalhe de Receipt — sempre historico/somente-leitura. */
+/**
+ * Detalhe de Receipt — o recebimento físico é sempre histórico/somente
+ * leitura. O custo efetivo de aquisição é a única coisa editável aqui, e
+ * é custeio, não alteração do documento físico: nunca muda quantidade,
+ * lote ou estoque.
+ */
 export function ReceiptDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -17,6 +24,25 @@ export function ReceiptDetailPage() {
   const [receipt, setReceipt] = useState<ReceiptDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const [costDraft, setCostDraft] = useState("");
+  const [savingCost, setSavingCost] = useState(false);
+
+  async function handleSaveCost(lineId: string) {
+    setSavingCost(true);
+    setError(null);
+    try {
+      const updated = await setAcquisitionCost(lineId, { unitCost: costDraft.trim() });
+      setReceipt(updated);
+      setEditingLineId(null);
+      setCostDraft("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao salvar custo de aquisição");
+    } finally {
+      setSavingCost(false);
+    }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -76,6 +102,8 @@ export function ReceiptDetailPage() {
       </div>
 
       <div className="doc-body">
+        {error && <p className="form-alert">{error}</p>}
+
         <FormSection title="Dados do recebimento">
           <dl className="definition-list">
             <dt>Ordem de compra</dt>
@@ -118,6 +146,9 @@ export function ReceiptDetailPage() {
                   <th>Validade</th>
                   <th>Localização</th>
                   <th>Lote interno</th>
+                  <th>Preço previsto (OC)</th>
+                  <th>Custo efetivo</th>
+                  <th aria-hidden="true" />
                 </tr>
               </thead>
               <tbody>
@@ -151,6 +182,58 @@ export function ReceiptDetailPage() {
                         </div>
                       ) : (
                         "—"
+                      )}
+                    </td>
+                    <td>{formatBRL(line.purchaseUnitPrice)}</td>
+                    <td>
+                      {editingLineId === line.id ? (
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Vazio = desconhecido"
+                          value={costDraft}
+                          onChange={(event) => setCostDraft(event.target.value)}
+                        />
+                      ) : line.actualUnitCost !== null ? (
+                        <>
+                          {formatBRL(line.actualUnitCost)}
+                          <br />
+                          <span className="field__hint">Real</span>
+                        </>
+                      ) : (
+                        <span className="field__hint">Sem custo informado</span>
+                      )}
+                    </td>
+                    <td>
+                      {editingLineId === line.id ? (
+                        <div className="table__actions">
+                          <button
+                            type="button"
+                            className="btn btn--accent btn--sm"
+                            disabled={savingCost}
+                            onClick={() => handleSaveCost(line.id)}
+                          >
+                            {savingCost ? "Salvando…" : "Salvar"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() => setEditingLineId(null)}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => {
+                            setEditingLineId(line.id);
+                            setCostDraft(line.actualUnitCost ?? "");
+                          }}
+                        >
+                          {line.actualUnitCost !== null ? "Atualizar custo" : "Definir custo"}
+                        </button>
                       )}
                     </td>
                   </tr>

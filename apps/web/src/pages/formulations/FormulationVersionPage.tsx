@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { FormulationVersionDTO, UnitOfMeasureDTO } from "@veridi/shared";
-import { FORMULATION_VERSION_STATUS_LABELS } from "@veridi/shared";
+import type { FormulationCostEstimateDTO, FormulationVersionDTO, UnitOfMeasureDTO } from "@veridi/shared";
+import {
+  COST_QUALITY_LABELS,
+  COST_SOURCE_LABELS,
+  FORMULATION_VERSION_STATUS_LABELS,
+} from "@veridi/shared";
 import {
   activateFormulationVersion,
   createNewFormulationVersion,
@@ -11,6 +15,8 @@ import {
 import { listItems } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { getFormulationCostEstimate } from "../../lib/costs-api";
+import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
@@ -92,6 +98,7 @@ export function FormulationVersionPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
+  const [costEstimate, setCostEstimate] = useState<FormulationCostEstimateDTO | null>(null);
 
   const syncFromServer = useCallback((dto: FormulationVersionDTO) => {
     setBasisQuantity(dto.basisQuantity);
@@ -115,6 +122,15 @@ export function FormulationVersionPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Fotografia de custo — recarregada sempre que a versão muda (a fórmula
+  // é imutável, mas a referência de custo não).
+  useEffect(() => {
+    if (!versionId) return;
+    getFormulationCostEstimate(versionId)
+      .then(setCostEstimate)
+      .catch(() => setCostEstimate(null));
+  }, [versionId, version?.components.length]);
 
   useEffect(() => {
     Promise.all([
@@ -490,6 +506,85 @@ export function FormulationVersionPage() {
             </div>
           )}
         </FormSection>
+
+        {costEstimate && (
+          <FormSection
+            title="Custo estimado de materiais"
+            subtitle="Sempre uma estimativa — a fórmula é um plano, não um realizado. A referência de custo muda com o tempo e nunca é gravada na versão."
+          >
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Componente</th>
+                    <th>Quantidade</th>
+                    <th>Referência unitária</th>
+                    <th>Origem</th>
+                    <th>Custo estimado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costEstimate.components.map((component) => (
+                    <tr key={component.itemId}>
+                      <td>
+                        <span className="code">{component.itemCode}</span> {component.itemName}
+                      </td>
+                      <td>
+                        {component.normalizedQuantity} {component.stockUnitCode}
+                        <br />
+                        <span className="field__hint">
+                          {component.formulaQuantity} {component.formulaUnitCode}
+                        </span>
+                      </td>
+                      <td>{formatBRL(component.unitCost)}</td>
+                      <td>
+                        <span
+                          className={
+                            component.costSource === "NO_COST" ? "badge badge--warn" : "badge badge--neutral"
+                          }
+                        >
+                          {COST_SOURCE_LABELS[component.costSource]}
+                        </span>
+                      </td>
+                      <td>{formatBRL(component.estimatedComponentCost)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <dl className="definition-list">
+              <dt>Custo estimado da base ({costEstimate.basisQuantity} {costEstimate.outputUnitCode})</dt>
+              <dd>
+                {costEstimate.estimatedMaterialCost
+                  ? formatBRL(costEstimate.estimatedMaterialCost)
+                  : "Indisponível"}
+              </dd>
+              <dt>Custo estimado por unidade</dt>
+              <dd>
+                {costEstimate.estimatedMaterialUnitCost
+                  ? formatBRL(costEstimate.estimatedMaterialUnitCost)
+                  : "Indisponível"}
+              </dd>
+              <dt>Qualidade</dt>
+              <dd>
+                <span
+                  className={costEstimate.quality === "ESTIMATED" ? "badge badge--active" : "badge badge--warn"}
+                >
+                  {COST_QUALITY_LABELS[costEstimate.quality]}
+                </span>
+              </dd>
+            </dl>
+
+            {costEstimate.quality === "PARTIAL" && (
+              <p className="field__hint">
+                Custo parcial: {costEstimate.missingCostItems.join(", ")} sem referência de custo. O
+                subtotal conhecido ({formatBRL(costEstimate.knownCostSubtotal)}) não representa o custo
+                total da fórmula.
+              </p>
+            )}
+          </FormSection>
+        )}
 
         <FormSection title="Observações">
           <div className="field">

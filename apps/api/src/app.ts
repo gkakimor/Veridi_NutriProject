@@ -20,6 +20,7 @@ import { fulfillmentPlanRoutes } from "./modules/customer-orders/fulfillment-pla
 import { purchaseSuggestionRoutes } from "./modules/customer-orders/purchase-suggestion.routes.js";
 import { shipmentsRoutes } from "./modules/shipments/shipments.routes.js";
 import { billingsRoutes } from "./modules/billings/billings.routes.js";
+import { costsRoutes } from "./modules/costs/costs.routes.js";
 
 /**
  * Monta a instancia Fastify.
@@ -59,6 +60,7 @@ export function buildApp() {
   app.register(purchaseSuggestionRoutes);
   app.register(shipmentsRoutes);
   app.register(billingsRoutes);
+  app.register(costsRoutes);
 
   return app;
 }

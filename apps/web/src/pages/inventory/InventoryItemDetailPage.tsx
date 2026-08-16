@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { AllocationSuggestionDTO, InventoryItemDetailDTO } from "@veridi/shared";
-import { ITEM_TYPE_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
+import type { AllocationSuggestionDTO, CostReferenceDTO, InventoryItemDetailDTO } from "@veridi/shared";
+import { COST_SOURCE_LABELS, ITEM_TYPE_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
 import { getAllocationSuggestion, getInventoryItem } from "../../lib/inventory-api";
+import { getItemCostReference } from "../../lib/costs-api";
+import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
 
@@ -38,6 +40,7 @@ export function InventoryItemDetailPage() {
   const [suggestion, setSuggestion] = useState<AllocationSuggestionDTO | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
+  const [costReference, setCostReference] = useState<CostReferenceDTO | null>(null);
 
   const load = useCallback(() => {
     if (!itemId) return;
@@ -52,6 +55,13 @@ export function InventoryItemDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!itemId) return;
+    getItemCostReference(itemId)
+      .then(setCostReference)
+      .catch(() => setCostReference(null));
+  }, [itemId]);
 
   async function handleCalculateSuggestion(event: FormEvent) {
     event.preventDefault();
@@ -112,6 +122,35 @@ export function InventoryItemDetailPage() {
       </div>
 
       <div className="doc-body">
+        {costReference && (
+          <FormSection
+            title="Referência de custo"
+            subtitle="Baseada apenas em custos efetivos de aquisição informados — preço de OC nunca entra."
+          >
+            <dl className="definition-list">
+              <dt>Custo unitário</dt>
+              <dd>
+                {costReference.unitCost
+                  ? `${formatBRL(costReference.unitCost)} / ${costReference.unitCode}`
+                  : "Sem custo"}
+              </dd>
+              <dt>Origem</dt>
+              <dd>
+                <span
+                  className={
+                    costReference.source === "NO_COST" ? "badge badge--warn" : "badge badge--neutral"
+                  }
+                >
+                  {COST_SOURCE_LABELS[costReference.source]}
+                </span>
+              </dd>
+              <dt>Data de referência</dt>
+              <dd>{formatDate(costReference.referenceDate)}</dd>
+            </dl>
+            {costReference.details && <p className="field__hint">{costReference.details}</p>}
+          </FormSection>
+        )}
+
         <FormSection title="Disponibilidade">
           <dl className="definition-list">
             <dt>On Hand</dt>

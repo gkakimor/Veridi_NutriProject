@@ -7,7 +7,15 @@ import type {
   ProductionOrderStatus,
   ProductionOutputDestination,
 } from "@veridi/shared";
-import { PRODUCTION_ORDER_ORIGIN_LABELS, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
+import type { ProductionOrderMaterialCostDTO } from "@veridi/shared";
+import {
+  COST_QUALITY_LABELS,
+  COST_SOURCE_LABELS,
+  PRODUCTION_ORDER_ORIGIN_LABELS,
+  PRODUCTION_ORDER_STATUS_LABELS,
+} from "@veridi/shared";
+import { getProductionOrderMaterialCost } from "../../lib/costs-api";
+import { formatBRL } from "../../lib/currency";
 import {
   cancelProductionOrder,
   completeProductionOrder,
@@ -111,6 +119,8 @@ export function ProductionOrderPage() {
   const [outputNotes, setOutputNotes] = useState("");
   const [registeringOutput, setRegisteringOutput] = useState(false);
 
+  const [materialCost, setMaterialCost] = useState<ProductionOrderMaterialCostDTO | null>(null);
+
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completionReason, setCompletionReason] = useState("");
   const [completing, setCompleting] = useState(false);
@@ -140,6 +150,18 @@ export function ProductionOrderPage() {
       .then((result) => setActiveProducts(result.products))
       .catch(() => setActiveProducts([]));
   }, []);
+
+  // Custo material só faz sentido quando já existe consumo real — sempre
+  // recalculado ao vivo (informar custo depois melhora o resultado).
+  useEffect(() => {
+    if (!id || !productionOrder || productionOrder.consumptions.length === 0) {
+      setMaterialCost(null);
+      return;
+    }
+    getProductionOrderMaterialCost(id)
+      .then(setMaterialCost)
+      .catch(() => setMaterialCost(null));
+  }, [id, productionOrder]);
 
   // So precisa dos flags do Finished Item (controlsLot/controlsExpiry) a
   // partir de IN_PRODUCTION, para orientar o formulario de Registrar produção.
@@ -1115,6 +1137,99 @@ export function ProductionOrderPage() {
                 </table>
               </div>
             )}
+          </FormSection>
+        )}
+
+        {materialCost && (
+          <FormSection
+            title="Custo de materiais"
+            subtitle={
+              status === "COMPLETED"
+                ? "Custo material encerrado desta OP, a partir do que foi realmente consumido."
+                : "Custo material atual — a OP ainda está em produção, o valor pode mudar."
+            }
+          >
+            <dl className="definition-list">
+              <dt>Materiais consumidos</dt>
+              <dd>
+                {materialCost.totalMaterialCost
+                  ? formatBRL(materialCost.totalMaterialCost)
+                  : "Indisponível"}
+              </dd>
+              <dt>Produzido</dt>
+              <dd>
+                {materialCost.producedQuantity} {materialCost.outputUnitCode}
+              </dd>
+              <dt>Custo material / unidade</dt>
+              <dd>
+                {materialCost.materialUnitCost ? formatBRL(materialCost.materialUnitCost) : "Indisponível"}
+              </dd>
+              <dt>Qualidade</dt>
+              <dd>
+                <span
+                  className={
+                    materialCost.quality === "REAL"
+                      ? "badge badge--active"
+                      : materialCost.quality === "ESTIMATED"
+                        ? "badge badge--neutral"
+                        : "badge badge--warn"
+                  }
+                >
+                  {COST_QUALITY_LABELS[materialCost.quality]}
+                </span>
+              </dd>
+            </dl>
+
+            {materialCost.quality === "PARTIAL" && (
+              <p className="field__hint">
+                Custo parcial: existem materiais consumidos sem referência de custo (
+                {materialCost.missingCostItems.join(", ")}). O subtotal conhecido (
+                {formatBRL(materialCost.knownMaterialCostSubtotal)}) não representa o custo total.
+              </p>
+            )}
+
+            <div className="table-container table-container--spaced">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Lote</th>
+                    <th>Consumido</th>
+                    <th>Custo unitário</th>
+                    <th>Origem</th>
+                    <th>Custo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {materialCost.consumptions.map((consumption) => (
+                    <tr key={consumption.consumptionId}>
+                      <td>
+                        <span className="code">{consumption.itemCode}</span> {consumption.itemName}
+                      </td>
+                      <td>{consumption.lotCode ?? "—"}</td>
+                      <td>
+                        {consumption.quantity} {consumption.unitCode}
+                      </td>
+                      <td>{formatBRL(consumption.unitCost)}</td>
+                      <td>
+                        <span
+                          className={
+                            consumption.costSource === "REAL"
+                              ? "badge badge--active"
+                              : consumption.costSource === "NO_COST"
+                                ? "badge badge--warn"
+                                : "badge badge--neutral"
+                          }
+                        >
+                          {COST_SOURCE_LABELS[consumption.costSource]}
+                        </span>
+                      </td>
+                      <td>{formatBRL(consumption.materialCost)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </FormSection>
         )}
 

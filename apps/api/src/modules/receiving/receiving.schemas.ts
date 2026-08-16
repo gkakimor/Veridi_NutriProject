@@ -9,6 +9,18 @@ const receiptLineInputSchema = z.object({
   supplierLot: z.string().trim().max(100).optional(),
   expiryDate: requiredDateSchema.optional(),
   location: z.string().trim().max(200).optional(),
+  /**
+   * Custo efetivo de aquisicao por unidade de estoque — SEMPRE opcional
+   * (recebimento nunca falha por falta de custo). Zero e valido; negativo
+   * rejeitado; nunca preenchido a partir do preco da OC.
+   */
+  actualUnitCost: z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : String(value).trim()))
+    .refine((value) => value === undefined || value === "" || /^\d+(\.\d+)?$/.test(value), {
+      message: "Custo unitário inválido (não pode ser negativo)",
+    }),
 });
 
 export const createReceiptSchema = z.object({
