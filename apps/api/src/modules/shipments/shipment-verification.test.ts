@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -8,7 +8,7 @@ const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -206,7 +206,7 @@ async function getOrder(app: App, orderId: string) {
 
 describe("Conferência de lote — identidade", () => {
   it("aceita o lote reservado, grava a auditoria e não movimenta estoque", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -256,7 +256,7 @@ describe("Conferência de lote — identidade", () => {
   });
 
   it("aceita o código puro e o payload de QR (LOT:<code>) — mesmo padrão do lote", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -285,7 +285,7 @@ describe("Conferência de lote — identidade", () => {
   });
 
   it("recusa lote de outro produto acabado e lote de componente da OP", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -330,7 +330,7 @@ describe("Conferência de lote — identidade", () => {
   });
 
   it("recusa linha de outra expedição e lote bloqueado, aguardando Qualidade ou vencido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -377,7 +377,7 @@ describe("Conferência de lote — identidade", () => {
 
 describe("Conferência de lote — confirmação da expedição", () => {
   it("bloqueia a confirmação sem conferência e libera depois dela", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -422,7 +422,7 @@ describe("Conferência de lote — confirmação da expedição", () => {
   });
 
   it("exige conferência de TODOS os lotes do mesmo produto", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT", true);
@@ -468,7 +468,7 @@ describe("Conferência de lote — confirmação da expedição", () => {
   });
 
   it("mantém a conferência ao salvar a separação de novo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -508,7 +508,7 @@ describe("Conferência de lote — confirmação da expedição", () => {
 
 describe("Conferência de lote — pedido com vários produtos", () => {
   it("expede A total, B parcial e C nenhum: pedido segue PARTIALLY_SHIPPED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const itemA = await createItem("FINISHED_PRODUCT");
@@ -571,7 +571,7 @@ describe("Conferência de lote — pedido com vários produtos", () => {
 
 describe("Conferência de lote — mesmo lote em pedidos diferentes", () => {
   it("LT-A com 1000: PED-A reserva 300, PED-B reserva 500, EXP-A expede 200", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");

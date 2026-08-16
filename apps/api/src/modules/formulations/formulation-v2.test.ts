@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 import { applyPurityAndOverage, computeComponentRequirement } from "../../lib/formulation-math.js";
 
@@ -16,7 +16,7 @@ const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -199,7 +199,7 @@ describe("Formulação v2 — matemática", () => {
 
 describe("Formulação v2 — versão e Ordem de Produção", () => {
   it("versão PER_DOSE calcula a necessidade da OP com pureza e overage congelados", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const activeIngredient = await createItem(app, { purity: "98" });
@@ -285,7 +285,7 @@ describe("Formulação v2 — versão e Ordem de Produção", () => {
   });
 
   it("alterar a pureza do Item depois NÃO altera a formulação nem a OP", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const ingredient = await createItem(app, { purity: "90" });
@@ -347,7 +347,7 @@ describe("Formulação v2 — versão e Ordem de Produção", () => {
   });
 
   it("versão sem pureza informada não aplica correção nenhuma", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const ingredient = await createItem(app);
@@ -376,7 +376,7 @@ describe("Formulação v2 — versão e Ordem de Produção", () => {
   });
 
   it("rejeita pureza fora da faixa e overage negativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const ingredient = await createItem(app);
@@ -402,7 +402,7 @@ describe("Formulação v2 — versão e Ordem de Produção", () => {
   });
 
   it("versões antigas continuam FIXED_BASIS e com o mesmo resultado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const ingredient = await createItem(app);
@@ -447,7 +447,7 @@ describe("Formulação v2 — versão e Ordem de Produção", () => {
   });
 
   it("nova versão a partir da ativa preserva modo de cálculo, doses e snapshots", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const ingredient = await createItem(app, { purity: "95" });

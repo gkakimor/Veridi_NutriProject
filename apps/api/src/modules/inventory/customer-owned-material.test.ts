@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -16,7 +16,7 @@ const fixtureCustomerIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
 const fixtureCustomerOrderIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 function marker(): string {
   // Maiúsculo: códigos de lote são normalizados para maiúsculo na busca por
@@ -242,7 +242,7 @@ describe("Material de propriedade do cliente — integridade do dono", () => {
   });
 
   it("mesmo Item tem lotes de donos diferentes, cada um com seu saldo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customerA = await createCustomer("Cliente A Saldo");
@@ -277,7 +277,7 @@ describe("Material de propriedade do cliente — integridade do dono", () => {
 
 describe("Material de propriedade do cliente — FEFO e reserva", () => {
   it("necessidade VERIDI não é coberta por estoque de cliente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customerA = await createCustomer("Cliente A FEFO");
@@ -303,7 +303,7 @@ describe("Material de propriedade do cliente — FEFO e reserva", () => {
   });
 
   it("necessidade CUSTOMER só enxerga o estoque do cliente da própria OP", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customerA = await createCustomer("Cliente A Escopo");
@@ -329,7 +329,7 @@ describe("Material de propriedade do cliente — FEFO e reserva", () => {
   });
 
   it("reserva do RELEASE usa apenas lotes do cliente da OP", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customerA = await createCustomer("Cliente A Reserva");
@@ -359,7 +359,7 @@ describe("Material de propriedade do cliente — FEFO e reserva", () => {
   });
 
   it("OP com material do cliente sem cliente definido não libera", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const capsule = await createItem("PACKAGING", { unitCode: "kg" });
@@ -390,7 +390,7 @@ describe("Material de propriedade do cliente — FEFO e reserva", () => {
   });
 
   it("ativar formulação com componente do cliente exige produto com cliente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const capsule = await createItem("PACKAGING", { unitCode: "kg" });
@@ -407,7 +407,7 @@ describe("Material de propriedade do cliente — FEFO e reserva", () => {
 
 describe("Material de propriedade do cliente — recebimento sem Ordem de Compra", () => {
   it("cria Receipt/Lot/RECEIPT_IN com dono CUSTOMER e sem OC", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer("Cliente Recebimento");
@@ -450,7 +450,7 @@ describe("Material de propriedade do cliente — recebimento sem Ordem de Compra
   });
 
   it("item sem controle de lote é rejeitado com mensagem explícita", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer("Cliente Sem Lote");
@@ -473,7 +473,7 @@ describe("Material de propriedade do cliente — recebimento sem Ordem de Compra
   });
 
   it("qualidade continua valendo: item com liberação entra AWAITING_RELEASE e só depois fica disponível", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer("Cliente Qualidade");
@@ -508,7 +508,7 @@ describe("Material de propriedade do cliente — recebimento sem Ordem de Compra
 
 describe("Material de propriedade do cliente — consulta operacional", () => {
   it("visão de materiais de clientes lista só material de cliente, com saldo do ledger", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customerA = await createCustomer("Cliente A Visão");
@@ -542,7 +542,7 @@ describe("Material de propriedade do cliente — consulta operacional", () => {
   });
 
   it("R-01 traz o proprietário e filtra por cliente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customerA = await createCustomer("Cliente A R01");
@@ -571,7 +571,7 @@ describe("Material de propriedade do cliente — consulta operacional", () => {
 
 describe("Material de propriedade do cliente — picking, consumo e custo", () => {
   it("substituição rejeita lote de outro cliente e da Veridi, e aceita outro lote do mesmo cliente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customerA = await createCustomer("Cliente A Substituição");
@@ -625,7 +625,7 @@ describe("Material de propriedade do cliente — picking, consumo e custo", () =
   });
 
   it("consumo de lote do cliente baixa estoque normalmente e fica fora do custo Veridi", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -716,7 +716,7 @@ describe("Material de propriedade do cliente — picking, consumo e custo", () =
 
 describe("Material de propriedade do cliente — sugestão de compra", () => {
   it("falta de material do cliente não vira Ordem de Compra: aparece como aguardando cliente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 

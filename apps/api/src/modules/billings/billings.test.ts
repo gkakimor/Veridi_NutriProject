@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -8,7 +8,7 @@ const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -201,7 +201,7 @@ async function getInventory(app: App, itemId: string) {
 
 describe("Faturamento — criação", () => {
   it("gera FAT-000001 copiando fielmente as linhas da Expedição confirmada", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -232,7 +232,7 @@ describe("Faturamento — criação", () => {
   });
 
   it("rejeita Expedição DRAFT e Expedição CANCELLED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -258,7 +258,7 @@ describe("Faturamento — criação", () => {
   });
 
   it("apenas um faturamento ativo por Expedição; CANCELLED libera a vaga", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -286,7 +286,7 @@ describe("Faturamento — criação", () => {
   });
 
   it("índice único parcial garante um ativo por Expedição mesmo contornando o service", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -313,7 +313,7 @@ describe("Faturamento — criação", () => {
   });
 
   it("concorrência: duas criações simultâneas geram apenas um faturamento ativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -336,7 +336,7 @@ describe("Faturamento — criação", () => {
   });
 
   it("não permite alterar quantidade, lote ou linhas do faturamento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -366,7 +366,7 @@ describe("Faturamento — criação", () => {
 
 describe("Faturamento — preço e valor", () => {
   it("preço opcional; total só existe com pricing completo; Decimal sem float", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -403,7 +403,7 @@ describe("Faturamento — preço e valor", () => {
   });
 
   it("preço negativo rejeitado; zero aceito; preço limpável", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -444,7 +444,7 @@ describe("Faturamento — preço e valor", () => {
 
 describe("Faturamento — emissão e cancelamento", () => {
   it("emite sem preço, grava issuedAt/By e vira imutável", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -485,7 +485,7 @@ describe("Faturamento — emissão e cancelamento", () => {
   });
 
   it("emissão não altera Shipment, status do Pedido nem estoque", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -527,7 +527,7 @@ describe("Faturamento — emissão e cancelamento", () => {
   });
 
   it("cancelar DRAFT exige motivo, não conta como faturado e devolve a Expedição para faturável", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -564,7 +564,7 @@ describe("Faturamento — emissão e cancelamento", () => {
   });
 
   it("concorrência: duas emissões simultâneas do mesmo faturamento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -592,7 +592,7 @@ describe("Faturamento — emissão e cancelamento", () => {
 
 describe("Faturamento — progresso do Pedido", () => {
   it("DRAFT não conta como faturado; Expedição fica 'em preparação'", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -616,7 +616,7 @@ describe("Faturamento — progresso do Pedido", () => {
   });
 
   it("PROGRESSO COMPLETO: 1000 pedido, 400+600 expedidos e faturados → BILLED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -661,7 +661,7 @@ describe("Faturamento — progresso do Pedido", () => {
   });
 
   it("fatura Expedição de um Pedido apenas PARTIALLY_SHIPPED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -681,7 +681,7 @@ describe("Faturamento — progresso do Pedido", () => {
   });
 
   it("aguardando faturamento lista só Expedições CONFIRMED sem faturamento emitido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();

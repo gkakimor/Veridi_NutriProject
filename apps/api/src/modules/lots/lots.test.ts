@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureSupplierIds: string[] = [];
@@ -84,7 +84,7 @@ afterAll(async () => {
 
 describe("Lots", () => {
   it("busca por código interno, lote do fornecedor e código/nome do item", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const byInternalCode = await app.inject({
@@ -113,7 +113,7 @@ describe("Lots", () => {
   });
 
   it("filtra por status, item e fornecedor", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const onlyBlocked = await app.inject({
@@ -139,7 +139,7 @@ describe("Lots", () => {
   });
 
   it("GET /lots/:id retorna detalhe com item/fornecedor", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({ method: "GET", url: `/lots/${fixtureLotIds[0]}` });
@@ -154,7 +154,7 @@ describe("Lots", () => {
   });
 
   it("qrPayload é determinístico e distinto por lote", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const first = await app.inject({ method: "GET", url: `/lots/${fixtureLotIds[0]}` });
@@ -223,7 +223,7 @@ describe("Lot lookup (QR/scan)", () => {
   });
 
   it("resolve pelo código interno puro", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({ method: "GET", url: `/lots/lookup?code=${lookupCode}` });
@@ -235,7 +235,7 @@ describe("Lot lookup (QR/scan)", () => {
   });
 
   it("resolve pelo payload completo do QR (LOT:<codigo>)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({
@@ -250,7 +250,7 @@ describe("Lot lookup (QR/scan)", () => {
   });
 
   it("não encontra código de lote inválido/inventado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({
@@ -264,7 +264,7 @@ describe("Lot lookup (QR/scan)", () => {
   });
 
   it("nunca resolve por supplierLot — só pelo código interno", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({

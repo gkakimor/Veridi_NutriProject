@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureSupplierIds: string[] = [];
@@ -8,7 +8,7 @@ const createdPurchaseOrderIds: string[] = [];
 
 let supplierId: string;
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 type LotStatus = "AWAITING_RELEASE" | "AVAILABLE" | "BLOCKED";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -125,7 +125,7 @@ async function createOrderedPurchaseOrder(
 
 describe("Allocation suggestion — FEFO", () => {
   it("escolhe a validade mais próxima primeiro", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -148,7 +148,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("aloca em múltiplos lotes usando parcialmente o último", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -172,7 +172,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("quantidade exata (allocated == required, sem shortage)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -191,7 +191,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("shortage quando disponível não cobre o necessário — retorna 200, não erro", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -212,7 +212,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("ignora lote com saldo zero", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -244,7 +244,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("ignora lote AWAITING_RELEASE", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -269,7 +269,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("ignora lote BLOCKED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -291,7 +291,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("ignora lote vencido mesmo com status AVAILABLE persistido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -314,7 +314,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("usa On Hand derivado do ledger — ajuste de estoque altera a sugestão", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -345,7 +345,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("On Order não entra na alocação", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -366,7 +366,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("precisão decimal — sem erro de ponto flutuante", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -388,7 +388,7 @@ describe("Allocation suggestion — FEFO", () => {
   });
 
   it("qualidade: lote AWAITING_RELEASE que vence primeiro fica de fora até ser liberado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -421,7 +421,7 @@ describe("Allocation suggestion — FEFO", () => {
 
 describe("Allocation suggestion — empates", () => {
   it("mesma validade → recebimento mais antigo primeiro", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -443,7 +443,7 @@ describe("Allocation suggestion — empates", () => {
   });
 
   it("empate completo (mesma validade e recebimento) → código do lote decide", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -466,7 +466,7 @@ describe("Allocation suggestion — empates", () => {
 
 describe("Allocation suggestion — FIFO (sem validade)", () => {
   it("item com controlsExpiry=false usa recebimento mais antigo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem({ controlsExpiry: false });
@@ -487,7 +487,7 @@ describe("Allocation suggestion — FIFO (sem validade)", () => {
 
 describe("Allocation suggestion — item sem controle de lote", () => {
   it("retorna disponibilidade sem allocation fictício", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem({ controlsLot: false, controlsExpiry: false });
@@ -518,7 +518,7 @@ describe("Allocation suggestion — item sem controle de lote", () => {
   });
 
   it("item inexistente retorna 404", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({

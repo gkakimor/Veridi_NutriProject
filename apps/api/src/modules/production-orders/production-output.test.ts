@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureProductIds: string[] = [];
@@ -8,7 +8,7 @@ const fixtureItemIds: string[] = [];
 const fixtureSupplierIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 let supplierId: string;
 
@@ -201,7 +201,7 @@ async function getOrder(app: App, id: string) {
 
 describe("ProductionOutput — registro de produção", () => {
   it("rejeita apontamento fora de IN_PRODUCTION", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -221,7 +221,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("quantidade deve ser maior que zero", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -244,7 +244,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("cria ProductionOutput + exatamente 1 InventoryMovement FINISHED_GOOD_PRODUCTION, aumenta On Hand", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -279,7 +279,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("produção parcial: dois apontamentos no mesmo lote somam corretamente, sem perda de precisão", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -318,7 +318,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("não permite ultrapassar plannedQuantity (mesmo em lote novo)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -354,7 +354,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("concorrência: dois apontamentos simultâneos não ultrapassam plannedQuantity somados", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -389,7 +389,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("concorrência no mesmo lote: dois apontamentos ao lote existente não ultrapassam o planejado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -430,7 +430,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("rejeita lote de outra Ordem de Produção", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -466,7 +466,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("lote bloqueado não é elegível para novo apontamento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -497,7 +497,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("novo lote: origin PRODUCTION, código LT-YYYYMMDD-NNNNNN, businessLotNumber preservado, sem fornecedor/recebimento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -528,7 +528,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("item sem controle de lote bloqueia registro de produção", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -551,7 +551,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("item com controlsExpiry exige validade no novo lote, e não aceita validade anterior à produção", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -587,7 +587,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("requiresQualityRelease=true cria lote AWAITING_RELEASE; liberação altera Available", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -619,7 +619,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("requiresQualityRelease=false cria lote AVAILABLE direto", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -645,7 +645,7 @@ describe("ProductionOutput — registro de produção", () => {
   });
 
   it("requiresQualityRelease=true: não soma novo output em lote já liberado (cria lote novo)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -678,7 +678,7 @@ describe("ProductionOutput — registro de produção", () => {
 
 describe("ProductionOrder — conclusão (COMPLETED)", () => {
   it("não permite concluir sem nenhum ProductionOutput", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -697,7 +697,7 @@ describe("ProductionOrder — conclusão (COMPLETED)", () => {
   });
 
   it("conclui exatamente com o planejado, sem completionReason", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -727,7 +727,7 @@ describe("ProductionOrder — conclusão (COMPLETED)", () => {
   });
 
   it("menos que o planejado exige completionReason; sem motivo é rejeitado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -762,7 +762,7 @@ describe("ProductionOrder — conclusão (COMPLETED)", () => {
   });
 
   it("libera reserva remanescente: matemática crítica On Hand/Reserved/Available antes e depois da conclusão", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -823,7 +823,7 @@ describe("ProductionOrder — conclusão (COMPLETED)", () => {
   });
 
   it("OP COMPLETED bloqueia novo output, novo consumo e cancelamento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");

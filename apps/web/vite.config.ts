@@ -14,6 +14,10 @@ export default defineConfig({
   plugins: [react()],
   envDir: monorepoRoot,
   server: {
+    // Mesmo host da API (VITE_API_URL usa 127.0.0.1): o cookie de sessão só
+    // é first-party quando página e API compartilham o host — para o
+    // navegador, `localhost` e `127.0.0.1` são hosts diferentes.
+    host: "127.0.0.1",
     port: 5173,
     strictPort: false,
   },

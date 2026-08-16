@@ -1,6 +1,10 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { env } from "./config/env.js";
+import { authenticationHook } from "./lib/current-user.js";
+import { authRoutes } from "./modules/auth/auth.routes.js";
+import { usersRoutes } from "./modules/users/users.routes.js";
+import { controlledDocumentsRoutes } from "./modules/controlled-documents/controlled-documents.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { itemsRoutes } from "./modules/items/items.routes.js";
 import { unitsRoutes } from "./modules/units/units.routes.js";
@@ -14,6 +18,7 @@ import { inventoryRoutes } from "./modules/inventory/inventory.routes.js";
 import { formulationsRoutes } from "./modules/formulations/formulations.routes.js";
 import { productionOrdersRoutes } from "./modules/production-orders/production-orders.routes.js";
 import { pickingRoutes } from "./modules/production-orders/picking.routes.js";
+import { recipeRoutes } from "./modules/production-orders/recipe.routes.js";
 import { productionRoutes } from "./modules/production-orders/production.routes.js";
 import { customerOrdersRoutes } from "./modules/customer-orders/customer-orders.routes.js";
 import { fulfillmentPlanRoutes } from "./modules/customer-orders/fulfillment-plan.routes.js";
@@ -43,9 +48,18 @@ export function buildApp() {
   // Em producao a politica deve ser restringida a origem real do Veridi.
   app.register(cors, {
     origin: env.NODE_ENV === "production" ? env.WEB_ORIGIN : true,
+    // Sessao vive em cookie HttpOnly: o browser so envia com credenciais.
+    credentials: true,
   });
 
+  // Autenticacao global: toda rota operacional exige sessao valida. Health e
+  // as proprias rotas de login/logout/me sao as unicas excecoes.
+  app.addHook("preHandler", authenticationHook);
+
   app.register(healthRoutes);
+  app.register(authRoutes);
+  app.register(usersRoutes);
+  app.register(controlledDocumentsRoutes);
   app.register(itemsRoutes);
   app.register(unitsRoutes);
   app.register(suppliersRoutes);
@@ -58,6 +72,7 @@ export function buildApp() {
   app.register(formulationsRoutes);
   app.register(productionOrdersRoutes);
   app.register(pickingRoutes);
+  app.register(recipeRoutes);
   app.register(productionRoutes);
   app.register(customerOrdersRoutes);
   app.register(fulfillmentPlanRoutes);

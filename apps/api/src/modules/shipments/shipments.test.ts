@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -8,7 +8,7 @@ const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -233,7 +233,7 @@ async function verifyAllLots(app: App, shipmentId: string) {
 
 describe("Expedição — rascunho (separação)", () => {
   it("gera EXP-000001, não altera On Hand nem Reserved, permite uma única DRAFT por pedido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -267,7 +267,7 @@ describe("Expedição — rascunho (separação)", () => {
   });
 
   it("não permite quantidade acima do reservado disponível", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -287,7 +287,7 @@ describe("Expedição — rascunho (separação)", () => {
   });
 
   it("cancelar DRAFT exige motivo e não altera estoque; permite criar outra depois", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -324,7 +324,7 @@ describe("Expedição — rascunho (separação)", () => {
 
 describe("Expedição — confirmação", () => {
   it("MATEMÁTICA CRÍTICA: On Hand 1000/Reserved 600 → expede 200 → 800/400/400 → expede 400 → 400/0/400", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -369,7 +369,7 @@ describe("Expedição — confirmação", () => {
   });
 
   it("cria exatamente 1 SHIPMENT_OUT por linha, identificável pela Expedição de origem", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -397,7 +397,7 @@ describe("Expedição — confirmação", () => {
   });
 
   it("expedição parcial deixa PARTIALLY_SHIPPED; a segunda completa e vira SHIPPED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -435,7 +435,7 @@ describe("Expedição — confirmação", () => {
   });
 
   it("expedição única cobrindo tudo vai direto para SHIPPED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -453,7 +453,7 @@ describe("Expedição — confirmação", () => {
   });
 
   it("FEFO em múltiplos lotes: expede os dois lotes reservados", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem({ controlsExpiry: true });
@@ -484,7 +484,7 @@ describe("Expedição — confirmação", () => {
   });
 
   it("rejeita lote bloqueado, vencido ou aguardando liberação no momento da saída", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem({ controlsExpiry: true });
@@ -525,7 +525,7 @@ describe("Expedição — confirmação", () => {
   });
 
   it("CONFIRMED é imutável — não edita, não confirma de novo, não cancela", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -555,7 +555,7 @@ describe("Expedição — confirmação", () => {
   });
 
   it("pedido SHIPPED bloqueia nova expedição, nova reserva e cancelamento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -588,7 +588,7 @@ describe("Expedição — confirmação", () => {
   });
 
   it("uma única expedição DRAFT por pedido é garantida no próprio banco (índice parcial)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -616,7 +616,7 @@ describe("Expedição — confirmação", () => {
   });
 
   it("concorrência: duas confirmações simultâneas da mesma expedição não expedem em dobro", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -655,7 +655,7 @@ describe("Expedição — confirmação", () => {
 
 describe("Reserva complementar", () => {
   it("produto AWAITING_RELEASE não é reservável; após liberação Quality passa a ser", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -718,7 +718,7 @@ describe("Reserva complementar", () => {
   });
 
   it("não reserva acima do pendente do pedido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -738,7 +738,7 @@ describe("Reserva complementar", () => {
   });
 
   it("concorrência: dois pedidos disputando o mesmo saldo não over-reservam", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();
@@ -773,7 +773,7 @@ describe("Reserva complementar", () => {
 
 describe("Realocação de reserva", () => {
   it("preserva o expedido, libera o remanescente e realoca via FEFO mantendo a genealogia", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem({ controlsExpiry: true });
@@ -833,7 +833,7 @@ describe("Realocação de reserva", () => {
   });
 
   it("sem estoque suficiente faz rollback completo (linha original permanece ativa)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem({ controlsExpiry: true });
@@ -869,7 +869,7 @@ describe("Realocação de reserva", () => {
 
 describe("Hardening — bloqueio de lote reservado", () => {
   it("lote com reserva de Pedido do Cliente não pode ser bloqueado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createFinishedItem();

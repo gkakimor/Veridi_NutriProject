@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -8,7 +8,7 @@ const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -123,7 +123,7 @@ async function createDraftOrder(
 
 describe("CustomerOrder — CRUD e transições", () => {
   it("cria DRAFT e gera código PED-000001 sequencial", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer();
@@ -135,7 +135,7 @@ describe("CustomerOrder — CRUD e transições", () => {
   });
 
   it("cliente obrigatório e precisa estar ativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const missing = await app.inject({ method: "POST", url: "/customer-orders", payload: {} });
@@ -155,7 +155,7 @@ describe("CustomerOrder — CRUD e transições", () => {
   });
 
   it("linha exige Product ativo com Finished Product Item válido e quantidade > 0", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer();
@@ -194,7 +194,7 @@ describe("CustomerOrder — CRUD e transições", () => {
   });
 
   it("não permite o mesmo Product duas vezes no mesmo pedido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer();
@@ -218,7 +218,7 @@ describe("CustomerOrder — CRUD e transições", () => {
   });
 
   it("DRAFT é livremente editável (cliente, linhas, observações)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer();
@@ -248,7 +248,7 @@ describe("CustomerOrder — CRUD e transições", () => {
   });
 
   it("confirmação exige ao menos uma linha; DRAFT -> CONFIRMED congela snapshot", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer();
@@ -273,7 +273,7 @@ describe("CustomerOrder — CRUD e transições", () => {
   });
 
   it("CONFIRMED congela produtos/quantidades — só previsão de entrega e observações continuam editáveis", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer();
@@ -301,7 +301,7 @@ describe("CustomerOrder — CRUD e transições", () => {
   });
 
   it("snapshot preservado mesmo após inativar Customer/Product depois da confirmação", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer();
@@ -322,7 +322,7 @@ describe("CustomerOrder — CRUD e transições", () => {
   });
 
   it("cancelamento exige motivo; DRAFT e CONFIRMED (sem plano aplicado) podem cancelar", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = await createCustomer();

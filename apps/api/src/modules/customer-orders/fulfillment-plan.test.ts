@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -8,7 +8,7 @@ const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -190,7 +190,7 @@ async function createConfirmedOrder(
 
 describe("Plano de Atendimento — análise", () => {
   it("default: pedido 1000 / available 600 -> reserve 600 / produce 400, impacto de material agregado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -219,7 +219,7 @@ describe("Plano de Atendimento — análise", () => {
   });
 
   it("available >= ordered -> reserve integral, produce 0, sem impacto de material", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -243,7 +243,7 @@ describe("Plano de Atendimento — análise", () => {
   });
 
   it("available 0 -> reserve 0, produce integral", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -264,7 +264,7 @@ describe("Plano de Atendimento — análise", () => {
   });
 
   it("consultar o plano nunca altera estoque, nunca cria reserva/OP", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -294,7 +294,7 @@ describe("Plano de Atendimento — análise", () => {
   });
 
   it("impacto de material agrega o mesmo item entre Products diferentes do mesmo pedido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const vitaminC = await createItem("RAW_MATERIAL");
@@ -324,7 +324,7 @@ describe("Plano de Atendimento — análise", () => {
 
 describe("Plano de Atendimento — aplicação", () => {
   it("aceita ajuste manual cobrindo 100% do pedido; rejeita cobertura incompleta e reserva acima do disponível", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -373,7 +373,7 @@ describe("Plano de Atendimento — aplicação", () => {
   });
 
   it("reserva por FEFO em múltiplos lotes; On Hand não muda, Reserved sobe, Available desce, sem InventoryMovement novo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -423,7 +423,7 @@ describe("Plano de Atendimento — aplicação", () => {
   });
 
   it("concorrência: dois pedidos disputando o mesmo saldo — só um consegue reservar", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -465,7 +465,7 @@ describe("Plano de Atendimento — aplicação", () => {
   });
 
   it("OP gerada: origin CUSTOMER_ORDER, ligada à linha, DRAFT, navega de volta ao Pedido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -501,7 +501,7 @@ describe("Plano de Atendimento — aplicação", () => {
   });
 
   it("pedido em atendimento bloqueia cancelamento simples (reserva/OP já existem)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");

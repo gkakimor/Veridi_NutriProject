@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureProductIds: string[] = [];
@@ -8,7 +8,7 @@ const fixtureItemIds: string[] = [];
 const fixtureSupplierIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 let supplierId: string;
 
@@ -199,7 +199,7 @@ async function createPickedOrder(app: App, requiredQuantity: string, stockQuanti
 
 describe("Consumo real — regras básicas", () => {
   it("exige Picking confirmado antes do consumo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -222,7 +222,7 @@ describe("Consumo real — regras básicas", () => {
   });
 
   it("primeiro consumo muda RELEASED → IN_PRODUCTION e registra startedAt/startedBy", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { order, lineId } = await createPickedOrder(app, "30", "100");
     expect(order.status).toBe("RELEASED");
@@ -243,7 +243,7 @@ describe("Consumo real — regras básicas", () => {
   });
 
   it("cria ProductionConsumption e exatamente um InventoryMovement PRODUCTION_CONSUMPTION", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { rawMaterial, order, lineId } = await createPickedOrder(app, "30", "100");
 
@@ -271,7 +271,7 @@ describe("Consumo real — regras básicas", () => {
   });
 
   it("item sem lote consome corretamente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { order, lineId } = await createPickedOrder(app, "30", "100");
 
@@ -287,7 +287,7 @@ describe("Consumo real — regras básicas", () => {
   });
 
   it("consumo parcial e múltiplos consumos acumulam corretamente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { order, lineId } = await createPickedOrder(app, "30", "100");
 
@@ -313,7 +313,7 @@ describe("Consumo real — regras básicas", () => {
   });
 
   it("consumo exatamente igual ao reservado zera o restante", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { order, lineId } = await createPickedOrder(app, "30", "100");
 
@@ -331,7 +331,7 @@ describe("Consumo real — regras básicas", () => {
   });
 
   it("não excede o que ainda resta reservado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { order, lineId } = await createPickedOrder(app, "30", "100");
 
@@ -353,7 +353,7 @@ describe("Consumo real — regras básicas", () => {
   });
 
   it("não consome lote que ficou inelegível entre o Picking e o consumo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -383,7 +383,7 @@ describe("Consumo real — regras básicas", () => {
   });
 
   it("histórico de consumo preserva todos os eventos, não só o total", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { order, lineId } = await createPickedOrder(app, "30", "100");
 
@@ -406,7 +406,7 @@ describe("Consumo real — regras básicas", () => {
   });
 
   it("não permite cancelar OP depois de IN_PRODUCTION", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { order, lineId } = await createPickedOrder(app, "30", "100");
 
@@ -430,7 +430,7 @@ describe("Consumo real — regras básicas", () => {
 
 describe("Consumo real — matemática crítica de Reserved/Available", () => {
   it("consumir estoque já reservado não reduz Available novamente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { rawMaterial, order, lineId } = await createPickedOrder(app, "30", "100");
 
@@ -467,7 +467,7 @@ describe("Consumo real — matemática crítica de Reserved/Available", () => {
 
 describe("Consumo real — concorrência", () => {
   it("duas requisições consumindo o restante da mesma linha: só uma passa", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const { lineId, order } = await createPickedOrder(app, "10", "100");
 

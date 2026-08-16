@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureProductIds: string[] = [];
@@ -8,7 +8,7 @@ const fixtureItemIds: string[] = [];
 const fixtureSupplierIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 let supplierId: string;
 let supplierName: string;
@@ -169,7 +169,7 @@ async function createReleasedOrder(
 
 describe("Rastreabilidade bidirecional (backward/forward)", () => {
   it("backward: lote de produto acabado mostra a OP e os materiais REALMENTE consumidos", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -215,7 +215,7 @@ describe("Rastreabilidade bidirecional (backward/forward)", () => {
   });
 
   it("forward: lote de matéria-prima mostra a OP e o(s) lote(s) de produto acabado gerados", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -258,7 +258,7 @@ describe("Rastreabilidade bidirecional (backward/forward)", () => {
   });
 
   it("CRÍTICO: lote apenas reservado e NUNCA consumido não aparece como matéria-prima utilizada", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -322,7 +322,7 @@ describe("Rastreabilidade bidirecional (backward/forward)", () => {
   });
 
   it("404 para lote inexistente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({ method: "GET", url: `/lots/00000000-0000-0000-0000-000000000000/traceability` });

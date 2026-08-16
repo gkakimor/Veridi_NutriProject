@@ -73,10 +73,32 @@ enum LotOrigin {
   PRODUCTION
 }
 
-/// Como a versao calcula a necessidade de material.
-/// FIXED_BASIS: "estas quantidades produzem `basisQuantity`" (modelo
-/// original, preservado). PER_DOSE: a formula e declarada por DOSE do
-/// produto acabado, do jeito que a industria realmente trabalha.
+/// Perfil do usuario. RBAC simples: ADMIN administra usuarios e documentos
+/// controlados; os demais usam a operacao normal. Nao existe matriz de
+/// permissao por botao nesta fase.
+enum UserRole {
+  ADMIN
+  PRODUCTION
+  QUALITY
+  PURCHASING
+  COMMERCIAL
+  VIEWER
+}
+
+/// Tipos de documento controlado suportados. Codigos reais: R.PRO.002
+/// (Ordem de Producao) e R.COQ.003 (Folha de Receita).
+enum ControlledDocumentType {
+  PRODUCTION_ORDER
+  RECIPE_SHEET
+}
+
+/// Estado de uma parte/fracao da producao. Simples de proposito.
+enum ProductionPartStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
 /// Quem DEVE fornecer o componente conforme a formulacao — intencao/regra,
 /// nunca realidade fisica. A realidade fisica e o dono do Lot
 /// (InventoryOwnerType).
@@ -100,6 +122,10 @@ enum ReceiptSourceType {
   CUSTOMER_SUPPLIED
 }
 
+/// Como a versao calcula a necessidade de material.
+/// FIXED_BASIS: "estas quantidades produzem `basisQuantity`" (modelo
+/// original, preservado). PER_DOSE: a formula e declarada por DOSE do
+/// produto acabado, do jeito que a industria realmente trabalha.
 enum FormulationCalculationMode {
   FIXED_BASIS
   PER_DOSE
@@ -183,6 +209,176 @@ enum BillingStatus {
 enum MaterialReservationStatus {
   ACTIVE
   RELEASED
+}
+
+/// Usuario do sistema. Existe para autenticacao e, principalmente, para
+/// responder QUEM executou uma acao GMP — nunca um modulo de RH.
+model User {
+  id String @id @default(uuid())
+
+  /// USR-000001 — sequence dedicada, mesmo padrao dos demais codigos.
+  code String @unique
+
+  name String
+
+  /// Sempre normalizado em minusculas antes de gravar.
+  email String @unique
+
+  /// Hash da senha (scrypt com salt por usuario). Senha em texto nunca e
+  /// gravada nem logada.
+  passwordHash String
+
+  role   UserRole @default(VIEWER)
+  active Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions UserSession[]
+
+  preparedDocumentRevisions ControlledDocumentRevision[] @relation("DocumentPreparedBy")
+  approvedDocumentRevisions ControlledDocumentRevision[] @relation("DocumentApprovedBy")
+  startedParts   ProductionOrderPart[] @relation("PartStartedBy")
+  completedParts ProductionOrderPart[] @relation("PartCompletedBy")
+  recipeWeighings RecipeWeighing[]
+
+  @@index([active])
+  @@map("users")
+}
+
+/// Sessao opaca: o token bruto so existe no cookie HttpOnly; o banco guarda
+/// apenas o hash. Logout revoga; usuario inativo deixa de ser aceito.
+model UserSession {
+  id String @id @default(uuid())
+
+  tokenHash String @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+/// Revisao de documento controlado (R.PRO.002, R.COQ.003). Nao e GED nem
+/// workflow documental: e o cabecalho que a impressao precisa e o historico
+/// de revisoes. Revisao ja usada por documento operacional nunca e editada.
+model ControlledDocumentRevision {
+  id String @id @default(uuid())
+
+  type         ControlledDocumentType
+  documentCode String
+  title        String
+  revision     String
+  revisionDate DateTime?
+
+  /// Snapshot do nome junto do id: inativar/renomear o usuario depois nao
+  /// pode reescrever o documento historico.
+  preparedByUserId       String?
+  preparedByUser         User?   @relation("DocumentPreparedBy", fields: [preparedByUserId], references: [id])
+  preparedByNameSnapshot String?
+
+  approvedByUserId       String?
+  approvedByUser         User?   @relation("DocumentApprovedBy", fields: [approvedByUserId], references: [id])
+  approvedByNameSnapshot String?
+
+  /// Uma unica revisao ACTIVE por tipo (garantido no service, sob lock).
+  active Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  productionOrdersAsProductionOrderDoc ProductionOrder[] @relation("ProductionOrderDocumentRevision")
+  productionOrdersAsRecipeDoc          ProductionOrder[] @relation("RecipeSheetDocumentRevision")
+
+  @@unique([type, revision])
+  @@index([type, active])
+  @@map("controlled_document_revisions")
+}
+
+/// Contador da numeracao oficial anual da OP (001/26). Linha por ano,
+/// atualizada sob `FOR UPDATE` — nunca MAX(numero)+1.
+model ProductionOrderNumberCounter {
+  year       Int @id
+  lastNumber Int @default(0)
+
+  @@map("production_order_number_counters")
+}
+
+/// Parte/fracao da producao (o misturador nao comporta o lote inteiro).
+/// Gerada no RELEASE, a partir de `ProductionOrder.numberOfParts`.
+model ProductionOrderPart {
+  id String @id @default(uuid())
+
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+
+  partNumber Int
+  status     ProductionPartStatus @default(PENDING)
+
+  startedAt             DateTime?
+  startedByUserId       String?
+  startedByUser         User?     @relation("PartStartedBy", fields: [startedByUserId], references: [id])
+  startedByNameSnapshot String?
+
+  completedAt             DateTime?
+  completedByUserId       String?
+  completedByUser         User?     @relation("PartCompletedBy", fields: [completedByUserId], references: [id])
+  completedByNameSnapshot String?
+
+  createdAt DateTime @default(now())
+
+  weighings RecipeWeighing[]
+
+  @@unique([productionOrderId, partNumber])
+  @@map("production_order_parts")
+}
+
+/// Pesagem real registrada na Folha de Receita (R.COQ.003). E a ORIGEM/
+/// auditoria da execucao — nunca baixa estoque por conta propria: a baixa
+/// continua sendo ProductionConsumption -> InventoryMovement.
+model RecipeWeighing {
+  id String @id @default(uuid())
+
+  productionOrderPartId String
+  productionOrderPart   ProductionOrderPart @relation(fields: [productionOrderPartId], references: [id], onDelete: Cascade)
+
+  productionOrderRequirementId String
+  productionOrderRequirement   ProductionOrderRequirement @relation(fields: [productionOrderRequirementId], references: [id])
+
+  materialReservationLineId String?
+  materialReservationLine   MaterialReservationLine? @relation(fields: [materialReservationLineId], references: [id])
+
+  lotId String?
+  lot   Lot?   @relation(fields: [lotId], references: [id])
+
+  /// Quanto a parte deveria pesar quando a pesagem foi registrada.
+  plannedQuantitySnapshot Decimal @db.Decimal(18, 6)
+  /// Quanto realmente foi pesado. Diferenca e registrada, nunca escondida.
+  actualQuantity          Decimal @db.Decimal(18, 6)
+  uomCode                 String
+
+  executedByUserId       String
+  executedByUser         User   @relation(fields: [executedByUserId], references: [id])
+  /// Nome no momento do registro — impressao historica nunca depende do
+  /// cadastro atual.
+  executedByNameSnapshot String
+  executedAt             DateTime @default(now())
+
+  /// 1:1 com o consumo real gerado por esta pesagem. Unico e imutavel:
+  /// confirmar de novo nunca gera segunda baixa.
+  productionConsumptionId String?                @unique
+  productionConsumption   ProductionConsumption? @relation(fields: [productionConsumptionId], references: [id])
+
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  @@index([productionOrderRequirementId])
+  @@map("recipe_weighings")
 }
 
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
@@ -416,6 +612,10 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Sufixo do lote comercial deste cliente (ex.: "A3"). So alimenta a
+  /// SUGESTAO de businessLotNumber — nunca obriga nem valida.
+  businessLotSuffix String?
+
   products Product[]
   customerOrders CustomerOrder[]
   ownedLots Lot[]
@@ -482,6 +682,10 @@ model Product {
   /// Lote minimo de fabricacao, na unidade do Finished Product Item —
   /// por isso nao existe `minimumBatchUom`. Nao bloqueia OP nesta fase.
   minimumBatchQuantity Decimal? @db.Decimal(18, 6)
+
+  /// Codigo do produto dentro da mascara de lote comercial (ex.: "0340").
+  /// So alimenta a SUGESTAO de businessLotNumber.
+  businessLotCode String?
 
   externalCode String?
   notes        String?
@@ -895,6 +1099,8 @@ model Lot {
   @@index([supplierId])
   @@index([status])
   @@index([productionOrderId])
+  recipeWeighings RecipeWeighing[]
+
   @@index([ownerCustomerId])
   @@map("lots")
 }
@@ -1023,6 +1229,40 @@ model ProductionOrder {
   customerName String?
   customerCnpj String?
 
+  /// Snapshot completo do cliente para o documento impresso — congelado no
+  /// RELEASE. Editar o cadastro depois nunca reescreve a OP.
+  customerTradeName  String?
+  customerZipCode    String?
+  customerStreet     String?
+  customerNumber     String?
+  customerComplement String?
+  customerDistrict   String?
+  customerCity       String?
+  customerState      String?
+
+  /// Numeracao OFICIAL anual do documento (ex.: "023/26"), gerada na
+  /// primeira transicao para RELEASED. `code` (OP-000001) continua sendo a
+  /// identidade interna — os dois convivem.
+  officialNumber         String? @unique
+  officialNumberYear     Int?
+  officialNumberSequence Int?
+
+  /// Em quantas partes/fracoes a producao sera executada. Congelado no
+  /// RELEASE: folha de receita e execucao dependem disso.
+  numberOfParts Int @default(1)
+
+  /// Observacoes de rotulagem para a impressao do lote. Texto livre,
+  /// editavel ate o RELEASE.
+  labelInstructions String?
+
+  /// Revisoes dos documentos controlados congeladas no RELEASE — mudar a
+  /// revisao ativa global depois nunca altera uma OP ja liberada.
+  productionOrderRevisionId String?
+  productionOrderRevision   ControlledDocumentRevision? @relation("ProductionOrderDocumentRevision", fields: [productionOrderRevisionId], references: [id])
+
+  recipeSheetRevisionId String?
+  recipeSheetRevision   ControlledDocumentRevision? @relation("RecipeSheetDocumentRevision", fields: [recipeSheetRevisionId], references: [id])
+
   plannedAt DateTime?
   plannedBy String?
 
@@ -1052,6 +1292,7 @@ model ProductionOrder {
   updatedAt DateTime @updatedAt
 
   requirements ProductionOrderRequirement[]
+  parts        ProductionOrderPart[]
 
   /// No maximo uma reserva operacional por OP, criada no RELEASE. Nunca
   /// recriada mesmo se a OP RELEASED for cancelada (fica historica).
@@ -1119,6 +1360,7 @@ model ProductionOrderRequirement {
 
   reservationLines MaterialReservationLine[]
   consumptions ProductionConsumption[]
+  recipeWeighings RecipeWeighing[]
 
   @@unique([productionOrderId, itemId])
   @@map("production_order_requirements")
@@ -1202,6 +1444,8 @@ model MaterialReservationLine {
   @@index([itemId])
   @@index([lotId])
   @@index([reservationId])
+  recipeWeighings RecipeWeighing[]
+
   @@map("material_reservation_lines")
 }
 
@@ -1242,6 +1486,9 @@ model ProductionConsumption {
   @@index([productionOrderId])
   @@index([reservationLineId])
   @@index([itemId])
+  /// Pesagem da Folha de Receita que originou este consumo (quando veio de la).
+  recipeWeighing RecipeWeighing?
+
   @@map("production_consumptions")
 }
 

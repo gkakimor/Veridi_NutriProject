@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 import { buildCsv, csvDecimal, csvFileName, csvMoney, sanitizeCsvValue } from "../../lib/csv.js";
 import { csvExportPaths } from "./exports.routes.js";
@@ -14,7 +14,7 @@ const fixtureProductionOrderIds: string[] = [];
 const fixturePurchaseOrderIds: string[] = [];
 const fixtureReceiptIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -238,7 +238,7 @@ describe("Exportação CSV — formato base", () => {
 
 describe("Exportação CSV — listagens", () => {
   it("devolve cabeçalho HTTP de download e o resultado FILTRADO COMPLETO, além da página", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     // 30 clientes com o mesmo prefixo de busca: mais do que cabe numa página.
@@ -267,7 +267,7 @@ describe("Exportação CSV — listagens", () => {
   });
 
   it("respeita o mesmo filtro da tela — nenhuma linha fora do conjunto", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const prefix = `FILTRO${marker()}`.replace(/-/g, "").toUpperCase();
@@ -287,7 +287,7 @@ describe("Exportação CSV — listagens", () => {
   });
 
   it("preserva códigos de negócio e CNPJ como texto, nunca UUID", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const code = `CLI-EXP-CODE-${marker()}`;
@@ -303,7 +303,7 @@ describe("Exportação CSV — listagens", () => {
   });
 
   it("exporta lotes com código de lote e saldo do ledger", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createItem("FINISHED_PRODUCT");
@@ -363,7 +363,7 @@ describe("Exportação CSV — relatórios", () => {
   });
 
   it("R-01 exporta o mesmo conjunto do relatório, com saldo do ledger", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createItem("FINISHED_PRODUCT");
@@ -385,7 +385,7 @@ describe("Exportação CSV — relatórios", () => {
   });
 
   it("R-15 mantém a semântica de precificação incompleta: valor vazio, nunca zero", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -471,7 +471,7 @@ describe("Exportação CSV — relatórios", () => {
   });
 
   it("R-05 exporta o custo com a qualidade explícita e sem total artificial", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -591,7 +591,7 @@ describe("Exportação CSV — relatórios", () => {
   });
 
   it("impressão de relatório recebe o resultado completo, não a página", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const prefix = `PRINT${marker()}`.replace(/-/g, "").toUpperCase();

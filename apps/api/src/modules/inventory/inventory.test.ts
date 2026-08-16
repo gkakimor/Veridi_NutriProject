@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureSupplierIds: string[] = [];
@@ -10,7 +10,7 @@ const fixtureProductionOrderIds: string[] = [];
 
 let supplierId: string;
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -187,7 +187,7 @@ async function reserveStockViaProductionOrder(app: App, itemId: string, quantity
 
 describe("Inventory — saldo (On Hand/Available)", () => {
   it("RECEIPT_IN aumenta On Hand", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -210,7 +210,7 @@ describe("Inventory — saldo (On Hand/Available)", () => {
   });
 
   it("ajuste de entrada aumenta On Hand", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -228,7 +228,7 @@ describe("Inventory — saldo (On Hand/Available)", () => {
   });
 
   it("ajuste de saída reduz On Hand", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -257,7 +257,7 @@ describe("Inventory — saldo (On Hand/Available)", () => {
   });
 
   it("loss reduz On Hand", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -286,7 +286,7 @@ describe("Inventory — saldo (On Hand/Available)", () => {
   });
 
   it("múltiplos movimentos calculam saldo correto", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -318,7 +318,7 @@ describe("Inventory — saldo (On Hand/Available)", () => {
   });
 
   it("nunca permite saldo negativo (ADJUSTMENT_OUT e LOSS acima do On Hand)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -348,7 +348,7 @@ describe("Inventory — saldo (On Hand/Available)", () => {
   });
 
   it("concorrência: duas saídas simultâneas não deixam saldo negativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -377,7 +377,7 @@ describe("Inventory — saldo (On Hand/Available)", () => {
 
 describe("Inventory — Qualidade e Available", () => {
   it("lote AWAITING_RELEASE tem On Hand mas Available 0", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem({ controlsLot: true, requiresQualityRelease: true });
@@ -395,7 +395,7 @@ describe("Inventory — Qualidade e Available", () => {
   });
 
   it("liberar lote altera Available sem alterar On Hand", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem({ controlsLot: true, requiresQualityRelease: true });
@@ -410,7 +410,7 @@ describe("Inventory — Qualidade e Available", () => {
   });
 
   it("lote BLOCKED tem Available 0 e On Hand inalterado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem({ controlsLot: true, requiresQualityRelease: false });
@@ -431,7 +431,7 @@ describe("Inventory — Qualidade e Available", () => {
 
 describe("Inventory — On Order", () => {
   it("OC ORDERED conta para On Order", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -444,7 +444,7 @@ describe("Inventory — On Order", () => {
   });
 
   it("OC PARTIALLY_RECEIVED conta só a quantidade aberta", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -467,7 +467,7 @@ describe("Inventory — On Order", () => {
   });
 
   it("OC DRAFT não conta para On Order", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -489,7 +489,7 @@ describe("Inventory — On Order", () => {
   });
 
   it("OC CANCELLED não conta para On Order", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -507,7 +507,7 @@ describe("Inventory — On Order", () => {
   });
 
   it("OC RECEIVED (aberto = 0) não conta para On Order", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -532,7 +532,7 @@ describe("Inventory — On Order", () => {
 
 describe("Inventory — Inventário físico (stock count)", () => {
   it("diferença positiva gera ADJUSTMENT_IN", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -559,7 +559,7 @@ describe("Inventory — Inventário físico (stock count)", () => {
   });
 
   it("diferença negativa gera ADJUSTMENT_OUT", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -585,7 +585,7 @@ describe("Inventory — Inventário físico (stock count)", () => {
   });
 
   it("sem diferença não altera saldo e não cria InventoryMovement", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -610,7 +610,7 @@ describe("Inventory — Inventário físico (stock count)", () => {
   });
 
   it("motivo é obrigatório quando a contagem diverge do saldo do sistema", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -633,7 +633,7 @@ describe("Inventory — Inventário físico (stock count)", () => {
 
 describe("Inventory — hardening contra Reserved", () => {
   it("ADJUSTMENT_OUT não pode consumir estoque reservado (só Available)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -666,7 +666,7 @@ describe("Inventory — hardening contra Reserved", () => {
   });
 
   it("LOSS não pode reduzir On Hand abaixo do Reserved", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -690,7 +690,7 @@ describe("Inventory — hardening contra Reserved", () => {
   });
 
   it("Stock Count abaixo do Reserved é rejeitado, sem criar movimento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -714,7 +714,7 @@ describe("Inventory — hardening contra Reserved", () => {
   });
 
   it("Stock Count igual ou acima do Reserved funciona normalmente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem();
@@ -740,7 +740,7 @@ describe("Inventory — hardening contra Reserved", () => {
   });
 
   it("lote com Reservation ACTIVE não pode ser bloqueado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createTestItem({ controlsLot: true, requiresQualityRelease: false });

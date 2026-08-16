@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -16,7 +16,7 @@ const fixtureItemIds: string[] = [];
 const fixtureProductIds: string[] = [];
 const fixtureCustomerOrderIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -95,7 +95,7 @@ async function createProduct(app: App, payload: Record<string, unknown>) {
 
 describe("Cadastros v2 — Cliente com endereço", () => {
   it("cria com endereço completo e normaliza o CEP para dígitos", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createCustomer(app, {
@@ -123,7 +123,7 @@ describe("Cadastros v2 — Cliente com endereço", () => {
   });
 
   it("aceita atualização parcial e limpeza de campo sem tocar no resto", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = (
@@ -148,7 +148,7 @@ describe("Cadastros v2 — Cliente com endereço", () => {
   });
 
   it("endereço é totalmente opcional — cliente antigo continua válido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createCustomer(app, {});
@@ -164,7 +164,7 @@ describe("Cadastros v2 — Cliente com endereço", () => {
   });
 
   it("Pedido confirmado congela o endereço do Cliente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = (
@@ -221,7 +221,7 @@ describe("Cadastros v2 — Cliente com endereço", () => {
 
 describe("Cadastros v2 — Item industrial", () => {
   it("grava fonte, nutriente declarado, família e pureza como Decimal", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createItem(app, {
@@ -244,7 +244,7 @@ describe("Cadastros v2 — Item industrial", () => {
   });
 
   it("pureza: null é desconhecida; 0 e acima de 100 são rejeitados", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const unknown = (await createItem(app, {})).json();
@@ -259,7 +259,7 @@ describe("Cadastros v2 — Item industrial", () => {
   });
 
   it("subtipo de embalagem só é aceito em item de embalagem", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const packaging = await createItem(app, {
@@ -279,7 +279,7 @@ describe("Cadastros v2 — Item industrial", () => {
   });
 
   it("item sem os campos novos continua válido e é filtrável por família", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const legacy = await createItem(app, {});
@@ -300,7 +300,7 @@ describe("Cadastros v2 — Item industrial", () => {
   });
 
   it("alterar a pureza padrão não altera nada além do próprio item", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = (await createItem(app, { defaultPurityPercent: "95" })).json();
@@ -325,7 +325,7 @@ describe("Cadastros v2 — Item industrial", () => {
 
 describe("Cadastros v2 — Perfil industrial do Produto", () => {
   it("grava o perfil completo, com dose em unidade própria", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = (
@@ -365,7 +365,7 @@ describe("Cadastros v2 — Perfil industrial do Produto", () => {
   });
 
   it("rejeita quantidades não positivas e unidade de dose inexistente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     expect((await createProduct(app, { capsulesPerDose: 0 })).statusCode).toBe(400);
@@ -382,7 +382,7 @@ describe("Cadastros v2 — Perfil industrial do Produto", () => {
   });
 
   it("produto existente continua válido e aceita evolução parcial", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = (await createProduct(app, {})).json();
@@ -415,7 +415,7 @@ describe("Cadastros v2 — Perfil industrial do Produto", () => {
   });
 
   it("listagem mostra a versão ACTIVE da formulação", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = (await createItem(app, {})).json();
@@ -451,7 +451,7 @@ describe("Cadastros v2 — Perfil industrial do Produto", () => {
 
 describe("Cadastros v2 — exportações", () => {
   it("CSV traz os novos campos com rótulos amigáveis, sem enum cru", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const customer = (

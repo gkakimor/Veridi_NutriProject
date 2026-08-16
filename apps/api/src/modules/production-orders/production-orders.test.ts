@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureProductIds: string[] = [];
@@ -9,7 +9,7 @@ const fixtureSupplierIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
 const fixturePurchaseOrderIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 let supplierId: string;
 
@@ -175,7 +175,7 @@ async function createOnOrder(app: App, itemId: string, orderedQuantity: string) 
 
 describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   it("cria DRAFT com código OP-000001..., imutável", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -204,7 +204,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("concorrência: geração de código nunca duplica sob criação simultânea", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -223,7 +223,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("produto sem Finished Product Item não cria OP", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const product = await createProduct(app);
@@ -240,7 +240,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("produto inativo não cria OP", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -260,7 +260,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("formulação informada precisa pertencer ao produto", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -286,7 +286,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("DRAFT editável: Produto/Formulação/Quantidade/Observações", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -315,7 +315,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("planeja quantidade <= 0 é rejeitado no PLAN", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -346,7 +346,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("produto sem formulação ativa não planeja", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -369,7 +369,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("DRAFT com V1 obsoleta (V2 ativada depois) não planeja silenciosamente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -396,7 +396,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("fluxo completo DRAFT → PLANNED: congela campos estruturais e Requirements", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -449,7 +449,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("PLANNED pode existir com shortage (não bloqueia o PLAN)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -478,7 +478,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("cancelamento exige motivo; DRAFT e PLANNED podem ser cancelados; CANCELLED é somente leitura", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -520,7 +520,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
   });
 
   it("cancela OP PLANNED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -551,7 +551,7 @@ describe("Production Orders — ciclo de vida DRAFT/PLANNED/CANCELLED", () => {
 
 describe("Production Orders — cálculo de Requirements e UOM", () => {
   it("fator de produção e necessidade: basis 1000 / planned 5000 = fator 5", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { unitCode: "kg" });
@@ -575,7 +575,7 @@ describe("Production Orders — cálculo de Requirements e UOM", () => {
   });
 
   it("conversões de unidade: g→kg, mg→kg, mL→L, contagem", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawG = await createItem("RAW_MATERIAL", { unitCode: "kg" });
@@ -619,7 +619,7 @@ describe("Production Orders — cálculo de Requirements e UOM", () => {
   });
 
   it("regenera Requirements ao alterar plannedQuantity em DRAFT", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { unitCode: "kg" });
@@ -649,7 +649,7 @@ describe("Production Orders — cálculo de Requirements e UOM", () => {
   });
 
   it("troca de Produto em DRAFT limpa Requirements antigos e usa a formulação ACTIVE do novo produto", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawA = await createItem("RAW_MATERIAL", { unitCode: "kg" });
@@ -688,7 +688,7 @@ describe("Production Orders — cálculo de Requirements e UOM", () => {
   });
 
   it("precisão decimal: quantidade fracionária não é arredondada automaticamente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { unitCode: "un", controlsLot: false });
@@ -714,7 +714,7 @@ describe("Production Orders — cálculo de Requirements e UOM", () => {
 
 describe("Production Orders — disponibilidade, On Order, shortage e FEFO", () => {
   it("Reserved sempre 0; Available considera só lote AVAILABLE e não vencido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { unitCode: "kg", controlsLot: true, controlsExpiry: true });
@@ -750,7 +750,7 @@ describe("Production Orders — disponibilidade, On Order, shortage e FEFO", () 
   });
 
   it("shortage = max(required - available, 0); On Order não reduz shortage, aparece separado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { unitCode: "kg" });
@@ -780,7 +780,7 @@ describe("Production Orders — disponibilidade, On Order, shortage e FEFO", () 
   });
 
   it("retorna sugestão FEFO por Requirement sem persistir nem reservar", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", {

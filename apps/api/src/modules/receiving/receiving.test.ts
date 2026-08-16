@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const createdPurchaseOrderIds: string[] = [];
@@ -11,7 +11,7 @@ let rawMaterialItemId: string; // controlsLot=true, controlsExpiry=true, require
 let packagingItemId: string; // controlsLot=true, controlsExpiry=false, requiresQualityRelease=false (defaults)
 let noLotItemId: string; // controlsLot=false
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 /** Vencimento futuro generico para linhas de RAW_MATERIAL (controlsExpiry=true). */
 const FUTURE_EXPIRY = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -145,7 +145,7 @@ async function createOrderedPurchaseOrder(
 
 describe("Receiving", () => {
   it("recebe materiais de uma OC ORDERED e gera Receipt + Lot", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -184,7 +184,7 @@ describe("Receiving", () => {
   });
 
   it("recebimento parcial deixa OC como PARTIALLY_RECEIVED com received/open corretos", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -217,7 +217,7 @@ describe("Receiving", () => {
   });
 
   it("múltiplos recebimentos completam a OC e ela vira RECEIVED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -267,7 +267,7 @@ describe("Receiving", () => {
   });
 
   it("recebe OC PARTIALLY_RECEIVED (não só ORDERED)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -315,7 +315,7 @@ describe("Receiving", () => {
   });
 
   it("rejeita recebimento de OC DRAFT", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const draft = await app.inject({
@@ -346,7 +346,7 @@ describe("Receiving", () => {
   });
 
   it("rejeita recebimento de OC CANCELLED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -376,7 +376,7 @@ describe("Receiving", () => {
   });
 
   it("rejeita recebimento de OC já RECEIVED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -416,7 +416,7 @@ describe("Receiving", () => {
   });
 
   it("não excede a quantidade em aberto (over-receipt)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -463,7 +463,7 @@ describe("Receiving", () => {
   });
 
   it("não permite quantidade recebida <= 0", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -486,7 +486,7 @@ describe("Receiving", () => {
   });
 
   it("gera código de lote LT-YYYYMMDD-NNNNNN único a cada recebimento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -535,7 +535,7 @@ describe("Receiving", () => {
   });
 
   it("exige supplierLot quando o item controla lote", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -559,7 +559,7 @@ describe("Receiving", () => {
   });
 
   it("exige expiryDate quando o item controla validade", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -583,7 +583,7 @@ describe("Receiving", () => {
   });
 
   it("rejeita validade anterior à data do recebimento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -614,7 +614,7 @@ describe("Receiving", () => {
   });
 
   it("não cria Lot quando o item não controla lote", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -638,7 +638,7 @@ describe("Receiving", () => {
   });
 
   it("lote nasce AWAITING_RELEASE quando requiresQualityRelease=true e AVAILABLE quando false", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -684,7 +684,7 @@ describe("Receiving", () => {
   });
 
   it("libera lote explicitamente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -719,7 +719,7 @@ describe("Receiving", () => {
   });
 
   it("bloqueio de lote exige motivo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -765,7 +765,7 @@ describe("Receiving", () => {
   });
 
   it("atomicidade: falha em uma linha não deixa Receipt/Lot parcial", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [
@@ -816,7 +816,7 @@ describe("Receiving", () => {
   });
 
   it("gera exatamente um InventoryMovement RECEIPT_IN por ReceiptLine, ligado ao lote", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -855,7 +855,7 @@ describe("Receiving", () => {
   });
 
   it("recebimento sem lote gera InventoryMovement com lotId null", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -882,7 +882,7 @@ describe("Receiving", () => {
   });
 
   it("falha transacional (over-receipt em uma linha) não deixa InventoryMovement órfão", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -926,7 +926,7 @@ describe("Receiving", () => {
   });
 
   it("concorrência: duas tentativas simultâneas não permitem over-receipt combinado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const po = await createOrderedPurchaseOrder(app, [

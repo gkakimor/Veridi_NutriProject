@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -84,7 +84,7 @@ async function createProduct(app: App, finishedProductItemId?: string) {
 
 describe("Formulations — versionamento", () => {
   it("cria V1 DRAFT quando o produto ainda não tem formulação", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -109,7 +109,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("produto sem Finished Product Item não pode criar formulação", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const product = await createProduct(app);
@@ -126,7 +126,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("concorrência: criação simultânea de V1 só permite uma", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -147,7 +147,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("adiciona componente RAW_MATERIAL e PACKAGING, calcula equivalente de estoque (g → kg)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -193,7 +193,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("conversão mg → kg correta (precisão decimal)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -219,7 +219,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("rejeita FINISHED_PRODUCT como componente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -244,7 +244,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("rejeita componente duplicado na mesma versão", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -274,7 +274,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("rejeita quantidade <= 0", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -299,7 +299,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("rejeita basisQuantity <= 0", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -323,7 +323,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("rejeita dimensão de unidade incompatível", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -348,7 +348,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("DRAFT pode ser salva incompleta (sem componentes)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -372,7 +372,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("ativação bloqueia versão sem componentes", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -395,7 +395,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("fluxo completo: DRAFT → ACTIVE, versão fica imutável", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -443,7 +443,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("nova versão copia dados da ACTIVE; V1 continua ativa enquanto V2 é DRAFT", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -482,7 +482,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("ativar V2 torna V1 INACTIVE atomicamente; produto tem no máximo uma ACTIVE", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -531,7 +531,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("item inativo histórico continua visível na versão", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -563,7 +563,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("componente inativo bloqueia ativação de nova versão copiada", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -603,7 +603,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("Finished Product Item inativo bloqueia ativação", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -636,7 +636,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("adicionar item inativo como componente NOVO é rejeitado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -661,7 +661,7 @@ describe("Formulations — versionamento", () => {
   });
 
   it("componente já existente na versão (herdado) continua editável mesmo se o item foi inativado depois", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -12,7 +12,7 @@ const fixtureItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 const fixtureSupplierIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -458,7 +458,7 @@ async function issueBilling(app: App, shipmentId: string, options: { unitPrice?:
 
 describe("Relatórios — Estoque", () => {
   it("R-01: saldo vem do ledger, com lote e sem lote, e Qualidade zera o disponível", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -507,7 +507,7 @@ describe("Relatórios — Estoque", () => {
   });
 
   it("R-02: separa vencidos, 7/30 dias e período personalizado, exigindo saldo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const item = await createItem("FINISHED_PRODUCT", { controlsExpiry: true });
@@ -561,7 +561,7 @@ describe("Relatórios — Estoque", () => {
   });
 
   it("R-03: lista os tipos de movimento com origem, período e usuário", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -629,7 +629,7 @@ describe("Relatórios — Estoque", () => {
 
 describe("Relatórios — Produção", () => {
   it("R-04: falta considera a reserva da própria OP e não é reduzida por On Order", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -674,7 +674,7 @@ describe("Relatórios — Produção", () => {
   });
 
   it("R-05: planejado, produzido, variação e rendimento a partir dos apontamentos", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -713,7 +713,7 @@ describe("Relatórios — Produção", () => {
   });
 
   it("R-06: genealogia usa só consumo e apontamento reais", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -751,7 +751,7 @@ describe("Relatórios — Produção", () => {
   });
 
   it("R-07: consumo por período traz custo real e 'sem custo' explícito", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -804,7 +804,7 @@ describe("Relatórios — Produção", () => {
 
 describe("Relatórios — Compras", () => {
   it("R-08: status, origem e valor previsto só com preço completo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -869,7 +869,7 @@ describe("Relatórios — Compras", () => {
   });
 
   it("R-09: linha a linha, com lote, preço da OC e custo efetivo separados", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -904,7 +904,7 @@ describe("Relatórios — Compras", () => {
   });
 
   it("R-10 e R-11: em compra só com saldo aberto, atrasadas por previsão vencida", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -960,7 +960,7 @@ describe("Relatórios — Compras", () => {
 
 describe("Relatórios — Comercial e Faturamento", () => {
   it("R-12 a R-17: pedido com dois produtos, expedição e faturamento parciais", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -1087,7 +1087,7 @@ describe("Relatórios — Comercial e Faturamento", () => {
   });
 
   it("R-13: produzido vem das OPs do pedido, não do reservado nem do expedido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -1126,7 +1126,7 @@ describe("Relatórios — Comercial e Faturamento", () => {
   });
 
   it("R-15: total do período some quando algum faturamento está sem preço", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 

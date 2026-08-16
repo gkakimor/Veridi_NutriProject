@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureProductIds: string[] = [];
@@ -10,7 +10,7 @@ const fixtureProductionOrderIds: string[] = [];
 const fixturePurchaseOrderIds: string[] = [];
 const fixtureReceiptIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -237,7 +237,7 @@ async function listFinishedGoods(app: App, query = "") {
 
 describe("Produto Acabado — visão operacional", () => {
   it("lista apenas lotes origin PRODUCTION, nunca lotes de recebimento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -263,7 +263,7 @@ describe("Produto Acabado — visão operacional", () => {
   });
 
   it("produzido vem do ProductionOutput e nunca é usado como saldo; On Hand/Reserved/Available vêm do ledger", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -309,7 +309,7 @@ describe("Produto Acabado — visão operacional", () => {
   });
 
   it("qualidade reflete o status efetivo e a liberação altera Available", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -344,7 +344,7 @@ describe("Produto Acabado — visão operacional", () => {
   });
 
   it("custo material vem da Fundação de Custos com a qualidade correta", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -382,7 +382,7 @@ describe("Produto Acabado — visão operacional", () => {
   });
 
   it("filtra por status de qualidade e por busca de lote Veridi", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -9,7 +9,7 @@ const fixtureItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 const fixtureSupplierIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -244,7 +244,7 @@ async function getSuggestion(app: App, orderId: string) {
 
 describe("Sugestão de Compra — análise", () => {
   it("agrega o mesmo Item entre OPs/Products diferentes do mesmo Pedido", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const vitaminC = await createRawMaterial();
@@ -277,7 +277,7 @@ describe("Sugestão de Compra — análise", () => {
   });
 
   it("consumo real reduz remainingRequired; reserva própria da OP conta como cobertura", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createRawMaterial();
@@ -314,7 +314,7 @@ describe("Sugestão de Compra — análise", () => {
   });
 
   it("OP sem Requirements (sem Formulação ativa) vira pendência de planejamento, fora da soma quantitativa", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const { product } = await createProductWithFormulation(app, [], { withFormulation: false });
@@ -335,7 +335,7 @@ describe("Sugestão de Compra — análise", () => {
   });
 
   it("OP CANCELLED e OP COMPLETED não contribuem para a necessidade de compra", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterialA = await createRawMaterial();
@@ -390,7 +390,7 @@ describe("Sugestão de Compra — análise", () => {
   });
 
   it("On Order não reduz a falta física, mas reduz a compra adicional sugerida", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createRawMaterial();
@@ -431,7 +431,7 @@ describe("Sugestão de Compra — análise", () => {
   });
 
   it("matemática crítica: Remaining 100 / Own 30 / Available 20 / On Order 20 / Draft 10 → New Suggested 20", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createRawMaterial();
@@ -502,7 +502,7 @@ describe("Sugestão de Compra — análise", () => {
   });
 
   it("só disponível para pedido IN_FULFILLMENT", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const { product } = await createProductWithFormulation(app, [], { withFormulation: false });
@@ -519,7 +519,7 @@ describe("Sugestão de Compra — análise", () => {
 
 describe("Sugestão de Compra — geração de OC DRAFT", () => {
   it("gera OC DRAFT com origin CUSTOMER_ORDER, unitPrice null, nunca ORDERED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createRawMaterial();
@@ -563,7 +563,7 @@ describe("Sugestão de Compra — geração de OC DRAFT", () => {
   });
 
   it("agrupa por fornecedor: 2 itens mesmo Supplier → 1 OC; Suppliers diferentes → OCs diferentes", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const itemA = await createRawMaterial();
@@ -603,7 +603,7 @@ describe("Sugestão de Compra — geração de OC DRAFT", () => {
   });
 
   it("rejeita fornecedor inativo, item inválido, quantidade 0 não cria linha, tudo zero não cria OC", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createRawMaterial();
@@ -647,7 +647,7 @@ describe("Sugestão de Compra — geração de OC DRAFT", () => {
   });
 
   it("rejeita geração para pedido que não está em atendimento", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createRawMaterial();
@@ -670,7 +670,7 @@ describe("Sugestão de Compra — geração de OC DRAFT", () => {
 
 describe("Sugestão de Compra — ciclo de vida do rascunho", () => {
   it("gerar Draft aumenta draftPurchaseQuantity; confirmar a OC zera Draft e sobe On Order", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createRawMaterial();
@@ -708,7 +708,7 @@ describe("Sugestão de Compra — ciclo de vida do rascunho", () => {
   });
 
   it("cancelar a OC vinculada devolve a necessidade de compra (deixa de contar Draft e On Order)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createRawMaterial();
@@ -747,7 +747,7 @@ describe("Sugestão de Compra — ciclo de vida do rascunho", () => {
 
 describe("Sugestão de Compra — concorrência", () => {
   it("duas gerações simultâneas não corrompem dados (lock no CustomerOrder)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const itemA = await createRawMaterial();

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const createdSupplierIds: string[] = [];
@@ -10,7 +10,7 @@ afterEach(async () => {
   createdSupplierIds.length = 0;
 });
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 async function createTestSupplier(app: App, overrides: Record<string, unknown> = {}) {
   const response = await app.inject({
@@ -29,7 +29,7 @@ async function createTestSupplier(app: App, overrides: Record<string, unknown> =
 
 describe("Suppliers", () => {
   it("cria fornecedor com código FOR-######", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestSupplier(app, { legalName: "Fornecedor A" });
@@ -43,7 +43,7 @@ describe("Suppliers", () => {
   });
 
   it("código interno é imutável (PATCH ignora tentativa de alterar)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestSupplier(app);
@@ -64,7 +64,7 @@ describe("Suppliers", () => {
   });
 
   it("exige razão social", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({ method: "POST", url: "/suppliers", payload: {} });
@@ -75,7 +75,7 @@ describe("Suppliers", () => {
   });
 
   it("normaliza CNPJ para somente dígitos", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const digits = `33444555${Date.now().toString().slice(-6)}`;
@@ -92,7 +92,7 @@ describe("Suppliers", () => {
   });
 
   it("rejeita CNPJ com quantidade de dígitos inválida", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestSupplier(app, { cnpj: "123456" });
@@ -103,7 +103,7 @@ describe("Suppliers", () => {
   });
 
   it("não permite CNPJ duplicado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const cnpj = `11222333${Date.now().toString().slice(-6)}`;
@@ -118,7 +118,7 @@ describe("Suppliers", () => {
   });
 
   it("busca por código, razão social e CNPJ", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const marker = `BuscavelFornecedor${Date.now()}`;
@@ -142,7 +142,7 @@ describe("Suppliers", () => {
   });
 
   it("filtra por status ativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestSupplier(app, { legalName: "Fornecedor filtro" });
@@ -161,7 +161,7 @@ describe("Suppliers", () => {
   });
 
   it("inativa sem excluir e permite reativar", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestSupplier(app, { legalName: "Fornecedor inativar" });

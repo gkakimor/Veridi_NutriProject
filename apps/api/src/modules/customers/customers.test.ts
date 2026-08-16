@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const createdCustomerIds: string[] = [];
@@ -10,7 +10,7 @@ afterEach(async () => {
   createdCustomerIds.length = 0;
 });
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 async function createTestCustomer(app: App, overrides: Record<string, unknown> = {}) {
   const response = await app.inject({
@@ -29,7 +29,7 @@ async function createTestCustomer(app: App, overrides: Record<string, unknown> =
 
 describe("Customers", () => {
   it("cria cliente com código CLI-######", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestCustomer(app, { legalName: "Cliente A" });
@@ -43,7 +43,7 @@ describe("Customers", () => {
   });
 
   it("código interno é imutável (PATCH ignora tentativa de alterar)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestCustomer(app);
@@ -64,7 +64,7 @@ describe("Customers", () => {
   });
 
   it("exige razão social", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({ method: "POST", url: "/customers", payload: {} });
@@ -75,7 +75,7 @@ describe("Customers", () => {
   });
 
   it("normaliza CNPJ para somente dígitos", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const digits = `55666777${Date.now().toString().slice(-6)}`;
@@ -92,7 +92,7 @@ describe("Customers", () => {
   });
 
   it("não permite CNPJ duplicado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const cnpj = `22333444${Date.now().toString().slice(-6)}`;
@@ -107,7 +107,7 @@ describe("Customers", () => {
   });
 
   it("aceita UF válida em maiúsculas e rejeita UF inválida", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const valid = await createTestCustomer(app, { state: "sp" });
@@ -121,7 +121,7 @@ describe("Customers", () => {
   });
 
   it("busca por código, razão social e CNPJ", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const marker = `BuscavelCliente${Date.now()}`;
@@ -145,7 +145,7 @@ describe("Customers", () => {
   });
 
   it("filtra por status ativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestCustomer(app, { legalName: "Cliente filtro" });
@@ -164,7 +164,7 @@ describe("Customers", () => {
   });
 
   it("inativa sem excluir e permite reativar", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestCustomer(app, { legalName: "Cliente inativar" });

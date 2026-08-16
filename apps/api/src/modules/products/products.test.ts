@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const createdProductIds: string[] = [];
@@ -102,7 +102,7 @@ afterAll(async () => {
   }
 });
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 async function createTestProduct(app: App, overrides: Record<string, unknown> = {}) {
   const response = await app.inject({
@@ -121,7 +121,7 @@ async function createTestProduct(app: App, overrides: Record<string, unknown> = 
 
 describe("Products", () => {
   it("cria produto com código PROD-######", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app, { name: "Magnésio Quelato 60 cápsulas" });
@@ -135,7 +135,7 @@ describe("Products", () => {
   });
 
   it("código interno é imutável (PATCH ignora tentativa de alterar)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestProduct(app);
@@ -156,7 +156,7 @@ describe("Products", () => {
   });
 
   it("exige nome", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({ method: "POST", url: "/products", payload: {} });
@@ -167,7 +167,7 @@ describe("Products", () => {
   });
 
   it("cria produto sem cliente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app);
@@ -180,7 +180,7 @@ describe("Products", () => {
   });
 
   it("cria produto com cliente ativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app, { customerId: activeCustomerId });
@@ -193,7 +193,7 @@ describe("Products", () => {
   });
 
   it("rejeita cliente inexistente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app, {
@@ -207,7 +207,7 @@ describe("Products", () => {
   });
 
   it("rejeita nova associação a cliente inativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app, { customerId: inactiveCustomerId });
@@ -219,7 +219,7 @@ describe("Products", () => {
   });
 
   it("associa item FINISHED_PRODUCT ativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app, {
@@ -234,7 +234,7 @@ describe("Products", () => {
   });
 
   it("rejeita item RAW_MATERIAL como produto acabado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app, {
@@ -248,7 +248,7 @@ describe("Products", () => {
   });
 
   it("rejeita item PACKAGING como produto acabado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app, {
@@ -262,7 +262,7 @@ describe("Products", () => {
   });
 
   it("rejeita item inexistente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app, {
@@ -276,7 +276,7 @@ describe("Products", () => {
   });
 
   it("rejeita nova associação a item inativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestProduct(app, {
@@ -290,7 +290,7 @@ describe("Products", () => {
   });
 
   it("impede dois produtos usando o mesmo item de produto acabado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const first = await createTestProduct(app, { finishedProductItemId: finishedItemId });
@@ -304,7 +304,7 @@ describe("Products", () => {
   });
 
   it("mantém associação histórica se o cliente for inativado depois", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const marker = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -335,7 +335,7 @@ describe("Products", () => {
   });
 
   it("mantém associação histórica se o item for inativado depois", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const marker = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -367,7 +367,7 @@ describe("Products", () => {
   });
 
   it("busca por código, nome, referência externa e cliente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const marker = `Buscavel${Date.now()}`;
@@ -403,7 +403,7 @@ describe("Products", () => {
   });
 
   it("filtra por status ativo e por cliente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestProduct(app, { customerId: activeCustomerId });
@@ -432,7 +432,7 @@ describe("Products", () => {
   });
 
   it("inativa sem excluir e permite reativar", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestProduct(app);
@@ -456,7 +456,7 @@ describe("Products", () => {
   });
 
   it("PATCH com externalCode vazio limpa a referência (persiste null)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestProduct(app, { externalCode: `EXT${Date.now()}` });

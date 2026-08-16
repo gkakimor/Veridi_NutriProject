@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureProductIds: string[] = [];
@@ -9,7 +9,7 @@ const fixtureSupplierIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
 const fixturePurchaseOrderIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 let supplierId: string;
 
@@ -196,7 +196,7 @@ async function createOnOrder(app: App, itemId: string, orderedQuantity: string) 
 
 describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   it("PLANNED com estoque suficiente libera: status, releasedAt/releasedBy, Reservation ACTIVE", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -243,7 +243,7 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   });
 
   it("DRAFT não libera", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
@@ -266,7 +266,7 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   });
 
   it("RELEASED não libera novamente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -288,7 +288,7 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   });
 
   it("shortage bloqueia release; OP continua PLANNED; nenhuma reserva parcial", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -316,7 +316,7 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   });
 
   it("On Order não permite release mesmo cobrindo o total nominal", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -338,7 +338,7 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   });
 
   it("reserva cobre todos os Requirements de uma OP multi-componente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawA = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -366,7 +366,7 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   });
 
   it("FEFO determina os lotes reservados; múltiplos lotes cobrem um único Requirement", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: true, controlsExpiry: true });
@@ -396,7 +396,7 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   });
 
   it("FEFO no RELEASE recalcula com o estoque atual — segunda OP vê disponibilidade líquida reduzida", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: true, controlsExpiry: true });
@@ -435,7 +435,7 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
   });
 
   it("item sem controle de lote: ReservationLine com lotId null", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -458,7 +458,7 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
 
 describe("Production Orders — RELEASE concorrente", () => {
   it("duas OPs disputando o mesmo estoque: só uma libera, Reserved nunca dobra", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -495,7 +495,7 @@ describe("Production Orders — RELEASE concorrente", () => {
 
 describe("Production Orders — cancelamento de OP RELEASED", () => {
   it("cancelar RELEASED libera a reserva: On Hand intacto, Reserved volta a 0, Available restaurado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });

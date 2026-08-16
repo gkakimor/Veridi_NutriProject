@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 import { buildAttentionList } from "./attention.service.js";
 
@@ -13,7 +13,7 @@ const fixtureItemIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 const fixtureSupplierIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 beforeAll(async () => {
   const prisma = getPrisma();
@@ -366,7 +366,7 @@ async function issueBilling(app: App, shipmentId: string, unitPrice: string | nu
 
 describe("Dashboard — métricas do período", () => {
   it("conta cada documento pela sua data operacional e ignora o que está fora da janela", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
     const window = windowFor(0);
@@ -429,7 +429,7 @@ describe("Dashboard — métricas do período", () => {
   });
 
   it("não apresenta valor faturado quando algum faturamento do período está incompleto", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
     const window = windowFor(2);
@@ -473,7 +473,7 @@ describe("Dashboard — métricas do período", () => {
 
 describe("Dashboard — estado atual", () => {
   it("não responde ao filtro de período: OP antiga em produção continua contando hoje", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -539,7 +539,7 @@ describe("Dashboard — estado atual", () => {
   });
 
   it("conta itens distintos em compra, nunca a soma das quantidades", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const before = await fetchDashboard(app);
@@ -581,7 +581,7 @@ describe("Dashboard — estado atual", () => {
 
 describe("Dashboard — precisa de atenção", () => {
   it("deriva os itens das entidades, exige saldo e ordena por severidade", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -636,7 +636,7 @@ describe("Dashboard — precisa de atenção", () => {
 
 describe("Dashboard — movimentações", () => {
   it("resume eventos por tipo, agrupa ajustes e lista os movimentos recentes com origem", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
     const window = windowFor(5);
@@ -710,7 +710,7 @@ describe("Dashboard — movimentações", () => {
   });
 
   it("devolve período vazio quando nada aconteceu na janela", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const dashboard = await fetchDashboard(app, emptyWindow(6));

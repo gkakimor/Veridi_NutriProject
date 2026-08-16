@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 
 describe("GET /health", () => {
   it("responde com o contrato de health e reflete o estado do banco", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({ method: "GET", url: "/health" });

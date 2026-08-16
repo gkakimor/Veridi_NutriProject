@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const createdPurchaseOrderIds: string[] = [];
@@ -109,7 +109,7 @@ afterAll(async () => {
   }
 });
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 async function createTestPurchaseOrder(app: App, overrides: Record<string, unknown> = {}) {
   const response = await app.inject({
@@ -129,7 +129,7 @@ async function createTestPurchaseOrder(app: App, overrides: Record<string, unkno
 
 describe("Purchase Orders", () => {
   it("cria OC como DRAFT com código OC-######", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app);
@@ -143,7 +143,7 @@ describe("Purchase Orders", () => {
   });
 
   it("código interno é imutável (PATCH ignora tentativa de alterar)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app);
@@ -164,7 +164,7 @@ describe("Purchase Orders", () => {
   });
 
   it("exige fornecedor para criar", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({
@@ -179,7 +179,7 @@ describe("Purchase Orders", () => {
   });
 
   it("rejeita fornecedor inativo em nova OC", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app, { supplierId: inactiveSupplierId });
@@ -191,7 +191,7 @@ describe("Purchase Orders", () => {
   });
 
   it("aceita linha RAW_MATERIAL", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app, {
@@ -207,7 +207,7 @@ describe("Purchase Orders", () => {
   });
 
   it("aceita linha PACKAGING", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app, {
@@ -221,7 +221,7 @@ describe("Purchase Orders", () => {
   });
 
   it("rejeita linha com item FINISHED_PRODUCT", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app, {
@@ -235,7 +235,7 @@ describe("Purchase Orders", () => {
   });
 
   it("rejeita linha com item inativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app, {
@@ -249,7 +249,7 @@ describe("Purchase Orders", () => {
   });
 
   it("exige quantidade maior que zero", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app, {
@@ -262,7 +262,7 @@ describe("Purchase Orders", () => {
   });
 
   it("rejeita item duplicado na mesma OC", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app, {
@@ -279,7 +279,7 @@ describe("Purchase Orders", () => {
   });
 
   it("DRAFT pode ser editado (fornecedor, itens, notas)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app, {
@@ -305,7 +305,7 @@ describe("Purchase Orders", () => {
   });
 
   it("confirma DRAFT → ORDERED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app, {
@@ -324,7 +324,7 @@ describe("Purchase Orders", () => {
   });
 
   it("não confirma OC sem linhas", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app);
@@ -339,7 +339,7 @@ describe("Purchase Orders", () => {
   });
 
   it("ORDERED bloqueia alteração de fornecedor", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app, {
@@ -366,7 +366,7 @@ describe("Purchase Orders", () => {
   });
 
   it("ORDERED bloqueia alteração de linhas", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app, {
@@ -388,7 +388,7 @@ describe("Purchase Orders", () => {
   });
 
   it("ORDERED permite alterar previsão de entrega", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app, {
@@ -411,7 +411,7 @@ describe("Purchase Orders", () => {
   });
 
   it("ORDERED permite alterar observações", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app, {
@@ -433,7 +433,7 @@ describe("Purchase Orders", () => {
   });
 
   it("cancelamento exige motivo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app);
@@ -451,7 +451,7 @@ describe("Purchase Orders", () => {
   });
 
   it("cancela DRAFT e ORDERED, preserva motivo/usuário/timestamp", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app);
@@ -473,7 +473,7 @@ describe("Purchase Orders", () => {
   });
 
   it("CANCELLED não pode voltar para DRAFT/ORDERED nem ser editada", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestPurchaseOrder(app, {
@@ -501,7 +501,7 @@ describe("Purchase Orders", () => {
   });
 
   it("preserva snapshot histórico do fornecedor após alteração do cadastro", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const marker = `${Date.now()}`;
@@ -529,7 +529,7 @@ describe("Purchase Orders", () => {
   });
 
   it("calcula total decimal das linhas com preço", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app, {
@@ -553,7 +553,7 @@ describe("Purchase Orders", () => {
   });
 
   it("não inventa total quando nenhuma linha tem preço", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestPurchaseOrder(app, {

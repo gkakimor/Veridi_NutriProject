@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureProductIds: string[] = [];
@@ -11,7 +11,7 @@ const fixtureProductionOrderIds: string[] = [];
 const fixturePurchaseOrderIds: string[] = [];
 const fixtureReceiptIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -257,7 +257,7 @@ async function getMaterialCost(app: App, productionOrderId: string) {
 
 describe("Custo de aquisição no recebimento", () => {
   it("recebimento funciona sem custo; custo desconhecido é null, nunca 0", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -275,7 +275,7 @@ describe("Custo de aquisição no recebimento", () => {
   });
 
   it("preço da OC NUNCA vira custo real automaticamente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -299,7 +299,7 @@ describe("Custo de aquisição no recebimento", () => {
   });
 
   it("custo negativo rejeitado; zero explícito é válido e distinto de null", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -331,7 +331,7 @@ describe("Custo de aquisição no recebimento", () => {
   });
 
   it("define custo depois do recebimento sem alterar quantidade, estoque nem movimentos", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -370,7 +370,7 @@ describe("Custo de aquisição no recebimento", () => {
   });
 
   it("custo pode ser corrigido e limpo (volta a desconhecido)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -403,7 +403,7 @@ describe("Custo de aquisição no recebimento", () => {
 
 describe("Referência de custo — média ponderada e fallback", () => {
   it("MÉDIA PONDERADA OBRIGATÓRIA: 10kg@10 + 90kg@20 = 19/kg (nunca 15)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -420,7 +420,7 @@ describe("Referência de custo — média ponderada e fallback", () => {
   });
 
   it("hierarquia 30d → 90d → último custo real → sem custo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -461,7 +461,7 @@ describe("Referência de custo — média ponderada e fallback", () => {
   });
 
   it("recebimento posterior à data de referência é ignorado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -492,7 +492,7 @@ describe("Referência de custo — média ponderada e fallback", () => {
 
 describe("Custo estimado da formulação", () => {
   it("converte UOM (g→kg e mg→kg), soma componentes e usa basisQuantity", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -538,7 +538,7 @@ describe("Custo estimado da formulação", () => {
   });
 
   it("PARTIAL não apresenta subtotal como total; NO_COST quando nenhum componente tem custo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -581,7 +581,7 @@ describe("Custo estimado da formulação", () => {
 
 describe("Custo de materiais da Ordem de Produção", () => {
   it("CRÍTICO: usa o custo do lote REALMENTE consumido, nunca média do item nem FEFO esperado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -626,7 +626,7 @@ describe("Custo de materiais da Ordem de Produção", () => {
   });
 
   it("CUSTO MATERIAL/UNIDADE usa produção real (990), nunca a planejada (1000)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -656,7 +656,7 @@ describe("Custo de materiais da Ordem de Produção", () => {
   });
 
   it("lote sem custo cai no fallback histórico → ESTIMATED", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -700,7 +700,7 @@ describe("Custo de materiais da Ordem de Produção", () => {
   });
 
   it("PARTIAL: subtotal conhecido nunca vira total; sem custo nenhum → NO_COST", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -726,7 +726,7 @@ describe("Custo de materiais da Ordem de Produção", () => {
   });
 
   it("BACKFILL: informar o custo depois melhora automaticamente o custo da OP", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -763,7 +763,7 @@ describe("Custo de materiais da Ordem de Produção", () => {
   });
 
   it("consumo sem output calcula material mas não divide por zero", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();
@@ -784,7 +784,7 @@ describe("Custo de materiais da Ordem de Produção", () => {
   });
 
   it("precisão Decimal preservada (sem float JS)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const supplier = await createSupplier();

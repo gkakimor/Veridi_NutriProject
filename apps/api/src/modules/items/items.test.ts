@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const createdItemIds: string[] = [];
@@ -28,7 +28,7 @@ afterEach(async () => {
   createdItemIds.length = 0;
 });
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 async function createTestItem(app: App, overrides: Record<string, unknown> = {}) {
   const response = await app.inject({
@@ -49,7 +49,7 @@ async function createTestItem(app: App, overrides: Record<string, unknown> = {})
 
 describe("Items", () => {
   it("cria uma matéria-prima com código MP-######", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestItem(app, {
@@ -69,7 +69,7 @@ describe("Items", () => {
   });
 
   it("gera código ME-###### para embalagem, com controlsExpiry=false e requiresQualityRelease=false por padrão", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestItem(app, {
@@ -88,7 +88,7 @@ describe("Items", () => {
   });
 
   it("permite editar requiresQualityRelease independente do tipo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, {
@@ -111,7 +111,7 @@ describe("Items", () => {
   });
 
   it("gera código PA-###### para produto acabado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestItem(app, {
@@ -127,7 +127,7 @@ describe("Items", () => {
   });
 
   it("gera códigos únicos e sequenciais para o mesmo tipo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const first = await createTestItem(app, { name: "Sequencial A" });
@@ -165,7 +165,7 @@ describe("Items", () => {
   });
 
   it("exige nome, tipo e unidade", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await app.inject({ method: "POST", url: "/items", payload: {} });
@@ -176,7 +176,7 @@ describe("Items", () => {
   });
 
   it("rejeita unidade inexistente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const response = await createTestItem(app, { unitCode: "unidade-inexistente" });
@@ -187,7 +187,7 @@ describe("Items", () => {
   });
 
   it("inativa sem excluir e permite reativar", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, { name: "Item para inativar" });
@@ -215,7 +215,7 @@ describe("Items", () => {
   });
 
   it("busca por código, nome e barcode", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const marker = `Buscavel${Date.now()}`;
@@ -250,7 +250,7 @@ describe("Items", () => {
   });
 
   it("filtra por tipo e por status ativo", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, {
@@ -286,7 +286,7 @@ describe("Items", () => {
   });
 
   it("PATCH com externalBarcode vazio limpa o barcode existente (persiste null)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, {
@@ -324,7 +324,7 @@ async function markOperationallyUsed(itemId: string): Promise<void> {
 
 describe("Items — hardening estrutural (histórico operacional)", () => {
   it("item sem histórico pode alterar unidade, tipo e controles livremente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, {
@@ -353,7 +353,7 @@ describe("Items — hardening estrutural (histórico operacional)", () => {
   });
 
   it("item operacionalmente utilizado não pode alterar unidade de medida", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, { name: "Item usado — unidade", unitCode: "kg" });
@@ -376,7 +376,7 @@ describe("Items — hardening estrutural (histórico operacional)", () => {
   });
 
   it("item operacionalmente utilizado não pode alterar type", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, {
@@ -399,7 +399,7 @@ describe("Items — hardening estrutural (histórico operacional)", () => {
   });
 
   it("item operacionalmente utilizado não pode alterar controlsLot", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, {
@@ -422,7 +422,7 @@ describe("Items — hardening estrutural (histórico operacional)", () => {
   });
 
   it("item operacionalmente utilizado não pode alterar controlsExpiry", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, {
@@ -445,7 +445,7 @@ describe("Items — hardening estrutural (histórico operacional)", () => {
   });
 
   it("item operacionalmente utilizado ainda pode alterar name, externalBarcode e requiresQualityRelease", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, {
@@ -474,7 +474,7 @@ describe("Items — hardening estrutural (histórico operacional)", () => {
   });
 
   it("reenviar o mesmo valor estrutural não é tratado como alteração (não bloqueia)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, {
@@ -498,7 +498,7 @@ describe("Items — hardening estrutural (histórico operacional)", () => {
   });
 
   it("alterar requiresQualityRelease não muda o status de lotes já existentes", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
     const prisma = getPrisma();
 
@@ -538,7 +538,7 @@ describe("Items — hardening estrutural (histórico operacional)", () => {
   });
 
   it("listagem de itens também reporta operationallyUsed em lote", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const created = await createTestItem(app, { name: "Item usado — listagem" });

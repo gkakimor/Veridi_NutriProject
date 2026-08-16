@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
-import { buildApp } from "../../app.js";
+import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureProductIds: string[] = [];
@@ -8,7 +8,7 @@ const fixtureItemIds: string[] = [];
 const fixtureSupplierIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildTestApp>;
 
 let supplierId: string;
 
@@ -184,7 +184,7 @@ async function receiveStockNoLot(app: App, itemId: string, quantity: string) {
 
 describe("Picking — confirmação de lote", () => {
   it("confirma o lote reservado correto (código puro)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -223,7 +223,7 @@ describe("Picking — confirmação de lote", () => {
   });
 
   it("confirma via payload de QR (LOT:...)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -246,7 +246,7 @@ describe("Picking — confirmação de lote", () => {
   });
 
   it("item sem lote confirma separação sem informar lotCode", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -270,7 +270,7 @@ describe("Picking — confirmação de lote", () => {
   });
 
   it("não permite picking duplicado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
@@ -298,7 +298,7 @@ describe("Picking — confirmação de lote", () => {
   });
 
   it("lote diferente do reservado é rejeitado (mismatch)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -326,7 +326,7 @@ describe("Picking — confirmação de lote", () => {
   });
 
   it("lote de outro Item é rejeitado (mismatch)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -352,7 +352,7 @@ describe("Picking — confirmação de lote", () => {
   });
 
   it("lote vencido é rejeitado mesmo confirmando o código correto", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsExpiry: true });
@@ -383,7 +383,7 @@ describe("Picking — confirmação de lote", () => {
   });
 
   it("lote bloqueado é rejeitado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -408,7 +408,7 @@ describe("Picking — confirmação de lote", () => {
   });
 
   it("lote aguardando liberação é rejeitado", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -435,7 +435,7 @@ describe("Picking — confirmação de lote", () => {
 
 describe("Picking — substituição de lote", () => {
   it("substituição preserva histórico, Reserved do item não muda, On Hand não muda", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -497,7 +497,7 @@ describe("Picking — substituição de lote", () => {
   });
 
   it("rejeita lote sem Available suficiente", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -522,7 +522,7 @@ describe("Picking — substituição de lote", () => {
   });
 
   it("rejeita lote de outro Item", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -548,7 +548,7 @@ describe("Picking — substituição de lote", () => {
   });
 
   it("rejeita lote alternativo com status inválido (BLOCKED)", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -573,7 +573,7 @@ describe("Picking — substituição de lote", () => {
   });
 
   it("rejeita substituição após consumo já registrado na linha", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
@@ -609,7 +609,7 @@ describe("Picking — substituição de lote", () => {
   });
 
   it("concorrência: duas substituições não reservam o mesmo saldo alternativo duas vezes", async () => {
-    const app = buildApp();
+    const app = buildTestApp();
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL");
