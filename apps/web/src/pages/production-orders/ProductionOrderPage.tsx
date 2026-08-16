@@ -13,6 +13,7 @@ import {
   COST_SOURCE_LABELS,
   PRODUCTION_ORDER_ORIGIN_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
+  SUPPLY_RESPONSIBILITY_LABELS,
 } from "@veridi/shared";
 import { getProductionOrderMaterialCost } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
@@ -664,6 +665,7 @@ export function ProductionOrderPage() {
                 <thead>
                   <tr>
                     <th>Item</th>
+                    <th>Fornecimento</th>
                     <th>Necessário</th>
                     <th>On Hand</th>
                     <th>Reservado</th>
@@ -690,6 +692,17 @@ export function ProductionOrderPage() {
                         )}
                       </td>
                       <td>
+                        {SUPPLY_RESPONSIBILITY_LABELS[requirement.supplyResponsibility]}
+                        {requirement.supplyResponsibility === "CUSTOMER" && (
+                          <>
+                            <br />
+                            <span className="field__hint">
+                              {requirement.eligibleOwnerCustomerName ?? "Cliente não definido"}
+                            </span>
+                          </>
+                        )}
+                      </td>
+                      <td>
                         {requirement.requiredQuantity} {requirement.stockUnitCode}
                       </td>
                       <td>{requirement.onHand}</td>
@@ -706,13 +719,20 @@ export function ProductionOrderPage() {
                         >
                           {requirement.shortage}
                         </span>
+                        {requirement.supplyResponsibility === "CUSTOMER" &&
+                          Number(requirement.shortage) > 0 && (
+                            <>
+                              <br />
+                              <span className="field__hint">Aguardando material do cliente</span>
+                            </>
+                          )}
                       </td>
                     </tr>
                   ))}
 
                   {productionOrder.requirements.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="table__empty">
+                      <td colSpan={8} className="table__empty">
                         Nenhuma necessidade calculada — selecione uma formulação com componentes.
                       </td>
                     </tr>
@@ -1153,13 +1173,25 @@ export function ProductionOrderPage() {
 
         {materialCost && (
           <FormSection
-            title="Custo de materiais"
+            title={
+              materialCost.hasCustomerSuppliedMaterials
+                ? "Custo de materiais Veridi"
+                : "Custo de materiais"
+            }
             subtitle={
               status === "COMPLETED"
                 ? "Custo material encerrado desta OP, a partir do que foi realmente consumido."
                 : "Custo material atual — a OP ainda está em produção, o valor pode mudar."
             }
           >
+            {materialCost.hasCustomerSuppliedMaterials && (
+              <p className="field__hint">
+                Contém materiais fornecidos pelo cliente ({materialCost.customerSuppliedConsumptionCount}
+                {materialCost.customerSuppliedConsumptionCount === 1 ? " componente" : " componentes"}).
+                Esses materiais não têm custo de aquisição da Veridi e ficam fora deste total.
+              </p>
+            )}
+
             <dl className="definition-list">
               <dt>Materiais consumidos</dt>
               <dd>

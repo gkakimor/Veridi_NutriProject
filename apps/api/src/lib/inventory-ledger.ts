@@ -6,6 +6,37 @@ import type { InventoryMovementType } from "@veridi/shared";
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
 /**
+ * Escopo de PROPRIEDADE do estoque. Sempre opcional: sem escopo, tudo que
+ * ja existia continua enxergando o estoque fisico inteiro — visibilidade
+ * fisica e elegibilidade para alocacao sao coisas diferentes, e so a
+ * segunda filtra por dono.
+ *
+ * `VERIDI` inclui estoque sem lote (item sem controle de lote e sempre
+ * estoque proprio); `CUSTOMER` nunca inclui, porque material de cliente
+ * exige controle de lote.
+ */
+export type InventoryOwnerScope =
+  | { ownerType: "VERIDI" }
+  | { ownerType: "CUSTOMER"; customerId: string };
+
+/** Filtro de Lot para um escopo de propriedade. */
+export function lotOwnerWhere(scope: InventoryOwnerScope): Prisma.LotWhereInput {
+  return scope.ownerType === "VERIDI"
+    ? { ownerType: "VERIDI" }
+    : { ownerType: "CUSTOMER", ownerCustomerId: scope.customerId };
+}
+
+/**
+ * Filtro de InventoryMovement pelo dono do lote. Movimento sem lote conta
+ * como estoque Veridi — nunca como estoque de cliente.
+ */
+function movementOwnerWhere(scope: InventoryOwnerScope): Prisma.InventoryMovementWhereInput {
+  return scope.ownerType === "VERIDI"
+    ? { OR: [{ lotId: null }, { lot: { is: { ownerType: "VERIDI" } } }] }
+    : { lot: { is: { ownerType: "CUSTOMER", ownerCustomerId: scope.customerId } } };
+}
+
+/**
  * On Hand de um item (e opcionalmente de um lote especifico) — soma
  * algebrica dos InventoryMovements, nunca uma coluna armazenada.
  *
@@ -32,11 +63,12 @@ export async function getOnHand(
 export async function getOnHandByItems(
   prisma: PrismaOrTx,
   itemIds: string[],
+  scope?: InventoryOwnerScope,
 ): Promise<Map<string, Prisma.Decimal>> {
   if (itemIds.length === 0) return new Map();
   const grouped = await prisma.inventoryMovement.groupBy({
     by: ["itemId", "type"],
-    where: { itemId: { in: itemIds } },
+    where: { itemId: { in: itemIds }, ...(scope ? movementOwnerWhere(scope) : {}) },
     _sum: { quantity: true },
   });
   return groupIntoMap(grouped, (row) => row.itemId);
@@ -125,15 +157,33 @@ export async function getShippedByCustomerReservationLines(
 export async function getReservedByItems(
   prisma: PrismaOrTx,
   itemIds: string[],
+  scope?: InventoryOwnerScope,
 ): Promise<Map<string, Prisma.Decimal>> {
   if (itemIds.length === 0) return new Map();
+  // Reserva sem lote e compromisso sobre estoque proprio; no escopo de
+  // cliente ela nunca conta.
+  const ownerFilter: Prisma.MaterialReservationLineWhereInput = scope
+    ? scope.ownerType === "VERIDI"
+      ? { OR: [{ lotId: null }, { lot: { is: { ownerType: "VERIDI" } } }] }
+      : { lot: { is: { ownerType: "CUSTOMER", ownerCustomerId: scope.customerId } } }
+    : {};
   const [lines, customerOrderLines] = await Promise.all([
     prisma.materialReservationLine.findMany({
-      where: { itemId: { in: itemIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
+      where: {
+        itemId: { in: itemIds },
+        releasedAt: null,
+        reservation: { status: "ACTIVE" },
+        ...ownerFilter,
+      },
       select: { id: true, itemId: true, quantity: true },
     }),
     prisma.customerOrderReservationLine.findMany({
-      where: { itemId: { in: itemIds }, releasedAt: null, reservation: { status: "ACTIVE" } },
+      where: {
+        itemId: { in: itemIds },
+        releasedAt: null,
+        reservation: { status: "ACTIVE" },
+        ...(ownerFilter as Prisma.CustomerOrderReservationLineWhereInput),
+      },
       select: { id: true, itemId: true, quantity: true },
     }),
   ]);
@@ -265,16 +315,19 @@ export function isLotAvailableForUse(lot: { status: string; expiryDate: Date | n
 export async function getAvailableByItems(
   prisma: PrismaOrTx,
   items: readonly { id: string; controlsLot: boolean }[],
+  scope?: InventoryOwnerScope,
 ): Promise<Map<string, Prisma.Decimal>> {
   const itemIds = items.map((item) => item.id);
   const [onHandByItem, reservedByItem] = await Promise.all([
-    getOnHandByItems(prisma, itemIds),
-    getReservedByItems(prisma, itemIds),
+    getOnHandByItems(prisma, itemIds, scope),
+    getReservedByItems(prisma, itemIds, scope),
   ]);
 
   const lotControlledIds = items.filter((item) => item.controlsLot).map((item) => item.id);
   const lots = lotControlledIds.length
-    ? await prisma.lot.findMany({ where: { itemId: { in: lotControlledIds } } })
+    ? await prisma.lot.findMany({
+        where: { itemId: { in: lotControlledIds }, ...(scope ? lotOwnerWhere(scope) : {}) },
+      })
     : [];
   const lotIds = lots.map((lot) => lot.id);
   const [onHandByLot, reservedByLot] = await Promise.all([
@@ -296,6 +349,10 @@ export async function getAvailableByItems(
   for (const item of items) {
     if (item.controlsLot) {
       result.set(item.id, availableByItem.get(item.id) ?? new Prisma.Decimal(0));
+    } else if (scope?.ownerType === "CUSTOMER") {
+      // Material de cliente exige controle de lote — sem lote nao existe
+      // saldo de terceiro identificavel.
+      result.set(item.id, new Prisma.Decimal(0));
     } else {
       const onHand = onHandByItem.get(item.id) ?? new Prisma.Decimal(0);
       const reserved = reservedByItem.get(item.id) ?? new Prisma.Decimal(0);

@@ -44,6 +44,9 @@ concluído.**
 **Delivery 26 — Formulação Industrial v2 (Bloco F, capacidade 34):
 concluído — dose, pureza e overage; base DEV reconstruível a partir do
 corpus real (fora do repositório).**
+**Delivery 27 — Material de propriedade do cliente (Bloco F, capacidade
+35): concluído — dono do estoque físico, recebimento sem OC, FEFO/reserva
+por proprietário.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2900,6 +2903,80 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 27 — Material de propriedade do cliente (Bloco F, capacidade 35)
+
+A Veridi é terceirizadora: parte do material dentro da fábrica é do
+cliente. Esta capacidade separa **dois conceitos que não podem se
+confundir**.
+
+## Responsabilidade x propriedade
+- `FormulationComponent.supplyResponsibility` (`VERIDI` default |
+  `CUSTOMER`): quem DEVE fornecer. É intenção, congelada na versão e
+  copiada para `ProductionOrderRequirement` — a OP nunca reconsulta a
+  fórmula atual.
+- `Lot.ownerType` (`VERIDI` | `CUSTOMER`) + `ownerCustomerId`: de quem é o
+  material físico. `CHECK` no banco garante as duas direções (Veridi nunca
+  tem cliente; cliente nunca fica sem cliente).
+- Dono é independente de Fornecedor: fornecedor é quem vendeu, dono é de
+  quem é. Lote de cliente costuma não ter fornecedor, e `supplierLot`
+  continua sendo o lote do fabricante.
+- Propriedade é imutável depois da criação: não existe transferência nem
+  edição silenciosa de dono.
+
+## Cliente da OP
+`ProductionOrder.customerId` vem do Pedido (origin `CUSTOMER_ORDER`) ou do
+Produto; se os dois existirem e divergirem, é `CustomerMismatchError` —
+nunca se escolhe um vencedor silencioso. Congelado no PLAN junto com o
+resto do snapshot.
+
+## Elegibilidade por proprietário
+`lib/inventory-ledger.ts` ganhou `InventoryOwnerScope` opcional
+(`getOnHandByItems`/`getReservedByItems`/`getAvailableByItems`) e
+`getAllocationSuggestion` aceita escopo. **Sem escopo nada mudou** — é a
+razão de os 418 testes anteriores continuarem passando sem alteração.
+
+- Requirement `VERIDI`: só lote Veridi. Requirement `CUSTOMER`: só lote do
+  cliente DA OP.
+- Requirement `CUSTOMER` sem cliente definido: escopo `null` = nenhum
+  estoque elegível (falta = necessidade inteira), e o RELEASE é bloqueado
+  com mensagem própria.
+- Substituição no Picking valida o dono: mesmo Item não basta.
+- **Visibilidade ≠ elegibilidade**: listas e relatórios continuam mostrando
+  o estoque físico inteiro, agora com a coluna Proprietário.
+
+## Recebimento sem Ordem de Compra
+`Receipt.sourceType` = `PURCHASE_ORDER` (comportamento intacto) |
+`CUSTOMER_SUPPLIED`. Na segunda origem `purchaseOrderId`/`supplierId` ficam
+nulos, `customerId` é obrigatório (CHECK no banco) e a `ReceiptLine` carrega
+o próprio snapshot do item (linhas antigas continuam lendo o da OC). Nota
+fiscal é opcional. Cria Receipt/ReceiptLine/Lot/`RECEIPT_IN` pelo mesmo
+caminho de sempre — nunca um segundo ledger. Qualidade não muda: item com
+liberação entra `AWAITING_RELEASE`. Item sem controle de lote é recusado.
+
+## Compra e custo
+- Falta de material do cliente nunca vira Sugestão de Compra nem OC DRAFT —
+  aparece em "Materiais aguardando cliente" (com o disponível daquele
+  cliente). Mesmo um payload explícito é recusado.
+- Material do cliente não tem custo de aquisição da Veridi: fica fora do
+  total e **fora da qualidade** do custo (dois componentes do cliente não
+  rebaixam um custo REAL para PARTIAL). `null` nunca vira `0`.
+  `hasCustomerSuppliedMaterials` sinaliza na tela ("Custo de materiais
+  Veridi" + aviso).
+
+## Telas
+Estoque → **Materiais de Clientes** (read model sobre Lot dono CUSTOMER +
+ledger, com CSV), coluna/filtro Proprietário em Lotes e R-01, proprietário
+no detalhe do lote e discretamente na etiqueta (o QR continua só
+`LOT:<código>`), Fornecimento na formulação e na OP, e Compras →
+Recebimentos → "Receber material do cliente".
+
+## Não implementado de propósito
+Transferência de propriedade, produto acabado de cliente, conta-corrente de
+material, cobrança de industrialização, valor econômico do material do
+cliente, expected inbound/ASN, CoA e anexos.
+
+---
+
 # Delivery 26 — Formulação Industrial v2 (Bloco F, capacidade 34)
 
 A formulação passa a suportar o jeito industrial de declarar fórmula
@@ -3360,7 +3437,7 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **capacidade 35** (Bloco F). A base de
+Próximo passo do roadmap oficial: **capacidade 36** (Bloco F). A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —

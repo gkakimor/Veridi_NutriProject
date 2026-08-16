@@ -5,6 +5,7 @@ import type {
   FormulationComponentBasis,
   FormulationCostEstimateDTO,
   FormulationVersionDTO,
+  SupplyResponsibility,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
 import {
@@ -15,6 +16,8 @@ import {
   FORMULATION_COMPONENT_BASES,
   FORMULATION_COMPONENT_BASIS_LABELS,
   FORMULATION_VERSION_STATUS_LABELS,
+  SUPPLY_RESPONSIBILITIES,
+  SUPPLY_RESPONSIBILITY_LABELS,
 } from "@veridi/shared";
 import {
   activateFormulationVersion,
@@ -49,6 +52,7 @@ interface ComponentRow {
   quantity: string;
   unitCode: string;
   basis: FormulationComponentBasis;
+  supplyResponsibility: SupplyResponsibility;
   purityPercentApplied: string;
   overagePercent: string;
   notes: string;
@@ -84,6 +88,7 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
     quantity: component.quantity,
     unitCode: component.unitCode,
     basis: component.basis,
+    supplyResponsibility: component.supplyResponsibility,
     purityPercentApplied: component.purityPercentApplied ?? "",
     overagePercent: component.overagePercent ?? "",
     notes: component.notes ?? "",
@@ -219,6 +224,8 @@ export function FormulationVersionPage() {
         // Componente novo herda o modo da versão: numa fórmula por dose, a
         // linha por dose é o caso normal.
         basis: calculationMode === "PER_DOSE" ? "PER_DOSE" : "FIXED_BASIS",
+        // Default do domínio: a Veridi fornece, salvo declaração explícita.
+        supplyResponsibility: "VERIDI",
         purityPercentApplied: "",
         overagePercent: "",
         notes: "",
@@ -234,6 +241,12 @@ export function FormulationVersionPage() {
 
   function handleComponentBasisChange(key: string, basis: FormulationComponentBasis) {
     setComponents((prev) => prev.map((row) => (row.key === key ? { ...row, basis } : row)));
+  }
+
+  function handleComponentSupplyChange(key: string, supplyResponsibility: SupplyResponsibility) {
+    setComponents((prev) =>
+      prev.map((row) => (row.key === key ? { ...row, supplyResponsibility } : row)),
+    );
   }
 
   function handleComponentItemChange(key: string, itemId: string) {
@@ -276,6 +289,7 @@ export function FormulationVersionPage() {
         quantity: row.quantity.trim(),
         unitCode: row.unitCode,
         basis: row.basis,
+        supplyResponsibility: row.supplyResponsibility,
         // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
         purityPercentApplied: row.purityPercentApplied.trim() || null,
         overagePercent: row.overagePercent.trim() || null,
@@ -481,7 +495,7 @@ export function FormulationVersionPage() {
 
         <FormSection
           title="Componentes"
-          subtitle="Pureza vazia = desconhecida (nenhuma correção é aplicada). Embalagem normalmente usa base por unidade acabada. O físico por unidade já inclui pureza e overage."
+          subtitle="Fornecimento Cliente = material que o cliente envia (exige produto vinculado a cliente). Pureza vazia = desconhecida (nenhuma correção é aplicada). Embalagem normalmente usa base por unidade acabada. O físico por unidade já inclui pureza e overage."
         >
           <div className="table-container">
             <table className="table">
@@ -490,6 +504,7 @@ export function FormulationVersionPage() {
                   <th>Item</th>
                   <th>Tipo</th>
                   <th>Base</th>
+                  <th>Fornecimento</th>
                   <th>Quantidade</th>
                   <th>Unidade</th>
                   <th>Pureza %</th>
@@ -546,6 +561,28 @@ export function FormulationVersionPage() {
                         </select>
                       ) : (
                         FORMULATION_COMPONENT_BASIS_LABELS[row.basis]
+                      )}
+                    </td>
+                    <td>
+                      {isDraft ? (
+                        <select
+                          aria-label="Responsabilidade de fornecimento"
+                          value={row.supplyResponsibility}
+                          onChange={(event) =>
+                            handleComponentSupplyChange(
+                              row.key,
+                              event.target.value as SupplyResponsibility,
+                            )
+                          }
+                        >
+                          {SUPPLY_RESPONSIBILITIES.map((responsibility) => (
+                            <option key={responsibility} value={responsibility}>
+                              {SUPPLY_RESPONSIBILITY_LABELS[responsibility]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]
                       )}
                     </td>
                     <td>
@@ -641,7 +678,7 @@ export function FormulationVersionPage() {
 
                 {components.length === 0 && (
                   <tr>
-                    <td colSpan={isDraft ? 10 : 9} className="table__empty">
+                    <td colSpan={isDraft ? 11 : 10} className="table__empty">
                       Nenhum componente adicionado.
                     </td>
                   </tr>

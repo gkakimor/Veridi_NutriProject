@@ -32,9 +32,11 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getConsumedByReservationLines, isLotExpired } from "../../lib/inventory-ledger.js";
+import type { InventoryOwnerScope } from "../../lib/inventory-ledger.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
 import { computeFormulationRequirements } from "./requirement-calc.js";
 import {
+  CustomerMismatchError,
   FormulationVersionNotFoundError,
   FormulationVersionProductMismatchError,
   InactiveProductError,
@@ -63,6 +65,7 @@ type ReservationWithLines = MaterialReservation & { lines: ReservationLineWithRe
 type ConsumptionWithRelations = ProductionConsumption & { item: Item; lot: Lot | null };
 type OutputWithRelations = ProductionOutput & { lot: Lot | null };
 type POWithRelations = ProductionOrder & {
+  customer: Customer | null;
   product: ProductWithRelations;
   formulationVersion: FormulationVersion | null;
   requirements: RequirementWithItem[];
@@ -74,6 +77,7 @@ type POWithRelations = ProductionOrder & {
 };
 
 const productionOrderInclude = {
+  customer: true,
   product: { include: { customer: true, finishedProductItem: true } },
   formulationVersion: true,
   requirements: { include: { item: true }, orderBy: { position: "asc" as const } },
@@ -89,6 +93,49 @@ const productionOrderInclude = {
   finishedItem: true,
   customerOrder: true,
 } as const;
+
+/**
+ * Escopo de estoque elegivel para uma necessidade da OP. `VERIDI` so
+ * enxerga estoque proprio; `CUSTOMER` so enxerga o estoque do cliente
+ * DESTA OP — nunca de outro cliente, nunca da Veridi. Sem cliente definido
+ * uma necessidade CUSTOMER nao tem escopo: fica sem cobertura possivel
+ * (e o RELEASE e bloqueado com mensagem propria).
+ */
+export function requirementOwnerScope(
+  supplyResponsibility: "VERIDI" | "CUSTOMER",
+  orderCustomerId: string | null,
+): InventoryOwnerScope | null {
+  if (supplyResponsibility === "VERIDI") return { ownerType: "VERIDI" };
+  return orderCustomerId ? { ownerType: "CUSTOMER", customerId: orderCustomerId } : null;
+}
+
+/**
+ * Cliente da OP: vem do Pedido quando a OP nasceu de um, senao do Produto.
+ * Se os dois existirem e forem diferentes, e inconsistencia real — nunca
+ * se escolhe um silenciosamente.
+ */
+async function resolveOrderCustomerId(
+  tx: Prisma.TransactionClient,
+  productCustomerId: string | null,
+  customerOrderId: string | null,
+): Promise<string | null> {
+  if (!customerOrderId) return productCustomerId;
+
+  const customerOrder = await tx.customerOrder.findUnique({
+    where: { id: customerOrderId },
+    include: { customer: true },
+  });
+  if (!customerOrder) return productCustomerId;
+
+  if (productCustomerId && productCustomerId !== customerOrder.customerId) {
+    const productCustomer = await tx.customer.findUnique({ where: { id: productCustomerId } });
+    throw new CustomerMismatchError(
+      productCustomer?.legalName ?? productCustomerId,
+      customerOrder.customer.legalName,
+    );
+  }
+  return customerOrder.customerId;
+}
 
 /** Soma dos ProductionOutput da OP — nunca uma segunda coluna manual. Aceita `tx` para uso dentro de transacao. */
 export async function getProducedQuantity(
@@ -244,6 +291,9 @@ async function regenerateRequirements(
       itemType: row.itemType,
       formulaQuantity: row.formulaQuantity,
       formulaUnitCode: row.formulaUnitCode,
+      // Congela de quem o material deve vir: depois disso a OP nunca mais
+      // consulta a formulacao atual para decidir isso.
+      supplyResponsibility: row.supplyResponsibility,
       // Congela tambem o teorico e os fatores aplicados: a OP guarda o
       // "porque" do peso, nao so o numero final.
       theoreticalQuantity: row.theoreticalQuantity,
@@ -267,10 +317,13 @@ async function attachRequirementAvailability(
   requirements: RequirementWithItem[],
   reservationLinesByRequirement: Map<string, ReservationLineWithRelations[]>,
   consumedByLine: Map<string, Prisma.Decimal>,
+  orderCustomer: { id: string; name: string } | null,
 ): Promise<ProductionOrderRequirementDTO[]> {
   if (requirements.length === 0) return [];
 
   const prisma = getPrisma();
+  const scopeOf = (requirement: RequirementWithItem): InventoryOwnerScope | null =>
+    requirementOwnerScope(requirement.supplyResponsibility, orderCustomer?.id ?? null);
 
   // Mesma matematica de disponibilidade/falta usada pelos relatorios —
   // calculo unico, nunca uma segunda interpretacao de shortage.
@@ -281,6 +334,10 @@ async function attachRequirementAvailability(
       itemId: requirement.itemId,
       controlsLot: requirement.item.controlsLot,
       requiredQuantity: requirement.requiredQuantity,
+      // Material do cliente sem cliente definido: nenhum estoque e
+      // elegivel, entao a falta e a necessidade inteira — nunca o estoque
+      // da Veridi cobrindo por engano.
+      ownerScope: scopeOf(requirement),
       activeReservationLines: (reservationLinesByRequirement.get(requirement.id) ?? [])
         .filter((line) => line.releasedAt === null)
         .map((line) => ({ id: line.id, quantity: line.quantity })),
@@ -304,11 +361,15 @@ async function attachRequirementAvailability(
     const remainingReservedQuantity = availability.remainingReserved;
 
     // On Order e so informativo — nunca reduz o shortage operacional.
-    const suggestion = await getAllocationSuggestion(
-      prisma,
-      requirement.itemId,
-      requirement.requiredQuantity.toString(),
-    );
+    const scope = scopeOf(requirement);
+    const suggestion = scope
+      ? await getAllocationSuggestion(
+          prisma,
+          requirement.itemId,
+          requirement.requiredQuantity.toString(),
+          scope,
+        )
+      : null;
 
     results.push({
       id: requirement.id,
@@ -318,6 +379,12 @@ async function attachRequirementAvailability(
       itemType: requirement.itemType,
       formulaQuantity: requirement.formulaQuantity.toString(),
       formulaUnitCode: requirement.formulaUnitCode,
+      supplyResponsibility: requirement.supplyResponsibility,
+      eligibleOwnerType: requirement.supplyResponsibility === "CUSTOMER" ? "CUSTOMER" : "VERIDI",
+      eligibleOwnerCustomerId:
+        requirement.supplyResponsibility === "CUSTOMER" ? (orderCustomer?.id ?? null) : null,
+      eligibleOwnerCustomerName:
+        requirement.supplyResponsibility === "CUSTOMER" ? (orderCustomer?.name ?? null) : null,
       requiredQuantity: requirement.requiredQuantity.toString(),
       stockUnitCode: requirement.stockUnitCode,
       position: requirement.position,
@@ -327,7 +394,7 @@ async function attachRequirementAvailability(
       onOrder: onOrder.toString(),
       shortage: shortage.toString(),
       availabilityStatus: shortage.greaterThan(0) ? "SHORTAGE" : "AVAILABLE",
-      suggestedAllocations: suggestion.allocations.map((allocation) => ({
+      suggestedAllocations: (suggestion?.allocations ?? []).map((allocation) => ({
         lotId: allocation.lotId,
         lotCode: allocation.lotCode,
         expiryDate: allocation.expiryDate,
@@ -357,10 +424,19 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     reservationLinesByRequirement.set(line.productionOrderRequirementId, list);
   }
 
+  // Cliente da OP: snapshot proprio quando existir, senao o cliente atual
+  // do Produto (DRAFT ainda le ao vivo, como o resto do documento).
+  const orderCustomer = order.customer
+    ? { id: order.customer.id, name: order.customer.legalName }
+    : order.product.customer
+      ? { id: order.product.customer.id, name: order.product.customer.legalName }
+      : null;
+
   const requirements = await attachRequirementAvailability(
     order.requirements,
     reservationLinesByRequirement,
     consumedByLine,
+    orderCustomer,
   );
   const shortageItemCount = requirements.filter((r) => r.availabilityStatus === "SHORTAGE").length;
   const materialsStatus: ProductionOrderMaterialsStatus =
@@ -433,6 +509,10 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     materialsStatus,
     shortageItemCount,
     notes: order.notes,
+    customerId: order.customerId ?? orderCustomer?.id ?? null,
+    hasCustomerSuppliedRequirements: order.requirements.some(
+      (requirement) => requirement.supplyResponsibility === "CUSTOMER",
+    ),
     customerCode: usingSnapshot ? order.customerCode : (order.product.customer?.code ?? null),
     customerName: usingSnapshot ? order.customerName : (order.product.customer?.legalName ?? null),
     customerCnpj: usingSnapshot ? order.customerCnpj : (order.product.customer?.cnpj ?? null),
@@ -524,6 +604,9 @@ export async function createProductionOrder(
         plannedQuantity,
         outputUnitCode: product.finishedProductItem!.unitCode,
         origin: input.origin ?? "MANUAL",
+        // OP manual herda o cliente do Produto. Mudar Product.customerId
+        // depois nunca reescreve esta OP.
+        ...(product.customerId ? { customerId: product.customerId } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         createdBy: SYSTEM_ACTOR,
       },
@@ -555,6 +638,9 @@ export async function createDraftProductionOrderInTx(
     customerOrderLineId: string;
   },
 ): Promise<string> {
+  const product = await tx.product.findUniqueOrThrow({ where: { id: params.productId } });
+  const customerId = await resolveOrderCustomerId(tx, product.customerId, params.customerOrderId);
+
   const created = await tx.productionOrder.create({
     data: {
       code: params.code,
@@ -565,6 +651,7 @@ export async function createDraftProductionOrderInTx(
       origin: "CUSTOMER_ORDER",
       customerOrderId: params.customerOrderId,
       customerOrderLineId: params.customerOrderLineId,
+      ...(customerId ? { customerId } : {}),
       createdBy: SYSTEM_ACTOR,
     },
   });
@@ -619,7 +706,18 @@ export async function updateProductionOrder(
     await tx.productionOrder.update({
       where: { id },
       data: {
-        ...(productChanging ? { productId: effectiveProduct.id } : {}),
+        ...(productChanging
+          ? {
+              productId: effectiveProduct.id,
+              // Trocar de produto troca o dono do material esperado —
+              // manter o cliente antigo seria abrir mao de estoque errado.
+              customerId: await resolveOrderCustomerId(
+                tx,
+                effectiveProduct.customerId,
+                current.customerOrderId,
+              ),
+            }
+          : {}),
         ...(regenerate
           ? {
               formulationVersionId: formulationVersion?.id ?? null,
@@ -682,6 +780,13 @@ export async function planProductionOrder(id: string): Promise<ProductionOrderDT
       throw new PlanValidationError(`Não é possível planejar esta ordem: ${reasons.join("; ")}.`);
     }
 
+    const plannedCustomerId =
+      order.customerId ??
+      (await resolveOrderCustomerId(tx, order.product.customerId, order.customerOrderId));
+    const plannedCustomer = plannedCustomerId
+      ? await tx.customer.findUnique({ where: { id: plannedCustomerId } })
+      : null;
+
     // Regenera uma ultima vez antes de congelar — seguranca contra qualquer
     // drift entre o ultimo save do DRAFT e o momento do planejamento.
     await regenerateRequirements(tx, id, order.formulationVersionId, order.plannedQuantity);
@@ -705,11 +810,14 @@ export async function planProductionOrder(id: string): Promise<ProductionOrderDT
         finishedItemCode: order.product.finishedProductItem!.code,
         finishedItemName: order.product.finishedProductItem!.name,
         formulationVersionNumber: order.formulationVersion!.versionNumber,
-        ...(order.product.customer
+        // Cliente congelado junto com o resto do snapshot — a OP nunca
+        // volta a perguntar ao Produto de quem ela e.
+        ...(plannedCustomerId ? { customerId: plannedCustomerId } : {}),
+        ...(plannedCustomer
           ? {
-              customerCode: order.product.customer.code,
-              customerName: order.product.customer.legalName,
-              customerCnpj: order.product.customer.cnpj,
+              customerCode: plannedCustomer.code,
+              customerName: plannedCustomer.legalName,
+              customerCnpj: plannedCustomer.cnpj,
             }
           : {}),
       },
@@ -748,6 +856,18 @@ export async function releaseProductionOrder(id: string): Promise<ProductionOrde
       );
     }
 
+    // Material do cliente exige saber INEQUIVOCAMENTE de qual cliente esta
+    // OP e — sem isso nao existe estoque elegivel, e liberar seria operar
+    // no escuro.
+    const hasCustomerSupplied = order.requirements.some(
+      (requirement) => requirement.supplyResponsibility === "CUSTOMER",
+    );
+    if (hasCustomerSupplied && !order.customerId) {
+      throw new ReleaseValidationError(
+        "Esta OP possui materiais fornecidos pelo cliente, mas não possui cliente definido.",
+      );
+    }
+
     // Trava os Items envolvidos em ordem deterministica (id ascendente) —
     // serializa RELEASEs concorrentes que disputam o mesmo item e evita
     // deadlock entre travas cruzadas de duas OPs. Consultas de
@@ -767,16 +887,22 @@ export async function releaseProductionOrder(id: string): Promise<ProductionOrde
     for (const requirement of order.requirements) {
       // Recalcula FEFO/FIFO agora, sob lock — nunca reutiliza a sugestao
       // antiga exibida na UI antes do RELEASE.
+      // Dono e criterio de elegibilidade: necessidade da Veridi so olha
+      // lote proprio, necessidade do cliente so olha lote DESTE cliente.
+      const scope = requirementOwnerScope(requirement.supplyResponsibility, order.customerId);
       const suggestion = await getAllocationSuggestion(
         tx,
         requirement.itemId,
         requirement.requiredQuantity.toString(),
+        scope ?? { ownerType: "VERIDI" },
       );
 
       if (new Prisma.Decimal(suggestion.shortageQuantity).greaterThan(0)) {
-        shortages.push(
-          `${requirement.itemCode} (falta ${suggestion.shortageQuantity} ${requirement.stockUnitCode})`,
-        );
+        const missing =
+          requirement.supplyResponsibility === "CUSTOMER"
+            ? `${requirement.itemCode} (aguardando material do cliente: ${suggestion.shortageQuantity} ${requirement.stockUnitCode})`
+            : `${requirement.itemCode} (falta ${suggestion.shortageQuantity} ${requirement.stockUnitCode})`;
+        shortages.push(missing);
         continue;
       }
 

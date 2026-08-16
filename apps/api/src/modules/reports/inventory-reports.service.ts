@@ -57,8 +57,12 @@ export async function getInventoryPosition(
         where: {
           ...(query.status ? { status: query.status } : {}),
           ...(query.location ? { location: { contains: query.location, mode: "insensitive" } } : {}),
+          // Filtro de propriedade é escolha do usuário: por padrão a
+          // posição continua mostrando o estoque físico inteiro.
+          ...(query.ownerType ? { ownerType: query.ownerType } : {}),
+          ...(query.ownerCustomerId ? { ownerCustomerId: query.ownerCustomerId } : {}),
         },
-        include: { supplier: true },
+        include: { supplier: true, ownerCustomer: true },
         orderBy: { code: "asc" },
       },
     },
@@ -96,6 +100,9 @@ export async function getInventoryPosition(
           supplierLot: lot.supplierLot,
           businessLotNumber: lot.businessLotNumber,
           supplierName: lot.supplier ? lot.supplier.legalName : null,
+          ownerType: lot.ownerType,
+          ownerCustomerId: lot.ownerCustomerId,
+          ownerCustomerName: lot.ownerCustomer ? lot.ownerCustomer.legalName : null,
           expiryDate: lot.expiryDate ? lot.expiryDate.toISOString() : null,
           location: lot.location,
           onHand: onHand.toString(),
@@ -108,8 +115,10 @@ export async function getInventoryPosition(
       continue;
     }
 
-    // Item sem controle de lote: o saldo vive no proprio Item.
+    // Item sem controle de lote: o saldo vive no proprio Item — e e sempre
+    // estoque proprio (material de cliente exige lote).
     if (query.status || query.location) continue;
+    if (query.ownerType === "CUSTOMER" || query.ownerCustomerId) continue;
     const onHand = onHandByItem.get(item.id) ?? new Prisma.Decimal(0);
     const reserved = reservedByItem.get(item.id) ?? new Prisma.Decimal(0);
     if (query.onlyWithBalance && onHand.lessThanOrEqualTo(0)) continue;
@@ -126,6 +135,9 @@ export async function getInventoryPosition(
       supplierLot: null,
       businessLotNumber: null,
       supplierName: null,
+      ownerType: "VERIDI",
+      ownerCustomerId: null,
+      ownerCustomerName: null,
       expiryDate: null,
       location: null,
       onHand: onHand.toString(),
@@ -278,7 +290,7 @@ export async function getMovementsReport(
       where,
       include: {
         item: true,
-        lot: true,
+        lot: { include: { ownerCustomer: true } },
         receiptLine: { include: { receipt: true } },
         productionConsumption: { include: { productionOrder: true } },
         productionOutput: { include: { productionOrder: true } },
@@ -314,6 +326,10 @@ export async function getMovementsReport(
     }
 
     return {
+      // Owner e caracteristica do lote; o tipo de movimento nunca muda por
+      // causa dele.
+      ownerType: movement.lot?.ownerType ?? "VERIDI",
+      ownerCustomerName: movement.lot?.ownerCustomer?.legalName ?? null,
       id: movement.id,
       occurredAt: movement.occurredAt.toISOString(),
       type: movement.type,

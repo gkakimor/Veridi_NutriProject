@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { getPrisma } from "../../db/prisma.js";
 import { getAllocationSuggestion } from "./allocation.service.js";
+import { listCustomerMaterials } from "./customer-materials.service.js";
 import {
   createInventoryAdjustment,
   createStockCount,
@@ -21,6 +22,7 @@ import {
 } from "./inventory.errors.js";
 import {
   allocationSuggestionQuerySchema,
+  listCustomerMaterialsQuerySchema,
   createInventoryAdjustmentSchema,
   listInventoryMovementsQuerySchema,
   listInventoryQuerySchema,
@@ -80,6 +82,19 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const result = await listInventory(parsed.data);
+    return reply.send(result);
+  });
+
+  // Somente leitura: quanto material de cada cliente esta fisicamente aqui.
+  app.get("/inventory/customer-materials", async (request, reply) => {
+    const parsed = listCustomerMaterialsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    const result = await listCustomerMaterials(parsed.data);
     return reply.send(result);
   });
 

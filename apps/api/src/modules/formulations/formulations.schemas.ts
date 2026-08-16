@@ -35,6 +35,7 @@ const formulationComponentInputSchema = z.object({
   quantity: decimalStringSchema(),
   unitCode: z.string().trim().min(1, "Unidade é obrigatória"),
   basis: z.enum(["FIXED_BASIS", "PER_DOSE", "PER_FINISHED_UNIT"]).optional(),
+  supplyResponsibility: z.enum(["VERIDI", "CUSTOMER"]).optional(),
   // Pureza: mesma regra do cadastro — 0 < x <= 100, null = desconhecida.
   purityPercentApplied: optionalPurityPercent,
   overagePercent: optionalOveragePercent,

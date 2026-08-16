@@ -37,7 +37,21 @@ export const allocationSuggestionQuerySchema = z.object({
   quantity: decimalStringSchema(),
 });
 
+export const listCustomerMaterialsQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  customerId: z.string().trim().min(1).optional(),
+  itemId: z.string().trim().min(1).optional(),
+  status: z.enum(["AWAITING_RELEASE", "AVAILABLE", "BLOCKED", "EXPIRED"]).optional(),
+  onlyWithBalance: z
+    .union([z.string(), z.boolean()])
+    .optional()
+    .transform((value) => (typeof value === "string" ? value === "true" : (value ?? false))),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export type ListInventoryQuery = z.infer<typeof listInventoryQuerySchema>;
+export type ListCustomerMaterialsQuery = z.infer<typeof listCustomerMaterialsQuerySchema>;
 export type ListInventoryMovementsQuery = z.infer<typeof listInventoryMovementsQuerySchema>;
 export type CreateInventoryAdjustmentInput = z.infer<typeof createInventoryAdjustmentSchema>;
 export type StockCountInput = z.infer<typeof stockCountSchema>;

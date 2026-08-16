@@ -1,6 +1,7 @@
 /** Contratos do módulo de Formulações/Versionamento, consumidos por `apps/api` e `apps/web`. */
 
 import type { ItemType } from "./items.js";
+import type { SupplyResponsibility } from "./ownership.js";
 
 export type FormulationVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE";
 
@@ -59,6 +60,11 @@ export interface FormulationComponentDTO {
   quantity: string;
   unitCode: string;
   basis: FormulationComponentBasis;
+  /**
+   * Quem deve fornecer este componente. Intenção declarada na fórmula e
+   * congelada na versão — nunca é o dono do lote físico.
+   */
+  supplyResponsibility: SupplyResponsibility;
   /**
    * SNAPSHOT da pureza aplicada (0 < x <= 100). `null` significa
    * DESCONHECIDA: nenhuma correção é aplicada — nunca se assume 100%.
@@ -139,6 +145,7 @@ export interface FormulationComponentInput {
   quantity: string;
   unitCode: string;
   basis?: FormulationComponentBasis;
+  supplyResponsibility?: SupplyResponsibility;
   purityPercentApplied?: string | null;
   overagePercent?: string | null;
   legacyTotalQuantity?: string | null;

@@ -1,4 +1,11 @@
-import type { BlockLotInput, LotDTO, LotListResponse, LotStatus, LotTraceabilityDTO } from "@veridi/shared";
+import type {
+  BlockLotInput,
+  InventoryOwnerType,
+  LotDTO,
+  LotListResponse,
+  LotStatus,
+  LotTraceabilityDTO,
+} from "@veridi/shared";
 import { API_URL } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
@@ -7,6 +14,8 @@ export interface ListLotsParams {
   itemId?: string;
   supplierId?: string;
   status?: LotStatus;
+  ownerType?: InventoryOwnerType;
+  ownerCustomerId?: string;
   page?: number;
   pageSize?: number;
 }
@@ -17,6 +26,8 @@ export async function listLots(params: ListLotsParams = {}): Promise<LotListResp
   if (params.itemId) query.set("itemId", params.itemId);
   if (params.supplierId) query.set("supplierId", params.supplierId);
   if (params.status) query.set("status", params.status);
+  if (params.ownerType) query.set("ownerType", params.ownerType);
+  if (params.ownerCustomerId) query.set("ownerCustomerId", params.ownerCustomerId);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 

@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { PrismaClient, ItemType } from "@prisma/client";
+import type { PrismaClient, ItemType, SupplyResponsibility } from "@prisma/client";
 import { computeComponentRequirement } from "../../lib/formulation-math.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
@@ -11,6 +11,8 @@ export interface ComputedRequirementRow {
   itemType: ItemType;
   formulaQuantity: Prisma.Decimal;
   formulaUnitCode: string;
+  /** Snapshot da intenção da fórmula — quem deve fornecer este material. */
+  supplyResponsibility: SupplyResponsibility;
   /** Antes de pureza/overage, na unidade de estoque. */
   theoreticalQuantity: Prisma.Decimal;
   purityPercentApplied: Prisma.Decimal | null;
@@ -69,6 +71,7 @@ export async function computeFormulationRequirements(
       itemType: item.type,
       formulaQuantity: component.quantity,
       formulaUnitCode: component.unitCode,
+      supplyResponsibility: component.supplyResponsibility,
       theoreticalQuantity: requirement.theoreticalQuantity,
       purityPercentApplied: requirement.purityPercentApplied,
       overagePercent: requirement.overagePercent,

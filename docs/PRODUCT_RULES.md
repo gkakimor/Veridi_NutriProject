@@ -411,6 +411,48 @@ Negative On Hand/Available is not silently allowed.
   point on — they can never eat into stock a `RELEASED` Production Order
   is counting on.
 
+## Inventory ownership — customer-owned material (capability 35)
+
+Veridi is a private-label manufacturer: part of the material inside the
+plant belongs to the customer. Ownership is a property of the **lot**, and
+it is deliberately separate from who supplied it.
+
+- Every `Lot` has an owner: `VERIDI` or `CUSTOMER`. A customer-owned lot
+  belongs to exactly one Customer; a Veridi lot never has one. The database
+  enforces both directions.
+- Owner is independent of Supplier: the supplier is who sold the material,
+  the owner is who it belongs to. A customer-owned lot usually has no
+  supplier at all, and its `supplierLot` is still the manufacturer's lot.
+- Customer material **requires lot control**. Receiving customer material
+  for an item without lot control is refused — a third party's balance that
+  cannot be told apart from Veridi's own stock is worse than no balance.
+- Ownership is a historical characteristic of the lot: immutable after
+  creation. There is no ownership transfer and no silent owner edit;
+  adjustments and stock counts never change it.
+- **Visibility is not eligibility.** Global inventory views keep showing all
+  physical stock, with the owner made explicit; only allocation filters by
+  owner. Aggregate "available" is never presented as Veridi's without
+  distinguishing ownership.
+- Eligibility for a Production Order requirement: `VERIDI` responsibility
+  considers only Veridi lots; `CUSTOMER` responsibility considers only lots
+  of that order's customer. Customer A never supplies customer B, and
+  Veridi material never covers a customer requirement (nor the reverse).
+  Quality, expiry, On Hand, Reserved, FEFO and FIFO fallback all keep
+  working exactly as before — owner is one more eligibility criterion.
+- Lot substitution in Picking respects the owner: the same item is not
+  enough.
+- A Production Order with customer-supplied requirements cannot be released
+  without a customer: without it there is no eligible stock at all.
+- Shortage of customer material never becomes a Purchase Suggestion or a
+  DRAFT Purchase Order — it is "waiting for the customer to send". Veridi's
+  On Order never covers it either.
+- Customer material has **no Veridi acquisition cost**. That is not
+  "unknown cost": it is third-party property. It stays out of the order's
+  material cost, and cost quality is judged only over Veridi components —
+  `null` never becomes `0`.
+- Finished-goods ownership is unchanged in this capability: production
+  output lots stay Veridi.
+
 ---
 
 # 15. Inventory movement ledger
@@ -591,6 +633,15 @@ Old OPs never change because a new formula is activated.
 - Legacy reference fields (historical total / unit / batch units) are
   documentation of the imported spreadsheet line — never inputs to any
   calculation.
+
+### Customer-owned material (capability 35)
+
+- A component declares a **supply responsibility**: `VERIDI` (default) or
+  `CUSTOMER`. This is intent, frozen in the version and copied onto the
+  Production Order requirement — never re-read from the current formula.
+- A version with a `CUSTOMER` component cannot be activated while the
+  Product has no Customer: without a customer the formula is ambiguous.
+  The DRAFT stays freely editable.
 
 ---
 

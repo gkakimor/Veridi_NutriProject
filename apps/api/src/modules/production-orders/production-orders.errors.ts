@@ -69,3 +69,17 @@ export class ReleaseValidationError extends Error {
     this.name = "ReleaseValidationError";
   }
 }
+
+/**
+ * Inconsistência de cliente: o Produto pertence a um cliente e o Pedido a
+ * outro. Nunca se escolhe um "vencedor" silencioso — sem cliente
+ * inequívoco não se pode usar material de propriedade do cliente.
+ */
+export class CustomerMismatchError extends Error {
+  constructor(productCustomer: string, orderCustomer: string) {
+    super(
+      `Cliente inconsistente: o produto pertence a ${productCustomer} e o pedido a ${orderCustomer}.`,
+    );
+    this.name = "CustomerMismatchError";
+  }
+}

@@ -11,6 +11,8 @@
  * médias de custo. Custo desconhecido é sempre `null`, nunca `0`.
  */
 
+import type { InventoryOwnerType } from "./ownership.js";
+
 /**
  * Qualidade/origem de uma referência unitária de custo.
  * - `REAL`: custo efetivo informado para a aquisição exata em questão.
@@ -94,6 +96,13 @@ export interface FormulationCostEstimateDTO {
 
 export interface ProductionConsumptionCostDTO {
   consumptionId: string;
+  /**
+   * Dono do lote consumido. `CUSTOMER` = material fornecido pelo cliente:
+   * fica FORA do custo de material da Veridi, e sua ausência de custo não
+   * é "custo desconhecido" — é propriedade de terceiro.
+   */
+  ownerType: InventoryOwnerType;
+  ownerCustomerName: string | null;
   itemId: string;
   itemCode: string;
   itemName: string;
@@ -117,7 +126,15 @@ export interface ProductionConsumptionCostDTO {
 export interface ProductionOrderMaterialCostDTO {
   productionOrderId: string;
   consumptions: ProductionConsumptionCostDTO[];
+  /**
+   * Qualidade avaliada SOMENTE sobre os consumos da Veridi — material do
+   * cliente nunca rebaixa a qualidade para `PARTIAL`.
+   */
   quality: CostQuality;
+  /** `true` quando ao menos um consumo veio de lote do cliente. */
+  hasCustomerSuppliedMaterials: boolean;
+  /** Quantos consumos foram de material do cliente — nunca valorados. */
+  customerSuppliedConsumptionCount: number;
   /** Só existe quando a qualidade é `REAL` ou `ESTIMATED` — `PARTIAL` deixa `null`. */
   totalMaterialCost: string | null;
   /** Soma do que é conhecido — útil em `PARTIAL`, nunca apresentado como total. */

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
-import type { LotDTO, LotStatus } from "@veridi/shared";
-import { LOT_STATUSES, LOT_STATUS_LABELS } from "@veridi/shared";
+import type { InventoryOwnerType, LotDTO, LotStatus } from "@veridi/shared";
+import { LOT_STATUSES, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { listLots } from "../../lib/lots-api";
 
 type StatusFilter = LotStatus | "all";
+type OwnerFilter = InventoryOwnerType | "all";
 
 const PAGE_SIZE = 20;
 
@@ -44,6 +45,7 @@ export function LotsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>("all");
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -52,7 +54,7 @@ export function LotsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter]);
+  }, [search, statusFilter, ownerFilter]);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -61,6 +63,7 @@ export function LotsPage() {
     const params: Parameters<typeof listLots>[0] = { page, pageSize: PAGE_SIZE };
     if (search) params.search = search;
     if (statusFilter !== "all") params.status = statusFilter;
+    if (ownerFilter !== "all") params.ownerType = ownerFilter;
 
     listLots(params)
       .then((result) => {
@@ -71,7 +74,7 @@ export function LotsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar lotes");
       })
       .finally(() => setLoading(false));
-  }, [page, search, statusFilter]);
+  }, [page, search, statusFilter, ownerFilter]);
 
   useEffect(() => {
     reload();
@@ -95,7 +98,14 @@ export function LotsPage() {
         >
           Escanear QR
         </button>
-        <ExportCsvButton path="/lots/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
+        <ExportCsvButton
+          path="/lots/export.csv"
+          filters={{
+            search,
+            status: statusFilter === "all" ? undefined : statusFilter,
+            ownerType: ownerFilter === "all" ? undefined : ownerFilter,
+          }}
+        />
 </div>
 
       <div className="toolbar">
@@ -111,6 +121,19 @@ export function LotsPage() {
             onChange={(event) => setSearchInput(event.target.value)}
           />
         </div>
+
+        <label className="sr-only" htmlFor="lots-owner-filter">
+          Filtrar por proprietário
+        </label>
+        <select
+          id="lots-owner-filter"
+          value={ownerFilter}
+          onChange={(event) => setOwnerFilter(event.target.value as OwnerFilter)}
+        >
+          <option value="all">Todos os proprietários</option>
+          <option value="VERIDI">Veridi</option>
+          <option value="CUSTOMER">Cliente</option>
+        </select>
 
         <label className="sr-only" htmlFor="lots-status-filter">
           Filtrar por status
@@ -138,6 +161,7 @@ export function LotsPage() {
               <th>Lote Interno</th>
               <th>Item</th>
               <th>Lote Fornecedor</th>
+              <th>Proprietário</th>
               <th>Fornecedor</th>
               <th>Recebido</th>
               <th>Validade</th>
@@ -161,6 +185,7 @@ export function LotsPage() {
                   <span className="code">{lot.itemCode}</span> {lot.itemName}
                 </td>
                 <td>{lot.supplierLot ?? "—"}</td>
+                <td>{ownerLabel(lot.ownerType, lot.ownerCustomerName)}</td>
                 <td>{lot.supplierName}</td>
                 <td>
                   {lot.initialReceivedQuantity} {lot.unitCode}
@@ -195,7 +220,7 @@ export function LotsPage() {
 
             {!loading && lots.length === 0 && (
               <tr>
-                <td colSpan={9} className="table__empty">
+                <td colSpan={10} className="table__empty">
                   Nenhum lote encontrado.
                 </td>
               </tr>

@@ -13,6 +13,7 @@ import { getConsumedByReservationLines, isLotExpired } from "../../lib/inventory
 import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { getConsumedLotCostReference } from "../../lib/cost-reference.js";
 import { getProductionOrderMaterialCost } from "../costs/costs.service.js";
+import { requirementOwnerScope } from "../production-orders/production-orders.service.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import type {
@@ -54,6 +55,7 @@ export async function getRequirementsReport(
     },
     include: {
       product: true,
+      customer: true,
       requirements: { include: { item: true }, orderBy: { position: "asc" } },
       reservation: { include: { lines: true } },
     },
@@ -73,6 +75,9 @@ export async function getRequirementsReport(
       itemId: requirement.itemId,
       controlsLot: requirement.item.controlsLot,
       requiredQuantity: requirement.requiredQuantity,
+      // Mesma regra de elegibilidade por proprietario do documento da OP —
+      // nunca uma segunda interpretacao no relatorio.
+      ownerScope: requirementOwnerScope(requirement.supplyResponsibility, order.customerId),
       activeReservationLines: (order.reservation?.lines ?? [])
         .filter((line) => line.releasedAt === null && line.productionOrderRequirementId === requirement.id)
         .map((line) => ({ id: line.id, quantity: line.quantity })),
@@ -98,6 +103,11 @@ export async function getRequirementsReport(
         itemId: requirement.itemId,
         itemCode: requirement.itemCode,
         itemName: requirement.itemName,
+        supplyResponsibility: requirement.supplyResponsibility,
+        customerName:
+          requirement.supplyResponsibility === "CUSTOMER"
+            ? (order.customer?.legalName ?? order.customerName ?? null)
+            : null,
         requiredQuantity: requirement.requiredQuantity.toString(),
         reserved: availability.reserved.toString(),
         available: availability.available.toString(),

@@ -15,6 +15,7 @@ import type {
   PurchaseOrderReportRowDTO,
   ReceiptReportRowDTO,
 } from "@veridi/shared";
+import { SUPPLY_RESPONSIBILITY_LABELS } from "@veridi/shared";
 import {
   COST_SOURCE_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
@@ -116,6 +117,11 @@ const r01 = defineCsvExport({
     { header: "Lote interno", value: (row: InventoryPositionRowDTO) => csvCode(row.lotCode) },
     { header: "Lote do fornecedor", value: (row: InventoryPositionRowDTO) => csvCode(row.supplierLot) },
     { header: "Lote Veridi", value: (row: InventoryPositionRowDTO) => csvCode(row.businessLotNumber) },
+    {
+      header: "Proprietário",
+      value: (row: InventoryPositionRowDTO) =>
+        row.ownerType === "CUSTOMER" ? csvText(row.ownerCustomerName ?? "Cliente") : "Veridi",
+    },
     { header: "Fornecedor", value: (row: InventoryPositionRowDTO) => csvText(row.supplierName) },
     { header: "Validade", value: (row: InventoryPositionRowDTO) => csvDate(row.expiryDate) },
     { header: "Localização", value: (row: InventoryPositionRowDTO) => csvText(row.location) },
@@ -186,6 +192,12 @@ const r04 = defineCsvExport({
     { header: "Status da OP", value: (row: ProductionRequirementRowDTO) => PRODUCTION_ORDER_STATUS_LABELS[row.productionOrderStatus] },
     { header: "Item", value: (row: ProductionRequirementRowDTO) => csvCode(row.itemCode) },
     { header: "Descrição", value: (row: ProductionRequirementRowDTO) => csvText(row.itemName) },
+    {
+      header: "Fornecimento",
+      value: (row: ProductionRequirementRowDTO) =>
+        SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility],
+    },
+    { header: "Cliente", value: (row: ProductionRequirementRowDTO) => csvText(row.customerName) },
     { header: "Necessário", value: (row: ProductionRequirementRowDTO) => csvDecimal(row.requiredQuantity) },
     { header: "Reservado", value: (row: ProductionRequirementRowDTO) => csvDecimal(row.reserved) },
     { header: "Disponível", value: (row: ProductionRequirementRowDTO) => csvDecimal(row.available) },

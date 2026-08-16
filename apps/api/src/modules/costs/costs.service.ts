@@ -157,7 +157,10 @@ export async function getProductionOrderMaterialCost(
   const order = await prisma.productionOrder.findUnique({
     where: { id: productionOrderId },
     include: {
-      consumptions: { include: { item: true, lot: true }, orderBy: { createdAt: "asc" } },
+      consumptions: {
+        include: { item: true, lot: { include: { ownerCustomer: true } } },
+        orderBy: { createdAt: "asc" },
+      },
       outputs: true,
     },
   });
@@ -167,26 +170,43 @@ export async function getProductionOrderMaterialCost(
   const missingCostItems: string[] = [];
   let knownSubtotal = new Prisma.Decimal(0);
   let withCost = 0;
+  let veridiConsumptionCount = 0;
+  let customerSuppliedConsumptionCount = 0;
   let allReal = true;
 
   for (const consumption of order.consumptions) {
-    const reference = await getConsumedLotCostReference(prisma, {
-      itemId: consumption.itemId,
-      lotId: consumption.lotId,
-      consumedAt: consumption.consumedAt,
-    });
+    // Material do cliente NAO tem custo de aquisicao da Veridi. Isso nao e
+    // "custo desconhecido": e propriedade de terceiro. Fica fora do total,
+    // fora da qualidade e nunca vira zero persistido.
+    const isCustomerOwned = consumption.lot?.ownerType === "CUSTOMER";
 
-    const materialCost = reference.unitCost ? consumption.quantity.times(reference.unitCost) : null;
-    if (materialCost) {
-      knownSubtotal = knownSubtotal.plus(materialCost);
-      withCost += 1;
+    const reference = isCustomerOwned
+      ? { unitCost: null, source: "NO_COST" as const, details: null }
+      : await getConsumedLotCostReference(prisma, {
+          itemId: consumption.itemId,
+          lotId: consumption.lotId,
+          consumedAt: consumption.consumedAt,
+        });
+
+    const materialCost =
+      !isCustomerOwned && reference.unitCost ? consumption.quantity.times(reference.unitCost) : null;
+    if (isCustomerOwned) {
+      customerSuppliedConsumptionCount += 1;
     } else {
-      missingCostItems.push(consumption.item.code);
+      veridiConsumptionCount += 1;
+      if (materialCost) {
+        knownSubtotal = knownSubtotal.plus(materialCost);
+        withCost += 1;
+      } else {
+        missingCostItems.push(consumption.item.code);
+      }
+      if (reference.source !== "REAL") allReal = false;
     }
-    if (reference.source !== "REAL") allReal = false;
 
     consumptions.push({
       consumptionId: consumption.id,
+      ownerType: consumption.lot?.ownerType ?? "VERIDI",
+      ownerCustomerName: consumption.lot?.ownerCustomer?.legalName ?? null,
       itemId: consumption.itemId,
       itemCode: consumption.item.code,
       itemName: consumption.item.name,
@@ -201,10 +221,12 @@ export async function getProductionOrderMaterialCost(
     });
   }
 
+  // Qualidade avaliada SO sobre os consumos da Veridi: dois componentes do
+  // cliente sem preco nao transformam um custo real em PARTIAL.
   let quality: CostQuality;
-  if (consumptions.length === 0 || withCost === 0) {
+  if (veridiConsumptionCount === 0 || withCost === 0) {
     quality = "NO_COST";
-  } else if (withCost < consumptions.length) {
+  } else if (withCost < veridiConsumptionCount) {
     quality = "PARTIAL";
   } else if (allReal) {
     quality = "REAL";
@@ -231,6 +253,8 @@ export async function getProductionOrderMaterialCost(
     productionOrderId: order.id,
     consumptions,
     quality,
+    hasCustomerSuppliedMaterials: customerSuppliedConsumptionCount > 0,
+    customerSuppliedConsumptionCount,
     totalMaterialCost: totalMaterialCost ? formatAmount(totalMaterialCost) : null,
     knownMaterialCostSubtotal: withCost > 0 ? formatAmount(knownSubtotal) : null,
     producedQuantity: producedQuantity.toString(),

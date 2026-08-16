@@ -2,6 +2,7 @@
 
 import type { ItemType } from "./items.js";
 import type { LotStatus } from "./lots.js";
+import type { InventoryOwnerType, SupplyResponsibility } from "./ownership.js";
 
 export const PRODUCTION_ORDER_CODE_PREFIX = "OP";
 
@@ -68,6 +69,15 @@ export interface ProductionOrderRequirementDTO {
   /** Decimal como string — quantidade/unidade originais da fórmula. */
   formulaQuantity: string;
   formulaUnitCode: string;
+  /**
+   * SNAPSHOT vindo do componente da fórmula: de quem este material deve
+   * vir. `CUSTOMER` só é atendível por lote do cliente desta OP.
+   */
+  supplyResponsibility: SupplyResponsibility;
+  /** Dono elegível do estoque para esta necessidade — deriva de `supplyResponsibility` + cliente da OP. */
+  eligibleOwnerType: InventoryOwnerType;
+  eligibleOwnerCustomerId: string | null;
+  eligibleOwnerCustomerName: string | null;
   /** `formulaQuantity × productionFactor`, já convertida para a unidade de estoque — fonte de verdade da necessidade técnica. */
   requiredQuantity: string;
   stockUnitCode: string;
@@ -183,9 +193,13 @@ export interface ProductionOrderDTO {
   /** Quantos Requirements estão em SHORTAGE — para a coluna "Falta em N materiais" da listagem. */
   shortageItemCount: number;
   notes: string | null;
+  /** Cliente da OP — obrigatório para liberar OP com material do cliente. */
+  customerId: string | null;
   customerCode: string | null;
   customerName: string | null;
   customerCnpj: string | null;
+  /** `true` quando existe ao menos um Requirement com fornecimento do cliente. */
+  hasCustomerSuppliedRequirements: boolean;
   requirements: ProductionOrderRequirementDTO[];
   plannedAt: string | null;
   plannedBy: string | null;

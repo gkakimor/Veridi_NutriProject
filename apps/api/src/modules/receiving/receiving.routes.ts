@@ -1,8 +1,18 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
-import { createReceipt, getReceiptById, listReceipts } from "./receiving.service.js";
 import {
+  createCustomerSuppliedReceipt,
+  createReceipt,
+  getReceiptById,
+  listReceipts,
+} from "./receiving.service.js";
+import {
+  CustomerMaterialRequiresLotControlError,
+  CustomerNotFoundError,
   EmptyReceiptError,
+  InactiveCustomerError,
+  InvalidCustomerSuppliedItemTypeError,
+  ReceiptItemNotFoundError,
   InvalidExpiryDateError,
   InvalidPurchaseOrderStatusError,
   InvalidReceivedQuantityError,
@@ -12,7 +22,11 @@ import {
   PurchaseOrderLineNotFoundError,
   PurchaseOrderNotFoundError,
 } from "./receiving.errors.js";
-import { createReceiptSchema, listReceiptsQuerySchema } from "./receiving.schemas.js";
+import {
+  createCustomerSuppliedReceiptSchema,
+  createReceiptSchema,
+  listReceiptsQuerySchema,
+} from "./receiving.schemas.js";
 
 function formatZodError(error: ZodError) {
   return error.issues.map((issue) => ({
@@ -51,6 +65,21 @@ function mapDomainError(
   if (error instanceof InvalidExpiryDateError) {
     return { status: 400, body: { error: "invalid_expiry_date", message: error.message } };
   }
+  if (error instanceof CustomerNotFoundError) {
+    return { status: 400, body: { error: "customer_not_found", message: error.message } };
+  }
+  if (error instanceof InactiveCustomerError) {
+    return { status: 400, body: { error: "inactive_customer", message: error.message } };
+  }
+  if (error instanceof ReceiptItemNotFoundError) {
+    return { status: 400, body: { error: "item_not_found", message: error.message } };
+  }
+  if (error instanceof InvalidCustomerSuppliedItemTypeError) {
+    return { status: 400, body: { error: "invalid_item_type", message: error.message } };
+  }
+  if (error instanceof CustomerMaterialRequiresLotControlError) {
+    return { status: 400, body: { error: "lot_control_required", message: error.message } };
+  }
   return null;
 }
 
@@ -76,6 +105,25 @@ export const receivingRoutes: FastifyPluginAsync = async (app) => {
     const receipt = await getReceiptById(id);
     if (!receipt) return reply.status(404).send({ error: "not_found" });
     return reply.send(receipt);
+  });
+
+  // Recebimento de material enviado pelo cliente — rota propria, sem OC.
+  app.post("/receipts/customer-supplied", async (request, reply) => {
+    const parsed = createCustomerSuppliedReceiptSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    try {
+      const receipt = await createCustomerSuppliedReceipt(parsed.data);
+      return reply.status(201).send(receipt);
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
   });
 
   app.post("/purchase-orders/:id/receipts", async (request, reply) => {

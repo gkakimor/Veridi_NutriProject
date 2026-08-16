@@ -1,5 +1,7 @@
 /** Contratos do módulo de Lotes internos, consumidos por `apps/api` e `apps/web`. */
 
+import type { InventoryOwnerType } from "./ownership.js";
+
 /**
  * Prefixo do payload de QR do lote. O QR identifica só o lote interno —
  * nunca dados mutáveis (quantidade/status/localização/validade/fornecedor).
@@ -55,6 +57,14 @@ export interface LotDTO {
   itemCode: string;
   itemName: string;
   unitCode: string;
+  /**
+   * Dono do estoque físico — independente de Fornecedor. `CUSTOMER`
+   * sempre traz o cliente proprietário; `VERIDI` nunca traz.
+   */
+  ownerType: InventoryOwnerType;
+  ownerCustomerId: string | null;
+  ownerCustomerCode: string | null;
+  ownerCustomerName: string | null;
   /** `null` para lotes `PRODUCTION` — nunca fornecedor fake. */
   supplierId: string | null;
   supplierCode: string | null;

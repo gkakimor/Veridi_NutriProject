@@ -38,9 +38,30 @@ export interface PendingProductionOrderDTO {
   productName: string;
 }
 
+/**
+ * Material que o CLIENTE deve enviar. Nunca vira Ordem de Compra da
+ * Veridi: falta aqui não é "comprar", é "aguardando material do cliente".
+ */
+export interface CustomerSuppliedMaterialRowDTO {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unitCode: string;
+  customerId: string | null;
+  customerName: string | null;
+  remainingRequired: string;
+  ownReserved: string;
+  /** Disponível do estoque DESTE cliente — estoque Veridi nunca entra. */
+  available: string;
+  /** `max(remainingRequired - ownReserved - available, 0)` — o que ainda falta o cliente enviar. */
+  shortage: string;
+}
+
 export interface PurchaseSuggestionDTO {
   customerOrderId: string;
   rows: PurchaseSuggestionRowDTO[];
+  /** Linhas fornecidas pelo cliente — separadas justamente para explicar por que não geram OC. */
+  customerSuppliedRows: CustomerSuppliedMaterialRowDTO[];
   /** OPs do Pedido sem Requirements ainda (sem Formulação ACTIVE) — não entram na análise quantitativa. */
   pendingProductionOrders: PendingProductionOrderDTO[];
 }

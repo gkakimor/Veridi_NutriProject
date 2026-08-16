@@ -1,6 +1,12 @@
 import { Prisma } from "@prisma/client";
 import type { Item, PrismaClient, Supplier } from "@prisma/client";
-import type { CustomerOrderDTO, PendingProductionOrderDTO, PurchaseSuggestionDTO, PurchaseSuggestionRowDTO } from "@veridi/shared";
+import type {
+  CustomerOrderDTO,
+  CustomerSuppliedMaterialRowDTO,
+  PendingProductionOrderDTO,
+  PurchaseSuggestionDTO,
+  PurchaseSuggestionRowDTO,
+} from "@veridi/shared";
 import { PURCHASE_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -16,7 +22,11 @@ import { createDraftPurchaseOrderInTx } from "../purchase-orders/purchase-orders
 import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
 import { getCustomerOrderById } from "./customer-orders.service.js";
 import { itemScopesFor } from "./fulfillment-plan.service.js";
-import { CustomerOrderNotInFulfillmentError, EmptyPurchaseDraftsError } from "./purchase-suggestion.errors.js";
+import {
+  CustomerOrderNotInFulfillmentError,
+  CustomerSuppliedItemPurchaseError,
+  EmptyPurchaseDraftsError,
+} from "./purchase-suggestion.errors.js";
 import type { GeneratePurchaseDraftsInput } from "./purchase-suggestion.schemas.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
@@ -55,11 +65,12 @@ async function buildPurchaseSuggestion(
 ): Promise<PurchaseSuggestionDTO> {
   const productionOrders = await prisma.productionOrder.findMany({
     where: { customerOrderId, status: { notIn: ["CANCELLED", "COMPLETED"] } },
-    include: { requirements: true, product: true },
+    include: { requirements: true, product: true, customer: true },
     orderBy: { createdAt: "asc" },
   });
 
   const pendingProductionOrders: PendingProductionOrderDTO[] = [];
+  const orderByRequirement = new Map<string, (typeof productionOrders)[number]>();
   const requirementRows: (typeof productionOrders)[number]["requirements"] = [];
   for (const order of productionOrders) {
     if (order.requirements.length === 0) {
@@ -73,10 +84,13 @@ async function buildPurchaseSuggestion(
       continue;
     }
     requirementRows.push(...order.requirements);
+    for (const requirement of order.requirements) {
+      orderByRequirement.set(requirement.id, order);
+    }
   }
 
   if (requirementRows.length === 0) {
-    return { customerOrderId, rows: [], pendingProductionOrders };
+    return { customerOrderId, rows: [], customerSuppliedRows: [], pendingProductionOrders };
   }
 
   const requirementIds = requirementRows.map((requirement) => requirement.id);
@@ -113,26 +127,42 @@ async function buildPurchaseSuggestion(
   }
 
   // Agrega por Item — o mesmo material pode aparecer em mais de uma
-  // OP/Product deste Pedido (§8).
-  const aggregated = new Map<
-    string,
-    { itemCode: string; itemName: string; unitCode: string; remainingRequired: Prisma.Decimal; ownReserved: Prisma.Decimal }
-  >();
+  // OP/Product deste Pedido (§8). Material do cliente e agregado a parte:
+  // ele nunca pode virar sugestao de compra da Veridi.
+  interface AggregatedRow {
+    itemCode: string;
+    itemName: string;
+    unitCode: string;
+    remainingRequired: Prisma.Decimal;
+    ownReserved: Prisma.Decimal;
+    customerId: string | null;
+    customerName: string | null;
+  }
+  const aggregated = new Map<string, AggregatedRow>();
+  const customerSupplied = new Map<string, AggregatedRow>();
+
   for (const requirement of requirementRows) {
     const consumed = consumedByRequirement.get(requirement.id) ?? new Prisma.Decimal(0);
     const remainingRequired = Prisma.Decimal.max(requirement.requiredQuantity.minus(consumed), 0);
     const ownReserved = ownReservedByRequirement.get(requirement.id) ?? new Prisma.Decimal(0);
+    const isCustomerSupplied = requirement.supplyResponsibility === "CUSTOMER";
+    const bucket = isCustomerSupplied ? customerSupplied : aggregated;
+    const order = orderByRequirement.get(requirement.id);
 
-    const current = aggregated.get(requirement.itemId) ?? {
+    const current = bucket.get(requirement.itemId) ?? {
       itemCode: requirement.itemCode,
       itemName: requirement.itemName,
       unitCode: requirement.stockUnitCode,
       remainingRequired: new Prisma.Decimal(0),
       ownReserved: new Prisma.Decimal(0),
+      customerId: isCustomerSupplied ? (order?.customerId ?? null) : null,
+      customerName: isCustomerSupplied
+        ? (order?.customer?.legalName ?? order?.customerName ?? null)
+        : null,
     };
     current.remainingRequired = current.remainingRequired.plus(remainingRequired);
     current.ownReserved = current.ownReserved.plus(ownReserved);
-    aggregated.set(requirement.itemId, current);
+    bucket.set(requirement.itemId, current);
   }
 
   const itemIds = [...aggregated.keys()];
@@ -180,7 +210,60 @@ async function buildPurchaseSuggestion(
     };
   });
 
-  return { customerOrderId, rows, pendingProductionOrders };
+  const customerSuppliedRows = await buildCustomerSuppliedRows(prisma, customerSupplied);
+
+  return { customerOrderId, rows, customerSuppliedRows, pendingProductionOrders };
+}
+
+/**
+ * Linhas de material do cliente. Disponibilidade vem SO do estoque daquele
+ * cliente — estoque Veridi e estoque de outro cliente nunca reduzem a
+ * falta. Falta aqui nao gera Ordem de Compra: e "aguardando material do
+ * cliente".
+ */
+async function buildCustomerSuppliedRows(
+  prisma: PrismaOrTx,
+  aggregated: Map<
+    string,
+    {
+      itemCode: string;
+      itemName: string;
+      unitCode: string;
+      remainingRequired: Prisma.Decimal;
+      ownReserved: Prisma.Decimal;
+      customerId: string | null;
+      customerName: string | null;
+    }
+  >,
+): Promise<CustomerSuppliedMaterialRowDTO[]> {
+  const rows: CustomerSuppliedMaterialRowDTO[] = [];
+  for (const [itemId, info] of aggregated) {
+    const available = info.customerId
+      ? ((
+          await getAvailableByItems(prisma, await itemScopesFor(prisma, [itemId]), {
+            ownerType: "CUSTOMER",
+            customerId: info.customerId,
+          })
+        ).get(itemId) ?? new Prisma.Decimal(0))
+      : new Prisma.Decimal(0);
+
+    rows.push({
+      itemId,
+      itemCode: info.itemCode,
+      itemName: info.itemName,
+      unitCode: info.unitCode,
+      customerId: info.customerId,
+      customerName: info.customerName,
+      remainingRequired: info.remainingRequired.toString(),
+      ownReserved: info.ownReserved.toString(),
+      available: available.toString(),
+      shortage: Prisma.Decimal.max(
+        info.remainingRequired.minus(info.ownReserved).minus(available),
+        0,
+      ).toString(),
+    });
+  }
+  return rows;
 }
 
 export async function getPurchaseSuggestion(customerOrderId: string): Promise<PurchaseSuggestionDTO> {
@@ -250,6 +333,35 @@ export async function generatePurchaseDrafts(
       throw new CustomerOrderNotInFulfillmentError(
         "Só é possível gerar Ordens de Compra para um pedido em atendimento.",
       );
+    }
+
+    // Material do cliente nunca vira compra da Veridi, mesmo que o payload
+    // peca — a decisao e do dominio, nao da tela.
+    const itemIds = [...new Set(nonZeroLines.map((line) => line.itemId))];
+    const customerSuppliedRequirements = await tx.productionOrderRequirement.findMany({
+      where: {
+        itemId: { in: itemIds },
+        supplyResponsibility: "CUSTOMER",
+        productionOrder: { customerOrderId, status: { notIn: ["CANCELLED", "COMPLETED"] } },
+      },
+      select: { itemId: true, itemCode: true },
+    });
+    const veridiRequirementItems = new Set(
+      (
+        await tx.productionOrderRequirement.findMany({
+          where: {
+            itemId: { in: itemIds },
+            supplyResponsibility: "VERIDI",
+            productionOrder: { customerOrderId, status: { notIn: ["CANCELLED", "COMPLETED"] } },
+          },
+          select: { itemId: true },
+        })
+      ).map((requirement) => requirement.itemId),
+    );
+    for (const requirement of customerSuppliedRequirements) {
+      if (!veridiRequirementItems.has(requirement.itemId)) {
+        throw new CustomerSuppliedItemPurchaseError(requirement.itemCode);
+      }
     }
 
     // Trava os Suppliers envolvidos em ordem deterministica — mesmo

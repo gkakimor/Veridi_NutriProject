@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type {
+  Customer,
   Item,
   Lot,
   PurchaseOrder,
@@ -15,7 +16,12 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { nextLotCode } from "../../lib/lot-code.js";
 import {
+  CustomerMaterialRequiresLotControlError,
+  CustomerNotFoundError,
   EmptyReceiptError,
+  InactiveCustomerError,
+  InvalidCustomerSuppliedItemTypeError,
+  ReceiptItemNotFoundError,
   InvalidExpiryDateError,
   InvalidPurchaseOrderStatusError,
   InvalidReceivedQuantityError,
@@ -25,7 +31,13 @@ import {
   PurchaseOrderLineNotFoundError,
   PurchaseOrderNotFoundError,
 } from "./receiving.errors.js";
-import type { CreateReceiptInput, ListReceiptsQuery, ReceiptLineInput } from "./receiving.schemas.js";
+import type {
+  CreateCustomerSuppliedReceiptInput,
+  CreateReceiptInput,
+  CustomerSuppliedLineInput,
+  ListReceiptsQuery,
+  ReceiptLineInput,
+} from "./receiving.schemas.js";
 
 const RECEIPT_CODE_SEQUENCE = "receipt_code_seq";
 
@@ -33,17 +45,22 @@ const RECEIPT_CODE_SEQUENCE = "receipt_code_seq";
 const SYSTEM_ACTOR = "Ambiente local";
 
 type ReceiptLineWithRelations = ReceiptLine & {
-  purchaseOrderLine: PurchaseOrderLine;
+  purchaseOrderLine: PurchaseOrderLine | null;
+  item: Item;
   lot: Lot | null;
 };
 type ReceiptWithRelations = Receipt & {
-  purchaseOrder: PurchaseOrder;
+  purchaseOrder: PurchaseOrder | null;
+  supplier: { code: string; legalName: string } | null;
+  customer: Customer | null;
   lines: ReceiptLineWithRelations[];
 };
 
 const receiptInclude = {
   purchaseOrder: true,
-  lines: { include: { purchaseOrderLine: true, lot: true } },
+  supplier: true,
+  customer: true,
+  lines: { include: { purchaseOrderLine: true, item: true, lot: true } },
 } as const;
 
 function toReceiptLineDTO(line: ReceiptLineWithRelations): ReceiptLineDTO {
@@ -51,8 +68,10 @@ function toReceiptLineDTO(line: ReceiptLineWithRelations): ReceiptLineDTO {
     id: line.id,
     purchaseOrderLineId: line.purchaseOrderLineId,
     itemId: line.itemId,
-    itemCode: line.purchaseOrderLine.itemCode,
-    itemName: line.purchaseOrderLine.itemName,
+    // Snapshot proprio da linha quando existir (linha direta de material do
+    // cliente); linhas antigas de OC continuam lendo o snapshot da OC.
+    itemCode: line.itemCode ?? line.purchaseOrderLine?.itemCode ?? line.item.code,
+    itemName: line.itemName ?? line.purchaseOrderLine?.itemName ?? line.item.name,
     unitCode: line.unitCode,
     receivedQuantity: line.receivedQuantity.toString(),
     supplierLot: line.supplierLot,
@@ -60,8 +79,9 @@ function toReceiptLineDTO(line: ReceiptLineWithRelations): ReceiptLineDTO {
     location: line.location,
     lotId: line.lotId,
     lotCode: line.lot ? line.lot.code : null,
+    ownerType: line.lot ? line.lot.ownerType : "VERIDI",
     // Preco previsto da OC — so referencia visual, nunca custo real.
-    purchaseUnitPrice: line.purchaseOrderLine.unitPrice
+    purchaseUnitPrice: line.purchaseOrderLine?.unitPrice
       ? line.purchaseOrderLine.unitPrice.toFixed(4)
       : null,
     actualUnitCost: line.actualUnitCost ? line.actualUnitCost.toFixed(4) : null,
@@ -75,11 +95,15 @@ function toReceiptDTO(receipt: ReceiptWithRelations): ReceiptDTO {
   return {
     id: receipt.id,
     code: receipt.code,
+    sourceType: receipt.sourceType,
     purchaseOrderId: receipt.purchaseOrderId,
-    purchaseOrderCode: receipt.purchaseOrder.code,
+    purchaseOrderCode: receipt.purchaseOrder?.code ?? null,
     supplierId: receipt.supplierId,
-    supplierCode: receipt.purchaseOrder.supplierCode,
-    supplierName: receipt.purchaseOrder.supplierName,
+    supplierCode: receipt.purchaseOrder?.supplierCode ?? receipt.supplier?.code ?? null,
+    supplierName: receipt.purchaseOrder?.supplierName ?? receipt.supplier?.legalName ?? null,
+    customerId: receipt.customerId,
+    customerCode: receipt.customer ? receipt.customer.code : null,
+    customerName: receipt.customer ? receipt.customer.legalName : null,
     receivedAt: receipt.receivedAt.toISOString(),
     invoiceNumber: receipt.invoiceNumber,
     documentReference: receipt.documentReference,
@@ -98,6 +122,8 @@ export async function listReceipts(
 
   if (query.purchaseOrderId) where["purchaseOrderId"] = query.purchaseOrderId;
   if (query.supplierId) where["supplierId"] = query.supplierId;
+  if (query.sourceType) where["sourceType"] = query.sourceType;
+  if (query.customerId) where["customerId"] = query.customerId;
   if (query.dateFrom || query.dateTo) {
     where["receivedAt"] = {
       ...(query.dateFrom ? { gte: query.dateFrom } : {}),
@@ -109,6 +135,7 @@ export async function listReceipts(
       { code: { contains: query.search, mode: "insensitive" } },
       { purchaseOrder: { is: { code: { contains: query.search, mode: "insensitive" } } } },
       { purchaseOrder: { is: { supplierName: { contains: query.search, mode: "insensitive" } } } },
+      { customer: { is: { legalName: { contains: query.search, mode: "insensitive" } } } },
     ];
   }
 
@@ -242,6 +269,8 @@ export async function createReceipt(
           receiptId: receipt.id,
           purchaseOrderLineId: line.poLine.id,
           itemId: line.item.id,
+          itemCode: line.item.code,
+          itemName: line.item.name,
           receivedQuantity: line.input.receivedQuantity,
           unitCode: line.poLine.unitCode,
           supplierLot,
@@ -309,6 +338,132 @@ export async function createReceipt(
       where: { id: purchaseOrderId },
       data: { status: allFullyReceived ? "RECEIVED" : "PARTIALLY_RECEIVED" },
     });
+
+    return receipt.id;
+  });
+
+  return (await getReceiptById(receiptId))!;
+}
+
+/**
+ * Recebimento de material ENVIADO PELO CLIENTE — sem Ordem de Compra e sem
+ * Fornecedor fake. Mesma infraestrutura do recebimento normal: Receipt,
+ * ReceiptLine, Lot e o mesmo movimento RECEIPT_IN no ledger — nunca um
+ * segundo estoque paralelo.
+ *
+ * A diferença é a PROPRIEDADE: o lote nasce `ownerType=CUSTOMER` do
+ * cliente informado. Qualidade continua valendo igual: item que exige
+ * liberação entra `AWAITING_RELEASE`.
+ */
+export async function createCustomerSuppliedReceipt(
+  input: CreateCustomerSuppliedReceiptInput,
+): Promise<ReceiptDTO> {
+  const prisma = getPrisma();
+
+  const customer = await prisma.customer.findUnique({ where: { id: input.customerId } });
+  if (!customer) throw new CustomerNotFoundError(input.customerId);
+  if (!customer.active) throw new InactiveCustomerError(input.customerId);
+
+  const prepared: { item: Item; input: CustomerSuppliedLineInput }[] = [];
+  for (const lineInput of input.lines) {
+    const item = await prisma.item.findUnique({ where: { id: lineInput.itemId } });
+    if (!item) throw new ReceiptItemNotFoundError(lineInput.itemId);
+    if (item.type !== "RAW_MATERIAL" && item.type !== "PACKAGING") {
+      throw new InvalidCustomerSuppliedItemTypeError(item.code);
+    }
+    // Sem lote não existe saldo de terceiro identificável — bloqueia em vez
+    // de criar estoque de cliente indistinguível do próprio.
+    if (!item.controlsLot) throw new CustomerMaterialRequiresLotControlError(item.code);
+    if (new Prisma.Decimal(lineInput.receivedQuantity).lessThanOrEqualTo(0)) {
+      throw new InvalidReceivedQuantityError(item.code);
+    }
+    if (item.controlsExpiry) {
+      if (!lineInput.expiryDate) throw new MissingExpiryDateError(item.code);
+      if (lineInput.expiryDate.getTime() < input.receivedAt.getTime()) {
+        throw new InvalidExpiryDateError(item.code);
+      }
+    }
+    prepared.push({ item, input: lineInput });
+  }
+
+  if (prepared.length === 0) throw new EmptyReceiptError();
+
+  const code = await nextSequenceCode(prisma, RECEIPT_CODE_SEQUENCE, RECEIPT_CODE_PREFIX);
+
+  const receiptId = await prisma.$transaction(async (tx) => {
+    const receipt = await tx.receipt.create({
+      data: {
+        code,
+        sourceType: "CUSTOMER_SUPPLIED",
+        customerId: customer.id,
+        receivedAt: input.receivedAt,
+        ...(input.invoiceNumber !== undefined ? { invoiceNumber: input.invoiceNumber } : {}),
+        ...(input.documentReference !== undefined
+          ? { documentReference: input.documentReference }
+          : {}),
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        createdBy: SYSTEM_ACTOR,
+      },
+    });
+
+    for (const line of prepared) {
+      const supplierLot = line.input.supplierLot?.trim() || null;
+      const expiryDate = line.input.expiryDate ?? null;
+      const location = line.input.location?.trim() || null;
+
+      const receiptLine = await tx.receiptLine.create({
+        data: {
+          receiptId: receipt.id,
+          itemId: line.item.id,
+          // Linha direta: o snapshot do item vive nela mesma, sem depender
+          // de PurchaseOrderLine.
+          itemCode: line.item.code,
+          itemName: line.item.name,
+          receivedQuantity: line.input.receivedQuantity,
+          unitCode: line.item.unitCode,
+          supplierLot,
+          expiryDate,
+          location,
+          // Material do cliente não tem custo de aquisição da Veridi —
+          // `null` é desconhecido/inexistente, nunca zero.
+          actualUnitCost: null,
+        },
+      });
+
+      const lotCode = await nextLotCode(tx, input.receivedAt);
+      const lot = await tx.lot.create({
+        data: {
+          code: lotCode,
+          itemId: line.item.id,
+          // Fornecedor fica null: quem enviou é o dono, e dono não é
+          // fornecedor. O lote do fabricante, quando informado, continua em
+          // supplierLot.
+          ownerType: "CUSTOMER",
+          ownerCustomerId: customer.id,
+          supplierLot,
+          expiryDate,
+          initialReceivedQuantity: line.input.receivedQuantity,
+          status: line.item.requiresQualityRelease ? "AWAITING_RELEASE" : "AVAILABLE",
+          location,
+          createdBy: SYSTEM_ACTOR,
+        },
+      });
+      await tx.receiptLine.update({ where: { id: receiptLine.id }, data: { lotId: lot.id } });
+
+      await tx.inventoryMovement.create({
+        data: {
+          itemId: line.item.id,
+          lotId: lot.id,
+          type: "RECEIPT_IN",
+          quantity: line.input.receivedQuantity,
+          occurredAt: input.receivedAt,
+          sourceType: "RECEIPT",
+          sourceId: receiptLine.id,
+          receiptLineId: receiptLine.id,
+          createdBy: SYSTEM_ACTOR,
+        },
+      });
+    }
 
     return receipt.id;
   });

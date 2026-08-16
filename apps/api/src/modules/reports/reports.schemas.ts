@@ -54,6 +54,8 @@ export const inventoryPositionQuerySchema = z.object({
   itemType: z.enum(["RAW_MATERIAL", "PACKAGING", "FINISHED_PRODUCT"]).optional(),
   status: z.enum(["AWAITING_RELEASE", "AVAILABLE", "BLOCKED", "EXPIRED"]).optional(),
   location: z.string().trim().min(1).optional(),
+  ownerType: z.enum(["VERIDI", "CUSTOMER"]).optional(),
+  ownerCustomerId: z.string().trim().min(1).optional(),
   /** Padrão do relatório: fotografia do que existe fisicamente hoje. */
   onlyWithBalance: booleanFlag(true),
   ...paginationFields,

@@ -1030,6 +1030,52 @@ export function CustomerOrderPage() {
             {suggestion && noAdditionalPurchaseSuggested && suggestion.rows.length > 0 && (
               <p className="field__hint">Nenhuma compra adicional sugerida neste momento.</p>
             )}
+
+            {suggestion && suggestion.customerSuppliedRows.length > 0 && (
+              <>
+                <h4>Materiais aguardando cliente</h4>
+                <p className="field__hint">
+                  Estes materiais são fornecidos pelo cliente e por isso não geram Ordem de Compra —
+                  a falta é resolvida com o envio do próprio cliente.
+                </p>
+                <div className="table-container">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Cliente</th>
+                        <th>Necessário</th>
+                        <th>Disponível do cliente</th>
+                        <th>Falta</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suggestion.customerSuppliedRows.map((row) => (
+                        <tr key={row.itemId}>
+                          <td>
+                            <span className="code">{row.itemCode}</span> {row.itemName}
+                          </td>
+                          <td>{row.customerName ?? "—"}</td>
+                          <td>
+                            {row.remainingRequired} {row.unitCode}
+                          </td>
+                          <td>{row.available}</td>
+                          <td>
+                            <span
+                              className={
+                                Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"
+                              }
+                            >
+                              {row.shortage}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </FormSection>
         )}
 

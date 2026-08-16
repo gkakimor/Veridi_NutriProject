@@ -172,3 +172,36 @@ export interface StockCountResultDTO {
   /** `null` quando não houve diferença — nenhum InventoryMovement é criado nesse caso. */
   movementCreated: InventoryMovementDTO | null;
 }
+
+/**
+ * Materiais de clientes — read model sobre `Lot` de dono `CUSTOMER` + o
+ * Inventory Ledger. Sem entidade nova e sem saldo persistido.
+ */
+export interface CustomerMaterialRowDTO {
+  customerId: string;
+  customerCode: string;
+  customerName: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  lotId: string;
+  lotCode: string;
+  /** Lote do fabricante informado pelo cliente — nunca substitui o lote interno. */
+  supplierLot: string | null;
+  expiryDate: string | null;
+  isExpired: boolean;
+  location: string | null;
+  onHand: string;
+  reserved: string;
+  /** `onHand - reserved` quando o lote está elegível; "0" caso contrário. */
+  available: string;
+  unitCode: string;
+  status: LotStatus;
+}
+
+export interface CustomerMaterialsResponse {
+  rows: CustomerMaterialRowDTO[];
+  page: number;
+  pageSize: number;
+  total: number;
+}

@@ -1,6 +1,7 @@
 import type {
   BillingDTO,
   CustomerDTO,
+  CustomerMaterialRowDTO,
   CustomerOrderDTO,
   FinishedGoodRowDTO,
   FormulationSummaryDTO,
@@ -41,6 +42,7 @@ import { listProducts } from "../products/products.service.js";
 import { listPurchaseOrders } from "../purchase-orders/purchase-orders.service.js";
 import { listReceipts } from "../receiving/receiving.service.js";
 import { listInventory, listInventoryMovements } from "../inventory/inventory.service.js";
+import { listCustomerMaterials } from "../inventory/customer-materials.service.js";
 import { listLots } from "../lots/lots.service.js";
 import { listFormulations } from "../formulations/formulations.service.js";
 import { listProductionOrders } from "../production-orders/production-orders.service.js";
@@ -54,7 +56,11 @@ import { listItemsQuerySchema } from "../items/items.schemas.js";
 import { listProductsQuerySchema } from "../products/products.schemas.js";
 import { listPurchaseOrdersQuerySchema } from "../purchase-orders/purchase-orders.schemas.js";
 import { listReceiptsQuerySchema } from "../receiving/receiving.schemas.js";
-import { listInventoryQuerySchema, listInventoryMovementsQuerySchema } from "../inventory/inventory.schemas.js";
+import {
+  listCustomerMaterialsQuerySchema,
+  listInventoryQuerySchema,
+  listInventoryMovementsQuerySchema,
+} from "../inventory/inventory.schemas.js";
 import { listLotsQuerySchema } from "../lots/lots.schemas.js";
 import { listFormulationsQuerySchema } from "../formulations/formulations.schemas.js";
 import { listProductionOrdersQuerySchema } from "../production-orders/production-orders.schemas.js";
@@ -68,7 +74,11 @@ import type { ListItemsQuery } from "../items/items.schemas.js";
 import type { ListProductsQuery } from "../products/products.schemas.js";
 import type { ListPurchaseOrdersQuery } from "../purchase-orders/purchase-orders.schemas.js";
 import type { ListReceiptsQuery } from "../receiving/receiving.schemas.js";
-import type { ListInventoryQuery, ListInventoryMovementsQuery } from "../inventory/inventory.schemas.js";
+import type {
+  ListCustomerMaterialsQuery,
+  ListInventoryQuery,
+  ListInventoryMovementsQuery,
+} from "../inventory/inventory.schemas.js";
 import type { ListLotsQuery } from "../lots/lots.schemas.js";
 import type { ListFormulationsQuery } from "../formulations/formulations.schemas.js";
 import type { ListProductionOrdersQuery } from "../production-orders/production-orders.schemas.js";
@@ -275,6 +285,14 @@ const lotsExport = defineCsvExport({
     { header: "Descrição", value: (row: LotDTO) => csvText(row.itemName) },
     { header: "Lote do fornecedor", value: (row: LotDTO) => csvCode(row.supplierLot) },
     { header: "Lote Veridi", value: (row: LotDTO) => csvCode(row.businessLotNumber) },
+    // Dono do estoque fisico — nunca confundido com Fornecedor.
+    {
+      header: "Proprietário",
+      value: (row: LotDTO) =>
+        row.ownerType === "CUSTOMER"
+          ? csvText(row.ownerCustomerName ?? "Cliente")
+          : "Veridi",
+    },
     { header: "Fornecedor", value: (row: LotDTO) => csvText(row.supplierName) },
     { header: "Validade", value: (row: LotDTO) => csvDate(row.expiryDate) },
     { header: "On Hand", value: (row: LotDTO) => csvDecimal(row.onHand) },
@@ -285,6 +303,33 @@ const lotsExport = defineCsvExport({
     { header: "Localização", value: (row: LotDTO) => csvText(row.location) },
     { header: "Recebimento", value: (row: LotDTO) => csvCode(row.receiptCode) },
     { header: "OP", value: (row: LotDTO) => csvCode(row.productionOrderCode) },
+  ],
+});
+
+const customerMaterialsExport = defineCsvExport({
+  path: "/inventory/customer-materials/export.csv",
+  slug: "materiais-de-clientes",
+  schema: listCustomerMaterialsQuerySchema,
+  fetch: async (query: ListCustomerMaterialsQuery) =>
+    (await listCustomerMaterials(query, ALL_ROWS)).rows,
+  columns: [
+    { header: "Cliente", value: (row: CustomerMaterialRowDTO) => csvText(row.customerName) },
+    { header: "Código do cliente", value: (row: CustomerMaterialRowDTO) => csvCode(row.customerCode) },
+    { header: "Item", value: (row: CustomerMaterialRowDTO) => csvCode(row.itemCode) },
+    { header: "Descrição", value: (row: CustomerMaterialRowDTO) => csvText(row.itemName) },
+    { header: "Lote interno", value: (row: CustomerMaterialRowDTO) => csvCode(row.lotCode) },
+    { header: "Lote externo", value: (row: CustomerMaterialRowDTO) => csvCode(row.supplierLot) },
+    { header: "Validade", value: (row: CustomerMaterialRowDTO) => csvDate(row.expiryDate) },
+    { header: "Localização", value: (row: CustomerMaterialRowDTO) => csvText(row.location) },
+    { header: "On Hand", value: (row: CustomerMaterialRowDTO) => csvDecimal(row.onHand) },
+    { header: "Reservado", value: (row: CustomerMaterialRowDTO) => csvDecimal(row.reserved) },
+    { header: "Disponível", value: (row: CustomerMaterialRowDTO) => csvDecimal(row.available) },
+    { header: "Unidade", value: (row: CustomerMaterialRowDTO) => csvText(row.unitCode) },
+    {
+      header: "Qualidade",
+      value: (row: CustomerMaterialRowDTO) =>
+        row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.status],
+    },
   ],
 });
 
@@ -439,6 +484,7 @@ export const listCsvExports: CsvExportRoute[] = [
   receiptsExport,
   inventoryExport,
   lotsExport,
+  customerMaterialsExport,
   movementsExport,
   formulationsExport,
   productionOrdersExport,

@@ -11,6 +11,7 @@ import { PurchaseOrdersPage } from "./pages/purchase-orders/PurchaseOrdersPage";
 import { PurchaseOrderPage } from "./pages/purchase-orders/PurchaseOrderPage";
 import { ReceiptsPage } from "./pages/receiving/ReceiptsPage";
 import { ReceivePurchaseOrderPage } from "./pages/receiving/ReceivePurchaseOrderPage";
+import { ReceiveCustomerMaterialPage } from "./pages/receiving/ReceiveCustomerMaterialPage";
 import { ReceiptDetailPage } from "./pages/receiving/ReceiptDetailPage";
 import { LotsPage } from "./pages/lots/LotsPage";
 import { LotDetailPage } from "./pages/lots/LotDetailPage";
@@ -20,6 +21,7 @@ import { InventoryOverviewPage } from "./pages/inventory/InventoryOverviewPage";
 import { InventoryItemDetailPage } from "./pages/inventory/InventoryItemDetailPage";
 import { InventoryMovementsPage } from "./pages/inventory/InventoryMovementsPage";
 import { StockCountPage } from "./pages/inventory/StockCountPage";
+import { CustomerMaterialsPage } from "./pages/inventory/CustomerMaterialsPage";
 import { FormulationsPage } from "./pages/formulations/FormulationsPage";
 import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPage";
 import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
@@ -96,10 +98,18 @@ export function App() {
           <Route path="/compras/ordens/:id" element={<PurchaseOrderPage />} />
           <Route path="/compras/recebimentos" element={<ReceiptsPage />} />
           <Route path="/compras/recebimentos/novo" element={<ReceivePurchaseOrderPage />} />
+          <Route
+            path="/compras/recebimentos/material-do-cliente"
+            element={<ReceiveCustomerMaterialPage />}
+          />
           <Route path="/compras/recebimentos/:id" element={<ReceiptDetailPage />} />
           <Route path="/estoque" element={<InventoryOverviewPage />} />
           <Route path="/estoque/movimentacoes" element={<InventoryMovementsPage />} />
           <Route path="/estoque/inventario" element={<StockCountPage />} />
+          <Route
+            path="/estoque/materiais-de-clientes"
+            element={<CustomerMaterialsPage />}
+          />
           <Route path="/estoque/lotes" element={<LotsPage />} />
           <Route path="/estoque/lotes/escanear" element={<LotScanPage />} />
           <Route path="/estoque/lotes/:id" element={<LotDetailPage />} />

@@ -138,3 +138,17 @@ export class EmptyConsumptionBatchError extends Error {
     this.name = "EmptyConsumptionBatchError";
   }
 }
+
+/**
+ * Substituição por lote de outro proprietário. Mesmo Item, mesma qualidade
+ * e mesma validade não bastam: material do cliente A nunca abastece o
+ * cliente B, e nunca substitui material da Veridi (nem o contrário).
+ */
+export class AlternateLotOwnerMismatchError extends Error {
+  constructor(lotCode: string, expectedOwner: string) {
+    super(
+      `Lote ${lotCode} pertence a outro proprietário — esta necessidade só aceita material de ${expectedOwner}.`,
+    );
+    this.name = "AlternateLotOwnerMismatchError";
+  }
+}

@@ -11,3 +11,17 @@ export class EmptyPurchaseDraftsError extends Error {
     this.name = "EmptyPurchaseDraftsError";
   }
 }
+
+/**
+ * Tentativa de comprar material que, nas OPs deste Pedido, é fornecido
+ * pelo cliente. Falta desse material nunca é "comprar" — é aguardar o
+ * cliente enviar.
+ */
+export class CustomerSuppliedItemPurchaseError extends Error {
+  constructor(itemCode: string) {
+    super(
+      `${itemCode} é material fornecido pelo cliente nas OPs deste pedido — não gera Ordem de Compra.`,
+    );
+    this.name = "CustomerSuppliedItemPurchaseError";
+  }
+}

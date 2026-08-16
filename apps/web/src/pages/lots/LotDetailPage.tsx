@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { CostReferenceDTO, LotDTO, LotTraceabilityDTO, ProductionOrderMaterialCostDTO } from "@veridi/shared";
-import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
+import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { blockLot, getLot, getLotTraceability, releaseLot } from "../../lib/lots-api";
 import { getItemCostReference, getProductionOrderMaterialCost } from "../../lib/costs-api";
 import { getReceipt } from "../../lib/receiving-api";
@@ -228,9 +228,16 @@ export function LotDetailPage() {
               <dd>
                 <span className="code">{lot.itemCode}</span> {lot.itemName}
               </dd>
+              <dt>Proprietário</dt>
+              <dd>
+                {ownerLabel(lot.ownerType, lot.ownerCustomerName)}
+                {lot.ownerType === "CUSTOMER" && lot.ownerCustomerCode ? (
+                  <span className="field__hint"> {lot.ownerCustomerCode}</span>
+                ) : null}
+              </dd>
               <dt>Fornecedor</dt>
               <dd>
-                {lot.supplierCode} — {lot.supplierName}
+                {lot.supplierId ? `${lot.supplierCode} — ${lot.supplierName}` : "—"}
               </dd>
               <dt>Lote do fornecedor</dt>
               <dd>{lot.supplierLot ?? "—"}</dd>

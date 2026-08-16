@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { ReceiptDTO } from "@veridi/shared";
+import { RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
 import { listReceipts } from "../../lib/receiving-api";
 
 const PAGE_SIZE = 20;
@@ -62,7 +63,7 @@ export function ReceiptsPage() {
         <div>
           <h1 className="page__title">Recebimentos</h1>
           <p className="page__subtitle">
-            Materiais recebidos a partir de Ordens de Compra confirmadas.
+            Materiais recebidos de Ordens de Compra ou enviados pelo próprio cliente.
           </p>
         </div>
         <button
@@ -71,6 +72,13 @@ export function ReceiptsPage() {
           onClick={() => navigate("/compras/recebimentos/novo")}
         >
           Receber OC
+        </button>
+        <button
+          type="button"
+          className="btn btn--secondary"
+          onClick={() => navigate("/compras/recebimentos/material-do-cliente")}
+        >
+          Receber material do cliente
         </button>
         <ExportCsvButton path="/receipts/export.csv" filters={{ search }} />
 </div>
@@ -97,8 +105,9 @@ export function ReceiptsPage() {
           <thead>
             <tr>
               <th>Código</th>
+              <th>Origem</th>
               <th>OC</th>
-              <th>Fornecedor</th>
+              <th>Fornecedor / Cliente</th>
               <th>Data</th>
               <th>Itens</th>
               <th>Status</th>
@@ -116,8 +125,13 @@ export function ReceiptsPage() {
                 }}
               >
                 <td className="is-code">{receipt.code}</td>
-                <td className="is-code">{receipt.purchaseOrderCode}</td>
-                <td>{receipt.supplierName}</td>
+                <td>{RECEIPT_SOURCE_TYPE_LABELS[receipt.sourceType]}</td>
+                <td className="is-code">{receipt.purchaseOrderCode ?? "—"}</td>
+                <td>
+                  {receipt.sourceType === "CUSTOMER_SUPPLIED"
+                    ? `Cliente — ${receipt.customerName ?? ""}`
+                    : (receipt.supplierName ?? "—")}
+                </td>
                 <td>{formatDate(receipt.receivedAt)}</td>
                 <td>{receipt.lines.length}</td>
                 <td>
@@ -139,7 +153,7 @@ export function ReceiptsPage() {
 
             {!loading && receipts.length === 0 && (
               <tr>
-                <td colSpan={7} className="table__empty">
+                <td colSpan={8} className="table__empty">
                   Nenhum recebimento encontrado.
                 </td>
               </tr>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ReceiptDTO } from "@veridi/shared";
+import { RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
 import { getReceipt } from "../../lib/receiving-api";
 import { setAcquisitionCost } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
@@ -115,20 +116,33 @@ export function ReceiptDetailPage() {
 
         <FormSection title="Dados do recebimento">
           <dl className="definition-list">
-            <dt>Ordem de compra</dt>
-            <dd>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/compras/ordens/${receipt.purchaseOrderId}`)}
-              >
-                {receipt.purchaseOrderCode}
-              </button>
-            </dd>
-            <dt>Fornecedor</dt>
-            <dd>
-              {receipt.supplierCode} — {receipt.supplierName}
-            </dd>
+            <dt>Origem</dt>
+            <dd>{RECEIPT_SOURCE_TYPE_LABELS[receipt.sourceType]}</dd>
+            {receipt.sourceType === "CUSTOMER_SUPPLIED" ? (
+              <>
+                <dt>Cliente proprietário</dt>
+                <dd>
+                  {receipt.customerCode} — {receipt.customerName}
+                </dd>
+              </>
+            ) : (
+              <>
+                <dt>Ordem de compra</dt>
+                <dd>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => navigate(`/compras/ordens/${receipt.purchaseOrderId}`)}
+                  >
+                    {receipt.purchaseOrderCode}
+                  </button>
+                </dd>
+                <dt>Fornecedor</dt>
+                <dd>
+                  {receipt.supplierCode} — {receipt.supplierName}
+                </dd>
+              </>
+            )}
             <dt>Data do recebimento</dt>
             <dd>{formatDate(receipt.receivedAt)}</dd>
             <dt>Nota fiscal</dt>

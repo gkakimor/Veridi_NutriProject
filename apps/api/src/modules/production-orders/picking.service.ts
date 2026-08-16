@@ -9,9 +9,10 @@ import {
   isLotAvailableForUse,
 } from "../../lib/inventory-ledger.js";
 import { ProductionOrderNotFoundError } from "./production-orders.errors.js";
-import { getProductionOrderById } from "./production-orders.service.js";
+import { getProductionOrderById, requirementOwnerScope } from "./production-orders.service.js";
 import {
   AlternateLotItemMismatchError,
+  AlternateLotOwnerMismatchError,
   ConsumptionExceedsReservedError,
   ConsumptionLotNotEligibleError,
   EmptyConsumptionBatchError,
@@ -122,7 +123,12 @@ export async function substituteReservationLine(
 
     const line = await tx.materialReservationLine.findUnique({
       where: { id: reservationLineId },
-      include: { item: true, lot: true, reservation: true },
+      include: {
+        item: true,
+        lot: true,
+        reservation: { include: { productionOrder: true } },
+        productionOrderRequirement: true,
+      },
     });
     if (!line || line.reservation.productionOrderId !== productionOrderId) {
       throw new ReservationLineNotFoundError(reservationLineId);
@@ -145,6 +151,26 @@ export async function substituteReservationLine(
     if (!newLot) throw new LotNotFoundByCodeError(lotCode);
     if (newLot.id === line.lotId) throw new SameLotSubstitutionError();
     if (newLot.itemId !== line.itemId) throw new AlternateLotItemMismatchError();
+
+    // Proprietario e criterio de elegibilidade tanto quanto Item,
+    // Qualidade e validade — mesmo Item nao basta.
+    const scope = requirementOwnerScope(
+      line.productionOrderRequirement.supplyResponsibility,
+      line.reservation.productionOrder.customerId,
+    );
+    const ownerMatches =
+      scope !== null &&
+      (scope.ownerType === "VERIDI"
+        ? newLot.ownerType === "VERIDI"
+        : newLot.ownerType === "CUSTOMER" && newLot.ownerCustomerId === scope.customerId);
+    if (!ownerMatches) {
+      const expectedOwner =
+        line.productionOrderRequirement.supplyResponsibility === "CUSTOMER"
+          ? "cliente desta OP"
+          : "Veridi";
+      throw new AlternateLotOwnerMismatchError(newLot.code, expectedOwner);
+    }
+
     if (!isLotAvailableForUse(newLot)) throw new LotNoLongerEligibleError(newLot.code);
 
     const onHand = await getOnHand(tx, { itemId: line.itemId, lotId: newLot.id });

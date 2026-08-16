@@ -77,6 +77,29 @@ enum LotOrigin {
 /// FIXED_BASIS: "estas quantidades produzem `basisQuantity`" (modelo
 /// original, preservado). PER_DOSE: a formula e declarada por DOSE do
 /// produto acabado, do jeito que a industria realmente trabalha.
+/// Quem DEVE fornecer o componente conforme a formulacao — intencao/regra,
+/// nunca realidade fisica. A realidade fisica e o dono do Lot
+/// (InventoryOwnerType).
+enum SupplyResponsibility {
+  VERIDI
+  CUSTOMER
+}
+
+/// Dono do estoque fisico. Material do cliente fica dentro da Veridi mas
+/// continua sendo do cliente — nunca some com o estoque proprio.
+enum InventoryOwnerType {
+  VERIDI
+  CUSTOMER
+}
+
+/// Origem do Recebimento. CUSTOMER_SUPPLIED existe para NAO precisar de
+/// Ordem de Compra falsa nem Fornecedor fake quando o material vem do
+/// proprio cliente.
+enum ReceiptSourceType {
+  PURCHASE_ORDER
+  CUSTOMER_SUPPLIED
+}
+
 enum FormulationCalculationMode {
   FIXED_BASIS
   PER_DOSE
@@ -395,6 +418,9 @@ model Customer {
 
   products Product[]
   customerOrders CustomerOrder[]
+  ownedLots Lot[]
+  receipts Receipt[]
+  productionOrders ProductionOrder[]
 
   @@index([active])
   @@index([externalCode])
@@ -559,6 +585,10 @@ model FormulationComponent {
 
   basis FormulationComponentBasis @default(FIXED_BASIS)
 
+  /// Responsabilidade de fornecimento — congelada na versao junto com o
+  /// resto. Mudar depois nunca reescreve uma versao ACTIVE historica.
+  supplyResponsibility SupplyResponsibility @default(VERIDI)
+
   /// SNAPSHOT da pureza aplicada nesta formulacao (0 < x <= 100). Copiada
   /// de Item.defaultPurityPercent quando existir no momento da criacao —
   /// alterar o Item depois NUNCA muda esta versao. `null` = pureza
@@ -693,11 +723,20 @@ model Receipt {
   /// Codigo interno gerado pelo backend (sequence dedicada, REC-000001).
   code String @unique
 
-  purchaseOrderId String
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  sourceType ReceiptSourceType @default(PURCHASE_ORDER)
 
-  supplierId String
-  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  /// Preenchidos so quando sourceType=PURCHASE_ORDER — recebimento de
+  /// material do cliente nao inventa OC nem fornecedor.
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  /// Obrigatorio quando sourceType=CUSTOMER_SUPPLIED — dono do material
+  /// recebido (CHECK no banco).
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
 
   receivedAt        DateTime
   invoiceNumber     String?
@@ -711,6 +750,7 @@ model Receipt {
 
   @@index([purchaseOrderId])
   @@index([supplierId])
+  @@index([customerId])
   @@map("receipts")
 }
 
@@ -723,11 +763,18 @@ model ReceiptLine {
   receiptId String
   receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
 
-  purchaseOrderLineId String
-  purchaseOrderLine    PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id])
+  /// Null em recebimento de material do cliente — a linha e direta, sem
+  /// OC. Para linhas de OC continua obrigatorio na pratica.
+  purchaseOrderLineId String?
+  purchaseOrderLine    PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
 
   itemId String
   item   Item   @relation(fields: [itemId], references: [id])
+
+  /// Snapshot do item na linha. Linhas antigas de OC ficaram com null e
+  /// continuam lendo o snapshot da PurchaseOrderLine — nunca reescritas.
+  itemCode String?
+  itemName String?
 
   receivedQuantity Decimal @db.Decimal(18, 6)
   unitCode         String
@@ -795,6 +842,14 @@ model Lot {
   supplierId String?
   supplier   Supplier? @relation(fields: [supplierId], references: [id])
 
+  /// DONO do estoque fisico — independente de Supplier (quem vendeu) e de
+  /// quem enviou. VERIDI exige ownerCustomerId null; CUSTOMER exige
+  /// ownerCustomerId preenchido (CHECK no banco). Imutavel apos a criacao:
+  /// nao existe troca de propriedade nesta fase.
+  ownerType       InventoryOwnerType @default(VERIDI)
+  ownerCustomerId String?
+  ownerCustomer   Customer?          @relation(fields: [ownerCustomerId], references: [id])
+
   receiptLine ReceiptLine?
 
   /// Preenchido so para origin=PRODUCTION — a OP que produziu este lote.
@@ -840,6 +895,7 @@ model Lot {
   @@index([supplierId])
   @@index([status])
   @@index([productionOrderId])
+  @@index([ownerCustomerId])
   @@map("lots")
 }
 
@@ -957,6 +1013,12 @@ model ProductionOrder {
 
   formulationVersionNumber Int?
 
+  /// Cliente da OP — resolvido do CustomerOrder (origin=CUSTOMER_ORDER) ou
+  /// do Product. Necessario para usar material de propriedade do cliente.
+  /// Nunca reescrito quando Product.customerId mudar depois.
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
   customerCode String?
   customerName String?
   customerCnpj String?
@@ -1007,6 +1069,7 @@ model ProductionOrder {
   @@index([status])
   @@index([productId])
   @@index([customerOrderId])
+  @@index([customerId])
   @@map("production_orders")
 }
 
@@ -1031,6 +1094,11 @@ model ProductionOrderRequirement {
   /// Quantidade/unidade originais da formula (component.quantity/unitCode).
   formulaQuantity Decimal @db.Decimal(18, 6)
   formulaUnitCode String
+
+  /// SNAPSHOT da responsabilidade de fornecimento vinda do
+  /// FormulationComponent. A OP nunca volta a consultar a formulacao atual
+  /// para decidir de quem o material deveria vir.
+  supplyResponsibility SupplyResponsibility @default(VERIDI)
 
   /// Necessidade TEORICA (antes de pureza/overage), na unidade de estoque.
   theoreticalQuantity Decimal? @db.Decimal(18, 6)

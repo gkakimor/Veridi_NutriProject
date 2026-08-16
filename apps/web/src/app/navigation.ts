@@ -73,6 +73,11 @@ export const navigation: NavGroup[] = [
         implemented: true,
       },
       {
+        label: "Materiais de Clientes",
+        path: "/estoque/materiais-de-clientes",
+        implemented: true,
+      },
+      {
         label: "Inventário Físico",
         path: "/estoque/inventario",
         implemented: true,

@@ -8,7 +8,11 @@ import {
   LineItemNotFoundError,
   SupplierNotFoundError,
 } from "../purchase-orders/purchase-orders.errors.js";
-import { CustomerOrderNotInFulfillmentError, EmptyPurchaseDraftsError } from "./purchase-suggestion.errors.js";
+import {
+  CustomerOrderNotInFulfillmentError,
+  CustomerSuppliedItemPurchaseError,
+  EmptyPurchaseDraftsError,
+} from "./purchase-suggestion.errors.js";
 import { generatePurchaseDrafts, getPurchaseSuggestion } from "./purchase-suggestion.service.js";
 import { generatePurchaseDraftsSchema } from "./purchase-suggestion.schemas.js";
 
@@ -45,6 +49,9 @@ function mapDomainError(
   }
   if (error instanceof EmptyPurchaseDraftsError) {
     return { status: 400, body: { error: "empty_purchase_drafts", message: error.message } };
+  }
+  if (error instanceof CustomerSuppliedItemPurchaseError) {
+    return { status: 400, body: { error: "customer_supplied_item", message: error.message } };
   }
   return null;
 }

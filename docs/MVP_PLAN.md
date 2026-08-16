@@ -81,7 +81,7 @@ not yet represented in the domain.
 
 33. Industrial master data v2 ✓
 34. Industrial formulation v2: dose, purity and overage ✓
-35. Customer-owned material
+35. Customer-owned material ✓
 36. GMP + Users + industrial Production Order + batch record
 37. Documentary quality / CoA / attachments
 38. Projects + versioned quotations
@@ -129,7 +129,8 @@ dashboard, reports and exports remain the foundation.
 → 32 CSV/PDF/Print exports ✓
 → 33 Industrial master data v2 ✓
 → 34 Industrial formulation v2 ✓
-→ 35-42 Block F (Veridi adherence / private label)
+→ 35 Customer-owned material ✓
+→ 36-42 Block F (Veridi adherence / private label)
 → 43-47 Block G (industrial costing & pricing)
 → ⛔ GATE: Block H (regulatory/labelling) needs a new domain/regulatory
    validation from Product Ownership before being specified

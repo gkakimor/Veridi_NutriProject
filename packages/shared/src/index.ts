@@ -9,6 +9,7 @@
 
 export * from "./health.js";
 export * from "./items.js";
+export * from "./ownership.js";
 export * from "./cnpj.js";
 export * from "./br-states.js";
 export * from "./suppliers.js";

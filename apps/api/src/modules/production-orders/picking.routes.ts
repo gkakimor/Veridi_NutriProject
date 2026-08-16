@@ -3,6 +3,7 @@ import type { ZodError } from "zod";
 import { confirmPicking, recordConsumption, substituteReservationLine } from "./picking.service.js";
 import {
   AlternateLotItemMismatchError,
+  AlternateLotOwnerMismatchError,
   ConsumptionExceedsReservedError,
   ConsumptionLotNotEligibleError,
   EmptyConsumptionBatchError,
@@ -82,6 +83,9 @@ function mapDomainError(
   }
   if (error instanceof AlternateLotItemMismatchError) {
     return { status: 400, body: { error: "alternate_lot_item_mismatch", message: error.message } };
+  }
+  if (error instanceof AlternateLotOwnerMismatchError) {
+    return { status: 400, body: { error: "alternate_lot_owner_mismatch", message: error.message } };
   }
   if (error instanceof InsufficientAlternateLotError) {
     return { status: 400, body: { error: "insufficient_alternate_lot", message: error.message } };

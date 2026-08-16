@@ -6,6 +6,8 @@
  * planejado/requerido/reservado/sugerido pelo FEFO.
  */
 
+import type { InventoryOwnerType } from "./ownership.js";
+
 export interface TraceabilityConsumedMaterialDTO {
   itemId: string;
   itemCode: string;
@@ -14,6 +16,9 @@ export interface TraceabilityConsumedMaterialDTO {
   lotCode: string | null;
   supplierLot: string | null;
   supplierName: string | null;
+  /** Proprietário do lote consumido — a genealogia preserva de quem era o material. */
+  ownerType: InventoryOwnerType;
+  ownerCustomerName: string | null;
   quantity: string;
   unitCode: string;
 }

@@ -44,7 +44,8 @@ import type {
 /** Sem autenticacao/Usuarios no MVP ainda — mesma string ja usada na topbar. */
 const SYSTEM_ACTOR = "Ambiente local";
 
-type ReceiptLineChain = ReceiptLine & { receipt: Receipt & { purchaseOrder: PurchaseOrder } };
+/** Recebimento de material do cliente nao tem OC — a cadeia para no Receipt. */
+type ReceiptLineChain = ReceiptLine & { receipt: Receipt & { purchaseOrder: PurchaseOrder | null } };
 type ShipmentLineChain = { shipment: { id: string; code: string } };
 type MovementWithRelations = InventoryMovement & {
   item: Item;
@@ -79,7 +80,7 @@ function toMovementDTO(movement: MovementWithRelations): InventoryMovementDTO {
     receiptId: receiptLine ? receiptLine.receiptId : null,
     receiptCode: receiptLine ? receiptLine.receipt.code : null,
     purchaseOrderId: receiptLine ? receiptLine.receipt.purchaseOrderId : null,
-    purchaseOrderCode: receiptLine ? receiptLine.receipt.purchaseOrder.code : null,
+    purchaseOrderCode: receiptLine?.receipt.purchaseOrder?.code ?? null,
     shipmentId: shipmentLine ? shipmentLine.shipment.id : null,
     shipmentCode: shipmentLine ? shipmentLine.shipment.code : null,
     reason: movement.reason,

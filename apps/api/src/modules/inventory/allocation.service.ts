@@ -7,7 +7,9 @@ import {
   getReservedByItems,
   getReservedByLots,
   isLotAvailableForUse,
+  lotOwnerWhere,
 } from "../../lib/inventory-ledger.js";
+import type { InventoryOwnerScope } from "../../lib/inventory-ledger.js";
 import { ItemNotFoundError } from "./inventory.errors.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
@@ -44,6 +46,13 @@ export async function getAllocationSuggestion(
   prisma: PrismaOrTx,
   itemId: string,
   requiredQuantity: string,
+  /**
+   * Escopo de propriedade. Omitido = comportamento historico (todo o
+   * estoque). Informado = so lotes daquele dono sao elegiveis; dono e mais
+   * um criterio de elegibilidade, ao lado de Qualidade e validade — nunca
+   * substitui FEFO/FIFO.
+   */
+  ownerScope?: InventoryOwnerScope,
 ): Promise<AllocationSuggestionDTO> {
   const item = await prisma.item.findUnique({ where: { id: itemId } });
   if (!item) throw new ItemNotFoundError(itemId);
@@ -51,6 +60,22 @@ export async function getAllocationSuggestion(
   const required = new Prisma.Decimal(requiredQuantity);
 
   if (!item.controlsLot) {
+    // Material de cliente exige controle de lote: sem lote nao ha saldo de
+    // terceiro identificavel, entao o disponivel do escopo e zero.
+    if (ownerScope?.ownerType === "CUSTOMER") {
+      return {
+        itemId: item.id,
+        itemCode: item.code,
+        itemName: item.name,
+        unitCode: item.unitCode,
+        strategy: "NO_LOT",
+        requiredQuantity: required.toString(),
+        availableQuantity: "0",
+        allocatedQuantity: "0",
+        shortageQuantity: required.toString(),
+        allocations: [],
+      };
+    }
     const onHand = await getOnHand(prisma, { itemId: item.id });
     const reserved = (await getReservedByItems(prisma, [item.id])).get(item.id) ?? new Prisma.Decimal(0);
     const available = Prisma.Decimal.max(onHand.minus(reserved), 0);
@@ -74,7 +99,7 @@ export async function getAllocationSuggestion(
   const strategy: AllocationStrategy = item.controlsExpiry ? "FEFO" : "FIFO";
 
   const lots = await prisma.lot.findMany({
-    where: { itemId: item.id },
+    where: { itemId: item.id, ...(ownerScope ? lotOwnerWhere(ownerScope) : {}) },
     include: lotWithReceivedAtInclude,
   });
   const lotIds = lots.map((lot) => lot.id);

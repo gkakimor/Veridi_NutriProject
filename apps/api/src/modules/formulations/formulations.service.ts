@@ -90,6 +90,7 @@ function toComponentDTO(
     quantity: component.quantity.toString(),
     unitCode: component.unitCode,
     basis: component.basis,
+    supplyResponsibility: component.supplyResponsibility,
     purityPercentApplied: component.purityPercentApplied
       ? component.purityPercentApplied.toString()
       : null,
@@ -334,6 +335,11 @@ export async function createNewVersionFromActive(
             quantity: component.quantity,
             unitCode: component.unitCode,
             ...(component.basis !== undefined ? { basis: component.basis } : {}),
+            // Responsabilidade de fornecimento tambem e congelada aqui:
+            // e intencao da versao, nao consulta ao cadastro atual.
+            ...(component.supplyResponsibility !== undefined
+              ? { supplyResponsibility: component.supplyResponsibility }
+              : {}),
             // Pureza/overage sao SNAPSHOT: gravados aqui e nunca mais
             // reescritos por mudanca no cadastro do Item.
             ...(component.purityPercentApplied !== undefined
@@ -437,6 +443,11 @@ export async function updateFormulationVersion(
             quantity: component.quantity,
             unitCode: component.unitCode,
             ...(component.basis !== undefined ? { basis: component.basis } : {}),
+            // Responsabilidade de fornecimento tambem e congelada aqui:
+            // e intencao da versao, nao consulta ao cadastro atual.
+            ...(component.supplyResponsibility !== undefined
+              ? { supplyResponsibility: component.supplyResponsibility }
+              : {}),
             // Pureza/overage sao SNAPSHOT: gravados aqui e nunca mais
             // reescritos por mudanca no cadastro do Item.
             ...(component.purityPercentApplied !== undefined
@@ -506,6 +517,18 @@ export async function activateFormulationVersion(id: string): Promise<Formulatio
   }
   if (invalidComponents.length > 0) {
     reasons.push(`componentes precisam de revisão: ${invalidComponents.join(", ")}`);
+  }
+
+  // Material fornecido pelo cliente só existe se houver cliente: sem isso a
+  // fórmula fica ambígua ("qual cliente envia?"). O DRAFT continua livre
+  // para edição — o bloqueio é só na ativação.
+  const hasCustomerComponent = version.components.some(
+    (component) => component.supplyResponsibility === "CUSTOMER",
+  );
+  if (hasCustomerComponent && !product.customerId) {
+    reasons.push(
+      "há componentes fornecidos pelo cliente, mas o produto não está vinculado a um cliente",
+    );
   }
 
   if (reasons.length > 0) {

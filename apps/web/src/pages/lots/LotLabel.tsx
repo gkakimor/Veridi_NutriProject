@@ -1,4 +1,5 @@
 import type { LotDTO } from "@veridi/shared";
+import { ownerLabel } from "@veridi/shared";
 import { QrCode } from "../../components/QrCode";
 
 function formatDate(value: string | null): string {
@@ -11,6 +12,9 @@ function formatDate(value: string | null): string {
  * saldo disponível, reservado, preço, OC completa ou dado financeiro.
  * Lote produzido (origin=PRODUCTION) nunca mostra Lote fornecedor — mostra
  * Lote Veridi e a quantidade produzida acumulada em vez da recebida.
+ *
+ * Material de cliente mostra o proprietário de forma discreta. O QR
+ * continua sendo só `LOT:<código>` — nunca carrega cliente.
  */
 export function LotLabel({ lot }: { lot: LotDTO }) {
   const isProduction = lot.origin === "PRODUCTION";
@@ -63,6 +67,12 @@ export function LotLabel({ lot }: { lot: LotDTO }) {
               </dd>
               <dt>Localização</dt>
               <dd>{lot.location ?? "—"}</dd>
+            </>
+          )}
+          {lot.ownerType === "CUSTOMER" && (
+            <>
+              <dt>Proprietário</dt>
+              <dd>{ownerLabel(lot.ownerType, lot.ownerCustomerName)}</dd>
             </>
           )}
         </dl>

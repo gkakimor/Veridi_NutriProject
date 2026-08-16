@@ -67,3 +67,47 @@ export class InvalidExpiryDateError extends Error {
     this.name = "InvalidExpiryDateError";
   }
 }
+
+export class CustomerNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Cliente não encontrado: ${id}`);
+    this.name = "CustomerNotFoundError";
+  }
+}
+
+export class InactiveCustomerError extends Error {
+  constructor(id: string) {
+    super(`Cliente inativo não pode enviar material: ${id}`);
+    this.name = "InactiveCustomerError";
+  }
+}
+
+export class ReceiptItemNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Item não encontrado: ${id}`);
+    this.name = "ReceiptItemNotFoundError";
+  }
+}
+
+export class InvalidCustomerSuppliedItemTypeError extends Error {
+  constructor(code: string) {
+    super(
+      `Item ${code} não é matéria-prima nem embalagem — material do cliente só existe para esses tipos.`,
+    );
+    this.name = "InvalidCustomerSuppliedItemTypeError";
+  }
+}
+
+/**
+ * Material do cliente SEM controle de lote criaria saldo de terceiro
+ * indistinguível do estoque próprio. Decisão de produto: bloquear o
+ * recebimento em vez de aceitar um saldo que não dá para rastrear.
+ */
+export class CustomerMaterialRequiresLotControlError extends Error {
+  constructor(code: string) {
+    super(
+      `Item ${code} não controla lote — material de propriedade do cliente exige controle de lote. Ative o controle de lote no cadastro do item antes de receber.`,
+    );
+    this.name = "CustomerMaterialRequiresLotControlError";
+  }
+}

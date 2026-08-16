@@ -39,7 +39,10 @@ async function buildFinishedLotTraceability(lot: Lot): Promise<FinishedLotTracea
 
   const [items, materialLots] = await Promise.all([
     prisma.item.findMany({ where: { id: { in: itemIds } } }),
-    prisma.lot.findMany({ where: { id: { in: lotIds } }, include: { supplier: true } }),
+    prisma.lot.findMany({
+      where: { id: { in: lotIds } },
+      include: { supplier: true, ownerCustomer: true },
+    }),
   ]);
   const itemsById = new Map(items.map((item) => [item.id, item]));
   const lotsById = new Map(materialLots.map((materialLot) => [materialLot.id, materialLot]));
@@ -55,6 +58,8 @@ async function buildFinishedLotTraceability(lot: Lot): Promise<FinishedLotTracea
       lotCode: materialLot ? materialLot.code : null,
       supplierLot: materialLot ? materialLot.supplierLot : null,
       supplierName: materialLot?.supplier ? materialLot.supplier.legalName : null,
+      ownerType: materialLot?.ownerType ?? "VERIDI",
+      ownerCustomerName: materialLot?.ownerCustomer?.legalName ?? null,
       quantity: (row._sum.quantity ?? new Prisma.Decimal(0)).toString(),
       unitCode: item.unitCode,
     };

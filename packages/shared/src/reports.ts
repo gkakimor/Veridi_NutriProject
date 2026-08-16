@@ -16,6 +16,7 @@ import type { BillingStatus, CustomerOrderBillingStatus } from "./billings.js";
 import type { CustomerOrderStatus } from "./customer-orders.js";
 import type { InventoryMovementSourceType, InventoryMovementType } from "./inventory.js";
 import type { ItemType } from "./items.js";
+import type { InventoryOwnerType, SupplyResponsibility } from "./ownership.js";
 import type { LotOrigin, LotStatus } from "./lots.js";
 import type { ProductionOrderStatus } from "./production-orders.js";
 import type { PurchaseOrderOrigin, PurchaseOrderStatus } from "./purchase-orders.js";
@@ -46,6 +47,10 @@ export interface InventoryPositionRowDTO {
   supplierLot: string | null;
   businessLotNumber: string | null;
   supplierName: string | null;
+  /** Proprietário do lote — estoque físico nunca é apresentado como "disponível Veridi" sem distinguir dono. */
+  ownerType: InventoryOwnerType;
+  ownerCustomerId: string | null;
+  ownerCustomerName: string | null;
   expiryDate: string | null;
   location: string | null;
   onHand: string;
@@ -81,6 +86,9 @@ export interface ExpiryRowDTO {
 /* ─────────────── R-03 Movimentações ─────────────── */
 
 export interface MovementReportRowDTO {
+  /** Proprietário do lote movimentado — `VERIDI` quando não há lote. */
+  ownerType: InventoryOwnerType;
+  ownerCustomerName: string | null;
   id: string;
   occurredAt: string;
   type: InventoryMovementType;
@@ -113,6 +121,10 @@ export interface ProductionRequirementRowDTO {
   itemId: string;
   itemCode: string;
   itemName: string;
+  /** Quem deve fornecer: falta de material do cliente nunca vira necessidade de compra. */
+  supplyResponsibility: SupplyResponsibility;
+  /** Cliente esperado quando `supplyResponsibility = CUSTOMER`. */
+  customerName: string | null;
   requiredQuantity: string;
   reserved: string;
   /** Disponível PARA ESTA OP — soma de volta a própria reserva, nunca gera falta falsa. */
@@ -239,10 +251,14 @@ export interface ReceiptReportRowDTO {
   receiptId: string;
   receiptCode: string;
   receivedAt: string;
-  purchaseOrderId: string;
-  purchaseOrderCode: string;
-  supplierId: string;
-  supplierName: string;
+  /** `null` em recebimento de material do cliente — não existe OC nem fornecedor. */
+  purchaseOrderId: string | null;
+  purchaseOrderCode: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
+  /** Dono do material recebido — `CUSTOMER` traz o cliente proprietário. */
+  ownerType: InventoryOwnerType;
+  ownerCustomerName: string | null;
   itemId: string;
   itemCode: string;
   itemName: string;

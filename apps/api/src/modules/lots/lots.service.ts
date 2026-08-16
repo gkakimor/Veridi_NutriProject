@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type {
+  Customer,
   Item,
   Lot,
   ProductionOrder,
@@ -25,10 +26,12 @@ import type { ListLotsQuery } from "./lots.schemas.js";
 /** Sem autenticacao/Usuarios no MVP ainda — mesma string ja usada na topbar. */
 const SYSTEM_ACTOR = "Ambiente local";
 
-type ReceiptLineChain = ReceiptLine & { receipt: Receipt & { purchaseOrder: PurchaseOrder } };
+/** Recebimento de material do cliente nao tem OC — a cadeia para no Receipt. */
+type ReceiptLineChain = ReceiptLine & { receipt: Receipt & { purchaseOrder: PurchaseOrder | null } };
 type LotWithRelations = Lot & {
   item: Item;
   supplier: Supplier | null;
+  ownerCustomer: Customer | null;
   receiptLine: ReceiptLineChain | null;
   productionOrder: ProductionOrder | null;
 };
@@ -36,6 +39,7 @@ type LotWithRelations = Lot & {
 const lotInclude = {
   item: true,
   supplier: true,
+  ownerCustomer: true,
   receiptLine: { include: { receipt: { include: { purchaseOrder: true } } } },
   productionOrder: true,
 } as const;
@@ -54,6 +58,11 @@ function toLotDTO(lot: LotWithRelations, producedQuantity: Prisma.Decimal | null
     itemCode: lot.item.code,
     itemName: lot.item.name,
     unitCode: receiptLine ? receiptLine.unitCode : lot.item.unitCode,
+    // Dono do estoque fisico — nunca confundido com Fornecedor.
+    ownerType: lot.ownerType,
+    ownerCustomerId: lot.ownerCustomerId,
+    ownerCustomerCode: lot.ownerCustomer ? lot.ownerCustomer.code : null,
+    ownerCustomerName: lot.ownerCustomer ? lot.ownerCustomer.legalName : null,
     supplierId: lot.supplierId,
     supplierCode: lot.supplier ? lot.supplier.code : null,
     supplierName: lot.supplier ? lot.supplier.legalName : null,
@@ -68,7 +77,7 @@ function toLotDTO(lot: LotWithRelations, producedQuantity: Prisma.Decimal | null
     receiptId: receiptLine ? receiptLine.receiptId : null,
     receiptCode: receiptLine ? receiptLine.receipt.code : null,
     purchaseOrderId: receiptLine ? receiptLine.receipt.purchaseOrderId : null,
-    purchaseOrderCode: receiptLine ? receiptLine.receipt.purchaseOrder.code : null,
+    purchaseOrderCode: receiptLine?.receipt.purchaseOrder?.code ?? null,
     productionOrderId: lot.productionOrderId,
     productionOrderCode: lot.productionOrder ? lot.productionOrder.code : null,
     createdAt: lot.createdAt.toISOString(),
@@ -139,6 +148,10 @@ export async function listLots(
 
   if (query.itemId) where["itemId"] = query.itemId;
   if (query.supplierId) where["supplierId"] = query.supplierId;
+  // Filtro de propriedade: a lista continua mostrando o estoque fisico
+  // inteiro por padrao (visibilidade), o filtro e escolha do usuario.
+  if (query.ownerType) where["ownerType"] = query.ownerType;
+  if (query.ownerCustomerId) where["ownerCustomerId"] = query.ownerCustomerId;
   if (query.status) where["status"] = query.status;
   if (query.search) {
     where["OR"] = [
