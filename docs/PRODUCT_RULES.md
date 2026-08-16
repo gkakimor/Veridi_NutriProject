@@ -285,6 +285,9 @@ Full laboratory inspection and COA workflows are outside MVP.
   (`SELECT … FOR UPDATE`) inside the confirming transaction before summing
   `ReceiptLine`s and comparing against `orderedQuantity` — simple row
   locking, not full `SERIALIZABLE` isolation.
+- A lot with an `ACTIVE` Material Reservation cannot transition to
+  `BLOCKED` in this phase — a `RELEASED` Production Order may be counting
+  on it, and blocking would silently corrupt that commitment.
 
 ---
 
@@ -401,6 +404,12 @@ Negative On Hand/Available is not silently allowed.
   the relevant scope (lot, or item when there is no lot) and validate
   against the current On Hand before writing, the same concurrency pattern
   used for Receiving's over-receipt guard.
+- `Reserved` is real from Material Reservation onward (sum of `ACTIVE`
+  `MaterialReservationLine`s) — never a second persisted quantity.
+  `Available = On Hand - Reserved`, never negative. Outbound
+  adjustments/loss are bounded by Available, not raw On Hand, from this
+  point on — they can never eat into stock a `RELEASED` Production Order
+  is counting on.
 
 ---
 
@@ -458,6 +467,10 @@ Advanced cycle-count scheduling remains future scope.
   or an outbound quantity.
 - A stock count with no difference creates no movement at all — nothing to
   audit when the count matches the system.
+- A stock count whose counted quantity would fall below the currently
+  reserved quantity is rejected — the system never resolves this
+  automatically by cancelling a reservation; the user must review
+  reservations first.
 
 ---
 
@@ -503,6 +516,10 @@ Do not use color alone.
 - A user will eventually be able to substitute the suggested lot with a
   different one (in Picking/OP): FEFO is the default recommendation, not
   a rule that makes any other AVAILABLE lot with stock impossible to use.
+- Since Material Reservation, allocation is computed against net
+  availability (`On Hand - Reserved` per eligible lot), never raw On
+  Hand — a lot another OP already reserved contributes only its
+  remaining unreserved balance to a new suggestion or RELEASE.
 
 ---
 
@@ -635,9 +652,14 @@ Do not hide shortages.
   always calculated live from the same `inventory-ledger.ts` used by the
   Inventory overview and FEFO, so the contract never diverges across
   screens.
-- `Reserved` is fixed at `"0"` in this slice — Material Reservation does
-  not exist yet. When it lands, it will replace this fixed value under
-  the exact same contract, not a new one.
+- `Reserved` is real from Material Reservation onward — sum of
+  `MaterialReservationLine` rows belonging to `ACTIVE` reservations.
+  `RELEASED` (a reservation that was let go, e.g. cancelling a `RELEASED`
+  OP) never counts. A `RELEASED` OP's own requirement rows never count
+  its own reservation as competing against itself — Available shown for
+  its own requirements adds back what it already secured, so a
+  successfully released OP never displays a false shortage against its
+  own already-reserved materials.
 - `shortage = max(required - available, 0)`. On Order is shown alongside
   but never reduces shortage — material in transit is not physically
   available.
@@ -667,6 +689,50 @@ Reservation does not equal physical consumption.
 Unused reservation must be released.
 
 Reservation creation/release must be transactional.
+
+## Durable rules confirmed at implementation
+
+- Only `PLANNED → RELEASED` executes reservation in this slice; `DRAFT`
+  never releases and `RELEASED` never releases twice. There is still no
+  free-form status PATCH.
+- RELEASE requires every Requirement to be 100% covered by real
+  `AVAILABLE` stock (`On Hand - Reserved`, respecting lot eligibility) —
+  On Order never counts toward that coverage. If any Requirement is
+  short, the whole RELEASE fails and nothing is reserved (no partial
+  reservation ever survives).
+- FEFO/FIFO is recalculated at RELEASE time against the *current* stock
+  state (never the suggestion the UI showed earlier) — same allocation
+  service used everywhere else, just run once more, inside the RELEASE
+  transaction, under lock.
+- Reservation never touches On Hand and never creates an
+  `InventoryMovement` — it is a commitment dimension, not a physical
+  movement. It is per-lot when the item controls lot (persisting the
+  official allocation, `MaterialReservationLine.lotId`) and per-item when
+  it doesn't (`lotId` null, never a fabricated lot).
+- Concurrency: RELEASE locks every `Item` row involved (`SELECT ... FOR
+  UPDATE`, deterministic ascending-id order to avoid deadlock) before
+  recomputing availability — two OPs racing for the same limited stock
+  can never both succeed; the loser fails with a shortage error and
+  nothing is reserved for it.
+- Cancelling a `RELEASED` OP requires a reason, moves its `MaterialReservation`
+  to `RELEASED` (not deleted — kept historical) in the same transaction as
+  the OP's own cancellation, and creates no `InventoryMovement` — nothing
+  physical ever happened, so nothing physical needs reverting. Availability
+  recovers automatically because `Reserved` only ever sums `ACTIVE`
+  reservations.
+- Manual stock adjustments/loss and Stock Count can never consume
+  reserved stock: outbound movements are bounded by Available (`On Hand -
+  Reserved`), and a Stock Count whose counted quantity would fall below
+  the currently reserved quantity is rejected outright — the system never
+  auto-cancels a reservation to make an adjustment fit.
+- A lot with an `ACTIVE` reservation cannot be blocked in this phase — a
+  `RELEASED` OP may be counting on it; blocking would silently corrupt
+  that commitment. The OP/reservation is never auto-cancelled to allow
+  the block.
+- Manual unreserve, lot substitution, or editing a reservation's
+  allocation do not exist in this slice — a reservation is only born at
+  RELEASE and only stops counting when its OP is cancelled. Those
+  operations arrive with Picking.
 
 ---
 

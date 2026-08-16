@@ -46,3 +46,12 @@ export class MissingCountReasonError extends Error {
     this.name = "MissingCountReasonError";
   }
 }
+
+export class CountBelowReservedError extends Error {
+  constructor() {
+    super(
+      "A contagem informada é inferior à quantidade atualmente reservada. Revise as reservas antes de ajustar o estoque.",
+    );
+    this.name = "CountBelowReservedError";
+  }
+}

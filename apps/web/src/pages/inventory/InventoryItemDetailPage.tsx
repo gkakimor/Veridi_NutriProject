@@ -166,6 +166,7 @@ export function InventoryItemDetailPage() {
                     <th>Localização</th>
                     <th>Status</th>
                     <th>On Hand</th>
+                    <th>Reservado</th>
                     <th>Disponível</th>
                     <th aria-hidden="true" />
                   </tr>
@@ -185,6 +186,9 @@ export function InventoryItemDetailPage() {
                         {lot.onHand} {detail.unitCode}
                       </td>
                       <td>
+                        {lot.reserved} {detail.unitCode}
+                      </td>
+                      <td>
                         {lot.available} {detail.unitCode}
                       </td>
                       <td>
@@ -201,7 +205,7 @@ export function InventoryItemDetailPage() {
 
                   {detail.lots.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="table__empty">
+                      <td colSpan={8} className="table__empty">
                         Nenhum lote para este item.
                       </td>
                     </tr>

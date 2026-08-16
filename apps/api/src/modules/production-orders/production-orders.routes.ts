@@ -6,6 +6,7 @@ import {
   getProductionOrderById,
   listProductionOrders,
   planProductionOrder,
+  releaseProductionOrder,
   updateProductionOrder,
 } from "./production-orders.service.js";
 import {
@@ -18,6 +19,7 @@ import {
   PlanValidationError,
   ProductNotFoundError,
   ProductionOrderNotFoundError,
+  ReleaseValidationError,
 } from "./production-orders.errors.js";
 import {
   cancelProductionOrderSchema,
@@ -63,16 +65,20 @@ function mapDomainError(
   if (error instanceof PlanValidationError) {
     return { status: 400, body: { error: "plan_validation_failed", message: error.message } };
   }
+  if (error instanceof ReleaseValidationError) {
+    return { status: 400, body: { error: "release_validation_failed", message: error.message } };
+  }
   return null;
 }
 
 /**
  * `GET /production-orders`, `GET /production-orders/:id`, `POST /production-orders`,
  * `PATCH /production-orders/:id`, `POST /production-orders/:id/plan`,
- * `POST /production-orders/:id/cancel`.
+ * `POST /production-orders/:id/release`, `POST /production-orders/:id/cancel`.
  *
- * Sem PATCH de status livre — so as transicoes DRAFT->PLANNED (via /plan) e
- * DRAFT|PLANNED->CANCELLED (via /cancel) existem nesta entrega.
+ * Sem PATCH de status livre — so as transicoes DRAFT->PLANNED (via /plan),
+ * PLANNED->RELEASED (via /release) e DRAFT|PLANNED|RELEASED->CANCELLED
+ * (via /cancel) existem nesta entrega.
  */
 export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
   app.get("/production-orders", async (request, reply) => {
@@ -135,6 +141,18 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.params as { id: string };
     try {
       const order = await planProductionOrder(id);
+      return reply.send(order);
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/production-orders/:id/release", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const order = await releaseProductionOrder(id);
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);

@@ -52,9 +52,9 @@ export interface LotDTO {
   initialReceivedQuantity: string;
   /** Derivado do InventoryMovement ledger — nunca uma coluna armazenada em Lot. */
   onHand: string;
-  /** Sempre "0" nesta entrega — Reservation pertence ao módulo de OP. */
+  /** Soma das MaterialReservationLine ACTIVE deste lote — real a partir do RELEASE de OP. */
   reserved: string;
-  /** `onHand` se status AVAILABLE e não vencido; "0" caso contrário (bloqueado/aguardando/vencido). */
+  /** `onHand - reserved` se status AVAILABLE e não vencido; "0" caso contrário (bloqueado/aguardando/vencido). */
   available: string;
   status: LotStatus;
   location: string | null;

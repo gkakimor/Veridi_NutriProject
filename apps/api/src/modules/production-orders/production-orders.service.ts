@@ -3,11 +3,15 @@ import type {
   Customer,
   FormulationVersion,
   Item,
+  Lot,
+  MaterialReservation,
+  MaterialReservationLine,
   Product,
   ProductionOrder,
   ProductionOrderRequirement,
 } from "@prisma/client";
 import type {
+  MaterialReservationDTO,
   ProductionOrderDTO,
   ProductionOrderListResponse,
   ProductionOrderMaterialsStatus,
@@ -16,7 +20,12 @@ import type {
 import { PRODUCTION_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
-import { getAvailableByItems, getOnHandByItems, getOnOrderByItems } from "../../lib/inventory-ledger.js";
+import {
+  getAvailableByItems,
+  getOnHandByItems,
+  getOnOrderByItems,
+  getReservedByItems,
+} from "../../lib/inventory-ledger.js";
 import { convertUomDecimal } from "../items/uom.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
 import {
@@ -29,6 +38,7 @@ import {
   PlanValidationError,
   ProductNotFoundError,
   ProductionOrderNotFoundError,
+  ReleaseValidationError,
 } from "./production-orders.errors.js";
 import type {
   CreateProductionOrderInput,
@@ -42,17 +52,46 @@ const CODE_SEQUENCE = "production_order_code_seq";
 
 type ProductWithRelations = Product & { customer: Customer | null; finishedProductItem: Item | null };
 type RequirementWithItem = ProductionOrderRequirement & { item: Item };
+type ReservationLineWithRelations = MaterialReservationLine & { item: Item; lot: Lot | null };
+type ReservationWithLines = MaterialReservation & { lines: ReservationLineWithRelations[] };
 type POWithRelations = ProductionOrder & {
   product: ProductWithRelations;
   formulationVersion: FormulationVersion | null;
   requirements: RequirementWithItem[];
+  reservation: ReservationWithLines | null;
 };
 
 const productionOrderInclude = {
   product: { include: { customer: true, finishedProductItem: true } },
   formulationVersion: true,
   requirements: { include: { item: true }, orderBy: { position: "asc" as const } },
+  reservation: { include: { lines: { include: { item: true, lot: true } } } },
 } as const;
+
+function toReservationDTO(reservation: ReservationWithLines): MaterialReservationDTO {
+  return {
+    id: reservation.id,
+    productionOrderId: reservation.productionOrderId,
+    status: reservation.status,
+    createdAt: reservation.createdAt.toISOString(),
+    createdBy: reservation.createdBy,
+    releasedAt: reservation.releasedAt ? reservation.releasedAt.toISOString() : null,
+    releasedBy: reservation.releasedBy,
+    releaseReason: reservation.releaseReason,
+    lines: reservation.lines.map((line) => ({
+      id: line.id,
+      itemId: line.itemId,
+      itemCode: line.item.code,
+      itemName: line.item.name,
+      lotId: line.lotId,
+      lotCode: line.lot ? line.lot.code : null,
+      expiryDate: line.lot?.expiryDate ? line.lot.expiryDate.toISOString() : null,
+      location: line.lot ? line.lot.location : null,
+      quantity: line.quantity.toString(),
+      unitCode: line.item.unitCode,
+    })),
+  };
+}
 
 async function requireOrder(id: string): Promise<POWithRelations> {
   const order = await getPrisma().productionOrder.findUnique({
@@ -147,6 +186,7 @@ async function regenerateRequirements(
  */
 async function attachRequirementAvailability(
   requirements: RequirementWithItem[],
+  ownActiveReservationLines: readonly { itemId: string; quantity: Prisma.Decimal }[] = [],
 ): Promise<ProductionOrderRequirementDTO[]> {
   if (requirements.length === 0) return [];
 
@@ -157,21 +197,35 @@ async function attachRequirementAvailability(
   }));
   const itemIds = itemScopes.map((scope) => scope.id);
 
-  const [onHandByItem, availableByItem, onOrderByItem] = await Promise.all([
+  const [onHandByItem, availableByItem, onOrderByItem, reservedByItem] = await Promise.all([
     getOnHandByItems(prisma, itemIds),
     getAvailableByItems(prisma, itemScopes),
     getOnOrderByItems(prisma, itemIds),
+    getReservedByItems(prisma, itemIds),
   ]);
+
+  // A OP RELEASED ja reservou a propria necessidade — Available/Falta
+  // exibidos para ELA MESMA nunca podem contar a propria reserva como se
+  // fosse concorrencia. "Disponivel para esta OP" = Available global +
+  // o que ela mesma ja reservou daquele item (nunca conta contra si).
+  const ownReservedByItem = new Map<string, Prisma.Decimal>();
+  for (const line of ownActiveReservationLines) {
+    const current = ownReservedByItem.get(line.itemId) ?? new Prisma.Decimal(0);
+    ownReservedByItem.set(line.itemId, current.plus(line.quantity));
+  }
 
   const results: ProductionOrderRequirementDTO[] = [];
   for (const requirement of requirements) {
     const onHand = onHandByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
-    const available = availableByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
     const onOrder = onOrderByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
+    const reserved = reservedByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
+    const ownReserved = ownReservedByItem.get(requirement.itemId) ?? new Prisma.Decimal(0);
+    const available = (availableByItem.get(requirement.itemId) ?? new Prisma.Decimal(0)).plus(ownReserved);
     const shortage = Prisma.Decimal.max(requirement.requiredQuantity.minus(available), 0);
 
     // On Order e so informativo — nunca reduz o shortage operacional.
     const suggestion = await getAllocationSuggestion(
+      prisma,
       requirement.itemId,
       requirement.requiredQuantity.toString(),
     );
@@ -188,7 +242,7 @@ async function attachRequirementAvailability(
       stockUnitCode: requirement.stockUnitCode,
       position: requirement.position,
       onHand: onHand.toString(),
-      reserved: "0",
+      reserved: reserved.toString(),
       available: available.toString(),
       onOrder: onOrder.toString(),
       shortage: shortage.toString(),
@@ -206,7 +260,9 @@ async function attachRequirementAvailability(
 }
 
 async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionOrderDTO> {
-  const requirements = await attachRequirementAvailability(order.requirements);
+  const ownActiveReservationLines =
+    order.reservation && order.reservation.status === "ACTIVE" ? order.reservation.lines : [];
+  const requirements = await attachRequirementAvailability(order.requirements, ownActiveReservationLines);
   const shortageItemCount = requirements.filter((r) => r.availabilityStatus === "SHORTAGE").length;
   const materialsStatus: ProductionOrderMaterialsStatus =
     shortageItemCount > 0 ? "MATERIAL_SHORTAGE" : "MATERIALS_AVAILABLE";
@@ -250,6 +306,9 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     requirements,
     plannedAt: order.plannedAt ? order.plannedAt.toISOString() : null,
     plannedBy: order.plannedBy,
+    releasedAt: order.releasedAt ? order.releasedAt.toISOString() : null,
+    releasedBy: order.releasedBy,
+    reservation: order.reservation ? toReservationDTO(order.reservation) : null,
     cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,
     cancelledBy: order.cancelledBy,
     cancelReason: order.cancelReason,
@@ -480,12 +539,138 @@ export async function planProductionOrder(id: string): Promise<ProductionOrderDT
   return (await getProductionOrderById(id))!;
 }
 
+/**
+ * PLANNED -> RELEASED: valida disponibilidade ATUAL (recalculada, nunca a
+ * sugestao antiga da UI), aloca FEFO/FIFO e reserva. Tudo ou nada — se
+ * qualquer Requirement nao puder ser 100% atendido por estoque Available
+ * real, a transacao inteira reverte (nenhuma reserva parcial). On Order
+ * nunca satisfaz a exigencia. Nao exige RELEASED -> mais nada nesta
+ * entrega (Picking/Consumo ficam para o proximo modulo).
+ */
+export async function releaseProductionOrder(id: string): Promise<ProductionOrderDTO> {
+  await getPrisma().$transaction(async (tx) => {
+    const lockedRows = await tx.$queryRaw<{ status: string }[]>`
+      SELECT status FROM production_orders WHERE id = ${id} FOR UPDATE
+    `;
+    if (lockedRows.length === 0) throw new ProductionOrderNotFoundError(id);
+    if (lockedRows[0]?.status !== "PLANNED") {
+      throw new InvalidTransitionError("Somente ordens planejadas podem ser liberadas.");
+    }
+
+    const order = await tx.productionOrder.findUniqueOrThrow({
+      where: { id },
+      include: { requirements: { include: { item: true }, orderBy: { position: "asc" } } },
+    });
+
+    if (order.requirements.length === 0) {
+      throw new ReleaseValidationError(
+        "Não é possível liberar esta ordem: nenhuma necessidade de material calculada.",
+      );
+    }
+
+    // Trava os Items envolvidos em ordem deterministica (id ascendente) —
+    // serializa RELEASEs concorrentes que disputam o mesmo item e evita
+    // deadlock entre travas cruzadas de duas OPs. Consultas de
+    // disponibilidade fora de RELEASE (GET da OP, Visao Geral) nao
+    // precisam desse lock — sao so leitura, snapshot da query.
+    const itemIds = [...new Set(order.requirements.map((requirement) => requirement.itemId))].sort();
+    await tx.$queryRaw`SELECT id FROM items WHERE id IN (${Prisma.join(itemIds)}) ORDER BY id FOR UPDATE`;
+
+    const shortages: string[] = [];
+    const linesToCreate: {
+      requirementId: string;
+      itemId: string;
+      lotId: string | null;
+      quantity: Prisma.Decimal;
+    }[] = [];
+
+    for (const requirement of order.requirements) {
+      // Recalcula FEFO/FIFO agora, sob lock — nunca reutiliza a sugestao
+      // antiga exibida na UI antes do RELEASE.
+      const suggestion = await getAllocationSuggestion(
+        tx,
+        requirement.itemId,
+        requirement.requiredQuantity.toString(),
+      );
+
+      if (new Prisma.Decimal(suggestion.shortageQuantity).greaterThan(0)) {
+        shortages.push(
+          `${requirement.itemCode} (falta ${suggestion.shortageQuantity} ${requirement.stockUnitCode})`,
+        );
+        continue;
+      }
+
+      if (requirement.item.controlsLot) {
+        for (const allocation of suggestion.allocations) {
+          linesToCreate.push({
+            requirementId: requirement.id,
+            itemId: requirement.itemId,
+            lotId: allocation.lotId,
+            quantity: new Prisma.Decimal(allocation.suggestedQuantity),
+          });
+        }
+      } else {
+        linesToCreate.push({
+          requirementId: requirement.id,
+          itemId: requirement.itemId,
+          lotId: null,
+          quantity: requirement.requiredQuantity,
+        });
+      }
+    }
+
+    if (shortages.length > 0) {
+      throw new ReleaseValidationError(
+        `Não é possível liberar: estoque disponível insuficiente para ${shortages.join(", ")}.`,
+      );
+    }
+
+    const reservation = await tx.materialReservation.create({
+      data: { productionOrderId: id, status: "ACTIVE", createdBy: SYSTEM_ACTOR },
+    });
+    await tx.materialReservationLine.createMany({
+      data: linesToCreate.map((line) => ({
+        reservationId: reservation.id,
+        productionOrderRequirementId: line.requirementId,
+        itemId: line.itemId,
+        lotId: line.lotId,
+        quantity: line.quantity,
+      })),
+    });
+
+    await tx.productionOrder.update({
+      where: { id },
+      data: { status: "RELEASED", releasedAt: new Date(), releasedBy: SYSTEM_ACTOR },
+    });
+  });
+
+  return (await getProductionOrderById(id))!;
+}
+
 export async function cancelProductionOrder(id: string, reason: string): Promise<ProductionOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
     const current = await tx.productionOrder.findUnique({ where: { id } });
     if (!current) throw new ProductionOrderNotFoundError(id);
-    if (current.status !== "DRAFT" && current.status !== "PLANNED") {
-      throw new InvalidTransitionError("Somente rascunhos ou ordens planejadas podem ser canceladas.");
+    if (current.status !== "DRAFT" && current.status !== "PLANNED" && current.status !== "RELEASED") {
+      throw new InvalidTransitionError(
+        "Somente rascunhos, ordens planejadas ou liberadas podem ser canceladas.",
+      );
+    }
+
+    if (current.status === "RELEASED") {
+      // Libera a reserva na MESMA transacao — Reserved passa a considerar
+      // so reservas ACTIVE, entao a disponibilidade volta automaticamente.
+      // Nunca cria InventoryMovement: On Hand nunca mudou (fisicamente
+      // nada aconteceu). Historico preservado — nunca deletada.
+      await tx.materialReservation.updateMany({
+        where: { productionOrderId: id, status: "ACTIVE" },
+        data: {
+          status: "RELEASED",
+          releasedAt: new Date(),
+          releasedBy: SYSTEM_ACTOR,
+          releaseReason: reason,
+        },
+      });
     }
 
     await tx.productionOrder.update({

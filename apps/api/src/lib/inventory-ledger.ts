@@ -60,6 +60,47 @@ export async function getOnHandByLots(
 }
 
 /**
+ * Reserved por item — soma das MaterialReservationLine de reservas ACTIVE.
+ * RELEASED (reserva liberada, ex.: cancelamento de OP RELEASED) nunca
+ * conta. Nunca uma segunda quantidade fora da tabela de reserva.
+ */
+export async function getReservedByItems(
+  prisma: PrismaOrTx,
+  itemIds: string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  if (itemIds.length === 0) return new Map();
+  const grouped = await prisma.materialReservationLine.groupBy({
+    by: ["itemId"],
+    where: { itemId: { in: itemIds }, reservation: { status: "ACTIVE" } },
+    _sum: { quantity: true },
+  });
+  const map = new Map<string, Prisma.Decimal>();
+  for (const row of grouped) {
+    map.set(row.itemId, row._sum.quantity ?? new Prisma.Decimal(0));
+  }
+  return map;
+}
+
+/** Versao por lote de `getReservedByItems` — mesma regra ACTIVE-only. */
+export async function getReservedByLots(
+  prisma: PrismaOrTx,
+  lotIds: string[],
+): Promise<Map<string, Prisma.Decimal>> {
+  if (lotIds.length === 0) return new Map();
+  const grouped = await prisma.materialReservationLine.groupBy({
+    by: ["lotId"],
+    where: { lotId: { in: lotIds }, reservation: { status: "ACTIVE" } },
+    _sum: { quantity: true },
+  });
+  const map = new Map<string, Prisma.Decimal>();
+  for (const row of grouped) {
+    if (!row.lotId) continue;
+    map.set(row.lotId, row._sum.quantity ?? new Prisma.Decimal(0));
+  }
+  return map;
+}
+
+/**
  * On Order por item — soma do `openQuantity` (orderedQuantity - recebido
  * real) das PurchaseOrderLine de OCs ORDERED/PARTIALLY_RECEIVED. Nunca
  * persiste uma segunda quantidade; DRAFT/CANCELLED/RECEIVED nao contam.
@@ -104,45 +145,53 @@ export function isLotAvailableForUse(lot: { status: string; expiryDate: Date | n
 
 /**
  * Available por item — mesma interpretacao em qualquer tela/servico que
- * precise dela (Visao Geral do Estoque, FEFO, Requirements de OP). Item
- * sem controle de lote: Available = On Hand. Item com controle de lote:
- * soma so o On Hand dos lotes efetivamente disponiveis (AVAILABLE, nao
- * vencido) — lote AWAITING_RELEASE/BLOCKED/vencido continua em On Hand
- * mas contribui 0 aqui. Nunca duplicar esta logica em outro modulo.
+ * precise dela (Visao Geral do Estoque, FEFO, Requirements de OP,
+ * Reservation). Regra definitiva: `Available = On Hand - Reserved`, nunca
+ * negativo. Item sem controle de lote: calculado no nivel do Item. Item
+ * com controle de lote: calculado por lote elegivel (AVAILABLE, nao
+ * vencido) e somado — lote AWAITING_RELEASE/BLOCKED/vencido continua em
+ * On Hand mas contribui 0 aqui, mesmo que tenha Reserved. Nunca duplicar
+ * esta logica em outro modulo.
  */
 export async function getAvailableByItems(
   prisma: PrismaOrTx,
   items: readonly { id: string; controlsLot: boolean }[],
 ): Promise<Map<string, Prisma.Decimal>> {
-  const onHandByItem = await getOnHandByItems(
-    prisma,
-    items.map((item) => item.id),
-  );
+  const itemIds = items.map((item) => item.id);
+  const [onHandByItem, reservedByItem] = await Promise.all([
+    getOnHandByItems(prisma, itemIds),
+    getReservedByItems(prisma, itemIds),
+  ]);
 
   const lotControlledIds = items.filter((item) => item.controlsLot).map((item) => item.id);
   const lots = lotControlledIds.length
     ? await prisma.lot.findMany({ where: { itemId: { in: lotControlledIds } } })
     : [];
-  const onHandByLot = await getOnHandByLots(
-    prisma,
-    lots.map((lot) => lot.id),
-  );
+  const lotIds = lots.map((lot) => lot.id);
+  const [onHandByLot, reservedByLot] = await Promise.all([
+    getOnHandByLots(prisma, lotIds),
+    getReservedByLots(prisma, lotIds),
+  ]);
 
   const availableByItem = new Map<string, Prisma.Decimal>();
   for (const lot of lots) {
     if (!isLotAvailableForUse(lot)) continue;
     const lotOnHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
+    const lotReserved = reservedByLot.get(lot.id) ?? new Prisma.Decimal(0);
+    const lotAvailable = Prisma.Decimal.max(lotOnHand.minus(lotReserved), 0);
     const current = availableByItem.get(lot.itemId) ?? new Prisma.Decimal(0);
-    availableByItem.set(lot.itemId, current.plus(lotOnHand));
+    availableByItem.set(lot.itemId, current.plus(lotAvailable));
   }
 
   const result = new Map<string, Prisma.Decimal>();
   for (const item of items) {
-    const onHand = onHandByItem.get(item.id) ?? new Prisma.Decimal(0);
-    result.set(
-      item.id,
-      item.controlsLot ? (availableByItem.get(item.id) ?? new Prisma.Decimal(0)) : onHand,
-    );
+    if (item.controlsLot) {
+      result.set(item.id, availableByItem.get(item.id) ?? new Prisma.Decimal(0));
+    } else {
+      const onHand = onHandByItem.get(item.id) ?? new Prisma.Decimal(0);
+      const reserved = reservedByItem.get(item.id) ?? new Prisma.Decimal(0);
+      result.set(item.id, Prisma.Decimal.max(onHand.minus(reserved), 0));
+    }
   }
   return result;
 }

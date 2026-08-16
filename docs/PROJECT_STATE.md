@@ -22,6 +22,7 @@ FAST MVP.
 **Delivery 10 — FEFO (sugestão e alocação de lotes): concluído.**
 **Delivery 11 — Formulações + Versionamento (+ hardening de Item): concluído.**
 **Delivery 12 — Ordem de Produção + Cálculo de Necessidade de Materiais: concluído.**
+**Delivery 13 — Material Reservation + Release da Ordem de Produção: concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -29,13 +30,13 @@ oficial de identidade. Para telas CRUD simples (list + create/edit) o
 padrão é `FullWorkspaceModal` — aplicado em Itens, Fornecedores, Clientes,
 Produtos. Para **documentos transacionais** o padrão é **página própria
 dentro do workspace** (não modal) — aplicado em Ordem de Compra,
-Recebimento, Formulação (editor de versão) e agora Ordem de Produção. Rota
+Recebimento, Formulação (editor de versão) e Ordem de Produção. Rota
 de impressão (etiqueta de lote) é um terceiro padrão: página fora do
 `AppShell`, sem topbar/sidebar. Ver `docs/UI_BRAND.md`.
 
-7 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
+6 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
 Usuários; Bloco B completo; Bloco C: Formulações + Versionamento + OP +
-Requirement Calculation implementados, falta Reservation, QR Picking,
+Requirement Calculation + Reservation implementados, falta QR Picking,
 Actual Consumption, Partial Production, Finished Product).
 
 ## Stack instalada
@@ -57,24 +58,26 @@ Actual Consumption, Partial Production, Finished Product).
 apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  vira overlay em mobile), Cadastros >
                  Itens/Fornecedores/Clientes/Produtos, Compras > Ordens de
-                 Compra/Recebimentos, Estoque > Visão Geral/Lotes (scan/QR/
-                 etiqueta)/Movimentações/Inventário Físico, Produção >
-                 Formulações (histórico de versões + editor DRAFT) / Ordens
-                 de Produção (lista + documento DRAFT/PLANNED/CANCELLED)
+                 Compra/Recebimentos, Estoque > Visão Geral (Reservado real)/
+                 Lotes (scan/QR/etiqueta)/Movimentações/Inventário Físico,
+                 Produção > Formulações (histórico de versões + editor
+                 DRAFT) / Ordens de Produção (lista + documento
+                 DRAFT/PLANNED/RELEASED/CANCELLED, seção Materiais
+                 Reservados)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders,
                  /receipts, /lots (+ /lots/lookup), /inventory,
                  /inventory-movements, /inventory-adjustments, /stock-counts,
-                 /inventory/:itemId/allocation-suggestion (FEFO/FIFO),
-                 /formulations, /products/:id/formulations,
+                 /inventory/:itemId/allocation-suggestion (FEFO/FIFO, ciente
+                 de Reserved), /formulations, /products/:id/formulations,
                  /formulation-versions, /production-orders (+ /plan,
-                 /cancel)
+                 /release, /cancel)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder,
-                 Receipt, Lot [qrPayload, onHand/reserved/available],
+                 Receipt, Lot [qrPayload, onHand/reserved/available real],
                  InventoryMovement, AllocationSuggestion,
                  FormulationVersion/Component, ProductionOrder/Requirement,
-                 CNPJ, UFs)
+                 MaterialReservation/Line, CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -1196,6 +1199,163 @@ Formulações/Estoque/FEFO/Ordens de Compra. Console limpo (único erro é o
 
 ---
 
+# Delivery 13 — Material Reservation + Release da Ordem de Produção
+
+PLANNED → RELEASED: valida disponibilidade real, aloca FEFO/FIFO e
+reserva. `Reserved` deixa de ser `"0"` fixo em todo o sistema (OP,
+Estoque, Lotes, FEFO) e passa a ser real. Fecha o ciclo até o ponto
+imediatamente anterior ao Picking. Validada só em desktop web (Desktop
+Web First).
+
+## Modelagem — MaterialReservation / MaterialReservationLine
+
+- `MaterialReservation`: `productionOrderId` (`@unique` — no máximo uma
+  reserva operacional por OP, nascida só pela regra de domínio do
+  RELEASE), `status` (`ACTIVE`/`RELEASED`; nunca deletada — histórico),
+  auditoria de criação/liberação (`releasedAt/By/Reason`).
+- `MaterialReservationLine`: `reservationId`, `productionOrderRequirementId`,
+  `itemId`, `lotId?` (null quando o item não controla lote — nunca lote
+  fictício), `quantity`. Base do futuro Picking (`OP → Requirement →
+  Lote reservado → Quantidade`).
+- Migration `20260822090000_material_reservations`: dois enums/tabelas +
+  `releasedAt`/`releasedBy` em `ProductionOrder`. FKs para
+  Item/Lot/ProductionOrder/Requirement em `RESTRICT` (mesma filosofia de
+  "RESTRICT + ordem de limpeza correta em teste" das entregas anteriores);
+  só `ReservationLine → Reservation` é `CASCADE`.
+
+## Reserved passa a ser real em todo o sistema
+
+`getReservedByItems`/`getReservedByLots` (novo em `inventory-ledger.ts`)
+somam `MaterialReservationLine` de reservas `ACTIVE` — nunca `RELEASED`.
+`getAvailableByItems` foi reescrito: `Available = On Hand - Reserved`
+(nunca negativo), por lote elegível (`AVAILABLE`, não vencido) somado por
+item. `allocation.service.ts#getAllocationSuggestion` passou a receber
+`prisma`/`tx` como primeiro parâmetro (permite rodar dentro da transação
+do RELEASE) e usa a mesma disponibilidade líquida — FEFO/FIFO nunca
+sugere mais do que sobra depois de outras reservas `ACTIVE`. Estoque
+(Visão Geral, detalhe por item/lote), Lotes e Requirements de OP
+consomem exatamente as mesmas funções — nenhum cálculo paralelo.
+
+## Algoritmo de RELEASE (transação única)
+
+`production-orders.service.ts#releaseProductionOrder`: 1. trava a OP
+(`FOR UPDATE`), valida `PLANNED`; 2. carrega Requirements; 3. trava todos
+os `Item`s envolvidos, ordem determinística (id ascendente, evita
+deadlock); 4. recalcula FEFO/FIFO por Requirement contra o estoque atual
+(nunca a sugestão antiga da UI), coletando todas as faltas antes de
+decidir; 5. se qualquer Requirement não for 100% atendido por estoque
+`Available` real, `ROLLBACK` completo — nenhuma reserva parcial; 6. senão,
+cria `MaterialReservation` + `MaterialReservationLine`s (uma por lote
+alocado, ou uma por item sem lote) e OP → `RELEASED` com
+`releasedAt/releasedBy`. On Order nunca satisfaz a exigência.
+
+## Falso shortage pós-RELEASE — bug real encontrado e corrigido
+
+Ao exibir os Requirements de uma OP já `RELEASED`, a própria reserva da
+OP entrava na conta de `Reserved` global e "competia" contra si mesma —
+uma OP que acabara de reservar 100% do que precisava aparecia com "Falta"
+> 0. Corrigido em `attachRequirementAvailability`: para uma OP com
+reserva `ACTIVE` própria, o `Available` exibido em cada linha soma de
+volta o que a própria OP já reservou daquele item antes de calcular
+shortage — nunca conta a reserva da OP contra ela mesma. Não afeta
+Estoque/Lotes/FEFO (que continuam mostrando disponibilidade líquida real
+para qualquer outra consulta) nem DRAFT/PLANNED (que ainda não têm
+reserva própria).
+
+## Concorrência
+
+Duas OPs disputando o mesmo estoque: cada RELEASE trava (`FOR UPDATE`)
+todos os Items de seus próprios Requirements antes de calcular
+disponibilidade — a segunda transação bloqueia até a primeira commitar, e
+então recalcula com os dados já atualizados. Testado com duas OPs de
+80kg contra 100kg disponíveis via `Promise.all`: exatamente uma libera,
+`Reserved` nunca passa de 80 (nunca 160).
+
+## Cancelamento de OP RELEASED
+
+`cancelProductionOrder` evoluído: `RELEASED → CANCELLED` (motivo
+obrigatório) agora também move a `MaterialReservation` para `RELEASED`
+(liberada) na mesma transação — `Reserved` volta a considerar só reservas
+`ACTIVE`, então a disponibilidade retorna automaticamente, sem nenhum
+`InventoryMovement` (fisicamente nada mudou). Histórico preservado: a
+reserva nunca é deletada, só marcada.
+
+## Hardening de ajustes/inventário contra Reserved
+
+`createInventoryAdjustment` (`ADJUSTMENT_OUT`/`LOSS`): o limite deixou de
+ser `On Hand` cru e passou a ser `Available` (`On Hand - Reserved` no
+escopo do lote ou do item) — nunca mais pode consumir estoque comprometido
+por uma reserva `ACTIVE`. `createStockCount`: contagem cujo resultado
+ficaria abaixo do `Reserved` atual é rejeitada explicitamente
+(`CountBelowReservedError`, mensagem orientando revisar as reservas) —
+nunca resolve automaticamente cancelando reservas. `blockLot`: lote com
+`Reserved` `ACTIVE` > 0 não pode ser bloqueado nesta fase (reutiliza
+`InvalidLotTransitionError` com mensagem específica) — nunca cancela a
+OP/reserva automaticamente para permitir o bloqueio.
+
+## Backend
+
+`POST /production-orders/:id/release` (nova operação de domínio
+explícita). `POST /production-orders/:id/cancel` evoluído para tratar
+`RELEASED`. Sem `POST /reservations` genérico — reserva nasce só pela
+regra de RELEASE da OP; leitura vem embutida em `GET
+/production-orders/:id` (`reservation` no DTO).
+
+## Frontend
+
+OP `PLANNED`: botão "Liberar OP" (some quando `PLANNED`, some se
+`shortageItemCount > 0`, mostrando "Não é possível liberar: falta
+material." — backend sempre revalida, frontend nunca é a única barreira).
+`ConfirmDialog` (tone accent) com o texto exato do handoff. OP
+`RELEASED`: nova seção "Materiais Reservados" (Item/Lote/Validade/
+Quantidade reservada/Localização — `—` para item sem lote), subtítulo
+muda quando a reserva foi liberada (OP cancelada). Cancelamento agora
+também cobre `RELEASED` (mesmo diálogo de motivo obrigatório, aviso extra
+de que os materiais serão liberados). Listagem: coluna Materiais mostra
+"Reservado" para `RELEASED`/`IN_PRODUCTION`/`COMPLETED`. `InventoryItemDetailPage`
+ganhou a coluna "Reservado" na tabela de saldo por lote (só faltava a
+coluna — o dado já existia no contrato).
+
+## Testes
+
+16 novos testes de API: 11 em `production-orders-release.test.ts`
+(RELEASE com estoque suficiente — status/auditoria/Reservation
+ACTIVE/Reserved-Available-OnHand corretos/zero InventoryMovement; DRAFT
+não libera; RELEASED não libera de novo; shortage bloqueia sem reserva
+parcial; On Order não permite release; multi-componente cobre todos os
+Requirements; FEFO determina lotes com múltiplos lotes por Requirement;
+FEFO recalculado no RELEASE considerando reserva de outra OP; item sem
+lote gera linha com `lotId` null; concorrência real de duas OPs
+disputando o mesmo estoque; cancelamento de RELEASED libera reserva sem
+InventoryMovement) + 5 em `inventory.test.ts` (ADJUSTMENT_OUT/LOSS
+travados pelo Reserved, Stock Count abaixo do Reserved rejeitado, Stock
+Count igual ao Reserved funciona, lote com reserva ACTIVE não bloqueia).
+Total da API: 210 testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (210 API + 7 web) — ok. Validado
+visualmente via Playwright **só desktop**: OP PLANNED com estoque
+suficiente, diálogo de liberação (texto exato do handoff), OP RELEASED
+com Necessidade de Materiais mostrando Falta 0 corretamente (após corrigir
+o bug do falso shortage) e nova seção Materiais Reservados com os lotes
+FEFO reais, Visão Geral do Estoque e detalhe do item refletindo
+Reservado/Disponível reais (item e por lote), segunda OP vendo
+disponibilidade reduzida e sendo bloqueada por shortage (botão desabilitado
++ mensagem), listagem com "Reservado"/"Falta em N materiais", cancelamento
+de OP RELEASED devolvendo disponibilidade. Regressão em
+Formulações/OP/Estoque/Lotes/FEFO/Ordens de Compra. Console limpo (único
+evento é o 404 pré-existente de `favicon.ico`).
+
+## Pendente (não bloqueante)
+
+- Nenhuma pendência real dentro do escopo. Picking, QR Picking, Consumo
+  real, `PRODUCTION_CONSUMPTION`, substituição manual de lote, produção
+  parcial e Produto Acabado ficam para os próximos módulos, por decisão
+  explícita do handoff — não avançar para Picking/Consumo agora.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -1219,7 +1379,7 @@ Formulações/Estoque/FEFO/Ordens de Compra. Console limpo (único erro é o
 14. Versioning ✓
 15. OP ✓
 16. Requirement Calculation ✓
-17. Reservation
+17. Reservation ✓
 18. QR Picking
 19. Actual Consumption
 20. Partial Production / Completion
@@ -1253,6 +1413,17 @@ Formulações/Estoque/FEFO/Ordens de Compra. Console limpo (único erro é o
 - Reservation does not reduce On Hand.
 - Actual consumption reduces On Hand.
 - Unused reservation is released.
+- Confirmed at implementation (Delivery 13): only `PLANNED → RELEASED`
+  reserves; RELEASE requires 100% Available coverage of every Requirement
+  (On Order never counts) or the whole transaction rolls back — no
+  partial reservation. Reserved/Available are real everywhere (OP,
+  Inventory, Lots, FEFO) from this point on, never a second calculation.
+  Cancelling a `RELEASED` OP moves its reservation to historical
+  `RELEASED` status (never deleted) in the same transaction, restoring
+  Available automatically, with zero `InventoryMovement`. Manual
+  adjustments/loss/Stock Count can never eat into reserved stock, and a
+  lot with an active reservation can't be blocked — see
+  `docs/PRODUCT_RULES.md` §14/§17/§19-21 for full detail.
 - Formula ACTIVE versions remain historical/immutable.
 - OP keeps exact formula version.
 - Insufficient Available stock blocks OP release by default.
@@ -1393,19 +1564,20 @@ Formulações/Estoque/FEFO/Ordens de Compra. Console limpo (único erro é o
 # Next recommended implementation
 
 Resta do Bloco A: **Usuários**. Bloco B está completo. Bloco C:
-Formulações + Versionamento + OP + Requirement Calculation completos,
-próximo é **Material Reservation** (PLANNED→RELEASED, bloqueio por
-estoque insuficiente) — a definir por próximo handoff de Product
+Formulações + Versionamento + OP + Requirement Calculation + Reservation
+completos, próximo é **Picking / QR Picking** (confirmação física dos
+lotes já reservados em `MaterialReservationLine`, seguida de Consumo
+real/`PRODUCTION_CONSUMPTION`) — a definir por próximo handoff de Product
 Ownership. Reutilizar: `FullWorkspaceModal` + `components.css` para
 cadastros simples; padrão de página própria (ver Ordem de
 Compra/Recebimento/editor de Formulação/OP) para novos documentos
-transacionais; `LotScanner`/`QrCode` para os próximos fluxos scan-first
-(Picking/Consumo); `apps/api/src/lib/inventory-ledger.ts` para qualquer
-cálculo futuro de saldo (Reservation substituirá o `reserved: "0"` fixo
-em `ProductionOrderRequirementDTO` quando existir, mesmo contrato);
-`allocation.service.ts#getAllocationSuggestion` será reutilizado pela
-futura Reserva de OP para criar alocações reais a partir das mesmas
-sugestões hoje só recomendadas.
+transacionais; `LotScanner`/`QrCode` para os fluxos scan-first de
+Picking; `apps/api/src/lib/inventory-ledger.ts`
+(`getReservedByItems/Lots`, `getAvailableByItems`) e
+`allocation.service.ts#getAllocationSuggestion` (já aceita `tx` como
+parâmetro) para qualquer cálculo futuro de saldo/alocação —
+`MaterialReservationLine` já modela exatamente `OP → Requirement → Lote
+reservado → Quantidade` que o Picking precisa confirmar fisicamente.
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

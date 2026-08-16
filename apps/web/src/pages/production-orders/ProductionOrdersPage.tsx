@@ -32,6 +32,9 @@ function formatDate(value: string): string {
 
 function materialsLabel(order: ProductionOrderDTO): string {
   if (order.status === "CANCELLED") return "—";
+  if (order.status === "RELEASED" || order.status === "IN_PRODUCTION" || order.status === "COMPLETED") {
+    return "Reservado";
+  }
   return order.materialsStatus === "MATERIALS_AVAILABLE"
     ? "Disponível"
     : `Falta em ${order.shortageItemCount} ${order.shortageItemCount === 1 ? "material" : "materiais"}`;
@@ -39,6 +42,9 @@ function materialsLabel(order: ProductionOrderDTO): string {
 
 function materialsBadgeClass(order: ProductionOrderDTO): string {
   if (order.status === "CANCELLED") return "badge badge--neutral";
+  if (order.status === "RELEASED" || order.status === "IN_PRODUCTION" || order.status === "COMPLETED") {
+    return "badge badge--active";
+  }
   return order.materialsStatus === "MATERIALS_AVAILABLE" ? "badge badge--active" : "badge badge--warn";
 }
 

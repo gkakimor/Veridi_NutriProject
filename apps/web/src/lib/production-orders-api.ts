@@ -64,6 +64,11 @@ export async function planProductionOrder(id: string): Promise<ProductionOrderDT
   return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
 }
 
+export async function releaseProductionOrder(id: string): Promise<ProductionOrderDTO> {
+  const response = await fetch(`${API_URL}/production-orders/${id}/release`, { method: "POST" });
+  return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}
+
 export async function cancelProductionOrder(
   id: string,
   input: CancelProductionOrderInput,

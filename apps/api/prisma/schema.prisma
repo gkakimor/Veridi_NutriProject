@@ -79,6 +79,13 @@ enum ProductionOrderOrigin {
   STOCK_PRODUCTION
 }
 
+/// ACTIVE conta em Reserved; RELEASED (a reserva foi liberada — ex.:
+/// cancelamento de OP RELEASED) nao conta mais. Nunca deletado — historico.
+enum MaterialReservationStatus {
+  ACTIVE
+  RELEASED
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -137,6 +144,7 @@ model Item {
   formulationVersionsAsOutput FormulationVersion[]
   productionOrderRequirements ProductionOrderRequirement[]
   productionOrdersAsFinishedItem ProductionOrder[] @relation("ProductionOrderFinishedItem")
+  materialReservationLines MaterialReservationLine[]
 
   @@index([type])
   @@index([active])
@@ -525,6 +533,7 @@ model Lot {
   createdBy String?
 
   inventoryMovements InventoryMovement[]
+  materialReservationLines MaterialReservationLine[]
 
   @@index([itemId])
   @@index([supplierId])
@@ -628,6 +637,11 @@ model ProductionOrder {
   plannedAt DateTime?
   plannedBy String?
 
+  /// Preenchido em PLANNED -> RELEASED. Reservation e a alocacao oficial
+  /// criada nesse momento — ver MaterialReservation.
+  releasedAt DateTime?
+  releasedBy String?
+
   cancelledAt  DateTime?
   cancelledBy  String?
   cancelReason String?
@@ -637,6 +651,10 @@ model ProductionOrder {
   updatedAt DateTime @updatedAt
 
   requirements ProductionOrderRequirement[]
+
+  /// No maximo uma reserva operacional por OP, criada no RELEASE. Nunca
+  /// recriada mesmo se a OP RELEASED for cancelada (fica historica).
+  reservation MaterialReservation?
 
   @@index([status])
   @@index([productId])
@@ -675,6 +693,65 @@ model ProductionOrderRequirement {
 
   createdAt DateTime @default(now())
 
+  reservationLines MaterialReservationLine[]
+
   @@unique([productionOrderId, itemId])
   @@map("production_order_requirements")
+}
+
+/// Reserva de materiais criada no RELEASE da OP — a partir daqui Reserved
+/// deixa de ser 0 fixo e passa a ser a soma real das linhas ACTIVE. Nunca
+/// altera On Hand, nunca cria InventoryMovement. Nunca deletada — historico
+/// (ACTIVE conta em Reserved; RELEASED nao conta mais).
+model MaterialReservation {
+  id String @id @default(uuid())
+
+  /// No maximo uma por OP (garantido no banco) — reserva nasce so pela
+  /// regra de dominio do RELEASE, nunca por endpoint generico.
+  productionOrderId String          @unique
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id])
+
+  status MaterialReservationStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  /// Preenchidos quando a reserva e liberada (ex.: cancelamento da OP
+  /// RELEASED) — nunca por desreserva manual, nao implementada nesta fase.
+  releasedAt    DateTime?
+  releasedBy    String?
+  releaseReason String?
+
+  lines MaterialReservationLine[]
+
+  @@index([status])
+  @@map("material_reservations")
+}
+
+/// Alocacao oficial por item/lote de uma reserva — base do futuro Picking.
+/// Item sem controle de lote: lotId null, quantidade no nivel do Item.
+model MaterialReservationLine {
+  id String @id @default(uuid())
+
+  reservationId String
+  reservation   MaterialReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  productionOrderRequirementId String
+  productionOrderRequirement   ProductionOrderRequirement @relation(fields: [productionOrderRequirementId], references: [id])
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  /// Null quando o item nao controla lote.
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  quantity Decimal @db.Decimal(18, 6)
+
+  createdAt DateTime @default(now())
+
+  @@index([itemId])
+  @@index([lotId])
+  @@index([reservationId])
+  @@map("material_reservation_lines")
 }

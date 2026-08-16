@@ -17,10 +17,13 @@ import {
   getOnHandByItems,
   getOnHandByLots,
   getOnOrderByItems,
+  getReservedByItems,
+  getReservedByLots,
   isLotAvailableForUse,
   isLotExpired,
 } from "../../lib/inventory-ledger.js";
 import {
+  CountBelowReservedError,
   InsufficientStockError,
   ItemNotFoundError,
   LotItemMismatchError,
@@ -91,16 +94,18 @@ async function buildItemSummaries(
   items: Item[],
 ): Promise<InventoryItemSummaryDTO[]> {
   const itemIds = items.map((item) => item.id);
-  const [onHandByItem, onOrderByItem, availableByItem] = await Promise.all([
+  const [onHandByItem, onOrderByItem, availableByItem, reservedByItem] = await Promise.all([
     getOnHandByItems(prisma, itemIds),
     getOnOrderByItems(prisma, itemIds),
     getAvailableByItems(prisma, items),
+    getReservedByItems(prisma, itemIds),
   ]);
 
   return items.map((item) => {
     const onHand = onHandByItem.get(item.id) ?? new Prisma.Decimal(0);
     const onOrder = onOrderByItem.get(item.id) ?? new Prisma.Decimal(0);
     const available = availableByItem.get(item.id) ?? new Prisma.Decimal(0);
+    const reserved = reservedByItem.get(item.id) ?? new Prisma.Decimal(0);
 
     return {
       itemId: item.id,
@@ -110,7 +115,7 @@ async function buildItemSummaries(
       unitCode: item.unitCode,
       controlsLot: item.controlsLot,
       onHand: onHand.toString(),
-      reserved: "0",
+      reserved: reserved.toString(),
       available: available.toString(),
       onOrder: onOrder.toString(),
     };
@@ -153,15 +158,18 @@ export async function getInventoryByItemId(itemId: string): Promise<InventoryIte
   let lots: InventoryLotBreakdownDTO[] = [];
   if (item.controlsLot) {
     const itemLots = await prisma.lot.findMany({ where: { itemId } });
-    const onHandByLot = await getOnHandByLots(
-      prisma,
-      itemLots.map((lot) => lot.id),
-    );
+    const lotIds = itemLots.map((lot) => lot.id);
+    const [onHandByLot, reservedByLot] = await Promise.all([
+      getOnHandByLots(prisma, lotIds),
+      getReservedByLots(prisma, lotIds),
+    ]);
 
     lots = itemLots
       .map((lot): InventoryLotBreakdownDTO => {
         const onHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
+        const reserved = reservedByLot.get(lot.id) ?? new Prisma.Decimal(0);
         const eligible = isLotAvailableForUse(lot);
+        const available = eligible ? Prisma.Decimal.max(onHand.minus(reserved), 0) : new Prisma.Decimal(0);
         return {
           lotId: lot.id,
           lotCode: lot.code,
@@ -170,7 +178,8 @@ export async function getInventoryByItemId(itemId: string): Promise<InventoryIte
           location: lot.location,
           status: lot.status,
           onHand: onHand.toString(),
-          available: (eligible ? onHand : new Prisma.Decimal(0)).toString(),
+          reserved: reserved.toString(),
+          available: available.toString(),
         };
       })
       // Apresentacao (validade ascendente, sem validade por ultimo, depois
@@ -277,7 +286,13 @@ export async function createInventoryAdjustment(
 
     if (isOutbound) {
       const onHand = await getOnHand(tx, { itemId: item.id, lotId: input.lotId ?? null });
-      if (quantity.greaterThan(onHand)) throw new InsufficientStockError(item.code);
+      const reserved = lot
+        ? ((await getReservedByLots(tx, [lot.id])).get(lot.id) ?? new Prisma.Decimal(0))
+        : ((await getReservedByItems(tx, [item.id])).get(item.id) ?? new Prisma.Decimal(0));
+      // Available, nao On Hand cru — saida/perda nunca pode consumir
+      // estoque comprometido por uma Reservation ACTIVE.
+      const available = Prisma.Decimal.max(onHand.minus(reserved), 0);
+      if (quantity.greaterThan(available)) throw new InsufficientStockError(item.code);
     }
 
     const movement = await tx.inventoryMovement.create({
@@ -311,6 +326,15 @@ export async function createStockCount(input: StockCountInput): Promise<StockCou
 
     if (difference.isZero()) {
       return { systemQuantity, difference, movementId: null as string | null };
+    }
+
+    if (difference.lessThan(0)) {
+      const reserved = lot
+        ? ((await getReservedByLots(tx, [lot.id])).get(lot.id) ?? new Prisma.Decimal(0))
+        : ((await getReservedByItems(tx, [item.id])).get(item.id) ?? new Prisma.Decimal(0));
+      // Nao resolve automaticamente cancelando reservas — rejeita e deixa o
+      // usuario revisar as reservas antes de ajustar o estoque.
+      if (countedQuantity.lessThan(reserved)) throw new CountBelowReservedError();
     }
 
     if (!input.reason) throw new MissingCountReasonError();

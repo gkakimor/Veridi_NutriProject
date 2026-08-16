@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { getPrisma } from "../../db/prisma.js";
 import { getAllocationSuggestion } from "./allocation.service.js";
 import {
   createInventoryAdjustment,
@@ -9,6 +10,7 @@ import {
   listInventoryMovements,
 } from "./inventory.service.js";
 import {
+  CountBelowReservedError,
   InsufficientStockError,
   ItemNotFoundError,
   LotItemMismatchError,
@@ -55,6 +57,9 @@ function mapDomainError(
   }
   if (error instanceof MissingCountReasonError) {
     return { status: 400, body: { error: "missing_count_reason", message: error.message } };
+  }
+  if (error instanceof CountBelowReservedError) {
+    return { status: 400, body: { error: "count_below_reserved", message: error.message } };
   }
   return null;
 }
@@ -108,7 +113,7 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const suggestion = await getAllocationSuggestion(itemId, parsed.data.quantity);
+      const suggestion = await getAllocationSuggestion(getPrisma(), itemId, parsed.data.quantity);
       return reply.send(suggestion);
     } catch (error) {
       if (error instanceof ItemNotFoundError) {

@@ -88,9 +88,9 @@ export interface InventoryItemSummaryDTO {
   controlsLot: boolean;
   /** Soma algébrica dos InventoryMovements — nunca uma coluna armazenada. */
   onHand: string;
-  /** Sempre "0" nesta entrega — Reservation pertence ao módulo de OP. */
+  /** Soma das MaterialReservationLine de reservas ACTIVE — real a partir do RELEASE de OP. */
   reserved: string;
-  /** `onHand - reserved`, restrito a lotes AVAILABLE/não vencidos quando o item controla lote. */
+  /** `onHand - reserved`, nunca negativo, restrito a lotes AVAILABLE/não vencidos quando o item controla lote. */
   available: string;
   /** Quantidade aberta em OCs ORDERED/PARTIALLY_RECEIVED — nunca uma segunda quantidade persistida. */
   onOrder: string;
@@ -111,7 +111,9 @@ export interface InventoryLotBreakdownDTO {
   location: string | null;
   status: LotStatus;
   onHand: string;
-  /** `onHand` se status AVAILABLE e não vencido; "0" caso contrário — material bloqueado não some do estoque. */
+  /** Soma das MaterialReservationLine ACTIVE deste lote. */
+  reserved: string;
+  /** `onHand - reserved` se status AVAILABLE e não vencido; "0" caso contrário — material bloqueado não some do estoque. */
   available: string;
 }
 

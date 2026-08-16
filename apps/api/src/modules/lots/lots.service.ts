@@ -3,7 +3,12 @@ import type { Item, Lot, PurchaseOrder, Receipt, ReceiptLine, Supplier } from "@
 import type { LotDTO, LotListResponse } from "@veridi/shared";
 import { LOT_QR_PREFIX, normalizeLotLookupCode } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import { getOnHandByLots, isLotAvailableForUse, isLotExpired } from "../../lib/inventory-ledger.js";
+import {
+  getOnHandByLots,
+  getReservedByLots,
+  isLotAvailableForUse,
+  isLotExpired,
+} from "../../lib/inventory-ledger.js";
 import { InvalidLotTransitionError, LotNotFoundError } from "./lots.errors.js";
 import type { ListLotsQuery } from "./lots.schemas.js";
 
@@ -60,24 +65,29 @@ function toLotDTO(lot: LotWithRelations): LotDTOWithoutStock {
 }
 
 /**
- * On Hand/Available do lote, derivados do InventoryMovement ledger — nunca
- * uma coluna em Lot. Reserved e sempre "0" nesta entrega (Reservation
- * pertence ao modulo de OP). Versao em lote evita N+1 em listagens.
+ * On Hand/Reserved/Available do lote, derivados do InventoryMovement
+ * ledger e das MaterialReservationLine ACTIVE — nunca colunas em Lot.
+ * Versao em lote evita N+1 em listagens.
  */
 async function attachStock(lots: LotWithRelations[]): Promise<LotDTO[]> {
-  const onHandByLot = await getOnHandByLots(
-    getPrisma(),
-    lots.map((lot) => lot.id),
-  );
+  const prisma = getPrisma();
+  const lotIds = lots.map((lot) => lot.id);
+  const [onHandByLot, reservedByLot] = await Promise.all([
+    getOnHandByLots(prisma, lotIds),
+    getReservedByLots(prisma, lotIds),
+  ]);
 
   return lots.map((lot) => {
     const dto = toLotDTO(lot);
     const onHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
-    const available = isLotAvailableForUse(lot) ? onHand : new Prisma.Decimal(0);
+    const reserved = reservedByLot.get(lot.id) ?? new Prisma.Decimal(0);
+    const available = isLotAvailableForUse(lot)
+      ? Prisma.Decimal.max(onHand.minus(reserved), 0)
+      : new Prisma.Decimal(0);
     return {
       ...dto,
       onHand: onHand.toString(),
-      reserved: "0",
+      reserved: reserved.toString(),
       available: available.toString(),
     };
   });
@@ -171,6 +181,15 @@ export async function blockLot(id: string, reason: string): Promise<LotDTO> {
   if (lot.status !== "AWAITING_RELEASE" && lot.status !== "AVAILABLE") {
     throw new InvalidLotTransitionError(
       "Somente lotes aguardando liberação ou disponíveis podem ser bloqueados.",
+    );
+  }
+
+  // Uma OP RELEASED pode estar contando com este lote — bloquear agora
+  // corromperia a reserva ativa. Nao cancela a OP/reserva automaticamente.
+  const reserved = (await getReservedByLots(getPrisma(), [id])).get(id) ?? new Prisma.Decimal(0);
+  if (reserved.greaterThan(0)) {
+    throw new InvalidLotTransitionError(
+      "Este lote possui reservas ativas de Ordens de Produção — não pode ser bloqueado nesta fase.",
     );
   }
 

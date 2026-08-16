@@ -19,7 +19,7 @@ export interface LotAllocationDTO {
   supplierLot: string | null;
   expiryDate: string | null;
   location: string | null;
-  /** Decimal como string — On Hand elegível do lote no momento da consulta. */
+  /** Decimal como string — `onHand - reserved` elegível do lote no momento da consulta. */
   availableQuantity: string;
   /** Decimal como string — quanto deste lote a sugestão usa. */
   suggestedQuantity: string;
@@ -36,7 +36,7 @@ export interface AllocationSuggestionDTO {
   unitCode: string;
   strategy: AllocationStrategy;
   requiredQuantity: string;
-  /** Soma do On Hand elegível (AVAILABLE, não vencido, saldo > 0) — nunca inclui On Order. */
+  /** Soma do `onHand - reserved` elegível (AVAILABLE, não vencido, saldo > 0) — nunca inclui On Order. */
   availableQuantity: string;
   allocatedQuantity: string;
   /** `max(0, requiredQuantity - allocatedQuantity)` — falta é resultado operacional válido, não erro. */

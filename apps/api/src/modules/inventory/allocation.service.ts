@@ -1,8 +1,16 @@
 import { Prisma } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import type { AllocationSuggestionDTO, AllocationStrategy, LotAllocationDTO } from "@veridi/shared";
-import { getPrisma } from "../../db/prisma.js";
-import { getOnHand, getOnHandByLots, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
+import {
+  getOnHand,
+  getOnHandByLots,
+  getReservedByItems,
+  getReservedByLots,
+  isLotAvailableForUse,
+} from "../../lib/inventory-ledger.js";
 import { ItemNotFoundError } from "./inventory.errors.js";
+
+type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
 /**
  * `receivedAt` real do lote vem do Receipt (via ReceiptLine), nao de
@@ -27,13 +35,16 @@ function receivedAtOf(lot: LotWithReceivedAt): Date {
  * controla lote. Nunca reserva/baixa estoque/cria InventoryMovement —
  * puro calculo sob demanda, sempre a partir das mesmas regras de
  * disponibilidade do ledger (nunca uma segunda interpretacao de
- * On Hand/Available/elegibilidade de lote).
+ * On Hand/Available/elegibilidade de lote). Disponibilidade considera
+ * Reserved real (`Available = On Hand - Reserved`) — a mesma alocacao
+ * usada para exibicao na UI (fora de transacao) e para o RELEASE de OP
+ * (dentro de transacao, recebendo o `tx` como `prisma`).
  */
 export async function getAllocationSuggestion(
+  prisma: PrismaOrTx,
   itemId: string,
   requiredQuantity: string,
 ): Promise<AllocationSuggestionDTO> {
-  const prisma = getPrisma();
   const item = await prisma.item.findUnique({ where: { id: itemId } });
   if (!item) throw new ItemNotFoundError(itemId);
 
@@ -41,7 +52,8 @@ export async function getAllocationSuggestion(
 
   if (!item.controlsLot) {
     const onHand = await getOnHand(prisma, { itemId: item.id });
-    const available = onHand.greaterThan(0) ? onHand : new Prisma.Decimal(0);
+    const reserved = (await getReservedByItems(prisma, [item.id])).get(item.id) ?? new Prisma.Decimal(0);
+    const available = Prisma.Decimal.max(onHand.minus(reserved), 0);
     const allocated = Prisma.Decimal.min(required, available);
     const shortage = Prisma.Decimal.max(required.minus(allocated), 0);
 
@@ -65,14 +77,20 @@ export async function getAllocationSuggestion(
     where: { itemId: item.id },
     include: lotWithReceivedAtInclude,
   });
-  const onHandByLot = await getOnHandByLots(
-    prisma,
-    lots.map((lot) => lot.id),
-  );
+  const lotIds = lots.map((lot) => lot.id);
+  const [onHandByLot, reservedByLot] = await Promise.all([
+    getOnHandByLots(prisma, lotIds),
+    getReservedByLots(prisma, lotIds),
+  ]);
 
   const eligible = lots
-    .map((lot) => ({ lot, onHand: onHandByLot.get(lot.id) ?? new Prisma.Decimal(0) }))
-    .filter(({ lot, onHand }) => isLotAvailableForUse(lot) && onHand.greaterThan(0));
+    .map((lot) => {
+      const onHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
+      const reserved = reservedByLot.get(lot.id) ?? new Prisma.Decimal(0);
+      const available = Prisma.Decimal.max(onHand.minus(reserved), 0);
+      return { lot, onHand, reserved, available };
+    })
+    .filter(({ lot, available }) => isLotAvailableForUse(lot) && available.greaterThan(0));
 
   // Determinismo: mesma comparacao para FEFO (validade) e FIFO
   // (recebimento) — desempate sempre por recebimento mais antigo e depois
@@ -89,14 +107,14 @@ export async function getAllocationSuggestion(
     return a.lot.code.localeCompare(b.lot.code);
   });
 
-  const availableQuantity = eligible.reduce((sum, entry) => sum.plus(entry.onHand), new Prisma.Decimal(0));
+  const availableQuantity = eligible.reduce((sum, entry) => sum.plus(entry.available), new Prisma.Decimal(0));
 
   let remaining = required;
   const allocations: LotAllocationDTO[] = [];
   for (const entry of eligible) {
     if (remaining.lessThanOrEqualTo(0)) break;
 
-    const suggested = Prisma.Decimal.min(remaining, entry.onHand);
+    const suggested = Prisma.Decimal.min(remaining, entry.available);
     if (suggested.lessThanOrEqualTo(0)) continue;
 
     allocations.push({
@@ -105,7 +123,7 @@ export async function getAllocationSuggestion(
       supplierLot: entry.lot.supplierLot,
       expiryDate: entry.lot.expiryDate ? entry.lot.expiryDate.toISOString() : null,
       location: entry.lot.location,
-      availableQuantity: entry.onHand.toString(),
+      availableQuantity: entry.available.toString(),
       suggestedQuantity: suggested.toString(),
     });
     remaining = remaining.minus(suggested);

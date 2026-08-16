@@ -73,16 +73,51 @@ export interface ProductionOrderRequirementDTO {
   position: number;
   /** Calculado ao vivo a partir do Inventory Ledger — nunca persistido no Requirement. */
   onHand: string;
-  /** Sempre "0" nesta entrega — Reservation ainda não existe. */
+  /** Soma das MaterialReservationLine de reservas ACTIVE para este item — real a partir do RELEASE. */
   reserved: string;
+  /** `onHand - reserved`, nunca negativo. */
   available: string;
   /** Informativo — nunca reduz `shortage`. */
   onOrder: string;
   /** `max(requiredQuantity - available, 0)`. */
   shortage: string;
   availabilityStatus: MaterialAvailabilityStatus;
-  /** Sugestão FEFO/FIFO — nunca reserva, nunca persiste. */
+  /** Sugestão FEFO/FIFO — nunca reserva, nunca persiste (a alocação oficial só existe em `ProductionOrderDTO.reservation` após RELEASED). */
   suggestedAllocations: SuggestedLotAllocationDTO[];
+}
+
+/** ACTIVE conta em Reserved; RELEASED (reserva liberada, ex.: cancelamento de OP RELEASED) não conta mais. */
+export type MaterialReservationStatus = "ACTIVE" | "RELEASED";
+
+export interface MaterialReservationLineDTO {
+  id: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  /** `null` quando o item não controla lote — quantidade reservada no nível do Item. */
+  lotId: string | null;
+  lotCode: string | null;
+  expiryDate: string | null;
+  location: string | null;
+  quantity: string;
+  unitCode: string;
+}
+
+/**
+ * Alocação oficial criada no RELEASE da OP — base do futuro Picking.
+ * Nunca altera On Hand, nunca cria InventoryMovement. Histórica: nunca
+ * deletada mesmo quando `status` vira `RELEASED`.
+ */
+export interface MaterialReservationDTO {
+  id: string;
+  productionOrderId: string;
+  status: MaterialReservationStatus;
+  createdAt: string;
+  createdBy: string | null;
+  releasedAt: string | null;
+  releasedBy: string | null;
+  releaseReason: string | null;
+  lines: MaterialReservationLineDTO[];
 }
 
 export interface ProductionOrderDTO {
@@ -114,6 +149,10 @@ export interface ProductionOrderDTO {
   requirements: ProductionOrderRequirementDTO[];
   plannedAt: string | null;
   plannedBy: string | null;
+  releasedAt: string | null;
+  releasedBy: string | null;
+  /** `null` até o RELEASE. Depois disso, a alocação oficial de materiais da OP. */
+  reservation: MaterialReservationDTO | null;
   cancelledAt: string | null;
   cancelledBy: string | null;
   cancelReason: string | null;

@@ -61,3 +61,11 @@ export class PlanValidationError extends Error {
     this.name = "PlanValidationError";
   }
 }
+
+/** Reúne todas as falhas do gate de RELEASE (shortage por Requirement) numa mensagem só. */
+export class ReleaseValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReleaseValidationError";
+  }
+}

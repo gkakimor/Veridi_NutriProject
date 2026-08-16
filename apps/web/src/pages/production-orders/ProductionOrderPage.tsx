@@ -7,12 +7,14 @@ import {
   createProductionOrder,
   getProductionOrder,
   planProductionOrder,
+  releaseProductionOrder,
   updateProductionOrder,
 } from "../../lib/production-orders-api";
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 interface FormulationVersionOption {
   id: string;
@@ -67,11 +69,13 @@ export function ProductionOrderPage() {
 
   const [saving, setSaving] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [releasing, setReleasing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
 
   const syncFormFromServer = useCallback((order: ProductionOrderDTO) => {
     setProductId(order.productId);
@@ -122,8 +126,10 @@ export function ProductionOrderPage() {
 
   const status: ProductionOrderStatus = productionOrder?.status ?? "DRAFT";
   const isDraft = isNew || status === "DRAFT";
-  const isCancellable = !isNew && (status === "DRAFT" || status === "PLANNED");
+  const isCancellable = !isNew && (status === "DRAFT" || status === "PLANNED" || status === "RELEASED");
   const isPlannable = !isNew && status === "DRAFT";
+  const isReleasable = !isNew && status === "PLANNED";
+  const hasShortage = (productionOrder?.shortageItemCount ?? 0) > 0;
 
   const selectedProduct = activeProducts.find((product) => product.id === productId) ?? null;
   const hasNoActiveFormulation =
@@ -214,6 +220,22 @@ export function ProductionOrderPage() {
       setError(err instanceof Error ? err.message : "Falha ao planejar ordem de produção");
     } finally {
       setPlanning(false);
+    }
+  }
+
+  async function handleRelease() {
+    if (!id) return;
+    setReleaseDialogOpen(false);
+    setReleasing(true);
+    setError(null);
+    try {
+      const updated = await releaseProductionOrder(id);
+      setProductionOrder(updated);
+      syncFormFromServer(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao liberar ordem de produção");
+    } finally {
+      setReleasing(false);
     }
   }
 
@@ -453,6 +475,48 @@ export function ProductionOrderPage() {
           </FormSection>
         )}
 
+        {productionOrder?.reservation && (
+          <FormSection
+            title="Materiais Reservados"
+            subtitle={
+              productionOrder.reservation.status === "ACTIVE"
+                ? "Alocação oficial desta OP — base do futuro Picking. O estoque físico ainda não foi baixado."
+                : "Reserva liberada (OP cancelada) — mantida como histórico, não conta mais em Reservado."
+            }
+          >
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Lote</th>
+                    <th>Validade</th>
+                    <th>Quantidade reservada</th>
+                    <th>Localização</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productionOrder.reservation.lines.map((line) => (
+                    <tr key={line.id}>
+                      <td>
+                        <span className="code">{line.itemCode}</span> {line.itemName}
+                      </td>
+                      <td>{line.lotCode ?? "—"}</td>
+                      <td>
+                        {line.expiryDate ? new Date(line.expiryDate).toLocaleDateString("pt-BR") : "—"}
+                      </td>
+                      <td>
+                        {line.quantity} {line.unitCode}
+                      </td>
+                      <td>{line.location ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </FormSection>
+        )}
+
         <FormSection title="Observações">
           <div className="field">
             <label htmlFor="op-notes">Notas internas</label>
@@ -471,7 +535,7 @@ export function ProductionOrderPage() {
           <button
             type="button"
             className="btn btn--danger"
-            disabled={saving || planning}
+            disabled={saving || planning || releasing}
             onClick={() => setCancelDialogOpen(true)}
           >
             Cancelar OP
@@ -483,7 +547,7 @@ export function ProductionOrderPage() {
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={saving || planning}
+              disabled={saving || planning || releasing}
               onClick={handleSaveDraft}
             >
               {saving ? "Salvando…" : "Salvar rascunho"}
@@ -493,19 +557,42 @@ export function ProductionOrderPage() {
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={saving || planning}
+              disabled={saving || planning || releasing}
               onClick={handleSaveNotesOnly}
             >
               {saving ? "Salvando…" : "Salvar"}
             </button>
           )}
           {isPlannable && (
-            <button type="button" className="btn btn--accent" disabled={saving || planning} onClick={handlePlan}>
+            <button type="button" className="btn btn--accent" disabled={saving || planning || releasing} onClick={handlePlan}>
               {planning ? "Planejando…" : "Planejar OP"}
             </button>
           )}
+          {isReleasable && (
+            <div className="line-actions">
+              {hasShortage && <p className="field__hint">Não é possível liberar: falta material.</p>}
+              <button
+                type="button"
+                className="btn btn--accent"
+                disabled={saving || planning || releasing || hasShortage}
+                onClick={() => setReleaseDialogOpen(true)}
+              >
+                {releasing ? "Liberando…" : "Liberar OP"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={releaseDialogOpen}
+        title={`Liberar ${productionOrder?.code} para produção?`}
+        message="Os materiais disponíveis serão reservados para esta OP usando a ordem FEFO/FIFO. O estoque físico ainda não será baixado."
+        confirmLabel="Liberar OP"
+        confirmTone="accent"
+        onCancel={() => setReleaseDialogOpen(false)}
+        onConfirm={handleRelease}
+      />
 
       {cancelDialogOpen && (
         <>
@@ -519,6 +606,7 @@ export function ProductionOrderPage() {
             <h2 id="cancel-op-title">Cancelar ordem de produção?</h2>
             <p>
               {productionOrder?.code} permanecerá no histórico. Esta ação não pode ser desfeita.
+              {status === "RELEASED" && " Os materiais reservados serão liberados automaticamente."}
             </p>
             <div className="field">
               <label htmlFor="op-cancel-reason">
