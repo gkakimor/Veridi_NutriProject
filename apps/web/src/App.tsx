@@ -20,6 +20,9 @@ import { InventoryOverviewPage } from "./pages/inventory/InventoryOverviewPage";
 import { InventoryItemDetailPage } from "./pages/inventory/InventoryItemDetailPage";
 import { InventoryMovementsPage } from "./pages/inventory/InventoryMovementsPage";
 import { StockCountPage } from "./pages/inventory/StockCountPage";
+import { FormulationsPage } from "./pages/formulations/FormulationsPage";
+import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPage";
+import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
 
 export function App() {
   return (
@@ -47,6 +50,12 @@ export function App() {
           <Route path="/estoque/lotes/escanear" element={<LotScanPage />} />
           <Route path="/estoque/lotes/:id" element={<LotDetailPage />} />
           <Route path="/estoque/:itemId" element={<InventoryItemDetailPage />} />
+          <Route path="/producao/formulacoes" element={<FormulationsPage />} />
+          <Route path="/producao/formulacoes/:productId" element={<FormulationDetailPage />} />
+          <Route
+            path="/producao/formulacoes/:productId/versoes/:versionId"
+            element={<FormulationVersionPage />}
+          />
 
           {navItems
             .filter((item) => !item.implemented)

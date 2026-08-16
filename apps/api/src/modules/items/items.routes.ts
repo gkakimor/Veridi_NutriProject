@@ -8,7 +8,7 @@ import {
   listItems,
   updateItem,
 } from "./items.service.js";
-import { ItemNotFoundError, UnitNotFoundError } from "./items.errors.js";
+import { ItemNotFoundError, StructuralFieldLockedError, UnitNotFoundError } from "./items.errors.js";
 import {
   createItemSchema,
   listItemsQuerySchema,
@@ -89,6 +89,11 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
         return reply
           .status(400)
           .send({ error: "invalid_unit", message: error.message });
+      }
+      if (error instanceof StructuralFieldLockedError) {
+        return reply
+          .status(400)
+          .send({ error: "structural_field_locked", message: error.message });
       }
       throw error;
     }

@@ -77,7 +77,7 @@ export const navigation: NavGroup[] = [
       {
         label: "Formulações",
         path: "/producao/formulacoes",
-        implemented: false,
+        implemented: true,
       },
       {
         label: "Ordens de Produção",

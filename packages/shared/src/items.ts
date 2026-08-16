@@ -55,6 +55,13 @@ export interface ItemDTO {
   requiresQualityRelease: boolean;
   externalBarcode: string | null;
   active: boolean;
+  /**
+   * `true` quando o item já tem referência em PurchaseOrderLine, ReceiptLine,
+   * Lot ou InventoryMovement — nesse caso `type`/`unitCode`/`controlsLot`/
+   * `controlsExpiry` ficam bloqueados para nunca corromper o significado de
+   * histórico já registrado.
+   */
+  operationallyUsed: boolean;
   createdAt: string;
   updatedAt: string;
 }

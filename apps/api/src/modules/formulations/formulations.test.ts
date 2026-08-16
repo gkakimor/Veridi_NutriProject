@@ -1,0 +1,699 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildApp } from "../../app.js";
+import { getPrisma } from "../../db/prisma.js";
+
+const fixtureProductIds: string[] = [];
+const fixtureItemIds: string[] = [];
+
+type App = ReturnType<typeof buildApp>;
+
+beforeAll(async () => {
+  const prisma = getPrisma();
+  await prisma.unitOfMeasure.upsert({
+    where: { code: "kg" },
+    update: {},
+    create: { code: "kg", label: "Quilograma", dimension: "MASS", toBaseFactor: 1000 },
+  });
+  await prisma.unitOfMeasure.upsert({
+    where: { code: "g" },
+    update: {},
+    create: { code: "g", label: "Grama", dimension: "MASS", toBaseFactor: 1 },
+  });
+  await prisma.unitOfMeasure.upsert({
+    where: { code: "mg" },
+    update: {},
+    create: { code: "mg", label: "Miligrama", dimension: "MASS", toBaseFactor: 0.001 },
+  });
+  await prisma.unitOfMeasure.upsert({
+    where: { code: "un" },
+    update: {},
+    create: { code: "un", label: "Unidade", dimension: "COUNT", toBaseFactor: 1 },
+  });
+});
+
+afterAll(async () => {
+  const prisma = getPrisma();
+  if (fixtureProductIds.length > 0) {
+    await prisma.formulationVersion.deleteMany({ where: { productId: { in: fixtureProductIds } } });
+    await prisma.product.deleteMany({ where: { id: { in: fixtureProductIds } } });
+  }
+  if (fixtureItemIds.length > 0) {
+    await prisma.item.deleteMany({ where: { id: { in: fixtureItemIds } } });
+  }
+});
+
+function marker(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+async function createItem(
+  type: "RAW_MATERIAL" | "PACKAGING" | "FINISHED_PRODUCT",
+  overrides: { unitCode?: string; active?: boolean } = {},
+) {
+  const prisma = getPrisma();
+  const m = marker();
+  const prefix = type === "RAW_MATERIAL" ? "MP" : type === "PACKAGING" ? "ME" : "PA";
+  const item = await prisma.item.create({
+    data: {
+      type,
+      code: `${prefix}-FORM-${m}`,
+      name: `Item Formulação Teste ${m}`,
+      unitCode: overrides.unitCode ?? "kg",
+      controlsLot: true,
+      controlsExpiry: false,
+      requiresQualityRelease: false,
+      active: overrides.active ?? true,
+    },
+  });
+  fixtureItemIds.push(item.id);
+  return item;
+}
+
+async function createProduct(app: App, finishedProductItemId?: string) {
+  const response = await app.inject({
+    method: "POST",
+    url: "/products",
+    payload: {
+      name: `Produto Formulação Teste ${marker()}`,
+      ...(finishedProductItemId ? { finishedProductItemId } : {}),
+    },
+  });
+  fixtureProductIds.push(response.json().id);
+  return response.json();
+}
+
+describe("Formulations — versionamento", () => {
+  it("cria V1 DRAFT quando o produto ainda não tem formulação", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.versionNumber).toBe(1);
+    expect(body.versionLabel).toBe("V1");
+    expect(body.status).toBe("DRAFT");
+    expect(body.outputItemId).toBe(finishedItem.id);
+    expect(body.outputUnitCode).toBe(finishedItem.unitCode);
+    expect(body.components).toEqual([]);
+
+    await app.close();
+  });
+
+  it("produto sem Finished Product Item não pode criar formulação", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const product = await createProduct(app);
+    const response = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("missing_finished_item");
+
+    await app.close();
+  });
+
+  it("concorrência: criação simultânea de V1 só permite uma", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+
+    const attempt = () =>
+      app.inject({
+        method: "POST",
+        url: `/products/${product.id}/formulation-versions`,
+        payload: {},
+      });
+
+    const [first, second] = await Promise.all([attempt(), attempt()]);
+    const statuses = [first.statusCode, second.statusCode].sort();
+    expect(statuses).toEqual([201, 400]);
+
+    await app.close();
+  });
+
+  it("adiciona componente RAW_MATERIAL e PACKAGING, calcula equivalente de estoque (g → kg)", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const versionId = created.json().id;
+
+    const rawMaterial = await createItem("RAW_MATERIAL", { unitCode: "kg" });
+    const packaging = await createItem("PACKAGING", { unitCode: "un" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${versionId}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [
+          { itemId: rawMaterial.id, quantity: "500", unitCode: "g" },
+          { itemId: packaging.id, quantity: "1000", unitCode: "un" },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.components).toHaveLength(2);
+
+    const rawComponent = body.components.find((c: { itemId: string }) => c.itemId === rawMaterial.id);
+    expect(rawComponent.quantity).toBe("500");
+    expect(rawComponent.unitCode).toBe("g");
+    expect(rawComponent.stockEquivalentQuantity).toBe("0.5");
+    expect(rawComponent.stockUnitCode).toBe("kg");
+
+    const packagingComponent = body.components.find(
+      (c: { itemId: string }) => c.itemId === packaging.id,
+    );
+    expect(packagingComponent.stockEquivalentQuantity).toBe("1000");
+
+    await app.close();
+  });
+
+  it("conversão mg → kg correta (precisão decimal)", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const versionId = created.json().id;
+
+    const rawMaterial = await createItem("RAW_MATERIAL", { unitCode: "kg" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${versionId}`,
+      payload: { components: [{ itemId: rawMaterial.id, quantity: "250000", unitCode: "mg" }] },
+    });
+
+    expect(response.json().components[0].stockEquivalentQuantity).toBe("0.25");
+
+    await app.close();
+  });
+
+  it("rejeita FINISHED_PRODUCT como componente", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const otherFinished = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: { components: [{ itemId: otherFinished.id, quantity: "1", unitCode: "kg" }] },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("invalid_component_type");
+
+    await app.close();
+  });
+
+  it("rejeita componente duplicado na mesma versão", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL");
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: {
+        components: [
+          { itemId: rawMaterial.id, quantity: "1", unitCode: "kg" },
+          { itemId: rawMaterial.id, quantity: "2", unitCode: "kg" },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("duplicate_component");
+
+    await app.close();
+  });
+
+  it("rejeita quantidade <= 0", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL");
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: { components: [{ itemId: rawMaterial.id, quantity: "0", unitCode: "kg" }] },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("validation_error");
+
+    await app.close();
+  });
+
+  it("rejeita basisQuantity <= 0", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: { basisQuantity: "0" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("validation_error");
+
+    await app.close();
+  });
+
+  it("rejeita dimensão de unidade incompatível", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL", { unitCode: "kg" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: { components: [{ itemId: rawMaterial.id, quantity: "1", unitCode: "un" }] },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("incompatible_component_unit");
+
+    await app.close();
+  });
+
+  it("DRAFT pode ser salva incompleta (sem componentes)", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: { notes: "Ainda montando" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().components).toEqual([]);
+
+    await app.close();
+  });
+
+  it("ativação bloqueia versão sem componentes", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${created.json().id}/activate`,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("activation_blocked");
+
+    await app.close();
+  });
+
+  it("fluxo completo: DRAFT → ACTIVE, versão fica imutável", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: rawMaterial.id, quantity: "1", unitCode: "kg" }],
+      },
+    });
+
+    const activated = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${created.json().id}/activate`,
+    });
+    expect(activated.statusCode).toBe(200);
+    expect(activated.json().status).toBe("ACTIVE");
+    expect(activated.json().activatedAt).not.toBeNull();
+    expect(activated.json().activatedBy).not.toBeNull();
+
+    const editAttempt = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: { basisQuantity: "2000" },
+    });
+    expect(editAttempt.statusCode).toBe(400);
+    expect(editAttempt.json().error).toBe("version_not_draft");
+
+    const reactivateAttempt = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${created.json().id}/activate`,
+    });
+    expect(reactivateAttempt.statusCode).toBe(400);
+    expect(reactivateAttempt.json().error).toBe("version_not_draft");
+
+    await app.close();
+  });
+
+  it("nova versão copia dados da ACTIVE; V1 continua ativa enquanto V2 é DRAFT", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const v1 = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v1.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: rawMaterial.id, quantity: "5", unitCode: "kg" }],
+      },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v1.json().id}/activate` });
+
+    const v2 = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v1.json().id}/new-version`,
+    });
+    expect(v2.statusCode).toBe(201);
+    expect(v2.json().versionNumber).toBe(2);
+    expect(v2.json().status).toBe("DRAFT");
+    expect(v2.json().basisQuantity).toBe("1000");
+    expect(v2.json().components).toHaveLength(1);
+    expect(v2.json().components[0].itemId).toBe(rawMaterial.id);
+
+    const v1Fetched = await app.inject({ method: "GET", url: `/formulation-versions/${v1.json().id}` });
+    expect(v1Fetched.json().status).toBe("ACTIVE");
+
+    await app.close();
+  });
+
+  it("ativar V2 torna V1 INACTIVE atomicamente; produto tem no máximo uma ACTIVE", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const v1 = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v1.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: rawMaterial.id, quantity: "5", unitCode: "kg" }],
+      },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v1.json().id}/activate` });
+
+    const v2 = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v1.json().id}/new-version`,
+    });
+    const v2Activated = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v2.json().id}/activate`,
+    });
+    expect(v2Activated.statusCode).toBe(200);
+    expect(v2Activated.json().status).toBe("ACTIVE");
+
+    const v1Fetched = await app.inject({ method: "GET", url: `/formulation-versions/${v1.json().id}` });
+    expect(v1Fetched.json().status).toBe("INACTIVE");
+    expect(v1Fetched.json().inactivatedAt).not.toBeNull();
+    // conteudo historico da V1 nao muda
+    expect(v1Fetched.json().basisQuantity).toBe("1000");
+    expect(v1Fetched.json().components).toHaveLength(1);
+
+    const list = await app.inject({ method: "GET", url: `/products/${product.id}/formulations` });
+    const activeCount = list
+      .json()
+      .versions.filter((v: { status: string }) => v.status === "ACTIVE").length;
+    expect(activeCount).toBe(1);
+
+    await app.close();
+  });
+
+  it("item inativo histórico continua visível na versão", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const v1 = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v1.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: rawMaterial.id, quantity: "5", unitCode: "kg" }],
+      },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v1.json().id}/activate` });
+
+    await getPrisma().item.update({ where: { id: rawMaterial.id }, data: { active: false } });
+
+    const fetched = await app.inject({ method: "GET", url: `/formulation-versions/${v1.json().id}` });
+    expect(fetched.statusCode).toBe(200);
+    expect(fetched.json().components[0].itemActive).toBe(false);
+    expect(fetched.json().components[0].itemId).toBe(rawMaterial.id);
+
+    await app.close();
+  });
+
+  it("componente inativo bloqueia ativação de nova versão copiada", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const v1 = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v1.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: rawMaterial.id, quantity: "5", unitCode: "kg" }],
+      },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v1.json().id}/activate` });
+
+    const v2 = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v1.json().id}/new-version`,
+    });
+
+    await getPrisma().item.update({ where: { id: rawMaterial.id }, data: { active: false } });
+
+    const activateAttempt = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v2.json().id}/activate`,
+    });
+    expect(activateAttempt.statusCode).toBe(400);
+    expect(activateAttempt.json().error).toBe("activation_blocked");
+    expect(activateAttempt.json().message).toContain(rawMaterial.code);
+
+    await app.close();
+  });
+
+  it("Finished Product Item inativo bloqueia ativação", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: rawMaterial.id, quantity: "5", unitCode: "kg" }],
+      },
+    });
+
+    await getPrisma().item.update({ where: { id: finishedItem.id }, data: { active: false } });
+
+    const activateAttempt = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${created.json().id}/activate`,
+    });
+    expect(activateAttempt.statusCode).toBe(400);
+    expect(activateAttempt.json().error).toBe("activation_blocked");
+
+    await app.close();
+  });
+
+  it("adicionar item inativo como componente NOVO é rejeitado", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const inactiveRaw = await createItem("RAW_MATERIAL", { active: false });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: { components: [{ itemId: inactiveRaw.id, quantity: "1", unitCode: "kg" }] },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe("inactive_component");
+
+    await app.close();
+  });
+
+  it("componente já existente na versão (herdado) continua editável mesmo se o item foi inativado depois", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const created = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: { components: [{ itemId: rawMaterial.id, quantity: "1", unitCode: "kg" }] },
+    });
+
+    await getPrisma().item.update({ where: { id: rawMaterial.id }, data: { active: false } });
+
+    // Reenvia a MESMA linha (ja existente) com quantidade alterada — deve
+    // continuar permitido, mesmo com o item agora inativo.
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${created.json().id}`,
+      payload: {
+        basisQuantity: "1",
+        components: [{ itemId: rawMaterial.id, quantity: "3", unitCode: "kg" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().components[0].quantity).toBe("3");
+
+    await app.close();
+  });
+});

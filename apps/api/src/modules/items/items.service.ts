@@ -3,7 +3,7 @@ import type { ItemDTO, ItemListResponse } from "@veridi/shared";
 import { ITEM_TYPE_DEFAULTS } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextItemCode } from "./item-codes.js";
-import { ItemNotFoundError, UnitNotFoundError } from "./items.errors.js";
+import { ItemNotFoundError, StructuralFieldLockedError, UnitNotFoundError } from "./items.errors.js";
 import type {
   CreateItemInput,
   ListItemsQuery,
@@ -12,7 +12,7 @@ import type {
 
 type ItemWithUnit = Item & { unit: UnitOfMeasure };
 
-function toItemDTO(item: ItemWithUnit): ItemDTO {
+function toItemDTO(item: ItemWithUnit, operationallyUsed: boolean): ItemDTO {
   return {
     id: item.id,
     code: item.code,
@@ -29,6 +29,7 @@ function toItemDTO(item: ItemWithUnit): ItemDTO {
     requiresQualityRelease: item.requiresQualityRelease,
     externalBarcode: item.externalBarcode,
     active: item.active,
+    operationallyUsed,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
@@ -45,6 +46,40 @@ async function requireItem(id: string): Promise<Item> {
   const item = await getPrisma().item.findUnique({ where: { id } });
   if (!item) throw new ItemNotFoundError(id);
   return item;
+}
+
+/**
+ * Um item "operacionalmente utilizado" já tem referência relevante em pelo
+ * menos uma dessas tabelas — a partir daí, alterar tipo/unidade/controles
+ * de lote/validade corromperia o significado de números já registrados.
+ * Verificação mais simples e confiável para o modelo atual: existência
+ * direta, não contagem.
+ */
+async function isItemOperationallyUsed(itemId: string): Promise<boolean> {
+  const prisma = getPrisma();
+  const [poLine, receiptLine, lot, movement] = await Promise.all([
+    prisma.purchaseOrderLine.findFirst({ where: { itemId }, select: { id: true } }),
+    prisma.receiptLine.findFirst({ where: { itemId }, select: { id: true } }),
+    prisma.lot.findFirst({ where: { itemId }, select: { id: true } }),
+    prisma.inventoryMovement.findFirst({ where: { itemId }, select: { id: true } }),
+  ]);
+  return poLine !== null || receiptLine !== null || lot !== null || movement !== null;
+}
+
+/** Versão em lote — evita N+1 ao listar itens. */
+async function getOperationallyUsedItemIds(itemIds: string[]): Promise<Set<string>> {
+  if (itemIds.length === 0) return new Set();
+  const prisma = getPrisma();
+  const where = { itemId: { in: itemIds } };
+  const [poLines, receiptLines, lots, movements] = await Promise.all([
+    prisma.purchaseOrderLine.findMany({ where, select: { itemId: true }, distinct: ["itemId"] }),
+    prisma.receiptLine.findMany({ where, select: { itemId: true }, distinct: ["itemId"] }),
+    prisma.lot.findMany({ where, select: { itemId: true }, distinct: ["itemId"] }),
+    prisma.inventoryMovement.findMany({ where, select: { itemId: true }, distinct: ["itemId"] }),
+  ]);
+  const used = new Set<string>();
+  for (const row of [...poLines, ...receiptLines, ...lots, ...movements]) used.add(row.itemId);
+  return used;
 }
 
 export async function listItems(
@@ -74,8 +109,10 @@ export async function listItems(
     prisma.item.count({ where }),
   ]);
 
+  const usedIds = await getOperationallyUsedItemIds(items.map((item) => item.id));
+
   return {
-    items: items.map(toItemDTO),
+    items: items.map((item) => toItemDTO(item, usedIds.has(item.id))),
     page: query.page,
     pageSize: query.pageSize,
     total,
@@ -87,7 +124,8 @@ export async function getItemById(id: string): Promise<ItemDTO | null> {
     where: { id },
     include: { unit: true },
   });
-  return item ? toItemDTO(item) : null;
+  if (!item) return null;
+  return toItemDTO(item, await isItemOperationallyUsed(id));
 }
 
 export async function createItem(input: CreateItemInput): Promise<ItemDTO> {
@@ -112,15 +150,35 @@ export async function createItem(input: CreateItemInput): Promise<ItemDTO> {
     include: { unit: true },
   });
 
-  return toItemDTO(item);
+  // Item recem-criado nunca pode ja estar operacionalmente utilizado.
+  return toItemDTO(item, false);
 }
 
 export async function updateItem(
   id: string,
   input: UpdateItemInput,
 ): Promise<ItemDTO> {
-  await requireItem(id);
+  const current = await requireItem(id);
   if (input.unitCode) await assertUnitExists(input.unitCode);
+
+  const structuralChange =
+    (input.type !== undefined && input.type !== current.type) ||
+    (input.unitCode !== undefined && input.unitCode !== current.unitCode) ||
+    (input.controlsLot !== undefined && input.controlsLot !== current.controlsLot) ||
+    (input.controlsExpiry !== undefined && input.controlsExpiry !== current.controlsExpiry);
+
+  if (structuralChange && (await isItemOperationallyUsed(id))) {
+    if (input.type !== undefined && input.type !== current.type) {
+      throw new StructuralFieldLockedError("type");
+    }
+    if (input.unitCode !== undefined && input.unitCode !== current.unitCode) {
+      throw new StructuralFieldLockedError("unitCode");
+    }
+    if (input.controlsLot !== undefined && input.controlsLot !== current.controlsLot) {
+      throw new StructuralFieldLockedError("controlsLot");
+    }
+    throw new StructuralFieldLockedError("controlsExpiry");
+  }
 
   const item = await getPrisma().item.update({
     where: { id },
@@ -144,7 +202,9 @@ export async function updateItem(
     include: { unit: true },
   });
 
-  return toItemDTO(item);
+  // requiresQualityRelease so afeta novos lotes recebidos — nunca reescreve
+  // Lot.status de lotes ja existentes (nenhum UPDATE em Lot acontece aqui).
+  return toItemDTO(item, await isItemOperationallyUsed(id));
 }
 
 export async function activateItem(id: string): Promise<ItemDTO> {
@@ -154,7 +214,7 @@ export async function activateItem(id: string): Promise<ItemDTO> {
     data: { active: true },
     include: { unit: true },
   });
-  return toItemDTO(item);
+  return toItemDTO(item, await isItemOperationallyUsed(id));
 }
 
 export async function deactivateItem(id: string): Promise<ItemDTO> {
@@ -164,5 +224,5 @@ export async function deactivateItem(id: string): Promise<ItemDTO> {
     data: { active: false },
     include: { unit: true },
   });
-  return toItemDTO(item);
+  return toItemDTO(item, await isItemOperationallyUsed(id));
 }

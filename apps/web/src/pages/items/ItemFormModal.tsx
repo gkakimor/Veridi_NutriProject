@@ -59,6 +59,10 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const structuralLocked = mode === "edit" && (item?.operationallyUsed ?? false);
+  const structuralLockHint =
+    "Este campo não pode ser alterado porque o item já possui histórico operacional.";
+
   function handleTypeChange(nextType: ItemType) {
     setForm((prev) => {
       if (mode === "edit") return { ...prev, type: nextType };
@@ -191,6 +195,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
               <select
                 id="item-type"
                 required
+                disabled={structuralLocked}
                 value={form.type}
                 onChange={(event) => handleTypeChange(event.target.value as ItemType)}
               >
@@ -206,6 +211,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
               {fieldErrors["type"] && (
                 <p className="field__error">{fieldErrors["type"]}</p>
               )}
+              {structuralLocked && <p className="field__hint">{structuralLockHint}</p>}
             </div>
 
             <div className="field">
@@ -215,6 +221,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
               <select
                 id="item-unit"
                 required
+                disabled={structuralLocked}
                 value={form.unitCode}
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, unitCode: event.target.value }))
@@ -232,6 +239,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
               {fieldErrors["unitCode"] && (
                 <p className="field__error">{fieldErrors["unitCode"]}</p>
               )}
+              {structuralLocked && <p className="field__hint">{structuralLockHint}</p>}
             </div>
 
             <div className="field field--full">
@@ -256,12 +264,17 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
 
         <FormSection
           title="Controles de rastreabilidade"
-          subtitle="Definem como o estoque deste item será acompanhado."
+          subtitle={
+            structuralLocked
+              ? `Lote e validade: ${structuralLockHint.charAt(0).toLowerCase()}${structuralLockHint.slice(1)}`
+              : "Definem como o estoque deste item será acompanhado."
+          }
         >
           <div className="toggle-row">
             <ToggleCard
               id="item-controls-lot"
               checked={form.controlsLot}
+              disabled={structuralLocked}
               onChange={(checked) =>
                 setForm((prev) => ({ ...prev, controlsLot: checked }))
               }
@@ -271,6 +284,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
             <ToggleCard
               id="item-controls-expiry"
               checked={form.controlsExpiry}
+              disabled={structuralLocked}
               onChange={(checked) =>
                 setForm((prev) => ({ ...prev, controlsExpiry: checked }))
               }

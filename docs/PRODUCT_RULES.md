@@ -74,6 +74,17 @@ whether a lot received for that item starts `AWAITING_RELEASE` or already
 `AVAILABLE`. It is a per-item setting the user can override, never inferred
 permanently from `type` alone.
 
+## Durable rules confirmed at implementation
+
+- Once an item is operationally used (referenced by a Purchase Order line,
+  Receipt line, Lot, or Inventory Movement), its structural fields —
+  `type`, unit of measure, `controlsLot`, `controlsExpiry` — are locked
+  for good. Changing them after real history exists would silently change
+  the meaning of numbers already recorded. `name`, external barcode,
+  active/inactive, and `requiresQualityRelease` remain always editable.
+- `requiresQualityRelease` only affects lots received after the change —
+  it never retroactively rewrites the status of lots that already exist.
+
 ---
 
 # 5. Products
@@ -519,6 +530,29 @@ To change an active formulation:
 4. keep previous version.
 
 Old OPs never change because a new formula is activated.
+
+## Durable rules confirmed at implementation
+
+- A formulation belongs to the Product, never directly to the finished-
+  product Item. A version snapshots its output (item id/code/name/unit)
+  at creation/copy time — it never depends on the Product's *current*
+  finished-item association, so a later re-link on the Product never
+  changes how a historical version reads.
+- Only one `ACTIVE` version per Product at a time, enforced at the
+  database level (not just in application code).
+- `ACTIVE`/`INACTIVE` versions are immutable by construction — no edit
+  endpoint accepts them. The only way to change a formulation is to
+  create a new version from the active one.
+- Components are only `RAW_MATERIAL`/`PACKAGING` — never
+  `FINISHED_PRODUCT`. A component's unit may differ from the item's
+  stock unit as long as the dimension is compatible (UOM), reusing the
+  existing UOM service — never a second conversion system.
+- `basisQuantity` defines the version's production base ("these component
+  quantities yield `basisQuantity` of finished product") — decimal only,
+  never a JS float.
+- A version preserves the exact output/component data it was
+  created/copied with — it stays historically correct even if a
+  component's Item is later inactivated or renamed.
 
 ---
 

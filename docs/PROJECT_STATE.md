@@ -20,20 +20,23 @@ FAST MVP.
 **Delivery 08 — QR Code + Etiqueta de Lote + Scan/Consulta: concluído.**
 **Delivery 09 — Estoque + Movimentações + Inventário Físico: concluído.**
 **Delivery 10 — FEFO (sugestão e alocação de lotes): concluído.**
+**Delivery 11 — Formulações + Versionamento (+ hardening de Item): concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
 oficial de identidade. Para telas CRUD simples (list + create/edit) o
 padrão é `FullWorkspaceModal` — aplicado em Itens, Fornecedores, Clientes,
 Produtos. Para **documentos transacionais** o padrão é **página própria
-dentro do workspace** (não modal) — aplicado em Ordem de Compra e
-Recebimento; será reutilizado em Ordem de Produção. Rota de impressão
-(etiqueta de lote) é um terceiro padrão: página fora do `AppShell`, sem
-topbar/sidebar. Ver `docs/UI_BRAND.md`.
+dentro do workspace** (não modal) — aplicado em Ordem de Compra,
+Recebimento e agora Formulação (editor de versão); será reutilizado em
+Ordem de Produção. Rota de impressão (etiqueta de lote) é um terceiro
+padrão: página fora do `AppShell`, sem topbar/sidebar. Ver `docs/UI_BRAND.md`.
 
-11 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
-Usuários; Bloco B está completo — OC, Recebimento, Lotes, QR/Etiqueta,
-Estoque/Movimentações e FEFO implementados).
+8 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
+Usuários; Bloco B completo; Bloco C: Formulações + Versionamento
+implementados nesta entrega, falta OP, Requirement Calculation,
+Reservation, QR Picking, Actual Consumption, Partial Production, Finished
+Product).
 
 ## Stack instalada
 
@@ -55,16 +58,20 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  vira overlay em mobile), Cadastros >
                  Itens/Fornecedores/Clientes/Produtos, Compras > Ordens de
                  Compra/Recebimentos, Estoque > Visão Geral/Lotes (scan/QR/
-                 etiqueta)/Movimentações/Inventário Físico
+                 etiqueta)/Movimentações/Inventário Físico, Produção >
+                 Formulações (histórico de versões + editor DRAFT)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders,
                  /receipts, /lots (+ /lots/lookup), /inventory,
                  /inventory-movements, /inventory-adjustments, /stock-counts,
-                 /inventory/:itemId/allocation-suggestion (FEFO/FIFO)
-packages/shared contratos compartilhados (Health, Item, UnitOfMeasure,
-                 Supplier, Customer, Product, PurchaseOrder, Receipt, Lot
-                 [qrPayload, onHand/reserved/available], InventoryMovement,
-                 AllocationSuggestion, CNPJ, UFs)
+                 /inventory/:itemId/allocation-suggestion (FEFO/FIFO),
+                 /formulations, /products/:id/formulations,
+                 /formulation-versions
+packages/shared contratos compartilhados (Health, Item [operationallyUsed],
+                 UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder,
+                 Receipt, Lot [qrPayload, onHand/reserved/available],
+                 InventoryMovement, AllocationSuggestion,
+                 FormulationVersion/Component, CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -896,6 +903,139 @@ Inventário Físico/Recebimentos/Ordens de Compra. Console limpo.
 
 ---
 
+# Delivery 11 — Formulações + Versionamento (+ hardening de Item)
+
+Primeiro módulo do Bloco C. Formulação pertence ao `Product`, não ao Item
+de saída diretamente. Validada só em desktop web (Desktop Web First).
+
+## Hardening de Item (pré-requisito)
+
+Um Item "operacionalmente utilizado" (referência em `PurchaseOrderLine`,
+`ReceiptLine`, `Lot` ou `InventoryMovement` — checagem por existência
+direta, batelada nas listagens) trava `type`/`unitCode`/`controlsLot`/
+`controlsExpiry` para nunca corromper o significado de números já
+registrados (ex.: trocar kg→g de um item com histórico deixaria
+quantidades antigas com outro significado). `name`/`externalBarcode`/
+`active`/`requiresQualityRelease` continuam sempre editáveis;
+`requiresQualityRelease` nunca reescreve `Lot.status` de lotes já
+existentes (só afeta lotes futuros). `ItemDTO` ganhou `operationallyUsed`;
+`ItemFormModal` desabilita os campos travados com a explicação exata do
+handoff. Reenviar o mesmo valor não conta como alteração (não bloqueia).
+
+## Modelagem — FormulationVersion / FormulationComponent
+
+- `FormulationVersion`: `productId`, `versionNumber` (sequencial **por
+  Product**, não sequence global), `status`
+  (`DRAFT`/`ACTIVE`/`INACTIVE`), `basisQuantity`, snapshot do output
+  (`outputItemId`/`outputItemCode`/`outputItemName`/`outputUnitCode` —
+  congelado no momento da criação/cópia, nunca depende da associação
+  *atual* do Product), `notes?`, auditoria de criação/ativação/inativação.
+- `FormulationComponent`: `formulationVersionId`, `itemId`, `quantity`,
+  `unitCode` (pode diferir da unidade de estoque do item, mesma
+  dimensão), `notes?`, `position`. `@@unique([formulationVersionId,
+  itemId])` — mesmo item não repete na versão, garantido no banco.
+- Índice único parcial `WHERE status = 'ACTIVE'` em
+  `(productId)` — no máximo uma versão ativa por Product, garantido no
+  banco (mesma técnica do CNPJ opcional), não só na aplicação. Migration
+  `20260820090000_formulations`.
+
+## Versionamento
+
+`versionNumber` gerado dentro de uma transação que trava a linha do
+`Product` (`SELECT … FOR UPDATE`) antes de consultar o maior número
+existente — mesmo padrão de concorrência-segura já usado em Recebimento,
+sem depender de `MAX+1` desprotegido. `POST
+/products/:id/formulation-versions` só cria quando o Product ainda não
+tem nenhuma versão (V1); `POST /formulation-versions/:id/new-version`
+(chamado na versão ACTIVE) cria a próxima DRAFT copiando
+`basisQuantity`/output/componentes/notas — nunca reaproveita a
+associação atual do Product para o output, sempre copia o snapshot da
+versão de origem.
+
+## Imutabilidade e ativação
+
+ACTIVE/INACTIVE nunca aceitam `PATCH` (backend bloqueia, não só a UI —
+`VersionNotDraftError`). Única forma de mudar uma formulação: criar nova
+versão. `POST /formulation-versions/:id/activate` roda numa única
+transação: trava o Product, inativa a ACTIVE anterior do mesmo produto
+(se houver, com `inactivatedAt`/`By`) e ativa a versão alvo
+(`activatedAt`/`By`) — atômico, nunca duas ACTIVE por corrida (lock +
+índice parcial). Gate de ativação (seção 16 do handoff) valida: Product
+ativo, `finishedProductItemId` presente e ativo/tipo `FINISHED_PRODUCT`,
+`basisQuantity > 0`, ao menos um componente, e cada componente ativo/tipo
+válido/quantidade válida/unidade compatível — reúne todas as falhas numa
+mensagem só, citando os itens problemáticos.
+
+## Componentes: ativo só importa para linha NOVA
+
+Adicionar um componente novo a uma DRAFT exige item ativo
+(`RAW_MATERIAL`/`PACKAGING`, nunca `FINISHED_PRODUCT`). Uma linha já
+existente antes da edição atual (herdada de cópia de uma ACTIVE, por
+exemplo) continua editável mesmo que o item tenha sido inativado depois
+— `updateFormulationVersion` compara o conjunto de `itemId`s antes/depois
+do PATCH para decidir quando exigir item ativo.
+
+## UOM sem segundo sistema de conversão
+
+`apps/api/src/modules/items/uom.ts` ganhou `convertUomDecimal`/
+`isUomCompatible` — mesma fundação de `convertUom` (delivery 02), agora
+em `Prisma.Decimal` para nunca introduzir erro de ponto flutuante no
+"equivalente de estoque" exibido (ex.: 500 g de um item em kg → `0.5`
+exato). `stockEquivalentQuantity` é só exibição — a fórmula sempre
+preserva `quantity`/`unitCode` originais como fonte de verdade.
+
+## Frontend
+
+Produção → **Formulações** (`/producao/formulacoes`, tabela Produto/
+Cliente/Item acabado/Versão ativa/Situação/Última atualização — uma linha
+por Product, nunca por componente) → **detalhe do Product**
+(`/producao/formulacoes/:productId`, item acabado + formulação ativa +
+histórico de versões + "Criar formulação"/"Criar nova versão") →
+**editor de versão** (`/producao/formulacoes/:productId/versoes/:versionId`,
+página própria — mesmo padrão de documento transacional de Ordem de
+Compra/Recebimento). DRAFT: tudo editável, tabela de componentes com
+select de item (só ativos, filtra já usados na versão), select de unidade
+(só dimensão compatível com o item), equivalente de estoque calculado ao
+salvar. ACTIVE/INACTIVE: mesma tela em somente-leitura, sem "Salvar",
+única ação é "Criar nova versão". Ativação usa `ConfirmDialog` (tone
+accent) com o texto exato do handoff.
+
+## Testes
+
+28 novos testes de API: 8 em `items.test.ts` (hardening estrutural — sem
+histórico altera livremente, com histórico trava
+type/unitCode/controlsLot/controlsExpiry, `name`/`externalBarcode`/
+`requiresQualityRelease` continuam livres, reenviar mesmo valor não
+bloqueia, `requiresQualityRelease` não muda lote histórico, listagem
+também expõe `operationallyUsed`) + 20 em `formulations.test.ts` (cria V1
+DRAFT, concorrência na criação de V1, RAW_MATERIAL/PACKAGING aceitos,
+FINISHED_PRODUCT/duplicado/quantidade₀/dimensão incompatível rejeitados,
+conversão g→kg e mg→kg exatas, DRAFT incompleta, ativação valida
+integridade, fluxo DRAFT→ACTIVE→imutável, nova versão copia ACTIVE
+mantendo V1 ativa até a ativação de V2, ativar V2 inativa V1 atomicamente
+e preserva conteúdo histórico, item inativo histórico continua visível,
+componente inativo bloqueia ativação, Finished Product Item inativo
+bloqueia ativação, linha herdada com item inativo continua editável).
+Total da API: 173 testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (173 API + 7 web) — ok. Validado
+visualmente via Playwright **só desktop**: lista de Formulações (produto
+com versão ativa e produto "Sem formulação", como no exemplo do
+handoff), detalhe do produto com histórico V1/V2, V1 ACTIVE read-only,
+V2 DRAFT editável com adição de componente e conversão g→kg em tempo
+real, diálogo de ativação, V1 virando "Inativa" após ativar V2 com
+conteúdo preservado, campos estruturais de Item travados na UI com a
+mensagem exata do handoff. Regressão em Itens/Produtos/Estoque/Lotes/
+Ordens de Compra/Recebimentos. Console limpo.
+
+## Pendente (não bloqueante)
+
+- Nenhuma pendência real.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -1025,6 +1165,20 @@ Inventário Físico/Recebimentos/Ordens de Compra. Console limpo.
   necessidade física (não entra na alocação). O usuário poderá no futuro
   substituir o lote sugerido por outro, desde que `AVAILABLE` e com
   saldo — FEFO é default, não uma regra que torna outro lote impossível.
+- Um Item "operacionalmente utilizado" (referência em PO line/Receipt
+  line/Lot/InventoryMovement) trava `type`/`unitCode`/`controlsLot`/
+  `controlsExpiry` para sempre — nunca corromper o significado de
+  histórico já registrado. `requiresQualityRelease` continua sempre
+  editável e nunca retroage sobre lotes já existentes.
+- Formulação pertence ao `Product`, nunca ao Item de saída diretamente;
+  a versão preserva um snapshot do output (item/unidade/código/nome) no
+  momento da criação/cópia — nunca depende da associação atual do
+  Product. Só uma versão `ACTIVE` por Product (garantido também no
+  banco). `ACTIVE`/`INACTIVE` são imutáveis por construção — mudar a
+  formulação sempre cria uma nova versão, nunca edita uma existente.
+  Componentes são só `RAW_MATERIAL`/`PACKAGING`; a unidade do componente
+  pode diferir da unidade de estoque do item, desde que mesma dimensão
+  (UOM). `basisQuantity` define a base de cálculo da versão.
 
 ---
 
@@ -1066,16 +1220,19 @@ Inventário Físico/Recebimentos/Ordens de Compra. Console limpo.
 
 # Next recommended implementation
 
-Resta do Bloco A: **Usuários**. Bloco B está completo. Próximo é o Bloco C
-— começa por **Formulações** — a definir por próximo handoff de Product
-Ownership. Reutilizar: `FullWorkspaceModal` + `components.css` para
-cadastros simples; padrão de página própria (ver Ordem de Compra/
-Recebimento) para novos documentos transacionais (ex.: Ordem de
-Produção); `LotScanner`/`QrCode` para os próximos fluxos scan-first
-(Picking/Consumo); `apps/api/src/lib/inventory-ledger.ts` para qualquer
-cálculo futuro de saldo (Reservation substituirá o `reserved: "0"` fixo
-quando existir); `allocation.service.ts#getAllocationSuggestion` será
-reutilizado pela futura Reserva de OP para criar alocações reais.
+Resta do Bloco A: **Usuários**. Bloco B está completo. Bloco C:
+Formulações + Versionamento completos, próximo é **Ordem de Produção** —
+a definir por próximo handoff de Product Ownership. Reutilizar:
+`FullWorkspaceModal` + `components.css` para cadastros simples; padrão de
+página própria (ver Ordem de Compra/Recebimento/editor de Formulação)
+para novos documentos transacionais (a própria OP); `LotScanner`/`QrCode`
+para os próximos fluxos scan-first (Picking/Consumo); `apps/api/src/lib/
+inventory-ledger.ts` para qualquer cálculo futuro de saldo (Reservation
+substituirá o `reserved: "0"` fixo quando existir);
+`allocation.service.ts#getAllocationSuggestion` será reutilizado pela
+futura Reserva de OP para criar alocações reais; `FormulationVersion`
+ACTIVE é a base do Requirement Calculation da OP (versão exata que a OP
+deve preservar, por decisão já registrada em `docs/PRODUCT_RULES.md`).
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

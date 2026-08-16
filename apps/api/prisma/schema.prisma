@@ -53,6 +53,12 @@ enum InventoryMovementSourceType {
   MANUAL_LOSS
 }
 
+enum FormulationVersionStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -107,6 +113,8 @@ model Item {
   receiptLines        ReceiptLine[]
   lots                Lot[]
   inventoryMovements  InventoryMovement[]
+  formulationComponents FormulationComponent[]
+  formulationVersionsAsOutput FormulationVersion[]
 
   @@index([type])
   @@index([active])
@@ -213,9 +221,92 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  formulationVersions FormulationVersion[]
+
   @@index([active])
   @@index([customerId])
   @@map("products")
+}
+
+/// Versao de formulacao — pertence ao Product, nao ao Item de saida
+/// diretamente. DRAFT e editavel; ACTIVE/INACTIVE sao imutaveis por
+/// construcao (nenhuma rota de edicao aceita nesses status). No maximo uma
+/// ACTIVE por Product (garantido tambem por indice unico parcial na
+/// migration). Mudar a formulacao sempre cria uma nova versao — nunca
+/// edita uma ACTIVE.
+model FormulationVersion {
+  id String @id @default(uuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  /// Sequencial por Product (V1, V2...) — NAO e uma sequence global.
+  versionNumber Int
+
+  status FormulationVersionStatus @default(DRAFT)
+
+  /// "Estas quantidades de componentes produzem `basisQuantity` do produto
+  /// acabado" — base de calculo, futura fundacao do Requirement Calculation
+  /// da OP (nao implementado ainda).
+  basisQuantity Decimal @db.Decimal(18, 6)
+
+  /// Snapshot do output no momento da criacao/copia da versao — nunca
+  /// depende da associacao ATUAL do Product (que pode mudar depois),
+  /// preservando o significado historico da versao.
+  outputItemId   String
+  outputItem     Item   @relation(fields: [outputItemId], references: [id])
+  outputItemCode String
+  outputItemName String
+  outputUnitCode String
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  activatedAt DateTime?
+  activatedBy String?
+
+  inactivatedAt DateTime?
+  inactivatedBy String?
+
+  components FormulationComponent[]
+
+  /// V1/V2/... e sempre unico dentro do mesmo Product.
+  @@unique([productId, versionNumber])
+  @@index([productId])
+  @@index([status])
+  @@map("formulation_versions")
+}
+
+/// Linha de componente (materia-prima/embalagem) de uma versao de
+/// formulacao. So existe/muda enquanto a versao e DRAFT.
+model FormulationComponent {
+  id String @id @default(uuid())
+
+  formulationVersionId String
+  formulationVersion   FormulationVersion @relation(fields: [formulationVersionId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  quantity Decimal @db.Decimal(18, 6)
+
+  /// Pode diferir da unidade de estoque do Item, desde que mesma dimensao
+  /// (ex.: item em kg, componente em g) — validado via lib/uom existente.
+  unitCode String
+
+  notes String?
+
+  /// Ordem de exibicao estavel — nao depende da ordem de insercao no banco.
+  position Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Mesmo Item nao pode aparecer duas vezes na mesma versao.
+  @@unique([formulationVersionId, itemId])
+  @@map("formulation_components")
 }
 
 /// Ordem de Compra — primeira feature transacional. DRAFT e livremente

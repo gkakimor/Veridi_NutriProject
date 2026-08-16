@@ -29,6 +29,11 @@ export async function listProducts(
   return (await parseJsonOrThrow(response)) as ProductListResponse;
 }
 
+export async function getProduct(id: string): Promise<ProductDTO> {
+  const response = await fetch(`${API_URL}/products/${id}`);
+  return (await parseJsonOrThrow(response)) as ProductDTO;
+}
+
 export async function createProduct(input: CreateProductInput): Promise<ProductDTO> {
   const response = await fetch(`${API_URL}/products`, {
     method: "POST",

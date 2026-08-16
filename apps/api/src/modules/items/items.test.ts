@@ -20,7 +20,11 @@ beforeAll(async () => {
 
 afterEach(async () => {
   if (createdItemIds.length === 0) return;
-  await getPrisma().item.deleteMany({ where: { id: { in: createdItemIds } } });
+  const prisma = getPrisma();
+  // Lot.itemId nao tem CASCADE (RESTRICT) — precisa sair antes do Item.
+  // InventoryMovement cascade tanto de Lot quanto de Item direto.
+  await prisma.lot.deleteMany({ where: { itemId: { in: createdItemIds } } });
+  await prisma.item.deleteMany({ where: { id: { in: createdItemIds } } });
   createdItemIds.length = 0;
 });
 
@@ -299,6 +303,251 @@ describe("Items", () => {
     });
     expect(cleared.statusCode).toBe(200);
     expect(cleared.json().externalBarcode).toBeNull();
+
+    await app.close();
+  });
+});
+
+/** Marca o item como "operacionalmente utilizado" criando um InventoryMovement direto. */
+async function markOperationallyUsed(itemId: string): Promise<void> {
+  await getPrisma().inventoryMovement.create({
+    data: {
+      itemId,
+      type: "RECEIPT_IN",
+      quantity: "10",
+      occurredAt: new Date(),
+      sourceType: "RECEIPT",
+      createdBy: "Teste",
+    },
+  });
+}
+
+describe("Items — hardening estrutural (histórico operacional)", () => {
+  it("item sem histórico pode alterar unidade, tipo e controles livremente", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, {
+      type: "RAW_MATERIAL",
+      name: "Item sem histórico",
+      unitCode: "kg",
+      controlsLot: true,
+      controlsExpiry: true,
+    });
+    const id = created.json().id;
+    expect(created.json().operationallyUsed).toBe(false);
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/items/${id}`,
+      payload: { type: "PACKAGING", unitCode: "un", controlsLot: false, controlsExpiry: false },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().type).toBe("PACKAGING");
+    expect(patched.json().unitCode).toBe("un");
+    expect(patched.json().controlsLot).toBe(false);
+    expect(patched.json().controlsExpiry).toBe(false);
+
+    await app.close();
+  });
+
+  it("item operacionalmente utilizado não pode alterar unidade de medida", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, { name: "Item usado — unidade", unitCode: "kg" });
+    const id = created.json().id;
+    await markOperationallyUsed(id);
+
+    const fetched = await app.inject({ method: "GET", url: `/items/${id}` });
+    expect(fetched.json().operationallyUsed).toBe(true);
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/items/${id}`,
+      payload: { unitCode: "un" },
+    });
+
+    expect(patched.statusCode).toBe(400);
+    expect(patched.json().error).toBe("structural_field_locked");
+
+    await app.close();
+  });
+
+  it("item operacionalmente utilizado não pode alterar type", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, {
+      type: "RAW_MATERIAL",
+      name: "Item usado — tipo",
+    });
+    const id = created.json().id;
+    await markOperationallyUsed(id);
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/items/${id}`,
+      payload: { type: "PACKAGING" },
+    });
+
+    expect(patched.statusCode).toBe(400);
+    expect(patched.json().error).toBe("structural_field_locked");
+
+    await app.close();
+  });
+
+  it("item operacionalmente utilizado não pode alterar controlsLot", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, {
+      name: "Item usado — controlsLot",
+      controlsLot: true,
+    });
+    const id = created.json().id;
+    await markOperationallyUsed(id);
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/items/${id}`,
+      payload: { controlsLot: false },
+    });
+
+    expect(patched.statusCode).toBe(400);
+    expect(patched.json().error).toBe("structural_field_locked");
+
+    await app.close();
+  });
+
+  it("item operacionalmente utilizado não pode alterar controlsExpiry", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, {
+      name: "Item usado — controlsExpiry",
+      controlsExpiry: true,
+    });
+    const id = created.json().id;
+    await markOperationallyUsed(id);
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/items/${id}`,
+      payload: { controlsExpiry: false },
+    });
+
+    expect(patched.statusCode).toBe(400);
+    expect(patched.json().error).toBe("structural_field_locked");
+
+    await app.close();
+  });
+
+  it("item operacionalmente utilizado ainda pode alterar name, externalBarcode e requiresQualityRelease", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, {
+      name: "Item usado — campos livres",
+      requiresQualityRelease: false,
+    });
+    const id = created.json().id;
+    await markOperationallyUsed(id);
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/items/${id}`,
+      payload: {
+        name: "Nome atualizado",
+        externalBarcode: "BC-NOVO",
+        requiresQualityRelease: true,
+      },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().name).toBe("Nome atualizado");
+    expect(patched.json().externalBarcode).toBe("BC-NOVO");
+    expect(patched.json().requiresQualityRelease).toBe(true);
+
+    await app.close();
+  });
+
+  it("reenviar o mesmo valor estrutural não é tratado como alteração (não bloqueia)", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, {
+      type: "RAW_MATERIAL",
+      name: "Item usado — mesmo valor",
+      unitCode: "kg",
+    });
+    const id = created.json().id;
+    await markOperationallyUsed(id);
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/items/${id}`,
+      payload: { type: "RAW_MATERIAL", unitCode: "kg", name: "Item usado — mesmo valor renomeado" },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().name).toBe("Item usado — mesmo valor renomeado");
+
+    await app.close();
+  });
+
+  it("alterar requiresQualityRelease não muda o status de lotes já existentes", async () => {
+    const app = buildApp();
+    await app.ready();
+    const prisma = getPrisma();
+
+    const created = await createTestItem(app, {
+      name: "Item usado — quality release histórico",
+      requiresQualityRelease: true,
+    });
+    const id = created.json().id;
+
+    const supplierMarker = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const supplier = await prisma.supplier.create({
+      data: { code: `FOR-ITEMQR-${supplierMarker}`, legalName: `Fornecedor Teste ${supplierMarker}` },
+    });
+    const lot = await prisma.lot.create({
+      data: {
+        code: `LT-TESTE-${supplierMarker}`,
+        itemId: id,
+        supplierId: supplier.id,
+        initialReceivedQuantity: "10",
+        status: "AWAITING_RELEASE",
+      },
+    });
+
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/items/${id}`,
+      payload: { requiresQualityRelease: false },
+    });
+    expect(patched.statusCode).toBe(200);
+
+    const lotFetched = await app.inject({ method: "GET", url: `/lots/${lot.id}` });
+    expect(lotFetched.json().status).toBe("AWAITING_RELEASE");
+
+    await prisma.lot.deleteMany({ where: { id: lot.id } });
+    await prisma.supplier.deleteMany({ where: { id: supplier.id } });
+    await app.close();
+  });
+
+  it("listagem de itens também reporta operationallyUsed em lote", async () => {
+    const app = buildApp();
+    await app.ready();
+
+    const created = await createTestItem(app, { name: "Item usado — listagem" });
+    const id = created.json().id;
+    await markOperationallyUsed(id);
+
+    const list = await app.inject({ method: "GET", url: `/items?search=${created.json().code}` });
+    const found = list.json().items.find((item: { id: string }) => item.id === id);
+    expect(found.operationallyUsed).toBe(true);
 
     await app.close();
   });
