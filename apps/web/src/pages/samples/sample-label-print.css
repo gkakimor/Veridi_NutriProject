@@ -1,0 +1,128 @@
+/*
+ * Etiqueta de amostra — A6 (105 × 148 mm), impressão via navegador.
+ *
+ * A etiqueta é técnica: identifica a amostra, o teste e o projeto. NUNCA
+ * traz preço, custo ou qualquer valor comercial — a amostra circula entre
+ * laboratório, produção e cliente.
+ */
+
+.sample-label-print {
+  --sample-label-w: 105mm;
+  --sample-label-h: 148mm;
+
+  min-height: 100vh;
+  background: var(--canvas);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+}
+
+.sample-label-print__toolbar {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+.sample-label-print__sheet {
+  background: #ffffff;
+  width: var(--sample-label-w);
+  height: var(--sample-label-h);
+  box-shadow: var(--shadow-1);
+  padding: 6mm;
+  box-sizing: border-box;
+}
+
+.sample-label {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3mm;
+  font-family: var(--font-ui);
+  color: #17251e;
+}
+
+.sample-label__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid #d8ded6;
+  padding-bottom: 2mm;
+}
+
+.sample-label__kind {
+  letter-spacing: 0.16em;
+  color: #5d6c63;
+}
+
+.sample-label__code {
+  font-family: var(--font-code);
+  font-size: 20px;
+  font-weight: var(--fw-semibold);
+}
+
+.sample-label__test {
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+}
+
+.sample-label__fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 3mm;
+  row-gap: 1.5mm;
+  font-size: 11px;
+  align-content: start;
+}
+
+.sample-label__fields dt {
+  color: #5d6c63;
+}
+
+.sample-label__fields dd {
+  font-weight: var(--fw-medium);
+}
+
+.sample-label__qr {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5mm;
+}
+
+.sample-label__qr-code {
+  font-family: var(--font-code);
+  font-size: 10px;
+  color: #5d6c63;
+}
+
+.sample-label__notice {
+  font-size: 9px;
+  color: #5d6c63;
+  text-align: center;
+}
+
+@media print {
+  .sample-label-print__toolbar {
+    display: none;
+  }
+
+  .sample-label-print {
+    background: #ffffff;
+    padding: 0;
+  }
+
+  .sample-label-print__sheet {
+    box-shadow: none;
+  }
+
+  @page {
+    size: A6;
+    margin: 0;
+  }
+}

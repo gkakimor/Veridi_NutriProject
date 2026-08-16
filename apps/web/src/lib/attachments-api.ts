@@ -10,7 +10,7 @@ import type {
 import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
-export type AttachmentContext = "lots" | "receipts" | "products" | "projects";
+export type AttachmentContext = "lots" | "receipts" | "products" | "projects" | "project-samples";
 
 export async function listAttachments(
   context: AttachmentContext,

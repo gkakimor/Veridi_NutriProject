@@ -50,11 +50,15 @@ enum InventoryMovementType {
   ADJUSTMENT_OUT
   LOSS
   PRODUCTION_CONSUMPTION
+  /// Saida fisica de material usado em amostra/piloto. E consumo real de
+  /// desenvolvimento — nunca disfarcado de ajuste.
+  SAMPLE_CONSUMPTION
   FINISHED_GOOD_PRODUCTION
   SHIPMENT_OUT
 }
 
 enum InventoryMovementSourceType {
+  PROJECT_SAMPLE
   RECEIPT
   MANUAL_ADJUSTMENT
   STOCK_COUNT
@@ -90,6 +94,22 @@ enum UserRole {
 enum ControlledDocumentType {
   PRODUCTION_ORDER
   RECIPE_SHEET
+}
+
+/// Estagio da amostra/teste. Aprovar a amostra NUNCA aprova o projeto —
+/// sao decisoes diferentes (tecnica x comercial).
+enum ProjectSampleStatus {
+  DRAFT
+  IN_PROGRESS
+  PRODUCED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ProjectSampleSource {
+  MANUAL
+  LEGACY_IMPORT
 }
 
 /// Pipeline comercial do projeto — vocabulario observado na operacao real
@@ -150,6 +170,7 @@ enum AttachmentType {
   LABEL_ART
   TECHNICAL_SHEET
   BRIEFING
+  SAMPLE_RESULT
   OTHER
 }
 
@@ -312,6 +333,13 @@ model User {
   sentQuotes          QuoteVersion[] @relation("QuoteSentBy")
   acceptedQuotes      QuoteVersion[] @relation("QuoteAcceptedBy")
   rejectedQuotes      QuoteVersion[] @relation("QuoteRejectedBy")
+  createdSamples      ProjectSample[] @relation("SampleCreatedBy")
+  startedSamples      ProjectSample[] @relation("SampleStartedBy")
+  producedSamples     ProjectSample[] @relation("SampleProducedBy")
+  approvedSamples     ProjectSample[] @relation("SampleApprovedBy")
+  rejectedSamples     ProjectSample[] @relation("SampleRejectedBy")
+  cancelledSamples    ProjectSample[] @relation("SampleCancelledBy")
+  sampleConsumptions  SampleConsumption[] @relation("SampleConsumptionBy")
 
   @@index([active])
   @@map("users")
@@ -478,6 +506,9 @@ model Attachment {
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id])
 
+  projectSampleId String?
+  projectSample   ProjectSample? @relation(fields: [projectSampleId], references: [id])
+
   originalFileName String
   mimeType         String
   sizeBytes        Int
@@ -501,6 +532,7 @@ model Attachment {
   @@index([receiptId])
   @@index([productId])
   @@index([projectId])
+  @@index([projectSampleId])
   @@index([documentType])
   @@map("attachments")
 }
@@ -571,6 +603,7 @@ model Project {
   quoteVersions QuoteVersion[]
   statusHistory ProjectStatusHistory[]
   attachments   Attachment[]
+  samples       ProjectSample[]
 
   @@index([customerId])
   @@index([status])
@@ -677,6 +710,123 @@ model QuoteVersion {
   @@map("quote_versions")
 }
 
+/// Amostra / piloto / teste Tn de um projeto.
+///
+/// NAO e Lot nem ProductionOrder: o projeto pode entrar em amostra antes de
+/// existir Product, Item de produto acabado ou formulacao operacional —
+/// criar Product artificial so para fabricar uma amostra seria mentira no
+/// cadastro. A amostra tem identidade propria (`AM-000001`) e QR proprio
+/// (`SAMPLE:AM-000001`).
+model ProjectSample {
+  id String @id @default(uuid())
+
+  /// AM-000001 — identidade interna da amostra.
+  code String @unique
+
+  /// Numero/lote da planilha historica, quando existir.
+  externalCode String?
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Sequencial POR PROJETO: T1, T2, T3... Legado preserva o numero
+  /// original, e o proximo manual continua depois do maior existente.
+  testSequence Int
+
+  status ProjectSampleStatus @default(DRAFT)
+  source ProjectSampleSource @default(MANUAL)
+
+  description     String?
+  productionNotes String?
+  /// Justificativa da decisao — obrigatoria na reprovacao.
+  decisionNotes   String?
+
+  /// Quanto foi produzido da amostra. NAO e estoque comercial: amostra
+  /// nunca entra em Finished Goods.
+  outputQuantity Decimal?       @db.Decimal(18, 6)
+  outputUomCode  String?
+  outputUom      UnitOfMeasure? @relation("SampleOutputUom", fields: [outputUomCode], references: [code])
+
+  /// Snapshot congelado na producao — editar cliente/projeto depois nao
+  /// reescreve a etiqueta ja impressa.
+  customerCodeSnapshot String?
+  customerNameSnapshot String?
+  projectCodeSnapshot  String?
+  projectNameSnapshot  String?
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("SampleCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+
+  startedAt             DateTime?
+  startedByUserId       String?
+  startedByUser         User?     @relation("SampleStartedBy", fields: [startedByUserId], references: [id])
+  startedByNameSnapshot String?
+
+  producedAt             DateTime?
+  producedByUserId       String?
+  producedByUser         User?     @relation("SampleProducedBy", fields: [producedByUserId], references: [id])
+  producedByNameSnapshot String?
+
+  approvedAt             DateTime?
+  approvedByUserId       String?
+  approvedByUser         User?     @relation("SampleApprovedBy", fields: [approvedByUserId], references: [id])
+  approvedByNameSnapshot String?
+
+  rejectedAt             DateTime?
+  rejectedByUserId       String?
+  rejectedByUser         User?     @relation("SampleRejectedBy", fields: [rejectedByUserId], references: [id])
+  rejectedByNameSnapshot String?
+
+  cancelledAt             DateTime?
+  cancelledByUserId       String?
+  cancelledByUser         User?     @relation("SampleCancelledBy", fields: [cancelledByUserId], references: [id])
+  cancelledByNameSnapshot String?
+
+  updatedAt DateTime @updatedAt
+
+  consumptions SampleConsumption[]
+  attachments  Attachment[]
+
+  @@unique([projectId, testSequence])
+  @@index([projectId])
+  @@index([status])
+  @@map("project_samples")
+}
+
+/// Consumo real de material numa amostra. Historico imutavel: reprovar ou
+/// cancelar a amostra NUNCA estorna material que ja foi fisicamente usado.
+model SampleConsumption {
+  id String @id @default(uuid())
+
+  projectSampleId String
+  projectSample   ProjectSample @relation(fields: [projectSampleId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  quantity Decimal @db.Decimal(18, 6)
+  uomCode  String
+
+  /// 1:1 com o movimento SAMPLE_CONSUMPTION do ledger — a baixa continua
+  /// sendo do Inventory Movement, nunca uma segunda contabilidade.
+  inventoryMovementId String? @unique
+
+  executedAt             DateTime @default(now())
+  executedByUserId       String
+  executedByUser         User     @relation("SampleConsumptionBy", fields: [executedByUserId], references: [id])
+  executedByNameSnapshot String
+  notes                  String?
+
+  @@index([projectSampleId])
+  @@index([lotId])
+  @@map("sample_consumptions")
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -694,6 +844,7 @@ model UnitOfMeasure {
   productsAsDoseUom Product[] @relation("ProductDoseUom")
   projectsAsDoseUom Project[] @relation("ProjectDoseUom")
   quoteVersions     QuoteVersion[] @relation("QuoteUom")
+  sampleOutputs     ProjectSample[] @relation("SampleOutputUom")
 
   @@map("units_of_measure")
 }
@@ -765,6 +916,7 @@ model Item {
   lots                Lot[]
   inventoryMovements  InventoryMovement[]
   formulationComponents FormulationComponent[]
+  sampleConsumptions    SampleConsumption[]
   formulationVersionsAsOutput FormulationVersion[]
   productionOrderRequirements ProductionOrderRequirement[]
   productionOrdersAsFinishedItem ProductionOrder[] @relation("ProductionOrderFinishedItem")
@@ -1420,6 +1572,7 @@ model Lot {
   @@index([status])
   @@index([productionOrderId])
   recipeWeighings RecipeWeighing[]
+  sampleConsumptions SampleConsumption[]
   attachments Attachment[]
 
   @@index([ownerCustomerId])

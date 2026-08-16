@@ -9,6 +9,7 @@ import {
   legacyQuoteVersions,
   readLegacyProjectRows,
 } from "./project-analysis.js";
+import { normalizeName, readLegacySampleRows, resolveSamples } from "./sample-analysis.js";
 import { nextSequenceCode } from "../../apps/api/src/lib/sequence-code.js";
 import type { MappedItem } from "./mapping.js";
 import {
@@ -79,6 +80,10 @@ async function nextProjectCode(): Promise<string> {
   return nextSequenceCode(prisma, "project_code_seq", "PROJ");
 }
 
+async function nextSampleCode(): Promise<string> {
+  return nextSequenceCode(prisma, "project_sample_code_seq", "AM");
+}
+
 async function nextQuoteCode(): Promise<string> {
   return nextSequenceCode(prisma, "quote_code_seq", "ORC");
 }
@@ -134,11 +139,16 @@ async function writeCrossReference(): Promise<void> {
     fs.writeFileSync(path.join(outputDir, file), `${content}\r\n`, "utf8");
   };
 
-  const [customers, items, products, suppliers] = await Promise.all([
+  const [customers, items, products, suppliers, samples] = await Promise.all([
     prisma.customer.findMany({ orderBy: { code: "asc" } }),
     prisma.item.findMany({ orderBy: { code: "asc" } }),
     prisma.product.findMany({ orderBy: { code: "asc" } }),
     prisma.supplier.findMany({ orderBy: { code: "asc" } }),
+    prisma.projectSample.findMany({
+      where: { source: "LEGACY_IMPORT" },
+      orderBy: { code: "asc" },
+      include: { project: { select: { code: true } } },
+    }),
   ]);
 
   write(
@@ -155,6 +165,16 @@ async function writeCrossReference(): Promise<void> {
     "de-para-produtos.csv",
     ["cod_produto_planilha", "codigo_veridi", "nome"],
     products.map((row) => [row.externalCode, row.code, row.name]),
+  );
+  write(
+    "de-para-amostras.csv",
+    ["lote_interno_planilha", "codigo_veridi", "projeto", "teste"],
+    samples.map((row) => [
+      row.externalCode,
+      row.code,
+      row.project.code,
+      `T${row.testSequence}`,
+    ]),
   );
   // Fornecedor não tem código na planilha — o de-para é pelo nome.
   write(
@@ -574,6 +594,78 @@ async function main(): Promise<void> {
     }
   }
 
+  /* ── Amostras historicas (capacidade 39) ── */
+  //
+  // `amostras.csv` nao tem cod_cliente nem cod_produto: a unica ligacao
+  // aceita e igualdade EXATA do nome do projeto. Amostra que nao resolve
+  // vira finding e NAO e importada — nenhum Project e criado para acomodar
+  // uma amostra, e nenhum consumo de material e reconstruido (o corpus nao
+  // registra o que foi usado em cada teste).
+  const legacySampleRows = readLegacySampleRows(findings);
+  const legacyProjects = await prisma.project.findMany({
+    where: { source: "LEGACY_IMPORT" },
+    select: { id: true, name: true },
+  });
+  const projectsByName = new Map<string, string[]>();
+  for (const project of legacyProjects) {
+    const key = normalizeName(project.name);
+    projectsByName.set(key, [...(projectsByName.get(key) ?? []), project.id]);
+  }
+
+  let samplesCreated = 0;
+  let samplesSkipped = 0;
+
+  for (const resolution of resolveSamples(legacySampleRows, projectsByName, findings)) {
+    if (!resolution.projectId || resolution.row.testSequence === null) {
+      samplesSkipped += 1;
+      continue;
+    }
+
+    const existing = await prisma.projectSample.findFirst({
+      where: { externalCode: resolution.row.externalCode },
+    });
+    if (existing) continue;
+
+    // Tn ja usado no projeto: dois testes historicos diferentes disputando o
+    // mesmo numero. Nada e renumerado — o conflito e reportado.
+    const clash = await prisma.projectSample.findFirst({
+      where: { projectId: resolution.projectId, testSequence: resolution.row.testSequence },
+    });
+    if (clash) {
+      findings.add(
+        "SAMPLE_TEST_NUMBER_CLASH",
+        "ProjectSample",
+        resolution.row.externalCode,
+        `T${resolution.row.testSequence} ja existe no projeto — amostra nao importada`,
+      );
+      samplesSkipped += 1;
+      continue;
+    }
+
+    // PRODUCED: a planilha e um registro de amostras que existiram
+    // fisicamente. O desfecho (aprovada/reprovada) NAO esta no export e
+    // nunca e inventado; data e quantidade produzida ficam vazias.
+    await prisma.projectSample.create({
+      data: {
+        code: await nextSampleCode(),
+        externalCode: resolution.row.externalCode,
+        projectId: resolution.projectId,
+        testSequence: resolution.row.testSequence,
+        status: "PRODUCED",
+        source: "LEGACY_IMPORT",
+        description: resolution.row.description,
+      },
+    });
+    samplesCreated += 1;
+
+    findings.add(
+      "SAMPLE_LEGACY_OUTCOME_UNKNOWN",
+      "ProjectSample",
+      resolution.row.externalCode,
+      "export nao traz desfecho, data nem quantidade — importada como PRODUZIDA sem decisao",
+    );
+  }
+
   /* ── Resumo ── */
   const [suppliers, customers, itemCount, productCount, versions] = await Promise.all([
     prisma.supplier.count(),
@@ -596,6 +688,9 @@ async function main(): Promise<void> {
   console.log(`    ligados a Product existente: ${projectsLinkedToProduct}`);
   console.log(`    sem Product correspondente: ${projectsWithoutProduct}`);
   console.log(`  Versoes de orcamento (historico): ${quoteCount} (novas ${legacyQuotesCreated})`);
+  console.log(
+    `  Amostras historicas: ${samplesCreated} importadas, ${samplesSkipped} nao resolvidas`,
+  );
   console.log(`  Formulações ACTIVE: ${versions}`);
   console.log(`    PER_DOSE reconstruídas: ${perDoseVersions}`);
   console.log(`    FIXED_BASIS pelo consumo histórico: ${legacyVersions}`);

@@ -11,6 +11,7 @@ import type {
   LotDTO,
   ProductDTO,
   ProjectDTO,
+  ProjectSampleDTO,
   ProductionOrderDTO,
   PurchaseOrderDTO,
   ReceiptDTO,
@@ -32,6 +33,7 @@ import {
   COA_STATUS_LABELS,
   PROJECT_CANCEL_REASON_LABELS,
   PROJECT_STATUS_LABELS,
+  PROJECT_SAMPLE_STATUS_LABELS,
   LOT_STATUS_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
@@ -44,6 +46,7 @@ import { listSuppliers } from "../suppliers/suppliers.service.js";
 import { listItems } from "../items/items.service.js";
 import { listProducts } from "../products/products.service.js";
 import { listProjects } from "../projects/projects.service.js";
+import { listSamples } from "../samples/samples.service.js";
 import { listPurchaseOrders } from "../purchase-orders/purchase-orders.service.js";
 import { listReceipts } from "../receiving/receiving.service.js";
 import { listInventory, listInventoryMovements } from "../inventory/inventory.service.js";
@@ -60,6 +63,7 @@ import { listSuppliersQuerySchema } from "../suppliers/suppliers.schemas.js";
 import { listItemsQuerySchema } from "../items/items.schemas.js";
 import { listProductsQuerySchema } from "../products/products.schemas.js";
 import { listProjectsQuerySchema } from "../projects/projects.schemas.js";
+import { listSamplesQuerySchema } from "../samples/samples.schemas.js";
 import { listPurchaseOrdersQuerySchema } from "../purchase-orders/purchase-orders.schemas.js";
 import { listReceiptsQuerySchema } from "../receiving/receiving.schemas.js";
 import {
@@ -79,6 +83,7 @@ import type { ListSuppliersQuery } from "../suppliers/suppliers.schemas.js";
 import type { ListItemsQuery } from "../items/items.schemas.js";
 import type { ListProductsQuery } from "../products/products.schemas.js";
 import type { ListProjectsQuery } from "../projects/projects.schemas.js";
+import type { ListSamplesQuery } from "../samples/samples.schemas.js";
 import type { ListPurchaseOrdersQuery } from "../purchase-orders/purchase-orders.schemas.js";
 import type { ListReceiptsQuery } from "../receiving/receiving.schemas.js";
 import type {
@@ -341,6 +346,33 @@ const projectsExport = defineCsvExport({
   ],
 });
 
+const samplesExport = defineCsvExport({
+  path: "/project-samples/export.csv",
+  slug: "amostras",
+  schema: listSamplesQuerySchema,
+  fetch: async (query: ListSamplesQuery) => (await listSamples(query, ALL_ROWS)).samples,
+  columns: [
+    { header: "Amostra", value: (row: ProjectSampleDTO) => csvCode(row.code) },
+    { header: "Código legado", value: (row: ProjectSampleDTO) => csvCode(row.externalCode) },
+    { header: "Teste", value: (row: ProjectSampleDTO) => csvCode(row.testLabel) },
+    { header: "Projeto", value: (row: ProjectSampleDTO) => csvCode(row.projectCode) },
+    { header: "Nome do projeto", value: (row: ProjectSampleDTO) => csvText(row.projectName) },
+    { header: "Cliente", value: (row: ProjectSampleDTO) => csvText(row.customerName) },
+    { header: "Status", value: (row: ProjectSampleDTO) => PROJECT_SAMPLE_STATUS_LABELS[row.status] },
+    { header: "Descrição", value: (row: ProjectSampleDTO) => csvText(row.description) },
+    { header: "Quantidade produzida", value: (row: ProjectSampleDTO) => csvDecimal(row.outputQuantity) },
+    { header: "Unidade", value: (row: ProjectSampleDTO) => csvText(row.outputUomCode) },
+    { header: "Consumos", value: (row: ProjectSampleDTO) => String(row.consumptions.length) },
+    { header: "Criada em", value: (row: ProjectSampleDTO) => csvDateTime(row.createdAt) },
+    { header: "Criada por", value: (row: ProjectSampleDTO) => csvText(row.createdByName) },
+    { header: "Produzida em", value: (row: ProjectSampleDTO) => csvDateTime(row.producedAt) },
+    { header: "Produzida por", value: (row: ProjectSampleDTO) => csvText(row.producedByName) },
+    { header: "Decidida em", value: (row: ProjectSampleDTO) => csvDateTime(row.approvedAt ?? row.rejectedAt) },
+    { header: "Decidida por", value: (row: ProjectSampleDTO) => csvText(row.approvedByName ?? row.rejectedByName) },
+    { header: "Observação da decisão", value: (row: ProjectSampleDTO) => csvText(row.decisionNotes) },
+  ],
+});
+
 const customerMaterialsExport = defineCsvExport({
   path: "/inventory/customer-materials/export.csv",
   slug: "materiais-de-clientes",
@@ -521,6 +553,7 @@ export const listCsvExports: CsvExportRoute[] = [
   inventoryExport,
   lotsExport,
   projectsExport,
+  samplesExport,
   customerMaterialsExport,
   movementsExport,
   formulationsExport,

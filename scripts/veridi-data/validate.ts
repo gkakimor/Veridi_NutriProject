@@ -5,6 +5,7 @@ import {
   readLegacyProjectRows,
   readPipelineVocabulary,
 } from "./project-analysis.js";
+import { normalizeName, readLegacySampleRows, resolveSamples } from "./sample-analysis.js";
 import {
   COMPARISON_TOLERANCE,
   readCmvProducts,
@@ -217,9 +218,40 @@ async function main(): Promise<void> {
     "  pipeline historico precisa ser reconciliado com o Product Owner (nada foi inferido).",
   );
 
+  // Capacidade 39 — amostras historicas. O export nao traz cliente nem
+  // codigo de produto: a unica ligacao aceita e igualdade EXATA do nome do
+  // projeto. O resto vira finding, nunca palpite.
+  const sampleRowsLegacy = readLegacySampleRows(findings);
+  const projectsByName = new Map<string, string[]>();
+  for (const group of projectGroups.values()) {
+    const name = normalizeName(group.rows[0]!.productName);
+    projectsByName.set(name, [...(projectsByName.get(name) ?? []), group.key]);
+  }
+  const resolutions = resolveSamples(sampleRowsLegacy, projectsByName, new FindingLog());
+  const withTest = sampleRowsLegacy.filter((row) => row.testSequence !== null).length;
+  const resolvedSamples = resolutions.filter((item) => item.reason === "RESOLVED").length;
+  const ambiguousSamples = resolutions.filter((item) => item.reason === "AMBIGUOUS").length;
+  const samplesWithoutDescription = resolutions.filter(
+    (item) => item.reason === "NO_DESCRIPTION",
+  ).length;
+
+  console.log("\nAMOSTRAS HISTORICAS (somente leitura)");
+  console.log(`  linhas ${sampleRowsLegacy.length} - com numero de teste ${withTest}`);
+  console.log(`  sem descricao ${samplesWithoutDescription}`);
+  console.log(
+    `  resolviveis por nome exato de projeto ${resolvedSamples} - ambiguas ${ambiguousSamples}`,
+  );
+  console.log(
+    `  nao resolviveis ${sampleRowsLegacy.length - resolvedSamples} — o export nao traz cod_cliente nem cod_produto`,
+  );
+  console.log(
+    "  nenhum consumo historico de material foi reconstruido (o corpus nao tem essa informacao).",
+  );
+
   console.log("\nNÃO IMPORTADO NESTA CAPACIDADE");
-  console.log("  estoque_saldos, compras_recebimentos, precos_fornecedores, amostras,");
-  console.log("  projetos (como Project), cmv_* e in28_limites — capacidades 37-41, Bloco G e Bloco H.");
+  console.log("  estoque_saldos, compras_recebimentos, precos_fornecedores,");
+  console.log("  cmv_* e in28_limites — capacidades 40-41, Bloco G e Bloco H.");
+  console.log("  amostras: só as resolvíveis por nome exato de projeto entram no seed.");
 
   // Presença/estrutura dos arquivos reservados é verificada, o conteúdo não
   // é persistido.

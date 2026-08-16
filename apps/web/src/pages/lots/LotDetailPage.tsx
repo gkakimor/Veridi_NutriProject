@@ -680,6 +680,52 @@ export function LotDetailPage() {
                 </tbody>
               </table>
             </div>
+
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Amostra</th>
+                    <th>Teste</th>
+                    <th>Projeto</th>
+                    <th>Cliente</th>
+                    <th>Quantidade consumida</th>
+                    <th>Quando</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {traceability.usedInSamples.map((usage) => (
+                    <tr key={usage.sampleId}>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => navigate(`/comercial/amostras/${usage.sampleId}`)}
+                        >
+                          {usage.sampleCode}
+                        </button>
+                      </td>
+                      <td className="is-code">{usage.testLabel}</td>
+                      <td>
+                        <span className="code">{usage.projectCode}</span> {usage.projectName}
+                      </td>
+                      <td>{usage.customerName}</td>
+                      <td>
+                        {usage.consumedQuantity} {usage.unitCode}
+                      </td>
+                      <td>{new Date(usage.consumedAt).toLocaleString("pt-BR")}</td>
+                    </tr>
+                  ))}
+                  {traceability.usedInSamples.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="table__empty">
+                        Este lote nunca foi consumido em amostra.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </FormSection>
         )}
 

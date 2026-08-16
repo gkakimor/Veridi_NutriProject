@@ -56,6 +56,9 @@ fila da Qualidade.**
 **Delivery 30 — Projetos + Orçamentos versionados (Bloco F, capacidade
 38): concluído — o funil private label entra no sistema, com aprovação
 convertendo projeto em Produto.**
+**Delivery 31 — Amostras / pilotos / testes Tn (Bloco F, capacidade 39):
+concluído — amostra com identidade própria, consumo real de material com
+tipo de movimento próprio e decisão separada da aprovação comercial.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2912,6 +2915,78 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 31 — Amostras / pilotos / testes Tn (Bloco F, capacidade 39)
+
+## Amostra não é lote nem Ordem de Produção
+`ProjectSample` é entidade própria (`AM-000001`). O projeto entra em
+amostra ANTES de existir `Product`, item de produto acabado ou formulação
+operacional — criar um Product artificial só para fabricar amostra seria
+mentira no cadastro, e tratá-la como `Lot` a colocaria no estoque
+expedível.
+
+- `testSequence` (T1..Tn) é sequencial **por projeto**, gerado sob
+  `FOR UPDATE` (`@@unique(projectId, testSequence)`): duas criações
+  simultâneas nunca recebem o mesmo número. Tn legado nunca é renumerado —
+  o contador continua depois do maior existente.
+- Status `DRAFT/IN_PROGRESS/PRODUCED/APPROVED/REJECTED/CANCELLED`;
+  aprovada/reprovada/cancelada são terminais.
+- Criar a primeira amostra num projeto `WAITING`/`STAND_BY` move o projeto
+  para `SAMPLE` com evento no `ProjectStatusHistory` — nunca em silêncio.
+  Projeto aprovado/cancelado não aceita amostra nova.
+- **Amostra aprovada NÃO aprova o projeto**: a aprovação comercial
+  continua exigindo orçamento `ACCEPTED` e ação explícita (capacidade 38).
+- Concluir congela snapshot de cliente/projeto — renomear o projeto depois
+  não reescreve a etiqueta já impressa.
+- QR próprio `SAMPLE:AM-000001`; a etiqueta A6 não traz preço nem custo.
+
+## Consumo real de material
+`SampleConsumption` 1:1 com um `InventoryMovement` do tipo novo
+`SAMPLE_CONSUMPTION` (`sourceType=PROJECT_SAMPLE`). É saída física de
+verdade, nunca disfarçada de ajuste, e nunca uma segunda contabilidade.
+
+- Reutiliza as MESMAS regras do resto do sistema: lote existe e pertence
+  ao item, `isLotAvailableForUse` (qualidade + validade + CoA),
+  proprietário (material do cliente só no projeto daquele cliente),
+  quantidade > 0 e disponível = On Hand − Reservado. Amostra nunca come
+  estoque reservado para OP/Pedido. Não existe bypass "porque é amostra".
+- Item que controla lote exige lote informado.
+- O primeiro consumo é o início real da preparação (`DRAFT → IN_PROGRESS`).
+- **Reprovar ou cancelar nunca estorna material**: o que foi consumido
+  fisicamente continua consumido. A saída da amostra também nunca entra em
+  produto acabado.
+- Rastreabilidade para frente do lote passa a listar as amostras, R-03
+  mostra a origem (`AM-000012 (PROJ-000003 T2)`) e o Dashboard conta o
+  consumo de amostra em card e série próprios.
+
+## Perfis
+Criar/editar amostra: Comercial, Produção ou ADMIN. Consumo e conclusão
+física: Produção ou ADMIN. Aprovar/reprovar: Comercial ou ADMIN.
+Qualidade lê e anexa documento. Quem executou vem sempre da sessão.
+
+## Anexos
+`Attachment` ganhou o quinto contexto (`projectSampleId`, CHECK de dono
+único atualizado) e o tipo `SAMPLE_RESULT`. Amostra aceita resultado de
+teste, arte e ficha técnica; **CoA e nota fiscal são recusados** — laudo
+pertence ao lote e nota ao recebimento.
+
+## Corpus
+`amostras.csv` (32 linhas) tem só número interno, série, texto livre e às
+vezes o número do teste: **não há cod_cliente nem cod_produto**. A única
+ligação aceita é igualdade EXATA (normalizada) entre a descrição sem o
+sufixo `Tn` e o nome de um único projeto — prefixo/semelhança seria
+adivinhação. Resultado: 26 linhas com Tn, 3 resolvíveis, 29 viram finding.
+O seed importa as 3 como `LEGACY_IMPORT`/`PRODUCED` (sem data, quantidade
+nem desfecho — nada é inventado), grava `de-para-amostras.csv` e nunca cria
+Project nem consumo histórico fake.
+
+## Não implementado de propósito
+Amostra como lote expedível, estoque de amostra, envio/logística de
+amostra ao cliente, custo/margem da amostra (Bloco G), assinatura do
+cliente, reversão de consumo e criação automática de formulação a partir
+da amostra aprovada.
+
+---
+
 # Delivery 30 — Projetos + Orçamentos versionados (Bloco F, capacidade 38)
 
 ## Project ≠ Product
@@ -2968,7 +3043,7 @@ vínculo. As versões históricas (V1..Vn) entram como `ARCHIVED`, sem preço.
 
 ## Não implementado de propósito
 Kanban, CRM, lead/contato, e-mail/WhatsApp, assinatura eletrônica,
-entidade de Amostra (capacidade 39), custo/margem/comissão automáticos
+custo/margem/comissão automáticos
 (Bloco G), tabela de preço por faixa, conversão de moeda e R-18.
 
 ---
@@ -3649,13 +3724,12 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **capacidade 39 — Amostras / Pilotos /
-Testes** (Bloco F). A base de
+Próximo passo do roadmap oficial: **capacidade 40** (Bloco F). A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
 o que existe hoje é ferramenta de dados de desenvolvimento. Depois seguem
-36-42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+40-42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.

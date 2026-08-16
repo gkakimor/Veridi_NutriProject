@@ -132,6 +132,8 @@ export interface DashboardCurrentStateDTO {
 export interface MovementSummaryDTO {
   receiptIn: number;
   productionConsumption: number;
+  /** Consumo de material em amostra/piloto — saída física de desenvolvimento. */
+  sampleConsumption: number;
   finishedGoodProduction: number;
   shipmentOut: number;
   /** `ADJUSTMENT_IN` + `ADJUSTMENT_OUT` agrupados para o card. */
@@ -151,7 +153,7 @@ export interface RecentMovementDTO {
   unitCode: string;
   /** Código do documento de origem, quando derivável. */
   sourceCode: string | null;
-  sourceKind: "RECEIPT" | "PRODUCTION_ORDER" | "SHIPMENT" | "ADJUSTMENT" | null;
+  sourceKind: "RECEIPT" | "PRODUCTION_ORDER" | "SHIPMENT" | "PROJECT_SAMPLE" | "ADJUSTMENT" | null;
   sourceId: string | null;
 }
 
@@ -160,6 +162,7 @@ export interface MovementActivityPointDTO {
   date: string;
   receiptIn: number;
   productionConsumption: number;
+  sampleConsumption: number;
   finishedGoodProduction: number;
   shipmentOut: number;
   adjustments: number;

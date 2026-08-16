@@ -105,7 +105,7 @@ export interface MovementReportRowDTO {
   sourceType: InventoryMovementSourceType;
   /** Documento de origem, quando derivável pelos vínculos 1:1 existentes. */
   documentCode: string | null;
-  documentKind: "RECEIPT" | "PRODUCTION_ORDER" | "SHIPMENT" | null;
+  documentKind: "RECEIPT" | "PRODUCTION_ORDER" | "SHIPMENT" | "PROJECT_SAMPLE" | null;
   documentId: string | null;
   reason: string | null;
   createdBy: string | null;

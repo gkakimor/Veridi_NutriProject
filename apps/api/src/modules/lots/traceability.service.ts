@@ -99,6 +99,14 @@ async function buildRawMaterialLotTraceability(lot: Lot): Promise<RawMaterialLot
     _sum: { quantity: true },
   });
 
+  // Consumo em amostra tambem e saida fisica: aparece na rastreabilidade
+  // para frente mesmo sem Ordem de Producao.
+  const sampleConsumptions = await prisma.sampleConsumption.findMany({
+    where: { lotId: lot.id },
+    include: { projectSample: { include: { project: { include: { customer: true } } } } },
+    orderBy: { executedAt: "asc" },
+  });
+
   const orderIds = consumptionSums.map((row) => row.productionOrderId);
   const [orders, outputs] = await Promise.all([
     prisma.productionOrder.findMany({ where: { id: { in: orderIds } } }),
@@ -145,6 +153,22 @@ async function buildRawMaterialLotTraceability(lot: Lot): Promise<RawMaterialLot
     };
   });
 
+  const usedInSamples = sampleConsumptions.map((consumption) => {
+    const sample = consumption.projectSample;
+    return {
+      sampleId: sample.id,
+      sampleCode: sample.code,
+      testLabel: `T${sample.testSequence}`,
+      projectCode: sample.project.code,
+      projectName: sample.project.name,
+      customerName: sample.project.customer.legalName,
+      sampleStatus: sample.status,
+      consumedQuantity: consumption.quantity.toString(),
+      unitCode: consumption.uomCode,
+      consumedAt: consumption.executedAt.toISOString(),
+    };
+  });
+
   return {
     kind: "RAW_MATERIAL",
     lotId: lot.id,
@@ -160,6 +184,7 @@ async function buildRawMaterialLotTraceability(lot: Lot): Promise<RawMaterialLot
       uploadedByName: document.uploadedByNameSnapshot,
     })),
     usedIn,
+    usedInSamples,
   };
 }
 

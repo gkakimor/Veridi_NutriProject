@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { ProjectDTO, QuoteVersionDTO } from "@veridi/shared";
+import type { ProjectDTO, ProjectSampleDTO, QuoteVersionDTO } from "@veridi/shared";
 import {
   PROJECT_ATTACHMENT_TYPES,
+  PROJECT_SAMPLE_STATUS_LABELS,
   PROJECT_CANCEL_REASONS,
   PROJECT_CANCEL_REASON_LABELS,
   PROJECT_SOURCE_LABELS,
@@ -22,6 +23,8 @@ import {
   sendQuoteVersion,
   updateQuoteVersion,
 } from "../../lib/projects-api";
+import { createSample, listSamples } from "../../lib/samples-api";
+import { useAuth } from "../../app/AuthProvider";
 import { formatBRL } from "../../lib/currency";
 import { ProjectFormModal } from "./ProjectFormModal";
 
@@ -58,8 +61,10 @@ function quoteBadgeClass(status: QuoteVersionDTO["status"]): string {
 export function ProjectDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
 
   const [project, setProject] = useState<ProjectDTO | null>(null);
+  const [samples, setSamples] = useState<ProjectSampleDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +80,11 @@ export function ProjectDetailPage() {
   const [draftNotes, setDraftNotes] = useState("");
 
   const draft = project?.quoteVersions.find((quote) => quote.status === "DRAFT") ?? null;
+
+  // Criar amostra é ato de desenvolvimento: Comercial pede, Produção também
+  // pode abrir. Quem consome material continua sendo só Produção/ADMIN.
+  const canCreateSample =
+    user?.role === "COMMERCIAL" || user?.role === "PRODUCTION" || user?.role === "ADMIN";
 
   const load = useCallback(() => {
     if (!id) return;
@@ -97,9 +107,17 @@ export function ProjectDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  const loadSamples = useCallback(() => {
+    if (!id) return;
+    listSamples({ projectId: id, pageSize: 100 })
+      .then((result) => setSamples(result.samples))
+      .catch(() => setSamples([]));
+  }, [id]);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadSamples();
+  }, [load, loadSamples]);
 
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
@@ -491,6 +509,73 @@ export function ProjectDetailPage() {
               </div>
             </>
           )}
+        </FormSection>
+
+        <FormSection
+          title="Amostras / testes"
+          subtitle="Cada teste Tn é uma amostra própria: não é lote nem ordem de produção, e aprovar uma amostra não aprova o projeto."
+        >
+          <div className="table-container">
+            <table className="table table--clickable-rows">
+              <thead>
+                <tr>
+                  <th>Amostra</th>
+                  <th>Teste</th>
+                  <th>Descrição</th>
+                  <th>Status</th>
+                  <th>Consumos</th>
+                  <th>Produzida em</th>
+                </tr>
+              </thead>
+              <tbody>
+                {samples.map((sample) => (
+                  <tr
+                    key={sample.id}
+                    tabIndex={0}
+                    onClick={() => navigate(`/comercial/amostras/${sample.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") navigate(`/comercial/amostras/${sample.id}`);
+                    }}
+                  >
+                    <td className="is-code">{sample.code}</td>
+                    <td className="is-code">{sample.testLabel}</td>
+                    <td>{sample.description ?? "—"}</td>
+                    <td>{PROJECT_SAMPLE_STATUS_LABELS[sample.status]}</td>
+                    <td>{sample.consumptions.length}</td>
+                    <td>{formatDateTime(sample.producedAt)}</td>
+                  </tr>
+                ))}
+                {samples.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="table__empty">
+                      Nenhuma amostra registrada neste projeto.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {id &&
+            canCreateSample &&
+            project.status !== "APPROVED" &&
+            project.status !== "CANCELLED" && (
+              <div className="line-actions">
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  disabled={saving}
+                  onClick={() =>
+                    void run(async () => {
+                      const sample = await createSample(id);
+                      navigate(`/comercial/amostras/${sample.id}`);
+                    })
+                  }
+                >
+                  Nova amostra (T{samples.length > 0 ? Math.max(...samples.map((sample) => sample.testSequence)) + 1 : 1})
+                </button>
+              </div>
+            )}
         </FormSection>
 
         {id && (

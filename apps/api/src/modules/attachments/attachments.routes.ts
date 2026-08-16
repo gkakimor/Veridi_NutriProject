@@ -77,6 +77,13 @@ export const attachmentsRoutes: FastifyPluginAsync = async (app) => {
       { path: "receipts", kind: "RECEIPT", uploadRoles: ["PURCHASING", "QUALITY", "ADMIN"] },
       { path: "products", kind: "PRODUCT", uploadRoles: ["COMMERCIAL", "QUALITY", "ADMIN"] },
       { path: "projects", kind: "PROJECT", uploadRoles: ["COMMERCIAL", "QUALITY", "ADMIN"] },
+      // Resultado de teste de amostra vem de quem produziu ou de quem
+      // avalia — Produção entra aqui, ao contrário do projeto comercial.
+      {
+        path: "project-samples",
+        kind: "PROJECT_SAMPLE",
+        uploadRoles: ["COMMERCIAL", "PRODUCTION", "QUALITY", "ADMIN"],
+      },
     ];
 
   for (const context of contexts) {

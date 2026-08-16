@@ -13,6 +13,7 @@ export type InventoryMovementType =
   | "ADJUSTMENT_OUT"
   | "LOSS"
   | "PRODUCTION_CONSUMPTION"
+  | "SAMPLE_CONSUMPTION"
   | "FINISHED_GOOD_PRODUCTION"
   | "SHIPMENT_OUT";
 
@@ -22,6 +23,7 @@ export const INVENTORY_MOVEMENT_TYPES: readonly InventoryMovementType[] = [
   "ADJUSTMENT_OUT",
   "LOSS",
   "PRODUCTION_CONSUMPTION",
+  "SAMPLE_CONSUMPTION",
   "FINISHED_GOOD_PRODUCTION",
   "SHIPMENT_OUT",
 ];
@@ -32,6 +34,7 @@ export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, strin
   ADJUSTMENT_OUT: "Ajuste de saída",
   LOSS: "Perda",
   PRODUCTION_CONSUMPTION: "Consumo de produção",
+  SAMPLE_CONSUMPTION: "Consumo de amostra",
   FINISHED_GOOD_PRODUCTION: "Entrada — Produção",
   SHIPMENT_OUT: "Saída — Expedição",
 };
@@ -46,11 +49,14 @@ export const INVENTORY_MOVEMENT_DIRECTION: Record<InventoryMovementType, 1 | -1>
   ADJUSTMENT_OUT: -1,
   LOSS: -1,
   PRODUCTION_CONSUMPTION: -1,
+  // Consumo de amostra é saída física real de desenvolvimento.
+  SAMPLE_CONSUMPTION: -1,
   FINISHED_GOOD_PRODUCTION: 1,
   SHIPMENT_OUT: -1,
 };
 
 export type InventoryMovementSourceType =
+  | "PROJECT_SAMPLE"
   | "RECEIPT"
   | "MANUAL_ADJUSTMENT"
   | "STOCK_COUNT"
@@ -67,6 +73,7 @@ export const INVENTORY_MOVEMENT_SOURCE_LABELS: Record<InventoryMovementSourceTyp
   PRODUCTION_CONSUMPTION: "Consumo de produção",
   FINISHED_GOOD_PRODUCTION: "Produção",
   SHIPMENT: "Expedição",
+  PROJECT_SAMPLE: "Amostra / teste",
 };
 
 export interface InventoryMovementDTO {

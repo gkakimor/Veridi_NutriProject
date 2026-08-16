@@ -22,6 +22,9 @@ import { LotsPage } from "./pages/lots/LotsPage";
 import { LotDetailPage } from "./pages/lots/LotDetailPage";
 import { LotScanPage } from "./pages/lots/LotScanPage";
 import { LotLabelPrintPage } from "./pages/lots/LotLabelPrintPage";
+import { SampleLabelPrintPage } from "./pages/samples/SampleLabelPrintPage";
+import { SamplesPage } from "./pages/samples/SamplesPage";
+import { SampleDetailPage } from "./pages/samples/SampleDetailPage";
 import { InventoryOverviewPage } from "./pages/inventory/InventoryOverviewPage";
 import { InventoryItemDetailPage } from "./pages/inventory/InventoryItemDetailPage";
 import { InventoryMovementsPage } from "./pages/inventory/InventoryMovementsPage";
@@ -104,6 +107,7 @@ function AuthenticatedApp() {
       <Routes>
         {/* Rotas de impressão: fora do AppShell — sem topbar/sidebar. */}
         <Route path="/estoque/lotes/:id/etiqueta" element={<LotLabelPrintPage />} />
+        <Route path="/comercial/amostras/:id/etiqueta" element={<SampleLabelPrintPage />} />
         <Route path="/estoque/lotes/:id/rastreabilidade/imprimir" element={<LotTraceabilityPrintPage />} />
         <Route path="/comercial/pedidos/:id/imprimir" element={<CustomerOrderPrintPage />} />
         <Route path="/comercial/orcamentos/:id/imprimir" element={<QuotePrintPage />} />
@@ -164,6 +168,8 @@ function AuthenticatedApp() {
           <Route path="/producao/produto-acabado" element={<FinishedGoodsPage />} />
           <Route path="/comercial/projetos" element={<ProjectsPage />} />
           <Route path="/comercial/projetos/:id" element={<ProjectDetailPage />} />
+          <Route path="/comercial/amostras" element={<SamplesPage />} />
+          <Route path="/comercial/amostras/:id" element={<SampleDetailPage />} />
           <Route path="/comercial/pedidos" element={<CustomerOrdersPage />} />
           <Route path="/comercial/pedidos/novo" element={<CustomerOrderPage />} />
           <Route path="/comercial/pedidos/:id" element={<CustomerOrderPage />} />

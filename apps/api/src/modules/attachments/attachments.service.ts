@@ -33,7 +33,8 @@ export type AttachmentContext =
   | { kind: "LOT"; id: string }
   | { kind: "RECEIPT"; id: string }
   | { kind: "PRODUCT"; id: string }
-  | { kind: "PROJECT"; id: string };
+  | { kind: "PROJECT"; id: string }
+  | { kind: "PROJECT_SAMPLE"; id: string };
 
 /** Cada contexto aceita um conjunto próprio de documentos. */
 const ALLOWED_TYPES: Record<AttachmentContext["kind"], AttachmentType[]> = {
@@ -42,6 +43,9 @@ const ALLOWED_TYPES: Record<AttachmentContext["kind"], AttachmentType[]> = {
   PRODUCT: ["LABEL_ART", "TECHNICAL_SHEET", "OTHER"],
   // Projeto recebe briefing e material técnico — nunca laudo nem nota.
   PROJECT: ["BRIEFING", "LABEL_ART", "TECHNICAL_SHEET", "OTHER"],
+  // Amostra guarda resultado de teste e arte de estudo. CoA é do lote e
+  // nota fiscal é do recebimento — nenhum dos dois nasce numa amostra.
+  PROJECT_SAMPLE: ["SAMPLE_RESULT", "LABEL_ART", "TECHNICAL_SHEET", "OTHER"],
 };
 
 export function toAttachmentDTO(attachment: Attachment): AttachmentDTO {
@@ -52,6 +56,7 @@ export function toAttachmentDTO(attachment: Attachment): AttachmentDTO {
     receiptId: attachment.receiptId,
     productId: attachment.productId,
     projectId: attachment.projectId,
+    projectSampleId: attachment.projectSampleId,
     originalFileName: attachment.originalFileName,
     mimeType: attachment.mimeType,
     sizeBytes: attachment.sizeBytes,
@@ -74,19 +79,25 @@ function contextWhere(context: AttachmentContext): Prisma.AttachmentWhereInput {
       return { productId: context.id };
     case "PROJECT":
       return { projectId: context.id };
+    case "PROJECT_SAMPLE":
+      return { projectSampleId: context.id };
   }
 }
 
 async function assertContextExists(context: AttachmentContext): Promise<void> {
   const prisma = getPrisma();
-  const exists =
-    context.kind === "LOT"
-      ? await prisma.lot.findUnique({ where: { id: context.id }, select: { id: true } })
-      : context.kind === "RECEIPT"
-        ? await prisma.receipt.findUnique({ where: { id: context.id }, select: { id: true } })
-        : context.kind === "PRODUCT"
-          ? await prisma.product.findUnique({ where: { id: context.id }, select: { id: true } })
-          : await prisma.project.findUnique({ where: { id: context.id }, select: { id: true } });
+  const select = { id: true };
+  const where = { id: context.id };
+
+  const exists = await (context.kind === "LOT"
+    ? prisma.lot.findUnique({ where, select })
+    : context.kind === "RECEIPT"
+      ? prisma.receipt.findUnique({ where, select })
+      : context.kind === "PRODUCT"
+        ? prisma.product.findUnique({ where, select })
+        : context.kind === "PROJECT"
+          ? prisma.project.findUnique({ where, select })
+          : prisma.projectSample.findUnique({ where, select }));
 
   if (!exists) throw new AttachmentContextNotFoundError(context.kind, context.id);
 }
@@ -147,6 +158,7 @@ export async function uploadAttachment(
         ...(context.kind === "RECEIPT" ? { receiptId: context.id } : {}),
         ...(context.kind === "PRODUCT" ? { productId: context.id } : {}),
         ...(context.kind === "PROJECT" ? { projectId: context.id } : {}),
+        ...(context.kind === "PROJECT_SAMPLE" ? { projectSampleId: context.id } : {}),
         originalFileName: displayName,
         mimeType,
         sizeBytes: stored.sizeBytes,

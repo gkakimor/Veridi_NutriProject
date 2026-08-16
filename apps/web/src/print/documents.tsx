@@ -620,6 +620,25 @@ export function LotTraceabilityPrintDocument({
               </tr>
             ))}
           </PrintTable>
+
+          <PrintTable
+            columns={["Amostra", "Teste", "Projeto", "Cliente", "Consumido", "Unidade"]}
+            isEmpty={traceability.usedInSamples.length === 0}
+            emptyMessage="Este lote nunca foi consumido em amostra."
+          >
+            {traceability.usedInSamples.map((usage) => (
+              <tr key={usage.sampleId}>
+                <td>{usage.sampleCode}</td>
+                <td>{usage.testLabel}</td>
+                <td>
+                  {usage.projectCode} — {usage.projectName}
+                </td>
+                <td>{usage.customerName}</td>
+                <td className="is-number">{usage.consumedQuantity}</td>
+                <td>{usage.unitCode}</td>
+              </tr>
+            ))}
+          </PrintTable>
         </PrintSection>
       )}
     </PrintLayout>

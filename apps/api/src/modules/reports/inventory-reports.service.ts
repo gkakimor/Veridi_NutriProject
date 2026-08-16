@@ -305,6 +305,23 @@ export async function getMovementsReport(
     prisma.inventoryMovement.count({ where }),
   ]);
 
+  // Consumo de amostra nao tem linha de documento propria no ledger: o
+  // vinculo e sourceType/sourceId. Resolvido em lote, sem N+1.
+  const sampleIds = [
+    ...new Set(
+      movements
+        .filter((movement) => movement.sourceType === "PROJECT_SAMPLE" && movement.sourceId)
+        .map((movement) => movement.sourceId!),
+    ),
+  ];
+  const samples = sampleIds.length
+    ? await prisma.projectSample.findMany({
+        where: { id: { in: sampleIds } },
+        select: { id: true, code: true, testSequence: true, project: { select: { code: true } } },
+      })
+    : [];
+  const samplesById = new Map(samples.map((sample) => [sample.id, sample]));
+
   const rows = movements.map((movement): MovementReportRowDTO => {
     let documentCode: string | null = null;
     let documentKind: MovementReportRowDTO["documentKind"] = null;
@@ -326,6 +343,14 @@ export async function getMovementsReport(
       documentCode = movement.shipmentLine.shipment.code;
       documentKind = "SHIPMENT";
       documentId = movement.shipmentLine.shipmentId;
+    } else if (movement.sourceType === "PROJECT_SAMPLE" && movement.sourceId) {
+      const sample = samplesById.get(movement.sourceId);
+      if (sample) {
+        // Mostra a amostra e o teste: "AM-000012 (PJ-000003 T2)".
+        documentCode = `${sample.code} (${sample.project.code} T${sample.testSequence})`;
+        documentKind = "PROJECT_SAMPLE";
+        documentId = sample.id;
+      }
     }
 
     return {

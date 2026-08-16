@@ -8,6 +8,7 @@
 
 import type { InventoryOwnerType } from "./ownership.js";
 import type { CoaStatus } from "./lots.js";
+import type { ProjectSampleStatus } from "./samples.js";
 
 export interface TraceabilityConsumedMaterialDTO {
   itemId: string;
@@ -72,6 +73,19 @@ export interface RawMaterialUsageDTO {
 }
 
 /** Rastreabilidade FORWARD — de um lote de matéria-prima/embalagem até os produtos acabados gerados. */
+export interface RawMaterialSampleUsageDTO {
+  sampleId: string;
+  sampleCode: string;
+  testLabel: string;
+  projectCode: string;
+  projectName: string;
+  customerName: string;
+  sampleStatus: ProjectSampleStatus;
+  consumedQuantity: string;
+  unitCode: string;
+  consumedAt: string;
+}
+
 export interface RawMaterialLotTraceabilityDTO {
   kind: "RAW_MATERIAL";
   lotId: string;
@@ -84,6 +98,12 @@ export interface RawMaterialLotTraceabilityDTO {
   /** Metadados dos laudos anexados; o conteúdo binário nunca entra aqui. */
   coaDocuments: TraceabilityDocumentDTO[];
   usedIn: RawMaterialUsageDTO[];
+  /**
+   * Amostras/pilotos que consumiram este lote. Material usado em teste saiu
+   * fisicamente do estoque — a rastreabilidade para frente precisa mostrar
+   * isso mesmo sem Ordem de Produção envolvida.
+   */
+  usedInSamples: RawMaterialSampleUsageDTO[];
 }
 
 export type LotTraceabilityDTO = FinishedLotTraceabilityDTO | RawMaterialLotTraceabilityDTO;

@@ -287,6 +287,7 @@ const MOVEMENT_DOCUMENT_PATHS: Record<string, string> = {
   RECEIPT: "/compras/recebimentos",
   PRODUCTION_ORDER: "/producao/ordens",
   SHIPMENT: "/comercial/expedicoes",
+  PROJECT_SAMPLE: "/comercial/amostras",
 };
 
 /** R-03 — Movimentações. */

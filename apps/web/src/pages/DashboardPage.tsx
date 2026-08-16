@@ -64,6 +64,8 @@ function movementPath(movement: RecentMovementDTO): string | null {
       return `/producao/ordens/${movement.sourceId}`;
     case "SHIPMENT":
       return `/comercial/expedicoes/${movement.sourceId}`;
+    case "PROJECT_SAMPLE":
+      return `/comercial/amostras/${movement.sourceId}`;
     default:
       return null;
   }
@@ -73,6 +75,7 @@ const SERIES: { key: keyof Omit<MovementActivityPointDTO, "date">; label: string
   { key: "receiptIn", label: "Recebimento", color: "var(--v-green-600)" },
   { key: "finishedGoodProduction", label: "Produção", color: "var(--v-lime)" },
   { key: "productionConsumption", label: "Consumo", color: "var(--v-green-900)" },
+  { key: "sampleConsumption", label: "Amostras", color: "var(--v-green-700)" },
   { key: "shipmentOut", label: "Expedição", color: "var(--ink-3)" },
   { key: "adjustments", label: "Ajustes", color: "var(--warn-fg)" },
   { key: "loss", label: "Perdas", color: "var(--err-fg)" },
@@ -417,6 +420,10 @@ export function DashboardPage() {
               <article className="dash-card">
                 <div className="dash-card__label">Consumos de produção</div>
                 <div className="dash-card__value">{data.movementSummary.productionConsumption}</div>
+              </article>
+              <article className="dash-card">
+                <div className="dash-card__label">Consumos em amostra</div>
+                <div className="dash-card__value">{data.movementSummary.sampleConsumption}</div>
               </article>
               <article className="dash-card">
                 <div className="dash-card__label">Entradas por produção</div>

@@ -157,6 +157,50 @@ user to clear them to edit unrelated fields.
   imported as `LEGACY_IMPORT`, never invent a Product to satisfy a foreign
   key, and never overwrite what the system itself has edited.
 
+# 5.2 Samples / pilots / trials Tn (capability 39)
+
+- A **sample is not a Lot and not a Production Order**. A project goes
+  into sampling before any Product, finished-goods item or operational
+  formulation exists; creating an artificial Product just to make a sample
+  would be a lie in the master data, and modelling it as a lot would put
+  development material inside shippable stock.
+- The sample has its own identity (`AM-000001`) and its own QR payload
+  (`SAMPLE:…`), deliberately different from a lot's `LOT:…`. Scanning a
+  sample must never open a stock lot.
+- The trial number `Tn` is sequential **per project**, generated under a
+  row lock so two simultaneous creations never collide. Legacy `Tn` is
+  preserved as exported and never renumbered; new samples continue after
+  the highest existing number.
+- Creating the first sample moves a waiting/stand-by project into the
+  sample stage, with an explicit status-history event. An approved or
+  cancelled project accepts no new sample.
+- **An approved sample never approves the project.** Technical approval of
+  a trial and commercial approval of a project are different decisions;
+  the latter still requires an accepted quote and an explicit action.
+- Material used in a sample is a **real physical stock exit**, recorded as
+  its own movement type (sample consumption) — never disguised as an
+  adjustment, and never a second ledger of its own. It reuses the same
+  eligibility rules as the rest of the system: lot belongs to the item,
+  quality/expiry/CoA state, owner (customer-owned material only for that
+  customer's project), positive quantity and availability net of what is
+  reserved for production orders or customer orders. There is no bypass
+  "because it is a sample".
+- Rejecting or cancelling a sample **never reverses consumption**: what
+  was physically used stays used. A reversal, if ever needed, is an
+  explicit inventory operation with its own reason.
+- The sample output never enters finished-goods stock and is never
+  shippable as product. Its label carries no price or cost.
+- Concluding a sample freezes the customer/project snapshot, so a later
+  rename never rewrites a label that was already printed and sent.
+- Roles: creating a sample belongs to commercial/production; consumption
+  and physical completion belong to production; approving or rejecting the
+  result belongs to commercial. Quality reads and attaches documents.
+- Legacy samples are only imported when the link to a project is
+  unequivocal. The historical export has no customer or product code, so
+  resolution by resemblance is forbidden — unresolved rows become findings,
+  no Project is invented, no consumption is fabricated and no outcome
+  (approved/rejected) is guessed.
+
 ---
 
 # 6. Purchase Orders

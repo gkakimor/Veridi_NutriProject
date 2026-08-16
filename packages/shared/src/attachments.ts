@@ -13,6 +13,7 @@ export type AttachmentType =
   | "LABEL_ART"
   | "TECHNICAL_SHEET"
   | "BRIEFING"
+  | "SAMPLE_RESULT"
   | "OTHER";
 
 export const ATTACHMENT_TYPE_LABELS: Record<AttachmentType, string> = {
@@ -21,6 +22,7 @@ export const ATTACHMENT_TYPE_LABELS: Record<AttachmentType, string> = {
   LABEL_ART: "Arte de rótulo",
   TECHNICAL_SHEET: "Ficha técnica",
   BRIEFING: "Briefing",
+  SAMPLE_RESULT: "Resultado de amostra",
   OTHER: "Outro",
 };
 
@@ -32,6 +34,14 @@ export const PRODUCT_ATTACHMENT_TYPES: readonly AttachmentType[] = [
   "TECHNICAL_SHEET",
   "OTHER",
 ];
+/** Amostra aceita resultado de teste e material técnico — nunca laudo nem nota. */
+export const SAMPLE_ATTACHMENT_TYPES: readonly AttachmentType[] = [
+  "SAMPLE_RESULT",
+  "LABEL_ART",
+  "TECHNICAL_SHEET",
+  "OTHER",
+];
+
 /** Projeto aceita briefing e material técnico — nunca laudo nem nota fiscal. */
 export const PROJECT_ATTACHMENT_TYPES: readonly AttachmentType[] = [
   "BRIEFING",
@@ -56,6 +66,7 @@ export interface AttachmentDTO {
   receiptId: string | null;
   productId: string | null;
   projectId: string | null;
+  projectSampleId: string | null;
   /** Nome sanitizado só para exibição/download — nunca é caminho de arquivo. */
   originalFileName: string;
   mimeType: string;

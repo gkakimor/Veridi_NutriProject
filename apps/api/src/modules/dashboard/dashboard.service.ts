@@ -163,6 +163,7 @@ function emptySummary(): MovementSummaryDTO {
   return {
     receiptIn: 0,
     productionConsumption: 0,
+    sampleConsumption: 0,
     finishedGoodProduction: 0,
     shipmentOut: 0,
     adjustments: 0,
@@ -177,6 +178,11 @@ function applyMovementCount(target: MovementSummaryDTO, type: string, count: num
       break;
     case "PRODUCTION_CONSUMPTION":
       target.productionConsumption += count;
+      break;
+    case "SAMPLE_CONSUMPTION":
+      // Card proprio: consumo de desenvolvimento nao se mistura com
+      // consumo de producao nem com ajuste.
+      target.sampleConsumption += count;
       break;
     case "FINISHED_GOOD_PRODUCTION":
       target.finishedGoodProduction += count;
@@ -259,6 +265,23 @@ async function buildRecentMovements(
     take: RECENT_MOVEMENTS_LIMIT,
   });
 
+  // Amostra se liga ao ledger por sourceType/sourceId, nao por linha de
+  // documento. Resolvido em lote.
+  const sampleIds = [
+    ...new Set(
+      movements
+        .filter((movement) => movement.sourceType === "PROJECT_SAMPLE" && movement.sourceId)
+        .map((movement) => movement.sourceId!),
+    ),
+  ];
+  const samples = sampleIds.length
+    ? await prisma.projectSample.findMany({
+        where: { id: { in: sampleIds } },
+        select: { id: true, code: true },
+      })
+    : [];
+  const samplesById = new Map(samples.map((sample) => [sample.id, sample]));
+
   return movements.map((movement) => {
     // Origem derivada do vinculo 1:1 que cada tipo ja possui — nenhum
     // sistema generico de resolucao de origem.
@@ -282,6 +305,13 @@ async function buildRecentMovements(
       sourceCode = movement.shipmentLine.shipment.code;
       sourceKind = "SHIPMENT";
       sourceId = movement.shipmentLine.shipmentId;
+    } else if (movement.sourceType === "PROJECT_SAMPLE" && movement.sourceId) {
+      const sample = samplesById.get(movement.sourceId);
+      if (sample) {
+        sourceCode = sample.code;
+        sourceKind = "PROJECT_SAMPLE";
+        sourceId = sample.id;
+      }
     } else if (
       movement.type === "ADJUSTMENT_IN" ||
       movement.type === "ADJUSTMENT_OUT" ||
