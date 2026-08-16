@@ -9,13 +9,18 @@ import {
   ExcessiveReserveRequestError,
   InsufficientAvailableError,
   InsufficientOnHandError,
+  LineNotVerifiableError,
+  LotMismatchError,
+  LotNotFoundError,
   LotNotShippableError,
   NothingToReallocateError,
   NothingToShipError,
   OrderNotShippableError,
   ReservationLineNotFoundError,
+  ShipmentLineNotFoundError,
   ShipmentNotDraftError,
   ShipmentNotFoundError,
+  UnverifiedShipmentLinesError,
 } from "./shipments.errors.js";
 import {
   cancelShipment,
@@ -24,6 +29,7 @@ import {
   getShipmentById,
   listShipments,
   updateShipment,
+  verifyShipmentLine,
 } from "./shipments.service.js";
 import {
   getReservationStatus,
@@ -36,6 +42,7 @@ import {
   reallocateReservationLineSchema,
   reserveAvailableSchema,
   updateShipmentSchema,
+  verifyShipmentLineSchema,
 } from "./shipments.schemas.js";
 
 function formatZodError(error: ZodError) {
@@ -90,6 +97,21 @@ function mapDomainError(
   if (error instanceof InsufficientAvailableError) {
     return { status: 400, body: { error: "insufficient_available", message: error.message } };
   }
+  if (error instanceof ShipmentLineNotFoundError) {
+    return { status: 404, body: { error: "not_found", message: error.message } };
+  }
+  if (error instanceof LotNotFoundError) {
+    return { status: 404, body: { error: "lot_not_found", message: error.message } };
+  }
+  if (error instanceof LotMismatchError) {
+    return { status: 400, body: { error: "lot_mismatch", message: error.message } };
+  }
+  if (error instanceof LineNotVerifiableError) {
+    return { status: 400, body: { error: "line_not_verifiable", message: error.message } };
+  }
+  if (error instanceof UnverifiedShipmentLinesError) {
+    return { status: 400, body: { error: "unverified_shipment_lines", message: error.message } };
+  }
   if (error instanceof NothingToReallocateError) {
     return { status: 400, body: { error: "nothing_to_reallocate", message: error.message } };
   }
@@ -98,6 +120,8 @@ function mapDomainError(
 
 /**
  * `GET /shipments`, `GET /shipments/:id`, `PATCH /shipments/:id`,
+ * `POST /shipments/:id/lines/:lineId/verify` (conferência física do lote —
+ * auditoria pura, nunca movimenta estoque),
  * `POST /shipments/:id/confirm`, `POST /shipments/:id/cancel`, mais as
  * operações do Pedido: `POST /customer-orders/:id/shipments` (cria DRAFT),
  * `GET /customer-orders/:id/reservation-status`,
@@ -147,6 +171,24 @@ export const shipmentsRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       return reply.send(await updateShipment(id, parsed.data));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/shipments/:id/lines/:lineId/verify", async (request, reply) => {
+    const { id, lineId } = request.params as { id: string; lineId: string };
+    const parsed = verifyShipmentLineSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    try {
+      return reply.send(await verifyShipmentLine(id, lineId, parsed.data.lotCode));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

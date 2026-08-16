@@ -1,8 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { ShipmentDTO, ShipmentStatus } from "@veridi/shared";
-import { SHIPMENT_BILLING_STATUS_LABELS, SHIPMENT_STATUS_LABELS } from "@veridi/shared";
-import { cancelShipment, confirmShipment, getShipment, updateShipment } from "../../lib/shipments-api";
+import type {
+  ShipmentDTO,
+  ShipmentLineDTO,
+  ShipmentProductGroupDTO,
+  ShipmentProductStatus,
+  ShipmentStatus,
+} from "@veridi/shared";
+import {
+  SHIPMENT_BILLING_STATUS_LABELS,
+  SHIPMENT_PRODUCT_STATUS_LABELS,
+  SHIPMENT_STATUS_LABELS,
+} from "@veridi/shared";
+import {
+  cancelShipment,
+  confirmShipment,
+  getShipment,
+  updateShipment,
+  verifyShipmentLine,
+} from "../../lib/shipments-api";
 import { createBilling } from "../../lib/billings-api";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -28,6 +44,155 @@ function formatDateTime(value: string | null): string {
   return new Date(value).toLocaleString("pt-BR");
 }
 
+function productStatusBadgeClass(status: ShipmentProductStatus): string {
+  switch (status) {
+    case "VERIFIED":
+      return "badge badge--active";
+    case "PARTIAL":
+      return "badge badge--warn";
+    case "READY":
+      return "badge badge--neutral";
+    case "PENDING":
+      return "badge badge--inactive";
+  }
+}
+
+interface ProductGroupProps {
+  group: ShipmentProductGroupDTO;
+  lines: ShipmentLineDTO[];
+  isDraft: boolean;
+  quantities: Record<string, string>;
+  onQuantityChange: (reservationLineId: string, value: string) => void;
+  lotInputs: Record<string, string>;
+  onLotInputChange: (reservationLineId: string, value: string) => void;
+  onVerify: (line: ShipmentLineDTO) => void;
+  verifyingLine: string | null;
+}
+
+/**
+ * Um produto do Pedido dentro da Expedição. Um Pedido com vários produtos
+ * gera vários blocos — inclusive para o produto que ainda não tem reserva,
+ * para o operador enxergar o que falta. Nenhum total aqui é armazenado:
+ * tudo vem derivado do read model.
+ */
+function ProductGroup({
+  group,
+  lines,
+  isDraft,
+  quantities,
+  onQuantityChange,
+  lotInputs,
+  onLotInputChange,
+  onVerify,
+  verifyingLine,
+}: ProductGroupProps) {
+  return (
+    <div className="shipment-product">
+      <div className="status-line">
+        <strong>
+          <span className="code">{group.productCode}</span> {group.productName}
+        </strong>
+        <span className={productStatusBadgeClass(group.status)}>
+          {SHIPMENT_PRODUCT_STATUS_LABELS[group.status]}
+        </span>
+      </div>
+
+      {/* Cada número com a própria unidade — nada é somado entre produtos. */}
+      <p className="shipment-product__meta">
+        Pedido: {group.orderedQuantity} {group.unitCode} · Já expedido: {group.shippedQuantity} ·
+        Falta expedir: {group.outstandingQuantity} · Reservado disponível: {group.reservedRemaining} ·
+        Expedindo agora: {group.shippingNow} · Lotes conferidos: {group.lotsVerified}/
+        {group.lotsRequired}
+      </p>
+
+      {lines.length === 0 ? (
+        <p className="field__hint">Ainda sem reserva disponível para esta expedição.</p>
+      ) : (
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Lote</th>
+                <th>Lote Veridi</th>
+                <th>Validade</th>
+                <th>Localização</th>
+                <th>Reservado disponível</th>
+                <th>{isDraft ? "Enviar agora" : "Expedido"}</th>
+                <th>Conferência</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((line) => (
+                <tr key={line.id}>
+                  <td className="is-code">{line.lotCode ?? "—"}</td>
+                  <td>{line.businessLotNumber ?? "—"}</td>
+                  <td>{formatDate(line.expiryDate)}</td>
+                  <td>{line.location ?? "—"}</td>
+                  <td>
+                    {line.reservedRemaining} {line.unitCode}
+                  </td>
+                  <td>
+                    {isDraft ? (
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        aria-label={`Quantidade do lote ${line.lotCode ?? ""}`}
+                        value={quantities[line.customerOrderReservationLineId] ?? ""}
+                        onChange={(event) =>
+                          onQuantityChange(line.customerOrderReservationLineId, event.target.value)
+                        }
+                      />
+                    ) : (
+                      `${line.quantity} ${line.unitCode}`
+                    )}
+                  </td>
+                  <td>
+                    {line.verifiedAt ? (
+                      <span className="status-line">
+                        <span className="badge badge--active">Conferido</span>
+                        <span className="field__hint">
+                          {formatDateTime(line.verifiedAt)} — {line.verifiedBy ?? "—"}
+                        </span>
+                      </span>
+                    ) : isDraft && line.requiresVerification ? (
+                      <div className="lot-scanner__manual-row">
+                        <input
+                          type="text"
+                          aria-label={`Lote conferido da linha ${line.lotCode ?? ""}`}
+                          placeholder="Escaneie ou digite o lote"
+                          value={lotInputs[line.customerOrderReservationLineId] ?? ""}
+                          onChange={(event) =>
+                            onLotInputChange(line.customerOrderReservationLineId, event.target.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") onVerify(line);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--sm"
+                          disabled={verifyingLine === line.customerOrderReservationLineId}
+                          onClick={() => onVerify(line)}
+                        >
+                          {verifyingLine === line.customerOrderReservationLineId
+                            ? "Conferindo…"
+                            : "Conferir lote"}
+                        </button>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Documento transacional — página própria no workspace, não
  * FullWorkspaceModal. Estruturada como bloco read-only quando CONFIRMED,
@@ -50,6 +215,10 @@ export function ShipmentPage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [preparingBilling, setPreparingBilling] = useState(false);
+
+  /** Código lido/digitado por linha de reserva (a linha é recriada a cada save). */
+  const [lotInputs, setLotInputs] = useState<Record<string, string>>({});
+  const [verifyingLine, setVerifyingLine] = useState<string | null>(null);
 
   const syncFromServer = useCallback((next: ShipmentDTO) => {
     setShipment(next);
@@ -115,6 +284,46 @@ export function ShipmentPage() {
       setError(err instanceof Error ? err.message : "Falha ao confirmar expedição");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * Confere o lote de uma linha. A separação é salva antes, porque a
+   * conferência valida a quantidade realmente gravada — e como o save
+   * recria as linhas, a conferência usa o id devolvido pelo servidor.
+   */
+  async function handleVerify(line: ShipmentLineDTO) {
+    if (!id || !shipment) return;
+    const reservationLineId = line.customerOrderReservationLineId;
+    const lotCode = (lotInputs[reservationLineId] ?? "").trim();
+    if (!lotCode) return;
+
+    setVerifyingLine(reservationLineId);
+    setError(null);
+    try {
+      const saved = await updateShipment(id, {
+        notes: notes.trim(),
+        lines: shipment.lines.map((current) => ({
+          customerOrderReservationLineId: current.customerOrderReservationLineId,
+          quantity: (quantities[current.customerOrderReservationLineId] ?? "0").trim() || "0",
+        })),
+      });
+      const target = saved.lines.find(
+        (current) => current.customerOrderReservationLineId === reservationLineId,
+      );
+      if (!target) {
+        syncFromServer(saved);
+        setError("Esta linha não está mais na separação — informe a quantidade antes de conferir.");
+        return;
+      }
+
+      const verified = await verifyShipmentLine(id, target.id, { lotCode });
+      syncFromServer(verified);
+      setLotInputs((prev) => ({ ...prev, [reservationLineId]: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao conferir o lote");
+    } finally {
+      setVerifyingLine(null);
     }
   }
 
@@ -232,6 +441,25 @@ export function ShipmentPage() {
           </dl>
         </FormSection>
 
+        {isDraft && (
+          <FormSection
+            title="Conferência"
+            subtitle="Cada lote é conferido uma vez — nunca por unidade. Conferir não movimenta estoque."
+          >
+            <dl className="definition-list">
+              <dt>Produtos nesta expedição</dt>
+              <dd>{shipment.verification.productCount}</dd>
+              <dt>Lotes necessários</dt>
+              <dd>{shipment.verification.lotsRequired}</dd>
+              <dt>Lotes conferidos</dt>
+              <dd>
+                {shipment.verification.lotsVerified} / {shipment.verification.lotsRequired}
+                {shipment.verification.allLotsVerified && shipment.verification.lotsRequired > 0 && " ✓"}
+              </dd>
+            </dl>
+          </FormSection>
+        )}
+
         <FormSection
           title="Itens para expedição"
           subtitle={
@@ -240,63 +468,34 @@ export function ShipmentPage() {
               : "Quantidades efetivamente expedidas — histórico imutável."
           }
         >
-          <div className="table-container">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Produto</th>
-                  <th>Lote</th>
-                  <th>Lote Veridi</th>
-                  <th>Validade</th>
-                  <th>Localização</th>
-                  <th>Reservado disponível</th>
-                  <th>{isDraft ? "Enviar agora" : "Expedido"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shipment.lines.map((line) => (
-                  <tr key={line.id}>
-                    <td>
-                      <span className="code">{line.productCode}</span> {line.productName}
-                    </td>
-                    <td>{line.lotCode ?? "—"}</td>
-                    <td>{line.businessLotNumber ?? "—"}</td>
-                    <td>{formatDate(line.expiryDate)}</td>
-                    <td>{line.location ?? "—"}</td>
-                    <td>{line.reservedRemaining}</td>
-                    <td>
-                      {isDraft ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={quantities[line.customerOrderReservationLineId] ?? ""}
-                          onChange={(event) =>
-                            setQuantities((prev) => ({
-                              ...prev,
-                              [line.customerOrderReservationLineId]: event.target.value,
-                            }))
-                          }
-                        />
-                      ) : (
-                        `${line.quantity} ${line.unitCode}`
-                      )}
-                    </td>
-                  </tr>
-                ))}
+          {shipment.products.map((group) => (
+            <ProductGroup
+              key={group.customerOrderLineId}
+              group={group}
+              lines={shipment.lines.filter(
+                (line) => line.customerOrderLineId === group.customerOrderLineId,
+              )}
+              isDraft={isDraft}
+              quantities={quantities}
+              onQuantityChange={(reservationLineId, value) =>
+                setQuantities((prev) => ({ ...prev, [reservationLineId]: value }))
+              }
+              lotInputs={lotInputs}
+              onLotInputChange={(reservationLineId, value) =>
+                setLotInputs((prev) => ({ ...prev, [reservationLineId]: value }))
+              }
+              onVerify={handleVerify}
+              verifyingLine={verifyingLine}
+            />
+          ))}
 
-                {shipment.lines.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="table__empty">
-                      Nenhum item nesta expedição.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-            <div className="table-foot">
-              Total: {isDraft ? totalToShip : shipment.totalQuantity}
-            </div>
-          </div>
+          {shipment.products.length === 0 && (
+            <p className="field__hint">Nenhum item nesta expedição.</p>
+          )}
+
+          <p className="field__hint">
+            Total: {isDraft ? totalToShip : shipment.totalQuantity}
+          </p>
         </FormSection>
 
         <FormSection title="Observações">
@@ -350,13 +549,47 @@ export function ShipmentPage() {
         )}
 
         {shipment.status === "CONFIRMED" && (
-          <FormSection title="Auditoria">
+          <FormSection
+            title="Auditoria"
+            subtitle="Conferência física e saída — histórico imutável, não é possível reconferir."
+          >
             <dl className="definition-list">
               <dt>Confirmada em</dt>
               <dd>
                 {formatDateTime(shipment.confirmedAt)} — {shipment.confirmedBy ?? "—"}
               </dd>
             </dl>
+
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Lote</th>
+                    <th>Lote Veridi</th>
+                    <th>Quantidade</th>
+                    <th>Conferido em</th>
+                    <th>Conferido por</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shipment.lines.map((line) => (
+                    <tr key={line.id}>
+                      <td>
+                        <span className="code">{line.productCode}</span> {line.productName}
+                      </td>
+                      <td className="is-code">{line.lotCode ?? "—"}</td>
+                      <td>{line.businessLotNumber ?? "—"}</td>
+                      <td>
+                        {line.quantity} {line.unitCode}
+                      </td>
+                      <td>{formatDateTime(line.verifiedAt)}</td>
+                      <td>{line.verifiedBy ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </FormSection>
         )}
       </div>
@@ -382,8 +615,13 @@ export function ShipmentPage() {
               <button
                 type="button"
                 className="btn btn--accent"
-                disabled={saving || totalToShip <= 0}
+                disabled={saving || totalToShip <= 0 || !shipment.verification.allLotsVerified}
                 onClick={() => setConfirmDialogOpen(true)}
+                title={
+                  shipment.verification.allLotsVerified
+                    ? undefined
+                    : "Existem lotes ainda não conferidos nesta expedição."
+                }
               >
                 Confirmar expedição
               </button>
@@ -395,7 +633,11 @@ export function ShipmentPage() {
       <ConfirmDialog
         open={confirmDialogOpen}
         title={`Confirmar expedição ${shipment.code}?`}
-        message="Os produtos serão registrados como saída física do estoque. Esta operação não poderá ser cancelada diretamente depois da confirmação."
+        message={
+          `Produtos: ${shipment.verification.productCount} · Lotes: ${shipment.verification.lotsRequired} · ` +
+          `Conferência: ${shipment.verification.lotsVerified}/${shipment.verification.lotsRequired} ✓. ` +
+          "A confirmação registrará a saída física do estoque e não poderá ser cancelada depois."
+        }
         confirmLabel="Confirmar expedição"
         confirmTone="accent"
         onCancel={() => setConfirmDialogOpen(false)}

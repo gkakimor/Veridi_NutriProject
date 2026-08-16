@@ -8,6 +8,7 @@ import type {
   ShipmentListResponse,
   ShipmentStatus,
   UpdateShipmentInput,
+  VerifyShipmentLineInput,
 } from "@veridi/shared";
 import { API_URL } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
@@ -47,6 +48,23 @@ export async function createShipmentDraft(customerOrderId: string): Promise<Ship
 export async function updateShipment(id: string, input: UpdateShipmentInput): Promise<ShipmentDTO> {
   const response = await fetch(`${API_URL}/shipments/${id}`, {
     method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await parseJsonOrThrow(response)) as ShipmentDTO;
+}
+
+/**
+ * Confere fisicamente o lote de uma linha. Aceita código puro ou payload de
+ * QR (`LOT:LT-...`). Auditoria pura — nunca movimenta estoque.
+ */
+export async function verifyShipmentLine(
+  shipmentId: string,
+  lineId: string,
+  input: VerifyShipmentLineInput,
+): Promise<ShipmentDTO> {
+  const response = await fetch(`${API_URL}/shipments/${shipmentId}/lines/${lineId}/verify`, {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });

@@ -154,6 +154,22 @@ async function createOrderInFulfillment(app: App, productId: string, orderedQuan
   return applied.json();
 }
 
+/**
+ * Item loteado só sai depois de conferido fisicamente — a expedição não
+ * confirma sem isso.
+ */
+async function verifyAllLots(app: App, shipmentId: string) {
+  const shipment = (await app.inject({ method: "GET", url: `/shipments/${shipmentId}` })).json();
+  for (const line of shipment.lines) {
+    if (!line.requiresVerification) continue;
+    await app.inject({
+      method: "POST",
+      url: `/shipments/${shipmentId}/lines/${line.id}/verify`,
+      payload: { lotCode: line.lotCode },
+    });
+  }
+}
+
 /** Cria e confirma uma Expedição da quantidade informada. */
 async function shipQuantity(app: App, orderId: string, quantity?: string) {
   const draft = (await app.inject({ method: "POST", url: `/customer-orders/${orderId}/shipments` })).json();
@@ -166,6 +182,7 @@ async function shipQuantity(app: App, orderId: string, quantity?: string) {
       },
     });
   }
+  await verifyAllLots(app, draft.id);
   const confirmed = await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
   return confirmed.json();
 }

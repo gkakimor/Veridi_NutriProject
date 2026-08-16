@@ -258,6 +258,15 @@ export function FinishedGoodsPage() {
                     >
                       Abrir lote
                     </button>
+                    {/* Reaproveita a rota de impressão de etiqueta já existente —
+                        o QR do lote produzido é o mesmo `LOT:<code>` de sempre. */}
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => navigate(`/estoque/lotes/${row.lotId}/etiqueta`)}
+                    >
+                      Etiqueta / QR
+                    </button>
                     {row.productionOrderId && (
                       <button
                         type="button"

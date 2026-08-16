@@ -200,6 +200,20 @@ Formal equivalent-material rules.
 ## Rework / reprocessing
 Formal workflows.
 
+## Logistics unit / Volume / Handling unit
+A physical package (box/pallet) identified on its own, holding a known
+quantity of a single lot:
+
+```text
+VOL-000001 → LT-PA-001 → 500 un
+```
+
+Would let the operator scan one box and get the quantity already attached,
+instead of scanning the lot and typing the quantity. **Not implemented in
+the FAST MVP on purpose**: today the lot QR answers only "which lot?", and
+quantity stays an explicit, separate decision on the shipment line. Units
+are never serialized — 400 units of a lot are one scan, not 400 reads.
+
 ---
 
 # Commercial / CRM

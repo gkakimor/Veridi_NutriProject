@@ -41,6 +41,66 @@ export interface ShipmentLineDTO {
   position: number;
   /** `reservedRemaining` da linha de reserva de origem — o teto do que esta linha pode enviar. */
   reservedRemaining: string;
+  /** Linha loteada com quantidade > 0 exige conferência física antes da confirmação. */
+  requiresVerification: boolean;
+  /** Conferência física do lote — auditoria, nunca movimento de estoque. */
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+}
+
+/**
+ * Situação de conferência de um produto da Expedição — **derivada, nunca
+ * persistida**. `READY` = há quantidade separada e nenhum lote conferido
+ * ainda; `VERIFIED` = todos os lotes com quantidade > 0 foram conferidos.
+ */
+export type ShipmentProductStatus = "PENDING" | "READY" | "PARTIAL" | "VERIFIED";
+
+export const SHIPMENT_PRODUCT_STATUS_LABELS: Record<ShipmentProductStatus, string> = {
+  PENDING: "Pendente",
+  READY: "Pronto",
+  PARTIAL: "Parcial",
+  VERIFIED: "Conferido",
+};
+
+/**
+ * Progresso por linha do Pedido dentro da Expedição. Todos os totais são
+ * derivados na leitura — nada aqui é armazenado.
+ */
+export interface ShipmentProductGroupDTO {
+  customerOrderLineId: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  /** `null` enquanto o Pedido não tem snapshot do Finished Product Item. */
+  itemId: string | null;
+  finishedItemCode: string | null;
+  finishedItemName: string | null;
+  unitCode: string;
+  orderedQuantity: string;
+  /** Já expedido em Expedições CONFIRMED (inclui esta, depois de confirmada). */
+  shippedQuantity: string;
+  /** `ordered - shipped`, nunca negativo. */
+  outstandingQuantity: string;
+  /** Soma dos `reservedRemaining` das linhas desta Expedição. */
+  reservedRemaining: string;
+  /** Soma das quantidades desta Expedição para este produto. */
+  shippingNow: string;
+  lotsRequired: number;
+  lotsVerified: number;
+  status: ShipmentProductStatus;
+}
+
+export interface ShipmentVerificationSummaryDTO {
+  /** Produtos com quantidade > 0 nesta Expedição. */
+  productCount: number;
+  lotsRequired: number;
+  lotsVerified: number;
+  allLotsVerified: boolean;
+}
+
+export interface VerifyShipmentLineInput {
+  /** Código puro (`LT-...`) ou payload de QR (`LOT:LT-...`). */
+  lotCode: string;
 }
 
 export interface ShipmentDTO {
@@ -54,6 +114,10 @@ export interface ShipmentDTO {
   shipmentDate: string | null;
   notes: string | null;
   lines: ShipmentLineDTO[];
+  /** Um grupo por linha do Pedido — inclusive produtos ainda sem reserva nesta Expedição. */
+  products: ShipmentProductGroupDTO[];
+  /** Contagem de produtos/lotes conferidos — nunca soma de unidades incompatíveis. */
+  verification: ShipmentVerificationSummaryDTO;
   /** Soma das quantidades das linhas. */
   totalQuantity: string;
   /** Estado de faturamento derivado — só relevante quando `CONFIRMED`. */

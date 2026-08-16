@@ -207,6 +207,30 @@ async function setShipmentLines(
   return app.inject({ method: "PATCH", url: `/shipments/${shipmentId}`, payload: { lines } });
 }
 
+async function getShipment(app: App, shipmentId: string) {
+  return (await app.inject({ method: "GET", url: `/shipments/${shipmentId}` })).json();
+}
+
+async function verifyLine(app: App, shipmentId: string, lineId: string, lotCode: string) {
+  return app.inject({
+    method: "POST",
+    url: `/shipments/${shipmentId}/lines/${lineId}/verify`,
+    payload: { lotCode },
+  });
+}
+
+/**
+ * Conferência física de todos os lotes da expedição — pré-requisito para
+ * confirmar qualquer linha loteada com quantidade > 0.
+ */
+async function verifyAllLots(app: App, shipmentId: string) {
+  const shipment = await getShipment(app, shipmentId);
+  for (const line of shipment.lines) {
+    if (!line.requiresVerification) continue;
+    await verifyLine(app, shipmentId, line.id, line.lotCode);
+  }
+}
+
 describe("Expedição — rascunho (separação)", () => {
   it("gera EXP-000001, não altera On Hand nem Reserved, permite uma única DRAFT por pedido", async () => {
     const app = buildApp();
@@ -319,6 +343,7 @@ describe("Expedição — confirmação", () => {
     await setShipmentLines(app, draft1.id, [
       { customerOrderReservationLineId: reservationLineId, quantity: "200" },
     ]);
+    await verifyAllLots(app, draft1.id);
     const confirmed1 = await app.inject({ method: "POST", url: `/shipments/${draft1.id}/confirm` });
     expect(confirmed1.statusCode).toBe(200);
     expect(confirmed1.json().status).toBe("CONFIRMED");
@@ -331,6 +356,7 @@ describe("Expedição — confirmação", () => {
     // Expedição 2: os 400 restantes.
     const draft2 = (await prepareShipment(app, order.id)).json();
     expect(draft2.totalQuantity).toBe("400");
+    await verifyAllLots(app, draft2.id);
     const confirmed2 = await app.inject({ method: "POST", url: `/shipments/${draft2.id}/confirm` });
     expect(confirmed2.statusCode).toBe(200);
 
@@ -352,6 +378,7 @@ describe("Expedição — confirmação", () => {
     const order = await createOrderInFulfillment(app, product.id, "500", "500");
 
     const draft = (await prepareShipment(app, order.id)).json();
+    await verifyAllLots(app, draft.id);
     const confirmed = await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
     expect(confirmed.statusCode).toBe(200);
 
@@ -383,6 +410,7 @@ describe("Expedição — confirmação", () => {
     await setShipmentLines(app, draft1.id, [
       { customerOrderReservationLineId: reservationLineId, quantity: "400" },
     ]);
+    await verifyAllLots(app, draft1.id);
     await app.inject({ method: "POST", url: `/shipments/${draft1.id}/confirm` });
 
     const partial = await getOrder(app, order.id);
@@ -391,6 +419,7 @@ describe("Expedição — confirmação", () => {
     expect(partial.lines[0].outstandingQuantity).toBe("600");
 
     const draft2 = (await prepareShipment(app, order.id)).json();
+    await verifyAllLots(app, draft2.id);
     await app.inject({ method: "POST", url: `/shipments/${draft2.id}/confirm` });
 
     const shipped = await getOrder(app, order.id);
@@ -415,6 +444,7 @@ describe("Expedição — confirmação", () => {
     const order = await createOrderInFulfillment(app, product.id, "1000", "1000");
 
     const draft = (await prepareShipment(app, order.id)).json();
+    await verifyAllLots(app, draft.id);
     await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
 
     expect((await getOrder(app, order.id)).status).toBe("SHIPPED");
@@ -442,6 +472,7 @@ describe("Expedição — confirmação", () => {
     expect(byLot.get(lotA.id)).toBe("400");
     expect(byLot.get(lotB.id)).toBe("200");
 
+    await verifyAllLots(app, draft.id);
     await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
 
     const lotADetail = (await app.inject({ method: "GET", url: `/lots/${lotA.id}` })).json();
@@ -463,6 +494,9 @@ describe("Expedição — confirmação", () => {
     const product = await createProduct(app, finishedItem.id);
     const order = await createOrderInFulfillment(app, product.id, "500", "500");
     const draft = (await prepareShipment(app, order.id)).json();
+    // Conferido enquanto o lote ainda estava bom — a revalidação da saída
+    // continua sendo obrigatória mesmo com a conferência já feita.
+    await verifyAllLots(app, draft.id);
 
     // O lote vence DEPOIS da reserva, ANTES da expedição.
     await getPrisma().lot.update({
@@ -499,6 +533,7 @@ describe("Expedição — confirmação", () => {
     const product = await createProduct(app, finishedItem.id);
     const order = await createOrderInFulfillment(app, product.id, "300", "300");
     const draft = (await prepareShipment(app, order.id)).json();
+    await verifyAllLots(app, draft.id);
     await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
 
     const edit = await app.inject({ method: "PATCH", url: `/shipments/${draft.id}`, payload: { notes: "x" } });
@@ -528,6 +563,7 @@ describe("Expedição — confirmação", () => {
     const product = await createProduct(app, finishedItem.id);
     const order = await createOrderInFulfillment(app, product.id, "300", "300");
     const draft = (await prepareShipment(app, order.id)).json();
+    await verifyAllLots(app, draft.id);
     await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
 
     const newShipment = await prepareShipment(app, order.id);
@@ -594,6 +630,7 @@ describe("Expedição — confirmação", () => {
       { customerOrderReservationLineId: reservationLineId, quantity: "80" },
     ]);
 
+    await verifyAllLots(app, draft.id);
     const [respA, respB] = await Promise.all([
       app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` }),
       app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` }),
@@ -752,6 +789,7 @@ describe("Realocação de reserva", () => {
     await setShipmentLines(app, draft.id, [
       { customerOrderReservationLineId: originalLineId, quantity: "40" },
     ]);
+    await verifyAllLots(app, draft.id);
     await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
 
     // Lote A vence antes de expedir o restante; chega um lote B novo.

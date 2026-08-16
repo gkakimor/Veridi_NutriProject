@@ -16,6 +16,11 @@ export const cancelShipmentSchema = z.object({
   reason: z.string().trim().min(3, "Motivo do cancelamento é obrigatório").max(500),
 });
 
+/** Aceita o código puro (`LT-...`) ou o payload de QR (`LOT:LT-...`). */
+export const verifyShipmentLineSchema = z.object({
+  lotCode: z.string().trim().min(1, "Informe ou escaneie o lote"),
+});
+
 export const listShipmentsQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   customerOrderId: z.string().trim().min(1).optional(),
@@ -41,5 +46,6 @@ export type ShipmentLineInput = z.infer<typeof shipmentLineInputSchema>;
 export type UpdateShipmentInput = z.infer<typeof updateShipmentSchema>;
 export type CancelShipmentInput = z.infer<typeof cancelShipmentSchema>;
 export type ListShipmentsQuery = z.infer<typeof listShipmentsQuerySchema>;
+export type VerifyShipmentLineInput = z.infer<typeof verifyShipmentLineSchema>;
 export type ReserveAvailableInput = z.infer<typeof reserveAvailableSchema>;
 export type ReallocateReservationLineInput = z.infer<typeof reallocateReservationLineSchema>;

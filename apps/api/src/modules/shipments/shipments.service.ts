@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type {
   Customer,
   CustomerOrder,
+  CustomerOrderLine,
   CustomerOrderReservationLine,
   Item,
   Lot,
@@ -10,8 +11,14 @@ import type {
   Shipment,
   ShipmentLine,
 } from "@prisma/client";
-import type { ShipmentDTO, ShipmentLineDTO, ShipmentListResponse } from "@veridi/shared";
-import { SHIPMENT_CODE_PREFIX } from "@veridi/shared";
+import type {
+  ShipmentDTO,
+  ShipmentLineDTO,
+  ShipmentListResponse,
+  ShipmentProductGroupDTO,
+  ShipmentProductStatus,
+} from "@veridi/shared";
+import { SHIPMENT_CODE_PREFIX, normalizeLotLookupCode } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getOnHand, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
@@ -23,12 +30,17 @@ import {
   ExceedsOutstandingError,
   ExceedsReservedRemainingError,
   InsufficientOnHandError,
+  LineNotVerifiableError,
+  LotMismatchError,
+  LotNotFoundError,
   LotNotShippableError,
   NothingToShipError,
   OrderNotShippableError,
   ReservationLineNotFoundError,
+  ShipmentLineNotFoundError,
   ShipmentNotDraftError,
   ShipmentNotFoundError,
+  UnverifiedShipmentLinesError,
 } from "./shipments.errors.js";
 import type { ListShipmentsQuery, UpdateShipmentInput } from "./shipments.schemas.js";
 
@@ -54,12 +66,12 @@ type ShipmentLineWithRelations = ShipmentLine & {
   customerOrderReservationLine: ReservationLineWithRelations;
 };
 type ShipmentWithRelations = Shipment & {
-  customerOrder: CustomerOrder & { customer: Customer };
+  customerOrder: CustomerOrder & { customer: Customer; lines: CustomerOrderLine[] };
   lines: ShipmentLineWithRelations[];
 };
 
 const shipmentInclude = {
-  customerOrder: { include: { customer: true } },
+  customerOrder: { include: { customer: true, lines: { orderBy: { position: "asc" as const } } } },
   lines: {
     include: {
       product: true,
@@ -171,7 +183,76 @@ function toShipmentLineDTO(
     unitCode: line.unitCode,
     position: line.position,
     reservedRemaining: reservedRemaining.toString(),
+    // Item loteado com quantidade real e o unico caso que exige conferencia
+    // fisica antes da saida.
+    requiresVerification: line.lotId !== null && line.quantity.greaterThan(0),
+    verifiedAt: line.verifiedAt ? line.verifiedAt.toISOString() : null,
+    verifiedBy: line.verifiedBy,
   };
+}
+
+/**
+ * Progresso por produto do Pedido — SEMPRE derivado na leitura. Um Pedido
+ * com varios produtos gera varios grupos, inclusive para produtos que ainda
+ * nao tem reserva nesta Expedicao (aparecem com `shippingNow = 0`, para o
+ * operador enxergar o que falta em vez de achar que o pedido esta completo).
+ */
+function buildProductGroups(
+  shipment: ShipmentWithRelations,
+  lineDTOs: ShipmentLineDTO[],
+  shippedByOrderLine: Map<string, Prisma.Decimal>,
+): ShipmentProductGroupDTO[] {
+  const linesByOrderLine = new Map<string, ShipmentLineDTO[]>();
+  for (const line of lineDTOs) {
+    const bucket = linesByOrderLine.get(line.customerOrderLineId) ?? [];
+    bucket.push(line);
+    linesByOrderLine.set(line.customerOrderLineId, bucket);
+  }
+
+  return shipment.customerOrder.lines.map((orderLine) => {
+    const lines = linesByOrderLine.get(orderLine.id) ?? [];
+    const shipped = shippedByOrderLine.get(orderLine.id) ?? new Prisma.Decimal(0);
+    const outstanding = Prisma.Decimal.max(orderLine.orderedQuantity.minus(shipped), 0);
+
+    let shippingNow = new Prisma.Decimal(0);
+    let reservedRemaining = new Prisma.Decimal(0);
+    let lotsRequired = 0;
+    let lotsVerified = 0;
+    for (const line of lines) {
+      shippingNow = shippingNow.plus(line.quantity);
+      reservedRemaining = reservedRemaining.plus(line.reservedRemaining);
+      if (!line.requiresVerification) continue;
+      lotsRequired += 1;
+      if (line.verifiedAt !== null) lotsVerified += 1;
+    }
+
+    // Status puramente visual: nunca persistido, nunca usado como regra.
+    let status: ShipmentProductStatus;
+    if (lotsRequired === 0) status = "PENDING";
+    else if (lotsVerified === 0) status = "READY";
+    else if (lotsVerified < lotsRequired) status = "PARTIAL";
+    else status = "VERIFIED";
+
+    const reference = lines[0];
+    return {
+      customerOrderLineId: orderLine.id,
+      productId: orderLine.productId,
+      productCode: orderLine.productCode ?? reference?.productCode ?? "—",
+      productName: orderLine.productName ?? reference?.productName ?? "—",
+      itemId: orderLine.finishedItemId ?? reference?.itemId ?? null,
+      finishedItemCode: orderLine.finishedItemCode ?? reference?.finishedItemCode ?? null,
+      finishedItemName: orderLine.finishedItemName ?? reference?.finishedItemName ?? null,
+      unitCode: orderLine.unitCode,
+      orderedQuantity: orderLine.orderedQuantity.toString(),
+      shippedQuantity: shipped.toString(),
+      outstandingQuantity: outstanding.toString(),
+      reservedRemaining: reservedRemaining.toString(),
+      shippingNow: shippingNow.toString(),
+      lotsRequired,
+      lotsVerified,
+      status,
+    };
+  });
 }
 
 async function toShipmentDTO(shipment: ShipmentWithRelations): Promise<ShipmentDTO> {
@@ -183,11 +264,34 @@ async function toShipmentDTO(shipment: ShipmentWithRelations): Promise<ShipmentD
   // Numa Expedicao CONFIRMED o "reservado disponivel" ja considera a
   // propria saida — a UI read-only mostra o historico, nao um teto de
   // edicao. Em DRAFT e o teto real do que ainda pode ser enviado.
-  const reservedRemainingByLine = await getReservedRemainingByLines(
-    getPrisma(),
-    shipment.lines.map((line) => line.customerOrderReservationLineId),
-  );
+  const [reservedRemainingByLine, shippedByOrderLine] = await Promise.all([
+    getReservedRemainingByLines(
+      getPrisma(),
+      shipment.lines.map((line) => line.customerOrderReservationLineId),
+    ),
+    getShippedByOrderLines(
+      getPrisma(),
+      shipment.customerOrder.lines.map((line) => line.id),
+    ),
+  ]);
   const totalQuantity = shipment.lines.reduce((sum, line) => sum.plus(line.quantity), new Prisma.Decimal(0));
+
+  const lineDTOs = shipment.lines.map((line) =>
+    toShipmentLineDTO(
+      line,
+      reservedRemainingByLine.get(line.customerOrderReservationLineId) ?? new Prisma.Decimal(0),
+    ),
+  );
+  const products = buildProductGroups(shipment, lineDTOs, shippedByOrderLine);
+
+  // Contagem de produtos/lotes — nunca soma de unidades incompativeis.
+  const linesRequiringVerification = lineDTOs.filter((line) => line.requiresVerification);
+  const verification = {
+    productCount: products.filter((group) => new Prisma.Decimal(group.shippingNow).greaterThan(0)).length,
+    lotsRequired: linesRequiringVerification.length,
+    lotsVerified: linesRequiringVerification.filter((line) => line.verifiedAt !== null).length,
+    allLotsVerified: linesRequiringVerification.every((line) => line.verifiedAt !== null),
+  };
 
   return {
     id: shipment.id,
@@ -199,9 +303,9 @@ async function toShipmentDTO(shipment: ShipmentWithRelations): Promise<ShipmentD
     status: shipment.status,
     shipmentDate: shipment.shipmentDate ? shipment.shipmentDate.toISOString() : null,
     notes: shipment.notes,
-    lines: shipment.lines.map((line) =>
-      toShipmentLineDTO(line, reservedRemainingByLine.get(line.customerOrderReservationLineId) ?? new Prisma.Decimal(0)),
-    ),
+    lines: lineDTOs,
+    products,
+    verification,
     totalQuantity: totalQuantity.toString(),
     billingStatus: billingInfo.status,
     billingId: billingInfo.billingId,
@@ -391,11 +495,30 @@ export async function updateShipment(id: string, input: UpdateShipmentInput): Pr
         }
       }
 
+      // A separacao e reescrita a cada save, mas a conferencia fisica ja
+      // feita nao pode ser perdida por isso: ela vale para o LOTE daquela
+      // linha de reserva, e quantidade e um conceito separado. Se a reserva
+      // for realocada, a linha de reserva antiga deixa de existir e a
+      // conferencia naturalmente nao e reaproveitada.
+      const existingLines = await tx.shipmentLine.findMany({
+        where: { shipmentId: id },
+        select: { customerOrderReservationLineId: true, verifiedAt: true, verifiedBy: true },
+      });
+      const verificationByReservationLine = new Map(
+        existingLines
+          .filter((line) => line.verifiedAt !== null)
+          .map((line) => [
+            line.customerOrderReservationLineId,
+            { verifiedAt: line.verifiedAt, verifiedBy: line.verifiedBy },
+          ]),
+      );
+
       await tx.shipmentLine.deleteMany({ where: { shipmentId: id } });
       if (nonZero.length > 0) {
         await tx.shipmentLine.createMany({
           data: nonZero.map((line, index) => {
             const reservationLine = reservationLinesById.get(line.customerOrderReservationLineId)!;
+            const verification = verificationByReservationLine.get(reservationLine.id);
             return {
               shipmentId: id,
               customerOrderLineId: reservationLine.customerOrderLineId,
@@ -406,6 +529,9 @@ export async function updateShipment(id: string, input: UpdateShipmentInput): Pr
               quantity: new Prisma.Decimal(line.quantity),
               unitCode: reservationLine.item.unitCode,
               position: index,
+              ...(verification
+                ? { verifiedAt: verification.verifiedAt, verifiedBy: verification.verifiedBy }
+                : {}),
             };
           }),
         });
@@ -419,6 +545,97 @@ export async function updateShipment(id: string, input: UpdateShipmentInput): Pr
   });
 
   return (await getShipmentById(id))!;
+}
+
+/**
+ * Confere fisicamente o lote de uma linha da Expedicao (§12-19 do handoff).
+ *
+ * Aceita o codigo puro ou o payload de QR (`LOT:LT-...`), reutilizando a
+ * MESMA normalizacao do lookup de lotes — nao existe segundo padrao de QR.
+ *
+ * A conferencia responde apenas "o lote certo esta fisicamente aqui?".
+ * NUNCA cria InventoryMovement, nunca altera On Hand/Reserved/Available e
+ * nunca mexe no status do Pedido: a saida fisica continua acontecendo
+ * exclusivamente na confirmacao da Expedicao. Tambem nunca troca o lote da
+ * linha — lote divergente e erro, e trocar exige realocacao explicita da
+ * reserva.
+ */
+export async function verifyShipmentLine(
+  shipmentId: string,
+  shipmentLineId: string,
+  rawLotCode: string,
+): Promise<ShipmentDTO> {
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    const shipment = await tx.shipment.findUnique({ where: { id: shipmentId } });
+    if (!shipment) throw new ShipmentNotFoundError(shipmentId);
+    if (shipment.status !== "DRAFT") {
+      throw new ShipmentNotDraftError(
+        "Somente expedições em rascunho permitem conferir lotes — uma expedição confirmada é histórico.",
+      );
+    }
+
+    const line = await tx.shipmentLine.findFirst({
+      where: { id: shipmentLineId, shipmentId },
+      include: { item: true, customerOrderReservationLine: { include: { reservation: true, lot: true } } },
+    });
+    if (!line) throw new ShipmentLineNotFoundError(shipmentLineId);
+    if (line.quantity.lessThanOrEqualTo(0)) {
+      throw new LineNotVerifiableError(
+        "Informe a quantidade a expedir desta linha antes de conferir o lote.",
+      );
+    }
+    if (line.lotId === null) {
+      throw new LineNotVerifiableError("Esta linha não controla lote — não há conferência a fazer.");
+    }
+
+    const normalized = normalizeLotLookupCode(rawLotCode);
+    if (!normalized) throw new LotNotFoundError(rawLotCode);
+
+    const lot = await tx.lot.findUnique({ where: { code: normalized } });
+    if (!lot) throw new LotNotFoundError(normalized);
+
+    const reservationLine = line.customerOrderReservationLine;
+    // A reserva tem que ser deste Pedido — o contexto comercial vem da
+    // Expedicao, nunca do lote.
+    if (reservationLine.reservation.customerOrderId !== shipment.customerOrderId) {
+      throw new ReservationLineNotFoundError(line.customerOrderReservationLineId);
+    }
+
+    // Identidade: um lote pertence a exatamente UM Item. Um lote de
+    // componente usado na OP nunca vira produto expedivel, e o lote de outro
+    // produto acabado tambem nao serve.
+    const expectedLot = reservationLine.lot;
+    if (!expectedLot || lot.id !== expectedLot.id) {
+      throw new LotMismatchError(expectedLot?.code ?? line.lotCode ?? "—", lot.code);
+    }
+    if (lot.itemId !== line.itemId) {
+      throw new LotMismatchError(expectedLot.code, lot.code);
+    }
+
+    // Lote precisa estar operacionalmente utilizavel AGORA — bloqueado,
+    // aguardando Qualidade ou vencido nunca sai.
+    if (!isLotAvailableForUse(lot)) throw new LotNotShippableError(lot.code);
+
+    const remaining =
+      (await getReservedRemainingByLines(tx, [reservationLine.id])).get(reservationLine.id) ??
+      new Prisma.Decimal(0);
+    if (remaining.lessThanOrEqualTo(0)) {
+      throw new ExceedsReservedRemainingError(lot.code, "0");
+    }
+    if (line.quantity.greaterThan(remaining)) {
+      throw new ExceedsReservedRemainingError(lot.code, remaining.toString());
+    }
+
+    // Só auditoria: nenhum InventoryMovement é criado aqui.
+    await tx.shipmentLine.update({
+      where: { id: line.id },
+      data: { verifiedAt: new Date(), verifiedBy: SYSTEM_ACTOR },
+    });
+  });
+
+  return (await getShipmentById(shipmentId))!;
 }
 
 /**
@@ -455,6 +672,11 @@ export async function confirmShipment(id: string): Promise<ShipmentDTO> {
 
     const shipmentLines = shipment.lines.filter((line) => line.quantity.greaterThan(0));
     if (shipmentLines.length === 0) throw new EmptyShipmentError();
+
+    // Item loteado so sai depois de conferido fisicamente. Regra validada no
+    // backend — a UI apenas antecipa o bloqueio.
+    const unverified = shipmentLines.filter((line) => line.lotId !== null && line.verifiedAt === null);
+    if (unverified.length > 0) throw new UnverifiedShipmentLinesError();
 
     // Trava Items e Lotes envolvidos em ordem deterministica — mesmo padrao
     // de concorrencia do RELEASE de OP/Aplicar Plano. Protege contra duas

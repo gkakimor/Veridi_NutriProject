@@ -32,6 +32,9 @@ FAST MVP.
 **Delivery 20 — Fundação de Custos (capacidade 29): concluído.**
 **Delivery 21 — Dashboard operacional (Bloco E, capacidade 30): concluído
 — inclui a correção de consistência da tela Produção → Produto Acabado.**
+**Delivery 22 — QR de Produto Acabado + Conferência de lote na Expedição:
+concluído (fechamento operacional Produto Acabado → identificação física →
+Expedição).**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -86,7 +89,7 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  RELEASED/IN_PRODUCTION) / Produto Acabado (consulta
                  read-only dos lotes produzidos: produzido, On Hand/
                  Reserved/Available, qualidade, validade e custo material
-                 unitário), Comercial > Pedidos (lista +
+                 unitário + Etiqueta/QR), Comercial > Pedidos (lista +
                  documento DRAFT/CONFIRMED/IN_FULFILLMENT/
                  PARTIALLY_SHIPPED/SHIPPED/CANCELLED, seções Produtos
                  [expedido/falta expedir]/Plano de Atendimento [editável
@@ -96,8 +99,10 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  Compra Vinculadas/Reservas de Produto Acabado [com
                  realocação]/Faturamento [progresso + documentos]/OPs
                  Geradas) + Expedições (lista + documento DRAFT/CONFIRMED/
-                 CANCELLED, separação editável, bloco read-only
-                 pós-confirmação, seção Faturamento) + Faturamento (lista
+                 CANCELLED, separação agrupada por produto com progresso
+                 e conferência de lote por linha, bloco read-only
+                 pós-confirmação com auditoria de conferência, seção
+                 Faturamento) + Faturamento (lista
                  "Aguardando faturamento" + documentos, documento próprio
                  DRAFT/ISSUED/CANCELLED com preço opcional)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
@@ -115,7 +120,8 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /apply-fulfillment-plan, /purchase-suggestion,
                  /purchase-drafts, /shipments, /reservation-status,
                  /reserve-available, /reallocate-reservation-line),
-                 /shipments (+ /confirm, /cancel), /billings (+ /awaiting,
+                 /shipments (+ /lines/:lineId/verify, /confirm, /cancel),
+                 /billings (+ /awaiting,
                  /issue, /cancel), /receipt-lines/:id/acquisition-cost,
                  /items/:id/cost-reference,
                  /formulation-versions/:id/cost-estimate,
@@ -2861,6 +2867,64 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 22 — QR de Produto Acabado + Conferência de lote na Expedição
+
+Fechamento operacional entre produzir, identificar fisicamente e expedir.
+Nenhuma entidade nova: nem `StockOutboundOrder`, nem `ScanEvent`, nem
+unidade logística. A Expedição continua sendo a ordem de saída.
+
+- **Identidade.** Um `Lot` pertence a exatamente um `Item` (garantido pelo
+  relacionamento). Lote de componente pode alimentar várias OPs, mas nunca
+  vira produto expedível — a Expedição só aceita o **Finished Product Lot
+  reservado àquela linha**. Um mesmo lote de produto acabado pode atender
+  vários Pedidos: `Lot` não tem cliente/pedido; o contexto comercial vem
+  de Shipment → CustomerOrder → Customer → ShipmentLine → ReservationLine
+  → Lot.
+- **QR.** Continua `LOT:<Lot.code>` — um único padrão, sem cliente,
+  pedido, quantidade, saldo, localização, status ou custo. A tela Produto
+  Acabado ganhou a ação `Etiqueta / QR`, que reaproveita a rota de
+  impressão já existente (`/estoque/lotes/:id/etiqueta`) e o `LotLabel`,
+  que já tratava lote produzido (Lote Veridi + quantidade produzida, sem
+  lote do fornecedor). Nenhuma lógica de etiqueta foi duplicada.
+- **Conferência.** `POST /shipments/:id/lines/:lineId/verify` com o código
+  puro ou o payload de QR, reutilizando `normalizeLotLookupCode` — não
+  existe segundo padrão de leitura. Entrada manual é suficiente: nada
+  depende de câmera. Valida Expedição DRAFT, linha pertencente à
+  Expedição, lote existente, lote **exatamente** o da ReservationLine (e
+  do Item esperado), reserva do mesmo Pedido, `reservedRemaining > 0`,
+  quantidade dentro do reservado e lote operacionalmente utilizável
+  (bloqueado/aguardando Qualidade/vencido nunca passam).
+- **Auditoria mínima:** `ShipmentLine.verifiedAt`/`verifiedBy`. Conferir
+  **não** cria InventoryMovement e não altera On Hand/Reserved/Available
+  nem o status do Pedido. Salvar a separação de novo preserva a
+  conferência (o lote não mudou; quantidade é outro conceito).
+- **Confirmação bloqueada:** linha loteada com quantidade > 0 e sem
+  `verifiedAt` faz o CONFIRM falhar com "Existem lotes ainda não
+  conferidos nesta expedição." Validado no backend; a UI só antecipa. A
+  elegibilidade do lote continua sendo revalidada no CONFIRM mesmo com a
+  conferência feita.
+- **Lote errado nunca é aceito em silêncio** nem substituído: a mensagem
+  mostra lote esperado × lote informado, e trocar exige a realocação
+  explícita da reserva já existente.
+- **Quantidade continua separada do QR:** o QR diz *qual lote*, a
+  ShipmentLine diz *quanto*. 400 unidades de um lote = 1 conferência.
+- **UX de Pedido com vários produtos:** o DTO passou a expor `products`
+  (um grupo por linha do Pedido, inclusive as ainda sem reserva) com
+  Pedido/Já expedido/Falta/Reservado/Expedindo agora/Lotes conferidos e um
+  status visual `PENDING/READY/PARTIAL/VERIFIED` — tudo derivado, nada
+  persistido — mais `verification` (produtos, lotes necessários, lotes
+  conferidos). Contagem de produtos/lotes é segura; unidades incompatíveis
+  nunca são somadas.
+- Testes: `shipment-verification.test.ts` (identidade, QR puro e payload,
+  lote de outro produto, lote de componente, linha de outra Expedição,
+  bloqueado/aguardando/vencido, bloqueio e liberação do CONFIRM, dois
+  lotes do mesmo produto, conferência preservada no save, Pedido com três
+  produtos → `PARTIALLY_SHIPPED`, mesmo lote em dois Pedidos com a
+  matemática final 800/600/200). As suítes existentes passaram a conferir
+  antes de confirmar.
+
+---
+
 # Delivery 21 — Dashboard operacional (Bloco E, capacidade 30)
 
 Cockpit, não BI. `GET /dashboard?from=&to=` é um **read model único** —
@@ -3001,7 +3065,9 @@ Fundação de Custos) — faltava só a visão. Nada de domínio novo foi criado
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
-**Fundação de Custos (29)** e **Dashboard operacional (30)** concluídos.
+**Fundação de Custos (29)** e **Dashboard operacional (30)** concluídos,
+mais o fechamento operacional QR de Produto Acabado + conferência de lote
+na Expedição (não altera o roadmap).
 Próximo passo do roadmap oficial: **Relatórios (31)** — incluindo R-14
 Pedido → Operação, R-15 Faturamento por período, R-16 Aguardando
 faturamento, R-17 Pedido × Entregue × Faturado — e depois exportações

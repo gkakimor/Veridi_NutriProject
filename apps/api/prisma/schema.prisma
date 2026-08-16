@@ -1266,6 +1266,13 @@ model ShipmentLine {
   lotCode           String?
   businessLotNumber String?
 
+  /// Conferencia fisica do lote antes da saida. Auditoria minima: NAO e um
+  /// ScanEvent generico, nao cria movimento e nao altera saldo — so registra
+  /// que o lote reservado foi encontrado fisicamente. Uma linha loteada com
+  /// quantidade > 0 so pode ser confirmada com `verifiedAt` preenchido.
+  verifiedAt DateTime?
+  verifiedBy String?
+
   createdAt DateTime @default(now())
 
   inventoryMovement InventoryMovement?

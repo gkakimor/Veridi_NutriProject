@@ -91,6 +91,50 @@ export class InsufficientAvailableError extends Error {
   }
 }
 
+export class ShipmentLineNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Linha não encontrada nesta expedição: ${id}`);
+    this.name = "ShipmentLineNotFoundError";
+  }
+}
+
+export class LotNotFoundError extends Error {
+  constructor(code: string) {
+    super(`Lote não encontrado: ${code}`);
+    this.name = "LotNotFoundError";
+  }
+}
+
+/**
+ * Lote lido não é o lote reservado desta linha. Nunca substituir
+ * automaticamente — trocar de lote é uma realocação explícita da reserva.
+ */
+export class LotMismatchError extends Error {
+  constructor(
+    readonly expectedLotCode: string,
+    readonly informedLotCode: string,
+  ) {
+    super(
+      `Este lote não corresponde à reserva desta linha da expedição. Lote esperado: ${expectedLotCode}. Lote informado: ${informedLotCode}.`,
+    );
+    this.name = "LotMismatchError";
+  }
+}
+
+export class LineNotVerifiableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LineNotVerifiableError";
+  }
+}
+
+export class UnverifiedShipmentLinesError extends Error {
+  constructor() {
+    super("Existem lotes ainda não conferidos nesta expedição.");
+    this.name = "UnverifiedShipmentLinesError";
+  }
+}
+
 export class NothingToReallocateError extends Error {
   constructor() {
     super("Esta linha de reserva não possui quantidade remanescente para realocar.");

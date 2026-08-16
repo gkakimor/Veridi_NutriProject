@@ -1180,6 +1180,50 @@ logistics/WMS.
   (`ShipmentLine` quantities of CONFIRMED shipments) — never on the
   originally ordered, reserved or planned quantity.
 
+### Lot identity and shipment verification (Delivery 22)
+
+- A `Lot` belongs to exactly **one** `Item` — structurally, through the
+  relation. `LT-PA-001` can never simultaneously represent two different
+  finished products.
+- A **component lot** (raw material/packaging) may feed several
+  Production Orders, and that genealogy is preserved through
+  ProductionConsumption → OP → ProductionOutput. It never makes the
+  component lot shippable: a shipment of the finished product only
+  accepts the **finished product lot** that was reserved to that order.
+- A **finished product lot** may serve several Customer Orders at the
+  same time. The lot never carries a customer or an order
+  (`Lot.customerId`/`Lot.customerOrderId` deliberately do not exist) —
+  the commercial context comes from the Shipment
+  (Shipment → CustomerOrder → Customer → ShipmentLine → ReservationLine
+  → Lot). The same QR is legitimately read on two different shipments.
+- `Lot.code` is the unique physical identifier and the QR payload stays
+  `LOT:<Lot.code>` — one single pattern for every lot origin. The QR
+  carries **nothing else**: no customer, order, shipment, quantity,
+  balance, location, status or cost. `businessLotNumber` ("Lote Veridi")
+  is a business-facing label shown on the label and screens, never the
+  system identity.
+- A lot label may show the **produced quantity** (sum of the lot's
+  ProductionOutputs). That is history, never the current balance — the
+  balance always comes from the inventory ledger.
+- FAST MVP **does not serialize units**: there is no QR per pot, capsule
+  or unit. 400 units of a lot are one scan plus an explicit quantity, not
+  400 reads. A future logistics unit/volume is backlog only.
+- A shipment line for a lot-controlled item with quantity > 0 requires
+  **physical lot verification** before the shipment can be confirmed.
+  Verification answers only "is the right lot physically here?" — it
+  never creates an InventoryMovement, never changes On Hand / Reserved /
+  Available and never changes the order status.
+- Quantity stays a separate decision: the QR says *which lot*, the
+  shipment line says *how much*. Quantity is never inferred from a scan.
+- A wrong lot is never silently accepted or swapped. The system states
+  the expected and the informed lot; changing lots requires the existing
+  explicit reservation reallocation.
+- Verification is audit only (`verifiedAt`/`verifiedBy` on the shipment
+  line) — deliberately not a generic ScanEvent entity. Confirming the
+  shipment remains the single physical write-off, and lot eligibility is
+  still revalidated at that moment even when verification already
+  happened.
+
 ## Invoicing (implemented, Delivery 19)
 Invoicing reflects what is actually delivered, not the originally ordered
 quantity (e.g. order 1000, deliver 600 → invoice 600). Partial invoicing
