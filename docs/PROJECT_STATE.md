@@ -21,6 +21,7 @@ FAST MVP.
 **Delivery 09 — Estoque + Movimentações + Inventário Físico: concluído.**
 **Delivery 10 — FEFO (sugestão e alocação de lotes): concluído.**
 **Delivery 11 — Formulações + Versionamento (+ hardening de Item): concluído.**
+**Delivery 12 — Ordem de Produção + Cálculo de Necessidade de Materiais: concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -28,15 +29,14 @@ oficial de identidade. Para telas CRUD simples (list + create/edit) o
 padrão é `FullWorkspaceModal` — aplicado em Itens, Fornecedores, Clientes,
 Produtos. Para **documentos transacionais** o padrão é **página própria
 dentro do workspace** (não modal) — aplicado em Ordem de Compra,
-Recebimento e agora Formulação (editor de versão); será reutilizado em
-Ordem de Produção. Rota de impressão (etiqueta de lote) é um terceiro
-padrão: página fora do `AppShell`, sem topbar/sidebar. Ver `docs/UI_BRAND.md`.
+Recebimento, Formulação (editor de versão) e agora Ordem de Produção. Rota
+de impressão (etiqueta de lote) é um terceiro padrão: página fora do
+`AppShell`, sem topbar/sidebar. Ver `docs/UI_BRAND.md`.
 
-8 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
-Usuários; Bloco B completo; Bloco C: Formulações + Versionamento
-implementados nesta entrega, falta OP, Requirement Calculation,
-Reservation, QR Picking, Actual Consumption, Partial Production, Finished
-Product).
+7 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
+Usuários; Bloco B completo; Bloco C: Formulações + Versionamento + OP +
+Requirement Calculation implementados, falta Reservation, QR Picking,
+Actual Consumption, Partial Production, Finished Product).
 
 ## Stack instalada
 
@@ -59,19 +59,22 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  Itens/Fornecedores/Clientes/Produtos, Compras > Ordens de
                  Compra/Recebimentos, Estoque > Visão Geral/Lotes (scan/QR/
                  etiqueta)/Movimentações/Inventário Físico, Produção >
-                 Formulações (histórico de versões + editor DRAFT)
+                 Formulações (histórico de versões + editor DRAFT) / Ordens
+                 de Produção (lista + documento DRAFT/PLANNED/CANCELLED)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders,
                  /receipts, /lots (+ /lots/lookup), /inventory,
                  /inventory-movements, /inventory-adjustments, /stock-counts,
                  /inventory/:itemId/allocation-suggestion (FEFO/FIFO),
                  /formulations, /products/:id/formulations,
-                 /formulation-versions
+                 /formulation-versions, /production-orders (+ /plan,
+                 /cancel)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder,
                  Receipt, Lot [qrPayload, onHand/reserved/available],
                  InventoryMovement, AllocationSuggestion,
-                 FormulationVersion/Component, CNPJ, UFs)
+                 FormulationVersion/Component, ProductionOrder/Requirement,
+                 CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -1036,6 +1039,163 @@ Ordens de Compra/Recebimentos. Console limpo.
 
 ---
 
+# Delivery 12 — Ordem de Produção + Cálculo de Necessidade de Materiais
+
+Primeiro slice de OP do Bloco C. Transforma Produto + Formulação +
+quantidade planejada em necessidade de materiais, comparada ao estoque em
+tempo real. Não implementa Reservation/Release/Picking/Consumo — escopo
+explicitamente travado no handoff. Validada só em desktop web (Desktop Web
+First).
+
+## Modelagem — ProductionOrder / ProductionOrderRequirement
+
+- `ProductionOrder`: `code` (sequence `production_order_code_seq`, prefixo
+  `OP`), `productId`, `formulationVersionId?` (nullable — DRAFT pode
+  existir sem formulação ativa selecionável), `plannedQuantity`
+  (`Decimal(18,6)`), `outputUnitCode` (sempre a unidade do Finished
+  Product Item, definida na criação), `status`
+  (`DRAFT`/`PLANNED`/`RELEASED`/`IN_PRODUCTION`/`COMPLETED`/`BLOCKED`/
+  `CANCELLED` — só as transições DRAFT→PLANNED e DRAFT/PLANNED→CANCELLED
+  são executáveis nesta entrega), `origin` (`MANUAL`/`STOCK_PRODUCTION`,
+  default `MANUAL`; `CUSTOMER_ORDER` fica para o Bloco D), snapshot
+  histórico nullable (`productCode/Name`, `finishedItemId/Code/Name`,
+  `formulationVersionNumber`, `customerCode/Name/Cnpj`) populado só no
+  planejamento, `notes?`, auditoria de planejamento/cancelamento.
+- `ProductionOrderRequirement`: `productionOrderId`, `itemId` + snapshot
+  (`itemCode`/`itemName`/`itemType`), `formulaQuantity`/`formulaUnitCode`
+  (fórmula original), `requiredQuantity`/`stockUnitCode` (já convertido
+  para a unidade de estoque do item — fonte de verdade da necessidade
+  técnica), `position`. `@@unique([productionOrderId, itemId])`.
+  Migration `20260821090000_production_orders`.
+
+## Necessidade de materiais é sempre calculada ao vivo
+
+`Requirement` persiste só o que a OP **precisa** tecnicamente
+(`requiredQuantity`). On Hand/Reserved/Available/On Order/Shortage nunca
+são colunas — calculados a cada leitura da OP a partir do mesmo
+`inventory-ledger.ts` já usado por Visão Geral do Estoque e FEFO (nenhuma
+segunda interpretação de disponibilidade). `Reserved` é sempre `"0"` nesta
+entrega — Reservation ainda não existe; quando existir, substituirá esse
+fixo pelo mesmo contrato.
+
+`getAvailableByItems` (nova função em `inventory-ledger.ts`) extrai a
+lógica de "Available por item" que já existia inline em
+`inventory.service.ts#buildItemSummaries` — reaproveitada agora também
+pelos Requirements de OP, sem duplicar o cálculo de elegibilidade de lote
+em um terceiro lugar.
+
+## Fator de produção e cálculo de requisito
+
+`productionFactor = plannedQuantity / formulationVersion.basisQuantity`
+(Decimal, nunca persistido — sempre derivável). Por componente:
+`formulaQuantity × factor`, convertido da unidade de fórmula para a
+unidade de estoque do item via `convertUomDecimal` (já existente, sem
+segundo serviço de conversão). Sem arredondamento operacional automático
+nesta fase — uma necessidade matemática de `4.5un` permanece `4.5`, nunca
+vira `5` silenciosamente.
+
+## Shortage nunca considera On Order
+
+`shortage = max(requiredQuantity - available, 0)`. `onOrder` é exibido
+separado, nunca reduz o `shortage` — material em compra ainda não está
+fisicamente disponível. `suggestedAllocations` por Requirement reaproveita
+`allocation.service.ts#getAllocationSuggestion` (FEFO/FIFO já existente) —
+sugestão pura, nunca persistida, nunca reserva, nunca altera saldo.
+
+## DRAFT × PLANNED
+
+DRAFT: Produto/Formulação/Quantidade/Observações editáveis; qualquer
+mudança de Produto/Formulação/Quantidade regenera os Requirements
+transacionalmente (delete + recreate, mesmo padrão de "substituir linhas"
+já usado em Formulação/Ordem de Compra). Trocar de Produto nunca herda a
+formulação do produto anterior — resolve a versão ACTIVE do novo produto
+(ou a versão explícita informada, validada contra o novo `productId`).
+Produto sem Finished Product Item válido não permite nem criar a OP
+(`outputUnitCode` depende dele); Produto sem formulação ACTIVE permite
+DRAFT (sem Requirements), mas bloqueia o `PLAN`.
+
+`POST /production-orders/:id/plan`: transação com lock de linha
+(`SELECT … FOR UPDATE`), revalida DRAFT, Produto ativo, Finished Product
+Item válido/ativo, formulação selecionada e **ainda ACTIVE** (uma DRAFT
+apontando para uma versão que virou INACTIVE depois de outra ativação
+nunca planeja silenciosamente — erro explícito, mesmo padrão de
+"reunir todas as falhas numa mensagem só" de `FormulationActivationError`),
+`plannedQuantity > 0`, Requirements não vazios. **Não exige estoque
+suficiente** — PLANNED pode existir com shortage; o bloqueio por
+insuficiência é uma decisão do próximo módulo (RELEASE). Ao planejar,
+congela os campos estruturais e o snapshot histórico; só `notes`
+continua editável depois.
+
+## Cancelamento
+
+`POST /production-orders/:id/cancel`: DRAFT ou PLANNED → CANCELLED, motivo
+obrigatório, nunca apaga Requirements (histórico preservado). CANCELLED é
+somente leitura.
+
+## Backend
+
+`GET/POST /production-orders`, `GET/PATCH /production-orders/:id`,
+`POST /production-orders/:id/plan`, `POST /production-orders/:id/cancel`.
+Sem PATCH de status livre. `production-orders.service.ts` consulta
+`FormulationVersion`/`FormulationComponent` diretamente via Prisma (não
+pela camada de DTO de `formulations.service.ts`, que já retorna Decimal
+como string) — mesmo padrão de `receiving.service.ts` consultando
+`PurchaseOrderLine` direto em vez de passar pela DTO de Ordem de Compra.
+
+## Frontend
+
+Produção → **Ordens de Produção** (`/producao/ordens`, tabela OP/Produto/
+Formulação/Quantidade/Unidade/Materiais["Disponível" ou "Falta em N
+materiais", dinâmico]/Status/Criada em) → **documento da OP**
+(`/producao/ordens/nova`, `/producao/ordens/:id` — mesmo padrão de página
+própria de Ordem de Compra/Recebimento/editor de Formulação). DRAFT:
+Produto/Formulação(lista todas as versões do produto, ACTIVE
+pré-selecionada)/Quantidade editáveis; troca de Produto recarrega as
+versões de formulação do novo produto e reseleciona a ACTIVE, nunca herda
+a anterior. Tabela "Necessidade de Materiais" (Item/Necessário/On
+Hand/Reservado/Disponível/Em Compra/Falta) com sugestão FEFO/FIFO inline
+por item, aparece assim que a OP é persistida (Requirements só existem no
+servidor). Rodapé: Cancelar OP / Salvar rascunho / Planejar OP.
+
+## Testes
+
+21 novos testes (`production-orders.test.ts`): geração/imutabilidade de
+código, concorrência na geração de código, Produto sem Finished Product
+Item/inativo não cria OP, formulação precisa pertencer ao Produto, DRAFT
+editável, quantidade ≤0 rejeitada no PLAN, Produto sem formulação ativa
+não planeja, versão que virou INACTIVE depois de selecionada não planeja
+silenciosamente, fluxo DRAFT→PLANNED com congelamento de campos e
+Requirements, PLANNED pode existir com shortage, cancelamento exige
+motivo/preserva Requirements/CANCELLED somente leitura, fator de produção
+e conversões de unidade (g→kg/mg→kg/mL→L/contagem), regeneração de
+Requirements ao mudar quantidade/Produto, precisão decimal sem
+arredondamento automático (4.5 preservado), Reserved sempre 0, Available
+respeitando lote bloqueado/vencido, shortage correto com On Order exibido
+separado, sugestão FEFO retornada sem alterar saldo. Total da API: 194
+testes.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (194 API + 7 web) — ok. Validado
+visualmente via Playwright **só desktop**: criação de OP (Produto →
+Formulação ACTIVE pré-selecionada → quantidade 5000), Requirements
+corretos após salvar rascunho (Vitamina C 500g/1000un × fator 5 = 2.5kg,
+Pote 1000un × 5 = 5000un, ambos com sugestão FEFO/FIFO exibida),
+planejamento (status Planejada, campos travados, Requirements
+preservados), listagem com coluna Materiais ("Disponível"), cancelamento
+com motivo obrigatório e bloco de histórico. Regressão em
+Formulações/Estoque/FEFO/Ordens de Compra. Console limpo (único erro é o
+404 pré-existente de `favicon.ico`, não relacionado a esta entrega).
+
+## Pendente (não bloqueante)
+
+- Nenhuma pendência real dentro do escopo desta entrega. Reservation,
+  RELEASE (bloqueio por estoque insuficiente), Picking, Consumo real e
+  Produto Acabado ficam para os próximos módulos do Bloco C, por decisão
+  explícita do handoff — não avançar para Material Reservation agora.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -1055,10 +1215,10 @@ Ordens de Compra/Recebimentos. Console limpo.
 12. FEFO
 
 ## Block C — Production
-13. Formulations
-14. Versioning
-15. OP
-16. Requirement Calculation
+13. Formulations ✓
+14. Versioning ✓
+15. OP ✓
+16. Requirement Calculation ✓
 17. Reservation
 18. QR Picking
 19. Actual Consumption
@@ -1179,6 +1339,18 @@ Ordens de Compra/Recebimentos. Console limpo.
   Componentes são só `RAW_MATERIAL`/`PACKAGING`; a unidade do componente
   pode diferir da unidade de estoque do item, desde que mesma dimensão
   (UOM). `basisQuantity` define a base de cálculo da versão.
+- Ordem de Produção preserva a formulação exata usada (snapshot do
+  `formulationVersionId`/número/output, congelado só no planejamento,
+  nunca na criação). `ProductionOrderRequirement.requiredQuantity` é a
+  necessidade técnica congelada (fonte de verdade); On
+  Hand/Reserved/Available/On Order/Shortage nunca são persistidos —
+  sempre calculados ao vivo a partir do `inventory-ledger.ts`, mesmo
+  contrato em qualquer tela. Uma OP `PLANNED` pode existir com shortage —
+  insuficiência de estoque não bloqueia o planejamento, só bloqueará o
+  futuro `RELEASE`. `On Order` nunca reduz o shortage exibido (mostrado
+  separado, "Em Compra"). A sugestão FEFO/FIFO em uma OP é só
+  recomendação — nunca reserva, nunca persiste, mesmo serviço de
+  `allocation.service.ts` já usado fora do contexto de OP.
 
 ---
 
@@ -1221,18 +1393,19 @@ Ordens de Compra/Recebimentos. Console limpo.
 # Next recommended implementation
 
 Resta do Bloco A: **Usuários**. Bloco B está completo. Bloco C:
-Formulações + Versionamento completos, próximo é **Ordem de Produção** —
-a definir por próximo handoff de Product Ownership. Reutilizar:
-`FullWorkspaceModal` + `components.css` para cadastros simples; padrão de
-página própria (ver Ordem de Compra/Recebimento/editor de Formulação)
-para novos documentos transacionais (a própria OP); `LotScanner`/`QrCode`
-para os próximos fluxos scan-first (Picking/Consumo); `apps/api/src/lib/
-inventory-ledger.ts` para qualquer cálculo futuro de saldo (Reservation
-substituirá o `reserved: "0"` fixo quando existir);
+Formulações + Versionamento + OP + Requirement Calculation completos,
+próximo é **Material Reservation** (PLANNED→RELEASED, bloqueio por
+estoque insuficiente) — a definir por próximo handoff de Product
+Ownership. Reutilizar: `FullWorkspaceModal` + `components.css` para
+cadastros simples; padrão de página própria (ver Ordem de
+Compra/Recebimento/editor de Formulação/OP) para novos documentos
+transacionais; `LotScanner`/`QrCode` para os próximos fluxos scan-first
+(Picking/Consumo); `apps/api/src/lib/inventory-ledger.ts` para qualquer
+cálculo futuro de saldo (Reservation substituirá o `reserved: "0"` fixo
+em `ProductionOrderRequirementDTO` quando existir, mesmo contrato);
 `allocation.service.ts#getAllocationSuggestion` será reutilizado pela
-futura Reserva de OP para criar alocações reais; `FormulationVersion`
-ACTIVE é a base do Requirement Calculation da OP (versão exata que a OP
-deve preservar, por decisão já registrada em `docs/PRODUCT_RULES.md`).
+futura Reserva de OP para criar alocações reais a partir das mesmas
+sugestões hoje só recomendadas.
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

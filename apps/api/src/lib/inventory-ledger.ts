@@ -102,6 +102,51 @@ export function isLotAvailableForUse(lot: { status: string; expiryDate: Date | n
   return lot.status === "AVAILABLE" && !isLotExpired(lot);
 }
 
+/**
+ * Available por item — mesma interpretacao em qualquer tela/servico que
+ * precise dela (Visao Geral do Estoque, FEFO, Requirements de OP). Item
+ * sem controle de lote: Available = On Hand. Item com controle de lote:
+ * soma so o On Hand dos lotes efetivamente disponiveis (AVAILABLE, nao
+ * vencido) — lote AWAITING_RELEASE/BLOCKED/vencido continua em On Hand
+ * mas contribui 0 aqui. Nunca duplicar esta logica em outro modulo.
+ */
+export async function getAvailableByItems(
+  prisma: PrismaOrTx,
+  items: readonly { id: string; controlsLot: boolean }[],
+): Promise<Map<string, Prisma.Decimal>> {
+  const onHandByItem = await getOnHandByItems(
+    prisma,
+    items.map((item) => item.id),
+  );
+
+  const lotControlledIds = items.filter((item) => item.controlsLot).map((item) => item.id);
+  const lots = lotControlledIds.length
+    ? await prisma.lot.findMany({ where: { itemId: { in: lotControlledIds } } })
+    : [];
+  const onHandByLot = await getOnHandByLots(
+    prisma,
+    lots.map((lot) => lot.id),
+  );
+
+  const availableByItem = new Map<string, Prisma.Decimal>();
+  for (const lot of lots) {
+    if (!isLotAvailableForUse(lot)) continue;
+    const lotOnHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
+    const current = availableByItem.get(lot.itemId) ?? new Prisma.Decimal(0);
+    availableByItem.set(lot.itemId, current.plus(lotOnHand));
+  }
+
+  const result = new Map<string, Prisma.Decimal>();
+  for (const item of items) {
+    const onHand = onHandByItem.get(item.id) ?? new Prisma.Decimal(0);
+    result.set(
+      item.id,
+      item.controlsLot ? (availableByItem.get(item.id) ?? new Prisma.Decimal(0)) : onHand,
+    );
+  }
+  return result;
+}
+
 function sumDirectional(
   rows: { type: InventoryMovementType; _sum: { quantity: Prisma.Decimal | null } }[],
 ): Prisma.Decimal {

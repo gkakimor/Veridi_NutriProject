@@ -82,7 +82,7 @@ export const navigation: NavGroup[] = [
       {
         label: "Ordens de Produção",
         path: "/producao/ordens",
-        implemented: false,
+        implemented: true,
       },
       {
         label: "Picking / Consumo",

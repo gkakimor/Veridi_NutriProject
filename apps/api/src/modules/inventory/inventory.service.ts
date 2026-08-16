@@ -12,6 +12,7 @@ import type {
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import {
+  getAvailableByItems,
   getOnHand,
   getOnHandByItems,
   getOnHandByLots,
@@ -90,34 +91,16 @@ async function buildItemSummaries(
   items: Item[],
 ): Promise<InventoryItemSummaryDTO[]> {
   const itemIds = items.map((item) => item.id);
-  const [onHandByItem, onOrderByItem] = await Promise.all([
+  const [onHandByItem, onOrderByItem, availableByItem] = await Promise.all([
     getOnHandByItems(prisma, itemIds),
     getOnOrderByItems(prisma, itemIds),
+    getAvailableByItems(prisma, items),
   ]);
-
-  const lotControlledIds = items.filter((item) => item.controlsLot).map((item) => item.id);
-  const lots = lotControlledIds.length
-    ? await prisma.lot.findMany({ where: { itemId: { in: lotControlledIds } } })
-    : [];
-  const onHandByLot = await getOnHandByLots(
-    prisma,
-    lots.map((lot) => lot.id),
-  );
-
-  const availableByItem = new Map<string, Prisma.Decimal>();
-  for (const lot of lots) {
-    if (!isLotAvailableForUse(lot)) continue;
-    const lotOnHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
-    const current = availableByItem.get(lot.itemId) ?? new Prisma.Decimal(0);
-    availableByItem.set(lot.itemId, current.plus(lotOnHand));
-  }
 
   return items.map((item) => {
     const onHand = onHandByItem.get(item.id) ?? new Prisma.Decimal(0);
     const onOrder = onOrderByItem.get(item.id) ?? new Prisma.Decimal(0);
-    const available = item.controlsLot
-      ? (availableByItem.get(item.id) ?? new Prisma.Decimal(0))
-      : onHand;
+    const available = availableByItem.get(item.id) ?? new Prisma.Decimal(0);
 
     return {
       itemId: item.id,

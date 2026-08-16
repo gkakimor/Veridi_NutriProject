@@ -59,6 +59,26 @@ enum FormulationVersionStatus {
   INACTIVE
 }
 
+/// Lifecycle completo do roadmap — esta entrega so implementa
+/// DRAFT->PLANNED e DRAFT/PLANNED->CANCELLED. RELEASED em diante chega
+/// junto de Material Reservation.
+enum ProductionOrderStatus {
+  DRAFT
+  PLANNED
+  RELEASED
+  IN_PRODUCTION
+  COMPLETED
+  BLOCKED
+  CANCELLED
+}
+
+/// CUSTOMER_ORDER fica para o Bloco D (Pedidos & Atendimento) — nao criar
+/// referencia fake agora.
+enum ProductionOrderOrigin {
+  MANUAL
+  STOCK_PRODUCTION
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -115,6 +135,8 @@ model Item {
   inventoryMovements  InventoryMovement[]
   formulationComponents FormulationComponent[]
   formulationVersionsAsOutput FormulationVersion[]
+  productionOrderRequirements ProductionOrderRequirement[]
+  productionOrdersAsFinishedItem ProductionOrder[] @relation("ProductionOrderFinishedItem")
 
   @@index([type])
   @@index([active])
@@ -222,6 +244,7 @@ model Product {
   updatedAt DateTime @updatedAt
 
   formulationVersions FormulationVersion[]
+  productionOrders    ProductionOrder[]
 
   @@index([active])
   @@index([customerId])
@@ -271,6 +294,7 @@ model FormulationVersion {
   inactivatedBy String?
 
   components FormulationComponent[]
+  productionOrders ProductionOrder[]
 
   /// V1/V2/... e sempre unico dentro do mesmo Product.
   @@unique([productId, versionNumber])
@@ -553,4 +577,104 @@ model InventoryMovement {
   @@index([type])
   @@index([occurredAt])
   @@map("inventory_movements")
+}
+
+/// Ordem de Producao. DRAFT e livremente editavel (Product/Formulacao/
+/// quantidade/notas), regenerando Requirements a cada mudanca relevante.
+/// PLANNED congela Product/versao de formulacao/quantidade/Requirements —
+/// so notas continuam editaveis. Sem exclusao fisica; cancelar preserva o
+/// documento e os Requirements no historico.
+model ProductionOrder {
+  id String @id @default(uuid())
+
+  /// Codigo interno gerado pelo backend (sequence dedicada, OP-000001).
+  /// Imutavel apos a criacao.
+  code String @unique
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  /// Null enquanto DRAFT sem formulacao definida (produto sem ACTIVE, ou
+  /// ainda nao escolhida). Pode referenciar qualquer versao do Product
+  /// durante DRAFT (para prever Requirements); PLAN exige que a versao
+  /// esteja ACTIVE no momento.
+  formulationVersionId String?
+  formulationVersion   FormulationVersion? @relation(fields: [formulationVersionId], references: [id])
+
+  plannedQuantity Decimal @db.Decimal(18, 6)
+  outputUnitCode  String
+
+  status ProductionOrderStatus @default(DRAFT)
+  origin ProductionOrderOrigin @default(MANUAL)
+
+  notes String?
+
+  /// Snapshot historico — preenchido so ao planejar (PLANNED). Enquanto
+  /// DRAFT, o service le Product/FormulationVersion/Item ao vivo via join.
+  productCode  String?
+  productName  String?
+
+  finishedItemId   String?
+  finishedItem     Item?   @relation("ProductionOrderFinishedItem", fields: [finishedItemId], references: [id])
+  finishedItemCode String?
+  finishedItemName String?
+
+  formulationVersionNumber Int?
+
+  customerCode String?
+  customerName String?
+  customerCnpj String?
+
+  plannedAt DateTime?
+  plannedBy String?
+
+  cancelledAt  DateTime?
+  cancelledBy  String?
+  cancelReason String?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirements ProductionOrderRequirement[]
+
+  @@index([status])
+  @@index([productId])
+  @@map("production_orders")
+}
+
+/// Necessidade de material CONGELADA da OP — nunca guarda On Hand/
+/// Reserved/Available/On Order/Shortage (isso e sempre calculado ao vivo
+/// na leitura, a partir do Inventory Ledger). Regenerada (delete+recreate)
+/// a cada mudanca relevante enquanto a OP e DRAFT; congelada ao planejar.
+model ProductionOrderRequirement {
+  id String @id @default(uuid())
+
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  /// Snapshot — mesmo padrao de linha de documento historico.
+  itemCode String
+  itemName String
+  itemType ItemType
+
+  /// Quantidade/unidade originais da formula (component.quantity/unitCode).
+  formulaQuantity Decimal @db.Decimal(18, 6)
+  formulaUnitCode String
+
+  /// formulaQuantity x productionFactor, ja convertida para a unidade de
+  /// estoque do Item — fonte de verdade da necessidade tecnica da OP.
+  requiredQuantity Decimal @db.Decimal(18, 6)
+  stockUnitCode    String
+
+  /// Ordem de exibicao estavel.
+  position Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([productionOrderId, itemId])
+  @@map("production_order_requirements")
 }

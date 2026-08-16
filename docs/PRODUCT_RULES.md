@@ -584,6 +584,25 @@ An OP may be created/planned without sufficient stock.
 Default MVP rule:
 **insufficient Available stock prevents RELEASE**.
 
+## Durable rules confirmed at implementation (DRAFT/PLANNED slice)
+
+- An OP always preserves the exact `FormulationVersion` used — the
+  version reference (plus a historical snapshot of product/finished item/
+  version number/customer) is frozen at the moment the OP transitions to
+  `PLANNED`, never at creation. While `DRAFT`, the OP always reflects the
+  product/formulation's *current* state, live-joined, so the user is
+  never shown a stale preview before committing.
+- Only `DRAFT → PLANNED` and `DRAFT`/`PLANNED → CANCELLED` are executable
+  in this slice; `RELEASED` onward requires Material Reservation and is
+  not implemented yet. There is no free-form status PATCH.
+- A `DRAFT` referencing a formulation version that stopped being `ACTIVE`
+  (a newer version was activated meanwhile) never plans silently against
+  the obsolete version — planning fails with an explicit error, and the
+  user must update the DRAFT to the current `ACTIVE` version.
+- `PLANNED` may exist with shortage — insufficient stock never blocks
+  planning, only the future `RELEASE`.
+- Cancelling requires a reason and never deletes historical Requirements.
+
 ---
 
 # 20. Material requirement calculation
@@ -606,6 +625,29 @@ For every requirement show:
 On Order is informational and must not satisfy a release requirement until physically received.
 
 Do not hide shortages.
+
+## Durable rules confirmed at implementation
+
+- A Requirement persists only the frozen technical need
+  (`requiredQuantity`, normalized to the item's stock unit via the same
+  UOM service used by Formulations — no second conversion service). On
+  Hand/Reserved/Available/On Order/Shortage are never stored columns —
+  always calculated live from the same `inventory-ledger.ts` used by the
+  Inventory overview and FEFO, so the contract never diverges across
+  screens.
+- `Reserved` is fixed at `"0"` in this slice — Material Reservation does
+  not exist yet. When it lands, it will replace this fixed value under
+  the exact same contract, not a new one.
+- `shortage = max(required - available, 0)`. On Order is shown alongside
+  but never reduces shortage — material in transit is not physically
+  available.
+- No automatic operational rounding is applied to a requirement quantity
+  in this phase (e.g. a mathematical need of 4.5 units stays 4.5, never
+  silently becomes 5). Closed-packaging/box-multiple rounding is deferred
+  to a future phase, only if actually needed.
+- The FEFO/FIFO lot suggestion shown per requirement reuses the existing
+  allocation service unchanged — a recommendation only, never persisted,
+  never a reservation, never altering stock.
 
 ---
 

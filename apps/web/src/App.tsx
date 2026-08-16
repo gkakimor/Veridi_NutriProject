@@ -23,6 +23,8 @@ import { StockCountPage } from "./pages/inventory/StockCountPage";
 import { FormulationsPage } from "./pages/formulations/FormulationsPage";
 import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPage";
 import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
+import { ProductionOrdersPage } from "./pages/production-orders/ProductionOrdersPage";
+import { ProductionOrderPage } from "./pages/production-orders/ProductionOrderPage";
 
 export function App() {
   return (
@@ -56,6 +58,9 @@ export function App() {
             path="/producao/formulacoes/:productId/versoes/:versionId"
             element={<FormulationVersionPage />}
           />
+          <Route path="/producao/ordens" element={<ProductionOrdersPage />} />
+          <Route path="/producao/ordens/nova" element={<ProductionOrderPage />} />
+          <Route path="/producao/ordens/:id" element={<ProductionOrderPage />} />
 
           {navItems
             .filter((item) => !item.implemented)
