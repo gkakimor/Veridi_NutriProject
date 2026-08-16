@@ -39,6 +39,18 @@ Expedição).**
 capacidade 31): concluído.**
 **Delivery 24 — Exportações CSV + Impressão/PDF (Bloco E, capacidade 32):
 concluído — Bloco E encerrado.**
+**Delivery 25 — Cadastros Industriais v2 (Bloco F, capacidade 33):
+concluído.**
+
+**Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
+as planilhas reais mostrou que a Veridi opera como **terceirização/private
+label** e que faltavam capacidades no domínio. Ordem nova: **Bloco F
+(33-42)** e **Bloco G (43-47)** vêm ANTES da Demo Readiness. Ao concluir o
+Bloco G o trabalho PARA: o **Bloco H (regulatório/rotulagem) é um gate** e
+só será especificado após nova validação de domínio/regulatória do Product
+Owner. Demo Readiness, responsivo/mobile e hardening geral não foram
+iniciados. O core 1-32 continua sendo a fundação — as novas capacidades
+evoluem o modelo, não o substituem.
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -2885,6 +2897,64 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 25 — Cadastros Industriais v2 (Bloco F, capacidade 33)
+
+Primeira capacidade do Bloco F. Enriquece Customer/Item/Product com o que a
+operação real de private label já usa. É **cadastro**: nenhuma matemática de
+estoque, produção ou custo mudou, e nenhuma regra regulatória foi criada.
+
+- **Cliente — endereço estruturado**: `street`, `number`, `complement`,
+  `district`, `zipCode` somados a `city`/`state`. Tudo opcional; clientes
+  antigos seguem válidos. `zipCode` é guardado só com dígitos (a máscara
+  `00000-000` é da UI) e exige 8 dígitos quando informado. Sem integração de
+  CEP — o usuário digita.
+- **Snapshot do Pedido**: o CONFIRM passou a congelar também o endereço
+  (`customerStreet`…`customerState`). Editar o cadastro do Cliente depois
+  não muda documento já confirmado. Pedidos confirmados antes desta
+  capacidade ficam com `null` — não se inventa histórico.
+- **Item — taxonomia industrial**: `sourceName` (forma química realmente
+  usada, ex.: "Cloridrato de tiamina"), `declaredNutrient` (denominação
+  nutricional, ex.: "Vitamina B1"), `family` (enum fixo, sem cadastro
+  configurável) e `packagingSubtype` (só para PACKAGING — rejeitado nos
+  demais tipos pelo backend).
+- **Item — pureza padrão**: `defaultPurityPercent` Decimal(6,3), aceito
+  apenas em `0 < x <= 100`. **`null` significa DESCONHECIDA e nunca pode
+  virar 100%.** É só o default de novas formulações: a capacidade 34
+  congelará `purityPercentApplied` no componente, então alterar o Item
+  jamais reescreverá formulação/OP histórica.
+- **Product — perfil industrial**: `dosageForm`, `presentationType`,
+  `capsulesPerDose`, `doseAmount` + `doseUomCode`, `dosesPerPackage`,
+  `unitsPerShippingBox`, `targetAgeGroup`, `shelfLifeMonths` e
+  `minimumBatchQuantity`. Todos opcionais e todos positivos quando
+  informados (validado no backend, não só no formulário).
+- **Sem UOM duplicada**: a dose tem unidade própria porque pode ser mg/g/ml
+  e diferir da unidade de estoque; `minimumBatchQuantity` usa a unidade do
+  Finished Product Item, então não existe `minimumBatchUom`.
+- **`targetAgeGroup` é descritivo.** Nenhuma regra de IDR/%VD/ANVISA foi
+  implementada — isso é o gate do Bloco H.
+- **`shelfLifeMonths` é referência**: não altera lote nem validade agora; a
+  capacidade 36 poderá sugerir `validade = produção + shelfLifeMonths`.
+- UI: seção `Endereço` no modal de Cliente; `Classificação industrial` no de
+  Item (subtipo aparece só para embalagem; dica explícita de que pureza
+  vazia significa desconhecida); `Perfil do produto`, `Dose e apresentação`
+  e `Industrial` no de Produto. Listagem de Itens ganhou Família e Fonte
+  (nutriente como texto secundário); a de Produtos ganhou Forma,
+  Apresentação, Vida útil e **Formulação ativa** (versão já marcada ACTIVE,
+  sem lógica nova de versionamento).
+- CSV de Clientes, Itens e Produtos estendido com os novos campos, sempre
+  com rótulo amigável em vez de enum cru e com decimais preservados.
+- Migration `20260901090000_industrial_master_data`: tudo nullable, sem
+  backfill, sem reset e sem seed (o importador das planilhas é a
+  capacidade 41).
+- Testes (`industrial-master-data.test.ts`, 14 casos): endereço completo,
+  normalização de CEP, atualização parcial, snapshot congelado contra
+  edição posterior do cadastro, taxonomia, pureza 98,5 exata, pureza 0 e
+  >100 rejeitadas, subtipo fora de embalagem rejeitado, perfil completo do
+  produto, valores não positivos rejeitados, unidade de dose inexistente,
+  registros antigos ainda válidos e os três CSVs.
+
+---
+
 # Delivery 24 — Exportações CSV + Impressão/PDF (Bloco E, capacidade 32)
 
 Última capacidade estrutural antes da validação ponta a ponta. **Nenhuma
@@ -3212,11 +3282,13 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **validação ponta a ponta / demo**,
-depois responsivo/mobile e hardening técnico. Nada disso foi iniciado —
-aguarda handoff de Product Ownership. Para a demo, já existem: CSV em
-todas as listagens e nos relatórios tabulares, impressão/PDF dos
-documentos e da rastreabilidade, e o Dashboard como visão de abertura.
+Próximo passo do roadmap oficial: **capacidade 34 — Formulação Industrial
+v2 (dose, pureza e overage)**, que usará `Item.defaultPurityPercent` como
+default e congelará `purityPercentApplied` no componente. Depois seguem
+35-42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
+Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
+não iniciados, por decisão explícita.
 Reutilizar quando começar: `FullWorkspaceModal`
 + `components.css` para cadastros simples; padrão de página própria (ver
 Ordem de Compra/Recebimento/editor de Formulação/OP/Pedido) para novos

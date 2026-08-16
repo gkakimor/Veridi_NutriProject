@@ -18,6 +18,12 @@ import type {
 } from "@veridi/shared";
 import {
   BILLING_STATUS_LABELS,
+  DOSAGE_FORM_LABELS,
+  ITEM_FAMILY_LABELS,
+  PACKAGING_SUBTYPE_LABELS,
+  PRESENTATION_TYPE_LABELS,
+  TARGET_AGE_GROUP_LABELS,
+  formatZipCode,
   CUSTOMER_ORDER_STATUS_LABELS,
   INVENTORY_MOVEMENT_TYPE_LABELS,
   ITEM_TYPE_LABELS,
@@ -93,6 +99,12 @@ const customersExport = defineCsvExport({
     { header: "CNPJ", value: (row: CustomerDTO) => csvCode(row.cnpj) },
     { header: "E-mail", value: (row: CustomerDTO) => csvText(row.email) },
     { header: "Telefone", value: (row: CustomerDTO) => csvCode(row.phone) },
+    // CEP exportado formatado; o valor guardado continua só com dígitos.
+    { header: "CEP", value: (row: CustomerDTO) => csvCode(formatZipCode(row.zipCode)) },
+    { header: "Logradouro", value: (row: CustomerDTO) => csvText(row.street) },
+    { header: "Número", value: (row: CustomerDTO) => csvCode(row.number) },
+    { header: "Complemento", value: (row: CustomerDTO) => csvText(row.complement) },
+    { header: "Bairro", value: (row: CustomerDTO) => csvText(row.district) },
     { header: "Cidade", value: (row: CustomerDTO) => csvText(row.city) },
     { header: "UF", value: (row: CustomerDTO) => csvText(row.state) },
     { header: "Ativo", value: (row: CustomerDTO) => csvBoolean(row.active) },
@@ -125,6 +137,16 @@ const itemsExport = defineCsvExport({
     { header: "Nome", value: (row: ItemDTO) => csvText(row.name) },
     { header: "Tipo", value: (row: ItemDTO) => ITEM_TYPE_LABELS[row.type] },
     { header: "Unidade", value: (row: ItemDTO) => csvText(row.unitCode) },
+    // Rótulos amigáveis, nunca o enum cru.
+    { header: "Família", value: (row: ItemDTO) => (row.family ? ITEM_FAMILY_LABELS[row.family] : "") },
+    { header: "Fonte", value: (row: ItemDTO) => csvText(row.sourceName) },
+    { header: "Nutriente declarado", value: (row: ItemDTO) => csvText(row.declaredNutrient) },
+    // Pureza desconhecida fica VAZIA — nunca 100.
+    { header: "Pureza padrão (%)", value: (row: ItemDTO) => csvDecimal(row.defaultPurityPercent) },
+    {
+      header: "Subtipo de embalagem",
+      value: (row: ItemDTO) => (row.packagingSubtype ? PACKAGING_SUBTYPE_LABELS[row.packagingSubtype] : ""),
+    },
     { header: "Controla lote", value: (row: ItemDTO) => csvBoolean(row.controlsLot) },
     { header: "Controla validade", value: (row: ItemDTO) => csvBoolean(row.controlsExpiry) },
     { header: "Exige liberação da Qualidade", value: (row: ItemDTO) => csvBoolean(row.requiresQualityRelease) },
@@ -143,6 +165,27 @@ const productsExport = defineCsvExport({
     { header: "Nome", value: (row: ProductDTO) => csvText(row.name) },
     { header: "Cliente", value: (row: ProductDTO) => csvText(row.customer ? row.customer.legalName : null) },
     { header: "Item de produto acabado", value: (row: ProductDTO) => csvCode(row.finishedProductItem ? row.finishedProductItem.code : null) },
+    {
+      header: "Forma farmacêutica",
+      value: (row: ProductDTO) => (row.dosageForm ? DOSAGE_FORM_LABELS[row.dosageForm] : ""),
+    },
+    {
+      header: "Apresentação",
+      value: (row: ProductDTO) =>
+        row.presentationType ? PRESENTATION_TYPE_LABELS[row.presentationType] : "",
+    },
+    { header: "Cápsulas por dose", value: (row: ProductDTO) => csvDecimal(row.capsulesPerDose) },
+    { header: "Dose", value: (row: ProductDTO) => csvDecimal(row.doseAmount) },
+    { header: "Unidade da dose", value: (row: ProductDTO) => csvText(row.doseUomCode) },
+    { header: "Doses por embalagem", value: (row: ProductDTO) => csvDecimal(row.dosesPerPackage) },
+    { header: "Unidades por caixa", value: (row: ProductDTO) => csvDecimal(row.unitsPerShippingBox) },
+    {
+      header: "Público-alvo",
+      value: (row: ProductDTO) => (row.targetAgeGroup ? TARGET_AGE_GROUP_LABELS[row.targetAgeGroup] : ""),
+    },
+    { header: "Vida útil (meses)", value: (row: ProductDTO) => csvDecimal(row.shelfLifeMonths) },
+    { header: "Lote mínimo", value: (row: ProductDTO) => csvDecimal(row.minimumBatchQuantity) },
+    { header: "Formulação ativa", value: (row: ProductDTO) => csvText(row.activeFormulationVersionLabel) },
     { header: "Código externo", value: (row: ProductDTO) => csvCode(row.externalCode) },
     { header: "Ativo", value: (row: ProductDTO) => csvBoolean(row.active) },
   ],

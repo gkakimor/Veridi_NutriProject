@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { ItemDTO, ItemType, UnitOfMeasureDTO } from "@veridi/shared";
-import { ITEM_TYPE_LABELS } from "@veridi/shared";
+import { ITEM_FAMILY_LABELS, ITEM_TYPE_LABELS } from "@veridi/shared";
 import { listItems, setItemActive } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import { ItemFormModal } from "./ItemFormModal";
@@ -178,6 +178,8 @@ export function ItemsPage() {
               <th>Código</th>
               <th>Nome</th>
               <th>Tipo</th>
+              <th>Família</th>
+              <th>Fonte</th>
               <th>Unidade</th>
               <th>Lote</th>
               <th>Validade</th>
@@ -198,12 +200,21 @@ export function ItemsPage() {
                 }}
               >
                 <td className="is-code">{item.code}</td>
-                <td>{item.name}</td>
+                <td>
+                  {item.name}
+                  {/* Nutriente declarado como texto secundário: informa sem
+                      alargar a tabela. */}
+                  {item.declaredNutrient && (
+                    <div className="muted is-small">{item.declaredNutrient}</div>
+                  )}
+                </td>
                 <td>
                   <span className="badge badge--neutral">
                     {ITEM_TYPE_LABELS[item.type]}
                   </span>
                 </td>
+                <td>{item.family ? ITEM_FAMILY_LABELS[item.family] : "—"}</td>
+                <td>{item.sourceName ?? "—"}</td>
                 <td>{item.unit.code}</td>
                 <td>{item.controlsLot ? "Sim" : "Não"}</td>
                 <td>{item.controlsExpiry ? "Sim" : "Não"}</td>

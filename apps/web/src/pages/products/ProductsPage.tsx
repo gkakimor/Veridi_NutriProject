@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { CustomerDTO, ProductDTO } from "@veridi/shared";
+import { DOSAGE_FORM_LABELS, PRESENTATION_TYPE_LABELS } from "@veridi/shared";
 import { listProducts, setProductActive } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
 import { ProductFormModal } from "./ProductFormModal";
@@ -161,8 +162,11 @@ export function ProductsPage() {
               <th>Código</th>
               <th>Produto</th>
               <th>Cliente</th>
+              <th>Forma</th>
+              <th>Apresentação</th>
               <th>Item acabado</th>
-              <th>Referência</th>
+              <th>Vida útil</th>
+              <th>Formulação</th>
               <th>Status</th>
               <th aria-hidden="true" />
             </tr>
@@ -186,6 +190,12 @@ export function ProductsPage() {
                     ? product.customer.tradeName ?? product.customer.legalName
                     : "—"}
                 </td>
+                <td>{product.dosageForm ? DOSAGE_FORM_LABELS[product.dosageForm] : "—"}</td>
+                <td>
+                  {product.presentationType
+                    ? PRESENTATION_TYPE_LABELS[product.presentationType]
+                    : "—"}
+                </td>
                 <td>
                   {product.finishedProductItem ? (
                     <span className="code">{product.finishedProductItem.code}</span>
@@ -193,7 +203,11 @@ export function ProductsPage() {
                     "—"
                   )}
                 </td>
-                <td>{product.externalCode ?? "—"}</td>
+                <td>
+                  {product.shelfLifeMonths ? `${product.shelfLifeMonths} meses` : "—"}
+                </td>
+                {/* Versão ACTIVE já existente — nenhuma lógica nova de versionamento. */}
+                <td>{product.activeFormulationVersionLabel ?? "—"}</td>
                 <td>
                   <span
                     className={

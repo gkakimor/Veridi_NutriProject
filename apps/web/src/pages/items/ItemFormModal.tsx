@@ -6,6 +6,12 @@ import { createItem, updateItem } from "../../lib/items-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
+import {
+  ITEM_FAMILIES,
+  ITEM_FAMILY_LABELS,
+  PACKAGING_SUBTYPES,
+  PACKAGING_SUBTYPE_LABELS,
+} from "@veridi/shared";
 import { ToggleCard } from "../../components/ToggleCard";
 
 interface ItemFormModalProps {
@@ -23,6 +29,11 @@ interface FormState {
   controlsLot: boolean;
   controlsExpiry: boolean;
   requiresQualityRelease: boolean;
+  sourceName: string;
+  declaredNutrient: string;
+  family: string;
+  defaultPurityPercent: string;
+  packagingSubtype: string;
   externalBarcode: string;
 }
 
@@ -35,6 +46,11 @@ function initialState(item: ItemDTO | null): FormState {
       controlsLot: item.controlsLot,
       controlsExpiry: item.controlsExpiry,
       requiresQualityRelease: item.requiresQualityRelease,
+      sourceName: item.sourceName ?? "",
+      declaredNutrient: item.declaredNutrient ?? "",
+      family: item.family ?? "",
+      defaultPurityPercent: item.defaultPurityPercent ?? "",
+      packagingSubtype: item.packagingSubtype ?? "",
       externalBarcode: item.externalBarcode ?? "",
     };
   }
@@ -45,6 +61,11 @@ function initialState(item: ItemDTO | null): FormState {
     controlsLot: true,
     controlsExpiry: true,
     requiresQualityRelease: true,
+    sourceName: "",
+    declaredNutrient: "",
+    family: "",
+    defaultPurityPercent: "",
+    packagingSubtype: "",
     externalBarcode: "",
   };
 }
@@ -96,6 +117,21 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
       controlsLot: form.controlsLot,
       controlsExpiry: form.controlsExpiry,
       requiresQualityRelease: form.requiresQualityRelease,
+      // No edit sempre envia (mesmo vazio) para permitir limpar; no create
+      // só quando preenchido. Vazio vira null — nunca um default silencioso.
+      ...(mode === "edit" || form.sourceName.trim()
+        ? { sourceName: form.sourceName.trim() }
+        : {}),
+      ...(mode === "edit" || form.declaredNutrient.trim()
+        ? { declaredNutrient: form.declaredNutrient.trim() }
+        : {}),
+      ...(mode === "edit" || form.family ? { family: form.family } : {}),
+      ...(mode === "edit" || form.defaultPurityPercent.trim()
+        ? { defaultPurityPercent: form.defaultPurityPercent.trim().replace(",", ".") }
+        : {}),
+      ...(mode === "edit" || form.packagingSubtype
+        ? { packagingSubtype: form.type === "PACKAGING" ? form.packagingSubtype : "" }
+        : {}),
       // No edit sempre envia a chave (mesmo vazia) para permitir limpar um
       // barcode existente; no create so envia quando preenchido.
       ...(mode === "edit" || trimmedBarcode
@@ -259,6 +295,100 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
                 <p className="field__error">{fieldErrors["name"]}</p>
               )}
             </div>
+          </div>
+        </FormSection>
+
+        {/* Classificação industrial (capacidade 33) — insumo das
+            capacidades de formulação e custeio. Tudo opcional. */}
+        <FormSection
+          title="Classificação industrial"
+          subtitle="Fonte, nutriente declarado e pureza padrão usados pela formulação."
+        >
+          <div className="field-grid-2">
+            <div className="field">
+              <label htmlFor="item-source-name">Fonte</label>
+              <input
+                id="item-source-name"
+                type="text"
+                placeholder="Ex.: Cloridrato de tiamina"
+                value={form.sourceName}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, sourceName: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="item-declared-nutrient">Nutriente declarado</label>
+              <input
+                id="item-declared-nutrient"
+                type="text"
+                placeholder="Ex.: Vitamina B1"
+                value={form.declaredNutrient}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, declaredNutrient: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="item-family">Família</label>
+              <select
+                id="item-family"
+                value={form.family}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, family: event.target.value }))
+                }
+              >
+                <option value="">Não informada</option>
+                {ITEM_FAMILIES.map((family) => (
+                  <option key={family} value={family}>
+                    {ITEM_FAMILY_LABELS[family]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field field--narrow">
+              <label htmlFor="item-purity">Pureza padrão (%)</label>
+              <input
+                id="item-purity"
+                type="text"
+                inputMode="decimal"
+                placeholder="Ex.: 98,5"
+                value={form.defaultPurityPercent}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, defaultPurityPercent: event.target.value }))
+                }
+              />
+              {/* Vazio = desconhecida. Nunca é assumida como 100%. */}
+              <p className="field__hint">
+                Em branco significa pureza desconhecida — nunca 100%.
+              </p>
+              {fieldErrors["defaultPurityPercent"] && (
+                <p className="field__error">{fieldErrors["defaultPurityPercent"]}</p>
+              )}
+            </div>
+
+            {form.type === "PACKAGING" && (
+              <div className="field">
+                <label htmlFor="item-packaging-subtype">Subtipo de embalagem</label>
+                <select
+                  id="item-packaging-subtype"
+                  value={form.packagingSubtype}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, packagingSubtype: event.target.value }))
+                  }
+                >
+                  <option value="">Não informado</option>
+                  {PACKAGING_SUBTYPES.map((subtype) => (
+                    <option key={subtype} value={subtype}>
+                      {PACKAGING_SUBTYPE_LABELS[subtype]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </FormSection>
 

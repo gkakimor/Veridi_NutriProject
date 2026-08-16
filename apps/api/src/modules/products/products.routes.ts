@@ -10,6 +10,7 @@ import {
 } from "./products.service.js";
 import {
   CustomerNotFoundError,
+  DoseUomNotFoundError,
   DuplicateFinishedItemError,
   FinishedItemNotFoundError,
   InactiveCustomerError,
@@ -33,6 +34,9 @@ function formatZodError(error: ZodError) {
 function mapDomainError(
   error: unknown,
 ): { status: number; body: { error: string; message: string } } | null {
+  if (error instanceof DoseUomNotFoundError) {
+    return { status: 400, body: { error: "dose_uom_not_found", message: error.message } };
+  }
   if (error instanceof CustomerNotFoundError) {
     return { status: 400, body: { error: "customer_not_found", message: error.message } };
   }

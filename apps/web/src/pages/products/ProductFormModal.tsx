@@ -1,12 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import type { ProductDTO } from "@veridi/shared";
+import type {
+  DosageForm,
+  PresentationType,
+  ProductDTO,
+  TargetAgeGroup,
+  UnitOfMeasureDTO,
+} from "@veridi/shared";
 import { createProduct, updateProduct } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
 import { listItems } from "../../lib/items-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
+import {
+  DOSAGE_FORMS,
+  DOSAGE_FORM_LABELS,
+  PRESENTATION_TYPES,
+  PRESENTATION_TYPE_LABELS,
+  TARGET_AGE_GROUPS,
+  TARGET_AGE_GROUP_LABELS,
+} from "@veridi/shared";
+import { listUnits } from "../../lib/units-api";
 
 interface ProductFormModalProps {
   mode: "create" | "edit";
@@ -35,7 +50,22 @@ interface FormState {
   externalCode: string;
   customerId: string;
   finishedProductItemId: string;
+  dosageForm: string;
+  presentationType: string;
+  capsulesPerDose: string;
+  doseAmount: string;
+  doseUomCode: string;
+  dosesPerPackage: string;
+  unitsPerShippingBox: string;
+  targetAgeGroup: string;
+  shelfLifeMonths: string;
+  minimumBatchQuantity: string;
   notes: string;
+}
+
+/** Número opcional vira texto do formulário; vazio continua vazio. */
+function numberField(value: number | string | null): string {
+  return value === null || value === undefined ? "" : String(value);
 }
 
 function initialState(product: ProductDTO | null): FormState {
@@ -45,10 +75,36 @@ function initialState(product: ProductDTO | null): FormState {
       externalCode: product.externalCode ?? "",
       customerId: product.customerId ?? "",
       finishedProductItemId: product.finishedProductItemId ?? "",
+      dosageForm: product.dosageForm ?? "",
+      presentationType: product.presentationType ?? "",
+      capsulesPerDose: numberField(product.capsulesPerDose),
+      doseAmount: numberField(product.doseAmount),
+      doseUomCode: product.doseUomCode ?? "",
+      dosesPerPackage: numberField(product.dosesPerPackage),
+      unitsPerShippingBox: numberField(product.unitsPerShippingBox),
+      targetAgeGroup: product.targetAgeGroup ?? "",
+      shelfLifeMonths: numberField(product.shelfLifeMonths),
+      minimumBatchQuantity: numberField(product.minimumBatchQuantity),
       notes: product.notes ?? "",
     };
   }
-  return { name: "", externalCode: "", customerId: "", finishedProductItemId: "", notes: "" };
+  return {
+    name: "",
+    externalCode: "",
+    customerId: "",
+    finishedProductItemId: "",
+    dosageForm: "",
+    presentationType: "",
+    capsulesPerDose: "",
+    doseAmount: "",
+    doseUomCode: "",
+    dosesPerPackage: "",
+    unitsPerShippingBox: "",
+    targetAgeGroup: "",
+    shelfLifeMonths: "",
+    minimumBatchQuantity: "",
+    notes: "",
+  };
 }
 
 /** Modal fullscreen de criacao/edicao de produto — mesmo padrao de Items. */
@@ -57,6 +113,14 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
+
+  useEffect(() => {
+    // A dose pode ser em mg/g/ml — unidades vêm do cadastro existente.
+    listUnits()
+      .then(setUnits)
+      .catch(() => setUnits([]));
+  }, []);
 
   const [activeCustomers, setActiveCustomers] = useState<CustomerOption[]>([]);
   const [activeFinishedItems, setActiveFinishedItems] = useState<FinishedItemOption[]>([]);
@@ -106,8 +170,43 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
     const finishedProductItemId = optionalField(form.finishedProductItemId);
     const notes = optionalField(form.notes);
 
+    // Campo numérico: no edit sempre envia (vazio limpa), no create só
+    // quando preenchido. Vírgula decimal do usuário vira ponto.
+    const numeric = (value: string) => {
+      const trimmed = value.trim().replace(",", ".");
+      if (mode === "edit") return { value: trimmed };
+      return trimmed ? { value: trimmed } : null;
+    };
+    const enumField = (value: string) =>
+      mode === "edit" || value ? { value } : null;
+
+    const dosageForm = enumField(form.dosageForm);
+    const presentationType = enumField(form.presentationType);
+    const targetAgeGroup = enumField(form.targetAgeGroup);
+    const doseUomCode = enumField(form.doseUomCode);
+    const capsulesPerDose = numeric(form.capsulesPerDose);
+    const doseAmount = numeric(form.doseAmount);
+    const dosesPerPackage = numeric(form.dosesPerPackage);
+    const unitsPerShippingBox = numeric(form.unitsPerShippingBox);
+    const shelfLifeMonths = numeric(form.shelfLifeMonths);
+    const minimumBatchQuantity = numeric(form.minimumBatchQuantity);
+
     const payload = {
       name: form.name.trim(),
+      ...(dosageForm ? { dosageForm: dosageForm.value as DosageForm | "" } : {}),
+      ...(presentationType
+        ? { presentationType: presentationType.value as PresentationType | "" }
+        : {}),
+      ...(targetAgeGroup
+        ? { targetAgeGroup: targetAgeGroup.value as TargetAgeGroup | "" }
+        : {}),
+      ...(doseUomCode ? { doseUomCode: doseUomCode.value } : {}),
+      ...(capsulesPerDose ? { capsulesPerDose: capsulesPerDose.value } : {}),
+      ...(doseAmount ? { doseAmount: doseAmount.value } : {}),
+      ...(dosesPerPackage ? { dosesPerPackage: dosesPerPackage.value } : {}),
+      ...(unitsPerShippingBox ? { unitsPerShippingBox: unitsPerShippingBox.value } : {}),
+      ...(shelfLifeMonths ? { shelfLifeMonths: shelfLifeMonths.value } : {}),
+      ...(minimumBatchQuantity ? { minimumBatchQuantity: minimumBatchQuantity.value } : {}),
       ...(externalCode ? { externalCode: externalCode.value } : {}),
       ...(customerId ? { customerId: customerId.value } : {}),
       ...(finishedProductItemId ? { finishedProductItemId: finishedProductItemId.value } : {}),
@@ -267,6 +366,202 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
               </select>
               {fieldErrors["finishedProductItemId"] && (
                 <p className="field__error">{fieldErrors["finishedProductItemId"]}</p>
+              )}
+            </div>
+          </div>
+        </FormSection>
+
+        {/* Perfil industrial (capacidade 33): cadastro puro — nada aqui
+            bloqueia OP, muda validade de lote ou entra em custo. */}
+        <FormSection
+          title="Perfil do produto"
+          subtitle="Forma e apresentação comercial usadas pela operação private label."
+        >
+          <div className="field-grid-2">
+            <div className="field">
+              <label htmlFor="product-dosage-form">Forma farmacêutica</label>
+              <select
+                id="product-dosage-form"
+                value={form.dosageForm}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, dosageForm: event.target.value }))
+                }
+              >
+                <option value="">Não informada</option>
+                {DOSAGE_FORMS.map((option) => (
+                  <option key={option} value={option}>
+                    {DOSAGE_FORM_LABELS[option]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="product-presentation">Apresentação</label>
+              <select
+                id="product-presentation"
+                value={form.presentationType}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, presentationType: event.target.value }))
+                }
+              >
+                <option value="">Não informada</option>
+                {PRESENTATION_TYPES.map((option) => (
+                  <option key={option} value={option}>
+                    {PRESENTATION_TYPE_LABELS[option]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </FormSection>
+
+        <FormSection
+          title="Dose e apresentação"
+          subtitle="A unidade da dose pode ser diferente da unidade de estoque do produto acabado."
+        >
+          <div className="field-grid-2">
+            <div className="field field--narrow">
+              <label htmlFor="product-capsules-per-dose">Cápsulas por dose</label>
+              <input
+                id="product-capsules-per-dose"
+                type="text"
+                inputMode="numeric"
+                value={form.capsulesPerDose}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, capsulesPerDose: event.target.value }))
+                }
+              />
+              {fieldErrors["capsulesPerDose"] && (
+                <p className="field__error">{fieldErrors["capsulesPerDose"]}</p>
+              )}
+            </div>
+
+            <div className="field field--narrow">
+              <label htmlFor="product-dose-amount">Dose</label>
+              <input
+                id="product-dose-amount"
+                type="text"
+                inputMode="decimal"
+                placeholder="Ex.: 500"
+                value={form.doseAmount}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, doseAmount: event.target.value }))
+                }
+              />
+              {fieldErrors["doseAmount"] && (
+                <p className="field__error">{fieldErrors["doseAmount"]}</p>
+              )}
+            </div>
+
+            <div className="field field--narrow">
+              <label htmlFor="product-dose-uom">Unidade da dose</label>
+              <select
+                id="product-dose-uom"
+                value={form.doseUomCode}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, doseUomCode: event.target.value }))
+                }
+              >
+                <option value="">Não informada</option>
+                {units.map((unit) => (
+                  <option key={unit.code} value={unit.code}>
+                    {unit.code} — {unit.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field field--narrow">
+              <label htmlFor="product-doses-per-package">Doses por embalagem</label>
+              <input
+                id="product-doses-per-package"
+                type="text"
+                inputMode="numeric"
+                value={form.dosesPerPackage}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, dosesPerPackage: event.target.value }))
+                }
+              />
+              {fieldErrors["dosesPerPackage"] && (
+                <p className="field__error">{fieldErrors["dosesPerPackage"]}</p>
+              )}
+            </div>
+
+            <div className="field field--narrow">
+              <label htmlFor="product-units-per-box">Unidades por caixa</label>
+              <input
+                id="product-units-per-box"
+                type="text"
+                inputMode="numeric"
+                value={form.unitsPerShippingBox}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, unitsPerShippingBox: event.target.value }))
+                }
+              />
+              {fieldErrors["unitsPerShippingBox"] && (
+                <p className="field__error">{fieldErrors["unitsPerShippingBox"]}</p>
+              )}
+            </div>
+          </div>
+        </FormSection>
+
+        <FormSection
+          title="Industrial"
+          subtitle="Referências de fabricação — ainda sem efeito automático em OP ou validade de lote."
+        >
+          <div className="field-grid-2">
+            <div className="field">
+              <label htmlFor="product-target-age">Público-alvo</label>
+              <select
+                id="product-target-age"
+                value={form.targetAgeGroup}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, targetAgeGroup: event.target.value }))
+                }
+              >
+                <option value="">Não informado</option>
+                {TARGET_AGE_GROUPS.map((option) => (
+                  <option key={option} value={option}>
+                    {TARGET_AGE_GROUP_LABELS[option]}
+                  </option>
+                ))}
+              </select>
+              {/* Descritivo: nenhuma regra regulatória depende disto agora. */}
+              <p className="field__hint">Informativo — sem validação regulatória nesta fase.</p>
+            </div>
+
+            <div className="field field--narrow">
+              <label htmlFor="product-shelf-life">Vida útil (meses)</label>
+              <input
+                id="product-shelf-life"
+                type="text"
+                inputMode="numeric"
+                value={form.shelfLifeMonths}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, shelfLifeMonths: event.target.value }))
+                }
+              />
+              {fieldErrors["shelfLifeMonths"] && (
+                <p className="field__error">{fieldErrors["shelfLifeMonths"]}</p>
+              )}
+            </div>
+
+            <div className="field field--narrow">
+              <label htmlFor="product-minimum-batch">Lote mínimo</label>
+              <input
+                id="product-minimum-batch"
+                type="text"
+                inputMode="decimal"
+                value={form.minimumBatchQuantity}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, minimumBatchQuantity: event.target.value }))
+                }
+              />
+              {/* Na unidade do item de produto acabado — sem UOM duplicada. */}
+              <p className="field__hint">Na unidade do item de produto acabado.</p>
+              {fieldErrors["minimumBatchQuantity"] && (
+                <p className="field__error">{fieldErrors["minimumBatchQuantity"]}</p>
               )}
             </div>
           </div>

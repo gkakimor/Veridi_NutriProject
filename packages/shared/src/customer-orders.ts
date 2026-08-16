@@ -1,6 +1,7 @@
 /** Contratos do módulo de Pedido do Cliente + Plano de Atendimento, consumidos por `apps/api` e `apps/web`. */
 
 import type { CustomerOrderBillingStatus } from "./billings.js";
+import type { CustomerAddress } from "./customers.js";
 
 export const CUSTOMER_ORDER_CODE_PREFIX = "PED";
 
@@ -156,6 +157,8 @@ export interface CustomerOrderDTO {
   customerName: string | null;
   customerTradeName: string | null;
   customerCnpj: string | null;
+  /** Endereço congelado no CONFIRM; `null` em pedidos anteriores à cap. 33. */
+  customerAddress: CustomerAddress;
   orderDate: string;
   requestedDeliveryDate: string | null;
   status: CustomerOrderStatus;

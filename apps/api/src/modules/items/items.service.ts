@@ -5,7 +5,12 @@ import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextItemCode } from "./item-codes.js";
-import { ItemNotFoundError, StructuralFieldLockedError, UnitNotFoundError } from "./items.errors.js";
+import {
+  ItemNotFoundError,
+  PackagingSubtypeNotApplicableError,
+  StructuralFieldLockedError,
+  UnitNotFoundError,
+} from "./items.errors.js";
 import type {
   CreateItemInput,
   ListItemsQuery,
@@ -29,12 +34,29 @@ function toItemDTO(item: ItemWithUnit, operationallyUsed: boolean): ItemDTO {
     controlsLot: item.controlsLot,
     controlsExpiry: item.controlsExpiry,
     requiresQualityRelease: item.requiresQualityRelease,
+    sourceName: item.sourceName,
+    declaredNutrient: item.declaredNutrient,
+    family: item.family,
+    // Decimal vira string: pureza nunca passa por float. `null` continua
+    // `null` — pureza desconhecida jamais é apresentada como 100%.
+    defaultPurityPercent: item.defaultPurityPercent ? item.defaultPurityPercent.toString() : null,
+    packagingSubtype: item.packagingSubtype,
     externalBarcode: item.externalBarcode,
     active: item.active,
     operationallyUsed,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
+}
+
+/** Subtipo de embalagem só é aceito quando o item é PACKAGING. */
+function assertPackagingSubtypeCoherent(
+  type: string,
+  packagingSubtype: string | null | undefined,
+): void {
+  if (packagingSubtype && type !== "PACKAGING") {
+    throw new PackagingSubtypeNotApplicableError();
+  }
 }
 
 async function assertUnitExists(unitCode: string): Promise<void> {
@@ -92,12 +114,15 @@ export async function listItems(
   const where: Record<string, unknown> = {};
 
   if (query.type) where["type"] = query.type;
+  if (query.family) where["family"] = query.family;
   if (query.active !== undefined) where["active"] = query.active;
   if (query.search) {
     where["OR"] = [
       { code: { contains: query.search, mode: "insensitive" } },
       { name: { contains: query.search, mode: "insensitive" } },
       { externalBarcode: { contains: query.search, mode: "insensitive" } },
+      { sourceName: { contains: query.search, mode: "insensitive" } },
+      { declaredNutrient: { contains: query.search, mode: "insensitive" } },
     ];
   }
 
@@ -130,6 +155,7 @@ export async function getItemById(id: string): Promise<ItemDTO | null> {
 
 export async function createItem(input: CreateItemInput): Promise<ItemDTO> {
   await assertUnitExists(input.unitCode);
+  assertPackagingSubtypeCoherent(input.type, input.packagingSubtype);
 
   const defaults = ITEM_TYPE_DEFAULTS[input.type];
   const prisma = getPrisma();
@@ -145,6 +171,17 @@ export async function createItem(input: CreateItemInput): Promise<ItemDTO> {
       controlsExpiry: input.controlsExpiry ?? defaults.controlsExpiry,
       requiresQualityRelease:
         input.requiresQualityRelease ?? defaults.requiresQualityRelease,
+      ...(input.sourceName !== undefined ? { sourceName: input.sourceName } : {}),
+      ...(input.declaredNutrient !== undefined
+        ? { declaredNutrient: input.declaredNutrient }
+        : {}),
+      ...(input.family !== undefined ? { family: input.family } : {}),
+      ...(input.defaultPurityPercent !== undefined
+        ? { defaultPurityPercent: input.defaultPurityPercent }
+        : {}),
+      ...(input.packagingSubtype !== undefined
+        ? { packagingSubtype: input.packagingSubtype }
+        : {}),
       externalBarcode: input.externalBarcode ? input.externalBarcode : null,
     },
     include: { unit: true },
@@ -160,6 +197,7 @@ export async function updateItem(
 ): Promise<ItemDTO> {
   const current = await requireItem(id);
   if (input.unitCode) await assertUnitExists(input.unitCode);
+  assertPackagingSubtypeCoherent(input.type ?? current.type, input.packagingSubtype);
 
   const structuralChange =
     (input.type !== undefined && input.type !== current.type) ||
@@ -194,6 +232,19 @@ export async function updateItem(
         : {}),
       ...(input.requiresQualityRelease !== undefined
         ? { requiresQualityRelease: input.requiresQualityRelease }
+        : {}),
+      ...(input.sourceName !== undefined ? { sourceName: input.sourceName } : {}),
+      ...(input.declaredNutrient !== undefined
+        ? { declaredNutrient: input.declaredNutrient }
+        : {}),
+      ...(input.family !== undefined ? { family: input.family } : {}),
+      // Alterar a pureza padrão NUNCA reescreve formulação/OP histórica:
+      // a capacidade 34 congela `purityPercentApplied` no componente.
+      ...(input.defaultPurityPercent !== undefined
+        ? { defaultPurityPercent: input.defaultPurityPercent }
+        : {}),
+      ...(input.packagingSubtype !== undefined
+        ? { packagingSubtype: input.packagingSubtype }
         : {}),
       ...(input.externalBarcode !== undefined
         ? { externalBarcode: input.externalBarcode ? input.externalBarcode : null }

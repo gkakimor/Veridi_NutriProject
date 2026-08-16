@@ -8,7 +8,12 @@ import {
   listItems,
   updateItem,
 } from "./items.service.js";
-import { ItemNotFoundError, StructuralFieldLockedError, UnitNotFoundError } from "./items.errors.js";
+import {
+  ItemNotFoundError,
+  PackagingSubtypeNotApplicableError,
+  StructuralFieldLockedError,
+  UnitNotFoundError,
+} from "./items.errors.js";
 import {
   createItemSchema,
   listItemsQuerySchema,
@@ -60,6 +65,11 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
       const item = await createItem(parsed.data);
       return reply.status(201).send(item);
     } catch (error) {
+      if (error instanceof PackagingSubtypeNotApplicableError) {
+        return reply
+          .status(400)
+          .send({ error: "packaging_subtype_not_applicable", message: error.message });
+      }
       if (error instanceof UnitNotFoundError) {
         return reply
           .status(400)
@@ -84,6 +94,11 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       if (error instanceof ItemNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
+      }
+      if (error instanceof PackagingSubtypeNotApplicableError) {
+        return reply
+          .status(400)
+          .send({ error: "packaging_subtype_not_applicable", message: error.message });
       }
       if (error instanceof UnitNotFoundError) {
         return reply

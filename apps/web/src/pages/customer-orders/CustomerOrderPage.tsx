@@ -296,8 +296,15 @@ export function CustomerOrderPage() {
         cnpj: customerOrder.customerCnpj,
         email: null,
         phone: null,
-        city: null,
-        state: null,
+        // Opção sintética para o select: o Pedido confirmado já tem o
+        // snapshot próprio, o endereço não é lido daqui.
+        street: null,
+        number: null,
+        complement: null,
+        district: null,
+        zipCode: null,
+        city: customerOrder.customerAddress.city,
+        state: customerOrder.customerAddress.state,
         notes: null,
         active: false,
         createdAt: "",

@@ -19,6 +19,17 @@ const STRUCTURAL_FIELD_LABELS: Record<string, string> = {
   controlsExpiry: "Controla validade",
 };
 
+/**
+ * `packagingSubtype` só existe para embalagem. Guardá-lo em matéria-prima
+ * ou produto acabado criaria um dado sem significado no cadastro.
+ */
+export class PackagingSubtypeNotApplicableError extends Error {
+  constructor() {
+    super("Subtipo de embalagem só se aplica a itens do tipo Material de embalagem.");
+    this.name = "PackagingSubtypeNotApplicableError";
+  }
+}
+
 export class StructuralFieldLockedError extends Error {
   constructor(field: string) {
     const label = STRUCTURAL_FIELD_LABELS[field] ?? field;

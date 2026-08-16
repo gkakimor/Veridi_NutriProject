@@ -8,6 +8,7 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   CustomerNotFoundError,
+  DoseUomNotFoundError,
   DuplicateFinishedItemError,
   FinishedItemNotFoundError,
   InactiveCustomerError,
@@ -26,9 +27,25 @@ const CODE_SEQUENCE = "product_code_seq";
 type ProductWithRelations = Product & {
   customer: Customer | null;
   finishedProductItem: Item | null;
+  formulationVersions?: { id: string; versionNumber: number }[];
 };
 
+/**
+ * A listagem mostra a versão ACTIVE da formulação quando existir. Nenhuma
+ * lógica nova de versionamento: só a leitura da versão já marcada ACTIVE.
+ */
+const productInclude = {
+  customer: true,
+  finishedProductItem: true,
+  formulationVersions: {
+    where: { status: "ACTIVE" as const },
+    select: { id: true, versionNumber: true },
+    take: 1,
+  },
+} as const;
+
 function toProductDTO(product: ProductWithRelations): ProductDTO {
+  const activeVersion = product.formulationVersions?.[0] ?? null;
   return {
     id: product.id,
     code: product.code,
@@ -50,12 +67,33 @@ function toProductDTO(product: ProductWithRelations): ProductDTO {
           name: product.finishedProductItem.name,
         }
       : null,
+    dosageForm: product.dosageForm,
+    presentationType: product.presentationType,
+    capsulesPerDose: product.capsulesPerDose,
+    // Decimais viajam como string — nunca float.
+    doseAmount: product.doseAmount ? product.doseAmount.toString() : null,
+    doseUomCode: product.doseUomCode,
+    dosesPerPackage: product.dosesPerPackage,
+    unitsPerShippingBox: product.unitsPerShippingBox,
+    targetAgeGroup: product.targetAgeGroup,
+    shelfLifeMonths: product.shelfLifeMonths,
+    minimumBatchQuantity: product.minimumBatchQuantity
+      ? product.minimumBatchQuantity.toString()
+      : null,
+    activeFormulationVersionId: activeVersion ? activeVersion.id : null,
+    activeFormulationVersionLabel: activeVersion ? `V${activeVersion.versionNumber}` : null,
     externalCode: product.externalCode,
     notes: product.notes,
     active: product.active,
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };
+}
+
+/** A unidade da dose (mg/g/ml…) precisa existir — pode diferir da unidade de estoque. */
+async function assertDoseUomExists(code: string): Promise<void> {
+  const unit = await getPrisma().unitOfMeasure.findUnique({ where: { code } });
+  if (!unit) throw new DoseUomNotFoundError(code);
 }
 
 /** Vinculo NOVO a um Customer: precisa existir e estar ativo. */
@@ -131,7 +169,7 @@ export async function listProducts(
   const [products, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { customer: true, finishedProductItem: true },
+      include: productInclude,
       orderBy: { code: "asc" },
       ...pageArgs(pagination),
     }),
@@ -147,13 +185,40 @@ export async function listProducts(
 export async function getProductById(id: string): Promise<ProductDTO | null> {
   const product = await getPrisma().product.findUnique({
     where: { id },
-    include: { customer: true, finishedProductItem: true },
+    include: productInclude,
   });
   return product ? toProductDTO(product) : null;
 }
 
+/**
+ * Campos do perfil industrial (capacidade 33). Chave ausente não mexe,
+ * `null` limpa — mesmo idioma do resto do cadastro. Nenhum deles participa
+ * de cálculo de estoque, produção ou custo nesta fase.
+ */
+function industrialData(input: CreateProductInput | UpdateProductInput) {
+  return {
+    ...(input.dosageForm !== undefined ? { dosageForm: input.dosageForm } : {}),
+    ...(input.presentationType !== undefined
+      ? { presentationType: input.presentationType }
+      : {}),
+    ...(input.capsulesPerDose !== undefined ? { capsulesPerDose: input.capsulesPerDose } : {}),
+    ...(input.doseAmount !== undefined ? { doseAmount: input.doseAmount } : {}),
+    ...(input.doseUomCode !== undefined ? { doseUomCode: input.doseUomCode } : {}),
+    ...(input.dosesPerPackage !== undefined ? { dosesPerPackage: input.dosesPerPackage } : {}),
+    ...(input.unitsPerShippingBox !== undefined
+      ? { unitsPerShippingBox: input.unitsPerShippingBox }
+      : {}),
+    ...(input.targetAgeGroup !== undefined ? { targetAgeGroup: input.targetAgeGroup } : {}),
+    ...(input.shelfLifeMonths !== undefined ? { shelfLifeMonths: input.shelfLifeMonths } : {}),
+    ...(input.minimumBatchQuantity !== undefined
+      ? { minimumBatchQuantity: input.minimumBatchQuantity }
+      : {}),
+  };
+}
+
 export async function createProduct(input: CreateProductInput): Promise<ProductDTO> {
   if (input.customerId) await assertCustomerForNewAssociation(input.customerId);
+  if (input.doseUomCode) await assertDoseUomExists(input.doseUomCode);
   if (input.finishedProductItemId) {
     await assertFinishedItemForNewAssociation(input.finishedProductItemId);
   }
@@ -170,10 +235,11 @@ export async function createProduct(input: CreateProductInput): Promise<ProductD
         ...(input.finishedProductItemId !== undefined
           ? { finishedProductItemId: input.finishedProductItemId }
           : {}),
+        ...industrialData(input),
         ...(input.externalCode !== undefined ? { externalCode: input.externalCode } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
       },
-      include: { customer: true, finishedProductItem: true },
+      include: productInclude,
     });
     return toProductDTO(product);
   } catch (error) {
@@ -189,6 +255,7 @@ export async function updateProduct(
   input: UpdateProductInput,
 ): Promise<ProductDTO> {
   const current = await requireProduct(id);
+  if (input.doseUomCode) await assertDoseUomExists(input.doseUomCode);
 
   // So valida novamente se a associacao esta MUDANDO — mantem vinculo
   // historico intacto mesmo se o Customer/Item ligado foi inativado depois.
@@ -213,10 +280,11 @@ export async function updateProduct(
         ...(input.finishedProductItemId !== undefined
           ? { finishedProductItemId: input.finishedProductItemId }
           : {}),
+        ...industrialData(input),
         ...(input.externalCode !== undefined ? { externalCode: input.externalCode } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
       },
-      include: { customer: true, finishedProductItem: true },
+      include: productInclude,
     });
     return toProductDTO(product);
   } catch (error) {
@@ -232,7 +300,7 @@ export async function activateProduct(id: string): Promise<ProductDTO> {
   const product = await getPrisma().product.update({
     where: { id },
     data: { active: true },
-    include: { customer: true, finishedProductItem: true },
+    include: productInclude,
   });
   return toProductDTO(product);
 }
@@ -242,7 +310,7 @@ export async function deactivateProduct(id: string): Promise<ProductDTO> {
   const product = await getPrisma().product.update({
     where: { id },
     data: { active: false },
-    include: { customer: true, finishedProductItem: true },
+    include: productInclude,
   });
   return toProductDTO(product);
 }

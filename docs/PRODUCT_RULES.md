@@ -1297,6 +1297,47 @@ produce → make finished product available → picking/shipping → invoicing.
 
 ---
 
+# 33. Industrial master data v2 (implemented, Delivery 25)
+
+First capability of Block F. Enriches Customer, Item and Product with the
+attributes the real private-label operation already uses. Master data only:
+no formulation maths, no costing, no regulatory rule.
+
+## Durable rules confirmed at implementation
+
+- **`Item.defaultPurityPercent` is only a DEFAULT.** It seeds new
+  formulations and nothing else. Capability 34 will freeze
+  `purityPercentApplied` on the formulation component, so changing the item
+  later must never alter a historical formulation or production order.
+- **A null purity means UNKNOWN, never 100%.** No screen, export, print or
+  calculation may silently substitute a default. Accepted range when
+  informed: `0 < x <= 100`.
+- `packagingSubtype` exists only for `type = PACKAGING`; the backend
+  rejects it on raw material and finished product.
+- `sourceName` (chemical form actually used) and `declaredNutrient`
+  (nutritional denomination) are distinct from `Item.name` and from each
+  other; packaging normally has neither.
+- `Product.shelfLifeMonths` is a **default reference**. It changes no
+  existing lot; capability 36 may use it to *suggest* an expiry date at
+  production time.
+- Industrial product attributes (dosage form, presentation, dose, doses per
+  package, units per shipping box, minimum batch) never alter history
+  automatically and never block a production order in this capability.
+- The dose carries its own unit (`doseUomCode`) because it may differ from
+  the finished item stock unit. `minimumBatchQuantity` deliberately has
+  **no** unit of its own: it always uses the finished product item unit.
+- **`targetAgeGroup` carries no regulatory rule.** It is descriptive master
+  data. RDI, %DV, minimum/maximum limits and ANVISA validation belong to
+  Block H, which cannot start without a new domain/regulatory validation
+  from Product Ownership.
+- The Customer address is structured and entirely optional; `zipCode` is
+  stored digits-only and formatted for display. A confirmed Customer Order
+  freezes the address in its own snapshot, so editing the customer later
+  never rewrites an existing document; documents confirmed before this
+  capability keep null and are never back-filled.
+
+---
+
 # 30. Block E — Management, Reports & Exports (Dashboard: Delivery 21; Reports: Delivery 23; Exports: Delivery 24)
 
 Product Ownership decision registered during Delivery 18. A **transversal

@@ -1,3 +1,11 @@
+/** A unidade da dose precisa existir no cadastro de unidades. */
+export class DoseUomNotFoundError extends Error {
+  constructor(code: string) {
+    super(`Unidade da dose inválida: ${code}`);
+    this.name = "DoseUomNotFoundError";
+  }
+}
+
 export class ProductNotFoundError extends Error {
   constructor(id: string) {
     super(`Produto não encontrado: ${id}`);

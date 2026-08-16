@@ -73,8 +73,13 @@ export function csvDateTime(value: string | Date | null | undefined): string {
  * `Prisma.Decimal`, nunca por float do JS — `19.000000` nunca vira
  * `18,999999999`. Valor desconhecido é célula VAZIA, nunca `0`.
  */
-export function csvDecimal(value: string | Prisma.Decimal | null | undefined): string {
+export function csvDecimal(
+  value: string | number | Prisma.Decimal | null | undefined,
+): string {
   if (value === null || value === undefined || value === "") return "";
+  // Inteiros de cadastro (doses, meses, unidades) também passam por aqui —
+  // convertidos para texto sem virar notação/float.
+  if (typeof value === "number") return String(value);
   const decimal = value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value);
   return decimal.toString().replace(".", ",");
 }

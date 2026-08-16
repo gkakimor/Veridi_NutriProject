@@ -35,6 +35,81 @@ export const ITEM_TYPE_DEFAULTS: Record<
   FINISHED_PRODUCT: { controlsLot: true, controlsExpiry: true, requiresQualityRelease: true },
 };
 
+/**
+ * Família industrial do Item (capacidade 33). Lista fixa nesta fase — não
+ * existe cadastro configurável de famílias.
+ */
+export type ItemFamily =
+  | "VITAMIN"
+  | "MINERAL"
+  | "AMINO_ACID"
+  | "EXCIPIENT"
+  | "BOTANICAL"
+  | "OTHER_RAW_MATERIAL"
+  | "PACKAGING"
+  | "OTHER";
+
+export const ITEM_FAMILIES: readonly ItemFamily[] = [
+  "VITAMIN",
+  "MINERAL",
+  "AMINO_ACID",
+  "EXCIPIENT",
+  "BOTANICAL",
+  "OTHER_RAW_MATERIAL",
+  "PACKAGING",
+  "OTHER",
+];
+
+export const ITEM_FAMILY_LABELS: Record<ItemFamily, string> = {
+  VITAMIN: "Vitamina",
+  MINERAL: "Mineral",
+  AMINO_ACID: "Aminoácido",
+  EXCIPIENT: "Excipiente",
+  BOTANICAL: "Botânico",
+  OTHER_RAW_MATERIAL: "Outra matéria-prima",
+  PACKAGING: "Embalagem",
+  OTHER: "Outro",
+};
+
+/** Subtipo de embalagem — só se aplica a `type = PACKAGING`. */
+export type PackagingSubtype =
+  | "POT"
+  | "CAP"
+  | "SCOOP"
+  | "SEAL"
+  | "LABEL"
+  | "BOX"
+  | "POUCH"
+  | "CARTON"
+  | "BOTTLE"
+  | "OTHER";
+
+export const PACKAGING_SUBTYPES: readonly PackagingSubtype[] = [
+  "POT",
+  "CAP",
+  "SCOOP",
+  "SEAL",
+  "LABEL",
+  "BOX",
+  "POUCH",
+  "CARTON",
+  "BOTTLE",
+  "OTHER",
+];
+
+export const PACKAGING_SUBTYPE_LABELS: Record<PackagingSubtype, string> = {
+  POT: "Pote",
+  CAP: "Tampa",
+  SCOOP: "Dosador",
+  SEAL: "Selo",
+  LABEL: "Rótulo",
+  BOX: "Caixa",
+  POUCH: "Sachê/Pouch",
+  CARTON: "Cartucho",
+  BOTTLE: "Frasco",
+  OTHER: "Outro",
+};
+
 export type UomDimension = "MASS" | "COUNT" | "VOLUME";
 
 export interface UnitOfMeasureDTO {
@@ -53,6 +128,19 @@ export interface ItemDTO {
   controlsLot: boolean;
   controlsExpiry: boolean;
   requiresQualityRelease: boolean;
+  /** Fonte / forma química realmente utilizada (ex.: "Cloridrato de tiamina"). */
+  sourceName: string | null;
+  /** Denominação nutricional declarada (ex.: "Vitamina B1"). */
+  declaredNutrient: string | null;
+  family: ItemFamily | null;
+  /**
+   * Pureza padrão em % (0 < x <= 100). `null` significa DESCONHECIDA — nunca
+   * deve ser interpretada como 100%. É apenas o default de novas
+   * formulações; a pureza aplicada será congelada no componente (cap. 34).
+   */
+  defaultPurityPercent: string | null;
+  /** Preenchido apenas quando `type = PACKAGING`. */
+  packagingSubtype: PackagingSubtype | null;
   externalBarcode: string | null;
   active: boolean;
   /**

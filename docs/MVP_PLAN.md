@@ -69,8 +69,51 @@ payment** (future financial layer, out of scope).
 
 Block E is a **transversal layer**, executed only **after** 26 (Purchase
 Suggestion), 27 (Shipping), 28 (Invoicing) and 29 (Cost foundation) are
-done, and **before** end-to-end validation / final demo. It reads existing
-operational entities — it never introduces a new source of truth.
+done. It reads existing operational entities — it never introduces a new
+source of truth.
+
+## Block F — Veridi adherence / private label
+
+Added after a detailed comparison between the running system and the
+company's real spreadsheets, which showed that Veridi operates as a
+**private label / contract manufacturer** and that several concepts were
+not yet represented in the domain.
+
+33. Industrial master data v2 ✓
+34. Industrial formulation v2: dose, purity and overage
+35. Customer-owned material
+36. GMP + Users + industrial Production Order + batch record
+37. Documentary quality / CoA / attachments
+38. Projects + versioned quotations
+39. Samples / pilots / trials
+40. Item × Supplier / MOQ / approval
+41. Veridi spreadsheet importer
+42. Operational adherence UX
+
+## Block G — Industrial costing & pricing
+
+43. Industrial cost structure
+44. Resources / equipment / energy / labour
+45. Full production cost
+46. Price and margin simulator by range
+47. Project → Quotation → Cost/Price integration
+
+## Block H — Regulatory / labelling (GATE — not specified yet)
+
+Planned theme: declared nutrient, RDI/nutritional reference, %DV, age
+group, minimum/maximum limits, ANVISA rules, formulation validation and
+labelling data.
+
+**This block must NOT be started automatically.** On finishing Block G the
+work stops: Product Ownership will re-validate the regulatory rules and the
+spreadsheets before specifying H. Until then nothing in the system may
+depend on a regulatory calculation — `Product.targetAgeGroup`, added in
+capability 33, is descriptive master data only.
+
+The blocks above are evolutions of the existing core (1–32), never
+replacements: ledger, lots, FEFO, reservations, production, real
+consumption, traceability, orders, shipping, billing, cost foundation,
+dashboard, reports and exports remain the foundation.
 
 ---
 
@@ -84,10 +127,19 @@ operational entities — it never introduces a new source of truth.
 → 30 Executive/Operational Dashboard ✓
 → 31 Reports ✓
 → 32 CSV/PDF/Print exports ✓
+→ 33 Industrial master data v2 ✓
+→ 34-42 Block F (Veridi adherence / private label)
+→ 43-47 Block G (industrial costing & pricing)
+→ ⛔ GATE: Block H (regulatory/labelling) needs a new domain/regulatory
+   validation from Product Ownership before being specified
 → end-to-end validation / demo
 → responsive/mobile hardening
 → later technical hardening
 ```
+
+Roadmap change registered on 16/08/2026: Blocks F and G come **before**
+demo readiness. Demo readiness, responsive/mobile and general hardening
+are explicitly not started.
 
 Guiding principle registered with the cost foundation: **first know what
 the material/product cost; only later evolve to know when and how much

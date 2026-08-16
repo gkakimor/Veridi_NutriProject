@@ -326,6 +326,17 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
     customerName: usingSnapshot ? order.customerName : order.customer.legalName,
     customerTradeName: usingSnapshot ? order.customerTradeName : order.customer.tradeName,
     customerCnpj: usingSnapshot ? order.customerCnpj : order.customer.cnpj,
+    // Pedidos confirmados antes da capacidade 33 ficam com endereco null no
+    // snapshot — nunca se inventa historico buscando o cadastro atual.
+    customerAddress: {
+      street: usingSnapshot ? order.customerStreet : order.customer.street,
+      number: usingSnapshot ? order.customerNumber : order.customer.number,
+      complement: usingSnapshot ? order.customerComplement : order.customer.complement,
+      district: usingSnapshot ? order.customerDistrict : order.customer.district,
+      zipCode: usingSnapshot ? order.customerZipCode : order.customer.zipCode,
+      city: usingSnapshot ? order.customerCity : order.customer.city,
+      state: usingSnapshot ? order.customerState : order.customer.state,
+    },
     orderDate: order.orderDate.toISOString(),
     requestedDeliveryDate: order.requestedDeliveryDate ? order.requestedDeliveryDate.toISOString() : null,
     status: order.status,
@@ -600,6 +611,15 @@ export async function confirmCustomerOrder(id: string): Promise<CustomerOrderDTO
         customerName: customer.legalName,
         customerTradeName: customer.tradeName,
         customerCnpj: customer.cnpj,
+        // Endereco tambem congela: editar o cadastro do Cliente depois nao
+        // pode mudar o que este documento diz.
+        customerStreet: customer.street,
+        customerNumber: customer.number,
+        customerComplement: customer.complement,
+        customerDistrict: customer.district,
+        customerZipCode: customer.zipCode,
+        customerCity: customer.city,
+        customerState: customer.state,
       },
     });
 

@@ -158,6 +158,7 @@ model UnitOfMeasure {
   toBaseFactor Decimal      @db.Decimal(18, 6)
 
   items Item[]
+  productsAsDoseUom Product[] @relation("ProductDoseUom")
 
   @@map("units_of_measure")
 }
@@ -183,6 +184,27 @@ model Item {
   /// (ITEM_TYPE_DEFAULTS em @veridi/shared), editavel pelo usuario — nao
   /// inferido permanentemente so pelo type.
   requiresQualityRelease Boolean @default(true)
+
+  /// Fonte / forma quimica realmente utilizada (ex.: "Cloridrato de
+  /// tiamina" para o item "Vitamina B1"). Texto livre nesta fase — nao
+  /// existe entidade Source.
+  sourceName String?
+
+  /// Denominacao nutricional declarada (ex.: "Vitamina B1", "Magnesio").
+  /// Diferente de `name` quando necessario; embalagem normalmente fica null.
+  declaredNutrient String?
+
+  family ItemFamily?
+
+  /// Pureza padrao conhecida da materia-prima, em porcentagem (0 < x <= 100).
+  /// `null` significa DESCONHECIDA — nunca deve ser lida como 100%. E apenas
+  /// o default para novas formulacoes: a capacidade 34 congelara
+  /// `purityPercentApplied` no componente, entao mudar este campo nunca
+  /// altera formulacao/OP historica.
+  defaultPurityPercent Decimal? @db.Decimal(6, 3)
+
+  /// So para type = PACKAGING; permanece null nos demais tipos.
+  packagingSubtype PackagingSubtype?
 
   externalBarcode String?
   active          Boolean       @default(true)
@@ -211,6 +233,7 @@ model Item {
   @@index([type])
   @@index([active])
   @@index([externalBarcode])
+  @@index([family])
   @@map("items")
 }
 
@@ -246,6 +269,66 @@ model Supplier {
   @@map("suppliers")
 }
 
+/// Familia industrial do Item — classificacao operacional usada pelo
+/// cadastro e pelas futuras capacidades de formulacao/custeio. Lista fixa
+/// nesta fase: nao existe cadastro configuravel de familias.
+enum ItemFamily {
+  VITAMIN
+  MINERAL
+  AMINO_ACID
+  EXCIPIENT
+  BOTANICAL
+  OTHER_RAW_MATERIAL
+  PACKAGING
+  OTHER
+}
+
+/// Subtipo de embalagem. So faz sentido para Item.type = PACKAGING —
+/// coerencia validada no service.
+enum PackagingSubtype {
+  POT
+  CAP
+  SCOOP
+  SEAL
+  LABEL
+  BOX
+  POUCH
+  CARTON
+  BOTTLE
+  OTHER
+}
+
+/// Forma farmaceutica do Product.
+enum DosageForm {
+  CAPSULE
+  POWDER
+  TABLET
+  LIQUID
+  OTHER
+}
+
+/// Apresentacao comercial do Product — NAO confundir com o Item de
+/// embalagem usado na formulacao.
+enum PresentationType {
+  POT
+  POUCH
+  CARTON
+  BULK
+  BOTTLE
+  OTHER
+}
+
+/// Publico-alvo declarado. Nesta fase e apenas cadastro descritivo:
+/// nenhuma regra regulatoria (IDR/%VD/ANVISA) depende dele — isso e o
+/// gate do Bloco H.
+enum TargetAgeGroup {
+  ADULT
+  CHILD
+  PREGNANT
+  LACTATING
+  OTHER
+}
+
 /// Cliente. Cadastro base: sem CRM, tabela de preco ou pedido neste momento.
 model Customer {
   id   String @id @default(uuid())
@@ -262,7 +345,16 @@ model Customer {
   cnpj  String?
   email String?
   phone String?
-  city  String?
+
+  /// Endereco estruturado. Todos opcionais: clientes cadastrados antes da
+  /// capacidade 33 continuam validos com os campos em null.
+  street     String?
+  number     String?
+  complement String?
+  district   String?
+  /// Somente digitos quando informado (a formatacao 00000-000 e da UI).
+  zipCode    String?
+  city       String?
 
   /// UF brasileira, sempre maiuscula.
   state String?
@@ -306,6 +398,35 @@ model Product {
   /// vinculo; associacao historica preservada se o Item for inativado depois.
   finishedProductItemId String? @unique
   finishedProductItem   Item?   @relation(fields: [finishedProductItemId], references: [id])
+
+  /// Perfil industrial (capacidade 33). Todos opcionais: produtos
+  /// cadastrados antes continuam validos. Nenhum deles altera calculo de
+  /// estoque/producao — sao cadastro, insumo para as capacidades 34-47.
+  dosageForm       DosageForm?
+  presentationType PresentationType?
+
+  /// Quantidade de capsulas por dose (normalmente com dosageForm CAPSULE).
+  capsulesPerDose Int?
+
+  /// Dose declarada (ex.: 500 mg). `doseUom` existe porque a unidade da
+  /// dose pode ser diferente da unidade de estoque do Finished Item.
+  doseAmount Decimal?       @db.Decimal(18, 6)
+  doseUomCode String?
+  doseUom     UnitOfMeasure? @relation("ProductDoseUom", fields: [doseUomCode], references: [code])
+
+  dosesPerPackage      Int?
+  unitsPerShippingBox  Int?
+
+  /// Publico-alvo — descritivo nesta fase, sem regra regulatoria.
+  targetAgeGroup TargetAgeGroup?
+
+  /// Vida util padrao em meses. A capacidade 36 podera sugerir
+  /// `validade = data de producao + shelfLifeMonths`; aqui e so cadastro.
+  shelfLifeMonths Int?
+
+  /// Lote minimo de fabricacao, na unidade do Finished Product Item —
+  /// por isso nao existe `minimumBatchUom`. Nao bloqueia OP nesta fase.
+  minimumBatchQuantity Decimal? @db.Decimal(18, 6)
 
   externalCode String?
   notes        String?
@@ -1048,6 +1169,16 @@ model CustomerOrder {
   customerName      String?
   customerTradeName String?
   customerCnpj      String?
+  /// Endereco congelado no CONFIRM: editar o cadastro do Cliente depois
+  /// nunca muda o que este documento diz. Pedidos confirmados antes da
+  /// capacidade 33 permanecem com null.
+  customerStreet     String?
+  customerNumber     String?
+  customerComplement String?
+  customerDistrict   String?
+  customerZipCode    String?
+  customerCity       String?
+  customerState      String?
 
   confirmedAt DateTime?
   confirmedBy String?

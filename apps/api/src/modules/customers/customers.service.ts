@@ -15,6 +15,22 @@ import type {
 
 const CODE_SEQUENCE = "customer_code_seq";
 
+/**
+ * Endereco estruturado (capacidade 33). Chave ausente nao mexe, `""` limpa
+ * — mesmo idioma dos demais campos do cadastro.
+ */
+function addressData(input: CreateCustomerInput | UpdateCustomerInput) {
+  return {
+    ...(input.street !== undefined ? { street: input.street } : {}),
+    ...(input.number !== undefined ? { number: input.number } : {}),
+    ...(input.complement !== undefined ? { complement: input.complement } : {}),
+    ...(input.district !== undefined ? { district: input.district } : {}),
+    ...(input.zipCode !== undefined ? { zipCode: input.zipCode } : {}),
+    ...(input.city !== undefined ? { city: input.city } : {}),
+    ...(input.state !== undefined ? { state: input.state } : {}),
+  };
+}
+
 function toCustomerDTO(customer: Customer): CustomerDTO {
   return {
     id: customer.id,
@@ -24,6 +40,11 @@ function toCustomerDTO(customer: Customer): CustomerDTO {
     cnpj: customer.cnpj,
     email: customer.email,
     phone: customer.phone,
+    street: customer.street,
+    number: customer.number,
+    complement: customer.complement,
+    district: customer.district,
+    zipCode: customer.zipCode,
     city: customer.city,
     state: customer.state,
     notes: customer.notes,
@@ -107,8 +128,7 @@ export async function createCustomer(
         ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
-        ...(input.city !== undefined ? { city: input.city } : {}),
-        ...(input.state !== undefined ? { state: input.state } : {}),
+        ...addressData(input),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
       },
     });
@@ -137,8 +157,7 @@ export async function updateCustomer(
         ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
-        ...(input.city !== undefined ? { city: input.city } : {}),
-        ...(input.state !== undefined ? { state: input.state } : {}),
+        ...addressData(input),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
       },
     });

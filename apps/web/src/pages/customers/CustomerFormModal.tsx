@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { CustomerDTO } from "@veridi/shared";
-import { BR_STATE_CODES } from "@veridi/shared";
+import { BR_STATE_CODES, formatZipCode } from "@veridi/shared";
 import { createCustomer, updateCustomer } from "../../lib/customers-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
@@ -20,6 +20,11 @@ interface FormState {
   cnpj: string;
   email: string;
   phone: string;
+  zipCode: string;
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
   city: string;
   state: string;
   notes: string;
@@ -33,6 +38,12 @@ function initialState(customer: CustomerDTO | null): FormState {
       cnpj: customer.cnpj ?? "",
       email: customer.email ?? "",
       phone: customer.phone ?? "",
+      // CEP guardado só com dígitos; exibido com máscara.
+      zipCode: formatZipCode(customer.zipCode) ?? "",
+      street: customer.street ?? "",
+      number: customer.number ?? "",
+      complement: customer.complement ?? "",
+      district: customer.district ?? "",
       city: customer.city ?? "",
       state: customer.state ?? "",
       notes: customer.notes ?? "",
@@ -44,6 +55,11 @@ function initialState(customer: CustomerDTO | null): FormState {
     cnpj: "",
     email: "",
     phone: "",
+    zipCode: "",
+    street: "",
+    number: "",
+    complement: "",
+    district: "",
     city: "",
     state: "",
     notes: "",
@@ -73,6 +89,11 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
     const cnpj = optionalField(form.cnpj);
     const email = optionalField(form.email);
     const phone = optionalField(form.phone);
+    const zipCode = optionalField(form.zipCode);
+    const street = optionalField(form.street);
+    const number = optionalField(form.number);
+    const complement = optionalField(form.complement);
+    const district = optionalField(form.district);
     const city = optionalField(form.city);
     const state = optionalField(form.state);
     const notes = optionalField(form.notes);
@@ -83,6 +104,11 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
       ...(cnpj ? { cnpj: cnpj.value } : {}),
       ...(email ? { email: email.value } : {}),
       ...(phone ? { phone: phone.value } : {}),
+      ...(zipCode ? { zipCode: zipCode.value } : {}),
+      ...(street ? { street: street.value } : {}),
+      ...(number ? { number: number.value } : {}),
+      ...(complement ? { complement: complement.value } : {}),
+      ...(district ? { district: district.value } : {}),
       ...(city ? { city: city.value } : {}),
       ...(state ? { state: state.value } : {}),
       ...(notes ? { notes: notes.value } : {}),
@@ -211,7 +237,7 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
           </div>
         </FormSection>
 
-        <FormSection title="Contato e localização">
+        <FormSection title="Contato">
           <div className="field-grid-2">
             <div className="field">
               <label htmlFor="customer-email">Email</label>
@@ -233,6 +259,78 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
                 value={form.phone}
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, phone: event.target.value }))
+                }
+              />
+            </div>
+
+          </div>
+        </FormSection>
+
+        {/* Endereço estruturado — usado depois em OP, documentos GMP e
+            expedição. Sem integração de CEP: o usuário digita. */}
+        <FormSection title="Endereço">
+          <div className="field-grid-2">
+            <div className="field field--narrow">
+              <label htmlFor="customer-zip">CEP</label>
+              <input
+                id="customer-zip"
+                type="text"
+                inputMode="numeric"
+                placeholder="00000-000"
+                value={form.zipCode}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, zipCode: event.target.value }))
+                }
+              />
+              {fieldErrors["zipCode"] && (
+                <p className="field__error">{fieldErrors["zipCode"]}</p>
+              )}
+            </div>
+
+            <div className="field field--full">
+              <label htmlFor="customer-street">Logradouro</label>
+              <input
+                id="customer-street"
+                type="text"
+                value={form.street}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, street: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="field field--narrow">
+              <label htmlFor="customer-number">Número</label>
+              <input
+                id="customer-number"
+                type="text"
+                value={form.number}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, number: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="customer-complement">Complemento</label>
+              <input
+                id="customer-complement"
+                type="text"
+                value={form.complement}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, complement: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="customer-district">Bairro</label>
+              <input
+                id="customer-district"
+                type="text"
+                value={form.district}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, district: event.target.value }))
                 }
               />
             </div>
