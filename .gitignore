@@ -32,3 +32,11 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Dados reais das planilhas Veridi (clientes, CNPJ, formulacoes, precos).
+# Nunca versionar.
+.local-data/
+
+# Pacote de handoff e screenshots gerados localmente — as telas capturadas
+# com a base DEV mostram dados reais de cliente/produto.
+handoff/
