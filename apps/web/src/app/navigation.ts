@@ -100,7 +100,7 @@ export const navigation: NavGroup[] = [
       {
         label: "Produto Acabado",
         path: "/producao/produto-acabado",
-        implemented: false,
+        implemented: true,
       },
     ],
   },

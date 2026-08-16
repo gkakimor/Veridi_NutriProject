@@ -81,7 +81,10 @@ apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  seções Materiais Reservados/Picking/Consumo Real/Produção
                  [apontamentos parciais + conclusão]/Origem [Pedido do
                  Cliente, quando aplicável]) / Picking / Consumo (lista
-                 RELEASED/IN_PRODUCTION), Comercial > Pedidos (lista +
+                 RELEASED/IN_PRODUCTION) / Produto Acabado (consulta
+                 read-only dos lotes produzidos: produzido, On Hand/
+                 Reserved/Available, qualidade, validade e custo material
+                 unitário), Comercial > Pedidos (lista +
                  documento DRAFT/CONFIRMED/IN_FULFILLMENT/
                  PARTIALLY_SHIPPED/SHIPPED/CANCELLED, seções Produtos
                  [expedido/falta expedir]/Plano de Atendimento [editável
@@ -114,7 +117,7 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /issue, /cancel), /receipt-lines/:id/acquisition-cost,
                  /items/:id/cost-reference,
                  /formulation-versions/:id/cost-estimate,
-                 /production-orders/:id/material-cost
+                 /production-orders/:id/material-cost, /finished-goods
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder
                  [origin MANUAL/CUSTOMER_ORDER, customerOrderId/Code],
@@ -2852,6 +2855,41 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
   separado, "Em Compra"). A sugestão FEFO/FIFO em uma OP é só
   recomendação — nunca reserva, nunca persiste, mesmo serviço de
   `allocation.service.ts` já usado fora do contexto de OP.
+
+---
+
+# Correção de consistência Bloco C — tela Produção → Produto Acabado
+
+`Produção → Produto Acabado` deixou de ser placeholder. A capacidade já
+existia inteira no back (ProductionOutput, `Lot.origin = PRODUCTION`,
+`FINISHED_GOOD_PRODUCTION`, Inventory Ledger, Qualidade, Rastreabilidade,
+Fundação de Custos) — faltava só a visão. Nada de domínio novo foi criado.
+
+- `GET /finished-goods` (`modules/finished-goods/`) é **read model puro**:
+  uma linha por `Lot` com `origin = PRODUCTION`. Lote de recebimento nunca
+  aparece.
+- **Não existe segundo estoque nem entidade nova.** Produzido = soma dos
+  `ProductionOutput` do lote (histórico do que saiu da OP); On Hand /
+  Reserved / Available vêm do `inventory-ledger.ts`. Quantidade produzida
+  nunca é usada como saldo.
+- Qualidade é o status efetivo do lote (mesma regra de sempre, vencimento
+  calculado, não persistido). As ações de Qualidade continuam na tela do
+  Lote — não foram duplicadas aqui.
+- Custo vem de `getProductionOrderMaterialCost` e é resolvido **uma vez por
+  OP distinta**, nunca por linha (evita N+1 quando uma OP gera vários
+  lotes). `REAL`/`ESTIMATED` mostram valor + origem; `PARTIAL`/`NO_COST`
+  mostram "Parcial"/"Sem custo" e **nenhum número** — custo incompleto
+  jamais é exibido como custo fechado.
+- A tela é **somente leitura**: não há `+ Novo Produto Acabado`. Produto
+  acabado nasce exclusivamente de OP → apontamento. Ações: `Abrir lote`,
+  `Abrir OP`. Cada quantidade carrega a própria unidade; nada é somado
+  entre unidades diferentes.
+- Estado vazio: "Nenhum produto acabado produzido ainda."
+- Testes (`finished-goods.test.ts`): só lotes PRODUCTION; produzido do
+  ProductionOutput divergindo de On Hand; Reserved/Available do ledger;
+  qualidade `AWAITING_RELEASE` com Available 0 e liberação abrindo
+  Available; custo `REAL` com valor e `NO_COST` com `materialUnitCost`
+  nulo; filtros de status e busca por lote Veridi.
 
 ---
 
