@@ -1,13 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { CostReferenceDTO, LotDTO, LotTraceabilityDTO, ProductionOrderMaterialCostDTO } from "@veridi/shared";
-import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
+import {
+  COA_STATUS_LABELS,
+  COST_QUALITY_LABELS,
+  COST_SOURCE_LABELS,
+  LOT_ATTACHMENT_TYPES,
+  LOT_STATUS_LABELS,
+  ownerLabel,
+} from "@veridi/shared";
 import { blockLot, getLot, getLotTraceability, releaseLot } from "../../lib/lots-api";
 import { getItemCostReference, getProductionOrderMaterialCost } from "../../lib/costs-api";
 import { getReceipt } from "../../lib/receiving-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { AttachmentsSection } from "../../components/AttachmentsSection";
+import { approveCoa, rejectCoa } from "../../lib/attachments-api";
+import { useAuth } from "../../app/AuthProvider";
 import { QrCode } from "../../components/QrCode";
 
 function formatDate(value: string | null): string {
@@ -37,6 +47,8 @@ function statusBadgeClass(status: LotDTO["status"], isExpired: boolean): string 
 export function LotDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
+  const canReviewCoa = user?.role === "QUALITY" || user?.role === "ADMIN";
 
   const [lot, setLot] = useState<LotDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,6 +132,43 @@ export function LotDetailPage() {
       setLot(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao liberar lote");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** Recarrega o lote — o estado documental muda ao anexar/arquivar laudo. */
+  async function reloadLot() {
+    if (!id) return;
+    setLot(await getLot(id));
+  }
+
+  async function handleApproveCoa() {
+    if (!id) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await approveCoa(id);
+      await reloadLot();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao aprovar o CoA");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRejectCoa() {
+    if (!id) return;
+    const reason = window.prompt("Motivo da rejeição do CoA:");
+    if (!reason?.trim()) return;
+
+    setSaving(true);
+    setError(null);
+    try {
+      await rejectCoa(id, reason.trim());
+      await reloadLot();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao rejeitar o CoA");
     } finally {
       setSaving(false);
     }
@@ -451,6 +500,69 @@ export function LotDetailPage() {
             )}
           </div>
         </FormSection>
+
+        <FormSection
+          title="Qualidade documental"
+          subtitle="Laudo/CoA é independente do status operacional: aprovar o documento não libera o lote."
+        >
+          <dl className="definition-list">
+            <dt>Exige CoA</dt>
+            <dd>{lot.requiresCoa ? "Sim" : "Não"}</dd>
+            <dt>Situação do CoA</dt>
+            <dd>
+              <span
+                className={
+                  lot.coaStatus === "APPROVED"
+                    ? "badge badge--active"
+                    : lot.coaStatus === "REJECTED"
+                      ? "badge badge--err"
+                      : lot.coaStatus === "NOT_REQUIRED"
+                        ? "badge badge--neutral"
+                        : "badge badge--warn"
+                }
+              >
+                {COA_STATUS_LABELS[lot.coaStatus]}
+              </span>
+            </dd>
+            <dt>Revisado por</dt>
+            <dd>{lot.coaReviewedByName ?? "—"}</dd>
+            <dt>Observação da análise</dt>
+            <dd>{lot.coaReviewNote ?? "—"}</dd>
+          </dl>
+
+          {canReviewCoa && lot.requiresCoa && lot.coaStatus === "RECEIVED" && (
+            <div className="line-actions">
+              <button
+                type="button"
+                className="btn btn--accent"
+                disabled={saving}
+                onClick={() => void handleApproveCoa()}
+              >
+                Aprovar CoA
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                disabled={saving}
+                onClick={() => void handleRejectCoa()}
+              >
+                Rejeitar CoA
+              </button>
+            </div>
+          )}
+        </FormSection>
+
+        {id && (
+          <AttachmentsSection
+            context="lots"
+            contextId={id}
+            title="Documentos do lote"
+            subtitle="Laudo/CoA e outros documentos. Anexar não aprova — a análise da Qualidade é uma ação separada."
+            types={LOT_ATTACHMENT_TYPES}
+            canArchive={canReviewCoa}
+            onChanged={() => void reloadLot()}
+          />
+        )}
 
         {traceability && traceability.kind === "FINISHED_GOOD" && (
           <FormSection

@@ -18,7 +18,13 @@ declare module "fastify" {
 }
 
 /** Rotas que existem justamente para quem ainda não tem sessão. */
-const PUBLIC_ROUTES = new Set(["/health", "/auth/login", "/auth/logout", "/auth/me"]);
+const PUBLIC_ROUTES = new Set([
+  "/health",
+  "/auth/login",
+  "/auth/logout",
+  "/auth/me",
+  "/auth/session",
+]);
 
 export function isPublicRoute(url: string): boolean {
   const path = url.split("?")[0] ?? url;

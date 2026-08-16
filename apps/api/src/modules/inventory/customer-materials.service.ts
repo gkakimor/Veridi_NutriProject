@@ -86,6 +86,7 @@ export async function listCustomerMaterials(
       available: available.toString(),
       unitCode: lot.item.unitCode,
       status: lot.status,
+      coaStatus: lot.coaStatus,
     });
   }
 

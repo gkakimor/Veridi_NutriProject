@@ -47,6 +47,28 @@ export const LOT_ORIGIN_LABELS: Record<LotOrigin, string> = {
   PRODUCTION: "Produção",
 };
 
+/**
+ * Situação DOCUMENTAL do laudo/CoA do lote — independente do status
+ * operacional. Aprovar o CoA nunca libera o lote sozinho.
+ */
+export type CoaStatus = "NOT_REQUIRED" | "PENDING" | "RECEIVED" | "APPROVED" | "REJECTED";
+
+export const COA_STATUSES: readonly CoaStatus[] = [
+  "NOT_REQUIRED",
+  "PENDING",
+  "RECEIVED",
+  "APPROVED",
+  "REJECTED",
+];
+
+export const COA_STATUS_LABELS: Record<CoaStatus, string> = {
+  NOT_REQUIRED: "Não exigido",
+  PENDING: "Pendente de documento",
+  RECEIVED: "Aguardando análise",
+  APPROVED: "Aprovado",
+  REJECTED: "Rejeitado",
+};
+
 export interface LotDTO {
   id: string;
   code: string;
@@ -65,6 +87,15 @@ export interface LotDTO {
   ownerCustomerId: string | null;
   ownerCustomerCode: string | null;
   ownerCustomerName: string | null;
+  /**
+   * Exigência documental congelada quando o lote nasceu — as regras usam
+   * este valor, nunca `Item.requiresCoa` atual.
+   */
+  requiresCoa: boolean;
+  coaStatus: CoaStatus;
+  coaReviewedAt: string | null;
+  coaReviewedByName: string | null;
+  coaReviewNote: string | null;
   /** `null` para lotes `PRODUCTION` — nunca fornecedor fake. */
   supplierId: string | null;
   supplierCode: string | null;
@@ -114,4 +145,48 @@ export interface LotListResponse {
 
 export interface BlockLotInput {
   reason: string;
+}
+
+/* ─────────────── Qualidade documental (CoA) ─────────────── */
+
+export interface CoaReviewResultDTO {
+  lotId: string;
+  lotCode: string;
+  coaStatus: CoaStatus;
+  /** Estado operacional após a revisão — aprovar não muda, rejeitar pode bloquear. */
+  lotStatus: LotStatus;
+  reviewedAt: string | null;
+  reviewedByName: string | null;
+  reviewNote: string | null;
+}
+
+export interface QualityQueueRowDTO {
+  lotId: string;
+  lotCode: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  sourceName: string | null;
+  declaredNutrient: string | null;
+  lotOrigin: LotOrigin;
+  supplierName: string | null;
+  ownerType: InventoryOwnerType;
+  ownerCustomerName: string | null;
+  receivedAt: string;
+  expiryDate: string | null;
+  isExpired: boolean;
+  requiresCoa: boolean;
+  coaStatus: CoaStatus;
+  coaReviewedByName: string | null;
+  coaReviewNote: string | null;
+  lotStatus: LotStatus;
+  onHand: string;
+  unitCode: string;
+}
+
+export interface QualityQueueResponse {
+  rows: QualityQueueRowDTO[];
+  page: number;
+  pageSize: number;
+  total: number;
 }

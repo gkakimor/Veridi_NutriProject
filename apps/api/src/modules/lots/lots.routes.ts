@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import type { ZodError } from "zod";
 import { blockLot, getLotById, listLots, lookupLotByCode, releaseLot } from "./lots.service.js";
+import { CoaNotApprovedError } from "../quality/quality.errors.js";
 import { InvalidLotTransitionError, LotNotFoundError } from "./lots.errors.js";
 import { blockLotSchema, listLotsQuerySchema, lookupLotQuerySchema } from "./lots.schemas.js";
 import { getLotTraceability } from "./traceability.service.js";
@@ -60,13 +62,17 @@ export const lotsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/lots/:id/release", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      return reply.send(await releaseLot(id));
+      return reply.send(await releaseLot(id, requireCurrentUser(request).name));
     } catch (error) {
       if (error instanceof LotNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }
       if (error instanceof InvalidLotTransitionError) {
         return reply.status(400).send({ error: "invalid_transition", message: error.message });
+      }
+      // Pendência documental é motivo legítimo de recusa da liberação.
+      if (error instanceof CoaNotApprovedError) {
+        return reply.status(400).send({ error: "coa_not_approved", message: error.message });
       }
       throw error;
     }

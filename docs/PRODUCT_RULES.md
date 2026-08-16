@@ -289,6 +289,46 @@ Full laboratory inspection and COA workflows are outside MVP.
   `BLOCKED` in this phase — a `RELEASED` Production Order may be counting
   on it, and blocking would silently corrupt that commitment.
 
+## Documentary quality — CoA and attachments (capability 37)
+
+- **Operational quality and documentary quality are different things.**
+  `Lot.status` says whether the lot can be used; `Lot.coaStatus` says
+  whether the certificate arrived and was approved. Neither replaces the
+  other.
+- The CoA belongs to the **lot** — not to the supplier, not to the item,
+  not only to the receipt: the certificate qualifies the physical lot that
+  was received. One receipt with several lines produces one documentary
+  status per lot.
+- `Item.requiresCoa` is the current configuration; the lot freezes it as
+  `requiresCoaSnapshot` at creation. Changing the item tomorrow never
+  reclassifies lots that already exist. It is a concept independent of
+  `requiresQualityRelease` and is never inferred from it.
+- A lot of an item that requires a CoA never starts as `AVAILABLE`, even
+  when manual quality release is not configured.
+- **Approving the CoA does not release the lot.** The flow is: receipt →
+  stock on hand → CoA pending/received → CoA approved → the Quality
+  operator releases explicitly → available. There is no automatic
+  documentary release.
+- Uploading a document moves `PENDING` to `RECEIVED`; it never approves.
+  Approving without an active CoA document is refused. Approval and
+  rejection are restricted to Quality/Admin — Purchasing may attach, not
+  decide. The reviewer always comes from the session.
+- Rejection requires a reason, and if the lot was operationally available
+  it is blocked in the same operation. Nothing about the CoA ever creates
+  an inventory movement: On Hand never changes.
+- A lot that requires a CoA and is not approved is not eligible for FEFO,
+  reservation, picking or consumption — the rule lives in the same
+  eligibility function as quality and expiry, not scattered as ad-hoc ifs.
+- Attachments are auditable evidence: never hard-deleted, only archived,
+  keeping who uploaded and who archived. Files never live in a public
+  directory, the user's filename never becomes a path, and download goes
+  through the authenticated API.
+- Only CoA gates operations. Label art and technical sheets are reference
+  documentation and block nothing.
+- Legacy data is never classified automatically: the historical "laudo"
+  column is read as validation statistics only, never written back into
+  master data.
+
 ---
 
 # 11. Physical location

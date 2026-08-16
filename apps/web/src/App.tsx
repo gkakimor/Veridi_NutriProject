@@ -27,6 +27,7 @@ import { InventoryItemDetailPage } from "./pages/inventory/InventoryItemDetailPa
 import { InventoryMovementsPage } from "./pages/inventory/InventoryMovementsPage";
 import { StockCountPage } from "./pages/inventory/StockCountPage";
 import { CustomerMaterialsPage } from "./pages/inventory/CustomerMaterialsPage";
+import { CoaQueuePage } from "./pages/quality/CoaQueuePage";
 import { FormulationsPage } from "./pages/formulations/FormulationsPage";
 import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPage";
 import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
@@ -139,6 +140,7 @@ function AuthenticatedApp() {
           <Route path="/estoque/lotes/escanear" element={<LotScanPage />} />
           <Route path="/estoque/lotes/:id" element={<LotDetailPage />} />
           <Route path="/estoque/:itemId" element={<InventoryItemDetailPage />} />
+          <Route path="/qualidade/documentos" element={<CoaQueuePage />} />
           <Route path="/producao/formulacoes" element={<FormulationsPage />} />
           <Route path="/producao/formulacoes/:productId" element={<FormulationDetailPage />} />
           <Route

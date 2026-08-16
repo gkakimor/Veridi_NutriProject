@@ -34,6 +34,7 @@ function toItemDTO(item: ItemWithUnit, operationallyUsed: boolean): ItemDTO {
     controlsLot: item.controlsLot,
     controlsExpiry: item.controlsExpiry,
     requiresQualityRelease: item.requiresQualityRelease,
+    requiresCoa: item.requiresCoa,
     sourceName: item.sourceName,
     declaredNutrient: item.declaredNutrient,
     family: item.family,
@@ -171,6 +172,9 @@ export async function createItem(input: CreateItemInput): Promise<ItemDTO> {
       controlsExpiry: input.controlsExpiry ?? defaults.controlsExpiry,
       requiresQualityRelease:
         input.requiresQualityRelease ?? defaults.requiresQualityRelease,
+      // Sem default por tipo: exigir laudo é decisão explícita do cadastro,
+      // nunca inferida de `requiresQualityRelease`.
+      requiresCoa: input.requiresCoa ?? false,
       ...(input.sourceName !== undefined ? { sourceName: input.sourceName } : {}),
       ...(input.declaredNutrient !== undefined
         ? { declaredNutrient: input.declaredNutrient }
@@ -230,6 +234,7 @@ export async function updateItem(
       ...(input.controlsExpiry !== undefined
         ? { controlsExpiry: input.controlsExpiry }
         : {}),
+      ...(input.requiresCoa !== undefined ? { requiresCoa: input.requiresCoa } : {}),
       ...(input.requiresQualityRelease !== undefined
         ? { requiresQualityRelease: input.requiresQualityRelease }
         : {}),

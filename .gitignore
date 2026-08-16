@@ -37,6 +37,9 @@ Thumbs.db
 # Nunca versionar.
 .local-data/
 
+# Anexos enviados pelo sistema (laudos, NF, artes) — nunca versionados.
+uploads/
+
 # Pacote de handoff e screenshots gerados localmente — as telas capturadas
 # com a base DEV mostram dados reais de cliente/produto.
 handoff/

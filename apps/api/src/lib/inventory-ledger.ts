@@ -297,9 +297,21 @@ export function isLotExpired(lot: { expiryDate: Date | null }): boolean {
   return lot.expiryDate ? lot.expiryDate.getTime() < Date.now() : false;
 }
 
-/** Um lote so contribui para Available quando AVAILABLE e nao vencido. */
-export function isLotAvailableForUse(lot: { status: string; expiryDate: Date | null }): boolean {
-  return lot.status === "AVAILABLE" && !isLotExpired(lot);
+/**
+ * Um lote so contribui para Available quando AVAILABLE, nao vencido e —
+ * quando exige laudo — com o CoA aprovado. A regra documental fica aqui,
+ * junto das outras, para nao existir uma segunda interpretacao espalhada
+ * por FEFO/reserva/picking/consumo.
+ */
+export function isLotAvailableForUse(lot: {
+  status: string;
+  expiryDate: Date | null;
+  requiresCoaSnapshot?: boolean;
+  coaStatus?: string;
+}): boolean {
+  if (lot.status !== "AVAILABLE" || isLotExpired(lot)) return false;
+  if (lot.requiresCoaSnapshot && lot.coaStatus !== "APPROVED") return false;
+  return true;
 }
 
 /**

@@ -50,6 +50,9 @@ por proprietário.**
 **Delivery 28 — GMP: usuários, documentos controlados, OP industrial e
 Folha de Receita (Bloco F, capacidade 36): concluído — o sistema passa a
 ter identidade real de usuário e execução de produção por parte.**
+**Delivery 29 — Qualidade documental / CoA / Anexos (Bloco F, capacidade
+37): concluído — laudo por lote com estado próprio, anexos auditáveis e
+fila da Qualidade.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2906,6 +2909,73 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 29 — Qualidade documental / CoA / Anexos (Bloco F, capacidade 37)
+
+## Dois estados que não se confundem
+`Lot.status` é a qualidade OPERACIONAL (o lote pode ser usado?);
+`Lot.coaStatus` é a situação DOCUMENTAL (o laudo chegou/foi aprovado?).
+Aprovar o CoA **não** libera o lote — a liberação da Qualidade continua
+sendo ação explícita.
+
+- `Item.requiresCoa` é configuração atual; o lote congela
+  `requiresCoaSnapshot` ao nascer. Mudar o item depois não reclassifica
+  lote histórico. Conceito independente de `requiresQualityRelease` — um
+  nunca é inferido do outro.
+- Lote de item que exige laudo nunca nasce `AVAILABLE`, mesmo sem
+  liberação manual configurada.
+- Fluxo: recebimento → On Hand → CoA `PENDING`/`RECEIVED` → `APPROVED` →
+  liberação da Qualidade → `AVAILABLE`.
+- Anexar move `PENDING` para `RECEIVED`; nunca aprova. Aprovar sem
+  documento ativo é recusado. Aprovar/rejeitar é de QUALITY/ADMIN —
+  Compras anexa, não decide. Revisor vem sempre da sessão.
+- Rejeitar exige motivo e bloqueia o lote se ele estiver disponível.
+  **Nenhuma ação documental cria InventoryMovement**: On Hand não muda.
+- `isLotAvailableForUse` passou a incluir a invariante documental — FEFO,
+  reserva, picking e consumo herdam a regra do mesmo lugar.
+- Material do cliente (capacidade 35) segue exatamente o mesmo caminho.
+
+## Anexos
+`Attachment` com contexto único (lote, recebimento OU produto — CHECK no
+banco), tipo (`COA`, `INVOICE`, `LABEL_ART`, `TECHNICAL_SHEET`, `OTHER`),
+SHA-256, tamanho, MIME, `storageKey` aleatória e snapshot de quem enviou.
+
+- `lib/file-storage.ts` é o único ponto que toca disco: PDF/PNG/JPEG,
+  10 MB, extensão conferida contra o MIME, nome do usuário sanitizado só
+  para exibição e `../`/caminho absoluto recusados. Arquivos em
+  `.local-data/uploads` (fora do repositório e de qualquer diretório
+  público); download só pela API autenticada, com `nosniff`.
+- Falha no banco depois do arquivo salvo remove o arquivo órfão.
+- Documento nunca é excluído: arquiva-se, guardando quem arquivou.
+  Arquivar o último CoA ativo devolve o lote a `PENDING` — mas um CoA já
+  `APPROVED` nunca regride sozinho.
+
+## Telas e leitura
+Qualidade → **Documentos / CoA** (read model sobre Lot + ledger, filtros
+por situação e saldo, aprovar/rejeitar). Bloco de documentos reutilizado em
+Lote, Recebimento e Produto. Item ganhou "Exige CoA / Laudo" ao lado de
+"Requer liberação da Qualidade". CoA aparece em R-01, R-09, Materiais de
+Clientes, CSVs, rastreabilidade (só metadados, nunca o binário) e no
+alerta do Dashboard, que agora diz o motivo real da pendência.
+
+## Housekeeping da 36
+`GET /auth/me` continua 401 sem sessão (semântica correta), mas o app usa
+`GET /auth/session`, que responde 200 com `user: null` — a tela de Login
+não gera mais erro de console. Validado com Playwright.
+
+## Corpus
+`veridi:data:validate` passou a reportar a estatística documental do
+histórico (829 linhas: laudo SIM 265, NÃO 14, vazio 550; 26 linhas de
+amostra). Nenhum Item foi classificado automaticamente a partir disso — a
+classificação do legado é decisão do Product Owner (capacidade 41).
+
+## Não implementado de propósito
+OCR, leitura automática do laudo, assinatura/certificado digital,
+validação laboratorial, especificação por parâmetro, resultado de ensaio,
+GED, versionamento/aprovação de arte, S3, antivírus, e-mail, Projetos,
+Amostras.
+
+---
+
 # Delivery 28 — GMP, usuários e OP industrial (Bloco F, capacidade 36)
 
 ## Usuários e autenticação
@@ -3515,8 +3585,8 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **capacidade 37 — Qualidade
-documental / CoA / Anexos** (Bloco F). A base de
+Próximo passo do roadmap oficial: **capacidade 38 — Projetos +
+Orçamentos versionados** (Bloco F). A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —

@@ -60,6 +60,7 @@ async function buildFinishedLotTraceability(lot: Lot): Promise<FinishedLotTracea
       supplierName: materialLot?.supplier ? materialLot.supplier.legalName : null,
       ownerType: materialLot?.ownerType ?? "VERIDI",
       ownerCustomerName: materialLot?.ownerCustomer?.legalName ?? null,
+      coaStatus: materialLot?.coaStatus ?? "NOT_REQUIRED",
       quantity: (row._sum.quantity ?? new Prisma.Decimal(0)).toString(),
       unitCode: item.unitCode,
     };
@@ -85,6 +86,12 @@ async function buildRawMaterialLotTraceability(lot: Lot): Promise<RawMaterialLot
   const prisma = getPrisma();
 
   const item = await prisma.item.findUniqueOrThrow({ where: { id: lot.itemId } });
+
+  // Só metadados do laudo: a genealogia nunca carrega o binário do PDF.
+  const coaDocuments = await prisma.attachment.findMany({
+    where: { lotId: lot.id, documentType: "COA", archivedAt: null },
+    orderBy: { uploadedAt: "desc" },
+  });
 
   const consumptionSums = await prisma.productionConsumption.groupBy({
     by: ["productionOrderId"],
@@ -145,6 +152,13 @@ async function buildRawMaterialLotTraceability(lot: Lot): Promise<RawMaterialLot
     itemId: lot.itemId,
     itemCode: item.code,
     itemName: item.name,
+    coaStatus: lot.coaStatus,
+    coaDocuments: coaDocuments.map((document) => ({
+      id: document.id,
+      originalFileName: document.originalFileName,
+      uploadedAt: document.uploadedAt.toISOString(),
+      uploadedByName: document.uploadedByNameSnapshot,
+    })),
     usedIn,
   };
 }

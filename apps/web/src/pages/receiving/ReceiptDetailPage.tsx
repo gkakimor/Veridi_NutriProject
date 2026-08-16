@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ReceiptDTO } from "@veridi/shared";
-import { RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
+import { COA_STATUS_LABELS, RECEIPT_ATTACHMENT_TYPES, RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
 import { getReceipt } from "../../lib/receiving-api";
 import { setAcquisitionCost } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
+import { AttachmentsSection } from "../../components/AttachmentsSection";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -169,6 +170,7 @@ export function ReceiptDetailPage() {
                   <th>Validade</th>
                   <th>Localização</th>
                   <th>Lote interno</th>
+                  <th>CoA</th>
                   <th>Preço previsto (OC)</th>
                   <th>Custo efetivo</th>
                   <th aria-hidden="true" />
@@ -206,6 +208,9 @@ export function ReceiptDetailPage() {
                       ) : (
                         "—"
                       )}
+                    </td>
+                    <td>
+                      {line.coaStatus ? COA_STATUS_LABELS[line.coaStatus] : "—"}
                     </td>
                     <td>{formatBRL(line.purchaseUnitPrice)}</td>
                     <td>
@@ -265,6 +270,16 @@ export function ReceiptDetailPage() {
             </table>
           </div>
         </FormSection>
+
+        {id && (
+          <AttachmentsSection
+            context="receipts"
+            contextId={id}
+            title="Documentos do recebimento"
+            subtitle="Nota fiscal e outros documentos. O laudo do material fica no lote, não aqui."
+            types={RECEIPT_ATTACHMENT_TYPES}
+          />
+        )}
       </div>
     </>
   );

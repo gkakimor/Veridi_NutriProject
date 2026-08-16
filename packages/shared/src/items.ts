@@ -128,6 +128,8 @@ export interface ItemDTO {
   controlsLot: boolean;
   controlsExpiry: boolean;
   requiresQualityRelease: boolean;
+  /** Exige laudo/CoA aprovado no lote. Conceito independente da liberação manual. */
+  requiresCoa: boolean;
   /** Fonte / forma química realmente utilizada (ex.: "Cloridrato de tiamina"). */
   sourceName: string | null;
   /** Denominação nutricional declarada (ex.: "Vitamina B1"). */
@@ -168,6 +170,7 @@ export interface CreateItemInput {
   controlsLot?: boolean;
   controlsExpiry?: boolean;
   requiresQualityRelease?: boolean;
+  requiresCoa?: boolean;
   externalBarcode?: string;
 }
 
@@ -178,5 +181,6 @@ export interface UpdateItemInput {
   controlsLot?: boolean;
   controlsExpiry?: boolean;
   requiresQualityRelease?: boolean;
+  requiresCoa?: boolean;
   externalBarcode?: string;
 }

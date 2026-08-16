@@ -1,7 +1,7 @@
 /** Contratos do módulo de Estoque (ledger, disponibilidade, ajustes, inventário físico). */
 
 import type { ItemType } from "./items.js";
-import type { LotStatus } from "./lots.js";
+import type { CoaStatus, LotStatus } from "./lots.js";
 
 /**
  * Tipos do ledger. Preparado para expansão futura (RETURN_TO_STOCK) — não
@@ -197,6 +197,7 @@ export interface CustomerMaterialRowDTO {
   available: string;
   unitCode: string;
   status: LotStatus;
+  coaStatus: CoaStatus;
 }
 
 export interface CustomerMaterialsResponse {

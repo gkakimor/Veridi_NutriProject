@@ -28,6 +28,7 @@ import {
   CUSTOMER_ORDER_STATUS_LABELS,
   INVENTORY_MOVEMENT_TYPE_LABELS,
   ITEM_TYPE_LABELS,
+  COA_STATUS_LABELS,
   LOT_STATUS_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
@@ -160,6 +161,7 @@ const itemsExport = defineCsvExport({
     { header: "Controla lote", value: (row: ItemDTO) => csvBoolean(row.controlsLot) },
     { header: "Controla validade", value: (row: ItemDTO) => csvBoolean(row.controlsExpiry) },
     { header: "Exige liberação da Qualidade", value: (row: ItemDTO) => csvBoolean(row.requiresQualityRelease) },
+    { header: "Exige CoA", value: (row: ItemDTO) => csvBoolean(row.requiresCoa) },
     { header: "Código de barras", value: (row: ItemDTO) => csvCode(row.externalBarcode) },
     { header: "Ativo", value: (row: ItemDTO) => csvBoolean(row.active) },
   ],
@@ -300,6 +302,7 @@ const lotsExport = defineCsvExport({
     { header: "Disponível", value: (row: LotDTO) => csvDecimal(row.available) },
     { header: "Unidade", value: (row: LotDTO) => csvText(row.unitCode) },
     { header: "Qualidade", value: (row: LotDTO) => (row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.status]) },
+    { header: "CoA", value: (row: LotDTO) => COA_STATUS_LABELS[row.coaStatus] },
     { header: "Localização", value: (row: LotDTO) => csvText(row.location) },
     { header: "Recebimento", value: (row: LotDTO) => csvCode(row.receiptCode) },
     { header: "OP", value: (row: LotDTO) => csvCode(row.productionOrderCode) },
@@ -330,6 +333,7 @@ const customerMaterialsExport = defineCsvExport({
       value: (row: CustomerMaterialRowDTO) =>
         row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.status],
     },
+    { header: "CoA", value: (row: CustomerMaterialRowDTO) => COA_STATUS_LABELS[row.coaStatus] },
   ],
 });
 

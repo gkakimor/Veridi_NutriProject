@@ -48,6 +48,7 @@ export const createItemSchema = z.object({
   controlsLot: z.boolean().optional(),
   controlsExpiry: z.boolean().optional(),
   requiresQualityRelease: z.boolean().optional(),
+  requiresCoa: z.boolean().optional(),
   ...industrialItemFields,
   externalBarcode: z.string().trim().max(64).optional(),
 });
@@ -59,6 +60,7 @@ export const updateItemSchema = z.object({
   controlsLot: z.boolean().optional(),
   controlsExpiry: z.boolean().optional(),
   requiresQualityRelease: z.boolean().optional(),
+  requiresCoa: z.boolean().optional(),
   ...industrialItemFields,
   externalBarcode: z.string().trim().max(64).optional(),
 });

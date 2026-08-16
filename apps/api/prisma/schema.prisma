@@ -92,6 +92,28 @@ enum ControlledDocumentType {
   RECIPE_SHEET
 }
 
+/// Estado DOCUMENTAL do laudo/CoA do lote — independente do status
+/// operacional (LotStatus). Aprovar o CoA nunca libera o lote sozinho: a
+/// liberacao da Qualidade continua sendo acao explicita.
+enum CoaStatus {
+  NOT_REQUIRED
+  PENDING
+  RECEIVED
+  APPROVED
+  REJECTED
+}
+
+/// Tipo do documento anexado. Cada contexto aceita um subconjunto:
+/// Lot -> COA/OTHER, Receipt -> INVOICE/OTHER, Product -> LABEL_ART/
+/// TECHNICAL_SHEET/OTHER.
+enum AttachmentType {
+  COA
+  INVOICE
+  LABEL_ART
+  TECHNICAL_SHEET
+  OTHER
+}
+
 /// Estado de uma parte/fracao da producao. Simples de proposito.
 enum ProductionPartStatus {
   PENDING
@@ -241,6 +263,9 @@ model User {
   startedParts   ProductionOrderPart[] @relation("PartStartedBy")
   completedParts ProductionOrderPart[] @relation("PartCompletedBy")
   recipeWeighings RecipeWeighing[]
+  uploadedAttachments Attachment[] @relation("AttachmentUploadedBy")
+  archivedAttachments Attachment[] @relation("AttachmentArchivedBy")
+  reviewedCoaLots     Lot[]        @relation("CoaReviewedBy")
 
   @@index([active])
   @@map("users")
@@ -381,6 +406,55 @@ model RecipeWeighing {
   @@map("recipe_weighings")
 }
 
+/// Documento anexado (laudo/CoA, NF, arte de rotulo, ficha tecnica).
+///
+/// O arquivo NAO fica no banco nem em diretorio publico: o conteudo vai
+/// para o storage local via adapter (`lib/file-storage.ts`) sob uma
+/// `storageKey` aleatoria; o nome original so serve para exibicao/download.
+/// Anexo nunca e excluido fisicamente pela operacao — arquiva-se, para nao
+/// destruir evidencia historica.
+model Attachment {
+  id String @id @default(uuid())
+
+  documentType AttachmentType
+
+  /// Exatamente UM contexto (CHECK no banco): lote, recebimento ou
+  /// produto. `projectId` entra na capacidade 38 como migration simples.
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  receiptId String?
+  receipt   Receipt? @relation(fields: [receiptId], references: [id])
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  originalFileName String
+  mimeType         String
+  sizeBytes        Int
+  /// SHA-256 do conteudo — integridade/auditoria, nunca deduplicacao automatica.
+  sha256           String
+  /// Identificador interno no storage. Aleatorio: nome enviado pelo usuario
+  /// jamais vira caminho de arquivo.
+  storageKey       String @unique
+
+  uploadedAt             DateTime @default(now())
+  uploadedByUserId       String
+  uploadedByUser         User     @relation("AttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
+  uploadedByNameSnapshot String
+
+  archivedAt             DateTime?
+  archivedByUserId       String?
+  archivedByUser         User?     @relation("AttachmentArchivedBy", fields: [archivedByUserId], references: [id])
+  archivedByNameSnapshot String?
+
+  @@index([lotId])
+  @@index([receiptId])
+  @@index([productId])
+  @@index([documentType])
+  @@map("attachments")
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -421,6 +495,11 @@ model Item {
   /// (ITEM_TYPE_DEFAULTS em @veridi/shared), editavel pelo usuario — nao
   /// inferido permanentemente so pelo type.
   requiresQualityRelease Boolean @default(true)
+
+  /// Se o lote deste item exige laudo/CoA aprovado. Conceito DIFERENTE de
+  /// requiresQualityRelease: um item pode exigir laudo sem exigir
+  /// liberacao manual e vice-versa. Nunca inferido de um pelo outro.
+  requiresCoa Boolean @default(false)
 
   /// Codigo do sistema legado (planilhas) — reconciliacao da importacao,
   /// nunca identidade operacional.
@@ -697,6 +776,7 @@ model Product {
   formulationVersions FormulationVersion[]
   productionOrders    ProductionOrder[]
   customerOrderLines  CustomerOrderLine[]
+  attachments         Attachment[]
   customerOrderReservationLines CustomerOrderReservationLine[]
   shipmentLines       ShipmentLine[]
   billingLines        BillingLine[]
@@ -952,6 +1032,8 @@ model Receipt {
   createdAt DateTime @default(now())
   createdBy String?
 
+  attachments Attachment[]
+
   @@index([purchaseOrderId])
   @@index([supplierId])
   @@index([customerId])
@@ -1077,6 +1159,18 @@ model Lot {
   status   LotStatus @default(AVAILABLE)
   location String?
 
+  /// SNAPSHOT da exigencia documental no momento em que o lote nasceu.
+  /// As regras do lote usam este campo, nunca `Item.requiresCoa` atual:
+  /// mudar o cadastro amanha nao pode reclassificar lotes historicos.
+  requiresCoaSnapshot Boolean   @default(false)
+  coaStatus           CoaStatus @default(NOT_REQUIRED)
+
+  coaReviewedAt             DateTime?
+  coaReviewedByUserId       String?
+  coaReviewedByUser         User?     @relation("CoaReviewedBy", fields: [coaReviewedByUserId], references: [id])
+  coaReviewedByNameSnapshot String?
+  coaReviewNote             String?
+
   releasedAt DateTime?
   releasedBy String?
 
@@ -1100,8 +1194,10 @@ model Lot {
   @@index([status])
   @@index([productionOrderId])
   recipeWeighings RecipeWeighing[]
+  attachments Attachment[]
 
   @@index([ownerCustomerId])
+  @@index([coaStatus])
   @@map("lots")
 }
 

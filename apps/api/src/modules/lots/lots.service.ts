@@ -20,6 +20,7 @@ import {
   isLotAvailableForUse,
   isLotExpired,
 } from "../../lib/inventory-ledger.js";
+import { CoaNotApprovedError } from "../quality/quality.errors.js";
 import { InvalidLotTransitionError, LotNotFoundError } from "./lots.errors.js";
 import type { ListLotsQuery } from "./lots.schemas.js";
 
@@ -58,6 +59,12 @@ function toLotDTO(lot: LotWithRelations, producedQuantity: Prisma.Decimal | null
     itemCode: lot.item.code,
     itemName: lot.item.name,
     unitCode: receiptLine ? receiptLine.unitCode : lot.item.unitCode,
+    // Estado DOCUMENTAL — independente do status operacional do lote.
+    requiresCoa: lot.requiresCoaSnapshot,
+    coaStatus: lot.coaStatus,
+    coaReviewedAt: lot.coaReviewedAt ? lot.coaReviewedAt.toISOString() : null,
+    coaReviewedByName: lot.coaReviewedByNameSnapshot,
+    coaReviewNote: lot.coaReviewNote,
     // Dono do estoque fisico — nunca confundido com Fornecedor.
     ownerType: lot.ownerType,
     ownerCustomerId: lot.ownerCustomerId,
@@ -151,6 +158,7 @@ export async function listLots(
   // Filtro de propriedade: a lista continua mostrando o estoque fisico
   // inteiro por padrao (visibilidade), o filtro e escolha do usuario.
   if (query.ownerType) where["ownerType"] = query.ownerType;
+  if (query.coaStatus) where["coaStatus"] = query.coaStatus;
   if (query.ownerCustomerId) where["ownerCustomerId"] = query.ownerCustomerId;
   if (query.status) where["status"] = query.status;
   if (query.search) {
@@ -204,17 +212,26 @@ export async function lookupLotByCode(rawCode: string): Promise<LotDTO | null> {
   return dto!;
 }
 
-export async function releaseLot(id: string): Promise<LotDTO> {
+export async function releaseLot(id: string, actorName?: string): Promise<LotDTO> {
   const lot = await requireLot(id);
   if (lot.status !== "AWAITING_RELEASE") {
     throw new InvalidLotTransitionError(
       "Somente lotes aguardando liberação podem ser liberados.",
     );
   }
+  // Invariante documental: lote que exige laudo só é liberado com CoA
+  // aprovado. Vale para qualquer perfil — não existe bypass silencioso.
+  if (lot.requiresCoaSnapshot && lot.coaStatus !== "APPROVED") {
+    throw new CoaNotApprovedError();
+  }
 
   await getPrisma().lot.update({
     where: { id },
-    data: { status: "AVAILABLE", releasedAt: new Date(), releasedBy: SYSTEM_ACTOR },
+    data: {
+      status: "AVAILABLE",
+      releasedAt: new Date(),
+      releasedBy: actorName ?? SYSTEM_ACTOR,
+    },
   });
 
   return (await getLotById(id))!;

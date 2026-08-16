@@ -99,7 +99,12 @@ export async function registerProductionOutput(
           businessLotNumber,
           expiryDate,
           initialReceivedQuantity: quantity,
-          status: finishedItem.requiresQualityRelease ? "AWAITING_RELEASE" : "AVAILABLE",
+          requiresCoaSnapshot: finishedItem.requiresCoa,
+          coaStatus: finishedItem.requiresCoa ? "PENDING" : "NOT_REQUIRED",
+          status:
+            finishedItem.requiresQualityRelease || finishedItem.requiresCoa
+              ? "AWAITING_RELEASE"
+              : "AVAILABLE",
           location,
           createdBy: SYSTEM_ACTOR,
         },

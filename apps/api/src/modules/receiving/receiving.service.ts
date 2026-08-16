@@ -80,6 +80,7 @@ function toReceiptLineDTO(line: ReceiptLineWithRelations): ReceiptLineDTO {
     lotId: line.lotId,
     lotCode: line.lot ? line.lot.code : null,
     ownerType: line.lot ? line.lot.ownerType : "VERIDI",
+    coaStatus: line.lot ? line.lot.coaStatus : null,
     // Preco previsto da OC — so referencia visual, nunca custo real.
     purchaseUnitPrice: line.purchaseOrderLine?.unitPrice
       ? line.purchaseOrderLine.unitPrice.toFixed(4)
@@ -294,7 +295,15 @@ export async function createReceipt(
             supplierLot,
             expiryDate,
             initialReceivedQuantity: line.input.receivedQuantity,
-            status: line.item.requiresQualityRelease ? "AWAITING_RELEASE" : "AVAILABLE",
+            // Exigência documental congelada no lote — mudar o cadastro do
+            // Item depois não reclassifica lotes históricos. Item que exige
+            // laudo nunca nasce disponível.
+            requiresCoaSnapshot: line.item.requiresCoa,
+            coaStatus: line.item.requiresCoa ? "PENDING" : "NOT_REQUIRED",
+            status:
+              line.item.requiresQualityRelease || line.item.requiresCoa
+                ? "AWAITING_RELEASE"
+                : "AVAILABLE",
             location,
             createdBy: SYSTEM_ACTOR,
           },
@@ -443,7 +452,13 @@ export async function createCustomerSuppliedReceipt(
           supplierLot,
           expiryDate,
           initialReceivedQuantity: line.input.receivedQuantity,
-          status: line.item.requiresQualityRelease ? "AWAITING_RELEASE" : "AVAILABLE",
+          // Material do cliente não pula Qualidade documental.
+          requiresCoaSnapshot: line.item.requiresCoa,
+          coaStatus: line.item.requiresCoa ? "PENDING" : "NOT_REQUIRED",
+          status:
+            line.item.requiresQualityRelease || line.item.requiresCoa
+              ? "AWAITING_RELEASE"
+              : "AVAILABLE",
           location,
           createdBy: SYSTEM_ACTOR,
         },

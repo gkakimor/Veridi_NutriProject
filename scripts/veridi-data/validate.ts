@@ -1,4 +1,4 @@
-import { CORPUS_DIR, FindingLog, corpusAvailable, readCorpusCsv, safeDecimal } from "./corpus.js";
+import { CORPUS_DIR, FindingLog, cleanText, corpusAvailable, readCorpusCsv, safeDecimal } from "./corpus.js";
 import {
   COMPARISON_TOLERANCE,
   readCmvProducts,
@@ -136,6 +136,43 @@ async function main(): Promise<void> {
 
   console.log("\nSTOCK RECONCILIATION (somente leitura — nada é importado)");
   console.log(`  positivos ${positive} · zerados ${zero} · NEGATIVOS ${negative} · ilegíveis ${unreadable}`);
+
+  // Capacidade 37 usa `compras_recebimentos.csv` só como VALIDAÇÃO DE
+  // DADOS: confirma o vocabulário de laudo antes de qualquer importação.
+  // Nada aqui altera a base, e `requiresCoa` do cadastro NUNCA é inferido
+  // automaticamente deste histórico — essa classificação é decisão do
+  // Product Owner (capacidade 41).
+  const receipts = readCorpusCsv("compras_recebimentos.csv");
+  let laudoYes = 0;
+  let laudoNo = 0;
+  let laudoEmpty = 0;
+  let sampleRows = 0;
+  const laudoVocabulary = new Map<string, number>();
+
+  for (const row of receipts.rows) {
+    const laudo = cleanText(row["laudo_recebido"]);
+    const normalized = laudo?.toUpperCase() ?? "";
+    if (!laudo) laudoEmpty += 1;
+    else if (["SIM", "S", "OK", "TRUE"].includes(normalized)) laudoYes += 1;
+    else if (["NAO", "NÃO", "N", "FALSE"].includes(normalized)) laudoNo += 1;
+    if (laudo) laudoVocabulary.set(laudo, (laudoVocabulary.get(laudo) ?? 0) + 1);
+
+    const sample = cleanText(row["eh_amostra"])?.toUpperCase();
+    if (sample && ["SIM", "S", "TRUE", "1"].includes(sample)) sampleRows += 1;
+  }
+
+  console.log("\nQUALIDADE DOCUMENTAL NO HISTÓRICO (somente leitura)");
+  console.log(`  linhas de recebimento ${receipts.rows.length}`);
+  console.log(`  laudo SIM ${laudoYes} · laudo NÃO ${laudoNo} · vazio ${laudoEmpty}`);
+  console.log(`  linhas marcadas como amostra ${sampleRows}`);
+  console.log(
+    `  vocabulário de laudo: ${[...laudoVocabulary.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([value, count]) => `${value} (${count})`)
+      .join(", ")}`,
+  );
+  console.log("  nenhum Item foi classificado automaticamente a partir deste histórico.");
 
   console.log("\nNÃO IMPORTADO NESTA CAPACIDADE");
   console.log("  estoque_saldos, compras_recebimentos, precos_fornecedores, amostras,");

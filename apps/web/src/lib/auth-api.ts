@@ -27,11 +27,15 @@ export async function logout(): Promise<void> {
   await apiFetch(`${API_URL}/auth/logout`, { method: "POST" });
 }
 
-/** `null` quando não há sessão — é assim que o app decide mostrar o Login. */
+/**
+ * `null` quando não há sessão — é assim que o app decide mostrar o Login.
+ * Usa `/auth/session`, que responde 200 mesmo sem sessão: "ninguém logado"
+ * é estado esperado e não deve aparecer como erro no console do navegador.
+ */
 export async function fetchCurrentUser(): Promise<AuthenticatedUserDTO | null> {
-  const response = await apiFetch(`${API_URL}/auth/me`);
-  if (response.status === 401) return null;
-  return (await parseJsonOrThrow(response)) as AuthenticatedUserDTO;
+  const response = await apiFetch(`${API_URL}/auth/session`);
+  const body = (await parseJsonOrThrow(response)) as { user: AuthenticatedUserDTO | null };
+  return body.user;
 }
 
 export interface ListUsersParams {

@@ -48,6 +48,18 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return reply.header("set-cookie", clearedSessionCookie()).send({ ok: true });
   });
 
+  /**
+   * Sonda de sessão do frontend. Responde 200 SEMPRE — "não há sessão" é
+   * um estado esperado na tela de Login, não um erro. `/auth/me` continua
+   * devolvendo 401 (semântica HTTP correta para quem exige sessão); esta
+   * rota existe para o app perguntar "quem sou eu?" sem sujar o console do
+   * navegador com um 401 previsto.
+   */
+  app.get("/auth/session", async (request, reply) => {
+    const user = request.currentUser;
+    return reply.send({ user: user ? toAuthenticatedUserDTO(user) : null });
+  });
+
   app.get("/auth/me", async (request, reply) => {
     try {
       return reply.send(toAuthenticatedUserDTO(requireCurrentUser(request)));

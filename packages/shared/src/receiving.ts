@@ -1,6 +1,7 @@
 /** Contratos do módulo de Recebimento, consumidos por `apps/api` e `apps/web`. */
 
 import type { InventoryOwnerType } from "./ownership.js";
+import type { CoaStatus } from "./lots.js";
 
 export const RECEIPT_CODE_PREFIX = "REC";
 
@@ -38,6 +39,8 @@ export interface ReceiptLineDTO {
   lotCode: string | null;
   /** Dono do lote criado por esta linha. */
   ownerType: InventoryOwnerType;
+  /** Situação documental do lote gerado por esta linha. */
+  coaStatus: CoaStatus | null;
   /** Preço previsto/negociado da linha da OC — referência visual, nunca custo real. */
   purchaseUnitPrice: string | null;
   /** Custo efetivo de aquisição por unidade de estoque. `null` = desconhecido (nunca `0`). */

@@ -15,7 +15,7 @@ import type {
   PurchaseOrderReportRowDTO,
   ReceiptReportRowDTO,
 } from "@veridi/shared";
-import { SUPPLY_RESPONSIBILITY_LABELS } from "@veridi/shared";
+import { COA_STATUS_LABELS, SUPPLY_RESPONSIBILITY_LABELS } from "@veridi/shared";
 import {
   COST_SOURCE_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
@@ -133,6 +133,11 @@ const r01 = defineCsvExport({
       header: "Qualidade",
       value: (row: InventoryPositionRowDTO) =>
         row.isExpired ? "Vencido" : row.status ? LOT_STATUS_LABELS[row.status] : "",
+    },
+    {
+      header: "CoA",
+      value: (row: InventoryPositionRowDTO) =>
+        row.coaStatus ? COA_STATUS_LABELS[row.coaStatus] : "",
     },
   ],
 });
@@ -292,6 +297,11 @@ const r09 = defineCsvExport({
     { header: "Lote do fornecedor", value: (row: ReceiptReportRowDTO) => csvCode(row.supplierLot) },
     { header: "Quantidade", value: (row: ReceiptReportRowDTO) => csvDecimal(row.receivedQuantity) },
     { header: "Unidade", value: (row: ReceiptReportRowDTO) => csvText(row.unitCode) },
+    {
+      header: "CoA",
+      value: (row: ReceiptReportRowDTO) =>
+        row.coaStatus ? COA_STATUS_LABELS[row.coaStatus] : "Não exigido",
+    },
     { header: "Preço previsto (OC)", value: (row: ReceiptReportRowDTO) => csvMoney(row.orderedUnitPrice) },
     { header: "Custo efetivo", value: (row: ReceiptReportRowDTO) => csvMoney(row.actualUnitCost) },
     { header: "Qualidade do custo", value: (row: ReceiptReportRowDTO) => row.costQuality },

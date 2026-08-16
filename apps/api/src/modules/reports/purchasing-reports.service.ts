@@ -164,6 +164,7 @@ export async function getReceiptsReport(
     supplierName: line.receipt.supplier?.legalName ?? null,
     ownerType: line.lot ? line.lot.ownerType : "VERIDI",
     ownerCustomerName: line.receipt.customer ? line.receipt.customer.legalName : null,
+    coaStatus: line.lot ? line.lot.coaStatus : null,
     itemId: line.itemId,
     itemCode: line.itemCode ?? line.item.code,
     itemName: line.itemName ?? line.item.name,

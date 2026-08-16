@@ -58,7 +58,15 @@ export async function buildAttentionList(prisma: PrismaOrTx): Promise<AttentionI
           { expiryDate: { gte: now, lte: nearExpiryLimit } },
         ],
       },
-      select: { id: true, code: true, status: true, expiryDate: true, item: { select: { code: true } } },
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        expiryDate: true,
+        requiresCoaSnapshot: true,
+        coaStatus: true,
+        item: { select: { code: true } },
+      },
     }),
     getProductionOrdersWithShortage(prisma),
     getProductionOrdersWithIncompleteCost(prisma),
@@ -131,10 +139,20 @@ export async function buildAttentionList(prisma: PrismaOrTx): Promise<AttentionI
     }
 
     if (lot.status === "AWAITING_RELEASE") {
+      // Um único alerta por lote, com o motivo mais útil: quando a trava é
+      // documental, dizer "aguarda liberação" esconderia o que fazer.
+      const description = lot.requiresCoaSnapshot
+        ? lot.coaStatus === "PENDING"
+          ? `CoA pendente — lote ${lot.code} (${lot.item.code}) aguarda o laudo.`
+          : lot.coaStatus === "RECEIVED"
+            ? `CoA aguardando análise — lote ${lot.code} (${lot.item.code}).`
+            : `Lote ${lot.code} (${lot.item.code}) aguarda liberação da Qualidade.`
+        : `Lote ${lot.code} (${lot.item.code}) aguarda liberação da Qualidade.`;
+
       items.push({
         type: "LOT_AWAITING_QUALITY",
         severity: "WARNING",
-        description: `Lote ${lot.code} (${lot.item.code}) aguarda liberação da Qualidade.`,
+        description,
         code: lot.code,
         relevantDate: null,
         targetKind: "LOT",

@@ -1,8 +1,11 @@
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import Fastify from "fastify";
 import { env } from "./config/env.js";
 import { authenticationHook } from "./lib/current-user.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
+import { attachmentsRoutes } from "./modules/attachments/attachments.routes.js";
+import { qualityRoutes } from "./modules/quality/quality.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
 import { controlledDocumentsRoutes } from "./modules/controlled-documents/controlled-documents.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
@@ -52,6 +55,10 @@ export function buildApp() {
     credentials: true,
   });
 
+  // Upload de documentos (laudo/CoA, NF, arte) — limite de 10 MB por
+  // arquivo, validado de novo no service.
+  app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+
   // Autenticacao global: toda rota operacional exige sessao valida. Health e
   // as proprias rotas de login/logout/me sao as unicas excecoes.
   app.addHook("preHandler", authenticationHook);
@@ -60,6 +67,8 @@ export function buildApp() {
   app.register(authRoutes);
   app.register(usersRoutes);
   app.register(controlledDocumentsRoutes);
+  app.register(attachmentsRoutes);
+  app.register(qualityRoutes);
   app.register(itemsRoutes);
   app.register(unitsRoutes);
   app.register(suppliersRoutes);

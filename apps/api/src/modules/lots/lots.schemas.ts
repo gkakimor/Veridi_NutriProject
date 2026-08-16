@@ -9,6 +9,7 @@ export const listLotsQuerySchema = z.object({
   itemId: z.string().trim().min(1).optional(),
   supplierId: z.string().trim().min(1).optional(),
   ownerType: z.enum(["VERIDI", "CUSTOMER"]).optional(),
+  coaStatus: z.enum(["NOT_REQUIRED", "PENDING", "RECEIVED", "APPROVED", "REJECTED"]).optional(),
   ownerCustomerId: z.string().trim().min(1).optional(),
   status: z.enum(["AWAITING_RELEASE", "AVAILABLE", "BLOCKED", "EXPIRED"]).optional(),
   page: z.coerce.number().int().min(1).default(1),

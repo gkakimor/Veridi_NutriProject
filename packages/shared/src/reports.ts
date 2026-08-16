@@ -17,6 +17,7 @@ import type { CustomerOrderStatus } from "./customer-orders.js";
 import type { InventoryMovementSourceType, InventoryMovementType } from "./inventory.js";
 import type { ItemType } from "./items.js";
 import type { InventoryOwnerType, SupplyResponsibility } from "./ownership.js";
+import type { CoaStatus } from "./lots.js";
 import type { LotOrigin, LotStatus } from "./lots.js";
 import type { ProductionOrderStatus } from "./production-orders.js";
 import type { PurchaseOrderOrigin, PurchaseOrderStatus } from "./purchase-orders.js";
@@ -51,6 +52,8 @@ export interface InventoryPositionRowDTO {
   ownerType: InventoryOwnerType;
   ownerCustomerId: string | null;
   ownerCustomerName: string | null;
+  /** Situação documental do laudo — "não exigido" quando o lote não pede CoA. */
+  coaStatus: CoaStatus | null;
   expiryDate: string | null;
   location: string | null;
   onHand: string;
@@ -259,6 +262,8 @@ export interface ReceiptReportRowDTO {
   /** Dono do material recebido — `CUSTOMER` traz o cliente proprietário. */
   ownerType: InventoryOwnerType;
   ownerCustomerName: string | null;
+  /** Situação documental do lote recebido; `null` quando a linha não gerou lote. */
+  coaStatus: CoaStatus | null;
   itemId: string;
   itemCode: string;
   itemName: string;

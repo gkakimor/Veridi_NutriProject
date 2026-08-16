@@ -12,6 +12,7 @@ import { listCustomers } from "../../lib/customers-api";
 import { listItems } from "../../lib/items-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
+import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
 import {
   DOSAGE_FORMS,
@@ -20,6 +21,7 @@ import {
   PRESENTATION_TYPE_LABELS,
   TARGET_AGE_GROUPS,
   TARGET_AGE_GROUP_LABELS,
+  PRODUCT_ATTACHMENT_TYPES,
 } from "@veridi/shared";
 import { listUnits } from "../../lib/units-api";
 
@@ -580,6 +582,16 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
             />
           </div>
         </FormSection>
+
+        {mode === "edit" && product && (
+          <AttachmentsSection
+            context="products"
+            contextId={product.id}
+            title="Documentos"
+            subtitle="Arte de rótulo e ficha técnica são referência — não travam nenhuma operação."
+            types={PRODUCT_ATTACHMENT_TYPES}
+          />
+        )}
 
         {mode === "edit" && product && (
           <FormSection title="Status">

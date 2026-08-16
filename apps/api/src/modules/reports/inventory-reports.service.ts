@@ -103,6 +103,7 @@ export async function getInventoryPosition(
           ownerType: lot.ownerType,
           ownerCustomerId: lot.ownerCustomerId,
           ownerCustomerName: lot.ownerCustomer ? lot.ownerCustomer.legalName : null,
+          coaStatus: lot.coaStatus,
           expiryDate: lot.expiryDate ? lot.expiryDate.toISOString() : null,
           location: lot.location,
           onHand: onHand.toString(),
@@ -138,6 +139,8 @@ export async function getInventoryPosition(
       ownerType: "VERIDI",
       ownerCustomerId: null,
       ownerCustomerName: null,
+      // Item sem controle de lote não tem laudo por lote.
+      coaStatus: null,
       expiryDate: null,
       location: null,
       onHand: onHand.toString(),

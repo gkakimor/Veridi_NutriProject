@@ -29,6 +29,7 @@ interface FormState {
   controlsLot: boolean;
   controlsExpiry: boolean;
   requiresQualityRelease: boolean;
+  requiresCoa: boolean;
   sourceName: string;
   declaredNutrient: string;
   family: string;
@@ -46,6 +47,7 @@ function initialState(item: ItemDTO | null): FormState {
       controlsLot: item.controlsLot,
       controlsExpiry: item.controlsExpiry,
       requiresQualityRelease: item.requiresQualityRelease,
+      requiresCoa: item.requiresCoa,
       sourceName: item.sourceName ?? "",
       declaredNutrient: item.declaredNutrient ?? "",
       family: item.family ?? "",
@@ -61,6 +63,8 @@ function initialState(item: ItemDTO | null): FormState {
     controlsLot: true,
     controlsExpiry: true,
     requiresQualityRelease: true,
+    // Exigir laudo é decisão explícita — nunca inferida do tipo do item.
+    requiresCoa: false,
     sourceName: "",
     declaredNutrient: "",
     family: "",
@@ -117,6 +121,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
       controlsLot: form.controlsLot,
       controlsExpiry: form.controlsExpiry,
       requiresQualityRelease: form.requiresQualityRelease,
+      requiresCoa: form.requiresCoa,
       // No edit sempre envia (mesmo vazio) para permitir limpar; no create
       // só quando preenchido. Vazio vira null — nunca um default silencioso.
       ...(mode === "edit" || form.sourceName.trim()
@@ -429,6 +434,13 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
               }
               label="Requer liberação da Qualidade"
               description="Novos lotes recebidos ficam indisponíveis até serem liberados."
+            />
+            <ToggleCard
+              id="item-requires-coa"
+              checked={form.requiresCoa}
+              onChange={(checked) => setForm((prev) => ({ ...prev, requiresCoa: checked }))}
+              label="Exige CoA / Laudo"
+              description="Lotes deste item só são liberados com o laudo aprovado pela Qualidade."
             />
           </div>
         </FormSection>

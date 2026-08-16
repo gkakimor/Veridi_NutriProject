@@ -95,6 +95,12 @@ export const navigation: NavGroup[] = [
     ],
   },
   {
+    title: "Qualidade",
+    items: [
+      { label: "Documentos / CoA", path: "/qualidade/documentos", implemented: true },
+    ],
+  },
+  {
     title: "Produção",
     items: [
       {

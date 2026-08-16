@@ -7,6 +7,7 @@
  */
 
 import type { InventoryOwnerType } from "./ownership.js";
+import type { CoaStatus } from "./lots.js";
 
 export interface TraceabilityConsumedMaterialDTO {
   itemId: string;
@@ -19,11 +20,21 @@ export interface TraceabilityConsumedMaterialDTO {
   /** Proprietário do lote consumido — a genealogia preserva de quem era o material. */
   ownerType: InventoryOwnerType;
   ownerCustomerName: string | null;
+  /** Situação documental do lote consumido, preservada na genealogia. */
+  coaStatus: CoaStatus;
   quantity: string;
   unitCode: string;
 }
 
 /** Rastreabilidade BACKWARD — de um lote de produto acabado até as matérias-primas realmente consumidas. */
+/** Metadados do documento — a genealogia nunca embute o binário. */
+export interface TraceabilityDocumentDTO {
+  id: string;
+  originalFileName: string;
+  uploadedAt: string;
+  uploadedByName: string;
+}
+
 export interface FinishedLotTraceabilityDTO {
   kind: "FINISHED_GOOD";
   lotId: string;
@@ -68,6 +79,10 @@ export interface RawMaterialLotTraceabilityDTO {
   itemId: string;
   itemCode: string;
   itemName: string;
+  /** Situação documental do lote — parte da rastreabilidade, não do estoque. */
+  coaStatus: CoaStatus;
+  /** Metadados dos laudos anexados; o conteúdo binário nunca entra aqui. */
+  coaDocuments: TraceabilityDocumentDTO[];
   usedIn: RawMaterialUsageDTO[];
 }
 

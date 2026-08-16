@@ -17,6 +17,12 @@ const envSchema = z.object({
   API_HOST: z.string().min(1).default("127.0.0.1"),
   /** Origem do frontend aceita por CORS quando NODE_ENV=production. */
   WEB_ORIGIN: z.string().min(1).default("http://127.0.0.1:5173"),
+  /**
+   * Onde os anexos são gravados. Fora do repositório e fora de qualquer
+   * diretório servido publicamente — o download passa sempre pela API
+   * autenticada.
+   */
+  VERIDI_UPLOAD_DIR: z.string().min(1).default("../../.local-data/uploads"),
 });
 
 const parsed = envSchema.safeParse(process.env);
