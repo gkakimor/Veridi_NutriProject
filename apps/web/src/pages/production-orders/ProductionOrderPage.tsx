@@ -1,20 +1,29 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { ProductDTO, ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
+import type {
+  ItemDTO,
+  ProductDTO,
+  ProductionOrderDTO,
+  ProductionOrderStatus,
+  ProductionOutputDestination,
+} from "@veridi/shared";
 import { PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
 import {
   cancelProductionOrder,
+  completeProductionOrder,
   confirmPicking,
   createProductionOrder,
   getProductionOrder,
   planProductionOrder,
   recordConsumption,
+  registerProductionOutput,
   releaseProductionOrder,
   substituteReservationLine,
   updateProductionOrder,
 } from "../../lib/production-orders-api";
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
+import { getItem } from "../../lib/items-api";
 import { ApiValidationError, LotMismatchApiError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -92,6 +101,20 @@ export function ProductionOrderPage() {
   const [consumeQuantities, setConsumeQuantities] = useState<Record<string, string>>({});
   const [consumingLineId, setConsumingLineId] = useState<string | null>(null);
 
+  const [finishedItem, setFinishedItem] = useState<ItemDTO | null>(null);
+  const [outputQuantity, setOutputQuantity] = useState("");
+  const [outputDestination, setOutputDestination] = useState<ProductionOutputDestination>("NEW_LOT");
+  const [outputLotId, setOutputLotId] = useState("");
+  const [outputBusinessLotNumber, setOutputBusinessLotNumber] = useState("");
+  const [outputExpiryDate, setOutputExpiryDate] = useState("");
+  const [outputLocation, setOutputLocation] = useState("");
+  const [outputNotes, setOutputNotes] = useState("");
+  const [registeringOutput, setRegisteringOutput] = useState(false);
+
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [completionReason, setCompletionReason] = useState("");
+  const [completing, setCompleting] = useState(false);
+
   const syncFormFromServer = useCallback((order: ProductionOrderDTO) => {
     setProductId(order.productId);
     setFormulationVersionId(order.formulationVersionId ?? "");
@@ -117,6 +140,20 @@ export function ProductionOrderPage() {
       .then((result) => setActiveProducts(result.products))
       .catch(() => setActiveProducts([]));
   }, []);
+
+  // So precisa dos flags do Finished Item (controlsLot/controlsExpiry) a
+  // partir de IN_PRODUCTION, para orientar o formulario de Registrar produção.
+  useEffect(() => {
+    const finishedItemId = productionOrder?.finishedItemId;
+    const orderStatus = productionOrder?.status;
+    if (!finishedItemId || (orderStatus !== "IN_PRODUCTION" && orderStatus !== "COMPLETED")) {
+      setFinishedItem(null);
+      return;
+    }
+    getItem(finishedItemId)
+      .then(setFinishedItem)
+      .catch(() => setFinishedItem(null));
+  }, [productionOrder?.finishedItemId, productionOrder?.status]);
 
   // Enquanto DRAFT: recarrega as versões de formulação do produto
   // selecionado sempre que ele muda, priorizando a ACTIVE por padrão —
@@ -350,6 +387,64 @@ export function ProductionOrderPage() {
       setError(err instanceof Error ? err.message : "Falha ao registrar consumo");
     } finally {
       setConsumingLineId(null);
+    }
+  }
+
+  async function handleRegisterOutput() {
+    if (!id) return;
+    const quantity = outputQuantity.trim();
+    if (!quantity) return;
+
+    setRegisteringOutput(true);
+    setError(null);
+    setFieldErrors({});
+    try {
+      const updated = await registerProductionOutput(id, {
+        quantity,
+        destination: outputDestination,
+        ...(outputDestination === "EXISTING_LOT" ? { lotId: outputLotId } : {}),
+        ...(outputDestination === "NEW_LOT" ? { businessLotNumber: outputBusinessLotNumber.trim() } : {}),
+        ...(outputDestination === "NEW_LOT" && outputExpiryDate ? { expiryDate: outputExpiryDate } : {}),
+        ...(outputDestination === "NEW_LOT" && outputLocation.trim() ? { location: outputLocation.trim() } : {}),
+        ...(outputNotes.trim() ? { notes: outputNotes.trim() } : {}),
+      });
+      setProductionOrder(updated);
+      setOutputQuantity("");
+      setOutputBusinessLotNumber("");
+      setOutputExpiryDate("");
+      setOutputLocation("");
+      setOutputNotes("");
+    } catch (err) {
+      if (err instanceof ApiValidationError) {
+        const nextFieldErrors: Record<string, string> = {};
+        for (const issue of err.issues) {
+          nextFieldErrors[issue.path] = issue.message;
+        }
+        setFieldErrors(nextFieldErrors);
+        setError("Corrija os campos destacados.");
+      } else {
+        setError(err instanceof Error ? err.message : "Falha ao registrar produção");
+      }
+    } finally {
+      setRegisteringOutput(false);
+    }
+  }
+
+  async function handleCompleteOrder() {
+    if (!id) return;
+    setCompleting(true);
+    setError(null);
+    try {
+      const updated = await completeProductionOrder(id, {
+        ...(completionReason.trim() ? { completionReason: completionReason.trim() } : {}),
+      });
+      setProductionOrder(updated);
+      setCompleteDialogOpen(false);
+      setCompletionReason("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao concluir ordem de produção");
+    } finally {
+      setCompleting(false);
     }
   }
 
@@ -814,6 +909,206 @@ export function ProductionOrderPage() {
           </FormSection>
         )}
 
+        {productionOrder && (status === "IN_PRODUCTION" || status === "COMPLETED") && (
+          <FormSection
+            title="Produção"
+            subtitle="Produzido é sempre a soma dos apontamentos reais — produção parcial permitida, nunca ultrapassa o planejado."
+          >
+            <dl className="definition-list">
+              <dt>Planejado</dt>
+              <dd>
+                {productionOrder.plannedQuantity} {productionOrder.outputUnitCode}
+              </dd>
+              <dt>Produzido</dt>
+              <dd>
+                {productionOrder.producedQuantity} {productionOrder.outputUnitCode}
+              </dd>
+              <dt>{status === "COMPLETED" ? "Variação" : "Restante"}</dt>
+              <dd>
+                {productionOrder.remainingQuantity} {productionOrder.outputUnitCode}
+              </dd>
+            </dl>
+
+            {status === "IN_PRODUCTION" && finishedItem && !finishedItem.controlsLot && (
+              <p className="form-alert">
+                Item de produto acabado não controla lote — não é possível registrar produção.
+              </p>
+            )}
+
+            {status === "IN_PRODUCTION" && finishedItem?.controlsLot && (
+              <>
+                <div className="field-grid-2">
+                  <div className="field">
+                    <label htmlFor="output-quantity">
+                      Quantidade produzida <span className="req">*</span>
+                    </label>
+                    <input
+                      id="output-quantity"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={outputQuantity}
+                      onChange={(event) => setOutputQuantity(event.target.value)}
+                    />
+                    {fieldErrors["quantity"] && <p className="field__error">{fieldErrors["quantity"]}</p>}
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="output-destination">Destino</label>
+                    <select
+                      id="output-destination"
+                      value={outputDestination}
+                      onChange={(event) =>
+                        setOutputDestination(event.target.value as ProductionOutputDestination)
+                      }
+                    >
+                      <option value="NEW_LOT">Novo lote</option>
+                      <option
+                        value="EXISTING_LOT"
+                        disabled={productionOrder.eligibleFinishedLots.length === 0}
+                      >
+                        Lote existente desta OP
+                      </option>
+                    </select>
+                  </div>
+
+                  {outputDestination === "NEW_LOT" ? (
+                    <>
+                      <div className="field">
+                        <label htmlFor="output-business-lot">
+                          Lote Veridi <span className="req">*</span>
+                        </label>
+                        <input
+                          id="output-business-lot"
+                          type="text"
+                          value={outputBusinessLotNumber}
+                          onChange={(event) => setOutputBusinessLotNumber(event.target.value)}
+                        />
+                        {fieldErrors["businessLotNumber"] && (
+                          <p className="field__error">{fieldErrors["businessLotNumber"]}</p>
+                        )}
+                      </div>
+                      {finishedItem.controlsExpiry && (
+                        <div className="field">
+                          <label htmlFor="output-expiry">
+                            Validade <span className="req">*</span>
+                          </label>
+                          <input
+                            id="output-expiry"
+                            type="date"
+                            value={outputExpiryDate}
+                            onChange={(event) => setOutputExpiryDate(event.target.value)}
+                          />
+                        </div>
+                      )}
+                      <div className="field">
+                        <label htmlFor="output-location">Localização</label>
+                        <input
+                          id="output-location"
+                          type="text"
+                          value={outputLocation}
+                          onChange={(event) => setOutputLocation(event.target.value)}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="field">
+                      <label htmlFor="output-lot">
+                        Lote existente <span className="req">*</span>
+                      </label>
+                      <select
+                        id="output-lot"
+                        value={outputLotId}
+                        onChange={(event) => setOutputLotId(event.target.value)}
+                      >
+                        <option value="">Selecione…</option>
+                        {productionOrder.eligibleFinishedLots.map((lot) => (
+                          <option key={lot.id} value={lot.id}>
+                            {lot.code}
+                            {lot.businessLotNumber ? ` — ${lot.businessLotNumber}` : ""} (produzido:{" "}
+                            {lot.producedQuantity})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="field field--full">
+                    <label htmlFor="output-notes">Observações</label>
+                    <textarea
+                      id="output-notes"
+                      rows={2}
+                      value={outputNotes}
+                      onChange={(event) => setOutputNotes(event.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="line-actions">
+                  <button
+                    type="button"
+                    className="btn btn--accent btn--sm"
+                    disabled={
+                      registeringOutput ||
+                      !outputQuantity.trim() ||
+                      (outputDestination === "EXISTING_LOT" && !outputLotId) ||
+                      (outputDestination === "NEW_LOT" && !outputBusinessLotNumber.trim())
+                    }
+                    onClick={handleRegisterOutput}
+                  >
+                    {registeringOutput ? "Registrando…" : "Registrar produção"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {productionOrder.outputs.length > 0 && (
+              <div className="table-container table-container--spaced">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Quantidade</th>
+                      <th>Lote interno</th>
+                      <th>Lote Veridi</th>
+                      <th>Usuário</th>
+                      <th>Observação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productionOrder.outputs.map((output) => (
+                      <tr key={output.id}>
+                        <td>{formatDateTime(output.producedAt)}</td>
+                        <td>
+                          {output.quantity} {productionOrder.outputUnitCode}
+                        </td>
+                        <td>{output.lotCode ?? "—"}</td>
+                        <td>{output.businessLotNumber ?? "—"}</td>
+                        <td>{output.producedBy ?? "—"}</td>
+                        <td>{output.notes ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </FormSection>
+        )}
+
+        {productionOrder?.status === "COMPLETED" && (
+          <FormSection title="Conclusão">
+            <div className="status-line">
+              <span className="badge badge--active">Concluída</span>
+              <span className="field__hint">
+                {formatDateTime(productionOrder.completedAt)} — {productionOrder.completedBy ?? "—"}
+              </span>
+            </div>
+            {productionOrder.completionReason && (
+              <p className="field__hint">Motivo da variação: {productionOrder.completionReason}</p>
+            )}
+          </FormSection>
+        )}
+
         <FormSection title="Observações">
           <div className="field">
             <label htmlFor="op-notes">Notas internas</label>
@@ -878,6 +1173,21 @@ export function ProductionOrderPage() {
               </button>
             </div>
           )}
+          {status === "IN_PRODUCTION" && (
+            <div className="line-actions">
+              {(productionOrder?.outputs.length ?? 0) === 0 && (
+                <p className="field__hint">Registre ao menos um apontamento de produção para concluir.</p>
+              )}
+              <button
+                type="button"
+                className="btn btn--accent"
+                disabled={completing || (productionOrder?.outputs.length ?? 0) === 0}
+                onClick={() => setCompleteDialogOpen(true)}
+              >
+                Concluir OP
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -929,6 +1239,58 @@ export function ProductionOrderPage() {
                 onClick={handleUseDifferentLot}
               >
                 {substituting ? "Substituindo…" : "Usar lote diferente"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {completeDialogOpen && productionOrder && (
+        <>
+          <div className="confirm-overlay" />
+          <div
+            className="confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="complete-op-title"
+          >
+            <h2 id="complete-op-title">Concluir ordem de produção?</h2>
+            <p>
+              Produzido: {productionOrder.producedQuantity} de {productionOrder.plannedQuantity}{" "}
+              {productionOrder.outputUnitCode}. Qualquer reserva de material ainda não consumida será
+              liberada. Após concluída, a OP fica somente histórico.
+            </p>
+            {Number(productionOrder.remainingQuantity) > 0 && (
+              <div className="field">
+                <label htmlFor="op-completion-reason">
+                  Motivo da variação <span className="req">*</span>
+                </label>
+                <textarea
+                  id="op-completion-reason"
+                  rows={3}
+                  value={completionReason}
+                  onChange={(event) => setCompletionReason(event.target.value)}
+                />
+              </div>
+            )}
+            <div className="confirm-dialog__actions">
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => setCompleteDialogOpen(false)}
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                className="btn btn--accent"
+                disabled={
+                  completing ||
+                  (Number(productionOrder.remainingQuantity) > 0 && completionReason.trim().length < 3)
+                }
+                onClick={handleCompleteOrder}
+              >
+                {completing ? "Concluindo…" : "Concluir OP"}
               </button>
             </div>
           </div>

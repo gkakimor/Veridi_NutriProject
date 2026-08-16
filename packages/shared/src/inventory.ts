@@ -4,16 +4,16 @@ import type { ItemType } from "./items.js";
 import type { LotStatus } from "./lots.js";
 
 /**
- * Tipos do ledger. Preparado para expansão futura (RETURN_TO_STOCK,
- * FINISHED_GOOD_PRODUCTION) — não criados agora porque Produto Acabado
- * está fora desta entrega.
+ * Tipos do ledger. Preparado para expansão futura (RETURN_TO_STOCK) — não
+ * criado agora porque devolução pós-produção ainda não existe.
  */
 export type InventoryMovementType =
   | "RECEIPT_IN"
   | "ADJUSTMENT_IN"
   | "ADJUSTMENT_OUT"
   | "LOSS"
-  | "PRODUCTION_CONSUMPTION";
+  | "PRODUCTION_CONSUMPTION"
+  | "FINISHED_GOOD_PRODUCTION";
 
 export const INVENTORY_MOVEMENT_TYPES: readonly InventoryMovementType[] = [
   "RECEIPT_IN",
@@ -21,6 +21,7 @@ export const INVENTORY_MOVEMENT_TYPES: readonly InventoryMovementType[] = [
   "ADJUSTMENT_OUT",
   "LOSS",
   "PRODUCTION_CONSUMPTION",
+  "FINISHED_GOOD_PRODUCTION",
 ];
 
 export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, string> = {
@@ -29,6 +30,7 @@ export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, strin
   ADJUSTMENT_OUT: "Ajuste de saída",
   LOSS: "Perda",
   PRODUCTION_CONSUMPTION: "Consumo de produção",
+  FINISHED_GOOD_PRODUCTION: "Entrada — Produção",
 };
 
 /**
@@ -41,6 +43,7 @@ export const INVENTORY_MOVEMENT_DIRECTION: Record<InventoryMovementType, 1 | -1>
   ADJUSTMENT_OUT: -1,
   LOSS: -1,
   PRODUCTION_CONSUMPTION: -1,
+  FINISHED_GOOD_PRODUCTION: 1,
 };
 
 export type InventoryMovementSourceType =
@@ -48,7 +51,8 @@ export type InventoryMovementSourceType =
   | "MANUAL_ADJUSTMENT"
   | "STOCK_COUNT"
   | "MANUAL_LOSS"
-  | "PRODUCTION_CONSUMPTION";
+  | "PRODUCTION_CONSUMPTION"
+  | "FINISHED_GOOD_PRODUCTION";
 
 export const INVENTORY_MOVEMENT_SOURCE_LABELS: Record<InventoryMovementSourceType, string> = {
   RECEIPT: "Recebimento",
@@ -56,6 +60,7 @@ export const INVENTORY_MOVEMENT_SOURCE_LABELS: Record<InventoryMovementSourceTyp
   STOCK_COUNT: "Inventário físico",
   MANUAL_LOSS: "Perda manual",
   PRODUCTION_CONSUMPTION: "Consumo de produção",
+  FINISHED_GOOD_PRODUCTION: "Produção",
 };
 
 export interface InventoryMovementDTO {

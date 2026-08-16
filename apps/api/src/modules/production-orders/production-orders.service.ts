@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import type {
   Customer,
   FormulationVersion,
@@ -10,8 +11,10 @@ import type {
   ProductionConsumption,
   ProductionOrder,
   ProductionOrderRequirement,
+  ProductionOutput,
 } from "@prisma/client";
 import type {
+  EligibleFinishedLotDTO,
   MaterialReservationDTO,
   MaterialReservationLineDTO,
   ProductionConsumptionDTO,
@@ -19,6 +22,7 @@ import type {
   ProductionOrderListResponse,
   ProductionOrderMaterialsStatus,
   ProductionOrderRequirementDTO,
+  ProductionOutputDTO,
 } from "@veridi/shared";
 import { PRODUCTION_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -29,6 +33,7 @@ import {
   getOnHandByItems,
   getOnOrderByItems,
   getReservedByItems,
+  isLotExpired,
 } from "../../lib/inventory-ledger.js";
 import { convertUomDecimal } from "../items/uom.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
@@ -59,12 +64,15 @@ type RequirementWithItem = ProductionOrderRequirement & { item: Item };
 type ReservationLineWithRelations = MaterialReservationLine & { item: Item; lot: Lot | null };
 type ReservationWithLines = MaterialReservation & { lines: ReservationLineWithRelations[] };
 type ConsumptionWithRelations = ProductionConsumption & { item: Item; lot: Lot | null };
+type OutputWithRelations = ProductionOutput & { lot: Lot | null };
 type POWithRelations = ProductionOrder & {
   product: ProductWithRelations;
   formulationVersion: FormulationVersion | null;
   requirements: RequirementWithItem[];
   reservation: ReservationWithLines | null;
   consumptions: ConsumptionWithRelations[];
+  outputs: OutputWithRelations[];
+  finishedItem: Item | null;
 };
 
 const productionOrderInclude = {
@@ -76,7 +84,37 @@ const productionOrderInclude = {
     include: { item: true, lot: true },
     orderBy: { createdAt: "asc" as const },
   },
+  outputs: {
+    include: { lot: true },
+    orderBy: { createdAt: "asc" as const },
+  },
+  finishedItem: true,
 } as const;
+
+/** Soma dos ProductionOutput da OP — nunca uma segunda coluna manual. Aceita `tx` para uso dentro de transacao. */
+export async function getProducedQuantity(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  productionOrderId: string,
+): Promise<Prisma.Decimal> {
+  const result = await prisma.productionOutput.aggregate({
+    where: { productionOrderId },
+    _sum: { quantity: true },
+  });
+  return result._sum.quantity ?? new Prisma.Decimal(0);
+}
+
+function toOutputDTO(output: OutputWithRelations): ProductionOutputDTO {
+  return {
+    id: output.id,
+    quantity: output.quantity.toString(),
+    lotId: output.lotId,
+    lotCode: output.lot ? output.lot.code : null,
+    businessLotNumber: output.lot ? output.lot.businessLotNumber : null,
+    producedAt: output.producedAt.toISOString(),
+    producedBy: output.producedBy,
+    notes: output.notes,
+  };
+}
 
 function toReservationLineDTO(
   line: ReservationLineWithRelations,
@@ -349,6 +387,40 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
   // Product/Item/Customer ao vivo via join.
   const usingSnapshot = order.productCode !== null;
 
+  // producedQuantity e sempre a soma dos ProductionOutput — nunca uma
+  // segunda coluna manual. remainingQuantity nunca fica negativo (Output
+  // acima do planejado e bloqueado no service).
+  const producedQuantity = order.outputs.reduce(
+    (sum, output) => sum.plus(output.quantity),
+    new Prisma.Decimal(0),
+  );
+  const remainingQuantity = Prisma.Decimal.max(order.plannedQuantity.minus(producedQuantity), 0);
+
+  // Lotes PRODUCTION desta OP elegiveis para receber um novo Output — so
+  // existem lotes que ja tiveram ao menos um Output (nunca uma consulta
+  // separada: deriva do proprio order.outputs, ja incluido).
+  const producedByLot = new Map<string, Prisma.Decimal>();
+  const lotsById = new Map<string, NonNullable<OutputWithRelations["lot"]>>();
+  for (const output of order.outputs) {
+    if (!output.lot) continue;
+    lotsById.set(output.lot.id, output.lot);
+    producedByLot.set(output.lot.id, (producedByLot.get(output.lot.id) ?? new Prisma.Decimal(0)).plus(output.quantity));
+  }
+  const eligibleFinishedLots: EligibleFinishedLotDTO[] = [...lotsById.values()]
+    .filter((lot) => {
+      if (lot.status === "BLOCKED") return false;
+      if (isLotExpired(lot)) return false;
+      if (order.finishedItem?.requiresQualityRelease && lot.status === "AVAILABLE") return false;
+      return true;
+    })
+    .map((lot) => ({
+      id: lot.id,
+      code: lot.code,
+      businessLotNumber: lot.businessLotNumber,
+      status: lot.status,
+      producedQuantity: (producedByLot.get(lot.id) ?? new Prisma.Decimal(0)).toString(),
+    }));
+
   return {
     id: order.id,
     code: order.code,
@@ -385,6 +457,13 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     startedAt: order.startedAt ? order.startedAt.toISOString() : null,
     startedBy: order.startedBy,
     consumptions: order.consumptions.map(toConsumptionDTO),
+    producedQuantity: producedQuantity.toString(),
+    remainingQuantity: remainingQuantity.toString(),
+    outputs: order.outputs.map(toOutputDTO),
+    eligibleFinishedLots,
+    completedAt: order.completedAt ? order.completedAt.toISOString() : null,
+    completedBy: order.completedBy,
+    completionReason: order.completionReason,
     cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,
     cancelledBy: order.cancelledBy,
     cancelReason: order.cancelReason,

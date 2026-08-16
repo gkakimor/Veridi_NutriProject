@@ -1,4 +1,4 @@
-import type { BlockLotInput, LotDTO, LotListResponse, LotStatus } from "@veridi/shared";
+import type { BlockLotInput, LotDTO, LotListResponse, LotStatus, LotTraceabilityDTO } from "@veridi/shared";
 import { API_URL } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
@@ -48,4 +48,9 @@ export async function blockLot(id: string, input: BlockLotInput): Promise<LotDTO
     body: JSON.stringify(input),
   });
   return (await parseJsonOrThrow(response)) as LotDTO;
+}
+
+export async function getLotTraceability(id: string): Promise<LotTraceabilityDTO> {
+  const response = await fetch(`${API_URL}/lots/${id}/traceability`);
+  return (await parseJsonOrThrow(response)) as LotTraceabilityDTO;
 }

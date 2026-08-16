@@ -1,13 +1,14 @@
 /** Contratos do módulo de Ordem de Produção + Requirements, consumidos por `apps/api` e `apps/web`. */
 
 import type { ItemType } from "./items.js";
+import type { LotStatus } from "./lots.js";
 
 export const PRODUCTION_ORDER_CODE_PREFIX = "OP";
 
 /**
- * Lifecycle completo do roadmap — esta entrega só implementa
- * DRAFT→PLANNED e DRAFT/PLANNED→CANCELLED. RELEASED em diante chega
- * junto de Material Reservation.
+ * Lifecycle completo: DRAFT→PLANNED→RELEASED→IN_PRODUCTION→COMPLETED,
+ * com DRAFT/PLANNED/RELEASED→CANCELLED (nunca a partir de IN_PRODUCTION/
+ * COMPLETED). `BLOCKED` reservado para uso futuro, ainda não alcançável.
  */
 export type ProductionOrderStatus =
   | "DRAFT"
@@ -197,12 +198,47 @@ export interface ProductionOrderDTO {
   startedBy: string | null;
   /** Histórico completo de eventos de consumo — nunca só o total agregado. */
   consumptions: ProductionConsumptionDTO[];
+  /** Soma dos ProductionOutput da OP — nunca uma segunda coluna manual. */
+  producedQuantity: string;
+  /** `plannedQuantity - producedQuantity`, nunca negativo — "Restante" durante IN_PRODUCTION, "Variação" na conclusão (mesmo número). */
+  remainingQuantity: string;
+  /** Histórico completo de apontamentos de produção — nunca só o total agregado. */
+  outputs: ProductionOutputDTO[];
+  /** Lotes de produto acabado desta OP que ainda podem receber novo Output — para o seletor "Lote existente desta OP". */
+  eligibleFinishedLots: EligibleFinishedLotDTO[];
+  /** Preenchidos em IN_PRODUCTION → COMPLETED. */
+  completedAt: string | null;
+  completedBy: string | null;
+  /** Obrigatório quando `remainingQuantity > 0` no momento da conclusão. */
+  completionReason: string | null;
   cancelledAt: string | null;
   cancelledBy: string | null;
   cancelReason: string | null;
   createdAt: string;
   createdBy: string | null;
   updatedAt: string;
+}
+
+/** Evento REAL e imutável de produção parcial — nunca só o total agregado. */
+export interface ProductionOutputDTO {
+  id: string;
+  quantity: string;
+  lotId: string | null;
+  lotCode: string | null;
+  businessLotNumber: string | null;
+  producedAt: string;
+  producedBy: string | null;
+  notes: string | null;
+}
+
+/** Lote de produto acabado desta OP elegível para receber um novo Output (produção parcial no mesmo lote). */
+export interface EligibleFinishedLotDTO {
+  id: string;
+  code: string;
+  businessLotNumber: string | null;
+  status: LotStatus;
+  /** Soma dos Outputs já lançados neste lote. */
+  producedQuantity: string;
 }
 
 export interface ProductionOrderListResponse {
@@ -249,4 +285,27 @@ export interface RecordConsumptionEntryInput {
 
 export interface RecordConsumptionInput {
   entries: RecordConsumptionEntryInput[];
+}
+
+/** `NEW_LOT`: cria lote de produto acabado novo. `EXISTING_LOT`: soma a um lote `PRODUCTION` já criado por esta mesma OP. */
+export type ProductionOutputDestination = "NEW_LOT" | "EXISTING_LOT";
+
+export interface RegisterProductionOutputInput {
+  quantity: string;
+  destination: ProductionOutputDestination;
+  /** Obrigatório quando `destination = "EXISTING_LOT"`. */
+  lotId?: string;
+  /** Obrigatório quando `destination = "NEW_LOT"`. */
+  businessLotNumber?: string;
+  /** Obrigatório quando `destination = "NEW_LOT"` e o item controla validade. Ignorado em `EXISTING_LOT`. */
+  expiryDate?: string;
+  location?: string;
+  notes?: string;
+  /** Omitido = agora. */
+  producedAt?: string;
+}
+
+export interface CompleteProductionOrderInput {
+  /** Obrigatório quando `remainingQuantity > 0`. */
+  completionReason?: string;
 }

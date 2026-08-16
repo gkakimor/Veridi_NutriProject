@@ -24,6 +24,7 @@ FAST MVP.
 **Delivery 12 — Ordem de Produção + Cálculo de Necessidade de Materiais: concluído.**
 **Delivery 13 — Material Reservation + Release da Ordem de Produção: concluído.**
 **Delivery 14 — Picking + Consumo Real de Materiais: concluído.**
+**Delivery 15 — Produção Parcial + Produto Acabado + Rastreabilidade: concluído.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -36,11 +37,11 @@ Picking/Consumo Real embutidos). Rota de impressão (etiqueta de lote) é
 um terceiro padrão: página fora do `AppShell`, sem topbar/sidebar. Ver
 `docs/UI_BRAND.md`.
 
-4 dos 21 módulos do MVP ainda não foram implementados (Bloco A: falta só
-Usuários; Bloco B completo; Bloco C: Formulações + Versionamento + OP +
-Requirement Calculation + Reservation + QR Picking + Actual Consumption
-implementados, falta Partial Production/conclusão da OP e Finished
-Product).
+Bloco C completo (Formulações + Versionamento + OP + Requirement
+Calculation + Reservation + QR Picking + Actual Consumption + Partial
+Production/conclusão da OP + Finished Product + Rastreabilidade
+bidirecional). Só falta Usuários (Bloco A) dentro do escopo MVP travado;
+Bloco D (Pedido do Cliente/Atendimento) é escopo ampliado, não iniciado.
 
 ## Stack instalada
 
@@ -61,29 +62,38 @@ Product).
 apps/web        React + Vite + TS strict, shell operacional Veridi (sidebar
                  vira overlay em mobile), Cadastros >
                  Itens/Fornecedores/Clientes/Produtos, Compras > Ordens de
-                 Compra/Recebimentos, Estoque > Visão Geral (Reservado real)/
-                 Lotes (scan/QR/etiqueta)/Movimentações/Inventário Físico,
+                 Compra/Recebimentos, Estoque > Visão Geral (Reservado real,
+                 inclui Produto Acabado automaticamente)/ Lotes (scan/QR/
+                 etiqueta, origem RECEIPT/PRODUCTION, rastreabilidade
+                 backward/forward)/Movimentações/Inventário Físico,
                  Produção > Formulações (histórico de versões + editor
                  DRAFT) / Ordens de Produção (lista + documento
-                 DRAFT/PLANNED/RELEASED/IN_PRODUCTION/CANCELLED, seções
-                 Materiais Reservados/Picking/Consumo Real) / Picking /
-                 Consumo (lista RELEASED/IN_PRODUCTION)
+                 DRAFT/PLANNED/RELEASED/IN_PRODUCTION/COMPLETED/CANCELLED,
+                 seções Materiais Reservados/Picking/Consumo Real/Produção
+                 [apontamentos parciais + conclusão]) / Picking / Consumo
+                 (lista RELEASED/IN_PRODUCTION)
 apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /suppliers, /customers, /products, /purchase-orders,
-                 /receipts, /lots (+ /lots/lookup), /inventory,
-                 /inventory-movements, /inventory-adjustments, /stock-counts,
-                 /inventory/:itemId/allocation-suggestion (FEFO/FIFO, ciente
-                 de Reserved), /formulations, /products/:id/formulations,
-                 /formulation-versions, /production-orders (+ /plan,
-                 /release, /cancel, /picking/:lineId/confirm,
-                 /picking/:lineId/substitute, /consumptions)
+                 /receipts, /lots (+ /lots/lookup, /lots/:id/traceability),
+                 /inventory, /inventory-movements, /inventory-adjustments,
+                 /stock-counts, /inventory/:itemId/allocation-suggestion
+                 (FEFO/FIFO, ciente de Reserved), /formulations,
+                 /products/:id/formulations, /formulation-versions,
+                 /production-orders (+ /plan, /release, /cancel,
+                 /picking/:lineId/confirm, /picking/:lineId/substitute,
+                 /consumptions, /outputs, /complete)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder,
-                 Receipt, Lot [qrPayload, onHand/reserved/available real],
-                 InventoryMovement [PRODUCTION_CONSUMPTION],
-                 AllocationSuggestion, FormulationVersion/Component,
-                 ProductionOrder/Requirement, MaterialReservation/Line
-                 [Picking/substituição], ProductionConsumption, CNPJ, UFs)
+                 Receipt, Lot [origin RECEIPT/PRODUCTION, businessLotNumber,
+                 producedQuantity, qrPayload, onHand/reserved/available
+                 real], InventoryMovement [PRODUCTION_CONSUMPTION,
+                 FINISHED_GOOD_PRODUCTION], AllocationSuggestion,
+                 FormulationVersion/Component, ProductionOrder/Requirement
+                 [outputs, eligibleFinishedLots, producedQuantity/
+                 remainingQuantity, completedAt/By/Reason],
+                 MaterialReservation/Line [Picking/substituição],
+                 ProductionConsumption, ProductionOutput, LotTraceabilityDTO
+                 [FINISHED_GOOD backward / RAW_MATERIAL forward], CNPJ, UFs)
 ```
 
 Raiz: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`,
@@ -1517,6 +1527,191 @@ mismatch, ambos sem relação com exceções reais).
 
 ---
 
+# Delivery 15 — Produção Parcial + Produto Acabado + Rastreabilidade
+
+Fecha o ciclo industrial completo: OP `IN_PRODUCTION` → apontamentos de
+produção (parciais, múltiplos) → lote de produto acabado → estoque físico
+real → conclusão da OP (`IN_PRODUCTION → COMPLETED`) → liberação de
+reserva remanescente → rastreabilidade bidirecional MP↔PA. Encerra o
+Bloco C. Validada só em desktop web (Desktop Web First — sem
+Playwright/browser tool disponível neste ambiente, ver "Pendente").
+
+## Modelagem — ProductionOutput + Lot evoluído
+
+- `ProductionOutput` (novo, histórico/imutável): `productionOrderId`,
+  `lotId?`, `quantity` (`Decimal(18,6)`, sempre > 0), `producedAt`,
+  `producedBy?`, `notes?`. `producedQuantity` da OP é **sempre**
+  `sum(ProductionOutput.quantity)` — nunca uma segunda coluna manual.
+- `Lot` evoluído para servir as duas origens (nunca uma segunda tabela
+  paralela para produto acabado): novo enum `origin`
+  (`RECEIPT`/`PRODUCTION`, default `RECEIPT`), `supplierId` virou
+  nullable (sempre `null` para `PRODUCTION`), novo `productionOrderId?`
+  → `ProductionOrder` (RESTRICT), novo `businessLotNumber?` (lote
+  comercial/Veridi — informado pelo usuário, nunca substitui `Lot.code`,
+  histórico, nunca reescrito). `initialReceivedQuantity` continua
+  significando só "primeira quantidade" mesmo em lote produzido (nunca
+  atualizado depois) — a quantidade produzida acumulada é um campo
+  próprio (`producedQuantity`, `null` para `RECEIPT`, `sum` dos Outputs
+  para `PRODUCTION`), nunca reaproveitando aquela coluna como saldo.
+- `InventoryMovement` ganhou `type`/`sourceType`
+  `FINISHED_GOOD_PRODUCTION` (entrada física, `direction: 1`) +
+  `productionOutputId?` único (FK 1:1 real, mesmo padrão de
+  `receiptLineId`/`productionConsumptionId`) — exatamente 1 movimento por
+  Output, `onDelete: Cascade` (só limpeza de fixture).
+- `ProductionOrder` ganhou `completedAt/By/completionReason`.
+  Migration `20260824090000_production_output_and_finished_lots`.
+
+## Produção parcial — nunca ultrapassa o planejado
+
+Múltiplos `ProductionOutput` por OP são normais; a OP nunca conclui
+automaticamente após o primeiro. Cada registro roda numa transação que
+trava a OP (`SELECT … FOR UPDATE`) antes de somar os Outputs já
+existentes — o mesmo lock resolve concorrência (dois apontamentos
+simultâneos nunca somam acima de `plannedQuantity`). Exemplo do handoff
+coberto por teste: planejado 1000, output 600 + output 390 = produzido
+990, restante 10, sem perda de precisão Decimal.
+
+## Novo lote ou lote existente da mesma OP
+
+Registrar um Output aceita `NEW_LOT` ou `EXISTING_LOT`. Reuso de lote
+exige, sob lock do próprio lote (protege contra dois Outputs
+concorrentes no mesmo lote): `origin = PRODUCTION`, mesma OP, mesmo
+Finished Item, não `BLOCKED`, não vencido, e — quando
+`Item.requiresQualityRelease` — não já liberado (`AVAILABLE`): produção
+nova nunca se mistura num lote já liberado pela Qualidade, cria lote
+novo em vez disso. Sem `requiresQualityRelease`, um lote `AVAILABLE` da
+mesma OP pode receber novo Output normalmente. `NEW_LOT` exige
+`businessLotNumber`; exige `expiryDate` (nunca anterior a `producedAt`)
+só quando `Item.controlsExpiry`; nunca pede validade de novo ao somar em
+lote existente. `Item.controlsLot = false` bloqueia todo o fluxo com
+mensagem clara — nunca cria pseudo-lote.
+
+## Estoque, Qualidade e código do lote — reuso total da infraestrutura
+
+Lote novo usa `nextLotCode` (mesma sequence `LT-YYYYMMDD-NNNNNN`, mesmo
+QR `LOT:<code>`) e nasce `AWAITING_RELEASE`/`AVAILABLE` pela mesma regra
+de `Item.requiresQualityRelease` do Recebimento — reaproveita
+`POST /lots/:id/release|block` existente, sem segundo módulo de
+Qualidade. `On Hand` sobe via `FINISHED_GOOD_PRODUCTION` (mesmo ledger,
+`INVENTORY_MOVEMENT_DIRECTION` já cobria a extensão sem tocar
+`inventory-ledger.ts`); `Available` só conta quando `AVAILABLE`/não
+vencido — mesma regra de sempre. Produto Acabado aparece automaticamente
+na Visão Geral do Estoque (tipo `FINISHED_PRODUCT` já suportado
+genericamente) — nenhuma tela nova.
+
+## Conclusão da OP — parcial permitida, reserva remanescente liberada
+
+`POST /production-orders/:id/complete`: transação com lock, exige ao
+menos 1 `ProductionOutput` (senão rejeita), **não** exige
+`producedQuantity == plannedQuantity` (conclusão parcial é o caminho
+normal). `variance = plannedQuantity - producedQuantity` (nunca negativo
+— Output já é travado no teto do planejado); `variance > 0` exige
+`completionReason`. Qualquer `MaterialReservation` ainda `ACTIVE` vira
+`RELEASED` (`releaseReason: "PRODUCTION_COMPLETED"`) na mesma transação
+— nunca apaga Reservation/Lines, nunca cria `InventoryMovement` (On Hand
+não muda, `Available` sobe porque `Reserved` some). Teste crítico do
+handoff coberto exatamente: On Hand 100/Reserved 30, consome 28 → antes
+da conclusão On Hand 72/Reserved 2/Available 70 → depois da conclusão On
+Hand 72/Reserved 0/Available 72, zero movimento novo para os 2 liberados.
+Após `COMPLETED`: novo Picking/substituição/Consumo/Output/cancelamento
+são todos rejeitados pelos mesmos gates de status já existentes (nenhum
+código extra foi necessário — `COMPLETED` simplesmente não está em
+nenhuma lista de status aceitos).
+
+## Rastreabilidade bidirecional — só genealogia real
+
+`GET /lots/:id/traceability` (`traceability.service.ts`, módulo novo em
+`lots/`) — branch único por `Lot.origin`: `PRODUCTION` retorna
+`FINISHED_GOOD` (backward: OP/Produto/quantidade produzida no lote +
+materiais REALMENTE consumidos, agrupados por item+lote via
+`ProductionConsumption`, com lote fornecedor/fornecedor do material);
+qualquer outro lote retorna `RAW_MATERIAL` (forward: para cada OP que
+realmente consumiu este lote, quanto foi consumido + quais lotes de
+produto acabado foram gerados, via `ProductionOutput` real). **Nunca**
+deriva de Requirement/MaterialReservation/sugestão FEFO — só
+`ProductionConsumption`/`ProductionOutput` reais. Coberto por teste
+crítico: um lote reservado e depois substituído no Picking (nunca
+fisicamente consumido) não aparece em `usedIn` do lote original, só no
+lote realmente consumido — a mesma genealogia usada para a UI (Lote de
+Detalhe) e para a etiqueta (nunca infere do que foi planejado).
+
+## QR / Etiqueta — sem novo sistema
+
+`qrPayload` continua `LOT:<code>` sem mudança de payload. `LotLabel`
+passou a ramificar por `lot.origin`: `PRODUCTION` nunca mostra "Lote
+fornecedor", mostra "Lote Veridi"/"Data de produção"/"Quantidade
+produzida" (acumulada, explicitamente não chamada de "saldo" — saldo
+real segue vindo do ledger) em vez de "Quantidade recebida". Mesmo
+componente, mesma rota de impressão — só o conteúdo muda.
+
+## Backend
+
+`production.service.ts` (módulo novo, dedicado — mantém
+`production-orders.service.ts` focado no lifecycle):
+`registerProductionOutput`/`completeProductionOrder`, mesmo padrão
+transacional/lock de `picking.service.ts`. `production.errors.ts`/
+`production.schemas.ts` seguem o mesmo padrão de erro tipado +
+`mapDomainError` já usado em Picking. `getProducedQuantity` exportado de
+`production-orders.service.ts` para reuso (mesma filosofia de "nunca
+duplicar cálculo crítico" do resto da sessão).
+
+## Frontend
+
+`ProductionOrderPage` ganhou a seção "Produção" (visível em
+`IN_PRODUCTION`/`COMPLETED`: resumo Planejado/Produzido/
+Restante-ou-Variação + formulário "Registrar produção" com alternância
+Novo lote/Lote existente da OP, campos condicionais por
+`Item.controlsExpiry`/`requiresQualityRelease` buscados via `getItem` +
+histórico completo "Data/Quantidade/Lote interno/Lote Veridi/Usuário/
+Observação") e o botão "Concluir OP" (diálogo pedindo motivo só quando
+há variação). `LotDetailPage` ganhou Identificação condicional por
+origem (Produção mostra OP/Lote Veridi em vez de Fornecedor/Recebimento)
+e a seção "Rastreabilidade" (formato depende de `kind` retornado pela
+API). `LotLabel` ficou origin-aware (ver acima).
+
+## Testes
+
+24 novos testes de API: 15 em `production-output.test.ts` (rejeita fora
+de `IN_PRODUCTION`, quantidade > 0, cria Output + exatamente 1
+`FINISHED_GOOD_PRODUCTION`/On Hand sobe, produção parcial soma exata no
+mesmo lote, nunca ultrapassa planejado, concorrência real no nível da OP
+e no nível do mesmo lote, lote de outra OP rejeitado, lote bloqueado
+rejeitado, código/origem/businessLotNumber/sem fornecedor confirmados,
+`controlsLot`/`controlsExpiry`/validade-antes-da-produção, `AWAITING_
+RELEASE`×`AVAILABLE` por `requiresQualityRelease`, lote já liberado não
+recebe novo Output) + 5 de conclusão (sem Output rejeitado, exato sem
+motivo, parcial com/sem motivo, matemática crítica de liberação de
+reserva, `COMPLETED` bloqueia Output/Consumo/cancelamento) em
+`production-output.test.ts`, mais 4 em `traceability.test.ts`
+(`lots/`): backward com materiais reais, forward com lote(s) gerados,
+CRÍTICO lote só reservado (nunca consumido, via substituição de Picking)
+não aparece em `usedIn`, 404 para lote inexistente. Total da API: **261
+testes** (237 + 24). Web: 8 testes (7 + 1 novo para `LotLabel` de lote
+produzido) — todos passando.
+
+## Validação
+
+`pnpm typecheck`/`build`/`test` (261 API + 8 web) — ok em todo o
+monorepo, incluindo o build final (`shared`→`api`→`web`). Regressão
+completa da suíte de Produção/Estoque/Lotes confirmada (zero teste
+quebrado pelas mudanças de schema/DTO).
+
+## Pendente (real)
+
+- **Sem validação visual via Playwright/browser nesta sessão** — a
+  ferramenta de browser não está disponível neste ambiente. Toda a
+  validação foi por typecheck/build/teste de integração real (contra
+  Postgres, via `app.inject`) — cobre comportamento de API/regra de
+  negócio, mas não confirma renderização/UX real da seção "Produção" e
+  da "Rastreabilidade" no navegador. Recomendado validar manualmente
+  (ou com Playwright quando disponível) antes de considerar a UI 100%
+  fechada.
+- Algoritmo automático definitivo de `businessLotNumber` (Lote Veridi)
+  fica para decisão futura de Product Ownership — hoje é sempre
+  informado manualmente, conforme handoff.
+
+---
+
 # MVP scope locked
 
 ## Block A — Base
@@ -1543,8 +1738,8 @@ mismatch, ambos sem relação com exceções reais).
 17. Reservation ✓
 18. QR Picking ✓
 19. Actual Consumption ✓
-20. Partial Production / Completion
-21. Finished Product
+20. Partial Production / Completion ✓
+21. Finished Product ✓
 
 ---
 
@@ -1603,6 +1798,27 @@ mismatch, ambos sem relação com exceções reais).
   remainder after consumption stays reserved while `IN_PRODUCTION` — not
   auto-released. `IN_PRODUCTION` cannot be cancelled in this phase — see
   `docs/PRODUCT_RULES.md` §22-23 for full detail.
+- Confirmed at implementation (Delivery 15): multiple `ProductionOutput`
+  per OP are normal (partial production), produced quantity is always
+  `sum(ProductionOutput)`, never a second manual column, and it never
+  exceeds `plannedQuantity` (enforced under the same OP row lock used for
+  concurrency). Each Output generates exactly one `InventoryMovement`
+  `FINISHED_GOOD_PRODUCTION` (real 1:1). Finished-good lots reuse the
+  existing `Lot` table (new `origin` enum) — never a parallel table;
+  `businessLotNumber` (Lote Veridi) is user-entered, historical, never
+  replaces `Lot.code`/`supplierLot`. A new Output can join an existing
+  finished lot from the *same* OP only when not blocked/expired and — if
+  the item requires Quality release — not already released (new
+  production never mixes into an already-released lot). Completing an OP
+  (`IN_PRODUCTION → COMPLETED`) never requires
+  `producedQuantity == plannedQuantity`; any remaining `ACTIVE` reservation
+  is released in the same transaction (never deleted, never an
+  `InventoryMovement`) — On Hand stays, Available rises. Bidirectional
+  traceability (`GET /lots/:id/traceability`) is built strictly from real
+  `ProductionConsumption`/`ProductionOutput` rows — never from
+  Requirement/Reservation/FEFO suggestion; a lot only reserved and never
+  actually consumed never appears as "used". See
+  `docs/PRODUCT_RULES.md` for full detail.
 - Formula ACTIVE versions remain historical/immutable.
 - OP keeps exact formula version.
 - Insufficient Available stock blocks OP release by default.
@@ -1742,22 +1958,23 @@ mismatch, ambos sem relação com exceções reais).
 
 # Next recommended implementation
 
-Resta do Bloco A: **Usuários**. Bloco B está completo. Bloco C:
-Formulações + Versionamento + OP + Requirement Calculation + Reservation +
-QR Picking + Actual Consumption completos, próximo é **Partial
-Production / conclusão da OP** (output do produto acabado, liberar o
-saldo reservado não consumido, `IN_PRODUCTION → COMPLETED`) seguido de
-**Finished Product** — a definir por próximo handoff de Product
-Ownership. Reutilizar: `FullWorkspaceModal` + `components.css` para
+Bloco C está completo (13-21, incluindo Partial Production/Finished
+Product/Rastreabilidade). Resta do Bloco A: **Usuários**. Próximo passo
+natural de negócio é o **Bloco D — Pedidos & Atendimento** (Pedido do
+Cliente, Plano de Atendimento, reserva de PA para pedido, expedição,
+faturamento) — **não iniciado nesta entrega, por instrução explícita do
+handoff**; aguarda novo handoff de Product Ownership antes de começar.
+Reutilizar quando começar: `FullWorkspaceModal` + `components.css` para
 cadastros simples; padrão de página própria (ver Ordem de
 Compra/Recebimento/editor de Formulação/OP) para novos documentos
 transacionais; `apps/api/src/lib/inventory-ledger.ts`
 (`getReservedByItems/Lots`, `getAvailableByItems`,
 `getConsumedByReservationLines`) para qualquer cálculo futuro de saldo;
-`ProductionConsumption` já modela `OP → Requirement → Lote → Quantidade
-consumida`, base direta para o cálculo de rendimento/yield quando a
-conclusão da OP existir; `MaterialReservationLine.remainingQuantity` é
-exatamente o saldo que a conclusão da OP precisará liberar.
+`getProducedQuantity`/`ProductionOutput`/`Lot.origin=PRODUCTION` já
+modelam o Produto Acabado físico — base direta para reserva de PA por
+Pedido do Cliente quando o Bloco D existir; `traceability.service.ts` já
+resolve genealogia real, reutilizável para qualquer tela futura de
+rastreabilidade por Pedido/Expedição.
 
 Não criar as tabelas futuras antes do próximo slice ser confirmado.
 

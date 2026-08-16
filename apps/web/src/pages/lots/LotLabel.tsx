@@ -9,8 +9,12 @@ function formatDate(value: string | null): string {
 /**
  * Conteúdo da etiqueta de lote — humano-legível sem scanner. NÃO inclui
  * saldo disponível, reservado, preço, OC completa ou dado financeiro.
+ * Lote produzido (origin=PRODUCTION) nunca mostra Lote fornecedor — mostra
+ * Lote Veridi e a quantidade produzida acumulada em vez da recebida.
  */
 export function LotLabel({ lot }: { lot: LotDTO }) {
+  const isProduction = lot.origin === "PRODUCTION";
+
   return (
     <div className="lot-label">
       <div className="lot-label__header">VERIDI NUTRITION</div>
@@ -22,21 +26,45 @@ export function LotLabel({ lot }: { lot: LotDTO }) {
 
       <div className="lot-label__body">
         <dl className="lot-label__fields">
-          <dt>Lote fornecedor</dt>
-          <dd>{lot.supplierLot ?? "—"}</dd>
-          <dt>Lote interno</dt>
-          <dd>{lot.code}</dd>
-          <dt>Validade</dt>
-          <dd>
-            {formatDate(lot.expiryDate)}
-            {lot.isExpired && <span className="lot-label__expired"> — VENCIDO</span>}
-          </dd>
-          <dt>Quantidade recebida</dt>
-          <dd>
-            {lot.initialReceivedQuantity} {lot.unitCode}
-          </dd>
-          <dt>Localização</dt>
-          <dd>{lot.location ?? "—"}</dd>
+          {isProduction ? (
+            <>
+              <dt>Lote Veridi</dt>
+              <dd>{lot.businessLotNumber ?? "—"}</dd>
+              <dt>Lote interno</dt>
+              <dd>{lot.code}</dd>
+              <dt>Data de produção</dt>
+              <dd>{formatDate(lot.createdAt)}</dd>
+              <dt>Validade</dt>
+              <dd>
+                {formatDate(lot.expiryDate)}
+                {lot.isExpired && <span className="lot-label__expired"> — VENCIDO</span>}
+              </dd>
+              <dt>Quantidade produzida</dt>
+              <dd>
+                {lot.producedQuantity ?? lot.initialReceivedQuantity} {lot.unitCode}
+              </dd>
+              <dt>Localização</dt>
+              <dd>{lot.location ?? "—"}</dd>
+            </>
+          ) : (
+            <>
+              <dt>Lote fornecedor</dt>
+              <dd>{lot.supplierLot ?? "—"}</dd>
+              <dt>Lote interno</dt>
+              <dd>{lot.code}</dd>
+              <dt>Validade</dt>
+              <dd>
+                {formatDate(lot.expiryDate)}
+                {lot.isExpired && <span className="lot-label__expired"> — VENCIDO</span>}
+              </dd>
+              <dt>Quantidade recebida</dt>
+              <dd>
+                {lot.initialReceivedQuantity} {lot.unitCode}
+              </dd>
+              <dt>Localização</dt>
+              <dd>{lot.location ?? "—"}</dd>
+            </>
+          )}
         </dl>
 
         <div className="lot-label__qr">

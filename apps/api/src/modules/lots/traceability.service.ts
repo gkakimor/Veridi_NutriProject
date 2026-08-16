@@ -1,0 +1,159 @@
+import { Prisma } from "@prisma/client";
+import type { Lot } from "@prisma/client";
+import type {
+  FinishedLotTraceabilityDTO,
+  LotTraceabilityDTO,
+  RawMaterialLotTraceabilityDTO,
+  RawMaterialUsageFinishedLotDTO,
+} from "@veridi/shared";
+import { getPrisma } from "../../db/prisma.js";
+
+/**
+ * Genealogia baseada SEMPRE em ProductionConsumption (o que foi realmente
+ * consumido) e ProductionOutput (o que foi realmente produzido) — nunca em
+ * Requirement/MaterialReservation/sugestao FEFO. Um lote so reservado e
+ * nunca consumido nunca aparece aqui.
+ */
+
+async function buildFinishedLotTraceability(lot: Lot): Promise<FinishedLotTraceabilityDTO> {
+  const prisma = getPrisma();
+
+  const order = await prisma.productionOrder.findUniqueOrThrow({
+    where: { id: lot.productionOrderId! },
+  });
+
+  const producedAgg = await prisma.productionOutput.aggregate({
+    where: { lotId: lot.id },
+    _sum: { quantity: true },
+  });
+  const producedQuantity = producedAgg._sum.quantity ?? new Prisma.Decimal(0);
+
+  const consumptionSums = await prisma.productionConsumption.groupBy({
+    by: ["itemId", "lotId"],
+    where: { productionOrderId: order.id },
+    _sum: { quantity: true },
+  });
+
+  const itemIds = [...new Set(consumptionSums.map((row) => row.itemId))];
+  const lotIds = [...new Set(consumptionSums.map((row) => row.lotId).filter((id): id is string => id !== null))];
+
+  const [items, materialLots] = await Promise.all([
+    prisma.item.findMany({ where: { id: { in: itemIds } } }),
+    prisma.lot.findMany({ where: { id: { in: lotIds } }, include: { supplier: true } }),
+  ]);
+  const itemsById = new Map(items.map((item) => [item.id, item]));
+  const lotsById = new Map(materialLots.map((materialLot) => [materialLot.id, materialLot]));
+
+  const consumedMaterials = consumptionSums.map((row) => {
+    const item = itemsById.get(row.itemId)!;
+    const materialLot = row.lotId ? (lotsById.get(row.lotId) ?? null) : null;
+    return {
+      itemId: row.itemId,
+      itemCode: item.code,
+      itemName: item.name,
+      lotId: row.lotId,
+      lotCode: materialLot ? materialLot.code : null,
+      supplierLot: materialLot ? materialLot.supplierLot : null,
+      supplierName: materialLot?.supplier ? materialLot.supplier.legalName : null,
+      quantity: (row._sum.quantity ?? new Prisma.Decimal(0)).toString(),
+      unitCode: item.unitCode,
+    };
+  });
+
+  return {
+    kind: "FINISHED_GOOD",
+    lotId: lot.id,
+    lotCode: lot.code,
+    businessLotNumber: lot.businessLotNumber,
+    productionOrderId: order.id,
+    productionOrderCode: order.code,
+    productId: order.productId,
+    productCode: order.productCode!,
+    productName: order.productName!,
+    producedQuantity: producedQuantity.toString(),
+    unitCode: order.outputUnitCode,
+    consumedMaterials,
+  };
+}
+
+async function buildRawMaterialLotTraceability(lot: Lot): Promise<RawMaterialLotTraceabilityDTO> {
+  const prisma = getPrisma();
+
+  const item = await prisma.item.findUniqueOrThrow({ where: { id: lot.itemId } });
+
+  const consumptionSums = await prisma.productionConsumption.groupBy({
+    by: ["productionOrderId"],
+    where: { lotId: lot.id },
+    _sum: { quantity: true },
+  });
+
+  const orderIds = consumptionSums.map((row) => row.productionOrderId);
+  const [orders, outputs] = await Promise.all([
+    prisma.productionOrder.findMany({ where: { id: { in: orderIds } } }),
+    prisma.productionOutput.findMany({
+      where: { productionOrderId: { in: orderIds }, lotId: { not: null } },
+      include: { lot: true },
+    }),
+  ]);
+  const ordersById = new Map(orders.map((order) => [order.id, order]));
+
+  const outputsByOrder = new Map<string, typeof outputs>();
+  for (const output of outputs) {
+    const list = outputsByOrder.get(output.productionOrderId) ?? [];
+    list.push(output);
+    outputsByOrder.set(output.productionOrderId, list);
+  }
+
+  const usedIn = consumptionSums.map((row) => {
+    const order = ordersById.get(row.productionOrderId)!;
+    const orderOutputs = outputsByOrder.get(row.productionOrderId) ?? [];
+
+    const finishedLotsById = new Map<string, RawMaterialUsageFinishedLotDTO>();
+    for (const output of orderOutputs) {
+      if (!output.lot) continue;
+      const existing = finishedLotsById.get(output.lot.id);
+      const producedSoFar = existing ? new Prisma.Decimal(existing.producedQuantity) : new Prisma.Decimal(0);
+      finishedLotsById.set(output.lot.id, {
+        lotId: output.lot.id,
+        lotCode: output.lot.code,
+        businessLotNumber: output.lot.businessLotNumber,
+        producedQuantity: producedSoFar.plus(output.quantity).toString(),
+      });
+    }
+
+    return {
+      productionOrderId: order.id,
+      productionOrderCode: order.code,
+      productId: order.productId,
+      productCode: order.productCode!,
+      productName: order.productName!,
+      consumedQuantity: (row._sum.quantity ?? new Prisma.Decimal(0)).toString(),
+      unitCode: item.unitCode,
+      finishedLots: [...finishedLotsById.values()],
+    };
+  });
+
+  return {
+    kind: "RAW_MATERIAL",
+    lotId: lot.id,
+    lotCode: lot.code,
+    itemId: lot.itemId,
+    itemCode: item.code,
+    itemName: item.name,
+    usedIn,
+  };
+}
+
+/**
+ * `origin=PRODUCTION` -> rastreabilidade BACKWARD (lote de produto acabado
+ * ate as materias-primas realmente consumidas). Qualquer outro lote ->
+ * rastreabilidade FORWARD (o que foi realmente produzido a partir dele).
+ */
+export async function getLotTraceability(lotId: string): Promise<LotTraceabilityDTO | null> {
+  const lot = await getPrisma().lot.findUnique({ where: { id: lotId } });
+  if (!lot) return null;
+
+  return lot.origin === "PRODUCTION"
+    ? buildFinishedLotTraceability(lot)
+    : buildRawMaterialLotTraceability(lot);
+}

@@ -1,9 +1,11 @@
 import type {
   CancelProductionOrderInput,
+  CompleteProductionOrderInput,
   CreateProductionOrderInput,
   ProductionOrderDTO,
   ProductionOrderListResponse,
   ProductionOrderStatus,
+  RegisterProductionOutputInput,
   UpdateProductionOrderInput,
 } from "@veridi/shared";
 import { API_URL } from "./api";
@@ -121,6 +123,30 @@ export async function recordConsumption(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ entries }),
+  });
+  return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}
+
+export async function registerProductionOutput(
+  productionOrderId: string,
+  input: RegisterProductionOutputInput,
+): Promise<ProductionOrderDTO> {
+  const response = await fetch(`${API_URL}/production-orders/${productionOrderId}/outputs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}
+
+export async function completeProductionOrder(
+  productionOrderId: string,
+  input: CompleteProductionOrderInput,
+): Promise<ProductionOrderDTO> {
+  const response = await fetch(`${API_URL}/production-orders/${productionOrderId}/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
   return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
 }

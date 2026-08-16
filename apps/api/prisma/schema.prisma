@@ -37,14 +37,15 @@ enum LotStatus {
 }
 
 /// Tipos do ledger de estoque. Preparado para expansao futura
-/// (RETURN_TO_STOCK, FINISHED_GOOD_PRODUCTION) — nao criados agora porque
-/// Producao/Produto Acabado ainda nao existem.
+/// (RETURN_TO_STOCK) — nao criado agora porque devolucao pos-producao
+/// ainda nao existe.
 enum InventoryMovementType {
   RECEIPT_IN
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
   LOSS
   PRODUCTION_CONSUMPTION
+  FINISHED_GOOD_PRODUCTION
 }
 
 enum InventoryMovementSourceType {
@@ -53,6 +54,16 @@ enum InventoryMovementSourceType {
   STOCK_COUNT
   MANUAL_LOSS
   PRODUCTION_CONSUMPTION
+  FINISHED_GOOD_PRODUCTION
+}
+
+/// Lote recebido (RECEIPT, Supplier/Receipt/OC) ou lote produzido
+/// (PRODUCTION, ProductionOutput/ProductionOrder/Product) — mesma
+/// infraestrutura de Lot para as duas origens, nunca uma segunda tabela
+/// paralela so para produto acabado.
+enum LotOrigin {
+  RECEIPT
+  PRODUCTION
 }
 
 enum FormulationVersionStatus {
@@ -498,25 +509,46 @@ model ReceiptLine {
   @@map("receipt_lines")
 }
 
-/// Lote interno — criado automaticamente quando Item.controlsLot=true.
-/// `initialReceivedQuantity` e so o quanto entrou neste recebimento: NAO e
-/// saldo atual. Saldo fisico vira do ledger de Inventory Movements, ainda
-/// nao implementado.
+/// Lote interno — criado automaticamente quando Item.controlsLot=true, seja
+/// por Recebimento (origin=RECEIPT) ou por Producao (origin=PRODUCTION).
+/// Mesma infraestrutura para as duas origens — nunca um segundo modelo de
+/// lote so para produto acabado. `initialReceivedQuantity` e so o quanto
+/// entrou no evento que criou o lote (recebimento OU primeira producao):
+/// NAO e saldo atual. Saldo fisico vem do ledger de Inventory Movements.
 model Lot {
   id String @id @default(uuid())
 
-  /// LT-YYYYMMDD-NNNNNN — data do recebimento + sequence global
-  /// (nao reinicia por dia). Gerado pelo backend, imutavel, unico.
+  /// LT-YYYYMMDD-NNNNNN — data do evento (recebimento ou producao) +
+  /// sequence global (nao reinicia por dia). Gerado pelo backend,
+  /// imutavel, unico. Mesmo identificador usado no QR interno para as
+  /// duas origens.
   code String @unique
+
+  origin LotOrigin @default(RECEIPT)
 
   itemId String
   item   Item   @relation(fields: [itemId], references: [id])
 
-  supplierId String
-  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  /// Obrigatorio para origin=RECEIPT; sempre null para origin=PRODUCTION —
+  /// nunca fornecedor fake so para preencher a coluna.
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
 
   receiptLine ReceiptLine?
 
+  /// Preenchido so para origin=PRODUCTION — a OP que produziu este lote.
+  /// Nunca junto com supplierId.
+  productionOrderId String?
+  productionOrder   ProductionOrder? @relation(fields: [productionOrderId], references: [id])
+
+  /// Lote comercial/Veridi — informado pelo usuario ao criar um lote de
+  /// producao, permanece historico (nunca sobrescrito). Nunca substitui
+  /// `code` (identidade interna) nem `supplierLot` (identificacao do
+  /// fornecedor). Sem algoritmo automatico ainda — decisao futura.
+  businessLotNumber String?
+
+  /// So para origin=RECEIPT — identificacao do fornecedor, nunca
+  /// preenchida para lote produzido.
   supplierLot String?
   expiryDate  DateTime?
 
@@ -538,10 +570,12 @@ model Lot {
   inventoryMovements InventoryMovement[]
   materialReservationLines MaterialReservationLine[]
   productionConsumptions ProductionConsumption[]
+  productionOutputs ProductionOutput[]
 
   @@index([itemId])
   @@index([supplierId])
   @@index([status])
+  @@index([productionOrderId])
   @@map("lots")
 }
 
@@ -583,6 +617,11 @@ model InventoryMovement {
   /// banco que um ProductionConsumption gera no maximo um movimento.
   productionConsumptionId String?                @unique
   productionConsumption   ProductionConsumption? @relation(fields: [productionConsumptionId], references: [id], onDelete: Cascade)
+
+  /// Preenchido so para FINISHED_GOOD_PRODUCTION — FK real 1:1, garante no
+  /// banco que um ProductionOutput gera no maximo um movimento.
+  productionOutputId String?            @unique
+  productionOutput   ProductionOutput? @relation(fields: [productionOutputId], references: [id], onDelete: Cascade)
 
   /// Obrigatorio (validado no service) para ajuste/perda; sempre null em RECEIPT_IN.
   reason String?
@@ -661,6 +700,12 @@ model ProductionOrder {
   cancelledBy  String?
   cancelReason String?
 
+  /// Preenchidos em IN_PRODUCTION -> COMPLETED. completionReason e
+  /// obrigatorio so quando producedQuantity < plannedQuantity (variancia).
+  completedAt      DateTime?
+  completedBy      String?
+  completionReason String?
+
   createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -672,6 +717,13 @@ model ProductionOrder {
   reservation MaterialReservation?
 
   consumptions ProductionConsumption[]
+
+  /// Eventos reais de producao parcial — producedQuantity e sempre a soma
+  /// destes, nunca uma segunda coluna manual.
+  outputs ProductionOutput[]
+
+  /// Lotes de produto acabado gerados por esta OP (origin=PRODUCTION).
+  finishedLots Lot[]
 
   @@index([status])
   @@index([productId])
@@ -836,4 +888,37 @@ model ProductionConsumption {
   @@index([reservationLineId])
   @@index([itemId])
   @@map("production_consumptions")
+}
+
+/// Evento REAL e imutavel de producao parcial — nunca editado/deletado.
+/// Uma OP pode ter varios (producao parcial e o comportamento normal).
+/// producedQuantity da OP e sempre a soma destes, nunca uma segunda
+/// coluna. Gera exatamente 1 InventoryMovement FINISHED_GOOD_PRODUCTION
+/// (relacao 1:1 garantida — ver InventoryMovement.productionOutputId).
+model ProductionOutput {
+  id String @id @default(uuid())
+
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id])
+
+  /// Nulo so se o Finished Product Item nao controlar lote — bloqueado no
+  /// service nesta fase (rastreabilidade do MVP pressupoe lote de produto
+  /// acabado), mantido nullable no schema por simetria com os demais
+  /// movimentos que tambem preveem item sem lote.
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  quantity Decimal @db.Decimal(18, 6)
+
+  producedAt DateTime
+  producedBy String?
+  notes      String?
+
+  createdAt DateTime @default(now())
+
+  inventoryMovement InventoryMovement?
+
+  @@index([productionOrderId])
+  @@index([lotId])
+  @@map("production_outputs")
 }

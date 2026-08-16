@@ -32,24 +32,44 @@ export const LOT_STATUS_LABELS: Record<LotStatus, string> = {
   EXPIRED: "Vencido",
 };
 
+/**
+ * Origem do lote — mesma infraestrutura de `Lot` para as duas, nunca um
+ * segundo modelo só para produto acabado. `RECEIPT`: veio de um
+ * Recebimento (Supplier/Receipt/OC). `PRODUCTION`: veio de um
+ * `ProductionOutput` (OP/Product) — nunca exige Supplier/Receipt.
+ */
+export type LotOrigin = "RECEIPT" | "PRODUCTION";
+
+export const LOT_ORIGIN_LABELS: Record<LotOrigin, string> = {
+  RECEIPT: "Recebimento",
+  PRODUCTION: "Produção",
+};
+
 export interface LotDTO {
   id: string;
   code: string;
-  /** `LOT:<code>` — payload determinístico codificado no QR. */
+  /** `LOT:<code>` — payload determinístico codificado no QR. Mesmo payload para as duas origens. */
   qrPayload: string;
+  origin: LotOrigin;
   itemId: string;
   itemCode: string;
   itemName: string;
   unitCode: string;
-  supplierId: string;
-  supplierCode: string;
-  supplierName: string;
+  /** `null` para lotes `PRODUCTION` — nunca fornecedor fake. */
+  supplierId: string | null;
+  supplierCode: string | null;
+  supplierName: string | null;
+  /** Sempre `null` para lotes `PRODUCTION` — nunca confundido com o lote Veridi. */
   supplierLot: string | null;
+  /** Lote comercial/Veridi — só para lotes `PRODUCTION`, informado pelo usuário na criação, histórico. */
+  businessLotNumber: string | null;
   expiryDate: string | null;
   /** Calculado (`expiryDate < hoje`), nunca escrito por job — sem scheduler nesta entrega. */
   isExpired: boolean;
-  /** Quanto entrou neste recebimento — NÃO é saldo atual. Saldo vem do InventoryMovement ledger. */
+  /** Quanto entrou no evento que criou o lote (recebimento ou primeira produção) — NÃO é saldo atual. Saldo vem do InventoryMovement ledger. */
   initialReceivedQuantity: string;
+  /** Soma dos `ProductionOutput` deste lote — só para `origin=PRODUCTION`; `null` para `RECEIPT`. Nunca chamado de saldo: é a quantidade produzida acumulada, não o saldo atual. */
+  producedQuantity: string | null;
   /** Derivado do InventoryMovement ledger — nunca uma coluna armazenada em Lot. */
   onHand: string;
   /** Soma das MaterialReservationLine ACTIVE deste lote — real a partir do RELEASE de OP. */
@@ -58,10 +78,14 @@ export interface LotDTO {
   available: string;
   status: LotStatus;
   location: string | null;
-  receiptId: string;
-  receiptCode: string;
-  purchaseOrderId: string;
-  purchaseOrderCode: string;
+  /** `null` para lotes `PRODUCTION`. */
+  receiptId: string | null;
+  receiptCode: string | null;
+  purchaseOrderId: string | null;
+  purchaseOrderCode: string | null;
+  /** `null` para lotes `RECEIPT`. */
+  productionOrderId: string | null;
+  productionOrderCode: string | null;
   createdAt: string;
   createdBy: string | null;
   releasedAt: string | null;

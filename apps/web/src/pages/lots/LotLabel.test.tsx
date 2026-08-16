@@ -7,6 +7,7 @@ const baseLot: LotDTO = {
   id: "lot-1",
   code: "LT-20260815-000123",
   qrPayload: "LOT:LT-20260815-000123",
+  origin: "RECEIPT",
   itemId: "item-1",
   itemCode: "MP-001",
   itemName: "Farinha de trigo",
@@ -15,6 +16,8 @@ const baseLot: LotDTO = {
   supplierCode: "FOR-001",
   supplierName: "Fornecedor Teste",
   supplierLot: "SUP-A",
+  businessLotNumber: null,
+  producedQuantity: null,
   expiryDate: "2026-01-01T00:00:00.000Z",
   isExpired: true,
   initialReceivedQuantity: "10",
@@ -27,6 +30,8 @@ const baseLot: LotDTO = {
   receiptCode: "REC-000001",
   purchaseOrderId: "po-1",
   purchaseOrderCode: "OC-000001",
+  productionOrderId: null,
+  productionOrderCode: null,
   createdAt: new Date().toISOString(),
   createdBy: "Ambiente local",
   releasedAt: null,
@@ -34,6 +39,33 @@ const baseLot: LotDTO = {
   blockedAt: null,
   blockedBy: null,
   blockReason: null,
+};
+
+const producedLot: LotDTO = {
+  ...baseLot,
+  id: "lot-2",
+  code: "LT-20260815-000245",
+  qrPayload: "LOT:LT-20260815-000245",
+  origin: "PRODUCTION",
+  itemCode: "PA-001",
+  itemName: "Whey Protein 900g",
+  supplierId: null,
+  supplierCode: null,
+  supplierName: null,
+  supplierLot: null,
+  businessLotNumber: "260815-A",
+  producedQuantity: "990",
+  expiryDate: "2027-01-01T00:00:00.000Z",
+  isExpired: false,
+  initialReceivedQuantity: "600",
+  onHand: "990",
+  available: "990",
+  receiptId: null,
+  receiptCode: null,
+  purchaseOrderId: null,
+  purchaseOrderCode: null,
+  productionOrderId: "op-1",
+  productionOrderCode: "OP-000042",
 };
 
 describe("LotLabel", () => {
@@ -56,5 +88,17 @@ describe("LotLabel", () => {
   it("mostra VENCIDO quando o lote está expirado", () => {
     render(<LotLabel lot={baseLot} />);
     expect(screen.getByText(/VENCIDO/)).toBeInTheDocument();
+  });
+
+  it("lote de produção (origin=PRODUCTION) mostra Lote Veridi e quantidade produzida, nunca Lote fornecedor", () => {
+    render(<LotLabel lot={producedLot} />);
+
+    expect(screen.getByText("260815-A")).toBeInTheDocument();
+    expect(screen.getByText("LT-20260815-000245")).toBeInTheDocument();
+    expect(screen.getByText(/990 kg/)).toBeInTheDocument();
+    expect(screen.getByText("Quantidade produzida")).toBeInTheDocument();
+
+    expect(screen.queryByText("Lote fornecedor")).not.toBeInTheDocument();
+    expect(screen.queryByText("Quantidade recebida")).not.toBeInTheDocument();
   });
 });

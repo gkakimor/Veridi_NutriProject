@@ -902,6 +902,46 @@ Raw-material lot
 
 This is a core MVP requirement.
 
+## Durable rules confirmed at implementation (§24-26, Delivery 15)
+
+- Produced quantity is always `sum(ProductionOutput)` for the OP — never
+  a second manual/aggregated column. An Output is only accepted while the
+  OP is `IN_PRODUCTION`, must be `> 0`, and can never push the cumulative
+  total above `plannedQuantity` (checked under the same row lock used to
+  serialize concurrent Outputs on the same OP).
+- Every `ProductionOutput` generates exactly one physical stock movement
+  (`FINISHED_GOOD_PRODUCTION`), never zero, never more than one.
+- Finished product reuses the existing internal `Lot` infrastructure
+  (new `origin: RECEIPT | PRODUCTION`) — never a second, parallel lot
+  table. A produced lot never requires a Supplier/Receipt and never gets
+  a fabricated one.
+- The Veridi/commercial lot number (`businessLotNumber`) is always
+  user-entered and historical — it never replaces the immutable internal
+  `Lot.code`, and is never confused with a supplier lot. No automatic
+  generation algorithm exists yet (deferred, per §25).
+- A second Output can join an existing finished lot only when it was
+  created by the *same* OP, for the *same* Finished Product Item, and is
+  not blocked/expired — and, when the item requires Quality release, only
+  while that lot has not yet been released (new unreleased production
+  never gets mixed into an already Quality-released lot; a new lot is
+  created instead).
+- The Finished Product Item's Quality gate (`requiresQualityRelease`)
+  drives the produced lot's initial status exactly like a received lot —
+  `AWAITING_RELEASE` or `AVAILABLE` — reusing the same release/block
+  flow; there is no second Quality module for finished goods.
+- Completing an OP (`IN_PRODUCTION → COMPLETED`) never requires
+  `producedQuantity == plannedQuantity` — partial completion is the
+  normal path. Any variance requires an explicit reason. On completion,
+  any still-`ACTIVE` reservation for that OP is released in the same
+  transaction (historical `RELEASED` status, never deleted) — On Hand
+  never changes, only `Available` rises; releasing a reservation never
+  creates an `InventoryMovement`.
+- Bidirectional genealogy (backward and forward) is built **strictly**
+  from real `ProductionConsumption` and `ProductionOutput` rows — never
+  from planned Requirement, MaterialReservation, or a FEFO suggestion. A
+  lot that was only ever reserved and never actually consumed must never
+  appear as "used" in another lot's traceability.
+
 ---
 
 # 27. Corrections and auditability

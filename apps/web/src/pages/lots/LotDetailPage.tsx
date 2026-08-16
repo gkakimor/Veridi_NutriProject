@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { LotDTO } from "@veridi/shared";
+import type { LotDTO, LotTraceabilityDTO } from "@veridi/shared";
 import { LOT_STATUS_LABELS } from "@veridi/shared";
-import { blockLot, getLot, releaseLot } from "../../lib/lots-api";
+import { blockLot, getLot, getLotTraceability, releaseLot } from "../../lib/lots-api";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { QrCode } from "../../components/QrCode";
@@ -41,6 +41,8 @@ export function LotDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [traceability, setTraceability] = useState<LotTraceabilityDTO | null>(null);
+
   const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [blockReason, setBlockReason] = useState("");
@@ -48,10 +50,14 @@ export function LotDetailPage() {
   function load(lotId: string) {
     setLoading(true);
     setNotFound(false);
+    setTraceability(null);
     getLot(lotId)
       .then(setLot)
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
+    getLotTraceability(lotId)
+      .then(setTraceability)
+      .catch(() => setTraceability(null));
   }
 
   useEffect(() => {
@@ -133,57 +139,91 @@ export function LotDetailPage() {
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
 
-        <FormSection title="Identificação">
-          <dl className="definition-list">
-            <dt>Item</dt>
-            <dd>
-              <span className="code">{lot.itemCode}</span> {lot.itemName}
-            </dd>
-            <dt>Fornecedor</dt>
-            <dd>
-              {lot.supplierCode} — {lot.supplierName}
-            </dd>
-            <dt>Lote do fornecedor</dt>
-            <dd>{lot.supplierLot ?? "—"}</dd>
-            <dt>Origem — Recebimento</dt>
-            <dd>
-              {lot.receiptId ? (
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm"
-                  onClick={() => navigate(`/compras/recebimentos/${lot.receiptId}`)}
-                >
-                  {lot.receiptCode}
-                </button>
-              ) : (
-                "—"
-              )}
-            </dd>
-            <dt>Origem — Ordem de Compra</dt>
-            <dd>
-              {lot.purchaseOrderId ? (
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm"
-                  onClick={() => navigate(`/compras/ordens/${lot.purchaseOrderId}`)}
-                >
-                  {lot.purchaseOrderCode}
-                </button>
-              ) : (
-                "—"
-              )}
-            </dd>
-          </dl>
-        </FormSection>
+        {lot.origin === "PRODUCTION" ? (
+          <FormSection title="Identificação">
+            <dl className="definition-list">
+              <dt>Origem</dt>
+              <dd>Produção</dd>
+              <dt>Item</dt>
+              <dd>
+                <span className="code">{lot.itemCode}</span> {lot.itemName}
+              </dd>
+              <dt>Produzido por</dt>
+              <dd>
+                {lot.productionOrderId ? (
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => navigate(`/producao/ordens/${lot.productionOrderId}`)}
+                  >
+                    {lot.productionOrderCode}
+                  </button>
+                ) : (
+                  "—"
+                )}
+              </dd>
+              <dt>Lote Veridi</dt>
+              <dd>{lot.businessLotNumber ?? "—"}</dd>
+            </dl>
+          </FormSection>
+        ) : (
+          <FormSection title="Identificação">
+            <dl className="definition-list">
+              <dt>Item</dt>
+              <dd>
+                <span className="code">{lot.itemCode}</span> {lot.itemName}
+              </dd>
+              <dt>Fornecedor</dt>
+              <dd>
+                {lot.supplierCode} — {lot.supplierName}
+              </dd>
+              <dt>Lote do fornecedor</dt>
+              <dd>{lot.supplierLot ?? "—"}</dd>
+              <dt>Origem — Recebimento</dt>
+              <dd>
+                {lot.receiptId ? (
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => navigate(`/compras/recebimentos/${lot.receiptId}`)}
+                  >
+                    {lot.receiptCode}
+                  </button>
+                ) : (
+                  "—"
+                )}
+              </dd>
+              <dt>Origem — Ordem de Compra</dt>
+              <dd>
+                {lot.purchaseOrderId ? (
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => navigate(`/compras/ordens/${lot.purchaseOrderId}`)}
+                  >
+                    {lot.purchaseOrderCode}
+                  </button>
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </dl>
+          </FormSection>
+        )}
 
         <FormSection
           title="Quantidade e validade"
-          subtitle="Quantidade originalmente recebida — não é saldo atual. Saldo atual vem do histórico de movimentações (abaixo)."
+          subtitle={
+            lot.origin === "PRODUCTION"
+              ? "Quantidade produzida acumulada (soma dos apontamentos) — não é saldo atual. Saldo atual vem do histórico de movimentações (abaixo)."
+              : "Quantidade originalmente recebida — não é saldo atual. Saldo atual vem do histórico de movimentações (abaixo)."
+          }
         >
           <dl className="definition-list">
-            <dt>Quantidade recebida</dt>
+            <dt>{lot.origin === "PRODUCTION" ? "Quantidade produzida" : "Quantidade recebida"}</dt>
             <dd>
-              {lot.initialReceivedQuantity} {lot.unitCode}
+              {lot.origin === "PRODUCTION" ? lot.producedQuantity : lot.initialReceivedQuantity}{" "}
+              {lot.unitCode}
             </dd>
             <dt>Validade</dt>
             <dd>{formatDate(lot.expiryDate)}</dd>
@@ -263,6 +303,125 @@ export function LotDetailPage() {
             )}
           </div>
         </FormSection>
+
+        {traceability && traceability.kind === "FINISHED_GOOD" && (
+          <FormSection
+            title="Rastreabilidade"
+            subtitle="Genealogia real — consumo e produção efetivos, nunca reserva/sugestão FEFO."
+          >
+            <dl className="definition-list">
+              <dt>Produzido por</dt>
+              <dd>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => navigate(`/producao/ordens/${traceability.productionOrderId}`)}
+                >
+                  {traceability.productionOrderCode}
+                </button>
+              </dd>
+              <dt>Produto</dt>
+              <dd>
+                <span className="code">{traceability.productCode}</span> {traceability.productName}
+              </dd>
+              <dt>Quantidade produzida neste lote</dt>
+              <dd>
+                {traceability.producedQuantity} {traceability.unitCode}
+              </dd>
+            </dl>
+
+            <div className="table-container table-container--spaced">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Lote</th>
+                    <th>Lote fornecedor</th>
+                    <th>Quantidade consumida</th>
+                    <th>Fornecedor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {traceability.consumedMaterials.map((material) => (
+                    <tr key={`${material.itemId}-${material.lotId ?? "sem-lote"}`}>
+                      <td>
+                        <span className="code">{material.itemCode}</span> {material.itemName}
+                      </td>
+                      <td>{material.lotCode ?? "—"}</td>
+                      <td>{material.supplierLot ?? "—"}</td>
+                      <td>
+                        {material.quantity} {material.unitCode}
+                      </td>
+                      <td>{material.supplierName ?? "—"}</td>
+                    </tr>
+                  ))}
+                  {traceability.consumedMaterials.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="table__empty">
+                        Nenhum material consumido registrado.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </FormSection>
+        )}
+
+        {traceability && traceability.kind === "RAW_MATERIAL" && (
+          <FormSection
+            title="Rastreabilidade — Utilizado em"
+            subtitle="Genealogia real — consumo e produção efetivos, nunca reserva/sugestão FEFO."
+          >
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Ordem de Produção</th>
+                    <th>Produto</th>
+                    <th>Quantidade consumida</th>
+                    <th>Lote(s) de produto acabado gerados</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {traceability.usedIn.map((usage) => (
+                    <tr key={usage.productionOrderId}>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => navigate(`/producao/ordens/${usage.productionOrderId}`)}
+                        >
+                          {usage.productionOrderCode}
+                        </button>
+                      </td>
+                      <td>
+                        <span className="code">{usage.productCode}</span> {usage.productName}
+                      </td>
+                      <td>
+                        {usage.consumedQuantity} {usage.unitCode}
+                      </td>
+                      <td>
+                        {usage.finishedLots.length === 0
+                          ? "—"
+                          : usage.finishedLots
+                              .map((finished) => finished.businessLotNumber ?? finished.lotCode)
+                              .join(", ")}
+                      </td>
+                    </tr>
+                  ))}
+                  {traceability.usedIn.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="table__empty">
+                        Este lote nunca foi consumido em nenhuma Ordem de Produção.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </FormSection>
+        )}
 
         <FormSection title="QR Code" subtitle="Identifica só o lote interno — nunca dados mutáveis.">
           <div className="lot-detail-qr">

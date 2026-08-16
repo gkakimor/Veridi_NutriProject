@@ -1,5 +1,13 @@
 import { Prisma } from "@prisma/client";
-import type { Item, Lot, PurchaseOrder, Receipt, ReceiptLine, Supplier } from "@prisma/client";
+import type {
+  Item,
+  Lot,
+  ProductionOrder,
+  PurchaseOrder,
+  Receipt,
+  ReceiptLine,
+  Supplier,
+} from "@prisma/client";
 import type { LotDTO, LotListResponse } from "@veridi/shared";
 import { LOT_QR_PREFIX, normalizeLotLookupCode } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -18,42 +26,49 @@ const SYSTEM_ACTOR = "Ambiente local";
 type ReceiptLineChain = ReceiptLine & { receipt: Receipt & { purchaseOrder: PurchaseOrder } };
 type LotWithRelations = Lot & {
   item: Item;
-  supplier: Supplier;
+  supplier: Supplier | null;
   receiptLine: ReceiptLineChain | null;
+  productionOrder: ProductionOrder | null;
 };
 
 const lotInclude = {
   item: true,
   supplier: true,
   receiptLine: { include: { receipt: { include: { purchaseOrder: true } } } },
+  productionOrder: true,
 } as const;
 
 type LotDTOWithoutStock = Omit<LotDTO, "onHand" | "reserved" | "available">;
 
-function toLotDTO(lot: LotWithRelations): LotDTOWithoutStock {
+function toLotDTO(lot: LotWithRelations, producedQuantity: Prisma.Decimal | null): LotDTOWithoutStock {
   const receiptLine = lot.receiptLine;
 
   return {
     id: lot.id,
     code: lot.code,
     qrPayload: `${LOT_QR_PREFIX}${lot.code}`,
+    origin: lot.origin,
     itemId: lot.itemId,
     itemCode: lot.item.code,
     itemName: lot.item.name,
     unitCode: receiptLine ? receiptLine.unitCode : lot.item.unitCode,
     supplierId: lot.supplierId,
-    supplierCode: lot.supplier.code,
-    supplierName: lot.supplier.legalName,
+    supplierCode: lot.supplier ? lot.supplier.code : null,
+    supplierName: lot.supplier ? lot.supplier.legalName : null,
     supplierLot: lot.supplierLot,
+    businessLotNumber: lot.businessLotNumber,
     expiryDate: lot.expiryDate ? lot.expiryDate.toISOString() : null,
     isExpired: isLotExpired(lot),
     initialReceivedQuantity: lot.initialReceivedQuantity.toString(),
+    producedQuantity: lot.origin === "PRODUCTION" ? (producedQuantity ?? new Prisma.Decimal(0)).toString() : null,
     status: lot.status,
     location: lot.location,
-    receiptId: receiptLine ? receiptLine.receiptId : "",
-    receiptCode: receiptLine ? receiptLine.receipt.code : "",
-    purchaseOrderId: receiptLine ? receiptLine.receipt.purchaseOrderId : "",
-    purchaseOrderCode: receiptLine ? receiptLine.receipt.purchaseOrder.code : "",
+    receiptId: receiptLine ? receiptLine.receiptId : null,
+    receiptCode: receiptLine ? receiptLine.receipt.code : null,
+    purchaseOrderId: receiptLine ? receiptLine.receipt.purchaseOrderId : null,
+    purchaseOrderCode: receiptLine ? receiptLine.receipt.purchaseOrder.code : null,
+    productionOrderId: lot.productionOrderId,
+    productionOrderCode: lot.productionOrder ? lot.productionOrder.code : null,
     createdAt: lot.createdAt.toISOString(),
     createdBy: lot.createdBy,
     releasedAt: lot.releasedAt ? lot.releasedAt.toISOString() : null,
@@ -67,18 +82,33 @@ function toLotDTO(lot: LotWithRelations): LotDTOWithoutStock {
 /**
  * On Hand/Reserved/Available do lote, derivados do InventoryMovement
  * ledger e das MaterialReservationLine ACTIVE — nunca colunas em Lot.
- * Versao em lote evita N+1 em listagens.
+ * `producedQuantity` (so origin=PRODUCTION) e a soma dos ProductionOutput
+ * do lote — quantidade produzida acumulada, nunca confundida com saldo
+ * atual. Versao em lote evita N+1 em listagens.
  */
 async function attachStock(lots: LotWithRelations[]): Promise<LotDTO[]> {
   const prisma = getPrisma();
   const lotIds = lots.map((lot) => lot.id);
-  const [onHandByLot, reservedByLot] = await Promise.all([
+  const productionLotIds = lots.filter((lot) => lot.origin === "PRODUCTION").map((lot) => lot.id);
+
+  const [onHandByLot, reservedByLot, outputSums] = await Promise.all([
     getOnHandByLots(prisma, lotIds),
     getReservedByLots(prisma, lotIds),
+    productionLotIds.length > 0
+      ? prisma.productionOutput.groupBy({
+          by: ["lotId"],
+          where: { lotId: { in: productionLotIds } },
+          _sum: { quantity: true },
+        })
+      : Promise.resolve([]),
   ]);
+  const producedByLot = new Map<string, Prisma.Decimal>();
+  for (const row of outputSums) {
+    if (row.lotId) producedByLot.set(row.lotId, row._sum.quantity ?? new Prisma.Decimal(0));
+  }
 
   return lots.map((lot) => {
-    const dto = toLotDTO(lot);
+    const dto = toLotDTO(lot, producedByLot.get(lot.id) ?? null);
     const onHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
     const reserved = reservedByLot.get(lot.id) ?? new Prisma.Decimal(0);
     const available = isLotAvailableForUse(lot)
