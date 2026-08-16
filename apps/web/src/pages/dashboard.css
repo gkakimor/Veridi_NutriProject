@@ -1,0 +1,213 @@
+/*
+ * Cockpit operacional. Sem biblioteca de BI: grade simples, lista de
+ * atenção e um único gráfico em SVG puro. Só tokens — nada de hex cru.
+ */
+
+.dash-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-5);
+}
+
+.dash-filter__label {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.dash-section {
+  margin-bottom: var(--sp-6);
+}
+
+.dash-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.dash-section__head h2 {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.dash-section__hint {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+
+.dash-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.dash-card__label {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.dash-card__value {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* Valor indisponível nunca é exibido como número — é um aviso. */
+.dash-card__value--unavailable {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--warn-fg);
+}
+
+.dash-card__note {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+/* PRECISA DE ATENÇÃO — bloco visualmente dominante do cockpit. */
+.dash-attention {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+
+.dash-attention__row {
+  display: grid;
+  grid-template-columns: 96px 1fr 150px 110px;
+  gap: var(--sp-3);
+  align-items: center;
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dash-attention__row:last-of-type {
+  border-bottom: 0;
+}
+
+.dash-attention__row:hover {
+  background: var(--selected-bg);
+}
+
+.dash-attention__row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.dash-attention__type {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.dash-attention__code {
+  font-family: var(--font-code);
+  font-size: var(--fs-sm);
+}
+
+.dash-attention__date {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.dash-attention__empty {
+  padding: var(--sp-5) var(--sp-4);
+  color: var(--ink-2);
+}
+
+.dash-attention__more {
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  border-top: 1px solid var(--line);
+}
+
+.dash-state {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-3);
+}
+
+.dash-state__block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.dash-state__block h3 {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  margin-bottom: var(--sp-2);
+  color: var(--ink);
+}
+
+.dash-state__line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-1) 0;
+  font-size: var(--fs-sm);
+}
+
+.dash-state__line span {
+  color: var(--ink-2);
+}
+
+.dash-state__line b {
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-chart {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+  overflow-x: auto;
+}
+
+.dash-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.dash-chart__legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: var(--sp-1);
+  border-radius: 2px;
+}
+
+.is-small {
+  font-size: var(--fs-xs);
+}

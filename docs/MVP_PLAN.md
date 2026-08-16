@@ -39,7 +39,7 @@ The MVP should be operationally useful from the first releases and must not atte
 18. QR Picking
 19. Actual Consumption
 20. Partial Production / Completion
-21. Finished Product
+21. Finished Product ✓
 
 ## Block D — Orders & Fulfillment
 22. Customer Order ✓
@@ -63,7 +63,7 @@ from **effective acquisition cost** (the real reference) from **actual
 payment** (future financial layer, out of scope).
 
 ## Block E — Management, Reports & Exports (transversal layer)
-30. Executive/Operational Dashboard
+30. Executive/Operational Dashboard ✓
 31. Reports
 32. CSV / PDF / Print exports
 
@@ -81,7 +81,7 @@ operational entities — it never introduces a new source of truth.
 → 27 Shipping ✓
 → 28 Invoicing ✓
 → 29 Material cost foundation ✓
-→ 30 Executive/Operational Dashboard
+→ 30 Executive/Operational Dashboard ✓
 → 31 Reports
 → 32 CSV/PDF/Print exports
 → end-to-end validation / demo

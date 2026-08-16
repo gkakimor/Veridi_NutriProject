@@ -1253,7 +1253,7 @@ produce → make finished product available → picking/shipping → invoicing.
 
 ---
 
-# 30. Block E — Management, Reports & Exports (registered, not started)
+# 30. Block E — Management, Reports & Exports (Dashboard implemented, Delivery 21)
 
 Product Ownership decision registered during Delivery 18. A **transversal
 layer** (steps 29–31), executed only **after** Purchase Suggestion (26),
@@ -1284,6 +1284,33 @@ the official roadmap ordering.
   label print route.
 - CSV export always respects the currently applied filters and exports the
   **complete filtered result**, not just the visible page.
+
+## Durable rules confirmed at implementation (Dashboard, §30)
+
+- One read model per management surface (`GET /dashboard?from=&to=`)
+  instead of the screen orchestrating a dozen calls. No aggregate table,
+  no persisted dashboard field, no cache layer.
+- Every period metric counts **documents/events** and uses the document's
+  own operational date (`createdAt` for orders, `receivedAt` for
+  receipts, `completedAt` for production orders, `confirmedAt` for
+  shipments, `issuedAt` for billings) — never `updatedAt`, and never a
+  proxy entity (a receipt with five lines is one receipt, not five
+  `RECEIPT_IN` movements).
+- A monetary aggregate is published **only when every document feeding it
+  is complete**. With any incomplete document the aggregate is `null` and
+  the surface states that values are incomplete, alongside how many
+  documents are complete. A partial sum is never displayed as a total.
+- The attention list is fully **derived**: no `Attention` table, no
+  persisted severity, no configurable rule engine. Severity comes from a
+  fixed map, ordering is severity → date → code (deterministic), and the
+  list is capped with the real total shown next to it.
+- A lot only becomes an attention item while it still has balance; a
+  zeroed lot is history, not a pending problem. Expiry is always the
+  effective date, never a persisted status.
+- Cost-quality indicators report **how many** documents have incomplete
+  cost — they never show money derived from incomplete data.
+- The client always sends explicit temporal bounds, so "today" is the
+  operator's day rather than the server timezone's.
 
 ---
 

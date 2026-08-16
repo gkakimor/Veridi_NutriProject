@@ -21,6 +21,7 @@ import { purchaseSuggestionRoutes } from "./modules/customer-orders/purchase-sug
 import { shipmentsRoutes } from "./modules/shipments/shipments.routes.js";
 import { billingsRoutes } from "./modules/billings/billings.routes.js";
 import { costsRoutes } from "./modules/costs/costs.routes.js";
+import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
 import { finishedGoodsRoutes } from "./modules/finished-goods/finished-goods.routes.js";
 
 /**
@@ -62,6 +63,7 @@ export function buildApp() {
   app.register(shipmentsRoutes);
   app.register(billingsRoutes);
   app.register(costsRoutes);
+  app.register(dashboardRoutes);
   app.register(finishedGoodsRoutes);
 
   return app;

@@ -8,5 +8,11 @@ import { defineConfig, loadEnv } from "vite";
 export default defineConfig(({ mode }) => ({
   test: {
     env: loadEnv(mode, "../../", ""),
+    // Cada arquivo de teste sobe a app e abre o proprio pool do Prisma.
+    // Sem teto de workers o Postgres local esgota os connection slots
+    // ("remaining connection slots are reserved...") e testes corretos
+    // falham por infraestrutura.
+    maxWorkers: 3,
+    minWorkers: 1,
   },
 }));

@@ -30,6 +30,8 @@ FAST MVP.
 **Delivery 18 — Separação + Expedição (Bloco D, capacidade 27): concluído.**
 **Delivery 19 — Faturamento (Bloco D, capacidade 28): concluído — Bloco D funcionalmente encerrado.**
 **Delivery 20 — Fundação de Custos (capacidade 29): concluído.**
+**Delivery 21 — Dashboard operacional (Bloco E, capacidade 30): concluído
+— inclui a correção de consistência da tela Produção → Produto Acabado.**
 
 Decisão durável: baseline visual v2 (tokens `--v-green-*`/`--v-lime`/
 `--ok`/`--warn`/`--err`, `--font-ui`/`--font-code` sem CDN) é o padrão
@@ -47,10 +49,10 @@ Calculation + Reservation + QR Picking + Actual Consumption + Partial
 Production/conclusão da OP + Finished Product + Rastreabilidade
 bidirecional). Bloco D **completo** (22-28: Pedido do Cliente, Plano de Atendimento,
 Reserva de Produto Acabado, OPs Sugeridas, Sugestão de Compra, Expedição,
-Faturamento) + **Fundação de Custos (29)**. Só falta Usuários (Bloco A)
-dentro do escopo MVP travado; o próximo passo é o **Bloco E — Gestão,
-Relatórios & Exportações** (30-32), camada transversal já oficializada no
-roadmap mas ainda não iniciada.
+Faturamento) + **Fundação de Custos (29)**. **Bloco E iniciado: Dashboard
+operacional (30) concluído.** Só falta Usuários (Bloco A) dentro do escopo
+MVP travado; os próximos passos do Bloco E são Relatórios (31) e
+Exportações CSV/PDF (32) — nenhum deles iniciado.
 
 ## Stack instalada
 
@@ -117,7 +119,8 @@ apps/api        Fastify + TS strict, Prisma; /health, /items, /units,
                  /issue, /cancel), /receipt-lines/:id/acquisition-cost,
                  /items/:id/cost-reference,
                  /formulation-versions/:id/cost-estimate,
-                 /production-orders/:id/material-cost, /finished-goods
+                 /production-orders/:id/material-cost, /finished-goods,
+                 /dashboard (read model único do cockpit)
 packages/shared contratos compartilhados (Health, Item [operationallyUsed],
                  UnitOfMeasure, Supplier, Customer, Product, PurchaseOrder
                  [origin MANUAL/CUSTOMER_ORDER, customerOrderId/Code],
@@ -2858,6 +2861,72 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 21 — Dashboard operacional (Bloco E, capacidade 30)
+
+Cockpit, não BI. `GET /dashboard?from=&to=` é um **read model único** —
+uma chamada em vez de dezenas — e **nunca é fonte de verdade**: nenhuma
+tabela agregada, nenhum campo persistido, nenhum cache/Redis. Tudo é
+derivado ao vivo dos documentos e dos serviços centrais já existentes
+(`inventory-ledger.ts`, `allocation.service.ts`, `costs.service.ts`).
+
+**Separação inegociável entre estado atual e período.** "Operação atual"
+(Comercial/Produção/Compras/Estoque-Qualidade) ignora completamente o
+filtro; só as métricas históricas respondem a ele. Coberto por teste: uma
+OP antiga `IN_PRODUCTION` continua contando no estado mesmo quando a
+janela consultada não a inclui, e o bloco de estado sai idêntico em duas
+janelas radicalmente diferentes.
+
+**Cada métrica do período usa a data operacional do próprio documento** —
+Pedidos por `createdAt`, Recebimentos por `Receipt.receivedAt` (nunca
+movimentos `RECEIPT_IN`: um recebimento com cinco linhas é UM
+recebimento), OPs por `completedAt`, Expedições por `confirmedAt`,
+Faturamentos por `issuedAt`. Nunca `updatedAt`. Todas as métricas são
+**contagem de documentos/eventos** — nada soma quantidades de UOMs
+diferentes.
+
+**Valor faturado só existe quando TODOS os faturamentos emitidos do
+período têm preço completo.** Caso contrário o card mostra "Valores
+incompletos" com o denominador (`billingsWithCompletePricing` de
+`billingsIssued`) e `billedAmount` fica `null`. Teste obrigatório: FAT-A
+completo de R$ 100 + FAT-B incompleto nunca exibe R$ 100 como total.
+
+**"Precisa de atenção" é a seção mais importante** e vem antes dos
+números. Dez tipos derivados (lote vencido/bloqueado/aguardando
+Qualidade/próximo do vencimento, OP com falta de material, OC atrasada,
+Pedido aguardando produção/expedição, Expedição aguardando faturamento,
+OP concluída com custo incompleto), severidade `CRITICAL/WARNING/INFO`
+**derivada por mapa fixo, nunca persistida** — não existe tabela
+`Attention` nem engine configurável. Ordem: severidade → data → código
+(determinística). Limite de 20 com o total ao lado; cada linha navega
+para o documento. Lote só vira atenção com saldo > 0 — lote zerado não é
+problema operacional. `LOT_EXPIRED` usa a data efetiva de validade, não
+o status persistido (nenhum job marca `EXPIRED`).
+
+Outras decisões registradas:
+- "Itens em compra" conta **itens distintos** com quantidade aberta —
+  1000 kg + 2500 un jamais viram 3500.
+- OC atrasada = `ORDERED`/`PARTIALLY_RECEIVED` + previsão vencida + saldo
+  ainda aberto.
+- "OPs com falta de material" restringe-se a `DRAFT`/`PLANNED`: uma
+  `RELEASED` já tem reserva própria e contá-la geraria falta falsa.
+- "OPs concluídas com custo incompleto" (`PARTIAL`/`NO_COST`) é indicador
+  de qualidade do dado — mostra a contagem, nunca dinheiro.
+- Um único gráfico (atividade de estoque por dia, contagem de eventos),
+  em SVG próprio; nenhuma biblioteca de BI entrou no projeto.
+- Últimos 15 movimentos com quantidade + unidade por linha (seguro) e
+  origem resolvida pelos vínculos 1:1 que já existem.
+- N+1 evitado: disponibilidade resolvida de uma vez para todos os itens
+  candidatos a falta; varredura de custo das OPs concluídas limitada a
+  200 linhas.
+- O frontend envia sempre `from`/`to` explícitos (Hoje/7/30/
+  Personalizado, padrão Hoje), para "hoje" ser o dia do operador e não o
+  fuso do servidor.
+- `vitest.config.ts` passou a limitar `maxWorkers: 3`: com 26 arquivos de
+  teste cada um subindo app + pool do Prisma, o Postgres local esgotava
+  os connection slots e testes corretos falhavam por infraestrutura.
+
+---
+
 # Correção de consistência Bloco C — tela Produção → Produto Acabado
 
 `Produção → Produto Acabado` deixou de ser placeholder. A capacidade já
@@ -2931,15 +3000,18 @@ Fundação de Custos) — faltava só a visão. Nada de domínio novo foi criado
 
 # Next recommended implementation
 
-Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)** e
-**Fundação de Custos (29)** concluída. Próximo passo do roadmap oficial:
-**Bloco E — Gestão, Relatórios & Exportações (30-32)** — Dashboard
-operacional, Relatórios (incluindo R-14 Pedido → Operação, R-15
-Faturamento por período, R-16 Aguardando faturamento, R-17 Pedido ×
-Entregue × Faturado) e exportações CSV/PDF/impressão — e só então
-validação ponta a ponta / demo, responsivo e hardening técnico. **Nada
-disso foi iniciado nesta entrega, por instrução explícita do handoff**;
-aguarda novo handoff de Product Ownership.
+Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
+**Fundação de Custos (29)** e **Dashboard operacional (30)** concluídos.
+Próximo passo do roadmap oficial: **Relatórios (31)** — incluindo R-14
+Pedido → Operação, R-15 Faturamento por período, R-16 Aguardando
+faturamento, R-17 Pedido × Entregue × Faturado — e depois exportações
+CSV/PDF/impressão (32), e só então validação ponta a ponta / demo,
+responsivo e hardening técnico. **Relatórios não foram iniciados, por
+instrução explícita do handoff**; aguarda novo handoff de Product
+Ownership. Reaproveitar no 31: `modules/dashboard/dashboard.queries.ts`
+(itens distintos em compra, OC atrasada, pedidos aguardando produção/
+expedição) e `attention.service.ts`, que já resolvem essas perguntas sem
+tabela agregada.
 Reutilizar quando começar: `FullWorkspaceModal`
 + `components.css` para cadastros simples; padrão de página própria (ver
 Ordem de Compra/Recebimento/editor de Formulação/OP/Pedido) para novos

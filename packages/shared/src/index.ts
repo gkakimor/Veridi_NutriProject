@@ -28,4 +28,5 @@ export * from "./purchase-suggestion.js";
 export * from "./shipments.js";
 export * from "./billings.js";
 export * from "./costs.js";
+export * from "./dashboard.js";
 export * from "./finished-goods.js";
