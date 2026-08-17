@@ -37,6 +37,7 @@ import {
   updateIndustrialCostVersion,
 } from "../../lib/industrial-costs-api";
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
+import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
@@ -173,6 +174,7 @@ export function IndustrialCostPage() {
           </div>
         </div>
         <div className="table__actions">
+          <ProjectOriginLink productId={productId} />
           {/* Produto sem lote mínimo cadastrado não tem base sugerida; sem
               este campo o botão só devolvia "Informe a base de produção" e o
               usuário não tinha onde informá-la. Continua valendo a regra de

@@ -170,6 +170,7 @@ interface PreparedLine {
 export async function createReceipt(
   purchaseOrderId: string,
   input: CreateReceiptInput,
+  actor?: { id: string; name: string },
 ): Promise<ReceiptDTO> {
   const prisma = getPrisma();
 
@@ -234,7 +235,7 @@ export async function createReceipt(
           ? { documentReference: input.documentReference }
           : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
-        createdBy: SYSTEM_ACTOR,
+        createdBy: actor?.name ?? SYSTEM_ACTOR,
       },
     });
 
@@ -279,7 +280,7 @@ export async function createReceipt(
           location,
           actualUnitCost,
           ...(actualUnitCost
-            ? { costUpdatedAt: new Date(), costUpdatedBy: SYSTEM_ACTOR }
+            ? { costUpdatedAt: new Date(), costUpdatedBy: actor?.name ?? SYSTEM_ACTOR }
             : {}),
         },
       });
@@ -305,7 +306,7 @@ export async function createReceipt(
                 ? "AWAITING_RELEASE"
                 : "AVAILABLE",
             location,
-            createdBy: SYSTEM_ACTOR,
+            createdBy: actor?.name ?? SYSTEM_ACTOR,
           },
         });
         lotId = lot.id;
@@ -324,7 +325,7 @@ export async function createReceipt(
           sourceType: "RECEIPT",
           sourceId: receiptLine.id,
           receiptLineId: receiptLine.id,
-          createdBy: SYSTEM_ACTOR,
+          createdBy: actor?.name ?? SYSTEM_ACTOR,
         },
       });
     }
@@ -366,6 +367,7 @@ export async function createReceipt(
  */
 export async function createCustomerSuppliedReceipt(
   input: CreateCustomerSuppliedReceiptInput,
+  actor?: { id: string; name: string },
 ): Promise<ReceiptDTO> {
   const prisma = getPrisma();
 
@@ -411,7 +413,7 @@ export async function createCustomerSuppliedReceipt(
           ? { documentReference: input.documentReference }
           : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
-        createdBy: SYSTEM_ACTOR,
+        createdBy: actor?.name ?? SYSTEM_ACTOR,
       },
     });
 
@@ -460,7 +462,7 @@ export async function createCustomerSuppliedReceipt(
               ? "AWAITING_RELEASE"
               : "AVAILABLE",
           location,
-          createdBy: SYSTEM_ACTOR,
+          createdBy: actor?.name ?? SYSTEM_ACTOR,
         },
       });
       await tx.receiptLine.update({ where: { id: receiptLine.id }, data: { lotId: lot.id } });
@@ -475,7 +477,7 @@ export async function createCustomerSuppliedReceipt(
           sourceType: "RECEIPT",
           sourceId: receiptLine.id,
           receiptLineId: receiptLine.id,
-          createdBy: SYSTEM_ACTOR,
+          createdBy: actor?.name ?? SYSTEM_ACTOR,
         },
       });
     }

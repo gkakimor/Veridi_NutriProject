@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import {
   ActiveBillingAlreadyExistsError,
   BillingLineNotFoundError,
@@ -96,7 +97,7 @@ export const billingsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.status(201).send(await createBilling(parsed.data.shipmentId));
+      return reply.status(201).send(await createBilling(parsed.data.shipmentId, requireCurrentUser(request)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
@@ -125,7 +126,7 @@ export const billingsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/billings/:id/issue", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      return reply.send(await issueBilling(id));
+      return reply.send(await issueBilling(id, requireCurrentUser(request)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
@@ -143,7 +144,7 @@ export const billingsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.send(await cancelBilling(id, parsed.data.reason));
+      return reply.send(await cancelBilling(id, parsed.data.reason, requireCurrentUser(request)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

@@ -12,6 +12,7 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { useAuth } from "../../app/AuthProvider";
 import { getInventoryItem } from "../../lib/inventory-api";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { listItems } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import {
@@ -306,19 +307,18 @@ export function SampleDetailPage() {
               <div className="field-grid-2">
                 <div className="field">
                   <label htmlFor="sample-item">Item</label>
-                  <select
+                  <SearchableEntitySelect
                     id="sample-item"
                     value={itemId}
-                    onChange={(event) => setItemId(event.target.value)}
+                    onChange={setItemId}
                     required
-                  >
-                    <option value="">Selecione…</option>
-                    {items.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.code} — {item.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Digite código ou nome do item…"
+                    options={items.map((item) => ({
+                      id: item.id,
+                      code: item.code,
+                      name: item.name,
+                    }))}
+                  />
                 </div>
 
                 <div className="field">

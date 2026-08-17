@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
 import { applyFulfillmentPlan, getFulfillmentPlan } from "./fulfillment-plan.service.js";
 import {
@@ -73,7 +74,7 @@ export const fulfillmentPlanRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.send(await applyFulfillmentPlan(id, parsed.data));
+      return reply.send(await applyFulfillmentPlan(id, parsed.data, requireCurrentUser(request)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

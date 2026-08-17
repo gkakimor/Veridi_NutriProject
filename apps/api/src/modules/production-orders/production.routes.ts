@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import { InvalidTransitionError, MissingFinishedItemError, ProductionOrderNotFoundError } from "./production-orders.errors.js";
 import { completeProductionOrder, registerProductionOutput } from "./production.service.js";
 import {
@@ -85,7 +86,7 @@ export const productionRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const order = await registerProductionOutput(id, parsed.data);
+      const order = await registerProductionOutput(id, parsed.data, requireCurrentUser(request));
       return reply.status(201).send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
@@ -102,7 +103,7 @@ export const productionRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const order = await completeProductionOrder(id, parsed.data);
+      const order = await completeProductionOrder(id, parsed.data, requireCurrentUser(request));
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);

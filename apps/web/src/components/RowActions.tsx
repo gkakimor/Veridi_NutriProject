@@ -60,9 +60,16 @@ export function RowActions({
   const available = actions.filter((action) => !action.disabled);
 
   return (
-    // A linha da tabela trata Enter como "abrir registro"; sem parar o evento
-    // aqui, Enter no menu "⋯" abria o cadastro em vez do menu.
-    <div className="row-actions" ref={container} onKeyDown={(event) => event.stopPropagation()}>
+    // A linha da tabela trata Enter como "abrir registro" — só essas teclas
+    // param aqui. Parar TODAS impedia o Escape de chegar ao listener que
+    // fecha o menu.
+    <div
+      className="row-actions"
+      ref={container}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+      }}
+    >
       {children}
       {available.length > 0 && (
         <>

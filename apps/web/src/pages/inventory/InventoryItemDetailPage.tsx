@@ -156,18 +156,28 @@ export function InventoryItemDetailPage() {
             <dt>Físico</dt>
             <dd>
               {detail.onHand} {detail.unitCode}
+              <span className="field__hint"> — existe no depósito agora, somando os lotes.</span>
             </dd>
             <dt>Reservado</dt>
             <dd>
               {detail.reserved} {detail.unitCode}
+              <span className="field__hint">
+                {" "}
+                — parte do físico já comprometida com produção ou pedido.
+              </span>
             </dd>
             <dt>Disponível</dt>
             <dd>
               {detail.available} {detail.unitCode}
+              <span className="field__hint">
+                {" "}
+                — físico menos reservado, só lote liberado e não vencido.
+              </span>
             </dd>
             <dt>Em Compra</dt>
             <dd>
               {detail.onOrder} {detail.unitCode}
+              <span className="field__hint"> — saldo de ordens de compra que ainda não chegou.</span>
             </dd>
           </dl>
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { FormulationVersionDTO, ProductDTO } from "@veridi/shared";
 import { FORMULATION_VERSION_STATUS_LABELS } from "@veridi/shared";
 import { getProduct } from "../../lib/products-api";
@@ -124,13 +125,16 @@ export function FormulationDetailPage() {
             </h1>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => navigate("/producao/formulacoes")}
-        >
-          ← Voltar
-        </button>
+        <div className="table__actions">
+          <ProjectOriginLink productId={productId} />
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => navigate("/producao/formulacoes")}
+          >
+            ← Voltar
+          </button>
+        </div>
       </div>
 
       <div className="doc-body">

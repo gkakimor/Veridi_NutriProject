@@ -255,7 +255,10 @@ export async function listAwaitingBilling(): Promise<AwaitingBillingListResponse
  * banco). A quantidade vem SEMPRE da ShipmentLine — nunca recalculada a
  * partir do Pedido, nunca editavel depois.
  */
-export async function createBilling(shipmentId: string): Promise<BillingDTO> {
+export async function createBilling(
+  shipmentId: string,
+  actor?: { id: string; name: string },
+): Promise<BillingDTO> {
   const prisma = getPrisma();
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, BILLING_CODE_PREFIX);
 
@@ -294,7 +297,7 @@ export async function createBilling(shipmentId: string): Promise<BillingDTO> {
         customerOrderCode: order.code,
         shipmentCode: shipment.code,
         shipmentDate: shipment.shipmentDate,
-        createdBy: SYSTEM_ACTOR,
+        createdBy: actor?.name ?? SYSTEM_ACTOR,
       },
     });
 
@@ -372,7 +375,10 @@ export async function updateBilling(id: string, input: UpdateBillingInput): Prom
  * fora do sistema. Nunca altera estoque, Expedicao ou o status do Pedido
  * (o estado de faturamento do Pedido e sempre derivado).
  */
-export async function issueBilling(id: string): Promise<BillingDTO> {
+export async function issueBilling(
+  id: string,
+  actor?: { id: string; name: string },
+): Promise<BillingDTO> {
   await getPrisma().$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM billings WHERE id = ${id} FOR UPDATE`;
 
@@ -394,7 +400,7 @@ export async function issueBilling(id: string): Promise<BillingDTO> {
 
     await tx.billing.update({
       where: { id },
-      data: { status: "ISSUED", issuedAt: new Date(), issuedBy: SYSTEM_ACTOR },
+      data: { status: "ISSUED", issuedAt: new Date(), issuedBy: actor?.name ?? SYSTEM_ACTOR },
     });
   });
 
@@ -406,7 +412,11 @@ export async function issueBilling(id: string): Promise<BillingDTO> {
  * Expedicao ou Pedido — a Expedicao simplesmente volta a aparecer como
  * faturavel e um novo rascunho pode ser criado.
  */
-export async function cancelBilling(id: string, reason: string): Promise<BillingDTO> {
+export async function cancelBilling(
+  id: string,
+  reason: string,
+  actor?: { id: string; name: string },
+): Promise<BillingDTO> {
   await getPrisma().$transaction(async (tx) => {
     const billing = await tx.billing.findUnique({ where: { id } });
     if (!billing) throw new BillingNotFoundError(id);
@@ -421,7 +431,7 @@ export async function cancelBilling(id: string, reason: string): Promise<Billing
       data: {
         status: "CANCELLED",
         cancelledAt: new Date(),
-        cancelledBy: SYSTEM_ACTOR,
+        cancelledBy: actor?.name ?? SYSTEM_ACTOR,
         cancelReason: reason,
       },
     });

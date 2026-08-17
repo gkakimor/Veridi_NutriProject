@@ -56,7 +56,9 @@ export function AppShell() {
         setSearchValue("");
         navigate(`/estoque/lotes/${lot.id}`);
       } else {
-        setSearchError(`Lote "${query}" não encontrado.`);
+        setSearchError(
+          `Nenhum lote encontrado para "${query}". Se o número comercial se repete em mais de um lote, procure em Estoque › Lotes.`,
+        );
       }
     } catch {
       setSearchError("Falha ao consultar lote.");
@@ -120,9 +122,10 @@ export function AppShell() {
             <input
               id="global-search"
               type="search"
-              // A busca resolve lote (código interno ou QR); prometer item e OP
-              // fazia o usuário concluir que o item "não existe".
-              placeholder="Buscar ou escanear lote…"
+              // Resolve lote pelo código interno, pelo QR e pelo número de lote
+              // comercial impresso na etiqueta. Item e OP continuam fora — não
+              // prometer o que não faz.
+              placeholder="Buscar ou escanear lote (interno ou comercial)…"
               value={searchValue}
               disabled={searching}
               onChange={(event) => {

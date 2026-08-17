@@ -198,6 +198,7 @@ export async function getFulfillmentPlan(customerOrderId: string): Promise<Fulfi
 export async function applyFulfillmentPlan(
   customerOrderId: string,
   input: ApplyFulfillmentPlanInput,
+  actor?: { id: string; name: string },
 ): Promise<CustomerOrderDTO> {
   const prisma = getPrisma();
 
@@ -362,6 +363,7 @@ export async function applyFulfillmentPlan(
         plannedQuantity: toCreate.plannedQuantity,
         customerOrderId,
         customerOrderLineId: toCreate.customerOrderLineId,
+        ...(actor ? { createdBy: actor.name } : {}),
       });
     }
 

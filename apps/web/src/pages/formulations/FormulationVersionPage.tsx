@@ -32,6 +32,8 @@ import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { ProjectOriginLink } from "../../components/ProjectOriginLink";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 
 interface ItemOption {
   id: string;
@@ -390,13 +392,16 @@ export function FormulationVersionPage() {
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => navigate(`/producao/formulacoes/${productId}`)}
-        >
-          ← Voltar
-        </button>
+        <div className="table__actions">
+          <ProjectOriginLink productId={productId} />
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => navigate(`/producao/formulacoes/${productId}`)}
+          >
+            ← Voltar
+          </button>
+        </div>
       </div>
 
       <div className="doc-body">
@@ -519,18 +524,18 @@ export function FormulationVersionPage() {
                   <tr key={row.key}>
                     <td>
                       {isDraft ? (
-                        <select
+                        <SearchableEntitySelect
+                          id={`componente-${row.key}`}
                           value={row.itemId}
-                          onChange={(event) => handleComponentItemChange(row.key, event.target.value)}
-                        >
-                          <option value="">Selecione…</option>
-                          {optionsForRow(row).map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.code} — {item.name}
-                              {!item.active ? " (inativo)" : ""}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(itemId) => handleComponentItemChange(row.key, itemId)}
+                          placeholder="Digite código ou nome do item…"
+                          options={optionsForRow(row).map((item) => ({
+                            id: item.id,
+                            code: item.code,
+                            name: item.name,
+                            ...(item.active ? {} : { hint: "inativo" }),
+                          }))}
+                        />
                       ) : (
                         <>
                           <span className="code">{row.itemCode}</span> {row.itemName}

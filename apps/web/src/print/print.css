@@ -139,6 +139,42 @@
   white-space: nowrap;
 }
 
+/*
+ * Relatório largo: a linha principal carrega as colunas de decisão e a linha
+ * de detalhe carrega o resto rotulado. Nenhum dado sai do papel — só deixa de
+ * disputar largura com os demais.
+ */
+.print-row--primary td {
+  border-bottom: 0;
+  font-weight: var(--fw-medium);
+}
+
+.print-row--detail td {
+  padding-top: 2px;
+}
+
+.print-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-4);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.print-detail div {
+  display: flex;
+  gap: 4px;
+}
+
+.print-detail dt::after {
+  content: ":";
+}
+
+.print-detail dd {
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
 .print-doc__foot {
   margin-top: var(--sp-6);
   padding-top: var(--sp-2);
@@ -306,7 +342,7 @@
   /* Documento largo aperta a tabela antes de perder coluna na folha —
      coluna cortada no papel é informação perdida, não detalhe estético. */
   .print-screen--landscape .print-table {
-    font-size: 10.5px;
+    font-size: 11.5px;
   }
 
   .print-screen--landscape .print-table th,

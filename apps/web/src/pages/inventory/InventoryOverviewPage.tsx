@@ -126,6 +126,28 @@ export function InventoryOverviewPage() {
 
       {error && <p className="form-alert">{error}</p>}
 
+      {/* Quem vem de planilha não tem por que adivinhar o que cada coluna
+          significa — a definição fica ao lado da tabela, não escondida em
+          tooltip. */}
+      <dl className="stock-legend">
+        <div>
+          <dt>Físico</dt>
+          <dd>o que existe no depósito agora, somando todos os lotes.</dd>
+        </div>
+        <div>
+          <dt>Reservado</dt>
+          <dd>parte do físico já comprometida com ordens de produção ou pedidos.</dd>
+        </div>
+        <div>
+          <dt>Disponível</dt>
+          <dd>físico menos reservado, contando só lote liberado e não vencido.</dd>
+        </div>
+        <div>
+          <dt>Em Compra</dt>
+          <dd>saldo de ordens de compra confirmadas que ainda não chegaram.</dd>
+        </div>
+      </dl>
+
       <div className="table-container">
         <table className="table table--clickable-rows">
           <thead>

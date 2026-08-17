@@ -139,7 +139,12 @@ export const pickingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const order = await confirmPicking(id, reservationLineId, parsed.data.lotCode);
+      const order = await confirmPicking(
+        id,
+        reservationLineId,
+        parsed.data.lotCode,
+        requireCurrentUser(request),
+      );
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
@@ -158,7 +163,12 @@ export const pickingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const order = await substituteReservationLine(id, reservationLineId, parsed.data.lotCode);
+      const order = await substituteReservationLine(
+        id,
+        reservationLineId,
+        parsed.data.lotCode,
+        requireCurrentUser(request),
+      );
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);

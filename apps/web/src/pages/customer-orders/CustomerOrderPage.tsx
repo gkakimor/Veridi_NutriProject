@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import type {
   CustomerDTO,
   CustomerOrderDTO,
@@ -789,17 +790,17 @@ export function CustomerOrderPage() {
                   <tr key={line.key}>
                     <td>
                       {isDraft ? (
-                        <select
+                        <SearchableEntitySelect
+                          id={`pedido-produto-${line.key}`}
                           value={line.productId}
-                          onChange={(event) => handleLineProductChange(line.key, event.target.value)}
-                        >
-                          <option value="">Selecione…</option>
-                          {optionsForRow(line).map((product) => (
-                            <option key={product.id} value={product.id}>
-                              {product.code} — {product.name}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(productId) => handleLineProductChange(line.key, productId)}
+                          placeholder="Digite código ou nome do produto…"
+                          options={optionsForRow(line).map((product) => ({
+                            id: product.id,
+                            code: product.code,
+                            name: product.name,
+                          }))}
+                        />
                       ) : (
                         <>
                           <span className="code">{line.productCode}</span> {line.productName}

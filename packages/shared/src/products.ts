@@ -99,6 +99,8 @@ export interface ProductDTO {
   lifecycle: ProductLifecycle;
   /** Projeto que criou o produto técnico; `null` em produto legado. */
   originProjectId: string | null;
+  /** Código do projeto de origem — nunca inferido para produto legado. */
+  originProjectCode: string | null;
   finishedProductItemId: string | null;
   finishedProductItem: ProductFinishedItemSummary | null;
   /** Perfil industrial (capacidade 33) — cadastro, sem efeito em cálculo. */

@@ -200,6 +200,41 @@ async function getOrder(app: App, id: string) {
 }
 
 describe("ProductionOutput — registro de produção", () => {
+  it("registra o usuário autenticado em picking, apontamento e conclusão", async () => {
+    // Cada `inject` do harness autentica um usuário próprio: serve de prova
+    // de que a ação guarda QUEM executou, não o ator de sistema.
+    const app = buildTestApp();
+    await app.ready();
+
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await receiveStock(rawMaterial.id, "1000");
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const released = await createReleasedOrder(app, finishedItem.id, rawMaterial.id, "1", "100");
+    const order = await moveToInProduction(app, released);
+
+    await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/outputs`,
+      payload: { quantity: "100", destination: "NEW_LOT", businessLotNumber: "VD-AUDIT" },
+    });
+    await app.inject({ method: "POST", url: `/production-orders/${order.id}/complete`, payload: {} });
+
+    const final = await getOrder(app, order.id);
+    const pickedBy = final.requirements
+      .flatMap((requirement: { reservationLines: { pickedBy: string | null }[] }) =>
+        requirement.reservationLines,
+      )
+      .map((line: { pickedBy: string | null }) => line.pickedBy);
+
+    for (const actor of [...pickedBy, final.outputs[0].producedBy, final.completedBy]) {
+      expect(actor).toBeTruthy();
+      expect(actor).not.toBe("Ambiente local");
+    }
+
+    await app.close();
+  });
+
+
   it("rejeita apontamento fora de IN_PRODUCTION", async () => {
     const app = buildTestApp();
     await app.ready();

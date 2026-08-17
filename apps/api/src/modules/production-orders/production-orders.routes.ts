@@ -115,7 +115,7 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const order = await createProductionOrder(parsed.data);
+      const order = await createProductionOrder(parsed.data, requireCurrentUser(request));
       return reply.status(201).send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
@@ -146,7 +146,7 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
   app.post("/production-orders/:id/plan", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const order = await planProductionOrder(id);
+      const order = await planProductionOrder(id, requireCurrentUser(request));
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);

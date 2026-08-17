@@ -165,6 +165,9 @@ export async function listLots(
     where["OR"] = [
       { code: { contains: query.search, mode: "insensitive" } },
       { supplierLot: { contains: query.search, mode: "insensitive" } },
+      // O número que a operação lê na etiqueta é o lote comercial; sem ele
+      // aqui, procurar pelo que está impresso não achava nada.
+      { businessLotNumber: { contains: query.search, mode: "insensitive" } },
       { item: { is: { code: { contains: query.search, mode: "insensitive" } } } },
       { item: { is: { name: { contains: query.search, mode: "insensitive" } } } },
     ];
@@ -203,11 +206,23 @@ export async function lookupLotByCode(rawCode: string): Promise<LotDTO | null> {
   const normalized = normalizeLotLookupCode(rawCode);
   if (!normalized) return null;
 
-  const lot = await getPrisma().lot.findUnique({
-    where: { code: normalized },
-    include: lotInclude,
-  });
-  if (!lot) return null;
+  const prisma = getPrisma();
+  let lot = await prisma.lot.findUnique({ where: { code: normalized }, include: lotInclude });
+
+  if (!lot) {
+    // O código impresso na etiqueta é o lote comercial. Só resolve quando é
+    // inequívoco: com mais de um lote no mesmo número, abrir "algum" seria
+    // apontar a operação para o lote errado — a lista de Lotes resolve esse
+    // caso, porque a busca dela também cobre o número comercial.
+    const byBusinessLot = await prisma.lot.findMany({
+      where: { businessLotNumber: { equals: normalized, mode: "insensitive" } },
+      include: lotInclude,
+      take: 2,
+    });
+    if (byBusinessLot.length !== 1) return null;
+    lot = byBusinessLot[0]!;
+  }
+
   const [dto] = await attachStock([lot]);
   return dto!;
 }
@@ -237,7 +252,11 @@ export async function releaseLot(id: string, actorName?: string): Promise<LotDTO
   return (await getLotById(id))!;
 }
 
-export async function blockLot(id: string, reason: string): Promise<LotDTO> {
+export async function blockLot(
+  id: string,
+  reason: string,
+  actorName?: string,
+): Promise<LotDTO> {
   const lot = await requireLot(id);
   if (lot.status !== "AWAITING_RELEASE" && lot.status !== "AVAILABLE") {
     throw new InvalidLotTransitionError(
@@ -262,7 +281,7 @@ export async function blockLot(id: string, reason: string): Promise<LotDTO> {
     data: {
       status: "BLOCKED",
       blockedAt: new Date(),
-      blockedBy: SYSTEM_ACTOR,
+      blockedBy: actorName ?? SYSTEM_ACTOR,
       blockReason: reason,
     },
   });

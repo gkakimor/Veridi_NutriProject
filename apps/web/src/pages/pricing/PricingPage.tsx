@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { PriceMode, PricingVersionDTO } from "@veridi/shared";
 import {
   COMMISSION_BASE_DESCRIPTION,
@@ -117,6 +118,7 @@ export function PricingPage() {
           >
             Imprimir / Salvar PDF
           </button>
+          <ProjectOriginLink productId={pricing.productId} />
           <button
             type="button"
             className="btn btn--ghost"

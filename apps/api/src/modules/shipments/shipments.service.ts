@@ -366,7 +366,10 @@ export async function getShipmentById(id: string): Promise<ShipmentDTO | null> {
  * Pedido). Nunca cria InventoryMovement, nunca toca a Reserva. No maximo
  * uma DRAFT por Pedido (garantido tambem por indice parcial no banco).
  */
-export async function createShipmentDraft(customerOrderId: string): Promise<ShipmentDTO> {
+export async function createShipmentDraft(
+  customerOrderId: string,
+  actor?: { id: string; name: string },
+): Promise<ShipmentDTO> {
   const prisma = getPrisma();
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, SHIPMENT_CODE_PREFIX);
 
@@ -440,7 +443,7 @@ export async function createShipmentDraft(customerOrderId: string): Promise<Ship
     if (linesToCreate.length === 0) throw new NothingToShipError();
 
     const shipment = await tx.shipment.create({
-      data: { code, customerOrderId, status: "DRAFT", createdBy: SYSTEM_ACTOR },
+      data: { code, customerOrderId, status: "DRAFT", createdBy: actor?.name ?? SYSTEM_ACTOR },
     });
     await tx.shipmentLine.createMany({
       data: linesToCreate.map((line, index) => ({
@@ -565,6 +568,7 @@ export async function verifyShipmentLine(
   shipmentId: string,
   shipmentLineId: string,
   rawLotCode: string,
+  actor?: { id: string; name: string },
 ): Promise<ShipmentDTO> {
   const prisma = getPrisma();
 
@@ -632,7 +636,7 @@ export async function verifyShipmentLine(
     // Só auditoria: nenhum InventoryMovement é criado aqui.
     await tx.shipmentLine.update({
       where: { id: line.id },
-      data: { verifiedAt: new Date(), verifiedBy: SYSTEM_ACTOR },
+      data: { verifiedAt: new Date(), verifiedBy: actor?.name ?? SYSTEM_ACTOR },
     });
   });
 
@@ -648,7 +652,10 @@ export async function verifyShipmentLine(
  * Rollback completo em qualquer falha — nunca expedicao parcial dentro do
  * mesmo submit.
  */
-export async function confirmShipment(id: string): Promise<ShipmentDTO> {
+export async function confirmShipment(
+  id: string,
+  actor?: { id: string; name: string },
+): Promise<ShipmentDTO> {
   await getPrisma().$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM shipments WHERE id = ${id} FOR UPDATE`;
 
@@ -781,7 +788,7 @@ export async function confirmShipment(id: string): Promise<ShipmentDTO> {
           sourceType: "SHIPMENT",
           sourceId: shipment.id,
           shipmentLineId: line.id,
-          createdBy: SYSTEM_ACTOR,
+          createdBy: actor?.name ?? SYSTEM_ACTOR,
         },
       });
     }
@@ -792,7 +799,7 @@ export async function confirmShipment(id: string): Promise<ShipmentDTO> {
         status: "CONFIRMED",
         shipmentDate,
         confirmedAt: shipmentDate,
-        confirmedBy: SYSTEM_ACTOR,
+        confirmedBy: actor?.name ?? SYSTEM_ACTOR,
       },
     });
 
@@ -822,7 +829,7 @@ export async function confirmShipment(id: string): Promise<ShipmentDTO> {
         data: {
           status: "RELEASED",
           releasedAt: shipmentDate,
-          releasedBy: SYSTEM_ACTOR,
+          releasedBy: actor?.name ?? SYSTEM_ACTOR,
           releaseReason: ORDER_SHIPPED_RELEASE_REASON,
         },
       });
@@ -833,7 +840,11 @@ export async function confirmShipment(id: string): Promise<ShipmentDTO> {
 }
 
 /** DRAFT -> CANCELLED. Nunca altera On Hand/Reserved/Pedido — DRAFT nunca foi realidade fisica. */
-export async function cancelShipment(id: string, reason: string): Promise<ShipmentDTO> {
+export async function cancelShipment(
+  id: string,
+  reason: string,
+  actor?: { id: string; name: string },
+): Promise<ShipmentDTO> {
   await getPrisma().$transaction(async (tx) => {
     const shipment = await tx.shipment.findUnique({ where: { id } });
     if (!shipment) throw new ShipmentNotFoundError(id);
@@ -848,7 +859,7 @@ export async function cancelShipment(id: string, reason: string): Promise<Shipme
       data: {
         status: "CANCELLED",
         cancelledAt: new Date(),
-        cancelledBy: SYSTEM_ACTOR,
+        cancelledBy: actor?.name ?? SYSTEM_ACTOR,
         cancelReason: reason,
       },
     });

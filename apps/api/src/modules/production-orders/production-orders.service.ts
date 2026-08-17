@@ -629,6 +629,7 @@ export async function getProductionOrderById(id: string): Promise<ProductionOrde
 
 export async function createProductionOrder(
   input: CreateProductionOrderInput,
+  actor?: { id: string; name: string },
 ): Promise<ProductionOrderDTO> {
   const product = await assertActiveProductWithFinishedItem(input.productId);
   const formulationVersion = await resolveFormulationVersion(product.id, input.formulationVersionId);
@@ -653,7 +654,7 @@ export async function createProductionOrder(
           ? { labelInstructions: input.labelInstructions }
           : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
-        createdBy: SYSTEM_ACTOR,
+        createdBy: actor?.name ?? SYSTEM_ACTOR,
       },
     });
 
@@ -681,6 +682,8 @@ export async function createDraftProductionOrderInTx(
     plannedQuantity: Prisma.Decimal;
     customerOrderId: string;
     customerOrderLineId: string;
+    /** Quem aplicou o plano de atendimento — a OP não nasce de ninguém. */
+    createdBy?: string;
   },
 ): Promise<string> {
   const product = await tx.product.findUniqueOrThrow({ where: { id: params.productId } });
@@ -697,7 +700,7 @@ export async function createDraftProductionOrderInTx(
       customerOrderId: params.customerOrderId,
       customerOrderLineId: params.customerOrderLineId,
       ...(customerId ? { customerId } : {}),
-      createdBy: SYSTEM_ACTOR,
+      createdBy: params.createdBy ?? SYSTEM_ACTOR,
     },
   });
   await regenerateRequirements(tx, created.id, params.formulationVersionId, params.plannedQuantity);
@@ -790,7 +793,10 @@ export async function updateProductionOrder(
   return (await getProductionOrderById(id))!;
 }
 
-export async function planProductionOrder(id: string): Promise<ProductionOrderDTO> {
+export async function planProductionOrder(
+  id: string,
+  actor?: { id: string; name: string },
+): Promise<ProductionOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
     const lockedRows = await tx.$queryRaw<{ status: string }[]>`
       SELECT status FROM production_orders WHERE id = ${id} FOR UPDATE
@@ -856,7 +862,7 @@ export async function planProductionOrder(id: string): Promise<ProductionOrderDT
       data: {
         status: "PLANNED",
         plannedAt: new Date(),
-        plannedBy: SYSTEM_ACTOR,
+        plannedBy: actor?.name ?? SYSTEM_ACTOR,
         productCode: order.product.code,
         productName: order.product.name,
         finishedItemId: order.product.finishedProductItem!.id,
@@ -1017,7 +1023,7 @@ export async function releaseProductionOrder(
       : null;
 
     const reservation = await tx.materialReservation.create({
-      data: { productionOrderId: id, status: "ACTIVE", createdBy: SYSTEM_ACTOR },
+      data: { productionOrderId: id, status: "ACTIVE", createdBy: actor?.name ?? SYSTEM_ACTOR },
     });
     await tx.materialReservationLine.createMany({
       data: linesToCreate.map((line) => ({

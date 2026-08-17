@@ -88,7 +88,7 @@ export const lotsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.send(await blockLot(id, parsed.data.reason));
+      return reply.send(await blockLot(id, parsed.data.reason, requireCurrentUser(request).name));
     } catch (error) {
       if (error instanceof LotNotFoundError) {
         return reply.status(404).send({ error: "not_found" });

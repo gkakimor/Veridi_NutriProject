@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState , useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { RecipeSheetDTO, RecipeSheetPartDTO } from "@veridi/shared";
 import {
@@ -39,6 +39,20 @@ export function RecipeSheetPage() {
   const [sheet, setSheet] = useState<RecipeSheetDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const alertRef = useRef<HTMLParagraphElement>(null);
+
+  /**
+   * A recusa vem do backend com texto de negócio ("restam 0"), mas o alerta
+   * fica no topo da folha: com a página rolada na parte que está sendo
+   * pesada, a ação parecia não ter efeito. Traz o alerta para a vista.
+   */
+  function reportError(err: unknown, fallback: string) {
+    setError(err instanceof Error ? err.message : fallback);
+    requestAnimationFrame(() => {
+      alertRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      alertRef.current?.focus();
+    });
+  }
   const [activePart, setActivePart] = useState(1);
 
   const [requirementId, setRequirementId] = useState("");
@@ -78,7 +92,7 @@ export function RecipeSheetPage() {
       setActualQuantity("");
       setNotes("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao registrar pesagem");
+      reportError(err, "Falha ao registrar pesagem");
     } finally {
       setSaving(false);
     }
@@ -91,7 +105,7 @@ export function RecipeSheetPage() {
     try {
       setSheet(await completePart(id, activePart));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao concluir a parte");
+      reportError(err, "Falha ao concluir a parte");
     } finally {
       setSaving(false);
     }
@@ -152,7 +166,11 @@ export function RecipeSheetPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && (
+          <p className="form-alert" ref={alertRef} tabIndex={-1} role="alert">
+            {error}
+          </p>
+        )}
 
         <FormSection title="Ordem de Produção">
           <dl className="definition-list">

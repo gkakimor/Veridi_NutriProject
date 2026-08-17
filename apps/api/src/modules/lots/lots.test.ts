@@ -47,6 +47,7 @@ beforeAll(async () => {
       itemId,
       supplierId,
       supplierLot: `SUP-${marker}-A`,
+      businessLotNumber: `COM${marker}A`,
       initialReceivedQuantity: "10",
       status: "AVAILABLE",
     },
@@ -108,6 +109,27 @@ describe("Lots", () => {
       url: `/lots?search=MP-LOT-${marker}`,
     });
     expect(byItemCode.json().lots.length).toBeGreaterThanOrEqual(2);
+
+    await app.close();
+  });
+
+  it("acha o lote pelo número comercial impresso na etiqueta", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    // A operação lê o lote comercial no rótulo; procurar por ele não pode
+    // devolver "nenhum lote encontrado".
+    const byBusinessLot = await app.inject({ method: "GET", url: `/lots?search=COM${marker}A` });
+    expect(byBusinessLot.statusCode).toBe(200);
+    expect(
+      byBusinessLot.json().lots.some((l: { code: string }) => l.code === `LT-TESTE-${marker}-A`),
+    ).toBe(true);
+
+    // O escaneamento/busca direta também resolve, sem trocar a identidade
+    // interna do lote.
+    const lookup = await app.inject({ method: "GET", url: `/lots/lookup?code=COM${marker}A` });
+    expect(lookup.statusCode).toBe(200);
+    expect(lookup.json().code).toBe(`LT-TESTE-${marker}-A`);
 
     await app.close();
   });

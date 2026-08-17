@@ -39,6 +39,7 @@ const PRODUCTION_COMPLETED_RELEASE_REASON = "PRODUCTION_COMPLETED";
 export async function registerProductionOutput(
   productionOrderId: string,
   input: RegisterProductionOutputSchema,
+  actor?: { id: string; name: string },
 ): Promise<ProductionOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
     // Trava a OP inteira — serializa apontamentos concorrentes (dois
@@ -107,7 +108,7 @@ export async function registerProductionOutput(
               ? "AWAITING_RELEASE"
               : "AVAILABLE",
           location,
-          createdBy: SYSTEM_ACTOR,
+          createdBy: actor?.name ?? SYSTEM_ACTOR,
         },
       });
       lotId = lot.id;
@@ -135,7 +136,7 @@ export async function registerProductionOutput(
         lotId,
         quantity,
         producedAt,
-        producedBy: SYSTEM_ACTOR,
+        producedBy: actor?.name ?? SYSTEM_ACTOR,
         notes: input.notes?.trim() || null,
       },
     });
@@ -150,7 +151,7 @@ export async function registerProductionOutput(
         sourceType: "FINISHED_GOOD_PRODUCTION",
         sourceId: order.id,
         productionOutputId: output.id,
-        createdBy: SYSTEM_ACTOR,
+        createdBy: actor?.name ?? SYSTEM_ACTOR,
       },
     });
   });
@@ -169,6 +170,7 @@ export async function registerProductionOutput(
 export async function completeProductionOrder(
   productionOrderId: string,
   input: CompleteProductionOrderSchema,
+  actor?: { id: string; name: string },
 ): Promise<ProductionOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM production_orders WHERE id = ${productionOrderId} FOR UPDATE`;
@@ -201,7 +203,7 @@ export async function completeProductionOrder(
       data: {
         status: "RELEASED",
         releasedAt: new Date(),
-        releasedBy: SYSTEM_ACTOR,
+        releasedBy: actor?.name ?? SYSTEM_ACTOR,
         releaseReason: PRODUCTION_COMPLETED_RELEASE_REASON,
       },
     });
@@ -211,7 +213,7 @@ export async function completeProductionOrder(
       data: {
         status: "COMPLETED",
         completedAt: new Date(),
-        completedBy: SYSTEM_ACTOR,
+        completedBy: actor?.name ?? SYSTEM_ACTOR,
         completionReason: variance.greaterThan(0) ? completionReason : null,
       },
     });

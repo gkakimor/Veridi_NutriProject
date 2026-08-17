@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState , useRef } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import type { PurchaseOrderDTO, PurchaseOrderStatus, SupplierItemDTO } from "@veridi/shared";
 import { PURCHASE_ORDER_STATUS_LABELS, SUPPLIER_ITEM_QUALIFICATION_LABELS } from "@veridi/shared";
 import {
@@ -107,6 +108,16 @@ export function PurchaseOrderPage() {
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineRow[]>([]);
+
+  /**
+   * Falta de material manda o item e a quantidade que falta pela URL. Sem
+   * isso o atalho "Ir para compras" deixava a pessoa reconstruir de memória o
+   * que o sistema acabou de calcular. Só pré-preenche a linha — fornecedor,
+   * preço e decisão de comprar continuam com quem usa.
+   */
+  const [searchParams] = useSearchParams();
+  const shortageItemId = searchParams.get("itemId") ?? "";
+  const shortageQuantity = searchParams.get("quantidade") ?? "";
 
   const [activeSuppliers, setActiveSuppliers] = useState<SupplierOption[]>([]);
   const [activeItems, setActiveItems] = useState<ItemOption[]>([]);
@@ -217,6 +228,27 @@ export function PurchaseOrderPage() {
     }
     return base;
   }
+
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!isNew || prefilled.current || !shortageItemId) return;
+    const item = activeItems.find((option) => option.id === shortageItemId);
+    if (!item) return;
+    prefilled.current = true;
+    setLines([
+      {
+        key: nextRowKey(),
+        itemId: item.id,
+        itemCode: item.code,
+        itemName: item.name,
+        unitCode: item.unitCode,
+        orderedQuantity: shortageQuantity,
+        unitPrice: "",
+        receivedQuantity: "0",
+        openQuantity: "0",
+      },
+    ]);
+  }, [isNew, shortageItemId, shortageQuantity, activeItems]);
 
   function handleAddLine() {
     setLines((prev) => [
@@ -483,19 +515,18 @@ export function PurchaseOrderPage() {
               Fornecedor <span className="req">*</span>
             </label>
             {isDraftEditable ? (
-              <select
+              <SearchableEntitySelect
                 id="po-supplier"
                 value={supplierId}
-                onChange={(event) => setSupplierId(event.target.value)}
-              >
-                <option value="">Selecione…</option>
-                {supplierOptions.map((supplier) => (
-                  <option key={supplier.id} value={supplier.id}>
-                    {supplier.code} — {supplier.tradeName ?? supplier.legalName}
-                    {!supplier.active ? " (inativo)" : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={setSupplierId}
+                placeholder="Digite código ou nome do fornecedor…"
+                options={supplierOptions.map((supplier) => ({
+                  id: supplier.id,
+                  code: supplier.code,
+                  name: supplier.tradeName ?? supplier.legalName,
+                  ...(supplier.active ? {} : { hint: "inativo" }),
+                }))}
+              />
             ) : (
               <p className="field-readonly-value">
                 {purchaseOrder?.supplierCode} — {purchaseOrder?.supplierName}

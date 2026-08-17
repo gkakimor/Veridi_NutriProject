@@ -871,7 +871,37 @@ export function ProductionOrderPage() {
                           Number(requirement.shortage) > 0 && (
                             <>
                               <br />
+                              {/* Material do cliente não se compra: o CTA de
+                                  compra aqui seria conselho errado. */}
                               <span className="field__hint">Aguardando material do cliente</span>
+                            </>
+                          )}
+                        {requirement.supplyResponsibility !== "CUSTOMER" &&
+                          Number(requirement.shortage) > 0 && (
+                            <>
+                              <br />
+                              {/* A tela mostra o que falta; sem este caminho o
+                                  usuário tinha que reconstruir de memória onde
+                                  fica a sugestão de compra. Só navega — quem
+                                  decide comprar continua sendo a pessoa. */}
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--sm"
+                                onClick={() =>
+                                  navigate(
+                                    productionOrder.customerOrderId
+                                      ? `/comercial/pedidos/${productionOrder.customerOrderId}`
+                                      : // Leva o item e o que falta: o atalho tem
+                                        // que chegar com o contexto que a tela
+                                        // acabou de calcular.
+                                        `/compras/ordens/nova?itemId=${requirement.itemId}&quantidade=${requirement.shortage}`,
+                                  )
+                                }
+                              >
+                                {productionOrder.customerOrderId
+                                  ? "Ver sugestão de compra"
+                                  : "Ir para compras"}
+                              </button>
                             </>
                           )}
                       </td>
@@ -984,6 +1014,16 @@ export function ProductionOrderPage() {
                           >
                             {line.pickingStatus === "CONFIRMED" ? "Conferido" : "Pendente"}
                           </span>
+                          {/* Conferência é registro de rastreabilidade: quem
+                              conferiu e quando aparecem junto do status. */}
+                          {line.pickingStatus === "CONFIRMED" && line.pickedBy && (
+                            <div className="field__hint">
+                              {line.pickedBy}
+                              {line.pickedAt
+                                ? ` · ${new Date(line.pickedAt).toLocaleString("pt-BR")}`
+                                : ""}
+                            </div>
+                          )}
                         </td>
                         <td>
                           {line.pickingStatus !== "CONFIRMED" &&

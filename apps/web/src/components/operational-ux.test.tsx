@@ -6,6 +6,7 @@ import type { AttentionItemDTO } from "@veridi/shared";
 import { ATTENTION_LIST_PATH } from "@veridi/shared";
 import { FlowContext } from "./FlowContext";
 import { RowActions } from "./RowActions";
+import { SearchableEntitySelect } from "./SearchableEntitySelect";
 import { clearStoredFilters, usePersistentFilter } from "../lib/stored-filters";
 
 /**
@@ -38,6 +39,36 @@ describe("Ações de linha", () => {
     expect(inactivate).toHaveBeenCalledTimes(1);
   });
 
+  it("abre com Enter, fecha com Escape e devolve o foco ao gatilho", () => {
+    // O menu vive dentro de uma linha de tabela que também trata Enter; a
+    // correção não pode engolir o Escape junto.
+    const rowEnter = vi.fn();
+    render(
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+      <table>
+        <tbody>
+          <tr onKeyDown={(event) => event.key === "Enter" && rowEnter()}>
+            <td>
+              <RowActions actions={[{ label: "Inativar", onSelect: vi.fn() }]} />
+            </td>
+          </tr>
+        </tbody>
+      </table>,
+    );
+
+    const toggle = screen.getByLabelText("Mais ações");
+    toggle.focus();
+    fireEvent.keyDown(toggle, { key: "Enter" });
+    fireEvent.click(toggle);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    // Enter no menu não pode acionar a linha da tabela.
+    expect(rowEnter).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+  });
+
   it("não renderiza o menu quando não há ação secundária", () => {
     render(
       <RowActions actions={[{ label: "Inativar", onSelect: vi.fn(), disabled: true }]}>
@@ -45,6 +76,52 @@ describe("Ações de linha", () => {
       </RowActions>,
     );
     expect(screen.queryByLabelText("Mais ações")).toBeNull();
+  });
+});
+
+describe("Seleção de entidade com busca", () => {
+  it("filtra por código ou nome, ignora acento e escolhe pelo teclado", async () => {
+    const options = [
+      { id: "1", code: "MP-000245", name: "Vitamina C" },
+      { id: "2", code: "MP-000801", name: "Óxido de magnésio" },
+      { id: "3", code: "ME-000110", name: "Pote 200 g" },
+    ];
+    const onChange = vi.fn();
+    render(
+      <SearchableEntitySelect id="item" options={options} value="" onChange={onChange} />,
+    );
+
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    // Sem acento: quem digita rápido não acentua.
+    fireEvent.change(input, { target: { value: "oxido" } });
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+
+    // Por código também.
+    fireEvent.change(input, { target: { value: "ME-000110" } });
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith("3");
+  });
+
+  it("fecha com Escape sem alterar a seleção", () => {
+    const onChange = vi.fn();
+    render(
+      <SearchableEntitySelect
+        id="item"
+        options={[{ id: "1", code: "MP-000245", name: "Vitamina C" }]}
+        value="1"
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 

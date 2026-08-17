@@ -62,6 +62,7 @@ export async function confirmPicking(
   productionOrderId: string,
   reservationLineId: string,
   lotCode: string | undefined,
+  actor?: { id: string; name: string },
 ): Promise<ProductionOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
     await lockOrderAndAssertReleasable(tx, productionOrderId);
@@ -95,7 +96,7 @@ export async function confirmPicking(
 
     await tx.materialReservationLine.update({
       where: { id: reservationLineId },
-      data: { pickedAt: new Date(), pickedBy: SYSTEM_ACTOR },
+      data: { pickedAt: new Date(), pickedBy: actor?.name ?? SYSTEM_ACTOR },
     });
   });
 
@@ -115,6 +116,7 @@ export async function substituteReservationLine(
   productionOrderId: string,
   reservationLineId: string,
   lotCode: string,
+  actor?: { id: string; name: string },
 ): Promise<ProductionOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
     await lockOrderAndAssertReleasable(tx, productionOrderId);
@@ -182,7 +184,7 @@ export async function substituteReservationLine(
       where: { id: line.id },
       data: {
         releasedAt: new Date(),
-        releasedBy: SYSTEM_ACTOR,
+        releasedBy: actor?.name ?? SYSTEM_ACTOR,
         releaseReason: "Substituição de lote no Picking",
       },
     });
@@ -196,7 +198,7 @@ export async function substituteReservationLine(
         quantity: line.quantity,
         replacesLineId: line.id,
         pickedAt: new Date(),
-        pickedBy: SYSTEM_ACTOR,
+        pickedBy: actor?.name ?? SYSTEM_ACTOR,
       },
     });
   });

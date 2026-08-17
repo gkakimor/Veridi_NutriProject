@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { CustomerDTO, ProductDTO } from "@veridi/shared";
@@ -27,8 +28,12 @@ export function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  // Deep link tem que filtrar de verdade: "Abrir produto" no projeto manda
+  // ?search=PROD-000123 e antes caía numa lista de 20 produtos quaisquer.
+  const [params] = useSearchParams();
+  const initialSearch = params.get("search") ?? "";
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
   const [customerFilter, setCustomerFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>("all");

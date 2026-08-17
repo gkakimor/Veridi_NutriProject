@@ -96,6 +96,10 @@ export function InventoryCountSheetPage() {
       title="Folha de contagem física de estoque"
       {...(blind ? { subtitle: "Contagem cega — saldo do sistema omitido" } : {})}
       backTo="/estoque/inventario"
+      // Com a coluna "Proprietário" a folha não cabe em retrato, e espremer as
+      // colunas de escrita à mão (contagem, diferença, observação) inviabiliza
+      // o uso no chão de fábrica.
+      landscape
       filters={[
         ...(search ? [{ label: "Busca", value: search }] : []),
         ...(itemType ? [{ label: "Tipo de item", value: itemType }] : []),
@@ -319,7 +323,10 @@ export function ProductionPickingSheetPage() {
           "Validade",
           "Localização",
           "Qtd. separar",
-          "Conferido",
+          // O papel continua com campo de conferência manual; o que o sistema
+          // já sabe aparece na coluna ao lado, sem preencher o quadrado.
+          "Conferido (papel)",
+          "Picking no sistema",
           "Observação",
         ]}
         isEmpty={reservationLines.length === 0}
@@ -345,6 +352,13 @@ export function ProductionPickingSheetPage() {
               {line.quantity} {requirement.stockUnitCode}
             </td>
             <PrintCheckCell />
+            <td>
+              {line.pickingStatus === "CONFIRMED"
+                ? `${line.pickedBy ?? "—"}${
+                    line.pickedAt ? ` · ${formatPrintDate(line.pickedAt)}` : ""
+                  }`
+                : "—"}
+            </td>
             <PrintWriteCell width="120px" />
           </tr>
         ))}

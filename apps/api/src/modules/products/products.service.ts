@@ -28,6 +28,7 @@ type ProductWithRelations = Product & {
   customer: Customer | null;
   finishedProductItem: Item | null;
   formulationVersions?: { id: string; versionNumber: number }[];
+  originProject?: { code: string } | null;
 };
 
 /**
@@ -37,6 +38,9 @@ type ProductWithRelations = Product & {
 const productInclude = {
   customer: true,
   finishedProductItem: true,
+  // O projeto que originou o produto continua sendo contexto útil depois de
+  // aprovado — é o caminho de volta para quem veio de lá.
+  originProject: { select: { code: true } },
   formulationVersions: {
     where: { status: "ACTIVE" as const },
     select: { id: true, versionNumber: true },
@@ -53,6 +57,7 @@ function toProductDTO(product: ProductWithRelations): ProductDTO {
     customerId: product.customerId,
     lifecycle: product.lifecycle,
     originProjectId: product.originProjectId,
+    originProjectCode: product.originProject?.code ?? null,
     customer: product.customer
       ? {
           id: product.customer.id,

@@ -27,6 +27,12 @@ interface ReportPrintDefinition {
   screenPath: string;
   /** Contém custo/margem: documento interno, nunca entregue ao cliente. */
   internal?: boolean;
+  /**
+   * Relatório largo demais para uma linha só. As colunas listadas aqui viram
+   * a linha principal; TODAS as outras aparecem logo abaixo, rotuladas, na
+   * mesma linha de detalhe. Nada some do papel — só deixa de disputar largura.
+   */
+  primaryColumns?: string[];
 }
 
 export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
@@ -125,12 +131,33 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Custo industrial por produto",
     csvPath: "/reports/costs/industrial-by-product/export.csv",
     screenPath: "/relatorios/custos/industrial-por-produto",
+    primaryColumns: [
+      "Produto",
+      "Nome",
+      "Cliente",
+      "Qualidade",
+      "Custo industrial total",
+      "Custo/unidade",
+      "Custo/1.000",
+    ],
   },
   "R-19": {
     code: "R-19",
     title: "Precificação por produto",
     csvPath: "/reports/costs/pricing-by-product/export.csv",
     screenPath: "/relatorios/custos/precificacao-por-produto",
+    primaryColumns: [
+      "Produto",
+      "Nome",
+      "Cliente",
+      "Quantidade",
+      "Unidade",
+      "Custo/unidade",
+      "Preço",
+      "Margem de contribuição (%)",
+      "Contribuição/unidade",
+      "Qualidade do custo",
+    ],
   },
   "R-20": {
     code: "R-20",
@@ -139,6 +166,18 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     screenPath: "/relatorios/comercial/orcamento-precificacao",
     // Contém custo e margem: nunca é o documento entregue ao cliente.
     internal: true,
+    primaryColumns: [
+      "Orçamento",
+      "Projeto",
+      "Cliente",
+      "Produto",
+      "Status",
+      "Quantidade",
+      "Unidade",
+      "Preço unitário",
+      "Total",
+      "Origem do preço",
+    ],
   },
 };
 
@@ -261,6 +300,17 @@ export function ReportPrintPage() {
   // Relatório largo vira paisagem por decisão de layout, não do usuário.
   const landscape = data.header.length > 7;
 
+  // Índices das colunas principais (na ordem declarada) e das demais, que
+  // descem para a linha de detalhe.
+  const primaryIndexes = (definition.primaryColumns ?? [])
+    .map((column) => data.header.indexOf(column))
+    .filter((index) => index >= 0);
+  const hierarchical = primaryIndexes.length > 0;
+  const detailIndexes = hierarchical
+    ? data.header.map((_, index) => index).filter((index) => !primaryIndexes.includes(index))
+    : [];
+  const columns = hierarchical ? primaryIndexes.map((index) => data.header[index]!) : data.header;
+
   return (
     <PrintSheet
       sheetCode={definition.code}
@@ -276,19 +326,43 @@ export function ReportPrintPage() {
       )}
 
       <PrintTable
-        columns={data.header}
+        columns={columns}
         isEmpty={data.rows.length === 0}
         emptyMessage="Nenhum registro para os filtros aplicados."
       >
-        {data.rows.map((cells, index) => (
-          <tr key={`${index}-${cells[0] ?? ""}`}>
-            {data.header.map((column, position) => (
-              // Valor desconhecido continua vindo como "—" do próprio
-              // read model: o papel nunca inventa zero.
-              <td key={column}>{cells[position] ?? ""}</td>
-            ))}
-          </tr>
-        ))}
+        {data.rows.map((cells, index) => {
+          const key = `${index}-${cells[0] ?? ""}`;
+          if (!hierarchical) {
+            return (
+              <tr key={key}>
+                {data.header.map((column, position) => (
+                  // Valor desconhecido continua vindo como "—" do próprio
+                  // read model: o papel nunca inventa zero.
+                  <td key={column}>{cells[position] ?? ""}</td>
+                ))}
+              </tr>
+            );
+          }
+          return [
+            <tr key={`${key}-principal`} className="print-row--primary">
+              {primaryIndexes.map((position) => (
+                <td key={data.header[position]}>{cells[position] ?? ""}</td>
+              ))}
+            </tr>,
+            <tr key={`${key}-detalhe`} className="print-row--detail">
+              <td colSpan={primaryIndexes.length}>
+                <dl className="print-detail">
+                  {detailIndexes.map((position) => (
+                    <div key={data.header[position]}>
+                      <dt>{data.header[position]}</dt>
+                      <dd>{cells[position] ?? ""}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </td>
+            </tr>,
+          ];
+        })}
       </PrintTable>
     </PrintSheet>
   );

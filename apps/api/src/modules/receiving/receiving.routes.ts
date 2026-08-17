@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import {
   createCustomerSuppliedReceipt,
   createReceipt,
@@ -117,7 +118,7 @@ export const receivingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const receipt = await createCustomerSuppliedReceipt(parsed.data);
+      const receipt = await createCustomerSuppliedReceipt(parsed.data, requireCurrentUser(request));
       return reply.status(201).send(receipt);
     } catch (error) {
       const mapped = mapDomainError(error);
@@ -136,7 +137,7 @@ export const receivingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const receipt = await createReceipt(id, parsed.data);
+      const receipt = await createReceipt(id, parsed.data, requireCurrentUser(request));
       return reply.status(201).send(receipt);
     } catch (error) {
       const mapped = mapDomainError(error);

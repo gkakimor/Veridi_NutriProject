@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import { CustomerOrderNotFoundError } from "../customer-orders/customer-orders.errors.js";
 import {
   DraftShipmentAlreadyExistsError,
@@ -152,7 +153,7 @@ export const shipmentsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/customer-orders/:id/shipments", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      return reply.status(201).send(await createShipmentDraft(id));
+      return reply.status(201).send(await createShipmentDraft(id, requireCurrentUser(request)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
@@ -188,7 +189,7 @@ export const shipmentsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.send(await verifyShipmentLine(id, lineId, parsed.data.lotCode));
+      return reply.send(await verifyShipmentLine(id, lineId, parsed.data.lotCode, requireCurrentUser(request)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
@@ -199,7 +200,7 @@ export const shipmentsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/shipments/:id/confirm", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      return reply.send(await confirmShipment(id));
+      return reply.send(await confirmShipment(id, requireCurrentUser(request)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
@@ -217,7 +218,7 @@ export const shipmentsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.send(await cancelShipment(id, parsed.data.reason));
+      return reply.send(await cancelShipment(id, parsed.data.reason, requireCurrentUser(request)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
