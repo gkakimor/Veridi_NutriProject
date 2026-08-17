@@ -1,5 +1,8 @@
 -- DropTable (fundação de bootstrap não é mais necessária: primeira migration de domínio real)
-DROP TABLE "_bootstrap_probe";
+-- `IF EXISTS` porque `_bootstrap_probe` nasceu de um `db push` na origem do
+-- projeto, não de migration versionada: em banco novo ela nunca existiu, e sem
+-- a guarda a primeira migration quebra com 42P01 (`table does not exist`).
+DROP TABLE IF EXISTS "_bootstrap_probe";
 
 -- CreateEnum
 CREATE TYPE "ItemType" AS ENUM ('RAW_MATERIAL', 'PACKAGING', 'FINISHED_PRODUCT');
