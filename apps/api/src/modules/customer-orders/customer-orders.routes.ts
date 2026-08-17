@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
 import type { ZodError } from "zod";
 import {
   cancelCustomerOrder,
@@ -38,6 +39,10 @@ function formatZodError(error: ZodError) {
 function mapDomainError(
   error: unknown,
 ): { status: number; body: { error: string; message: string } } | null {
+  if (error instanceof ProductNotOperationalError) {
+    // Produto técnico de projeto não entra em operação comercial/industrial.
+    return { status: 400, body: { error: "product_not_operational", message: error.message } };
+  }
   if (error instanceof CustomerNotFoundError) {
     return { status: 400, body: { error: "customer_not_found", message: error.message } };
   }

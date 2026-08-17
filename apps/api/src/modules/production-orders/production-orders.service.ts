@@ -28,6 +28,7 @@ import type {
 } from "@veridi/shared";
 import { PRODUCTION_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
@@ -252,6 +253,9 @@ async function assertActiveProductWithFinishedItem(id: string): Promise<ProductW
   });
   if (!product) throw new ProductNotFoundError(id);
   if (!product.active) throw new InactiveProductError(id);
+  // Amostra de desenvolvimento tem domínio próprio (capacidade 39); OP
+  // comercial exige produto aprovado.
+  assertProductOperational(product, id);
   if (!product.finishedProductItemId || !product.finishedProductItem) {
     throw new MissingFinishedItemError();
   }

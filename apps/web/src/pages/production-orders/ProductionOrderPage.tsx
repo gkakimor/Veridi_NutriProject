@@ -188,7 +188,8 @@ export function ProductionOrderPage() {
   }, [id, isNew, syncFormFromServer]);
 
   useEffect(() => {
-    listProducts({ active: true, pageSize: 100 })
+    // Produto técnico de projeto não é opção operacional.
+    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 100 })
       .then((result) => setActiveProducts(result.products))
       .catch(() => setActiveProducts([]));
   }, []);

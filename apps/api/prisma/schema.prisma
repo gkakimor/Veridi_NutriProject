@@ -617,6 +617,10 @@ model Project {
   productId String?  @unique
   product   Product? @relation(fields: [productId], references: [id])
 
+  /// Produto tecnico criado por este projeto (acao "preparar produto
+  /// tecnico"). Diferente de `product`, que tambem cobre vinculo legado.
+  originatedProduct Product? @relation("ProductOriginProject")
+
   createdAt             DateTime @default(now())
   createdByUserId       String?
   createdByUser         User?    @relation("ProjectCreatedBy", fields: [createdByUserId], references: [id])
@@ -682,6 +686,35 @@ model QuoteVersion {
   /// nunca se confundem.
   unitPrice    Decimal? @db.Decimal(14, 4)
   currencyCode String   @default("BRL")
+
+  /// Preco digitado ou vindo de uma faixa de precificacao ativa. Orcamento
+  /// manual continua legitimo: o sistema aceita excecao comercial.
+  priceSource QuotePriceSource @default(MANUAL)
+
+  pricingVersionId String?
+  pricingVersion   PricingVersion? @relation(fields: [pricingVersionId], references: [id])
+  pricingTierId    String?
+  pricingTier      PricingTier?    @relation(fields: [pricingTierId], references: [id])
+
+  /// Congelado no ENVIO: a proposta enviada guarda a cadeia economica que a
+  /// gerou. PREC nova, CALC novo ou compra nova nunca reescrevem isto.
+  pricingCodeSnapshot              String?
+  pricingVersionNumberSnapshot     Int?
+  pricingTierQuantitySnapshot      Decimal?               @db.Decimal(18, 6)
+  pricingTierUomSnapshot           String?
+  pricingSelectedUnitPriceSnapshot Decimal?               @db.Decimal(14, 6)
+  costCalculationCodeSnapshot      String?
+  costReferenceDateSnapshot        DateTime?
+  costStructureLabelSnapshot       String?
+  formulationVersionNumberSnapshot Int?
+  industrialCostPerUnitSnapshot    Decimal?               @db.Decimal(18, 6)
+  costQualitySnapshot              IndustrialCostQuality?
+  commissionPercentSnapshot        Decimal?               @db.Decimal(7, 4)
+  contributionPerUnitSnapshot      Decimal?               @db.Decimal(14, 6)
+  contributionMarginSnapshot       Decimal?               @db.Decimal(7, 4)
+  markupSnapshot                   Decimal?               @db.Decimal(12, 4)
+  /// Avisos economicos congelados (custo incompleto, contribuicao negativa).
+  pricingWarningsSnapshot          Json?
 
   commercialNotes String?
   paymentTerms    String?
@@ -1112,7 +1145,8 @@ model PricingVersion {
 
   updatedAt DateTime @updatedAt
 
-  tiers PricingTier[]
+  tiers         PricingTier[]
+  quoteVersions QuoteVersion[]
 
   @@unique([productId, versionNumber])
   @@index([productId])
@@ -1172,6 +1206,8 @@ model PricingTier {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  quoteVersions QuoteVersion[]
 
   @@unique([pricingVersionId, quantity])
   @@index([pricingVersionId])
@@ -1480,6 +1516,21 @@ enum IndustrialMaterialCostSource {
 
 /// Calcular o preco pela margem desejada, ou informar o preco e ver a
 /// margem que ele produz.
+/// Produto em DESENVOLVIMENTO existe para engenharia e custeio: formulacao,
+/// estrutura de custos, calculo e precificacao. Nao entra em pedido,
+/// producao comercial, expedicao nem faturamento — so APPROVED opera.
+enum ProductLifecycle {
+  DEVELOPMENT
+  APPROVED
+}
+
+/// De onde veio o preco do orcamento: digitado a mao ou de uma faixa de
+/// precificacao ativa (com toda a cadeia PREC -> CALC -> EC -> Formulacao).
+enum QuotePriceSource {
+  MANUAL
+  PRICING_TIER
+}
+
 enum PriceMode {
   TARGET_MARGIN
   MANUAL_PRICE
@@ -1871,6 +1922,17 @@ model Product {
   externalCode String?
   notes        String?
   active       Boolean @default(true)
+
+  /// Produto tecnico do projeto (DEVELOPMENT) x produto operacional
+  /// (APPROVED). O produto NAO muda de identidade ao ser aprovado: mesmo
+  /// codigo, mesma formulacao, mesma estrutura de custos.
+  lifecycle ProductLifecycle @default(APPROVED)
+
+  /// Projeto que criou este produto tecnico. So existe para produto nascido
+  /// da acao "preparar produto tecnico" — produto legado continua null e
+  /// nunca e afetado pelo cancelamento de um projeto.
+  originProjectId String?  @unique
+  originProject   Project? @relation("ProductOriginProject", fields: [originProjectId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

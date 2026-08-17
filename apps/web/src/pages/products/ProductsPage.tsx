@@ -9,6 +9,7 @@ import { ProductFormModal } from "./ProductFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { RowActions } from "../../components/RowActions";
 
+type LifecycleFilter = "all" | "APPROVED" | "DEVELOPMENT";
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
   | { mode: "closed" }
@@ -30,6 +31,7 @@ export function ProductsPage() {
   const [search, setSearch] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>("all");
 
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
@@ -42,7 +44,7 @@ export function ProductsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, customerFilter, activeFilter]);
+  }, [search, customerFilter, activeFilter, lifecycleFilter]);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -52,6 +54,7 @@ export function ProductsPage() {
     if (search) params.search = search;
     if (customerFilter) params.customerId = customerFilter;
     if (activeFilter !== "all") params.active = activeFilter === "active";
+    if (lifecycleFilter !== "all") params.lifecycle = lifecycleFilter;
 
     listProducts(params)
       .then((result) => {
@@ -62,7 +65,7 @@ export function ProductsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar produtos");
       })
       .finally(() => setLoading(false));
-  }, [page, search, customerFilter, activeFilter]);
+  }, [page, search, customerFilter, activeFilter, lifecycleFilter]);
 
   useEffect(() => {
     reload();
@@ -154,6 +157,19 @@ export function ProductsPage() {
           <option value="active">Ativos</option>
           <option value="inactive">Inativos</option>
         </select>
+
+        <label className="sr-only" htmlFor="products-lifecycle-filter">
+          Filtrar por ciclo de vida
+        </label>
+        <select
+          id="products-lifecycle-filter"
+          value={lifecycleFilter}
+          onChange={(event) => setLifecycleFilter(event.target.value as LifecycleFilter)}
+        >
+          <option value="all">Aprovados e em desenvolvimento</option>
+          <option value="APPROVED">Aprovados</option>
+          <option value="DEVELOPMENT">Em desenvolvimento</option>
+        </select>
       </div>
 
       {error && <p className="form-alert">{error}</p>}
@@ -187,7 +203,13 @@ export function ProductsPage() {
                 }}
               >
                 <td className="is-code">{product.code}</td>
-                <td>{product.name}</td>
+                <td>
+                  {product.name}
+                  {/* Produto técnico de projeto: existe para custo, não para venda. */}
+                  {product.lifecycle === "DEVELOPMENT" && (
+                    <span className="badge badge--warn"> Em desenvolvimento</span>
+                  )}
+                </td>
                 <td>
                   {product.customer
                     ? product.customer.tradeName ?? product.customer.legalName

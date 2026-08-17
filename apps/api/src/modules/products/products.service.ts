@@ -51,6 +51,8 @@ function toProductDTO(product: ProductWithRelations): ProductDTO {
     code: product.code,
     name: product.name,
     customerId: product.customerId,
+    lifecycle: product.lifecycle,
+    originProjectId: product.originProjectId,
     customer: product.customer
       ? {
           id: product.customer.id,
@@ -149,6 +151,7 @@ export async function listProducts(
 
   if (query.active !== undefined) where["active"] = query.active;
   if (query.customerId) where["customerId"] = query.customerId;
+  if (query.lifecycle) where["lifecycle"] = query.lifecycle;
   if (query.search) {
     where["OR"] = [
       { code: { contains: query.search, mode: "insensitive" } },

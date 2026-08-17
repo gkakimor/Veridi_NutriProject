@@ -11,6 +11,7 @@ export interface ListProductsParams {
   search?: string;
   active?: boolean;
   customerId?: string;
+  lifecycle?: "DEVELOPMENT" | "APPROVED";
   page?: number;
   pageSize?: number;
 }
@@ -22,6 +23,7 @@ export async function listProducts(
   if (params.search) query.set("search", params.search);
   if (params.active !== undefined) query.set("active", String(params.active));
   if (params.customerId) query.set("customerId", params.customerId);
+  if (params.lifecycle) query.set("lifecycle", params.lifecycle);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 

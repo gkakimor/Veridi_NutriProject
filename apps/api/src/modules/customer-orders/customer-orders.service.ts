@@ -31,6 +31,7 @@ import type {
 } from "@veridi/shared";
 import { CUSTOMER_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -374,6 +375,8 @@ async function assertLineProductValid(id: string): Promise<ProductWithFinishedIt
   });
   if (!product) throw new LineProductNotFoundError(id);
   if (!product.active) throw new InactiveLineProductError(id);
+  // Produto técnico de projeto não vende: só o aprovado é operacional.
+  assertProductOperational(product, id);
   if (
     !product.finishedProductItemId ||
     !product.finishedProductItem ||
@@ -590,6 +593,7 @@ export async function confirmCustomerOrder(id: string): Promise<CustomerOrderDTO
       });
       if (!product) throw new LineProductNotFoundError(line.productId);
       if (!product.active) throw new InactiveLineProductError(line.productId);
+      assertProductOperational(product, line.productId);
       if (
         !product.finishedProductItemId ||
         !product.finishedProductItem ||

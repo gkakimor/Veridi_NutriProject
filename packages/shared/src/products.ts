@@ -78,12 +78,27 @@ export const TARGET_AGE_GROUP_LABELS: Record<TargetAgeGroup, string> = {
   OTHER: "Outro",
 };
 
+/**
+ * Produto em DESENVOLVIMENTO é entidade técnica do projeto: formulação,
+ * custo e preço sim; pedido, produção comercial, expedição e faturamento
+ * não. Aprovar não troca o produto — promove o mesmo.
+ */
+export type ProductLifecycle = "DEVELOPMENT" | "APPROVED";
+
+export const PRODUCT_LIFECYCLE_LABELS: Record<ProductLifecycle, string> = {
+  DEVELOPMENT: "Em desenvolvimento",
+  APPROVED: "Aprovado",
+};
+
 export interface ProductDTO {
   id: string;
   code: string;
   name: string;
   customerId: string | null;
   customer: ProductCustomerSummary | null;
+  lifecycle: ProductLifecycle;
+  /** Projeto que criou o produto técnico; `null` em produto legado. */
+  originProjectId: string | null;
   finishedProductItemId: string | null;
   finishedProductItem: ProductFinishedItemSummary | null;
   /** Perfil industrial (capacidade 33) — cadastro, sem efeito em cálculo. */
