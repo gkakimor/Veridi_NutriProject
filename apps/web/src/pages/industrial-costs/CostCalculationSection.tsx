@@ -13,6 +13,7 @@ import {
   listProductCostCalculations,
   saveIndustrialCostCalculation,
 } from "../../lib/cost-calculation-api";
+import { createPricingVersion } from "../../lib/pricing-api";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -169,6 +170,7 @@ export function CostCalculationSection({
                 <th>Qualidade</th>
                 <th>Custo total</th>
                 <th>Custo/unidade</th>
+                {canSave && <th aria-hidden="true" />}
               </tr>
             </thead>
             <tbody>
@@ -192,11 +194,31 @@ export function CostCalculationSection({
                       : formatBRL(row.totalIndustrialCost)}
                   </td>
                   <td>{formatUnitCost(row.costPerUnit)}</td>
+                  {canSave && (
+                    <td onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(async () => {
+                            // Precificação formal nasce de um cálculo salvo.
+                            const pricing = await createPricingVersion(productId, {
+                              industrialCostCalculationId: row.id,
+                            });
+                            navigate(`/gestao/precificacao/${pricing.id}`);
+                          })
+                        }
+                      >
+                        Criar precificação
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {history.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="table__empty">
+                  <td colSpan={canSave ? 8 : 7} className="table__empty">
                     Nenhum cálculo salvo para este produto.
                   </td>
                 </tr>

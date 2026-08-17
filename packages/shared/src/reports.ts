@@ -13,6 +13,7 @@
 
 import type { CostQuality, CostSource } from "./costs.js";
 import type { IndustrialCostQuality } from "./industrial-cost-calculation.js";
+import type { PriceMode } from "./pricing.js";
 import type { BillingStatus, CustomerOrderBillingStatus } from "./billings.js";
 import type { CustomerOrderStatus } from "./customer-orders.js";
 import type { InventoryMovementSourceType, InventoryMovementType } from "./inventory.js";
@@ -525,4 +526,33 @@ export interface IndustrialCostByProductRowDTO {
   knownSubtotal: string | null;
   costPerUnit: string | null;
   costPer1000: string | null;
+}
+
+/* ─────────────── R-19 Precificação por Produto ─────────────── */
+
+/**
+ * Uma linha por FAIXA de uma precificação ATIVA. Nada é recalculado: o
+ * relatório lê os snapshots congelados na ativação, que são o preço que a
+ * empresa realmente pratica.
+ */
+export interface PricingByProductRowDTO {
+  pricingVersionId: string;
+  pricingLabel: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  customerName: string | null;
+  calculationCode: string;
+  costReferenceDate: string;
+  costQuality: IndustrialCostQuality;
+  quantity: string;
+  uomCode: string;
+  priceMode: PriceMode;
+  costPerUnit: string | null;
+  commissionPercent: string;
+  unitPrice: string | null;
+  contributionMarginPercent: string | null;
+  markupPercent: string | null;
+  contributionPerUnit: string | null;
+  activatedAt: string | null;
 }

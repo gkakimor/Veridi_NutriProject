@@ -11,6 +11,7 @@ import type {
   MovementReportRowDTO,
   OnOrderRowDTO,
   IndustrialCostByProductRowDTO,
+  PricingByProductRowDTO,
   OrderDeliveredBilledRowDTO,
   OrderOperationDTO,
   PlannedActualRowDTO,
@@ -90,3 +91,5 @@ export const getOrderDeliveredBilledReport = (filters: ReportFilters) =>
   fetchReport<ReportPageDTO<OrderDeliveredBilledRowDTO>>("billing/order-delivered-billed", filters);
 export const getIndustrialCostByProductReport = (filters: ReportFilters) =>
   fetchReport<ReportPageDTO<IndustrialCostByProductRowDTO>>("costs/industrial-by-product", filters);
+export const getPricingByProductReport = (filters: ReportFilters) =>
+  fetchReport<ReportPageDTO<PricingByProductRowDTO>>("costs/pricing-by-product", filters);

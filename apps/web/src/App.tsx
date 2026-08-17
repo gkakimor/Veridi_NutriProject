@@ -27,7 +27,13 @@ import { ReportPrintPage } from "./pages/print/ReportPrintPage";
 import { IndustrialCostPrintPage } from "./pages/print/IndustrialCostPrintPage";
 import { IndustrialCostPage } from "./pages/industrial-costs/IndustrialCostPage";
 import { CostCalculationPage } from "./pages/industrial-costs/CostCalculationPage";
-import { IndustrialCostByProductReportPage } from "./pages/reports/CostReports";
+import { PricingListPage } from "./pages/pricing/PricingListPage";
+import { PricingPage } from "./pages/pricing/PricingPage";
+import { PricingPrintPage } from "./pages/print/PricingPrintPage";
+import {
+  IndustrialCostByProductReportPage,
+  PricingByProductReportPage,
+} from "./pages/reports/CostReports";
 import { CostCalculationPrintPage } from "./pages/print/CostCalculationPrintPage";
 import { ProductionCostPrintPage } from "./pages/print/ProductionCostPrintPage";
 import { IndustrialResourceDetailPage } from "./pages/industrial-resources/IndustrialResourceDetailPage";
@@ -137,6 +143,7 @@ function AuthenticatedApp() {
         <Route path="/print/estrutura-custos/:id" element={<IndustrialCostPrintPage />} />
         <Route path="/print/calculo-custo/:id" element={<CostCalculationPrintPage />} />
         <Route path="/print/custo-producao/:id" element={<ProductionCostPrintPage />} />
+        <Route path="/print/precificacao/:id" element={<PricingPrintPage />} />
         <Route path="/print/contagem-fisica" element={<InventoryCountSheetPage />} />
         <Route path="/print/posicao-estoque" element={<InventoryPositionSheetPage />} />
         <Route path="/print/qualidade-pendencias" element={<QualityPendingSheetPage />} />
@@ -224,10 +231,16 @@ function AuthenticatedApp() {
             path="/gestao/recursos-industriais/:id"
             element={<IndustrialResourceDetailPage />}
           />
+          <Route path="/gestao/precificacao" element={<PricingListPage />} />
+          <Route path="/gestao/precificacao/:pricingId" element={<PricingPage />} />
           <Route path="/relatorios" element={<ReportsHubPage />} />
           <Route
             path="/relatorios/custos/industrial-por-produto"
             element={<IndustrialCostByProductReportPage />}
+          />
+          <Route
+            path="/relatorios/custos/precificacao-por-produto"
+            element={<PricingByProductReportPage />}
           />
           <Route path="/relatorios/estoque/posicao" element={<InventoryPositionReportPage />} />
           <Route path="/relatorios/estoque/vencimentos" element={<ExpiryReportPage />} />

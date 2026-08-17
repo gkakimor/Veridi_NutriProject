@@ -3,6 +3,7 @@ import { CORPUS_DIR, corpusAvailable, readCorpusCsv, cleanText } from "../veridi
 import { assertImportEnvironment } from "./environment.js";
 import { analyzeCmv } from "./cmv-analysis.js";
 import { reconcileCmv } from "./cmv-reconciliation.js";
+import { analyzePricingCorpus, ensureProductOverrideTemplate } from "./pricing-analysis.js";
 import { readOverrides } from "./overrides.js";
 import { runPipeline } from "./pipeline.js";
 import { writeFindingsArtifacts } from "./report.js";
@@ -130,10 +131,38 @@ async function main(): Promise<void> {
       );
     }
 
+    // Capacidade 46 — precificacao historica: descricao, nunca importacao.
+    const overrides = ensureProductOverrideTemplate();
+    const pricingCorpus = analyzePricingCorpus(result.findings, {
+      resolved: reconciliation.productsComparable,
+      unresolved: reconciliation.products - reconciliation.productsComparable,
+    });
+    console.log("\nPRECIFICACAO HISTORICA (somente leitura)");
+    console.log(
+      `  linhas ${pricingCorpus.rows} em ${pricingCorpus.files} produtos - com quantidade ${pricingCorpus.withQuantity} - com preco ${pricingCorpus.withPrice} - com margem ${pricingCorpus.withMargin} - com comissao ${pricingCorpus.withCommission}`,
+    );
+    console.log(
+      `  faixas por produto: ${pricingCorpus.filesWithThreeBands} produtos com 3 faixas - quantidades duplicadas ${pricingCorpus.duplicateQuantities} - valores ilegiveis ${pricingCorpus.invalidDecimals}`,
+    );
+    console.log(
+      `  preco cai com a quantidade em ${pricingCorpus.priceDecreasingFiles} produtos - nao monotonico em ${pricingCorpus.priceNonMonotonicFiles}`,
+    );
+    console.log(
+      `  comissao constante em ${pricingCorpus.constantCommissionFiles} produtos - variavel em ${pricingCorpus.varyingCommissionFiles}`,
+    );
+    console.log(
+      `  produtos resolvidos ${pricingCorpus.resolvedProducts} - nao resolvidos ${pricingCorpus.unresolvedProducts} (mapeamento manual em ${overrides.path}, ${overrides.mapped} mapeados)`,
+    );
+    console.log(
+      "  margem historica nao e verificavel: o custo unitario exportado nao e confiavel.",
+    );
+
     console.log(
       "\n  nada de CMV e persistido: nenhum recurso industrial e criado a partir de texto legado,",
     );
-    console.log("  e nenhum preco historico vira custo de material atual.");
+    console.log(
+      "  e nenhum preco historico vira custo de material atual nem precificacao ativa.",
+    );
 
     result.findings.print(2);
     console.log(`\n  Findings detalhados em ${OUT_DIR}`);

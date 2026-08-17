@@ -211,6 +211,13 @@ export const industrialCostByProductQuerySchema = z.object({
   ...paginationFields,
 });
 
+export const pricingByProductQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  customerId: z.string().trim().min(1).optional(),
+  ...paginationFields,
+});
+
+export type PricingByProductQuery = z.infer<typeof pricingByProductQuerySchema>;
 export type IndustrialCostByProductQuery = z.infer<typeof industrialCostByProductQuerySchema>;
 export type CustomerOrdersQuery = z.infer<typeof customerOrdersQuerySchema>;
 export type FulfillmentQuery = z.infer<typeof fulfillmentQuerySchema>;

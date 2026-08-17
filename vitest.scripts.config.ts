@@ -21,6 +21,11 @@ export default defineConfig(({ mode }) => ({
   test: {
     env: loadEnv(mode, ".", ""),
     include: ["scripts/**/*.test.ts"],
+    // Cada teste roda o pipeline INTEIRO em dry-run sobre o corpus real e o
+    // banco de desenvolvimento: são dezenas de milhares de linhas, e o
+    // tempo cresce junto com a base. O padrão de 5s não descreve esse
+    // trabalho — o timeout aqui é de infraestrutura, não de regra.
+    testTimeout: 60_000,
     maxWorkers: 2,
     minWorkers: 1,
   },

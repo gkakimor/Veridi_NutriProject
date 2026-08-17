@@ -12,6 +12,7 @@ import { supplierItemsRoutes } from "./modules/supplier-items/supplier-items.rou
 import { industrialCostsRoutes } from "./modules/industrial-costs/industrial-costs.routes.js";
 import { industrialResourcesRoutes } from "./modules/industrial-resources/industrial-resources.routes.js";
 import { industrialCostCalculationRoutes } from "./modules/industrial-cost-calculation/calculation.routes.js";
+import { pricingRoutes } from "./modules/pricing/pricing.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
 import { controlledDocumentsRoutes } from "./modules/controlled-documents/controlled-documents.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
@@ -81,6 +82,7 @@ export function buildApp() {
   app.register(industrialCostsRoutes);
   app.register(industrialResourcesRoutes);
   app.register(industrialCostCalculationRoutes);
+  app.register(pricingRoutes);
   app.register(itemsRoutes);
   app.register(unitsRoutes);
   app.register(suppliersRoutes);

@@ -545,6 +545,63 @@ buttons.
   spreadsheet is reported (`CMV_MATERIAL_DIVERGENCE`), never fixed by
   adjusting a formula or a price.
 
+# 5.9 Pricing, margin and quantity tiers (capability 46)
+
+- A formal pricing version **starts from a saved cost calculation**
+  (`CALC-…`). That snapshot is what freezes the structure, the formulation,
+  the material references, the rates and the reference date — without it
+  nobody can say which cost a price was built on.
+- **Every tier of a version shares the same economic basis.** A purchase
+  landing in the middle of a negotiation must not make the 300-unit tier and
+  the 1000-unit tier describe different realities. A new cost context means a
+  new calculation and a new pricing version.
+- **Quantity changes the unit cost.** A fixed cost per batch does not shrink
+  below one batch, shipping boxes are whole and per-reference-batch resources
+  follow the batch count, so a tier is always recalculated for its own
+  quantity — never the CALC's unit cost multiplied by an arbitrary number.
+  This batch-aware reading is the commercial simulation; the realised
+  production cost of capability 45 keeps its proportional reading untouched.
+- Customer-supplied material stays outside the Veridi cost and does not
+  degrade the cost quality; the pricing document says it is there.
+- **Commission is a percentage of the gross sale price** — R$ 100 at 5% is
+  R$ 5. No other commission base exists in this phase.
+- **Contribution = price − commission − industrial cost.** It is *not* net
+  profit: taxes, financial expenses, default risk and commercial freight are
+  not modelled, so the words "lucro" and "margem líquida" never appear.
+- Contribution margin is contribution ÷ price and **may be negative** — a
+  price below cost is commercial information, never clamped to zero. Markup
+  is a different thing (price ÷ cost − 1) and is `null` when the cost base is
+  zero: infinite markup does not exist.
+- Target margin mode computes `P = C / (1 − margin − commission)`, which
+  requires margin + commission below 100%; anything else has no price that
+  satisfies it and is rejected.
+- **A partial cost never produces a price by margin**: the suggested price is
+  `null` and the version cannot be activated in that mode. A manual price is
+  allowed over a partial cost, but margin, markup and contribution stay
+  `null` — a margin computed over the known subtotal would look safe and
+  would not be.
+- Activating a pricing version **recalculates everything in the backend** and
+  freezes cost, price, commission, contribution and markup per tier. Numbers
+  sent by the screen are ignored, and the frontend never computes price,
+  margin or markup.
+- An **active pricing version is immutable**: new receipts, new rates, a new
+  structure or a new calculation never rewrite a negotiated price. A new
+  version copies the commercial plan (tiers, margins, commissions) but never
+  the economic snapshots.
+- A tier quantity below the product's minimum batch is a **warning, never a
+  silent correction** — the quantity the user typed is the quantity that
+  stays.
+- Prices are Decimal with enough precision and **no invented rounding rule**:
+  the system never turns 15.3846 into 15.90 on its own; a rounded price is a
+  manual decision.
+- Quotations stay manual in this capacity: pricing feeds no quote
+  automatically, and the read model of the active pricing exists for the next
+  capability to consume.
+- Legacy pricing rows remain **commercial observation only**. Because the
+  exported historical unit cost is untrustworthy, the historical margin
+  formula cannot be verified (`HISTORICAL_MARGIN_FORMULA_UNVERIFIABLE`) and
+  no pricing version is ever created from the spreadsheet.
+
 ---
 
 # 6. Purchase Orders

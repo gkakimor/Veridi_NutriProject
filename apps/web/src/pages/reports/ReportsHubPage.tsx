@@ -175,6 +175,13 @@ const GROUPS: { title: string; reports: ReportLink[] }[] = [
         hint: "Último cálculo de custo salvo por produto, com qualidade e custo por unidade.",
         path: "/relatorios/custos/industrial-por-produto",
       },
+      {
+        code: "R-19",
+        aliases: ["Preço", "Margem", "Faixas de quantidade", "Precificação"],
+        label: "Precificação por produto",
+        hint: "Faixas de preço ativas com margem de contribuição e markup.",
+        path: "/relatorios/custos/precificacao-por-produto",
+      },
     ],
   },
 ];

@@ -76,6 +76,10 @@ tarifa histórica imutável e snapshot econômico congelado na ativação.**
 concluído — custo padrão/prospectivo com data de referência, custo da
 produção realizada (materiais reais + padrão aplicado), snapshots imutáveis
 e branding oficial da Veridi.**
+**Delivery 38 — Simulador de preço / margem / faixas de quantidade (Bloco G,
+capacidade 46): concluído — precificação versionada a partir de um cálculo
+salvo, custo consciente de lote por faixa e margem de contribuição (nunca
+lucro).**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -4180,6 +4184,84 @@ da formulação intacto: 26/26/0.
 
 ---
 
+# Delivery 38 — Precificação e margem (Bloco G, capacidade 46)
+
+## Proveniência
+`PricingVersion` (`PREC-000001 · V2`) nasce SEMPRE de um `IndustrialCostCalculation`
+salvo do mesmo produto — backend valida. O CALC é que congela EC, formulação,
+referências de material, tarifas e data de referência; a versão guarda
+snapshots de conveniência (código do CALC, rótulo da EC, formulação, data,
+qualidade) mas a referência oficial continua sendo o cálculo.
+
+Um rascunho por produto (índice parcial), uma ativa por produto, sequencial
+`versionNumber` sob lock. Nova versão copia o PLANO comercial (faixas,
+margens, comissões, modos) e não copia snapshot econômico nem auditoria.
+
+## Custo por faixa: economia consciente de lote
+`costForOutputQuantity` reaproveita o motor da 45 com um modo novo de escala.
+`batchCount = max(1, ceil(quantidade / base da EC))`:
+
+- `FIXED_PER_BATCH` / `FIXED_PER_REFERENCE_BATCH` → × batchCount (300 de uma
+  base de 1000 ainda exige um lote inteiro);
+- `PER_OUTPUT_UNIT` → × quantidade; `PER_1000_OUTPUT_UNITS` → × quantidade/1000;
+- `PER_SHIPPING_BOX` → ceil(quantidade / unidades por caixa);
+- percentual incide sobre o custo direto COMPLETO, depois dele.
+
+Preços unitários de material, tarifas de recurso, tarifa de energia e valores
+de premissa vêm CONGELADOS do CALC — nenhuma consulta nova a Receipt, Offer
+ou Rate durante a simulação. A leitura proporcional da 45 (custo da OP)
+permanece intacta: os dois modos convivem no mesmo motor, explicitamente.
+
+## Preço, margem e markup
+`TARGET_MARGIN`: `P = C / (1 − margem − comissão)`, com margem + comissão < 100%
+validado no serviço e no banco. `MANUAL_PRICE`: preço informado devolve
+contribuição, margem e markup. Comissão sempre sobre o preço BRUTO.
+Contribuição negativa é preservada; markup com custo zero é `null` com aviso —
+nunca Infinity. Custo `PARTIAL`/`NO_COST` não gera preço por margem, e preço
+manual sobre custo parcial não ganha margem falsa.
+
+## Ativação e imutabilidade
+Ativar RECALCULA tudo no backend (payload da tela é ignorado) e congela por
+faixa: custo, qualidade, lotes, margem alvo, comissão, preço sugerido,
+preço escolhido, contribuição, markup, receita e avisos. Ativa anterior vira
+inativa na mesma transação. Depois disso, compra nova, tarifa nova, EC nova
+ou CALC novo não reescrevem preço negociado. Ativar com custo incompleto ou
+sobre EC que não é mais a ativa exige confirmação explícita.
+
+## Telas e documentos
+Gestão → Precificação (lista com filtros de situação e qualidade de custo),
+página da versão com tabela comparativa das faixas, CTA "Criar precificação"
+em cada cálculo salvo, resumo da precificação ativa no cadastro do produto e
+impressão dedicada `/print/precificacao/:id` — documento INTERNO, com
+disclaimer de que não é orçamento nem documento fiscal. Escrita:
+COMMERCIAL/ADMIN. Leitura: + PURCHASING. Produção e Qualidade não acessam.
+
+## R-19
+Precificação por produto, uma linha por faixa ATIVA, lendo snapshots — nunca
+resimula. CSV e impressão pela rota genérica de relatórios.
+
+## Corpus
+`cmv_precificacao.csv`: 27 linhas em 9 produtos, todas com quantidade, preço,
+margem e comissão; 9 produtos com 3 faixas; preço cai com a quantidade nos 9;
+comissão varia entre faixas nos 9 (finding INFO). Só 1 dos 9 produtos resolve
+com confiança contra a formulação — os demais viram
+`CMV_PRODUCT_NOT_RESOLVED`, e o template local
+`.local-data/veridi/cmv-product-overrides.csv` (fora do repositório) existe
+para mapeamento manual. Como o custo unitário exportado é não confiável
+(finding da 45), a fórmula histórica de margem é declarada não verificável e
+NENHUMA precificação legada é importada.
+
+## Preparação para a 47
+`GET /products/:id/active-pricing` devolve a precificação ativa com suas
+faixas. Escolher a faixa para uma quantidade cotada é decisão da 47 —
+Orçamento continua manual aqui.
+
+- Testes: 581 API + 25 web + 14 scripts. Playwright: `handoff/screens/46-*`.
+- Goldens: formulação 26/26/0; CMV 6 comparáveis / 0 dentro da tolerância /
+  6 divergentes / 46 insuficientes (baseline da 45 preservado).
+
+---
+
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
@@ -4187,15 +4269,15 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Bloco F CONCLUÍDO (33-42); Bloco G em andamento (43-45 concluídas).
-Próximo passo do roadmap oficial: **capacidade 46 — simulador de preço,
-margem e faixas de quantidade**, que consome os cálculos `CALC` salvos na
-45. A base de
+Bloco F CONCLUÍDO (33-42); Bloco G em andamento (43-46 concluídas).
+Próximo passo do roadmap oficial: **capacidade 47 — integração Projeto →
+Orçamento → Custo/Preço**, que consome as precificações `PREC` ativas da 46.
+A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
-o que existe hoje é ferramenta de dados de desenvolvimento. Depois seguem
-46-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+o que existe hoje é ferramenta de dados de desenvolvimento. Depois segue
+47 (Bloco G). **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.

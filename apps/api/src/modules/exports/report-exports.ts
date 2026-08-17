@@ -83,11 +83,20 @@ import {
   receiptsQuerySchema,
   requirementsQuerySchema,
 } from "../reports/reports.schemas.js";
-import type { IndustrialCostByProductRowDTO } from "@veridi/shared";
-import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
-import { getIndustrialCostByProductReport } from "../reports/cost-reports.service.js";
-import type { IndustrialCostByProductQuery } from "../reports/reports.schemas.js";
-import { industrialCostByProductQuerySchema } from "../reports/reports.schemas.js";
+import type { IndustrialCostByProductRowDTO, PricingByProductRowDTO } from "@veridi/shared";
+import { INDUSTRIAL_COST_QUALITY_LABELS, PRICE_MODE_LABELS } from "@veridi/shared";
+import {
+  getIndustrialCostByProductReport,
+  getPricingByProductReport,
+} from "../reports/cost-reports.service.js";
+import type {
+  IndustrialCostByProductQuery,
+  PricingByProductQuery,
+} from "../reports/reports.schemas.js";
+import {
+  industrialCostByProductQuerySchema,
+  pricingByProductQuerySchema,
+} from "../reports/reports.schemas.js";
 import type { CsvExportRoute } from "./csv-export.js";
 import { defineCsvExport } from "./csv-export.js";
 
@@ -500,6 +509,42 @@ const r18 = defineCsvExport({
   ],
 });
 
+const r19 = defineCsvExport({
+  path: "/reports/costs/pricing-by-product/export.csv",
+  slug: "r19_precificacao_por_produto",
+  schema: pricingByProductQuerySchema,
+  fetch: async (query: PricingByProductQuery) =>
+    (await getPricingByProductReport(query, ALL_ROWS)).rows,
+  columns: [
+    { header: "Produto", value: (row: PricingByProductRowDTO) => csvCode(row.productCode) },
+    { header: "Nome", value: (row: PricingByProductRowDTO) => csvText(row.productName) },
+    { header: "Cliente", value: (row: PricingByProductRowDTO) => csvText(row.customerName) },
+    { header: "Precificação", value: (row: PricingByProductRowDTO) => csvCode(row.pricingLabel) },
+    { header: "Quantidade", value: (row: PricingByProductRowDTO) => csvDecimal(row.quantity) },
+    { header: "Unidade", value: (row: PricingByProductRowDTO) => csvText(row.uomCode) },
+    { header: "Modo de preço", value: (row: PricingByProductRowDTO) => PRICE_MODE_LABELS[row.priceMode] },
+    { header: "Cálculo de custo", value: (row: PricingByProductRowDTO) => csvCode(row.calculationCode) },
+    { header: "Data do custo", value: (row: PricingByProductRowDTO) => csvDate(row.costReferenceDate) },
+    {
+      header: "Qualidade do custo",
+      value: (row: PricingByProductRowDTO) => INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality],
+    },
+    { header: "Custo/unidade", value: (row: PricingByProductRowDTO) => csvDecimal(row.costPerUnit) },
+    { header: "Comissão (%)", value: (row: PricingByProductRowDTO) => csvDecimal(row.commissionPercent) },
+    { header: "Preço", value: (row: PricingByProductRowDTO) => csvDecimal(row.unitPrice) },
+    {
+      header: "Margem de contribuição (%)",
+      value: (row: PricingByProductRowDTO) => csvDecimal(row.contributionMarginPercent),
+    },
+    { header: "Markup (%)", value: (row: PricingByProductRowDTO) => csvDecimal(row.markupPercent) },
+    {
+      header: "Contribuição/unidade",
+      value: (row: PricingByProductRowDTO) => csvDecimal(row.contributionPerUnit),
+    },
+    { header: "Ativada em", value: (row: PricingByProductRowDTO) => csvDateTime(row.activatedAt) },
+  ],
+});
+
 export const reportCsvExports: CsvExportRoute[] = [
   r01,
   r02,
@@ -517,4 +562,5 @@ export const reportCsvExports: CsvExportRoute[] = [
   r16,
   r17,
   r18,
+  r19,
 ];

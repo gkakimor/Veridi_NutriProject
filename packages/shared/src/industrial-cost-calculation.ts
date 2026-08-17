@@ -171,6 +171,8 @@ export interface IndustrialCostCalculationDTO {
 
   energyCalculationMode: EnergyCalculationMode;
   derivedEnergyKwh: string | null;
+  /** Tarifa usada para valorizar a energia — congelada junto com o resto. */
+  energyRate: string | null;
 
   materialsSubtotalKnown: string;
   laborSubtotalKnown: string;

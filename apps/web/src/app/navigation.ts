@@ -84,6 +84,7 @@ export const navigation: NavGroup[] = [
         path: "/gestao/recursos-industriais",
         implemented: true,
       },
+      { label: "Precificação", path: "/gestao/precificacao", implemented: true },
     ],
   },
   {

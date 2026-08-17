@@ -50,6 +50,26 @@ type UsageRow = VersionForCalculation["resourceUsages"][number];
 type LineRow = VersionForCalculation["lines"][number];
 
 /**
+ * Como um custo fixo por lote se comporta fora da base de referência.
+ *
+ * `PROPORTIONAL` é a leitura da produção realizada: metade da base
+ * produzida absorveu metade daquele custo. `BATCH_AWARE` é a leitura
+ * comercial: produzir 300 de uma base de 1000 ainda exige UM lote, e o
+ * custo fixo desse lote não encolhe porque o cliente comprou menos.
+ */
+export type BatchScalingMode = "PROPORTIONAL" | "BATCH_AWARE";
+
+/** Lotes de referência necessários para uma quantidade — no mínimo um. */
+export function batchCountFor(
+  outputQuantity: Prisma.Decimal,
+  referenceOutputQuantity: Prisma.Decimal,
+): Prisma.Decimal {
+  if (referenceOutputQuantity.lessThanOrEqualTo(0)) return new Prisma.Decimal(1);
+  const batches = outputQuantity.dividedBy(referenceOutputQuantity).ceil();
+  return batches.lessThan(1) ? new Prisma.Decimal(1) : batches;
+}
+
+/**
  * Consumo de um recurso escalado para uma quantidade de saída.
  *
  * A base declara o que a fábrica planejou: por lote de referência, por
@@ -60,12 +80,16 @@ export function scaledUsageQuantity(
   usage: { usageBasis: string; usageQuantity: Prisma.Decimal },
   outputQuantity: Prisma.Decimal,
   referenceOutputQuantity: Prisma.Decimal,
+  mode: BatchScalingMode = "PROPORTIONAL",
 ): Prisma.Decimal {
   if (usage.usageBasis === "PER_OUTPUT_UNIT") return usage.usageQuantity.times(outputQuantity);
   if (usage.usageBasis === "PER_1000_OUTPUT_UNITS") {
     return usage.usageQuantity.times(outputQuantity.dividedBy(THOUSAND));
   }
-  // FIXED_PER_REFERENCE_BATCH: proporcional à fração da base produzida.
+  // FIXED_PER_REFERENCE_BATCH
+  if (mode === "BATCH_AWARE") {
+    return usage.usageQuantity.times(batchCountFor(outputQuantity, referenceOutputQuantity));
+  }
   if (referenceOutputQuantity.lessThanOrEqualTo(0)) return usage.usageQuantity;
   return usage.usageQuantity.times(outputQuantity.dividedBy(referenceOutputQuantity));
 }
@@ -115,6 +139,7 @@ export function computeManualLine(
   outputQuantity: Prisma.Decimal,
   referenceOutputQuantity: Prisma.Decimal,
   unitsPerBox: number | null,
+  mode: BatchScalingMode = "PROPORTIONAL",
 ): ManualLineComputation {
   const base: IndustrialManualCostLineDTO = {
     lineId: line.id,
@@ -136,9 +161,12 @@ export function computeManualLine(
   }
 
   if (line.calculationBasis === "FIXED_PER_BATCH") {
-    const factor = referenceOutputQuantity.greaterThan(0)
-      ? outputQuantity.dividedBy(referenceOutputQuantity)
-      : new Prisma.Decimal(1);
+    const factor =
+      mode === "BATCH_AWARE"
+        ? batchCountFor(outputQuantity, referenceOutputQuantity)
+        : referenceOutputQuantity.greaterThan(0)
+          ? outputQuantity.dividedBy(referenceOutputQuantity)
+          : new Prisma.Decimal(1);
     const amount = line.rateValue.times(factor);
     return {
       line: { ...base, subtotal: money(amount) },
@@ -207,6 +235,8 @@ export interface ResourceCostResult {
   lines: IndustrialResourceCostLineDTO[];
   laborKnown: Prisma.Decimal;
   equipmentKnown: Prisma.Decimal;
+  /** Tarifa aplicada à energia — congelada junto com o cálculo. */
+  energyRate: Prisma.Decimal | null;
   /** `null` quando a energia deveria compor o custo e não é conhecida. */
   energy: Prisma.Decimal | null;
   derivedEnergyKwh: Prisma.Decimal | null;
@@ -236,6 +266,7 @@ export async function computeResourceCosts(
   let laborKnown = new Prisma.Decimal(0);
   let equipmentKnown = new Prisma.Decimal(0);
   let energy: Prisma.Decimal | null = null;
+  let energyRate: Prisma.Decimal | null = null;
   let derivedEnergyKwh: Prisma.Decimal | null = null;
   let missing = false;
   let draftReference = false;
@@ -315,6 +346,7 @@ export async function computeResourceCosts(
           complete = false;
           continue;
         }
+        energyRate = rate;
         total = total.plus(quantity.times(rate));
       }
       if (complete) energy = total;
@@ -341,6 +373,7 @@ export async function computeResourceCosts(
       derivedEnergyKwh = derivedTotal;
       const selected = derivedEnergyRate(version, referenceDate);
       if (selected.rate) {
+        energyRate = selected.rate;
         energy = derivedTotal.times(selected.rate);
         warnings.push({
           code: "ENERGY_RATE_CURRENT_REFERENCE",
@@ -362,6 +395,7 @@ export async function computeResourceCosts(
     lines,
     laborKnown,
     equipmentKnown,
+    energyRate,
     energy,
     derivedEnergyKwh,
     missing,
@@ -633,6 +667,7 @@ export async function calculateIndustrialCost(
     derivedEnergyKwh: resourceCosts.derivedEnergyKwh
       ? resourceCosts.derivedEnergyKwh.toString()
       : null,
+    energyRate: resourceCosts.energyRate ? resourceCosts.energyRate.toString() : null,
 
     materialsSubtotalKnown: money(materialsSubtotalKnown),
     laborSubtotalKnown: money(resourceCosts.laborKnown),

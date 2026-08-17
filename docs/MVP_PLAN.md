@@ -95,7 +95,7 @@ not yet represented in the domain.
 43. Industrial cost structure ✓
 44. Resources / equipment / energy / labour ✓
 45. Full production cost ✓
-46. Price and margin simulator by range
+46. Price and margin simulator by range ✓
 47. Project → Quotation → Cost/Price integration
 
 ## Block H — Regulatory / labelling (GATE — not specified yet)
@@ -140,7 +140,8 @@ dashboard, reports and exports remain the foundation.
 → 43 Industrial cost structure ✓
 → 44 Industrial resources / equipment / energy / labour ✓
 → 45 Industrial cost calculation ✓
-→ 46-47 Block G (pricing & integration)
+→ 46 Price / margin / quantity-tier simulator ✓
+→ 47 Block G (Project → Quotation → Cost/Price integration)
 → ⛔ GATE: Block H (regulatory/labelling) needs a new domain/regulatory
    validation from Product Ownership before being specified
 → end-to-end validation / demo
