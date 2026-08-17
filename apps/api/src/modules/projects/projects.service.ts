@@ -2,6 +2,7 @@ import type { Prisma as PrismaTypes, ProjectStatus, User } from "@prisma/client"
 import type {
   ProjectDTO,
   ProjectListResponse,
+  ProjectProductDTO,
   ProjectStatusHistoryDTO,
   ProjectVocabularyResponse,
   QuoteVersionDTO,
@@ -61,11 +62,41 @@ const projectInclude = {
   product: true,
   responsibleUser: true,
   createdByUser: true,
+  // Produtos do projeto: a associação real, que pode ser mais de uma.
+  products: {
+    orderBy: { sequence: "asc" as const },
+    include: {
+      product: true,
+      samples: { orderBy: { testSequence: "desc" as const }, take: 1 },
+    },
+  },
   quoteVersions: { orderBy: { versionNumber: "asc" as const } },
   statusHistory: { orderBy: { changedAt: "asc" as const } },
 } as const;
 
 type ProjectWithRelations = PrismaTypes.ProjectGetPayload<{ include: typeof projectInclude }>;
+
+export function toProjectProductDTO(
+  link: ProjectWithRelations["products"][number],
+): ProjectProductDTO {
+  const latestSample = link.samples[0] ?? null;
+  return {
+    id: link.id,
+    projectId: link.projectId,
+    productId: link.productId,
+    productCode: link.product.code,
+    productName: link.product.name,
+    productLifecycle: link.product.lifecycle,
+    productActive: link.product.active,
+    sequence: link.sequence,
+    status: link.status,
+    costing: null,
+    latestSampleCode: latestSample ? latestSample.code : null,
+    latestSampleLabel: latestSample ? `T${latestSample.testSequence}` : null,
+    createdAt: link.createdAt.toISOString(),
+    createdByName: link.createdByNameSnapshot,
+  };
+}
 
 function toStatusHistoryDTO(
   history: ProjectWithRelations["statusHistory"][number],
@@ -119,6 +150,7 @@ export function toProjectDTO(project: ProjectWithRelations): ProjectDTO {
     productCode: project.product ? project.product.code : null,
     productName: project.product ? project.product.name : null,
     costing: null,
+    products: project.products.map(toProjectProductDTO),
     latestQuoteLabel: latest ? latest.versionLabel : null,
     latestQuoteStatus: latest ? latest.status : null,
     acceptedQuoteLabel: accepted ? accepted.versionLabel : null,
@@ -139,11 +171,19 @@ async function requireProject(id: string): Promise<ProjectWithRelations> {
 /** Detalhe do projeto com a cadeia Produto → Formulação → Custo → Preço. */
 export async function getProjectById(id: string): Promise<ProjectDTO | null> {
   const project = await getPrisma().project.findUnique({ where: { id }, include: projectInclude });
-  if (project) {
-    const dto = toProjectDTO(project);
-    return { ...dto, costing: await getProjectCostingSummary(project.productId) };
-  }
-  return project ? toProjectDTO(project) : null;
+  if (!project) return null;
+
+  const dto = toProjectDTO(project);
+  // A cadeia técnica/econômica é POR PRODUTO: com vários produtos, um
+  // "custo do projeto" seria um número que não corresponde a nada.
+  const products = await Promise.all(
+    dto.products.map(async (link) => ({
+      ...link,
+      costing: await getProjectCostingSummary(link.productId),
+    })),
+  );
+
+  return { ...dto, products, costing: await getProjectCostingSummary(project.productId) };
 }
 
 export async function listProjects(

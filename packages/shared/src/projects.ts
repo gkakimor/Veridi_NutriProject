@@ -134,6 +134,35 @@ export interface QuotePricingProvenanceDTO {
   frozen: boolean;
 }
 
+/**
+ * Linha de orçamento: um produto, sua quantidade e seu preço.
+ *
+ * A proveniência é POR LINHA — uma pode vir de faixa de precificação e outra
+ * ser exceção comercial manual na mesma proposta, e as duas são legítimas.
+ */
+export interface QuoteLineDTO {
+  id: string;
+  quoteVersionId: string;
+  projectProductId: string | null;
+  productId: string;
+  productCode: string;
+  productName: string;
+  sortOrder: number;
+  /** Decimal como string — nunca float. */
+  quotedQuantity: string | null;
+  uomCode: string | null;
+  /** `null` = ainda não precificado; `"0"` é preço zero explícito. */
+  unitPrice: string | null;
+  /** `quotedQuantity × unitPrice`, derivado — nunca persistido. */
+  total: string | null;
+  priceSource: QuotePriceSource;
+  /**
+   * Só chega para quem pode ver custo e margem (comercial/administração).
+   * O documento do cliente nunca expõe isso.
+   */
+  pricing: QuotePricingProvenanceDTO | null;
+}
+
 export interface QuoteVersionDTO {
   id: string;
   code: string;
@@ -146,23 +175,17 @@ export interface QuoteVersionDTO {
   source: ProjectSource;
   quoteDate: string;
   validUntil: string | null;
-  /** Decimal como string — nunca float. */
-  quotedQuantity: string | null;
-  uomCode: string | null;
-  /** `null` = ainda não precificado; `"0"` é preço zero explícito. */
-  unitPrice: string | null;
   currencyCode: string;
-  /** `quotedQuantity × unitPrice`, derivado — nunca persistido. */
+  /** Uma linha por produto. O cabeçalho não guarda quantidade nem preço. */
+  lines: QuoteLineDTO[];
+  /**
+   * Soma das linhas. `null` enquanto alguma linha essencial não tem preço —
+   * total parcial não existe: existe subtotal conhecido.
+   */
   total: string | null;
   commercialNotes: string | null;
   paymentTerms: string | null;
   leadTimeDays: number | null;
-  priceSource: QuotePriceSource;
-  /**
-   * Só chega para quem pode ver custo e margem (comercial/administração).
-   * O documento do cliente nunca expõe isso.
-   */
-  pricing: QuotePricingProvenanceDTO | null;
   sentAt: string | null;
   sentByName: string | null;
   acceptedAt: string | null;
@@ -188,6 +211,45 @@ export interface QuoteVersionDTO {
   projectChannel: string | null;
   createdAt: string;
   createdByName: string | null;
+}
+
+/** Situação comercial do produto dentro do projeto. */
+export type ProjectProductStatus = "ACTIVE" | "APPROVED" | "OUT_OF_SCOPE";
+
+export const PROJECT_PRODUCT_STATUS_LABELS: Record<ProjectProductStatus, string> = {
+  ACTIVE: "Em desenvolvimento",
+  APPROVED: "Aprovado",
+  OUT_OF_SCOPE: "Fora do escopo",
+};
+
+/**
+ * Produto dentro de um projeto.
+ *
+ * `status` é a situação COMERCIAL nesta negociação; `productLifecycle` é a
+ * situação TÉCNICA do produto, que vale fora dela. Um produto pode estar
+ * aprovado tecnicamente e fora do escopo comercial desta aprovação.
+ */
+export interface ProjectProductDTO {
+  id: string;
+  projectId: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  productLifecycle: string;
+  productActive: boolean;
+  sequence: number;
+  status: ProjectProductStatus;
+  /** Cadeia técnica/econômica deste produto — read model puro. */
+  costing: ProjectCostingSummaryDTO | null;
+  /** Última amostra deste produto, quando houver. */
+  latestSampleCode: string | null;
+  latestSampleLabel: string | null;
+  createdAt: string;
+  createdByName: string | null;
+}
+
+export interface ProjectProductListResponse {
+  products: ProjectProductDTO[];
 }
 
 export interface ProjectDTO {
@@ -229,6 +291,12 @@ export interface ProjectDTO {
   latestQuoteStatus: QuoteStatus | null;
   /** Versão aceita vigente, quando existir. */
   acceptedQuoteLabel: string | null;
+  /**
+   * Produtos do projeto. `productId` acima continua sendo o produto
+   * principal/legado — a associação real está aqui, e um projeto pode ter
+   * vários.
+   */
+  products: ProjectProductDTO[];
   quoteVersions: QuoteVersionDTO[];
   statusHistory: ProjectStatusHistoryDTO[];
   createdAt: string;

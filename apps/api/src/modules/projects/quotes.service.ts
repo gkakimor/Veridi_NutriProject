@@ -33,15 +33,56 @@ const CODE_SEQUENCE = "quote_code_seq";
  * A proveniência econômica (PREC/CALC/custo/margem) é INFORMAÇÃO INTERNA:
  * só entra quando quem chamou pode vê-la, e nunca no documento do cliente.
  */
-export function toQuoteVersionDTO(
-  quote: QuoteVersion,
-  pricing: QuotePricingProvenanceDTO | null = null,
-): QuoteVersionDTO {
+export const quoteInclude = {
+  lines: { orderBy: { sortOrder: "asc" as const }, include: { product: true } },
+} as const;
+
+export type QuoteWithLines = PrismaTypes.QuoteVersionGetPayload<{ include: typeof quoteInclude }>;
+
+function toQuoteLineDTO(
+  line: QuoteWithLines["lines"][number],
+  pricing: QuotePricingProvenanceDTO | null,
+): QuoteLineDTO {
   // Total é derivado; só existe quando quantidade E preço existem. Preço
   // `null` (não precificado) nunca vira zero.
   const total =
-    quote.quotedQuantity && quote.unitPrice
-      ? quote.quotedQuantity.times(quote.unitPrice).toFixed(2)
+    line.quotedQuantity && line.unitPrice !== null
+      ? line.quotedQuantity.times(line.unitPrice).toFixed(2)
+      : null;
+
+  return {
+    id: line.id,
+    quoteVersionId: line.quoteVersionId,
+    projectProductId: line.projectProductId,
+    productId: line.productId,
+    productCode: line.productCodeSnapshot ?? line.product.code,
+    productName: line.productNameSnapshot ?? line.product.name,
+    sortOrder: line.sortOrder,
+    quotedQuantity: line.quotedQuantity ? line.quotedQuantity.toString() : null,
+    uomCode: line.uomCode,
+    unitPrice: line.unitPrice !== null ? line.unitPrice.toFixed(4) : null,
+    total,
+    priceSource: line.priceSource,
+    pricing,
+  };
+}
+
+export function toQuoteVersionDTO(
+  quote: QuoteWithLines,
+  pricingByLine: Map<string, QuotePricingProvenanceDTO> | null = null,
+): QuoteVersionDTO {
+  const lines = quote.lines.map((line) =>
+    toQuoteLineDTO(line, pricingByLine?.get(line.id) ?? null),
+  );
+
+  // Total da proposta é a soma das linhas — e só existe quando TODAS têm
+  // preço. Somar o que está precificado e ignorar o resto entregaria um
+  // número menor que a proposta, com cara de total.
+  const total =
+    lines.length > 0 && lines.every((line) => line.total !== null)
+      ? lines
+          .reduce((sum, line) => sum.plus(new Prisma.Decimal(line.total ?? 0)), new Prisma.Decimal(0))
+          .toFixed(2)
       : null;
 
   return {
@@ -55,16 +96,12 @@ export function toQuoteVersionDTO(
     source: quote.source,
     quoteDate: quote.quoteDate.toISOString(),
     validUntil: quote.validUntil ? quote.validUntil.toISOString() : null,
-    quotedQuantity: quote.quotedQuantity ? quote.quotedQuantity.toString() : null,
-    uomCode: quote.uomCode,
-    unitPrice: quote.unitPrice ? quote.unitPrice.toFixed(4) : null,
     currencyCode: quote.currencyCode,
+    lines,
     total,
     commercialNotes: quote.commercialNotes,
     paymentTerms: quote.paymentTerms,
     leadTimeDays: quote.leadTimeDays,
-    priceSource: quote.priceSource,
-    pricing,
     sentAt: quote.sentAt ? quote.sentAt.toISOString() : null,
     sentByName: quote.sentByNameSnapshot,
     acceptedAt: quote.acceptedAt ? quote.acceptedAt.toISOString() : null,
@@ -93,8 +130,14 @@ export function toQuoteVersionDTO(
 }
 
 export async function getQuoteById(id: string): Promise<QuoteVersionDTO | null> {
-  const quote = await getPrisma().quoteVersion.findUnique({ where: { id } });
+  const quote = await getPrisma().quoteVersion.findUnique({ where: { id }, include: quoteInclude });
   return quote ? toQuoteVersionDTO(quote) : null;
+}
+
+async function requireQuoteWithLines(id: string): Promise<QuoteWithLines> {
+  const quote = await getPrisma().quoteVersion.findUnique({ where: { id }, include: quoteInclude });
+  if (!quote) throw new QuoteNotFoundError(id);
+  return quote;
 }
 
 /**
@@ -118,7 +161,7 @@ export async function createQuoteVersion(
   }
 
   const existingDraft = project.quoteVersions.find((quote) => quote.status === "DRAFT");
-  if (existingDraft) return toQuoteVersionDTO(existingDraft);
+  if (existingDraft) return (await getQuoteById(existingDraft.id)) as QuoteVersionDTO;
 
   const previous = project.quoteVersions[0] ?? null;
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, QUOTE_CODE_PREFIX);
@@ -140,14 +183,9 @@ export async function createQuoteVersion(
         versionNumber: (maxVersion._max.versionNumber ?? 0) + 1,
         status: "DRAFT",
         quoteDate: new Date(),
-        // Valores comerciais servem de ponto de partida; o VÍNCULO com a
-        // precificação não é herdado — cada proposta confirma sua própria
-        // base econômica.
+        // Condições comerciais servem de ponto de partida.
         ...(previous
           ? {
-              quotedQuantity: previous.quotedQuantity,
-              uomCode: previous.uomCode,
-              unitPrice: previous.unitPrice,
               currencyCode: previous.currencyCode,
               commercialNotes: previous.commercialNotes,
               paymentTerms: previous.paymentTerms,
@@ -159,6 +197,32 @@ export async function createQuoteVersion(
       },
     });
 
+    // As linhas da versão anterior vêm junto: quantidade, unidade e preço como
+    // ponto de partida. O VÍNCULO com a precificação não é herdado — cada
+    // proposta confirma a própria base econômica, então a linha nova nasce
+    // MANUAL até alguém reaplicar a faixa. Herdar a proveniência afirmaria que
+    // este preço veio de um cálculo que ninguém conferiu.
+    if (previous) {
+      const previousLines = await tx.quoteLine.findMany({
+        where: { quoteVersionId: previous.id },
+        orderBy: { sortOrder: "asc" },
+      });
+      for (const line of previousLines) {
+        await tx.quoteLine.create({
+          data: {
+            quoteVersionId: quote.id,
+            projectProductId: line.projectProductId,
+            productId: line.productId,
+            sortOrder: line.sortOrder,
+            quotedQuantity: line.quotedQuantity,
+            uomCode: line.uomCode,
+            unitPrice: line.unitPrice,
+            priceSource: "MANUAL",
+          },
+        });
+      }
+    }
+
     // A versão anterior formalmente apresentada passa a ser histórico.
     // Recusada e arquivada permanecem como estão.
     if (previous && (previous.status === "SENT" || previous.status === "ACCEPTED")) {
@@ -168,28 +232,22 @@ export async function createQuoteVersion(
     return quote;
   });
 
-  return toQuoteVersionDTO(created);
+  return (await getQuoteById(created.id)) as QuoteVersionDTO;
 }
 
 export async function updateQuoteVersion(
   id: string,
   input: UpdateQuoteVersionInput,
 ): Promise<QuoteVersionDTO> {
-  const quote = await getPrisma().quoteVersion.findUnique({ where: { id } });
-  if (!quote) throw new QuoteNotFoundError(id);
+  const quote = await requireQuoteWithLines(id);
   // Proposta apresentada é histórico: renegociar cria versão nova.
   if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
-  // Quantidade, unidade e preço pertencem à faixa enquanto houver vínculo.
-  assertPriceEditable(quote, input);
 
-  const updated = await getPrisma().quoteVersion.update({
+  await getPrisma().quoteVersion.update({
     where: { id },
     data: {
       ...(input.quoteDate !== undefined ? { quoteDate: input.quoteDate } : {}),
       ...(input.validUntil !== undefined ? { validUntil: input.validUntil } : {}),
-      ...(input.quotedQuantity !== undefined ? { quotedQuantity: input.quotedQuantity } : {}),
-      ...(input.uomCode !== undefined ? { uomCode: input.uomCode } : {}),
-      ...(input.unitPrice !== undefined ? { unitPrice: input.unitPrice } : {}),
       ...(input.currencyCode !== undefined ? { currencyCode: input.currencyCode } : {}),
       ...(input.commercialNotes !== undefined ? { commercialNotes: input.commercialNotes } : {}),
       ...(input.paymentTerms !== undefined ? { paymentTerms: input.paymentTerms } : {}),
@@ -197,7 +255,85 @@ export async function updateQuoteVersion(
     },
   });
 
-  return toQuoteVersionDTO(updated);
+  return (await getQuoteById(id)) as QuoteVersionDTO;
+}
+
+/**
+ * Adiciona um produto à proposta.
+ *
+ * Só produto associado ao projeto entra: a proposta é da negociação, e um
+ * produto de outro projeto na mesma proposta seria vínculo inventado.
+ */
+export async function addQuoteLine(
+  quoteVersionId: string,
+  input: { projectProductId: string },
+): Promise<QuoteVersionDTO> {
+  const prisma = getPrisma();
+  const quote = await requireQuoteWithLines(quoteVersionId);
+  if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
+
+  const link = await prisma.projectProduct.findUnique({ where: { id: input.projectProductId } });
+  if (!link || link.projectId !== quote.projectId) {
+    throw new QuoteLineProductNotInProjectError(input.projectProductId);
+  }
+  if (quote.lines.some((line) => line.productId === link.productId)) {
+    throw new QuoteLineDuplicateError(link.productId);
+  }
+
+  await prisma.quoteLine.create({
+    data: {
+      quoteVersionId,
+      projectProductId: link.id,
+      productId: link.productId,
+      sortOrder: quote.lines.length + 1,
+      priceSource: "MANUAL",
+    },
+  });
+
+  return (await getQuoteById(quoteVersionId)) as QuoteVersionDTO;
+}
+
+/** Quantidade, unidade e preço da linha. */
+export async function updateQuoteLine(
+  lineId: string,
+  input: { quotedQuantity?: unknown; uomCode?: unknown; unitPrice?: unknown },
+): Promise<QuoteVersionDTO> {
+  const prisma = getPrisma();
+  const line = await prisma.quoteLine.findUnique({
+    where: { id: lineId },
+    include: { quoteVersion: true },
+  });
+  if (!line) throw new QuoteLineNotFoundError(lineId);
+  if (line.quoteVersion.status !== "DRAFT") throw new QuoteNotDraftError(line.quoteVersion.status);
+  // Quantidade, unidade e preço pertencem à faixa enquanto houver vínculo.
+  assertPriceEditable(line, input);
+
+  await prisma.quoteLine.update({
+    where: { id: lineId },
+    data: {
+      ...(input.quotedQuantity !== undefined
+        ? { quotedQuantity: input.quotedQuantity as never }
+        : {}),
+      ...(input.uomCode !== undefined ? { uomCode: input.uomCode as never } : {}),
+      ...(input.unitPrice !== undefined ? { unitPrice: input.unitPrice as never } : {}),
+    },
+  });
+
+  return (await getQuoteById(line.quoteVersionId)) as QuoteVersionDTO;
+}
+
+/** Remover linha só em rascunho: proposta enviada é história. */
+export async function removeQuoteLine(lineId: string): Promise<QuoteVersionDTO> {
+  const prisma = getPrisma();
+  const line = await prisma.quoteLine.findUnique({
+    where: { id: lineId },
+    include: { quoteVersion: true },
+  });
+  if (!line) throw new QuoteLineNotFoundError(lineId);
+  if (line.quoteVersion.status !== "DRAFT") throw new QuoteNotDraftError(line.quoteVersion.status);
+
+  await prisma.quoteLine.delete({ where: { id: lineId } });
+  return (await getQuoteById(line.quoteVersionId)) as QuoteVersionDTO;
 }
 
 /**
@@ -212,11 +348,16 @@ export async function sendQuoteVersion(
   const prisma = getPrisma();
   const quote = await prisma.quoteVersion.findUnique({
     where: { id },
-    include: { project: { include: { customer: true } } },
+    include: { project: { include: { customer: true } }, lines: true },
   });
   if (!quote) throw new QuoteNotFoundError(id);
   if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
-  if (!quote.quotedQuantity || !quote.uomCode || quote.unitPrice === null) {
+  // Proposta sem produto não é proposta; e linha sem quantidade, unidade ou
+  // preço não pode virar documento do cliente.
+  if (quote.lines.length === 0) throw new IncompleteQuoteError();
+  if (
+    quote.lines.some((line) => !line.quotedQuantity || !line.uomCode || line.unitPrice === null)
+  ) {
     throw new IncompleteQuoteError();
   }
 
@@ -224,8 +365,9 @@ export async function sendQuoteVersion(
   const { customer } = project;
 
   // Custo industrial incompleto pode virar proposta — mas nunca por
-  // acidente; e o que for enviado fica congelado aqui.
-  const pricingSnapshot = await buildPricingSnapshotData(id, options);
+  // acidente; e o que for enviado fica congelado aqui, LINHA A LINHA: cada
+  // produto tem a própria cadeia PREC → CALC → EC → fórmula.
+  const lineSnapshots = await buildLineSnapshots(quote.lines, options);
 
   const updated = await prisma.quoteVersion.update({
     where: { id },
@@ -249,11 +391,14 @@ export async function sendQuoteVersion(
       projectName: project.name,
       projectConcept: project.concept,
       projectChannel: project.channel,
-      ...pricingSnapshot,
     } as PrismaTypes.QuoteVersionUpdateInput,
   });
 
-  return toQuoteVersionDTO(updated);
+  for (const [lineId, data] of lineSnapshots) {
+    await prisma.quoteLine.update({ where: { id: lineId }, data });
+  }
+
+  return (await getQuoteById(updated.id)) as QuoteVersionDTO;
 }
 
 /**
@@ -284,7 +429,7 @@ export async function acceptQuoteVersion(id: string, actor: User): Promise<Quote
     });
   });
 
-  return toQuoteVersionDTO(updated);
+  return (await getQuoteById(updated.id)) as QuoteVersionDTO;
 }
 
 /** Recusar não cancela o projeto: outra versão pode ser negociada. */
@@ -309,7 +454,7 @@ export async function rejectQuoteVersion(
     },
   });
 
-  return toQuoteVersionDTO(updated);
+  return (await getQuoteById(updated.id)) as QuoteVersionDTO;
 }
 
 /** Recarrega o projeto — as ações de orçamento mudam o resumo do projeto. */

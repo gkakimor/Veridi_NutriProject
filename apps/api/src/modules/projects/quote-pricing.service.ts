@@ -98,11 +98,20 @@ export class IncompleteCostQuoteError extends Error {
   }
 }
 
-type QuoteRow = PrismaTypes.QuoteVersionGetPayload<{
-  include: { pricingVersion: true; pricingTier: true };
+/**
+ * A proveniência de preço vive na LINHA, não no cabeçalho: numa proposta com
+ * três produtos, cada um tem a própria faixa, o próprio cálculo e a própria
+ * qualidade de custo.
+ */
+type QuoteRow = PrismaTypes.QuoteLineGetPayload<{
+  include: { pricingVersion: true; pricingTier: true; quoteVersion: true };
 }>;
 
-const quoteInclude = { pricingVersion: true, pricingTier: true } satisfies PrismaTypes.QuoteVersionInclude;
+const lineInclude = {
+  pricingVersion: true,
+  pricingTier: true,
+  quoteVersion: true,
+} satisfies PrismaTypes.QuoteLineInclude;
 
 /**
  * Proveniência do preço.
@@ -115,7 +124,7 @@ const quoteInclude = { pricingVersion: true, pricingTier: true } satisfies Prism
 export function toPricingProvenance(quote: QuoteRow): QuotePricingProvenanceDTO | null {
   if (quote.priceSource !== "PRICING_TIER") return null;
 
-  if (quote.status !== "DRAFT" && quote.pricingCodeSnapshot) {
+  if (quote.quoteVersion.status !== "DRAFT" && quote.pricingCodeSnapshot) {
     return {
       pricingVersionId: quote.pricingVersionId,
       pricingCode: quote.pricingCodeSnapshot,
@@ -184,21 +193,17 @@ export function toPricingProvenance(quote: QuoteRow): QuotePricingProvenanceDTO 
   };
 }
 
-export async function getQuoteWithPricing(id: string): Promise<QuoteRow> {
-  const quote = await getPrisma().quoteVersion.findUnique({ where: { id }, include: quoteInclude });
-  if (!quote) throw new QuoteNotFoundError(id);
-  return quote;
+export async function getQuoteLineWithPricing(id: string): Promise<QuoteRow> {
+  const line = await getPrisma().quoteLine.findUnique({ where: { id }, include: lineInclude });
+  if (!line) throw new QuoteNotFoundError(id);
+  return line;
 }
 
-/** Precificação ativa disponível para o orçamento deste projeto. */
-export async function getQuotePricingOptions(quoteId: string): Promise<PricingVersionDTO | null> {
-  const quote = await getPrisma().quoteVersion.findUnique({
-    where: { id: quoteId },
-    include: { project: true },
-  });
-  if (!quote) throw new QuoteNotFoundError(quoteId);
-  if (!quote.project.productId) return null;
-  return getActivePricingForProduct(quote.project.productId);
+/** Precificação ativa disponível para o PRODUTO desta linha. */
+export async function getQuoteLinePricingOptions(lineId: string): Promise<PricingVersionDTO | null> {
+  const line = await getPrisma().quoteLine.findUnique({ where: { id: lineId } });
+  if (!line) throw new QuoteNotFoundError(lineId);
+  return getActivePricingForProduct(line.productId);
 }
 
 /**
@@ -208,26 +213,27 @@ export async function getQuotePricingOptions(quoteId: string): Promise<PricingVe
  * SELECIONADO na precificação, não o sugerido, porque a faixa pode ter sido
  * fechada com preço manual.
  */
-export async function applyQuotePricing(
-  quoteId: string,
+export async function applyQuoteLinePricing(
+  lineId: string,
   tierId: string,
   _actor: User,
-): Promise<QuoteVersionDTO> {
+): Promise<string> {
   const prisma = getPrisma();
-  const quote = await prisma.quoteVersion.findUnique({
-    where: { id: quoteId },
-    include: { project: true },
+  const line = await prisma.quoteLine.findUnique({
+    where: { id: lineId },
+    include: { quoteVersion: true },
   });
-  if (!quote) throw new QuoteNotFoundError(quoteId);
-  if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
-  if (!quote.project.productId) throw new QuoteWithoutProductError();
+  if (!line) throw new QuoteNotFoundError(lineId);
+  if (line.quoteVersion.status !== "DRAFT") throw new QuoteNotDraftError(line.quoteVersion.status);
 
   const tier = await prisma.pricingTier.findUnique({
     where: { id: tierId },
     include: { pricingVersion: true },
   });
   if (!tier) throw new PricingTierNotFoundForQuoteError(tierId);
-  if (tier.pricingVersion.productId !== quote.project.productId) {
+  // A faixa tem que ser do produto DESTA linha: preço de outro produto na
+  // linha seria proveniência falsa, não atalho.
+  if (tier.pricingVersion.productId !== line.productId) {
     throw new PricingProductMismatchError();
   }
   // Rascunho de precificação é negociação interna, não base de proposta.
@@ -236,22 +242,22 @@ export async function applyQuotePricing(
 
   // Quantidade já informada precisa bater com a faixa — nada de escolher a
   // "faixa mais próxima" nem interpolar preço.
-  if (quote.quotedQuantity && quote.uomCode) {
+  if (line.quotedQuantity && line.uomCode) {
     const units = await prisma.unitOfMeasure.findMany();
-    if (!isUomCompatible(quote.uomCode, tier.uomCode, units)) {
-      throw new QuoteUomIncompatibleError(quote.uomCode, tier.uomCode);
+    if (!isUomCompatible(line.uomCode, tier.uomCode, units)) {
+      throw new QuoteUomIncompatibleError(line.uomCode, tier.uomCode);
     }
-    const converted = convertUomDecimal(quote.quotedQuantity, quote.uomCode, tier.uomCode, units);
+    const converted = convertUomDecimal(line.quotedQuantity, line.uomCode, tier.uomCode, units);
     if (!converted.equals(tier.quantity)) {
       throw new QuoteQuantityMismatchError(
-        `${quote.quotedQuantity.toString()} ${quote.uomCode}`,
+        `${line.quotedQuantity.toString()} ${line.uomCode}`,
         `${tier.quantity.toString()} ${tier.uomCode}`,
       );
     }
   }
 
-  const updated = await prisma.quoteVersion.update({
-    where: { id: quoteId },
+  await prisma.quoteLine.update({
+    where: { id: lineId },
     data: {
       priceSource: "PRICING_TIER",
       pricingVersionId: tier.pricingVersionId,
@@ -262,30 +268,30 @@ export async function applyQuotePricing(
     },
   });
 
-  return toQuoteVersionDTO(updated);
+  return line.quoteVersionId;
 }
 
 /**
- * Desvincula: o preço vira manual e perde a proveniência.
+ * Desvincula: o preço da linha vira manual e perde a proveniência.
  *
- * O valor atual permanece como ponto de partida, mas o documento deixa de
+ * O valor atual permanece como ponto de partida, mas a linha deixa de
  * apontar PREC/CALC — manter o vínculo depois de editar à mão seria
  * proveniência falsa.
  */
-export async function useManualQuotePrice(
-  quoteId: string,
-  _actor: User,
-): Promise<QuoteVersionDTO> {
+export async function useManualQuoteLinePrice(lineId: string, _actor: User): Promise<string> {
   const prisma = getPrisma();
-  const quote = await prisma.quoteVersion.findUnique({ where: { id: quoteId } });
-  if (!quote) throw new QuoteNotFoundError(quoteId);
-  if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
+  const line = await prisma.quoteLine.findUnique({
+    where: { id: lineId },
+    include: { quoteVersion: true },
+  });
+  if (!line) throw new QuoteNotFoundError(lineId);
+  if (line.quoteVersion.status !== "DRAFT") throw new QuoteNotDraftError(line.quoteVersion.status);
 
-  const updated = await prisma.quoteVersion.update({
-    where: { id: quoteId },
+  await prisma.quoteLine.update({
+    where: { id: lineId },
     data: { priceSource: "MANUAL", pricingVersionId: null, pricingTierId: null },
   });
-  return toQuoteVersionDTO(updated);
+  return line.quoteVersionId;
 }
 
 /** Campos econômicos travados enquanto a proposta vem de uma faixa. */
@@ -304,19 +310,53 @@ export function assertPriceEditable(
 }
 
 /** Snapshot econômico congelado no envio da proposta. */
-export async function buildPricingSnapshotData(
-  quoteId: string,
+/**
+ * Congela a economia de cada linha no envio.
+ *
+ * Uma proposta com três produtos tem três cadeias PREC → CALC → EC →
+ * fórmula, e cada uma precisa ficar congelada por conta própria: precificar
+ * o produto A de novo amanhã não pode reescrever o que o cliente recebeu
+ * sobre o produto B.
+ *
+ * A confirmação de custo incompleto vale para a proposta inteira — se
+ * QUALQUER linha estiver com custo parcial, quem envia confirma uma vez.
+ */
+export async function buildLineSnapshots(
+  lines: { id: string }[],
   options: { confirmIncompleteCost?: boolean | undefined },
-): Promise<PrismaTypes.QuoteVersionUpdateInput> {
-  const quote = await getQuoteWithPricing(quoteId);
-  if (quote.priceSource !== "PRICING_TIER") return {};
+): Promise<[string, PrismaTypes.QuoteLineUpdateInput][]> {
+  const result: [string, PrismaTypes.QuoteLineUpdateInput][] = [];
 
-  const provenance = toPricingProvenance(quote);
-  if (!provenance) return {};
+  for (const item of lines) {
+    const line = await getQuoteLineWithPricing(item.id);
+    const productSnapshot: PrismaTypes.QuoteLineUpdateInput = {
+      productCodeSnapshot: line.productCodeSnapshot ?? undefined,
+      productNameSnapshot: line.productNameSnapshot ?? undefined,
+    };
 
-  const incomplete = provenance.costQuality === "PARTIAL" || provenance.costQuality === "NO_COST";
-  if (incomplete && !options.confirmIncompleteCost) throw new IncompleteCostQuoteError();
+    if (line.priceSource !== "PRICING_TIER") {
+      result.push([line.id, productSnapshot]);
+      continue;
+    }
 
+    const provenance = toPricingProvenance(line);
+    if (!provenance) {
+      result.push([line.id, productSnapshot]);
+      continue;
+    }
+
+    const incomplete = provenance.costQuality === "PARTIAL" || provenance.costQuality === "NO_COST";
+    if (incomplete && !options.confirmIncompleteCost) throw new IncompleteCostQuoteError();
+
+    result.push([line.id, { ...productSnapshot, ...buildProvenanceSnapshot(provenance) }]);
+  }
+
+  return result;
+}
+
+function buildProvenanceSnapshot(
+  provenance: QuotePricingProvenanceDTO,
+): PrismaTypes.QuoteLineUpdateInput {
   return {
     pricingCodeSnapshot: provenance.pricingCode,
     pricingVersionNumberSnapshot: provenance.pricingVersionNumber,
