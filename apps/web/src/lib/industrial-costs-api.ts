@@ -1,9 +1,11 @@
 import type {
   ActivateIndustrialCostVersionInput,
   CreateIndustrialCostLineInput,
+  CreateIndustrialCostResourceUsageInput,
   CreateIndustrialCostVersionInput,
   IndustrialCostVersionDTO,
   ProductIndustrialCostResponse,
+  UpdateEnergyModeInput,
   UpdateIndustrialCostVersionInput,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
@@ -58,6 +60,25 @@ export async function createIndustrialCostLine(
 
 export async function deleteIndustrialCostLine(lineId: string): Promise<IndustrialCostVersionDTO> {
   return send(`/industrial-cost-lines/${lineId}`, "DELETE");
+}
+
+export async function createResourceUsage(
+  versionId: string,
+  input: CreateIndustrialCostResourceUsageInput,
+): Promise<IndustrialCostVersionDTO> {
+  return send(`/industrial-costs/${versionId}/resource-usages`, "POST", input);
+}
+
+export async function deleteResourceUsage(usageId: string): Promise<IndustrialCostVersionDTO> {
+  return send(`/industrial-cost-resource-usages/${usageId}`, "DELETE");
+}
+
+/** Direto e derivado são exclusivos — o backend recusa a troca com energia lançada. */
+export async function updateEnergyMode(
+  versionId: string,
+  input: UpdateEnergyModeInput,
+): Promise<IndustrialCostVersionDTO> {
+  return send(`/industrial-costs/${versionId}/energy-mode`, "POST", input);
 }
 
 export async function activateIndustrialCostVersion(

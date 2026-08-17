@@ -3,6 +3,9 @@ import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import {
+  DirectEnergyNotAllowedError,
+  DuplicatedResourceUsageError,
+  EnergyUsageRequiresDirectModeError,
   FormulationNotStableError,
   FormulationProductMismatchError,
   FormulationVersionNotFoundError,
@@ -12,14 +15,19 @@ import {
   IndustrialCostProductNotFoundError,
   IndustrialCostVersionLockedError,
   IndustrialCostVersionNotFoundError,
+  InactiveResourceActivationError,
   InvalidCostRateError,
   InvalidReferenceOutputError,
   MissingFormulationVersionError,
+  ResourceNotFoundForUsageError,
+  ResourceUsageNotFoundError,
 } from "./industrial-costs.errors.js";
 import {
   activateIndustrialCostVersionSchema,
   createIndustrialCostLineSchema,
   createIndustrialCostVersionSchema,
+  createResourceUsageSchema,
+  updateEnergyModeSchema,
   updateIndustrialCostLineSchema,
   updateIndustrialCostVersionSchema,
 } from "./industrial-costs.schemas.js";
@@ -27,7 +35,10 @@ import {
   activateIndustrialCostVersion,
   createIndustrialCostLine,
   createIndustrialCostVersion,
+  createResourceUsage,
   deleteIndustrialCostLine,
+  deleteResourceUsage,
+  updateEnergyMode,
   getIndustrialCostVersion,
   getProductIndustrialCosts,
   updateIndustrialCostLine,
@@ -50,6 +61,25 @@ function mapDomainError(
     error instanceof IndustrialCostProductNotFoundError
   ) {
     return { status: 404, body: { error: "not_found", message: error.message } };
+  }
+  if (
+    error instanceof ResourceNotFoundForUsageError ||
+    error instanceof ResourceUsageNotFoundError
+  ) {
+    return { status: 404, body: { error: "not_found", message: error.message } };
+  }
+  if (error instanceof DuplicatedResourceUsageError) {
+    return { status: 409, body: { error: "duplicated_resource", message: error.message } };
+  }
+  if (
+    error instanceof EnergyUsageRequiresDirectModeError ||
+    error instanceof DirectEnergyNotAllowedError
+  ) {
+    // Energia direta e derivada nunca convivem — evita contar duas vezes.
+    return { status: 409, body: { error: "energy_mode_conflict", message: error.message } };
+  }
+  if (error instanceof InactiveResourceActivationError) {
+    return { status: 409, body: { error: "inactive_resource", message: error.message } };
   }
   if (error instanceof IndustrialCostVersionLockedError) {
     return { status: 409, body: { error: "version_locked", message: error.message } };
@@ -187,6 +217,54 @@ export const industrialCostsRoutes: FastifyPluginAsync = async (app) => {
     try {
       const actor = requireRole(request, "COMMERCIAL", "ADMIN");
       return reply.send(await deleteIndustrialCostLine(id, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/industrial-costs/:id/resource-usages", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = createResourceUsageSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.status(201).send(await createResourceUsage(id, parsed.data, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.delete("/industrial-cost-resource-usages/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      return reply.send(await deleteResourceUsage(id, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/industrial-costs/:id/energy-mode", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = updateEnergyModeSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.send(await updateEnergyMode(id, parsed.data, actor));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

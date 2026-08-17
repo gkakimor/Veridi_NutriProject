@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
+  EnergyCalculationMode,
+  IndustrialCostResourceUsageDTO,
   IndustrialCostVersionDTO,
+  IndustrialResourceDTO,
   ProductIndustrialCostResponse,
 } from "@veridi/shared";
 import {
@@ -11,6 +14,11 @@ import {
   INDUSTRIAL_COST_CATEGORIES,
   INDUSTRIAL_COST_CATEGORY_LABELS,
   INDUSTRIAL_COST_VERSION_STATUS_LABELS,
+  ENERGY_CALCULATION_MODES,
+  ENERGY_CALCULATION_MODE_LABELS,
+  INDUSTRIAL_RATE_UOM_LABELS,
+  INDUSTRIAL_RESOURCE_TYPE_LABELS,
+  INDUSTRIAL_USAGE_BASIS_LABELS,
 } from "@veridi/shared";
 import type { IndustrialCostBasis, IndustrialCostCategory } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
@@ -20,10 +28,14 @@ import {
   activateIndustrialCostVersion,
   createIndustrialCostLine,
   createIndustrialCostVersion,
+  createResourceUsage,
   deleteIndustrialCostLine,
+  deleteResourceUsage,
   getProductIndustrialCosts,
+  updateEnergyMode,
   updateIndustrialCostVersion,
 } from "../../lib/industrial-costs-api";
+import { listIndustrialResources } from "../../lib/industrial-resources-api";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
@@ -33,6 +45,20 @@ function statusBadgeClass(status: string): string {
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
+}
+
+/**
+ * Enquanto rascunho, a tarifa exibida é a vigente HOJE — referência que ainda
+ * pode mudar. Depois de ativa, o que vale é o valor congelado na ativação.
+ */
+function describeRate(usage: IndustrialCostResourceUsageDTO, status: string): string {
+  if (status === "DRAFT") {
+    return usage.currentRate
+      ? `R$ ${usage.currentRate.rateValue} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.currentRate.rateUom]} (referência atual)`
+      : "Tarifa não informada";
+  }
+  if (!usage.rateValueSnapshot || !usage.rateUomSnapshot) return "Tarifa não informada";
+  return `R$ ${usage.rateValueSnapshot} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.rateUomSnapshot]}`;
 }
 
 /**
@@ -58,6 +84,10 @@ export function IndustrialCostPage() {
   const [basis, setBasis] = useState<IndustrialCostBasis>("FIXED_PER_BATCH");
   const [rateValue, setRateValue] = useState("");
 
+  const [resources, setResources] = useState<IndustrialResourceDTO[]>([]);
+  const [usageResourceId, setUsageResourceId] = useState("");
+  const [usageQuantity, setUsageQuantity] = useState("");
+
   const canEdit = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
 
   const load = useCallback(() => {
@@ -81,6 +111,14 @@ export function IndustrialCostPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    // Só recursos ativos entram numa estrutura nova; os inativos que já
+    // estão em versões antigas continuam listados pela própria versão.
+    listIndustrialResources({ active: true, pageSize: 100 })
+      .then((result) => setResources(result.resources))
+      .catch(() => setResources([]));
+  }, []);
+
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
@@ -100,6 +138,16 @@ export function IndustrialCostPage() {
   // A versão em edição é o rascunho; sem rascunho, mostra-se a vigente.
   const version: IndustrialCostVersionDTO | null = data.draft ?? data.current;
   const editable = canEdit && version?.status === "DRAFT";
+
+  // Energia direta só existe no modo correspondente; fora dele o recurso de
+  // energia nem é oferecido, para não induzir dupla contagem.
+  const usedResourceIds = new Set(version?.resourceUsages.map((usage) => usage.resourceId) ?? []);
+  const selectableResources = resources.filter(
+    (resource) =>
+      !usedResourceIds.has(resource.id) &&
+      (resource.type !== "ENERGY" || version?.energyCalculationMode === "DIRECT"),
+  );
+  const selectedResource = resources.find((resource) => resource.id === usageResourceId) ?? null;
 
   return (
     <>
@@ -477,12 +525,190 @@ export function IndustrialCostPage() {
 
             <FormSection
               title="Recursos industriais"
-              subtitle="Mão de obra, equipamentos e energia ganham modelagem própria na próxima etapa."
+              subtitle="Quanto de mão de obra, equipamento e energia esta base de produção consome. Nenhum valor é multiplicado aqui — o custo consolidado é etapa seguinte."
             >
-              <p className="field__hint">
-                Nada é cadastrado aqui de propósito: lançar esses custos como premissa manual agora
-                significaria duplicá-los quando os recursos existirem.
-              </p>
+              <div className="table-container">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Recurso</th>
+                      <th>Tipo</th>
+                      <th>Consumo</th>
+                      <th>Base</th>
+                      <th>
+                        {version.status === "DRAFT" ? "Tarifa de referência" : "Tarifa congelada"}
+                      </th>
+                      <th>Energia derivada</th>
+                      {editable && <th aria-hidden="true" />}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {version.resourceUsages.map((usage) => (
+                      <tr key={usage.id}>
+                        <td>
+                          <span className="code">{usage.resourceCode}</span>{" "}
+                          {/* Nome congelado explica o documento antigo mesmo se o
+                              cadastro for renomeado depois. */}
+                          {usage.resourceNameSnapshot ?? usage.resourceName}
+                          {!usage.resourceActive && (
+                            <span className="badge badge--warn"> Recurso inativo</span>
+                          )}
+                        </td>
+                        <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[usage.resourceType]}</td>
+                        <td>
+                          {usage.usageQuantity} {INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}
+                        </td>
+                        <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
+                        <td>{describeRate(usage, version.status)}</td>
+                        <td>
+                          {/* Sem potência conhecida a energia fica em aberto, nunca zero. */}
+                          {usage.derivedEnergyKwh ? `${usage.derivedEnergyKwh} kWh` : "—"}
+                        </td>
+                        {editable && (
+                          <td onClick={(event) => event.stopPropagation()}>
+                            <RowActions
+                              actions={[
+                                {
+                                  label: "Remover recurso",
+                                  destructive: true,
+                                  onSelect: () => void run(() => deleteResourceUsage(usage.id)),
+                                },
+                              ]}
+                            />
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                    {version.resourceUsages.length === 0 && (
+                      <tr>
+                        <td colSpan={editable ? 7 : 6} className="table__empty">
+                          Nenhum recurso declarado nesta estrutura.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {editable && (
+                <>
+                  <div className="field-grid-2">
+                    <div className="field">
+                      <label htmlFor="usage-resource">Recurso</label>
+                      <select
+                        id="usage-resource"
+                        value={usageResourceId}
+                        onChange={(event) => setUsageResourceId(event.target.value)}
+                      >
+                        <option value="">Selecione…</option>
+                        {selectableResources.map((resource) => (
+                          <option key={resource.id} value={resource.id}>
+                            {resource.code} — {resource.name} (
+                            {INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type]})
+                          </option>
+                        ))}
+                      </select>
+                      <span className="field__hint">
+                        {version.energyCalculationMode === "DIRECT"
+                          ? "Energia entra como consumo informado diretamente."
+                          : "Recursos de energia só aparecem no modo de consumo informado diretamente."}
+                      </span>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="usage-quantity">
+                        Consumo por lote de referência
+                        {selectedResource
+                          ? ` (${INDUSTRIAL_RATE_UOM_LABELS[selectedResource.defaultUsageUom]})`
+                          : ""}
+                      </label>
+                      <input
+                        id="usage-quantity"
+                        type="text"
+                        inputMode="decimal"
+                        value={usageQuantity}
+                        onChange={(event) => setUsageQuantity(event.target.value)}
+                      />
+                      <span className="field__hint">
+                        Recurso que não é usado simplesmente não entra na estrutura.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="line-actions">
+                    <button
+                      type="button"
+                      className="btn btn--secondary btn--sm"
+                      disabled={saving || !usageResourceId || !usageQuantity.trim()}
+                      onClick={() =>
+                        void run(async () => {
+                          await createResourceUsage(version.id, {
+                            resourceId: usageResourceId,
+                            usageQuantity: usageQuantity.trim(),
+                          });
+                          setUsageResourceId("");
+                          setUsageQuantity("");
+                        })
+                      }
+                    >
+                      Adicionar recurso
+                    </button>
+                  </div>
+                </>
+              )}
+            </FormSection>
+
+            <FormSection
+              title="Energia"
+              subtitle="Consumo informado diretamente e consumo derivado dos equipamentos são exclusivos: somar os dois contaria a mesma energia duas vezes."
+            >
+              <dl className="definition-list">
+                <dt>Modo de cálculo</dt>
+                <dd>{ENERGY_CALCULATION_MODE_LABELS[version.energyCalculationMode]}</dd>
+                <dt>Consumo derivado dos equipamentos</dt>
+                <dd>
+                  {version.energyCalculationMode !== "FROM_EQUIPMENT"
+                    ? "—"
+                    : version.derivedEnergyKwh
+                      ? `${version.derivedEnergyKwh} kWh por lote de referência`
+                      : "Em aberto — há equipamento sem potência informada"}
+                </dd>
+              </dl>
+
+              {version.energyCalculationMode === "NONE" && (
+                <p className="field__hint">
+                  Energia ainda não estruturada. Isso não significa consumo zero.
+                </p>
+              )}
+
+              {editable && (
+                <div className="field-grid-2">
+                  <div className="field">
+                    <label htmlFor="energy-mode">Como a energia é apurada</label>
+                    <select
+                      id="energy-mode"
+                      value={version.energyCalculationMode}
+                      disabled={saving}
+                      onChange={(event) =>
+                        void run(() =>
+                          updateEnergyMode(version.id, {
+                            energyCalculationMode: event.target.value as EnergyCalculationMode,
+                          }),
+                        )
+                      }
+                    >
+                      {ENERGY_CALCULATION_MODES.map((mode) => (
+                        <option key={mode} value={mode}>
+                          {ENERGY_CALCULATION_MODE_LABELS[mode]}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="field__hint">
+                      Derivada usa horas de equipamento × potência declarada no recurso.
+                    </span>
+                  </div>
+                </div>
+              )}
             </FormSection>
           </>
         )}

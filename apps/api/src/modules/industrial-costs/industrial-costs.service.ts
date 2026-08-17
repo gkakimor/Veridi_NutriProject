@@ -4,15 +4,20 @@ import type {
   IndustrialCostLineDTO,
   IndustrialCostMaterialDTO,
   IndustrialCostPendencyDTO,
+  IndustrialCostResourceUsageDTO,
   IndustrialCostVersionDTO,
   IndustrialCostVersionSummaryDTO,
   ProductIndustrialCostResponse,
 } from "@veridi/shared";
-import { MAX_INDUSTRIAL_COST_PERCENT } from "@veridi/shared";
+import { MAX_INDUSTRIAL_COST_PERCENT, usageUomForResourceType } from "@veridi/shared";
+import { pickCurrentRate, toRateDTO } from "../industrial-resources/industrial-resources.service.js";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { convertUomDecimal, UomDimensionMismatchError, UomNotFoundError } from "../items/uom.js";
 import {
+  DirectEnergyNotAllowedError,
+  DuplicatedResourceUsageError,
+  EnergyUsageRequiresDirectModeError,
   FormulationNotStableError,
   FormulationProductMismatchError,
   FormulationVersionNotFoundError,
@@ -22,13 +27,18 @@ import {
   IndustrialCostProductNotFoundError,
   IndustrialCostVersionLockedError,
   IndustrialCostVersionNotFoundError,
+  InactiveResourceActivationError,
   InvalidCostRateError,
   InvalidReferenceOutputError,
   MissingFormulationVersionError,
+  ResourceNotFoundForUsageError,
+  ResourceUsageNotFoundError,
 } from "./industrial-costs.errors.js";
 import type {
   ActivateIndustrialCostVersionInput,
   CreateIndustrialCostLineInput,
+  CreateResourceUsageInput,
+  UpdateEnergyModeInput,
   CreateIndustrialCostVersionInput,
   UpdateIndustrialCostLineInput,
   UpdateIndustrialCostVersionInput,
@@ -60,6 +70,10 @@ const versionInclude = {
   product: { include: { customer: true, finishedProductItem: true } },
   formulationVersion: { include: { components: { include: { item: true } } } },
   lines: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] as PrismaTypes.IndustrialCostLineOrderByWithRelationInput[] },
+  resourceUsages: {
+    include: { industrialResource: { include: { rates: true } } },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] as PrismaTypes.IndustrialCostResourceUsageOrderByWithRelationInput[],
+  },
 } satisfies PrismaTypes.IndustrialCostVersionInclude;
 
 type VersionWithRelations = PrismaTypes.IndustrialCostVersionGetPayload<{
@@ -99,6 +113,83 @@ function toMaterialDTO(
   };
 }
 
+type UsageWithResource = VersionWithRelations["resourceUsages"][number];
+
+/**
+ * Consumo energético derivado de UM equipamento: horas planejadas × kW.
+ *
+ * É quantidade de energia, não dinheiro. `null` quando a potência é
+ * desconhecida — a energia não vira zero por omissão.
+ */
+function derivedEnergyForUsage(usage: UsageWithResource): Prisma.Decimal | null {
+  if (usage.industrialResource.type !== "EQUIPMENT") return null;
+  const power = usage.powerKwSnapshot ?? usage.industrialResource.powerKw;
+  if (!power) return null;
+  return usage.usageQuantity.times(power);
+}
+
+function toUsageDTO(usage: UsageWithResource, reference: Date): IndustrialCostResourceUsageDTO {
+  const current = pickCurrentRate(usage.industrialResource.rates, reference);
+  const derived = derivedEnergyForUsage(usage);
+
+  return {
+    id: usage.id,
+    resourceId: usage.industrialResourceId,
+    resourceCode: usage.industrialResource.code,
+    // Nome atual para navegar; o snapshot preserva o que a versão ativa viu.
+    resourceName: usage.industrialResource.name,
+    resourceType: usage.industrialResource.type,
+    resourceActive: usage.industrialResource.active,
+    usageBasis: usage.usageBasis,
+    usageQuantity: usage.usageQuantity.toString(),
+    usageUom: usage.usageUom,
+    notes: usage.notes,
+
+    currentRate: current ? toRateDTO(current, reference) : null,
+    powerKw: usage.industrialResource.powerKw ? usage.industrialResource.powerKw.toString() : null,
+
+    rateValueSnapshot: usage.rateValueSnapshot ? usage.rateValueSnapshot.toString() : null,
+    rateCurrencySnapshot: usage.rateCurrencySnapshot,
+    rateUomSnapshot: usage.rateUomSnapshot,
+    rateEffectiveAtSnapshot: usage.rateEffectiveAtSnapshot
+      ? usage.rateEffectiveAtSnapshot.toISOString()
+      : null,
+    powerKwSnapshot: usage.powerKwSnapshot ? usage.powerKwSnapshot.toString() : null,
+    resourceNameSnapshot: usage.resourceNameSnapshot,
+
+    derivedEnergyKwh: derived ? derived.toString() : null,
+  };
+}
+
+/**
+ * Energia derivada da versão: Σ(horas de equipamento × kW).
+ *
+ * Só existe no modo `FROM_EQUIPMENT`; nos demais é `null`, porque somar
+ * energia derivada com consumo informado direto contaria a mesma energia
+ * duas vezes.
+ */
+function derivedEnergyForVersion(version: VersionWithRelations): Prisma.Decimal | null {
+  if (version.energyCalculationMode !== "FROM_EQUIPMENT") return null;
+
+  let total = new Prisma.Decimal(0);
+  let hasAny = false;
+  for (const usage of version.resourceUsages) {
+    const isEquipment =
+      (usage.resourceTypeSnapshot ?? usage.industrialResource.type) === "EQUIPMENT";
+    if (!isEquipment) continue;
+
+    const derived = derivedEnergyForUsage(usage);
+    // Um único equipamento sem potência deixa o total EM ABERTO. Somar só os
+    // conhecidos apresentaria um número menor como se fosse o consumo real —
+    // é a mesma mentira de tratar potência desconhecida como zero.
+    if (!derived) return null;
+
+    total = total.plus(derived);
+    hasAny = true;
+  }
+  return hasAny ? total : null;
+}
+
 /**
  * Pendências da estrutura — derivadas, nunca persistidas.
  *
@@ -135,6 +226,80 @@ function buildPendencies(
       code: "FORMULATION_NOT_STABLE",
       description: "A formulação referenciada ainda é rascunho.",
     });
+  }
+
+  // Versão congelada é lida pelo que ela congelou: inativar o recurso ou
+  // mexer na tarifa hoje não cria pendência num documento já ativado.
+  const frozen = version.status !== "DRAFT";
+  const reference = new Date();
+  for (const usage of version.resourceUsages) {
+    const name = usage.resourceNameSnapshot ?? usage.industrialResource.name;
+    if (frozen) {
+      if (usage.rateValueSnapshot === null) {
+        pendencies.push({
+          code: "RESOURCE_RATE_NOT_INFORMED",
+          description: `"${name}" foi ativado sem tarifa vigente informada.`,
+        });
+      }
+      continue;
+    }
+    if (!pickCurrentRate(usage.industrialResource.rates, reference)) {
+      pendencies.push({
+        code: "RESOURCE_RATE_NOT_INFORMED",
+        description: `"${name}" não tem tarifa vigente informada.`,
+      });
+    }
+    if (!usage.industrialResource.active) {
+      pendencies.push({
+        code: "RESOURCE_INACTIVE",
+        description: `"${name}" está inativo no cadastro de recursos.`,
+      });
+    }
+  }
+
+  // Energia: `NONE` é "ainda não estruturada", nunca energia zero.
+  if (version.energyCalculationMode === "NONE") {
+    pendencies.push({
+      code: "ENERGY_NOT_CONFIGURED",
+      description: "A energia desta estrutura ainda não foi configurada.",
+    });
+  }
+
+  if (version.energyCalculationMode === "DIRECT") {
+    const hasEnergyUsage = version.resourceUsages.some(
+      (usage) => usage.industrialResource.type === "ENERGY",
+    );
+    if (!hasEnergyUsage) {
+      pendencies.push({
+        code: "ENERGY_RESOURCE_MISSING",
+        description: "Modo direto sem consumo de energia informado.",
+      });
+    }
+  }
+
+  if (version.energyCalculationMode === "FROM_EQUIPMENT") {
+    // Sem potência não há como derivar energia — e assumir potência padrão
+    // seria inventar consumo.
+    for (const usage of version.resourceUsages) {
+      const isEquipment =
+        (usage.resourceTypeSnapshot ?? usage.industrialResource.type) === "EQUIPMENT";
+      // Congelada: vale a potência do momento da ativação; rascunho: a atual.
+      const power = frozen
+        ? usage.powerKwSnapshot
+        : (usage.powerKwSnapshot ?? usage.industrialResource.powerKw);
+      if (isEquipment && !power) {
+        pendencies.push({
+          code: "EQUIPMENT_POWER_NOT_INFORMED",
+          description: `"${usage.resourceNameSnapshot ?? usage.industrialResource.name}" está sem potência cadastrada — a energia derivada fica incompleta.`,
+        });
+      }
+    }
+    if (!version.resourceUsages.some((usage) => usage.industrialResource.type === "EQUIPMENT")) {
+      pendencies.push({
+        code: "ENERGY_RESOURCE_MISSING",
+        description: "Energia derivada dos equipamentos, mas nenhum equipamento foi planejado.",
+      });
+    }
   }
 
   // Informativo: a estrutura continua válida sobre a receita que ela
@@ -187,6 +352,10 @@ function toVersionDTO(
 
     materials: version.formulationVersion.components.map(toMaterialDTO),
     lines: version.lines.map(toLineDTO),
+    resourceUsages: version.resourceUsages.map((usage) => toUsageDTO(usage, new Date())),
+
+    energyCalculationMode: version.energyCalculationMode,
+    derivedEnergyKwh: derivedEnergyForVersion(version)?.toString() ?? null,
 
     complete: blockingPendencies(pendencies).length === 0,
     pendencies,
@@ -332,7 +501,12 @@ export async function createIndustrialCostVersion(
 
   const source = await prisma.industrialCostVersion.findFirst({
     where: { productId, status: "ACTIVE" },
-    include: { lines: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      lines: { orderBy: { sortOrder: "asc" } },
+      // Os usos são copiados; as TARIFAS não — elas são referência global e
+      // a nova versão deve enxergar a vigente, não a congelada da anterior.
+      resourceUsages: { orderBy: { sortOrder: "asc" } },
+    },
   });
 
   const formulationVersionId =
@@ -391,6 +565,7 @@ export async function createIndustrialCostVersion(
         referenceOutputQuantity: new Prisma.Decimal(referenceQuantity),
         referenceOutputUomCode: referenceUom,
         ...(input.notes !== undefined ? { notes: input.notes } : { notes: source?.notes ?? null }),
+        energyCalculationMode: source?.energyCalculationMode ?? "NONE",
         createdByUserId: actor.id,
         createdByNameSnapshot: actor.name,
       },
@@ -406,6 +581,22 @@ export async function createIndustrialCostVersion(
           rateValue: line.rateValue,
           notes: line.notes,
           sortOrder: line.sortOrder,
+        })),
+      });
+    }
+
+    if (source && source.resourceUsages.length > 0) {
+      await tx.industrialCostResourceUsage.createMany({
+        data: source.resourceUsages.map((usage) => ({
+          industrialCostVersionId: created.id,
+          industrialResourceId: usage.industrialResourceId,
+          usageBasis: usage.usageBasis,
+          usageQuantity: usage.usageQuantity,
+          usageUom: usage.usageUom,
+          notes: usage.notes,
+          sortOrder: usage.sortOrder,
+          // Snapshots econômicos ficam de fora: são da ativação, e esta
+          // versão ainda vai enxergar as tarifas vigentes.
         })),
       });
     }
@@ -543,6 +734,106 @@ export async function deleteIndustrialCostLine(
   return (await getIndustrialCostVersion(line.industrialCostVersionId))!;
 }
 
+
+/**
+ * Adiciona um recurso à versão em rascunho.
+ *
+ * Uma linha por recurso: sem roteiro nesta fase, o mesmo equipamento usado
+ * em duas etapas soma o tempo planejado. A unidade vem do tipo do recurso —
+ * operador em hora, energia em kWh.
+ */
+export async function createResourceUsage(
+  versionId: string,
+  input: CreateResourceUsageInput,
+  _actor: User,
+): Promise<IndustrialCostVersionDTO> {
+  const prisma = getPrisma();
+  const version = await requireEditableVersion(versionId);
+
+  const resource = await prisma.industrialResource.findUnique({
+    where: { id: input.resourceId },
+  });
+  if (!resource) throw new ResourceNotFoundForUsageError(input.resourceId);
+
+  // Energia direta só existe no modo direto; no modo derivado ela vem dos
+  // equipamentos, e aceitar as duas contaria a mesma energia duas vezes.
+  if (resource.type === "ENERGY" && version.energyCalculationMode !== "DIRECT") {
+    throw new EnergyUsageRequiresDirectModeError();
+  }
+
+  const existing = await prisma.industrialCostResourceUsage.findUnique({
+    where: {
+      industrialCostVersionId_industrialResourceId: {
+        industrialCostVersionId: versionId,
+        industrialResourceId: input.resourceId,
+      },
+    },
+  });
+  if (existing) throw new DuplicatedResourceUsageError(resource.name);
+
+  const last = await prisma.industrialCostResourceUsage.aggregate({
+    where: { industrialCostVersionId: versionId },
+    _max: { sortOrder: true },
+  });
+
+  await prisma.industrialCostResourceUsage.create({
+    data: {
+      industrialCostVersionId: versionId,
+      industrialResourceId: resource.id,
+      usageBasis: input.usageBasis ?? "FIXED_PER_REFERENCE_BATCH",
+      usageQuantity: new Prisma.Decimal(input.usageQuantity),
+      usageUom: usageUomForResourceType(resource.type),
+      ...(input.notes !== undefined ? { notes: input.notes } : {}),
+      sortOrder: (last._max.sortOrder ?? 0) + 1,
+    },
+  });
+
+  return (await getIndustrialCostVersion(versionId))!;
+}
+
+export async function deleteResourceUsage(
+  usageId: string,
+  _actor: User,
+): Promise<IndustrialCostVersionDTO> {
+  const prisma = getPrisma();
+  const usage = await prisma.industrialCostResourceUsage.findUnique({ where: { id: usageId } });
+  if (!usage) throw new ResourceUsageNotFoundError(usageId);
+  await requireEditableVersion(usage.industrialCostVersionId);
+
+  await prisma.industrialCostResourceUsage.delete({ where: { id: usageId } });
+  return (await getIndustrialCostVersion(usage.industrialCostVersionId))!;
+}
+
+/**
+ * Troca o modo de energia da versão.
+ *
+ * Sair do modo direto com consumo de energia já lançado é recusado: o
+ * usuário remove a linha antes, para que ninguém acabe com energia direta e
+ * derivada convivendo.
+ */
+export async function updateEnergyMode(
+  versionId: string,
+  input: UpdateEnergyModeInput,
+  _actor: User,
+): Promise<IndustrialCostVersionDTO> {
+  const prisma = getPrisma();
+  const version = await requireEditableVersion(versionId);
+
+  const hasEnergyUsage = version.resourceUsages.some(
+    (usage) => usage.industrialResource.type === "ENERGY",
+  );
+  if (hasEnergyUsage && input.energyCalculationMode !== "DIRECT") {
+    throw new DirectEnergyNotAllowedError();
+  }
+
+  await prisma.industrialCostVersion.update({
+    where: { id: versionId },
+    data: { energyCalculationMode: input.energyCalculationMode },
+  });
+
+  return (await getIndustrialCostVersion(versionId))!;
+}
+
 /**
  * Ativa a estrutura e congela os snapshots do documento.
  *
@@ -561,11 +852,40 @@ export async function activateIndustrialCostVersion(
 
   if (version.formulationVersion.status === "DRAFT") throw new FormulationNotStableError();
 
+  // Recurso inativo não entra numa estrutura nova: o histórico antigo que
+  // já o usava continua válido, mas ativar algo sobre recurso desativado
+  // seria criar uma premissa que a fábrica já abandonou.
+  const inactive = version.resourceUsages.filter((usage) => !usage.industrialResource.active);
+  if (inactive.length > 0) {
+    throw new InactiveResourceActivationError(
+      inactive.map((usage) => usage.industrialResource.name),
+    );
+  }
+
   const activeNumber = await activeFormulationNumber(version.productId);
   const pendencies = blockingPendencies(buildPendencies(version, activeNumber));
   if (pendencies.length > 0 && !input.confirmIncomplete) {
     throw new IncompleteActivationError(pendencies.map((pendency) => pendency.description));
   }
+
+  // Congela o que a versão considerou: tarifa e potência do momento da
+  // ativação. Reajustar a hora amanhã não pode reescrever custo histórico,
+  // e tarifa ausente continua `null` — nunca zero.
+  const reference = new Date();
+  const snapshots = version.resourceUsages.map((usage) => {
+    const rate = pickCurrentRate(usage.industrialResource.rates, reference);
+    return {
+      id: usage.id,
+      resourceNameSnapshot: usage.industrialResource.name,
+      resourceTypeSnapshot: usage.industrialResource.type,
+      rateIdSnapshot: rate?.id ?? null,
+      rateValueSnapshot: rate?.rateValue ?? null,
+      rateCurrencySnapshot: rate?.currencyCode ?? null,
+      rateUomSnapshot: rate?.rateUom ?? null,
+      rateEffectiveAtSnapshot: rate?.effectiveAt ?? null,
+      powerKwSnapshot: usage.industrialResource.powerKw ?? null,
+    };
+  });
 
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM products WHERE id = ${version.productId} FOR UPDATE`;
@@ -592,6 +912,11 @@ export async function activateIndustrialCostVersion(
         unitsPerShippingBoxSnapshot: version.product.unitsPerShippingBox,
       },
     });
+
+    for (const snapshot of snapshots) {
+      const { id, ...data } = snapshot;
+      await tx.industrialCostResourceUsage.update({ where: { id }, data });
+    }
   });
 
   return (await getIndustrialCostVersion(id))!;

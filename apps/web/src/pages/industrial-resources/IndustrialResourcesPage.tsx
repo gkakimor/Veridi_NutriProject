@@ -1,0 +1,244 @@
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { IndustrialResourceDTO, IndustrialResourceType } from "@veridi/shared";
+import {
+  INDUSTRIAL_RATE_UOM_LABELS,
+  INDUSTRIAL_RESOURCE_TYPES,
+  INDUSTRIAL_RESOURCE_TYPE_LABELS,
+} from "@veridi/shared";
+import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { useAuth } from "../../app/AuthProvider";
+import { listIndustrialResources } from "../../lib/industrial-resources-api";
+import { IndustrialResourceFormModal } from "./IndustrialResourceFormModal";
+
+type ActiveFilter = "all" | "active" | "inactive";
+type TypeFilter = "all" | IndustrialResourceType;
+
+const PAGE_SIZE = 20;
+
+/**
+ * Gestão → Recursos Industriais.
+ *
+ * Um recurso é a categoria econômica que a fábrica consome (mão de obra,
+ * equipamento, energia) — não é pessoa, não é máquina física com roteiro.
+ * A tarifa vigente aparece aqui só como referência: quem congela valor é a
+ * estrutura de custo no momento da ativação.
+ */
+export function IndustrialResourcesPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [resources, setResources] = useState<IndustrialResourceDTO[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [creating, setCreating] = useState(false);
+
+  const canEdit = user?.role === "ADMIN";
+
+  useEffect(() => {
+    const handle = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, typeFilter, activeFilter]);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    setError(null);
+
+    const params: Parameters<typeof listIndustrialResources>[0] = { page, pageSize: PAGE_SIZE };
+    if (search) params.search = search;
+    if (typeFilter !== "all") params.type = typeFilter;
+    if (activeFilter !== "all") params.active = activeFilter === "active";
+
+    listIndustrialResources(params)
+      .then((result) => {
+        setResources(result.resources);
+        setTotal(result.total);
+      })
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Falha ao carregar recursos industriais"),
+      )
+      .finally(() => setLoading(false));
+  }, [page, search, typeFilter, activeFilter]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  return (
+    <>
+      <div className="page__header">
+        <div>
+          <h1 className="page__title">Recursos industriais</h1>
+          <p className="page__subtitle">
+            Mão de obra, equipamentos e energia com tarifa histórica. O uso de cada recurso é
+            declarado na estrutura de custos do produto.
+          </p>
+        </div>
+        {canEdit && (
+          <button type="button" className="btn btn--primary" onClick={() => setCreating(true)}>
+            + Novo recurso
+          </button>
+        )}
+        <ExportCsvButton
+          path="/industrial-resources/export.csv"
+          filters={{
+            search,
+            type: typeFilter === "all" ? undefined : typeFilter,
+            active: activeFilter === "all" ? undefined : activeFilter === "active",
+          }}
+        />
+      </div>
+
+      <div className="toolbar">
+        <div className="toolbar__search">
+          <label className="sr-only" htmlFor="resources-search">
+            Buscar recursos
+          </label>
+          <input
+            id="resources-search"
+            type="search"
+            placeholder="Buscar por código, nome ou descrição…"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+          />
+        </div>
+
+        <label className="sr-only" htmlFor="resources-type-filter">
+          Filtrar por tipo
+        </label>
+        <select
+          id="resources-type-filter"
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
+        >
+          <option value="all">Todos os tipos</option>
+          {INDUSTRIAL_RESOURCE_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {INDUSTRIAL_RESOURCE_TYPE_LABELS[type]}
+            </option>
+          ))}
+        </select>
+
+        <label className="sr-only" htmlFor="resources-active-filter">
+          Filtrar por status
+        </label>
+        <select
+          id="resources-active-filter"
+          value={activeFilter}
+          onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
+        >
+          <option value="all">Todos os status</option>
+          <option value="active">Ativos</option>
+          <option value="inactive">Inativos</option>
+        </select>
+      </div>
+
+      {error && <p className="form-alert">{error}</p>}
+
+      <div className="table-container">
+        <table className="table table--clickable-rows">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Recurso</th>
+              <th>Tipo</th>
+              <th>Potência (kW)</th>
+              <th>Tarifa vigente</th>
+              <th>Tarifas</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {resources.map((resource) => (
+              <tr
+                key={resource.id}
+                tabIndex={0}
+                onClick={() => navigate(`/gestao/recursos-industriais/${resource.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    navigate(`/gestao/recursos-industriais/${resource.id}`);
+                  }
+                }}
+              >
+                <td className="is-code">{resource.code}</td>
+                <td>{resource.name}</td>
+                <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type]}</td>
+                {/* Potência desconhecida fica em branco — não vira zero. */}
+                <td>{resource.powerKw ?? "—"}</td>
+                <td>
+                  {resource.currentRate
+                    ? `R$ ${resource.currentRate.rateValue} / ${INDUSTRIAL_RATE_UOM_LABELS[resource.currentRate.rateUom]}`
+                    : "Não informada"}
+                </td>
+                <td>{resource.rateCount}</td>
+                <td>
+                  <span className={resource.active ? "badge badge--active" : "badge badge--inactive"}>
+                    {resource.active ? "Ativo" : "Inativo"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+
+            {!loading && resources.length === 0 && (
+              <tr>
+                <td colSpan={7} className="table__empty">
+                  Nenhum recurso industrial encontrado.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        <div className="table-foot">
+          {total} {total === 1 ? "recurso" : "recursos"}
+        </div>
+      </div>
+
+      <div className="pagination">
+        <span>
+          Página {page} de {totalPages}
+        </span>
+        <div className="table__actions">
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            disabled={page <= 1}
+            onClick={() => setPage((current) => current - 1)}
+          >
+            Anterior
+          </button>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            Próxima
+          </button>
+        </div>
+      </div>
+
+      {creating && (
+        <IndustrialResourceFormModal
+          onClose={() => setCreating(false)}
+          onSaved={(created) => {
+            setCreating(false);
+            navigate(`/gestao/recursos-industriais/${created.id}`);
+          }}
+        />
+      )}
+    </>
+  );
+}

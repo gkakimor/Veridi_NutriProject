@@ -421,6 +421,56 @@ buttons.
 - Costing structures do not feed quotes, prices, margins or commissions —
   those are later capabilities.
 
+# 5.7 Industrial resources (capability 44)
+
+- A **resource** and the **use of a resource** are different things. The
+  resource ("production operator", "encapsulating machine", "electricity")
+  is registered once with its own code and its own rate history; how many
+  hours a given product consumes belongs to that product's cost structure.
+  Free text like "encapsulator R$ 85 × 2.5" inside a product is not a model.
+- A labour resource is an **economic category, never a person**. `User`
+  stays the record of who did or audited something; the two are never linked
+  automatically.
+- **Rates are immutable and historical.** A raise is a new rate; the previous
+  one stays to explain why an old structure cost what it cost. There is no
+  `currentRate` column: the current rate is derived from a reference date
+  (`effectiveAt`/`validUntil`), never from `createdAt`, and a legacy value
+  with no effective date is a reference — never a current rate.
+- The unit follows the type: labour and equipment are charged per hour,
+  energy per kWh. "Operator at 3 KG" is rejected. Hour and kWh live in
+  their own closed enum and are deliberately kept out of the item unit
+  registry, where they would allow a raw material measured in kWh.
+- Power (kW) exists only for equipment and is **never invented**. Unknown
+  power stays `null`, never zero, and one single powerless piece of
+  equipment leaves the derived energy of the whole version *open* rather
+  than reporting the partial sum as if it were the real consumption.
+- A cost version declares at most **one usage line per resource** (there is
+  no routing in this phase, so the same resource's time is summed), always
+  with a quantity greater than zero — a resource that is not used simply is
+  not declared.
+- Energy is either **informed directly** or **derived from equipment**
+  (Σ hours × kW), never both: adding them would count the same energy twice.
+  `NONE` means "not structured yet" and never means zero energy.
+- Activating a version **freezes** the economic snapshot of every usage:
+  resource name and type, rate id/value/currency/unit/effective date and
+  power. Raising a rate tomorrow never rewrites an activated structure, and
+  an unknown rate freezes as `null` — never as zero. Activating with unknown
+  rates or powers requires explicit confirmation.
+- An **inactive resource blocks the activation** of a new structure, while
+  structures already active keep working with the values they froze.
+  Deactivating a resource today never creates a pendency on a document that
+  was activated yesterday.
+- A new cost version copies the resource usages (the plan) but never the
+  frozen rates: the new draft must see today's current rate.
+- Nothing here multiplies quantity by rate: the consolidated industrial cost
+  is the next capability, and printing a "resources" section on a draft
+  shows today's reference while an active version shows the frozen snapshot.
+- Legacy spreadsheets never create resources. Text hints only produce
+  findings (`LABOR_RESOURCE_CANDIDATE`, `EQUIPMENT_RESOURCE_CANDIDATE`,
+  `ENERGY_RESOURCE_CANDIDATE`, `EQUIPMENT_COST_MAY_INCLUDE_ENERGY`,
+  `UNRESOLVED_RESOURCE_COST`); registering a resource and its rate stays a
+  human decision.
+
 ---
 
 # 6. Purchase Orders

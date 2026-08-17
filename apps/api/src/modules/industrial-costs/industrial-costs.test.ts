@@ -215,10 +215,12 @@ describe("Estrutura de custos — versionamento", () => {
         rateValue: "150",
       },
     });
+    // Energia ainda não estruturada (modo NONE) é pendência desde a 44 —
+    // ativar assim é decisão explícita.
     await app.inject({
       method: "POST",
       url: `/industrial-costs/${v1.id}/activate`,
-      payload: {},
+      payload: { confirmIncomplete: true },
     });
 
     const v2 = (await createCostVersion(app, product.id)).json();
@@ -246,10 +248,18 @@ describe("Estrutura de custos — versionamento", () => {
     await activateFormulation(app, formulationVersionId);
 
     const v1 = (await createCostVersion(app, product.id, { referenceOutputQuantity: "500" })).json();
-    await app.inject({ method: "POST", url: `/industrial-costs/${v1.id}/activate`, payload: {} });
+    await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${v1.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
 
     const v2 = (await createCostVersion(app, product.id)).json();
-    await app.inject({ method: "POST", url: `/industrial-costs/${v2.id}/activate`, payload: {} });
+    await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${v2.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
 
     const overview = (
       await app.inject({ method: "GET", url: `/products/${product.id}/industrial-costs` })
@@ -285,7 +295,11 @@ describe("Estrutura de custos — versionamento", () => {
       })
     ).json().lines[0].id;
 
-    await app.inject({ method: "POST", url: `/industrial-costs/${v1.id}/activate`, payload: {} });
+    await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${v1.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
 
     const patchVersion = await app.inject({
       method: "PATCH",
@@ -335,7 +349,7 @@ describe("Estrutura de custos — formulação vinculada", () => {
     const activated = await app.inject({
       method: "POST",
       url: `/industrial-costs/${draft.id}/activate`,
-      payload: {},
+      payload: { confirmIncomplete: true },
     });
     expect(activated.statusCode).toBe(200);
     expect(activated.json().status).toBe("ACTIVE");
@@ -508,7 +522,11 @@ describe("Estrutura de custos — premissas manuais", () => {
     const version = (
       await createCostVersion(app, product.id, { referenceOutputQuantity: "1000" })
     ).json();
-    expect(version.complete).toBe(true);
+    // A única pendência de uma estrutura recém-criada é a energia, que
+    // nasce como "não configurada" — o que nunca significa energia zero.
+    expect(version.pendencies.map((row: { code: string }) => row.code)).toEqual([
+      "ENERGY_NOT_CONFIGURED",
+    ]);
 
     const withUnknown = (
       await app.inject({
@@ -611,15 +629,8 @@ describe("Estrutura de custos — sem efeito colateral", () => {
     await app.ready();
     const prisma = getPrisma();
 
-    const before = {
-      receiptLinesWithCost: await prisma.receiptLine.count({
-        where: { actualUnitCost: { not: null } },
-      }),
-      offers: await prisma.supplierItemOffer.count(),
-      movements: await prisma.inventoryMovement.count(),
-    };
-
-    const { product, formulationVersionId } = await createProductWithFormulation(app);
+    const { product, formulationVersionId, veridiMaterial, packaging } =
+      await createProductWithFormulation(app);
     await activateFormulation(app, formulationVersionId);
     const version = (
       await createCostVersion(app, product.id, { referenceOutputQuantity: "1000" })
@@ -634,17 +645,25 @@ describe("Estrutura de custos — sem efeito colateral", () => {
         rateValue: "500",
       },
     });
-    await app.inject({ method: "POST", url: `/industrial-costs/${version.id}/activate`, payload: {} });
+    await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${version.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
 
-    const after = {
-      receiptLinesWithCost: await prisma.receiptLine.count({
-        where: { actualUnitCost: { not: null } },
+    // Estrutura de custo não é custo real: nada do que a Foundation guarda
+    // sobre estes itens é criado ou tocado. A verificação é por item — contar
+    // linhas globais só mediria o que outros testes fazem em paralelo.
+    const itemIds = [veridiMaterial.id, packaging.id];
+    expect(
+      await prisma.inventoryMovement.count({ where: { lot: { itemId: { in: itemIds } } } }),
+    ).toBe(0);
+    expect(await prisma.supplierItemOffer.count({ where: { supplierItem: { itemId: { in: itemIds } } } })).toBe(0);
+    expect(
+      await prisma.receiptLine.count({
+        where: { itemId: { in: itemIds }, actualUnitCost: { not: null } },
       }),
-      offers: await prisma.supplierItemOffer.count(),
-      movements: await prisma.inventoryMovement.count(),
-    };
-    // Estrutura de custo não é custo real: a Foundation não se mexe.
-    expect(after).toEqual(before);
+    ).toBe(0);
 
     await app.close();
   });

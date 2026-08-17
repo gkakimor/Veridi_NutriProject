@@ -26,6 +26,8 @@ import { SampleLabelPrintPage } from "./pages/samples/SampleLabelPrintPage";
 import { ReportPrintPage } from "./pages/print/ReportPrintPage";
 import { IndustrialCostPrintPage } from "./pages/print/IndustrialCostPrintPage";
 import { IndustrialCostPage } from "./pages/industrial-costs/IndustrialCostPage";
+import { IndustrialResourceDetailPage } from "./pages/industrial-resources/IndustrialResourceDetailPage";
+import { IndustrialResourcesPage } from "./pages/industrial-resources/IndustrialResourcesPage";
 import {
   OrderOperationPrintPage,
   ProductionTraceabilityPrintPage,
@@ -207,6 +209,14 @@ function AuthenticatedApp() {
           <Route path="/comercial/faturamento/:id" element={<BillingPage />} />
 
           {/* Gestão → Relatórios (R-01…R-17), todos somente leitura. */}
+          <Route
+            path="/gestao/recursos-industriais"
+            element={<IndustrialResourcesPage />}
+          />
+          <Route
+            path="/gestao/recursos-industriais/:id"
+            element={<IndustrialResourceDetailPage />}
+          />
           <Route path="/relatorios" element={<ReportsHubPage />} />
           <Route path="/relatorios/estoque/posicao" element={<InventoryPositionReportPage />} />
           <Route path="/relatorios/estoque/vencimentos" element={<ExpiryReportPage />} />

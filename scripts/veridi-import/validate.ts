@@ -96,12 +96,20 @@ async function main(): Promise<void> {
       `    candidatos: material de formulacao ${cmv.components.byCandidate.FORMULATION_MATERIAL} - embalagem secundaria ${cmv.components.byCandidate.SECONDARY_PACKAGING} - mao de obra ${cmv.components.byCandidate.LABOR} - equipamento ${cmv.components.byCandidate.EQUIPMENT} - energia ${cmv.components.byCandidate.ENERGY} - overhead ${cmv.components.byCandidate.OVERHEAD} - nao classificados ${cmv.components.byCandidate.UNKNOWN}`,
     );
     console.log(
+      `    recursos industriais: mao de obra ${cmv.resources.labor} - equipamento ${cmv.resources.equipment} - energia ${cmv.resources.energy} - equipamento que pode ja incluir energia ${cmv.resources.equipmentMaybeWithEnergy}`,
+    );
+    console.log(
+      `    custo historico sem detalhe de recurso: ${cmv.resources.filesWithoutResourceDetail} de ${cmv.resources.filesWithHistoricalCost} planilhas — tarifa nao e derivavel da planilha`,
+    );
+    console.log(
       `  precificacao ${cmv.pricing.rows} linhas em ${cmv.pricing.files} produtos - faixas de quantidade ${cmv.pricing.quantityBands} - com preco ${cmv.pricing.withPrice} - com margem ${cmv.pricing.withMargin} - com comissao ${cmv.pricing.withCommission}`,
     );
     console.log(
       `  custo historico disponivel: ${cmv.historical.unitCostRows} linhas por unidade - ${cmv.historical.thousandUnitCostRows} por 1.000 unidades (referencia, sem exigencia de match)`,
     );
-    console.log("  nada de CMV e persistido: estrutura na 43, recursos/calculo/preco nas seguintes.");
+    console.log(
+      "  nada de CMV e persistido: nenhum recurso industrial e criado a partir de texto legado.",
+    );
 
     result.findings.print(2);
     console.log(`\n  Findings detalhados em ${OUT_DIR}`);

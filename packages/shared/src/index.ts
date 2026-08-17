@@ -17,6 +17,7 @@ export * from "./projects.js";
 export * from "./samples.js";
 export * from "./supplier-items.js";
 export * from "./industrial-costs.js";
+export * from "./industrial-resources.js";
 export * from "./cnpj.js";
 export * from "./br-states.js";
 export * from "./suppliers.js";

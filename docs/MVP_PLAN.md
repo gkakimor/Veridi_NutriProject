@@ -93,7 +93,7 @@ not yet represented in the domain.
 ## Block G — Industrial costing & pricing
 
 43. Industrial cost structure ✓
-44. Resources / equipment / energy / labour
+44. Resources / equipment / energy / labour ✓
 45. Full production cost
 46. Price and margin simulator by range
 47. Project → Quotation → Cost/Price integration
@@ -138,7 +138,8 @@ dashboard, reports and exports remain the foundation.
 → 41 Veridi legacy importer ✓
 → 42 Operational adherence UX ✓ — Block F complete
 → 43 Industrial cost structure ✓
-→ 44-47 Block G (industrial costing & pricing)
+→ 44 Industrial resources / equipment / energy / labour ✓
+→ 45-47 Block G (industrial costing & pricing)
 → ⛔ GATE: Block H (regulatory/labelling) needs a new domain/regulatory
    validation from Product Ownership before being specified
 → end-to-end validation / demo

@@ -28,6 +28,12 @@ export interface CmvComponentRow {
   family: string | null;
   /** Classificação do que a linha representa — nunca inferida no import. */
   candidate: CmvComponentCandidate;
+  /**
+   * Texto de equipamento que também fala de energia. Equipamento tarifado com
+   * energia embutida somado à energia derivada contaria a mesma conta duas
+   * vezes — o dado precisa ser lido por gente antes de virar tarifa.
+   */
+  mayIncludeEnergy: boolean;
 }
 
 /**
@@ -86,16 +92,26 @@ export function readCmvProductRows(): CmvProductRow[] {
   }));
 }
 
+const ENERGY_TERMS = ["ENERGIA", "ELETRIC", "ELÉTRIC", "KWH", "KW/H", "LUZ"];
+
+/** O texto do equipamento menciona energia junto? */
+export function equipmentTextMentionsEnergy(description: string | null): boolean {
+  const text = (description ?? "").toUpperCase();
+  return ENERGY_TERMS.some((term) => text.includes(term));
+}
+
 export function readCmvComponentRows(): CmvComponentRow[] {
   return readCorpusCsv("cmv_componentes.csv").rows.map((row) => {
     const itemExternalCode = cleanText(row["cod_item"]);
     const description = cleanText(row["descricao_mp"]);
+    const candidate = classifyCmvComponent(description, itemExternalCode !== null);
     return {
       file: cleanText(row["arquivo"]) ?? "",
       itemExternalCode,
       description,
       family: cleanText(row["familia"]),
-      candidate: classifyCmvComponent(description, itemExternalCode !== null),
+      candidate,
+      mayIncludeEnergy: candidate === "EQUIPMENT" && equipmentTextMentionsEnergy(description),
     };
   });
 }
@@ -149,6 +165,20 @@ export interface CmvAnalysis {
     distinctFamilies: number;
   };
   pricing: CmvPricingStats;
+  /**
+   * Candidatos a recurso industrial encontrados no texto legado. `files*`
+   * conta as planilhas cujo custo histórico existe mas NÃO detalha nenhum
+   * recurso — nelas mão de obra, equipamento e energia estão embutidos no
+   * custo unitário e não podem ser separados por leitura de texto.
+   */
+  resources: {
+    labor: number;
+    equipment: number;
+    energy: number;
+    equipmentMaybeWithEnergy: number;
+    filesWithHistoricalCost: number;
+    filesWithoutResourceDetail: number;
+  };
   /** Valores históricos disponíveis — referência, sem exigência de match. */
   historical: { unitCostRows: number; thousandUnitCostRows: number };
 }
@@ -175,17 +205,30 @@ export function analyzeCmv(findings: FindingSink): CmvAnalysis {
   };
   for (const component of components) byCandidate[component.candidate] += 1;
 
+  const CANDIDATE_FINDING: Partial<Record<CmvComponentCandidate, string>> = {
+    LABOR: "LABOR_RESOURCE_CANDIDATE",
+    EQUIPMENT: "EQUIPMENT_RESOURCE_CANDIDATE",
+    ENERGY: "ENERGY_RESOURCE_CANDIDATE",
+  };
+
   for (const component of components) {
-    if (
-      component.candidate === "LABOR" ||
-      component.candidate === "EQUIPMENT" ||
-      component.candidate === "ENERGY"
-    ) {
+    const resourceFinding = CANDIDATE_FINDING[component.candidate];
+    if (resourceFinding) {
+      // O recurso NUNCA é criado a partir do texto: o cadastro é decisão
+      // humana, e a tarifa histórica da planilha não é tarifa vigente.
       findings.add(
-        "DEFERRED_INDUSTRIAL_RESOURCE",
-        "IndustrialCost",
+        resourceFinding,
+        "IndustrialResource",
         component.description ?? component.file,
-        "custo de recurso industrial — modelagem propria na proxima capacidade, nunca linha manual agora",
+        "candidato a recurso industrial no texto legado — cadastro e tarifa continuam sendo decisao manual",
+      );
+    }
+    if (component.mayIncludeEnergy) {
+      findings.add(
+        "EQUIPMENT_COST_MAY_INCLUDE_ENERGY",
+        "IndustrialResource",
+        component.description ?? component.file,
+        "custo de equipamento que menciona energia — tarifar assim e somar energia derivada contaria a mesma energia duas vezes",
       );
     }
     if (component.candidate === "SECONDARY_PACKAGING") {
@@ -204,6 +247,33 @@ export function analyzeCmv(findings: FindingSink): CmvAnalysis {
         "linha de CMV sem categoria reconhecida — nao classificada automaticamente",
       );
     }
+  }
+
+  // Custo histórico existe, mas o CMV legado não separa mão de obra,
+  // equipamento e energia: eles estão diluídos no custo unitário. Isso é
+  // finding, não estimativa — nada aqui vira tarifa.
+  const filesWithResourceDetail = new Set(
+    components
+      .filter((component) => CANDIDATE_FINDING[component.candidate] !== undefined)
+      .map((component) => component.file),
+  );
+  const pricingFiles = new Set(
+    readCorpusCsv("cmv_precificacao.csv")
+      .rows.filter(
+        (row) => safeDecimal(row["custo_por_unidade"]) || safeDecimal(row["custo_por_1000_unid"]),
+      )
+      .map((row) => cleanText(row["arquivo"]) ?? ""),
+  );
+  const filesWithoutResourceDetail = [...pricingFiles].filter(
+    (file) => !filesWithResourceDetail.has(file),
+  );
+  for (const file of filesWithoutResourceDetail) {
+    findings.add(
+      "UNRESOLVED_RESOURCE_COST",
+      "IndustrialResource",
+      file,
+      "custo historico inclui mao de obra/equipamento/energia sem detalhamento — tarifa nao pode ser derivada da planilha",
+    );
   }
 
   findings.add(
@@ -231,6 +301,14 @@ export function analyzeCmv(findings: FindingSink): CmvAnalysis {
       ).size,
     },
     pricing,
+    resources: {
+      labor: byCandidate.LABOR,
+      equipment: byCandidate.EQUIPMENT,
+      energy: byCandidate.ENERGY,
+      equipmentMaybeWithEnergy: components.filter((component) => component.mayIncludeEnergy).length,
+      filesWithHistoricalCost: pricingFiles.size,
+      filesWithoutResourceDetail: filesWithoutResourceDetail.length,
+    },
     historical: {
       unitCostRows: historicalRows.filter((row) => safeDecimal(row["custo_por_unidade"])).length,
       thousandUnitCostRows: historicalRows.filter((row) => safeDecimal(row["custo_por_1000_unid"]))

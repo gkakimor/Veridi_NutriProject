@@ -6,6 +6,11 @@
  * consolidado (CMV) é calculado em outra capacidade; nada aqui guarda total.
  */
 
+import type {
+  EnergyCalculationMode,
+  IndustrialCostResourceUsageDTO,
+} from "./industrial-resources.js";
+
 export type IndustrialCostVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE";
 
 export const INDUSTRIAL_COST_VERSION_STATUS_LABELS: Record<
@@ -115,7 +120,13 @@ export interface IndustrialCostPendencyDTO {
     | "RATE_NOT_INFORMED"
     | "SHIPPING_BOX_NOT_CONFIGURED"
     | "FORMULATION_NOT_STABLE"
-    | "FORMULATION_OUTDATED";
+    | "FORMULATION_OUTDATED"
+    | "RESOURCE_RATE_NOT_INFORMED"
+    | "ENERGY_NOT_CONFIGURED"
+    | "EQUIPMENT_POWER_NOT_INFORMED"
+    | "ENERGY_RESOURCE_MISSING"
+    | "ENERGY_RATE_NOT_INFORMED"
+    | "RESOURCE_INACTIVE";
   description: string;
 }
 
@@ -145,6 +156,15 @@ export interface IndustrialCostVersionDTO {
 
   materials: IndustrialCostMaterialDTO[];
   lines: IndustrialCostLineDTO[];
+  /** Recursos industriais planejados nesta versão. */
+  resourceUsages: IndustrialCostResourceUsageDTO[];
+
+  energyCalculationMode: EnergyCalculationMode;
+  /**
+   * Consumo energético derivado dos equipamentos (Σ horas × kW). É
+   * QUANTIDADE, não custo: nenhum total em dinheiro é calculado nesta fase.
+   */
+  derivedEnergyKwh: string | null;
 
   /** `true` quando toda premissa necessária tem valor e base configurada. */
   complete: boolean;

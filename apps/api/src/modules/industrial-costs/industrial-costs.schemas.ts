@@ -67,3 +67,20 @@ export type UpdateIndustrialCostLineInput = z.infer<typeof updateIndustrialCostL
 export type ActivateIndustrialCostVersionInput = z.infer<
   typeof activateIndustrialCostVersionSchema
 >;
+
+export const createResourceUsageSchema = z.object({
+  resourceId: z.string().trim().min(1, "Selecione o recurso"),
+  // Recurso que não é usado simplesmente não vira linha — nada de 0 hora.
+  usageQuantity: decimalStringSchema(),
+  usageBasis: z
+    .enum(["FIXED_PER_REFERENCE_BATCH", "PER_OUTPUT_UNIT", "PER_1000_OUTPUT_UNITS"])
+    .optional(),
+  notes: optionalNullableText(1000),
+});
+
+export const updateEnergyModeSchema = z.object({
+  energyCalculationMode: z.enum(["NONE", "DIRECT", "FROM_EQUIPMENT"]),
+});
+
+export type CreateResourceUsageInput = z.infer<typeof createResourceUsageSchema>;
+export type UpdateEnergyModeInput = z.infer<typeof updateEnergyModeSchema>;

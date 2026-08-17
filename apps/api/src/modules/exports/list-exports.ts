@@ -16,6 +16,7 @@ import type {
   PurchaseOrderDTO,
   ReceiptDTO,
   ReceiptLineDTO,
+  IndustrialResourceDTO,
   ShipmentDTO,
   SupplierItemDTO,
   SupplierDTO,
@@ -40,6 +41,8 @@ import {
   PURCHASE_ORDER_STATUS_LABELS,
   SHIPMENT_STATUS_LABELS,
   SUPPLIER_ITEM_QUALIFICATION_LABELS,
+  INDUSTRIAL_RATE_UOM_LABELS,
+  INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
 import { csvBoolean, csvCode, csvDate, csvDateTime, csvDecimal, csvMoney, csvText } from "../../lib/csv.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
@@ -58,6 +61,7 @@ import { listLots } from "../lots/lots.service.js";
 import { listFormulations } from "../formulations/formulations.service.js";
 import { listProductionOrders } from "../production-orders/production-orders.service.js";
 import { listFinishedGoods } from "../finished-goods/finished-goods.service.js";
+import { listIndustrialResources } from "../industrial-resources/industrial-resources.service.js";
 import { listCustomerOrders } from "../customer-orders/customer-orders.service.js";
 import { listShipments } from "../shipments/shipments.service.js";
 import { listBillings } from "../billings/billings.service.js";
@@ -82,6 +86,10 @@ import { listFinishedGoodsQuerySchema } from "../finished-goods/finished-goods.s
 import { listCustomerOrdersQuerySchema } from "../customer-orders/customer-orders.schemas.js";
 import { listShipmentsQuerySchema } from "../shipments/shipments.schemas.js";
 import { listBillingsQuerySchema } from "../billings/billings.schemas.js";
+import {
+  listResourcesQuerySchema,
+} from "../industrial-resources/industrial-resources.schemas.js";
+import type { ListResourcesQuery } from "../industrial-resources/industrial-resources.schemas.js";
 import type { ListCustomersQuery } from "../customers/customers.schemas.js";
 import type { ListSuppliersQuery } from "../suppliers/suppliers.schemas.js";
 import type { ListSupplierItemsQuery } from "../supplier-items/supplier-items.schemas.js";
@@ -600,6 +608,32 @@ const billingsExport = defineCsvExport({
   ],
 });
 
+const industrialResourcesExport = defineCsvExport({
+  path: "/industrial-resources/export.csv",
+  slug: "recursos-industriais",
+  schema: listResourcesQuerySchema,
+  fetch: async (query: ListResourcesQuery) =>
+    (await listIndustrialResources(query, ALL_ROWS)).resources,
+  columns: [
+    { header: "Código", value: (row: IndustrialResourceDTO) => csvCode(row.code) },
+    { header: "Recurso", value: (row: IndustrialResourceDTO) => csvText(row.name) },
+    { header: "Tipo", value: (row: IndustrialResourceDTO) => INDUSTRIAL_RESOURCE_TYPE_LABELS[row.type] },
+    { header: "Descrição", value: (row: IndustrialResourceDTO) => csvText(row.description) },
+    // Potência e tarifa desconhecidas ficam vazias — nunca zero.
+    { header: "Potência (kW)", value: (row: IndustrialResourceDTO) => csvDecimal(row.powerKw) },
+    { header: "Tarifa vigente", value: (row: IndustrialResourceDTO) => csvMoney(row.currentRate?.rateValue ?? null) },
+    { header: "Moeda", value: (row: IndustrialResourceDTO) => csvText(row.currentRate?.currencyCode ?? null) },
+    {
+      header: "Unidade da tarifa",
+      value: (row: IndustrialResourceDTO) =>
+        row.currentRate ? INDUSTRIAL_RATE_UOM_LABELS[row.currentRate.rateUom] : "",
+    },
+    { header: "Vigente desde", value: (row: IndustrialResourceDTO) => csvDate(row.currentRate?.effectiveAt ?? null) },
+    { header: "Tarifas registradas", value: (row: IndustrialResourceDTO) => String(row.rateCount) },
+    { header: "Status", value: (row: IndustrialResourceDTO) => (row.active ? "Ativo" : "Inativo") },
+  ],
+});
+
 export const listCsvExports: CsvExportRoute[] = [
   customersExport,
   suppliersExport,
@@ -620,4 +654,5 @@ export const listCsvExports: CsvExportRoute[] = [
   customerOrdersExport,
   shipmentsExport,
   billingsExport,
+  industrialResourcesExport,
 ];

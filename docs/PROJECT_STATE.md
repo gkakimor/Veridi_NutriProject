@@ -69,6 +69,9 @@ severidade, overrides explícitos e abertura de estoque por lote real.**
 F, capacidade 42): concluído — Bloco F encerrado.**
 **Delivery 35 — Estrutura de custos industriais (Bloco G, capacidade 43):
 concluído — estrutura versionada de premissas, sem cálculo de CMV.**
+**Delivery 36 — Recursos industriais / equipamentos / energia / mão de obra
+(Bloco G, capacidade 44): concluído — recurso e uso do recurso separados,
+tarifa histórica imutável e snapshot econômico congelado na ativação.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -4040,6 +4043,68 @@ Fundação de Custos) — faltava só a visão. Nada de domínio novo foi criado
 
 ---
 
+# Delivery 36 — Recursos industriais (Bloco G, capacidade 44)
+
+## Recurso ≠ uso do recurso
+`IndustrialResource` (`REC-000001`) é o cadastro econômico — mão de obra,
+equipamento ou energia — com unidade de consumo derivada do tipo (hora para
+LABOR/EQUIPMENT, kWh para ENERGY) e `powerKw` só em equipamento. O quanto um
+produto consome é `IndustrialCostResourceUsage`, ligado à CostVersion, uma
+linha por recurso (sem roteiro nesta fase) e sempre com quantidade > 0.
+
+Recurso `LABOR` é categoria econômica, nunca pessoa: `User` continua sendo
+quem executou/auditou, e os dois nunca se ligam sozinhos.
+
+## Tarifa histórica e imutável
+`IndustrialResourceRate` nunca é editada: reajuste é registro novo. Não
+existe `currentRate` gravado — a vigente é derivada de `effectiveAt`/
+`validUntil` numa data de referência, e tarifa legada sem vigência é
+referência, jamais vigente. `HOUR`/`KWH` ficam num enum próprio, fora do
+registro de UOM de itens (senão daria para cadastrar matéria-prima em kWh —
+desvio consciente do §16/§18 do handoff, relatado).
+
+## Energia sem dupla contagem
+`energyCalculationMode` na versão: `NONE` (não estruturada, nunca zero),
+`DIRECT` (consumo lançado como recurso de energia) ou `FROM_EQUIPMENT`
+(Σ horas × kW). Os dois últimos são mutuamente exclusivos e o backend recusa
+a troca de modo enquanto houver energia direta lançada. Um único equipamento
+sem potência deixa a energia derivada EM ABERTO — somar só os conhecidos
+apresentaria um número menor como se fosse o consumo real.
+
+## Congelamento na ativação
+Ativar grava por uso: nome, tipo, id/valor/moeda/unidade/vigência da tarifa e
+potência. Reajustar a hora depois muda a "referência atual" exibida no
+rascunho, nunca o snapshot da versão ativa. Tarifa desconhecida congela
+`null`, e ativar incompleta exige confirmação explícita. Recurso inativo
+bloqueia ativação nova; versão já ativa continua íntegra e não ganha
+pendência por inativação posterior. Nova versão copia os usos, nunca as
+tarifas.
+
+## Telas
+Gestão → Recursos Industriais (lista com filtros + CSV, detalhe com
+histórico de tarifas e "Registrar tarifa"); seção RECURSOS INDUSTRIAIS e
+seção ENERGIA na página de custos, com preview do kWh derivado; a impressão
+da EC ganhou a seção de recursos — rascunho mostra referência atual, ativa
+mostra o snapshot.
+
+## Corpus
+O CMV legado NÃO detalha recurso: as 9 planilhas com custo histórico trazem
+mão de obra, equipamento e energia diluídos no custo unitário. Isso virou
+`UNRESOLVED_RESOURCE_COST` (9), e a classificação por texto só emite
+`LABOR/EQUIPMENT/ENERGY_RESOURCE_CANDIDATE` e
+`EQUIPMENT_COST_MAY_INCLUDE_ENERGY`. Nenhum recurso é criado a partir de
+texto e nada é persistido. Golden da formulação intacto: 26/26/0.
+
+## Efeito colateral desta capacidade
+Estrutura com energia ainda não configurada passou a ser "com pendências"
+(`ENERGY_NOT_CONFIGURED`) e ativar assim exige confirmação — consequência
+direta de "NONE nunca significa energia zero". Os testes da 43 foram
+ajustados a essa regra.
+
+- Testes: 542 API + 25 web + 14 scripts. Playwright: `handoff/screens/44-*`.
+
+---
+
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
@@ -4047,14 +4112,15 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Bloco F CONCLUÍDO (33-42); Bloco G iniciado na 43. Próximo passo do
-roadmap oficial: **capacidade 44 — recursos, equipamentos, energia e mão
-de obra**. A base de
+Bloco F CONCLUÍDO (33-42); Bloco G em andamento (43-44 concluídas).
+Próximo passo do roadmap oficial: **capacidade 45 — custo industrial
+consolidado**, que multiplica os usos de recurso pelas tarifas congeladas e
+soma as premissas manuais. A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
 o que existe hoje é ferramenta de dados de desenvolvimento. Depois seguem
-44-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+45-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.

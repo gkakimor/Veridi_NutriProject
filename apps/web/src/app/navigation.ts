@@ -77,7 +77,14 @@ export const navigation: NavGroup[] = [
   },
   {
     title: "Gestão",
-    items: [{ label: "Relatórios", path: "/relatorios", implemented: true }],
+    items: [
+      { label: "Relatórios", path: "/relatorios", implemented: true },
+      {
+        label: "Recursos Industriais",
+        path: "/gestao/recursos-industriais",
+        implemented: true,
+      },
+    ],
   },
   {
     title: "Administração",

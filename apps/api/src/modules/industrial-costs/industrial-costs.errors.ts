@@ -103,3 +103,52 @@ export class IncompleteActivationError extends Error {
     this.name = "IncompleteActivationError";
   }
 }
+
+export class ResourceNotFoundForUsageError extends Error {
+  constructor(id: string) {
+    super(`Recurso industrial não encontrado: ${id}`);
+    this.name = "ResourceNotFoundForUsageError";
+  }
+}
+
+export class ResourceUsageNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Uso de recurso não encontrado: ${id}`);
+    this.name = "ResourceUsageNotFoundError";
+  }
+}
+
+/** Uma linha por recurso: sem roteiro, o tempo do mesmo recurso é somado. */
+export class DuplicatedResourceUsageError extends Error {
+  constructor(name: string) {
+    super(`"${name}" já está nesta estrutura — some o tempo na linha existente.`);
+    this.name = "DuplicatedResourceUsageError";
+  }
+}
+
+/** Energia direta e derivada não convivem: contariam a mesma energia duas vezes. */
+export class EnergyUsageRequiresDirectModeError extends Error {
+  constructor() {
+    super(
+      'Consumo de energia só pode ser informado no modo "energia informada diretamente".',
+    );
+    this.name = "EnergyUsageRequiresDirectModeError";
+  }
+}
+
+export class DirectEnergyNotAllowedError extends Error {
+  constructor() {
+    super(
+      "Remova o consumo de energia informado antes de mudar o modo — energia direta e derivada não convivem.",
+    );
+    this.name = "DirectEnergyNotAllowedError";
+  }
+}
+
+/** Recurso desativado não entra em estrutura nova; o histórico continua. */
+export class InactiveResourceActivationError extends Error {
+  constructor(names: string[]) {
+    super(`Recurso inativo nesta estrutura: ${names.join(", ")}. Reative ou remova antes de ativar.`);
+    this.name = "InactiveResourceActivationError";
+  }
+}

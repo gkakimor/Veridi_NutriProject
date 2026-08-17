@@ -357,6 +357,9 @@ model User {
   createdSupplierItemOffers  SupplierItemOffer[] @relation("SupplierItemOfferCreatedBy")
   createdIndustrialCosts     IndustrialCostVersion[] @relation("IndustrialCostCreatedBy")
   activatedIndustrialCosts   IndustrialCostVersion[] @relation("IndustrialCostActivatedBy")
+  createdIndustrialResources IndustrialResource[] @relation("IndustrialResourceCreatedBy")
+  updatedIndustrialResources IndustrialResource[] @relation("IndustrialResourceUpdatedBy")
+  createdIndustrialRates     IndustrialResourceRate[] @relation("IndustrialResourceRateCreatedBy")
 
   @@index([active])
   @@map("users")
@@ -763,6 +766,9 @@ model IndustrialCostVersion {
   referenceOutputUomCode  String
   referenceOutputUom      UnitOfMeasure @relation("IndustrialCostOutputUom", fields: [referenceOutputUomCode], references: [code])
 
+  /// `NONE` significa energia ainda NAO estruturada — nunca energia zero.
+  energyCalculationMode EnergyCalculationMode @default(NONE)
+
   notes String?
 
   /// Snapshots congelados na ativacao — impressao e historico nao mudam
@@ -786,7 +792,8 @@ model IndustrialCostVersion {
 
   updatedAt DateTime @updatedAt
 
-  lines IndustrialCostLine[]
+  lines          IndustrialCostLine[]
+  resourceUsages IndustrialCostResourceUsage[]
 
   @@unique([productId, versionNumber])
   @@index([productId])
@@ -822,6 +829,126 @@ model IndustrialCostLine {
 
   @@index([industrialCostVersionId])
   @@map("industrial_cost_lines")
+}
+
+/// Recurso industrial (mao de obra, equipamento, energia).
+///
+/// LABOR e CATEGORIA economica, nao pessoa: `User` (capacidade 36) diz quem
+/// executou um ato; o recurso diz quanto custa uma hora daquela funcao. Os
+/// dois nunca se relacionam automaticamente.
+model IndustrialResource {
+  id String @id @default(uuid())
+
+  /// REC-000001 — codigo de negocio visivel.
+  code String @unique
+
+  name        String
+  type        IndustrialResourceType
+  description String?
+
+  /// Unidade em que o recurso e consumido (hora, kWh) — derivada do tipo.
+  defaultUsageUom IndustrialRateUom
+
+  /// Potencia nominal, so para equipamento. `null` = DESCONHECIDA: nunca
+  /// se assume potencia padrao, e o cadastro do equipamento nao trava por
+  /// causa disso.
+  powerKw Decimal? @db.Decimal(12, 4)
+
+  notes  String?
+  active Boolean @default(true)
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("IndustrialResourceCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+
+  updatedAt             DateTime @updatedAt
+  updatedByUserId       String?
+  updatedByUser         User?    @relation("IndustrialResourceUpdatedBy", fields: [updatedByUserId], references: [id])
+  updatedByNameSnapshot String?
+
+  rates  IndustrialResourceRate[]
+  usages IndustrialCostResourceUsage[]
+
+  @@index([type])
+  @@index([active])
+  @@map("industrial_resources")
+}
+
+/// Tarifa historica do recurso. IMUTAVEL: tarifa mudou, registra-se outra.
+///
+/// Por isso nao existe `currentRate` no recurso — a vigente e derivada da
+/// data de referencia, e o historico continua inteiro para que uma
+/// estrutura antiga nunca mude de valor sozinha.
+model IndustrialResourceRate {
+  id String @id @default(uuid())
+
+  industrialResourceId String
+  industrialResource   IndustrialResource @relation(fields: [industrialResourceId], references: [id], onDelete: Cascade)
+
+  rateValue    Decimal @db.Decimal(14, 4)
+  currencyCode String  @db.VarChar(3)
+  rateUom      IndustrialRateUom
+
+  /// Sem vigencia confiavel a tarifa e apenas referencia historica — nunca
+  /// tarifa vigente.
+  effectiveAt DateTime?
+  validUntil  DateTime?
+
+  source IndustrialResourceRateSource @default(MANUAL)
+  notes  String?
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("IndustrialResourceRateCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+
+  @@index([industrialResourceId])
+  @@index([effectiveAt])
+  @@map("industrial_resource_rates")
+}
+
+/// Uso PLANEJADO de um recurso na base de referencia de uma estrutura.
+///
+/// O recurso e global; o uso pertence a versao de custo. Uma linha por
+/// recurso: sem roteiro/operacoes nesta fase, o mesmo equipamento usado em
+/// duas etapas soma o tempo.
+model IndustrialCostResourceUsage {
+  id String @id @default(uuid())
+
+  industrialCostVersionId String
+  industrialCostVersion   IndustrialCostVersion @relation(fields: [industrialCostVersionId], references: [id], onDelete: Cascade)
+
+  industrialResourceId String
+  industrialResource   IndustrialResource @relation(fields: [industrialResourceId], references: [id])
+
+  usageBasis    IndustrialResourceUsageBasis @default(FIXED_PER_REFERENCE_BATCH)
+  usageQuantity Decimal                      @db.Decimal(18, 6)
+  usageUom      IndustrialRateUom
+
+  notes     String?
+  sortOrder Int     @default(0)
+
+  /// Snapshot economico congelado na ATIVACAO da versao de custo: mudar a
+  /// tarifa ou a potencia amanha nao pode reescrever o que uma estrutura
+  /// historica considerou. `null` continua null — tarifa desconhecida
+  /// nunca vira zero.
+  resourceNameSnapshot    String?
+  resourceTypeSnapshot    IndustrialResourceType?
+  rateIdSnapshot          String?
+  rateValueSnapshot       Decimal?                @db.Decimal(14, 4)
+  rateCurrencySnapshot    String?                 @db.VarChar(3)
+  rateUomSnapshot         IndustrialRateUom?
+  rateEffectiveAtSnapshot DateTime?
+  powerKwSnapshot         Decimal?                @db.Decimal(12, 4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([industrialCostVersionId, industrialResourceId])
+  @@index([industrialCostVersionId])
+  @@index([industrialResourceId])
+  @@map("industrial_cost_resource_usages")
 }
 
 /// Amostra / piloto / teste Tn de um projeto.
@@ -1060,6 +1187,48 @@ model SupplierItemOffer {
   @@index([supplierItemId])
   @@index([effectiveAt])
   @@map("supplier_item_offers")
+}
+
+/// Recurso economico da fabrica. Nao e centro de trabalho, roteiro nem
+/// ativo patrimonial: e a categoria que recebe tarifa e entra no custo.
+enum IndustrialResourceType {
+  LABOR
+  EQUIPMENT
+  ENERGY
+}
+
+/// Unidade das tarifas e dos usos industriais.
+///
+/// Enum proprio, e nao o registro de UOM fisico: hora e kWh nao sao
+/// unidades de ITEM. Colocar `h`/`kWh` no registro geral permitiria
+/// cadastrar uma materia-prima medida em kWh — o oposto do que o cadastro
+/// deve permitir. Aqui a lista e fechada e ligada ao tipo do recurso.
+enum IndustrialRateUom {
+  HOUR
+  KWH
+}
+
+enum IndustrialResourceRateSource {
+  MANUAL
+  LEGACY_IMPORT
+}
+
+/// Como o uso planejado se relaciona com a base de referencia.
+enum IndustrialResourceUsageBasis {
+  FIXED_PER_REFERENCE_BATCH
+  PER_OUTPUT_UNIT
+  PER_1000_OUTPUT_UNITS
+}
+
+/// De onde vem a energia da estrutura de custo.
+///
+/// `DIRECT` e `FROM_EQUIPMENT` sao mutuamente exclusivos de proposito:
+/// somar consumo direto com consumo derivado dos equipamentos contaria a
+/// mesma energia duas vezes.
+enum EnergyCalculationMode {
+  NONE
+  DIRECT
+  FROM_EQUIPMENT
 }
 
 /// Estagio da estrutura de custo industrial. Mesmo ciclo da Formulacao:
