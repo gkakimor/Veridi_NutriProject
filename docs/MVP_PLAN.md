@@ -87,7 +87,7 @@ not yet represented in the domain.
 38. Projects + versioned quotations ✓
 39. Samples / pilots / trials ✓
 40. Item × Supplier / MOQ / approval ✓
-41. Veridi spreadsheet importer
+41. Veridi spreadsheet importer ✓
 42. Operational adherence UX
 
 ## Block G — Industrial costing & pricing
@@ -135,7 +135,8 @@ dashboard, reports and exports remain the foundation.
 → 38 Projects + versioned quotations ✓
 → 39 Samples / pilots / trials ✓
 → 40 Item × Supplier / qualification / MOQ / prices ✓
-→ 41-42 Block F (Veridi adherence / private label)
+→ 41 Veridi legacy importer ✓
+→ 42 Block F (operational adherence UX)
 → 43-47 Block G (industrial costing & pricing)
 → ⛔ GATE: Block H (regulatory/labelling) needs a new domain/regulatory
    validation from Product Ownership before being specified

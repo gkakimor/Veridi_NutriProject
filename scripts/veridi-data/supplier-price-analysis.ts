@@ -1,6 +1,7 @@
 import { Prisma as PrismaNamespace } from "@prisma/client";
 import { createHash } from "node:crypto";
-import { FindingLog, cleanText, readCorpusCsv, safeDecimal } from "./corpus.js";
+import type { FindingSink } from "./corpus.js";
+import { cleanText, readCorpusCsv, safeDecimal } from "./corpus.js";
 
 /**
  * Leitura de `precos_fornecedores.csv` — preços de fornecedor do histórico.
@@ -83,7 +84,7 @@ function isAffirmative(value: string | null): boolean {
   return value !== null && ["SIM", "S", "OK", "TRUE", "1"].includes(value.toUpperCase());
 }
 
-export function readLegacySupplierPriceRows(findings: FindingLog): LegacySupplierPriceRow[] {
+export function readLegacySupplierPriceRows(findings: FindingSink): LegacySupplierPriceRow[] {
   const rows = readCorpusCsv("precos_fornecedores.csv").rows;
   const result: LegacySupplierPriceRow[] = [];
 

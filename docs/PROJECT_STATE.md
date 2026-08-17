@@ -62,6 +62,9 @@ tipo de movimento próprio e decisão separada da aprovação comercial.**
 **Delivery 32 — Item × Fornecedor / homologação / MOQ / preços (Bloco F,
 capacidade 40): concluído — relação Item×Supplier com homologação por item,
 fornecedor preferencial e histórico imutável de preços.**
+**Delivery 33 — Importador definitivo das planilhas (Bloco F, capacidade
+41): concluído — pipeline validate/plan/apply/verify, findings com
+severidade, overrides explícitos e abertura de estoque por lote real.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2918,6 +2921,87 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 33 — Importador definitivo das planilhas (Bloco F, capacidade 41)
+
+## Pipeline formal
+`validate → plan → apply → verify`, mais `opening-stock` como processo
+separado. Comandos oficiais: `veridi:import:*` e `veridi:opening-stock:*`;
+`veridi:data:validate`/`veridi:data:seed` continuam como alias e executam o
+MESMO pipeline (não existe segunda implementação). Runbook completo em
+`docs/VERIDI_MIGRATION.md`.
+
+- **Dry-run é o padrão**: só `apply -- --apply` escreve. PLAN e APPLY rodam
+  o mesmo código com as escritas desligadas/ligadas — o plano descreve
+  exatamente o que o apply faz.
+- **Nada é resetado**: sem TRUNCATE, DROP ou deleteMany global. Aditivo e
+  idempotente por `externalCode`/`sourceKey`/chave de negócio.
+- **Manifesto com SHA-256** de cada CSV no `import-plan.json`. Se a fonte
+  mudar depois do PLAN, o APPLY aborta e exige validate+plan de novo.
+- **Produção não é proibida para sempre** (a migração real acontece uma
+  vez), mas exige três camadas: `VERIDI_ALLOW_PRODUCTION_IMPORT=true`,
+  `--apply` e `--confirm-database=<nome>` batendo com o banco real.
+
+## Findings com severidade
+`BLOCKING` (linha fora), `REVIEW` (entrou o seguro, revisar),
+`INFO` (transformação conhecida), `EXCLUDED_BY_POLICY` (fora por decisão).
+Um dado ruim nunca impede os bons: 3 CNPJ inválidos não bloqueiam 77
+clientes. Artefatos locais: `findings.csv`, `findings-summary.md`,
+`import-report.md`, `import-summary.json`, `verify-summary.json` e os
+de-para — todos em `.local-data/veridi/out/`.
+
+## Overrides explícitos
+CSV em `.local-data/veridi/overrides/`, sem tela e sem estado escondido:
+`item-map-overrides.csv` (60 códigos de item usados em preços que não
+existem), `supplier-price-uom-overrides.csv` (86 preços por kg em item
+contado por unidade) e `sample-project-overrides.csv` (29 amostras sem
+projeto inequívoco). Ações são só `MAP`/`IGNORE` (ou `MAP_UOM`/
+`IGNORE_PRICE`): **nenhum override cria master data**, e templates
+existentes nunca são sobrescritos.
+
+## Decisões de migração
+- **441 MOQ numéricos puros** viram `quantidade × unidade do item`, com
+  finding `MOQ_ASSUMED_ITEM_UOM` (INFO): oferta legada não tem vigência,
+  logo nunca é preço atual e não controla compra. Os 14 ambíguos (`1mil`,
+  `KG`, `-`) entram sem MOQ estruturado.
+- **compras_recebimentos.csv (829 linhas)**: não vira Receipt nem ledger —
+  há entradas históricas sem as saídas correspondentes, e importá-las
+  inflaria o On Hand. Também não se cria "Receipt sem efeito". Continua
+  servindo de conferência (estatística de laudo 265/14/550).
+- **estoque_saldos.csv**: 106 positivos viram template de abertura, 316
+  zerados não geram nada, 103 negativos e 9 ilegíveis nunca migram.
+- CMV e IN28: estrutura validada, persistência adiada (Blocos G e H).
+- Usuários e revisões de documento controlado não são inventados.
+
+## Abertura de estoque
+Movimento próprio `OPENING_BALANCE` (+ `LotOrigin.OPENING_BALANCE`):
+entrada física auditável da migração, que não é compra, produção nem
+ajuste. O saldo legado é agregado por item e o ERP controla por item **e
+lote** — então quem conferiu o estoque físico preenche os lotes no template
+e o comando só reconcilia: soma dos lotes = saldo legado, item loteado
+exige lote real, dono explícito (`CUSTOMER` exige o cliente), sem
+`qualityStatus` o lote nasce `AWAITING_RELEASE`, `coaStatus=APPROVED` é
+recusado sem documento. Código do lote é gerado pelo ERP; cada linha tem
+chave estável, então reaplicar não duplica estoque.
+
+## Verificação
+`verify` consulta o banco (não as contagens do script): produto com item de
+produto acabado, uma ACTIVE por produto, formulação sem componentes,
+projeto×produto com o mesmo cliente, um preferencial por item, nenhuma
+oferta legada vigente, códigos legados preservados e — a invariante mais
+importante — **importar cadastro não cria movimento de estoque**.
+
+## Estado após a migração
+113 fornecedores · 80 clientes · 795 itens · 214 produtos · 212 formulações
+ACTIVE · 248 projetos · 9 orçamentos legados · 3 amostras · 639 relações
+item×fornecedor · 602 ofertas. Golden da formulação 26/26/0.
+
+## Não implementado de propósito
+ETL genérico/designer de mapeamento, tela de importação, parser XLSX no
+backend, fuzzy/AI matching, correção de CNPJ, reconstrução de ledger
+histórico, lote fake, saldo negativo de abertura, câmbio, CMV e ANVISA.
+
+---
+
 # Delivery 32 — Item × Fornecedor / homologação / MOQ / preços (Bloco F, capacidade 40)
 
 ## A relação é a entidade
@@ -3810,13 +3894,13 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **capacidade 41 — importador
-definitivo das planilhas Veridi** (Bloco F). A base de
+Próximo passo do roadmap oficial: **capacidade 42 — UX de aderência
+operacional** (Bloco F). A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
 o que existe hoje é ferramenta de dados de desenvolvimento. Depois seguem
-41-42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.

@@ -1,4 +1,5 @@
-import { FindingLog, cleanText, readCorpusCsv } from "./corpus.js";
+import type { FindingSink } from "./corpus.js";
+import { cleanText, readCorpusCsv } from "./corpus.js";
 
 /**
  * Leitura das amostras históricas (`amostras.csv`).
@@ -50,7 +51,7 @@ function parseTestSequence(row: Record<string, string>): number | null {
   return match ? Number(match[1]) : null;
 }
 
-export function readLegacySampleRows(findings: FindingLog): LegacySampleRow[] {
+export function readLegacySampleRows(findings: FindingSink): LegacySampleRow[] {
   const rows = readCorpusCsv("amostras.csv").rows;
   const result: LegacySampleRow[] = [];
 
@@ -104,7 +105,7 @@ export interface SampleResolution {
 export function resolveSamples(
   rows: readonly LegacySampleRow[],
   projectsByName: ReadonlyMap<string, string[]>,
-  findings: FindingLog,
+  findings: FindingSink,
 ): SampleResolution[] {
   return rows.map((row): SampleResolution => {
     if (!row.descriptionBase) {

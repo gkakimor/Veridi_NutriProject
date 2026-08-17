@@ -150,5 +150,6 @@ Keep `docs/PROJECT_STATE.md` compact. Rewrite/condense it; do not append an endl
 - deferred scope: `docs/BACKLOG.md`
 - benchmark rationale: `docs/BENCHMARK_NOTES.md`
 - current implementation: `docs/PROJECT_STATE.md`
+- legacy migration runbook: `docs/VERIDI_MIGRATION.md`
 
 Use `/ship` for implementation work.

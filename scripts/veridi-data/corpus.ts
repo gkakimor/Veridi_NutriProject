@@ -105,7 +105,16 @@ export interface Finding {
   detail: string;
 }
 
-export class FindingLog {
+/**
+ * Receptor de findings. A analise so precisa registrar; quem consome pode
+ * ser o log simples do harness ou o log com severidade da migracao
+ * (capacidade 41) — nenhum modulo de analise conhece a diferenca.
+ */
+export interface FindingSink {
+  add(code: string, entity: string, reference: string, detail: string): void;
+}
+
+export class FindingLog implements FindingSink {
   private readonly items: Finding[] = [];
 
   add(code: string, entity: string, reference: string, detail: string): void {

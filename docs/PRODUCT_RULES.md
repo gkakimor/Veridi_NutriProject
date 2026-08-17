@@ -267,6 +267,51 @@ user to clear them to edit unrelated fields.
   exact name, never fuzzy-matched, and no supplier is created just to hold a
   legacy price.
 
+# 5.4 Legacy migration (capability 41)
+
+- The importer is **one-shot and specific to Veridi**, not a generic ETL:
+  the pipeline is `validate → plan → apply → verify`, plus a separate
+  opening-stock step.
+- **Dry-run is the default.** Only `apply` writes, and only with an explicit
+  flag. The importer is additive and idempotent: it never truncates, drops
+  or resets, and re-running never duplicates.
+- Identity comes from stable keys — legacy `externalCode`, content-derived
+  `sourceKey`, or the domain's own business key. **A legacy code never
+  replaces the ERP code**: internal codes always come from the system's own
+  sequences.
+- Uncertain source data produces a *finding* with an explicit severity;
+  it is never "fixed" by guessing, and **fuzzy matching is not allowed**
+  anywhere (supplier, item, project or sample).
+- A bad row never blocks the good ones: blocking findings skip that row and
+  the migration continues.
+- Human decisions live in explicit override files (map to an existing
+  record, or ignore). **No override creates master data** — a single price
+  row is not enough evidence to create an Item, and converting a price per
+  kilo into a price per unit would require a weight nobody has.
+- The importer never overwrites a record the ERP itself edited; it may only
+  complete empty fields of records it created.
+- **Importing master data never moves stock.** That invariant is verified
+  after every apply.
+- Incomplete receipt history is **not** reconstructed: importing historical
+  inbound movements without the matching consumption would inflate On Hand,
+  and a "receipt with no inventory effect" would contradict the domain.
+- Opening inventory requires human reconciliation: legacy balances are
+  aggregated per item, the ERP controls stock per item **and lot**, and
+  inventing a lot to close a balance would destroy traceability. The sum of
+  the informed lots must match the legacy balance or that item is not
+  applied.
+- A lot-controlled item requires a real lot identification; negative legacy
+  balance never migrates; opening lots are never `AVAILABLE` by omission and
+  never carry an approved CoA without an actual document.
+- The opening event is its own movement type (`OPENING_BALANCE`): it is not
+  a purchase receipt, not production and not an adjustment. It is applied
+  once per stable key, and later corrections use normal inventory
+  count/adjustment.
+- The cutover creates a new source of truth: before it, the spreadsheet is
+  history; after it, the ERP is the operational truth.
+- Costing data (CMV) is deferred to Block G and regulatory limits (IN28) to
+  Block H — validated in structure, never persisted.
+
 ---
 
 # 6. Purchase Orders

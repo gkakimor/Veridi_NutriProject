@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { FindingLog } from "./corpus.js";
+import type { FindingSink } from "./corpus.js";
 import { cleanText, readCorpusCsv, safeDecimal } from "./corpus.js";
 import type { FormulationGroup, FormulationRow, MappedItem } from "./mapping.js";
 
@@ -139,7 +139,7 @@ export function reconstructGroup(
   group: FormulationGroup,
   itemsByExternalCode: Map<string, MappedItem>,
   cmvProducts: CmvProduct[],
-  findings: FindingLog,
+  findings: FindingSink,
 ): GroupReconstruction {
   const reference = `${group.productCode}/${group.lot}`;
   const factors: Prisma.Decimal[] = [];

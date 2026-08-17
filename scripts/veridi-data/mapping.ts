@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { FindingLog } from "./corpus.js";
+import type { FindingSink } from "./corpus.js";
 import { cleanText, digitsOnly, isValidCnpj, readCorpusCsv, safeDecimal } from "./corpus.js";
 
 /**
@@ -18,7 +18,7 @@ export interface MappedSupplier {
   legalName: string;
 }
 
-export function mapSuppliers(findings: FindingLog): MappedSupplier[] {
+export function mapSuppliers(findings: FindingSink): MappedSupplier[] {
   const file = readCorpusCsv("fornecedores.csv");
   const seen = new Set<string>();
   const suppliers: MappedSupplier[] = [];
@@ -54,7 +54,7 @@ export interface MappedCustomer {
   legacyAddress: string | null;
 }
 
-export function mapCustomers(findings: FindingLog): MappedCustomer[] {
+export function mapCustomers(findings: FindingSink): MappedCustomer[] {
   const file = readCorpusCsv("clientes.csv");
   const customers: MappedCustomer[] = [];
   const byCnpj = new Map<string, string>();
@@ -145,7 +145,7 @@ export interface MappedItem {
   typeIsCertain: boolean;
 }
 
-export function mapItems(findings: FindingLog): MappedItem[] {
+export function mapItems(findings: FindingSink): MappedItem[] {
   const base = readCorpusCsv("itens.csv");
   const enrichment = readCorpusCsv("itens_enriquecimento.csv");
 
@@ -242,7 +242,7 @@ export interface MappedProduct {
   customerExternalCode: string | null;
 }
 
-export function mapProducts(neededCodes: Set<string>, findings: FindingLog): MappedProduct[] {
+export function mapProducts(neededCodes: Set<string>, findings: FindingSink): MappedProduct[] {
   const projects = readCorpusCsv("projetos.csv");
 
   // `projetos.csv` é usado APENAS como lookup de nome/cliente. Project é
@@ -303,7 +303,7 @@ export interface FormulationGroup {
   rows: FormulationRow[];
 }
 
-export function readFormulationRows(findings: FindingLog): FormulationRow[] {
+export function readFormulationRows(findings: FindingSink): FormulationRow[] {
   const file = readCorpusCsv("formulacoes.csv");
   const rows: FormulationRow[] = [];
 
@@ -354,7 +354,7 @@ export function readFormulationRows(findings: FindingLog): FormulationRow[] {
  */
 export function selectLatestGroups(
   rows: FormulationRow[],
-  findings: FindingLog,
+  findings: FindingSink,
 ): Map<string, FormulationGroup> {
   const groups = new Map<string, FormulationGroup>();
   for (const row of rows) {

@@ -1,4 +1,5 @@
-import { FindingLog, cleanText, readCorpusCsv } from "./corpus.js";
+import type { FindingSink } from "./corpus.js";
+import { cleanText, readCorpusCsv } from "./corpus.js";
 
 /**
  * Leitura do pipeline comercial histórico (`projetos.csv` +
@@ -70,7 +71,7 @@ export function readPipelineVocabulary(): PipelineVocabulary {
   };
 }
 
-export function readLegacyProjectRows(findings: FindingLog): LegacyProjectRow[] {
+export function readLegacyProjectRows(findings: FindingSink): LegacyProjectRow[] {
   const rows = readCorpusCsv("projetos.csv").rows;
   const result: LegacyProjectRow[] = [];
 
@@ -128,7 +129,7 @@ export interface LegacyProjectGroup {
  */
 export function groupLegacyProjects(
   rows: LegacyProjectRow[],
-  findings: FindingLog,
+  findings: FindingSink,
 ): Map<string, LegacyProjectGroup> {
   const groups = new Map<string, LegacyProjectGroup>();
   const customersByProductCode = new Map<string, Set<string>>();
