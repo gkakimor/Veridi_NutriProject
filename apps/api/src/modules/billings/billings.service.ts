@@ -246,6 +246,7 @@ export async function listAwaitingBilling(): Promise<AwaitingBillingListResponse
       shipmentDate: shipment.shipmentDate ? shipment.shipmentDate.toISOString() : null,
       customerOrderId: shipment.customerOrderId,
       customerOrderCode: shipment.customerOrder.code,
+      customerId: shipment.customerOrder.customerId,
       customerName: shipment.customerOrder.customerName ?? shipment.customerOrder.customer.legalName,
       totalQuantity: totalQuantity.toString(),
       billingStatus: billingInfo.status,

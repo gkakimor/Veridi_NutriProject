@@ -211,6 +211,31 @@
   color: var(--v-green-700);
 }
 
+/**
+ * Referência a outro registro (ver `EntityLink`).
+ *
+ * Sublinhado discreto em vez de cor de link: numa tabela cheia de códigos,
+ * texto azul em cada linha vira ruído e o olho perde o que é ação principal.
+ * O sublinhado fecha no hover, que é quando a pessoa já mirou o alvo.
+ */
+.entity-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 2px;
+}
+
+.entity-link:hover,
+.entity-link:focus-visible {
+  color: var(--v-green-700);
+  text-decoration-color: currentColor;
+}
+
+.entity-link .code,
+.code .entity-link {
+  color: inherit;
+}
+
 .table__actions {
   display: flex;
   align-items: center;

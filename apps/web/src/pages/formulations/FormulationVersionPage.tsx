@@ -32,6 +32,7 @@ import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { EntityLink } from "../../components/EntityLink";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 
@@ -418,11 +419,21 @@ export function FormulationVersionPage() {
           <dl className="definition-list">
             <dt>Produto</dt>
             <dd>
-              <span className="code">{version.productCode}</span> {version.productName}
+              <EntityLink
+                kind="product"
+                id={version.productId}
+                code={version.productCode}
+                name={version.productName}
+              />
             </dd>
             <dt>Item de saída</dt>
             <dd>
-              <span className="code">{version.outputItemCode}</span> {version.outputItemName}
+              <EntityLink
+                kind="item"
+                id={version.outputItemId}
+                code={version.outputItemCode}
+                name={version.outputItemName}
+              />
             </dd>
           </dl>
 
@@ -538,7 +549,7 @@ export function FormulationVersionPage() {
                         />
                       ) : (
                         <>
-                          <span className="code">{row.itemCode}</span> {row.itemName}
+                          <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                         </>
                       )}
                       {!row.itemActive && (
@@ -721,7 +732,7 @@ export function FormulationVersionPage() {
                   {costEstimate.components.map((component) => (
                     <tr key={component.itemId}>
                       <td>
-                        <span className="code">{component.itemCode}</span> {component.itemName}
+                        <EntityLink kind="item" id={component.itemId} code={component.itemCode} name={component.itemName} />
                       </td>
                       <td>
                         {component.normalizedQuantity} {component.stockUnitCode}

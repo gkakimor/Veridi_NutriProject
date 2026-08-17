@@ -5,6 +5,7 @@ import { PROJECT_SAMPLE_STATUSES, PROJECT_SAMPLE_STATUS_LABELS } from "@veridi/s
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listSamples } from "../../lib/samples-api";
 import { listCustomers } from "../../lib/customers-api";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 20;
 
@@ -184,9 +185,11 @@ export function SamplesPage() {
                 <td className="is-code">{sample.code}</td>
                 <td className="is-code">{sample.testLabel}</td>
                 <td>
-                  <span className="code">{sample.projectCode}</span> {sample.projectName}
+                  <EntityLink kind="project" id={sample.projectId} code={sample.projectCode} name={sample.projectName} />
                 </td>
-                <td>{sample.customerName}</td>
+                <td>
+                  <EntityLink kind="customer" id={sample.customerId} code={sample.customerName} />
+                </td>
                 <td>{sample.description ?? "—"}</td>
                 <td>
                   <span className={sampleStatusBadgeClass(sample.status)}>

@@ -6,6 +6,7 @@ import {
   PRICING_VERSION_STATUS_LABELS,
 } from "@veridi/shared";
 import { listPricingVersions } from "../../lib/pricing-api";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 20;
 
@@ -156,7 +157,7 @@ export function PricingListPage() {
               >
                 <td className="is-code">{row.label}</td>
                 <td>
-                  <span className="code">{row.productCode}</span> {row.productName}
+                  <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
                 </td>
                 <td>{row.customerName ?? "—"}</td>
                 <td>

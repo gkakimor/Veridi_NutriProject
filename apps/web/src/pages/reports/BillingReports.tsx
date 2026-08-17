@@ -20,6 +20,7 @@ import {
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
 import { formatBRL } from "../../lib/currency";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 25;
 
@@ -350,7 +351,7 @@ export function OrderDeliveredBilledReportPage() {
             </td>
             <td>{row.customerName}</td>
             <td>
-              <span className="code">{row.productCode}</span> {row.productName}
+              <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
             </td>
             <td className="is-number">
               {row.orderedQuantity} {row.unitCode}

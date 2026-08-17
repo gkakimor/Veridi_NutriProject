@@ -6,6 +6,11 @@ import { listSuppliers, setSupplierActive } from "../../lib/suppliers-api";
 import { SupplierFormModal } from "./SupplierFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { RowActions } from "../../components/RowActions";
+import {
+  RecordContextChip,
+  useOpenRecord,
+  useRecordContext,
+} from "../../components/RecordContext";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -27,6 +32,11 @@ export function SuppliersPage() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
+  // Chegada por link contextual: `ids` reduz a lista, `open` abre o registro.
+  const { contextIds, openId, clear: clearContext, contextKey } = useRecordContext(
+    "/cadastros/fornecedores",
+  );
+
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
   const [confirmDeactivate, setConfirmDeactivate] = useState<SupplierDTO | null>(null);
 
@@ -37,13 +47,22 @@ export function SuppliersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, activeFilter]);
+  }, [search, activeFilter, contextKey]);
+
+  // Filtro antigo somado ao contexto esconderia o próprio registro citado.
+  useEffect(() => {
+    if (!contextKey) return;
+    setSearchInput("");
+    setSearch("");
+    setActiveFilter("all");
+  }, [contextKey]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
     const params: Parameters<typeof listSuppliers>[0] = { page, pageSize: PAGE_SIZE };
+    if (contextIds) params.ids = contextIds;
     if (search) params.search = search;
     if (activeFilter !== "all") params.active = activeFilter === "active";
 
@@ -56,11 +75,13 @@ export function SuppliersPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar fornecedores");
       })
       .finally(() => setLoading(false));
-  }, [page, search, activeFilter]);
+  }, [page, search, activeFilter, contextKey]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useOpenRecord(openId, suppliers, (supplier) => setModalState({ mode: "edit", supplier }));
 
   function handleToggleActive(supplier: SupplierDTO) {
     if (supplier.active) {
@@ -130,6 +151,15 @@ export function SuppliersPage() {
       </div>
 
       {error && <p className="form-alert">{error}</p>}
+
+      {contextIds && (
+        <RecordContextChip
+          noun="o fornecedor"
+          code={suppliers[0]?.code}
+          name={suppliers[0]?.tradeName ?? suppliers[0]?.legalName}
+          onClear={clearContext}
+        />
+      )}
 
       <div className="table-container">
         <table className="table table--clickable-rows">

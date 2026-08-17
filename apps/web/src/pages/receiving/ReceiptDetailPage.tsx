@@ -7,6 +7,7 @@ import { setAcquisitionCost } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
+import { EntityLink } from "../../components/EntityLink";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -123,7 +124,12 @@ export function ReceiptDetailPage() {
               <>
                 <dt>Cliente proprietário</dt>
                 <dd>
-                  {receipt.customerCode} — {receipt.customerName}
+                  <EntityLink
+                  kind="customer"
+                  id={receipt.customerId}
+                  code={receipt.customerCode}
+                  name={receipt.customerName}
+                />
                 </dd>
               </>
             ) : (
@@ -140,7 +146,12 @@ export function ReceiptDetailPage() {
                 </dd>
                 <dt>Fornecedor</dt>
                 <dd>
-                  {receipt.supplierCode} — {receipt.supplierName}
+                  <EntityLink
+                  kind="supplier"
+                  id={receipt.supplierId}
+                  code={receipt.supplierCode}
+                  name={receipt.supplierName}
+                />
                 </dd>
               </>
             )}
@@ -180,7 +191,7 @@ export function ReceiptDetailPage() {
                 {receipt.lines.map((line) => (
                   <tr key={line.id}>
                     <td>
-                      <span className="code">{line.itemCode}</span> {line.itemName}
+                      <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
                     </td>
                     <td>{line.receivedQuantity}</td>
                     <td>{line.unitCode}</td>

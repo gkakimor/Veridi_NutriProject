@@ -13,6 +13,11 @@ import { listUnits } from "../../lib/units-api";
 import { ItemFormModal } from "./ItemFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { RowActions } from "../../components/RowActions";
+import {
+  RecordContextChip,
+  useOpenRecord,
+  useRecordContext,
+} from "../../components/RecordContext";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -38,6 +43,9 @@ export function ItemsPage() {
   const [typeFilter, setTypeFilter] = useState<ItemType | "">("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
+  // Chegada por link contextual: `ids` reduz a lista, `open` abre o registro.
+  const { contextIds, openId, clear: clearContext, contextKey } = useRecordContext("/cadastros/itens");
+
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
 
@@ -54,7 +62,16 @@ export function ItemsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, typeFilter, activeFilter]);
+  }, [search, typeFilter, activeFilter, contextKey]);
+
+  // Filtro antigo somado ao contexto esconderia o próprio registro citado.
+  useEffect(() => {
+    if (!contextKey) return;
+    setSearchInput("");
+    setSearch("");
+    setTypeFilter("");
+    setActiveFilter("all");
+  }, [contextKey]);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -64,6 +81,7 @@ export function ItemsPage() {
       page,
       pageSize: PAGE_SIZE,
     };
+    if (contextIds) params.ids = contextIds;
     if (search) params.search = search;
     if (typeFilter) params.type = typeFilter;
     if (activeFilter !== "all") params.active = activeFilter === "active";
@@ -79,11 +97,13 @@ export function ItemsPage() {
         );
       })
       .finally(() => setLoading(false));
-  }, [page, search, typeFilter, activeFilter]);
+  }, [page, search, typeFilter, activeFilter, contextKey]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useOpenRecord(openId, items, (item) => setModalState({ mode: "edit", item }));
 
   useEffect(() => {
     listUnits()
@@ -181,6 +201,15 @@ export function ItemsPage() {
       </div>
 
       {error && <p className="form-alert">{error}</p>}
+
+      {contextIds && (
+        <RecordContextChip
+          noun="o item"
+          code={items[0]?.code}
+          name={items[0]?.name}
+          onClear={clearContext}
+        />
+      )}
 
       <SelectionBar count={selection.count} onClear={selection.clear}>
         <ExportCsvButton

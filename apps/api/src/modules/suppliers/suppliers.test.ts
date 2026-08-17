@@ -186,4 +186,22 @@ describe("Suppliers", () => {
 
     await app.close();
   });
+
+  it("reduz a lista ao id citado — o link contextual depende disso", async () => {
+    // Mesma regra do cliente: o lote cita o fornecedor pela identidade.
+    const app = buildTestApp();
+    await app.ready();
+
+    const alvo = await createTestSupplier(app, { legalName: "Fornecedor alvo do link" });
+    await createTestSupplier(app, { legalName: "Fornecedor que não deve aparecer" });
+    const alvoId = alvo.json().id as string;
+
+    const response = await app.inject({ method: "GET", url: `/suppliers?ids=${alvoId}` });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.total).toBe(1);
+    expect(body.suppliers).toHaveLength(1);
+    expect(body.suppliers[0].id).toBe(alvoId);
+  });
 });

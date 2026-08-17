@@ -5,6 +5,7 @@ import { useInitialFilters } from "../../lib/filter-params";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listCustomerMaterials } from "../../lib/customer-materials-api";
 import { listCustomers } from "../../lib/customers-api";
+import { EntityLink } from "../../components/EntityLink";
 
 type StatusFilter = LotStatus | "all";
 
@@ -196,10 +197,10 @@ export function CustomerMaterialsPage() {
             {rows.map((row) => (
               <tr key={row.lotId}>
                 <td>
-                  <span className="code">{row.customerCode}</span> {row.customerName}
+                  <EntityLink kind="customer" id={row.customerId} code={row.customerCode} name={row.customerName} />
                 </td>
                 <td>
-                  <span className="code">{row.itemCode}</span> {row.itemName}
+                  <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                 </td>
                 <td className="is-code">{row.lotCode}</td>
                 <td>{row.supplierLot ?? "—"}</td>

@@ -5,6 +5,7 @@ import { LOT_STATUS_LABELS } from "@veridi/shared";
 import { lookupLot } from "../../lib/lots-api";
 import { FormSection } from "../../components/FormSection";
 import { LotScanner } from "../../components/LotScanner";
+import { EntityLink } from "../../components/EntityLink";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -83,7 +84,7 @@ export function LotScanPage() {
               </span>
             </div>
             <p className="lot-scan-result__item">
-              <span className="code">{result.itemCode}</span> {result.itemName}
+              <EntityLink kind="item" id={result.itemId} code={result.itemCode} name={result.itemName} />
             </p>
             <dl className="definition-list">
               <dt>Validade</dt>

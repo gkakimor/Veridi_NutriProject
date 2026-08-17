@@ -7,6 +7,7 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { EntityLink } from "../../components/EntityLink";
 
 function statusBadgeClass(status: BillingStatus): string {
   switch (status) {
@@ -249,7 +250,12 @@ export function BillingPage() {
             </dd>
             <dt>Cliente</dt>
             <dd>
-              {billing.customerCode} — {billing.customerName}
+              <EntityLink
+                kind="customer"
+                id={billing.customerId}
+                code={billing.customerCode}
+                name={billing.customerName}
+              />
             </dd>
             <dt>Data de expedição</dt>
             <dd>{formatDate(billing.shipmentDate)}</dd>
@@ -297,7 +303,7 @@ export function BillingPage() {
                   return (
                     <tr key={line.id}>
                       <td>
-                        <span className="code">{line.productCode}</span> {line.productName}
+                        <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                       </td>
                       <td>
                         {line.lotCode ?? "—"}

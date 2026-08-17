@@ -57,6 +57,7 @@ export async function listSuppliers(
   const prisma = getPrisma();
   const where: Record<string, unknown> = {};
 
+  if (query.ids && query.ids.length > 0) where["id"] = { in: query.ids };
   if (query.active !== undefined) where["active"] = query.active;
   if (query.search) {
     where["OR"] = [

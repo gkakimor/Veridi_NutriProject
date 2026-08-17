@@ -15,6 +15,7 @@ import { listSupplierItems } from "../../lib/supplier-items-api";
 import { listItems } from "../../lib/items-api";
 import { formatBRL } from "../../lib/currency";
 import { ApiValidationError } from "../../lib/api-errors";
+import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
@@ -608,9 +609,13 @@ export function PurchaseOrderPage() {
                           ))}
                         </select>
                       ) : (
-                        <span className="code">{line.itemCode}</span>
+                        <EntityLink
+                          kind="item"
+                          id={line.itemId}
+                          code={line.itemCode}
+                          name={line.itemName}
+                        />
                       )}
-                      {!isDraftEditable && <span> {line.itemName}</span>}
                       {(() => {
                         const relation = supplierItemsByItem[line.itemId];
                         if (!line.itemId || !relation) return null;

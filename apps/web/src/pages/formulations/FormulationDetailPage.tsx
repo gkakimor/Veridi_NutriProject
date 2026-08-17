@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { EntityLink } from "../../components/EntityLink";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { FormulationVersionDTO, ProductDTO } from "@veridi/shared";
 import { FORMULATION_VERSION_STATUS_LABELS } from "@veridi/shared";
@@ -143,8 +144,12 @@ export function FormulationDetailPage() {
         <FormSection title="Item acabado">
           {product.finishedProductItem ? (
             <p className="field-readonly-value">
-              <span className="code">{product.finishedProductItem.code}</span>{" "}
-              {product.finishedProductItem.name}
+              <EntityLink
+                kind="item"
+                id={product.finishedProductItem.id}
+                code={product.finishedProductItem.code}
+                name={product.finishedProductItem.name}
+              />
             </p>
           ) : (
             <p className="field__hint">

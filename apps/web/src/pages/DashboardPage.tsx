@@ -16,6 +16,7 @@ import {
   INVENTORY_MOVEMENT_TYPE_LABELS,
 } from "@veridi/shared";
 import type { InventoryMovementType } from "@veridi/shared";
+import { EntityLink } from "../components/EntityLink";
 import { getDashboard } from "../lib/dashboard-api";
 import type { UserRole } from "@veridi/shared";
 import type { PeriodPreset } from "../lib/period";
@@ -578,7 +579,7 @@ export function DashboardPage() {
                             movement.type}
                         </td>
                         <td>
-                          <span className="code">{movement.itemCode}</span> {movement.itemName}
+                          <EntityLink kind="item" id={movement.itemId} code={movement.itemCode} name={movement.itemName} />
                         </td>
                         <td className="is-code">{movement.lotCode ?? "—"}</td>
                         {/* Cada linha traz a própria unidade — nada é somado entre linhas. */}

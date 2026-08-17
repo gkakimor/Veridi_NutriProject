@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import type { LotDTO } from "@veridi/shared";
 import { LotScanPage } from "./LotScanPage";
 import { lookupLot } from "../../lib/lots-api";
@@ -71,12 +72,19 @@ describe("LotScanPage", () => {
   it("mostra o card de resultado e navega ao clicar em Ver detalhes", async () => {
     vi.mocked(lookupLot).mockResolvedValue(fixtureLot);
     const user = userEvent.setup();
-    render(<LotScanPage />);
+    render(
+      <MemoryRouter>
+        <LotScanPage />
+      </MemoryRouter>,
+    );
 
     await user.type(screen.getByLabelText("Digite o lote"), "LT-20260815-000123");
     await user.click(screen.getByRole("button", { name: "Buscar" }));
 
-    await waitFor(() => expect(screen.getByText("Farinha de trigo")).toBeInTheDocument());
+    // O item vem como referência clicável: código e nome no mesmo link.
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: /Farinha de trigo/ })).toBeInTheDocument(),
+    );
 
     await user.click(screen.getByRole("button", { name: "Ver detalhes" }));
     expect(navigateMock).toHaveBeenCalledWith("/estoque/lotes/lot-1");
@@ -85,7 +93,11 @@ describe("LotScanPage", () => {
   it("mostra erro Veridi-branded quando o lote não é encontrado", async () => {
     vi.mocked(lookupLot).mockResolvedValue(null);
     const user = userEvent.setup();
-    render(<LotScanPage />);
+    render(
+      <MemoryRouter>
+        <LotScanPage />
+      </MemoryRouter>,
+    );
 
     await user.type(screen.getByLabelText("Digite o lote"), "LT-INVENTADO");
     await user.click(screen.getByRole("button", { name: "Buscar" }));

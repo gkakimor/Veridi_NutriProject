@@ -179,6 +179,8 @@ export interface RecentMovementDTO {
   id: string;
   occurredAt: string;
   type: string;
+  /** Identidade do item — o painel cita, e a citação precisa abrir. */
+  itemId: string;
   itemCode: string;
   itemName: string;
   lotCode: string | null;

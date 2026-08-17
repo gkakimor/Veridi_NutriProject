@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CustomerDTO, ProjectDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@veridi/shared";
+import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listProjects, getProjectVocabulary } from "../../lib/projects-api";
 import { listCustomers } from "../../lib/customers-api";
@@ -250,7 +251,9 @@ export function ProjectsPage() {
                 </td>
                 <td className="is-code">{project.externalCode ?? "—"}</td>
                 <td>{formatDate(project.entryDate)}</td>
-                <td>{project.customerName}</td>
+                <td>
+                  <EntityLink kind="customer" id={project.customerId} code={project.customerCode} name={project.customerName} />
+                </td>
                 <td>{project.concept ?? "—"}</td>
                 <td>{project.channel ?? "—"}</td>
                 <td>{project.responsibleUserName ?? "—"}</td>

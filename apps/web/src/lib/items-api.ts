@@ -9,6 +9,8 @@ import { API_URL, apiFetch } from "./api";
 import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListItemsParams {
+  /** Conjunto explícito de ids — link contextual e exportação da seleção. */
+  ids?: string[];
   search?: string;
   type?: ItemType;
   active?: boolean;
@@ -20,6 +22,7 @@ export async function listItems(
   params: ListItemsParams = {},
 ): Promise<ItemListResponse> {
   const query = new URLSearchParams();
+  if (params.ids && params.ids.length > 0) query.set("ids", params.ids.join(","));
   if (params.search) query.set("search", params.search);
   if (params.type) query.set("type", params.type);
   if (params.active !== undefined) query.set("active", String(params.active));

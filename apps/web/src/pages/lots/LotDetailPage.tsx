@@ -19,6 +19,7 @@ import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { approveCoa, rejectCoa } from "../../lib/attachments-api";
 import { useAuth } from "../../app/AuthProvider";
 import { QrCode } from "../../components/QrCode";
+import { EntityLink } from "../../components/EntityLink";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -250,7 +251,7 @@ export function LotDetailPage() {
               <dd>Produção</dd>
               <dt>Item</dt>
               <dd>
-                <span className="code">{lot.itemCode}</span> {lot.itemName}
+                <EntityLink kind="item" id={lot.itemId} code={lot.itemCode} name={lot.itemName} />
               </dd>
               <dt>Produzido por</dt>
               <dd>
@@ -275,7 +276,7 @@ export function LotDetailPage() {
             <dl className="definition-list">
               <dt>Item</dt>
               <dd>
-                <span className="code">{lot.itemCode}</span> {lot.itemName}
+                <EntityLink kind="item" id={lot.itemId} code={lot.itemCode} name={lot.itemName} />
               </dd>
               <dt>Proprietário</dt>
               <dd>
@@ -286,7 +287,12 @@ export function LotDetailPage() {
               </dd>
               <dt>Fornecedor</dt>
               <dd>
-                {lot.supplierId ? `${lot.supplierCode} — ${lot.supplierName}` : "—"}
+                <EntityLink
+                  kind="supplier"
+                  id={lot.supplierId}
+                  code={lot.supplierCode}
+                  name={lot.supplierName}
+                />
               </dd>
               <dt>Lote do fornecedor</dt>
               <dd>{lot.supplierLot ?? "—"}</dd>
@@ -582,7 +588,7 @@ export function LotDetailPage() {
               </dd>
               <dt>Produto</dt>
               <dd>
-                <span className="code">{traceability.productCode}</span> {traceability.productName}
+                <EntityLink kind="product" id={traceability.productId} code={traceability.productCode} name={traceability.productName} />
               </dd>
               <dt>Quantidade produzida neste lote</dt>
               <dd>
@@ -605,7 +611,7 @@ export function LotDetailPage() {
                   {traceability.consumedMaterials.map((material) => (
                     <tr key={`${material.itemId}-${material.lotId ?? "sem-lote"}`}>
                       <td>
-                        <span className="code">{material.itemCode}</span> {material.itemName}
+                        <EntityLink kind="item" id={material.itemId} code={material.itemCode} name={material.itemName} />
                       </td>
                       <td>{material.lotCode ?? "—"}</td>
                       <td>{material.supplierLot ?? "—"}</td>
@@ -656,7 +662,7 @@ export function LotDetailPage() {
                         </button>
                       </td>
                       <td>
-                        <span className="code">{usage.productCode}</span> {usage.productName}
+                        <EntityLink kind="product" id={usage.productId} code={usage.productCode} name={usage.productName} />
                       </td>
                       <td>
                         {usage.consumedQuantity} {usage.unitCode}
@@ -707,7 +713,7 @@ export function LotDetailPage() {
                       </td>
                       <td className="is-code">{usage.testLabel}</td>
                       <td>
-                        <span className="code">{usage.projectCode}</span> {usage.projectName}
+                        <EntityLink kind="project" id={usage.projectId} code={usage.projectCode} name={usage.projectName} />
                       </td>
                       <td>{usage.customerName}</td>
                       <td>

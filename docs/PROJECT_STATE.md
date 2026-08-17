@@ -4335,6 +4335,32 @@ inventado.
 
 ---
 
+# Referência clicável entre registros
+
+Toda citação de outro registro é link (`components/EntityLink.tsx`): produto,
+item, cliente, fornecedor, projeto, amostra, lote, OC, recebimento, OP, pedido,
+expedição, faturamento, formulação, cálculo de custo e recurso industrial. 42
+telas, ~90 citações convertidas.
+
+- **Destino por identidade**, nunca busca textual — e **sem id, sem link**:
+  snapshot congelado ou legado que guardou só o código continua texto.
+- Cadastro simples abre o registro, não a lista: `?ids=<id>&open=<id>`
+  (`components/RecordContext.tsx` — chip "mostrando apenas…" com saída).
+  Documento transacional vai direto à própria página.
+- `stopPropagation` no link: sem isso a navegação da linha clicável vence e a
+  pessoa que mirou o produto cai na formulação (visto no navegador, não
+  deduzido).
+- O UUID nunca aparece na tela; vive só no endereço.
+
+Seis DTOs passaram a expor identidade que já existia no banco: movimento
+recente do painel (`itemId`), uso em amostra na rastreabilidade (`projectId`),
+folha de receita (`productId`, `itemId` de pesagem e de embalagem), R-14
+(`productId` de linha e de OP) e fila de faturamento (`customerId`).
+`GET /customers` e `GET /suppliers` ganharam o filtro `ids`, que `/items` já
+tinha — é o que sustenta o link contextual.
+
+---
+
 # Implantação — origem única
 
 Decisão durável: **um serviço só**. A API serve o build do frontend e responde

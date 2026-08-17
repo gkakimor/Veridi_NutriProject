@@ -17,6 +17,7 @@ import {
   updateSupplierItem,
 } from "../../lib/supplier-items-api";
 import { qualificationBadgeClass } from "./SupplierItemsPage";
+import { EntityLink } from "../../components/EntityLink";
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
@@ -146,14 +147,14 @@ export function SupplierItemDetailModal({
         <dl className="definition-list">
           <dt>Item</dt>
           <dd>
-            <span className="code">{supplierItem.itemCode}</span> {supplierItem.itemName} (
+            <EntityLink kind="item" id={supplierItem.itemId} code={supplierItem.itemCode} name={supplierItem.itemName} /> (
             {supplierItem.itemUnitCode})
           </dd>
           <dt>Código legado do item</dt>
           <dd className="is-code">{supplierItem.itemExternalCode ?? "—"}</dd>
           <dt>Fornecedor</dt>
           <dd>
-            <span className="code">{supplierItem.supplierCode}</span> {supplierItem.supplierName}
+            <EntityLink kind="supplier" id={supplierItem.supplierId} code={supplierItem.supplierCode} name={supplierItem.supplierName} />
           </dd>
           <dt>Homologação</dt>
           <dd>

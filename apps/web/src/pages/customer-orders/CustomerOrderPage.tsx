@@ -45,6 +45,7 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { EntityLink } from "../../components/EntityLink";
 
 interface LineRow {
   key: string;
@@ -808,7 +809,7 @@ export function CustomerOrderPage() {
                         />
                       ) : (
                         <>
-                          <span className="code">{line.productCode}</span> {line.productName}
+                          <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                         </>
                       )}
                     </td>
@@ -898,7 +899,7 @@ export function CustomerOrderPage() {
                         return (
                           <tr key={line.customerOrderLineId}>
                             <td>
-                              <span className="code">{line.productCode}</span> {line.productName}
+                              <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                             </td>
                             <td>
                               {line.orderedQuantity} {line.unitCode}
@@ -961,7 +962,7 @@ export function CustomerOrderPage() {
                         {plan.materialImpact.map((row) => (
                           <tr key={row.itemId}>
                             <td>
-                              <span className="code">{row.itemCode}</span> {row.itemName}
+                              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                             </td>
                             <td>
                               {row.requiredQuantity} {row.unitCode}
@@ -1037,7 +1038,7 @@ export function CustomerOrderPage() {
                         return (
                           <tr key={row.itemId}>
                             <td>
-                              <span className="code">{row.itemCode}</span> {row.itemName}
+                              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                               {/* Quem pode fornecer fica junto do material: e a
                                   informacao que sustenta a decisao de compra. */}
                               {row.supplierCandidates.length === 0 ? (
@@ -1189,7 +1190,7 @@ export function CustomerOrderPage() {
                       {suggestion.customerSuppliedRows.map((row) => (
                         <tr key={row.itemId}>
                           <td>
-                            <span className="code">{row.itemCode}</span> {row.itemName}
+                            <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                           </td>
                           <td>{row.customerName ?? "—"}</td>
                           <td>
@@ -1237,7 +1238,7 @@ export function CustomerOrderPage() {
                   {reservationStatus.lines.map((line) => (
                     <tr key={line.customerOrderLineId}>
                       <td>
-                        <span className="code">{line.productCode}</span> {line.productName}
+                        <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                       </td>
                       <td>
                         {line.orderedQuantity} {line.unitCode}
@@ -1495,7 +1496,7 @@ export function CustomerOrderPage() {
                         return (
                           <tr key={line.id}>
                             <td>
-                              <span className="code">{line.productCode}</span> {line.productName}
+                              <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                             </td>
                             <td>
                               {/* O lote que atendeu o pedido é a resposta de
@@ -1572,7 +1573,7 @@ export function CustomerOrderPage() {
                         <tr key={op.id} tabIndex={0} onClick={() => navigate(`/producao/ordens/${op.id}`)}>
                           <td className="is-code">{op.code}</td>
                           <td>
-                            <span className="code">{op.productCode}</span> {op.productName}
+                            <EntityLink kind="product" id={op.productId} code={op.productCode} name={op.productName} />
                           </td>
                           <td>
                             {op.plannedQuantity} {op.outputUnitCode}

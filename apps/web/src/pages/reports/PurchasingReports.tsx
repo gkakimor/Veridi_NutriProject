@@ -12,6 +12,7 @@ import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
 import { formatBRL } from "../../lib/currency";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 25;
 
@@ -278,7 +279,7 @@ export function ReceiptsReportPage() {
             </td>
             <td>{row.supplierName}</td>
             <td>
-              <span className="code">{row.itemCode}</span> {row.itemName}
+              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td>
               <DocLink code={row.lotCode} to={row.lotId ? `/estoque/lotes/${row.lotId}` : null} />
@@ -358,7 +359,7 @@ export function OnOrderReportPage() {
             </td>
             <td>{row.supplierName}</td>
             <td>
-              <span className="code">{row.itemCode}</span> {row.itemName}
+              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td className="is-number">
               {row.orderedQuantity} {row.unitCode}
@@ -423,7 +424,7 @@ export function LatePurchaseOrdersReportPage() {
             </td>
             <td>{row.supplierName}</td>
             <td>
-              <span className="code">{row.itemCode}</span> {row.itemName}
+              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td className="is-number">
               {row.openQuantity} {row.unitCode}

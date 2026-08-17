@@ -17,6 +17,7 @@ import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
 import { formatBRL } from "../../lib/currency";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 25;
 
@@ -261,7 +262,7 @@ export function FulfillmentReportPage() {
             </td>
             <td>{row.customerName}</td>
             <td>
-              <span className="code">{row.productCode}</span> {row.productName}
+              <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
             </td>
             <td className="is-number">
               {row.orderedQuantity} {row.unitCode}
@@ -352,7 +353,7 @@ export function OrderOperationReportPage() {
               rows={data.lines.map((line) => (
                 <tr key={line.customerOrderLineId}>
                   <td>
-                    <span className="code">{line.productCode}</span> {line.productName}
+                    <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                   </td>
                   <td className="is-number">
                     {line.orderedQuantity} {line.unitCode}
@@ -370,7 +371,7 @@ export function OrderOperationReportPage() {
               rows={data.reservations.map((row) => (
                 <tr key={row.reservationLineId}>
                   <td>
-                    <span className="code">{row.productCode}</span> {row.productName}
+                    <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
                   </td>
                   <td>
                     <DocLink code={row.lotCode} to={row.lotId ? `/estoque/lotes/${row.lotId}` : null} />
@@ -397,7 +398,7 @@ export function OrderOperationReportPage() {
                     <DocLink code={row.code} to={`/producao/ordens/${row.productionOrderId}`} />
                   </td>
                   <td>
-                    <span className="code">{row.productCode}</span> {row.productName}
+                    <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
                   </td>
                   <td className="is-number">
                     {row.plannedQuantity} {row.unitCode}

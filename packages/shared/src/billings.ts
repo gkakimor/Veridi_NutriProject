@@ -118,6 +118,8 @@ export interface AwaitingBillingRowDTO {
   shipmentDate: string | null;
   customerOrderId: string;
   customerOrderCode: string;
+  /** Identidade do cliente — a fila cita, e a citação abre o cadastro. */
+  customerId: string;
   customerName: string | null;
   totalQuantity: string;
   billingStatus: ShipmentBillingStatus;

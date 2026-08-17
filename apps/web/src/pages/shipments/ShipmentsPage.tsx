@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { ShipmentDTO, ShipmentStatus } from "@veridi/shared";
@@ -143,7 +144,9 @@ export function ShipmentsPage() {
               >
                 <td className="is-code">{shipment.code}</td>
                 <td className="is-code">{shipment.customerOrderCode}</td>
-                <td>{shipment.customerName ?? "—"}</td>
+                <td>
+                  <EntityLink kind="customer" id={shipment.customerId} code={shipment.customerName} />
+                </td>
                 <td>{formatDate(shipment.shipmentDate)}</td>
                 <td>{shipment.totalQuantity}</td>
                 <td>

@@ -7,6 +7,7 @@ import {
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { prepareTechnicalProduct } from "../../lib/projects-api";
+import { EntityLink } from "../../components/EntityLink";
 
 /**
  * Custo e precificação dentro do projeto.
@@ -91,7 +92,7 @@ export function ProjectCostingSection({
           <dl className="definition-list">
             <dt>Produto</dt>
             <dd>
-              <span className="code">{costing.productCode}</span> {costing.productName}{" "}
+              <EntityLink kind="product" id={costing.productId} code={costing.productCode} name={costing.productName} />{" "}
               <span
                 className={
                   costing.lifecycle === "APPROVED" ? "badge badge--active" : "badge badge--warn"

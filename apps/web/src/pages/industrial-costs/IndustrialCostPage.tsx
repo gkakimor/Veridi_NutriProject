@@ -39,6 +39,7 @@ import {
 } from "../../lib/industrial-costs-api";
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
+import { EntityLink } from "../../components/EntityLink";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
@@ -384,7 +385,7 @@ export function IndustrialCostPage() {
                     {version.materials.map((material) => (
                       <tr key={material.itemId}>
                         <td>
-                          <span className="code">{material.itemCode}</span> {material.itemName}
+                          <EntityLink kind="item" id={material.itemId} code={material.itemCode} name={material.itemName} />
                         </td>
                         <td>{material.quantity}</td>
                         <td>{material.unitCode}</td>
@@ -583,10 +584,14 @@ export function IndustrialCostPage() {
                     {version.resourceUsages.map((usage) => (
                       <tr key={usage.id}>
                         <td>
-                          <span className="code">{usage.resourceCode}</span>{" "}
                           {/* Nome congelado explica o documento antigo mesmo se o
                               cadastro for renomeado depois. */}
-                          {usage.resourceNameSnapshot ?? usage.resourceName}
+                          <EntityLink
+                            kind="industrialResource"
+                            id={usage.resourceId}
+                            code={usage.resourceCode}
+                            name={usage.resourceNameSnapshot ?? usage.resourceName}
+                          />
                           {!usage.resourceActive && (
                             <span className="badge badge--warn"> Recurso inativo</span>
                           )}

@@ -5,6 +5,7 @@ import type { InventoryMovementDTO, InventoryMovementType } from "@veridi/shared
 import { INVENTORY_MOVEMENT_DIRECTION, INVENTORY_MOVEMENT_TYPE_LABELS } from "@veridi/shared";
 import { useInitialFilters } from "../../lib/filter-params";
 import { listInventoryMovements } from "../../lib/inventory-api";
+import { EntityLink } from "../../components/EntityLink";
 
 type TypeFilter = InventoryMovementType | "all";
 
@@ -146,7 +147,7 @@ export function InventoryMovementsPage() {
                     className="btn btn--ghost btn--sm"
                     onClick={() => navigate(`/estoque/${movement.itemId}`)}
                   >
-                    <span className="code">{movement.itemCode}</span> {movement.itemName}
+                    <EntityLink kind="item" id={movement.itemId} code={movement.itemCode} name={movement.itemName} />
                   </button>
                 </td>
                 <td>

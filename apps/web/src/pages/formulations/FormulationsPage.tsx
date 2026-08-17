@@ -3,6 +3,7 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { FormulationSummaryDTO } from "@veridi/shared";
 import { listFormulations } from "../../lib/formulations-api";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 20;
 
@@ -124,15 +125,15 @@ export function FormulationsPage() {
                 }}
               >
                 <td>
-                  <span className="code">{formulation.productCode}</span> {formulation.productName}
+                  <EntityLink kind="product" id={formulation.productId} code={formulation.productCode} name={formulation.productName} />
                 </td>
                 <td>{formulation.customerName ?? "—"}</td>
                 <td>
-                  {formulation.finishedProductItemCode ? (
-                    <span className="code">{formulation.finishedProductItemCode}</span>
-                  ) : (
-                    "—"
-                  )}
+                  <EntityLink
+                    kind="item"
+                    id={formulation.finishedProductItemId}
+                    code={formulation.finishedProductItemCode}
+                  />
                 </td>
                 <td>{formulation.activeVersionLabel ?? "—"}</td>
                 <td>{situacaoBadge(formulation)}</td>

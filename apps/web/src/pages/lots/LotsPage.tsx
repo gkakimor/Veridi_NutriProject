@@ -7,6 +7,7 @@ import { listLots } from "../../lib/lots-api";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
+import { EntityLink } from "../../components/EntityLink";
 
 type StatusFilter = LotStatus | "all";
 type OwnerFilter = InventoryOwnerType | "all";
@@ -243,11 +244,13 @@ export function LotsPage() {
               >
                 <td className="is-code">{lot.code}</td>
                 <td>
-                  <span className="code">{lot.itemCode}</span> {lot.itemName}
+                  <EntityLink kind="item" id={lot.itemId} code={lot.itemCode} name={lot.itemName} />
                 </td>
                 <td>{lot.supplierLot ?? "—"}</td>
                 <td>{ownerLabel(lot.ownerType, lot.ownerCustomerName)}</td>
-                <td>{lot.supplierName}</td>
+                <td>
+                  <EntityLink kind="supplier" id={lot.supplierId} code={lot.supplierCode} name={lot.supplierName} />
+                </td>
                 <td>
                   {lot.initialReceivedQuantity} {lot.unitCode}
                 </td>

@@ -44,6 +44,7 @@ import { FlowContext } from "../../components/FlowContext";
 import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { LotScanner } from "../../components/LotScanner";
+import { EntityLink } from "../../components/EntityLink";
 
 interface FormulationVersionOption {
   id: string;
@@ -826,7 +827,7 @@ export function ProductionOrderPage() {
                   {productionOrder.requirements.map((requirement) => (
                     <tr key={requirement.id}>
                       <td>
-                        <span className="code">{requirement.itemCode}</span> {requirement.itemName}
+                        <EntityLink kind="item" id={requirement.itemId} code={requirement.itemCode} name={requirement.itemName} />
                         {requirement.suggestedAllocations.length > 0 && (
                           <>
                             <br />
@@ -949,7 +950,7 @@ export function ProductionOrderPage() {
                   {productionOrder.reservation.lines.map((line) => (
                     <tr key={line.id}>
                       <td>
-                        <span className="code">{line.itemCode}</span> {line.itemName}
+                        <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
                       <td>
@@ -990,7 +991,7 @@ export function ProductionOrderPage() {
                     <Fragment key={line.id}>
                       <tr>
                         <td>
-                          <span className="code">{line.itemCode}</span> {line.itemName}
+                          <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
                           {line.replacesLineId && (
                             <>
                               <br />
@@ -1095,7 +1096,7 @@ export function ProductionOrderPage() {
                   {activeReservationLines.map((line) => (
                     <tr key={line.id}>
                       <td>
-                        <span className="code">{line.itemCode}</span> {line.itemName}
+                        <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
                       <td>
@@ -1161,7 +1162,7 @@ export function ProductionOrderPage() {
                       <tr key={consumption.id}>
                         <td>{formatDateTime(consumption.consumedAt)}</td>
                         <td>
-                          <span className="code">{consumption.itemCode}</span> {consumption.itemName}
+                          <EntityLink kind="item" id={consumption.itemId} code={consumption.itemCode} name={consumption.itemName} />
                         </td>
                         <td>{consumption.lotCode ?? "—"}</td>
                         <td>
@@ -1531,7 +1532,7 @@ export function ProductionOrderPage() {
                   {materialCost.consumptions.map((consumption) => (
                     <tr key={consumption.consumptionId}>
                       <td>
-                        <span className="code">{consumption.itemCode}</span> {consumption.itemName}
+                        <EntityLink kind="item" id={consumption.itemId} code={consumption.itemCode} name={consumption.itemName} />
                       </td>
                       <td>{consumption.lotCode ?? "—"}</td>
                       <td>

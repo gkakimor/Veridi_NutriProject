@@ -371,6 +371,7 @@ export interface OrderOperationReservationDTO {
 export interface OrderOperationProductionDTO {
   productionOrderId: string;
   code: string;
+  productId: string;
   productCode: string;
   productName: string;
   plannedQuantity: string;
@@ -425,6 +426,7 @@ export interface OrderOperationDTO {
   requestedDeliveryDate: string | null;
   lines: {
     customerOrderLineId: string;
+    productId: string;
     productCode: string;
     productName: string;
     orderedQuantity: string;

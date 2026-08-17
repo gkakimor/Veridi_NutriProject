@@ -6,6 +6,7 @@ import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, LOT_STATUSES, LOT_STATUS_LABEL
 import { listFinishedGoods } from "../../lib/finished-goods-api";
 import { listProducts } from "../../lib/products-api";
 import { formatBRL } from "../../lib/currency";
+import { EntityLink } from "../../components/EntityLink";
 
 type StatusFilter = LotStatus | "all";
 
@@ -227,7 +228,7 @@ export function FinishedGoodsPage() {
               <tr key={row.lotId}>
                 <td>{row.productName ?? "—"}</td>
                 <td>
-                  <span className="code">{row.itemCode}</span> {row.itemName}
+                  <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                 </td>
                 <td>{row.businessLotNumber ?? "—"}</td>
                 <td className="is-code">{row.lotCode}</td>

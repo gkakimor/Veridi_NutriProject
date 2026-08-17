@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useInitialFilters } from "../../lib/filter-params";
+import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { PurchaseOrderDTO, PurchaseOrderStatus, SupplierDTO } from "@veridi/shared";
@@ -183,7 +184,9 @@ export function PurchaseOrdersPage() {
                 }}
               >
                 <td className="is-code">{po.code}</td>
-                <td>{po.supplierName}</td>
+                <td>
+                  <EntityLink kind="supplier" id={po.supplierId} code={po.supplierCode} name={po.supplierName} />
+                </td>
                 <td>{formatDate(po.orderDate)}</td>
                 <td>{formatDate(po.expectedDeliveryDate)}</td>
                 <td>{po.lines.length}</td>

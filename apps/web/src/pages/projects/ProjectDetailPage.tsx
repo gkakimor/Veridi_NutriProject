@@ -30,6 +30,7 @@ import { createSample, listSamples } from "../../lib/samples-api";
 import { useAuth } from "../../app/AuthProvider";
 import { formatBRL } from "../../lib/currency";
 import { ProjectFormModal } from "./ProjectFormModal";
+import { EntityLink } from "../../components/EntityLink";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -234,7 +235,7 @@ export function ProjectDetailPage() {
           <dl className="definition-list">
             <dt>Cliente</dt>
             <dd>
-              <span className="code">{project.customerCode}</span> {project.customerName}
+              <EntityLink kind="customer" id={project.customerId} code={project.customerCode} name={project.customerName} />
             </dd>
             <dt>Conceito / canal</dt>
             <dd>
@@ -251,7 +252,12 @@ export function ProjectDetailPage() {
             <dt>Produto resultante</dt>
             <dd>
               {project.productId ? (
-                <span className="code">{project.productCode}</span>
+                <EntityLink
+                  kind="product"
+                  id={project.productId}
+                  code={project.productCode}
+                  name={project.productName}
+                />
               ) : (
                 "— (nasce na aprovação)"
               )}

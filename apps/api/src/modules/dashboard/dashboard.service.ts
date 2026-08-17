@@ -327,6 +327,7 @@ async function buildRecentMovements(
       id: movement.id,
       occurredAt: movement.occurredAt.toISOString(),
       type: movement.type,
+      itemId: movement.itemId,
       itemCode: movement.item.code,
       itemName: movement.item.name,
       lotCode: movement.lot ? movement.lot.code : null,

@@ -17,6 +17,7 @@ import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
 import { formatBRL } from "../../lib/currency";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 25;
 
@@ -110,11 +111,11 @@ export function RequirementsReportPage() {
               <DocLink code={row.productionOrderCode} to={`/producao/ordens/${row.productionOrderId}`} />
             </td>
             <td>
-              <span className="code">{row.productCode}</span> {row.productName}
+              <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
             </td>
             <td>{PRODUCTION_ORDER_STATUS_LABELS[row.productionOrderStatus]}</td>
             <td>
-              <span className="code">{row.itemCode}</span> {row.itemName}
+              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td className="is-number">
               {row.requiredQuantity} {row.unitCode}
@@ -235,7 +236,7 @@ export function PlannedActualReportPage() {
               <DocLink code={row.productionOrderCode} to={`/producao/ordens/${row.productionOrderId}`} />
             </td>
             <td>
-              <span className="code">{row.productCode}</span> {row.productName}
+              <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
             </td>
             <td>{row.formulationVersionNumber ? `v${row.formulationVersionNumber}` : "—"}</td>
             <td className="is-number">
@@ -314,7 +315,7 @@ export function ProductionTraceabilityReportPage() {
               </dd>
               <dt>Produto</dt>
               <dd>
-                <span className="code">{data.productCode}</span> {data.productName}
+                <EntityLink kind="product" id={data.productId} code={data.productCode} name={data.productName} />
               </dd>
               <dt>Planejado / Produzido</dt>
               <dd>
@@ -333,7 +334,7 @@ export function ProductionTraceabilityReportPage() {
               rows={data.consumed.map((row: TraceabilityConsumedRowDTO) => (
                 <tr key={`${row.itemId}-${row.lotId ?? "sem-lote"}`}>
                   <td>
-                    <span className="code">{row.itemCode}</span> {row.itemName}
+                    <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                   </td>
                   <td>
                     <DocLink code={row.lotCode} to={row.lotId ? `/estoque/lotes/${row.lotId}` : null} />
@@ -440,13 +441,13 @@ export function ConsumptionReportPage() {
           <tr key={row.id}>
             <td>{formatDate(row.consumedAt)}</td>
             <td>
-              <span className="code">{row.itemCode}</span> {row.itemName}
+              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td>
               <DocLink code={row.lotCode} to={row.lotId ? `/estoque/lotes/${row.lotId}` : null} />
             </td>
             <td>
-              <span className="code">{row.productCode}</span> {row.productName}
+              <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
             </td>
             <td>
               <DocLink code={row.productionOrderCode} to={`/producao/ordens/${row.productionOrderId}`} />

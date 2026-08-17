@@ -8,6 +8,7 @@ import {
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { completePart, getRecipeSheet, registerWeighing } from "../../lib/recipe-api";
+import { EntityLink } from "../../components/EntityLink";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -178,11 +179,15 @@ export function RecipeSheetPage() {
             <dd>{sheet.officialNumber ?? "—"}</dd>
             <dt>OP interna</dt>
             <dd>
-              <span className="code">{sheet.productionOrderCode}</span>
+              <EntityLink
+                kind="productionOrder"
+                id={sheet.productionOrderId}
+                code={sheet.productionOrderCode}
+              />
             </dd>
             <dt>Produto</dt>
             <dd>
-              <span className="code">{sheet.productCode}</span> {sheet.productName}
+              <EntityLink kind="product" id={sheet.productId} code={sheet.productCode} name={sheet.productName} />
             </dd>
             <dt>Cliente</dt>
             <dd>{sheet.customerName ?? "—"}</dd>
@@ -253,7 +258,7 @@ export function RecipeSheetPage() {
                   {part.requirements.map((requirement) => (
                     <tr key={requirement.requirementId}>
                       <td>
-                        <span className="code">{requirement.itemCode}</span> {requirement.itemName}
+                        <EntityLink kind="item" id={requirement.itemId} code={requirement.itemCode} name={requirement.itemName} />
                         {requirement.sourceName && (
                           <div className="field__hint">Fonte: {requirement.sourceName}</div>
                         )}
@@ -379,7 +384,7 @@ export function RecipeSheetPage() {
                   {part.weighings.map((weighing) => (
                     <tr key={weighing.id}>
                       <td>
-                        <span className="code">{weighing.itemCode}</span> {weighing.itemName}
+                        <EntityLink kind="item" id={weighing.itemId} code={weighing.itemCode} name={weighing.itemName} />
                       </td>
                       <td className="is-code">{weighing.lotCode ?? "—"}</td>
                       <td>{ownerLabel(weighing.ownerType, null)}</td>
@@ -424,7 +429,7 @@ export function RecipeSheetPage() {
                   {sheet.packagingRequirements.map((row) => (
                     <tr key={row.requirementId}>
                       <td>
-                        <span className="code">{row.itemCode}</span> {row.itemName}
+                        <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                       </td>
                       <td>{SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}</td>
                       <td>

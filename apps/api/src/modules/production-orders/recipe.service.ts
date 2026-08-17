@@ -68,6 +68,7 @@ function toWeighingDTO(
     id: weighing.id,
     productionOrderPartId: weighing.productionOrderPartId,
     productionOrderRequirementId: weighing.productionOrderRequirementId,
+    itemId: weighing.productionOrderRequirement.itemId,
     itemCode: weighing.productionOrderRequirement.itemCode,
     itemName: weighing.productionOrderRequirement.itemName,
     lotId: weighing.lotId,
@@ -172,6 +173,7 @@ export async function getRecipeSheet(id: string): Promise<RecipeSheetDTO> {
       : null,
     productionOrderCode: order.code,
     officialNumber: order.officialNumber,
+    productId: order.productId,
     productCode: order.productCode ?? order.product.code,
     productName: order.productName ?? order.product.name,
     customerName: order.customerName ?? order.customer?.legalName ?? null,
@@ -185,6 +187,7 @@ export async function getRecipeSheet(id: string): Promise<RecipeSheetDTO> {
     parts,
     packagingRequirements: packaging.map((requirement) => ({
       requirementId: requirement.id,
+      itemId: requirement.itemId,
       itemCode: requirement.itemCode,
       itemName: requirement.itemName,
       supplyResponsibility: requirement.supplyResponsibility,

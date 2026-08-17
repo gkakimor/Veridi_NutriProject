@@ -9,6 +9,7 @@ import { listProducts, setProductActive } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
 import { ProductFormModal } from "./ProductFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { EntityLink } from "../../components/EntityLink";
 import { RowActions } from "../../components/RowActions";
 
 type LifecycleFilter = "all" | "APPROVED" | "DEVELOPMENT";
@@ -296,11 +297,11 @@ export function ProductsPage() {
                     : "—"}
                 </td>
                 <td>
-                  {product.finishedProductItem ? (
-                    <span className="code">{product.finishedProductItem.code}</span>
-                  ) : (
-                    "—"
-                  )}
+                  <EntityLink
+                    kind="item"
+                    id={product.finishedProductItem?.id}
+                    code={product.finishedProductItem?.code}
+                  />
                 </td>
                 <td>
                   {product.shelfLifeMonths ? `${product.shelfLifeMonths} meses` : "—"}

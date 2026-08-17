@@ -77,6 +77,8 @@ export interface RawMaterialSampleUsageDTO {
   sampleId: string;
   sampleCode: string;
   testLabel: string;
+  /** Identidade do projeto — a rastreabilidade cita, e a citação abre. */
+  projectId: string;
   projectCode: string;
   projectName: string;
   customerName: string;

@@ -4,6 +4,7 @@ import type { CoaStatus, QualityQueueRowDTO } from "@veridi/shared";
 import { COA_STATUSES, COA_STATUS_LABELS, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { approveCoa, listQualityQueue, rejectCoa } from "../../lib/attachments-api";
 import { useAuth } from "../../app/AuthProvider";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 20;
 
@@ -191,7 +192,7 @@ export function CoaQueuePage() {
               <tr key={row.lotId}>
                 <td className="is-code">{row.lotCode}</td>
                 <td>
-                  <span className="code">{row.itemCode}</span> {row.itemName}
+                  <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                   {row.sourceName && <div className="field__hint">Fonte: {row.sourceName}</div>}
                 </td>
                 <td>

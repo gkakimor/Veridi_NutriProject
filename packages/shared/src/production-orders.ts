@@ -369,6 +369,8 @@ export interface RecipeWeighingDTO {
   id: string;
   productionOrderPartId: string;
   productionOrderRequirementId: string;
+  /** Identidade do item — a folha cita, e a citação abre o cadastro. */
+  itemId: string;
   itemCode: string;
   itemName: string;
   lotId: string | null;
@@ -419,6 +421,7 @@ export interface RecipeSheetPartDTO {
 
 export interface RecipeSheetPackagingDTO {
   requirementId: string;
+  itemId: string;
   itemCode: string;
   itemName: string;
   supplyResponsibility: SupplyResponsibility;
@@ -433,6 +436,7 @@ export interface RecipeSheetDTO {
   recipeSheetRevision: ControlledDocumentRevisionDTO | null;
   productionOrderCode: string;
   officialNumber: string | null;
+  productId: string;
   productCode: string;
   productName: string;
   customerName: string | null;

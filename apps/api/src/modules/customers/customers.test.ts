@@ -186,4 +186,24 @@ describe("Customers", () => {
 
     await app.close();
   });
+
+  it("reduz a lista ao id citado — o link contextual depende disso", async () => {
+    // O link vindo de outra tela leva à identidade, não a uma busca pelo
+    // texto do código: busca traria homônimo, e um cliente errado numa tela
+    // de pedido é erro caro.
+    const app = buildTestApp();
+    await app.ready();
+
+    const alvo = await createTestCustomer(app, { legalName: "Cliente alvo do link" });
+    await createTestCustomer(app, { legalName: "Cliente que não deve aparecer" });
+    const alvoId = alvo.json().id as string;
+
+    const response = await app.inject({ method: "GET", url: `/customers?ids=${alvoId}` });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.total).toBe(1);
+    expect(body.customers).toHaveLength(1);
+    expect(body.customers[0].id).toBe(alvoId);
+  });
 });

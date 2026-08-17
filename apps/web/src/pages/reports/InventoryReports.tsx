@@ -14,6 +14,7 @@ import {
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 25;
 
@@ -130,7 +131,7 @@ export function InventoryPositionReportPage() {
         rows={(data?.rows ?? []).map((row) => (
           <tr key={`${row.itemId}-${row.lotId ?? "sem-lote"}`}>
             <td>
-              <span className="code">{row.itemCode}</span> {row.itemName}
+              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td>{ITEM_TYPE_LABELS[row.itemType]}</td>
             <td>
@@ -252,7 +253,7 @@ export function ExpiryReportPage() {
         rows={(data?.rows ?? []).map((row) => (
           <tr key={row.lotId}>
             <td>
-              <span className="code">{row.itemCode}</span> {row.itemName}
+              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td>
               <DocLink code={row.lotCode} to={`/estoque/lotes/${row.lotId}`} />
@@ -362,7 +363,7 @@ export function MovementsReportPage() {
             <td>{formatDateTime(row.occurredAt)}</td>
             <td>{INVENTORY_MOVEMENT_TYPE_LABELS[row.type]}</td>
             <td>
-              <span className="code">{row.itemCode}</span> {row.itemName}
+              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td>
               <DocLink code={row.lotCode} to={row.lotId ? `/estoque/lotes/${row.lotId}` : null} />

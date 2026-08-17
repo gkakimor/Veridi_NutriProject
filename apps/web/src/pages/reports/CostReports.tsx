@@ -15,6 +15,7 @@ import {
 } from "../../lib/reports-api";
 import { formatUnitCost } from "../../components/CostBreakdown";
 import { formatBRL } from "../../lib/currency";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 25;
 
@@ -82,7 +83,7 @@ export function IndustrialCostByProductReportPage() {
             }}
           >
             <td>
-              <span className="code">{row.productCode}</span> {row.productName}
+              <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
             </td>
             <td>{row.customerName ?? "—"}</td>
             <td>{row.activeCostVersionLabel ?? "—"}</td>
@@ -184,7 +185,7 @@ export function PricingByProductReportPage() {
             }}
           >
             <td>
-              <span className="code">{row.productCode}</span> {row.productName}
+              <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
             </td>
             <td>{row.customerName ?? "—"}</td>
             <td className="is-code">{row.pricingLabel}</td>
@@ -312,7 +313,7 @@ export function QuotePricingAuditReportPage() {
           >
             <td className="is-code">{row.quoteLabel}</td>
             <td>
-              <span className="code">{row.projectCode}</span> {row.projectName}
+              <EntityLink kind="project" id={row.projectId} code={row.projectCode} name={row.projectName} />
             </td>
             <td>{row.customerName ?? "—"}</td>
             <td className="is-code">{row.productCode ?? "—"}</td>

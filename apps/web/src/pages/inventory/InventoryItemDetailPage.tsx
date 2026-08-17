@@ -8,6 +8,7 @@ import { getItemCostReference } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
+import { EntityLink } from "../../components/EntityLink";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -111,7 +112,7 @@ export function InventoryItemDetailPage() {
           <div className="doc-crumb">Estoque / Visão Geral / Detalhe</div>
           <div className="doc-title">
             <h1>
-              <span className="code">{detail.itemCode}</span> {detail.itemName}
+              <EntityLink kind="item" id={detail.itemId} code={detail.itemCode} name={detail.itemName} />
             </h1>
             <span className="badge badge--neutral">{ITEM_TYPE_LABELS[detail.itemType]}</span>
           </div>

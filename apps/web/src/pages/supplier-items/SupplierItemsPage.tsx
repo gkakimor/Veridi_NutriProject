@@ -16,6 +16,7 @@ import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { SupplierItemFormModal } from "./SupplierItemFormModal";
 import { SupplierItemDetailModal } from "./SupplierItemDetailModal";
+import { EntityLink } from "../../components/EntityLink";
 
 const PAGE_SIZE = 20;
 const FILTER_SCOPE = "supplier-items";
@@ -333,7 +334,7 @@ export function SupplierItemsPage() {
                 }}
               >
                 <td>
-                  <span className="code">{row.itemCode}</span> {row.itemName}
+                  <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                 </td>
                 <td>{row.supplierName}</td>
                 <td className="is-code">{row.supplierItemCode ?? "—"}</td>

@@ -544,6 +544,22 @@ record*, which is most of the work in an ERP.
 - **A known relationship is a link, not a search.** When the system already
   knows the orders belong to that customer, the user should not have to open
   another module and search again.
+- **Every reference to another record is clickable** — `EntityLink`. The ERP
+  cites records constantly: the formula cites its product and output item, the
+  order cites the customer, the lot cites the receipt and the supplier. Written
+  as plain text, each citation makes the reader memorise a code and go hunting
+  for work the system had already done. One component owns every destination,
+  so a route change is one edit and not a scavenger hunt.
+- **No id, no link.** A frozen snapshot or legacy row that kept only the code
+  stays text. Guessing a likely destination is worse than not navigating: it
+  lands on the wrong record wearing the right code.
+- **A citation inside a clickable row stops the propagation.** Otherwise the
+  row's own navigation wins and the person who aimed at the product lands on
+  the formula.
+- **A simple registry link opens the record, not its list.** Item, customer and
+  supplier live in a list with a modal: the link narrows the list (`ids`) and
+  opens the record (`open`). A transactional document has its own page and the
+  link goes straight to it.
 - **List filters answer real questions**, not every column that exists. Three
   or four main filters; the rest behind "more filters".
 - **An empty result says which one it is**: "nothing matches these filters"

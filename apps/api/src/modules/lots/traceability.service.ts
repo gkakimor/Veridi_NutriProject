@@ -159,6 +159,7 @@ async function buildRawMaterialLotTraceability(lot: Lot): Promise<RawMaterialLot
       sampleId: sample.id,
       sampleCode: sample.code,
       testLabel: `T${sample.testSequence}`,
+      projectId: sample.project.id,
       projectCode: sample.project.code,
       projectName: sample.project.name,
       customerName: sample.project.customer.legalName,

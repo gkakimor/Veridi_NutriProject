@@ -351,6 +351,7 @@ export async function getOrderOperation(
       : null,
     lines: order.lines.map((line) => ({
       customerOrderLineId: line.id,
+      productId: line.productId,
       productCode: line.productCode ?? line.product.code,
       productName: line.productName ?? line.product.name,
       orderedQuantity: line.orderedQuantity.toString(),
@@ -375,6 +376,7 @@ export async function getOrderOperation(
     productionOrders: order.productionOrders.map((productionOrder) => ({
       productionOrderId: productionOrder.id,
       code: productionOrder.code,
+      productId: productionOrder.productId,
       productCode: productionOrder.productCode ?? productionOrder.product.code,
       productName: productionOrder.productName ?? productionOrder.product.name,
       plannedQuantity: productionOrder.plannedQuantity.toString(),

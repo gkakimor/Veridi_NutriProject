@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CustomerDTO } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
+import { EntityLink } from "../../components/EntityLink";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
@@ -183,7 +184,9 @@ export function BillingsPage() {
               <tr key={row.shipmentId}>
                 <td className="is-code">{row.shipmentCode}</td>
                 <td className="is-code">{row.customerOrderCode}</td>
-                <td>{row.customerName ?? "—"}</td>
+                <td>
+                  <EntityLink kind="customer" id={row.customerId} code={row.customerName} />
+                </td>
                 <td>{formatDate(row.shipmentDate)}</td>
                 <td>{row.totalQuantity}</td>
                 <td>
@@ -330,7 +333,9 @@ export function BillingsPage() {
                 <td className="is-code">{billing.code}</td>
                 <td className="is-code">{billing.shipmentCode}</td>
                 <td className="is-code">{billing.customerOrderCode}</td>
-                <td>{billing.customerName ?? "—"}</td>
+                <td>
+                  <EntityLink kind="customer" id={billing.customerId} code={billing.customerName} />
+                </td>
                 <td>{billing.totalQuantity}</td>
                 <td>{billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}</td>
                 <td>

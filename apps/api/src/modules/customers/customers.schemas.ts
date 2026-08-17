@@ -69,6 +69,17 @@ export const listCustomersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de
    100 o cadastro 101 em diante ficava impossível de escolher. */
+  /**
+   * Conjunto explícito de ids. Serve à exportação do que está selecionado e
+   * ao link contextual, que leva à lista já reduzida ao registro citado —
+   * identidade, nunca busca por texto. Vazio significa "sem restrição".
+   */
+  ids: z
+    .string()
+    .trim()
+    .min(1)
+    .optional()
+    .transform((value) => (value ? value.split(",").filter(Boolean) : undefined)),
   pageSize: z.coerce.number().int().min(1).max(1000).default(20),
 });
 

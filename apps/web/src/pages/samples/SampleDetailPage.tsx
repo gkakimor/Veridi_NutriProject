@@ -24,6 +24,7 @@ import {
   rejectSample,
 } from "../../lib/samples-api";
 import { sampleStatusBadgeClass } from "./SamplesPage";
+import { EntityLink } from "../../components/EntityLink";
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
@@ -143,7 +144,12 @@ export function SampleDetailPage() {
           </h1>
           <p className="page__subtitle">
             <Link to={`/comercial/projetos/${sample.projectId}`}>
-              {sample.projectCode} — {sample.projectName}
+              <EntityLink
+              kind="project"
+              id={sample.projectId}
+              code={sample.projectCode}
+              name={sample.projectName}
+            />
             </Link>{" "}
             · {sample.customerName} ·{" "}
             <span className={sampleStatusBadgeClass(sample.status)}>
@@ -261,7 +267,7 @@ export function SampleDetailPage() {
                 {sample.consumptions.map((consumption) => (
                   <tr key={consumption.id}>
                     <td>
-                      <span className="code">{consumption.itemCode}</span> {consumption.itemName}
+                      <EntityLink kind="item" id={consumption.itemId} code={consumption.itemCode} name={consumption.itemName} />
                     </td>
                     <td className="is-code">{consumption.lotCode ?? "—"}</td>
                     <td>{ownerLabel(consumption.ownerType, consumption.ownerCustomerName)}</td>

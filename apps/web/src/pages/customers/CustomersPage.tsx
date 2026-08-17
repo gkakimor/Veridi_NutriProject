@@ -6,6 +6,11 @@ import { listCustomers, setCustomerActive } from "../../lib/customers-api";
 import { CustomerFormModal } from "./CustomerFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { RowActions } from "../../components/RowActions";
+import {
+  RecordContextChip,
+  useOpenRecord,
+  useRecordContext,
+} from "../../components/RecordContext";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -28,6 +33,11 @@ export function CustomersPage() {
   const [stateFilter, setStateFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
+  // Chegada por link contextual: `ids` reduz a lista, `open` abre o registro.
+  const { contextIds, openId, clear: clearContext, contextKey } = useRecordContext(
+    "/cadastros/clientes",
+  );
+
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
   const [confirmDeactivate, setConfirmDeactivate] = useState<CustomerDTO | null>(null);
 
@@ -38,13 +48,23 @@ export function CustomersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, stateFilter, activeFilter]);
+  }, [search, stateFilter, activeFilter, contextKey]);
+
+  // Filtro antigo somado ao contexto esconderia o próprio registro citado.
+  useEffect(() => {
+    if (!contextKey) return;
+    setSearchInput("");
+    setSearch("");
+    setStateFilter("");
+    setActiveFilter("all");
+  }, [contextKey]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
     const params: Parameters<typeof listCustomers>[0] = { page, pageSize: PAGE_SIZE };
+    if (contextIds) params.ids = contextIds;
     if (search) params.search = search;
     if (stateFilter) params.state = stateFilter;
     if (activeFilter !== "all") params.active = activeFilter === "active";
@@ -58,11 +78,13 @@ export function CustomersPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar clientes");
       })
       .finally(() => setLoading(false));
-  }, [page, search, stateFilter, activeFilter]);
+  }, [page, search, stateFilter, activeFilter, contextKey]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useOpenRecord(openId, customers, (customer) => setModalState({ mode: "edit", customer }));
 
   function handleToggleActive(customer: CustomerDTO) {
     if (customer.active) {
@@ -148,6 +170,15 @@ export function CustomersPage() {
       </div>
 
       {error && <p className="form-alert">{error}</p>}
+
+      {contextIds && (
+        <RecordContextChip
+          noun="o cliente"
+          code={customers[0]?.code}
+          name={customers[0]?.tradeName ?? customers[0]?.legalName}
+          onClear={clearContext}
+        />
+      )}
 
       <div className="table-container">
         <table className="table table--clickable-rows">

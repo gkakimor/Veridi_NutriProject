@@ -23,6 +23,7 @@ import { createBilling } from "../../lib/billings-api";
 import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { EntityLink } from "../../components/EntityLink";
 
 function statusBadgeClass(status: ShipmentStatus): string {
   switch (status) {
@@ -91,7 +92,7 @@ function ProductGroup({
     <div className="shipment-product">
       <div className="status-line">
         <strong>
-          <span className="code">{group.productCode}</span> {group.productName}
+          <EntityLink kind="product" id={group.productId} code={group.productCode} name={group.productName} />
         </strong>
         <span className={productStatusBadgeClass(group.status)}>
           {SHIPMENT_PRODUCT_STATUS_LABELS[group.status]}
@@ -614,7 +615,7 @@ export function ShipmentPage() {
                   {shipment.lines.map((line) => (
                     <tr key={line.id}>
                       <td>
-                        <span className="code">{line.productCode}</span> {line.productName}
+                        <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                       </td>
                       <td className="is-code">{line.lotCode ?? "—"}</td>
                       <td>{line.businessLotNumber ?? "—"}</td>
