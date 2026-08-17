@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BrandLogo } from "../components/BrandLogo";
 import type { ControlledDocumentRevisionDTO } from "@veridi/shared";
 import "./print.css";
 
@@ -45,7 +46,7 @@ export function PrintLayout({
     <article className="print-doc">
       <header className="print-doc__header">
         <div>
-          <div className="print-doc__brand">Veridi Nutrition</div>
+          <BrandLogo className="print-doc__logo" />
           <div className="print-doc__kind">{kind}</div>
         </div>
         <div style={{ textAlign: "right" }}>

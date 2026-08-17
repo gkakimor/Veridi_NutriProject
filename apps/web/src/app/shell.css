@@ -82,15 +82,11 @@
 }
 
 .masthead__mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-sm);
-  background: var(--v-lime);
-  color: var(--v-lime-ink);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
+  /* Símbolo oficial: proporção preservada, sem fundo inventado. */
+  object-fit: contain;
 }
 
 .masthead__sub {

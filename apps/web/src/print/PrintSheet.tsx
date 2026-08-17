@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOptionalAuth } from "../app/AuthProvider";
+import { BrandLogo } from "../components/BrandLogo";
 import { PrintActions } from "./PrintLayout";
 import "./print.css";
 
@@ -49,9 +50,8 @@ export function PrintSheet({
       <article className="print-doc">
         <header className="print-doc__header">
           <div>
-            {/* Sem asset de marca oficial ainda: a assinatura tipográfica
-                usa a identidade atual em vez de uma logomarca inventada. */}
-            <div className="print-doc__brand">Veridi Nutrition</div>
+            {/* Marca oficial local — o papel nunca busca nada na rede. */}
+            <BrandLogo className="print-doc__logo" />
             <div className="print-doc__kind">{title}</div>
             {subtitle && <div className="print-doc__status">{subtitle}</div>}
           </div>

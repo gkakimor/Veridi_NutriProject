@@ -36,7 +36,10 @@ describe("Folha operacional impressa", () => {
       </PrintSheet>,
     );
 
-    expect(screen.getByText("Veridi Nutrition")).toBeTruthy();
+    // Marca oficial vem de asset local — o papel nunca busca imagem na rede.
+    const brand = screen.getByAltText("Veridi Nutrition") as HTMLImageElement;
+    expect(brand.getAttribute("src")).toBeTruthy();
+    expect(brand.getAttribute("src")).not.toMatch(/^https?:/);
     expect(screen.getByText("FO-01")).toBeTruthy();
     expect(screen.getByText("Folha de contagem física de estoque")).toBeTruthy();
     // Filtros aplicados precisam viajar com o papel: sem isso ninguém sabe

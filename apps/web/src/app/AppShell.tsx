@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { BrandLogo } from "../components/BrandLogo";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { USER_ROLE_LABELS } from "@veridi/shared";
 import { lookupLot } from "../lib/lots-api";
@@ -89,9 +90,7 @@ export function AppShell() {
         </button>
 
         <Link to="/" className="masthead__brand">
-          <span className="masthead__mark" aria-hidden="true">
-            V
-          </span>
+          <BrandLogo variant="symbol" className="masthead__mark" />
           Veridi
           <span className="masthead__sub">Nutrition</span>
         </Link>

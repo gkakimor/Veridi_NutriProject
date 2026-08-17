@@ -24,6 +24,14 @@
   margin-bottom: var(--sp-4);
 }
 
+.print-doc__logo {
+  /* Altura fixa, largura automática: a marca nunca é esticada. */
+  height: 34px;
+  width: auto;
+  display: block;
+  margin-bottom: var(--sp-1);
+}
+
 .print-doc__brand {
   font-size: var(--fs-md);
   font-weight: var(--fw-semibold);
