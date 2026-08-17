@@ -64,6 +64,7 @@ Node é fixado em 22 pelo `.node-version`.
 | `NODE_ENV` | `production` | liga o `Secure` no cookie e o log em `info` |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | referência ao banco do projeto — não copiar a URL na mão |
 | `VERIDI_WEB_DIST` | `apps/web/dist` | relativo à raiz do monorepo (não ao diretório do processo) |
+| `VERIDI_UPLOAD_DIR` | `/data/uploads` | dentro do volume persistente — ver seção 6 |
 | `TZ` | `UTC` | container e banco no mesmo relógio; a formatação é no cliente |
 
 **Não copiar `API_HOST` do `.env.example`.** Ele vale `127.0.0.1`, que é
@@ -118,24 +119,46 @@ Rodar sempre `validate` antes de `apply`, e `verify` depois. Ver
 
 ---
 
-## 6. Aberto — resolver antes de uso real
+## 6. Anexos — volume persistente
 
-Estes pontos não bloqueiam a publicação de demonstração, mas **bloqueiam
-operação de verdade**:
+O disco do container é efêmero: laudo/CoA, NF e arte gravados nele sumiriam no
+redeploy seguinte, deixando registro no banco apontando para arquivo que não
+existe mais. Por isso o serviço tem um **volume** montado em `/data`, e
+`VERIDI_UPLOAD_DIR=/data/uploads` aponta o armazenamento para dentro dele.
 
-- **Anexos somem no redeploy.** `apps/api/src/lib/file-storage.ts` grava no
-  disco local, e o disco do container é efêmero. Laudo/CoA, NF e arte enviados
-  seriam perdidos na próxima publicação. Solução acordada: adaptador de
-  armazenamento em Cloudflare R2 (download continua passando pela API
-  autenticada — arquivo nunca fica público).
+```bash
+railway volume --service <id> --environment <id> add --mount-path /data
+```
+
+Nenhuma mudança de código: `file-storage.ts` já resolve caminho absoluto e cria
+o diretório na primeira gravação. O download continua passando pela API
+autenticada — arquivo nunca fica público.
+
+Verificado em produção: upload (`201`), redeploy completo (build novo,
+container substituído), download do mesmo anexo (`200`, 39 bytes, conteúdo
+íntegro).
+
+Cloudflare R2 continua sendo a saída quando o volume apertar ou quando o
+Railway deixar de ser a casa — o armazenamento está isolado em três funções
+(`storeFile`, `readFile`, `deleteStoredFile`), então a troca é local.
+
+## 7. Aberto — resolver antes de uso real
+
+Não bloqueiam demonstração; **bloqueiam operação de verdade**:
+
 - **Backup do banco.** O snapshot do provedor não substitui `pg_dump`
   periódico guardado fora dele.
 - **Limite de tentativas no login.** Hoje não há rate limit na rota de
-  autenticação; exposta na internet, ela precisa de um.
+  autenticação; exposta na internet, ela precisa de um — mais ainda enquanto
+  existirem as contas de avaliação (`pnpm users:demo`, domínio
+  `@veridi.demo`), que usam senha única e conhecida por quem avalia.
+- **Corpus real não subiu.** Cliente, CNPJ, fornecedor, preço e formulação só
+  entram depois dos dois itens acima. O que está no ambiente publicado é o
+  `pnpm db:seed` — dados fictícios.
 
 ---
 
-## 7. Rodar o modo de produção na máquina local
+## 8. Rodar o modo de produção na máquina local
 
 Útil para reproduzir o ambiente publicado antes de subir:
 
