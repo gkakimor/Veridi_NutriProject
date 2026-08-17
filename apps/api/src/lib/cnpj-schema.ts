@@ -20,15 +20,22 @@ export const optionalCnpjSchema = z
     message: "CNPJ deve conter 14 dígitos",
   });
 
-/** Texto opcional: string vazia vira `null` (limpa o campo em updates). */
+/**
+ * Texto opcional: campo ausente não muda nada; string vazia **e `null`**
+ * limpam o campo. Os formulários enviam `null` para "não preenchido" — sem
+ * aceitar `null` aqui, deixar um campo opcional em branco derruba o salvamento
+ * inteiro com "Expected string, received null".
+ */
 export function optionalNullableText(max: number) {
   return z
     .string()
     .trim()
     .max(max)
+    .nullable()
     .optional()
     .transform((value) => {
       if (value === undefined) return undefined;
+      if (value === null) return null;
       return value.length === 0 ? null : value;
     });
 }

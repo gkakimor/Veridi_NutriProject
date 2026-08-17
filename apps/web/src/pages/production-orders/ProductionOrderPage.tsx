@@ -189,7 +189,7 @@ export function ProductionOrderPage() {
 
   useEffect(() => {
     // Produto técnico de projeto não é opção operacional.
-    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 100 })
+    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 1000 })
       .then((result) => setActiveProducts(result.products))
       .catch(() => setActiveProducts([]));
   }, []);
@@ -897,7 +897,11 @@ export function ProductionOrderPage() {
             subtitle={
               productionOrder.reservation.status === "ACTIVE"
                 ? "Alocação oficial desta OP — base do futuro Picking. O estoque físico ainda não foi baixado."
-                : "Reserva liberada (OP cancelada) — mantida como histórico, não conta mais em Reservado."
+                : // Reserva também é liberada ao concluir a OP; dizer "cancelada"
+                  // numa OP concluída é informação errada no histórico.
+                  `Reserva liberada (${
+                    productionOrder.status === "CANCELLED" ? "OP cancelada" : "OP concluída"
+                  }) — mantida como histórico, não conta mais em Reservado.`
             }
           >
             <div className="table-container">

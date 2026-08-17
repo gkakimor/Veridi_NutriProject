@@ -129,10 +129,10 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
   const [activeFinishedItems, setActiveFinishedItems] = useState<FinishedItemOption[]>([]);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 100 })
+    listCustomers({ active: true, pageSize: 1000 })
       .then((result) => setActiveCustomers(result.customers))
       .catch(() => setActiveCustomers([]));
-    listItems({ type: "FINISHED_PRODUCT", active: true, pageSize: 100 })
+    listItems({ type: "FINISHED_PRODUCT", active: true, pageSize: 1000 })
       .then((result) => setActiveFinishedItems(result.items))
       .catch(() => setActiveFinishedItems([]));
   }, []);

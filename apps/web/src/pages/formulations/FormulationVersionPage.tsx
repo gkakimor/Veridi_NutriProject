@@ -161,8 +161,8 @@ export function FormulationVersionPage() {
 
   useEffect(() => {
     Promise.all([
-      listItems({ type: "RAW_MATERIAL", active: true, pageSize: 100 }),
-      listItems({ type: "PACKAGING", active: true, pageSize: 100 }),
+      listItems({ type: "RAW_MATERIAL", active: true, pageSize: 1000 }),
+      listItems({ type: "PACKAGING", active: true, pageSize: 1000 }),
     ])
       .then(([raw, packaging]) =>
         setActiveItems(

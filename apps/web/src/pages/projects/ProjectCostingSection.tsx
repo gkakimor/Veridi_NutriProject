@@ -145,7 +145,11 @@ export function ProjectCostingSection({
               <button
                 type="button"
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/producao/formulacoes/${costing.formulationVersionId}`)}
+                onClick={() =>
+                  navigate(
+                    `/producao/formulacoes/${costing.productId}/versoes/${costing.formulationVersionId}`,
+                  )
+                }
               >
                 Abrir formulação
               </button>

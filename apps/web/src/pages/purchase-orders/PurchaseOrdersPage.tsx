@@ -81,7 +81,7 @@ export function PurchaseOrdersPage() {
   }, [reload]);
 
   useEffect(() => {
-    listSuppliers({ pageSize: 100 })
+    listSuppliers({ pageSize: 1000 })
       .then((result) => setSuppliers(result.suppliers))
       .catch(() => setSuppliers([]));
   }, []);

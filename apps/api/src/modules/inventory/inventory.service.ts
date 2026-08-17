@@ -149,9 +149,18 @@ export async function listInventory(
   const items = await prisma.item.findMany({ where, orderBy: { code: "asc" } });
   const summaries = await buildItemSummaries(prisma, items);
 
+  const hasPosition = (summary: (typeof summaries)[number]) =>
+    new Prisma.Decimal(summary.onHand).greaterThan(0) ||
+    new Prisma.Decimal(summary.reserved).greaterThan(0) ||
+    new Prisma.Decimal(summary.onOrder).greaterThan(0);
+
+  // Sem filtro, quem tem posição vem primeiro: ordenado só por código, a
+  // primeira página do estoque real fica coberta por itens zerados e o
+  // módulo parece vazio. Nada é escondido — a ordem dentro de cada grupo
+  // continua por código.
   const filtered = query.onlyWithStock
     ? summaries.filter((summary) => new Prisma.Decimal(summary.onHand).greaterThan(0))
-    : summaries;
+    : [...summaries].sort((a, b) => Number(hasPosition(b)) - Number(hasPosition(a)));
 
   return { items: slicePage(filtered, pagination), ...pageMeta(pagination, filtered.length) };
 }

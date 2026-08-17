@@ -28,7 +28,7 @@ function formatDate(value: string | null): string {
 function useCustomerOptions() {
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 100 })
+    listCustomers({ active: true, pageSize: 1000 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
   }, []);
@@ -243,7 +243,7 @@ export function FulfillmentReportPage() {
           "Pedido",
           "Cliente",
           "Produto",
-          "Pedido",
+          "Qtd. pedida",
           "Reservado",
           "Produzido",
           "OPs",

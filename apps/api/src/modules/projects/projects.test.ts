@@ -160,6 +160,44 @@ describe("Projeto — cadastro e pipeline", () => {
     await app.close();
   });
 
+  it("aceita null nos campos opcionais — formulário em branco não derruba o cadastro", async () => {
+    const app = buildTestApp("COMMERCIAL");
+    await app.ready();
+
+    const customer = await createCustomer();
+    // O formulário envia null para todo campo opcional deixado em branco.
+    const response = await createProject(app, customer.id, {
+      concept: null,
+      channel: null,
+      externalCode: null,
+      notes: null,
+    });
+
+    expect(response.statusCode).toBe(201);
+    const project = response.json();
+    expect(project.concept).toBeNull();
+    expect(project.channel).toBeNull();
+    expect(project.externalCode).toBeNull();
+    expect(project.notes).toBeNull();
+
+    // null continua limpando o campo em uma atualização.
+    const filled = await app.inject({
+      method: "PATCH",
+      url: `/projects/${project.id}`,
+      payload: { notes: "Anotação inicial" },
+    });
+    expect(filled.statusCode).toBe(200);
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/projects/${project.id}`,
+      payload: { notes: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().notes).toBeNull();
+
+    await app.close();
+  });
+
   it("percorre o pipeline com histórico e trata aprovado/cancelado como terminais", async () => {
     const app = buildTestApp("COMMERCIAL");
     await app.ready();

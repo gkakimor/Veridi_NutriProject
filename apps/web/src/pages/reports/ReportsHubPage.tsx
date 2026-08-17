@@ -193,28 +193,42 @@ const GROUPS: { title: string; reports: ReportLink[] }[] = [
   },
 ];
 
-/** Busca client-side: 17 relatórios não justificam índice no backend. */
-function matches(report: ReportLink, term: string): boolean {
-  if (!term) return true;
-  const haystack = [report.code, report.label, report.hint, ...(report.aliases ?? [])]
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(term);
+/**
+ * Normaliza para busca: quem digita rápido em pt-BR escreve "orcamento" e
+ * "producao" — sem isso a busca responde "nada encontrado" para um relatório
+ * que existe.
+ */
+function normalize(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+/**
+ * Busca client-side: 20 relatórios não justificam índice no backend.
+ * Casa por palavra, não por substring: quem procura "necessidade de produção"
+ * precisa achar o relatório cujo apelido é "Necessidade p/ produção".
+ */
+function matches(report: ReportLink, words: string[]): boolean {
+  if (words.length === 0) return true;
+  const haystack = normalize(
+    [report.code, report.label, report.hint, ...(report.aliases ?? [])].join(" "),
+  );
+  return words.every((word) => haystack.includes(word));
 }
 
 export function ReportsHubPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
 
-  const term = search.trim().toLowerCase();
-  const groups = useMemo(
-    () =>
-      GROUPS.map((group) => ({
-        ...group,
-        reports: group.reports.filter((report) => matches(report, term)),
-      })).filter((group) => group.reports.length > 0),
-    [term],
-  );
+  const groups = useMemo(() => {
+    const words = normalize(search.trim()).split(/\s+/).filter(Boolean);
+    return GROUPS.map((group) => ({
+      ...group,
+      reports: group.reports.filter((report) => matches(report, words)),
+    })).filter((group) => group.reports.length > 0);
+  }, [search]);
 
   return (
     <>

@@ -111,7 +111,7 @@ export function CustomerOrdersPage() {
   }, [reload]);
 
   useEffect(() => {
-    listCustomers({ pageSize: 100 })
+    listCustomers({ pageSize: 1000 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
   }, []);

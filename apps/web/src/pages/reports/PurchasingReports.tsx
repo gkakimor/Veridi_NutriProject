@@ -23,7 +23,7 @@ function formatDate(value: string | null): string {
 function useSupplierOptions() {
   const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);
   useEffect(() => {
-    listSuppliers({ active: true, pageSize: 100 })
+    listSuppliers({ active: true, pageSize: 1000 })
       .then((result) => setSuppliers(result.suppliers))
       .catch(() => setSuppliers([]));
   }, []);

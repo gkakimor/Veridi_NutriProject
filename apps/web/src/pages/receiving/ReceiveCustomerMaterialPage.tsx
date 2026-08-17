@@ -58,14 +58,14 @@ export function ReceiveCustomerMaterialPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 100 })
+    listCustomers({ active: true, pageSize: 1000 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
 
     // Material de cliente existe só para matéria-prima e embalagem.
     Promise.all([
-      listItems({ type: "RAW_MATERIAL", active: true, pageSize: 100 }),
-      listItems({ type: "PACKAGING", active: true, pageSize: 100 }),
+      listItems({ type: "RAW_MATERIAL", active: true, pageSize: 1000 }),
+      listItems({ type: "PACKAGING", active: true, pageSize: 1000 }),
     ])
       .then(([raw, packaging]) => setItems([...raw.items, ...packaging.items]))
       .catch(() => setItems([]));

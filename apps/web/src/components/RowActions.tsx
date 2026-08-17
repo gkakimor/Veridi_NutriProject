@@ -34,6 +34,7 @@ export function RowActions({
 }) {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -42,7 +43,10 @@ export function RowActions({
       if (!container.current?.contains(event.target as Node)) setOpen(false);
     }
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      // Sem isso o foco cai no body e quem usa teclado recomeça a tabela.
+      toggle.current?.focus();
     }
 
     document.addEventListener("mousedown", handlePointerDown);
@@ -56,12 +60,15 @@ export function RowActions({
   const available = actions.filter((action) => !action.disabled);
 
   return (
-    <div className="row-actions" ref={container}>
+    // A linha da tabela trata Enter como "abrir registro"; sem parar o evento
+    // aqui, Enter no menu "⋯" abria o cadastro em vez do menu.
+    <div className="row-actions" ref={container} onKeyDown={(event) => event.stopPropagation()}>
       {children}
       {available.length > 0 && (
         <>
           <button
             type="button"
+            ref={toggle}
             className="btn btn--ghost btn--sm row-actions__toggle"
             aria-label={label}
             aria-haspopup="menu"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   CustomerDTO,
   CustomerOrderDTO,
@@ -219,11 +219,11 @@ export function CustomerOrderPage() {
   }, [id, isNew, syncFormFromServer]);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 100 })
+    listCustomers({ active: true, pageSize: 1000 })
       .then((result) => setActiveCustomers(result.customers))
       .catch(() => setActiveCustomers([]));
     // Produto técnico de projeto não é opção operacional.
-    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 100 })
+    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 1000 })
       .then((result) => setActiveProducts(result.products))
       .catch(() => setActiveProducts([]));
   }, []);
@@ -299,7 +299,7 @@ export function CustomerOrderPage() {
 
   useEffect(() => {
     if (!showPurchaseSuggestion) return;
-    listSuppliers({ active: true, pageSize: 100 })
+    listSuppliers({ active: true, pageSize: 1000 })
       .then((result) => setActiveSuppliers(result.suppliers))
       .catch(() => setActiveSuppliers([]));
   }, [showPurchaseSuggestion]);
@@ -1492,7 +1492,15 @@ export function CustomerOrderPage() {
                               <span className="code">{line.productCode}</span> {line.productName}
                             </td>
                             <td>
-                              {line.lotCode ?? "— (sem controle de lote)"}
+                              {/* O lote que atendeu o pedido é a resposta de
+                                  "de qual lote saiu?" — tem que ser clicável. */}
+                              {line.lotCode && line.lotId ? (
+                                <Link className="code" to={`/estoque/lotes/${line.lotId}`}>
+                                  {line.lotCode}
+                                </Link>
+                              ) : (
+                                (line.lotCode ?? "— (sem controle de lote)")
+                              )}
                               {line.businessLotNumber ? ` — ${line.businessLotNumber}` : ""}
                               {line.replacesLineId && (
                                 <>

@@ -74,7 +74,7 @@ export function ProjectFormModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 100 })
+    listCustomers({ active: true, pageSize: 1000 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
     getProjectVocabulary()

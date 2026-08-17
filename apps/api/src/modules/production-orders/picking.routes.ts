@@ -23,6 +23,7 @@ import {
   SameLotSubstitutionError,
   SubstitutionAfterConsumptionError,
 } from "./picking.errors.js";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import { ProductionOrderNotFoundError } from "./production-orders.errors.js";
 import {
   confirmPickingSchema,
@@ -176,7 +177,9 @@ export const pickingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const order = await recordConsumption(id, parsed.data.entries);
+      // Consumo é registro de rastreabilidade: fica com quem confirmou,
+      // não com o ator de sistema.
+      const order = await recordConsumption(id, parsed.data.entries, requireCurrentUser(request));
       return reply.status(201).send(order);
     } catch (error) {
       const mapped = mapDomainError(error);

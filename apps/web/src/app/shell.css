@@ -4,6 +4,25 @@
  * Sem painel de propriedades permanente.
  */
 
+/* Visível só quando recebe foco pelo teclado — primeiro Tab da página. */
+.skip-link {
+  position: fixed;
+  top: var(--sp-2);
+  left: var(--sp-2);
+  z-index: 200;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--v-green-800);
+  color: var(--on-dark);
+  font-weight: 600;
+  transform: translateY(-200%);
+  transition: transform var(--transition);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
 .shell {
   --sidebar-current-w: var(--sidebar-w);
 

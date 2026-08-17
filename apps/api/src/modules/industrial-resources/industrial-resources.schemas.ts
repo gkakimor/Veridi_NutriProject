@@ -41,7 +41,9 @@ export const listResourcesQuerySchema = z.object({
     .optional()
     .transform((value) => (value === undefined ? undefined : value === "true")),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de
+   100 o cadastro 101 em diante ficava impossível de escolher. */
+  pageSize: z.coerce.number().int().min(1).max(1000).default(20),
 });
 
 export type CreateIndustrialResourceInput = z.infer<typeof createIndustrialResourceSchema>;

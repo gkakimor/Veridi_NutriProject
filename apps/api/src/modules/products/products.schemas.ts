@@ -59,7 +59,9 @@ export const listProductsQuerySchema = z.object({
   /** Seletor operacional pede APPROVED; gestão de custo aceita os dois. */
   lifecycle: z.enum(["DEVELOPMENT", "APPROVED"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de
+   100 o cadastro 101 em diante ficava impossível de escolher. */
+  pageSize: z.coerce.number().int().min(1).max(1000).default(20),
 });
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;

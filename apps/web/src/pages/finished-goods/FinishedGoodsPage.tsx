@@ -86,7 +86,7 @@ export function FinishedGoodsPage() {
   }, [search, statusFilter, productFilter, dateFrom, dateTo]);
 
   useEffect(() => {
-    listProducts({ active: true, pageSize: 100 })
+    listProducts({ active: true, pageSize: 1000 })
       .then((result) => setProducts(result.products))
       .catch(() => setProducts([]));
   }, []);

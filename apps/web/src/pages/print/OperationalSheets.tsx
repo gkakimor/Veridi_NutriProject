@@ -108,6 +108,10 @@ export function InventoryCountSheetPage() {
           "Código",
           "Item",
           "Lote",
+          /* Contar material de cliente junto com o da Veridi, sem dizer de
+             quem é, é a forma mais fácil de tratar estoque alheio como
+             próprio. FO-02 e FO-03 já mostram o proprietário. */
+          "Proprietário",
           "Validade",
           "Localização",
           "Un.",
@@ -124,6 +128,7 @@ export function InventoryCountSheetPage() {
             <td>{row.itemCode}</td>
             <td>{row.itemName}</td>
             <td>{printOrDash(row.lotCode)}</td>
+            <td>{ownerLabel(row.ownerType, row.ownerCustomerName)}</td>
             <td>{formatPrintDate(row.expiryDate)}</td>
             <td>{printOrDash(row.location)}</td>
             <td>{row.unitCode}</td>

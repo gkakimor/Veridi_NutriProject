@@ -14,6 +14,7 @@ import {
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
   INDUSTRIAL_USAGE_BASIS_LABELS,
 } from "@veridi/shared";
+import { formatUnitCost } from "../../components/CostBreakdown";
 import { PrintSection, PrintTable, formatPrintDateTime } from "../../print/PrintLayout";
 import { PrintSheet } from "../../print/PrintSheet";
 import { getIndustrialCostVersion } from "../../lib/industrial-costs-api";
@@ -25,11 +26,11 @@ import { getIndustrialCostVersion } from "../../lib/industrial-costs-api";
 function printRate(usage: IndustrialCostResourceUsageDTO, status: string): string {
   if (status === "DRAFT") {
     return usage.currentRate
-      ? `R$ ${usage.currentRate.rateValue} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.currentRate.rateUom]}`
+      ? `${formatUnitCost(usage.currentRate.rateValue)} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.currentRate.rateUom]}`
       : "—";
   }
   if (!usage.rateValueSnapshot || !usage.rateUomSnapshot) return "—";
-  return `R$ ${usage.rateValueSnapshot} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.rateUomSnapshot]}`;
+  return `${formatUnitCost(usage.rateValueSnapshot)} / ${INDUSTRIAL_RATE_UOM_LABELS[usage.rateUomSnapshot]}`;
 }
 
 /**
@@ -142,7 +143,7 @@ export function IndustrialCostPrintPage() {
                   ? "—"
                   : line.calculationBasis === "PERCENT_OF_DIRECT_INDUSTRIAL_COST"
                     ? `${line.rateValue}%`
-                    : `R$ ${line.rateValue}`}
+                    : formatUnitCost(line.rateValue)}
               </td>
             </tr>
           ))}

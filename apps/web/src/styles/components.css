@@ -169,7 +169,9 @@
 
 .table th {
   background: var(--canvas);
-  color: var(--ink-3);
+  /* ink-3 sobre canvas dá 2,84:1 — abaixo do mínimo legível; cabeçalho de
+     tabela e dica de campo carregam informação, não são decoração. */
+  color: var(--ink-2);
   font-size: 11px;
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
@@ -557,7 +559,7 @@
 
 .field__hint {
   font-size: var(--fs-xs);
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .field__error {

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { CodeChip } from "./CodeChip";
 
@@ -32,12 +32,53 @@ export function FullWorkspaceModal({
   children,
   closeLabel = "Fechar",
 }: FullWorkspaceModalProps) {
+  const dialog = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
 
+    // Quem abriu o modal recebe o foco de volta ao fechar — sem isso, quem
+    // usa só teclado sai do modal direto para o fim da página.
+    const opener = document.activeElement as HTMLElement | null;
+
+    const focusable = () =>
+      Array.from(
+        dialog.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((element) => element.offsetParent !== null);
+
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      // Foco preso no diálogo: Tab na tabela de fundo faria o usuário editar
+      // um registro que não está mais visível.
+      const elements = focusable();
+      if (elements.length === 0) return;
+      const first = elements[0]!;
+      const last = elements[elements.length - 1]!;
+      const active = document.activeElement as HTMLElement | null;
+
+      if (!dialog.current?.contains(active)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
+
+    const initial = focusable()[0];
+    (initial ?? dialog.current)?.focus();
 
     document.addEventListener("keydown", handleKeyDown);
     document.body.style.overflow = "hidden";
@@ -45,6 +86,7 @@ export function FullWorkspaceModal({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
+      opener?.focus?.();
     };
   }, [open, onClose]);
 
@@ -55,6 +97,8 @@ export function FullWorkspaceModal({
       <div className="modal-overlay" />
       <div
         className="modal-fullscreen"
+        ref={dialog}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="full-workspace-modal-title"

@@ -115,7 +115,7 @@ export function IndustrialCostPage() {
   useEffect(() => {
     // Só recursos ativos entram numa estrutura nova; os inativos que já
     // estão em versões antigas continuam listados pela própria versão.
-    listIndustrialResources({ active: true, pageSize: 100 })
+    listIndustrialResources({ active: true, pageSize: 1000 })
       .then((result) => setResources(result.resources))
       .catch(() => setResources([]));
   }, []);
@@ -173,12 +173,45 @@ export function IndustrialCostPage() {
           </div>
         </div>
         <div className="table__actions">
+          {/* Produto sem lote mínimo cadastrado não tem base sugerida; sem
+              este campo o botão só devolvia "Informe a base de produção" e o
+              usuário não tinha onde informá-la. Continua valendo a regra de
+              nunca assumir 1000. */}
+          {canEdit && data.versions.length === 0 && (
+            <div className="field">
+              <label htmlFor="new-reference-output">
+                Base de produção ({data.referenceOutputUomCode})
+              </label>
+              <input
+                id="new-reference-output"
+                type="text"
+                inputMode="decimal"
+                placeholder={data.suggestedReferenceOutputQuantity ?? "ex.: 1000"}
+                value={referenceQuantity}
+                onChange={(event) => setReferenceQuantity(event.target.value)}
+              />
+            </div>
+          )}
           {canEdit && (
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={saving}
-              onClick={() => void run(() => createIndustrialCostVersion(productId))}
+              disabled={
+                saving ||
+                (data.versions.length === 0 &&
+                  !referenceQuantity.trim() &&
+                  !data.suggestedReferenceOutputQuantity)
+              }
+              onClick={() =>
+                void run(() =>
+                  createIndustrialCostVersion(
+                    productId,
+                    referenceQuantity.trim()
+                      ? { referenceOutputQuantity: referenceQuantity.trim() }
+                      : {},
+                  ),
+                )
+              }
             >
               {data.versions.length === 0 ? "Criar estrutura de custos" : "Nova versão"}
             </button>

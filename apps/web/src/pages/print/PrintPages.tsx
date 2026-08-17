@@ -49,10 +49,14 @@ function PrintScreen<T>({
   load,
   render,
   backTo,
+  landscape,
 }: {
   load: () => Promise<T>;
   render: (data: T) => ReactNode;
-  backTo: string;
+  /** Função quando o destino só é conhecido depois de carregar o documento. */
+  backTo: string | ((data: T) => string);
+  /** Paisagem só onde a largura realmente exige (ver print.css). */
+  landscape?: boolean;
 }) {
   const navigate = useNavigate();
   const [data, setData] = useState<T | null>(null);
@@ -77,10 +81,23 @@ function PrintScreen<T>({
   }
   if (!data) return <div className="print-doc">Carregando…</div>;
 
+  const actions = (
+    <PrintActions onBack={() => navigate(typeof backTo === "function" ? backTo(data) : backTo)} />
+  );
+
+  if (landscape) {
+    return (
+      <div className="print-screen print-screen--landscape">
+        {render(data)}
+        {actions}
+      </div>
+    );
+  }
+
   return (
     <>
       {render(data)}
-      <PrintActions onBack={() => navigate(backTo)} />
+      {actions}
     </>
   );
 }
@@ -142,6 +159,9 @@ export function RecipeSheetPrintPage() {
       load={() => getRecipeSheet(id!)}
       render={(sheet) => <RecipeSheetPrintDocument sheet={sheet} />}
       backTo={`/producao/ordens/${id}/receita`}
+      // 11 colunas de pesagem não cabem em retrato: a coluna "Observação",
+      // que é onde a operação escreve, ficava fora da folha.
+      landscape
     />
   );
 }
@@ -152,7 +172,8 @@ export function QuotePrintPage() {
     <PrintScreen<QuoteVersionDTO>
       load={() => getQuoteVersion(id!)}
       render={(quote) => <QuotePrintDocument quote={quote} />}
-      backTo={`/comercial/projetos/${id}`}
+      // O id da rota é o da versão do orçamento; o projeto vem do documento.
+      backTo={(quote) => `/comercial/projetos/${quote.projectId}`}
     />
   );
 }

@@ -35,7 +35,7 @@ export function StockCountPage() {
   const [result, setResult] = useState<StockCountResultDTO | null>(null);
 
   useEffect(() => {
-    listItems({ active: true, pageSize: 100 })
+    listItems({ active: true, pageSize: 1000 })
       .then((response) => setItems(response.items))
       .catch(() => setItems([]));
   }, []);

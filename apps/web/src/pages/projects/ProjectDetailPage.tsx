@@ -598,8 +598,14 @@ export function ProjectDetailPage() {
                 {samples.length === 0 && (
                   <tr>
                     <td colSpan={6} className="table__empty">
-                      Nenhuma amostra registrada neste projeto — use “Nova amostra” para abrir o
-                      primeiro teste.
+                      {/* O botão some em projeto aprovado/cancelado e para quem não
+                          pode criar amostra — o texto não pode prometer uma ação
+                          que não está na tela. */}
+                      {canCreateSample &&
+                      project.status !== "APPROVED" &&
+                      project.status !== "CANCELLED"
+                        ? "Nenhuma amostra registrada neste projeto — use “Nova amostra” para abrir o primeiro teste."
+                        : "Nenhuma amostra registrada neste projeto."}
                     </td>
                   </tr>
                 )}

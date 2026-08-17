@@ -67,6 +67,11 @@ export function AppShell() {
 
   return (
     <div className={navCollapsed ? "shell shell--nav-collapsed" : "shell"}>
+      {/* Sem isso, chegar à primeira ação da tela pelo teclado exige passar
+          pelos ~20 links da navegação em todas as páginas. */}
+      <a className="skip-link" href="#conteudo">
+        Pular para o conteúdo
+      </a>
       <header className="masthead">
         <button
           type="button"
@@ -115,7 +120,9 @@ export function AppShell() {
             <input
               id="global-search"
               type="search"
-              placeholder="Buscar ou escanear lote, item, OP…"
+              // A busca resolve lote (código interno ou QR); prometer item e OP
+              // fazia o usuário concluir que o item "não existe".
+              placeholder="Buscar ou escanear lote…"
               value={searchValue}
               disabled={searching}
               onChange={(event) => {
@@ -180,7 +187,7 @@ export function AppShell() {
         />
       )}
 
-      <main className="workspace">
+      <main className="workspace" id="conteudo" tabIndex={-1}>
         <Outlet />
       </main>
     </div>

@@ -55,7 +55,7 @@ export function CustomerMaterialsPage() {
   }, [search, customerId, statusFilter, onlyWithBalance]);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 100 })
+    listCustomers({ active: true, pageSize: 1000 })
       .then((result) =>
         setCustomers(
           result.customers.map((customer) => ({

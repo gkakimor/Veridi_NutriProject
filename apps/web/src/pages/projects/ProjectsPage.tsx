@@ -86,7 +86,7 @@ export function ProjectsPage() {
   }, [search, status, customerId, channel]);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 100 })
+    listCustomers({ active: true, pageSize: 1000 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
     getProjectVocabulary()

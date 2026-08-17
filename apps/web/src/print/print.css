@@ -303,6 +303,17 @@
     page: landscape-sheet;
   }
 
+  /* Documento largo aperta a tabela antes de perder coluna na folha —
+     coluna cortada no papel é informação perdida, não detalhe estético. */
+  .print-screen--landscape .print-table {
+    font-size: 10.5px;
+  }
+
+  .print-screen--landscape .print-table th,
+  .print-screen--landscape .print-table td {
+    padding: 4px;
+  }
+
   @page landscape-sheet {
     size: A4 landscape;
     margin: 10mm;

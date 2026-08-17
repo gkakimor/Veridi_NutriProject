@@ -148,8 +148,11 @@ export function ReportTable({
       <table className="table report-table">
         <thead>
           <tr>
-            {columns.map((column) => (
-              <th key={column}>{column}</th>
+            {/* Índice como chave: dois relatórios legítimos repetem um rótulo
+                (ex.: código do pedido e quantidade pedida) e o título não é
+                identidade de coluna. */}
+            {columns.map((column, index) => (
+              <th key={`${index}-${column}`}>{column}</th>
             ))}
           </tr>
         </thead>
