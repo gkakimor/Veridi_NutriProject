@@ -69,11 +69,6 @@
   embalagem cadastradas.
 - **CTA:** no projeto, "Preparar produto técnico" → abrir a formulação V1 →
   lançar componentes → ativar.
-- **Atenção (medido na revalidação):** o botão "Abrir produto" cai numa lista de
-  produtos **não filtrada** — se precisar do cadastro do produto, busque o
-  código na lista. E não existe volta direta ao projeto a partir de Formulação,
-  Custos ou Precificação: deixe o projeto aberto numa segunda aba antes de
-  começar.
 - **Prova cênica:** tentar incluir o produto em um pedido de cliente. A recusa é
   explícita: *"O produto PROD-… está em desenvolvimento e ainda não pode ser
   usado em operação comercial ou industrial."*
@@ -179,14 +174,14 @@
 
 - **Mensagem:** de um lote de produto acabado chega-se aos lotes de matéria-prima
   e à OP; e há 20 relatórios prontos, todos imprimíveis.
-- **CTA:** chegue ao lote de produto acabado por Estoque → Posição → item →
-  "Ver lote" (a busca de Estoque → Lotes **não** encontra pelo número de lote
-  comercial impresso na etiqueta) → "Rastreabilidade" → mostrar a árvore →
-  imprimir;
+- **CTA:** ache o lote de produto acabado buscando o **número comercial da
+  etiqueta** (busca do topo ou Estoque → Lotes) → "Rastreabilidade" → mostrar a
+  árvore → imprimir;
   depois Hub de relatórios → R-04 (necessidade), R-18 (custo industrial),
   R-19 (precificação), R-20 (orçamento × precificação, documento interno).
-- **Atenção:** mostre R-19 e R-20 **na tela**. Impressos, os dois ainda estouram
-  a folha A4 em paisagem (+26 % e +33,5 %) e perdem as colunas da direita.
+- **Prova cênica:** imprima o R-20. Ele cabe na folha em paisagem com a
+  proveniência (PREC, faixa, CALC, qualidade do custo) numa linha de detalhe
+  abaixo de cada proposta — e vem marcado como documento interno.
 - **Prova cênica:** R-20 é restrito — Produção/Qualidade recebem 403.
 - **Corte:** mostrar só R-20 e a rastreabilidade (−2 min).
 
@@ -214,8 +209,5 @@ Três frases, nesta ordem:
 | Produto ainda em desenvolvimento no pedido | recusa `product_not_operational` | idem: mostre o texto e aprove o projeto |
 | Tela de Usuários poluída por contas de teste (`teste-…`) | lista com centenas de linhas | não abra a tela de Usuários na demo |
 | Corpus sem custo/preço histórico | R-18/R-19 vazios para produtos legados | use o produto criado na demo, que tem CALC e PREC |
-| "Abrir produto" abre lista não filtrada | produto errado no topo | busque o código do produto na lista |
-| Sem volta ao projeto a partir de Custo/Precificação | precisa do botão voltar do navegador | deixe o projeto aberto numa segunda aba |
-| Lote comercial não é encontrado na busca de Lotes | "Nenhum lote encontrado" | vá por Posição de Estoque → item → "Ver lote" |
-| Impressão de R-19/R-20 corta colunas | conteúdo além da margem | apresente esses dois em tela |
-| Usuário das ações de produção | saída e conclusão mostram "Ambiente local" | se perguntarem, diga que a atribuição está em correção — só o consumo já registra o usuário |
+| Falta de material de propriedade do cliente | comportamento sem caso vivo no banco | não prometa essa tela; conte a regra em voz alta |
+| Tela da OP não mostra quem criou/planejou a ordem | pergunta de auditoria | o histórico existe no Projeto; na OP está em backlog |

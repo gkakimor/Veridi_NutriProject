@@ -277,3 +277,126 @@ Blockers reais, pelos critérios definidos pelo Product Owner:
 
 REG-01 e REG-02 não bloqueiam o roteiro, mas são regressões das correções deste
 gate e deveriam ser fechadas antes de qualquer demonstração pública.
+
+
+---
+
+# UX HARDENING FINAL VALIDATION
+
+Sprint de hardening executado em 2026-08-17 sobre os commits do gate
+(`4342ee7`, `615f7f2`, `fd68e2c`). Não é capacidade nova: o objetivo foi tornar
+o produto navegável de fato, não apenas aprovado em teste. Os mesmos três
+agentes remediram depois, em modo somente-leitura, sem receber meta de nota.
+
+## Evolução dos scores
+
+| Dimensão | Antes do gate | Pós quick wins | Pós hardening |
+|---|---|---|---|
+| Navegação sem treinamento | 5/10 | 7/10 | **9/10** |
+| Continuidade entre módulos | 6/10 | 6/10 | **8/10** |
+| Legibilidade | 7/10 | 8/10 | **9/10** |
+| Consistência | 8/10 | 8/10 | **9/10** |
+| Acessibilidade básica | 4/10 | 7/10 | **9/10** |
+| Documentos impressos | 6/10 | 7/10 | **9/10** |
+| Descoberta (14 tarefas) | — | 12/14 | **14/14** |
+
+## Regressões do gate — fechadas
+
+| ID | O que era | Correção | Confirmação |
+|---|---|---|---|
+| REG-01 | Escape parou de fechar o menu "⋯" porque o `stopPropagation` que consertou o Enter também barrava o Escape | o handler só para Enter e Espaço; Escape volta a chegar ao listener que fecha e devolve o foco | auditor visual: `aria-expanded` volta a `false` e o foco retorna ao botão · teste de regressão |
+| REG-02 | FO-01 estourou o retrato em 26,6% depois de ganhar a coluna "Proprietário" | folha passou a paisagem, mantendo a coluna e o espaço de escrita à mão | 1047px de conteúdo em 1047px úteis — 0% |
+| REG-03 | "Qtd. pedida" foi renomeado só na tela; impressão e CSV seguiam "Pedido (qtd)" | rótulo corrigido na fonte do export | auditor visual confirmou em R-13 e R-17, papel e CSV |
+
+## Impressos — redesenho, não compressão
+
+R-18, R-19 e R-20 passaram a um layout de duas linhas por registro: as colunas
+de decisão ficam na linha principal e a proveniência (PREC, CALC, comissão,
+markup, faixa, datas, qualidade do custo) desce para uma linha de detalhe
+rotulada logo abaixo. **Nenhum dado foi removido** — e, com menos colunas
+disputando largura, ainda deu para **aumentar** a fonte de 10,5px para 11,5px.
+
+Medição na largura útil real (retrato 718px, paisagem 1047px):
+
+| Documento | Antes | Depois |
+|---|---|---|
+| R-19 | +26,0% | **0%** |
+| R-20 | +33,5% | **0%** |
+| R-18 | +12% | **0%** |
+| FO-01 | +26,6% | **0%** |
+| R.COQ.003 · PREC · CALC · R.PRO.002 · FO-04 | 0% | **0%** |
+
+## Auditoria de usuário nas ações operacionais
+
+Antes, só consumo e liberação de OP registravam quem executou. Agora a sessão é
+a fonte em toda ação iniciada por usuário autenticado:
+
+- **Produção**: criação da OP (inclusive a criada pelo plano de atendimento),
+  planejamento, liberação, picking, pesagem da Folha de Receita, consumo,
+  apontamento de produção e conclusão;
+- **Compras e Qualidade**: recebimento, recebimento de material do cliente,
+  criação de lote, bloqueio de lote, liberação de lote;
+- **Comercial**: rascunho e confirmação de expedição, conferência de lote,
+  criação e emissão de faturamento, cancelamentos;
+- **Razão de estoque**: todos os `InventoryMovement` gerados por essas ações,
+  incluindo o `SHIPMENT_OUT` que era o último resquício.
+
+Verificado no banco depois de um ciclo completo: `RECEIPT_IN`,
+`PRODUCTION_CONSUMPTION`, `FINISHED_GOOD_PRODUCTION`, `SHIPMENT_OUT` e
+`SAMPLE_CONSUMPTION` — todos com o usuário real, nenhum "Ambiente local".
+
+Regra preservada: **histórico antigo não foi reescrito**. Registro anterior ao
+sprint continua com o ator que tinha; ninguém foi inventado.
+
+## Continuidade comercial
+
+- "Abrir produto" no projeto aplica o filtro de verdade (uma linha, o produto
+  certo) em vez de abrir uma lista qualquer;
+- Formulação, Estrutura de Custos e Precificação mostram "← Voltar ao projeto
+  PROJ-…" quando o produto nasceu de um projeto — e **nada** quando é produto
+  legado, sem adivinhação;
+- a falta de material na OP leva a Compras **com o item e a quantidade que
+  falta** já preenchidos; a decisão de comprar continua com a pessoa;
+- material de propriedade do cliente continua sem CTA de compra, dizendo que
+  aguarda o cliente.
+
+## Seleção de entidade por digitação
+
+Os `<select>` de catálogo grande (item da formulação, item da amostra, produto
+do pedido, fornecedor da OC) viraram um combobox com busca: digita-se código ou
+nome, sem acento, e a lista filtra. Padrão ARIA completo (`combobox` +
+`listbox` + `aria-activedescendant`), ↑/↓ percorrem, Enter escolhe, Escape
+fecha sem alterar. Veredito do auditor visual: *"não é pior que o `<select>`
+nativo em nenhum aspecto testado"*.
+
+## Outras correções do sprint
+
+- Estoque explica o próprio vocabulário: legenda de Físico / Reservado /
+  Disponível / Em Compra na lista, e a definição ao lado de cada número no
+  detalhe do item;
+- busca de lote passa a casar o **número comercial impresso na etiqueta**, na
+  lista e na busca do topo — sem escolher por adivinhação quando o número se
+  repete em mais de um lote;
+- recusa da Folha de Receita aparece na tela, com `role="alert"` e rolagem até
+  o alerta (o backend sempre respondeu certo: *"Quantidade excede o saldo ainda
+  reservado desta linha (restam 0,1)"*);
+- FO-04 separa a conferência de papel do picking já registrado no sistema, sem
+  preencher o quadrado manual;
+- anel de foco dos campos de formulário igualado ao do resto do sistema.
+
+## Findings ainda abertos
+
+| Sev. | Finding | Situação |
+|---|---|---|
+| MEDIUM | Falta de material **de propriedade do cliente** não pôde ser verificada na interface: não existe esse caso no banco. O comportamento está no código (sem CTA de compra, com aviso de que aguarda o cliente) | **não verificável** — fabricar um cenário só para provar isso seria encenação |
+| LOW | Tela da OP não mostra histórico de criação/planejamento/liberação como o Projeto mostra. Não é regressão: nunca existiu | backlog |
+| LOW | Campo de busca da lista de produtos não exibe o termo vindo do deep link, embora filtre corretamente | backlog |
+| LOW | Combobox limita a exibição a 50 opções por vez, com aviso para refinar a busca | por desenho |
+
+## Ambiente, não produto
+
+A suíte compartilha o banco com o ambiente de desenvolvimento. Durante esta
+rodada um teste de dashboard falhou por contagem global enquanto dois auditores
+operavam no mesmo banco; com o banco quieto, os 601 testes da API passam. O
+isolamento do banco de testes continua no backlog (F-12 em
+`docs/PRODUCT_AUDIT.md`).

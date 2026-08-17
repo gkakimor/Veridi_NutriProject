@@ -58,8 +58,8 @@ interface e estão listados abaixo — todos corrigidos ou registrados.
 | F-02 | **Cadastro travava quando um campo opcional ficava em branco.** O formulário envia `null`; o schema aceitava só `undefined` ou `""` | `POST /projects` com `concept/channel/externalCode/notes = null` → 400 `Expected string, received null` | **corrigido** em `optionalNullableText` (helper compartilhado por projetos, clientes, fornecedores, pedidos, faturamento) + teste de regressão |
 | F-03 | **"Abrir formulação" no projeto levava a "Produto não encontrado"** — a rota recebia o id da versão de formulação onde espera o id do produto | `/producao/formulacoes/{formulationVersionId}` | **corrigido** (regressão introduzida na capacidade 47) |
 | F-04 | **Criar a primeira estrutura de custos era um beco sem saída** para produto sem lote mínimo — o botão exigia a base de produção e a tela não oferecia campo. Atinge os 214 produtos legados, todos sem `minimumBatchQuantity` | `POST /products/:id/industrial-costs` sem corpo → "Informe a base de produção" | **corrigido**: campo "Base de produção" antes de criar; a regra de nunca assumir 1000 continua valendo |
-| F-05 | **Ações de produção gravam "Ambiente local" no lugar do usuário.** Consumo, apontamento de produção, conclusão e picking atribuem a um ator de sistema; só a pesagem da Folha de Receita registra quem executou | OP-010725 e OP-010726, campo USUÁRIO | **parcialmente corrigido**: o consumo passou a registrar quem confirmou. Picking, saída de produção, conclusão e planejamento continuam com o ator de sistema — a correção exige levar o usuário autenticado a quatro serviços e revisar os campos de auditoria; ficou como item de backlog, não como ajuste de fim de gate |
-| F-06 | **R-19 e R-20 perdem colunas no papel** — 1319 px e 1398 px de conteúdo em 1047 px úteis de A4 paisagem | medido com `emulateMedia("print")` | **não corrigido**: exige decidir quais colunas vão para o papel. R-18 e a Folha de Receita foram corrigidos |
+| F-05 | **Ações operacionais gravavam "Ambiente local" no lugar do usuário** — produção, recebimento, expedição, faturamento, lotes e os lançamentos de estoque correspondentes | OP-010725, EXP-003577, FAT-001873, campo USUÁRIO | **corrigido no sprint de hardening**: a sessão passou a ser a fonte em criação/planejamento/liberação de OP, picking, pesagem, consumo, apontamento, conclusão, recebimento (inclusive material do cliente), criação/bloqueio/liberação de lote, expedição, conferência, faturamento e cancelamentos. Histórico anterior não foi reescrito |
+| F-06 | **R-19 e R-20 perdiam colunas no papel** — 1319 px e 1398 px de conteúdo em 1047 px úteis de A4 paisagem | medido com `emulateMedia("print")` | **corrigido no sprint de hardening**: layout de duas linhas por registro (decisão em cima, proveniência rotulada abaixo). R-18, R-19, R-20 e FO-01 medidos em 0% de estouro, com fonte maior que antes |
 
 ### MEDIUM
 
@@ -255,12 +255,8 @@ Registrado como backlog, não implementado aqui:
 
 - **Bloco H** (regulatório, IN 28, rotulagem) — hard gate; o inventário de dados
   e as 15 perguntas estão em `docs/BLOCK_H_VALIDATION.md`;
-- **atribuição de usuário nas ações de produção** (F-05): levar o usuário
-  autenticado a picking, apontamento, conclusão e planejamento;
-- **colunas de R-19 e R-20 no papel** (F-06);
-- **seletor com busca no servidor** — o teto de 1000 registros resolve hoje
-  (795 itens), mas não é a solução definitiva;
-- **ponte da falta de material para a sugestão de compra** (F-11);
+- **seletor com busca no servidor** — o combobox filtra no cliente sobre o
+  catálogo já carregado; acima de alguns milhares de registros isso muda;
 - isolamento do banco de testes e limpeza dos 1.673 usuários `teste-*` (F-12);
 - decisão sobre o placeholder `**` em nutriente declarado (F-13);
 - busca global por item e OP (F-14);

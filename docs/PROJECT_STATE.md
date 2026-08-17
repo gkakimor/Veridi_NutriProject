@@ -4343,7 +4343,11 @@ mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
 Bloco F CONCLUÍDO (33-42) e **Bloco G CONCLUÍDO (43-47)**. Depois deles rodou o
-**gate pós-Bloco G** (auditoria de produto + UX + demo readiness, sem capacidade
+**gate pós-Bloco G**, sua revalidação e um **sprint de hardening de UX**
+(regressões do gate, impressos R-18/R-19/R-20/FO-01, auditoria de usuário em
+toda ação operacional, continuidade Projeto ↔ Produto, seletor com busca,
+vocabulário de estoque): resultado em `docs/UX_AUDIT.md`, seção
+UX HARDENING FINAL VALIDATION (auditoria de produto + UX + demo readiness, sem capacidade
 nova): resultados em `docs/PRODUCT_AUDIT.md`, `docs/UX_AUDIT.md`,
 `docs/DEMO_SCRIPT.md` e `docs/BLOCK_H_VALIDATION.md`. O gate corrigiu apenas
 regressão, bug evidente e atrito pequeno — nada de regra nova. O trabalho PARA
