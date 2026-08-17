@@ -528,6 +528,16 @@ record*, which is most of the work in an ERP.
   Never a UUID.
 - **Search is case- and accent-insensitive.** In Portuguese, typing without
   accents is normal, not an exception.
+- **A contextual link carries identity, not text.** `?productId=<id>`, never
+  `?search=CODE`: text can match more than one record, collide with a filter
+  left over from the last visit, or simply not be read by the destination —
+  all three happened in practice. Arriving with context replaces incompatible
+  filters instead of combining with them, and the screen says why it is showing
+  a subset, with a way to clear it.
+- **A floating list belongs in a portal.** Rendered inline, the search panel was
+  clipped by the first ancestor with `overflow` — in the order editor it became
+  a 93px box with its own scrollbar. Anchor it to the input in viewport
+  coordinates instead.
 - **A deep link filters for real.** A query parameter the screen ignores is
   worse than no link: it promises context and delivers a random list. Explicit
   URL beats the remembered session filter, which beats the screen default.

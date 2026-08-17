@@ -156,6 +156,7 @@ export async function listProducts(
 
   if (query.active !== undefined) where["active"] = query.active;
   if (query.customerId) where["customerId"] = query.customerId;
+  if (query.productId) where["id"] = query.productId;
   if (query.lifecycle) where["lifecycle"] = query.lifecycle;
   if (query.search) {
     where["OR"] = [

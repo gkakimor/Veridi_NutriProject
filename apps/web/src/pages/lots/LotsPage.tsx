@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate } from "react-router-dom";
+import { useNavigate , useSearchParams } from "react-router-dom";
 import type { InventoryOwnerType, LotDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { listLots } from "../../lib/lots-api";
@@ -93,11 +93,16 @@ export function LotsPage() {
     setPage(1);
   }, [search, statusFilter, ownerFilter]);
 
+  // Link contextual traz identidade exata; nunca combina com filtro anterior.
+  const [urlParams] = useSearchParams();
+  const contextParam = urlParams.get("itemId") ?? "";
+
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
     const params: Parameters<typeof listLots>[0] = { page, pageSize: PAGE_SIZE };
+    if (contextParam) params.itemId = contextParam;
     if (search) params.search = search;
     if (statusFilter !== "all") params.status = statusFilter;
     if (ownerFilter !== "all") params.ownerType = ownerFilter;
@@ -196,6 +201,19 @@ export function LotsPage() {
       </div>
 
       {error && <p className="form-alert">{error}</p>}
+
+      {contextParam && (
+        <p className="context-chip">
+          Mostrando apenas os lotes deste item — filtro veio de um link.{" "}
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => navigate("/estoque/lotes")}
+          >
+            Limpar filtros
+          </button>
+        </p>
+      )}
 
       <div className="table-container">
         <table className="table table--clickable-rows">

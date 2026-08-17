@@ -29,12 +29,20 @@ export function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Deep link tem que filtrar de verdade: "Abrir produto" no projeto manda
-  // ?search=PROD-000123 e antes caía numa lista de 20 produtos quaisquer.
+  /**
+   * Link contextual conhece o produto: vem `productId`, não texto. Busca
+   * textual podia trazer mais de uma linha, esbarrar em filtro anterior ou
+   * simplesmente não ser aplicada — o que o Product Owner viu na prática.
+   *
+   * A leitura é por efeito, não só no estado inicial: navegar de
+   * `/cadastros/produtos` para a mesma rota com outra query não remonta o
+   * componente, e um valor inicial nunca seria reavaliado.
+   */
   const [params] = useSearchParams();
-  const initialSearch = params.get("search") ?? "";
-  const [searchInput, setSearchInput] = useState(initialSearch);
-  const [search, setSearch] = useState(initialSearch);
+  const contextProductId = params.get("productId") ?? "";
+  const [searchInput, setSearchInput] = useState(params.get("search") ?? "");
+  const [search, setSearch] = useState(params.get("search") ?? "");
+  const [productContext, setProductContext] = useState<ProductDTO | null>(null);
   const [customerFilter, setCustomerFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>("all");
@@ -42,15 +50,28 @@ export function ProductsPage() {
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
 
-  // Quem clicou em "Abrir produto" quer o produto, não a lista dele. Com
-  // ?open=<id> o registro abre direto; a lista fica atrás, já filtrada.
-  const openId = params.get("open");
-  const openedFromUrl = useRef(false);
+  // Contexto exato substitui filtros incompatíveis: combinar o cliente da
+  // visita anterior com o produto pedido agora daria lista vazia.
   useEffect(() => {
-    if (!openId || openedFromUrl.current) return;
-    const target = products.find((product) => product.id === openId);
-    if (!target) return;
-    openedFromUrl.current = true;
+    if (!contextProductId) {
+      setProductContext(null);
+      return;
+    }
+    setSearchInput("");
+    setSearch("");
+    setCustomerFilter("");
+    setActiveFilter("all");
+    setLifecycleFilter("all");
+    setPage(1);
+  }, [contextProductId]);
+
+  // Quem clicou em "Abrir produto" quer o produto, não a lista dele.
+  const openId = params.get("open");
+  const openedId = useRef<string | null>(null);
+  useEffect(() => {
+    const target = openId ? products.find((product) => product.id === openId) : undefined;
+    if (!target || openedId.current === openId) return;
+    openedId.current = openId;
     setModalState({ mode: "edit", product: target });
   }, [openId, products]);
   const [confirmDeactivate, setConfirmDeactivate] = useState<ProductDTO | null>(null);
@@ -62,7 +83,7 @@ export function ProductsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, customerFilter, activeFilter, lifecycleFilter]);
+  }, [search, customerFilter, activeFilter, lifecycleFilter, contextProductId]);
 
   const hasFilters =
     searchInput !== "" ||
@@ -84,6 +105,7 @@ export function ProductsPage() {
     setError(null);
 
     const params: Parameters<typeof listProducts>[0] = { page, pageSize: PAGE_SIZE };
+    if (contextProductId) params.productId = contextProductId;
     if (search) params.search = search;
     if (customerFilter) params.customerId = customerFilter;
     if (activeFilter !== "all") params.active = activeFilter === "active";
@@ -91,6 +113,9 @@ export function ProductsPage() {
 
     listProducts(params)
       .then((result) => {
+        if (contextProductId) {
+          setProductContext(result.products.find((row) => row.id === contextProductId) ?? null);
+        }
         setProducts(result.products);
         setTotal(result.total);
       })
@@ -98,7 +123,7 @@ export function ProductsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar produtos");
       })
       .finally(() => setLoading(false));
-  }, [page, search, customerFilter, activeFilter, lifecycleFilter]);
+  }, [page, search, customerFilter, activeFilter, lifecycleFilter, contextProductId]);
 
   useEffect(() => {
     reload();
@@ -207,6 +232,21 @@ export function ProductsPage() {
       </div>
 
       {error && <p className="form-alert">{error}</p>}
+
+      {contextProductId && (
+        <p className="context-chip">
+          Mostrando apenas o produto{" "}
+          <span className="code">{productContext?.code ?? "selecionado"}</span>
+          {productContext ? ` · ${productContext.name}` : ""}{" "}
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => navigate("/cadastros/produtos")}
+          >
+            Limpar filtros
+          </button>
+        </p>
+      )}
 
       <div className="table-container">
         <table className="table table--clickable-rows">

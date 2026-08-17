@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { ItemDTO, SupplierDTO, SupplierItemDTO, SupplierItemQualificationStatus } from "@veridi/shared";
 import {
   ITEM_FAMILIES,
@@ -142,11 +143,16 @@ export function SupplierItemsPage() {
       .catch(() => setItems([]));
   }, []);
 
+  // Link contextual traz identidade exata; nunca combina com filtro anterior.
+  const navigate = useNavigate();
+  const contextParam = urlFilter("itemId");
+
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
     const params: Parameters<typeof listSupplierItems>[0] = { page, pageSize: PAGE_SIZE };
+    if (contextParam) params.itemId = contextParam;
     if (search) params.search = search;
     if (qualificationStatus !== "all") params.qualificationStatus = qualificationStatus;
     if (supplierId) params.supplierId = supplierId;
@@ -287,6 +293,19 @@ export function SupplierItemsPage() {
       </div>
 
       {error && <p className="form-alert">{error}</p>}
+
+      {contextParam && (
+        <p className="context-chip">
+          Mostrando apenas as relações deste item — filtro veio de um link.{" "}
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => navigate("/compras/item-fornecedor")}
+          >
+            Limpar filtros
+          </button>
+        </p>
+      )}
 
       <div className="table-container">
         <table className="table table--clickable-rows">

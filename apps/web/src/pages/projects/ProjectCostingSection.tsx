@@ -138,8 +138,10 @@ export function ProjectCostingSection({
               type="button"
               className="btn btn--ghost btn--sm"
               onClick={() =>
+                // Identidade, não texto: busca aproximada podia trazer mais de
+                // um produto ou esbarrar no filtro da visita anterior.
                 navigate(
-                  `/cadastros/produtos?search=${costing.productCode}&open=${costing.productId}`,
+                  `/cadastros/produtos?productId=${costing.productId}&open=${costing.productId}`,
                 )
               }
             >

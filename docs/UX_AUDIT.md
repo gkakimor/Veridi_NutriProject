@@ -406,7 +406,8 @@ isolamento do banco de testes continua no backlog (F-12 em
 
 # DEMO READY — CONFIRMAÇÃO FORMAL
 
-**DEMO READY = YES** (2026-08-17).
+**DEMO READY = YES** (2026-08-17, reconfirmado em 2026-08-18 após a rodada
+Entity Picker & Context Link Integrity — ver a última seção deste documento).
 
 Os dois vereditos que faltavam foram emitidos pelos auditores depois das
 correções, sem meta de nota:
@@ -558,3 +559,102 @@ Três achados dele, dois corrigidos e um recusado com motivo:
 Esse último caso é o motivo de o gate exigir verificação antes de correção:
 implementar o pedido teria quebrado uma regra deliberada do produto.
 
+
+---
+
+# ENTITY PICKER & CONTEXT LINK INTEGRITY
+
+Rodada aberta por **dois problemas que o Product Owner encontrou usando o
+sistema à mão** — não por auditoria. Demo Ready foi rebaixado para NO durante a
+correção e reavaliado no fim.
+
+## Problema 1 — escolher produto no Pedido
+
+Sintomas relatados: área de linhas pequena com scroll próprio, combobox
+espremido, lista de resultados minúscula, nomes longos impossíveis de comparar.
+
+Causa **única**, medida: o painel de resultados renderizava dentro do container
+da tabela, que tem `overflow`. Ele era recortado e ganhava barra de rolagem
+própria — **93 px visíveis para 359 px de conteúdo**, com dois ancestrais
+recortando.
+
+Correções:
+
+- a lista passou a sair por **portal**, ancorada em coordenadas de viewport,
+  acompanhando o campo no scroll e abrindo para cima quando não há espaço
+  abaixo;
+- painel com até 360 px de altura e no mínimo 380 px de largura — **9
+  resultados legíveis de uma vez**, contra um punhado truncado;
+- nome longo **quebra em vez de truncar**, para dar para comparar;
+- coluna Produto passou a ficar com a largura restante (quantidade 160 px,
+  unidade 90 px), e a linha nova começa com quantidade vazia e o rótulo
+  "Quantidade" em vez de um `0` que parecia válido.
+
+Medições depois (auditor visual, ao vivo): sem barra de rolagem interna com 1,
+3 e 8 linhas (93/93, 199/199, 464/464), painel sem recorte em 1440×900 e
+1280×720, teclado (↑ ↓ Enter Escape) sem regressão, reposicionamento correto no
+scroll e abertura para cima junto ao rodapé.
+
+O auditor encontrou um **HIGH** no caminho: o input em si media 177 px numa
+célula de 369 px — dentro de `.field` ele herdava largura, numa célula de tabela
+não havia regra alguma. Corrigido em uma regra CSS; medido depois em **337 px
+(1440×900)** e **307 px (1280×720)**, com o placeholder inteiro, sem efeito
+sobre os outros comboboxes. Veredito final dele: **picker aprovado**.
+
+## Problema 2 — link do projeto para o produto
+
+O Product Owner clicou e caiu na lista inteira de produtos. Era bug real, e o
+motivo é instrutivo: existiam **dois caminhos** para o mesmo destino na tela do
+projeto. O botão "Abrir produto" funcionava; o **chip "Produto" da trilha de
+navegação** apontava para `/cadastros/produtos?produto=CÓDIGO` — um parâmetro
+que nenhuma tela lê. A lista abria completa, sem aviso nenhum de que o contexto
+tinha sido perdido.
+
+Além disso, a busca textual que o botão usava trazia **2 linhas** em vez do
+produto exato.
+
+Correções:
+
+- a trilha passou a apontar para `?productId=<id>&open=<id>`, o mesmo padrão
+  que já funcionava;
+- a lista de produtos ganhou filtro por **identidade** (`productId`) no lugar de
+  busca textual;
+- o contexto é aplicado **por efeito**, não só no estado inicial: navegar de
+  `/cadastros/produtos` para a mesma rota com outra query não remonta o
+  componente, e era por isso que a query podia ser ignorada;
+- chegando com contexto, a tela **descarta filtros incompatíveis** — combinar o
+  cliente da visita anterior com o produto pedido agora daria lista vazia;
+- e mostra por que está mostrando um recorte: "Mostrando apenas o produto
+  PROD-… · Limpar filtros".
+
+O mesmo aviso foi estendido a Lotes, Ordens de Produção e Item × Fornecedor,
+por recomendação do auditor: serve de rede de segurança mesmo que um parâmetro
+falhe em silêncio no futuro.
+
+## Integridade de todos os links contextuais
+
+Testados **por clique**, com um filtro conflitante deixado de propósito antes:
+
+| Navegação | Filtro aplicado | Linhas |
+|---|---|---|
+| Projeto → Produto (botão e trilha) | `productId` exato | 1, com o produto aberto |
+| Produto → Ordens de produção | `productId` | só as do produto |
+| Item → Lotes | `itemId` | só os do item |
+| Fornecedor → Ordens de compra | `supplierId` | só as do fornecedor |
+| Cliente → Faturamentos | `customerId` | só os do cliente |
+
+**5/5**, com filtro visível e limpável em todos, e o filtro antigo descartado em
+vez de combinado.
+
+Dois achados do auditor (Produto → OPs e Item → Lotes "sem filtro") foram
+**retirados por ele mesmo** na revalidação: o seletor usado casava também o item
+homônimo da barra lateral, e o clique caía na navegação lateral, não no bloco
+"Ver relacionados". Vale o registro porque é uma armadilha real de teste, não
+uma desculpa: o produto tem dois links com o mesmo nome, e só um carrega
+contexto.
+
+## Regra que fica
+
+Link contextual usa **identidade**, nunca busca textual aproximada. Texto pode
+casar mais de um registro, esbarrar em filtro anterior ou simplesmente não ser
+aplicado — foi exatamente o que aconteceu aqui, nas três formas.

@@ -57,6 +57,8 @@ export const listProductsQuerySchema = z.object({
     .transform((value) => (value === undefined ? undefined : value === "true")),
   customerId: z.string().trim().min(1).optional(),
   /** Seletor operacional pede APPROVED; gestão de custo aceita os dois. */
+  /** Link contextual conhece o produto: filtra por identidade, não por texto. */
+  productId: z.string().trim().min(1).optional(),
   lifecycle: z.enum(["DEVELOPMENT", "APPROVED"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de

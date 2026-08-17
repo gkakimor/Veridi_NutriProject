@@ -777,12 +777,14 @@ export function CustomerOrderPage() {
 
         <FormSection title="Produtos" subtitle="Um Product por pedido — a unidade vem do item de produto acabado.">
           <div className="table-container">
-            <table className="table">
+            {/* Produto é a coluna de decisão: fica com o espaço, e a busca
+                dentro dela precisa de largura para nomes longos. */}
+            <table className="table table--order-lines">
               <thead>
                 <tr>
                   <th>Produto</th>
-                  <th>Quantidade</th>
-                  <th>Un.</th>
+                  <th className="col-quantity">Quantidade</th>
+                  <th className="col-unit">Un.</th>
                   {!isDraft && <th>Expedido</th>}
                   {!isDraft && <th>Falta expedir</th>}
                   {isDraft && <th aria-hidden="true" />}
@@ -815,7 +817,7 @@ export function CustomerOrderPage() {
                         <input
                           type="text"
                           inputMode="decimal"
-                          placeholder="0"
+                          placeholder="Quantidade"
                           value={line.orderedQuantity}
                           onChange={(event) => handleLineQuantityChange(line.key, event.target.value)}
                         />

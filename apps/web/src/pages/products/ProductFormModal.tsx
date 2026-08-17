@@ -294,7 +294,7 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
             links={[
               { label: "Formulação", to: `/producao/formulacoes/${product.id}` },
               { label: "Custos", to: `/produtos/${product.id}/custos` },
-              { label: "Ordens de produção", to: `/producao/ordens?search=${product.code}` },
+              { label: "Ordens de produção", to: `/producao/ordens?productId=${product.id}` },
               ...(product.originProjectId
                 ? [
                     {

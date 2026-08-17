@@ -140,6 +140,28 @@ describe("Seleção de entidade com busca", () => {
     expect(onChange).toHaveBeenCalledWith("");
   });
 
+  it("renderiza a lista fora do fluxo, para nenhum pai com overflow recortá-la", () => {
+    // O editor de linhas do Pedido vive dentro de um container com overflow:
+    // dentro dele a lista virava uma janelinha com scroll próprio.
+    const { container } = render(
+      <div style={{ overflow: "auto", height: 90 }}>
+        <SearchableEntitySelect
+          id="item"
+          options={[{ id: "1", code: "MP-000245", name: "Vitamina C" }]}
+          value=""
+          onChange={vi.fn()}
+        />
+      </div>,
+    );
+
+    fireEvent.focus(screen.getByRole("combobox"));
+    const list = screen.getByRole("listbox");
+    expect(list).toBeTruthy();
+    // A lista não está dentro do container que recorta.
+    expect(container.contains(list)).toBe(false);
+    expect(document.body.contains(list)).toBe(true);
+  });
+
   it("fecha com Escape sem alterar a seleção", () => {
     const onChange = vi.fn();
     render(

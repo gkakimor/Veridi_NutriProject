@@ -218,7 +218,9 @@ export function ProjectDetailPage() {
                 {
                   kind: "Produto",
                   code: project.productCode,
-                  path: `/cadastros/produtos?produto=${project.productCode}`,
+                  // Identidade, não texto: `?produto=` não era lido por tela
+                  // nenhuma e levava à lista inteira sem avisar.
+                  path: `/cadastros/produtos?productId=${project.productId}&open=${project.productId}`,
                 },
               ]
             : []),

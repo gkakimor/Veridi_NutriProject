@@ -120,6 +120,25 @@ async function createTestProduct(app: App, overrides: Record<string, unknown> = 
 }
 
 describe("Products", () => {
+  it("filtra por identidade do produto — link contextual não usa busca textual", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const first = (await createTestProduct(app)).json();
+    const second = (await createTestProduct(app)).json();
+    expect(first.id).not.toBe(second.id);
+
+    const exact = await app.inject({
+      method: "GET",
+      url: `/products?productId=${first.id}&pageSize=100`,
+    });
+    expect(exact.statusCode).toBe(200);
+    const ids = exact.json().products.map((row: { id: string }) => row.id);
+    expect(ids).toEqual([first.id]);
+
+    await app.close();
+  });
+
   it("cria produto com código PROD-######", async () => {
     const app = buildTestApp();
     await app.ready();

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate } from "react-router-dom";
+import { useNavigate , useSearchParams } from "react-router-dom";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
@@ -99,11 +99,16 @@ export function ProductionOrdersPage() {
     setPage(1);
   }, [search, statusFilter]);
 
+  // Link contextual traz identidade exata; nunca combina com filtro anterior.
+  const [urlParams] = useSearchParams();
+  const contextParam = urlParams.get("productId") ?? "";
+
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
     const params: Parameters<typeof listProductionOrders>[0] = { page, pageSize: PAGE_SIZE };
+    if (contextParam) params.productId = contextParam;
     if (search) params.search = search;
     if (statusFilter !== "all") params.status = statusFilter;
 
@@ -181,6 +186,19 @@ export function ProductionOrdersPage() {
       </div>
 
       {error && <p className="form-alert">{error}</p>}
+
+      {contextParam && (
+        <p className="context-chip">
+          Mostrando apenas as ordens deste produto — filtro veio de um link.{" "}
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => navigate("/producao/ordens")}
+          >
+            Limpar filtros
+          </button>
+        </p>
+      )}
 
       <div className="table-container">
         <table className="table table--clickable-rows">

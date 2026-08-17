@@ -229,10 +229,12 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
         {item && (
           <RelatedLinks
             links={[
-              { label: "Estoque", to: `/estoque?search=${item.code}` },
-              { label: "Lotes", to: `/estoque/lotes?search=${item.code}` },
-              { label: "Movimentações", to: `/estoque/movimentacoes?search=${item.code}` },
-              { label: "Fornecedores do item", to: `/compras/item-fornecedor?search=${item.code}` },
+              // Estoque do item tem tela própria: melhor destino que uma lista
+              // filtrada.
+              { label: "Estoque", to: `/estoque/${item.id}` },
+              { label: "Lotes", to: `/estoque/lotes?itemId=${item.id}` },
+              { label: "Movimentações", to: `/estoque/movimentacoes?itemId=${item.id}` },
+              { label: "Fornecedores do item", to: `/compras/item-fornecedor?itemId=${item.id}` },
             ]}
           />
         )}
