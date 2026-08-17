@@ -116,3 +116,21 @@ export type ApproveProjectInput = z.infer<typeof approveProjectSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
 export type UpdateQuoteVersionInput = z.infer<typeof updateQuoteVersionSchema>;
 export type RejectQuoteInput = z.infer<typeof rejectQuoteSchema>;
+
+/** Unidade do produto acabado: exigida quando o brief não a define. */
+export const prepareTechnicalProductSchema = z.object({
+  finishedUnitCode: z.string().trim().min(1).optional(),
+});
+
+export const applyQuotePricingSchema = z.object({
+  pricingTierId: z.string().trim().min(1, "Selecione a faixa de precificação"),
+});
+
+export const sendQuoteVersionSchema = z.object({
+  /** Proposta com custo industrial incompleto é decisão explícita. */
+  confirmIncompleteCost: z.boolean().optional(),
+});
+
+export type PrepareTechnicalProductInput = z.infer<typeof prepareTechnicalProductSchema>;
+export type ApplyQuotePricingInput = z.infer<typeof applyQuotePricingSchema>;
+export type SendQuoteVersionInput = z.infer<typeof sendQuoteVersionSchema>;

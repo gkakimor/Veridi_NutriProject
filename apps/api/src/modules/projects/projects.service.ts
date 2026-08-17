@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import type { Prisma as PrismaTypes, ProjectStatus, User } from "@prisma/client";
 import type {
   ProjectDTO,
@@ -9,6 +8,11 @@ import type {
 } from "@veridi/shared";
 import { PROJECT_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import {
+  assertPreparable,
+  createProjectProduct,
+  getProjectCostingSummary,
+} from "./technical-product.service.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -77,7 +81,7 @@ function toStatusHistoryDTO(
 }
 
 export function toProjectDTO(project: ProjectWithRelations): ProjectDTO {
-  const quotes: QuoteVersionDTO[] = project.quoteVersions.map(toQuoteVersionDTO);
+  const quotes: QuoteVersionDTO[] = project.quoteVersions.map((quote) => toQuoteVersionDTO(quote));
   const latest = quotes[quotes.length - 1] ?? null;
   const accepted = quotes.find((quote) => quote.status === "ACCEPTED") ?? null;
 
@@ -114,6 +118,7 @@ export function toProjectDTO(project: ProjectWithRelations): ProjectDTO {
     productId: project.productId,
     productCode: project.product ? project.product.code : null,
     productName: project.product ? project.product.name : null,
+    costing: null,
     latestQuoteLabel: latest ? latest.versionLabel : null,
     latestQuoteStatus: latest ? latest.status : null,
     acceptedQuoteLabel: accepted ? accepted.versionLabel : null,
@@ -131,8 +136,13 @@ async function requireProject(id: string): Promise<ProjectWithRelations> {
   return project;
 }
 
+/** Detalhe do projeto com a cadeia Produto → Formulação → Custo → Preço. */
 export async function getProjectById(id: string): Promise<ProjectDTO | null> {
   const project = await getPrisma().project.findUnique({ where: { id }, include: projectInclude });
+  if (project) {
+    const dto = toProjectDTO(project);
+    return { ...dto, costing: await getProjectCostingSummary(project.productId) };
+  }
   return project ? toProjectDTO(project) : null;
 }
 
@@ -369,6 +379,15 @@ export async function cancelProject(
       data: { status: "SUPERSEDED" },
     });
 
+    // Produto técnico criado POR ESTE projeto sai de circulação — evita
+    // lixo operacional. Produto legado/aprovado nunca é tocado, e nada de
+    // formulação, custo, cálculo ou preço é apagado: o histórico continua
+    // auditável.
+    await tx.product.updateMany({
+      where: { originProjectId: id, lifecycle: "DEVELOPMENT" },
+      data: { active: false },
+    });
+
     await tx.projectStatusHistory.create({
       data: {
         projectId: id,
@@ -379,6 +398,51 @@ export async function cancelProject(
         changedByNameSnapshot: actor.name,
       },
     });
+  });
+
+  return (await getProjectById(id))!;
+}
+
+/**
+ * Prepara o produto TÉCNICO do projeto.
+ *
+ * Resolve o ciclo que existia: custo e preço exigem Produto, e o orçamento
+ * exige preço, mas o Produto só nascia na aprovação. O produto criado aqui
+ * é o MESMO que será promovido depois — nada de produto temporário, nada de
+ * entidade paralela.
+ *
+ * Não muda o status do projeto: preparar produto é trabalho de engenharia,
+ * não decisão comercial.
+ */
+export async function prepareTechnicalProduct(
+  id: string,
+  input: { finishedUnitCode?: string | undefined },
+  actor: User,
+): Promise<ProjectDTO> {
+  const prisma = getPrisma();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${id} FOR UPDATE`;
+    const project = await tx.project.findUnique({ where: { id } });
+    if (!project) throw new ProjectNotFoundError(id);
+    assertPreparable(project.status);
+
+    // Idempotente: projeto que já tem produto devolve o que existe.
+    if (project.productId) return;
+
+    const finishedUnitCode = input.finishedUnitCode ?? null;
+    if (!finishedUnitCode) throw new MissingFinishedUnitError();
+    const unit = await tx.unitOfMeasure.findUnique({ where: { code: finishedUnitCode } });
+    if (!unit) throw new MissingFinishedUnitError();
+
+    const product = await createProjectProduct(
+      tx,
+      project,
+      { finishedUnitCode, lifecycle: "DEVELOPMENT" },
+      actor,
+    );
+
+    await tx.project.update({ where: { id }, data: { productId: product.id } });
   });
 
   return (await getProjectById(id))!;
@@ -420,6 +484,14 @@ export async function approveProject(
     if (!accepted) throw new MissingAcceptedQuoteError();
 
     let productId = project.productId;
+    if (productId) {
+      // Produto técnico existente é PROMOVIDO: mesmo código, mesma
+      // formulação, mesma estrutura de custos e a mesma precificação.
+      await tx.product.updateMany({
+        where: { id: productId, lifecycle: "DEVELOPMENT" },
+        data: { lifecycle: "APPROVED" },
+      });
+    }
     if (!productId) {
       // Unidade do produto acabado: vem do orçamento aceito quando fizer
       // sentido; caso contrário o usuário precisa informar — nunca se
@@ -430,67 +502,15 @@ export async function approveProject(
       const unit = await tx.unitOfMeasure.findUnique({ where: { code: finishedUnitCode } });
       if (!unit) throw new MissingFinishedUnitError();
 
-      const itemCodeRows = await tx.$queryRawUnsafe<{ nextval: bigint }[]>(
-        "SELECT nextval('item_code_finished_product_seq') AS nextval",
+      // Mesma construção da preparação técnica — existe UMA definição de
+      // "produto nascido de projeto"; aqui ele já nasce operacional.
+      const created = await createProjectProduct(
+        tx,
+        project,
+        { finishedUnitCode, lifecycle: "APPROVED" },
+        actor,
       );
-      const itemCode = `PA-${(itemCodeRows[0]?.nextval ?? 1n).toString().padStart(6, "0")}`;
-
-      const finishedItem = await tx.item.create({
-        data: {
-          code: itemCode,
-          type: "FINISHED_PRODUCT",
-          name: project.name,
-          unitCode: finishedUnitCode,
-          controlsLot: true,
-          controlsExpiry: true,
-          requiresQualityRelease: true,
-          active: true,
-        },
-      });
-
-      const productCodeRows = await tx.$queryRawUnsafe<{ nextval: bigint }[]>(
-        "SELECT nextval('product_code_seq') AS nextval",
-      );
-      const productCode = `PROD-${(productCodeRows[0]?.nextval ?? 1n).toString().padStart(6, "0")}`;
-
-      const product = await tx.product.create({
-        data: {
-          code: productCode,
-          name: project.name,
-          customerId: project.customerId,
-          finishedProductItemId: finishedItem.id,
-          // Brief do projeto vira ponto de partida do produto; a partir daqui
-          // as duas entidades seguem vidas separadas.
-          ...(project.dosageForm ? { dosageForm: project.dosageForm } : {}),
-          ...(project.presentationType ? { presentationType: project.presentationType } : {}),
-          ...(project.doseAmount ? { doseAmount: project.doseAmount } : {}),
-          ...(project.doseUomCode ? { doseUomCode: project.doseUomCode } : {}),
-          ...(project.dosesPerPackage ? { dosesPerPackage: project.dosesPerPackage } : {}),
-          ...(project.targetAgeGroup ? { targetAgeGroup: project.targetAgeGroup } : {}),
-          ...(project.minimumBatchQuantity
-            ? { minimumBatchQuantity: project.minimumBatchQuantity }
-            : {}),
-          ...(project.shelfLifeMonths ? { shelfLifeMonths: project.shelfLifeMonths } : {}),
-          ...(project.externalCode ? { externalCode: project.externalCode } : {}),
-          active: true,
-        },
-      });
-      productId = product.id;
-
-      // Formulação V1 DRAFT: pronta para a engenharia, nunca ACTIVE.
-      await tx.formulationVersion.create({
-        data: {
-          productId: product.id,
-          versionNumber: 1,
-          status: "DRAFT",
-          basisQuantity: new Prisma.Decimal(1),
-          outputItemId: finishedItem.id,
-          outputItemCode: finishedItem.code,
-          outputItemName: finishedItem.name,
-          outputUnitCode: finishedItem.unitCode,
-          createdBy: actor.name,
-        },
-      });
+      productId = created.id;
     }
 
     await tx.project.update({

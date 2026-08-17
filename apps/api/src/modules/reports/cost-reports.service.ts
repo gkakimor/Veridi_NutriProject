@@ -2,6 +2,7 @@ import type { Prisma as PrismaTypes } from "@prisma/client";
 import type {
   IndustrialCostByProductRowDTO,
   PricingByProductRowDTO,
+  QuotePricingAuditRowDTO,
   ReportPageDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -11,6 +12,7 @@ import { latestCalculationsByProduct } from "../industrial-cost-calculation/snap
 import type {
   IndustrialCostByProductQuery,
   PricingByProductQuery,
+  QuotePricingAuditQuery,
 } from "./reports.schemas.js";
 
 /**
@@ -148,4 +150,110 @@ export async function getPricingByProductReport(
 
   // Paginação em memória: a linha do relatório é a FAIXA, não a versão.
   return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
+}
+
+/**
+ * R-20 — Orçamento × Precificação.
+ *
+ * Mostra a cadeia ORC → PREC → faixa → CALC de cada proposta e deixa
+ * explícito o que foi preço de exceção. Proposta enviada lê o snapshot
+ * congelado; rascunho lê o vínculo vivo — nada é recalculado.
+ */
+export async function getQuotePricingAuditReport(
+  query: QuotePricingAuditQuery,
+  pagination: Pagination = query,
+): Promise<ReportPageDTO<QuotePricingAuditRowDTO>> {
+  const prisma = getPrisma();
+
+  const where: PrismaTypes.QuoteVersionWhereInput = {
+    ...(query.status ? { status: query.status } : {}),
+    ...(query.priceSource ? { priceSource: query.priceSource } : {}),
+    ...(query.customerId ? { project: { customerId: query.customerId } } : {}),
+    ...(query.from || query.to
+      ? {
+          quoteDate: {
+            ...(query.from ? { gte: query.from } : {}),
+            ...(query.to ? { lte: query.to } : {}),
+          },
+        }
+      : {}),
+    ...(query.search
+      ? {
+          OR: [
+            { code: { contains: query.search, mode: "insensitive" } },
+            { pricingCodeSnapshot: { contains: query.search, mode: "insensitive" } },
+            { costCalculationCodeSnapshot: { contains: query.search, mode: "insensitive" } },
+            { project: { code: { contains: query.search, mode: "insensitive" } } },
+            { project: { name: { contains: query.search, mode: "insensitive" } } },
+          ],
+        }
+      : {}),
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.quoteVersion.findMany({
+      where,
+      include: {
+        project: { include: { customer: true, product: true } },
+        pricingVersion: true,
+        pricingTier: true,
+      },
+      orderBy: [{ quoteDate: "desc" }, { code: "desc" }],
+      ...pageArgs(pagination),
+    }),
+    prisma.quoteVersion.count({ where }),
+  ]);
+
+  const mapped = rows.map((quote): QuotePricingAuditRowDTO => {
+    // Enviada usa o snapshot; rascunho usa o vínculo vivo (a precificação
+    // ativa já é imutável, então os dois são estáveis).
+    const frozen = quote.pricingCodeSnapshot !== null;
+    const pricingLabel = frozen
+      ? `${quote.pricingCodeSnapshot} · V${quote.pricingVersionNumberSnapshot ?? ""}`
+      : quote.pricingVersion
+        ? `${quote.pricingVersion.code} · V${quote.pricingVersion.versionNumber}`
+        : null;
+    const tierQuantity = frozen
+      ? (quote.pricingTierQuantitySnapshot?.toString() ?? null)
+      : (quote.pricingTier?.quantity.toString() ?? null);
+    const costPerUnit = frozen
+      ? quote.industrialCostPerUnitSnapshot
+      : (quote.pricingTier?.costPerUnitSnapshot ?? null);
+    const contribution = frozen
+      ? quote.contributionMarginSnapshot
+      : (quote.pricingTier?.contributionMarginSnapshot ?? null);
+
+    return {
+      quoteVersionId: quote.id,
+      quoteLabel: `${quote.code} · V${quote.versionNumber}`,
+      projectId: quote.projectId,
+      projectCode: quote.project.code,
+      projectName: quote.project.name,
+      customerName: quote.project.customer?.legalName ?? null,
+      productCode: quote.project.product?.code ?? null,
+      status: quote.status,
+      quotedQuantity: quote.quotedQuantity ? quote.quotedQuantity.toString() : null,
+      uomCode: quote.uomCode,
+      unitPrice: quote.unitPrice ? quote.unitPrice.toFixed(4) : null,
+      total:
+        quote.quotedQuantity && quote.unitPrice
+          ? quote.quotedQuantity.times(quote.unitPrice).toFixed(2)
+          : null,
+      priceSource: quote.priceSource,
+      pricingLabel,
+      tierQuantity,
+      calculationCode: frozen
+        ? quote.costCalculationCodeSnapshot
+        : (quote.pricingVersion?.calculationCodeSnapshot ?? null),
+      costQuality: frozen
+        ? quote.costQualitySnapshot
+        : (quote.pricingTier?.costQualitySnapshot ?? null),
+      industrialCostPerUnit: costPerUnit ? costPerUnit.toFixed(6) : null,
+      contributionMarginPercent: contribution ? contribution.toFixed(4) : null,
+      sentAt: quote.sentAt ? quote.sentAt.toISOString() : null,
+      acceptedAt: quote.acceptedAt ? quote.acceptedAt.toISOString() : null,
+    };
+  });
+
+  return { rows: mapped, ...pageMeta(pagination, total) };
 }

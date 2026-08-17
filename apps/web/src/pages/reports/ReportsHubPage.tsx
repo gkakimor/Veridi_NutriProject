@@ -182,6 +182,13 @@ const GROUPS: { title: string; reports: ReportLink[] }[] = [
         hint: "Faixas de preço ativas com margem de contribuição e markup.",
         path: "/relatorios/custos/precificacao-por-produto",
       },
+      {
+        code: "R-20",
+        aliases: ["Orçamento", "Proveniência do preço", "Auditoria comercial"],
+        label: "Orçamento × Precificação",
+        hint: "Origem do preço de cada proposta, com cálculo de custo e margem. Uso interno.",
+        path: "/relatorios/comercial/orcamento-precificacao",
+      },
     ],
   },
 ];

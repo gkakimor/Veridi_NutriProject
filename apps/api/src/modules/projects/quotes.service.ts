@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
-import type { QuoteVersion, User } from "@prisma/client";
-import type { QuoteVersionDTO } from "@veridi/shared";
+import type { Prisma as PrismaTypes, QuoteVersion, User } from "@prisma/client";
+import type { QuotePricingProvenanceDTO, QuoteVersionDTO } from "@veridi/shared";
 import { QUOTE_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -13,6 +13,7 @@ import {
   QuoteNotSentError,
 } from "./projects.errors.js";
 import { getProjectById } from "./projects.service.js";
+import { assertPriceEditable, buildPricingSnapshotData } from "./quote-pricing.service.js";
 import type { RejectQuoteInput, UpdateQuoteVersionInput } from "./projects.schemas.js";
 
 /**
@@ -26,7 +27,16 @@ import type { RejectQuoteInput, UpdateQuoteVersionInput } from "./projects.schem
 
 const CODE_SEQUENCE = "quote_code_seq";
 
-export function toQuoteVersionDTO(quote: QuoteVersion): QuoteVersionDTO {
+/**
+ * DTO do orçamento.
+ *
+ * A proveniência econômica (PREC/CALC/custo/margem) é INFORMAÇÃO INTERNA:
+ * só entra quando quem chamou pode vê-la, e nunca no documento do cliente.
+ */
+export function toQuoteVersionDTO(
+  quote: QuoteVersion,
+  pricing: QuotePricingProvenanceDTO | null = null,
+): QuoteVersionDTO {
   // Total é derivado; só existe quando quantidade E preço existem. Preço
   // `null` (não precificado) nunca vira zero.
   const total =
@@ -53,6 +63,8 @@ export function toQuoteVersionDTO(quote: QuoteVersion): QuoteVersionDTO {
     commercialNotes: quote.commercialNotes,
     paymentTerms: quote.paymentTerms,
     leadTimeDays: quote.leadTimeDays,
+    priceSource: quote.priceSource,
+    pricing,
     sentAt: quote.sentAt ? quote.sentAt.toISOString() : null,
     sentByName: quote.sentByNameSnapshot,
     acceptedAt: quote.acceptedAt ? quote.acceptedAt.toISOString() : null,
@@ -128,6 +140,9 @@ export async function createQuoteVersion(
         versionNumber: (maxVersion._max.versionNumber ?? 0) + 1,
         status: "DRAFT",
         quoteDate: new Date(),
+        // Valores comerciais servem de ponto de partida; o VÍNCULO com a
+        // precificação não é herdado — cada proposta confirma sua própria
+        // base econômica.
         ...(previous
           ? {
               quotedQuantity: previous.quotedQuantity,
@@ -164,6 +179,8 @@ export async function updateQuoteVersion(
   if (!quote) throw new QuoteNotFoundError(id);
   // Proposta apresentada é histórico: renegociar cria versão nova.
   if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
+  // Quantidade, unidade e preço pertencem à faixa enquanto houver vínculo.
+  assertPriceEditable(quote, input);
 
   const updated = await getPrisma().quoteVersion.update({
     where: { id },
@@ -187,7 +204,11 @@ export async function updateQuoteVersion(
  * Marca como apresentado ao cliente. NÃO envia e-mail: registra o fato
  * comercial e congela o snapshot que a impressão vai usar para sempre.
  */
-export async function sendQuoteVersion(id: string, actor: User): Promise<QuoteVersionDTO> {
+export async function sendQuoteVersion(
+  id: string,
+  actor: User,
+  options: { confirmIncompleteCost?: boolean | undefined } = {},
+): Promise<QuoteVersionDTO> {
   const prisma = getPrisma();
   const quote = await prisma.quoteVersion.findUnique({
     where: { id },
@@ -201,6 +222,10 @@ export async function sendQuoteVersion(id: string, actor: User): Promise<QuoteVe
 
   const { project } = quote;
   const { customer } = project;
+
+  // Custo industrial incompleto pode virar proposta — mas nunca por
+  // acidente; e o que for enviado fica congelado aqui.
+  const pricingSnapshot = await buildPricingSnapshotData(id, options);
 
   const updated = await prisma.quoteVersion.update({
     where: { id },
@@ -224,7 +249,8 @@ export async function sendQuoteVersion(id: string, actor: User): Promise<QuoteVe
       projectName: project.name,
       projectConcept: project.concept,
       projectChannel: project.channel,
-    },
+      ...pricingSnapshot,
+    } as PrismaTypes.QuoteVersionUpdateInput,
   });
 
   return toQuoteVersionDTO(updated);

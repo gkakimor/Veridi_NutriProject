@@ -80,6 +80,9 @@ e branding oficial da Veridi.**
 capacidade 46): concluído — precificação versionada a partir de um cálculo
 salvo, custo consciente de lote por faixa e margem de contribuição (nunca
 lucro).**
+**Delivery 39 — Projeto → Orçamento → Custo/Preço (Bloco G, capacidade 47):
+concluído — produto técnico com lifecycle, orçamento com proveniência
+econômica e promoção do mesmo produto na aprovação. BLOCO G ENCERRADO.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -4262,6 +4265,76 @@ Orçamento continua manual aqui.
 
 ---
 
+# Delivery 39 — Projeto → Orçamento → Custo/Preço (Bloco G, capacidade 47)
+
+## O ciclo que existia
+Custo e preço exigiam Produto; o Produto só nascia na aprovação do Projeto;
+e a aprovação exige orçamento aceito — que precisa de preço. `Product` ganhou
+lifecycle explícito: `DEVELOPMENT` (engenharia/custeio) e `APPROVED`
+(operacional). Os 214 produtos existentes foram backfilled como APPROVED e
+não mudaram de comportamento.
+
+## Produto técnico
+`POST /projects/:id/technical-product` cria Produto + Item de produto acabado
++ Formulação V1 DRAFT numa transação, com `originProjectId` apontando para o
+projeto. Idempotente, não muda o status do projeto e exige a unidade do
+produto acabado (nunca inventada). A MESMA função constrói o produto na
+aprovação — existe uma definição de "produto nascido de projeto".
+
+Cancelar o projeto inativa apenas o produto DEVELOPMENT criado por ele;
+produto legado/aprovado nunca é tocado, e formulação, EC, CALC, PREC e
+orçamentos permanecem.
+
+## Gate operacional
+`assertProductOperational` (um helper, não checagem espalhada) barra produto
+em desenvolvimento em linha de Pedido (criação e confirmação) e em Ordem de
+Produção. Seletores operacionais pedem `lifecycle=APPROVED`; a gestão de
+custo continua enxergando os dois. Cadastros → Produtos ganhou filtro de
+ciclo de vida e badge "Em desenvolvimento".
+
+## Orçamento com proveniência
+`QuoteVersion.priceSource` (`MANUAL` | `PRICING_TIER`, backfill MANUAL) mais
+vínculo com `PricingVersion`/`PricingTier`, com CHECK no banco garantindo
+que preço de faixa nunca fica com vínculo pela metade. Regras:
+
+- só precificação **ATIVA** do produto do projeto embasa proposta;
+- a quantidade tem que bater **exatamente** com a faixa (conversão de UOM
+  segura) — sem faixa mais próxima, sem interpolação;
+- com vínculo, quantidade/unidade/preço vêm da faixa e ficam travados;
+  condições comerciais seguem editáveis;
+- desvincular preserva o valor e apaga a proveniência;
+- nova versão de orçamento copia valores comerciais, nunca o vínculo.
+
+Enviar congela PREC/faixa/CALC/EC/formulação/custo/qualidade/comissão/
+contribuição/markup/avisos. Custo incompleto exige confirmação explícita, e o
+snapshot registra isso.
+
+## Confidencialidade
+A proveniência econômica só é entregue a COMMERCIAL/ADMIN — Produção recebe
+a proposta comercial sem custo, margem ou comissão. O documento do cliente
+continua sem nada disso (verificado no Playwright, inspecionando o texto
+impresso).
+
+## R-20
+Orçamento × Precificação: uma linha por proposta com origem do preço, PREC,
+faixa, CALC, qualidade do custo, custo/unidade e margem. Restrito a
+COMMERCIAL/ADMIN (403 para os demais), CSV e impressão marcada como documento
+interno. Proposta enviada lê o snapshot; rascunho lê o vínculo vivo.
+
+## Corpus
+Rastreabilidade comercial (somente leitura): 248 projetos, 214 com produto,
+34 sem produto técnico; 9 orçamentos, todos manuais e legados — reportados
+como `LEGACY_QUOTE_WITHOUT_PRICING_PROVENANCE`, sem vínculo retroativo
+inventado.
+
+- Testes: 598 API + 25 web + 14 scripts. Playwright: `handoff/screens/47-*`
+  com a história inteira (produto técnico bloqueado na operação → faixa exata
+  → preço travado → proveniência congelada → aprovação promovendo o mesmo
+  produto → OP criada).
+- Goldens: formulação 26/26/0; CMV 6/0/6/46; precificação 27 linhas.
+
+---
+
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
@@ -4269,15 +4342,15 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Bloco F CONCLUÍDO (33-42); Bloco G em andamento (43-46 concluídas).
-Próximo passo do roadmap oficial: **capacidade 47 — integração Projeto →
-Orçamento → Custo/Preço**, que consome as precificações `PREC` ativas da 46.
-A base de
+Bloco F CONCLUÍDO (33-42) e **Bloco G CONCLUÍDO (43-47)**. O trabalho PARA
+aqui: o **Bloco H (regulatório/rotulagem/ANVISA/IN28) é HARD GATE** e só
+será especificado após nova validação de domínio/regulatória do Product
+Owner. Demo Readiness, responsivo/mobile e hardening geral seguem não
+iniciados, por decisão explícita. A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
-o que existe hoje é ferramenta de dados de desenvolvimento. Depois segue
-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+o que existe hoje é ferramenta de dados de desenvolvimento. **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.

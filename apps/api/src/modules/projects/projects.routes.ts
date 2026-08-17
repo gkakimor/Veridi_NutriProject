@@ -3,6 +3,26 @@ import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import {
+  IncompleteCostQuoteError,
+  PriceLockedByPricingError,
+  PricingNotActiveError,
+  PricingProductMismatchError,
+  PricingTierNotFoundForQuoteError,
+  QuoteQuantityMismatchError,
+  QuoteUomIncompatibleError,
+  QuoteWithoutProductError,
+  TierWithoutPriceError,
+  applyQuotePricing,
+  getQuotePricingOptions,
+  getQuoteWithPricing,
+  toPricingProvenance,
+  useManualQuotePrice,
+} from "./quote-pricing.service.js";
+import {
+  ProjectNotPreparableError,
+  ProjectProductAlreadyExistsError,
+} from "./technical-product.service.js";
+import {
   CustomerLockedError,
   IncompleteQuoteError,
   InvalidStatusTransitionError,
@@ -16,7 +36,10 @@ import {
   QuoteNotSentError,
 } from "./projects.errors.js";
 import {
+  applyQuotePricingSchema,
   approveProjectSchema,
+  prepareTechnicalProductSchema,
+  sendQuoteVersionSchema,
   cancelProjectSchema,
   changeProjectStatusSchema,
   createProjectSchema,
@@ -27,6 +50,7 @@ import {
 } from "./projects.schemas.js";
 import {
   approveProject,
+  prepareTechnicalProduct,
   cancelProject,
   changeProjectStatus,
   createProject,
@@ -77,6 +101,37 @@ function mapDomainError(
   }
   if (error instanceof QuoteNotDraftError) {
     return { status: 409, body: { error: "quote_not_draft", message: error.message } };
+  }
+  if (error instanceof PricingTierNotFoundForQuoteError) {
+    return { status: 404, body: { error: "not_found", message: error.message } };
+  }
+  if (
+    error instanceof PricingProductMismatchError ||
+    error instanceof QuoteWithoutProductError ||
+    error instanceof TierWithoutPriceError
+  ) {
+    return { status: 400, body: { error: "invalid_pricing", message: error.message } };
+  }
+  if (error instanceof PricingNotActiveError) {
+    return { status: 409, body: { error: "pricing_not_active", message: error.message } };
+  }
+  if (
+    error instanceof QuoteQuantityMismatchError ||
+    error instanceof QuoteUomIncompatibleError
+  ) {
+    return { status: 409, body: { error: "quantity_mismatch", message: error.message } };
+  }
+  if (error instanceof PriceLockedByPricingError) {
+    return { status: 409, body: { error: "price_locked", message: error.message } };
+  }
+  if (error instanceof IncompleteCostQuoteError) {
+    return { status: 409, body: { error: "incomplete_cost", message: error.message } };
+  }
+  if (error instanceof ProjectProductAlreadyExistsError) {
+    return { status: 409, body: { error: "product_exists", message: error.message } };
+  }
+  if (error instanceof ProjectNotPreparableError) {
+    return { status: 409, body: { error: "not_preparable", message: error.message } };
   }
   if (error instanceof QuoteNotSentError) {
     return { status: 409, body: { error: "quote_not_sent", message: error.message } };
@@ -206,6 +261,24 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post("/projects/:id/technical-product", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = prepareTechnicalProductSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.status(201).send(await prepareTechnicalProduct(id, parsed.data, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
   app.post("/projects/:id/quote-versions", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
@@ -220,10 +293,60 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/quote-versions/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    requireCurrentUser(request);
+    const user = requireCurrentUser(request);
     const quote = await getQuoteById(id);
     if (!quote) return reply.status(404).send({ error: "not_found" });
-    return reply.send(quote);
+
+    // Custo, margem, markup e comissão são informação interna: só quem
+    // negocia (ou administra) recebe a proveniência econômica.
+    if (user.role !== "COMMERCIAL" && user.role !== "ADMIN") return reply.send(quote);
+
+    const row = await getQuoteWithPricing(id);
+    return reply.send({ ...quote, pricing: toPricingProvenance(row) });
+  });
+
+  app.get("/quote-versions/:id/pricing-options", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+      const pricing = await getQuotePricingOptions(id);
+      if (!pricing) return reply.status(404).send({ error: "not_found" });
+      return reply.send(pricing);
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/quote-versions/:id/apply-pricing", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = applyQuotePricingSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.send(await applyQuotePricing(id, parsed.data.pricingTierId, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/quote-versions/:id/manual-price", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      return reply.send(await useManualQuotePrice(id, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
   });
 
   app.patch("/quote-versions/:id", async (request, reply) => {
@@ -248,7 +371,13 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.params as { id: string };
     try {
       const actor = requireRole(request, "COMMERCIAL", "ADMIN");
-      return reply.send(await sendQuoteVersion(id, actor));
+      const parsed = sendQuoteVersionSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.send(await sendQuoteVersion(id, actor, parsed.data));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

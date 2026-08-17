@@ -12,6 +12,7 @@ import type {
   OnOrderRowDTO,
   IndustrialCostByProductRowDTO,
   PricingByProductRowDTO,
+  QuotePricingAuditRowDTO,
   OrderDeliveredBilledRowDTO,
   OrderOperationDTO,
   PlannedActualRowDTO,
@@ -93,3 +94,5 @@ export const getIndustrialCostByProductReport = (filters: ReportFilters) =>
   fetchReport<ReportPageDTO<IndustrialCostByProductRowDTO>>("costs/industrial-by-product", filters);
 export const getPricingByProductReport = (filters: ReportFilters) =>
   fetchReport<ReportPageDTO<PricingByProductRowDTO>>("costs/pricing-by-product", filters);
+export const getQuotePricingAuditReport = (filters: ReportFilters) =>
+  fetchReport<ReportPageDTO<QuotePricingAuditRowDTO>>("commercial/quote-pricing", filters);

@@ -12,6 +12,8 @@ import {
 } from "@veridi/shared";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
+import { ProjectCostingSection } from "./ProjectCostingSection";
+import { QuotePricingSection } from "./QuotePricingSection";
 import { FlowContext } from "../../components/FlowContext";
 import {
   acceptQuoteVersion,
@@ -86,6 +88,8 @@ export function ProjectDetailPage() {
   // pode abrir. Quem consome material continua sendo só Produção/ADMIN.
   const canCreateSample =
     user?.role === "COMMERCIAL" || user?.role === "PRODUCTION" || user?.role === "ADMIN";
+  // Preparar produto técnico e vincular precificação são atos comerciais.
+  const canEdit = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
 
   const load = useCallback(() => {
     if (!id) return;
@@ -323,6 +327,12 @@ export function ProjectDetailPage() {
           )}
         </FormSection>
 
+        <ProjectCostingSection
+          project={project}
+          canEdit={canEdit}
+          onChanged={load}
+        />
+
         <FormSection
           title="Orçamentos"
           subtitle="Cada negociação é uma versão. Enviado congela o snapshot do cliente e vira histórico."
@@ -523,12 +533,31 @@ export function ProjectDetailPage() {
                   type="button"
                   className="btn btn--accent"
                   disabled={saving}
-                  onClick={() => void run(() => sendQuoteVersion(draft.id))}
+                  onClick={() => {
+                    const partial =
+                      draft.pricing?.costQuality === "PARTIAL" ||
+                      draft.pricing?.costQuality === "NO_COST";
+                    if (
+                      partial &&
+                      !window.confirm(
+                        "Esta proposta utiliza preço com custo industrial incompleto. Enviar assim?",
+                      )
+                    ) {
+                      return;
+                    }
+                    void run(() =>
+                      sendQuoteVersion(draft.id, { confirmIncompleteCost: partial }),
+                    );
+                  }}
                 >
                   Marcar como enviado
                 </button>
               </div>
             </>
+          )}
+
+          {draft && (
+            <QuotePricingSection quote={draft} canEdit={canEdit} onChanged={load} />
           )}
         </FormSection>
 

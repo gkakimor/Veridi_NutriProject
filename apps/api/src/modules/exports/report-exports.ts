@@ -83,19 +83,31 @@ import {
   receiptsQuerySchema,
   requirementsQuerySchema,
 } from "../reports/reports.schemas.js";
-import type { IndustrialCostByProductRowDTO, PricingByProductRowDTO } from "@veridi/shared";
-import { INDUSTRIAL_COST_QUALITY_LABELS, PRICE_MODE_LABELS } from "@veridi/shared";
+import type {
+  IndustrialCostByProductRowDTO,
+  PricingByProductRowDTO,
+  QuotePricingAuditRowDTO,
+} from "@veridi/shared";
+import {
+  INDUSTRIAL_COST_QUALITY_LABELS,
+  PRICE_MODE_LABELS,
+  QUOTE_PRICE_SOURCE_LABELS,
+  QUOTE_STATUS_LABELS,
+} from "@veridi/shared";
 import {
   getIndustrialCostByProductReport,
   getPricingByProductReport,
+  getQuotePricingAuditReport,
 } from "../reports/cost-reports.service.js";
 import type {
   IndustrialCostByProductQuery,
   PricingByProductQuery,
+  QuotePricingAuditQuery,
 } from "../reports/reports.schemas.js";
 import {
   industrialCostByProductQuerySchema,
   pricingByProductQuerySchema,
+  quotePricingAuditQuerySchema,
 } from "../reports/reports.schemas.js";
 import type { CsvExportRoute } from "./csv-export.js";
 import { defineCsvExport } from "./csv-export.js";
@@ -545,6 +557,48 @@ const r19 = defineCsvExport({
   ],
 });
 
+const r20 = defineCsvExport({
+  path: "/reports/commercial/quote-pricing/export.csv",
+  slug: "r20_orcamento_precificacao",
+  schema: quotePricingAuditQuerySchema,
+  fetch: async (query: QuotePricingAuditQuery) =>
+    (await getQuotePricingAuditReport(query, ALL_ROWS)).rows,
+  columns: [
+    { header: "Orçamento", value: (row: QuotePricingAuditRowDTO) => csvCode(row.quoteLabel) },
+    { header: "Projeto", value: (row: QuotePricingAuditRowDTO) => csvCode(row.projectCode) },
+    { header: "Nome do projeto", value: (row: QuotePricingAuditRowDTO) => csvText(row.projectName) },
+    { header: "Cliente", value: (row: QuotePricingAuditRowDTO) => csvText(row.customerName) },
+    { header: "Produto", value: (row: QuotePricingAuditRowDTO) => csvCode(row.productCode) },
+    { header: "Status", value: (row: QuotePricingAuditRowDTO) => QUOTE_STATUS_LABELS[row.status] },
+    { header: "Quantidade", value: (row: QuotePricingAuditRowDTO) => csvDecimal(row.quotedQuantity) },
+    { header: "Unidade", value: (row: QuotePricingAuditRowDTO) => csvText(row.uomCode) },
+    { header: "Preço unitário", value: (row: QuotePricingAuditRowDTO) => csvMoney(row.unitPrice) },
+    { header: "Total", value: (row: QuotePricingAuditRowDTO) => csvMoney(row.total) },
+    {
+      header: "Origem do preço",
+      value: (row: QuotePricingAuditRowDTO) => QUOTE_PRICE_SOURCE_LABELS[row.priceSource],
+    },
+    { header: "Precificação", value: (row: QuotePricingAuditRowDTO) => csvCode(row.pricingLabel) },
+    { header: "Faixa", value: (row: QuotePricingAuditRowDTO) => csvDecimal(row.tierQuantity) },
+    { header: "Cálculo", value: (row: QuotePricingAuditRowDTO) => csvCode(row.calculationCode) },
+    {
+      header: "Qualidade do custo",
+      value: (row: QuotePricingAuditRowDTO) =>
+        row.costQuality ? INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality] : "",
+    },
+    {
+      header: "Custo industrial/un",
+      value: (row: QuotePricingAuditRowDTO) => csvDecimal(row.industrialCostPerUnit),
+    },
+    {
+      header: "Margem de contribuição (%)",
+      value: (row: QuotePricingAuditRowDTO) => csvDecimal(row.contributionMarginPercent),
+    },
+    { header: "Enviado em", value: (row: QuotePricingAuditRowDTO) => csvDateTime(row.sentAt) },
+    { header: "Aceito em", value: (row: QuotePricingAuditRowDTO) => csvDateTime(row.acceptedAt) },
+  ],
+});
+
 export const reportCsvExports: CsvExportRoute[] = [
   r01,
   r02,
@@ -563,4 +617,5 @@ export const reportCsvExports: CsvExportRoute[] = [
   r17,
   r18,
   r19,
+  r20,
 ];

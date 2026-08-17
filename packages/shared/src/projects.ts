@@ -7,7 +7,13 @@
  * cadastro inicial.
  */
 
-import type { DosageForm, PresentationType, TargetAgeGroup } from "./products.js";
+import type {
+  DosageForm,
+  PresentationType,
+  ProductLifecycle,
+  TargetAgeGroup,
+} from "./products.js";
+import type { IndustrialCostQuality } from "./industrial-cost-calculation.js";
 
 export const PROJECT_CODE_PREFIX = "PROJ";
 export const QUOTE_CODE_PREFIX = "ORC";
@@ -90,6 +96,44 @@ export interface ProjectStatusHistoryDTO {
   changedByName: string | null;
 }
 
+/**
+ * De onde veio o preço do orçamento.
+ *
+ * `MANUAL` continua legítimo: o sistema aceita exceção comercial. Quando o
+ * preço vem de uma faixa de precificação, ele carrega junto toda a cadeia
+ * PREC → CALC → EC → Formulação, e é isso que torna a proposta auditável.
+ */
+export type QuotePriceSource = "MANUAL" | "PRICING_TIER";
+
+export const QUOTE_PRICE_SOURCE_LABELS: Record<QuotePriceSource, string> = {
+  MANUAL: "Preço manual",
+  PRICING_TIER: "Faixa de precificação",
+};
+
+/** Proveniência econômica do preço — informação interna, nunca do cliente. */
+export interface QuotePricingProvenanceDTO {
+  pricingVersionId: string | null;
+  pricingCode: string | null;
+  pricingVersionNumber: number | null;
+  pricingTierId: string | null;
+  tierQuantity: string | null;
+  tierUomCode: string | null;
+  selectedUnitPrice: string | null;
+  calculationCode: string | null;
+  costReferenceDate: string | null;
+  costStructureLabel: string | null;
+  formulationVersionNumber: number | null;
+  industrialCostPerUnit: string | null;
+  costQuality: IndustrialCostQuality | null;
+  commissionPercent: string | null;
+  contributionPerUnit: string | null;
+  contributionMarginPercent: string | null;
+  markupPercent: string | null;
+  warnings: { code: string; message: string }[];
+  /** Congelado no envio; antes disso é a leitura viva da faixa vinculada. */
+  frozen: boolean;
+}
+
 export interface QuoteVersionDTO {
   id: string;
   code: string;
@@ -113,6 +157,12 @@ export interface QuoteVersionDTO {
   commercialNotes: string | null;
   paymentTerms: string | null;
   leadTimeDays: number | null;
+  priceSource: QuotePriceSource;
+  /**
+   * Só chega para quem pode ver custo e margem (comercial/administração).
+   * O documento do cliente nunca expõe isso.
+   */
+  pricing: QuotePricingProvenanceDTO | null;
   sentAt: string | null;
   sentByName: string | null;
   acceptedAt: string | null;
@@ -171,6 +221,8 @@ export interface ProjectDTO {
   shelfLifeMonths: number | null;
   productId: string | null;
   productCode: string | null;
+  /** Cadeia técnica/econômica do produto do projeto — read model puro. */
+  costing: ProjectCostingSummaryDTO | null;
   productName: string | null;
   /** Última versão de orçamento (qualquer status). */
   latestQuoteLabel: string | null;
@@ -247,4 +299,44 @@ export interface UpdateQuoteVersionInput {
 
 export interface RejectQuoteInput {
   reason?: string;
+}
+
+/** Resumo da cadeia Produto → Formulação → Custo → Preço de um projeto. */
+export interface ProjectCostingSummaryDTO {
+  productId: string;
+  productCode: string;
+  productName: string;
+  lifecycle: ProductLifecycle;
+  productActive: boolean;
+
+  formulationVersionId: string | null;
+  formulationVersionNumber: number | null;
+  formulationStatus: string | null;
+
+  industrialCostVersionId: string | null;
+  industrialCostVersionLabel: string | null;
+  industrialCostVersionStatus: string | null;
+
+  calculationId: string | null;
+  calculationCode: string | null;
+  calculationQuality: IndustrialCostQuality | null;
+  costReferenceDate: string | null;
+
+  pricingVersionId: string | null;
+  pricingLabel: string | null;
+  pricingTierCount: number;
+}
+
+export interface PrepareTechnicalProductInput {
+  /** Unidade do produto acabado; obrigatória quando o brief não a define. */
+  finishedUnitCode?: string;
+}
+
+export interface ApplyQuotePricingInput {
+  pricingTierId: string;
+}
+
+export interface SendQuoteVersionInput {
+  /** Enviar proposta com custo industrial incompleto é decisão explícita. */
+  confirmIncompleteCost?: boolean;
 }

@@ -5,7 +5,7 @@ import { PrintTable } from "../../print/PrintLayout";
 import { PrintSheet } from "../../print/PrintSheet";
 
 /**
- * Impressão dos relatórios R-01…R-19 em ROTA DEDICADA.
+ * Impressão dos relatórios R-01…R-20 em ROTA DEDICADA.
  *
  * Política oficial (capacidade 42): `window.print()` é só o mecanismo de
  * saída; a origem nunca é a tela operacional. Aqui o documento é montado do
@@ -25,6 +25,8 @@ interface ReportPrintDefinition {
   csvPath: string;
   /** Volta para a tela do relatório. */
   screenPath: string;
+  /** Contém custo/margem: documento interno, nunca entregue ao cliente. */
+  internal?: boolean;
 }
 
 export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
@@ -129,6 +131,14 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Precificação por produto",
     csvPath: "/reports/costs/pricing-by-product/export.csv",
     screenPath: "/relatorios/custos/precificacao-por-produto",
+  },
+  "R-20": {
+    code: "R-20",
+    title: "Orçamento × Precificação",
+    csvPath: "/reports/commercial/quote-pricing/export.csv",
+    screenPath: "/relatorios/comercial/orcamento-precificacao",
+    // Contém custo e margem: nunca é o documento entregue ao cliente.
+    internal: true,
   },
 };
 
@@ -259,6 +269,12 @@ export function ReportPrintPage() {
       {...(landscape ? { landscape: true } : {})}
       filters={[...appliedFilters, { label: "Registros", value: String(data.rows.length) }]}
     >
+      {definition.internal && (
+        <p className="print-doc__notice">
+          Documento interno. Contém custo e margem — não é o orçamento entregue ao cliente.
+        </p>
+      )}
+
       <PrintTable
         columns={data.header}
         isEmpty={data.rows.length === 0}

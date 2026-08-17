@@ -14,6 +14,7 @@
 import type { CostQuality, CostSource } from "./costs.js";
 import type { IndustrialCostQuality } from "./industrial-cost-calculation.js";
 import type { PriceMode } from "./pricing.js";
+import type { QuotePriceSource, QuoteStatus } from "./projects.js";
 import type { BillingStatus, CustomerOrderBillingStatus } from "./billings.js";
 import type { CustomerOrderStatus } from "./customer-orders.js";
 import type { InventoryMovementSourceType, InventoryMovementType } from "./inventory.js";
@@ -555,4 +556,35 @@ export interface PricingByProductRowDTO {
   markupPercent: string | null;
   contributionPerUnit: string | null;
   activatedAt: string | null;
+}
+
+/* ─────────────── R-20 Orçamento × Precificação ─────────────── */
+
+/**
+ * Auditoria comercial: qual proposta nasceu de precificação estruturada e
+ * qual foi preço de exceção. Contém custo e margem — é documento INTERNO,
+ * nunca o orçamento do cliente.
+ */
+export interface QuotePricingAuditRowDTO {
+  quoteVersionId: string;
+  quoteLabel: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  customerName: string | null;
+  productCode: string | null;
+  status: QuoteStatus;
+  quotedQuantity: string | null;
+  uomCode: string | null;
+  unitPrice: string | null;
+  total: string | null;
+  priceSource: QuotePriceSource;
+  pricingLabel: string | null;
+  tierQuantity: string | null;
+  calculationCode: string | null;
+  costQuality: IndustrialCostQuality | null;
+  industrialCostPerUnit: string | null;
+  contributionMarginPercent: string | null;
+  sentAt: string | null;
+  acceptedAt: string | null;
 }

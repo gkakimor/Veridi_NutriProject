@@ -217,6 +217,16 @@ export const pricingByProductQuerySchema = z.object({
   ...paginationFields,
 });
 
+export const quotePricingAuditQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  customerId: z.string().trim().min(1).optional(),
+  priceSource: z.enum(["MANUAL", "PRICING_TIER"]).optional(),
+  status: z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "SUPERSEDED"]).optional(),
+  ...periodFields,
+  ...paginationFields,
+});
+
+export type QuotePricingAuditQuery = z.infer<typeof quotePricingAuditQuerySchema>;
 export type PricingByProductQuery = z.infer<typeof pricingByProductQuerySchema>;
 export type IndustrialCostByProductQuery = z.infer<typeof industrialCostByProductQuerySchema>;
 export type CustomerOrdersQuery = z.infer<typeof customerOrdersQuerySchema>;

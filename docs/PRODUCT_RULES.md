@@ -602,6 +602,62 @@ buttons.
   formula cannot be verified (`HISTORICAL_MARGIN_FORMULA_UNVERIFIABLE`) and
   no pricing version is ever created from the spreadsheet.
 
+# 5.10 Project → Quotation → Cost/Price (capability 47)
+
+- **A product may exist before the project is approved.** Costing and
+  pricing need a Product, and a quotation needs a price — so the product now
+  has an explicit lifecycle: `DEVELOPMENT` for engineering and costing,
+  `APPROVED` for operation. Every product that already existed is
+  `APPROVED`; nothing about them changed.
+- A development product is **not a fake product**: no parallel entity, no
+  temporary code. Approving the project *promotes the same product* — same
+  code, same formulation, same cost structure, same pricing, same history.
+- Development products may have formulations (including an ACTIVE one, which
+  means "recipe chosen", not "product released"), cost structures,
+  calculations and pricing. They may **not** enter customer orders,
+  commercial production orders, shipments or invoicing. The gate lives in
+  the backend, in one helper — calling the API directly does not bypass it,
+  and operational selectors only offer approved products.
+- Preparing the technical product **does not change the project status**: it
+  is engineering work, not a commercial decision. The action is idempotent —
+  a project never ends up with two products.
+- Cancelling a project deactivates only the development product **that
+  project itself created** (`originProjectId`), never a legacy or approved
+  one. Nothing is deleted: formulation, structure, calculation, pricing and
+  quotations stay auditable.
+- Project approval still **requires an accepted quotation** and still creates
+  the product when none was prepared. Pricing is *not* required to approve —
+  a manual price stays a legitimate commercial exception, shown as a warning
+  rather than a blocker.
+- A quotation's price is either `MANUAL` or comes from a `PRICING_TIER` of
+  an **ACTIVE** pricing version of that project's product. A draft pricing
+  never backs a proposal sent to a customer.
+- The tier quantity must match the quoted quantity **exactly** (after a safe
+  unit conversion). No nearest-tier selection, no interpolation: a tier is a
+  closed economic scenario, and using another quantity would change batch
+  count, fixed costs, boxes and resources. Without the matching tier the
+  answer is "create the tier or use a manual price", never an invented one.
+- While a quotation is backed by a tier, quantity, unit and price come from
+  the tier and cannot be typed over; commercial conditions (validity,
+  payment terms, lead time, notes) stay editable. Unlinking switches to
+  manual price, keeps the current value as a starting point and **drops the
+  provenance** — a link that survived manual editing would be a lie.
+- Sending a quotation freezes the pricing provenance (PREC, tier, CALC, cost
+  structure, formulation, industrial cost, cost quality, commission,
+  contribution, markup, warnings). Later pricing versions, calculations or
+  purchases never rewrite what was presented to the customer.
+- A tier with incomplete industrial cost may back a proposal, but sending it
+  requires **explicit confirmation**, and the frozen snapshot records that
+  the margin was not calculable.
+- **The customer-facing quotation never shows cost, margin, markup,
+  commission, CALC or PREC.** That provenance is internal, delivered only to
+  commercial and administration roles; the R-20 audit report carries the same
+  restriction and prints marked as an internal document.
+- A new quotation version copies the commercial values but never the pricing
+  link: each proposal confirms its own economic basis.
+- Legacy quotations stay `MANUAL` and never receive retroactive provenance
+  they never had.
+
 ---
 
 # 6. Purchase Orders

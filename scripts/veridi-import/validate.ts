@@ -4,6 +4,7 @@ import { assertImportEnvironment } from "./environment.js";
 import { analyzeCmv } from "./cmv-analysis.js";
 import { reconcileCmv } from "./cmv-reconciliation.js";
 import { analyzePricingCorpus, ensureProductOverrideTemplate } from "./pricing-analysis.js";
+import { analyzeCommercialTrace } from "./commercial-trace.js";
 import { readOverrides } from "./overrides.js";
 import { runPipeline } from "./pipeline.js";
 import { writeFindingsArtifacts } from "./report.js";
@@ -155,6 +156,16 @@ async function main(): Promise<void> {
     );
     console.log(
       "  margem historica nao e verificavel: o custo unitario exportado nao e confiavel.",
+    );
+
+    // Capacidade 47 — rastreabilidade comercial do que ja existe no banco.
+    const trace = await analyzeCommercialTrace(prisma, result.findings);
+    console.log("\nRASTREABILIDADE COMERCIAL (somente leitura)");
+    console.log(
+      `  projetos ${trace.projects} - com produto ${trace.projectsWithProduct} - sem produto tecnico ${trace.projectsWithoutProduct} - produtos em desenvolvimento ${trace.developmentProducts}`,
+    );
+    console.log(
+      `  orcamentos ${trace.quotes} - de precificacao ${trace.quotesFromPricing} - manuais ${trace.quotesManual} - legado sem proveniencia ${trace.legacyQuotesWithoutProvenance} - com custo parcial ${trace.quotesWithPartialCost}`,
     );
 
     console.log(

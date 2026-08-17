@@ -6,6 +6,7 @@ import type {
   ProjectDTO,
   ProjectListResponse,
   ProjectStatus,
+  PricingVersionDTO,
   ProjectVocabularyResponse,
   QuoteVersionDTO,
   RejectQuoteInput,
@@ -116,8 +117,11 @@ export async function updateQuoteVersion(
   return (await parseJsonOrThrow(response)) as QuoteVersionDTO;
 }
 
-export async function sendQuoteVersion(id: string): Promise<QuoteVersionDTO> {
-  return postJson<QuoteVersionDTO>(`/quote-versions/${id}/send`);
+export async function sendQuoteVersion(
+  id: string,
+  input: { confirmIncompleteCost?: boolean } = {},
+): Promise<QuoteVersionDTO> {
+  return postJson<QuoteVersionDTO>(`/quote-versions/${id}/send`, input);
 }
 
 export async function acceptQuoteVersion(id: string): Promise<QuoteVersionDTO> {
@@ -129,4 +133,37 @@ export async function rejectQuoteVersion(
   input: RejectQuoteInput = {},
 ): Promise<QuoteVersionDTO> {
   return postJson<QuoteVersionDTO>(`/quote-versions/${id}/reject`, input);
+}
+
+/**
+ * Prepara o produto técnico do projeto.
+ *
+ * É o que destrava engenharia e custeio antes da aprovação comercial — sem
+ * mudar o status do projeto e sem criar produto duplicado.
+ */
+export async function prepareTechnicalProduct(
+  projectId: string,
+  input: { finishedUnitCode?: string } = {},
+): Promise<ProjectDTO> {
+  return postJson<ProjectDTO>(`/projects/${projectId}/technical-product`, input);
+}
+
+/** Precificação ATIVA disponível para embasar a proposta. */
+export async function getQuotePricingOptions(
+  quoteId: string,
+): Promise<PricingVersionDTO | null> {
+  const response = await apiFetch(`${API_URL}/quote-versions/${quoteId}/pricing-options`);
+  if (response.status === 404) return null;
+  return (await parseJsonOrThrow(response)) as PricingVersionDTO;
+}
+
+export async function applyQuotePricing(
+  quoteId: string,
+  pricingTierId: string,
+): Promise<QuoteVersionDTO> {
+  return postJson<QuoteVersionDTO>(`/quote-versions/${quoteId}/apply-pricing`, { pricingTierId });
+}
+
+export async function useManualQuotePrice(quoteId: string): Promise<QuoteVersionDTO> {
+  return postJson<QuoteVersionDTO>(`/quote-versions/${quoteId}/manual-price`);
 }

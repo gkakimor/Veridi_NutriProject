@@ -27,8 +27,10 @@ import { getAwaitingBillingReport, getBillingPeriodReport } from "./billing-repo
 import {
   getIndustrialCostByProductReport,
   getPricingByProductReport,
+  getQuotePricingAuditReport,
 } from "./cost-reports.service.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
+import { requireRole } from "../../lib/current-user.js";
 import type { Pagination } from "../../lib/pagination.js";
 import {
   awaitingBillingQuerySchema,
@@ -48,6 +50,7 @@ import {
   requirementsQuerySchema,
   industrialCostByProductQuerySchema,
   pricingByProductQuerySchema,
+  quotePricingAuditQuerySchema,
 } from "./reports.schemas.js";
 
 function formatZodError(error: ZodError) {
@@ -129,4 +132,23 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     getIndustrialCostByProductReport,
   );
   register("/reports/costs/pricing-by-product", pricingByProductQuerySchema, getPricingByProductReport);
+
+  // R-20 expõe custo e margem por proposta: acesso restrito a quem negocia.
+  app.get("/reports/commercial/quote-pricing", async (request, reply) => {
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+    } catch {
+      return reply.status(403).send({ error: "forbidden" });
+    }
+    const parsed = quotePricingAuditQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+    const query = parsed.data as { all?: boolean };
+    return reply.send(
+      await getQuotePricingAuditReport(parsed.data, query.all === true ? ALL_ROWS : undefined),
+    );
+  });
 };

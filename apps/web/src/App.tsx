@@ -33,6 +33,7 @@ import { PricingPrintPage } from "./pages/print/PricingPrintPage";
 import {
   IndustrialCostByProductReportPage,
   PricingByProductReportPage,
+  QuotePricingAuditReportPage,
 } from "./pages/reports/CostReports";
 import { CostCalculationPrintPage } from "./pages/print/CostCalculationPrintPage";
 import { ProductionCostPrintPage } from "./pages/print/ProductionCostPrintPage";
@@ -241,6 +242,10 @@ function AuthenticatedApp() {
           <Route
             path="/relatorios/custos/precificacao-por-produto"
             element={<PricingByProductReportPage />}
+          />
+          <Route
+            path="/relatorios/comercial/orcamento-precificacao"
+            element={<QuotePricingAuditReportPage />}
           />
           <Route path="/relatorios/estoque/posicao" element={<InventoryPositionReportPage />} />
           <Route path="/relatorios/estoque/vencimentos" element={<ExpiryReportPage />} />
