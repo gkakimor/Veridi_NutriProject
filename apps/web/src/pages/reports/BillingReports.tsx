@@ -58,16 +58,15 @@ export function BillingPeriodReportPage() {
     }),
     [search, customerId, from, to, page],
   );
-  const { data, loading, error, print, preparingPrint } = useReport(getBillingPeriodReport, filters);
+  const { data, loading, error } = useReport(getBillingPeriodReport, filters);
 
   return (
     <ReportPage
       title="R-15 · Faturamento por período"
       csvPath="/reports/billing/period/export.csv"
+      reportCode="R-15"
       csvFilters={filters}
       total={data?.total}
-      onPrint={print}
-      preparingPrint={preparingPrint}
       subtitle="Somente faturamentos emitidos, pela data de emissão."
       loading={loading}
       error={error}
@@ -174,16 +173,15 @@ export function AwaitingBillingReportPage() {
     () => ({ search, customerId, page, pageSize: PAGE_SIZE }),
     [search, customerId, page],
   );
-  const { data, loading, error, print, preparingPrint } = useReport(getAwaitingBillingReport, filters);
+  const { data, loading, error } = useReport(getAwaitingBillingReport, filters);
 
   return (
     <ReportPage
       title="R-16 · Aguardando faturamento"
       csvPath="/reports/billing/awaiting/export.csv"
+      reportCode="R-16"
       csvFilters={filters}
       total={data?.total}
-      onPrint={print}
-      preparingPrint={preparingPrint}
       subtitle="Expedições confirmadas ainda sem faturamento emitido — mais antiga primeiro."
       loading={loading}
       error={error}
@@ -272,16 +270,15 @@ export function OrderDeliveredBilledReportPage() {
     () => ({ search, customerId, status, page, pageSize: PAGE_SIZE }),
     [search, customerId, status, page],
   );
-  const { data, loading, error, print, preparingPrint } = useReport(getOrderDeliveredBilledReport, filters);
+  const { data, loading, error } = useReport(getOrderDeliveredBilledReport, filters);
 
   return (
     <ReportPage
       title="R-17 · Pedido x Entregue x Faturado"
       csvPath="/reports/billing/order-delivered-billed/export.csv"
+      reportCode="R-17"
       csvFilters={filters}
       total={data?.total}
-      onPrint={print}
-      preparingPrint={preparingPrint}
       subtitle="Expedido conta só Expedições confirmadas; faturado conta só Faturamentos emitidos."
       loading={loading}
       error={error}

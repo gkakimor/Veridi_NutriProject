@@ -22,8 +22,8 @@ export function ReportPage({
   error,
   csvPath,
   csvFilters,
-  onPrint,
-  preparingPrint,
+  reportCode,
+  printFilters,
   total,
   children,
 }: {
@@ -38,13 +38,21 @@ export function ReportPage({
   /** Rota `.../export.csv` do mesmo read model. */
   csvPath?: string;
   csvFilters?: ReportFilters;
-  onPrint?: () => void;
-  preparingPrint?: boolean | undefined;
+  /** Código do relatório — abre `/print/relatorios/:code` com os filtros. */
+  reportCode?: string;
+  /** Filtros levados para a rota de impressão (o padrão são os do CSV). */
+  printFilters?: ReportFilters;
   total?: number | undefined;
   children: ReactNode;
 }) {
   const navigate = useNavigate();
   const user = useOptionalAuth()?.user ?? null;
+
+  const printParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(printFilters ?? csvFilters ?? {})) {
+    if (value !== undefined && value !== "") printParams.set(key, String(value));
+  }
+  const printQuery = printParams.toString() ? `?${printParams.toString()}` : "";
 
   return (
     <>
@@ -56,14 +64,15 @@ export function ReportPage({
         </div>
         <div className="table__actions">
           {csvPath && <ExportCsvButton path={csvPath} filters={csvFilters ?? {}} />}
-          {onPrint && (
+          {reportCode && (
             <button
               type="button"
               className="btn btn--secondary btn--sm"
-              disabled={preparingPrint}
-              onClick={onPrint}
+              // Impressão nasce em rota dedicada: a tela operacional nunca
+              // vai para o papel.
+              onClick={() => navigate(`/print/relatorios/${reportCode}${printQuery}`)}
             >
-              {preparingPrint ? "Preparando…" : "Imprimir / Salvar PDF"}
+              Imprimir / Salvar PDF
             </button>
           )}
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigate("/relatorios")}>

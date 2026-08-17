@@ -78,16 +78,15 @@ export function PurchaseOrdersReportPage() {
     }),
     [search, supplierId, status, origin, from, to, page],
   );
-  const { data, loading, error, print, preparingPrint } = useReport(getPurchaseOrdersReport, filters);
+  const { data, loading, error } = useReport(getPurchaseOrdersReport, filters);
 
   return (
     <ReportPage
       title="R-08 · Ordens de Compra"
       csvPath="/reports/purchasing/orders/export.csv"
+      reportCode="R-08"
       csvFilters={filters}
       total={data?.total}
-      onPrint={print}
-      preparingPrint={preparingPrint}
       subtitle="Ordens por data do pedido. O valor previsto só aparece quando todas as linhas têm preço."
       loading={loading}
       error={error}
@@ -214,16 +213,15 @@ export function ReceiptsReportPage() {
     }),
     [search, supplierId, from, to, page],
   );
-  const { data, loading, error, print, preparingPrint } = useReport(getReceiptsReport, filters);
+  const { data, loading, error } = useReport(getReceiptsReport, filters);
 
   return (
     <ReportPage
       title="R-09 · Recebimentos"
       csvPath="/reports/purchasing/receipts/export.csv"
+      reportCode="R-09"
       csvFilters={filters}
       total={data?.total}
-      onPrint={print}
-      preparingPrint={preparingPrint}
       subtitle="Uma linha por item recebido. Preço da OC é expectativa; custo efetivo é a referência real."
       loading={loading}
       error={error}
@@ -314,16 +312,15 @@ export function OnOrderReportPage() {
     () => ({ search, supplierId, page, pageSize: PAGE_SIZE }),
     [search, supplierId, page],
   );
-  const { data, loading, error, print, preparingPrint } = useReport(getOnOrderReport, filters);
+  const { data, loading, error } = useReport(getOnOrderReport, filters);
 
   return (
     <ReportPage
       title="R-10 · Em Compra"
       csvPath="/reports/purchasing/on-order/export.csv"
+      reportCode="R-10"
       csvFilters={filters}
       total={data?.total}
-      onPrint={print}
-      preparingPrint={preparingPrint}
       subtitle="Quantidade ainda em aberto em ordens confirmadas. Rascunhos não contam como compra em curso."
       loading={loading}
       error={error}
@@ -393,16 +390,15 @@ export function LatePurchaseOrdersReportPage() {
   const [page, setPage] = useState(1);
 
   const filters = useMemo(() => ({ supplierId, page, pageSize: PAGE_SIZE }), [supplierId, page]);
-  const { data, loading, error, print, preparingPrint } = useReport(getLatePurchaseOrdersReport, filters);
+  const { data, loading, error } = useReport(getLatePurchaseOrdersReport, filters);
 
   return (
     <ReportPage
       title="R-11 · Ordens de Compra atrasadas"
       csvPath="/reports/purchasing/late/export.csv"
+      reportCode="R-11"
       csvFilters={filters}
       total={data?.total}
-      onPrint={print}
-      preparingPrint={preparingPrint}
       subtitle="Previsão de entrega vencida com quantidade ainda em aberto — mais atrasada primeiro."
       loading={loading}
       error={error}

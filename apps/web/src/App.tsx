@@ -23,6 +23,13 @@ import { LotDetailPage } from "./pages/lots/LotDetailPage";
 import { LotScanPage } from "./pages/lots/LotScanPage";
 import { LotLabelPrintPage } from "./pages/lots/LotLabelPrintPage";
 import { SampleLabelPrintPage } from "./pages/samples/SampleLabelPrintPage";
+import { ReportPrintPage } from "./pages/print/ReportPrintPage";
+import { IndustrialCostPrintPage } from "./pages/print/IndustrialCostPrintPage";
+import { IndustrialCostPage } from "./pages/industrial-costs/IndustrialCostPage";
+import {
+  OrderOperationPrintPage,
+  ProductionTraceabilityPrintPage,
+} from "./pages/print/DocumentReportPrints";
 import {
   InventoryCountSheetPage,
   InventoryPositionSheetPage,
@@ -117,6 +124,11 @@ function AuthenticatedApp() {
         <Route path="/estoque/lotes/:id/etiqueta" element={<LotLabelPrintPage />} />
         <Route path="/comercial/amostras/:id/etiqueta" element={<SampleLabelPrintPage />} />
         {/* Folhas operacionais (FO-xx): documento de papel, fora do AppShell. */}
+        {/* Relatórios: a impressão nasce em rota dedicada, nunca da tela. */}
+        <Route path="/print/relatorios/R-06" element={<ProductionTraceabilityPrintPage />} />
+        <Route path="/print/relatorios/R-14" element={<OrderOperationPrintPage />} />
+        <Route path="/print/relatorios/:reportCode" element={<ReportPrintPage />} />
+        <Route path="/print/estrutura-custos/:id" element={<IndustrialCostPrintPage />} />
         <Route path="/print/contagem-fisica" element={<InventoryCountSheetPage />} />
         <Route path="/print/posicao-estoque" element={<InventoryPositionSheetPage />} />
         <Route path="/print/qualidade-pendencias" element={<QualityPendingSheetPage />} />
@@ -141,6 +153,7 @@ function AuthenticatedApp() {
           <Route path="/cadastros/fornecedores" element={<SuppliersPage />} />
           <Route path="/cadastros/clientes" element={<CustomersPage />} />
           <Route path="/cadastros/produtos" element={<ProductsPage />} />
+          <Route path="/produtos/:productId/custos" element={<IndustrialCostPage />} />
           <Route path="/compras/ordens" element={<PurchaseOrdersPage />} />
           <Route path="/compras/ordens/nova" element={<PurchaseOrderPage />} />
           <Route path="/compras/ordens/:id" element={<PurchaseOrderPage />} />
