@@ -21,6 +21,7 @@
     "db:deploy": "pnpm --filter @veridi/api db:deploy",
     "db:seed": "pnpm --filter @veridi/api db:seed",
     "user:bootstrap-admin": "dotenv -e .env -- tsx scripts/bootstrap-admin.ts",
+    "users:demo": "dotenv -e .env -- tsx scripts/seed-demo-users.ts",
     "veridi:import:validate": "dotenv -e .env -- tsx scripts/veridi-import/validate.ts",
     "veridi:import:plan": "dotenv -e .env -- tsx scripts/veridi-import/plan.ts",
     "veridi:import:apply": "dotenv -e .env -- tsx scripts/veridi-import/apply.ts",
