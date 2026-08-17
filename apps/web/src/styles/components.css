@@ -810,3 +810,103 @@
   gap: 2px;
   font-size: var(--fs-sm);
 }
+
+/* ---------------- Ações de linha (overflow) ---------------- */
+
+/* Ação destrutiva sai da tabela: fica no menu, nunca como botão fixo. */
+.row-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.row-actions__toggle {
+  min-width: 28px;
+  padding: 0 var(--sp-2);
+  line-height: 1;
+}
+
+.row-actions__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 20;
+  min-width: 180px;
+  display: grid;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.row-actions__item {
+  padding: var(--sp-2) var(--sp-3);
+  background: none;
+  border: none;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.row-actions__item:hover {
+  background: var(--canvas);
+}
+
+.row-actions__item--danger {
+  color: var(--err-fg);
+}
+
+/* ---------------- Fluxo do documento ---------------- */
+
+/* Navegação de negócio (Pedido › OP › Expedição), não status. */
+.flow-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  margin-top: var(--sp-2);
+}
+
+.flow-context__step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.flow-context__arrow {
+  color: var(--ink-3);
+}
+
+.flow-context__node {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.flow-context__node.is-current {
+  border-color: var(--v-green-600);
+  background: var(--ok-bg);
+}
+
+.flow-context__kind {
+  color: var(--ink-2);
+  font-size: var(--fs-xs, 11px);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flow-context__code {
+  font-family: var(--font-code);
+}
+
+.flow-context__detail {
+  color: var(--ink-2);
+}

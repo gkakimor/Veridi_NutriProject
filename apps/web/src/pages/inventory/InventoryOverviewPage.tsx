@@ -69,9 +69,18 @@ export function InventoryOverviewPage() {
         <div>
           <h1 className="page__title">Estoque</h1>
           <p className="page__subtitle">
-            On Hand, disponível e em compra por item — derivados do histórico de movimentações.
+            Saldo físico, disponível e em compra por item — derivados do histórico de movimentações.
           </p>
         </div>
+        <button
+          type="button"
+          className="btn btn--secondary"
+          onClick={() =>
+            navigate(`/print/posicao-estoque${search ? `?search=${encodeURIComponent(search)}` : ""}`)
+          }
+        >
+          Imprimir posição (FO-02)
+        </button>
         <ExportCsvButton path="/inventory/export.csv" filters={{ search, type: typeFilter === "all" ? undefined : typeFilter, onlyWithStock }} />
 </div>
 
@@ -125,7 +134,7 @@ export function InventoryOverviewPage() {
               <th>Item</th>
               <th>Tipo</th>
               <th>Un.</th>
-              <th>On Hand</th>
+              <th>Físico</th>
               <th>Reservado</th>
               <th>Disponível</th>
               <th>Em Compra</th>

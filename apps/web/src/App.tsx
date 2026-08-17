@@ -23,6 +23,13 @@ import { LotDetailPage } from "./pages/lots/LotDetailPage";
 import { LotScanPage } from "./pages/lots/LotScanPage";
 import { LotLabelPrintPage } from "./pages/lots/LotLabelPrintPage";
 import { SampleLabelPrintPage } from "./pages/samples/SampleLabelPrintPage";
+import {
+  InventoryCountSheetPage,
+  InventoryPositionSheetPage,
+  ProductionPickingSheetPage,
+  QualityPendingSheetPage,
+  ShipmentPickingSheetPage,
+} from "./pages/print/OperationalSheets";
 import { SamplesPage } from "./pages/samples/SamplesPage";
 import { SupplierItemsPage } from "./pages/supplier-items/SupplierItemsPage";
 import { SampleDetailPage } from "./pages/samples/SampleDetailPage";
@@ -109,6 +116,12 @@ function AuthenticatedApp() {
         {/* Rotas de impressão: fora do AppShell — sem topbar/sidebar. */}
         <Route path="/estoque/lotes/:id/etiqueta" element={<LotLabelPrintPage />} />
         <Route path="/comercial/amostras/:id/etiqueta" element={<SampleLabelPrintPage />} />
+        {/* Folhas operacionais (FO-xx): documento de papel, fora do AppShell. */}
+        <Route path="/print/contagem-fisica" element={<InventoryCountSheetPage />} />
+        <Route path="/print/posicao-estoque" element={<InventoryPositionSheetPage />} />
+        <Route path="/print/qualidade-pendencias" element={<QualityPendingSheetPage />} />
+        <Route path="/print/producao-picking/:id" element={<ProductionPickingSheetPage />} />
+        <Route path="/print/expedicao-separacao/:id" element={<ShipmentPickingSheetPage />} />
         <Route path="/estoque/lotes/:id/rastreabilidade/imprimir" element={<LotTraceabilityPrintPage />} />
         <Route path="/comercial/pedidos/:id/imprimir" element={<CustomerOrderPrintPage />} />
         <Route path="/comercial/orcamentos/:id/imprimir" element={<QuotePrintPage />} />

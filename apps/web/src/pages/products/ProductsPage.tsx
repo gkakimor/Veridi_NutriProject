@@ -6,6 +6,7 @@ import { listProducts, setProductActive } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
 import { ProductFormModal } from "./ProductFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { RowActions } from "../../components/RowActions";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -218,7 +219,15 @@ export function ProductsPage() {
                   </span>
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
-                  <div className="table__actions">
+                  <RowActions
+                    actions={[
+                      {
+                        label: product.active ? "Inativar" : "Reativar",
+                        destructive: product.active,
+                        onSelect: () => handleToggleActive(product),
+                      },
+                    ]}
+                  >
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
@@ -226,18 +235,7 @@ export function ProductsPage() {
                     >
                       Editar
                     </button>
-                    <button
-                      type="button"
-                      className={
-                        product.active
-                          ? "btn btn--danger btn--sm"
-                          : "btn btn--secondary btn--sm"
-                      }
-                      onClick={() => handleToggleActive(product)}
-                    >
-                      {product.active ? "Inativar" : "Reativar"}
-                    </button>
-                  </div>
+                  </RowActions>
                 </td>
               </tr>
             ))}

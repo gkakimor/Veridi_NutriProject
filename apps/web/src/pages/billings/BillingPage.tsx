@@ -5,6 +5,7 @@ import { BILLING_STATUS_LABELS } from "@veridi/shared";
 import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../lib/billings-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
+import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 function statusBadgeClass(status: BillingStatus): string {
@@ -188,6 +189,23 @@ export function BillingPage() {
           </button>
         </div>
       </div>
+
+      <FlowContext
+        steps={[
+          {
+            kind: "Pedido",
+            code: billing.customerOrderCode,
+            path: `/comercial/pedidos/${billing.customerOrderId}`,
+            detail: billing.customerName,
+          },
+          {
+            kind: "Expedição",
+            code: billing.shipmentCode,
+            path: `/comercial/expedicoes/${billing.shipmentId}`,
+          },
+          { kind: "Faturamento", code: billing.code, current: true },
+        ]}
+      />
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}

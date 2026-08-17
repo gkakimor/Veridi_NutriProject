@@ -1,6 +1,9 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type {
+  AttentionGroupDTO,
+  AttentionItemDTO,
+  AttentionType,
   DashboardCurrentStateDTO,
   DashboardDTO,
   DashboardPeriodDTO,
@@ -336,6 +339,34 @@ async function buildRecentMovements(
   });
 }
 
+/** Itens de exemplo mostrados dentro de cada grupo antes do "ver todos". */
+const ATTENTION_GROUP_SAMPLE = 5;
+
+/**
+ * Agrupa a MESMA lista de atencoes por tipo — sem nenhuma consulta extra.
+ * O cockpit precisa dizer "12 lotes com CoA pendente", nao repetir 12
+ * linhas quase iguais; a fonte de verdade continua sendo a lista derivada.
+ */
+function groupAttention(items: AttentionItemDTO[]): AttentionGroupDTO[] {
+  const groups = new Map<AttentionType, AttentionGroupDTO>();
+
+  for (const item of items) {
+    const current = groups.get(item.type) ?? {
+      type: item.type,
+      severity: item.severity,
+      count: 0,
+      items: [],
+    };
+    current.count += 1;
+    if (current.items.length < ATTENTION_GROUP_SAMPLE) current.items.push(item);
+    groups.set(item.type, current);
+  }
+
+  // `items` ja vem ordenado por severidade e urgencia: preservar a ordem de
+  // insercao mantem o grupo mais critico no topo.
+  return [...groups.values()];
+}
+
 /**
  * Read model central do Dashboard — uma unica chamada em vez de dezenas de
  * requisicoes independentes do frontend. Nada aqui e persistido: tudo sai
@@ -360,6 +391,7 @@ export async function getDashboard(query: DashboardQuery): Promise<DashboardDTO>
     period,
     currentState,
     attention: attention.slice(0, ATTENTION_LIMIT),
+    attentionGroups: groupAttention(attention),
     attentionTotal: attention.length,
     attentionLimit: ATTENTION_LIMIT,
     movementSummary,

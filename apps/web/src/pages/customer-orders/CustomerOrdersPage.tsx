@@ -9,6 +9,8 @@ import {
 } from "@veridi/shared";
 import { listCustomerOrders } from "../../lib/customer-orders-api";
 import { listCustomers } from "../../lib/customers-api";
+import { useAuth } from "../../app/AuthProvider";
+import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 
 type ActiveFilter = CustomerOrderStatus | "all";
 
@@ -36,8 +38,11 @@ function formatDate(value: string | null): string {
 }
 
 /** Comercial → Pedidos. Documento transacional: linhas abrem página própria, não modal. */
+const FILTER_SCOPE = "customer-orders";
+
 export function CustomerOrdersPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [customerOrders, setCustomerOrders] = useState<CustomerOrderDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -45,10 +50,30 @@ export function CustomerOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [customerFilter, setCustomerFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ActiveFilter>("all");
+  const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
+  const [customerFilter, setCustomerFilter] = usePersistentFilter(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "customer",
+    "",
+  );
+  const [statusFilter, setStatusFilter] = usePersistentFilter<ActiveFilter>(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "status",
+    "all",
+  );
+  const [searchInput, setSearchInput] = useState(search);
+
+  const hasFilters = search !== "" || customerFilter !== "" || statusFilter !== "all";
+
+  function handleClearFilters() {
+    setSearchInput("");
+    setSearch("");
+    setCustomerFilter("");
+    setStatusFilter("all");
+    clearStoredFilters(user?.id ?? null, FILTER_SCOPE);
+  }
 
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
 
@@ -155,6 +180,12 @@ export function CustomerOrdersPage() {
             </option>
           ))}
         </select>
+
+        {hasFilters && (
+          <button type="button" className="btn btn--ghost btn--sm" onClick={handleClearFilters}>
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       {error && <p className="form-alert">{error}</p>}

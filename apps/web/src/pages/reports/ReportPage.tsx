@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { useOptionalAuth } from "../../app/AuthProvider";
 import type { ReportFilters } from "../../lib/reports-api";
 import "./reports.css";
 import "../../print/print.css";
@@ -43,6 +44,7 @@ export function ReportPage({
   children: ReactNode;
 }) {
   const navigate = useNavigate();
+  const user = useOptionalAuth()?.user ?? null;
 
   return (
     <>
@@ -79,6 +81,9 @@ export function ReportPage({
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="print-doc__status">Gerado em {new Date().toLocaleString("pt-BR")}</div>
+          {/* Quem gerou a IMPRESSÃO — não substitui os snapshots de quem
+              executou cada ato no sistema. */}
+          <div className="print-doc__status">Gerado por {user?.name ?? "—"}</div>
           {total !== undefined && (
             <div className="print-doc__status">{total} registros</div>
           )}

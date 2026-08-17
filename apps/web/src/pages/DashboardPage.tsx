@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type {
+  AttentionGroupDTO,
   AttentionItemDTO,
   AttentionSeverity,
   AttentionTargetKind,
@@ -9,15 +10,18 @@ import type {
   RecentMovementDTO,
 } from "@veridi/shared";
 import {
+  ATTENTION_LIST_PATH,
   ATTENTION_SEVERITY_LABELS,
   ATTENTION_TYPE_LABELS,
   INVENTORY_MOVEMENT_TYPE_LABELS,
 } from "@veridi/shared";
 import type { InventoryMovementType } from "@veridi/shared";
 import { getDashboard } from "../lib/dashboard-api";
+import type { UserRole } from "@veridi/shared";
 import type { PeriodPreset } from "../lib/period";
 import { PERIOD_PRESET_LABELS, dateInputValueOffset, resolvePeriodBounds } from "../lib/period";
 import { formatBRL } from "../lib/currency";
+import { useAuth } from "../app/AuthProvider";
 import "./dashboard.css";
 
 function severityBadgeClass(severity: AttentionSeverity): string {
@@ -156,6 +160,65 @@ function StateLine({ label, value }: { label: string; value: number }) {
   );
 }
 
+/**
+ * Um grupo por tipo de atenção: "CoA pendente — 12 lotes" em vez de doze
+ * linhas quase idênticas. Expandir mostra os primeiros itens; "ver todos"
+ * leva para a tela onde a operação realmente resolve o problema.
+ */
+function AttentionGroup({
+  group,
+  onOpenItem,
+  onOpenList,
+}: {
+  group: AttentionGroupDTO;
+  onOpenItem: (item: AttentionItemDTO) => void;
+  onOpenList: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="dash-attention__group">
+      <button
+        type="button"
+        className="dash-attention__group-head"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span className={severityBadgeClass(group.severity)}>
+          {ATTENTION_SEVERITY_LABELS[group.severity]}
+        </span>
+        <span className="dash-attention__group-title">{ATTENTION_TYPE_LABELS[group.type]}</span>
+        <span className="dash-attention__group-count">
+          {group.count} {group.count === 1 ? "item" : "itens"}
+        </span>
+        <span className="dash-attention__group-toggle" aria-hidden="true">
+          {expanded ? "▾" : "▸"}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="dash-attention__group-body">
+          {group.items.map((item) => (
+            <AttentionRow
+              key={`${item.type}-${item.targetId}`}
+              item={item}
+              onOpen={() => onOpenItem(item)}
+            />
+          ))}
+          {group.count > group.items.length && (
+            <p className="dash-attention__more">
+              Mostrando {group.items.length} de {group.count}.
+            </p>
+          )}
+          <button type="button" className="btn btn--ghost btn--sm" onClick={onOpenList}>
+            Ver todos
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AttentionRow({ item, onOpen }: { item: AttentionItemDTO; onOpen: () => void }) {
   return (
     <button type="button" className="dash-attention__row" onClick={onOpen}>
@@ -179,8 +242,31 @@ function AttentionRow({ item, onOpen }: { item: AttentionItemDTO; onOpen: () => 
  * `GET /dashboard`. Estado atual e período são blocos separados — trocar o
  * filtro de período não altera o que está aberto agora na operação.
  */
+/**
+ * Atalhos para o começo dos fluxos operacionais.
+ *
+ * São LINKS para as telas onde a criação acontece com todas as validações
+ * — nunca um atalho que pula pré-condição. O backend continua sendo a
+ * autoridade; aqui só se evita esconder a ação do usuário certo.
+ */
+const QUICK_ACTIONS: { label: string; path: string; roles: UserRole[] }[] = [
+  { label: "Novo projeto", path: "/comercial/projetos", roles: ["COMMERCIAL", "ADMIN"] },
+  { label: "Novo pedido", path: "/comercial/pedidos/novo", roles: ["COMMERCIAL", "ADMIN"] },
+  { label: "Nova ordem de produção", path: "/producao/ordens", roles: ["PRODUCTION", "ADMIN"] },
+  {
+    label: "Novo recebimento",
+    path: "/compras/recebimentos",
+    roles: ["PURCHASING", "QUALITY", "ADMIN"],
+  },
+  { label: "Fila da Qualidade", path: "/qualidade/documentos", roles: ["QUALITY", "ADMIN"] },
+];
+
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const quickActions = QUICK_ACTIONS.filter(
+    (action) => !user || action.roles.includes(user.role),
+  );
 
   const [preset, setPreset] = useState<PeriodPreset>("today");
   const [customFrom, setCustomFrom] = useState(dateInputValueOffset(-6));
@@ -259,6 +345,25 @@ export function DashboardPage() {
         )}
       </div>
 
+      <section className="dash-section">
+        <div className="dash-section__head">
+          <h2>Ações rápidas</h2>
+          <span className="dash-section__hint">Início dos fluxos mais usados no dia a dia</span>
+        </div>
+        <div className="dash-quick">
+          {quickActions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() => navigate(action.path)}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
       {error && <p className="form-alert">{error}</p>}
       {loading && !data && <p className="muted">Carregando…</p>}
 
@@ -274,21 +379,17 @@ export function DashboardPage() {
               </span>
             </div>
             <div className="dash-attention">
-              {data.attention.length === 0 && (
+              {data.attentionGroups.length === 0 && (
                 <p className="dash-attention__empty">Nada exigindo atenção agora.</p>
               )}
-              {data.attention.map((item) => (
-                <AttentionRow
-                  key={`${item.type}-${item.targetId}`}
-                  item={item}
-                  onOpen={() => navigate(attentionPath(item.targetKind, item.targetId))}
+              {data.attentionGroups.map((group) => (
+                <AttentionGroup
+                  key={group.type}
+                  group={group}
+                  onOpenItem={(item) => navigate(attentionPath(item.targetKind, item.targetId))}
+                  onOpenList={() => navigate(ATTENTION_LIST_PATH[group.type])}
                 />
               ))}
-              {data.attentionTotal > data.attention.length && (
-                <p className="dash-attention__more">
-                  Mostrando {data.attention.length} de {data.attentionTotal} pontos de atenção.
-                </p>
-              )}
             </div>
           </section>
 

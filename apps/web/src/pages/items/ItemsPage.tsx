@@ -6,6 +6,7 @@ import { listItems, setItemActive } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import { ItemFormModal } from "./ItemFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { RowActions } from "../../components/RowActions";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -228,7 +229,15 @@ export function ItemsPage() {
                   </span>
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
-                  <div className="table__actions">
+                  <RowActions
+                    actions={[
+                      {
+                        label: item.active ? "Inativar" : "Reativar",
+                        destructive: item.active,
+                        onSelect: () => handleToggleActive(item),
+                      },
+                    ]}
+                  >
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
@@ -236,16 +245,7 @@ export function ItemsPage() {
                     >
                       Editar
                     </button>
-                    <button
-                      type="button"
-                      className={
-                        item.active ? "btn btn--danger btn--sm" : "btn btn--secondary btn--sm"
-                      }
-                      onClick={() => handleToggleActive(item)}
-                    >
-                      {item.active ? "Inativar" : "Reativar"}
-                    </button>
-                  </div>
+                  </RowActions>
                 </td>
               </tr>
             ))}

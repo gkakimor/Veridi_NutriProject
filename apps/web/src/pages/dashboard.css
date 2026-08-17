@@ -211,3 +211,57 @@
 .is-small {
   font-size: var(--fs-xs);
 }
+
+/* Ações rápidas: início dos fluxos, sem atalho que pule validação. */
+.dash-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* Atenção agrupada por causa — 12 lotes viram uma linha, não doze. */
+.dash-attention__group {
+  border-bottom: 1px solid var(--line);
+}
+
+.dash-attention__group:last-child {
+  border-bottom: none;
+}
+
+.dash-attention__group-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.dash-attention__group-head:hover {
+  background: var(--canvas);
+}
+
+.dash-attention__group-title {
+  font-weight: var(--fw-medium);
+}
+
+.dash-attention__group-count {
+  margin-left: auto;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+.dash-attention__group-toggle {
+  color: var(--ink-3);
+}
+
+.dash-attention__group-body {
+  padding: 0 var(--sp-4) var(--sp-3);
+  display: grid;
+  gap: var(--sp-1);
+}

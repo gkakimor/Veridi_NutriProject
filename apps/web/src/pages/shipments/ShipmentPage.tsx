@@ -21,6 +21,7 @@ import {
 } from "../../lib/shipments-api";
 import { createBilling } from "../../lib/billings-api";
 import { FormSection } from "../../components/FormSection";
+import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 function statusBadgeClass(status: ShipmentStatus): string {
@@ -410,11 +411,39 @@ export function ShipmentPage() {
           >
             Imprimir
           </button>
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => navigate(`/print/expedicao-separacao/${shipment.id}`)}
+          >
+            Folha de separação (FO-05)
+          </button>
           <button type="button" className="btn btn--ghost" onClick={() => navigate("/comercial/expedicoes")}>
             ← Voltar
           </button>
         </div>
       </div>
+
+      <FlowContext
+        steps={[
+          {
+            kind: "Pedido",
+            code: shipment.customerOrderCode,
+            path: `/comercial/pedidos/${shipment.customerOrderId}`,
+            detail: shipment.customerName,
+          },
+          { kind: "Expedição", code: shipment.code, current: true },
+          ...(shipment.billingId && shipment.billingCode
+            ? [
+                {
+                  kind: "Faturamento",
+                  code: shipment.billingCode,
+                  path: `/comercial/faturamento/${shipment.billingId}`,
+                },
+              ]
+            : []),
+        ]}
+      />
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}

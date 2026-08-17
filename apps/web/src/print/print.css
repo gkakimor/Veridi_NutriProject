@@ -217,3 +217,108 @@
     text-decoration: none;
   }
 }
+
+/* ---------------- Folhas operacionais (FO-xx) ---------------- */
+
+/*
+ * Pré-visualização: a rota vive fora do AppShell, então o documento aparece
+ * sozinho na tela antes de ir para o papel. Nada de imprimir a tela
+ * operacional — o que vai para a impressora é sempre este documento.
+ */
+.print-screen {
+  min-height: 100vh;
+  background: var(--canvas);
+  padding: var(--sp-6) 0 var(--sp-8);
+}
+
+.print-screen .print-doc {
+  background: #fff;
+  box-shadow: var(--shadow-1);
+}
+
+.print-doc__header-right {
+  text-align: right;
+}
+
+.print-doc__filters {
+  border-top: 1px dashed var(--line-strong);
+  padding-top: var(--sp-2);
+}
+
+/* Espaço de anotação manual: o papel recebe o que o sistema não registra. */
+.print-write {
+  min-width: 70px;
+  height: 22px;
+}
+
+.print-write--check {
+  text-align: center;
+  font-size: 14px;
+}
+
+.print-signature {
+  display: flex;
+  gap: var(--sp-6);
+  margin-top: var(--sp-6);
+  page-break-inside: avoid;
+}
+
+.print-signature__field {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.print-signature__line {
+  display: block;
+  border-bottom: 1px solid var(--ink);
+  height: 24px;
+}
+
+.print-signature__label {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+@media print {
+  .print-screen {
+    background: #fff;
+    padding: 0;
+  }
+
+  .print-screen .print-doc {
+    box-shadow: none;
+  }
+
+  /* Retrato é o padrão; paisagem só onde a largura realmente exige. */
+  .print-screen--landscape {
+    page: landscape-sheet;
+  }
+
+  @page landscape-sheet {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  /* Preto e branco primeiro: bordas e texto carregam a informação, cor é
+     detalhe. Status nunca depende só de cor. */
+  .print-table th {
+    background: #fff !important;
+    border-bottom: 1.5px solid var(--ink) !important;
+  }
+
+  .print-table td,
+  .print-table th {
+    border-color: #999 !important;
+  }
+
+  /* Título não fica órfão no fim da página. */
+  .print-doc__section h2 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-write {
+    border-bottom: 1px solid #999;
+  }
+}

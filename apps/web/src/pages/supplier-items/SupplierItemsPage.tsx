@@ -10,10 +10,13 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listItems } from "../../lib/items-api";
 import { listSuppliers } from "../../lib/suppliers-api";
 import { listSupplierItems } from "../../lib/supplier-items-api";
+import { useAuth } from "../../app/AuthProvider";
+import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { SupplierItemFormModal } from "./SupplierItemFormModal";
 import { SupplierItemDetailModal } from "./SupplierItemDetailModal";
 
 const PAGE_SIZE = 20;
+const FILTER_SCOPE = "supplier-items";
 
 export function qualificationBadgeClass(status: SupplierItemQualificationStatus): string {
   switch (status) {
@@ -55,6 +58,7 @@ export function SupplierItemPriceCell({ row }: { row: SupplierItemDTO }) {
 
 /** Comercial → Compras → Item × Fornecedor. */
 export function SupplierItemsPage() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<SupplierItemDTO[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -64,15 +68,54 @@ export function SupplierItemsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [qualificationStatus, setQualificationStatus] = useState<
+  const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
+  const [qualificationStatus, setQualificationStatus] = usePersistentFilter<
     SupplierItemQualificationStatus | "all"
-  >("all");
-  const [supplierId, setSupplierId] = useState("");
-  const [itemFamily, setItemFamily] = useState("");
-  const [preferredOnly, setPreferredOnly] = useState(false);
-  const [activeOnly, setActiveOnly] = useState(true);
+  >(user?.id ?? null, FILTER_SCOPE, "qualification", "all");
+  const [supplierId, setSupplierId] = usePersistentFilter(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "supplier",
+    "",
+  );
+  const [itemFamily, setItemFamily] = usePersistentFilter(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "family",
+    "",
+  );
+  const [preferredOnly, setPreferredOnly] = usePersistentFilter(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "preferred",
+    false,
+  );
+  const [activeOnly, setActiveOnly] = usePersistentFilter(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "active",
+    true,
+  );
+  const [searchInput, setSearchInput] = useState(search);
+
+  const hasFilters =
+    search !== "" ||
+    qualificationStatus !== "all" ||
+    supplierId !== "" ||
+    itemFamily !== "" ||
+    preferredOnly ||
+    !activeOnly;
+
+  function handleClearFilters() {
+    setSearchInput("");
+    setSearch("");
+    setQualificationStatus("all");
+    setSupplierId("");
+    setItemFamily("");
+    setPreferredOnly(false);
+    setActiveOnly(true);
+    clearStoredFilters(user?.id ?? null, FILTER_SCOPE);
+  }
 
   const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);
   const [items, setItems] = useState<ItemDTO[]>([]);
@@ -80,6 +123,7 @@ export function SupplierItemsPage() {
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
   useEffect(() => {
@@ -231,6 +275,12 @@ export function SupplierItemsPage() {
           />
           Só ativas
         </label>
+
+        {hasFilters && (
+          <button type="button" className="btn btn--ghost btn--sm" onClick={handleClearFilters}>
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       {error && <p className="form-alert">{error}</p>}

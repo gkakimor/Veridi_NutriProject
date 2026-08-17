@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import type { SupplierItemDTO } from "@veridi/shared";
 import { SUPPLIER_ITEM_QUALIFICATION_LABELS } from "@veridi/shared";
 import { FormSection } from "./FormSection";
@@ -95,7 +96,8 @@ export function SupplierItemsSection({
                 <td colSpan={6} className="table__empty">
                   {isItemScope
                     ? "Nenhum fornecedor cadastrado para este item."
-                    : "Nenhum item cadastrado para este fornecedor."}
+                    : "Nenhum item cadastrado para este fornecedor."}{" "}
+                  <Link to="/compras/item-fornecedor">Vincular em Compras → Item × Fornecedor</Link>
                 </td>
               </tr>
             )}

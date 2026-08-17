@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../app/AuthProvider";
+import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import type { ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
 import { PRODUCTION_ORDER_STATUSES, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
 import { listProductionOrders } from "../../lib/production-orders-api";
@@ -50,8 +52,11 @@ function materialsBadgeClass(order: ProductionOrderDTO): string {
 }
 
 /** Produção → Ordens de Produção. Documento transacional: linha abre página própria, não modal. */
+const FILTER_SCOPE = "production-orders";
+
 export function ProductionOrdersPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [productionOrders, setProductionOrders] = useState<ProductionOrderDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -59,9 +64,23 @@ export function ProductionOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ActiveFilter>("all");
+  const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
+  const [statusFilter, setStatusFilter] = usePersistentFilter<ActiveFilter>(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "status",
+    "all",
+  );
+  const [searchInput, setSearchInput] = useState(search);
+
+  const hasFilters = search !== "" || statusFilter !== "all";
+
+  function handleClearFilters() {
+    setSearchInput("");
+    setSearch("");
+    setStatusFilter("all");
+    clearStoredFilters(user?.id ?? null, FILTER_SCOPE);
+  }
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -145,6 +164,12 @@ export function ProductionOrdersPage() {
             </option>
           ))}
         </select>
+
+        {hasFilters && (
+          <button type="button" className="btn btn--ghost btn--sm" onClick={handleClearFilters}>
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       {error && <p className="form-alert">{error}</p>}

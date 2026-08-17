@@ -213,7 +213,7 @@ export function FinishedGoodsPage() {
               <th>OP</th>
               <th>Data produção</th>
               <th>Produzido</th>
-              <th>On Hand</th>
+              <th>Físico</th>
               <th>Reserved</th>
               <th>Available</th>
               <th>Qualidade</th>

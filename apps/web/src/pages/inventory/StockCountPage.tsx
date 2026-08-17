@@ -118,6 +118,24 @@ export function StockCountPage() {
             Contagem física vira ajuste rastreável — nunca sobrescreve o saldo diretamente.
           </p>
         </div>
+        {/* FO-01: o operador leva o papel para o estoque e volta para
+            registrar a contagem aqui. */}
+        <div className="table__actions">
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => navigate("/print/contagem-fisica")}
+          >
+            Folha de contagem (FO-01)
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => navigate("/print/contagem-fisica?cega=1")}
+          >
+            Contagem cega
+          </button>
+        </div>
       </div>
 
       <FormSection title="Contagem">

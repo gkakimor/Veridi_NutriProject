@@ -345,7 +345,7 @@ export function LotDetailPage() {
 
         <FormSection title="Saldo" subtitle="Derivado do histórico de movimentações — nunca uma coluna própria do lote.">
           <dl className="definition-list">
-            <dt>On Hand</dt>
+            <dt>Físico</dt>
             <dd>
               {lot.onHand} {lot.unitCode}
             </dd>

@@ -63,3 +63,14 @@ export function useAuth(): AuthContextValue {
   if (!context) throw new Error("useAuth precisa estar dentro de AuthProvider");
   return context;
 }
+
+/**
+ * Sessão quando ela existe.
+ *
+ * Componentes de impressão são renderizados também fora da árvore da
+ * aplicação (testes, pré-visualização isolada): aqui a ausência de sessão é
+ * `null`, e o documento mostra "—" em vez de inventar um nome.
+ */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
+}

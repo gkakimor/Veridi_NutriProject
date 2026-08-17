@@ -312,6 +312,66 @@ user to clear them to edit unrelated fields.
 - Costing data (CMV) is deferred to Block G and regulatory limits (IN28) to
   Block H — validated in structure, never persisted.
 
+# 5.5 Operational UX and printing (capability 42)
+
+- Destructive actions (deactivate, cancel, block, archive) are never the
+  primary button of a table row: they live in the row's overflow menu and
+  keep their confirmation dialog. Frequent operational actions stay visible.
+- The document flow (order › production order › shipment › invoice) is
+  **navigation, not status**: it never recalculates state and never shows a
+  non-existent step as if it were a pending document.
+- Filter persistence is client-side and session-scoped only, per user and
+  per screen. There are no saved views in the database, and "clear filters"
+  is always available so persistence never traps someone on an apparently
+  empty screen.
+- Report aliases ("Kardex", "necessidade p/ produção") are display and
+  search only: the official `R-xx` code and the endpoint never change.
+- Attention items are grouped by cause for reading; the dashboard remains a
+  derived cockpit with no persisted attention table, and one lot never
+  appears under two overlapping reasons.
+- The UI never replaces backend validation: role-aware shortcuts only avoid
+  offering an action the user cannot perform — the server remains the
+  authority.
+
+## Printing policy
+
+`window.print()` stays the output mechanism (print or save as PDF, in the
+browser — there is no PDF engine in the backend). The **source**, however,
+is always a dedicated print view: the operational screen itself is never
+printed, so paper never carries sidebar, toolbar, filters, pagination or
+buttons.
+
+| Content | Output |
+| --- | --- |
+| Administrative list | CSV |
+| Report | CSV + professional printing |
+| Transactional document | professional printing |
+| Traceability | professional printing |
+| Operational sheet (FO-xx) | professional printing |
+| New / edit form | no export |
+
+- Printing a list-derived document always uses the **complete filtered
+  result** (`all=true`), never just the page open on screen.
+- Print is always a preview first: the dedicated route renders the document
+  and the user decides to print. Nothing prints automatically.
+- Every printed document carries the Veridi identity, the document
+  name/code, the applied filters or period, when it was generated and — now
+  that authentication exists — **who generated the printout**. That is the
+  print author, and it never replaces the historical snapshots of who
+  executed, approved or issued each act.
+- Paper may contain fields that do not exist in the database (physical
+  count, checked, observation, signature line). They are handwriting space:
+  nothing is persisted from paper, and a signature line on paper is never
+  presented as an electronic signature or GMP approval.
+- Operational sheets (`FO-xx`) are documentary identification, not an
+  entity: no `OperationalSheet` table exists. They show the current filtered
+  state at generation time and are not legal snapshots — transactional
+  documents keep using their frozen historical snapshots.
+- Unknown financial values keep printing as "—", never `R$ 0,00`, and a
+  partial cost is always explicitly partial.
+- Business codes (`PROJ-`, `PED-`, `LT-`…) are what appear on paper; a UUID
+  is never printed when a business code exists.
+
 ---
 
 # 6. Purchase Orders

@@ -5,6 +5,7 @@ import { BR_STATE_CODES, formatCnpj } from "@veridi/shared";
 import { listCustomers, setCustomerActive } from "../../lib/customers-api";
 import { CustomerFormModal } from "./CustomerFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { RowActions } from "../../components/RowActions";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -194,7 +195,15 @@ export function CustomersPage() {
                   </span>
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
-                  <div className="table__actions">
+                  <RowActions
+                    actions={[
+                      {
+                        label: customer.active ? "Inativar" : "Reativar",
+                        destructive: customer.active,
+                        onSelect: () => handleToggleActive(customer),
+                      },
+                    ]}
+                  >
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
@@ -202,18 +211,7 @@ export function CustomersPage() {
                     >
                       Editar
                     </button>
-                    <button
-                      type="button"
-                      className={
-                        customer.active
-                          ? "btn btn--danger btn--sm"
-                          : "btn btn--secondary btn--sm"
-                      }
-                      onClick={() => handleToggleActive(customer)}
-                    >
-                      {customer.active ? "Inativar" : "Reativar"}
-                    </button>
-                  </div>
+                  </RowActions>
                 </td>
               </tr>
             ))}

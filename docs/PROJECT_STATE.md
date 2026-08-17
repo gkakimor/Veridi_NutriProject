@@ -65,6 +65,8 @@ fornecedor preferencial e histórico imutável de preços.**
 **Delivery 33 — Importador definitivo das planilhas (Bloco F, capacidade
 41): concluído — pipeline validate/plan/apply/verify, findings com
 severidade, overrides explícitos e abertura de estoque por lote real.**
+**Delivery 34 — UX de aderência operacional + impressão profissional (Bloco
+F, capacidade 42): concluído — Bloco F encerrado.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2921,6 +2923,82 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 34 — UX de aderência operacional (Bloco F, capacidade 42)
+
+## Navegação e cockpit
+Sidebar reordenada pelo FLUXO DE TRABALHO (Comercial → Produção → Compras →
+Estoque → Qualidade → Cadastros → Gestão → Administração): cadastro, gestão
+e administração saem do meio da operação diária.
+
+- **Ações rápidas** no dashboard abrem o início dos fluxos mais usados.
+  São links para as telas com todas as validações — nunca atalho que pula
+  pré-condição — e respeitam o perfil (o backend continua sendo a
+  autoridade).
+- **Atenção agrupada por causa**: "OP com falta de material — 1 item" em vez
+  de N linhas quase idênticas. Cada grupo expande até 5 exemplos e tem
+  "ver todos" apontando para a tela que resolve o problema. Continua
+  derivado do read model, sem tabela de atenção e sem query nova (o
+  agrupamento acontece sobre a lista já calculada).
+
+## Ação destrutiva sai da tabela
+`RowActions` (menu ⋯) recebe inativar/reativar em Itens, Clientes,
+Fornecedores e Produtos; "Editar" continua visível. A confirmação
+(`ConfirmDialog`) não mudou — o menu reduz exposição, não segurança.
+
+## Contexto de fluxo
+`FlowContext` mostra a cadeia de documentos (Pedido › OP › Expedição ›
+Faturamento; Projeto › Produto; Amostra › Projeto). É **navegação, não
+status**: nada recalcula estado, etapa inexistente não aparece como
+documento pendente e a rastreabilidade completa continua na tela do lote.
+Todos os dados vêm dos DTOs que a página já carregava — nenhum endpoint
+novo.
+
+## Filtros que não somem
+`usePersistentFilter` guarda cada filtro em `sessionStorage`, por usuário e
+por tela (Lotes, Projetos, Pedidos, Ordens de Produção, Item × Fornecedor).
+"Limpar filtros" sempre disponível. Não existe visão salva no banco.
+
+## Relatórios reconhecíveis
+Hub com busca client-side e apelidos do dia a dia ("Kardex", "necessidade
+p/ produção", "carteira"). O código oficial `R-xx` e os endpoints
+continuam intactos.
+
+## Impressão profissional
+Decisão de PO incorporada: `window.print()` continua sendo o mecanismo de
+saída, mas a ORIGEM é sempre um documento dedicado — a tela operacional
+nunca é impressa.
+
+- `PrintSheet` + `PrintSignatureArea` + `PrintWriteCell`/`PrintCheckCell`
+  somam-se ao `PrintLayout`/`PrintTable` já existentes; `print.css`
+  centraliza `@page` (A4 retrato por padrão, paisagem só onde a largura
+  exige), quebras (`break-inside: avoid`, título não órfão), leitura em
+  preto e branco e ocultação dos controles.
+- Cabeçalho padrão: identidade Veridi, nome/código do documento, filtros
+  aplicados, gerado em e **gerado por** (usuário da sessão). Isso é o autor
+  da IMPRESSÃO — não substitui os snapshots de quem executou/aprovou.
+- Cinco folhas operacionais, em rotas fora do AppShell e sempre em
+  pré-visualização: **FO-01** contagem física (com opção de contagem cega),
+  **FO-02** posição de estoque (paisagem), **FO-03** pendências de
+  qualidade/CoA, **FO-04** separação/picking da produção, **FO-05**
+  separação da expedição.
+- Folha derivada de lista usa o resultado filtrado COMPLETO (`all=true`).
+- Campos de papel (contagem, conferido ☐, observação, assinatura) não
+  persistem nada: quem registra é o ERP depois. Assinatura em papel nunca é
+  chamada de assinatura eletrônica.
+
+## Terminologia
+Rótulos de estoque padronizados em pt-BR (Físico / Reservado / Disponível /
+Em Compra) e mensagens de erro comuns traduzidas no cliente, com o código
+técnico ainda visível no console. Projeto e amostra importados mostram
+"Importado do legado" como informação discreta, nunca alerta.
+
+## Não implementado de propósito
+Busca global, command palette, notificações, visões salvas, Kanban,
+onboarding, dashboard configurável, mobile/responsivo, PDF no backend,
+editor de template e qualquer redesenho do design system.
+
+---
+
 # Delivery 33 — Importador definitivo das planilhas (Bloco F, capacidade 41)
 
 ## Pipeline formal
@@ -3894,13 +3972,13 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Próximo passo do roadmap oficial: **capacidade 42 — UX de aderência
-operacional** (Bloco F). A base de
+Bloco F CONCLUÍDO (33-42). Próximo passo do roadmap oficial:
+**capacidade 43 — estrutura de custos industriais** (Bloco G). A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
 o que existe hoje é ferramenta de dados de desenvolvimento. Depois seguem
-42 (Bloco F) e 43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.

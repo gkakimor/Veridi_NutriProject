@@ -41,6 +41,8 @@ import {
 } from "../../lib/shipments-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
+import { FlowContext } from "../../components/FlowContext";
+import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 interface LineRow {
@@ -110,6 +112,41 @@ function situationLabel(situation: string): string {
     default:
       return situation;
   }
+}
+
+/**
+ * Cadeia operacional do pedido. Só aparecem documentos que existem: sem
+ * expedição, o pedido não mostra "expedição pendente" como se fosse um
+ * documento — a pendência é assunto do status, não do fluxo.
+ */
+function orderFlowSteps(order: CustomerOrderDTO): FlowStep[] {
+  const steps: FlowStep[] = [
+    { kind: "Pedido", code: order.code, detail: order.customerName, current: true },
+  ];
+
+  for (const productionOrder of order.generatedProductionOrders) {
+    steps.push({
+      kind: "OP",
+      code: productionOrder.code,
+      path: `/producao/ordens/${productionOrder.id}`,
+    });
+  }
+  for (const shipment of order.shipments) {
+    steps.push({
+      kind: "Expedição",
+      code: shipment.code,
+      path: `/comercial/expedicoes/${shipment.id}`,
+    });
+  }
+  for (const billing of order.billings) {
+    steps.push({
+      kind: "Faturamento",
+      code: billing.code,
+      path: `/comercial/faturamento/${billing.id}`,
+    });
+  }
+
+  return steps;
 }
 
 /**
@@ -673,6 +710,8 @@ export function CustomerOrderPage() {
         </div>
       </div>
 
+      {customerOrder && <FlowContext steps={orderFlowSteps(customerOrder)} />}
+
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
 
@@ -904,7 +943,7 @@ export function CustomerOrderPage() {
                         <tr>
                           <th>Material</th>
                           <th>Necessário</th>
-                          <th>On Hand</th>
+                          <th>Físico</th>
                           <th>Reservado</th>
                           <th>Disponível</th>
                           <th>Em Compra</th>

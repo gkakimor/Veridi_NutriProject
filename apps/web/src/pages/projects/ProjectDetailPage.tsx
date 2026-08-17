@@ -12,6 +12,7 @@ import {
 } from "@veridi/shared";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
+import { FlowContext } from "../../components/FlowContext";
 import {
   acceptQuoteVersion,
   approveProject,
@@ -182,6 +183,11 @@ export function ProjectDetailPage() {
             >
               {PROJECT_STATUS_LABELS[project.status]}
             </span>
+            {/* Origem legada é informação, não alerta: o projeto veio da
+                planilha e isso ajuda a reconhecer o dado antigo. */}
+            {project.source === "LEGACY_IMPORT" && (
+              <span className="badge badge--neutral">Importado do legado</span>
+            )}
           </div>
         </div>
         <div className="table__actions">
@@ -199,6 +205,21 @@ export function ProjectDetailPage() {
           </button>
         </div>
       </div>
+
+      <FlowContext
+        steps={[
+          { kind: "Projeto", code: project.code, detail: project.customerName, current: true },
+          ...(project.productId && project.productCode
+            ? [
+                {
+                  kind: "Produto",
+                  code: project.productCode,
+                  path: `/cadastros/produtos?produto=${project.productCode}`,
+                },
+              ]
+            : []),
+        ]}
+      />
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
@@ -548,7 +569,8 @@ export function ProjectDetailPage() {
                 {samples.length === 0 && (
                   <tr>
                     <td colSpan={6} className="table__empty">
-                      Nenhuma amostra registrada neste projeto.
+                      Nenhuma amostra registrada neste projeto — use “Nova amostra” para abrir o
+                      primeiro teste.
                     </td>
                   </tr>
                 )}

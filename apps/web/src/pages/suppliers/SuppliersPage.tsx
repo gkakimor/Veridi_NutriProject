@@ -5,6 +5,7 @@ import { formatCnpj } from "@veridi/shared";
 import { listSuppliers, setSupplierActive } from "../../lib/suppliers-api";
 import { SupplierFormModal } from "./SupplierFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { RowActions } from "../../components/RowActions";
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -170,7 +171,15 @@ export function SuppliersPage() {
                   </span>
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
-                  <div className="table__actions">
+                  <RowActions
+                    actions={[
+                      {
+                        label: supplier.active ? "Inativar" : "Reativar",
+                        destructive: supplier.active,
+                        onSelect: () => handleToggleActive(supplier),
+                      },
+                    ]}
+                  >
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
@@ -178,18 +187,7 @@ export function SuppliersPage() {
                     >
                       Editar
                     </button>
-                    <button
-                      type="button"
-                      className={
-                        supplier.active
-                          ? "btn btn--danger btn--sm"
-                          : "btn btn--secondary btn--sm"
-                      }
-                      onClick={() => handleToggleActive(supplier)}
-                    >
-                      {supplier.active ? "Inativar" : "Reativar"}
-                    </button>
-                  </div>
+                  </RowActions>
                 </td>
               </tr>
             ))}

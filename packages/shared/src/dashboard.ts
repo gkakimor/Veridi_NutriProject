@@ -45,6 +45,24 @@ export const ATTENTION_TYPE_LABELS: Record<AttentionType, string> = {
   PRODUCTION_ORDER_INCOMPLETE_COST: "OP concluída com custo incompleto",
 };
 
+/**
+ * Tela onde o usuário vê TODOS os itens daquele tipo de atenção. O card do
+ * dashboard mostra só os primeiros; "ver todos" leva para a lista real,
+ * filtrada quando a tela suporta o filtro por query string.
+ */
+export const ATTENTION_LIST_PATH: Record<AttentionType, string> = {
+  LOT_EXPIRED: "/estoque/lotes?status=EXPIRED",
+  LOT_BLOCKED: "/estoque/lotes?status=BLOCKED",
+  LOT_AWAITING_QUALITY: "/qualidade/documentos",
+  LOT_NEAR_EXPIRY: "/relatorios/estoque/vencimentos",
+  PRODUCTION_ORDER_SHORTAGE: "/relatorios/producao/necessidades",
+  PURCHASE_ORDER_LATE: "/relatorios/compras/atrasadas",
+  ORDER_AWAITING_PRODUCTION: "/comercial/pedidos",
+  ORDER_AWAITING_SHIPMENT: "/comercial/expedicoes",
+  SHIPMENT_AWAITING_BILLING: "/relatorios/faturamento/pendentes",
+  PRODUCTION_ORDER_INCOMPLETE_COST: "/producao/ordens",
+};
+
 /** Destino de navegação do item — sempre o documento relevante. */
 export type AttentionTargetKind =
   | "LOT"
@@ -64,6 +82,22 @@ export interface AttentionItemDTO {
   relevantDate: string | null;
   targetKind: AttentionTargetKind;
   targetId: string;
+}
+
+/**
+ * Atenções do MESMO tipo agrupadas para leitura.
+ *
+ * Continua sendo derivado do read model — não existe tabela de atenção nem
+ * severidade persistida. O agrupamento é só apresentação: 12 lotes com CoA
+ * pendente são uma linha com contagem, não 12 linhas quase idênticas.
+ */
+export interface AttentionGroupDTO {
+  type: AttentionType;
+  severity: AttentionSeverity;
+  /** Total do grupo — pode ser maior que `items.length`. */
+  count: number;
+  /** Amostra dos primeiros itens, para expandir sem sair do dashboard. */
+  items: AttentionItemDTO[];
 }
 
 export interface DashboardPeriodDTO {
@@ -174,6 +208,8 @@ export interface DashboardDTO {
   currentState: DashboardCurrentStateDTO;
   /** Priorizadas por severidade e data; limitadas a `attentionLimit`. */
   attention: AttentionItemDTO[];
+  /** Mesma lista agrupada por tipo — é o que o cockpit exibe. */
+  attentionGroups: AttentionGroupDTO[];
   attentionTotal: number;
   attentionLimit: number;
   movementSummary: MovementSummaryDTO;

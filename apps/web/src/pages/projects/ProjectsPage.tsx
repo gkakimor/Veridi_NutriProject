@@ -6,6 +6,8 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listProjects, getProjectVocabulary } from "../../lib/projects-api";
 import { listCustomers } from "../../lib/customers-api";
 import { ProjectFormModal } from "./ProjectFormModal";
+import { useAuth } from "../../app/AuthProvider";
+import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 
 const PAGE_SIZE = 20;
 
@@ -31,8 +33,11 @@ function formatDate(value: string): string {
  * planilha: quais projetos entram, de qual cliente, em que estágio e com
  * qual versão de orçamento.
  */
+const FILTER_SCOPE = "projects";
+
 export function ProjectsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [projects, setProjects] = useState<ProjectDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -41,17 +46,39 @@ export function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<ProjectStatus | "all">("all");
-  const [customerId, setCustomerId] = useState("");
-  const [channel, setChannel] = useState("");
+  const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
+  const [status, setStatus] = usePersistentFilter<ProjectStatus | "all">(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "status",
+    "all",
+  );
+  const [customerId, setCustomerId] = usePersistentFilter(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "customer",
+    "",
+  );
+  const [channel, setChannel] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "channel", "");
+  const [searchInput, setSearchInput] = useState(search);
+
+  const hasFilters = search !== "" || status !== "all" || customerId !== "" || channel !== "";
+
+  function handleClearFilters() {
+    setSearchInput("");
+    setSearch("");
+    setStatus("all");
+    setCustomerId("");
+    setChannel("");
+    clearStoredFilters(user?.id ?? null, FILTER_SCOPE);
+  }
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
   useEffect(() => {
@@ -179,6 +206,12 @@ export function ProjectsPage() {
             </option>
           ))}
         </select>
+
+        {hasFilters && (
+          <button type="button" className="btn btn--ghost btn--sm" onClick={handleClearFilters}>
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       {error && <p className="form-alert">{error}</p>}

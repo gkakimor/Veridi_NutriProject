@@ -35,6 +35,8 @@ import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
 import { getItem } from "../../lib/items-api";
 import { ApiValidationError, LotMismatchApiError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
+import { FlowContext } from "../../components/FlowContext";
+import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { LotScanner } from "../../components/LotScanner";
 
@@ -65,6 +67,36 @@ function statusBadgeClass(status: ProductionOrderStatus): string {
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR");
+}
+
+/**
+ * Cadeia da OP: de qual pedido ela nasceu e o que ela produziu. Só entram
+ * documentos existentes — OP sem pedido de origem (produção para estoque)
+ * simplesmente começa na própria OP.
+ */
+function productionOrderFlowSteps(order: ProductionOrderDTO): FlowStep[] {
+  const steps: FlowStep[] = [];
+
+  if (order.customerOrderId && order.customerOrderCode) {
+    steps.push({
+      kind: "Pedido",
+      code: order.customerOrderCode,
+      path: `/comercial/pedidos/${order.customerOrderId}`,
+    });
+  }
+  steps.push({ kind: "OP", code: order.code, detail: order.productCode, current: true });
+
+  // Lotes de produto acabado gerados — navegação, não rastreabilidade: a
+  // genealogia completa continua na tela do lote.
+  const lots = new Map<string, string>();
+  for (const output of order.outputs) {
+    if (output.lotId && output.lotCode) lots.set(output.lotId, output.lotCode);
+  }
+  for (const [lotId, lotCode] of lots) {
+    steps.push({ kind: "Lote", code: lotCode, path: `/estoque/lotes/${lotId}` });
+  }
+
+  return steps;
 }
 
 /**
@@ -523,11 +555,22 @@ export function ProductionOrderPage() {
               Imprimir
             </button>
           )}
+          {productionOrder && (
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={() => navigate(`/print/producao-picking/${productionOrder.id}`)}
+            >
+              Folha de separação (FO-04)
+            </button>
+          )}
           <button type="button" className="btn btn--ghost" onClick={() => navigate("/producao/ordens")}>
             ← Voltar
           </button>
         </div>
       </div>
+
+      {productionOrder && <FlowContext steps={productionOrderFlowSteps(productionOrder)} />}
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
@@ -753,7 +796,7 @@ export function ProductionOrderPage() {
                     <th>Item</th>
                     <th>Fornecimento</th>
                     <th>Necessário</th>
-                    <th>On Hand</th>
+                    <th>Físico</th>
                     <th>Reservado</th>
                     <th>Disponível</th>
                     <th>Em Compra</th>

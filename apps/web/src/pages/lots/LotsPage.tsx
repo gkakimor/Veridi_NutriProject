@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import type { InventoryOwnerType, LotDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { listLots } from "../../lib/lots-api";
+import { useAuth } from "../../app/AuthProvider";
+import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 
 type StatusFilter = LotStatus | "all";
 type OwnerFilter = InventoryOwnerType | "all";
@@ -33,8 +35,11 @@ function formatDate(value: string | null): string {
  * Estoque → Lotes. `Recebido` e a quantidade ORIGINAL do recebimento — nao
  * e saldo. Sem On Hand ainda (isso vem com Inventory Movements).
  */
+const FILTER_SCOPE = "lots";
+
 export function LotsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [lots, setLots] = useState<LotDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -42,15 +47,39 @@ export function LotsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>("all");
+  // Filtros lembrados na sessão: quem abre um lote e volta não perde o
+  // recorte. `Limpar filtros` devolve a lista completa em um clique.
+  const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
+  const [statusFilter, setStatusFilter] = usePersistentFilter<StatusFilter>(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "status",
+    "all",
+  );
+  const [ownerFilter, setOwnerFilter] = usePersistentFilter<OwnerFilter>(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "owner",
+    "all",
+  );
+  const [searchInput, setSearchInput] = useState(search);
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
     return () => clearTimeout(handle);
+    // `setSearch` é estável; incluí-lo só provocaria reexecução do debounce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
+
+  const hasFilters = search !== "" || statusFilter !== "all" || ownerFilter !== "all";
+
+  function handleClearFilters() {
+    setSearchInput("");
+    setSearch("");
+    setStatusFilter("all");
+    setOwnerFilter("all");
+    clearStoredFilters(user?.id ?? null, FILTER_SCOPE);
+  }
 
   useEffect(() => {
     setPage(1);
@@ -150,6 +179,12 @@ export function LotsPage() {
             </option>
           ))}
         </select>
+
+        {hasFilters && (
+          <button type="button" className="btn btn--ghost btn--sm" onClick={handleClearFilters}>
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       {error && <p className="form-alert">{error}</p>}

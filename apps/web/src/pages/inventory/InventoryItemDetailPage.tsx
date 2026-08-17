@@ -153,7 +153,7 @@ export function InventoryItemDetailPage() {
 
         <FormSection title="Disponibilidade">
           <dl className="definition-list">
-            <dt>On Hand</dt>
+            <dt>Físico</dt>
             <dd>
               {detail.onHand} {detail.unitCode}
             </dd>
@@ -204,7 +204,7 @@ export function InventoryItemDetailPage() {
                     <th>Validade</th>
                     <th>Localização</th>
                     <th>Status</th>
-                    <th>On Hand</th>
+                    <th>Físico</th>
                     <th>Reservado</th>
                     <th>Disponível</th>
                     <th aria-hidden="true" />

@@ -9,6 +9,7 @@ import type {
 import { PROJECT_SAMPLE_STATUS_LABELS, SAMPLE_ATTACHMENT_TYPES, ownerLabel } from "@veridi/shared";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
+import { FlowContext } from "../../components/FlowContext";
 import { useAuth } from "../../app/AuthProvider";
 import { getInventoryItem } from "../../lib/inventory-api";
 import { listItems } from "../../lib/items-api";
@@ -157,6 +158,24 @@ export function SampleDetailPage() {
           Etiqueta
         </button>
       </div>
+
+      <FlowContext
+        steps={[
+          {
+            kind: "Projeto",
+            code: sample.projectCode,
+            path: `/comercial/projetos/${sample.projectId}`,
+            detail: sample.customerName,
+          },
+          { kind: "Amostra", code: sample.code, detail: sample.testLabel, current: true },
+        ]}
+      />
+
+      {sample.source === "LEGACY_IMPORT" && (
+        <p className="field__hint">
+          Amostra importada do legado — o desfecho não veio na planilha.
+        </p>
+      )}
 
       {actionError && <p className="form-alert">{actionError}</p>}
 

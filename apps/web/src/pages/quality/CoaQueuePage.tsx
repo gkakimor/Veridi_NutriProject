@@ -118,6 +118,15 @@ export function CoaQueuePage() {
             Qualidade continua sendo uma ação explícita no lote.
           </p>
         </div>
+        <div className="table__actions">
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => navigate("/print/qualidade-pendencias")}
+          >
+            Folha de pendências (FO-03)
+          </button>
+        </div>
       </div>
 
       <div className="toolbar">
@@ -173,7 +182,7 @@ export function CoaQueuePage() {
               <th>Validade</th>
               <th>CoA</th>
               <th>Qualidade</th>
-              <th>On Hand</th>
+              <th>Físico</th>
               <th aria-hidden="true" />
             </tr>
           </thead>

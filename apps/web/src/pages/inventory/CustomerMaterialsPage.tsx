@@ -184,7 +184,7 @@ export function CustomerMaterialsPage() {
               <th>Lote externo</th>
               <th>Validade</th>
               <th>Localização</th>
-              <th>On Hand</th>
+              <th>Físico</th>
               <th>Reservado</th>
               <th>Disponível</th>
               <th>Qualidade</th>
