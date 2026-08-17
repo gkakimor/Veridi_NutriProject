@@ -63,11 +63,16 @@ Node é fixado em 22 pelo `.node-version`.
 |---|---|---|
 | `NODE_ENV` | `production` | liga o `Secure` no cookie e o log em `info` |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | referência ao banco do projeto — não copiar a URL na mão |
-| `VERIDI_WEB_DIST` | `apps/web/dist` | resolvido a partir do diretório do processo |
+| `VERIDI_WEB_DIST` | `apps/web/dist` | relativo à raiz do monorepo (não ao diretório do processo) |
 | `TZ` | `UTC` | container e banco no mesmo relógio; a formatação é no cliente |
 
-Não definir `PORT` nem `API_HOST`: o Railway injeta `PORT`, e em produção a
-API escuta em `0.0.0.0` sozinha. `WEB_ORIGIN` também não é usada aqui (não há
+**Não copiar `API_HOST` do `.env.example`.** Ele vale `127.0.0.1`, que é
+loopback: a API responderia só dentro do container e o health check nunca
+chegaria nela ("service unavailable" em todas as tentativas). Sem a variável,
+produção escuta em `0.0.0.0` sozinha.
+
+`API_PORT` também sai: quem manda é `PORT`. Se o provedor não injetar `PORT`,
+defina `PORT=8080` — nunca as duas. `WEB_ORIGIN` não é usada aqui (não há
 requisição cross-origin).
 
 ---

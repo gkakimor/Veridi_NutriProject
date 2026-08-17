@@ -3,6 +3,7 @@ import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import { env } from "./config/env.js";
 import { authenticationHook } from "./lib/current-user.js";
@@ -123,7 +124,13 @@ export function buildApp() {
    * continua servindo o front na porta dele.
    */
   if (env.VERIDI_WEB_DIST) {
-    const webRoot = path.resolve(env.VERIDI_WEB_DIST);
+    // Caminho relativo é resolvido contra a raiz do monorepo, não contra o
+    // diretório do processo: `pnpm --filter @veridi/api start:prod` executa
+    // dentro de `apps/api`, e `apps/web/dist` viraria
+    // `apps/api/apps/web/dist`. Deriva-se da localização deste módulo
+    // (`apps/api/{src,dist}/app.*`), então vale igual em código-fonte e build.
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+    const webRoot = path.resolve(repoRoot, env.VERIDI_WEB_DIST);
     const indexFile = path.join(webRoot, "index.html");
 
     if (!fs.existsSync(indexFile)) {
