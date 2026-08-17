@@ -12,6 +12,8 @@
     "dev:api": "pnpm --filter @veridi/api dev",
     "dev:web": "pnpm --filter @veridi/web dev",
     "build": "pnpm --filter @veridi/shared build && pnpm --filter @veridi/api build && pnpm --filter @veridi/web build",
+    "start:prod": "pnpm --filter @veridi/api start:prod",
+    "deploy:prod": "pnpm --filter @veridi/api deploy:prod",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test && vitest run --config vitest.scripts.config.ts",
     "db:generate": "pnpm --filter @veridi/api db:generate",

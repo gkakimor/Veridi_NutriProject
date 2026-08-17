@@ -1,5 +1,8 @@
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
+import fs from "node:fs";
+import path from "node:path";
 import Fastify from "fastify";
 import { env } from "./config/env.js";
 import { authenticationHook } from "./lib/current-user.js";
@@ -107,6 +110,50 @@ export function buildApp() {
   app.register(finishedGoodsRoutes);
   app.register(reportsRoutes);
   app.register(exportsRoutes);
+
+  /**
+   * Implantação de origem única: a API entrega o build do frontend.
+   *
+   * Sem isso, front e API ficam em sites diferentes e o cookie de sessão
+   * (`SameSite=Lax`) não é enviado — login passa, requisição seguinte volta
+   * 401. Servindo na mesma origem o problema não existe, e CORS deixa de ser
+   * necessário.
+   *
+   * Em desenvolvimento `VERIDI_WEB_DIST` fica vazio e nada muda: o Vite
+   * continua servindo o front na porta dele.
+   */
+  if (env.VERIDI_WEB_DIST) {
+    const webRoot = path.resolve(env.VERIDI_WEB_DIST);
+    const indexFile = path.join(webRoot, "index.html");
+
+    if (!fs.existsSync(indexFile)) {
+      throw new Error(
+        `VERIDI_WEB_DIST aponta para "${webRoot}", mas não existe index.html ali. ` +
+          "Rode o build do frontend antes de iniciar a API.",
+      );
+    }
+
+    // O estático é registrado num escopo que marca cada rota como pública.
+    // Marcar a rota (e não o caminho ou o cabeçalho) mantém a liberação
+    // explícita: só arquivo do build entra, nenhum endpoint de dados.
+    void app.register(async (scope) => {
+      scope.addHook("onRoute", (route) => {
+        route.config = { ...(route.config ?? {}), publicAsset: true };
+      });
+      await scope.register(fastifyStatic, { root: webRoot, wildcard: false });
+    });
+
+    app.setNotFoundHandler((request, reply) => {
+      // Rota do SPA (o roteamento é no cliente): devolve o app e deixa o
+      // React resolver. Só para navegação — chamada de API que não existe
+      // continua recebendo 404 em JSON, como sempre.
+      const acceptsHtml = (request.headers.accept ?? "").includes("text/html");
+      if (request.method === "GET" && acceptsHtml) {
+        return reply.type("text/html").send(fs.createReadStream(indexFile));
+      }
+      return reply.status(404).send({ error: "not_found" });
+    });
+  }
 
   return app;
 }

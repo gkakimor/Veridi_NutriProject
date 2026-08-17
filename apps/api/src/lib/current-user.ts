@@ -15,6 +15,11 @@ declare module "fastify" {
   interface FastifyRequest {
     currentUser?: User;
   }
+
+  interface FastifyContextConfig {
+    /** Rota que serve arquivo do frontend — pública por natureza. */
+    publicAsset?: boolean;
+  }
 }
 
 /** Rotas que existem justamente para quem ainda não tem sessão. */
@@ -55,6 +60,19 @@ export async function authenticationHook(
   if (user) request.currentUser = user;
 
   if (isPublicRoute(request.url)) return;
+
+  /**
+   * Arquivo do build do frontend (marcado como `publicAsset` no registro do
+   * estático) ou rota do próprio SPA, que não casa rota nenhuma da API e cai
+   * no `notFoundHandler` — ele devolve o `index.html` e quem decide o que
+   * aparece é a tela de login.
+   *
+   * A liberação é por rota, nunca por caminho ou cabeçalho: endpoint de dados
+   * sempre casa uma rota da API sem essa marca, então não há como escapar da
+   * sessão pedindo HTML.
+   */
+  if (request.routeOptions?.config?.publicAsset === true) return;
+  if (!request.routeOptions?.url) return;
 
   if (!user) {
     await reply.status(401).send({

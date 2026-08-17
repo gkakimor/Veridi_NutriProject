@@ -4335,6 +4335,37 @@ inventado.
 
 ---
 
+# Implantação — origem única
+
+Decisão durável: **um serviço só**. A API serve o build do frontend e responde
+a API no mesmo endereço, porque a sessão vive em cookie `SameSite=Lax` — front
+e API em sites diferentes fazem o login passar e a requisição seguinte voltar
+`401`. Consequência: CORS deixa de ser necessário e não há segunda plataforma
+para configurar.
+
+- `VERIDI_WEB_DIST` (vazio por padrão) aponta o build; vazio, nada muda em
+  desenvolvimento e o Vite segue na porta dele.
+- `@fastify/static` com `wildcard: false` em escopo próprio, cujo hook
+  `onRoute` marca `config.publicAsset`. O hook de autenticação libera **só**
+  rota casada — nunca caminho, nunca cabeçalho. `GET` que aceita `text/html`
+  e não casa devolve `index.html` (roteamento no cliente); resto continua
+  `404` JSON, e endpoint de dados sem sessão continua `401` mesmo pedindo HTML
+  (`modules/health/single-origin.test.ts`, 5 casos).
+- `.env.production` versionado com `VITE_API_URL=` (vazio) — sem ele o build
+  de produção herdaria o `127.0.0.1:3333` do `.env` local.
+- `PORT` injetada pelo provedor manda sobre `API_PORT`; em produção o host
+  padrão vira `0.0.0.0` (container), em desenvolvimento segue `127.0.0.1`
+  (cookie é first-party por host).
+- `railway.json`: build `pnpm build`, release `pnpm deploy:prod`
+  (`prisma migrate deploy`, antes de trocar a versão no ar), start
+  `pnpm start:prod`, health `GET /health`. Node fixado em 22 (`.node-version`).
+
+Runbook completo, variáveis e primeiro admin: `docs/DEPLOY.md`. Bloqueia uso
+real (não a demonstração): anexos em disco efêmero (adaptador R2 pendente),
+backup do banco, rate limit no login.
+
+---
+
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,

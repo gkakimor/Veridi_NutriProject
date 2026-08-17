@@ -11,6 +11,8 @@ build/
 .env
 .env.*
 !.env.example
+# Configuracao de build do frontend, sem segredo — ver cabecalho do arquivo.
+!.env.production
 
 # prisma
 apps/api/prisma/*.db

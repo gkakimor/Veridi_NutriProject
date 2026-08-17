@@ -1,6 +1,18 @@
 import type { HealthResponse } from "@veridi/shared";
 
-const API_URL = import.meta.env["VITE_API_URL"] ?? "http://127.0.0.1:3333";
+/**
+ * Base da API.
+ *
+ * Em produção o padrão é vazio: a própria API serve o frontend, então a
+ * chamada é relativa e a origem é a mesma — que é o que faz o cookie de
+ * sessão funcionar. `VITE_API_URL` continua existindo para quem quiser
+ * separar front e API em domínios próprios (aí precisa ser `app.` e `api.`
+ * do MESMO domínio registrável).
+ *
+ * Em desenvolvimento o Vite roda numa porta e a API em outra.
+ */
+const API_URL =
+  import.meta.env["VITE_API_URL"] ?? (import.meta.env.PROD ? "" : "http://127.0.0.1:3333");
 
 /**
  * Toda chamada à API passa por aqui.
