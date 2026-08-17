@@ -16,6 +16,7 @@ import {
   IndustrialCostVersionLockedError,
   IndustrialCostVersionNotFoundError,
   InactiveResourceActivationError,
+  InvalidEnergyResourceError,
   InvalidCostRateError,
   InvalidReferenceOutputError,
   MissingFormulationVersionError,
@@ -77,6 +78,9 @@ function mapDomainError(
   ) {
     // Energia direta e derivada nunca convivem — evita contar duas vezes.
     return { status: 409, body: { error: "energy_mode_conflict", message: error.message } };
+  }
+  if (error instanceof InvalidEnergyResourceError) {
+    return { status: 400, body: { error: "invalid_energy_resource", message: error.message } };
   }
   if (error instanceof InactiveResourceActivationError) {
     return { status: 409, body: { error: "inactive_resource", message: error.message } };

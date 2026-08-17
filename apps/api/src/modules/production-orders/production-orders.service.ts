@@ -35,6 +35,7 @@ import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getConsumedByReservationLines, isLotExpired } from "../../lib/inventory-ledger.js";
 import type { InventoryOwnerScope } from "../../lib/inventory-ledger.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
+import { findCompatibleCostVersion } from "../industrial-cost-calculation/production-cost.service.js";
 import { nextOfficialNumber } from "../../lib/production-order-number.js";
 import { suggestBusinessLotNumber } from "../../lib/business-lot.js";
 import { toControlledDocumentRevisionDTO } from "../controlled-documents/controlled-documents.service.js";
@@ -985,6 +986,15 @@ export async function releaseProductionOrder(
 
     const releasedAt = new Date();
 
+    // Estrutura de custos congelada aqui: precisa ser ACTIVE e apontar para
+    // a MESMA formulação que esta OP executa. Vincular a EC de outra receita
+    // atribuiria à produção premissas que não são dela — sem compatível, a
+    // OP segue normalmente e o custo industrial fica material-only.
+    const costVersion = await findCompatibleCostVersion(tx, {
+      productId: order.productId,
+      formulationVersionId: order.formulationVersionId,
+    });
+
     // Numeração OFICIAL do documento — só agora, na primeira liberação:
     // rascunho descartado nunca gasta numeração. Concurrency-safe (linha do
     // ano travada dentro desta transação).
@@ -1030,6 +1040,7 @@ export async function releaseProductionOrder(
         status: "RELEASED",
         releasedAt,
         releasedBy: actor?.name ?? SYSTEM_ACTOR,
+        ...(costVersion ? { industrialCostVersionId: costVersion.id } : {}),
         officialNumber: official.value,
         officialNumberYear: official.year,
         officialNumberSequence: official.sequence,

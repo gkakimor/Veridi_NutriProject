@@ -16,6 +16,7 @@ import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { convertUomDecimal, UomDimensionMismatchError, UomNotFoundError } from "../items/uom.js";
 import {
   DirectEnergyNotAllowedError,
+  InvalidEnergyResourceError,
   DuplicatedResourceUsageError,
   EnergyUsageRequiresDirectModeError,
   FormulationNotStableError,
@@ -67,6 +68,7 @@ const CODE_SEQUENCE = "industrial_cost_code_seq";
 const CODE_PREFIX = "EC";
 
 const versionInclude = {
+  energyResource: { select: { id: true, name: true } },
   product: { include: { customer: true, finishedProductItem: true } },
   formulationVersion: { include: { components: { include: { item: true } } } },
   lines: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] as PrismaTypes.IndustrialCostLineOrderByWithRelationInput[] },
@@ -355,6 +357,8 @@ function toVersionDTO(
     resourceUsages: version.resourceUsages.map((usage) => toUsageDTO(usage, new Date())),
 
     energyCalculationMode: version.energyCalculationMode,
+    energyResourceId: version.energyResourceId,
+    energyResourceName: version.energyResource?.name ?? null,
     derivedEnergyKwh: derivedEnergyForVersion(version)?.toString() ?? null,
 
     complete: blockingPendencies(pendencies).length === 0,
@@ -826,9 +830,26 @@ export async function updateEnergyMode(
     throw new DirectEnergyNotAllowedError();
   }
 
+  // Tarifa do kWh derivado: escolha explícita de um recurso de energia. O
+  // sistema nunca elege um sozinho — seria inventar premissa econômica.
+  if (input.energyResourceId) {
+    const resource = await prisma.industrialResource.findUnique({
+      where: { id: input.energyResourceId },
+    });
+    if (!resource) throw new ResourceNotFoundForUsageError(input.energyResourceId);
+    if (resource.type !== "ENERGY") {
+      throw new InvalidEnergyResourceError(resource.name);
+    }
+  }
+
   await prisma.industrialCostVersion.update({
     where: { id: versionId },
-    data: { energyCalculationMode: input.energyCalculationMode },
+    data: {
+      energyCalculationMode: input.energyCalculationMode,
+      ...(input.energyResourceId !== undefined
+        ? { energyResourceId: input.energyResourceId }
+        : {}),
+    },
   });
 
   return (await getIndustrialCostVersion(versionId))!;

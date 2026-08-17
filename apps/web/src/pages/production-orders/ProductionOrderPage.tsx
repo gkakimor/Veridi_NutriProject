@@ -7,10 +7,12 @@ import type {
   ProductionOrderStatus,
   ProductionOutputDestination,
 } from "@veridi/shared";
-import type { ProductionOrderMaterialCostDTO } from "@veridi/shared";
+import type { ProductionOrderCostDTO, ProductionOrderMaterialCostDTO } from "@veridi/shared";
 import {
   COST_QUALITY_LABELS,
   COST_SOURCE_LABELS,
+  INDUSTRIAL_COST_QUALITY_LABELS,
+  REALIZED_COST_STATUS_LABELS,
   PRODUCTION_ORDER_ORIGIN_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
   SUPPLY_RESPONSIBILITY_LABELS,
@@ -35,6 +37,8 @@ import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
 import { getItem } from "../../lib/items-api";
 import { ApiValidationError, LotMismatchApiError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
+import { formatUnitCost } from "../../components/CostBreakdown";
+import { getProductionOrderCost } from "../../lib/cost-calculation-api";
 import { FlowContext } from "../../components/FlowContext";
 import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -155,6 +159,7 @@ export function ProductionOrderPage() {
   const [registeringOutput, setRegisteringOutput] = useState(false);
 
   const [materialCost, setMaterialCost] = useState<ProductionOrderMaterialCostDTO | null>(null);
+  const [industrialCost, setIndustrialCost] = useState<ProductionOrderCostDTO | null>(null);
 
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completionReason, setCompletionReason] = useState("");
@@ -187,6 +192,19 @@ export function ProductionOrderPage() {
       .then((result) => setActiveProducts(result.products))
       .catch(() => setActiveProducts([]));
   }, []);
+
+  // Custo industrial: materiais realizados + custos padrão aplicados. Depois
+  // de concluída a OP, o backend devolve o snapshot congelado — a tela nunca
+  // recalcula nem faz aritmética econômica.
+  useEffect(() => {
+    if (!id || !productionOrder) {
+      setIndustrialCost(null);
+      return;
+    }
+    getProductionOrderCost(id)
+      .then(setIndustrialCost)
+      .catch(() => setIndustrialCost(null));
+  }, [id, productionOrder]);
 
   // Custo material só faz sentido quando já existe consumo real — sempre
   // recalculado ao vivo (informar custo depois melhora o resultado).
@@ -1297,6 +1315,98 @@ export function ProductionOrderPage() {
                 </table>
               </div>
             )}
+          </FormSection>
+        )}
+
+        {industrialCost && (
+          <FormSection
+            title="Custo industrial"
+            subtitle={
+              industrialCost.hybrid
+                ? "Híbrido: materiais realizados + custos industriais padrão aplicados. Horas de operador, de máquina e energia não são medidas — vêm da estrutura de custos."
+                : "Materiais realizados. Os custos industriais adicionais dependem de uma estrutura de custos vinculada."
+            }
+          >
+            <div className="doc-title">
+              <span
+                className={
+                  industrialCost.quality === "COMPLETE_REAL_REFERENCE"
+                    ? "badge badge--active"
+                    : industrialCost.quality === "COMPLETE_WITH_ESTIMATES"
+                      ? "badge badge--neutral"
+                      : "badge badge--warn"
+                }
+              >
+                {INDUSTRIAL_COST_QUALITY_LABELS[industrialCost.quality]}
+              </span>
+              <span
+                className={
+                  industrialCost.status === "FINAL" ? "badge badge--active" : "badge badge--warn"
+                }
+              >
+                {REALIZED_COST_STATUS_LABELS[industrialCost.status]}
+              </span>
+              {industrialCost.hybrid && (
+                <span className="badge badge--neutral">
+                  Híbrido: materiais reais + recursos padrão
+                </span>
+              )}
+            </div>
+
+            <dl className="definition-list">
+              <dt>Estrutura de custos</dt>
+              <dd>{industrialCost.industrialCostVersionLabel ?? "—"}</dd>
+              <dt>Formulação</dt>
+              <dd>
+                {industrialCost.formulationVersionNumber
+                  ? `V${industrialCost.formulationVersionNumber}`
+                  : "—"}
+              </dd>
+              <dt>Produzido</dt>
+              <dd>
+                {industrialCost.producedQuantity} {industrialCost.outputUnitCode}
+              </dd>
+              <dt>Materiais realizados</dt>
+              <dd>{formatBRL(industrialCost.actualMaterialCostKnown)}</dd>
+              <dt>Custos padrão aplicados</dt>
+              <dd>{formatBRL(industrialCost.standardAppliedCostKnown)}</dd>
+              {industrialCost.totalIndustrialCost === null ? (
+                <>
+                  <dt>Subtotal conhecido</dt>
+                  <dd>
+                    {formatBRL(industrialCost.knownSubtotal)}
+                    <span className="field__hint"> Existem custos não informados.</span>
+                  </dd>
+                </>
+              ) : (
+                <>
+                  <dt>Custo industrial da produção</dt>
+                  <dd>{formatBRL(industrialCost.totalIndustrialCost)}</dd>
+                </>
+              )}
+              <dt>Custo por unidade produzida</dt>
+              <dd>{formatUnitCost(industrialCost.costPerProducedUnit)}</dd>
+            </dl>
+
+            {industrialCost.warnings.length > 0 && (
+              <ul className="candidate-list">
+                {industrialCost.warnings.map((warning) => (
+                  <li key={`${warning.code}-${warning.message}`} className="field__hint">
+                    {warning.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="line-actions">
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                onClick={() => navigate(`/print/custo-producao/${industrialCost.productionOrderId}`)}
+              >
+                Imprimir custo / Salvar PDF
+              </button>
+            </div>
           </FormSection>
         )}
 

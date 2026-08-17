@@ -329,37 +329,38 @@ model User {
 
   sessions UserSession[]
 
-  preparedDocumentRevisions ControlledDocumentRevision[] @relation("DocumentPreparedBy")
-  approvedDocumentRevisions ControlledDocumentRevision[] @relation("DocumentApprovedBy")
-  startedParts   ProductionOrderPart[] @relation("PartStartedBy")
-  completedParts ProductionOrderPart[] @relation("PartCompletedBy")
-  recipeWeighings RecipeWeighing[]
-  uploadedAttachments Attachment[] @relation("AttachmentUploadedBy")
-  archivedAttachments Attachment[] @relation("AttachmentArchivedBy")
-  reviewedCoaLots     Lot[]        @relation("CoaReviewedBy")
-  responsibleProjects Project[]    @relation("ProjectResponsible")
-  createdProjects     Project[]    @relation("ProjectCreatedBy")
-  projectStatusChanges ProjectStatusHistory[] @relation("ProjectStatusChangedBy")
-  createdQuotes       QuoteVersion[] @relation("QuoteCreatedBy")
-  sentQuotes          QuoteVersion[] @relation("QuoteSentBy")
-  acceptedQuotes      QuoteVersion[] @relation("QuoteAcceptedBy")
-  rejectedQuotes      QuoteVersion[] @relation("QuoteRejectedBy")
-  createdSamples      ProjectSample[] @relation("SampleCreatedBy")
-  startedSamples      ProjectSample[] @relation("SampleStartedBy")
-  producedSamples     ProjectSample[] @relation("SampleProducedBy")
-  approvedSamples     ProjectSample[] @relation("SampleApprovedBy")
-  rejectedSamples     ProjectSample[] @relation("SampleRejectedBy")
-  cancelledSamples    ProjectSample[] @relation("SampleCancelledBy")
-  sampleConsumptions  SampleConsumption[] @relation("SampleConsumptionBy")
-  createdSupplierItems SupplierItem[] @relation("SupplierItemCreatedBy")
-  updatedSupplierItems SupplierItem[] @relation("SupplierItemUpdatedBy")
+  preparedDocumentRevisions  ControlledDocumentRevision[]       @relation("DocumentPreparedBy")
+  approvedDocumentRevisions  ControlledDocumentRevision[]       @relation("DocumentApprovedBy")
+  startedParts               ProductionOrderPart[]              @relation("PartStartedBy")
+  completedParts             ProductionOrderPart[]              @relation("PartCompletedBy")
+  recipeWeighings            RecipeWeighing[]
+  uploadedAttachments        Attachment[]                       @relation("AttachmentUploadedBy")
+  archivedAttachments        Attachment[]                       @relation("AttachmentArchivedBy")
+  reviewedCoaLots            Lot[]                              @relation("CoaReviewedBy")
+  responsibleProjects        Project[]                          @relation("ProjectResponsible")
+  createdProjects            Project[]                          @relation("ProjectCreatedBy")
+  projectStatusChanges       ProjectStatusHistory[]             @relation("ProjectStatusChangedBy")
+  createdQuotes              QuoteVersion[]                     @relation("QuoteCreatedBy")
+  sentQuotes                 QuoteVersion[]                     @relation("QuoteSentBy")
+  acceptedQuotes             QuoteVersion[]                     @relation("QuoteAcceptedBy")
+  rejectedQuotes             QuoteVersion[]                     @relation("QuoteRejectedBy")
+  createdSamples             ProjectSample[]                    @relation("SampleCreatedBy")
+  startedSamples             ProjectSample[]                    @relation("SampleStartedBy")
+  producedSamples            ProjectSample[]                    @relation("SampleProducedBy")
+  approvedSamples            ProjectSample[]                    @relation("SampleApprovedBy")
+  rejectedSamples            ProjectSample[]                    @relation("SampleRejectedBy")
+  cancelledSamples           ProjectSample[]                    @relation("SampleCancelledBy")
+  sampleConsumptions         SampleConsumption[]                @relation("SampleConsumptionBy")
+  createdSupplierItems       SupplierItem[]                     @relation("SupplierItemCreatedBy")
+  updatedSupplierItems       SupplierItem[]                     @relation("SupplierItemUpdatedBy")
   supplierItemQualifications SupplierItemQualificationHistory[] @relation("SupplierItemQualificationBy")
-  createdSupplierItemOffers  SupplierItemOffer[] @relation("SupplierItemOfferCreatedBy")
-  createdIndustrialCosts     IndustrialCostVersion[] @relation("IndustrialCostCreatedBy")
-  activatedIndustrialCosts   IndustrialCostVersion[] @relation("IndustrialCostActivatedBy")
-  createdIndustrialResources IndustrialResource[] @relation("IndustrialResourceCreatedBy")
-  updatedIndustrialResources IndustrialResource[] @relation("IndustrialResourceUpdatedBy")
-  createdIndustrialRates     IndustrialResourceRate[] @relation("IndustrialResourceRateCreatedBy")
+  createdSupplierItemOffers  SupplierItemOffer[]                @relation("SupplierItemOfferCreatedBy")
+  createdIndustrialCosts     IndustrialCostVersion[]            @relation("IndustrialCostCreatedBy")
+  activatedIndustrialCosts   IndustrialCostVersion[]            @relation("IndustrialCostActivatedBy")
+  industrialCostCalculations IndustrialCostCalculation[]        @relation("IndustrialCostCalculationBy")
+  createdIndustrialResources IndustrialResource[]               @relation("IndustrialResourceCreatedBy")
+  updatedIndustrialResources IndustrialResource[]               @relation("IndustrialResourceUpdatedBy")
+  createdIndustrialRates     IndustrialResourceRate[]           @relation("IndustrialResourceRateCreatedBy")
 
   @@index([active])
   @@map("users")
@@ -377,7 +378,7 @@ model UserSession {
 
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
   @@map("user_sessions")
@@ -472,7 +473,7 @@ model RecipeWeighing {
   materialReservationLine   MaterialReservationLine? @relation(fields: [materialReservationLineId], references: [id])
 
   lotId String?
-  lot   Lot?   @relation(fields: [lotId], references: [id])
+  lot   Lot?    @relation(fields: [lotId], references: [id])
 
   /// Quanto a parte deveria pesar quando a pesagem foi registrada.
   plannedQuantitySnapshot Decimal @db.Decimal(18, 6)
@@ -481,7 +482,7 @@ model RecipeWeighing {
   uomCode                 String
 
   executedByUserId       String
-  executedByUser         User   @relation(fields: [executedByUserId], references: [id])
+  executedByUser         User     @relation(fields: [executedByUserId], references: [id])
   /// Nome no momento do registro — impressao historica nunca depende do
   /// cadastro atual.
   executedByNameSnapshot String
@@ -769,16 +770,22 @@ model IndustrialCostVersion {
   /// `NONE` significa energia ainda NAO estruturada — nunca energia zero.
   energyCalculationMode EnergyCalculationMode @default(NONE)
 
+  /// Recurso de energia cuja tarifa valoriza o consumo DERIVADO dos
+  /// equipamentos. Sem ele o kWh derivado nao vira dinheiro: escolher
+  /// sozinho entre varios cadastros seria inventar premissa economica.
+  energyResourceId String?
+  energyResource   IndustrialResource? @relation("IndustrialCostEnergyResource", fields: [energyResourceId], references: [id])
+
   notes String?
 
   /// Snapshots congelados na ativacao — impressao e historico nao mudam
   /// porque alguem renomeou o produto depois.
-  productCodeSnapshot          String?
-  productNameSnapshot          String?
-  customerCodeSnapshot         String?
-  customerNameSnapshot         String?
+  productCodeSnapshot              String?
+  productNameSnapshot              String?
+  customerCodeSnapshot             String?
+  customerNameSnapshot             String?
   formulationVersionNumberSnapshot Int?
-  unitsPerShippingBoxSnapshot  Int?
+  unitsPerShippingBoxSnapshot      Int?
 
   createdAt             DateTime @default(now())
   createdByUserId       String?
@@ -792,8 +799,11 @@ model IndustrialCostVersion {
 
   updatedAt DateTime @updatedAt
 
-  lines          IndustrialCostLine[]
-  resourceUsages IndustrialCostResourceUsage[]
+  lines                   IndustrialCostLine[]
+  resourceUsages          IndustrialCostResourceUsage[]
+  calculations            IndustrialCostCalculation[]
+  productionOrders        ProductionOrder[]             @relation("ProductionOrderCostVersion")
+  productionCostSnapshots ProductionOrderCostSnapshot[]
 
   @@unique([productId, versionNumber])
   @@index([productId])
@@ -822,7 +832,7 @@ model IndustrialCostLine {
   rateValue Decimal? @db.Decimal(14, 4)
 
   notes     String?
-  sortOrder Int      @default(0)
+  sortOrder Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -869,6 +879,7 @@ model IndustrialResource {
 
   rates  IndustrialResourceRate[]
   usages IndustrialCostResourceUsage[]
+  energyForVersions IndustrialCostVersion[] @relation("IndustrialCostEnergyResource")
 
   @@index([type])
   @@index([active])
@@ -886,8 +897,8 @@ model IndustrialResourceRate {
   industrialResourceId String
   industrialResource   IndustrialResource @relation(fields: [industrialResourceId], references: [id], onDelete: Cascade)
 
-  rateValue    Decimal @db.Decimal(14, 4)
-  currencyCode String  @db.VarChar(3)
+  rateValue    Decimal           @db.Decimal(14, 4)
+  currencyCode String            @db.VarChar(3)
   rateUom      IndustrialRateUom
 
   /// Sem vigencia confiavel a tarifa e apenas referencia historica — nunca
@@ -949,6 +960,105 @@ model IndustrialCostResourceUsage {
   @@index([industrialCostVersionId])
   @@index([industrialResourceId])
   @@map("industrial_cost_resource_usages")
+}
+
+/// Calculo do custo industrial CONGELADO para historico e comparacao.
+///
+/// O calculo em si e determinstico e pode ser refeito a qualquer momento —
+/// nao se persiste cada clique. O que se persiste e a ANALISE: daqui a tres
+/// meses a media de 30 dias sera outra, e a decisao de preco tomada hoje
+/// precisa continuar explicavel. Snapshot salvo nunca recalcula.
+model IndustrialCostCalculation {
+  id String @id @default(uuid())
+
+  /// CALC-000001 — identidade do documento de calculo.
+  code String @unique
+
+  industrialCostVersionId String
+  industrialCostVersion   IndustrialCostVersion @relation(fields: [industrialCostVersionId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// Data usada para resolver custo de material — nunca "hoje" implicito.
+  costReferenceDate DateTime
+
+  /// Calcular sobre rascunho e permitido; a precificacao formal da proxima
+  /// capacidade e que vai preferir estrutura ativa.
+  structureStatusAtCalculation IndustrialCostVersionStatus
+
+  quality IndustrialCostQuality
+
+  /// Null quando algum componente necessario e desconhecido. Total parcial
+  /// NAO existe: existe subtotal conhecido.
+  directIndustrialCost Decimal? @db.Decimal(14, 4)
+  overheadCost         Decimal? @db.Decimal(14, 4)
+  totalIndustrialCost  Decimal? @db.Decimal(14, 4)
+  knownSubtotal        Decimal  @db.Decimal(14, 4)
+  costPerUnit          Decimal? @db.Decimal(18, 6)
+  costPer1000          Decimal? @db.Decimal(14, 4)
+
+  referenceOutputQuantity Decimal @db.Decimal(18, 6)
+  referenceOutputUomCode  String
+
+  /// Snapshots do documento — renomear produto/cliente depois nao reescreve
+  /// a analise impressa.
+  productCodeSnapshot      String
+  productNameSnapshot      String
+  customerNameSnapshot     String?
+  formulationVersionNumber Int
+
+  /// Resultado completo (linhas de material/recurso/premissa, fontes de
+  /// custo, avisos) exatamente como foi calculado.
+  result Json
+
+  notes String?
+
+  calculatedAt             DateTime @default(now())
+  calculatedByUserId       String?
+  calculatedByUser         User?    @relation("IndustrialCostCalculationBy", fields: [calculatedByUserId], references: [id])
+  calculatedByNameSnapshot String?
+
+  @@index([industrialCostVersionId])
+  @@index([productId])
+  @@index([calculatedAt])
+  @@map("industrial_cost_calculations")
+}
+
+/// Custo industrial de uma producao CONCLUIDA, congelado.
+///
+/// Materiais sao realizados; recursos/premissas sao custos padrao
+/// APLICADOS proporcionalmente ao que foi produzido — a Veridi ainda nao
+/// mede horas nem kWh reais, e chamar isso de "real" seria inventar dado.
+model ProductionOrderCostSnapshot {
+  id String @id @default(uuid())
+
+  productionOrderId String          @unique
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+
+  industrialCostVersionId String?
+  industrialCostVersion   IndustrialCostVersion? @relation(fields: [industrialCostVersionId], references: [id])
+
+  formulationVersionNumber Int?
+
+  completedAt      DateTime
+  producedQuantity Decimal  @db.Decimal(18, 6)
+  outputUnitCode   String
+
+  actualMaterialCostKnown  Decimal  @db.Decimal(14, 4)
+  standardAppliedCostKnown Decimal  @db.Decimal(14, 4)
+  knownSubtotal            Decimal  @db.Decimal(14, 4)
+  totalIndustrialCost      Decimal? @db.Decimal(14, 4)
+  costPerProducedUnit      Decimal? @db.Decimal(18, 6)
+
+  quality IndustrialCostQuality
+
+  breakdown Json
+
+  createdAt DateTime @default(now())
+
+  @@index([industrialCostVersionId])
+  @@map("production_order_cost_snapshots")
 }
 
 /// Amostra / piloto / teste Tn de um projeto.
@@ -1233,6 +1343,37 @@ enum EnergyCalculationMode {
 
 /// Estagio da estrutura de custo industrial. Mesmo ciclo da Formulacao:
 /// so o rascunho e editavel, e a versao ativa e um snapshot auditavel.
+/// De onde saiu o custo unitario de um material no calculo PROSPECTIVO.
+/// Separado de `CostSource` de proposito: la `REAL` significa "custo do lote
+/// efetivamente consumido", que so existe quando ha consumo. Custo padrao
+/// nunca e real nesse sentido.
+enum IndustrialMaterialCostSource {
+  WEIGHTED_AVG_30D
+  WEIGHTED_AVG_90D
+  LAST_REAL
+  SUPPLIER_OFFER_PREFERRED
+  SUPPLIER_OFFER_SINGLE_APPROVED
+  /// Varios homologados com oferta valida e nenhum preferencial: escolher o
+  /// menor preco seria tomar decisao comercial no lugar de gente.
+  AMBIGUOUS_SUPPLIER_REFERENCE
+  NO_COST
+  /// Material do cliente: fora do custo Veridi, e isso nao e "desconhecido".
+  EXCLUDED_CUSTOMER_SUPPLIED
+}
+
+enum IndustrialCostQuality {
+  COMPLETE_REAL_REFERENCE
+  COMPLETE_WITH_ESTIMATES
+  PARTIAL
+  NO_COST
+}
+
+/// Producao em andamento ainda pode consumir/produzir mais.
+enum RealizedCostStatus {
+  PROVISIONAL
+  FINAL
+}
+
 enum IndustrialCostVersionStatus {
   DRAFT
   ACTIVE
@@ -1275,13 +1416,13 @@ model UnitOfMeasure {
   dimension    UomDimension
   toBaseFactor Decimal      @db.Decimal(18, 6)
 
-  items Item[]
-  offerPrices SupplierItemOffer[] @relation("OfferPriceUom")
-  offerMoqs   SupplierItemOffer[] @relation("OfferMoqUom")
-  productsAsDoseUom Product[] @relation("ProductDoseUom")
-  projectsAsDoseUom Project[] @relation("ProjectDoseUom")
-  quoteVersions     QuoteVersion[] @relation("QuoteUom")
-  sampleOutputs     ProjectSample[] @relation("SampleOutputUom")
+  items                 Item[]
+  offerPrices           SupplierItemOffer[]     @relation("OfferPriceUom")
+  offerMoqs             SupplierItemOffer[]     @relation("OfferMoqUom")
+  productsAsDoseUom     Product[]               @relation("ProductDoseUom")
+  projectsAsDoseUom     Project[]               @relation("ProjectDoseUom")
+  quoteVersions         QuoteVersion[]          @relation("QuoteUom")
+  sampleOutputs         ProjectSample[]         @relation("SampleOutputUom")
   industrialCostOutputs IndustrialCostVersion[] @relation("IndustrialCostOutputUom")
 
   @@map("units_of_measure")
@@ -1310,11 +1451,11 @@ model Item {
   /// MP-000001 / ME-000001 / PA-000001). Imutavel apos a criacao.
   code String @unique
 
-  name            String
-  unitCode        String
-  unit            UnitOfMeasure @relation(fields: [unitCode], references: [code])
-  controlsLot     Boolean       @default(true)
-  controlsExpiry  Boolean       @default(true)
+  name           String
+  unitCode       String
+  unit           UnitOfMeasure @relation(fields: [unitCode], references: [code])
+  controlsLot    Boolean       @default(true)
+  controlsExpiry Boolean       @default(true)
 
   /// Se um lote recebido deste item fica AWAITING_RELEASE (precisa
   /// liberacao da Qualidade) ou ja nasce AVAILABLE. Default por tipo
@@ -1353,7 +1494,7 @@ model Item {
   packagingSubtype PackagingSubtype?
 
   externalBarcode String?
-  active          Boolean       @default(true)
+  active          Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1362,21 +1503,21 @@ model Item {
   /// fisica. 1:1 no MVP — ver Product.finishedProductItemId.
   product Product?
 
-  supplierItems       SupplierItem[]
-  purchaseOrderLines PurchaseOrderLine[]
-  receiptLines        ReceiptLine[]
-  lots                Lot[]
-  inventoryMovements  InventoryMovement[]
-  formulationComponents FormulationComponent[]
-  sampleConsumptions    SampleConsumption[]
-  formulationVersionsAsOutput FormulationVersion[]
-  productionOrderRequirements ProductionOrderRequirement[]
-  productionOrdersAsFinishedItem ProductionOrder[] @relation("ProductionOrderFinishedItem")
-  materialReservationLines MaterialReservationLine[]
-  productionConsumptions ProductionConsumption[]
-  customerOrderReservationLines CustomerOrderReservationLine[]
-  shipmentLines ShipmentLine[]
-  billingLines BillingLine[]
+  supplierItems                  SupplierItem[]
+  purchaseOrderLines             PurchaseOrderLine[]
+  receiptLines                   ReceiptLine[]
+  lots                           Lot[]
+  inventoryMovements             InventoryMovement[]
+  formulationComponents          FormulationComponent[]
+  sampleConsumptions             SampleConsumption[]
+  formulationVersionsAsOutput    FormulationVersion[]
+  productionOrderRequirements    ProductionOrderRequirement[]
+  productionOrdersAsFinishedItem ProductionOrder[]              @relation("ProductionOrderFinishedItem")
+  materialReservationLines       MaterialReservationLine[]
+  productionConsumptions         ProductionConsumption[]
+  customerOrderReservationLines  CustomerOrderReservationLine[]
+  shipmentLines                  ShipmentLine[]
+  billingLines                   BillingLine[]
 
   @@index([type])
   @@index([active])
@@ -1389,7 +1530,7 @@ model Item {
 /// Fornecedor. Cadastro base: sem preco, avaliacao, dados bancarios ou
 /// vinculo com Item neste momento (entra em Compras/Recebimento).
 model Supplier {
-  id   String @id @default(uuid())
+  id String @id @default(uuid())
 
   /// Codigo interno gerado pelo backend (sequence dedicada, FOR-000001).
   /// Imutavel apos a criacao.
@@ -1481,7 +1622,7 @@ enum TargetAgeGroup {
 
 /// Cliente. Cadastro base: sem CRM, tabela de preco ou pedido neste momento.
 model Customer {
-  id   String @id @default(uuid())
+  id String @id @default(uuid())
 
   /// Codigo interno gerado pelo backend (sequence dedicada, CLI-000001).
   /// Imutavel apos a criacao.
@@ -1524,12 +1665,12 @@ model Customer {
   /// SUGESTAO de businessLotNumber — nunca obriga nem valida.
   businessLotSuffix String?
 
-  products Product[]
-  customerOrders CustomerOrder[]
-  ownedLots Lot[]
-  receipts Receipt[]
+  products         Product[]
+  customerOrders   CustomerOrder[]
+  ownedLots        Lot[]
+  receipts         Receipt[]
   productionOrders ProductionOrder[]
-  projects Project[]
+  projects         Project[]
 
   @@index([active])
   @@index([externalCode])
@@ -1542,7 +1683,7 @@ model Customer {
 /// definicao comercial a que pertencerao formulacoes e OPs no futuro.
 /// Cadastro base: sem formulacao, OP, preco ou multiplos SKUs neste momento.
 model Product {
-  id   String @id @default(uuid())
+  id String @id @default(uuid())
 
   /// Codigo interno gerado pelo backend (sequence dedicada, PROD-000001).
   /// Imutavel apos a criacao.
@@ -1574,12 +1715,12 @@ model Product {
 
   /// Dose declarada (ex.: 500 mg). `doseUom` existe porque a unidade da
   /// dose pode ser diferente da unidade de estoque do Finished Item.
-  doseAmount Decimal?       @db.Decimal(18, 6)
+  doseAmount  Decimal?       @db.Decimal(18, 6)
   doseUomCode String?
   doseUom     UnitOfMeasure? @relation("ProductDoseUom", fields: [doseUomCode], references: [code])
 
-  dosesPerPackage      Int?
-  unitsPerShippingBox  Int?
+  dosesPerPackage     Int?
+  unitsPerShippingBox Int?
 
   /// Publico-alvo — descritivo nesta fase, sem regra regulatoria.
   targetAgeGroup TargetAgeGroup?
@@ -1603,15 +1744,16 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  formulationVersions FormulationVersion[]
-  industrialCostVersions IndustrialCostVersion[]
-  productionOrders    ProductionOrder[]
-  customerOrderLines  CustomerOrderLine[]
-  attachments         Attachment[]
-  project             Project?
+  formulationVersions           FormulationVersion[]
+  industrialCostVersions        IndustrialCostVersion[]
+  industrialCostCalculations    IndustrialCostCalculation[]
+  productionOrders              ProductionOrder[]
+  customerOrderLines            CustomerOrderLine[]
+  attachments                   Attachment[]
+  project                       Project?
   customerOrderReservationLines CustomerOrderReservationLine[]
-  shipmentLines       ShipmentLine[]
-  billingLines        BillingLine[]
+  shipmentLines                 ShipmentLine[]
+  billingLines                  BillingLine[]
 
   @@index([active])
   @@index([customerId])
@@ -1669,9 +1811,9 @@ model FormulationVersion {
   inactivatedAt DateTime?
   inactivatedBy String?
 
-  components FormulationComponent[]
+  components             FormulationComponent[]
   industrialCostVersions IndustrialCostVersion[]
-  productionOrders ProductionOrder[]
+  productionOrders       ProductionOrder[]
 
   /// V1/V2/... e sempre unico dentro do mesmo Product.
   @@unique([productId, versionNumber])
@@ -1809,13 +1951,13 @@ model PurchaseOrderLine {
   itemName String
   unitCode String
 
-  orderedQuantity Decimal  @db.Decimal(18, 6)
+  orderedQuantity Decimal @db.Decimal(18, 6)
 
   /// PRECO PREVISTO/NEGOCIADO — nunca custo real nem valor pago. Serve
   /// como referencia visual no Recebimento, mas o custo so vira real
   /// quando informado explicitamente em ReceiptLine.actualUnitCost.
   /// Nunca alimenta as medias de custo real.
-  unitPrice       Decimal? @db.Decimal(14, 4)
+  unitPrice Decimal? @db.Decimal(14, 4)
 
   receiptLines ReceiptLine[]
 
@@ -1885,7 +2027,7 @@ model ReceiptLine {
   /// Null em recebimento de material do cliente — a linha e direta, sem
   /// OC. Para linhas de OC continua obrigatorio na pratica.
   purchaseOrderLineId String?
-  purchaseOrderLine    PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
+  purchaseOrderLine   PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
 
   itemId String
   item   Item   @relation(fields: [itemId], references: [id])
@@ -1920,7 +2062,7 @@ model ReceiptLine {
   /// explicitamente informado, nunca reinterpretado como desconhecido.
   /// Nomeado "de aquisicao" para no futuro comportar mercadoria + frete +
   /// despesas diretamente atribuiveis, sem quebrar o schema.
-  actualUnitCost Decimal? @db.Decimal(14, 4)
+  actualUnitCost Decimal?  @db.Decimal(14, 4)
   costUpdatedAt  DateTime?
   costUpdatedBy  String?
   costNote       String?
@@ -2014,22 +2156,21 @@ model Lot {
   createdAt DateTime @default(now())
   createdBy String?
 
-  inventoryMovements InventoryMovement[]
-  materialReservationLines MaterialReservationLine[]
-  productionConsumptions ProductionConsumption[]
-  productionOutputs ProductionOutput[]
+  inventoryMovements            InventoryMovement[]
+  materialReservationLines      MaterialReservationLine[]
+  productionConsumptions        ProductionConsumption[]
+  productionOutputs             ProductionOutput[]
   customerOrderReservationLines CustomerOrderReservationLine[]
-  shipmentLines ShipmentLine[]
-  billingLines BillingLine[]
+  shipmentLines                 ShipmentLine[]
+  billingLines                  BillingLine[]
+  recipeWeighings               RecipeWeighing[]
+  sampleConsumptions            SampleConsumption[]
+  attachments                   Attachment[]
 
   @@index([itemId])
   @@index([supplierId])
   @@index([status])
   @@index([productionOrderId])
-  recipeWeighings RecipeWeighing[]
-  sampleConsumptions SampleConsumption[]
-  attachments Attachment[]
-
   @@index([ownerCustomerId])
   @@index([coaStatus])
   @@map("lots")
@@ -2076,7 +2217,7 @@ model InventoryMovement {
 
   /// Preenchido so para FINISHED_GOOD_PRODUCTION — FK real 1:1, garante no
   /// banco que um ProductionOutput gera no maximo um movimento.
-  productionOutputId String?            @unique
+  productionOutputId String?           @unique
   productionOutput   ProductionOutput? @relation(fields: [productionOutputId], references: [id], onDelete: Cascade)
 
   /// Preenchido so para SHIPMENT_OUT — FK real 1:1, garante no banco que
@@ -2119,6 +2260,12 @@ model ProductionOrder {
   formulationVersionId String?
   formulationVersion   FormulationVersion? @relation(fields: [formulationVersionId], references: [id])
 
+  /// Estrutura de custos congelada no RELEASE, quando existe uma ACTIVE
+  /// compativel com a formulacao da OP. Null e situacao legitima: producao
+  /// nunca depende de custo estruturado, e OPs antigas continuam validas.
+  industrialCostVersionId String?
+  industrialCostVersion   IndustrialCostVersion? @relation("ProductionOrderCostVersion", fields: [industrialCostVersionId], references: [id])
+
   plannedQuantity Decimal @db.Decimal(18, 6)
   outputUnitCode  String
 
@@ -2139,8 +2286,8 @@ model ProductionOrder {
 
   /// Snapshot historico — preenchido so ao planejar (PLANNED). Enquanto
   /// DRAFT, o service le Product/FormulationVersion/Item ao vivo via join.
-  productCode  String?
-  productName  String?
+  productCode String?
+  productName String?
 
   finishedItemId   String?
   finishedItem     Item?   @relation("ProductionOrderFinishedItem", fields: [finishedItemId], references: [id])
@@ -2232,7 +2379,8 @@ model ProductionOrder {
 
   /// Eventos reais de producao parcial — producedQuantity e sempre a soma
   /// destes, nunca uma segunda coluna manual.
-  outputs ProductionOutput[]
+  outputs      ProductionOutput[]
+  costSnapshot ProductionOrderCostSnapshot?
 
   /// Lotes de produto acabado gerados por esta OP (origin=PRODUCTION).
   finishedLots Lot[]
@@ -2289,8 +2437,8 @@ model ProductionOrderRequirement {
   createdAt DateTime @default(now())
 
   reservationLines MaterialReservationLine[]
-  consumptions ProductionConsumption[]
-  recipeWeighings RecipeWeighing[]
+  consumptions     ProductionConsumption[]
+  recipeWeighings  RecipeWeighing[]
 
   @@unique([productionOrderId, itemId])
   @@map("production_order_requirements")
@@ -2369,13 +2517,12 @@ model MaterialReservationLine {
 
   createdAt DateTime @default(now())
 
-  consumptions ProductionConsumption[]
+  consumptions    ProductionConsumption[]
+  recipeWeighings RecipeWeighing[]
 
   @@index([itemId])
   @@index([lotId])
   @@index([reservationId])
-  recipeWeighings RecipeWeighing[]
-
   @@map("material_reservation_lines")
 }
 
@@ -2412,13 +2559,12 @@ model ProductionConsumption {
   createdAt DateTime @default(now())
 
   inventoryMovement InventoryMovement?
+  /// Pesagem da Folha de Receita que originou este consumo (quando veio de la).
+  recipeWeighing    RecipeWeighing?
 
   @@index([productionOrderId])
   @@index([reservationLineId])
   @@index([itemId])
-  /// Pesagem da Folha de Receita que originou este consumo (quando veio de la).
-  recipeWeighing RecipeWeighing?
-
   @@map("production_consumptions")
 }
 
@@ -2478,10 +2624,10 @@ model CustomerOrder {
 
   /// Snapshot historico — preenchido so ao confirmar. Enquanto DRAFT, o
   /// service le Customer ao vivo via join (mesmo padrao de OP/OC).
-  customerCode      String?
-  customerName      String?
-  customerTradeName String?
-  customerCnpj      String?
+  customerCode       String?
+  customerName       String?
+  customerTradeName  String?
+  customerCnpj       String?
   /// Endereco congelado no CONFIRM: editar o cadastro do Cliente depois
   /// nunca muda o que este documento diz. Pedidos confirmados antes da
   /// capacidade 33 permanecem com null.

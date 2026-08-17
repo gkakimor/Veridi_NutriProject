@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { CORPUS_DIR, corpusAvailable, readCorpusCsv, cleanText } from "../veridi-data/corpus.js";
 import { assertImportEnvironment } from "./environment.js";
 import { analyzeCmv } from "./cmv-analysis.js";
+import { reconcileCmv } from "./cmv-reconciliation.js";
 import { readOverrides } from "./overrides.js";
 import { runPipeline } from "./pipeline.js";
 import { writeFindingsArtifacts } from "./report.js";
@@ -107,9 +108,32 @@ async function main(): Promise<void> {
     console.log(
       `  custo historico disponivel: ${cmv.historical.unitCostRows} linhas por unidade - ${cmv.historical.thousandUnitCostRows} por 1.000 unidades (referencia, sem exigencia de match)`,
     );
+    // Capacidade 45 — golden do CMV: valida o MOTOR com entradas historicas.
+    // Nenhum preco da planilha vira custo atual.
+    const reconciliation = reconcileCmv(result.findings);
+    console.log("\nGOLDEN DO CMV (motor x historico, nada persistido)");
     console.log(
-      "  nada de CMV e persistido: nenhum recurso industrial e criado a partir de texto legado.",
+      `  produtos ${reconciliation.products} - com comparaveis ${reconciliation.productsComparable} - componentes ${reconciliation.components}`,
     );
+    console.log(
+      `  comparaveis ${reconciliation.comparable} - dentro da tolerancia ${reconciliation.matched} - divergentes ${reconciliation.divergent} - insuficientes ${reconciliation.insufficient}`,
+    );
+    console.log(
+      `  total historico decomponivel ${reconciliation.historicalTotalsDecomposable} de ${reconciliation.products} - custos de recurso continuam diluidos`,
+    );
+    for (const row of reconciliation.rows) {
+      const legacy = row.legacyMaterialCost ? row.legacyMaterialCost.toFixed(2) : "-";
+      const engine = row.formulationMaterialCost ? row.formulationMaterialCost.toFixed(2) : "-";
+      const total = row.historicalTotalCost ? row.historicalTotalCost.toFixed(2) : "-";
+      console.log(
+        `    ${row.productName}: material/1000 historico ${legacy} x motor ${engine} - total historico ${total} - ${row.matched}/${row.comparable} dentro da tolerancia${row.insufficient > 0 ? ` - ${row.insufficient} sem insumos suficientes` : ""}`,
+      );
+    }
+
+    console.log(
+      "\n  nada de CMV e persistido: nenhum recurso industrial e criado a partir de texto legado,",
+    );
+    console.log("  e nenhum preco historico vira custo de material atual.");
 
     result.findings.print(2);
     console.log(`\n  Findings detalhados em ${OUT_DIR}`);

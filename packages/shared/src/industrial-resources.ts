@@ -193,4 +193,6 @@ export interface CreateIndustrialCostResourceUsageInput {
 
 export interface UpdateEnergyModeInput {
   energyCalculationMode: EnergyCalculationMode;
+  /** Recurso cuja tarifa valoriza o kWh derivado dos equipamentos. */
+  energyResourceId?: string | null;
 }

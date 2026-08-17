@@ -21,6 +21,7 @@ import {
   INDUSTRIAL_USAGE_BASIS_LABELS,
 } from "@veridi/shared";
 import type { IndustrialCostBasis, IndustrialCostCategory } from "@veridi/shared";
+import { CostCalculationSection } from "./CostCalculationSection";
 import { FormSection } from "../../components/FormSection";
 import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
@@ -707,10 +708,50 @@ export function IndustrialCostPage() {
                       Derivada usa horas de equipamento × potência declarada no recurso.
                     </span>
                   </div>
+
+                  {version.energyCalculationMode === "FROM_EQUIPMENT" && (
+                    <div className="field">
+                      <label htmlFor="energy-resource">Tarifa que valoriza o kWh derivado</label>
+                      <select
+                        id="energy-resource"
+                        value={version.energyResourceId ?? ""}
+                        disabled={saving}
+                        onChange={(event) =>
+                          void run(() =>
+                            updateEnergyMode(version.id, {
+                              energyCalculationMode: version.energyCalculationMode,
+                              energyResourceId: event.target.value || null,
+                            }),
+                          )
+                        }
+                      >
+                        <option value="">Selecione…</option>
+                        {resources
+                          .filter((resource) => resource.type === "ENERGY")
+                          .map((resource) => (
+                            <option key={resource.id} value={resource.id}>
+                              {resource.code} — {resource.name}
+                            </option>
+                          ))}
+                      </select>
+                      <span className="field__hint">
+                        Sem escolha explícita o kWh derivado não vira dinheiro: o sistema não elege
+                        um recurso de energia sozinho.
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </FormSection>
           </>
+        )}
+
+        {version && (
+          <CostCalculationSection
+            productId={productId}
+            versionId={version.id}
+            canSave={canEdit}
+          />
         )}
 
         <FormSection title="Versões">

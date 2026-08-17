@@ -83,6 +83,11 @@ import {
   receiptsQuerySchema,
   requirementsQuerySchema,
 } from "../reports/reports.schemas.js";
+import type { IndustrialCostByProductRowDTO } from "@veridi/shared";
+import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
+import { getIndustrialCostByProductReport } from "../reports/cost-reports.service.js";
+import type { IndustrialCostByProductQuery } from "../reports/reports.schemas.js";
+import { industrialCostByProductQuerySchema } from "../reports/reports.schemas.js";
 import type { CsvExportRoute } from "./csv-export.js";
 import { defineCsvExport } from "./csv-export.js";
 
@@ -444,6 +449,57 @@ const r17 = defineCsvExport({
   ],
 });
 
+const r18 = defineCsvExport({
+  path: "/reports/costs/industrial-by-product/export.csv",
+  slug: "r18_custo_industrial_por_produto",
+  schema: industrialCostByProductQuerySchema,
+  fetch: async (query: IndustrialCostByProductQuery) =>
+    (await getIndustrialCostByProductReport(query, ALL_ROWS)).rows,
+  columns: [
+    { header: "Produto", value: (row: IndustrialCostByProductRowDTO) => csvCode(row.productCode) },
+    { header: "Nome", value: (row: IndustrialCostByProductRowDTO) => csvText(row.productName) },
+    { header: "Cliente", value: (row: IndustrialCostByProductRowDTO) => csvText(row.customerName) },
+    {
+      header: "Estrutura ativa",
+      value: (row: IndustrialCostByProductRowDTO) => csvText(row.activeCostVersionLabel),
+    },
+    {
+      header: "Último cálculo",
+      value: (row: IndustrialCostByProductRowDTO) => csvCode(row.calculationCode),
+    },
+    {
+      header: "Data de referência",
+      value: (row: IndustrialCostByProductRowDTO) => csvDate(row.costReferenceDate),
+    },
+    {
+      header: "Calculado em",
+      value: (row: IndustrialCostByProductRowDTO) => csvDateTime(row.calculatedAt),
+    },
+    {
+      header: "Qualidade",
+      value: (row: IndustrialCostByProductRowDTO) =>
+        row.quality ? INDUSTRIAL_COST_QUALITY_LABELS[row.quality] : "",
+    },
+    // Parcial deixa o total vazio: subtotal conhecido vai na coluna própria.
+    {
+      header: "Custo industrial total",
+      value: (row: IndustrialCostByProductRowDTO) => csvMoney(row.totalIndustrialCost),
+    },
+    {
+      header: "Subtotal conhecido",
+      value: (row: IndustrialCostByProductRowDTO) => csvMoney(row.knownSubtotal),
+    },
+    {
+      header: "Custo/unidade",
+      value: (row: IndustrialCostByProductRowDTO) => csvDecimal(row.costPerUnit),
+    },
+    {
+      header: "Custo/1.000",
+      value: (row: IndustrialCostByProductRowDTO) => csvMoney(row.costPer1000),
+    },
+  ],
+});
+
 export const reportCsvExports: CsvExportRoute[] = [
   r01,
   r02,
@@ -460,4 +516,5 @@ export const reportCsvExports: CsvExportRoute[] = [
   r15,
   r16,
   r17,
+  r18,
 ];

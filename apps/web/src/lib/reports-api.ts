@@ -10,6 +10,7 @@ import type {
   LatePurchaseOrderRowDTO,
   MovementReportRowDTO,
   OnOrderRowDTO,
+  IndustrialCostByProductRowDTO,
   OrderDeliveredBilledRowDTO,
   OrderOperationDTO,
   PlannedActualRowDTO,
@@ -87,3 +88,5 @@ export const getAwaitingBillingReport = (filters: ReportFilters) =>
   fetchReport<ReportPageDTO<AwaitingBillingReportRowDTO>>("billing/awaiting", filters);
 export const getOrderDeliveredBilledReport = (filters: ReportFilters) =>
   fetchReport<ReportPageDTO<OrderDeliveredBilledRowDTO>>("billing/order-delivered-billed", filters);
+export const getIndustrialCostByProductReport = (filters: ReportFilters) =>
+  fetchReport<ReportPageDTO<IndustrialCostByProductRowDTO>>("costs/industrial-by-product", filters);

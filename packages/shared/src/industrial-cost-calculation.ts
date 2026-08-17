@@ -1,0 +1,289 @@
+/**
+ * Cálculo do custo industrial (capacidade 45).
+ *
+ * Aqui a estrutura vira número. Duas visões que NUNCA se misturam:
+ *
+ * 1. **custo padrão/prospectivo** — "quanto custa produzir a base de
+ *    referência desta EC, pelas informações conhecidas numa data";
+ * 2. **custo da produção realizada** — materiais realmente consumidos numa
+ *    OP mais os custos industriais PADRÃO aplicados (horas reais não são
+ *    medidas nesta fase, e chamá-las de reais seria mentira).
+ *
+ * Custo não é preço, e preço não é valor pago: oferta de fornecedor é
+ * estimativa prospectiva, `Receipt.actualUnitCost` é custo real de
+ * aquisição, e o que foi efetivamente pago é domínio financeiro futuro.
+ */
+
+import type { IndustrialCostBasis, IndustrialCostCategory } from "./industrial-costs.js";
+import type { EnergyCalculationMode, IndustrialResourceType } from "./industrial-resources.js";
+
+/**
+ * De onde veio o custo unitário de um material no cálculo PROSPECTIVO.
+ *
+ * Deliberadamente separado de `CostSource` da Foundation: lá `REAL`
+ * significa "custo do lote efetivamente consumido", que só existe quando há
+ * consumo. Um custo padrão nunca é "real" nesse sentido.
+ */
+export type IndustrialMaterialCostSource =
+  | "WEIGHTED_AVG_30D"
+  | "WEIGHTED_AVG_90D"
+  | "LAST_REAL"
+  | "SUPPLIER_OFFER_PREFERRED"
+  | "SUPPLIER_OFFER_SINGLE_APPROVED"
+  | "AMBIGUOUS_SUPPLIER_REFERENCE"
+  | "NO_COST"
+  | "EXCLUDED_CUSTOMER_SUPPLIED";
+
+export const INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS: Record<
+  IndustrialMaterialCostSource,
+  string
+> = {
+  WEIGHTED_AVG_30D: "Média ponderada de compras (30 dias)",
+  WEIGHTED_AVG_90D: "Média ponderada de compras (90 dias)",
+  LAST_REAL: "Último custo real de aquisição",
+  SUPPLIER_OFFER_PREFERRED: "Referência do fornecedor preferencial (estimativa)",
+  SUPPLIER_OFFER_SINGLE_APPROVED: "Referência do único fornecedor homologado (estimativa)",
+  AMBIGUOUS_SUPPLIER_REFERENCE: "Múltiplas referências de fornecedor, sem preferencial",
+  NO_COST: "Sem custo conhecido",
+  EXCLUDED_CUSTOMER_SUPPLIED: "Material do cliente — fora do custo Veridi",
+};
+
+/** Fontes que representam custo real de aquisição já ocorrido. */
+export const REAL_REFERENCE_SOURCES: readonly IndustrialMaterialCostSource[] = [
+  "WEIGHTED_AVG_30D",
+  "WEIGHTED_AVG_90D",
+  "LAST_REAL",
+];
+
+export type IndustrialCostQuality =
+  | "COMPLETE_REAL_REFERENCE"
+  | "COMPLETE_WITH_ESTIMATES"
+  | "PARTIAL"
+  | "NO_COST";
+
+export const INDUSTRIAL_COST_QUALITY_LABELS: Record<IndustrialCostQuality, string> = {
+  COMPLETE_REAL_REFERENCE: "Completo — referências reais de compra",
+  COMPLETE_WITH_ESTIMATES: "Completo — com estimativa de fornecedor",
+  PARTIAL: "Parcial — há custos não informados",
+  NO_COST: "Sem custo conhecido",
+};
+
+export const INDUSTRIAL_COST_QUALITY_HINTS: Record<IndustrialCostQuality, string> = {
+  COMPLETE_REAL_REFERENCE:
+    "Todos os materiais Veridi vieram de compras reais e todas as premissas estão informadas. Isso é referência completa, não o custo realizado de uma produção.",
+  COMPLETE_WITH_ESTIMATES:
+    "Tudo está calculado, mas pelo menos um material usou referência comercial de fornecedor — estimativa, não custo real.",
+  PARTIAL:
+    "Existe custo ou premissa não informada. O total completo não existe; o que aparece é o subtotal conhecido.",
+  NO_COST: "Nenhum custo Veridi conhecido para esta estrutura.",
+};
+
+/** Materiais reais + recursos padrão: a produção só fecha depois de concluída. */
+export type RealizedCostStatus = "PROVISIONAL" | "FINAL";
+
+export const REALIZED_COST_STATUS_LABELS: Record<RealizedCostStatus, string> = {
+  PROVISIONAL: "Provisório — produção em andamento",
+  FINAL: "Final — produção concluída",
+};
+
+export interface IndustrialCostWarningDTO {
+  code: string;
+  message: string;
+}
+
+export interface IndustrialMaterialCostLineDTO {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  /** Quantidade física necessária para a base de referência, já com pureza/overage. */
+  requiredQuantity: string;
+  unitCode: string;
+  customerSupplied: boolean;
+  /** `null` quando desconhecido ou material do cliente — nunca zero. */
+  unitCost: string | null;
+  costSource: IndustrialMaterialCostSource;
+  costSourceDetails: string | null;
+  subtotal: string | null;
+}
+
+export interface IndustrialResourceCostLineDTO {
+  resourceId: string;
+  resourceCode: string;
+  resourceName: string;
+  resourceType: IndustrialResourceType;
+  /** Consumo já escalado para a base de referência (horas ou kWh). */
+  quantity: string;
+  quantityUom: "HOUR" | "KWH";
+  rateValue: string | null;
+  /** Tarifa congelada da versão ativa ou referência atual do rascunho. */
+  rateIsDraftReference: boolean;
+  subtotal: string | null;
+}
+
+export interface IndustrialManualCostLineDTO {
+  lineId: string;
+  category: IndustrialCostCategory;
+  description: string;
+  calculationBasis: IndustrialCostBasis;
+  rateValue: string | null;
+  /** Caixas de expedição inteiras, quando a base for por caixa. */
+  computedUnits: string | null;
+  subtotal: string | null;
+}
+
+export interface CustomerSuppliedMaterialDTO {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  requiredQuantity: string;
+  unitCode: string;
+}
+
+/**
+ * Resultado do cálculo padrão. Todo campo de dinheiro que pode ser
+ * desconhecido é `string | null` — `knownSubtotal` existe sempre, mas nunca
+ * pode ser apresentado como total.
+ */
+export interface IndustrialCostCalculationDTO {
+  industrialCostVersionId: string;
+  industrialCostVersionLabel: string;
+  structureStatus: "DRAFT" | "ACTIVE" | "INACTIVE";
+  /** Rascunho usa a referência de hoje: o número ainda pode mudar. */
+  draftReference: boolean;
+
+  productId: string;
+  productCode: string;
+  productName: string;
+  customerName: string | null;
+  formulationVersionNumber: number;
+
+  referenceOutputQuantity: string;
+  referenceOutputUomCode: string;
+  unitsPerShippingBox: number | null;
+  costReferenceDate: string;
+  calculatedAt: string;
+
+  materials: IndustrialMaterialCostLineDTO[];
+  resources: IndustrialResourceCostLineDTO[];
+  manualLines: IndustrialManualCostLineDTO[];
+  customerSuppliedMaterials: CustomerSuppliedMaterialDTO[];
+  hasCustomerSuppliedMaterials: boolean;
+
+  energyCalculationMode: EnergyCalculationMode;
+  derivedEnergyKwh: string | null;
+
+  materialsSubtotalKnown: string;
+  laborSubtotalKnown: string;
+  equipmentSubtotalKnown: string;
+  /** `null` quando a energia deveria compor o custo e não é conhecida. */
+  energySubtotal: string | null;
+  secondaryPackagingSubtotalKnown: string;
+  thirdPartySubtotalKnown: string;
+  otherSubtotalKnown: string;
+  overheadSubtotalKnown: string;
+
+  /** Só existe quando todos os componentes diretos são conhecidos. */
+  directIndustrialCost: string | null;
+  totalIndustrialCost: string | null;
+  /** Sempre presente — é o que se conhece, jamais rotulado como total. */
+  knownSubtotal: string;
+  costPerUnit: string | null;
+  costPer1000: string | null;
+
+  quality: IndustrialCostQuality;
+  warnings: IndustrialCostWarningDTO[];
+}
+
+export interface IndustrialCostCalculationSnapshotDTO extends IndustrialCostCalculationDTO {
+  id: string;
+  code: string;
+  calculatedByName: string | null;
+  structureStatusAtCalculation: "DRAFT" | "ACTIVE" | "INACTIVE";
+  notes: string | null;
+}
+
+/** Linha da lista de cálculos salvos de um produto. */
+export interface IndustrialCostCalculationSummaryDTO {
+  id: string;
+  code: string;
+  industrialCostVersionId: string;
+  industrialCostVersionLabel: string;
+  structureStatusAtCalculation: "DRAFT" | "ACTIVE" | "INACTIVE";
+  costReferenceDate: string;
+  calculatedAt: string;
+  calculatedByName: string | null;
+  quality: IndustrialCostQuality;
+  totalIndustrialCost: string | null;
+  knownSubtotal: string;
+  costPerUnit: string | null;
+  costPer1000: string | null;
+}
+
+export interface SaveIndustrialCostCalculationInput {
+  costReferenceDate?: string;
+  notes?: string | null;
+}
+
+/** Consumo real avaliado de uma OP. */
+export interface ProductionMaterialCostLineDTO {
+  consumptionId: string;
+  itemCode: string;
+  itemName: string;
+  lotCode: string | null;
+  quantity: string;
+  unitCode: string;
+  consumedAt: string;
+  customerSupplied: boolean;
+  unitCost: string | null;
+  /** Fonte da Foundation: REAL (lote consumido) ou fallback histórico. */
+  costSource: string;
+  subtotal: string | null;
+}
+
+/**
+ * Custo industrial de uma produção. Materiais são REALIZADOS; recursos,
+ * embalagem secundária, serviços e overhead são PADRÃO APLICADOS na
+ * proporção do que foi realmente produzido — nunca "horas reais".
+ */
+export interface ProductionOrderCostDTO {
+  productionOrderId: string;
+  productionOrderCode: string;
+  productCode: string;
+  productName: string;
+  formulationVersionNumber: number | null;
+  industrialCostVersionId: string | null;
+  industrialCostVersionLabel: string | null;
+
+  producedQuantity: string;
+  outputUnitCode: string;
+  /** Produzido ÷ base da EC — proporção usada nos custos padrão aplicados. */
+  allocationFactor: string | null;
+
+  materials: ProductionMaterialCostLineDTO[];
+  standardApplied: IndustrialResourceCostLineDTO[];
+  standardAppliedManual: IndustrialManualCostLineDTO[];
+
+  actualMaterialCostKnown: string;
+  standardAppliedLaborKnown: string;
+  standardAppliedEquipmentKnown: string;
+  standardAppliedEnergy: string | null;
+  standardAppliedSecondaryPackagingKnown: string;
+  standardAppliedThirdPartyKnown: string;
+  standardAppliedOtherKnown: string;
+  standardAppliedOverheadKnown: string;
+  standardAppliedCostKnown: string;
+
+  totalIndustrialCost: string | null;
+  knownSubtotal: string;
+  costPerProducedUnit: string | null;
+
+  quality: IndustrialCostQuality;
+  status: RealizedCostStatus;
+  /** Materiais reais + recursos padrão convivendo no mesmo número. */
+  hybrid: boolean;
+  hasCustomerSuppliedMaterials: boolean;
+  warnings: IndustrialCostWarningDTO[];
+  /** Congelado na conclusão — a partir daí o documento não recalcula. */
+  snapshotId: string | null;
+  snapshotCreatedAt: string | null;
+}

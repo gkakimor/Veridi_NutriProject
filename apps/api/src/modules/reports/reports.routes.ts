@@ -24,6 +24,7 @@ import {
   getOrderOperation,
 } from "./commercial-reports.service.js";
 import { getAwaitingBillingReport, getBillingPeriodReport } from "./billing-reports.service.js";
+import { getIndustrialCostByProductReport } from "./cost-reports.service.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import type { Pagination } from "../../lib/pagination.js";
 import {
@@ -42,6 +43,7 @@ import {
   purchaseOrdersQuerySchema,
   receiptsQuerySchema,
   requirementsQuerySchema,
+  industrialCostByProductQuerySchema,
 } from "./reports.schemas.js";
 
 function formatZodError(error: ZodError) {
@@ -114,5 +116,12 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     "/reports/billing/order-delivered-billed",
     fulfillmentQuerySchema,
     getOrderDeliveredBilledReport,
+  );
+
+  // Gestão industrial
+  register(
+    "/reports/costs/industrial-by-product",
+    industrialCostByProductQuerySchema,
+    getIndustrialCostByProductReport,
   );
 };

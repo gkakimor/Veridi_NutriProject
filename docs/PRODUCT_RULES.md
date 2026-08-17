@@ -471,6 +471,80 @@ buttons.
   `UNRESOLVED_RESOURCE_COST`); registering a resource and its rate stays a
   human decision.
 
+# 5.8 Industrial cost calculation (capability 45)
+
+- **Cost, price and amount paid are three different things.** A supplier
+  offer is a proposed price, `Receipt.actualUnitCost` is a real acquisition
+  cost, and what was actually paid to the supplier stays outside this phase.
+- Two views that never mix: the **standard/prospective cost** ("what does it
+  cost to produce this structure's reference batch given what is known on a
+  date") and the **cost of a realised production** (materials actually
+  consumed plus standard industrial costs applied).
+- Every calculation takes an explicit **cost reference date**. The UI
+  defaults to today, but "today" is never buried in the domain: the same
+  product calculated in March and in August is allowed to differ, which is
+  exactly why saved calculations exist.
+- Prospective material cost follows the Foundation hierarchy —
+  **weighted average of the last 30 days → 90 days → last real cost** — and
+  only then, as a last resort before "no cost", an eligible supplier offer.
+  Averages are always weighted by quantity: 10 kg at 100 plus 20 kg at 130
+  is 120, never 115.
+- An offer is only eligible when the supplier relationship and the supplier
+  are active, the item is APPROVED for that supplier, the price is in BRL,
+  the offer is effective on the reference date and its unit converts to the
+  item's unit. A legacy offer without an effective date never becomes cost,
+  even when it is the only number available.
+- With a preferred supplier, its offer wins — preference is a commercial
+  decision, not "the cheapest". With several approved suppliers and no
+  preferred one, **the cost stays unknown**: picking the lowest price would
+  be making a purchasing decision on someone's behalf.
+- Customer-supplied material is **excluded**, not zero and not unknown: it
+  belongs to the product's physical structure, never to Veridi's cost, and
+  it does not degrade the quality of the result.
+- Physical quantities always come from the frozen formulation version scaled
+  to the structure's reference output — the same requirement math used by
+  production, never a second implementation of the formula.
+- Shipping boxes are whole: 25 units at 12 per box is 3 boxes. Percentages
+  apply to the **complete** direct industrial cost and never compose the
+  base of another percentage.
+- Direct industrial cost = Veridi materials and packaging + secondary
+  packaging + third-party services + labour + equipment + energy + other
+  direct lines. Overhead comes after it; customer-supplied material never
+  enters the base.
+- **A partial total does not exist.** When any necessary component is
+  unknown, the total, the direct cost and the unit cost are `null`, and what
+  is shown is labelled "subtotal conhecido" — never "total".
+- Quality is explicit: `COMPLETE_REAL_REFERENCE` (everything known, all
+  materials from real purchases — which is *not* the realised cost of a
+  production), `COMPLETE_WITH_ESTIMATES` (at least one material priced from
+  a supplier offer), `PARTIAL` and `NO_COST`.
+- A **saved calculation is immutable**. It freezes the whole analysis so the
+  pricing decision taken today stays explainable in three months; later
+  purchases, rate changes or structure edits never rewrite it, and the print
+  uses the saved result rather than recalculating.
+- The **frontend never calculates economic values**. Saving a calculation
+  recalculates on the backend: the payload the screen displayed is never
+  accepted as truth.
+- A Production Order freezes a **compatible** cost structure at release —
+  active and pointing at the same formulation version the order executes.
+  No compatible structure means production continues normally and the
+  industrial cost is material-only, stated as such.
+- Realised production cost separates **actual materials** (the lot really
+  consumed, valued at its own `consumedAt`, never "today") from **standard
+  applied costs** scaled by produced ÷ reference output. Resource hours and
+  kWh are not measured in this phase, so they are never called "real": the
+  document is labelled hybrid.
+- Completing a Production Order freezes its cost snapshot, once. Informing a
+  receipt cost or raising a rate afterwards never rewrites it; a retroactive
+  correction, if it ever exists, will be an explicit cost revision.
+- Money is always Decimal, never float; internal precision is preserved and
+  rounding happens at presentation (2 decimals for totals, up to 6 for unit
+  costs). Everything is BRL — no FX in this phase.
+- Legacy CMV values validate the engine with historically known inputs; they
+  never become current material cost. Divergence between the engine and the
+  spreadsheet is reported (`CMV_MATERIAL_DIVERGENCE`), never fixed by
+  adjusting a formula or a price.
+
 ---
 
 # 6. Purchase Orders

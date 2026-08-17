@@ -152,3 +152,11 @@ export class InactiveResourceActivationError extends Error {
     this.name = "InactiveResourceActivationError";
   }
 }
+
+/** Só recurso do tipo energia pode tarifar kWh. */
+export class InvalidEnergyResourceError extends Error {
+  constructor(name: string) {
+    super(`"${name}" não é um recurso de energia — não pode tarifar o kWh derivado.`);
+    this.name = "InvalidEnergyResourceError";
+  }
+}

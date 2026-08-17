@@ -160,6 +160,9 @@ export interface IndustrialCostVersionDTO {
   resourceUsages: IndustrialCostResourceUsageDTO[];
 
   energyCalculationMode: EnergyCalculationMode;
+  /** Tarifa do kWh derivado — escolhida, nunca deduzida do cadastro. */
+  energyResourceId: string | null;
+  energyResourceName: string | null;
   /**
    * Consumo energético derivado dos equipamentos (Σ horas × kW). É
    * QUANTIDADE, não custo: nenhum total em dinheiro é calculado nesta fase.

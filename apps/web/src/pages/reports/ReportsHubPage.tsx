@@ -165,6 +165,18 @@ const GROUPS: { title: string; reports: ReportLink[] }[] = [
       },
     ],
   },
+  {
+    title: "Gestão industrial",
+    reports: [
+      {
+        code: "R-18",
+        aliases: ["Custo industrial", "Custo por produto", "CMV"],
+        label: "Custo industrial por produto",
+        hint: "Último cálculo de custo salvo por produto, com qualidade e custo por unidade.",
+        path: "/relatorios/custos/industrial-por-produto",
+      },
+    ],
+  },
 ];
 
 /** Busca client-side: 17 relatórios não justificam índice no backend. */

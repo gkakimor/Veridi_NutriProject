@@ -26,6 +26,10 @@ import { SampleLabelPrintPage } from "./pages/samples/SampleLabelPrintPage";
 import { ReportPrintPage } from "./pages/print/ReportPrintPage";
 import { IndustrialCostPrintPage } from "./pages/print/IndustrialCostPrintPage";
 import { IndustrialCostPage } from "./pages/industrial-costs/IndustrialCostPage";
+import { CostCalculationPage } from "./pages/industrial-costs/CostCalculationPage";
+import { IndustrialCostByProductReportPage } from "./pages/reports/CostReports";
+import { CostCalculationPrintPage } from "./pages/print/CostCalculationPrintPage";
+import { ProductionCostPrintPage } from "./pages/print/ProductionCostPrintPage";
 import { IndustrialResourceDetailPage } from "./pages/industrial-resources/IndustrialResourceDetailPage";
 import { IndustrialResourcesPage } from "./pages/industrial-resources/IndustrialResourcesPage";
 import {
@@ -131,6 +135,8 @@ function AuthenticatedApp() {
         <Route path="/print/relatorios/R-14" element={<OrderOperationPrintPage />} />
         <Route path="/print/relatorios/:reportCode" element={<ReportPrintPage />} />
         <Route path="/print/estrutura-custos/:id" element={<IndustrialCostPrintPage />} />
+        <Route path="/print/calculo-custo/:id" element={<CostCalculationPrintPage />} />
+        <Route path="/print/custo-producao/:id" element={<ProductionCostPrintPage />} />
         <Route path="/print/contagem-fisica" element={<InventoryCountSheetPage />} />
         <Route path="/print/posicao-estoque" element={<InventoryPositionSheetPage />} />
         <Route path="/print/qualidade-pendencias" element={<QualityPendingSheetPage />} />
@@ -156,6 +162,7 @@ function AuthenticatedApp() {
           <Route path="/cadastros/clientes" element={<CustomersPage />} />
           <Route path="/cadastros/produtos" element={<ProductsPage />} />
           <Route path="/produtos/:productId/custos" element={<IndustrialCostPage />} />
+          <Route path="/calculos-custo/:id" element={<CostCalculationPage />} />
           <Route path="/compras/ordens" element={<PurchaseOrdersPage />} />
           <Route path="/compras/ordens/nova" element={<PurchaseOrderPage />} />
           <Route path="/compras/ordens/:id" element={<PurchaseOrderPage />} />
@@ -218,6 +225,10 @@ function AuthenticatedApp() {
             element={<IndustrialResourceDetailPage />}
           />
           <Route path="/relatorios" element={<ReportsHubPage />} />
+          <Route
+            path="/relatorios/custos/industrial-por-produto"
+            element={<IndustrialCostByProductReportPage />}
+          />
           <Route path="/relatorios/estoque/posicao" element={<InventoryPositionReportPage />} />
           <Route path="/relatorios/estoque/vencimentos" element={<ExpiryReportPage />} />
           <Route path="/relatorios/estoque/movimentacoes" element={<MovementsReportPage />} />

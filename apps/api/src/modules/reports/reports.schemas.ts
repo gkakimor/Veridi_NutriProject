@@ -201,6 +201,17 @@ export type ConsumptionQuery = z.infer<typeof consumptionQuerySchema>;
 export type PurchaseOrdersQuery = z.infer<typeof purchaseOrdersQuerySchema>;
 export type ReceiptsQuery = z.infer<typeof receiptsQuerySchema>;
 export type OnOrderQuery = z.infer<typeof onOrderQuerySchema>;
+export const industrialCostByProductQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+  customerId: z.string().trim().min(1).optional(),
+  active: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
+  ...paginationFields,
+});
+
+export type IndustrialCostByProductQuery = z.infer<typeof industrialCostByProductQuerySchema>;
 export type CustomerOrdersQuery = z.infer<typeof customerOrdersQuerySchema>;
 export type FulfillmentQuery = z.infer<typeof fulfillmentQuerySchema>;
 export type OrderOperationQuery = z.infer<typeof orderOperationQuerySchema>;

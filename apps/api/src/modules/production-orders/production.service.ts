@@ -5,6 +5,7 @@ import { nextLotCode } from "../../lib/lot-code.js";
 import { isLotExpired } from "../../lib/inventory-ledger.js";
 import { suggestedExpiryDate } from "../../lib/date-months.js";
 import { InvalidTransitionError, MissingFinishedItemError, ProductionOrderNotFoundError } from "./production-orders.errors.js";
+import { createProductionOrderCostSnapshot } from "../industrial-cost-calculation/production-cost.service.js";
 import { getProductionOrderById } from "./production-orders.service.js";
 import {
   ExpiryBeforeProducedAtError,
@@ -214,6 +215,11 @@ export async function completeProductionOrder(
         completionReason: variance.greaterThan(0) ? completionReason : null,
       },
     });
+
+    // Congela o custo industrial desta producao na MESMA transacao:
+    // informar custo de recebimento ou reajustar tarifa depois nunca
+    // reescreve o que esta OP custou.
+    await createProductionOrderCostSnapshot(tx, productionOrderId);
   });
 
   return (await getProductionOrderById(productionOrderId))!;

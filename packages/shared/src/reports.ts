@@ -12,6 +12,7 @@
  */
 
 import type { CostQuality, CostSource } from "./costs.js";
+import type { IndustrialCostQuality } from "./industrial-cost-calculation.js";
 import type { BillingStatus, CustomerOrderBillingStatus } from "./billings.js";
 import type { CustomerOrderStatus } from "./customer-orders.js";
 import type { InventoryMovementSourceType, InventoryMovementType } from "./inventory.js";
@@ -500,4 +501,28 @@ export interface OrderDeliveredBilledRowDTO {
   unitCode: string;
   status: CustomerOrderStatus;
   billingStatus: CustomerOrderBillingStatus;
+}
+
+/* ─────────────── R-18 Custo industrial por produto ─────────────── */
+
+/**
+ * Último cálculo SALVO por produto. Nada é recalculado em massa ao abrir o
+ * relatório, e produto sem cálculo salvo mostra "—": ausência é informação.
+ */
+export interface IndustrialCostByProductRowDTO {
+  productId: string;
+  productCode: string;
+  productName: string;
+  customerName: string | null;
+  activeCostVersionLabel: string | null;
+  calculationId: string | null;
+  calculationCode: string | null;
+  costReferenceDate: string | null;
+  calculatedAt: string | null;
+  quality: IndustrialCostQuality | null;
+  /** `null` em cálculo parcial — o subtotal conhecido vai separado. */
+  totalIndustrialCost: string | null;
+  knownSubtotal: string | null;
+  costPerUnit: string | null;
+  costPer1000: string | null;
 }

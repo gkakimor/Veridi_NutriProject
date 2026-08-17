@@ -80,6 +80,8 @@ export const createResourceUsageSchema = z.object({
 
 export const updateEnergyModeSchema = z.object({
   energyCalculationMode: z.enum(["NONE", "DIRECT", "FROM_EQUIPMENT"]),
+  /** Só faz sentido no modo derivado; ausente mantém o que já está lá. */
+  energyResourceId: z.string().trim().min(1).nullish(),
 });
 
 export type CreateResourceUsageInput = z.infer<typeof createResourceUsageSchema>;

@@ -5,7 +5,7 @@ import { PrintTable } from "../../print/PrintLayout";
 import { PrintSheet } from "../../print/PrintSheet";
 
 /**
- * Impressão dos relatórios R-01…R-17 em ROTA DEDICADA.
+ * Impressão dos relatórios R-01…R-18 em ROTA DEDICADA.
  *
  * Política oficial (capacidade 42): `window.print()` é só o mecanismo de
  * saída; a origem nunca é a tela operacional. Aqui o documento é montado do
@@ -117,6 +117,12 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Pedido x Entregue x Faturado",
     csvPath: "/reports/billing/order-delivered-billed/export.csv",
     screenPath: "/relatorios/faturamento/pedido-entregue-faturado",
+  },
+  "R-18": {
+    code: "R-18",
+    title: "Custo industrial por produto",
+    csvPath: "/reports/costs/industrial-by-product/export.csv",
+    screenPath: "/relatorios/custos/industrial-por-produto",
   },
 };
 

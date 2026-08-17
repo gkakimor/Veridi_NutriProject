@@ -72,6 +72,10 @@ concluído — estrutura versionada de premissas, sem cálculo de CMV.**
 **Delivery 36 — Recursos industriais / equipamentos / energia / mão de obra
 (Bloco G, capacidade 44): concluído — recurso e uso do recurso separados,
 tarifa histórica imutável e snapshot econômico congelado na ativação.**
+**Delivery 37 — Custo industrial completo (Bloco G, capacidade 45):
+concluído — custo padrão/prospectivo com data de referência, custo da
+produção realizada (materiais reais + padrão aplicado), snapshots imutáveis
+e branding oficial da Veridi.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -4105,6 +4109,77 @@ ajustados a essa regra.
 
 ---
 
+# Delivery 37 — Custo industrial completo (Bloco G, capacidade 45)
+
+## Branding oficial
+O logo oficial (`docs/logo/logo-veridi-head.png`) entrou como asset LOCAL em
+`apps/web/src/assets/brand/`, com o símbolo isolado recortado do próprio
+arquivo (241×241, sem distorcer o wordmark) servindo de favicon
+(`apps/web/public/favicon.png`). `BrandLogo` centraliza o uso: assinatura
+horizontal no `PrintHeader`/`PrintSheet` (reflete em FO-01…FO-05,
+relatórios, estruturas de custo, R.PRO.002 e R.COQ.003 sem tocar em código,
+revisão ou conteúdo controlado) e símbolo no masthead — o wordmark oficial é
+verde-escuro e sumiria no fundo verde do shell, então o texto continua. Zero
+request externa: validado no Playwright.
+
+## Custo padrão / prospectivo
+`GET /industrial-costs/:id/calculate?referenceDate=` devolve o read model
+completo. Material segue a Foundation (30d → 90d → último real) e só então
+oferta de fornecedor ELEGÍVEL (relação e fornecedor ativos, APPROVED, BRL,
+vigente na data, unidade convertível): preferencial vence; único homologado
+serve; vários sem preferencial devolvem `AMBIGUOUS_SUPPLIER_REFERENCE` com
+custo desconhecido — escolher o menor seria decidir compra no lugar de
+gente. Oferta legada sem vigência nunca vira custo.
+
+Quantidades vêm de `computeFormulationRequirements` (mesma matemática da
+produção). Material do cliente é `EXCLUDED_CUSTOMER_SUPPLIED` — nem zero,
+nem desconhecido. Caixas são inteiras (`ceil`), percentuais incidem sobre o
+custo direto COMPLETO e nunca compõem base de outro percentual. Sem algum
+componente, `total/direto/custo por unidade` são `null` e sobra o
+`knownSubtotal`, rotulado como subtotal conhecido.
+
+Energia derivada ganhou `IndustrialCostVersion.energyResourceId`: a tarifa
+do kWh derivado é ESCOLHIDA. O sistema não elege um recurso de energia
+sozinho (correção de projeto em cima da 44).
+
+## Cálculos salvos
+`IndustrialCostCalculation` (`CALC-000001`) congela a análise inteira em
+JSON + colunas de total. Salvar RECALCULA no backend — o frontend nunca é
+fonte da matemática. Snapshot salvo não recalcula: novas compras mudam o
+próximo cálculo, nunca o documento anterior.
+
+## Custo da produção
+`ProductionOrder.industrialCostVersionId` é congelado no RELEASE quando
+existe EC ACTIVE apontando para a MESMA formulação da OP; sem compatível a
+produção segue e o custo fica material-only, declarado. O custo separa
+materiais REALIZADOS (lote consumido, avaliado no `consumedAt`) de custos
+PADRÃO APLICADOS na proporção produzido ÷ base. Horas e kWh reais não são
+medidos, então nada é chamado de "real": a badge diz "híbrido".
+`ProductionOrderCostSnapshot` é criado na conclusão, uma única vez.
+
+## Telas e documentos
+Página de custos ganhou CÁLCULO PADRÃO (data de referência, [Calcular
+custo], [Salvar cálculo]) e CÁLCULOS SALVOS; `/calculos-custo/:id` é o
+snapshot read-only; prints dedicados em `/print/calculo-custo/:id` e
+`/print/custo-producao/:opId` (custo fora do documento GMP da OP). A OP
+ganhou a seção CUSTO INDUSTRIAL. R-18 (custo industrial por produto) usa o
+ÚLTIMO cálculo salvo — nunca recalcula em massa — com CSV e impressão pela
+rota genérica.
+
+## Golden do CMV (baseline novo)
+9 produtos · 52 componentes · 27 linhas de precificação. Resolução por nome
+só é confiável em 1 produto; 6 componentes comparáveis, 0 dentro da
+tolerância, 6 divergentes (razão sistemática ≈1,2 entre CMV e formulação),
+46 sem insumos suficientes. `custo_por_unidade` do export é idêntico em
+todas as planilhas — dado suspeito, reportado
+(`HISTORICAL_UNIT_COST_NOT_TRUSTWORTHY`) e nunca usado como golden de total.
+Nada de CMV é persistido e nenhum preço histórico vira custo atual. Golden
+da formulação intacto: 26/26/0.
+
+- Testes: 562 API + 25 web + 14 scripts. Playwright: `handoff/screens/45-*`.
+
+---
+
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
@@ -4112,15 +4187,15 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Bloco F CONCLUÍDO (33-42); Bloco G em andamento (43-44 concluídas).
-Próximo passo do roadmap oficial: **capacidade 45 — custo industrial
-consolidado**, que multiplica os usos de recurso pelas tarifas congeladas e
-soma as premissas manuais. A base de
+Bloco F CONCLUÍDO (33-42); Bloco G em andamento (43-45 concluídas).
+Próximo passo do roadmap oficial: **capacidade 46 — simulador de preço,
+margem e faixas de quantidade**, que consome os cálculos `CALC` salvos na
+45. A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
 o que existe hoje é ferramenta de dados de desenvolvimento. Depois seguem
-45-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+46-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.
