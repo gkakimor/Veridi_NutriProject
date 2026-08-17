@@ -185,3 +185,95 @@ Evidências positivas concretas, todas observadas:
 - **Status sempre em texto**, nunca só por cor, inclusive nos impressos.
 - **Zero requisição externa**: logo e favicon são arquivos locais; nenhuma
   chamada sai de 127.0.0.1.
+
+---
+
+# POST-FIX REVALIDATION
+
+Rodada de **revalidação** executada em 2026-08-17 sobre os commits `4342ee7`
+(correções) e `615f7f2` (documentação do gate). Não é auditoria nova: os mesmos
+três agentes remediram, em modo somente-leitura, o que tinham apontado. Cenário
+sintético novo (carimbo 219338) criado e removido ao final; corpus intacto.
+
+Nenhuma correção foi aplicada nesta rodada, por instrução explícita. O que
+aparece como aberto **fica aberto**.
+
+## Scores — antes → depois
+
+| Dimensão | Antes | Depois | Δ | Por quê |
+|---|---|---|---|---|
+| Navegação sem treinamento | 5/10 | **7/10** | +2 | 12 das 14 tarefas de descoberta concluídas sem conhecimento prévio; o bloqueio original (link da formulação) confirmado corrigido em dois registros distintos |
+| Continuidade entre módulos | 6/10 | **6/10** | 0 | as correções confirmadas são de tela isolada, não de ligação entre módulos; e a trilha de auditoria da produção continua furada |
+| Legibilidade | 7/10 | **8/10** | +1 | contraste de cabeçalho de tabela e dica de campo resolvido sistemicamente (5,19:1 e 5,54:1, medidos) |
+| Consistência | 8/10 | **8/10** | 0 | ganhos (separador decimal, "← Voltar" do orçamento) anulados por inconsistência nova: rótulo de coluna diferente entre tela e impresso em R-13/R-17 |
+| Acessibilidade básica | 4/10 | **7/10** | +3 | o CRITICAL do modal está resolvido com ciclo de foco fechado nos dois sentidos; skip link leva à primeira ação em 2 Tabs (eram ~37). Não subiu mais por causa da regressão do Escape no menu "⋯" |
+| Documentos impressos | 6/10 | **7/10** | +1 | R-18, Folha de Receita, Estrutura de Custos e "← Voltar" confirmados. Não subiu mais: FO-01 regrediu e R-19/R-20 continuam estourando |
+
+## HIGH antigos — veredito
+
+| # | Finding | Veredito | Evidência |
+|---|---|---|---|
+| A | Seletores presos em 100 registros | **RESOLVED** | Nova OC 115 fornecedores (o de código mais alto aparece), formulação 584 itens, amostra 803 itens, pedido 218 produtos |
+| B | Campo opcional em branco derrubando o cadastro | **RESOLVED** | payload real interceptado: todos os opcionais como `null`, aceitos pela API |
+| C | "Abrir formulação" quebrado | **RESOLVED** | leva a `/producao/formulacoes/{productId}/versoes/{versionId}` com a formulação ativa |
+| D | Estrutura de custos sem saída para produto sem lote mínimo | **RESOLVED** | campo "Base de produção (un)" presente, botão desabilitado até ser preenchido |
+| E | Produção gravando "Ambiente local" | **PARTIALLY RESOLVED** | consumo mostra "Administrador Veridi" e liberação também; **saída de produção, conclusão, planejamento e criação continuam "Ambiente local"**, e o picking não tem nenhuma coluna de responsável |
+| F | R-19 e R-20 perdendo coluna no papel | **STILL OPEN** | R-19 1319 px e R-20 1398 px contra 1047 px úteis (+26,0 % e +33,5 %), medidos com print media |
+
+## Macrofluxos
+
+| Macrofluxo | Veredito | Observação |
+|---|---|---|
+| Comercial (Projeto → Produto → Fórmula → Custo → Precificação → Orçamento) | **PASS** | a página do projeto reúne a cadeia inteira com links diretos |
+| Compras/Qualidade (sugestão → OC → Recebimento → Lote → CoA) | **PASS** | OC parcial legível (25/40 kg), lote com genealogia até a OP |
+| Produção (Pedido → OP → Picking → Receita → Output) | **PASS WITH FRICTION** | tudo executa; a fricção é a atribuição de usuário (finding E) |
+| Expedição/Faturamento | **PASS** | trilha Pedido → OP → Expedição → Faturamento clicável nos dois sentidos |
+| Estoque (Item → Lote → Rastreabilidade → FO-01) | **PASS** | FO-01 agora identifica o proprietário do material |
+
+## Quick wins revalidados
+
+PASS: seletores · campo opcional nulo · "Abrir formulação" · base de produção ·
+foco e trap do modal · Enter no menu "⋯" · skip link · contraste · Proprietário
+na FO-01 · Folha de Receita em paisagem · R-18 cabendo · busca sem acento ·
+ordem do estoque · texto "OP concluída" · voltar da impressão do orçamento ·
+separador decimal.
+
+FAIL: **Escape no menu "⋯"** (regressão desta correção) e **"Qtd. pedida"**
+(renomeado só na tela).
+
+## Regressões introduzidas pelas correções do gate
+
+| ID | Sev. | O que quebrou | Causa | Situação |
+|---|---|---|---|---|
+| REG-01 | HIGH | Escape não fecha mais o menu "⋯": `aria-expanded` continua `true` e o menu segue no DOM (clicar fora ainda fecha) | o `stopPropagation` que consertou o Enter também impede o Escape de chegar ao listener em `document` | aberto — `apps/web/src/components/RowActions.tsx` |
+| REG-02 | HIGH | FO-01 passou a estourar a folha: 909 px em 718 px úteis (+26,6 %) | a coluna "Proprietário" foi acrescentada sem reajustar o layout do retrato | aberto — a coluna em si está correta |
+| REG-03 | MEDIUM | Impressão e CSV de R-13/R-17 continuam com "Pedido (qtd)" | o rename foi feito no componente de tela; impressão e CSV herdam o cabeçalho de `apps/api/src/modules/exports/report-exports.ts` | aberto |
+
+## Findings novos (não corrigidos nesta rodada)
+
+| ID | Sev. | Finding | Evidência |
+|---|---|---|---|
+| NEW-01 | MEDIUM | "Abrir produto" a partir do projeto cai numa lista não filtrada de 20 produtos aleatórios | `/cadastros/produtos?search=PROD-021697` não aplica o parâmetro (era UX-21, agora medido como atrito real no fluxo mais repetido) |
+| NEW-02 | MEDIUM | Não há volta ao projeto a partir de Formulação, Custos ou Precificação — "← Voltar" leva à lista do módulo | confirmado no código: nenhuma das três telas guarda o projeto de origem |
+| NEW-03 | MEDIUM | Busca de lotes não reconhece o lote comercial impresso na etiqueta | `lots.service.ts` casa apenas código interno, lote do fornecedor e código/nome do item |
+| NEW-04 | LOW | Picking não tem coluna de responsável — não há onde mostrar quem conferiu | tabela de picking da OP |
+| NEW-05 | não confirmado | Pesagem da Folha de Receita não persistiu num teste, sem erro visível na tela | a API recusa corretamente com `exceeds_reserved` ("restam 0", porque o consumo já fora registrado); falta confirmar se a tela exibe essa mensagem |
+| NEW-06 | LOW | FO-04 imprime conferência e assinatura em branco mesmo com o picking já confirmado | por desenho é formulário de papel; pode ler como "não separado" |
+
+## Veredito de demo
+
+**DEMO NOT READY.** Critérios atendidos: nenhum CRITICAL; nenhum macrofluxo em
+FAIL; navegação 7/10; impressos 7/10; zero erro 5xx; console limpo (37 telas,
+0 erro, contra 8 na rodada anterior).
+
+Blockers reais, pelos critérios definidos pelo Product Owner:
+
+1. **Continuidade entre módulos 6/10**, abaixo do mínimo de 7 — puxada por
+   NEW-01, NEW-02 e pela trilha de auditoria da produção.
+2. **R-19 e R-20 não cabem no papel** (+26 % e +33,5 %).
+3. **Atribuição de usuário na produção** (finding E) — saída, conclusão,
+   planejamento e picking. Deixa de ser blocker se o Product Owner aceitar
+   formalmente o finding antes da demo.
+
+REG-01 e REG-02 não bloqueiam o roteiro, mas são regressões das correções deste
+gate e deveriam ser fechadas antes de qualquer demonstração pública.
