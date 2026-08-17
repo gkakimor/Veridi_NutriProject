@@ -118,6 +118,8 @@ export interface ProjectSampleListResponse {
 }
 
 export interface CreateProjectSampleInput {
+  /** Produto testado — exigido quando o projeto tem mais de um. */
+  projectProductId?: string;
   description?: string | null;
   productionNotes?: string | null;
   outputUomCode?: string | null;

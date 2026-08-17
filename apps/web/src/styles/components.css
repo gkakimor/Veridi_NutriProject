@@ -1152,3 +1152,89 @@
   background: var(--selected-bg);
   font-size: var(--fs-sm);
 }
+
+/**
+ * Orçamento multilinha.
+ *
+ * A proposta cobre vários produtos, então a tabela precisa de espaço: o nome
+ * do produto é o que a pessoa lê para saber do que se trata, e quantidade e
+ * unidade cabem em pouco. Sem rolagem interna — a página rola.
+ */
+.quote-workspace {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.quote-workspace__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+}
+
+.quote-workspace__head h4 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.quote-workspace__conditions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.table--quote-lines th:first-child,
+.table--quote-lines td:first-child {
+  width: 34%;
+}
+
+.table--quote-lines input {
+  width: 100%;
+  max-width: 140px;
+}
+
+.table--quote-lines tfoot td {
+  border-top: 2px solid var(--line-strong);
+  font-size: var(--fs-sm);
+}
+
+/* Formulário curto que nasce dentro de uma seção, sem virar modal. */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.inline-form > * {
+  margin: 0;
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.table tr.is-selected > td {
+  background: var(--selected-bg);
+}
+
+/* Criação no contexto: separada dos resultados, nunca confundida com um. */
+.entity-select__create {
+  border-top: 1px solid var(--line);
+  padding: var(--sp-1) var(--sp-2);
+}

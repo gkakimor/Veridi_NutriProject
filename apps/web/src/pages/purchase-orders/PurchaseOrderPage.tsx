@@ -11,6 +11,8 @@ import {
   updatePurchaseOrder,
 } from "../../lib/purchase-orders-api";
 import { listSuppliers } from "../../lib/suppliers-api";
+import { useAuth } from "../../app/AuthProvider";
+import { SupplierFormModal } from "../suppliers/SupplierFormModal";
 import { listSupplierItems } from "../../lib/supplier-items-api";
 import { listItems } from "../../lib/items-api";
 import { formatBRL } from "../../lib/currency";
@@ -105,6 +107,12 @@ export function PurchaseOrderPage() {
   const [notFound, setNotFound] = useState(false);
 
   const [supplierId, setSupplierId] = useState("");
+  // Criação no contexto: o fornecedor não existe e sair da OC agora
+  // significaria refazer as linhas já digitadas.
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const { user } = useAuth();
+  // CTA que termina em 403 é pior que CTA nenhum.
+  const canCreateSupplier = user?.role === "PURCHASING" || user?.role === "ADMIN";
   const [orderDate, setOrderDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -527,6 +535,9 @@ export function PurchaseOrderPage() {
                   name: supplier.tradeName ?? supplier.legalName,
                   ...(supplier.active ? {} : { hint: "inativo" }),
                 }))}
+                canCreate={canCreateSupplier}
+                createLabel="Cadastrar novo fornecedor"
+                onCreateNew={() => setSupplierModalOpen(true)}
               />
             ) : (
               <p className="field-readonly-value">
@@ -834,6 +845,23 @@ export function PurchaseOrderPage() {
             </div>
           </div>
         </>
+      )}
+
+      {supplierModalOpen && (
+        <SupplierFormModal
+          mode="create"
+          supplier={null}
+          onClose={() => setSupplierModalOpen(false)}
+          onSaved={(created) => {
+            setSupplierModalOpen(false);
+            if (!created) return;
+            setActiveSuppliers((prev) => [
+              { ...created },
+              ...prev.filter((row) => row.id !== created.id),
+            ]);
+            setSupplierId(created.id);
+          }}
+        />
       )}
     </>
   );

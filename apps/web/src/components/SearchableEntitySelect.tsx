@@ -37,6 +37,9 @@ export function SearchableEntitySelect({
   disabled,
   required,
   emptyMessage = "Nenhum resultado.",
+  canCreate = false,
+  createLabel = "Cadastrar novo",
+  onCreateNew,
 }: {
   id: string;
   options: EntityOption[];
@@ -46,6 +49,15 @@ export function SearchableEntitySelect({
   disabled?: boolean;
   required?: boolean;
   emptyMessage?: string;
+  /**
+   * Criação no contexto: quando o que a pessoa procura não existe, cadastrar
+   * ali mesmo evita abandonar o formulário pela metade. Só aparece quando o
+   * papel do usuário permite criar — CTA que termina em 403 é pior que CTA
+   * nenhum.
+   */
+  canCreate?: boolean;
+  createLabel?: string;
+  onCreateNew?: (typed: string) => void;
 }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
@@ -88,6 +100,15 @@ export function SearchableEntitySelect({
   }, [open, measure]);
 
   const selected = options.find((option) => option.id === value) ?? null;
+
+  // Seleção que chega de fora — criação no contexto devolvendo o registro
+  // recém-cadastrado — precisa aparecer no campo. Sem isto o valor está
+  // escolhido no estado e a tela mostra caixa vazia, que lê como "não salvou".
+  useEffect(() => {
+    if (!value) return;
+    setQuery("");
+    setOpen(false);
+  }, [value]);
 
   /** Busca sem acento e sem caixa: quem digita rápido não acentua. */
   const normalize = (text: string) =>
@@ -219,7 +240,7 @@ export function SearchableEntitySelect({
               maxHeight: anchor.maxHeight,
             }}
           >
-            {options.length === 0 && (
+            {options.length === 0 && !canCreate && (
               <li className="entity-select__empty">Nada disponível para escolher.</li>
             )}
             {options.length > 0 && filtered.length === 0 && (
@@ -248,6 +269,23 @@ export function SearchableEntitySelect({
             {filtered.length > 50 && (
               <li className="entity-select__empty">
                 +{filtered.length - 50} resultados — refine a busca.
+              </li>
+            )}
+            {canCreate && onCreateNew && (
+              <li className="entity-select__create">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onMouseDown={(event) => {
+                    // `mousedown` antes do blur fechar a lista.
+                    event.preventDefault();
+                    setOpen(false);
+                    onCreateNew(query.trim());
+                  }}
+                >
+                  + {createLabel}
+                  {query.trim() ? `: “${query.trim()}”` : ""}
+                </button>
               </li>
             )}
           </ul>,

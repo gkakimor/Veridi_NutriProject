@@ -33,6 +33,8 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { useAuth } from "../../app/AuthProvider";
+import { ItemFormModal } from "../items/ItemFormModal";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
@@ -127,6 +129,13 @@ export function FormulationVersionPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
+  // Criação no contexto: o item não existe e sair da fórmula agora
+  // significaria perder as linhas já montadas. Guarda a linha de origem
+  // para devolver o item selecionado exatamente onde ele foi pedido.
+  const [itemModalRowKey, setItemModalRowKey] = useState<string | null>(null);
+  const { user } = useAuth();
+  // CTA que termina em 403 é pior que CTA nenhum.
+  const canCreateItem = user?.role === "PURCHASING" || user?.role === "QUALITY" || user?.role === "ADMIN";
   const [costEstimate, setCostEstimate] = useState<FormulationCostEstimateDTO | null>(null);
 
   const syncFromServer = useCallback((dto: FormulationVersionDTO) => {
@@ -549,6 +558,9 @@ export function FormulationVersionPage() {
                             name: item.name,
                             ...(item.active ? {} : { hint: "inativo" }),
                           }))}
+                          canCreate={canCreateItem}
+                          createLabel="Cadastrar novo item"
+                          onCreateNew={() => setItemModalRowKey(row.key)}
                         />
                       ) : (
                         <>
@@ -847,6 +859,34 @@ export function FormulationVersionPage() {
         onCancel={() => setActivateDialogOpen(false)}
         onConfirm={handleActivate}
       />
+      {itemModalRowKey !== null && (
+        <ItemFormModal
+          mode="create"
+          item={null}
+          units={units}
+          onClose={() => setItemModalRowKey(null)}
+          onSaved={(created) => {
+            const rowKey = itemModalRowKey;
+            setItemModalRowKey(null);
+            if (!created || !rowKey) return;
+            // O item novo entra no catálogo e já fica escolhido na linha que
+            // pediu por ele — voltar e procurar de novo seria trabalho que o
+            // sistema acabou de fazer.
+            setActiveItems((prev) => [
+              {
+                id: created.id,
+                code: created.code,
+                name: created.name,
+                unitCode: created.unitCode,
+                unitDimension: created.unit.dimension,
+                active: created.active,
+              },
+              ...prev,
+            ]);
+            handleComponentItemChange(rowKey, created.id);
+          }}
+        />
+      )}
     </>
   );
 }

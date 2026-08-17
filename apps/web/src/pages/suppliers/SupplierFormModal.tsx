@@ -12,7 +12,8 @@ interface SupplierFormModalProps {
   mode: "create" | "edit";
   supplier: SupplierDTO | null;
   onClose: () => void;
-  onSaved: () => void;
+  /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
+  onSaved: (created?: SupplierDTO) => void;
 }
 
 interface FormState {
@@ -74,11 +75,14 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
 
     try {
       if (mode === "create") {
-        await createSupplier(payload);
+        const created = await createSupplier(payload);
+        onSaved(created);
       } else if (supplier) {
         await updateSupplier(supplier.id, payload);
+        onSaved();
+      } else {
+        onSaved();
       }
-      onSaved();
     } catch (err) {
       if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};

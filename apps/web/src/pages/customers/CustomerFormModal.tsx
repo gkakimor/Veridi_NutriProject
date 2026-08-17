@@ -12,7 +12,8 @@ interface CustomerFormModalProps {
   mode: "create" | "edit";
   customer: CustomerDTO | null;
   onClose: () => void;
-  onSaved: () => void;
+  /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
+  onSaved: (created?: CustomerDTO) => void;
 }
 
 interface FormState {
@@ -117,11 +118,14 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
 
     try {
       if (mode === "create") {
-        await createCustomer(payload);
+        const created = await createCustomer(payload);
+        onSaved(created);
       } else if (customer) {
         await updateCustomer(customer.id, payload);
+        onSaved();
+      } else {
+        onSaved();
       }
-      onSaved();
     } catch (err) {
       if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};
