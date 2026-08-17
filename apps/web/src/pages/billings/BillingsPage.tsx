@@ -221,6 +221,11 @@ export function BillingsPage() {
         </table>
       </div>
 
+      {/* A barra filtra os DOCUMENTOS de faturamento; a fila "Aguardando
+          faturamento" acima é outra pergunta e não responde a ela. Dizer isso
+          é mais barato do que deixar o usuário deduzir pela posição. */}
+      <p className="toolbar__scope">Filtrar documentos de faturamento</p>
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="billing-search">

@@ -602,6 +602,33 @@ buttons.
   formula cannot be verified (`HISTORICAL_MARGIN_FORMULA_UNVERIFIABLE`) and
   no pricing version is ever created from the spreadsheet.
 
+# 5.11 Finding records (findability round)
+
+Rules that outlived the round that produced them. The UI side of them lives in
+`docs/UI_BRAND.md`; what is here is the product intent.
+
+- **A dynamic business entity is searched, not scrolled.** Product, item,
+  customer, supplier, project, lot, order, production order, formula, resource
+  and supplier item appear as searchable selectors wherever they are chosen.
+  A small enum (status, type, mode, currency) keeps the plain select.
+- **An entity is always shown as business code + name.** The UUID is an
+  implementation detail and never reaches the operator.
+- **A link that carries context must filter for real.** A query parameter that
+  the destination ignores is worse than no link: it promises the answer and
+  delivers a random list. Explicit URL beats the remembered session filter.
+- **A known relationship is navigation, not a new search.** If the system
+  already knows which orders belong to a customer, the customer's record links
+  to them; the person does not open another module and search again.
+- **List filters exist to answer real questions**, not to mirror the schema.
+  When a filtered list comes back empty it says so — "nothing for these
+  filters", with a way to clear them — which is a different statement from
+  "nothing registered".
+- **A checkbox is a promise that something can be done with the selection.**
+  Selection is page-local, the counter never refers to rows the person can no
+  longer see, and changing a filter clears it. Selection never implies bulk
+  mutation: approving, releasing quality, shipping, invoicing and cancelling
+  keep their own transactional rules and stay one record at a time.
+
 # 5.10 Project → Quotation → Cost/Price (capability 47)
 
 - **A product may exist before the project is approved.** Costing and

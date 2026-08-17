@@ -180,8 +180,8 @@
 
 .table th {
   background: var(--canvas);
-  /* ink-3 sobre canvas dá 2,84:1 — abaixo do mínimo legível; cabeçalho de
-     tabela e dica de campo carregam informação, não são decoração. */
+  /* Cabeçalho de tabela carrega informação, não é decoração: usa ink-2
+     (5,19:1 sobre canvas). O tom mais claro reprovava no contraste. */
   color: var(--ink-2);
   font-size: 11px;
   font-weight: var(--fw-semibold);
@@ -1066,4 +1066,14 @@
 .table__select {
   width: 36px;
   text-align: center;
+}
+
+/* Diz a que a barra de filtros se aplica quando há mais de uma tabela. */
+.toolbar__scope {
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
 }

@@ -125,7 +125,7 @@ export function AppShell() {
               // Resolve lote pelo código interno, pelo QR e pelo número de lote
               // comercial impresso na etiqueta. Item e OP continuam fora — não
               // prometer o que não faz.
-              placeholder="Buscar ou escanear lote (interno ou comercial)…"
+              placeholder="Buscar ou escanear lote (código interno ou lote comercial)…"
               value={searchValue}
               disabled={searching}
               onChange={(event) => {

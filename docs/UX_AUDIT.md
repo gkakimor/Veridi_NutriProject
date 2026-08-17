@@ -431,3 +431,130 @@ O walkthrough saiu de PASS WITH FRICTION para PASS depois de duas correções:
 grupos curtos do painel de atenção passam a abrir já expandidos (a pendência
 não fica escondida atrás de um clique) e "Abrir produto" no projeto abre o
 registro direto, com a lista filtrada atrás.
+
+
+---
+
+# FINDABILITY & LIST UX
+
+Rodada executada em 2026-08-17, depois do Demo Ready formal. Objetivo único:
+**encontrar rapidamente o registro certo** — sem rolar centenas de opções, sem
+decorar código e sem abrir outro módulo para refazer a busca que o sistema já
+sabia fazer.
+
+## Selectors de entidade
+
+Inventário: **106 `<select>`** no frontend, classificados em enum, entidade
+pequena e entidade grande. Migrados para busca por digitação nesta rodada
+(somando-se aos 4 já validados antes):
+
+| Tela | Campo |
+|---|---|
+| Nova ordem de produção | Produto |
+| Pedido de cliente | Cliente · Produto da linha |
+| Contagem de estoque | Item |
+| Recebimento de material do cliente | Cliente |
+| Cadastro de produto | Cliente · Item de produto acabado |
+| Cadastro de projeto | Cliente |
+| Estrutura de custos | Recurso industrial |
+| Faturamento (filtro) | Cliente |
+| *(já migrados antes)* | Item da formulação · Item da amostra · Produto do pedido · Fornecedor da OC |
+
+Mantidos como `<select>` simples, de propósito: status, tipo, perfil, sim/não,
+moeda, modo, categoria, forma farmacêutica, faixa etária, UF. Enum pequeno não
+precisa de busca — combobox ali é cerimônia.
+
+Apresentação e busca seguem a regra registrada em `docs/UI_BRAND.md`: **código
+de negócio + nome** (`MP-000245 · Vitamina C`), nunca UUID; busca sem acento e
+sem caixa; ↑/↓, Enter e Escape; ARIA de combobox. A busca é no cliente, sobre o
+catálogo já carregado (795 itens é o maior caso hoje); acima de alguns milhares
+de registros isso passa a exigir busca no servidor — anotado como limite
+conhecido, não como pendência.
+
+## Listas e filtros
+
+| Lista | Contexto vindo da URL | Filtros |
+|---|---|---|
+| Faturamento | `customerId`, `dateFrom`, `dateTo` | busca (FAT/PED/EXP/cliente), status, **cliente**, período, "Limpar filtros" |
+| Pedidos | `customerId` | busca, cliente, status |
+| Projetos | `customerId` | busca, cliente, status, canal |
+| Ordens de compra | `supplierId` | busca, fornecedor, status |
+| Item × fornecedor | `supplierId` | busca, homologação, preferencial, ativo |
+| Materiais de clientes | `customerId` | busca, cliente |
+| Lotes · Movimentações · Posição de estoque · Ordens de produção | `search` | filtros existentes preservados |
+
+Precedência de filtro, agora explícita no código (`useInitialFilters` e o
+parâmetro `override` de `usePersistentFilter`): **URL → sessão → default da
+tela**. Quem clicou em "ver faturamentos deste cliente" está fazendo uma
+pergunta específica; abrir com o filtro da visita anterior responderia outra.
+
+Estado vazio deixou de ser uma frase só: com filtro aplicado, a tela diz
+"Nenhum faturamento encontrado para os filtros atuais" e oferece limpar —
+diferente de "Nenhum faturamento cadastrado".
+
+## Links contextuais
+
+Relação conhecida virou link, cada um abrindo o destino **já filtrado**:
+
+- **Cliente** → Projetos · Pedidos · Faturamentos · Materiais do cliente
+- **Produto** → Formulação · Custos · Ordens de produção · Projeto de origem
+- **Item** → Estoque · Lotes · Movimentações · Fornecedores do item
+- **Fornecedor** → Ordens de compra · Itens homologados
+
+Produto sem projeto de origem não mostra link nenhum — continua valendo a regra
+de nunca inventar relação.
+
+## Seleção de linhas
+
+`TableSelection` habilitado **apenas** na lista de Itens, porque só ali havia
+ação segura e útil para entregar nesta rodada: **exportar exatamente o que foi
+selecionado** (o CSV recebe os ids e mantém as regras de sempre — código de
+negócio, pt-BR, sem UUID, proteção contra fórmula).
+
+Decisões que ficaram no código e viram regra: seleção é da página atual, o
+contador nunca descreve linha que a pessoa não vê mais, trocar filtro limpa a
+seleção, e **seleção não implica mutação em massa**. Aprovar, liberar qualidade,
+expedir, faturar e cancelar continuam com suas regras transacionais próprias —
+nada disso foi adicionado.
+
+## Resultado dos auditores
+
+**Visual/acessibilidade**: comboboxes aprovados nas 7 superfícies testadas ao
+vivo (ARIA correta, `aria-activedescendant` atualizando nas setas, Escape sem
+alterar valor), barra de filtros do Faturamento cabendo numa linha em 1440×900 e
+1280×720, estado vazio correto, checkbox sem conflito com o clique da linha e
+contador honesto. Notas da rodada: Legibilidade **8**, Consistência **9**,
+Acessibilidade básica **8**.
+
+Os dois MEDIUM que rebaixaram essas notas foram **criados por esta rodada** e
+corrigidos em seguida, com medição do próprio auditor:
+
+| Finding | Correção | Verificação |
+|---|---|---|
+| Barra de filtros entre duas tabelas, sem dizer qual delas filtra | rótulo "Filtrar documentos de faturamento" acima da barra | "resolve — não acho mais que a barra precise mudar de lugar" |
+| Linha de Itens continuava focável tendo checkbox, "Editar" e "⋯" dentro: +33% de paradas de Tab por página | `tabIndex` removido da `<tr>`; clique segue abrindo o cadastro | 4 → **3 paradas por linha**, sem perder alcance de teclado |
+
+O auditor optou por **não subir as notas retroativamente** sem refazer a
+auditoria completa — decisão dele, registrada aqui como está: as notas da rodada
+são 8/9/8 e os dois motivos que as rebaixaram deixaram de existir.
+
+Um LOW também foi corrigido: comentário de CSS que citava o token e o contraste
+errados.
+
+**Usuário final (findability)**: **10 de 10 tarefas** concluídas, e — o que
+importava nesta rodada — **nenhuma exigiu rolar uma lista de centenas de
+opções**. As quatro travessias por relação (cliente → faturamentos, produto →
+OPs, item → lotes, fornecedor → OCs) chegaram ao destino já filtrado.
+`Facilidade de navegação sem treinamento: 9/10` — mantida, sem mudança líquida.
+
+Três achados dele, dois corrigidos e um recusado com motivo:
+
+| Sev. | Finding | Desfecho |
+|---|---|---|
+| MEDIUM | Filtro de cliente em Produtos ainda era `<select>` nativo com 83 opções ordenadas por código | migrado para o mesmo combobox de busca; revalidado ao vivo por nome, por código e por teclado |
+| LOW | Estado vazio de Produtos não distinguia filtro de catálogo vazio | padronizado com o de Faturamento; revalidado |
+| MEDIUM | Busca global não acharia lote pelo número do fornecedor, apesar do placeholder | **não corrigido, de propósito** — existe teste `"nunca resolve por supplierLot — só pelo código interno"`: lote de fornecedor não é único entre fornecedores e escanear precisa resolver identidade interna. O que mudou foi a promessa: o placeholder passou a dizer "código interno ou lote comercial". Na revalidação o próprio auditor concluiu que havia testado o campo errado — o lote comercial sempre esteve coberto — e encerrou o ponto |
+
+Esse último caso é o motivo de o gate exigir verificação antes de correção:
+implementar o pedido teria quebrado uma regra deliberada do produto.
+

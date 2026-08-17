@@ -212,16 +212,11 @@ export function ItemsPage() {
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr
-                key={item.id}
-                tabIndex={0}
-                onClick={() => setModalState({ mode: "edit", item })}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    setModalState({ mode: "edit", item });
-                  }
-                }}
-              >
+              // Com caixa de seleção, "Editar" e "⋯" dentro da linha, manter a
+              // própria linha focável só acrescentaria uma parada de Tab por
+              // registro — 20 a mais por página, sem alcance novo. O clique
+              // continua abrindo o cadastro.
+              <tr key={item.id} onClick={() => setModalState({ mode: "edit", item })}>
                 <SelectionCell
                   checked={selection.isSelected(item.id)}
                   onToggle={() => selection.toggle(item.id)}

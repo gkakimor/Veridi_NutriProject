@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { CustomerDTO, ProductDTO } from "@veridi/shared";
@@ -62,6 +63,21 @@ export function ProductsPage() {
   useEffect(() => {
     setPage(1);
   }, [search, customerFilter, activeFilter, lifecycleFilter]);
+
+  const hasFilters =
+    searchInput !== "" ||
+    search !== "" ||
+    customerFilter !== "" ||
+    activeFilter !== "all" ||
+    lifecycleFilter !== "all";
+
+  function clearFilters() {
+    setSearchInput("");
+    setSearch("");
+    setCustomerFilter("");
+    setActiveFilter("all");
+    setLifecycleFilter("all");
+  }
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -149,18 +165,19 @@ export function ProductsPage() {
         <label className="sr-only" htmlFor="products-customer-filter">
           Filtrar por cliente
         </label>
-        <select
-          id="products-customer-filter"
-          value={customerFilter}
-          onChange={(event) => setCustomerFilter(event.target.value)}
-        >
-          <option value="">Todos os clientes</option>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.code} — {customer.tradeName ?? customer.legalName}
-            </option>
-          ))}
-        </select>
+        <div className="toolbar__entity">
+          <SearchableEntitySelect
+            id="products-customer-filter"
+            value={customerFilter}
+            onChange={setCustomerFilter}
+            placeholder="Todos os clientes"
+            options={customers.map((customer) => ({
+              id: customer.id,
+              code: customer.code,
+              name: customer.tradeName ?? customer.legalName,
+            }))}
+          />
+        </div>
 
         <label className="sr-only" htmlFor="products-active-filter">
           Filtrar por status
@@ -290,7 +307,20 @@ export function ProductsPage() {
             {!loading && products.length === 0 && (
               <tr>
                 <td colSpan={7} className="table__empty">
-                  Nenhum produto encontrado.
+                  {hasFilters ? (
+                    <>
+                      Nenhum produto encontrado para os filtros atuais.{" "}
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={clearFilters}
+                      >
+                        Limpar filtros
+                      </button>
+                    </>
+                  ) : (
+                    "Nenhum produto cadastrado."
+                  )}
                 </td>
               </tr>
             )}
