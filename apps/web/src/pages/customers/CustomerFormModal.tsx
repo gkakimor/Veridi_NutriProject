@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { CustomerDTO } from "@veridi/shared";
 import { BR_STATE_CODES, formatZipCode } from "@veridi/shared";
+import { RelatedLinks } from "../../components/RelatedLinks";
 import { createCustomer, updateCustomer } from "../../lib/customers-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
@@ -183,6 +184,20 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
     >
       <form id="customer-form" onSubmit={handleSubmit}>
         {error && <p className="form-alert">{error}</p>}
+
+        {customer && (
+          <RelatedLinks
+            links={[
+              { label: "Projetos", to: `/comercial/projetos?customerId=${customer.id}` },
+              { label: "Pedidos", to: `/comercial/pedidos?customerId=${customer.id}` },
+              { label: "Faturamentos", to: `/comercial/faturamento?customerId=${customer.id}` },
+              {
+                label: "Materiais do cliente",
+                to: `/estoque/materiais-de-clientes?customerId=${customer.id}`,
+              },
+            ]}
+          />
+        )}
 
         <FormSection
           title="Identificação"

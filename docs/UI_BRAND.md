@@ -513,6 +513,36 @@ Never require a 3-column layout to complete an operational scan workflow.
 
 ---
 
+# 15.1 Findability — selectors, filters and links
+
+Rules that came out of the findability round. They are about *finding the right
+record*, which is most of the work in an ERP.
+
+- **Dynamic business entity in a selector is searchable.** Product, Item,
+  Customer, Supplier, Project, Lot, Order, Production Order, Formula, Resource,
+  User, Supplier Item: the user types a code or a name and the list filters.
+  Scrolling hundreds of options is not an interface.
+- **Small enum keeps the plain `<select>`.** Status, type, profile, yes/no,
+  currency, mode, category. A combobox there is ceremony.
+- **An entity option shows business code + name** — `MP-000245 · Vitamina C`.
+  Never a UUID.
+- **Search is case- and accent-insensitive.** In Portuguese, typing without
+  accents is normal, not an exception.
+- **A deep link filters for real.** A query parameter the screen ignores is
+  worse than no link: it promises context and delivers a random list. Explicit
+  URL beats the remembered session filter, which beats the screen default.
+- **A known relationship is a link, not a search.** When the system already
+  knows the orders belong to that customer, the user should not have to open
+  another module and search again.
+- **List filters answer real questions**, not every column that exists. Three
+  or four main filters; the rest behind "more filters".
+- **An empty result says which one it is**: "nothing matches these filters"
+  (with a way to clear them) is a different message from "nothing registered".
+- **A checkbox means "I can act on these records".** No decorative selection.
+  Selection is page-local, the counter never describes rows the user can no
+  longer see, and selection existing never implies bulk mutation — approving,
+  releasing, shipping and invoicing keep their own transactional rules.
+
 # 16. Avoid
 - hero sections;
 - giant typography;

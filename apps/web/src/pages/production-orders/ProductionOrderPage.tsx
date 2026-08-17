@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
   ItemDTO,
@@ -699,18 +700,17 @@ export function ProductionOrderPage() {
                 Produto <span className="req">*</span>
               </label>
               {isDraft ? (
-                <select
+                <SearchableEntitySelect
                   id="op-product"
                   value={productId}
-                  onChange={(event) => handleProductChange(event.target.value)}
-                >
-                  <option value="">Selecione…</option>
-                  {activeProducts.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.code} — {product.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(selectedId) => handleProductChange(selectedId)}
+                  placeholder="Digite código ou nome do produto…"
+                  options={activeProducts.map((product) => ({
+                    id: product.id,
+                    code: product.code,
+                    name: product.name,
+                  }))}
+                />
               ) : (
                 <p className="field-readonly-value">
                   {productionOrder?.productCode} — {productionOrder?.productName}

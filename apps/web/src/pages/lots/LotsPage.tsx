@@ -5,6 +5,7 @@ import type { InventoryOwnerType, LotDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { listLots } from "../../lib/lots-api";
 import { useAuth } from "../../app/AuthProvider";
+import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 
 type StatusFilter = LotStatus | "all";
@@ -49,7 +50,14 @@ export function LotsPage() {
 
   // Filtros lembrados na sessão: quem abre um lote e volta não perde o
   // recorte. `Limpar filtros` devolve a lista completa em um clique.
-  const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
+  const urlFilter = useInitialFilters();
+  const [search, setSearch] = usePersistentFilter(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "search",
+    "",
+    urlFilter("search"),
+  );
   const [statusFilter, setStatusFilter] = usePersistentFilter<StatusFilter>(
     user?.id ?? null,
     FILTER_SCOPE,

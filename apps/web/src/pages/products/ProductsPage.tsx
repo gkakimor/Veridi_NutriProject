@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
@@ -40,6 +40,18 @@ export function ProductsPage() {
 
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
+
+  // Quem clicou em "Abrir produto" quer o produto, não a lista dele. Com
+  // ?open=<id> o registro abre direto; a lista fica atrás, já filtrada.
+  const openId = params.get("open");
+  const openedFromUrl = useRef(false);
+  useEffect(() => {
+    if (!openId || openedFromUrl.current) return;
+    const target = products.find((product) => product.id === openId);
+    if (!target) return;
+    openedFromUrl.current = true;
+    setModalState({ mode: "edit", product: target });
+  }, [openId, products]);
   const [confirmDeactivate, setConfirmDeactivate] = useState<ProductDTO | null>(null);
 
   useEffect(() => {

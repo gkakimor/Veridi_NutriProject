@@ -743,15 +743,18 @@ export function CustomerOrderPage() {
                 Cliente <span className="req">*</span>
               </label>
               {isDraft ? (
-                <select id="co-customer" value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
-                  <option value="">Selecione…</option>
-                  {customerOptions.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.code} — {customer.tradeName ?? customer.legalName}
-                      {!customer.active ? " (inativo)" : ""}
-                    </option>
-                  ))}
-                </select>
+                <SearchableEntitySelect
+                  id="co-customer"
+                  value={customerId}
+                  onChange={(selectedId) => setCustomerId(selectedId)}
+                  placeholder="Digite código ou nome do cliente…"
+                  options={customerOptions.map((customer) => ({
+                    id: customer.id,
+                    code: customer.code,
+                    name: customer.tradeName ?? customer.legalName,
+                    ...(customer.active ? {} : { hint: "inativo" }),
+                  }))}
+                />
               ) : (
                 <p className="field-readonly-value">
                   {customerOrder?.customerCode} — {customerOrder?.customerName}

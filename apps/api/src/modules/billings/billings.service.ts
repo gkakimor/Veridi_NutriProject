@@ -174,6 +174,15 @@ export async function listBillings(
   if (query.status) where["status"] = query.status;
   if (query.customerOrderId) where["customerOrderId"] = query.customerOrderId;
   if (query.shipmentId) where["shipmentId"] = query.shipmentId;
+  // O cliente vive no pedido de origem; filtrar por ele é a pergunta mais
+  // frequente desta tela e não exige coluna nova.
+  if (query.customerId) where["customerOrder"] = { customerId: query.customerId };
+  if (query.dateFrom || query.dateTo) {
+    where["issuedAt"] = {
+      ...(query.dateFrom ? { gte: query.dateFrom } : {}),
+      ...(query.dateTo ? { lte: query.dateTo } : {}),
+    };
+  }
   if (query.search) {
     where["OR"] = [
       { code: { contains: query.search, mode: "insensitive" } },

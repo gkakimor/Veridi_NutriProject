@@ -11,6 +11,7 @@ import { listItems } from "../../lib/items-api";
 import { listSuppliers } from "../../lib/suppliers-api";
 import { listSupplierItems } from "../../lib/supplier-items-api";
 import { useAuth } from "../../app/AuthProvider";
+import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { SupplierItemFormModal } from "./SupplierItemFormModal";
 import { SupplierItemDetailModal } from "./SupplierItemDetailModal";
@@ -72,11 +73,13 @@ export function SupplierItemsPage() {
   const [qualificationStatus, setQualificationStatus] = usePersistentFilter<
     SupplierItemQualificationStatus | "all"
   >(user?.id ?? null, FILTER_SCOPE, "qualification", "all");
+  const urlFilter = useInitialFilters();
   const [supplierId, setSupplierId] = usePersistentFilter(
     user?.id ?? null,
     FILTER_SCOPE,
     "supplier",
     "",
+    urlFilter("supplierId"),
   );
   const [itemFamily, setItemFamily] = usePersistentFilter(
     user?.id ?? null,

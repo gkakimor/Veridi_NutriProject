@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import type { CustomerDTO } from "@veridi/shared";
+import { listCustomers } from "../../lib/customers-api";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { AwaitingBillingRowDTO, BillingDTO, BillingStatus } from "@veridi/shared";
@@ -45,9 +49,34 @@ export function BillingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [preparingShipmentId, setPreparingShipmentId] = useState<string | null>(null);
 
+  // Contexto explícito na URL manda: chegar aqui pelo cliente tem que abrir a
+  // tela já filtrada por ele.
+  const [params] = useSearchParams();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ActiveFilter>("all");
+  const [customerFilter, setCustomerFilter] = useState(params.get("customerId") ?? "");
+  const [dateFrom, setDateFrom] = useState(params.get("dateFrom") ?? "");
+  const [dateTo, setDateTo] = useState(params.get("dateTo") ?? "");
+  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
+
+  useEffect(() => {
+    listCustomers({ pageSize: 1000 })
+      .then((result) => setCustomers(result.customers))
+      .catch(() => setCustomers([]));
+  }, []);
+
+  const hasFilters =
+    Boolean(search) || statusFilter !== "all" || Boolean(customerFilter) || Boolean(dateFrom) || Boolean(dateTo);
+
+  function clearFilters() {
+    setSearchInput("");
+    setSearch("");
+    setStatusFilter("all");
+    setCustomerFilter("");
+    setDateFrom("");
+    setDateTo("");
+  }
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(searchInput), 300);
@@ -56,7 +85,7 @@ export function BillingsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter]);
+  }, [search, statusFilter, customerFilter, dateFrom, dateTo]);
 
   const reloadAwaiting = useCallback(() => {
     listAwaitingBilling()
@@ -68,11 +97,14 @@ export function BillingsPage() {
     setLoading(true);
     setError(null);
 
-    const params: Parameters<typeof listBillings>[0] = { page, pageSize: PAGE_SIZE };
-    if (search) params.search = search;
-    if (statusFilter !== "all") params.status = statusFilter;
+    const query: Parameters<typeof listBillings>[0] = { page, pageSize: PAGE_SIZE };
+    if (search) query.search = search;
+    if (statusFilter !== "all") query.status = statusFilter;
+    if (customerFilter) query.customerId = customerFilter;
+    if (dateFrom) query.dateFrom = dateFrom;
+    if (dateTo) query.dateTo = dateTo;
 
-    listBillings(params)
+    listBillings(query)
       .then((result) => {
         setBillings(result.billings);
         setTotal(result.total);
@@ -81,7 +113,7 @@ export function BillingsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar faturamentos");
       })
       .finally(() => setLoading(false));
-  }, [page, search, statusFilter]);
+  }, [page, search, statusFilter, customerFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     reload();
@@ -119,7 +151,13 @@ export function BillingsPage() {
             Faturamento comercial/operacional do que foi realmente expedido — não emite Nota Fiscal.
           </p>
         </div>
-        <ExportCsvButton path="/billings/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
+        <ExportCsvButton path="/billings/export.csv" filters={{
+            search,
+            status: statusFilter === "all" ? undefined : statusFilter,
+            customerId: customerFilter,
+            dateFrom,
+            dateTo,
+          }} />
 </div>
 
       {error && <p className="form-alert">{error}</p>}
@@ -212,6 +250,48 @@ export function BillingsPage() {
             </option>
           ))}
         </select>
+
+        <div className="toolbar__entity">
+          <label className="sr-only" htmlFor="billing-customer-filter">
+            Filtrar por cliente
+          </label>
+          <SearchableEntitySelect
+            id="billing-customer-filter"
+            value={customerFilter}
+            onChange={setCustomerFilter}
+            placeholder="Todos os clientes"
+            options={customers.map((customer) => ({
+              id: customer.id,
+              code: customer.code,
+              name: customer.tradeName ?? customer.legalName,
+            }))}
+          />
+        </div>
+
+        <label className="sr-only" htmlFor="billing-date-from">
+          Emitido a partir de
+        </label>
+        <input
+          id="billing-date-from"
+          type="date"
+          value={dateFrom}
+          onChange={(event) => setDateFrom(event.target.value)}
+        />
+        <label className="sr-only" htmlFor="billing-date-to">
+          Emitido até
+        </label>
+        <input
+          id="billing-date-to"
+          type="date"
+          value={dateTo}
+          onChange={(event) => setDateTo(event.target.value)}
+        />
+
+        {hasFilters && (
+          <button type="button" className="btn btn--ghost btn--sm" onClick={clearFilters}>
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       <div className="table-container">
@@ -271,7 +351,16 @@ export function BillingsPage() {
             {!loading && billings.length === 0 && (
               <tr>
                 <td colSpan={9} className="table__empty">
-                  Nenhum faturamento encontrado.
+                  {hasFilters ? (
+                    <>
+                      Nenhum faturamento encontrado para os filtros atuais.{" "}
+                      <button type="button" className="btn btn--ghost btn--sm" onClick={clearFilters}>
+                        Limpar filtros
+                      </button>
+                    </>
+                  ) : (
+                    "Nenhum faturamento cadastrado."
+                  )}
                 </td>
               </tr>
             )}

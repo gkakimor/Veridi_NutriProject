@@ -231,6 +231,37 @@ describe("Faturamento — criação", () => {
     await app.close();
   });
 
+  it("filtra faturamentos por cliente — a pergunta mais frequente da tela", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const finishedItem = await createFinishedItem();
+    await stockFinishedLot(finishedItem.id, "400");
+    const product = await createProduct(app, finishedItem.id);
+
+    // Dois clientes distintos, um faturamento cada.
+    const orderA = await createOrderInFulfillment(app, product.id, "100", "100");
+    const shipmentA = await shipQuantity(app, orderA.id);
+    const billingA = (await createBilling(app, shipmentA.id)).json();
+
+    const orderB = await createOrderInFulfillment(app, product.id, "100", "100");
+    const shipmentB = await shipQuantity(app, orderB.id);
+    const billingB = (await createBilling(app, shipmentB.id)).json();
+
+    expect(billingA.customerId).not.toBe(billingB.customerId);
+
+    const onlyA = await app.inject({
+      method: "GET",
+      url: `/billings?customerId=${billingA.customerId}&pageSize=100`,
+    });
+    expect(onlyA.statusCode).toBe(200);
+    const codes = onlyA.json().billings.map((row: { code: string }) => row.code);
+    expect(codes).toContain(billingA.code);
+    expect(codes).not.toContain(billingB.code);
+
+    await app.close();
+  });
+
   it("rejeita Expedição DRAFT e Expedição CANCELLED", async () => {
     const app = buildTestApp();
     await app.ready();

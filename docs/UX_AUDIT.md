@@ -400,3 +400,34 @@ rodada um teste de dashboard falhou por contagem global enquanto dois auditores
 operavam no mesmo banco; com o banco quieto, os 601 testes da API passam. O
 isolamento do banco de testes continua no backlog (F-12 em
 `docs/PRODUCT_AUDIT.md`).
+
+
+---
+
+# DEMO READY — CONFIRMAÇÃO FORMAL
+
+**DEMO READY = YES** (2026-08-17).
+
+Os dois vereditos que faltavam foram emitidos pelos auditores depois das
+correções, sem meta de nota:
+
+| Critério | Resultado |
+|---|---|
+| Macrofluxos | **5/5 PASS** — Comercial, Compras/Qualidade, Produção, Expedição/Faturamento e Estoque |
+| Demo walkthrough | **PASS** |
+| CRITICAL / HIGH abertos | **0 / 0** |
+| Navegação sem treinamento | 9/10 |
+| Continuidade entre módulos | **9/10** |
+| Acessibilidade básica | 9/10 |
+| Documentos impressos | 9/10 |
+| Descoberta | 14/14 |
+| Erros 5xx · console | 0 · limpo (37 telas) |
+
+O auditor operacional respondeu explicitamente à pergunta que restava:
+**não há mais nenhum "Ambiente local" em ação iniciada por usuário** — incluindo
+o lançamento `SHIPMENT_OUT` no razão de estoque, que era o último resquício.
+
+O walkthrough saiu de PASS WITH FRICTION para PASS depois de duas correções:
+grupos curtos do painel de atenção passam a abrir já expandidos (a pendência
+não fica escondida atrás de um clique) e "Abrir produto" no projeto abre o
+registro direto, com a lista filtrada atrás.

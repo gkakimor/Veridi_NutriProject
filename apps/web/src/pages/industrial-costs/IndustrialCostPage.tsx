@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
   EnergyCalculationMode,
@@ -631,19 +632,18 @@ export function IndustrialCostPage() {
                   <div className="field-grid-2">
                     <div className="field">
                       <label htmlFor="usage-resource">Recurso</label>
-                      <select
+                      <SearchableEntitySelect
                         id="usage-resource"
                         value={usageResourceId}
-                        onChange={(event) => setUsageResourceId(event.target.value)}
-                      >
-                        <option value="">Selecione…</option>
-                        {selectableResources.map((resource) => (
-                          <option key={resource.id} value={resource.id}>
-                            {resource.code} — {resource.name} (
-                            {INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type]})
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(selectedId) => setUsageResourceId(selectedId)}
+                        placeholder="Digite código ou nome do recurso…"
+                        options={selectableResources.map((resource) => ({
+                          id: resource.id,
+                          code: resource.code,
+                          name: resource.name,
+                          hint: INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type],
+                        }))}
+                      />
                       <span className="field__hint">
                         {version.energyCalculationMode === "DIRECT"
                           ? "Energia entra como consumo informado diretamente."

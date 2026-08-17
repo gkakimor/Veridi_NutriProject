@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useInitialFilters } from "../../lib/filter-params";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { PurchaseOrderDTO, PurchaseOrderStatus, SupplierDTO } from "@veridi/shared";
@@ -42,7 +43,8 @@ export function PurchaseOrdersPage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [supplierFilter, setSupplierFilter] = useState("");
+  const urlFilter = useInitialFilters();
+  const [supplierFilter, setSupplierFilter] = useState(urlFilter("supplierId"));
   const [statusFilter, setStatusFilter] = useState<ActiveFilter>("all");
 
   const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);

@@ -10,6 +10,7 @@ import {
 import { listCustomerOrders } from "../../lib/customer-orders-api";
 import { listCustomers } from "../../lib/customers-api";
 import { useAuth } from "../../app/AuthProvider";
+import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 
 type ActiveFilter = CustomerOrderStatus | "all";
@@ -50,12 +51,14 @@ export function CustomerOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const urlFilter = useInitialFilters();
   const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
   const [customerFilter, setCustomerFilter] = usePersistentFilter(
     user?.id ?? null,
     FILTER_SCOPE,
     "customer",
     "",
+    urlFilter("customerId"),
   );
   const [statusFilter, setStatusFilter] = usePersistentFilter<ActiveFilter>(
     user?.id ?? null,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { useNavigate } from "react-router-dom";
 import type { ItemDTO, StockCountResultDTO } from "@veridi/shared";
 import { listItems } from "../../lib/items-api";
@@ -144,14 +145,17 @@ export function StockCountPage() {
             <label htmlFor="count-item">
               Item <span className="req">*</span>
             </label>
-            <select id="count-item" value={itemId} onChange={(event) => setItemId(event.target.value)}>
-              <option value="">Selecione…</option>
-              {items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.code} — {item.name}
-                </option>
-              ))}
-            </select>
+            <SearchableEntitySelect
+              id="count-item"
+              value={itemId}
+              onChange={(selectedId) => setItemId(selectedId)}
+              placeholder="Digite código ou nome do item…"
+              options={items.map((item) => ({
+                id: item.id,
+                code: item.code,
+                name: item.name,
+              }))}
+            />
           </div>
 
           {selectedItem?.controlsLot && (

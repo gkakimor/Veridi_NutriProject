@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import type { CustomerDTO, ProjectDTO } from "@veridi/shared";
 import {
   DOSAGE_FORMS,
@@ -152,18 +153,17 @@ export function ProjectFormModal({
           <label htmlFor="project-customer">
             Cliente <span className="req">*</span>
           </label>
-          <select
+          <SearchableEntitySelect
             id="project-customer"
             value={form.customerId}
-            onChange={(event) => setForm((prev) => ({ ...prev, customerId: event.target.value }))}
-          >
-            <option value="">Selecione…</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.code} — {customer.legalName}
-              </option>
-            ))}
-          </select>
+            onChange={(selectedId) => setForm((prev) => ({ ...prev, customerId: selectedId }))}
+            placeholder="Digite código ou nome do cliente…"
+            options={customers.map((customer) => ({
+              id: customer.id,
+              code: customer.code,
+              name: customer.legalName,
+            }))}
+          />
         </div>
 
         <div className="field">

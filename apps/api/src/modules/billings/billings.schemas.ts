@@ -33,9 +33,13 @@ export const cancelBillingSchema = z.object({
 
 export const listBillingsQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
+  /** "Quero ver só os faturamentos do cliente X" é a pergunta desta tela. */
+  customerId: z.string().trim().min(1).optional(),
   customerOrderId: z.string().trim().min(1).optional(),
   shipmentId: z.string().trim().min(1).optional(),
   status: z.enum(["DRAFT", "ISSUED", "CANCELLED"]).optional(),
+  dateFrom: z.coerce.date().optional(),
+  dateTo: z.coerce.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

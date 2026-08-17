@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { useNavigate } from "react-router-dom";
 import type { CustomerDTO, ItemDTO } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
@@ -150,18 +151,17 @@ export function ReceiveCustomerMaterialPage() {
             <label htmlFor="customer-receipt-customer">
               Cliente proprietário <span className="req">*</span>
             </label>
-            <select
+            <SearchableEntitySelect
               id="customer-receipt-customer"
               value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
-            >
-              <option value="">Selecione…</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.code} — {customer.legalName}
-                </option>
-              ))}
-            </select>
+              onChange={(selectedId) => setCustomerId(selectedId)}
+              placeholder="Digite código ou nome do cliente…"
+              options={customers.map((customer) => ({
+                id: customer.id,
+                code: customer.code,
+                name: customer.legalName,
+              }))}
+            />
             {fieldErrors["customerId"] && (
               <p className="field__error">{fieldErrors["customerId"]}</p>
             )}

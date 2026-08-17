@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import {
+  SelectionBar,
+  SelectionCell,
+  SelectionHeaderCell,
+  useTableSelection,
+} from "../../components/TableSelection";
 import type { ItemDTO, ItemType, UnitOfMeasureDTO } from "@veridi/shared";
 import { ITEM_FAMILY_LABELS, ITEM_TYPE_LABELS } from "@veridi/shared";
 import { listItems, setItemActive } from "../../lib/items-api";
@@ -34,6 +40,10 @@ export function ItemsPage() {
 
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
   const [modalState, setModalState] = useState<ModalState>({ mode: "closed" });
+
+  // Seleção existe aqui porque há ação real: exportar exatamente o que foi
+  // marcado. Trocar filtro/página limpa a seleção — ver TableSelection.
+  const selection = useTableSelection(items, `${search}|${typeFilter}|${activeFilter}|${page}`);
   const [confirmDeactivate, setConfirmDeactivate] = useState<ItemDTO | null>(null);
 
   // Debounce da busca: evita 1 requisicao por tecla digitada.
@@ -172,10 +182,22 @@ export function ItemsPage() {
 
       {error && <p className="form-alert">{error}</p>}
 
+      <SelectionBar count={selection.count} onClear={selection.clear}>
+        <ExportCsvButton
+          path="/items/export.csv"
+          label="Exportar selecionados"
+          filters={{ ids: selection.selected.join(",") }}
+        />
+      </SelectionBar>
+
       <div className="table-container">
         <table className="table table--clickable-rows">
           <thead>
             <tr>
+              <SelectionHeaderCell
+                checked={selection.allOnPageSelected}
+                onToggle={selection.togglePage}
+              />
               <th>Código</th>
               <th>Nome</th>
               <th>Tipo</th>
@@ -200,6 +222,11 @@ export function ItemsPage() {
                   }
                 }}
               >
+                <SelectionCell
+                  checked={selection.isSelected(item.id)}
+                  onToggle={() => selection.toggle(item.id)}
+                  label={item.code}
+                />
                 <td className="is-code">{item.code}</td>
                 <td>
                   {item.name}

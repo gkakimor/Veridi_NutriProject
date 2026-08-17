@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { RelatedLinks } from "../../components/RelatedLinks";
+import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import type { FormEvent } from "react";
 import type {
   DosageForm,
@@ -287,6 +289,24 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
       <form id="product-form" onSubmit={handleSubmit}>
         {error && <p className="form-alert">{error}</p>}
 
+        {product && (
+          <RelatedLinks
+            links={[
+              { label: "Formulação", to: `/producao/formulacoes/${product.id}` },
+              { label: "Custos", to: `/produtos/${product.id}/custos` },
+              { label: "Ordens de produção", to: `/producao/ordens?search=${product.code}` },
+              ...(product.originProjectId
+                ? [
+                    {
+                      label: "Projeto de origem",
+                      to: `/comercial/projetos/${product.originProjectId}`,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        )}
+
         <FormSection
           title="Identificação"
           subtitle="Definição comercial/industrial do produto fabricado pela Veridi."
@@ -330,21 +350,18 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
           <div className="field-grid-2">
             <div className="field">
               <label htmlFor="product-customer">Cliente</label>
-              <select
+              <SearchableEntitySelect
                 id="product-customer"
                 value={form.customerId}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, customerId: event.target.value }))
-                }
-              >
-                <option value="">Nenhum</option>
-                {customerOptions.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.code} — {customer.tradeName ?? customer.legalName}
-                    {!customer.active ? " (inativo)" : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={(selectedId) => setForm((prev) => ({ ...prev, customerId: selectedId }))}
+                placeholder="Nenhum — digite para buscar…"
+                options={customerOptions.map((customer) => ({
+                  id: customer.id,
+                  code: customer.code,
+                  name: customer.tradeName ?? customer.legalName,
+                  ...(customer.active ? {} : { hint: "inativo" }),
+                }))}
+              />
               {fieldErrors["customerId"] && (
                 <p className="field__error">{fieldErrors["customerId"]}</p>
               )}
@@ -352,21 +369,18 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
 
             <div className="field">
               <label htmlFor="product-finished-item">Item de produto acabado</label>
-              <select
+              <SearchableEntitySelect
                 id="product-finished-item"
                 value={form.finishedProductItemId}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, finishedProductItemId: event.target.value }))
-                }
-              >
-                <option value="">Nenhum</option>
-                {finishedItemOptions.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.code} — {item.name}
-                    {!item.active ? " (inativo)" : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={(selectedId) => setForm((prev) => ({ ...prev, finishedProductItemId: selectedId }))}
+                placeholder="Nenhum — digite para buscar…"
+                options={finishedItemOptions.map((item) => ({
+                  id: item.id,
+                  code: item.code,
+                  name: item.name,
+                  ...(item.active ? {} : { hint: "inativo" }),
+                }))}
+              />
               {fieldErrors["finishedProductItemId"] && (
                 <p className="field__error">{fieldErrors["finishedProductItemId"]}</p>
               )}

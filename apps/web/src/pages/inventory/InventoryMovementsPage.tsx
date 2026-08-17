@@ -3,6 +3,7 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { InventoryMovementDTO, InventoryMovementType } from "@veridi/shared";
 import { INVENTORY_MOVEMENT_DIRECTION, INVENTORY_MOVEMENT_TYPE_LABELS } from "@veridi/shared";
+import { useInitialFilters } from "../../lib/filter-params";
 import { listInventoryMovements } from "../../lib/inventory-api";
 
 type TypeFilter = InventoryMovementType | "all";
@@ -25,8 +26,9 @@ export function InventoryMovementsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const urlFilter = useInitialFilters();
+  const [searchInput, setSearchInput] = useState(urlFilter("search"));
+  const [search, setSearch] = useState(urlFilter("search"));
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 
   useEffect(() => {

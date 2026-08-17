@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { SupplierDTO } from "@veridi/shared";
+import { RelatedLinks } from "../../components/RelatedLinks";
 import { createSupplier, updateSupplier } from "../../lib/suppliers-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
@@ -140,6 +141,15 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
     >
       <form id="supplier-form" onSubmit={handleSubmit}>
         {error && <p className="form-alert">{error}</p>}
+
+        {supplier && (
+          <RelatedLinks
+            links={[
+              { label: "Ordens de compra", to: `/compras/ordens?supplierId=${supplier.id}` },
+              { label: "Itens homologados", to: `/compras/item-fornecedor?supplierId=${supplier.id}` },
+            ]}
+          />
+        )}
 
         <FormSection
           title="Identificação"

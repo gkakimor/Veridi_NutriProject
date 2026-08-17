@@ -1009,3 +1009,61 @@
 .stock-legend dt::after {
   content: ":";
 }
+
+/* Combobox de entidade dentro da barra de filtros — largura de filtro, não
+   de campo de formulário. */
+.toolbar__entity {
+  min-width: 240px;
+}
+
+.toolbar__entity .entity-select input {
+  width: 100%;
+  height: 34px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-base);
+  font-family: inherit;
+}
+
+/* Atalhos para listas relacionadas — secundários por desenho. */
+.related-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+}
+
+.related-links__title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Barra de seleção — aparece só quando há linhas marcadas. */
+.selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--v-green-700);
+  border-radius: var(--radius-sm);
+  background: var(--selected-bg);
+  font-size: var(--fs-sm);
+}
+
+.table__select {
+  width: 36px;
+  text-align: center;
+}

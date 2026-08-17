@@ -11,9 +11,13 @@ import { parseJsonOrThrow } from "./api-errors";
 
 export interface ListBillingsParams {
   search?: string;
+  customerId?: string;
   customerOrderId?: string;
   shipmentId?: string;
   status?: BillingStatus;
+  /** ISO date (yyyy-mm-dd) — emitido a partir de / até. */
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
   pageSize?: number;
 }
@@ -23,6 +27,9 @@ export async function listBillings(params: ListBillingsParams = {}): Promise<Bil
   if (params.search) query.set("search", params.search);
   if (params.customerOrderId) query.set("customerOrderId", params.customerOrderId);
   if (params.shipmentId) query.set("shipmentId", params.shipmentId);
+  if (params.customerId) query.set("customerId", params.customerId);
+  if (params.dateFrom) query.set("dateFrom", params.dateFrom);
+  if (params.dateTo) query.set("dateTo", params.dateTo);
   if (params.status) query.set("status", params.status);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));

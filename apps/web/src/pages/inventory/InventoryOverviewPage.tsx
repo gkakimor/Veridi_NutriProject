@@ -3,6 +3,7 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { InventoryItemSummaryDTO, ItemType } from "@veridi/shared";
 import { ITEM_TYPES, ITEM_TYPE_LABELS } from "@veridi/shared";
+import { useInitialFilters } from "../../lib/filter-params";
 import { listInventory } from "../../lib/inventory-api";
 
 type TypeFilter = ItemType | "all";
@@ -23,8 +24,9 @@ export function InventoryOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const urlFilter = useInitialFilters();
+  const [searchInput, setSearchInput] = useState(urlFilter("search"));
+  const [search, setSearch] = useState(urlFilter("search"));
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [onlyWithStock, setOnlyWithStock] = useState(false);
 

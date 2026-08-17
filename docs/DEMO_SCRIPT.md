@@ -5,7 +5,10 @@
 > menus. Cada etapa abaixo tem: mensagem, dados necessários, CTA na tela,
 > duração e o que fazer se o dado não existir.
 >
-> Base validada no gate pós-Bloco G (2026-08-17). Total: **38 min** no ritmo
+> **DEMO READY = YES** (2026-08-17): 5 macrofluxos PASS, walkthrough PASS,
+> zero CRITICAL e zero HIGH, verificado pelos auditores independentes.
+>
+> Base validada no gate pós-Bloco G e no sprint de hardening de UX. Total: **38 min** no ritmo
 > normal; a coluna "corte" indica o que sai primeiro se o tempo apertar.
 
 ## Antes de começar (15 min de preparo, no dia anterior)
@@ -33,7 +36,8 @@
 - **Mensagem:** o sistema abre no trabalho pendente, não num painel de números.
 - **Dados:** o dashboard já lê o banco real.
 - **CTA:** partir de um grupo de atenção (ex.: lotes aguardando liberação) e
-  mostrar que o link leva à lista já filtrada.
+  mostrar que o link leva à lista já filtrada. Grupos curtos já abrem sozinhos;
+  grupo grande começa recolhido — um clique expande, outro abre o destino.
 - **Fallback:** se um grupo estiver vazio, use outro; não invente pendência.
 - **Corte:** não.
 
@@ -53,7 +57,7 @@
 - **Mensagem:** amostra é T1, T2, T3… com consumo de lote real; aprovar a
   amostra **não** aprova o projeto.
 - **Dados:** um lote com saldo disponível da matéria-prima usada no teste.
-- **CTA:** aba de amostras do projeto → "Nova amostra" → registrar consumo →
+- **CTA:** seção "Amostras / testes" na própria página do projeto → "Nova amostra" → registrar consumo →
   concluir → reprovar → criar T2 → aprovar.
 - **Fallback:** se não houver lote com saldo, produza a amostra com
   "confirmar sem consumo" e diga em voz alta que o consumo é opcional, não
@@ -209,5 +213,5 @@ Três frases, nesta ordem:
 | Produto ainda em desenvolvimento no pedido | recusa `product_not_operational` | idem: mostre o texto e aprove o projeto |
 | Tela de Usuários poluída por contas de teste (`teste-…`) | lista com centenas de linhas | não abra a tela de Usuários na demo |
 | Corpus sem custo/preço histórico | R-18/R-19 vazios para produtos legados | use o produto criado na demo, que tem CALC e PREC |
-| Falta de material de propriedade do cliente | comportamento sem caso vivo no banco | não prometa essa tela; conte a regra em voz alta |
+| Falta de material de propriedade do cliente | depende de haver o caso no cenário | com o cenário preparado a OP mostra "Fornecimento: Cliente" e nenhuma sugestão de compra — mostre ao vivo |
 | Tela da OP não mostra quem criou/planejou a ordem | pergunta de auditoria | o histórico existe no Projeto; na OP está em backlog |

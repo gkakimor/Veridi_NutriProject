@@ -4,6 +4,7 @@ import type { ItemDTO, ItemType, UnitOfMeasureDTO } from "@veridi/shared";
 import { ITEM_TYPE_DEFAULTS, ITEM_TYPE_LABELS } from "@veridi/shared";
 import { createItem, updateItem } from "../../lib/items-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { RelatedLinks } from "../../components/RelatedLinks";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
 import { SupplierItemsSection } from "../../components/SupplierItemsSection";
@@ -224,6 +225,17 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
     >
       <form id="item-form" onSubmit={handleSubmit}>
         {error && <p className="form-alert">{error}</p>}
+
+        {item && (
+          <RelatedLinks
+            links={[
+              { label: "Estoque", to: `/estoque?search=${item.code}` },
+              { label: "Lotes", to: `/estoque/lotes?search=${item.code}` },
+              { label: "Movimentações", to: `/estoque/movimentacoes?search=${item.code}` },
+              { label: "Fornecedores do item", to: `/compras/item-fornecedor?search=${item.code}` },
+            ]}
+          />
+        )}
 
         <FormSection
           title="Identificação"

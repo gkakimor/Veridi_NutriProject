@@ -7,6 +7,7 @@ import { listProjects, getProjectVocabulary } from "../../lib/projects-api";
 import { listCustomers } from "../../lib/customers-api";
 import { ProjectFormModal } from "./ProjectFormModal";
 import { useAuth } from "../../app/AuthProvider";
+import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 
 const PAGE_SIZE = 20;
@@ -46,6 +47,7 @@ export function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
+  const urlFilter = useInitialFilters();
   const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
   const [status, setStatus] = usePersistentFilter<ProjectStatus | "all">(
     user?.id ?? null,
@@ -58,6 +60,7 @@ export function ProjectsPage() {
     FILTER_SCOPE,
     "customer",
     "",
+    urlFilter("customerId"),
   );
   const [channel, setChannel] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "channel", "");
   const [searchInput, setSearchInput] = useState(search);

@@ -7,6 +7,12 @@ import { ATTENTION_LIST_PATH } from "@veridi/shared";
 import { FlowContext } from "./FlowContext";
 import { RowActions } from "./RowActions";
 import { SearchableEntitySelect } from "./SearchableEntitySelect";
+import {
+  SelectionBar,
+  SelectionCell,
+  SelectionHeaderCell,
+  useTableSelection,
+} from "./TableSelection";
 import { clearStoredFilters, usePersistentFilter } from "../lib/stored-filters";
 
 /**
@@ -106,6 +112,34 @@ describe("Seleção de entidade com busca", () => {
     expect(onChange).toHaveBeenCalledWith("3");
   });
 
+  it("avisa quando não há resultado e permite limpar a seleção", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <SearchableEntitySelect
+        id="item"
+        options={[{ id: "1", code: "MP-000245", name: "Vitamina C" }]}
+        value=""
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "xyz" } });
+    expect(screen.getByText("Nenhum resultado.")).toBeTruthy();
+
+    rerender(
+      <SearchableEntitySelect
+        id="item"
+        options={[{ id: "1", code: "MP-000245", name: "Vitamina C" }]}
+        value="1"
+        onChange={onChange}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+    fireEvent.click(screen.getByLabelText("Limpar seleção"));
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+
   it("fecha com Escape sem alterar a seleção", () => {
     const onChange = vi.fn();
     render(
@@ -122,6 +156,66 @@ describe("Seleção de entidade com busca", () => {
     fireEvent.keyDown(input, { key: "Escape" });
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("Seleção de linhas", () => {
+  function Harness({ rows, resetKey }: { rows: { id: string }[]; resetKey: string }) {
+    const selection = useTableSelection(rows, resetKey);
+    return (
+      <>
+        <SelectionBar count={selection.count} onClear={selection.clear}>
+          <span>ações</span>
+        </SelectionBar>
+        <table>
+          <thead>
+            <tr>
+              <SelectionHeaderCell
+                checked={selection.allOnPageSelected}
+                onToggle={selection.togglePage}
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <SelectionCell
+                  checked={selection.isSelected(row.id)}
+                  onToggle={() => selection.toggle(row.id)}
+                  label={row.id}
+                />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
+    );
+  }
+
+  const rows = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+  it("seleciona linha, seleciona a página e limpa", () => {
+    render(<Harness rows={rows} resetKey="filtro-1" />);
+    // Sem seleção, a barra não existe: nada de contador zerado ocupando espaço.
+    expect(screen.queryByText("ações")).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("Selecionar a"));
+    expect(screen.getByText("1")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Selecionar todos desta página"));
+    expect(screen.getByText("3")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Limpar seleção"));
+    expect(screen.queryByText("ações")).toBeNull();
+  });
+
+  it("trocar o filtro limpa a seleção — contador nunca fala de linha invisível", () => {
+    const { rerender } = render(<Harness rows={rows} resetKey="filtro-1" />);
+    fireEvent.click(screen.getByLabelText("Selecionar b"));
+    expect(screen.getByText("1")).toBeTruthy();
+
+    rerender(<Harness rows={rows} resetKey="filtro-2" />);
+    expect(screen.queryByText("ações")).toBeNull();
   });
 });
 

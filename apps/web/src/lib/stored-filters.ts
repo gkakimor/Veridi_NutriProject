@@ -30,10 +30,19 @@ export function usePersistentFilter<T>(
   scope: string,
   field: string,
   initial: T,
+  /**
+   * Contexto explícito da URL. Quando vem preenchido, vence o que estava
+   * guardado da sessão: quem clicou em "ver pedidos deste cliente" está
+   * pedindo esse filtro, não o da última visita.
+   */
+  override?: T | null,
 ): [T, (value: T) => void] {
   const key = filterStorageKey(userId, scope, field);
 
   const [value, setValue] = useState<T>(() => {
+    if (override !== undefined && override !== null && override !== ("" as unknown as T)) {
+      return override;
+    }
     try {
       const raw = sessionStorage.getItem(key);
       return raw === null ? initial : (JSON.parse(raw) as T);

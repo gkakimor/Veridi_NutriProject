@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/AuthProvider";
+import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import type { ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
 import { PRODUCTION_ORDER_STATUSES, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
@@ -64,7 +65,14 @@ export function ProductionOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
+  const urlFilter = useInitialFilters();
+  const [search, setSearch] = usePersistentFilter(
+    user?.id ?? null,
+    FILTER_SCOPE,
+    "search",
+    "",
+    urlFilter("search"),
+  );
   const [statusFilter, setStatusFilter] = usePersistentFilter<ActiveFilter>(
     user?.id ?? null,
     FILTER_SCOPE,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CustomerMaterialRowDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS } from "@veridi/shared";
+import { useInitialFilters } from "../../lib/filter-params";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listCustomerMaterials } from "../../lib/customer-materials-api";
 import { listCustomers } from "../../lib/customers-api";
@@ -40,7 +41,8 @@ export function CustomerMaterialsPage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [customerId, setCustomerId] = useState("");
+  const urlFilter = useInitialFilters();
+  const [customerId, setCustomerId] = useState(urlFilter("customerId"));
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [onlyWithBalance, setOnlyWithBalance] = useState(true);
   const [customers, setCustomers] = useState<{ id: string; code: string; legalName: string }[]>([]);

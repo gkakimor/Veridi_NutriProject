@@ -87,6 +87,16 @@ export const listItemsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de
    100 o cadastro 101 em diante ficava impossível de escolher. */
+  /**
+   * Conjunto explícito de ids — usado pela exportação do que está selecionado
+   * na tela. Vazio significa "sem restrição", nunca "nada".
+   */
+  ids: z
+    .string()
+    .trim()
+    .min(1)
+    .optional()
+    .transform((value) => (value ? value.split(",").filter(Boolean) : undefined)),
   pageSize: z.coerce.number().int().min(1).max(1000).default(20),
 });
 

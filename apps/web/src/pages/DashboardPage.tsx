@@ -174,7 +174,10 @@ function AttentionGroup({
   onOpenItem: (item: AttentionItemDTO) => void;
   onOpenList: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Pendência escondida atrás de um clique é pendência que ninguém vê. Grupo
+  // curto já abre; só o volumoso começa recolhido, para o painel não virar
+  // uma parede.
+  const [expanded, setExpanded] = useState(group.items.length > 0 && group.items.length <= 5);
 
   return (
     <div className="dash-attention__group">
