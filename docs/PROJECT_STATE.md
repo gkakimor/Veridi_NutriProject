@@ -67,6 +67,8 @@ fornecedor preferencial e histórico imutável de preços.**
 severidade, overrides explícitos e abertura de estoque por lote real.**
 **Delivery 34 — UX de aderência operacional + impressão profissional (Bloco
 F, capacidade 42): concluído — Bloco F encerrado.**
+**Delivery 35 — Estrutura de custos industriais (Bloco G, capacidade 43):
+concluído — estrutura versionada de premissas, sem cálculo de CMV.**
 
 **Mudança oficial de roadmap (16/08/2026).** A comparação entre o sistema e
 as planilhas reais mostrou que a Veridi opera como **terceirização/private
@@ -2923,6 +2925,79 @@ ponta / demo final. Ver `docs/MVP_PLAN.md` (roadmap oficial),
 
 ---
 
+# Delivery 35 — Estrutura de custos industriais (Bloco G, capacidade 43)
+
+## Housekeeping da impressão dos relatórios
+Fechada a última divergência da política da 42: os relatórios não imprimem
+mais a própria tela. `/print/relatorios/:code` monta o documento fora do
+AppShell a partir do MESMO endpoint de exportação (resultado filtrado
+completo, colunas rotuladas) — uma implementação genérica, não 17. R-06 e
+R-14 são consultas de documento único e ganharam impressão própria. O
+`useReport` perdeu o `print` que chamava `window.print()` sobre a tela.
+
+## Estrutura versionada
+`IndustrialCostVersion` (`EC-000001 · V2`) por produto, com
+`IndustrialCostLine` para as premissas manuais.
+
+- No máximo um rascunho e uma versão ativa por produto — índices parciais no
+  banco. "Nova versão" com rascunho aberto devolve o rascunho.
+- Só rascunho é editável; ativa/inativa são histórico. Ativar move a
+  anterior para inativa na mesma transação.
+- A versão aponta para uma **FormulationVersion específica**. Trocar a
+  formulação ativa do produto não reescreve estrutura existente: a
+  defasagem vira informação na tela ("usa V3, ativa é V4"), com CTA para
+  nova versão.
+- Rascunho pode apontar para formulação rascunho (engenharia), mas ativar
+  exige formulação estável.
+- Ativação congela snapshots (produto, cliente, formulação, unidades por
+  caixa).
+
+## Estrutura ≠ cálculo
+Nada aqui soma total. Matérias-primas e embalagens vêm da formulação,
+read-only, com material do cliente marcado — ele pertence à estrutura
+física, nunca ao custo de aquisição Veridi.
+
+Categorias manuais desta fase: embalagem secundária/expedição, serviço
+terceirizado, overhead e outros. Mão de obra, equipamento e energia são
+recusados de propósito (400) — ganham modelagem própria na 44.
+
+Bases de cálculo: fixo por lote, por unidade, por 1.000 unidades, por caixa
+de expedição e % do custo industrial direto (10 = 10%, teto técnico de
+1000%). A definição da base do percentual está registrada, mas o cálculo é
+da 45.
+
+## Desconhecido continua desconhecido
+`rateValue` nulo é "não informado", nunca zero. Completude é derivada:
+taxa sem valor, caixa de expedição sem unidades por caixa ou formulação
+ainda em rascunho geram pendência. Ativar incompleta é permitido **com
+confirmação explícita** — o cadastro não trava e nenhum zero é inventado.
+
+## UI e impressão
+Página própria em `/produtos/:productId/custos` (documento versionado, não
+modal), resumo no cadastro do produto e impressão dedicada em
+`/print/estrutura-custos/:id`, com aviso impresso de que aquilo é estrutura
+e premissas — não CMV consolidado.
+
+## Corpus CMV
+`cmv_produtos` (9), `cmv_componentes` (52) e `cmv_precificacao` (27) entram
+no `veridi:import:validate` apenas como estatística: 52 componentes com
+código de item (todos candidatos a material de formulação), 3 faixas de
+quantidade, 27 linhas com preço/margem/comissão e custo histórico
+disponível por unidade e por 1.000 unidades. **Nada é persistido**:
+recursos industriais ficam para a 44, cálculo para a 45 e preço/margem para
+a 46 — cada bloco com finding declarando o destino.
+
+## Sem efeito colateral
+Testado: criar e ativar estrutura não altera custo real de aquisição,
+ofertas de fornecedor, movimentos de estoque nem orçamentos.
+
+## Não implementado de propósito
+Recurso/equipamento/tarifa de energia/mão de obra, CMV consolidado, custo
+padrão, fallback de preço de fornecedor no custo, câmbio, simulador de
+preço, margem, comissão, faixas de quantidade e integração com orçamento.
+
+---
+
 # Delivery 34 — UX de aderência operacional (Bloco F, capacidade 42)
 
 ## Navegação e cockpit
@@ -3972,13 +4047,14 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Bloco F CONCLUÍDO (33-42). Próximo passo do roadmap oficial:
-**capacidade 43 — estrutura de custos industriais** (Bloco G). A base de
+Bloco F CONCLUÍDO (33-42); Bloco G iniciado na 43. Próximo passo do
+roadmap oficial: **capacidade 44 — recursos, equipamentos, energia e mão
+de obra**. A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
 o que existe hoje é ferramenta de dados de desenvolvimento. Depois seguem
-43-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
+44-47 (Bloco G). **Ao terminar o Bloco G, parar**: o
 Bloco H (regulatório/rotulagem) é gate e depende de nova validação do
 Product Owner. Demo Readiness, responsivo/mobile e hardening geral seguem
 não iniciados, por decisão explícita.

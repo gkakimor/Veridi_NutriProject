@@ -372,6 +372,55 @@ buttons.
 - Business codes (`PROJ-`, `PED-`, `LT-`…) are what appear on paper; a UUID
   is never printed when a business code exists.
 
+# 5.6 Industrial cost structure (capability 43)
+
+- **Structure is not calculation.** A cost version declares which recipe,
+  which production base and which additional costs exist. No total is
+  computed or stored here; the consolidated industrial cost is a later
+  capability, and calling a not-yet-calculated number "CMV" is how someone
+  prices wrong.
+- The structure is **versioned per product**: at most one draft and at most
+  one active version, both enforced in the database. Only the draft is
+  editable; active and inactive versions are history, and a correction is a
+  new version.
+- A version points at a **specific formulation version**, never at "the
+  currently active formula". Activating a new formula never rewrites an
+  existing cost structure — the divergence is reported so a human decides
+  whether a new cost version is needed.
+- A draft may reference a draft formulation (engineering work), but it
+  cannot be activated while the formulation is still a draft: freezing cost
+  over a mutable recipe would be meaningless.
+- Materials and packaging come from the formulation and are **never retyped**
+  as manual cost lines. Customer-supplied material appears because it is part
+  of the product's physical structure, but it is never a Veridi acquisition
+  cost.
+- Manual lines exist only for what is not in the formulation: secondary
+  packaging, third-party services, overhead and other. Labour, equipment and
+  energy are deliberately excluded — they get their own modelling, and
+  creating them as manual lines now would mean duplicating them later.
+- The reference output quantity is never assumed (no implicit 1000). The
+  minimum batch may be *suggested*; the user confirms, and the unit must be
+  compatible with the finished product's unit.
+- An uninformed rate is `null` — **never zero**. Zero is an explicitly
+  stated zero. Completeness is derived, never persisted: a structure with an
+  uninformed rate, or a per-shipping-box line on a product without units per
+  box, is incomplete.
+- An incomplete structure **can** be activated, with explicit confirmation:
+  the unknown stays unknown instead of blocking the whole registration, and
+  the future calculation reports partial cost rather than inventing a number.
+- Activation freezes document snapshots (product, customer, formulation
+  version, units per box) so printing later never changes silently.
+- A cost structure changes nothing in the Foundation of Costs: real
+  acquisition cost, the `REAL → 30D → 90D → LAST_REAL → NO_COST` hierarchy,
+  production consumption cost and supplier offers are untouched. Supplier
+  offers remain a commercial reference, not actual cost.
+- Percentage rates are stored as plain percent (10 = 10%), with a technical
+  ceiling to catch typos. The direct industrial cost base for percentages is
+  materials and packaging + direct labour + equipment + energy, before
+  overhead; customer-supplied material never enters it.
+- Costing structures do not feed quotes, prices, margins or commissions —
+  those are later capabilities.
+
 ---
 
 # 6. Purchase Orders

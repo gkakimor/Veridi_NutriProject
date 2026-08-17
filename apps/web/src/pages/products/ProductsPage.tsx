@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { CustomerDTO, ProductDTO } from "@veridi/shared";
 import { DOSAGE_FORM_LABELS, PRESENTATION_TYPE_LABELS } from "@veridi/shared";
@@ -18,6 +19,7 @@ const PAGE_SIZE = 20;
 
 /** Cadastros → Produtos. Mesmo padrao de tabela densa + modal de Items. */
 export function ProductsPage() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<ProductDTO[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -221,6 +223,12 @@ export function ProductsPage() {
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
                     actions={[
+                      {
+                        // Estrutura de custos é documento versionado: página
+                        // própria, não modal.
+                        label: "Custos industriais",
+                        onSelect: () => navigate(`/produtos/${product.id}/custos`),
+                      },
                       {
                         label: product.active ? "Inativar" : "Reativar",
                         destructive: product.active,

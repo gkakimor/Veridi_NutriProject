@@ -355,6 +355,8 @@ model User {
   updatedSupplierItems SupplierItem[] @relation("SupplierItemUpdatedBy")
   supplierItemQualifications SupplierItemQualificationHistory[] @relation("SupplierItemQualificationBy")
   createdSupplierItemOffers  SupplierItemOffer[] @relation("SupplierItemOfferCreatedBy")
+  createdIndustrialCosts     IndustrialCostVersion[] @relation("IndustrialCostCreatedBy")
+  activatedIndustrialCosts   IndustrialCostVersion[] @relation("IndustrialCostActivatedBy")
 
   @@index([active])
   @@map("users")
@@ -725,6 +727,103 @@ model QuoteVersion {
   @@map("quote_versions")
 }
 
+/// Estrutura de custo industrial de um Product, versionada.
+///
+/// ESTRUTURA nao e CALCULO: aqui ficam as premissas (qual receita, qual
+/// base de producao, quais custos adicionais existem). O custo industrial
+/// consolidado sera calculado na capacidade 45 — esta versao nao guarda
+/// total nem CMV.
+///
+/// A versao aponta para uma FormulationVersion ESPECIFICA, nunca para "a
+/// formulacao ativa atual": custo precisa saber exatamente qual receita foi
+/// usada, e trocar a formulacao ativa nao pode reescrever estrutura
+/// historica.
+model IndustrialCostVersion {
+  id String @id @default(uuid())
+
+  /// EC-000001 — identidade do documento.
+  code String @unique
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// Sequencial POR PRODUTO (V1, V2...), gerado sob lock.
+  versionNumber Int
+
+  status IndustrialCostVersionStatus @default(DRAFT)
+
+  /// Receita exata desta estrutura. DRAFT pode apontar para formulacao
+  /// DRAFT (trabalho de engenharia), mas ativar exige formulacao estavel.
+  formulationVersionId String
+  formulationVersion   FormulationVersion @relation(fields: [formulationVersionId], references: [id])
+
+  /// Base de producao usada para estruturar o custo (ex.: 1000 un). Nunca
+  /// assumida: o usuario informa ou confirma a sugestao do lote minimo.
+  referenceOutputQuantity Decimal       @db.Decimal(18, 6)
+  referenceOutputUomCode  String
+  referenceOutputUom      UnitOfMeasure @relation("IndustrialCostOutputUom", fields: [referenceOutputUomCode], references: [code])
+
+  notes String?
+
+  /// Snapshots congelados na ativacao — impressao e historico nao mudam
+  /// porque alguem renomeou o produto depois.
+  productCodeSnapshot          String?
+  productNameSnapshot          String?
+  customerCodeSnapshot         String?
+  customerNameSnapshot         String?
+  formulationVersionNumberSnapshot Int?
+  unitsPerShippingBoxSnapshot  Int?
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("IndustrialCostCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+
+  activatedAt             DateTime?
+  activatedByUserId       String?
+  activatedByUser         User?     @relation("IndustrialCostActivatedBy", fields: [activatedByUserId], references: [id])
+  activatedByNameSnapshot String?
+
+  updatedAt DateTime @updatedAt
+
+  lines IndustrialCostLine[]
+
+  @@unique([productId, versionNumber])
+  @@index([productId])
+  @@index([status])
+  @@map("industrial_cost_versions")
+}
+
+/// Premissa de custo informada manualmente (o que NAO vem da Formulacao).
+///
+/// `rateValue` nulo significa VALOR NAO INFORMADO — nunca zero. Zero e um
+/// zero explicito. E por isso que a estrutura pode existir completa em
+/// escopo e ainda incompleta em premissas economicas.
+model IndustrialCostLine {
+  id String @id @default(uuid())
+
+  industrialCostVersionId String
+  industrialCostVersion   IndustrialCostVersion @relation(fields: [industrialCostVersionId], references: [id], onDelete: Cascade)
+
+  category    IndustrialCostCategory
+  description String
+
+  calculationBasis IndustrialCostBasis
+
+  /// Valor em BRL, ou percentual quando a base e percentual (10 = 10%).
+  /// Sem multi-moeda nesta fase.
+  rateValue Decimal? @db.Decimal(14, 4)
+
+  notes     String?
+  sortOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([industrialCostVersionId])
+  @@map("industrial_cost_lines")
+}
+
 /// Amostra / piloto / teste Tn de um projeto.
 ///
 /// NAO e Lot nem ProductionOrder: o projeto pode entrar em amostra antes de
@@ -963,6 +1062,37 @@ model SupplierItemOffer {
   @@map("supplier_item_offers")
 }
 
+/// Estagio da estrutura de custo industrial. Mesmo ciclo da Formulacao:
+/// so o rascunho e editavel, e a versao ativa e um snapshot auditavel.
+enum IndustrialCostVersionStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+/// Categorias de custo INFORMADAS MANUALMENTE nesta fase.
+///
+/// Materia-prima e embalagem NAO aparecem aqui: elas vem da Formulacao e
+/// nunca sao redigitadas como custo manual. Mao de obra, equipamento e
+/// energia tambem ficam fora — ganham modelagem propria na capacidade 44,
+/// e cria-las como linha manual agora significaria duplicar tudo depois.
+enum IndustrialCostCategory {
+  SECONDARY_PACKAGING
+  THIRD_PARTY_SERVICE
+  OVERHEAD
+  OTHER
+}
+
+/// Como a premissa se converte em custo quando a capacidade 45 calcular.
+/// Lista fixa e pequena: nao existe motor de expressao.
+enum IndustrialCostBasis {
+  FIXED_PER_BATCH
+  PER_OUTPUT_UNIT
+  PER_1000_OUTPUT_UNITS
+  PER_SHIPPING_BOX
+  PERCENT_OF_DIRECT_INDUSTRIAL_COST
+}
+
 /// Unidades de medida do sistema. Sem tela administrativa no MVP: seed
 /// controlado pelo backend (prisma/seed.ts).
 ///
@@ -983,6 +1113,7 @@ model UnitOfMeasure {
   projectsAsDoseUom Project[] @relation("ProjectDoseUom")
   quoteVersions     QuoteVersion[] @relation("QuoteUom")
   sampleOutputs     ProjectSample[] @relation("SampleOutputUom")
+  industrialCostOutputs IndustrialCostVersion[] @relation("IndustrialCostOutputUom")
 
   @@map("units_of_measure")
 }
@@ -1304,6 +1435,7 @@ model Product {
   updatedAt DateTime @updatedAt
 
   formulationVersions FormulationVersion[]
+  industrialCostVersions IndustrialCostVersion[]
   productionOrders    ProductionOrder[]
   customerOrderLines  CustomerOrderLine[]
   attachments         Attachment[]
@@ -1369,6 +1501,7 @@ model FormulationVersion {
   inactivatedBy String?
 
   components FormulationComponent[]
+  industrialCostVersions IndustrialCostVersion[]
   productionOrders ProductionOrder[]
 
   /// V1/V2/... e sempre unico dentro do mesmo Product.

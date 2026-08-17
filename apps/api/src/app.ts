@@ -9,6 +9,7 @@ import { qualityRoutes } from "./modules/quality/quality.routes.js";
 import { projectsRoutes } from "./modules/projects/projects.routes.js";
 import { samplesRoutes } from "./modules/samples/samples.routes.js";
 import { supplierItemsRoutes } from "./modules/supplier-items/supplier-items.routes.js";
+import { industrialCostsRoutes } from "./modules/industrial-costs/industrial-costs.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
 import { controlledDocumentsRoutes } from "./modules/controlled-documents/controlled-documents.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
@@ -75,6 +76,7 @@ export function buildApp() {
   app.register(projectsRoutes);
   app.register(samplesRoutes);
   app.register(supplierItemsRoutes);
+  app.register(industrialCostsRoutes);
   app.register(itemsRoutes);
   app.register(unitsRoutes);
   app.register(suppliersRoutes);

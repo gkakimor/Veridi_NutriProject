@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { CORPUS_DIR, corpusAvailable, readCorpusCsv, cleanText } from "../veridi-data/corpus.js";
 import { assertImportEnvironment } from "./environment.js";
+import { analyzeCmv } from "./cmv-analysis.js";
 import { readOverrides } from "./overrides.js";
 import { runPipeline } from "./pipeline.js";
 import { writeFindingsArtifacts } from "./report.js";
@@ -79,6 +80,28 @@ async function main(): Promise<void> {
     console.log(
       `  positivos ${result.stock.positive} · zerados ${result.stock.zero} · NEGATIVOS ${result.stock.negative} · ilegíveis ${result.stock.unreadable}`,
     );
+
+    // Capacidade 43 — CMV historico: SOMENTE LEITURA. A estrutura de custos
+    // acabou de nascer; recursos, calculo e precificacao vem depois, e
+    // importar agora deformaria o modelo para caber na planilha.
+    const cmv = analyzeCmv(result.findings);
+    console.log("\nCMV HISTORICO (somente leitura)");
+    console.log(
+      `  produtos ${cmv.products.rows} - nomes distintos ${cmv.products.distinctNames} - com lote minimo ${cmv.products.withMinimumBatch} - com unidades por caixa ${cmv.products.withUnitsPerBox} - comissionados ${cmv.products.commissioned}`,
+    );
+    console.log(
+      `  componentes ${cmv.components.rows} - com cod_item ${cmv.components.withItemCode} - familias distintas ${cmv.components.distinctFamilies}`,
+    );
+    console.log(
+      `    candidatos: material de formulacao ${cmv.components.byCandidate.FORMULATION_MATERIAL} - embalagem secundaria ${cmv.components.byCandidate.SECONDARY_PACKAGING} - mao de obra ${cmv.components.byCandidate.LABOR} - equipamento ${cmv.components.byCandidate.EQUIPMENT} - energia ${cmv.components.byCandidate.ENERGY} - overhead ${cmv.components.byCandidate.OVERHEAD} - nao classificados ${cmv.components.byCandidate.UNKNOWN}`,
+    );
+    console.log(
+      `  precificacao ${cmv.pricing.rows} linhas em ${cmv.pricing.files} produtos - faixas de quantidade ${cmv.pricing.quantityBands} - com preco ${cmv.pricing.withPrice} - com margem ${cmv.pricing.withMargin} - com comissao ${cmv.pricing.withCommission}`,
+    );
+    console.log(
+      `  custo historico disponivel: ${cmv.historical.unitCostRows} linhas por unidade - ${cmv.historical.thousandUnitCostRows} por 1.000 unidades (referencia, sem exigencia de match)`,
+    );
+    console.log("  nada de CMV e persistido: estrutura na 43, recursos/calculo/preco nas seguintes.");
 
     result.findings.print(2);
     console.log(`\n  Findings detalhados em ${OUT_DIR}`);

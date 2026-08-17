@@ -13,6 +13,7 @@ import { listItems } from "../../lib/items-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
+import { ProductIndustrialCostSummary } from "./ProductIndustrialCostSummary";
 import { FormSection } from "../../components/FormSection";
 import {
   DOSAGE_FORMS,
@@ -582,6 +583,10 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
             />
           </div>
         </FormSection>
+
+        {/* Estrutura de custos é documento versionado: aqui só o resumo e
+            o caminho para a página própria. */}
+        {mode === "edit" && product && <ProductIndustrialCostSummary productId={product.id} />}
 
         {mode === "edit" && product && (
           <AttachmentsSection
