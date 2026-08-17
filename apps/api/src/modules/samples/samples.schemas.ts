@@ -4,6 +4,11 @@ import { decimalStringSchema } from "../../lib/decimal-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
 
 export const createSampleSchema = z.object({
+  /**
+   * Produto que a amostra testa. Exigido quando o projeto tem mais de um —
+   * qual sabor foi testado não se adivinha depois.
+   */
+  projectProductId: z.string().trim().min(1).optional(),
   description: optionalNullableText(500),
   productionNotes: optionalNullableText(2000),
   outputUomCode: optionalNullableText(20),

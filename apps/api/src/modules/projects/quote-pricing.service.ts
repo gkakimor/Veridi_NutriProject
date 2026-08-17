@@ -4,13 +4,11 @@ import type {
   IndustrialCostWarningDTO,
   PricingVersionDTO,
   QuotePricingProvenanceDTO,
-  QuoteVersionDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
 import { getActivePricingForProduct } from "../pricing/pricing.service.js";
 import { QuoteNotDraftError, QuoteNotFoundError } from "./projects.errors.js";
-import { toQuoteVersionDTO } from "./quotes.service.js";
 
 /**
  * Ligação entre orçamento e precificação.
@@ -329,9 +327,12 @@ export async function buildLineSnapshots(
 
   for (const item of lines) {
     const line = await getQuoteLineWithPricing(item.id);
+    // Nome e código do produto ficam congelados na linha: renomear o
+    // cadastro amanhã não reescreve a proposta que o cliente recebeu.
+    const product = await getPrisma().product.findUnique({ where: { id: line.productId } });
     const productSnapshot: PrismaTypes.QuoteLineUpdateInput = {
-      productCodeSnapshot: line.productCodeSnapshot ?? undefined,
-      productNameSnapshot: line.productNameSnapshot ?? undefined,
+      productCodeSnapshot: product?.code ?? line.productCodeSnapshot,
+      productNameSnapshot: product?.name ?? line.productNameSnapshot,
     };
 
     if (line.priceSource !== "PRICING_TIER") {

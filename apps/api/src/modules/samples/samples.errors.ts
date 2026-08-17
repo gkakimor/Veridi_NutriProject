@@ -103,3 +103,19 @@ export class MissingDecisionNotesError extends Error {
     this.name = "MissingDecisionNotesError";
   }
 }
+
+export class SampleProductRequiredError extends Error {
+  constructor() {
+    super(
+      "Este projeto tem mais de um produto: informe qual deles a amostra testa. Qual sabor foi testado não se deduz depois.",
+    );
+    this.name = "SampleProductRequiredError";
+  }
+}
+
+export class SampleProductNotInProjectError extends Error {
+  constructor() {
+    super("O produto informado não pertence a este projeto.");
+    this.name = "SampleProductNotInProjectError";
+  }
+}

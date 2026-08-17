@@ -82,6 +82,9 @@ afterAll(async () => {
       where: { formulationVersion: { productId: { in: productIds } } },
     });
     await prisma.formulationVersion.deleteMany({ where: { productId: { in: productIds } } });
+    // Linha de orçamento e vínculo com o projeto seguram o produto por FK.
+    await prisma.quoteLine.deleteMany({ where: { productId: { in: productIds } } });
+    await prisma.projectProduct.deleteMany({ where: { productId: { in: productIds } } });
     await prisma.product.deleteMany({ where: { id: { in: productIds } } });
   }
 
@@ -328,10 +331,31 @@ async function buildPricingChain(
   return { productId, calculation, pricing: activated, material };
 }
 
+/**
+ * Versão de orçamento já com a linha do produto do projeto.
+ *
+ * A economia vive na linha: sem ela não há o que precificar.
+ */
 async function createQuote(app: App, projectId: string) {
-  return (
+  const products = (
+    await app.inject({ method: "GET", url: `/projects/${projectId}/products` })
+  ).json().products as { id: string }[];
+  const quote = (
     await app.inject({ method: "POST", url: `/projects/${projectId}/quote-versions` })
   ).json();
+
+  if (quote.lines.length === 0 && products[0]) {
+    const withLine = (
+      await app.inject({
+        method: "POST",
+        url: `/quote-versions/${quote.id}/lines`,
+        payload: { projectProductId: products[0].id },
+      })
+    ).json();
+    return { ...withLine, lineId: withLine.lines[0].id as string };
+  }
+
+  return { ...quote, lineId: (quote.lines[0]?.id ?? null) as string | null };
 }
 
 describe("Produto técnico do projeto", () => {
@@ -539,21 +563,21 @@ describe("Orçamento com precificação", () => {
     const applied = (
       await app.inject({
         method: "POST",
-        url: `/quote-versions/${quote.id}/apply-pricing`,
+        url: `/quote-lines/${quote.lineId}/apply-pricing`,
         payload: { pricingTierId: tier.id },
       })
     ).json();
 
-    expect(applied.priceSource).toBe("PRICING_TIER");
-    expect(applied.quotedQuantity).toBe("500");
-    expect(applied.uomCode).toBe("un");
-    expect(applied.unitPrice).toBe("20.0000");
+    expect(applied.lines[0].priceSource).toBe("PRICING_TIER");
+    expect(applied.lines[0].quotedQuantity).toBe("500");
+    expect(applied.lines[0].uomCode).toBe("un");
+    expect(applied.lines[0].unitPrice).toBe("20.0000");
     expect(applied.total).toBe("10000.00");
 
     // Preço vem da faixa: editar à mão exige desvincular antes.
     const locked = await app.inject({
       method: "PATCH",
-      url: `/quote-versions/${quote.id}`,
+      url: `/quote-lines/${quote.lineId}`,
       payload: { unitPrice: "35" },
     });
     expect(locked.statusCode).toBe(409);
@@ -561,7 +585,7 @@ describe("Orçamento com precificação", () => {
 
     const lockedQuantity = await app.inject({
       method: "PATCH",
-      url: `/quote-versions/${quote.id}`,
+      url: `/quote-lines/${quote.lineId}`,
       payload: { quotedQuantity: "700" },
     });
     expect(lockedQuantity.statusCode).toBe(409);
@@ -588,13 +612,13 @@ describe("Orçamento com precificação", () => {
 
     await app.inject({
       method: "PATCH",
-      url: `/quote-versions/${quote.id}`,
+      url: `/quote-lines/${quote.lineId}`,
       payload: { quotedQuantity: "700", uomCode: "un" },
     });
 
     const refused = await app.inject({
       method: "POST",
-      url: `/quote-versions/${quote.id}/apply-pricing`,
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
     expect(refused.statusCode).toBe(409);
@@ -615,7 +639,7 @@ describe("Orçamento com precificação", () => {
     const quoteB = await createQuote(app, projectB.id);
     const mismatch = await app.inject({
       method: "POST",
-      url: `/quote-versions/${quoteB.id}/apply-pricing`,
+      url: `/quote-lines/${quoteB.lineId}/apply-pricing`,
       payload: { pricingTierId: chainA.pricing.tiers[0].id },
     });
     expect(mismatch.statusCode).toBe(400);
@@ -640,7 +664,7 @@ describe("Orçamento com precificação", () => {
     const quoteA = await createQuote(app, projectA.id);
     const draftRefused = await app.inject({
       method: "POST",
-      url: `/quote-versions/${quoteA.id}/apply-pricing`,
+      url: `/quote-lines/${quoteA.lineId}/apply-pricing`,
       payload: { pricingTierId: draftPricing.tiers[0].id },
     });
     expect(draftRefused.statusCode).toBe(409);
@@ -658,30 +682,30 @@ describe("Orçamento com precificação", () => {
     const quote = await createQuote(app, project.id);
     await app.inject({
       method: "POST",
-      url: `/quote-versions/${quote.id}/apply-pricing`,
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
 
     const manual = (
-      await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/manual-price` })
+      await app.inject({ method: "POST", url: `/quote-lines/${quote.lineId}/manual-price` })
     ).json();
 
-    expect(manual.priceSource).toBe("MANUAL");
-    expect(manual.unitPrice).toBe("20.0000");
+    expect(manual.lines[0].priceSource).toBe("MANUAL");
+    expect(manual.lines[0].unitPrice).toBe("20.0000");
 
     const reread = (
       await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
     ).json();
     // Sem vínculo, nada de PREC/CALC aparecendo como origem do preço.
-    expect(reread.pricing).toBeNull();
+    expect(reread.lines[0].pricing).toBeNull();
 
     const edited = await app.inject({
       method: "PATCH",
-      url: `/quote-versions/${quote.id}`,
+      url: `/quote-lines/${quote.lineId}`,
       payload: { unitPrice: "25" },
     });
     expect(edited.statusCode).toBe(200);
-    expect(edited.json().unitPrice).toBe("25.0000");
+    expect(edited.json().lines[0].unitPrice).toBe("25.0000");
 
     await app.close();
   });
@@ -695,7 +719,7 @@ describe("Orçamento com precificação", () => {
     const quote = await createQuote(app, project.id);
     await app.inject({
       method: "POST",
-      url: `/quote-versions/${quote.id}/apply-pricing`,
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
 
@@ -709,15 +733,15 @@ describe("Orçamento com precificação", () => {
     const detail = (
       await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
     ).json();
-    expect(detail.pricing.frozen).toBe(true);
-    expect(detail.pricing.pricingCode).toBe(chain.pricing.code);
-    expect(detail.pricing.calculationCode).toBe(chain.calculation.code);
-    expect(detail.pricing.costStructureLabel).toBe(
+    expect(detail.lines[0].pricing.frozen).toBe(true);
+    expect(detail.lines[0].pricing.pricingCode).toBe(chain.pricing.code);
+    expect(detail.lines[0].pricing.calculationCode).toBe(chain.calculation.code);
+    expect(detail.lines[0].pricing.costStructureLabel).toBe(
       chain.pricing.industrialCostVersionLabel,
     );
-    expect(detail.pricing.formulationVersionNumber).toBe(1);
-    expect(detail.pricing.selectedUnitPrice).toBe("20.000000");
-    const frozenCost = detail.pricing.industrialCostPerUnit;
+    expect(detail.lines[0].pricing.formulationVersionNumber).toBe(1);
+    expect(detail.lines[0].pricing.selectedUnitPrice).toBe("20.000000");
+    const frozenCost = detail.lines[0].pricing.industrialCostPerUnit;
 
     // Compra nova depois do envio não reescreve a proposta apresentada.
     await receiveWithCost(app, {
@@ -728,7 +752,7 @@ describe("Orçamento com precificação", () => {
     const afterPurchase = (
       await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
     ).json();
-    expect(afterPurchase.pricing.industrialCostPerUnit).toBe(frozenCost);
+    expect(afterPurchase.lines[0].pricing.industrialCostPerUnit).toBe(frozenCost);
 
     await app.close();
   });
@@ -745,7 +769,7 @@ describe("Orçamento com precificação", () => {
     const quote = await createQuote(app, project.id);
     await app.inject({
       method: "POST",
-      url: `/quote-versions/${quote.id}/apply-pricing`,
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
 
@@ -767,8 +791,8 @@ describe("Orçamento com precificação", () => {
     const detail = (
       await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
     ).json();
-    expect(detail.pricing.costQuality).toBe("PARTIAL");
-    expect(detail.pricing.contributionMarginPercent).toBeNull();
+    expect(detail.lines[0].pricing.costQuality).toBe("PARTIAL");
+    expect(detail.lines[0].pricing.contributionMarginPercent).toBeNull();
 
     await app.close();
   });
@@ -784,21 +808,21 @@ describe("Orçamento com precificação", () => {
     const quote = await createQuote(admin, project.id);
     await admin.inject({
       method: "POST",
-      url: `/quote-versions/${quote.id}/apply-pricing`,
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
 
     const commercialView = (
       await admin.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
     ).json();
-    expect(commercialView.pricing).not.toBeNull();
+    expect(commercialView.lines[0].pricing).not.toBeNull();
 
     const productionView = (
       await production.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
     ).json();
     // Produção vê a proposta comercial, nunca custo, margem ou comissão.
-    expect(productionView.unitPrice).toBe("20.0000");
-    expect(productionView.pricing).toBeNull();
+    expect(productionView.lines[0].unitPrice).toBe("20.0000");
+    expect(productionView.lines[0].pricing).toBeNull();
 
     await admin.close();
     await production.close();
@@ -813,7 +837,7 @@ describe("Orçamento com precificação", () => {
     const v1 = await createQuote(app, project.id);
     await app.inject({
       method: "POST",
-      url: `/quote-versions/${v1.id}/apply-pricing`,
+      url: `/quote-lines/${v1.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
     await app.inject({ method: "POST", url: `/quote-versions/${v1.id}/send`, payload: {} });
@@ -821,9 +845,9 @@ describe("Orçamento com precificação", () => {
     const v2 = await createQuote(app, project.id);
     expect(v2.versionNumber).toBe(2);
     // Valores comerciais servem de partida; a base econômica é reconfirmada.
-    expect(v2.unitPrice).toBe("20.0000");
-    expect(v2.priceSource).toBe("MANUAL");
-    expect(v2.pricing).toBeNull();
+    expect(v2.lines[0].unitPrice).toBe("20.0000");
+    expect(v2.lines[0].priceSource).toBe("MANUAL");
+    expect(v2.lines[0].pricing).toBeNull();
 
     await app.close();
   });
@@ -840,7 +864,7 @@ describe("Aprovação do projeto", () => {
     const quote = await createQuote(app, project.id);
     await app.inject({
       method: "POST",
-      url: `/quote-versions/${quote.id}/apply-pricing`,
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
     await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send`, payload: {} });
@@ -877,30 +901,60 @@ describe("Aprovação do projeto", () => {
     await app.close();
   });
 
-  it("preserva a aprovação de projeto sem produto preparado", async () => {
+  it("recusa proposta sem produto e aprova pelo produto adicionado ao projeto", async () => {
+    // Antes do multiproduto, a aprovação podia criar o produto sozinha. Agora
+    // a proposta exige linha, e linha exige produto do projeto: o produto
+    // passa a ser decisão explícita de quem negocia, não efeito colateral da
+    // aprovação.
     const app = buildTestApp("ADMIN");
     await app.ready();
     const prisma = getPrisma();
 
     const project = await createProject(app);
-    const quote = await createQuote(app, project.id);
+    const empty = (
+      await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
+    ).json();
+
+    const withoutLines = await app.inject({
+      method: "POST",
+      url: `/quote-versions/${empty.id}/send`,
+      payload: {},
+    });
+    expect(withoutLines.statusCode).toBe(400);
+    expect(withoutLines.json().error).toBe("incomplete_quote");
+
+    const link = (
+      await app.inject({
+        method: "POST",
+        url: `/projects/${project.id}/products`,
+        payload: { operation: "create", name: "Produto do projeto" },
+      })
+    ).json();
+    fixtureProductIds.push(link.productId);
+
+    const quoteWithLine = (
+      await app.inject({
+        method: "POST",
+        url: `/quote-versions/${empty.id}/lines`,
+        payload: { projectProductId: link.id },
+      })
+    ).json();
     await app.inject({
       method: "PATCH",
-      url: `/quote-versions/${quote.id}`,
+      url: `/quote-lines/${quoteWithLine.lines[0].id}`,
       payload: { quotedQuantity: "1000", uomCode: "un", unitPrice: "12" },
     });
-    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send`, payload: {} });
-    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
+    await app.inject({ method: "POST", url: `/quote-versions/${empty.id}/send`, payload: {} });
+    await app.inject({ method: "POST", url: `/quote-versions/${empty.id}/accept` });
 
     const approved = (
       await app.inject({ method: "POST", url: `/projects/${project.id}/approve`, payload: {} })
     ).json();
     expect(approved.status).toBe("APPROVED");
-    expect(approved.productId).toBeTruthy();
-    fixtureProductIds.push(approved.productId);
+    expect(approved.productId).toBe(link.productId);
 
     const product = await prisma.product.findUniqueOrThrow({
-      where: { id: approved.productId },
+      where: { id: link.productId },
       include: { formulationVersions: true },
     });
     // Orçamento manual continua aprovando projeto — sem precificação.
@@ -910,9 +964,7 @@ describe("Aprovação do projeto", () => {
 
     await app.close();
   });
-});
 
-describe("R-20 — orçamento × precificação", () => {
   it("mostra a proveniência, marca preço manual e fica restrito a quem negocia", async () => {
     const app = buildTestApp("ADMIN");
     await app.ready();
@@ -924,16 +976,25 @@ describe("R-20 — orçamento × precificação", () => {
     const quote = await createQuote(app, project.id);
     await app.inject({
       method: "POST",
-      url: `/quote-versions/${quote.id}/apply-pricing`,
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
     await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send`, payload: {} });
 
     const manualProject = await createProject(app);
+    // Proposta precisa de produto: o preço mora na linha.
+    const manualLink = (
+      await app.inject({
+        method: "POST",
+        url: `/projects/${manualProject.id}/products`,
+        payload: { operation: "create", name: "Produto manual" },
+      })
+    ).json();
+    fixtureProductIds.push(manualLink.productId);
     const manualQuote = await createQuote(app, manualProject.id);
     await app.inject({
       method: "PATCH",
-      url: `/quote-versions/${manualQuote.id}`,
+      url: `/quote-lines/${manualQuote.lineId}`,
       payload: { quotedQuantity: "300", uomCode: "un", unitPrice: "9" },
     });
 

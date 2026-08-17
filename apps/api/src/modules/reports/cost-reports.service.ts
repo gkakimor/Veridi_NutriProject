@@ -165,63 +165,80 @@ export async function getQuotePricingAuditReport(
 ): Promise<ReportPageDTO<QuotePricingAuditRowDTO>> {
   const prisma = getPrisma();
 
-  const where: PrismaTypes.QuoteVersionWhereInput = {
-    ...(query.status ? { status: query.status } : {}),
+  const where: PrismaTypes.QuoteLineWhereInput = {
+    ...(query.status ? { quoteVersion: { status: query.status } } : {}),
     ...(query.priceSource ? { priceSource: query.priceSource } : {}),
-    ...(query.customerId ? { project: { customerId: query.customerId } } : {}),
+    ...(query.customerId ? { quoteVersion: { project: { customerId: query.customerId } } } : {}),
     ...(query.from || query.to
       ? {
-          quoteDate: {
-            ...(query.from ? { gte: query.from } : {}),
-            ...(query.to ? { lte: query.to } : {}),
+          quoteVersion: {
+            quoteDate: {
+              ...(query.from ? { gte: query.from } : {}),
+              ...(query.to ? { lte: query.to } : {}),
+            },
           },
         }
       : {}),
     ...(query.search
       ? {
           OR: [
-            { code: { contains: query.search, mode: "insensitive" } },
+            { quoteVersion: { code: { contains: query.search, mode: "insensitive" } } },
             { pricingCodeSnapshot: { contains: query.search, mode: "insensitive" } },
             { costCalculationCodeSnapshot: { contains: query.search, mode: "insensitive" } },
-            { project: { code: { contains: query.search, mode: "insensitive" } } },
-            { project: { name: { contains: query.search, mode: "insensitive" } } },
+            { productCodeSnapshot: { contains: query.search, mode: "insensitive" } },
+            { product: { code: { contains: query.search, mode: "insensitive" } } },
+            {
+              quoteVersion: {
+                project: { code: { contains: query.search, mode: "insensitive" } },
+              },
+            },
+            {
+              quoteVersion: {
+                project: { name: { contains: query.search, mode: "insensitive" } },
+              },
+            },
           ],
         }
       : {}),
   };
 
+  // R-20 é auditoria de PREÇO, e preço vive na linha: numa proposta com três
+  // produtos, cada um tem a própria faixa, o próprio cálculo e a própria
+  // margem. Uma linha do relatório por linha de orçamento.
   const [rows, total] = await Promise.all([
-    prisma.quoteVersion.findMany({
+    prisma.quoteLine.findMany({
       where,
       include: {
-        project: { include: { customer: true, product: true } },
+        quoteVersion: { include: { project: { include: { customer: true } } } },
+        product: true,
         pricingVersion: true,
         pricingTier: true,
       },
-      orderBy: [{ quoteDate: "desc" }, { code: "desc" }],
+      orderBy: [{ quoteVersion: { quoteDate: "desc" } }, { sortOrder: "asc" }],
       ...pageArgs(pagination),
     }),
-    prisma.quoteVersion.count({ where }),
+    prisma.quoteLine.count({ where }),
   ]);
 
-  const mapped = rows.map((quote): QuotePricingAuditRowDTO => {
+  const mapped = rows.map((line): QuotePricingAuditRowDTO => {
+    const quote = line.quoteVersion;
     // Enviada usa o snapshot; rascunho usa o vínculo vivo (a precificação
     // ativa já é imutável, então os dois são estáveis).
-    const frozen = quote.pricingCodeSnapshot !== null;
+    const frozen = line.pricingCodeSnapshot !== null;
     const pricingLabel = frozen
-      ? `${quote.pricingCodeSnapshot} · V${quote.pricingVersionNumberSnapshot ?? ""}`
-      : quote.pricingVersion
-        ? `${quote.pricingVersion.code} · V${quote.pricingVersion.versionNumber}`
+      ? `${line.pricingCodeSnapshot} · V${line.pricingVersionNumberSnapshot ?? ""}`
+      : line.pricingVersion
+        ? `${line.pricingVersion.code} · V${line.pricingVersion.versionNumber}`
         : null;
     const tierQuantity = frozen
-      ? (quote.pricingTierQuantitySnapshot?.toString() ?? null)
-      : (quote.pricingTier?.quantity.toString() ?? null);
+      ? (line.pricingTierQuantitySnapshot?.toString() ?? null)
+      : (line.pricingTier?.quantity.toString() ?? null);
     const costPerUnit = frozen
-      ? quote.industrialCostPerUnitSnapshot
-      : (quote.pricingTier?.costPerUnitSnapshot ?? null);
+      ? line.industrialCostPerUnitSnapshot
+      : (line.pricingTier?.costPerUnitSnapshot ?? null);
     const contribution = frozen
-      ? quote.contributionMarginSnapshot
-      : (quote.pricingTier?.contributionMarginSnapshot ?? null);
+      ? line.contributionMarginSnapshot
+      : (line.pricingTier?.contributionMarginSnapshot ?? null);
 
     return {
       quoteVersionId: quote.id,
@@ -230,24 +247,24 @@ export async function getQuotePricingAuditReport(
       projectCode: quote.project.code,
       projectName: quote.project.name,
       customerName: quote.project.customer?.legalName ?? null,
-      productCode: quote.project.product?.code ?? null,
+      productCode: line.productCodeSnapshot ?? line.product.code,
       status: quote.status,
-      quotedQuantity: quote.quotedQuantity ? quote.quotedQuantity.toString() : null,
-      uomCode: quote.uomCode,
-      unitPrice: quote.unitPrice ? quote.unitPrice.toFixed(4) : null,
+      quotedQuantity: line.quotedQuantity ? line.quotedQuantity.toString() : null,
+      uomCode: line.uomCode,
+      unitPrice: line.unitPrice !== null ? line.unitPrice.toFixed(4) : null,
       total:
-        quote.quotedQuantity && quote.unitPrice
-          ? quote.quotedQuantity.times(quote.unitPrice).toFixed(2)
+        line.quotedQuantity && line.unitPrice !== null
+          ? line.quotedQuantity.times(line.unitPrice).toFixed(2)
           : null,
-      priceSource: quote.priceSource,
+      priceSource: line.priceSource,
       pricingLabel,
       tierQuantity,
       calculationCode: frozen
-        ? quote.costCalculationCodeSnapshot
-        : (quote.pricingVersion?.calculationCodeSnapshot ?? null),
+        ? line.costCalculationCodeSnapshot
+        : (line.pricingVersion?.calculationCodeSnapshot ?? null),
       costQuality: frozen
-        ? quote.costQualitySnapshot
-        : (quote.pricingTier?.costQualitySnapshot ?? null),
+        ? line.costQualitySnapshot
+        : (line.pricingTier?.costQualitySnapshot ?? null),
       industrialCostPerUnit: costPerUnit ? costPerUnit.toFixed(6) : null,
       contributionMarginPercent: contribution ? contribution.toFixed(4) : null,
       sentAt: quote.sentAt ? quote.sentAt.toISOString() : null,

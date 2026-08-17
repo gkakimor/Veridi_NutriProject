@@ -150,20 +150,21 @@ export async function prepareTechnicalProduct(
 
 /** Precificação ATIVA disponível para embasar a proposta. */
 export async function getQuotePricingOptions(
-  quoteId: string,
+  lineId: string,
 ): Promise<PricingVersionDTO | null> {
-  const response = await apiFetch(`${API_URL}/quote-versions/${quoteId}/pricing-options`);
+  const response = await apiFetch(`${API_URL}/quote-lines/${lineId}/pricing-options`);
   if (response.status === 404) return null;
   return (await parseJsonOrThrow(response)) as PricingVersionDTO;
 }
 
 export async function applyQuotePricing(
-  quoteId: string,
+  lineId: string,
   pricingTierId: string,
 ): Promise<QuoteVersionDTO> {
-  return postJson<QuoteVersionDTO>(`/quote-versions/${quoteId}/apply-pricing`, { pricingTierId });
+  return postJson<QuoteVersionDTO>(`/quote-lines/${lineId}/apply-pricing`, { pricingTierId });
 }
 
-export async function useManualQuotePrice(quoteId: string): Promise<QuoteVersionDTO> {
-  return postJson<QuoteVersionDTO>(`/quote-versions/${quoteId}/manual-price`);
+export async function useManualQuotePrice(
+  lineId: string): Promise<QuoteVersionDTO> {
+  return postJson<QuoteVersionDTO>(`/quote-lines/${lineId}/manual-price`);
 }

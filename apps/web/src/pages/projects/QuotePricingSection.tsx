@@ -44,7 +44,7 @@ export function QuotePricingSection({
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getQuotePricingOptions(quote.id)
+    line ? getQuotePricingOptions(line.id) : Promise.resolve(null)
       .then(setPricing)
       .catch(() => setPricing(null));
   }, [quote.id]);
@@ -66,13 +66,14 @@ export function QuotePricingSection({
     }
   }
 
-  const provenance = quote.pricing;
+  const line = quote.lines[0] ?? null;
+  const provenance = line?.pricing ?? null;
 
   return (
     <div className="doc-body">
       <h4>Origem do preço</h4>
       <p className="field__hint">
-        {QUOTE_PRICE_SOURCE_LABELS[quote.priceSource]} — informação interna: o documento do cliente
+        {QUOTE_PRICE_SOURCE_LABELS[(line?.priceSource ?? "MANUAL")]} — informação interna: o documento do cliente
         não mostra custo, margem nem comissão.
       </p>
 
@@ -140,13 +141,13 @@ export function QuotePricingSection({
 
       {canEdit && quote.status === "DRAFT" && (
         <>
-          {quote.priceSource === "PRICING_TIER" ? (
+          {(line?.priceSource ?? "MANUAL") === "PRICING_TIER" ? (
             <div className="line-actions">
               <button
                 type="button"
                 className="btn btn--secondary btn--sm"
                 disabled={busy}
-                onClick={() => void run(() => useManualQuotePrice(quote.id))}
+                onClick={() => void run(() => useManualQuotePrice(line?.id ?? ""))}
               >
                 Usar preço manual
               </button>
@@ -168,8 +169,8 @@ export function QuotePricingSection({
                 <tbody>
                   {pricing.tiers.map((tier) => {
                     const sameQuantity =
-                      quote.quotedQuantity === null ||
-                      Number(quote.quotedQuantity) === Number(tier.quantity);
+                      line?.quotedQuantity === null ||
+                      Number(line?.quotedQuantity) === Number(tier.quantity);
                     return (
                       <tr key={tier.id}>
                         <td>
@@ -185,7 +186,7 @@ export function QuotePricingSection({
                             type="button"
                             className="btn btn--ghost btn--sm"
                             disabled={busy}
-                            onClick={() => void run(() => applyQuotePricing(quote.id, tier.id))}
+                            onClick={() => void run(() => applyQuotePricing(line?.id ?? "", tier.id))}
                           >
                             Usar esta faixa
                           </button>

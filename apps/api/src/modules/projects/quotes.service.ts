@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
-import type { Prisma as PrismaTypes, QuoteVersion, User } from "@prisma/client";
-import type { QuotePricingProvenanceDTO, QuoteVersionDTO } from "@veridi/shared";
+import type { Prisma as PrismaTypes, User } from "@prisma/client";
+import type { QuoteLineDTO, QuotePricingProvenanceDTO, QuoteVersionDTO } from "@veridi/shared";
 import { QUOTE_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -8,12 +8,15 @@ import {
   IncompleteQuoteError,
   ProjectLockedError,
   ProjectNotFoundError,
+  QuoteLineDuplicateError,
+  QuoteLineNotFoundError,
+  QuoteLineProductNotInProjectError,
   QuoteNotDraftError,
   QuoteNotFoundError,
   QuoteNotSentError,
 } from "./projects.errors.js";
 import { getProjectById } from "./projects.service.js";
-import { assertPriceEditable, buildPricingSnapshotData } from "./quote-pricing.service.js";
+import { assertPriceEditable, buildLineSnapshots } from "./quote-pricing.service.js";
 import type { RejectQuoteInput, UpdateQuoteVersionInput } from "./projects.schemas.js";
 
 /**

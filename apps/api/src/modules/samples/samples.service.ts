@@ -32,6 +32,8 @@ import {
   SampleLotNotFoundError,
   SampleNotFoundError,
   SampleWithoutConsumptionError,
+  SampleProductNotInProjectError,
+  SampleProductRequiredError,
 } from "./samples.errors.js";
 import type {
   CreateSampleInput,
@@ -209,6 +211,25 @@ export async function createSample(
     throw new ProjectNotOpenForSamplesError(project.status);
   }
 
+  /*
+   * Qual produto a amostra testa.
+   *
+   * Com um produto só não há ambiguidade e o vínculo é automático. Com vários,
+   * quem cria escolhe: a associação errada contamina rastreabilidade e
+   * decisão técnica, e ninguém consegue reconstruir isso depois.
+   */
+  const links = await prisma.projectProduct.findMany({ where: { projectId } });
+  let projectProductId: string | null = null;
+  if (input.projectProductId) {
+    const chosen = links.find((link) => link.id === input.projectProductId);
+    if (!chosen) throw new SampleProductNotInProjectError();
+    projectProductId = chosen.id;
+  } else if (links.length === 1) {
+    projectProductId = links[0]!.id;
+  } else if (links.length > 1) {
+    throw new SampleProductRequiredError();
+  }
+
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, SAMPLE_CODE_PREFIX);
 
   const sampleId = await prisma.$transaction(async (tx) => {
@@ -226,6 +247,7 @@ export async function createSample(
         testSequence: (maxTest._max.testSequence ?? 0) + 1,
         status: "DRAFT",
         source: "MANUAL",
+        ...(projectProductId ? { projectProductId } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.productionNotes !== undefined
           ? { productionNotes: input.productionNotes }

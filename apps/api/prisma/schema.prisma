@@ -618,9 +618,9 @@ model Project {
   productId String?  @unique
   product   Product? @relation(fields: [productId], references: [id])
 
-  /// Produto tecnico criado por este projeto (acao "preparar produto
-  /// tecnico"). Diferente de `product`, que tambem cobre vinculo legado.
-  originatedProduct Product? @relation("ProductOriginProject")
+  /// Produtos tecnicos criados por este projeto. Diferente de `product`,
+  /// que e o principal/legado.
+  originatedProducts Product[] @relation("ProductOriginProject")
 
   createdAt             DateTime @default(now())
   createdByUserId       String?
@@ -2031,7 +2031,9 @@ model Product {
   /// Projeto que criou este produto tecnico. So existe para produto nascido
   /// da acao "preparar produto tecnico" — produto legado continua null e
   /// nunca e afetado pelo cancelamento de um projeto.
-  originProjectId String?  @unique
+  /// Projeto que originou o produto. NAO e unico: um projeto multiproduto
+  /// faz nascer varios produtos, e todos apontam para ele.
+  originProjectId String?
   originProject   Project? @relation("ProductOriginProject", fields: [originProjectId], references: [id])
 
   /// Projetos em que este produto participa. `originProject` diz onde ele

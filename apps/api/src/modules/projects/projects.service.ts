@@ -70,7 +70,10 @@ const projectInclude = {
       samples: { orderBy: { testSequence: "desc" as const }, take: 1 },
     },
   },
-  quoteVersions: { orderBy: { versionNumber: "asc" as const } },
+  quoteVersions: {
+    orderBy: { versionNumber: "asc" as const },
+    include: { lines: { orderBy: { sortOrder: "asc" as const }, include: { product: true } } },
+  },
   statusHistory: { orderBy: { changedAt: "asc" as const } },
 } as const;
 
@@ -483,6 +486,20 @@ export async function prepareTechnicalProduct(
     );
 
     await tx.project.update({ where: { id }, data: { productId: product.id } });
+
+    // O produto preparado entra na lista de produtos do projeto: a partir
+    // daqui a associação real é `ProjectProduct`, e o `productId` do projeto
+    // é só o principal.
+    await tx.projectProduct.create({
+      data: {
+        projectId: id,
+        productId: product.id,
+        sequence: 1,
+        status: "ACTIVE",
+        createdByUserId: actor.id,
+        createdByNameSnapshot: actor.name,
+      },
+    });
   });
 
   return (await getProjectById(id))!;
@@ -509,7 +526,11 @@ export async function approveProject(
 
     const project = await tx.project.findUnique({
       where: { id },
-      include: { quoteVersions: true, customer: true },
+      include: {
+        quoteVersions: { include: { lines: true } },
+        customer: true,
+        products: true,
+      },
     });
     if (!project) throw new ProjectNotFoundError(id);
     if (project.status === "APPROVED") {
@@ -523,20 +544,52 @@ export async function approveProject(
     const accepted = project.quoteVersions.find((quote) => quote.status === "ACCEPTED");
     if (!accepted) throw new MissingAcceptedQuoteError();
 
-    let productId = project.productId;
-    if (productId) {
-      // Produto técnico existente é PROMOVIDO: mesmo código, mesma
-      // formulação, mesma estrutura de custos e a mesma precificação.
-      await tx.product.updateMany({
-        where: { id: productId, lifecycle: "DEVELOPMENT" },
-        data: { lifecycle: "APPROVED" },
-      });
+    /*
+     * O que a aprovação promove é o que o cliente ACEITOU.
+     *
+     * Um projeto pode desenvolver três sabores e o cliente fechar dois. O
+     * terceiro não vira produto operacional por consequência indireta: ele
+     * sai do escopo comercial desta aprovação e continua em desenvolvimento,
+     * com a história técnica inteira preservada.
+     */
+    const acceptedProductIds = new Set(accepted.lines.map((line) => line.productId));
+
+    for (const link of project.products) {
+      const inScope = acceptedProductIds.has(link.productId);
+
+      if (inScope) {
+        // Produto técnico existente é PROMOVIDO: mesmo código, mesma
+        // formulação, mesma estrutura de custos e a mesma precificação.
+        // Produto que já estava aprovado permanece como está.
+        await tx.product.updateMany({
+          where: { id: link.productId, lifecycle: "DEVELOPMENT" },
+          data: { lifecycle: "APPROVED" },
+        });
+        await tx.projectProduct.update({ where: { id: link.id }, data: { status: "APPROVED" } });
+        continue;
+      }
+
+      if (link.status === "ACTIVE") {
+        await tx.projectProduct.update({
+          where: { id: link.id },
+          data: { status: "OUT_OF_SCOPE" },
+        });
+      }
     }
+
+    // O produto principal do projeto continua existindo para o legado: é o
+    // primeiro produto aceito, ou o que já estava lá.
+    let productId = project.productId;
+    const firstAccepted = project.products.find((link) => acceptedProductIds.has(link.productId));
+    if (!productId && firstAccepted) productId = firstAccepted.productId;
+
     if (!productId) {
-      // Unidade do produto acabado: vem do orçamento aceito quando fizer
-      // sentido; caso contrário o usuário precisa informar — nunca se
-      // inventa unidade.
-      const finishedUnitCode = input.finishedUnitCode ?? accepted.uomCode ?? null;
+      // Projeto sem nenhum produto preparado: a aprovação cria o produto,
+      // como sempre fez. A unidade vem da linha aceita — o cabeçalho não
+      // guarda mais unidade, e numa proposta com vários produtos cada linha
+      // tem a sua. Sem linha, quem aprova informa; nunca se inventa unidade.
+      const acceptedLine = accepted.lines[0] ?? null;
+      const finishedUnitCode = input.finishedUnitCode ?? acceptedLine?.uomCode ?? null;
       if (!finishedUnitCode) throw new MissingFinishedUnitError();
 
       const unit = await tx.unitOfMeasure.findUnique({ where: { code: finishedUnitCode } });
@@ -551,6 +604,19 @@ export async function approveProject(
         actor,
       );
       productId = created.id;
+
+      await tx.projectProduct.upsert({
+        where: { projectId_productId: { projectId: id, productId } },
+        create: {
+          projectId: id,
+          productId,
+          sequence: project.products.length + 1,
+          status: "APPROVED",
+          createdByUserId: actor.id,
+          createdByNameSnapshot: actor.name,
+        },
+        update: { status: "APPROVED" },
+      });
     }
 
     await tx.project.update({

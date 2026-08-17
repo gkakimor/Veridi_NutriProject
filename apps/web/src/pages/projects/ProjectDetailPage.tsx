@@ -100,9 +100,12 @@ export function ProjectDetailPage() {
         setProject(result);
         const currentDraft = result.quoteVersions.find((quote) => quote.status === "DRAFT");
         if (currentDraft) {
-          setDraftQuantity(currentDraft.quotedQuantity ?? "");
-          setDraftUom(currentDraft.uomCode ?? "un");
-          setDraftPrice(currentDraft.unitPrice ?? "");
+          // Enquanto a tela multilinha não existe, o editor mostra a
+          // primeira linha. A UI definitiva vem na próxima etapa.
+          const firstLine = currentDraft.lines[0] ?? null;
+          setDraftQuantity(firstLine?.quotedQuantity ?? "");
+          setDraftUom(firstLine?.uomCode ?? "un");
+          setDraftPrice(firstLine?.unitPrice ?? "");
           setDraftValidUntil(currentDraft.validUntil ? currentDraft.validUntil.slice(0, 10) : "");
           setDraftPaymentTerms(currentDraft.paymentTerms ?? "");
           setDraftLeadTime(currentDraft.leadTimeDays ? String(currentDraft.leadTimeDays) : "");
@@ -365,9 +368,15 @@ export function ProjectDetailPage() {
                     <td className="is-code">{quote.versionLabel}</td>
                     <td>{formatDate(quote.quoteDate)}</td>
                     <td>
-                      {quote.quotedQuantity ?? "—"} {quote.uomCode ?? ""}
+                      {quote.lines.length === 1
+                        ? `${quote.lines[0]?.quotedQuantity ?? "—"} ${quote.lines[0]?.uomCode ?? ""}`
+                        : `${quote.lines.length} produtos`}
                     </td>
-                    <td>{quote.unitPrice ? formatBRL(quote.unitPrice) : "—"}</td>
+                    <td>
+                      {quote.lines.length === 1 && quote.lines[0]?.unitPrice
+                        ? formatBRL(quote.lines[0].unitPrice)
+                        : "—"}
+                    </td>
                     <td>{quote.total ? formatBRL(quote.total) : "—"}</td>
                     <td>{formatDate(quote.validUntil)}</td>
                     <td>
@@ -542,9 +551,11 @@ export function ProjectDetailPage() {
                   className="btn btn--accent"
                   disabled={saving}
                   onClick={() => {
-                    const partial =
-                      draft.pricing?.costQuality === "PARTIAL" ||
-                      draft.pricing?.costQuality === "NO_COST";
+                    const partial = draft.lines.some(
+                      (line) =>
+                        line.pricing?.costQuality === "PARTIAL" ||
+                        line.pricing?.costQuality === "NO_COST",
+                    );
                     if (
                       partial &&
                       !window.confirm(

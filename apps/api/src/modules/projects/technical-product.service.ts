@@ -37,6 +37,11 @@ export interface TechnicalProductInput {
   /** Unidade do produto acabado — nunca inventada a partir do brief. */
   finishedUnitCode: string;
   lifecycle: ProductLifecycle;
+  /**
+   * Nome próprio. Um projeto com três sabores não pode gerar três produtos
+   * com o mesmo nome do projeto — quem opera precisa distinguir na tela.
+   */
+  name?: string;
 }
 
 /**
@@ -64,7 +69,7 @@ export async function createProjectProduct(
     data: {
       code: itemCode,
       type: "FINISHED_PRODUCT",
-      name: project.name,
+      name: input.name ?? project.name,
       unitCode: input.finishedUnitCode,
       controlsLot: true,
       controlsExpiry: true,
@@ -81,7 +86,7 @@ export async function createProjectProduct(
   const product = await tx.product.create({
     data: {
       code: productCode,
-      name: project.name,
+      name: input.name ?? project.name,
       customerId: project.customerId,
       finishedProductItemId: finishedItem.id,
       lifecycle: input.lifecycle,
