@@ -4342,11 +4342,16 @@ Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
 mais o fechamento operacional QR de Produto Acabado + conferência de lote
 na Expedição, os **Relatórios R-01…R-17 (31)** e as **Exportações CSV +
 Impressão/PDF (32)** — Bloco E encerrado.
-Bloco F CONCLUÍDO (33-42) e **Bloco G CONCLUÍDO (43-47)**. O trabalho PARA
+Bloco F CONCLUÍDO (33-42) e **Bloco G CONCLUÍDO (43-47)**. Depois deles rodou o
+**gate pós-Bloco G** (auditoria de produto + UX + demo readiness, sem capacidade
+nova): resultados em `docs/PRODUCT_AUDIT.md`, `docs/UX_AUDIT.md`,
+`docs/DEMO_SCRIPT.md` e `docs/BLOCK_H_VALIDATION.md`. O gate corrigiu apenas
+regressão, bug evidente e atrito pequeno — nada de regra nova. O trabalho PARA
 aqui: o **Bloco H (regulatório/rotulagem/ANVISA/IN28) é HARD GATE** e só
 será especificado após nova validação de domínio/regulatória do Product
-Owner. Demo Readiness, responsivo/mobile e hardening geral seguem não
-iniciados, por decisão explícita. A base de
+Owner, com as 15 perguntas de `docs/BLOCK_H_VALIDATION.md` respondidas.
+Responsivo/mobile e hardening geral seguem não iniciados, por decisão
+explícita. A base de
 desenvolvimento é reconstruível a partir do corpus real da Veridi
 (`pnpm veridi:data:seed --reset`, dados em `.local-data/`, nunca
 versionados); o importador definitivo continua sendo a **capacidade 41** —
