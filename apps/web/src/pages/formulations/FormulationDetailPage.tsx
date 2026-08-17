@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { EntityLink } from "../../components/EntityLink";
+import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { FormulationVersionDTO, ProductDTO } from "@veridi/shared";
 import { FORMULATION_VERSION_STATUS_LABELS } from "@veridi/shared";
@@ -122,7 +123,7 @@ export function FormulationDetailPage() {
           <div className="doc-crumb">Produção / Formulações / Detalhe</div>
           <div className="doc-title">
             <h1>
-              <span className="code">{product.code}</span> {product.name}
+              <EntityLink kind="product" id={product.id} code={product.code} /> {product.name}
             </h1>
           </div>
         </div>
@@ -137,6 +138,8 @@ export function FormulationDetailPage() {
           </button>
         </div>
       </div>
+
+      <ProductRelatedLinks productId={productId} current="formulation" />
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}

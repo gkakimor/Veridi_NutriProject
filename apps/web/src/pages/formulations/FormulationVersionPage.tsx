@@ -33,6 +33,7 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 
@@ -404,6 +405,8 @@ export function FormulationVersionPage() {
           </button>
         </div>
       </div>
+
+      <ProductRelatedLinks productId={productId} current="formulation" />
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}

@@ -19,6 +19,8 @@ import { parseJsonOrThrow } from "./api-errors";
  */
 export async function listPricingVersions(params: {
   search?: string;
+  /** Link contextual vindo das telas do produto — identidade, não texto. */
+  productId?: string;
   status?: string;
   quality?: string;
   page?: number;

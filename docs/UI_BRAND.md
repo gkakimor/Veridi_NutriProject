@@ -556,6 +556,11 @@ record*, which is most of the work in an ERP.
 - **A citation inside a clickable row stops the propagation.** Otherwise the
   row's own navigation wins and the person who aimed at the product lands on
   the formula.
+- **A screen about another record offers the way back.** Industrial costs,
+  formulation, calculation and pricing are screens *of a product* living on
+  their own routes: the title's code links to the product and a bar links the
+  sibling screens, minus the current one. Before this, the only way back was
+  the browser button.
 - **A simple registry link opens the record, not its list.** Item, customer and
   supplier live in a list with a modal: the link narrows the list (`ids`) and
   opens the record (`open`). A transactional document has its own page and the

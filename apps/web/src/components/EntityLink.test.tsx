@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { EntityLink, entityHref } from "./EntityLink";
+import { ProductRelatedLinks } from "./ProductRelatedLinks";
 
 /**
  * O que estes testes protegem não é o texto do link — é a regra: destino por
@@ -70,6 +71,33 @@ describe("EntityLink", () => {
     expect(entityHref("customerOrder", "ped-1")).toBe("/comercial/pedidos/ped-1");
     expect(entityHref("lot", "lot-1")).toBe("/estoque/lotes/lot-1");
     expect(entityHref("project", "prj-1")).toBe("/comercial/projetos/prj-1");
+  });
+
+  it("tela do produto oferece volta ao produto e às irmãs, menos a atual", () => {
+    // Custos, formulação e precificação são telas DO produto em rotas
+    // próprias: sem esta barra, quem entra numa delas só volta pelo botão do
+    // navegador.
+    render(
+      <MemoryRouter>
+        <ProductRelatedLinks productId="prod-1" current="costs" />
+      </MemoryRouter>,
+    );
+
+    const rotulos = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(rotulos).toContain("Produto");
+    expect(rotulos).toContain("Formulação");
+    expect(rotulos).toContain("Precificação");
+    // Link para a tela em que a pessoa já está é ruído.
+    expect(rotulos).not.toContain("Custos industriais");
+  });
+
+  it("sem produto não inventa barra de navegação", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ProductRelatedLinks productId={null} current="costs" />
+      </MemoryRouter>,
+    );
+    expect(container.textContent).toBe("");
   });
 
   it("sem código e sem nome mostra o traço de desconhecido", () => {

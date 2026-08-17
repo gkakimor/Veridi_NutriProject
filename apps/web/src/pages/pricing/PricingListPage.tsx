@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { PricingVersionSummaryDTO } from "@veridi/shared";
 import {
   INDUSTRIAL_COST_QUALITY_LABELS,
@@ -7,6 +7,7 @@ import {
 } from "@veridi/shared";
 import { listPricingVersions } from "../../lib/pricing-api";
 import { EntityLink } from "../../components/EntityLink";
+import { RecordContextChip } from "../../components/RecordContext";
 
 const PAGE_SIZE = 20;
 
@@ -31,6 +32,11 @@ export function PricingListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Chegada pelas telas do produto: a lista abre já reduzida a ele. Sem isto
+  // o link prometia contexto e entregava a lista inteira.
+  const [params] = useSearchParams();
+  const contextProductId = params.get("productId");
+
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -43,7 +49,16 @@ export function PricingListPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, status, quality]);
+  }, [search, status, quality, contextProductId]);
+
+  // Filtro antigo somado ao contexto esconderia a própria precificação citada.
+  useEffect(() => {
+    if (!contextProductId) return;
+    setSearchInput("");
+    setSearch("");
+    setStatus("");
+    setQuality("");
+  }, [contextProductId]);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -51,6 +66,7 @@ export function PricingListPage() {
     listPricingVersions({
       page,
       pageSize: PAGE_SIZE,
+      ...(contextProductId ? { productId: contextProductId } : {}),
       ...(search ? { search } : {}),
       ...(status ? { status } : {}),
       ...(quality ? { quality } : {}),
@@ -63,7 +79,7 @@ export function PricingListPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar precificações"),
       )
       .finally(() => setLoading(false));
-  }, [page, search, status, quality]);
+  }, [page, search, status, quality, contextProductId]);
 
   useEffect(() => {
     reload();
@@ -128,6 +144,15 @@ export function PricingListPage() {
       </div>
 
       {error && <p className="form-alert">{error}</p>}
+
+      {contextProductId && (
+        <RecordContextChip
+          noun="o produto"
+          code={rows[0]?.productCode}
+          name={rows[0]?.productName}
+          onClear={() => navigate("/gestao/precificacao")}
+        />
+      )}
 
       <div className="table-container">
         <table className="table table--clickable-rows">

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { IndustrialCostCalculationSnapshotDTO } from "@veridi/shared";
+import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
+import { EntityLink } from "../../components/EntityLink";
 import { CostBreakdown, CostQualityBadge } from "../../components/CostBreakdown";
 import { FormSection } from "../../components/FormSection";
 import { getIndustrialCostCalculation } from "../../lib/cost-calculation-api";
@@ -37,7 +39,8 @@ export function CostCalculationPage() {
           <div className="doc-crumb">Cadastros / Produtos / Custos industriais / Cálculo</div>
           <div className="doc-title">
             <h1>
-              {calculation.productCode} · {calculation.productName}
+              <EntityLink kind="product" id={calculation.productId} code={calculation.productCode} />{" "}
+              · {calculation.productName}
             </h1>
             <span className="code">{calculation.code}</span>
             <CostQualityBadge quality={calculation.quality} />
@@ -65,6 +68,7 @@ export function CostCalculationPage() {
       </div>
 
       <div className="doc-body">
+      <ProductRelatedLinks productId={calculation.productId} current="costs" />
         <FormSection title="Contexto do cálculo">
           <dl className="definition-list">
             <dt>Cliente</dt>

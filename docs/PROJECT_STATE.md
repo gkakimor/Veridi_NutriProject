@@ -4352,6 +4352,12 @@ telas, ~90 citações convertidas.
   deduzido).
 - O UUID nunca aparece na tela; vive só no endereço.
 
+Tela que fala de outro registro oferece a volta: em custos industriais,
+formulação, cálculo e precificação o código do título abre o produto e a barra
+`ProductRelatedLinks` leva às telas irmãs, menos a atual. A lista de
+precificação passou a respeitar `?productId=` — antes ignorava o parâmetro e
+entregava a lista inteira, que é pior que não ter link.
+
 Seis DTOs passaram a expor identidade que já existia no banco: movimento
 recente do painel (`itemId`), uso em amostra na rastreabilidade (`projectId`),
 folha de receita (`productId`, `itemId` de pesagem e de embalagem), R-14

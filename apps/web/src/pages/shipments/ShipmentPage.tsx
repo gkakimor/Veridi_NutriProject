@@ -474,7 +474,13 @@ export function ShipmentPage() {
               </button>
             </dd>
             <dt>Cliente</dt>
-            <dd>{shipment.customerName ?? "—"}</dd>
+            <dd>
+              <EntityLink
+                kind="customer"
+                id={shipment.customerId}
+                code={shipment.customerName}
+              />
+            </dd>
             <dt>Data da expedição</dt>
             <dd>{formatDate(shipment.shipmentDate)}</dd>
           </dl>

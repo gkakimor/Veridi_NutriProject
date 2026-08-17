@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
+import { EntityLink } from "../../components/EntityLink";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { PriceMode, PricingVersionDTO } from "@veridi/shared";
 import {
@@ -101,7 +103,8 @@ export function PricingPage() {
           <div className="doc-crumb">Gestão / Precificação</div>
           <div className="doc-title">
             <h1>
-              {pricing.productCode} · {pricing.productName}
+              <EntityLink kind="product" id={pricing.productId} code={pricing.productCode} /> ·{" "}
+              {pricing.productName}
             </h1>
             <span className="code">{pricing.label}</span>
             <span className={statusBadgeClass(pricing.status)}>
@@ -130,6 +133,7 @@ export function PricingPage() {
       </div>
 
       <div className="doc-body">
+      <ProductRelatedLinks productId={pricing.productId} current="pricing" />
         {error && <p className="form-alert">{error}</p>}
 
         <FormSection

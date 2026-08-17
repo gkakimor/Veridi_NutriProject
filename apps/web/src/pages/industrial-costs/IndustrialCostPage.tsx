@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
@@ -160,7 +161,8 @@ export function IndustrialCostPage() {
           <div className="doc-crumb">Cadastros / Produtos / Custos industriais</div>
           <div className="doc-title">
             <h1>
-              {data.productCode} · {data.productName}
+              <EntityLink kind="product" id={productId} code={data.productCode} /> ·{" "}
+              {data.productName}
             </h1>
             {version && (
               <>
@@ -240,6 +242,7 @@ export function IndustrialCostPage() {
       </div>
 
       <div className="doc-body">
+      <ProductRelatedLinks productId={productId} current="costs" />
         {error && <p className="form-alert">{error}</p>}
 
         {!version && (
