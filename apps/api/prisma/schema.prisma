@@ -50,6 +50,10 @@ enum InventoryMovementType {
   ADJUSTMENT_OUT
   LOSS
   PRODUCTION_CONSUMPTION
+  /// Saldo fisico de abertura da migracao. Entrada auditavel, usada uma
+  /// unica vez por lote: nao e recebimento de compra, nao e producao e nao
+  /// e ajuste de inventario.
+  OPENING_BALANCE
   /// Saida fisica de material usado em amostra/piloto. E consumo real de
   /// desenvolvimento — nunca disfarcado de ajuste.
   SAMPLE_CONSUMPTION
@@ -58,6 +62,9 @@ enum InventoryMovementType {
 }
 
 enum InventoryMovementSourceType {
+  /// Linha do template de abertura da migracao; `sourceId` guarda a chave
+  /// estavel daquela linha (idempotencia).
+  OPENING_BALANCE
   PROJECT_SAMPLE
   RECEIPT
   MANUAL_ADJUSTMENT
@@ -75,6 +82,10 @@ enum InventoryMovementSourceType {
 enum LotOrigin {
   RECEIPT
   PRODUCTION
+  /// Lote informado na migracao (saldo fisico de abertura). Nao e compra
+  /// nem producao: nasce sem fornecedor e sem OP, e existe para que o
+  /// estoque inicial tenha rastreabilidade real em vez de lote inventado.
+  OPENING_BALANCE
 }
 
 /// Perfil do usuario. RBAC simples: ADMIN administra usuarios e documentos

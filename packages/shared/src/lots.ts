@@ -40,11 +40,13 @@ export const LOT_STATUS_LABELS: Record<LotStatus, string> = {
  * Recebimento (Supplier/Receipt/OC). `PRODUCTION`: veio de um
  * `ProductionOutput` (OP/Product) — nunca exige Supplier/Receipt.
  */
-export type LotOrigin = "RECEIPT" | "PRODUCTION";
+export type LotOrigin = "RECEIPT" | "PRODUCTION" | "OPENING_BALANCE";
 
 export const LOT_ORIGIN_LABELS: Record<LotOrigin, string> = {
   RECEIPT: "Recebimento",
   PRODUCTION: "Produção",
+  // Lote informado na migração: não veio de compra nem de produção.
+  OPENING_BALANCE: "Saldo de abertura",
 };
 
 /**
