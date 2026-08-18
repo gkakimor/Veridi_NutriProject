@@ -12,10 +12,20 @@ import {
 import { createSample } from "../src/modules/samples/samples.service.js";
 import {
   activateFormulationVersion,
-  createFirstFormulationVersion,
   updateFormulationVersion,
 } from "../src/modules/formulations/formulations.service.js";
 import { nextSequenceCode } from "../src/lib/sequence-code.js";
+import {
+  activateIndustrialCostVersion,
+  createIndustrialCostVersion,
+} from "../src/modules/industrial-costs/industrial-costs.service.js";
+import { saveIndustrialCostCalculation } from "../src/modules/industrial-cost-calculation/snapshot.service.js";
+import {
+  activatePricingVersion,
+  createPricingTier,
+  createPricingVersion,
+} from "../src/modules/pricing/pricing.service.js";
+import { applyQuoteLinePricing } from "../src/modules/projects/quote-pricing.service.js";
 
 /**
  * `pnpm db:demo` — cenário fictício de demonstração.
@@ -196,54 +206,57 @@ async function main(): Promise<void> {
     links.push({ id: created.id, productId: created.productId, spec });
   }
 
-  // Fórmula do primeiro sabor: matéria-prima da Veridi, material do cliente e
-  // embalagem — as três responsabilidades que o sistema distingue.
   const first = links[0]!;
-  const hasFormula = await prisma.formulationVersion.findFirst({
-    where: { productId: first.productId },
+
+  /*
+   * Fórmula do primeiro sabor.
+   *
+   * A V1 já nasce em rascunho junto com o produto — o que falta é o conteúdo:
+   * matéria-prima da Veridi, material que o CLIENTE envia e embalagem. As três
+   * responsabilidades que o sistema distingue, na mesma receita.
+   */
+  const draftFormula = await prisma.formulationVersion.findFirst({
+    where: { productId: first.productId, status: "DRAFT" },
+    include: { components: true },
   });
-  if (!hasFormula) {
-    const version = await createFirstFormulationVersion(first.productId, actor);
-    await updateFormulationVersion(
-      version.id,
-      {
-        basisQuantity: "1",
-        calculationMode: "FIXED_BASIS",
-        components: [
-          {
-            itemId: betaAlanina.id,
-            quantity: "0.15",
-            uomCode: "kg",
-            basis: "PER_BASIS",
-            supplyResponsibility: "VERIDI",
-          },
-          {
-            itemId: cafeina.id,
-            quantity: "0.02",
-            uomCode: "kg",
-            basis: "PER_BASIS",
-            supplyResponsibility: "VERIDI",
-          },
-          {
-            itemId: aromaCliente.id,
-            quantity: "0.01",
-            uomCode: "kg",
-            basis: "PER_BASIS",
-            // Material do cliente: entra na fórmula, não vira estoque da Veridi.
-            supplyResponsibility: "CUSTOMER",
-          },
-          {
-            itemId: pote.id,
-            quantity: "1",
-            uomCode: "un",
-            basis: "PER_UNIT",
-            supplyResponsibility: "VERIDI",
-          },
-        ],
-      } as never,
-      actor,
-    );
-    await activateFormulationVersion(version.id);
+
+  if (draftFormula && draftFormula.components.length === 0) {
+    await updateFormulationVersion(draftFormula.id, {
+      basisQuantity: "1000",
+      calculationMode: "FIXED_BASIS",
+      components: [
+        {
+          itemId: betaAlanina.id,
+          quantity: "150",
+          unitCode: "kg",
+          basis: "FIXED_BASIS",
+          supplyResponsibility: "VERIDI",
+        },
+        {
+          itemId: cafeina.id,
+          quantity: "20",
+          unitCode: "kg",
+          basis: "FIXED_BASIS",
+          supplyResponsibility: "VERIDI",
+        },
+        {
+          // Material do cliente: entra na receita, não vira estoque da Veridi.
+          itemId: aromaCliente.id,
+          quantity: "10",
+          unitCode: "kg",
+          basis: "FIXED_BASIS",
+          supplyResponsibility: "CUSTOMER",
+        },
+        {
+          itemId: pote.id,
+          quantity: "1",
+          unitCode: "un",
+          basis: "PER_FINISHED_UNIT",
+          supplyResponsibility: "VERIDI",
+        },
+      ],
+    } as never);
+    await activateFormulationVersion(draftFormula.id);
   }
 
   // Amostras por produto: com vários sabores, qual foi testado importa.
@@ -261,14 +274,96 @@ async function main(): Promise<void> {
     );
   }
 
+  /*
+   * Custo industrial e preço do primeiro sabor.
+   *
+   * Sem isso as telas de Custos e Precificação abrem vazias, e a proposta não
+   * consegue demonstrar o que o sistema tem de mais próprio: preço com
+   * proveniência, ligado a um cálculo que alguém fechou.
+   */
+  let pricing = await prisma.pricingVersion.findFirst({
+    where: { productId: first.productId, status: "ACTIVE" },
+    include: { tiers: { orderBy: { quantity: "asc" } } },
+  });
+
+  if (!pricing) {
+    // A estrutura de custos aponta para uma versão ESPECÍFICA da fórmula —
+    // custo precisa saber exatamente qual receita foi usada.
+    const activeFormula = await prisma.formulationVersion.findFirst({
+      where: { productId: first.productId, status: "ACTIVE" },
+    });
+    if (!activeFormula) throw new Error("Fórmula ativa não encontrada para o produto DEMO.");
+
+    const costVersion = await createIndustrialCostVersion(
+      first.productId,
+      {
+        formulationVersionId: activeFormula.id,
+        referenceOutputQuantity: "1000",
+        referenceOutputUomCode: "un",
+      },
+      actor,
+    );
+    // A estrutura ativa com pendência conhecida (energia não configurada): o
+    // sistema aceita, mas exige confirmação explícita — e a qualidade do custo
+    // chega marcada como parcial até o fim da cadeia.
+    await activateIndustrialCostVersion(costVersion.id, { confirmIncomplete: true }, actor);
+    const calculation = await saveIndustrialCostCalculation(costVersion.id, {}, actor);
+
+    const draft = await createPricingVersion(
+      first.productId,
+      { industrialCostCalculationId: calculation.id },
+      actor,
+    );
+
+    // Três faixas: quanto maior o pedido, menor o preço unitário — o custo
+    // fixo se dilui. Números fictícios, mas coerentes entre si.
+    for (const tier of [
+      { quantity: "500", manualUnitPrice: "44.9000" },
+      { quantity: "1000", manualUnitPrice: "38.9000" },
+      { quantity: "3000", manualUnitPrice: "34.5000" },
+    ]) {
+      await createPricingTier(
+        draft.id,
+        {
+          quantity: tier.quantity,
+          uomCode: "un",
+          priceMode: "MANUAL_PRICE",
+          manualUnitPrice: tier.manualUnitPrice,
+          commissionPercent: "5",
+        } as never,
+        actor,
+      );
+    }
+
+    // Mesma honestidade da estrutura: preço fechado sobre custo parcial é
+    // decisão comercial legítima, mas confirmada — e a qualidade do custo
+    // segue visível na proposta interna.
+    await activatePricingVersion(draft.id, { confirmIncompleteCost: true }, actor);
+    pricing = await prisma.pricingVersion.findFirst({
+      where: { id: draft.id },
+      include: { tiers: { orderBy: { quantity: "asc" } } },
+    });
+  }
+
   // Duas versões de proposta: a primeira com os três sabores, a segunda —
   // aceita — com dois. É o que faz o terceiro ficar fora do escopo.
   const existingQuotes = await prisma.quoteVersion.count({ where: { projectId: project.id } });
   if (existingQuotes === 0) {
     const v1 = await createQuoteVersion(project.id, actor);
+    const tier1000 = pricing?.tiers.find((tier) => tier.quantity.toString() === "1000") ?? null;
+
     for (const link of links) {
       const withLine = await addQuoteLine(v1.id, { projectProductId: link.id });
       const created = withLine.lines[withLine.lines.length - 1]!;
+
+      // O primeiro sabor usa a faixa de precificação; os outros são preço
+      // manual. Proveniência é POR LINHA, e a demonstração precisa mostrar
+      // as duas coisas convivendo na mesma proposta.
+      if (link === first && tier1000) {
+        await applyQuoteLinePricing(created.id, tier1000.id, actor);
+        continue;
+      }
+
       await updateQuoteLine(created.id, {
         quotedQuantity: link.spec.quantity,
         uomCode: "un",
