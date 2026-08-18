@@ -410,7 +410,15 @@ export function ProductCmvPage() {
                     Esta faixa foi definida sobre um custo industrial{" "}
                     {INDUSTRIAL_COST_QUALITY_LABELS[tier.costQuality].toLowerCase()}, diferente da
                     base usada nesta simulação. Para comparar preço e custo na mesma realidade
-                    econômica, gere uma precificação a partir do cálculo atual.
+                    econômica, crie uma precificação a partir do cálculo atual em{" "}
+                    {/* O aviso aponta a tela que TEM a ação: precificação nasce
+                        de um cálculo salvo, na estrutura de custos. Mandar para
+                        a lista de precificação seria prometer um botão que não
+                        existe lá. */}
+                    <Link to={`/produtos/${productId}/custos`}>
+                      Custos industriais → Cálculos salvos
+                    </Link>
+                    .
                   </p>
                 )}
               </>

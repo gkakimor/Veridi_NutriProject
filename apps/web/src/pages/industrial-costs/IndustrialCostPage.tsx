@@ -21,6 +21,7 @@ import {
   INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
   INDUSTRIAL_USAGE_BASIS_LABELS,
+  FORMULATION_COMPONENT_BASIS_LABELS,
 } from "@veridi/shared";
 import type { IndustrialCostBasis, IndustrialCostCategory } from "@veridi/shared";
 import { CostCalculationSection } from "./CostCalculationSection";
@@ -431,7 +432,13 @@ export function IndustrialCostPage() {
                         </td>
                         <td className="is-numeric">{material.quantity}</td>
                         <td>{material.unitCode}</td>
-                        <td>{material.basis}</td>
+                        {/* A base do componente é enum no banco; na tela é
+                            frase em português, como no editor de formulação. */}
+                        <td>
+                          {FORMULATION_COMPONENT_BASIS_LABELS[
+                            material.basis as keyof typeof FORMULATION_COMPONENT_BASIS_LABELS
+                          ] ?? material.basis}
+                        </td>
                         <td>{material.purityPercentApplied ?? "—"}</td>
                         <td>{material.overagePercent ?? "—"}</td>
                         <td>

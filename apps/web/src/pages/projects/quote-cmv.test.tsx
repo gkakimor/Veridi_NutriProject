@@ -305,7 +305,7 @@ describe("Projeto fechado e proposta nova", () => {
         <QuoteVersionsSection
           project={project([])}
           canEdit
-          projectStatus="QUOTE"
+          projectStatus="SAMPLE"
           onChanged={() => {}}
         />
       </MemoryRouter>,
