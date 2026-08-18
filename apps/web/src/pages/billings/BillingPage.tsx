@@ -9,6 +9,7 @@ import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 function statusBadgeClass(status: BillingStatus): string {
   switch (status) {
@@ -424,8 +425,7 @@ export function BillingPage() {
 
       {cancelDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-billing-title">
+          <ModalDialog labelledBy="cancel-billing-title" onClose={() => setCancelDialogOpen(false)}>
             <h2 id="cancel-billing-title">Cancelar faturamento?</h2>
             <p>
               {billing.code} permanecerá no histórico. Nada muda no estoque nem na expedição — a expedição
@@ -455,7 +455,7 @@ export function BillingPage() {
                 Cancelar faturamento
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
     </>

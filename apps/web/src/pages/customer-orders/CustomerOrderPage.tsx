@@ -48,6 +48,7 @@ import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 interface LineRow {
   key: string;
@@ -1668,8 +1669,7 @@ export function CustomerOrderPage() {
 
       {cancelDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-co-title">
+          <ModalDialog labelledBy="cancel-co-title" onClose={() => setCancelDialogOpen(false)}>
             <h2 id="cancel-co-title">Cancelar pedido?</h2>
             <p>{customerOrder?.code} permanecerá no histórico. Esta ação não pode ser desfeita.</p>
             <div className="field">
@@ -1696,7 +1696,7 @@ export function CustomerOrderPage() {
                 Cancelar pedido
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
     </>

@@ -156,7 +156,7 @@ export function PricingListPage() {
       )}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
               <th>Precificação</th>

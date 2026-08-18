@@ -173,19 +173,23 @@
   background-image:
     linear-gradient(to right, var(--surface), rgba(255, 255, 255, 0)),
     linear-gradient(to left, var(--surface), rgba(255, 255, 255, 0)),
-    linear-gradient(to right, rgba(20, 40, 30, 0.16), rgba(20, 40, 30, 0)),
-    linear-gradient(to left, rgba(20, 40, 30, 0.16), rgba(20, 40, 30, 0));
+    linear-gradient(to right, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0)),
+    linear-gradient(to left, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0));
   background-position:
     0 0,
     100% 0,
     0 0,
     100% 0;
   background-repeat: no-repeat;
+  /* A sombra é a ÚNICA pista de que há coluna fora da tela. Medida a 12px
+     e 0,16 de opacidade ela passava despercebida numa lista onde metade das
+     colunas está cortada — o público do sistema não é de gente que sai
+     arrastando tabela para conferir. */
   background-size:
-    28px 100%,
-    28px 100%,
-    12px 100%,
-    12px 100%;
+    32px 100%,
+    32px 100%,
+    20px 100%,
+    20px 100%;
   background-attachment: local, local, scroll, scroll;
 }
 

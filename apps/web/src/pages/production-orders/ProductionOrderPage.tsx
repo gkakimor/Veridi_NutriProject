@@ -46,6 +46,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 interface FormulationVersionOption {
   id: string;
@@ -1710,13 +1711,7 @@ export function ProductionOrderPage() {
 
       {mismatchDialog && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="mismatch-title"
-          >
+          <ModalDialog labelledBy="mismatch-title" onClose={() => setMismatchDialog(null)}>
             <h2 id="mismatch-title">Lote informado é diferente do esperado</h2>
             <dl className="definition-list">
               <dt>Lote reservado</dt>
@@ -1748,19 +1743,13 @@ export function ProductionOrderPage() {
                 {substituting ? "Substituindo…" : "Usar lote diferente"}
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
 
       {completeDialogOpen && productionOrder && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="complete-op-title"
-          >
+          <ModalDialog labelledBy="complete-op-title" onClose={() => setCompleteDialogOpen(false)}>
             <h2 id="complete-op-title">Concluir ordem de produção?</h2>
             <p>
               Produzido: {productionOrder.producedQuantity} de {productionOrder.plannedQuantity}{" "}
@@ -1800,19 +1789,13 @@ export function ProductionOrderPage() {
                 {completing ? "Concluindo…" : "Concluir OP"}
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
 
       {cancelDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="cancel-op-title"
-          >
+          <ModalDialog labelledBy="cancel-op-title" onClose={() => setCancelDialogOpen(false)}>
             <h2 id="cancel-op-title">Cancelar ordem de produção?</h2>
             <p>
               {productionOrder?.code} permanecerá no histórico. Esta ação não pode ser desfeita.
@@ -1846,7 +1829,7 @@ export function ProductionOrderPage() {
                 Cancelar OP
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
     </>

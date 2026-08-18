@@ -29,6 +29,7 @@ import { useAuth } from "../../app/AuthProvider";
 import { QrCode } from "../../components/QrCode";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 
 function formatDateTime(value: string | null): string {
@@ -856,13 +857,7 @@ export function LotDetailPage() {
 
       {blockDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="block-lot-title"
-          >
+          <ModalDialog labelledBy="block-lot-title" onClose={() => setBlockDialogOpen(false)}>
             <h2 id="block-lot-title">Bloquear lote?</h2>
             <p>
               "{lot.code}" deixará de estar disponível para uso até uma nova decisão da Qualidade.
@@ -891,7 +886,7 @@ export function LotDetailPage() {
                 Bloquear lote
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
 

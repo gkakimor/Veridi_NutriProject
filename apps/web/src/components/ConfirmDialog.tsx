@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { useInertBackground } from "./useInertBackground";
+import { useRef } from "react";
+import { useModalDialog } from "./useModalDialog";
 import type { ReactNode } from "react";
 
 interface ConfirmDialogProps {
@@ -32,58 +32,10 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
 
-  useInertBackground(open, dialogRef);
-
-  useEffect(() => {
-    if (!open) return;
-
-    // `window.confirm` prendia o foco por conta do navegador. Ao trocar por
-    // um modal do proprio app, o foco precisa ser gerido aqui — senao a
-    // substituicao seria uma regressao de acessibilidade.
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    cancelRef.current?.focus();
-
-    function focusables(): HTMLElement[] {
-      const root = dialogRef.current;
-      if (!root) return [];
-      return Array.from(
-        root.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onCancel();
-        return;
-      }
-      if (event.key !== "Tab") return;
-
-      const items = focusables();
-      if (items.length === 0) return;
-      const first = items[0]!;
-      const last = items[items.length - 1]!;
-      const active = document.activeElement as HTMLElement | null;
-
-      if (event.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      // Devolve o foco a quem abriu o dialogo.
-      previouslyFocused?.focus?.();
-    };
-  }, [open, onCancel]);
+  // Foco, trap, Escape e retorno vivem no hook: oito confirmações do app
+  // remontavam esta marcação na mão e ficavam sem nada disso.
+  useModalDialog(open, dialogRef, onCancel);
 
   if (!open) return null;
 
@@ -102,7 +54,7 @@ export function ConfirmDialog({
             bloco dentro de parágrafo é HTML inválido e o React avisa. */}
         <div className="confirm-dialog__message">{message}</div>
         <div className="confirm-dialog__actions">
-          <button ref={cancelRef} type="button" className="btn btn--ghost" onClick={onCancel}>
+          <button type="button" className="btn btn--ghost" onClick={onCancel}>
             {cancelLabel}
           </button>
           <button

@@ -21,6 +21,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 interface SupplierOption {
   id: string;
@@ -840,13 +841,7 @@ export function PurchaseOrderPage() {
 
       {cancelDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="cancel-po-title"
-          >
+          <ModalDialog labelledBy="cancel-po-title" onClose={() => setCancelDialogOpen(false)}>
             <h2 id="cancel-po-title">Cancelar ordem de compra?</h2>
             <p>
               {purchaseOrder?.code} permanecerá no histórico, mas deixará de contribuir para "Em
@@ -880,7 +875,7 @@ export function PurchaseOrderPage() {
                 Cancelar OC
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
 

@@ -25,6 +25,7 @@ import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 function statusBadgeClass(status: ShipmentStatus): string {
   switch (status) {
@@ -745,8 +746,7 @@ export function ShipmentPage() {
 
       {cancelDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-shipment-title">
+          <ModalDialog labelledBy="cancel-shipment-title" onClose={() => setCancelDialogOpen(false)}>
             <h2 id="cancel-shipment-title">Cancelar expedição?</h2>
             <p>
               {shipment.code} permanecerá no histórico. Nada sai do estoque — a reserva do pedido
@@ -776,7 +776,7 @@ export function ShipmentPage() {
                 Cancelar expedição
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
     </>

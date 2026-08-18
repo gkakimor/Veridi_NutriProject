@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { InventoryLotBreakdownDTO } from "@veridi/shared";
 import { createInventoryAdjustment } from "../lib/inventory-api";
+import { ModalDialog } from "./ModalDialog";
 
 interface AdjustStockDialogProps {
   itemId: string;
@@ -64,13 +65,7 @@ export function AdjustStockDialog({
 
   return (
     <>
-      <div className="confirm-overlay" />
-      <div
-        className="confirm-dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="adjust-stock-title"
-      >
+      <ModalDialog labelledBy="adjust-stock-title" onClose={onClose}>
         <h2 id="adjust-stock-title">Ajustar estoque</h2>
         <p>Gera um movimento rastreável — não altera o saldo diretamente.</p>
 
@@ -150,7 +145,7 @@ export function AdjustStockDialog({
             {saving ? "Salvando…" : "Confirmar ajuste"}
           </button>
         </div>
-      </div>
+      </ModalDialog>
     </>
   );
 }
