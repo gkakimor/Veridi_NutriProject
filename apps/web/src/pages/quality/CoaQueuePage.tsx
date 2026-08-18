@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { RejectCoaDialog } from "../../components/RejectCoaDialog";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import type { CoaStatus, QualityQueueRowDTO } from "@veridi/shared";
 import { COA_STATUSES, COA_STATUS_LABELS, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { approveCoa, listQualityQueue, rejectCoa } from "../../lib/attachments-api";
@@ -248,7 +248,17 @@ export function CoaQueuePage() {
             {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={9} className="table__empty">
-                  Nenhum lote nesta situação documental.
+                  {/*
+                    Esta fila é sobre LAUDO, não sobre liberação. Um lote
+                    aguardando liberação cujo item não exige CoA nunca
+                    aparece aqui — e o atalho do Dashboard chama esta tela de
+                    "Fila da Qualidade", então o vazio parecia dizer que não
+                    havia trabalho.
+                  */}
+                  Nenhum lote nesta situação documental. Esta fila mostra o andamento do{" "}
+                  <strong>laudo (CoA)</strong>; a liberação de lote para uso é decidida em{" "}
+                  <Link to="/estoque/lotes">Estoque › Lotes</Link>, inclusive para itens que não
+                  exigem CoA.
                 </td>
               </tr>
             )}

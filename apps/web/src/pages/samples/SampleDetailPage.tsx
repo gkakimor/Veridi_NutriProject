@@ -524,6 +524,16 @@ export function SampleDetailPage() {
               />
             </div>
 
+            {/* Ação ausente sem explicação vira bloqueio silencioso: quem
+                executa o teste não decide o destino comercial dele. */}
+            {awaitingDecision && !canDecide && (
+              <p className="field__hint">
+                A decisão desta amostra é do Comercial: é quem responde ao cliente que aprova ou
+                reprova o teste. Registre aqui o parecer técnico — ele fica no histórico da
+                amostra.
+              </p>
+            )}
+
             <div className="line-actions">
               {awaitingDecision && canDecide && (
                 <>

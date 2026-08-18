@@ -331,6 +331,8 @@ async function attachRequirementAvailability(
   requirements: RequirementWithItem[],
   reservationLinesByRequirement: Map<string, ReservationLineWithRelations[]>,
   consumedByLine: Map<string, Prisma.Decimal>,
+  /** Consumo registrado por item — vale quando a reserva já foi liberada. */
+  consumidoPorItem: Map<string, Prisma.Decimal>,
   orderCustomer: { id: string; name: string } | null,
 ): Promise<ProductionOrderRequirementDTO[]> {
   if (requirements.length === 0) return [];
@@ -416,7 +418,12 @@ async function attachRequirementAvailability(
         suggestedQuantity: allocation.suggestedQuantity,
       })),
       allocatedQuantity: allocatedQuantity.toString(),
-      consumedQuantity: lineConsumedQuantity.toString(),
+      // Reserva ativa: o consumo desta OP para este item. Reserva liberada
+      // (ordem encerrada): o consumo registrado, que continua valendo.
+      consumedQuantity: (linesForRequirement.length > 0
+        ? lineConsumedQuantity
+        : (consumidoPorItem.get(requirement.itemId) ?? new Prisma.Decimal(0))
+      ).toString(),
       remainingReservedQuantity: remainingReservedQuantity.toString(),
       reservationLines: linesForRequirement.map((line) => toReservationLineDTO(line, consumedByLine)),
     });
@@ -446,10 +453,25 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
       ? { id: order.product.customer.id, name: order.product.customer.legalName }
       : null;
 
+  /*
+   * O que foi CONSUMIDO é história e não depende de a reserva continuar ativa.
+   *
+   * Concluir a OP libera a reserva; lendo o consumo só pelas linhas de
+   * reserva ativas, toda ordem concluída passava a declarar consumo zero em
+   * todos os materiais — inclusive a que consumiu tudo. O ledger de
+   * `ProductionConsumption` é a fonte, e ele não é apagado.
+   */
+  const consumidoPorItem = new Map<string, Prisma.Decimal>();
+  for (const consumption of order.consumptions) {
+    const atual = consumidoPorItem.get(consumption.itemId) ?? new Prisma.Decimal(0);
+    consumidoPorItem.set(consumption.itemId, atual.plus(consumption.quantity));
+  }
+
   const requirements = await attachRequirementAvailability(
     order.requirements,
     reservationLinesByRequirement,
     consumedByLine,
+    consumidoPorItem,
     orderCustomer,
   );
   const shortageItemCount = requirements.filter((r) => r.availabilityStatus === "SHORTAGE").length;

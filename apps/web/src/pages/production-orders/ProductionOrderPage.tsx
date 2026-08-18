@@ -828,6 +828,33 @@ export function ProductionOrderPage() {
             title="Necessidade de Materiais"
             subtitle="Disponibilidade calculada em tempo real a partir do estoque atual — não é uma reserva."
           >
+            {/*
+              Ordem encerrada com material da formulação que nunca foi
+              baixado. O lote de produto acabado já existe e pode ir para
+              expedição: a composição real não é a declarada, e isso não
+              aparecia em tela nenhuma — só na Folha de Receita impressa,
+              que ninguém precisa abrir para expedir.
+            */}
+            {(() => {
+              const encerrada = productionOrder.status === "COMPLETED";
+              const naoConsumidos = productionOrder.requirements.filter(
+                (requirement) =>
+                  Number(requirement.consumedQuantity) === 0 &&
+                  Number(requirement.requiredQuantity) > 0,
+              );
+              if (!encerrada || naoConsumidos.length === 0) return null;
+              return (
+                <p className="form-alert" role="status">
+                  Esta ordem foi concluída sem consumo registrado de{" "}
+                  {naoConsumidos.length}{" "}
+                  {naoConsumidos.length === 1 ? "material" : "materiais"} da formulação:{" "}
+                  {naoConsumidos.map((requirement) => requirement.itemCode).join(", ")}. O lote
+                  produzido não tem, no sistema, a composição que a formulação declara — confira
+                  antes de liberar para expedição.
+                </p>
+              );
+            })()}
+
             <div className="table-container">
               <table className="table">
                 <thead>
