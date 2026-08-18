@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { InventoryMovementDTO, InventoryMovementType } from "@veridi/shared";
-import { INVENTORY_MOVEMENT_DIRECTION, INVENTORY_MOVEMENT_TYPE_LABELS } from "@veridi/shared";
+import {
+  INVENTORY_MOVEMENT_DIRECTION,
+  INVENTORY_MOVEMENT_SOURCE_LABELS,
+  INVENTORY_MOVEMENT_TYPE_LABELS,
+} from "@veridi/shared";
 import { useInitialFilters } from "../../lib/filter-params";
 import { listInventoryMovements } from "../../lib/inventory-api";
 import { EntityLink } from "../../components/EntityLink";
@@ -131,7 +135,7 @@ export function InventoryMovementsPage() {
               <th>Lote</th>
               <th>Tipo</th>
               <th>Entrada/Saída</th>
-              <th>Quantidade</th>
+              <th className="is-numeric">Quantidade</th>
               <th>Origem</th>
               <th>Usuário</th>
               <th>Motivo</th>
@@ -142,23 +146,11 @@ export function InventoryMovementsPage() {
               <tr key={movement.id}>
                 <td>{formatDateTime(movement.occurredAt)}</td>
                 <td>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/estoque/${movement.itemId}`)}
-                  >
-                    <EntityLink kind="item" id={movement.itemId} code={movement.itemCode} name={movement.itemName} />
-                  </button>
+                  <EntityLink kind="item" id={movement.itemId} code={movement.itemCode} name={movement.itemName} />
                 </td>
-                <td>
+                <td className="is-code">
                   {movement.lotId ? (
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/estoque/lotes/${movement.lotId}`)}
-                    >
-                      <span className="code">{movement.lotCode}</span>
-                    </button>
+                    <EntityLink kind="lot" id={movement.lotId} code={movement.lotCode} />
                   ) : (
                     "—"
                   )}
@@ -169,26 +161,29 @@ export function InventoryMovementsPage() {
                     {INVENTORY_MOVEMENT_DIRECTION[movement.type] > 0 ? "Entrada" : "Saída"}
                   </span>
                 </td>
-                <td>{movement.quantity}</td>
-                <td>
+                <td className="is-numeric">{movement.quantity}</td>
+                {/* Todo movimento tem um documento que o causou; o extrato só
+                    conhecia recebimento e expedição, e as saídas de produção
+                    — as maiores do ledger — apareciam sem origem nenhuma. */}
+                <td className="is-code">
                   {movement.receiptId ? (
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/compras/recebimentos/${movement.receiptId}`)}
-                    >
-                      <span className="code">{movement.receiptCode}</span>
-                    </button>
+                    <EntityLink kind="receipt" id={movement.receiptId} code={movement.receiptCode} />
                   ) : movement.shipmentId ? (
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/comercial/expedicoes/${movement.shipmentId}`)}
-                    >
-                      <span className="code">{movement.shipmentCode}</span>
-                    </button>
+                    <EntityLink kind="shipment" id={movement.shipmentId} code={movement.shipmentCode} />
+                  ) : movement.productionOrderId ? (
+                    <EntityLink
+                      kind="productionOrder"
+                      id={movement.productionOrderId}
+                      code={movement.productionOrderCode}
+                    />
+                  ) : movement.projectSampleId ? (
+                    <EntityLink
+                      kind="sample"
+                      id={movement.projectSampleId}
+                      code={movement.projectSampleCode}
+                    />
                   ) : (
-                    "—"
+                    INVENTORY_MOVEMENT_SOURCE_LABELS[movement.sourceType]
                   )}
                 </td>
                 <td>{movement.createdBy ?? "—"}</td>

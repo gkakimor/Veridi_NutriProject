@@ -157,12 +157,12 @@ export function QuotePricingSection({
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Quantidade</th>
-                    <th>Custo/un</th>
+                    <th className="is-numeric">Quantidade</th>
+                    <th className="is-numeric">Custo/un</th>
                     <th>Qualidade</th>
-                    <th>Comissão</th>
-                    <th>Preço</th>
-                    <th>Margem de contribuição</th>
+                    <th className="is-numeric">Comissão</th>
+                    <th className="is-numeric">Preço</th>
+                    <th className="is-numeric">Margem de contribuição</th>
                     <th aria-hidden="true" />
                   </tr>
                 </thead>
@@ -173,14 +173,14 @@ export function QuotePricingSection({
                       Number(line?.quotedQuantity) === Number(tier.quantity);
                     return (
                       <tr key={tier.id}>
-                        <td>
+                        <td className="is-numeric">
                           {tier.quantity} {tier.uomCode}
                         </td>
-                        <td>{formatUnitCost(tier.industrialCostPerUnit)}</td>
+                        <td className="is-numeric">{formatUnitCost(tier.industrialCostPerUnit)}</td>
                         <td>{INDUSTRIAL_COST_QUALITY_LABELS[tier.costQuality]}</td>
-                        <td>{formatPercent(tier.commissionPercent)}</td>
-                        <td>{formatUnitCost(tier.selectedUnitPrice)}</td>
-                        <td>{formatPercent(tier.contributionMarginPercent)}</td>
+                        <td className="is-numeric">{formatPercent(tier.commissionPercent)}</td>
+                        <td className="is-numeric">{formatUnitCost(tier.selectedUnitPrice)}</td>
+                        <td className="is-numeric">{formatPercent(tier.contributionMarginPercent)}</td>
                         <td>
                           <button
                             type="button"

@@ -128,6 +128,114 @@ if (achouCriar) {
   ok("Enter abre o cadastro de cliente", (await page.locator("#customer-legal-name").count()) > 0);
 }
 
+// D. OC -> Recebimento -> Lote -> Qualidade
+const oc = (await get("/purchase-orders?pageSize=20")).purchaseOrders.find((row) => row.receipts?.length > 0);
+if (!oc) {
+  ok("existe OC com recebimento no cenario", false);
+} else {
+  await page.goto(`${WEB}/compras/ordens/${oc.id}`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1300);
+  ok("OC lista recebimentos", (await page.locator("th", { hasText: /^Recebimento$/ }).count()) > 0);
+  const linkRec = page.getByRole("link", { name: new RegExp(oc.receipts[0].code) }).first();
+  ok("recebimento tem link na OC", (await linkRec.count()) > 0);
+  if (await linkRec.count()) {
+    await linkRec.click();
+    await page.waitForTimeout(1600);
+    const corpoRec = await page.locator("body").innerText();
+    ok("link do recebimento abre o recebimento", page.url().includes("/compras/recebimentos/"), page.url().replace(WEB, ""));
+    ok("recebimento mostra a OC de origem", corpoRec.includes(oc.code));
+    ok("recebimento liga de volta a OC", (await page.getByRole("link", { name: new RegExp(oc.code) }).count()) > 0);
+    const linkLote = page.locator('td a.entity-link[href*="/estoque/lotes/"]').first();
+    ok("recebimento liga ao lote gerado", (await linkLote.count()) > 0);
+    if (await linkLote.count()) {
+      await linkLote.click();
+      await page.waitForTimeout(1600);
+      ok("link do lote abre o lote", page.url().includes("/estoque/lotes/"), page.url().replace(WEB, ""));
+      ok("lote mostra qualidade", /Qualidade/i.test(await page.locator("body").innerText()));
+    }
+  }
+}
+
+// Lote acabado -> expedicao
+const loteAcabado = (await get("/lots?pageSize=50")).lots.find((row) => row.shipments?.length > 0);
+if (!loteAcabado) {
+  ok("existe lote expedido no cenario", false);
+} else {
+  await page.goto(`${WEB}/estoque/lotes/${loteAcabado.id}`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1400);
+  ok("lote acabado lista expedicoes", /Expedi[çc][õo]es/.test(await page.locator("body").innerText()));
+  const linkExp = page.getByRole("link", { name: new RegExp(loteAcabado.shipments[0].code) }).first();
+  ok("expedicao tem link no lote", (await linkExp.count()) > 0);
+  if (await linkExp.count()) {
+    await linkExp.click();
+    await page.waitForTimeout(1600);
+    ok("link da expedicao abre a expedicao", page.url().includes("/comercial/expedicoes/"), page.url().replace(WEB, ""));
+  }
+}
+
+// Movimentacoes: toda saida tem documento de origem
+await page.goto(`${WEB}/estoque/movimentacoes`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1500);
+const origens = await page.evaluate(() => {
+  const cabecalhos = [...document.querySelectorAll("table thead th")].map((h) => h.textContent.trim());
+  const coluna = cabecalhos.indexOf("Origem");
+  if (coluna < 0) return null;
+  return [...document.querySelectorAll("table tbody tr")]
+    .filter((linha) => !linha.querySelector(".table__empty"))
+    .map((linha) => linha.children[coluna]?.textContent?.trim() ?? "");
+});
+ok(
+  "nenhuma movimentacao sem origem",
+  origens !== null && origens.length > 0 && origens.every((v) => v !== "" && v !== "—"),
+  JSON.stringify(origens?.slice(0, 5)),
+);
+
+const alinhamento = await page.evaluate(() => {
+  const th = [...document.querySelectorAll("table thead th")].find((h) => h.textContent.trim() === "Quantidade");
+  if (!th) return null;
+  const idx = [...th.parentElement.children].indexOf(th);
+  const td = document.querySelector("table tbody tr")?.children[idx];
+  return {
+    th: getComputedStyle(th).textAlign,
+    td: td ? getComputedStyle(td).textAlign : null,
+    tabular: td ? getComputedStyle(td).fontVariantNumeric : null,
+  };
+});
+ok(
+  "coluna numerica a direita com cabecalho junto",
+  alinhamento?.th === "right" && alinhamento?.td === "right",
+  JSON.stringify(alinhamento),
+);
+
+// Folha de receita de OP encerrada e consulta
+const opConcluida = (await get("/production-orders?pageSize=20")).productionOrders.find((row) => row.status === "COMPLETED");
+if (opConcluida) {
+  await page.goto(`${WEB}/producao/ordens/${opConcluida.id}/receita`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1500);
+  const corpoFolha = await page.locator("body").innerText();
+  ok("folha de OP encerrada nao registra pesagem", !/Registrar pesagem/.test(corpoFolha));
+  ok("folha de OP encerrada se explica", /documento de consulta/i.test(corpoFolha));
+}
+
+// Impressos: cabecalho numerico e rodape corrido
+const pedidoPrint = (await get("/customer-orders?pageSize=1")).customerOrders[0];
+await page.goto(`${WEB}/comercial/pedidos/${pedidoPrint.id}/imprimir`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1500);
+await page.emulateMedia({ media: "print" });
+const impresso = await page.evaluate(() => {
+  const th = [...document.querySelectorAll(".print-table thead th")].find((h) => h.className.includes("is-number"));
+  const rodape = document.querySelector(".print-running-foot");
+  return {
+    cabecalho: th ? getComputedStyle(th).textAlign : null,
+    rodape: rodape ? getComputedStyle(rodape).display : null,
+    texto: rodape ? rodape.textContent.trim().slice(0, 40) : null,
+  };
+});
+await page.emulateMedia({ media: "screen" });
+ok("impresso alinha cabecalho numerico", impresso.cabecalho === "right", JSON.stringify(impresso));
+ok("impresso repete identidade no rodape", impresso.rodape === "flex" && !!impresso.texto);
+
+
 console.log("\nerros de console:", erros.length ? [...new Set(erros)].slice(0, 4) : "nenhum");
 console.log("respostas >=400:", http.length ? [...new Set(http)].slice(0, 4) : "nenhuma");
 console.log(falhou === 0 ? "\nRESULTADO: PASS" : `\nRESULTADO: ${falhou} falha(s)`);

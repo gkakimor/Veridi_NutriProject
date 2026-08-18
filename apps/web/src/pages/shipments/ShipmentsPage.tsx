@@ -127,7 +127,7 @@ export function ShipmentsPage() {
               <th>Pedido</th>
               <th>Cliente</th>
               <th>Data</th>
-              <th>Quantidade</th>
+              <th className="is-numeric">Quantidade</th>
               <th>Status</th>
               <th aria-hidden="true" />
             </tr>
@@ -148,7 +148,7 @@ export function ShipmentsPage() {
                   <EntityLink kind="customer" id={shipment.customerId} code={shipment.customerName} />
                 </td>
                 <td>{formatDate(shipment.shipmentDate)}</td>
-                <td>{shipment.totalQuantity}</td>
+                <td className="is-numeric">{shipment.totalQuantity}</td>
                 <td>
                   <span className={statusBadgeClass(shipment.status)}>
                     {SHIPMENT_STATUS_LABELS[shipment.status]}

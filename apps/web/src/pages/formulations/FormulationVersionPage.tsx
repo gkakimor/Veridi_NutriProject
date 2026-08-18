@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   FormulationCalculationMode,
   FormulationComponentBasis,
@@ -533,7 +533,7 @@ export function FormulationVersionPage() {
                   <th>Tipo</th>
                   <th>Base</th>
                   <th>Fornecimento</th>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Unidade</th>
                   <th>Pureza %</th>
                   <th>Overage %</th>
@@ -616,7 +616,7 @@ export function FormulationVersionPage() {
                         SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]
                       )}
                     </td>
-                    <td>
+                    <td className="is-numeric">
                       {isDraft ? (
                         <input
                           type="text"
@@ -737,10 +737,10 @@ export function FormulationVersionPage() {
                 <thead>
                   <tr>
                     <th>Componente</th>
-                    <th>Quantidade</th>
+                    <th className="is-numeric">Quantidade</th>
                     <th>Referência unitária</th>
                     <th>Origem</th>
-                    <th>Custo estimado</th>
+                    <th className="is-numeric">Custo estimado</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -749,7 +749,7 @@ export function FormulationVersionPage() {
                       <td>
                         <EntityLink kind="item" id={component.itemId} code={component.itemCode} name={component.itemName} />
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {component.normalizedQuantity} {component.stockUnitCode}
                         <br />
                         <span className="field__hint">
@@ -766,7 +766,7 @@ export function FormulationVersionPage() {
                           {COST_SOURCE_LABELS[component.costSource]}
                         </span>
                       </td>
-                      <td>{formatBRL(component.estimatedComponentCost)}</td>
+                      <td className="is-numeric">{formatBRL(component.estimatedComponentCost)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -800,7 +800,14 @@ export function FormulationVersionPage() {
               <p className="field__hint">
                 Custo parcial: {costEstimate.missingCostItems.join(", ")} sem referência de custo. O
                 subtotal conhecido ({formatBRL(costEstimate.knownCostSubtotal)}) não representa o custo
-                total da fórmula.
+                total da fórmula.{" "}
+                {/* Dizer o que falta sem dizer onde resolver deixa a pessoa
+                    parada: a referência de custo vem do preço do fornecedor
+                    para o item, e é lá que ela é corrigida. */}
+                <Link to="/compras/item-fornecedor">
+                  Definir preço de fornecedor para esses itens
+                </Link>
+                .
               </p>
             )}
           </FormSection>

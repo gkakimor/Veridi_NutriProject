@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { CostReferenceDTO, LotDTO, LotTraceabilityDTO, ProductionOrderMaterialCostDTO } from "@veridi/shared";
+import type {
+  CostReferenceDTO,
+  LotDTO,
+  LotTraceabilityDTO,
+  ProductionOrderMaterialCostDTO,
+  ShipmentStatus,
+} from "@veridi/shared";
 import {
   COA_STATUS_LABELS,
   COST_QUALITY_LABELS,
   COST_SOURCE_LABELS,
   LOT_ATTACHMENT_TYPES,
   LOT_STATUS_LABELS,
+  SHIPMENT_STATUS_LABELS,
   ownerLabel,
 } from "@veridi/shared";
 import { blockLot, getLot, getLotTraceability, releaseLot } from "../../lib/lots-api";
@@ -366,6 +373,60 @@ export function LotDetailPage() {
           </dl>
         </FormSection>
 
+        {lot.shipments.length > 0 && (
+          <FormSection
+            title="Expedições"
+            subtitle="Para onde este lote foi. Só expedição confirmada saiu de fato do estoque."
+          >
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Expedição</th>
+                    <th>Pedido</th>
+                    <th>Cliente</th>
+                    <th className="is-numeric">Quantidade</th>
+                    <th>Status</th>
+                    <th>Confirmada em</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lot.shipments.map((shipment) => (
+                    <tr key={`${shipment.id}-${shipment.quantity}`}>
+                      <td className="is-code">
+                        <EntityLink kind="shipment" id={shipment.id} code={shipment.code} />
+                      </td>
+                      <td className="is-code">
+                        <EntityLink
+                          kind="customerOrder"
+                          id={shipment.customerOrderId}
+                          code={shipment.customerOrderCode}
+                        />
+                      </td>
+                      <td>
+                        <EntityLink
+                          kind="customer"
+                          id={shipment.customerId}
+                          code={shipment.customerName}
+                        />
+                      </td>
+                      <td className="is-numeric">
+                        {shipment.quantity} {shipment.unitCode}
+                      </td>
+                      <td>
+                        <span className="badge badge--neutral">
+                          {SHIPMENT_STATUS_LABELS[shipment.status as ShipmentStatus] ?? shipment.status}
+                        </span>
+                      </td>
+                      <td>{shipment.shippedAt ? formatDate(shipment.shippedAt) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </FormSection>
+        )}
+
         {lot.origin === "PRODUCTION" ? (
           <FormSection
             title="Custo material da produção"
@@ -603,7 +664,7 @@ export function LotDetailPage() {
                     <th>Item</th>
                     <th>Lote</th>
                     <th>Lote fornecedor</th>
-                    <th>Quantidade consumida</th>
+                    <th className="is-numeric">Quantidade consumida</th>
                     <th>Fornecedor</th>
                   </tr>
                 </thead>
@@ -615,7 +676,7 @@ export function LotDetailPage() {
                       </td>
                       <td>{material.lotCode ?? "—"}</td>
                       <td>{material.supplierLot ?? "—"}</td>
-                      <td>
+                      <td className="is-numeric">
                         {material.quantity} {material.unitCode}
                       </td>
                       <td>{material.supplierName ?? "—"}</td>
@@ -645,26 +706,24 @@ export function LotDetailPage() {
                   <tr>
                     <th>Ordem de Produção</th>
                     <th>Produto</th>
-                    <th>Quantidade consumida</th>
+                    <th className="is-numeric">Quantidade consumida</th>
                     <th>Lote(s) de produto acabado gerados</th>
                   </tr>
                 </thead>
                 <tbody>
                   {traceability.usedIn.map((usage) => (
                     <tr key={usage.productionOrderId}>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/producao/ordens/${usage.productionOrderId}`)}
-                        >
-                          {usage.productionOrderCode}
-                        </button>
+                      <td className="is-code">
+                        <EntityLink
+                          kind="productionOrder"
+                          id={usage.productionOrderId}
+                          code={usage.productionOrderCode}
+                        />
                       </td>
                       <td>
                         <EntityLink kind="product" id={usage.productId} code={usage.productCode} name={usage.productName} />
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {usage.consumedQuantity} {usage.unitCode}
                       </td>
                       <td>
@@ -695,7 +754,7 @@ export function LotDetailPage() {
                     <th>Teste</th>
                     <th>Projeto</th>
                     <th>Cliente</th>
-                    <th>Quantidade consumida</th>
+                    <th className="is-numeric">Quantidade consumida</th>
                     <th>Quando</th>
                   </tr>
                 </thead>
@@ -716,7 +775,7 @@ export function LotDetailPage() {
                         <EntityLink kind="project" id={usage.projectId} code={usage.projectCode} name={usage.projectName} />
                       </td>
                       <td>{usage.customerName}</td>
-                      <td>
+                      <td className="is-numeric">
                         {usage.consumedQuantity} {usage.unitCode}
                       </td>
                       <td>{new Date(usage.consumedAt).toLocaleString("pt-BR")}</td>

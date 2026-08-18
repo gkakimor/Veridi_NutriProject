@@ -190,7 +190,7 @@ export function IndustrialResourceDetailPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Valor</th>
+                  <th className="is-numeric">Valor</th>
                   <th>Unidade</th>
                   <th>Vigente desde</th>
                   <th>Válida até</th>
@@ -202,7 +202,7 @@ export function IndustrialResourceDetailPage() {
               <tbody>
                 {resource.rates.map((rate) => (
                   <tr key={rate.id}>
-                    <td>
+                    <td className="is-numeric">
                       {rate.currencyCode} {rate.rateValue}
                     </td>
                     <td>{INDUSTRIAL_RATE_UOM_LABELS[rate.rateUom]}</td>

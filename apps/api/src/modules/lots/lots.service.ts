@@ -35,6 +35,18 @@ type LotWithRelations = Lot & {
   ownerCustomer: Customer | null;
   receiptLine: ReceiptLineChain | null;
   productionOrder: ProductionOrder | null;
+  shipmentLines: {
+    quantity: Prisma.Decimal;
+    unitCode: string;
+    shipment: {
+      id: string;
+      code: string;
+      status: string;
+      confirmedAt: Date | null;
+      customerOrderId: string;
+      customerOrder: { code: string; customerId: string; customerName: string | null };
+    };
+  }[];
 };
 
 const lotInclude = {
@@ -43,6 +55,26 @@ const lotInclude = {
   ownerCustomer: true,
   receiptLine: { include: { receipt: { include: { purchaseOrder: true } } } },
   productionOrder: true,
+  // Para onde o lote foi. Sem isto, saber se um lote acabado ja saiu exigia
+  // voltar pelo pedido — e o lote e justamente por onde a rastreabilidade
+  // costuma comecar.
+  shipmentLines: {
+    orderBy: { id: "asc" as const },
+    select: {
+      quantity: true,
+      unitCode: true,
+      shipment: {
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          confirmedAt: true,
+          customerOrderId: true,
+          customerOrder: { select: { code: true, customerId: true, customerName: true } },
+        },
+      },
+    },
+  },
 } as const;
 
 type LotDTOWithoutStock = Omit<LotDTO, "onHand" | "reserved" | "available">;
@@ -94,6 +126,18 @@ function toLotDTO(lot: LotWithRelations, producedQuantity: Prisma.Decimal | null
     blockedAt: lot.blockedAt ? lot.blockedAt.toISOString() : null,
     blockedBy: lot.blockedBy,
     blockReason: lot.blockReason,
+    shipments: lot.shipmentLines.map((line) => ({
+      id: line.shipment.id,
+      code: line.shipment.code,
+      status: line.shipment.status,
+      shippedAt: line.shipment.confirmedAt ? line.shipment.confirmedAt.toISOString() : null,
+      quantity: line.quantity.toString(),
+      unitCode: line.unitCode,
+      customerOrderId: line.shipment.customerOrderId,
+      customerOrderCode: line.shipment.customerOrder.code,
+      customerId: line.shipment.customerOrder.customerId,
+      customerName: line.shipment.customerOrder.customerName,
+    })),
   };
 }
 

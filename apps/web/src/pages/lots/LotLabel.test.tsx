@@ -48,6 +48,7 @@ const baseLot: LotDTO = {
   blockedAt: null,
   blockedBy: null,
   blockReason: null,
+  shipments: [],
 };
 
 const producedLot: LotDTO = {

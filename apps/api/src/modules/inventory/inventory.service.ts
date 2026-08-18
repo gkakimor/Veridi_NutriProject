@@ -61,9 +61,57 @@ const movementInclude = {
   shipmentLine: { include: { shipment: true } },
 } as const;
 
-function toMovementDTO(movement: MovementWithRelations): InventoryMovementDTO {
+/**
+ * Códigos da origem que não tem relação própria no movimento.
+ *
+ * `sourceId` guarda o documento que causou a baixa (OP no consumo e na
+ * produção, amostra no teste), mas sem o código o extrato mostrava "—" na
+ * coluna Origem justamente nas saídas de produção — as maiores do ledger.
+ * Resolvido em lote para não gerar uma consulta por linha.
+ */
+async function resolveSourceCodes(
+  movements: MovementWithRelations[],
+): Promise<Map<string, string>> {
+  const prisma = getPrisma();
+  const opIds = new Set<string>();
+  const sampleIds = new Set<string>();
+  for (const movement of movements) {
+    if (!movement.sourceId) continue;
+    if (movement.sourceType === "PRODUCTION_CONSUMPTION" || movement.sourceType === "FINISHED_GOOD_PRODUCTION") {
+      opIds.add(movement.sourceId);
+    } else if (movement.sourceType === "PROJECT_SAMPLE") {
+      sampleIds.add(movement.sourceId);
+    }
+  }
+  const codes = new Map<string, string>();
+  if (opIds.size > 0) {
+    for (const order of await prisma.productionOrder.findMany({
+      where: { id: { in: [...opIds] } },
+      select: { id: true, code: true },
+    })) {
+      codes.set(order.id, order.code);
+    }
+  }
+  if (sampleIds.size > 0) {
+    for (const sample of await prisma.projectSample.findMany({
+      where: { id: { in: [...sampleIds] } },
+      select: { id: true, code: true },
+    })) {
+      codes.set(sample.id, sample.code);
+    }
+  }
+  return codes;
+}
+
+function toMovementDTO(
+  movement: MovementWithRelations,
+  sourceCodes: Map<string, string> = new Map(),
+): InventoryMovementDTO {
   const receiptLine = movement.receiptLine;
   const shipmentLine = movement.shipmentLine;
+  const fromProduction =
+    movement.sourceType === "PRODUCTION_CONSUMPTION" || movement.sourceType === "FINISHED_GOOD_PRODUCTION";
+  const sourceCode = movement.sourceId ? (sourceCodes.get(movement.sourceId) ?? null) : null;
   return {
     id: movement.id,
     itemId: movement.itemId,
@@ -83,6 +131,10 @@ function toMovementDTO(movement: MovementWithRelations): InventoryMovementDTO {
     purchaseOrderCode: receiptLine?.receipt.purchaseOrder?.code ?? null,
     shipmentId: shipmentLine ? shipmentLine.shipment.id : null,
     shipmentCode: shipmentLine ? shipmentLine.shipment.code : null,
+    productionOrderId: fromProduction && sourceCode ? movement.sourceId : null,
+    productionOrderCode: fromProduction ? sourceCode : null,
+    projectSampleId: movement.sourceType === "PROJECT_SAMPLE" && sourceCode ? movement.sourceId : null,
+    projectSampleCode: movement.sourceType === "PROJECT_SAMPLE" ? sourceCode : null,
     reason: movement.reason,
     createdBy: movement.createdBy,
     createdAt: movement.createdAt.toISOString(),
@@ -94,7 +146,8 @@ async function getMovementById(id: string): Promise<InventoryMovementDTO | null>
     where: { id },
     include: movementInclude,
   });
-  return movement ? toMovementDTO(movement) : null;
+  if (!movement) return null;
+  return toMovementDTO(movement, await resolveSourceCodes([movement]));
 }
 
 /** Resumo de disponibilidade para um lote de itens — usado por listagem e detalhe. */
@@ -241,8 +294,10 @@ export async function listInventoryMovements(
     prisma.inventoryMovement.count({ where }),
   ]);
 
+  const sourceCodes = await resolveSourceCodes(movements);
+
   return {
-    movements: movements.map(toMovementDTO),
+    movements: movements.map((movement) => toMovementDTO(movement, sourceCodes)),
     ...pageMeta(pagination, total),
   };
 }

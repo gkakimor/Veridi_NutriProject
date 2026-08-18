@@ -174,7 +174,7 @@ export function BillingsPage() {
               <th>Pedido</th>
               <th>Cliente</th>
               <th>Data</th>
-              <th>Quantidade</th>
+              <th className="is-numeric">Quantidade</th>
               <th>Situação</th>
               <th aria-hidden="true" />
             </tr>
@@ -313,8 +313,8 @@ export function BillingsPage() {
               <th>Expedição</th>
               <th>Pedido</th>
               <th>Cliente</th>
-              <th>Quantidade</th>
-              <th>Valor</th>
+              <th className="is-numeric">Quantidade</th>
+              <th className="is-numeric">Valor</th>
               <th>Status</th>
               <th>Emitido em</th>
               <th aria-hidden="true" />

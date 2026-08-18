@@ -287,7 +287,7 @@ export function SampleDetailPage() {
                   <th>Item</th>
                   <th>Lote</th>
                   <th>Proprietário</th>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Quando</th>
                   <th>Quem</th>
                   <th>Observação</th>
@@ -301,7 +301,7 @@ export function SampleDetailPage() {
                     </td>
                     <td className="is-code">{consumption.lotCode ?? "—"}</td>
                     <td>{ownerLabel(consumption.ownerType, consumption.ownerCustomerName)}</td>
-                    <td>
+                    <td className="is-numeric">
                       {consumption.quantity} {consumption.uomCode}
                     </td>
                     <td>{formatDateTime(consumption.executedAt)}</td>

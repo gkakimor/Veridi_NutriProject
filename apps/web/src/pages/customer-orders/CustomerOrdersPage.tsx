@@ -203,7 +203,7 @@ export function CustomerOrdersPage() {
               <th>Data</th>
               <th>Entrega</th>
               <th>Produtos</th>
-              <th>Quantidade</th>
+              <th className="is-numeric">Quantidade</th>
               <th>Atendimento</th>
               <th>Faturamento</th>
               <th>Status</th>
@@ -229,7 +229,7 @@ export function CustomerOrdersPage() {
                   <td>{formatDate(order.orderDate)}</td>
                   <td>{formatDate(order.requestedDeliveryDate)}</td>
                   <td>{order.lines.length}</td>
-                  <td>{totalQuantity}</td>
+                  <td className="is-numeric">{totalQuantity}</td>
                   <td>
                     {order.shipments.some((shipment) => shipment.status === "CONFIRMED")
                       ? "Expedido"

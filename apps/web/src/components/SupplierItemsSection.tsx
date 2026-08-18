@@ -49,7 +49,7 @@ export function SupplierItemsSection({
               <th>Código no fornecedor</th>
               <th>Homologação</th>
               <th>Preferencial</th>
-              <th>Preço</th>
+              <th className="is-numeric">Preço</th>
               <th>Pedido mínimo</th>
             </tr>
           </thead>
@@ -70,7 +70,7 @@ export function SupplierItemsSection({
                   <td className="is-code">{row.supplierItemCode ?? "—"}</td>
                   <td>{SUPPLIER_ITEM_QUALIFICATION_LABELS[row.qualificationStatus]}</td>
                   <td>{row.preferred ? "Sim" : "—"}</td>
-                  <td>
+                  <td className="is-numeric">
                     {offer ? (
                       <>
                         {offer.unitPrice} {offer.currencyCode}/{offer.priceUomCode}

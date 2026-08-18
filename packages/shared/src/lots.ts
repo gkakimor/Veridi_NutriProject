@@ -136,6 +136,26 @@ export interface LotDTO {
   blockedAt: string | null;
   blockedBy: string | null;
   blockReason: string | null;
+  /**
+   * Expedições que levaram este lote embora — só CONFIRMED conta como saída
+   * real, mas rascunho e cancelada também aparecem porque explicam onde o
+   * lote está comprometido. Vazio quando o lote nunca foi expedido.
+   */
+  shipments: LotShipmentSummaryDTO[];
+}
+
+export interface LotShipmentSummaryDTO {
+  id: string;
+  code: string;
+  status: string;
+  shippedAt: string | null;
+  /** Quanto deste lote saiu nesta expedição. */
+  quantity: string;
+  unitCode: string;
+  customerOrderId: string | null;
+  customerOrderCode: string | null;
+  customerId: string | null;
+  customerName: string | null;
 }
 
 export interface LotListResponse {

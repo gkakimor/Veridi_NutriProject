@@ -179,11 +179,11 @@ export function CoaQueuePage() {
               <th>Lote</th>
               <th>Item</th>
               <th>Fornecedor / Proprietário</th>
-              <th>Recebido em</th>
+              <th className="is-numeric">Recebido em</th>
               <th>Validade</th>
               <th>CoA</th>
               <th>Qualidade</th>
-              <th>Físico</th>
+              <th className="is-numeric">Físico</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -200,7 +200,7 @@ export function CoaQueuePage() {
                     ? ownerLabel(row.ownerType, row.ownerCustomerName)
                     : (row.supplierName ?? "—")}
                 </td>
-                <td>{formatDate(row.receivedAt)}</td>
+                <td className="is-numeric">{formatDate(row.receivedAt)}</td>
                 <td>{formatDate(row.expiryDate)}</td>
                 <td>
                   <span className={coaBadgeClass(row.coaStatus)}>
@@ -213,7 +213,7 @@ export function CoaQueuePage() {
                     {row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.lotStatus]}
                   </span>
                 </td>
-                <td>
+                <td className="is-numeric">
                   {row.onHand} {row.unitCode}
                 </td>
                 <td>

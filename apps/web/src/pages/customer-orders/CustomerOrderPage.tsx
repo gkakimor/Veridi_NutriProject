@@ -785,7 +785,7 @@ export function CustomerOrderPage() {
               <thead>
                 <tr>
                   <th>Produto</th>
-                  <th className="col-quantity">Quantidade</th>
+                  <th className="col-quantity is-numeric">Quantidade</th>
                   <th className="col-unit">Un.</th>
                   {!isDraft && <th>Expedido</th>}
                   {!isDraft && <th>Falta expedir</th>}
@@ -814,7 +814,7 @@ export function CustomerOrderPage() {
                         </>
                       )}
                     </td>
-                    <td>
+                    <td className="is-numeric">
                       {isDraft ? (
                         <input
                           type="text"
@@ -888,7 +888,7 @@ export function CustomerOrderPage() {
                       <tr>
                         <th>Produto</th>
                         <th>Pedido</th>
-                        <th>Disponível</th>
+                        <th className="is-numeric">Disponível</th>
                         <th>Reservar</th>
                         <th>Produzir</th>
                         <th>Situação</th>
@@ -905,7 +905,7 @@ export function CustomerOrderPage() {
                             <td>
                               {line.orderedQuantity} {line.unitCode}
                             </td>
-                            <td>{line.finishedGoodsAvailable}</td>
+                            <td className="is-numeric">{line.finishedGoodsAvailable}</td>
                             <td>
                               <input
                                 type="text"
@@ -951,12 +951,12 @@ export function CustomerOrderPage() {
                       <thead>
                         <tr>
                           <th>Material</th>
-                          <th>Necessário</th>
-                          <th>Físico</th>
-                          <th>Reservado</th>
-                          <th>Disponível</th>
-                          <th>Em Compra</th>
-                          <th>Falta</th>
+                          <th className="is-numeric">Necessário</th>
+                          <th className="is-numeric">Físico</th>
+                          <th className="is-numeric">Reservado</th>
+                          <th className="is-numeric">Disponível</th>
+                          <th className="is-numeric">Em Compra</th>
+                          <th className="is-numeric">Falta</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -965,14 +965,14 @@ export function CustomerOrderPage() {
                             <td>
                               <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                             </td>
-                            <td>
+                            <td className="is-numeric">
                               {row.requiredQuantity} {row.unitCode}
                             </td>
-                            <td>{row.onHand}</td>
-                            <td>{row.reserved}</td>
-                            <td>{row.available}</td>
-                            <td>{row.onOrder}</td>
-                            <td>
+                            <td className="is-numeric">{row.onHand}</td>
+                            <td className="is-numeric">{row.reserved}</td>
+                            <td className="is-numeric">{row.available}</td>
+                            <td className="is-numeric">{row.onOrder}</td>
+                            <td className="is-numeric">
                               <span className={Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"}>
                                 {row.shortage}
                               </span>
@@ -1022,10 +1022,10 @@ export function CustomerOrderPage() {
                     <thead>
                       <tr>
                         <th>Material</th>
-                        <th>Necessário restante</th>
+                        <th className="is-numeric">Necessário restante</th>
                         <th>Reservado p/ este Pedido</th>
-                        <th>Disponível</th>
-                        <th>Em Compra</th>
+                        <th className="is-numeric">Disponível</th>
+                        <th className="is-numeric">Em Compra</th>
                         <th>Falta física</th>
                         <th>Já em rascunho</th>
                         <th>Comprar sugerido</th>
@@ -1085,12 +1085,12 @@ export function CustomerOrderPage() {
                                   </div>
                                 )}
                             </td>
-                            <td>
+                            <td className="is-numeric">
                               {row.remainingRequired} {row.unitCode}
                             </td>
                             <td>{row.ownReserved}</td>
-                            <td>{row.available}</td>
-                            <td>{row.onOrder}</td>
+                            <td className="is-numeric">{row.available}</td>
+                            <td className="is-numeric">{row.onOrder}</td>
                             <td>{row.operationalShortage}</td>
                             <td>{row.draftPurchaseQuantity}</td>
                             <td>{row.newSuggestedPurchase}</td>
@@ -1182,9 +1182,9 @@ export function CustomerOrderPage() {
                       <tr>
                         <th>Item</th>
                         <th>Cliente</th>
-                        <th>Necessário</th>
+                        <th className="is-numeric">Necessário</th>
                         <th>Disponível do cliente</th>
-                        <th>Falta</th>
+                        <th className="is-numeric">Falta</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1194,11 +1194,11 @@ export function CustomerOrderPage() {
                             <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                           </td>
                           <td>{row.customerName ?? "—"}</td>
-                          <td>
+                          <td className="is-numeric">
                             {row.remainingRequired} {row.unitCode}
                           </td>
                           <td>{row.available}</td>
-                          <td>
+                          <td className="is-numeric">
                             <span
                               className={
                                 Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"
@@ -1302,7 +1302,7 @@ export function CustomerOrderPage() {
                   <tr>
                     <th>Expedição</th>
                     <th>Data</th>
-                    <th>Quantidade</th>
+                    <th className="is-numeric">Quantidade</th>
                     <th>Status</th>
                     <th aria-hidden="true" />
                   </tr>
@@ -1320,7 +1320,7 @@ export function CustomerOrderPage() {
                           ? new Date(shipment.shipmentDate).toLocaleDateString("pt-BR")
                           : "—"}
                       </td>
-                      <td>{shipment.totalQuantity}</td>
+                      <td className="is-numeric">{shipment.totalQuantity}</td>
                       <td>
                         <span className="badge badge--neutral">
                           {SHIPMENT_STATUS_LABELS[shipment.status as ShipmentStatus] ?? shipment.status}
@@ -1384,8 +1384,8 @@ export function CustomerOrderPage() {
                     <tr>
                       <th>Faturamento</th>
                       <th>Expedição</th>
-                      <th>Quantidade</th>
-                      <th>Valor</th>
+                      <th className="is-numeric">Quantidade</th>
+                      <th className="is-numeric">Valor</th>
                       <th>Status</th>
                       <th aria-hidden="true" />
                     </tr>
@@ -1399,8 +1399,8 @@ export function CustomerOrderPage() {
                       >
                         <td className="is-code">{billing.code}</td>
                         <td className="is-code">{billing.shipmentCode}</td>
-                        <td>{billing.totalQuantity}</td>
-                        <td>{billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}</td>
+                        <td className="is-numeric">{billing.totalQuantity}</td>
+                        <td className="is-numeric">{billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}</td>
                         <td>
                           <span className="badge badge--neutral">
                             {BILLING_STATUS_LABELS[
@@ -1434,9 +1434,9 @@ export function CustomerOrderPage() {
                   <tr>
                     <th>OC</th>
                     <th>Fornecedor</th>
-                    <th>Itens</th>
+                    <th className="is-numeric">Itens</th>
                     <th>Status</th>
-                    <th>Valor</th>
+                    <th className="is-numeric">Valor</th>
                     <th aria-hidden="true" />
                   </tr>
                 </thead>
@@ -1445,13 +1445,13 @@ export function CustomerOrderPage() {
                     <tr key={po.id} tabIndex={0} onClick={() => navigate(`/compras/ordens/${po.id}`)}>
                       <td className="is-code">{po.code}</td>
                       <td>{po.supplierName}</td>
-                      <td>{po.lineCount}</td>
+                      <td className="is-numeric">{po.lineCount}</td>
                       <td>
                         <span className="badge badge--neutral">
                           {PURCHASE_ORDER_STATUS_LABELS[po.status as keyof typeof PURCHASE_ORDER_STATUS_LABELS] ?? po.status}
                         </span>
                       </td>
-                      <td>{po.orderTotal ?? "—"}</td>
+                      <td className="is-numeric">{po.orderTotal ?? "—"}</td>
                       <td onClick={(event) => event.stopPropagation()}>
                         <button
                           type="button"
@@ -1482,7 +1482,7 @@ export function CustomerOrderPage() {
                       <tr>
                         <th>Produto</th>
                         <th>Lote</th>
-                        <th>Reservado</th>
+                        <th className="is-numeric">Reservado</th>
                         <th>Expedido</th>
                         <th>Restante</th>
                         <th>Situação</th>
@@ -1517,7 +1517,7 @@ export function CustomerOrderPage() {
                                 </>
                               )}
                             </td>
-                            <td>
+                            <td className="is-numeric">
                               {line.quantity} {line.unitCode}
                             </td>
                             <td>{line.shippedQuantity}</td>

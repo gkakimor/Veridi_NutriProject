@@ -376,7 +376,7 @@ export function IndustrialCostPage() {
                   <thead>
                     <tr>
                       <th>Item</th>
-                      <th>Quantidade</th>
+                      <th className="is-numeric">Quantidade</th>
                       <th>Un.</th>
                       <th>Base</th>
                       <th>Pureza</th>
@@ -390,7 +390,7 @@ export function IndustrialCostPage() {
                         <td>
                           <EntityLink kind="item" id={material.itemId} code={material.itemCode} name={material.itemName} />
                         </td>
-                        <td>{material.quantity}</td>
+                        <td className="is-numeric">{material.quantity}</td>
                         <td>{material.unitCode}</td>
                         <td>{material.basis}</td>
                         <td>{material.purityPercentApplied ?? "—"}</td>
@@ -428,7 +428,7 @@ export function IndustrialCostPage() {
                       <th>Categoria</th>
                       <th>Descrição</th>
                       <th>Base de cálculo</th>
-                      <th>Valor</th>
+                      <th className="is-numeric">Valor</th>
                       {editable && <th aria-hidden="true" />}
                     </tr>
                   </thead>
@@ -438,7 +438,7 @@ export function IndustrialCostPage() {
                         <td>{INDUSTRIAL_COST_CATEGORY_LABELS[line.category]}</td>
                         <td>{line.description}</td>
                         <td>{INDUSTRIAL_COST_BASIS_LABELS[line.calculationBasis]}</td>
-                        <td>
+                        <td className="is-numeric">
                           {/* Não informado nunca vira zero. */}
                           {line.rateValue === null
                             ? "—"

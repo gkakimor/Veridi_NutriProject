@@ -135,6 +135,7 @@ export function RecipeSheetPage() {
   }
 
   const part = sheet.parts.find((row) => row.partNumber === activePart) ?? sheet.parts[0];
+  const ordemEncerrada = sheet.status === "COMPLETED" || sheet.status === "CANCELLED";
 
   return (
     <>
@@ -248,7 +249,7 @@ export function RecipeSheetPage() {
                   <tr>
                     <th>Material</th>
                     <th>Fornecimento</th>
-                    <th>Planejado</th>
+                    <th className="is-numeric">Planejado</th>
                     <th>Pesado</th>
                     <th>Diferença</th>
                     <th>Lotes reservados</th>
@@ -269,7 +270,7 @@ export function RecipeSheetPage() {
                           <div className="field__hint">{requirement.expectedOwnerCustomerName}</div>
                         )}
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {requirement.plannedQuantity} {requirement.unitCode}
                       </td>
                       <td>{requirement.weighedQuantity}</td>
@@ -293,7 +294,17 @@ export function RecipeSheetPage() {
               </table>
             </div>
 
-            {part.status !== "COMPLETED" && (
+            {/* Ordem encerrada não recebe pesagem: a folha vira documento de
+                consulta. Deixar o formulário operável convidava a registrar
+                material numa produção que já terminou. */}
+            {ordemEncerrada && (
+              <p className="field__hint">
+                Ordem encerrada — esta folha é documento de consulta. Pesagem e
+                conclusão de parte não são mais registradas aqui.
+              </p>
+            )}
+
+            {part.status !== "COMPLETED" && !ordemEncerrada && (
               <>
                 <h4>Registrar pesagem</h4>
                 <div className="field field--narrow">
@@ -373,7 +384,7 @@ export function RecipeSheetPage() {
                     <th>Material</th>
                     <th>Lote</th>
                     <th>Proprietário</th>
-                    <th>Planejado</th>
+                    <th className="is-numeric">Planejado</th>
                     <th>Pesado</th>
                     <th>Executado por</th>
                     <th>Data/hora</th>
@@ -388,7 +399,7 @@ export function RecipeSheetPage() {
                       </td>
                       <td className="is-code">{weighing.lotCode ?? "—"}</td>
                       <td>{ownerLabel(weighing.ownerType, null)}</td>
-                      <td>{weighing.plannedQuantity}</td>
+                      <td className="is-numeric">{weighing.plannedQuantity}</td>
                       <td>
                         {weighing.actualQuantity} {weighing.uomCode}
                       </td>
@@ -422,7 +433,7 @@ export function RecipeSheetPage() {
                   <tr>
                     <th>Item</th>
                     <th>Fornecimento</th>
-                    <th>Total da OP</th>
+                    <th className="is-numeric">Total da OP</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -432,7 +443,7 @@ export function RecipeSheetPage() {
                         <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                       </td>
                       <td>{SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}</td>
-                      <td>
+                      <td className="is-numeric">
                         {row.totalQuantity} {row.unitCode}
                       </td>
                     </tr>

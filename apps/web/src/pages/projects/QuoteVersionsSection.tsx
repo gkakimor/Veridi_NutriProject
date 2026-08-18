@@ -122,7 +122,7 @@ export function QuoteVersionsSection({
               <th>Versão</th>
               <th>Data</th>
               <th>Produtos</th>
-              <th>Total</th>
+              <th className="is-numeric">Total</th>
               <th>Validade</th>
               <th>Status</th>
             </tr>
@@ -146,7 +146,7 @@ export function QuoteVersionsSection({
                 <td className="is-code">{quote.versionLabel}</td>
                 <td>{formatDate(quote.quoteDate)}</td>
                 <td>{quote.lines.length}</td>
-                <td>{quote.total ? formatBRL(quote.total) : "—"}</td>
+                <td className="is-numeric">{quote.total ? formatBRL(quote.total) : "—"}</td>
                 <td>{formatDate(quote.validUntil)}</td>
                 <td>
                   <span className={quoteBadgeClass(quote.status)}>
@@ -199,11 +199,11 @@ export function QuoteVersionsSection({
               <thead>
                 <tr>
                   <th>Produto</th>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Unidade</th>
                   <th>Origem do preço</th>
-                  <th>Preço unitário</th>
-                  <th>Total</th>
+                  <th className="is-numeric">Preço unitário</th>
+                  <th className="is-numeric">Total</th>
                   {editable && <th aria-label="Ações" />}
                 </tr>
               </thead>
@@ -225,7 +225,7 @@ export function QuoteVersionsSection({
                         name={line.productName}
                       />
                     </td>
-                    <td>
+                    <td className="is-numeric">
                       {editable ? (
                         <input
                           type="text"
@@ -271,7 +271,7 @@ export function QuoteVersionsSection({
                         </div>
                       )}
                     </td>
-                    <td>
+                    <td className="is-numeric">
                       {editable && line.priceSource === "MANUAL" ? (
                         <input
                           type="text"
@@ -292,7 +292,7 @@ export function QuoteVersionsSection({
                         "—"
                       )}
                     </td>
-                    <td>{line.total ? formatBRL(line.total) : "—"}</td>
+                    <td className="is-numeric">{line.total ? formatBRL(line.total) : "—"}</td>
                     {editable && (
                       <td className="table__actions">
                         <button

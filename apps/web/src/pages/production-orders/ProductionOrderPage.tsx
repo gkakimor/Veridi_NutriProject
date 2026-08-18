@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   ItemDTO,
   ProductDTO,
@@ -832,12 +832,12 @@ export function ProductionOrderPage() {
                   <tr>
                     <th>Item</th>
                     <th>Fornecimento</th>
-                    <th>Necessário</th>
-                    <th>Físico</th>
-                    <th>Reservado</th>
-                    <th>Disponível</th>
-                    <th>Em Compra</th>
-                    <th>Falta</th>
+                    <th className="is-numeric">Necessário</th>
+                    <th className="is-numeric">Físico</th>
+                    <th className="is-numeric">Reservado</th>
+                    <th className="is-numeric">Disponível</th>
+                    <th className="is-numeric">Em Compra</th>
+                    <th className="is-numeric">Falta</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -868,14 +868,14 @@ export function ProductionOrderPage() {
                           </>
                         )}
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {requirement.requiredQuantity} {requirement.stockUnitCode}
                       </td>
-                      <td>{requirement.onHand}</td>
-                      <td>{requirement.reserved}</td>
-                      <td>{requirement.available}</td>
-                      <td>{requirement.onOrder}</td>
-                      <td>
+                      <td className="is-numeric">{requirement.onHand}</td>
+                      <td className="is-numeric">{requirement.reserved}</td>
+                      <td className="is-numeric">{requirement.available}</td>
+                      <td className="is-numeric">{requirement.onOrder}</td>
+                      <td className="is-numeric">
                         {/* OP encerrada: a falta é recálculo contra o estoque
                             de HOJE, não pendência da ordem. Mostrar como
                             alerta acionável já mandou gente abrir compra de
@@ -975,7 +975,7 @@ export function ProductionOrderPage() {
                     <th>Item</th>
                     <th>Lote</th>
                     <th>Validade</th>
-                    <th>Quantidade reservada</th>
+                    <th className="is-numeric">Quantidade reservada</th>
                     <th>Localização</th>
                   </tr>
                 </thead>
@@ -989,7 +989,7 @@ export function ProductionOrderPage() {
                       <td>
                         {line.expiryDate ? new Date(line.expiryDate).toLocaleDateString("pt-BR") : "—"}
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {line.quantity} {line.unitCode}
                       </td>
                       <td>{line.location ?? "—"}</td>
@@ -1014,7 +1014,7 @@ export function ProductionOrderPage() {
                     <th>Lote esperado</th>
                     <th>Validade</th>
                     <th>Localização</th>
-                    <th>Reservado</th>
+                    <th className="is-numeric">Reservado</th>
                     <th>Status</th>
                     <th aria-hidden="true" />
                   </tr>
@@ -1037,7 +1037,7 @@ export function ProductionOrderPage() {
                           {line.expiryDate ? new Date(line.expiryDate).toLocaleDateString("pt-BR") : "—"}
                         </td>
                         <td>{line.location ?? "—"}</td>
-                        <td>
+                        <td className="is-numeric">
                           {line.quantity} {line.unitCode}
                         </td>
                         <td>
@@ -1118,8 +1118,8 @@ export function ProductionOrderPage() {
                   <tr>
                     <th>Item</th>
                     <th>Lote</th>
-                    <th>Reservado</th>
-                    <th>Consumido</th>
+                    <th className="is-numeric">Reservado</th>
+                    <th className="is-numeric">Consumido</th>
                     <th>Restante</th>
                     <th>Consumir agora</th>
                     <th aria-hidden="true" />
@@ -1132,10 +1132,10 @@ export function ProductionOrderPage() {
                         <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
-                      <td>
+                      <td className="is-numeric">
                         {line.quantity} {line.unitCode}
                       </td>
-                      <td>{line.consumedQuantity}</td>
+                      <td className="is-numeric">{line.consumedQuantity}</td>
                       <td>{line.remainingQuantity}</td>
                       <td>
                         <input
@@ -1186,7 +1186,7 @@ export function ProductionOrderPage() {
                       <th>Data</th>
                       <th>Item</th>
                       <th>Lote</th>
-                      <th>Quantidade</th>
+                      <th className="is-numeric">Quantidade</th>
                       <th>Usuário</th>
                     </tr>
                   </thead>
@@ -1198,7 +1198,7 @@ export function ProductionOrderPage() {
                           <EntityLink kind="item" id={consumption.itemId} code={consumption.itemCode} name={consumption.itemName} />
                         </td>
                         <td>{consumption.lotCode ?? "—"}</td>
-                        <td>
+                        <td className="is-numeric">
                           {consumption.quantity} {consumption.unitCode}
                         </td>
                         <td>{consumption.consumedBy ?? "—"}</td>
@@ -1370,7 +1370,7 @@ export function ProductionOrderPage() {
                   <thead>
                     <tr>
                       <th>Data</th>
-                      <th>Quantidade</th>
+                      <th className="is-numeric">Quantidade</th>
                       <th>Lote interno</th>
                       <th>Lote Veridi</th>
                       <th>Usuário</th>
@@ -1381,7 +1381,7 @@ export function ProductionOrderPage() {
                     {productionOrder.outputs.map((output) => (
                       <tr key={output.id}>
                         <td>{formatDateTime(output.producedAt)}</td>
-                        <td>
+                        <td className="is-numeric">
                           {output.quantity} {productionOrder.outputUnitCode}
                         </td>
                         <td>{output.lotCode ?? "—"}</td>
@@ -1545,7 +1545,14 @@ export function ProductionOrderPage() {
               <p className="field__hint">
                 Custo parcial: existem materiais consumidos sem referência de custo (
                 {materialCost.missingCostItems.join(", ")}). O subtotal conhecido (
-                {formatBRL(materialCost.knownMaterialCostSubtotal)}) não representa o custo total.
+                {formatBRL(materialCost.knownMaterialCostSubtotal)}) não representa o custo total.{" "}
+                {/* O custo do material vem do preço de fornecedor do item —
+                    apontar o caminho evita que a pessoa aceite o parcial por
+                    não saber onde ele se resolve. */}
+                <Link to="/compras/item-fornecedor">
+                  Definir preço de fornecedor para esses itens
+                </Link>
+                .
               </p>
             )}
 
@@ -1555,10 +1562,10 @@ export function ProductionOrderPage() {
                   <tr>
                     <th>Item</th>
                     <th>Lote</th>
-                    <th>Consumido</th>
-                    <th>Custo unitário</th>
+                    <th className="is-numeric">Consumido</th>
+                    <th className="is-numeric">Custo unitário</th>
                     <th>Origem</th>
-                    <th>Custo</th>
+                    <th className="is-numeric">Custo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1568,10 +1575,10 @@ export function ProductionOrderPage() {
                         <EntityLink kind="item" id={consumption.itemId} code={consumption.itemCode} name={consumption.itemName} />
                       </td>
                       <td>{consumption.lotCode ?? "—"}</td>
-                      <td>
+                      <td className="is-numeric">
                         {consumption.quantity} {consumption.unitCode}
                       </td>
-                      <td>{formatBRL(consumption.unitCost)}</td>
+                      <td className="is-numeric">{formatBRL(consumption.unitCost)}</td>
                       <td>
                         <span
                           className={
@@ -1585,7 +1592,7 @@ export function ProductionOrderPage() {
                           {COST_SOURCE_LABELS[consumption.costSource]}
                         </span>
                       </td>
-                      <td>{formatBRL(consumption.materialCost)}</td>
+                      <td className="is-numeric">{formatBRL(consumption.materialCost)}</td>
                     </tr>
                   ))}
                 </tbody>

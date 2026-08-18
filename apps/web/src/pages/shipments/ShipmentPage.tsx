@@ -612,7 +612,7 @@ export function ShipmentPage() {
                     <th>Produto</th>
                     <th>Lote</th>
                     <th>Lote Veridi</th>
-                    <th>Quantidade</th>
+                    <th className="is-numeric">Quantidade</th>
                     <th>Conferido em</th>
                     <th>Conferido por</th>
                   </tr>
@@ -625,7 +625,7 @@ export function ShipmentPage() {
                       </td>
                       <td className="is-code">{line.lotCode ?? "—"}</td>
                       <td>{line.businessLotNumber ?? "—"}</td>
-                      <td>
+                      <td className="is-numeric">
                         {line.quantity} {line.unitCode}
                       </td>
                       <td>{formatDateTime(line.verifiedAt)}</td>

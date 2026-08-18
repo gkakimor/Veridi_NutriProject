@@ -187,9 +187,9 @@ export function CustomerMaterialsPage() {
               <th>Lote externo</th>
               <th>Validade</th>
               <th>Localização</th>
-              <th>Físico</th>
-              <th>Reservado</th>
-              <th>Disponível</th>
+              <th className="is-numeric">Físico</th>
+              <th className="is-numeric">Reservado</th>
+              <th className="is-numeric">Disponível</th>
               <th>Qualidade</th>
             </tr>
           </thead>
@@ -206,11 +206,11 @@ export function CustomerMaterialsPage() {
                 <td>{row.supplierLot ?? "—"}</td>
                 <td>{formatDate(row.expiryDate)}</td>
                 <td>{row.location ?? "—"}</td>
-                <td>
+                <td className="is-numeric">
                   {row.onHand} {row.unitCode}
                 </td>
-                <td>{row.reserved}</td>
-                <td>{row.available}</td>
+                <td className="is-numeric">{row.reserved}</td>
+                <td className="is-numeric">{row.available}</td>
                 <td>
                   <span className={statusBadgeClass(row.status, row.isExpired)}>
                     {row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.status]}

@@ -587,10 +587,10 @@ export function PurchaseOrderPage() {
             <thead>
               <tr>
                 <th>Item</th>
-                <th>Quantidade</th>
+                <th className="is-numeric">Quantidade</th>
                 <th>Un.</th>
-                <th>Preço unit.</th>
-                <th>Total</th>
+                <th className="is-numeric">Preço unit.</th>
+                <th className="is-numeric">Total</th>
                 {isDraftEditable && <th aria-hidden="true" />}
               </tr>
             </thead>
@@ -647,7 +647,7 @@ export function PurchaseOrderPage() {
                         );
                       })()}
                     </td>
-                    <td>
+                    <td className="is-numeric">
                       {isDraftEditable ? (
                         <input
                           type="text"
@@ -673,7 +673,7 @@ export function PurchaseOrderPage() {
                       )}
                     </td>
                     <td>{line.unitCode || "—"}</td>
-                    <td>
+                    <td className="is-numeric">
                       {isDraftEditable ? (
                         <input
                           type="text"
@@ -688,7 +688,7 @@ export function PurchaseOrderPage() {
                         formatBRL(line.unitPrice || null)
                       )}
                     </td>
-                    <td>{formatBRL(lineTotal)}</td>
+                    <td className="is-numeric">{formatBRL(lineTotal)}</td>
                     {isDraftEditable && (
                       <td>
                         <button
@@ -725,6 +725,42 @@ export function PurchaseOrderPage() {
           </div>
         )}
       </FormSection>
+
+      {purchaseOrder && purchaseOrder.receipts.length > 0 && (
+        <FormSection
+          title="Recebimentos"
+          subtitle="O que de fato chegou contra esta ordem. Cada recebimento abre direto pelo código."
+        >
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Recebimento</th>
+                  <th>Data</th>
+                  <th>Nota fiscal</th>
+                  <th className="is-numeric">Itens</th>
+                  <th className="is-numeric">Quantidade</th>
+                  <th className="is-numeric">Lotes gerados</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchaseOrder.receipts.map((receipt) => (
+                  <tr key={receipt.id}>
+                    <td className="is-code">
+                      <EntityLink kind="receipt" id={receipt.id} code={receipt.code} />
+                    </td>
+                    <td>{new Date(receipt.receivedAt).toLocaleDateString("pt-BR")}</td>
+                    <td>{receipt.invoiceNumber ?? "—"}</td>
+                    <td className="is-numeric">{receipt.lineCount}</td>
+                    <td className="is-numeric">{receipt.receivedQuantity}</td>
+                    <td className="is-numeric">{receipt.lotCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </FormSection>
+      )}
 
       <FormSection title="Observações">
         <div className="field">

@@ -61,6 +61,7 @@ const fixtureLot: LotDTO = {
   blockedAt: null,
   blockedBy: null,
   blockReason: null,
+  shipments: [],
 };
 
 describe("LotScanPage", () => {

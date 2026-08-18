@@ -180,6 +180,16 @@ describe("Receiving", () => {
     expect(body.lines[0].lotId).not.toBeNull();
     expect(body.lines[0].lotCode).toMatch(/^LT-\d{8}-\d{6}$/);
 
+    // A OC precisa saber o que chegou contra ela: sem isto, conferir uma
+    // entrega obrigava a sair para a lista geral de recebimentos.
+    const reloaded = (await app.inject({ method: "GET", url: `/purchase-orders/${po.id}` })).json();
+    expect(reloaded.receipts).toHaveLength(1);
+    expect(reloaded.receipts[0].code).toBe(body.code);
+    expect(reloaded.receipts[0].invoiceNumber).toBe("NF 12345");
+    expect(reloaded.receipts[0].lineCount).toBe(1);
+    expect(reloaded.receipts[0].receivedQuantity).toBe("60");
+    expect(reloaded.receipts[0].lotCount).toBe(1);
+
     await app.close();
   });
 

@@ -266,6 +266,10 @@ describe("Consumo real — regras básicas", () => {
       .movements.filter((m: { type: string }) => m.type === "PRODUCTION_CONSUMPTION");
     expect(consumptionMovements).toHaveLength(1);
     expect(consumptionMovements[0].quantity).toBe("10");
+    // O extrato tem que dizer qual documento causou a baixa: consumo de
+    // produção aparecia sem origem nenhuma, e é a maior saída do ledger.
+    expect(consumptionMovements[0].productionOrderId).toBe(order.id);
+    expect(consumptionMovements[0].productionOrderCode).toBe(order.code);
 
     await app.close();
   });

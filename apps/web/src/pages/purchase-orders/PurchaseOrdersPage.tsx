@@ -167,8 +167,8 @@ export function PurchaseOrdersPage() {
               <th>Fornecedor</th>
               <th>Data</th>
               <th>Previsão</th>
-              <th>Itens</th>
-              <th>Total</th>
+              <th className="is-numeric">Itens</th>
+              <th className="is-numeric">Total</th>
               <th>Status</th>
               <th aria-hidden="true" />
             </tr>
@@ -189,8 +189,8 @@ export function PurchaseOrdersPage() {
                 </td>
                 <td>{formatDate(po.orderDate)}</td>
                 <td>{formatDate(po.expectedDeliveryDate)}</td>
-                <td>{po.lines.length}</td>
-                <td>{formatBRL(po.orderTotal)}</td>
+                <td className="is-numeric">{po.lines.length}</td>
+                <td className="is-numeric">{formatBRL(po.orderTotal)}</td>
                 <td>
                   <span className={statusBadgeClass(po.status)}>
                     {PURCHASE_ORDER_STATUS_LABELS[po.status]}

@@ -189,17 +189,17 @@ export function PricingPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Lotes</th>
-                  <th>Custo total</th>
-                  <th>Custo/un</th>
+                  <th className="is-numeric">Custo total</th>
+                  <th className="is-numeric">Custo/un</th>
                   <th>Qualidade</th>
                   <th>Modo</th>
-                  <th>Margem alvo</th>
-                  <th>Comissão</th>
-                  <th>Preço sugerido</th>
-                  <th>Preço escolhido</th>
-                  <th>Margem resultante</th>
+                  <th className="is-numeric">Margem alvo</th>
+                  <th className="is-numeric">Comissão</th>
+                  <th className="is-numeric">Preço sugerido</th>
+                  <th className="is-numeric">Preço escolhido</th>
+                  <th className="is-numeric">Margem resultante</th>
                   <th>Markup</th>
                   <th>Contribuição/un</th>
                   <th>Receita</th>
@@ -210,23 +210,23 @@ export function PricingPage() {
               <tbody>
                 {pricing.tiers.map((tier) => (
                   <tr key={tier.id}>
-                    <td>
+                    <td className="is-numeric">
                       {tier.quantity} {tier.uomCode}
                     </td>
                     <td>{tier.batchCount}</td>
-                    <td>
+                    <td className="is-numeric">
                       {tier.industrialCostTotal === null
                         ? `${formatBRL(tier.knownSubtotal)} (subtotal conhecido)`
                         : formatBRL(tier.industrialCostTotal)}
                     </td>
-                    <td>{formatUnitCost(tier.industrialCostPerUnit)}</td>
+                    <td className="is-numeric">{formatUnitCost(tier.industrialCostPerUnit)}</td>
                     <td>{INDUSTRIAL_COST_QUALITY_LABELS[tier.costQuality]}</td>
                     <td>{PRICE_MODE_LABELS[tier.priceMode]}</td>
-                    <td>{formatPercent(tier.targetContributionMarginPercent)}</td>
-                    <td>{formatPercent(tier.commissionPercent)}</td>
-                    <td>{formatUnitCost(tier.suggestedUnitPrice)}</td>
-                    <td>{formatUnitCost(tier.selectedUnitPrice)}</td>
-                    <td>{formatPercent(tier.contributionMarginPercent)}</td>
+                    <td className="is-numeric">{formatPercent(tier.targetContributionMarginPercent)}</td>
+                    <td className="is-numeric">{formatPercent(tier.commissionPercent)}</td>
+                    <td className="is-numeric">{formatUnitCost(tier.suggestedUnitPrice)}</td>
+                    <td className="is-numeric">{formatUnitCost(tier.selectedUnitPrice)}</td>
+                    <td className="is-numeric">{formatPercent(tier.contributionMarginPercent)}</td>
                     <td>{formatPercent(tier.markupPercent)}</td>
                     <td>{formatUnitCost(tier.contributionPerUnit)}</td>
                     <td>{tier.grossRevenue === null ? "—" : formatBRL(tier.grossRevenue)}</td>

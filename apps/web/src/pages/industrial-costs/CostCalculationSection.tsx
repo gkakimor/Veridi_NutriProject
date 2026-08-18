@@ -168,8 +168,8 @@ export function CostCalculationSection({
                 <th>Data de referência</th>
                 <th>Calculado em</th>
                 <th>Qualidade</th>
-                <th>Custo total</th>
-                <th>Custo/unidade</th>
+                <th className="is-numeric">Custo total</th>
+                <th className="is-numeric">Custo/unidade</th>
                 {canSave && <th aria-hidden="true" />}
               </tr>
             </thead>
@@ -188,12 +188,12 @@ export function CostCalculationSection({
                   <td>{new Date(row.costReferenceDate).toLocaleDateString("pt-BR")}</td>
                   <td>{formatDateTime(row.calculatedAt)}</td>
                   <td>{INDUSTRIAL_COST_QUALITY_LABELS[row.quality]}</td>
-                  <td>
+                  <td className="is-numeric">
                     {row.totalIndustrialCost === null
                       ? `${formatBRL(row.knownSubtotal)} (subtotal conhecido)`
                       : formatBRL(row.totalIndustrialCost)}
                   </td>
-                  <td>{formatUnitCost(row.costPerUnit)}</td>
+                  <td className="is-numeric">{formatUnitCost(row.costPerUnit)}</td>
                   {canSave && (
                     <td onClick={(event) => event.stopPropagation()}>
                       <button

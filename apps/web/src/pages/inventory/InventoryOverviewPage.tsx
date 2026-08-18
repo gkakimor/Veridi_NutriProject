@@ -158,10 +158,10 @@ export function InventoryOverviewPage() {
               <th>Item</th>
               <th>Tipo</th>
               <th>Un.</th>
-              <th>Físico</th>
-              <th>Reservado</th>
-              <th>Disponível</th>
-              <th>Em Compra</th>
+              <th className="is-numeric">Físico</th>
+              <th className="is-numeric">Reservado</th>
+              <th className="is-numeric">Disponível</th>
+              <th className="is-numeric">Em Compra</th>
             </tr>
           </thead>
           <tbody>
@@ -178,10 +178,10 @@ export function InventoryOverviewPage() {
                 <td>{item.itemName}</td>
                 <td>{ITEM_TYPE_LABELS[item.itemType]}</td>
                 <td>{item.unitCode}</td>
-                <td>{item.onHand}</td>
-                <td>{item.reserved}</td>
-                <td>{item.available}</td>
-                <td>{item.onOrder}</td>
+                <td className="is-numeric">{item.onHand}</td>
+                <td className="is-numeric">{item.reserved}</td>
+                <td className="is-numeric">{item.available}</td>
+                <td className="is-numeric">{item.onOrder}</td>
               </tr>
             ))}
 

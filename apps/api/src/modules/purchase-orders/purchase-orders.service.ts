@@ -35,12 +35,35 @@ const CODE_SEQUENCE = "purchase_order_code_seq";
 const SYSTEM_ACTOR = "Ambiente local";
 
 type LineWithReceipts = PurchaseOrderLine & { receiptLines: ReceiptLine[] };
-type PurchaseOrderWithLines = PurchaseOrder & { lines: LineWithReceipts[]; customerOrder: CustomerOrder | null };
+type ReceiptWithLines = {
+  id: string;
+  code: string;
+  receivedAt: Date;
+  invoiceNumber: string | null;
+  lines: { receivedQuantity: Prisma.Decimal; lotId: string | null }[];
+};
+type PurchaseOrderWithLines = PurchaseOrder & {
+  lines: LineWithReceipts[];
+  customerOrder: CustomerOrder | null;
+  receipts: ReceiptWithLines[];
+};
 
 /** Include padrao para carregar uma OC com o suficiente para o DTO (linhas + recebido). */
 const purchaseOrderInclude = {
   lines: { include: { receiptLines: true } },
   customerOrder: true,
+  // O que de fato chegou contra o que foi pedido: a OC sem os recebimentos
+  // obriga a sair para a lista geral e procurar pelo codigo da ordem.
+  receipts: {
+    orderBy: { receivedAt: "asc" as const },
+    select: {
+      id: true,
+      code: true,
+      receivedAt: true,
+      invoiceNumber: true,
+      lines: { select: { receivedQuantity: true, lotId: true } },
+    },
+  },
 } as const;
 
 /** Dinheiro (BRL) sempre com 2 casas decimais na saida da API. */
@@ -102,6 +125,17 @@ function toPurchaseOrderDTO(po: PurchaseOrderWithLines): PurchaseOrderDTO {
     cancelReason: po.cancelReason,
     createdAt: po.createdAt.toISOString(),
     updatedAt: po.updatedAt.toISOString(),
+    receipts: po.receipts.map((receipt) => ({
+      id: receipt.id,
+      code: receipt.code,
+      receivedAt: receipt.receivedAt.toISOString(),
+      invoiceNumber: receipt.invoiceNumber,
+      lineCount: receipt.lines.length,
+      receivedQuantity: receipt.lines
+        .reduce((total, line) => total.plus(line.receivedQuantity), new Prisma.Decimal(0))
+        .toString(),
+      lotCount: receipt.lines.filter((line) => line.lotId !== null).length,
+    })),
   };
 }
 

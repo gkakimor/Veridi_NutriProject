@@ -564,7 +564,7 @@ export function DashboardPage() {
                     <th>Tipo</th>
                     <th>Item</th>
                     <th>Lote</th>
-                    <th>Quantidade</th>
+                    <th className="is-numeric">Quantidade</th>
                     <th>Origem</th>
                   </tr>
                 </thead>
@@ -583,7 +583,7 @@ export function DashboardPage() {
                         </td>
                         <td className="is-code">{movement.lotCode ?? "—"}</td>
                         {/* Cada linha traz a própria unidade — nada é somado entre linhas. */}
-                        <td>
+                        <td className="is-numeric">
                           {movement.quantity} {movement.unitCode}
                         </td>
                         <td>

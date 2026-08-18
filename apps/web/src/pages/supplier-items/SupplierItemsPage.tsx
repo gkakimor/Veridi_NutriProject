@@ -317,7 +317,7 @@ export function SupplierItemsPage() {
               <th>Código no fornecedor</th>
               <th>Homologação</th>
               <th>Preferencial</th>
-              <th>Preço</th>
+              <th className="is-numeric">Preço</th>
               <th>Pedido mínimo</th>
               <th>Referências</th>
               <th>Situação</th>
@@ -344,7 +344,7 @@ export function SupplierItemsPage() {
                   </span>
                 </td>
                 <td>{row.preferred ? "Sim" : "—"}</td>
-                <td>
+                <td className="is-numeric">
                   <SupplierItemPriceCell row={row} />
                 </td>
                 <td>

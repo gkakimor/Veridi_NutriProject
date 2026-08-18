@@ -109,7 +109,7 @@ export function ReceiptsPage() {
               <th>OC</th>
               <th>Fornecedor / Cliente</th>
               <th>Data</th>
-              <th>Itens</th>
+              <th className="is-numeric">Itens</th>
               <th>Status</th>
               <th aria-hidden="true" />
             </tr>
@@ -133,7 +133,7 @@ export function ReceiptsPage() {
                     : (receipt.supplierName ?? "—")}
                 </td>
                 <td>{formatDate(receipt.receivedAt)}</td>
-                <td>{receipt.lines.length}</td>
+                <td className="is-numeric">{receipt.lines.length}</td>
                 <td>
                   <span className="badge badge--active">Confirmado</span>
                 </td>

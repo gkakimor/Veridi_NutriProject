@@ -393,6 +393,15 @@ describe("Expedição — confirmação", () => {
     expect(shipmentMovements[0].shipmentCode).toBe(draft.code);
     expect(shipmentMovements[0].sourceType).toBe("SHIPMENT");
 
+    // O lote precisa dizer para onde foi: antes, sair do lote acabado até a
+    // expedição obrigava a voltar pelo pedido.
+    const lotId = shipmentMovements[0].lotId as string;
+    const lot = (await app.inject({ method: "GET", url: `/lots/${lotId}` })).json();
+    expect(lot.shipments).toHaveLength(1);
+    expect(lot.shipments[0].code).toBe(draft.code);
+    expect(lot.shipments[0].quantity).toBe("500");
+    expect(lot.shipments[0].customerOrderId).toBe(order.id);
+
     await app.close();
   });
 

@@ -166,6 +166,12 @@ export function BillingPage() {
         .toFixed(2)
     : null;
   const displayTotal = isDraft ? previewTotal : billing.totalAmount;
+  /*
+   * Emitir é definitivo. Faturar sem preço continua permitido — existe
+   * faturamento puramente quantitativo — mas quem confirma precisa saber que
+   * está congelando um documento sem valor, e quais linhas estão assim.
+   */
+  const linhasSemPreco = billing.lines.filter((line) => (prices[line.id] ?? "").trim() === "");
 
   return (
     <>
@@ -287,10 +293,10 @@ export function BillingPage() {
                 <tr>
                   <th>Produto</th>
                   <th>Lote</th>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Unidade</th>
-                  <th>Preço unitário</th>
-                  <th>Total</th>
+                  <th className="is-numeric">Preço unitário</th>
+                  <th className="is-numeric">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -309,9 +315,9 @@ export function BillingPage() {
                         {line.lotCode ?? "—"}
                         {line.businessLotNumber ? ` — ${line.businessLotNumber}` : ""}
                       </td>
-                      <td>{line.quantity}</td>
+                      <td className="is-numeric">{line.quantity}</td>
                       <td>{line.unitCode}</td>
-                      <td>
+                      <td className="is-numeric">
                         {isDraft ? (
                           <input
                             type="text"
@@ -326,7 +332,7 @@ export function BillingPage() {
                           formatBRL(line.unitPrice)
                         )}
                       </td>
-                      <td>{formatBRL(lineTotal)}</td>
+                      <td className="is-numeric">{formatBRL(lineTotal)}</td>
                     </tr>
                   );
                 })}
@@ -404,7 +410,15 @@ export function BillingPage() {
       <ConfirmDialog
         open={issueDialogOpen}
         title={`Emitir faturamento ${billing.code}?`}
-        message="O documento será marcado como emitido e ficará somente para leitura. Esta ação não emite Nota Fiscal."
+        message={
+          linhasSemPreco.length === 0
+            ? "O documento será marcado como emitido e ficará somente para leitura. Esta ação não emite Nota Fiscal."
+            : `${linhasSemPreco.length} de ${billing.lines.length} ${
+                billing.lines.length === 1 ? "linha está" : "linhas estão"
+              } sem preço: ${linhasSemPreco
+                .map((line) => line.productCode)
+                .join(", ")}. O faturamento será emitido sem valor total e ficará somente para leitura — emitir não tem volta. Esta ação não emite Nota Fiscal.`
+        }
         confirmLabel="Emitir faturamento"
         confirmTone="accent"
         onCancel={() => setIssueDialogOpen(false)}
