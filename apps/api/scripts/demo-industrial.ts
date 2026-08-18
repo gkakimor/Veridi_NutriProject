@@ -113,6 +113,11 @@ export async function seedIndustrial(
           {
             purchaseOrderLineId: poDetalhe.lines[0]!.id,
             receivedQuantity: "160",
+            // Custo EFETIVO de aquisição, informado no recebimento — o
+            // domínio nunca o copia do preço da OC (preço negociado não é
+            // valor pago). Sem ele o item não tem custo real conhecido e
+            // todo o CMV do produto sai "sem custo".
+            actualUnitCost: "42.00",
             supplierLot: DEMO_SUPPLIER_LOT,
             expiryDate: new Date(Date.now() + 540 * 864e5).toISOString(),
           },
@@ -176,6 +181,7 @@ export async function seedIndustrial(
           {
             purchaseOrderLineId: detalhe.lines[0]!.id,
             receivedQuantity: "30",
+            actualUnitCost: "180.00",
             supplierLot: "DEMO-FORN-CAF-04",
             expiryDate: new Date(Date.now() + 500 * 864e5).toISOString(),
           },
@@ -222,6 +228,7 @@ export async function seedIndustrial(
           {
             purchaseOrderLineId: detalhe.lines[0]!.id,
             receivedQuantity: "1500",
+            actualUnitCost: "1.80",
             supplierLot: "DEMO-EMB-2026-03",
           },
         ],
