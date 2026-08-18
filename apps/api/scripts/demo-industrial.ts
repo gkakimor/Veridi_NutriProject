@@ -249,19 +249,39 @@ export async function seedIndustrial(
       });
     }
 
+    /* ── Plano de atendimento ──────────────────────────────────
+     * Sem estoque de produto acabado, o pedido só é atendido produzindo — e
+     * a OP precisa NASCER do pedido. Criar a ordem por fora produziria a
+     * mesma quantidade sem nenhum vínculo: quem abrisse o pedido depois não
+     * teria como saber qual ordem o atende, e o relatório de carteira sairia
+     * dizendo que nada foi produzido para ele.
+     */
+    const linhaPedido = pedido.lines[0]!;
+    if (pedido.status === "CONFIRMED") {
+      await chamar(ctx, "POST", `/customer-orders/${pedido.id}/apply-fulfillment-plan`, {
+        lines: [
+          {
+            customerOrderLineId: linhaPedido.id,
+            reserveQuantity: "0",
+            produceQuantity: "1000",
+          },
+        ],
+      });
+      pedido = await prisma.customerOrder.findUniqueOrThrow({
+        where: { id: pedido.id },
+        include: { lines: true },
+      });
+    }
+
     /* ── Ordem de produção ─────────────────────────────────────
-     * Sem estoque de produto acabado, o pedido só é atendido produzindo. */
-    let op = await prisma.productionOrder.findFirst({
-      where: { productId: entrada.productAId },
+     * Gerada pelo plano acima, já ligada ao pedido e ao cliente. */
+    let op = await prisma.productionOrder.findFirstOrThrow({
+      where: { customerOrderId: pedido.id },
       orderBy: { createdAt: "desc" },
     });
-    if (!op) {
-      const criada = await chamar<{ id: string }>(ctx, "POST", "/production-orders", {
-        productId: entrada.productAId,
-        plannedQuantity: "1000",
-      });
-      await chamar(ctx, "POST", `/production-orders/${criada.id}/plan`);
-      op = await prisma.productionOrder.findUniqueOrThrow({ where: { id: criada.id } });
+    if (op.status === "DRAFT") {
+      await chamar(ctx, "POST", `/production-orders/${op.id}/plan`);
+      op = await prisma.productionOrder.findUniqueOrThrow({ where: { id: op.id } });
     }
 
     /*
@@ -361,15 +381,13 @@ export async function seedIndustrial(
       where: { customerOrderId: pedido.id },
     });
     if (!jaExpedido) {
-      const linhaPedido = pedido.lines[0]!;
-      await chamar(ctx, "POST", `/customer-orders/${pedido.id}/apply-fulfillment-plan`, {
-        lines: [
-          {
-            customerOrderLineId: linhaPedido.id,
-            reserveQuantity: "1000",
-            produceQuantity: "0",
-          },
-        ],
+      /*
+       * Reserva complementar: o plano já foi aplicado (foi ele que gerou a
+       * OP) e não se reaplica. O produto acabado só existe agora, depois da
+       * produção, então é aqui que ele é reservado para este pedido.
+       */
+      await chamar(ctx, "POST", `/customer-orders/${pedido.id}/reserve-available`, {
+        lines: [{ customerOrderLineId: linhaPedido.id, quantity: "1000" }],
       });
 
       const rascunho = await chamar<{

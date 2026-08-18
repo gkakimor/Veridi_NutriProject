@@ -16,6 +16,7 @@ import {
   BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
+  PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
   SHIPMENT_STATUS_LABELS,
 } from "@veridi/shared";
@@ -1557,29 +1558,40 @@ export function CustomerOrderPage() {
             )}
 
             {customerOrder && customerOrder.generatedProductionOrders.length > 0 && (
-              <FormSection title="OPs Geradas" subtitle="Ordens de Produção DRAFT — o usuário revisa e planeja normalmente.">
+              <FormSection
+                title="Ordens de produção"
+                subtitle="O que a fábrica produz para atender este pedido. Cada ordem abre direto pelo código."
+              >
                 <div className="table-container">
                   <table className="table table--clickable-rows">
                     <thead>
                       <tr>
                         <th>OP</th>
                         <th>Produto</th>
-                        <th>Quantidade</th>
+                        <th className="is-numeric">Planejado</th>
+                        <th className="is-numeric">Produzido</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {customerOrder.generatedProductionOrders.map((op) => (
                         <tr key={op.id} tabIndex={0} onClick={() => navigate(`/producao/ordens/${op.id}`)}>
-                          <td className="is-code">{op.code}</td>
+                          <td className="is-code">
+                            <EntityLink kind="productionOrder" id={op.id} code={op.code} />
+                          </td>
                           <td>
                             <EntityLink kind="product" id={op.productId} code={op.productCode} name={op.productName} />
                           </td>
-                          <td>
+                          <td className="is-numeric">
                             {op.plannedQuantity} {op.outputUnitCode}
                           </td>
+                          <td className="is-numeric">
+                            {op.producedQuantity} {op.outputUnitCode}
+                          </td>
                           <td>
-                            <span className="badge badge--neutral">{op.status}</span>
+                            <span className="badge badge--neutral">
+                              {PRODUCTION_ORDER_STATUS_LABELS[op.status]}
+                            </span>
                           </td>
                         </tr>
                       ))}

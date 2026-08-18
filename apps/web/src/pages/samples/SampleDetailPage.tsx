@@ -192,6 +192,35 @@ export function SampleDetailPage() {
           subtitle="Amostra não é lote nem ordem de produção — o resultado nunca entra no estoque de produto acabado."
         >
           <dl className="definition-list">
+            <dt>Projeto</dt>
+            <dd>
+              <EntityLink
+                kind="project"
+                id={sample.projectId}
+                code={sample.projectCode}
+                name={sample.projectName}
+              />
+            </dd>
+            <dt>Cliente</dt>
+            <dd>
+              <EntityLink kind="customer" id={sample.customerId} code={sample.customerName} />
+            </dd>
+            {/* Num projeto com vários produtos, saber o que a amostra testa é
+                a informação principal — sem ela T1 e T2 podem ser sabores
+                diferentes e a tela não conta a diferença. */}
+            <dt>Produto testado</dt>
+            <dd>
+              {sample.productId ? (
+                <EntityLink
+                  kind="product"
+                  id={sample.productId}
+                  code={sample.productCode}
+                  name={sample.productName}
+                />
+              ) : (
+                <span className="muted">Produto não identificado</span>
+              )}
+            </dd>
             <dt>Descrição</dt>
             <dd>{sample.description ?? "—"}</dd>
             <dt>Código legado</dt>

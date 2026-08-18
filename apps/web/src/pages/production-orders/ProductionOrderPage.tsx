@@ -667,22 +667,36 @@ export function ProductionOrderPage() {
           </FormSection>
         )}
 
-        {productionOrder && productionOrder.origin !== "MANUAL" && (
-          <FormSection title="Origem">
+        {productionOrder && (productionOrder.origin !== "MANUAL" || productionOrder.customerId) && (
+          <FormSection
+            title="Origem"
+            subtitle="Para quem esta ordem produz — o pedido e o cliente abrem direto daqui."
+          >
             <dl className="definition-list">
               <dt>Origem</dt>
               <dd>{PRODUCTION_ORDER_ORIGIN_LABELS[productionOrder.origin]}</dd>
               {productionOrder.customerOrderId && (
                 <>
-                  <dt>Pedido</dt>
+                  <dt>Pedido do cliente</dt>
                   <dd>
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/comercial/pedidos/${productionOrder.customerOrderId}`)}
-                    >
-                      {productionOrder.customerOrderCode}
-                    </button>
+                    <EntityLink
+                      kind="customerOrder"
+                      id={productionOrder.customerOrderId}
+                      code={productionOrder.customerOrderCode}
+                    />
+                  </dd>
+                </>
+              )}
+              {productionOrder.customerId && (
+                <>
+                  <dt>Cliente</dt>
+                  <dd>
+                    <EntityLink
+                      kind="customer"
+                      id={productionOrder.customerId}
+                      code={productionOrder.customerCode}
+                      name={productionOrder.customerName}
+                    />
                   </dd>
                 </>
               )}

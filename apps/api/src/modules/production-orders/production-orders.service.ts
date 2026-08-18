@@ -527,9 +527,19 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     hasCustomerSuppliedRequirements: order.requirements.some(
       (requirement) => requirement.supplyResponsibility === "CUSTOMER",
     ),
-    customerCode: usingSnapshot ? order.customerCode : (order.product.customer?.code ?? null),
-    customerName: usingSnapshot ? order.customerName : (order.product.customer?.legalName ?? null),
-    customerCnpj: usingSnapshot ? order.customerCnpj : (order.product.customer?.cnpj ?? null),
+    // Antes do RELEASE não há snapshot: vale o cadastro atual. A ordem
+    // própria vem primeiro porque uma OP nascida de pedido já sabe para quem
+    // produz mesmo quando o Produto não tem cliente amarrado — sem isso a
+    // lista mostra "—" no cliente de uma ordem que existe justamente por ele.
+    customerCode: usingSnapshot
+      ? order.customerCode
+      : (order.customer?.code ?? order.product.customer?.code ?? null),
+    customerName: usingSnapshot
+      ? order.customerName
+      : (order.customer?.legalName ?? order.product.customer?.legalName ?? null),
+    customerCnpj: usingSnapshot
+      ? order.customerCnpj
+      : (order.customer?.cnpj ?? order.product.customer?.cnpj ?? null),
     // Endereço: snapshot congelado quando existir; antes do RELEASE, o
     // cadastro atual (o documento oficial ainda não foi emitido).
     customerTradeName: order.customerTradeName ?? order.product.customer?.tradeName ?? null,

@@ -203,6 +203,29 @@
   transition: background 0.1s;
 }
 
+/**
+ * Coluna numérica.
+ *
+ * Número se compara pela casa decimal. Alinhado à esquerda, `1.000` e `999`
+ * têm a mesma largura aparente e o olho perde a ordem de grandeza; com o
+ * dígito de largura fixa e a coluna encostada à direita, a comparação sai da
+ * leitura em vez da conta. O cabeçalho acompanha, senão o título flutua longe
+ * dos próprios valores.
+ */
+.table th.is-numeric,
+.table td.is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/** Segunda linha da célula: o contexto que desambigua sem virar coluna nova. */
+.table .cell-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
 .table td.is-code,
 .code {
   font-family: var(--font-code);

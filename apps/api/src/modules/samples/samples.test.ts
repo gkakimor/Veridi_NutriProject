@@ -14,6 +14,8 @@ const fixtureSampleIds: string[] = [];
 const fixtureProjectIds: string[] = [];
 const fixtureCustomerIds: string[] = [];
 const fixtureItemIds: string[] = [];
+const fixtureProjectProductIds: string[] = [];
+const fixtureProductIds: string[] = [];
 
 type App = ReturnType<typeof buildTestApp>;
 
@@ -45,6 +47,12 @@ afterAll(async () => {
     await prisma.inventoryMovement.deleteMany({ where: { itemId: { in: fixtureItemIds } } });
     await prisma.lot.deleteMany({ where: { itemId: { in: fixtureItemIds } } });
     await prisma.item.deleteMany({ where: { id: { in: fixtureItemIds } } });
+  }
+  if (fixtureProjectProductIds.length > 0) {
+    await prisma.projectProduct.deleteMany({ where: { id: { in: fixtureProjectProductIds } } });
+  }
+  if (fixtureProductIds.length > 0) {
+    await prisma.product.deleteMany({ where: { id: { in: fixtureProductIds } } });
   }
   if (fixtureProjectIds.length > 0) {
     await prisma.projectStatusHistory.deleteMany({
@@ -194,6 +202,61 @@ describe("Amostra — identidade e numeração", () => {
     // Projeto diferente recomeça em T1 — Tn é por projeto, não global.
     const otherProject = await createProject(customer.id);
     expect((await newSample(app, otherProject.id)).json().testSequence).toBe(1);
+
+    await app.close();
+  });
+
+  it("diz qual produto do projeto a amostra testa, e não inventa um quando não existe vínculo", async () => {
+    // Num projeto com três sabores, "T2 aprovada" não significa nada sem o
+    // produto ao lado — e a amostra antiga, sem vínculo, tem que continuar
+    // dizendo que não sabe em vez de apontar o primeiro produto da lista.
+    const app = buildTestApp("COMMERCIAL");
+    await app.ready();
+    const prisma = getPrisma();
+
+    const customer = await createCustomer();
+    const project = await createProject(customer.id);
+    const m = marker();
+    const produtos = await Promise.all(
+      ["A", "B"].map(async (sufixo, indice) => {
+        const product = await prisma.product.create({
+          data: { code: `PROD-AM-${sufixo}-${m}`, name: `Produto ${sufixo} ${m}`, customerId: customer.id },
+        });
+        fixtureProductIds.push(product.id);
+        const link = await prisma.projectProduct.create({
+          data: { projectId: project.id, productId: product.id, sequence: indice + 1 },
+        });
+        fixtureProjectProductIds.push(link.id);
+        return { product, link };
+      }),
+    );
+    const segundo = produtos[1]!;
+
+    const escolhida = await app.inject({
+      method: "POST",
+      url: `/projects/${project.id}/samples`,
+      payload: { description: "Sabor B", projectProductId: segundo.link.id },
+    });
+    expect(escolhida.statusCode).toBe(201);
+    fixtureSampleIds.push(escolhida.json().id);
+    const comProduto = escolhida.json();
+    expect(comProduto.projectProductId).toBe(segundo.link.id);
+    expect(comProduto.productId).toBe(segundo.product.id);
+    expect(comProduto.productCode).toBe(segundo.product.code);
+    expect(comProduto.productName).toBe(segundo.product.name);
+
+    // A lista mostra a mesma informação — é lá que a pessoa compara T1 e T2.
+    const listada = (await app.inject({ method: "GET", url: `/project-samples?search=${comProduto.code}` }))
+      .json()
+      .samples.find((item: { id: string }) => item.id === comProduto.id);
+    expect(listada.productCode).toBe(segundo.product.code);
+
+    // Amostra de projeto sem produto cadastrado: sem vínculo, sem palpite.
+    const projetoSemProduto = await createProject(customer.id);
+    const legado = (await newSample(app, projetoSemProduto.id)).json();
+    expect(legado.projectProductId).toBeNull();
+    expect(legado.productId).toBeNull();
+    expect(legado.productCode).toBeNull();
 
     await app.close();
   });

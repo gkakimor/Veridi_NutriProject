@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate , useSearchParams } from "react-router-dom";
 import { useAuth } from "../../app/AuthProvider";
@@ -206,9 +207,9 @@ export function ProductionOrdersPage() {
             <tr>
               <th>OP</th>
               <th>Produto</th>
+              <th>Cliente</th>
               <th>Formulação</th>
-              <th>Quantidade</th>
-              <th>Unidade</th>
+              <th className="is-numeric">Quantidade</th>
               <th>Materiais</th>
               <th>Status</th>
               <th>Criada em</th>
@@ -225,13 +226,38 @@ export function ProductionOrdersPage() {
                   if (event.key === "Enter") navigate(`/producao/ordens/${op.id}`);
                 }}
               >
-                <td className="is-code">{op.code}</td>
+                <td className="is-code">
+                  {op.code}
+                  {op.customerOrderId && (
+                    <span className="cell-sub">
+                      <EntityLink
+                        kind="customerOrder"
+                        id={op.customerOrderId}
+                        code={op.customerOrderCode}
+                      />
+                    </span>
+                  )}
+                </td>
                 <td>
-                  {op.productCode} — {op.productName}
+                  <EntityLink
+                    kind="product"
+                    id={op.productId}
+                    code={op.productCode}
+                    name={op.productName}
+                  />
+                </td>
+                <td>
+                  <EntityLink
+                    kind="customer"
+                    id={op.customerId}
+                    code={op.customerCode}
+                    name={op.customerName}
+                  />
                 </td>
                 <td>{op.formulationVersionLabel ?? "—"}</td>
-                <td>{op.plannedQuantity}</td>
-                <td>{op.outputUnitCode}</td>
+                <td className="is-numeric">
+                  {op.plannedQuantity} {op.outputUnitCode}
+                </td>
                 <td>
                   <span className={materialsBadgeClass(op)}>{materialsLabel(op)}</span>
                 </td>

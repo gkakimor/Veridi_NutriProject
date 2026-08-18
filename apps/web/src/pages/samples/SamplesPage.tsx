@@ -165,6 +165,7 @@ export function SamplesPage() {
               <th>Amostra</th>
               <th>Teste</th>
               <th>Projeto</th>
+              <th>Produto</th>
               <th>Cliente</th>
               <th>Descrição</th>
               <th>Status</th>
@@ -188,6 +189,18 @@ export function SamplesPage() {
                   <EntityLink kind="project" id={sample.projectId} code={sample.projectCode} name={sample.projectName} />
                 </td>
                 <td>
+                  {sample.productId ? (
+                    <EntityLink
+                      kind="product"
+                      id={sample.productId}
+                      code={sample.productCode}
+                      name={sample.productName}
+                    />
+                  ) : (
+                    <span className="muted">Produto não identificado</span>
+                  )}
+                </td>
+                <td>
                   <EntityLink kind="customer" id={sample.customerId} code={sample.customerName} />
                 </td>
                 <td>{sample.description ?? "—"}</td>
@@ -203,7 +216,7 @@ export function SamplesPage() {
 
             {!loading && samples.length === 0 && (
               <tr>
-                <td colSpan={8} className="table__empty">
+                <td colSpan={9} className="table__empty">
                   Nenhuma amostra encontrada.
                 </td>
               </tr>

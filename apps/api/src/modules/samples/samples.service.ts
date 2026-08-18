@@ -59,6 +59,10 @@ const CODE_SEQUENCE = "project_sample_code_seq";
 
 const sampleInclude = {
   project: { include: { customer: true } },
+  // Qual produto do projeto esta amostra testa. Null em amostra anterior ao
+  // projeto multiproduto — o que a tela mostra como não identificado, nunca
+  // como o primeiro produto do projeto.
+  projectProduct: { include: { product: true } },
   consumptions: {
     orderBy: { executedAt: "asc" as const },
     include: { item: true, lot: { include: { ownerCustomer: true } } },
@@ -98,6 +102,10 @@ export function toSampleDTO(sample: SampleWithRelations): ProjectSampleDTO {
     projectName: sample.project.name,
     customerId: sample.project.customerId,
     customerName: sample.project.customer.legalName,
+    projectProductId: sample.projectProductId,
+    productId: sample.projectProduct?.productId ?? null,
+    productCode: sample.projectProduct?.product.code ?? null,
+    productName: sample.projectProduct?.product.name ?? null,
     testSequence: sample.testSequence,
     testLabel: `T${sample.testSequence}`,
     status: sample.status,

@@ -2,6 +2,7 @@
 
 import type { CustomerOrderBillingStatus } from "./billings.js";
 import type { CustomerAddress } from "./customers.js";
+import type { ProductionOrderStatus } from "./production-orders.js";
 
 export const CUSTOMER_ORDER_CODE_PREFIX = "PED";
 
@@ -145,8 +146,10 @@ export interface CustomerOrderGeneratedProductionOrderDTO {
   productName: string;
   customerOrderLineId: string;
   plannedQuantity: string;
+  /** Soma dos apontamentos reais da OP — `0` enquanto nada foi produzido. */
+  producedQuantity: string;
   outputUnitCode: string;
-  status: string;
+  status: ProductionOrderStatus;
 }
 
 export interface CustomerOrderDTO {

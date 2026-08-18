@@ -78,6 +78,15 @@ export interface ProjectSampleDTO {
   projectName: string;
   customerId: string;
   customerName: string;
+  /**
+   * Produto do projeto que esta amostra testa. `null` em amostra criada
+   * antes do projeto multiproduto: a tela diz que o produto não foi
+   * identificado em vez de atribuir um.
+   */
+  projectProductId: string | null;
+  productId: string | null;
+  productCode: string | null;
+  productName: string | null;
   testSequence: number;
   /** Rótulo de apresentação: "T3". */
   testLabel: string;
