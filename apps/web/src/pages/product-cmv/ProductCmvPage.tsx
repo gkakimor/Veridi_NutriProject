@@ -222,6 +222,11 @@ export function ProductCmvPage() {
         </div>
       </div>
 
+      {/* Mesma posição das telas irmãs (Custos, Precificação): logo abaixo do
+          cabeçalho. No rodapé, quem terminava de ler a composição não via
+          que havia caminho para as outras telas do produto. */}
+      <ProductRelatedLinks productId={productId} current="cmv" title="Ver do produto" />
+
       <div className="doc-body">
         {error && (
           <p className="form-alert" role="alert">
@@ -534,7 +539,6 @@ export function ProductCmvPage() {
             <dt>Data do cálculo</dt>
             <dd>{formatDate(data?.calculationReferenceDate)}</dd>
           </dl>
-          <ProductRelatedLinks productId={productId} current="cmv" title="Ver do produto" />
         </FormSection>
       </div>
     </>

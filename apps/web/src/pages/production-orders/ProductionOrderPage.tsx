@@ -928,6 +928,36 @@ export function ProductionOrderPage() {
                             </span>
                           </>
                         )}
+                        {/*
+                          Falta com material já no galpão.
+
+                          `onHand` conta o físico inteiro; `available` só conta
+                          lote liberado. Quando a diferença explica a falta, a
+                          causa não é compra — é uma decisão de Qualidade
+                          pendente, e a tela dizia só "falta 35" enquanto o
+                          material estava na prateleira.
+                        */}
+                        {!ordemEncerrada &&
+                          Number(requirement.shortage) > 0 &&
+                          Number(requirement.onHand) -
+                            Number(requirement.reserved) -
+                            Number(requirement.available) >
+                            0 && (
+                            <>
+                              <br />
+                              <span className="field__hint">
+                                Há{" "}
+                                {(
+                                  Number(requirement.onHand) -
+                                  Number(requirement.reserved) -
+                                  Number(requirement.available)
+                                ).toLocaleString("pt-BR")}{" "}
+                                {requirement.stockUnitCode} em estoque físico ainda não liberado
+                                pela Qualidade.{" "}
+                                <Link to={`/estoque/${requirement.itemId}`}>Ver lotes do item</Link>
+                              </span>
+                            </>
+                          )}
                         {!ordemEncerrada &&
                           requirement.supplyResponsibility === "CUSTOMER" &&
                           Number(requirement.shortage) > 0 && (

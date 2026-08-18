@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { PricingVersionSummaryDTO } from "@veridi/shared";
 import {
   INDUSTRIAL_COST_QUALITY_LABELS,
@@ -204,7 +204,20 @@ export function PricingListPage() {
             {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={10} className="table__empty">
-                  Nenhuma precificação encontrada.
+                  {/* Lista vazia sem caminho é beco sem saída: precificação
+                      não nasce aqui, nasce de um cálculo de custo salvo. Quem
+                      chegou por um produto específico recebe o link direto. */}
+                  Nenhuma precificação encontrada. Uma precificação nasce de um{" "}
+                  <strong>cálculo de custo salvo</strong>, na estrutura de custos do produto.
+                  {contextProductId && (
+                    <>
+                      {" "}
+                      <Link to={`/produtos/${contextProductId}/custos`}>
+                        Abrir a estrutura de custos deste produto
+                      </Link>
+                      .
+                    </>
+                  )}
                 </td>
               </tr>
             )}

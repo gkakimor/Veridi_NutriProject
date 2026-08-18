@@ -16,7 +16,7 @@ import {
   SHIPMENT_STATUS_LABELS,
   ownerLabel,
 } from "@veridi/shared";
-import { blockLot, getLot, getLotTraceability, releaseLot } from "../../lib/lots-api";
+import { blockLot, getLot, getLotTraceability, releaseLot, unblockLot } from "../../lib/lots-api";
 import { getItemCostReference, getProductionOrderMaterialCost } from "../../lib/costs-api";
 import { getReceipt } from "../../lib/receiving-api";
 import { formatBRL } from "../../lib/currency";
@@ -84,6 +84,8 @@ export function LotDetailPage() {
    */
   const [errorScope, setErrorScope] = useState<"geral" | "qualidade">("geral");
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [unblockDialogOpen, setUnblockDialogOpen] = useState(false);
+  const [unblockReason, setUnblockReason] = useState("");
   const [blockReason, setBlockReason] = useState("");
 
   function load(lotId: string) {
@@ -190,6 +192,24 @@ export function LotDetailPage() {
       await reloadLot();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao rejeitar o CoA");
+      setErrorScope("qualidade");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUnblock() {
+    if (!id) return;
+    setSaving(true);
+    setError(null);
+    setErrorScope("geral");
+    try {
+      const updated = await unblockLot(id, { reason: unblockReason.trim() });
+      setUnblockDialogOpen(false);
+      setUnblockReason("");
+      setLot(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao desbloquear lote");
       setErrorScope("qualidade");
     } finally {
       setSaving(false);
@@ -588,7 +608,7 @@ export function LotDetailPage() {
                 </button>
               </div>
             )}
-            {lot.status === "AVAILABLE" && (
+            {lot.status === "AVAILABLE" && canReviewCoa && (
               <button
                 type="button"
                 className="btn btn--danger btn--sm"
@@ -597,6 +617,28 @@ export function LotDetailPage() {
               >
                 Bloquear
               </button>
+            )}
+            {lot.status === "AVAILABLE" && !canReviewCoa && (
+              <p className="field__hint">O bloqueio deste lote é decisão da Qualidade.</p>
+            )}
+            {/* Bloqueado deixou de ser fim de linha: material físico real não
+                pode ficar fora do estoque para sempre por causa de um
+                bloqueio feito por engano. Desbloquear reabre a decisão — o
+                lote volta para a fila, não para o estoque disponível. */}
+            {lot.status === "BLOCKED" && canReviewCoa && (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                disabled={saving}
+                onClick={() => setUnblockDialogOpen(true)}
+              >
+                Desbloquear
+              </button>
+            )}
+            {lot.status === "BLOCKED" && !canReviewCoa && (
+              <p className="field__hint">
+                O desbloqueio deste lote é decisão da Qualidade.
+              </p>
             )}
           </div>
         </FormSection>
@@ -915,6 +957,47 @@ export function LotDetailPage() {
             </div>
           </ModalDialog>
         </>
+      )}
+
+      {unblockDialogOpen && (
+        <ModalDialog labelledBy="unblock-lot-title" onClose={() => setUnblockDialogOpen(false)}>
+          <h2 id="unblock-lot-title">Desbloquear lote?</h2>
+          <p>
+            "{lot.code}" volta para a fila da Qualidade como <strong>aguardando liberação</strong>.
+            Ele não fica disponível para uso: liberar continua sendo uma decisão à parte.
+          </p>
+          <div className="field">
+            <label htmlFor="unblock-lot-reason">
+              Motivo do desbloqueio <span className="req">*</span>
+            </label>
+            <textarea
+              id="unblock-lot-reason"
+              rows={3}
+              value={unblockReason}
+              onChange={(event) => setUnblockReason(event.target.value)}
+            />
+            <p className="field__hint">
+              O motivo do bloqueio anterior continua registrado no histórico do lote.
+            </p>
+          </div>
+          <div className="confirm-dialog__actions">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => setUnblockDialogOpen(false)}
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              className="btn btn--accent"
+              disabled={unblockReason.trim().length < 3 || saving}
+              onClick={handleUnblock}
+            >
+              Desbloquear lote
+            </button>
+          </div>
+        </ModalDialog>
       )}
 
       {rejectCoaOpen && (
