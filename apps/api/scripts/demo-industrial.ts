@@ -132,7 +132,7 @@ export async function seedIndustrial(
     if (loteRecebido && loteRecebido.status !== "AVAILABLE") {
       await chamar(ctx, "POST", `/lots/${loteRecebido.id}/release`, {
         notes: "DEMO — laudo do fornecedor conferido",
-      }).catch(() => undefined);
+      });
     }
 
     /* ── Material do cliente: entra sem ordem de compra e não vira
@@ -186,7 +186,7 @@ export async function seedIndustrial(
       if (novo && novo.status !== "AVAILABLE") {
         await chamar(ctx, "POST", `/lots/${novo.id}/release`, {
           notes: "DEMO — laudo conferido",
-        }).catch(() => undefined);
+        });
       }
     }
 
@@ -198,7 +198,7 @@ export async function seedIndustrial(
     if (loteClienteAtual && loteClienteAtual.status !== "AVAILABLE") {
       await chamar(ctx, "POST", `/lots/${loteClienteAtual.id}/release`, {
         notes: "DEMO — material conferido no recebimento",
-      }).catch(() => undefined);
+      });
     }
 
     /* ── Embalagem: sem ela a OP não fecha os requisitos ──────── */
@@ -264,9 +264,15 @@ export async function seedIndustrial(
       op = await prisma.productionOrder.findUniqueOrThrow({ where: { id: criada.id } });
     }
 
-    if (op.status === "PLANNED" || op.status === "DRAFT") {
-      // Liberar gera número oficial, requisitos e reservas por FEFO — matéria
-      // -prima da Veridi e material do cliente, cada um com o próprio dono.
+    /*
+     * A OP avança por estado, não por "se acabei de criar".
+     *
+     * Reexecutar o cenário com a OP no meio do caminho precisa CONTINUAR de
+     * onde parou — foi exatamente isso que faltou antes: o bloco só tratava
+     * ordem recém-criada, a produção nunca era apontada, e o erro aparecia
+     * três etapas depois, na reserva de um produto que não existia.
+     */
+    if (op.status === "DRAFT" || op.status === "PLANNED") {
       const liberada = await chamar<{
         requirements: { reservationLines: { id: string; lotCode: string | null; quantity: string }[] }[];
       }>(ctx, "POST", `/production-orders/${op.id}/release`);
@@ -278,22 +284,74 @@ export async function seedIndustrial(
             "POST",
             `/production-orders/${op.id}/picking/${linha.id}/confirm`,
             linha.lotCode ? { lotCode: linha.lotCode } : {},
-          ).catch(() => undefined);
+          );
           await chamar(ctx, "POST", `/production-orders/${op.id}/consumptions`, {
             entries: [{ reservationLineId: linha.id, quantity: linha.quantity }],
-          }).catch(() => undefined);
+          });
+        }
+      }
+      op = await prisma.productionOrder.findUniqueOrThrow({ where: { id: op.id } });
+    }
+
+    if (op.status === "RELEASED" || op.status === "IN_PRODUCTION") {
+      // Picking e consumo pendentes de uma execução interrompida.
+      const detalhe = await chamar<{
+        requirements: {
+          reservationLines: {
+            id: string;
+            lotCode: string | null;
+            quantity: string;
+            pickingStatus: string;
+            remainingQuantity: string;
+          }[];
+        }[];
+      }>(ctx, "GET", `/production-orders/${op.id}`);
+
+      for (const requisito of detalhe.requirements) {
+        for (const linha of requisito.reservationLines) {
+          if (linha.pickingStatus !== "CONFIRMED") {
+            await chamar(
+              ctx,
+              "POST",
+              `/production-orders/${op.id}/picking/${linha.id}/confirm`,
+              linha.lotCode ? { lotCode: linha.lotCode } : {},
+            );
+          }
+          if (Number(linha.remainingQuantity) > 0) {
+            await chamar(ctx, "POST", `/production-orders/${op.id}/consumptions`, {
+              entries: [{ reservationLineId: linha.id, quantity: linha.remainingQuantity }],
+            });
+          }
         }
       }
 
-      // Produção apontada e lote de produto acabado com número comercial.
-      await chamar(ctx, "POST", `/production-orders/${op.id}/outputs`, {
-        quantity: "1000",
-        destination: "NEW_LOT",
-        businessLotNumber: DEMO_BUSINESS_LOT,
-      }).catch(() => undefined);
-      await chamar(ctx, "POST", `/production-orders/${op.id}/complete`, {}).catch(() => undefined);
+      const produzido = await prisma.productionOutput.count({ where: { productionOrderId: op.id } });
+      if (produzido === 0) {
+        await chamar(ctx, "POST", `/production-orders/${op.id}/outputs`, {
+          quantity: "1000",
+          destination: "NEW_LOT",
+          businessLotNumber: DEMO_BUSINESS_LOT,
+          // Produto acabado controla validade: o lote nasce com a dela.
+          expiryDate: new Date(Date.now() + 720 * 864e5).toISOString(),
+        });
+      }
+
+      await chamar(ctx, "POST", `/production-orders/${op.id}/complete`, {});
       op = await prisma.productionOrder.findUniqueOrThrow({ where: { id: op.id } });
       console.log(`  ordem de produção ${op.code} — ${op.status}`);
+    }
+
+    /* ── Liberação do lote acabado ─────────────────────────────
+     * Produto acabado exige liberação da Qualidade antes de virar estoque
+     * disponível — é o que impede expedir o que ainda não foi aprovado. */
+    const loteAcabado = await prisma.lot.findFirst({
+      where: { businessLotNumber: DEMO_BUSINESS_LOT },
+    });
+    if (loteAcabado && loteAcabado.status !== "AVAILABLE") {
+      await chamar(ctx, "POST", `/lots/${loteAcabado.id}/release`, {
+        notes: "DEMO — lote aprovado pela Qualidade",
+      });
+      console.log(`  lote acabado ${loteAcabado.code} liberado`);
     }
 
     /* ── Expedição parcial ─────────────────────────────────────
@@ -312,12 +370,12 @@ export async function seedIndustrial(
             produceQuantity: "0",
           },
         ],
-      }).catch(() => undefined);
+      });
 
       const rascunho = await chamar<{
         id: string;
         lines: { id: string; customerOrderReservationLineId: string; requiresVerification: boolean; lotCode: string | null }[];
-      }>(ctx, "POST", `/customer-orders/${pedido.id}/shipments`).catch(() => null);
+      }>(ctx, "POST", `/customer-orders/${pedido.id}/shipments`);
 
       if (rascunho) {
         await chamar(ctx, "PATCH", `/shipments/${rascunho.id}`, {
@@ -325,7 +383,7 @@ export async function seedIndustrial(
             customerOrderReservationLineId: linha.customerOrderReservationLineId,
             quantity: "600",
           })),
-        }).catch(() => undefined);
+        });
 
         const detalhe = await chamar<{
           lines: { id: string; requiresVerification: boolean; lotCode: string | null }[];
@@ -334,22 +392,22 @@ export async function seedIndustrial(
           if (!linha.requiresVerification || !linha.lotCode) continue;
           await chamar(ctx, "POST", `/shipments/${rascunho.id}/lines/${linha.id}/verify`, {
             lotCode: linha.lotCode,
-          }).catch(() => undefined);
+          });
         }
 
         const confirmada = await chamar<{ id: string; code: string }>(
           ctx,
           "POST",
           `/shipments/${rascunho.id}/confirm`,
-        ).catch(() => null);
+        );
 
         /* ── Faturamento do que foi expedido ───────────────── */
         if (confirmada) {
           const fatura = await chamar<{ id: string }>(ctx, "POST", "/billings", {
             shipmentId: confirmada.id,
-          }).catch(() => null);
+          });
           if (fatura) {
-            await chamar(ctx, "POST", `/billings/${fatura.id}/issue`, {}).catch(() => undefined);
+            await chamar(ctx, "POST", `/billings/${fatura.id}/issue`, {});
           }
           console.log(`  expedição ${confirmada.code} e faturamento prontos`);
         }
