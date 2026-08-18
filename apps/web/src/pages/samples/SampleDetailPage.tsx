@@ -344,6 +344,16 @@ export function SampleDetailPage() {
             </table>
           </div>
 
+          {/* Espelho da explicação que já existe na decisão comercial: sem ela,
+              quem criou a amostra via só "Cancelar amostra" e concluía que a
+              função não existia. Ação ausente sem motivo é bloqueio mudo. */}
+          {!canConsume && isOpen && (
+            <p className="field__hint">
+              Registrar consumo e concluir a amostra são da Produção: é quem pesa o material e
+              executa o teste. Enquanto isso não acontece, a amostra fica aguardando a bancada.
+            </p>
+          )}
+
           {canConsume && isOpen && (
             <form
               onSubmit={(event) => {

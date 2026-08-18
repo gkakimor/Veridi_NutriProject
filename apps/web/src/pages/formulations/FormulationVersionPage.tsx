@@ -735,7 +735,7 @@ export function FormulationVersionPage() {
         {costEstimate && (
           <FormSection
             title="Custo estimado de materiais"
-            subtitle="Sempre uma estimativa — a fórmula é um plano, não um realizado. A referência de custo muda com o tempo e nunca é gravada na versão."
+            subtitle="Estimativa de HOJE: lê a referência de custo vigente a cada abertura e nunca é gravada na versão. O CMV e a precificação leem a base CONGELADA do cálculo salvo — por isso os dois podem discordar, e é o cálculo salvo que vale como documento."
           >
             <div className="table-container">
               <table className="table">
