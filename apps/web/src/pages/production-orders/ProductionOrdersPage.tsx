@@ -202,7 +202,7 @@ export function ProductionOrdersPage() {
       )}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
               <th>OP</th>

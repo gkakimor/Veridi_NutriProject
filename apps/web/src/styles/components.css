@@ -152,12 +152,60 @@
 
 /* ---------------- Tabela ---------------- */
 
+/**
+ * Container de tabela.
+ *
+ * `overflow-x: auto` sozinho não resolve nada: a barra some quando não está
+ * em uso e a pessoa não descobre que existe coluna à direita — foi assim que
+ * Status e Abrir ficaram fora da tela mesmo em 1920px sem ninguém notar. As
+ * quatro camadas abaixo são o truque clássico de sombra de rolagem: as duas
+ * primeiras (`local`) andam com o conteúdo e cobrem a sombra quando a borda
+ * está visível; as duas de baixo (`scroll`) ficam presas ao container. O
+ * resultado é uma sombra que aparece só do lado em que há conteúdo cortado.
+ */
 .table-container {
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow-1);
+  scrollbar-width: thin;
+  background-image:
+    linear-gradient(to right, var(--surface), rgba(255, 255, 255, 0)),
+    linear-gradient(to left, var(--surface), rgba(255, 255, 255, 0)),
+    linear-gradient(to right, rgba(20, 40, 30, 0.16), rgba(20, 40, 30, 0)),
+    linear-gradient(to left, rgba(20, 40, 30, 0.16), rgba(20, 40, 30, 0));
+  background-position:
+    0 0,
+    100% 0,
+    0 0,
+    100% 0;
+  background-repeat: no-repeat;
+  background-size:
+    28px 100%,
+    28px 100%,
+    12px 100%,
+    12px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/**
+ * Coluna de ação fixa à direita.
+ *
+ * A ação principal da linha é o motivo de a tabela existir; ela não pode ser
+ * a primeira coisa a sair de cena quando a tabela é larga. Fica encostada na
+ * borda, com um fio à esquerda para não parecer que flutua sobre o texto.
+ */
+.table--sticky-actions th:last-child,
+.table--sticky-actions td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--surface);
+  box-shadow: inset 1px 0 0 var(--line);
+}
+
+.table--sticky-actions tbody tr:hover td:last-child {
+  background: var(--canvas);
 }
 
 .table-container--spaced {
@@ -1266,8 +1314,12 @@
   background: var(--selected-bg);
 }
 
-/* Criação no contexto: separada dos resultados, nunca confundida com um. */
+/**
+ * Criação no contexto: última parada da lista, alcançável pela seta como
+ * qualquer resultado, mas separada por um fio para não ser confundida com um.
+ */
 .entity-select__create {
   border-top: 1px solid var(--line);
-  padding: var(--sp-1) var(--sp-2);
+  color: var(--v-green-700);
+  font-weight: var(--fw-medium);
 }

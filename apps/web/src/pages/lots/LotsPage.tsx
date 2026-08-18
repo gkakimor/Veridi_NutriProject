@@ -217,18 +217,21 @@ export function LotsPage() {
       )}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
               <th>Lote Interno</th>
               <th>Item</th>
-              <th>Lote Fornecedor</th>
+              {/* Status ao lado da identidade: era a última coluna antes das
+                  ações e saía da tela junto com elas, justamente a informação
+                  que decide se o lote pode ser usado. */}
+              <th>Status</th>
               <th>Proprietário</th>
+              <th>Lote Fornecedor</th>
               <th>Fornecedor</th>
-              <th>Recebido</th>
+              <th className="is-numeric">Recebido</th>
               <th>Validade</th>
               <th>Localização</th>
-              <th>Status</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -242,25 +245,27 @@ export function LotsPage() {
                   if (event.key === "Enter") navigate(`/estoque/lotes/${lot.id}`);
                 }}
               >
-                <td className="is-code">{lot.code}</td>
+                <td className="is-code">
+                  <EntityLink kind="lot" id={lot.id} code={lot.code} />
+                </td>
                 <td>
                   <EntityLink kind="item" id={lot.itemId} code={lot.itemCode} name={lot.itemName} />
                 </td>
-                <td>{lot.supplierLot ?? "—"}</td>
-                <td>{ownerLabel(lot.ownerType, lot.ownerCustomerName)}</td>
-                <td>
-                  <EntityLink kind="supplier" id={lot.supplierId} code={lot.supplierCode} name={lot.supplierName} />
-                </td>
-                <td>
-                  {lot.initialReceivedQuantity} {lot.unitCode}
-                </td>
-                <td>{formatDate(lot.expiryDate)}</td>
-                <td>{lot.location ?? "—"}</td>
                 <td>
                   <span className={statusBadgeClass(lot.status, lot.isExpired)}>
                     {lot.isExpired ? "Vencido" : LOT_STATUS_LABELS[lot.status]}
                   </span>
                 </td>
+                <td>{ownerLabel(lot.ownerType, lot.ownerCustomerName)}</td>
+                <td>{lot.supplierLot ?? "—"}</td>
+                <td>
+                  <EntityLink kind="supplier" id={lot.supplierId} code={lot.supplierCode} name={lot.supplierName} />
+                </td>
+                <td className="is-numeric">
+                  {lot.initialReceivedQuantity} {lot.unitCode}
+                </td>
+                <td>{formatDate(lot.expiryDate)}</td>
+                <td>{lot.location ?? "—"}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
                     <button

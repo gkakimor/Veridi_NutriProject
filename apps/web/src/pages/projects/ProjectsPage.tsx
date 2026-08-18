@@ -221,7 +221,7 @@ export function ProjectsPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
               <th>Projeto</th>
@@ -234,6 +234,7 @@ export function ProjectsPage() {
               <th>Última versão</th>
               <th>Status</th>
               <th>Produto</th>
+              <th aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
@@ -246,8 +247,16 @@ export function ProjectsPage() {
                   if (event.key === "Enter") navigate(`/comercial/projetos/${project.id}`);
                 }}
               >
+                {/* O projeto precisa ser o destino explícito da linha: antes o
+                    único link aqui era o do Cliente, e mirar "o projeto"
+                    abria o cadastro do cliente. */}
                 <td>
-                  <span className="code">{project.code}</span> {project.name}
+                  <EntityLink
+                    kind="project"
+                    id={project.id}
+                    code={project.code}
+                    name={project.name}
+                  />
                 </td>
                 <td className="is-code">{project.externalCode ?? "—"}</td>
                 <td>{formatDate(project.entryDate)}</td>
@@ -264,12 +273,23 @@ export function ProjectsPage() {
                   </span>
                 </td>
                 <td className="is-code">{project.productCode ?? "—"}</td>
+                <td onClick={(event) => event.stopPropagation()}>
+                  <div className="table__actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => navigate(`/comercial/projetos/${project.id}`)}
+                    >
+                      Abrir
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
 
             {!loading && projects.length === 0 && (
               <tr>
-                <td colSpan={10} className="table__empty">
+                <td colSpan={11} className="table__empty">
                   Nenhum projeto encontrado.
                 </td>
               </tr>

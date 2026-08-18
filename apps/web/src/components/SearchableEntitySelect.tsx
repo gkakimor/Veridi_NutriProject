@@ -153,6 +153,21 @@ export function SearchableEntitySelect({
     input.current?.focus();
   }
 
+  /**
+   * "Cadastrar novo" é a última parada da lista, não um botão solto embaixo
+   * dela. Quem chega ao fim dos resultados com a seta continua a navegação e
+   * cai no cadastro — antes essa ação só existia para quem usava mouse, e
+   * quem digitava o nome de um cliente que ainda não existe ficava sem saída.
+   */
+  const createIndex = canCreate && onCreateNew ? filtered.length : -1;
+  const navigableCount = filtered.length + (createIndex >= 0 ? 1 : 0);
+
+  function startCreate() {
+    if (!onCreateNew) return;
+    setOpen(false);
+    onCreateNew(query.trim());
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -162,13 +177,18 @@ export function SearchableEntitySelect({
       }
       const step = event.key === "ArrowDown" ? 1 : -1;
       setActiveIndex((current) => {
-        if (filtered.length === 0) return 0;
-        return (current + step + filtered.length) % filtered.length;
+        if (navigableCount === 0) return 0;
+        return (current + step + navigableCount) % navigableCount;
       });
       return;
     }
     if (event.key === "Enter") {
       if (!open) return;
+      if (createIndex >= 0 && activeIndex === createIndex) {
+        event.preventDefault();
+        startCreate();
+        return;
+      }
       const option = filtered[activeIndex];
       if (option) {
         event.preventDefault();
@@ -184,7 +204,14 @@ export function SearchableEntitySelect({
     }
   }
 
-  const activeId = open && filtered[activeIndex] ? `${listId}-${filtered[activeIndex]!.id}` : undefined;
+  const createOptionId = `${listId}-create`;
+  const activeId = !open
+    ? undefined
+    : createIndex >= 0 && activeIndex === createIndex
+      ? createOptionId
+      : filtered[activeIndex]
+        ? `${listId}-${filtered[activeIndex]!.id}`
+        : undefined;
 
   return (
     <div className="entity-select" ref={container}>
@@ -240,11 +267,17 @@ export function SearchableEntitySelect({
               maxHeight: anchor.maxHeight,
             }}
           >
+            {/* Filho de `listbox` que não é opção precisa dizer que não é —
+                senão o leitor de tela conta aviso e ação como resultado. */}
             {options.length === 0 && !canCreate && (
-              <li className="entity-select__empty">Nada disponível para escolher.</li>
+              <li role="presentation" className="entity-select__empty">
+                Nada disponível para escolher.
+              </li>
             )}
             {options.length > 0 && filtered.length === 0 && (
-              <li className="entity-select__empty">{emptyMessage}</li>
+              <li role="presentation" className="entity-select__empty">
+                {emptyMessage}
+              </li>
             )}
             {filtered.slice(0, 50).map((option, index) => (
               <li
@@ -267,25 +300,29 @@ export function SearchableEntitySelect({
               </li>
             ))}
             {filtered.length > 50 && (
-              <li className="entity-select__empty">
+              <li role="presentation" className="entity-select__empty">
                 +{filtered.length - 50} resultados — refine a busca.
               </li>
             )}
-            {canCreate && onCreateNew && (
-              <li className="entity-select__create">
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm"
-                  onMouseDown={(event) => {
-                    // `mousedown` antes do blur fechar a lista.
-                    event.preventDefault();
-                    setOpen(false);
-                    onCreateNew(query.trim());
-                  }}
-                >
-                  + {createLabel}
-                  {query.trim() ? `: “${query.trim()}”` : ""}
-                </button>
+            {createIndex >= 0 && (
+              <li
+                id={createOptionId}
+                role="option"
+                aria-selected={activeIndex === createIndex}
+                className={
+                  activeIndex === createIndex
+                    ? "entity-select__option entity-select__create is-active"
+                    : "entity-select__option entity-select__create"
+                }
+                onMouseDown={(event) => {
+                  // `mousedown` antes do blur fechar a lista.
+                  event.preventDefault();
+                  startCreate();
+                }}
+                onMouseEnter={() => setActiveIndex(createIndex)}
+              >
+                + {createLabel}
+                {query.trim() ? `: “${query.trim()}”` : ""}
               </li>
             )}
           </ul>,

@@ -37,12 +37,67 @@ describe("Criação no contexto", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "Nova Nutrição" } });
 
-    const create = screen.getByRole("button", { name: /Cadastrar novo cliente/ });
+    const create = screen.getByRole("option", { name: /Cadastrar novo cliente/ });
     // O texto digitado vai junto: quem procurou já disse o nome.
     expect(create.textContent).toContain("Nova Nutrição");
 
     fireEvent.mouseDown(create);
     expect(onCreateNew).toHaveBeenCalledWith("Nova Nutrição");
+  });
+
+  it("alcança o cadastro pelo teclado, depois do último resultado", () => {
+    // Sem mouse a ação simplesmente não existia: o botão vivia fora da
+    // navegação por setas e nada no campo levava até ele.
+    const onCreateNew = vi.fn();
+    render(
+      <SearchableEntitySelect
+        id="cliente"
+        value=""
+        onChange={() => {}}
+        options={OPTIONS}
+        canCreate
+        createLabel="Cadastrar novo cliente"
+        onCreateNew={onCreateNew}
+      />,
+    );
+
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+
+    const create = screen.getByRole("option", { name: /Cadastrar novo cliente/ });
+    // Quem lê a tela por leitor de tela precisa ouvir onde está.
+    expect(input.getAttribute("aria-activedescendant")).toBe(create.getAttribute("id"));
+    expect(create.getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onCreateNew).toHaveBeenCalledWith("");
+  });
+
+  it("não anuncia aviso nem ação como resultado da busca", () => {
+    // `listbox` com filho que não é `option` faz o leitor de tela contar
+    // "3 resultados" onde existem 2.
+    render(
+      <SearchableEntitySelect
+        id="cliente"
+        value=""
+        onChange={() => {}}
+        options={OPTIONS}
+        canCreate
+        createLabel="Cadastrar novo cliente"
+        onCreateNew={() => {}}
+      />,
+    );
+
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "zzz sem resultado" } });
+
+    const list = document.querySelector(".entity-select__list") as HTMLElement;
+    for (const child of Array.from(list.children)) {
+      expect(["option", "presentation"]).toContain(child.getAttribute("role"));
+    }
   });
 
   it("não oferece cadastrar quando o papel não permite", () => {
@@ -52,7 +107,7 @@ describe("Criação no contexto", () => {
     );
 
     fireEvent.focus(screen.getByRole("combobox"));
-    expect(screen.queryByRole("button", { name: /Cadastrar/ })).toBeNull();
+    expect(screen.queryByRole("option", { name: /Cadastrar/ })).toBeNull();
   });
 
   it("continua listando resultados junto da opção de cadastrar", () => {
@@ -69,8 +124,9 @@ describe("Criação no contexto", () => {
     );
 
     fireEvent.focus(screen.getByRole("combobox"));
-    expect(screen.getAllByRole("option")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: /Cadastrar novo cliente/ })).toBeTruthy();
+    // Dois clientes + o cadastro no fim da lista.
+    expect(screen.getAllByRole("option")).toHaveLength(3);
+    expect(screen.getByRole("option", { name: /Cadastrar novo cliente/ })).toBeTruthy();
   });
 });
 
