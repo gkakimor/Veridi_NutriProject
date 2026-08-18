@@ -15,6 +15,7 @@ import {
   updateFormulationVersion,
 } from "../src/modules/formulations/formulations.service.js";
 import { nextSequenceCode } from "../src/lib/sequence-code.js";
+import { seedIndustrial } from "./demo-industrial.js";
 import {
   activateIndustrialCostVersion,
   createIndustrialCostVersion,
@@ -385,6 +386,18 @@ async function main(): Promise<void> {
       await approveProject(project.id, {}, actor);
     }
   }
+
+  // Metade industrial: compra, recebimento, qualidade, produção, expedição e
+  // faturamento em cima do primeiro sabor.
+  await seedIndustrial(prisma, actor, {
+    customerId: customer.id,
+    supplierId: suppliers[0]!.id,
+    productAId: first.productId,
+    materiaPrimaId: betaAlanina.id,
+    materiaPrimaSecundariaId: cafeina.id,
+    materialClienteId: aromaCliente.id,
+    embalagemId: pote.id,
+  });
 
   const summary = await prisma.projectProduct.findMany({
     where: { projectId: project.id },
