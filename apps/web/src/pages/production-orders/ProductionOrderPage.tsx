@@ -257,6 +257,9 @@ export function ProductionOrderPage() {
   }, [productId]);
 
   const status: ProductionOrderStatus = productionOrder?.status ?? "DRAFT";
+  // Ordem encerrada não pede material: o que a tela recalcula é o estoque de
+  // hoje, e apresentar isso como pendência gera compra indevida.
+  const ordemEncerrada = status === "COMPLETED" || status === "CANCELLED";
   const isDraft = isNew || status === "DRAFT";
   const isCancellable = !isNew && (status === "DRAFT" || status === "PLANNED" || status === "RELEASED");
   const isPlannable = !isNew && status === "DRAFT";
@@ -859,16 +862,31 @@ export function ProductionOrderPage() {
                       <td>{requirement.available}</td>
                       <td>{requirement.onOrder}</td>
                       <td>
+                        {/* OP encerrada: a falta é recálculo contra o estoque
+                            de HOJE, não pendência da ordem. Mostrar como
+                            alerta acionável já mandou gente abrir compra de
+                            material que a ordem consumiu semanas atrás. */}
                         <span
                           className={
-                            requirement.availabilityStatus === "AVAILABLE"
-                              ? "badge badge--active"
-                              : "badge badge--warn"
+                            ordemEncerrada
+                              ? "badge badge--neutral"
+                              : requirement.availabilityStatus === "AVAILABLE"
+                                ? "badge badge--active"
+                                : "badge badge--warn"
                           }
                         >
                           {requirement.shortage}
                         </span>
-                        {requirement.supplyResponsibility === "CUSTOMER" &&
+                        {ordemEncerrada && Number(requirement.shortage) > 0 && (
+                          <>
+                            <br />
+                            <span className="field__hint">
+                              Referência histórica — a ordem já foi encerrada.
+                            </span>
+                          </>
+                        )}
+                        {!ordemEncerrada &&
+                          requirement.supplyResponsibility === "CUSTOMER" &&
                           Number(requirement.shortage) > 0 && (
                             <>
                               <br />
@@ -877,7 +895,8 @@ export function ProductionOrderPage() {
                               <span className="field__hint">Aguardando material do cliente</span>
                             </>
                           )}
-                        {requirement.supplyResponsibility !== "CUSTOMER" &&
+                        {!ordemEncerrada &&
+                          requirement.supplyResponsibility !== "CUSTOMER" &&
                           Number(requirement.shortage) > 0 && (
                             <>
                               <br />
