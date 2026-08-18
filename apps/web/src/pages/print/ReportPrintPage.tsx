@@ -338,7 +338,7 @@ export function ReportPrintPage() {
                 {data.header.map((column, position) => (
                   // Valor desconhecido continua vindo como "—" do próprio
                   // read model: o papel nunca inventa zero.
-                  <td key={column}>{cells[position] ?? ""}</td>
+                  <td key={column}>{cells[position]?.trim() || "—"}</td>
                 ))}
               </tr>
             );
@@ -346,7 +346,7 @@ export function ReportPrintPage() {
           return [
             <tr key={`${key}-principal`} className="print-row--primary">
               {primaryIndexes.map((position) => (
-                <td key={data.header[position]}>{cells[position] ?? ""}</td>
+                <td key={data.header[position]}>{cells[position]?.trim() || "—"}</td>
               ))}
             </tr>,
             <tr key={`${key}-detalhe`} className="print-row--detail">
@@ -355,7 +355,7 @@ export function ReportPrintPage() {
                   {detailIndexes.map((position) => (
                     <div key={data.header[position]}>
                       <dt>{data.header[position]}</dt>
-                      <dd>{cells[position] ?? ""}</dd>
+                      <dd>{cells[position]?.trim() || "—"}</dd>
                     </div>
                   ))}
                 </dl>

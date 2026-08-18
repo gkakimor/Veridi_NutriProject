@@ -710,6 +710,10 @@
 .doc-body {
   max-width: 1040px;
   display: grid;
+  /* Grid sem trilha declarada resolve em `max-content`: a seção mais larga
+     estica o container, o `.table-container` infla junto e o scroll dele
+     nunca engata — a tabela some para fora da tela sem barra nenhuma. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-5);
 }
 

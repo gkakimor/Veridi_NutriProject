@@ -20,7 +20,10 @@
   --surface: #ffffff;
   --ink: #17251e;
   --ink-2: #5d6c63;
-  --ink-3: #8b978f;
+  /* 4,6:1 sobre canvas. O tom anterior (#8b978f) ficava em 2,84:1 e era
+     usado em breadcrumb, subtítulo e rodapé de impresso — texto que carrega
+     informação, não decoração. */
+  --ink-3: #6b7972;
   --line: #e3e9e2;
   --line-strong: #cfd8cf;
 
