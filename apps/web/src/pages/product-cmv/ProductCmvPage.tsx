@@ -13,6 +13,7 @@ import {
   INDUSTRIAL_COST_QUALITY_HINTS,
   INDUSTRIAL_COST_QUALITY_LABELS,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
+  INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
@@ -66,6 +67,22 @@ function qualityBadgeClass(quality: string): string {
  * Material traz a fonte do custo; recurso e premissa trazem a natureza do
  * que está sendo cobrado. Nenhum dos dois aparece como enum cru.
  */
+/**
+ * Unidade como se lê, não como se guarda.
+ *
+ * Material traz a unidade de estoque, que já é humana ("kg", "un"). Recurso
+ * industrial traz a unidade da tarifa, que é enum — e "HOUR" no meio de uma
+ * tabela de custos é vocabulário de banco de dados, não de fábrica.
+ */
+function describeUnit(component: CmvComponentDTO): string {
+  if (!component.unitCode) return "—";
+  const tarifa =
+    INDUSTRIAL_RATE_UOM_LABELS[
+      component.unitCode as keyof typeof INDUSTRIAL_RATE_UOM_LABELS
+    ];
+  return tarifa ?? component.unitCode;
+}
+
 function describeOrigin(component: CmvComponentDTO): string {
   if (component.customerSupplied) return "Fornecido pelo cliente";
   if (component.costSource) {
@@ -131,7 +148,10 @@ export function ProductCmvPage() {
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Falha ao calcular o CMV");
-        setData(null);
+        // Erro de quantidade não muda de produto: apagar a resposta anterior
+        // trocava o título por "CMV · —" e dava a impressão de ter saído da
+        // tela. O que precisa sumir é o resultado, não a identidade.
+        setData((atual) => (atual ? { ...atual, simulation: null } : null));
       } finally {
         setLoading(false);
       }
@@ -383,6 +403,17 @@ export function ProductCmvPage() {
                   Margem, comissão e markup vêm calculados da Precificação — esta tela não refaz a
                   conta.
                 </p>
+                {/* O preço vigente foi fechado sobre o cálculo daquele momento.
+                    Se aquela base era incompleta, a margem exibida ao lado de um
+                    CMV completo passa confiança que ela não tem. */}
+                {tier && tier.costQuality !== simulation?.quality && (
+                  <p className="form-alert" role="status">
+                    Esta faixa foi definida sobre um custo industrial{" "}
+                    {INDUSTRIAL_COST_QUALITY_LABELS[tier.costQuality].toLowerCase()}, diferente da
+                    base usada nesta simulação. Para comparar preço e custo na mesma realidade
+                    econômica, gere uma precificação a partir do cálculo atual.
+                  </p>
+                )}
               </>
             ) : (
               <p className="field__hint">
@@ -453,7 +484,7 @@ export function ProductCmvPage() {
                               )}
                             </td>
                             <td className="is-numeric">{component.requiredQuantity ?? "—"}</td>
-                            <td>{component.unitCode ?? "—"}</td>
+                            <td>{describeUnit(component)}</td>
                             <td>{describeOrigin(component)}</td>
                             <td className="is-numeric">
                               {component.unitCost ? formatBRL(component.unitCost) : "—"}

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { ProjectDTO, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
+import type { ProjectDTO, ProjectStatus, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
 import { QUOTE_STATUS_LABELS, QUOTE_PRICE_SOURCE_LABELS } from "@veridi/shared";
 import {
   acceptQuoteVersion,
@@ -63,12 +63,22 @@ function quoteBadgeClass(status: QuoteVersionDTO["status"]): string {
 export function QuoteVersionsSection({
   project,
   canEdit,
+  projectStatus,
   onChanged,
 }: {
   project: ProjectDTO;
   canEdit: boolean;
+  /** Só para explicar por que a ação sumiu — nunca para liberar a ação. */
+  projectStatus?: ProjectStatus;
   onChanged: () => void;
 }) {
+  /*
+   * Projeto aprovado ou cancelado é histórico e não recebe proposta nova.
+   * O botão existia mesmo assim, e a recusa só aparecia DEPOIS do clique —
+   * no fim de um caminho em que a pessoa já tinha conferido custo e preço.
+   * Ação impossível não deve ser oferecida; a explicação toma o lugar dela.
+   */
+  const projectOpen = projectStatus !== "APPROVED" && projectStatus !== "CANCELLED";
   const versions = project.quoteVersions;
   const draft = versions.find((quote) => quote.status === "DRAFT") ?? null;
 
@@ -113,7 +123,7 @@ export function QuoteVersionsSection({
   }, [versions, draft, openId]);
 
   const open = versions.find((quote) => quote.id === openId) ?? null;
-  const editable = canEdit && open?.status === "DRAFT";
+  const editable = canEdit && projectOpen && open?.status === "DRAFT";
 
   // Voltar do CMV traz a linha de volta ao campo de visão — a versão pode ter
   // muitas linhas, e "está aberta" não é o mesmo que "está visível".
@@ -289,7 +299,7 @@ export function QuoteVersionsSection({
       </div>
 
       <div className="line-actions">
-        {canEdit && (
+        {canEdit && projectOpen && (
           <button
             type="button"
             className="btn btn--secondary"
@@ -305,6 +315,14 @@ export function QuoteVersionsSection({
           </button>
         )}
       </div>
+
+      {canEdit && !projectOpen && (
+        <p className="field__hint">
+          {projectStatus === "APPROVED"
+            ? "Projeto aprovado é histórico: a proposta aceita ficou registrada como está. Para propor de novo ao mesmo cliente, crie um projeto novo."
+            : "Projeto cancelado é histórico e não recebe proposta nova."}
+        </p>
+      )}
 
       {open && (
         <div className="quote-workspace">

@@ -278,6 +278,43 @@ describe("Sugestão de faixa na linha do orçamento", () => {
   });
 });
 
+describe("Projeto fechado e proposta nova", () => {
+  it("projeto aprovado não oferece criar versão — e diz por quê", async () => {
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([]));
+    render(
+      <MemoryRouter>
+        <QuoteVersionsSection
+          project={project([quote({ status: "ACCEPTED" })])}
+          canEdit
+          projectStatus="APPROVED"
+          onChanged={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    // A recusa vinha depois do clique, no fim de um caminho já percorrido.
+    expect(screen.queryByRole("button", { name: /Criar nova versão|Abrir rascunho/ })).toBeNull();
+    expect(screen.getByText(/Projeto aprovado é histórico/)).toBeInTheDocument();
+    expect(screen.getByText(/crie um projeto novo/i)).toBeInTheDocument();
+  });
+
+  it("projeto em negociação continua oferecendo a versão nova", () => {
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([]));
+    render(
+      <MemoryRouter>
+        <QuoteVersionsSection
+          project={project([])}
+          canEdit
+          projectStatus="QUOTE"
+          onChanged={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Criar nova versão" })).toBeInTheDocument();
+  });
+});
+
 describe("Acesso ao CMV a partir do projeto", () => {
   it("cada produto do projeto tem um caminho direto para o CMV", () => {
     const produto: ProjectProductDTO = {

@@ -297,7 +297,12 @@ export function ProjectDetailPage() {
           onChanged={load}
         />
 
-        <QuoteVersionsSection project={project} canEdit={canEdit} onChanged={load} />
+        <QuoteVersionsSection
+          project={project}
+          canEdit={canEdit}
+          projectStatus={project.status}
+          onChanged={load}
+        />
 
         <FormSection
           title="Amostras / testes"

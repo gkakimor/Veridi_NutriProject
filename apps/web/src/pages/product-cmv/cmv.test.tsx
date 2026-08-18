@@ -367,6 +367,96 @@ describe("Tela de CMV", () => {
     expect(voltar).toHaveAttribute("href", "/comercial/projetos/prj-1");
   });
 
+  it("unidade de recurso aparece em português, não como enum de tarifa", async () => {
+    vi.mocked(getProductCmv).mockResolvedValue(
+      cmv({
+        simulation: {
+          ...cmv().simulation!,
+          components: [
+            {
+              group: "INDUSTRIAL_RESOURCE",
+              itemId: null,
+              code: "LABOR",
+              name: "DEMO — Mão de obra de produção",
+              requiredQuantity: "6",
+              unitCode: "HOUR",
+              costSource: null,
+              unitCost: "38.0000",
+              totalCost: "228.0000",
+              customerSupplied: false,
+            },
+          ],
+        },
+      }),
+    );
+    renderPage("/produtos/prod-1/cmv?quantity=1000");
+
+    await screen.findByText("Recursos industriais");
+    const linha = screen.getByText(/Mão de obra de produção/).closest("tr")!;
+    expect(within(linha).getByText("hora")).toBeInTheDocument();
+    expect(within(linha).queryByText("HOUR")).not.toBeInTheDocument();
+  });
+
+  it("erro de quantidade não faz a tela parecer outro produto", async () => {
+    vi.mocked(getProductCmv).mockResolvedValueOnce(cmv());
+    renderPage("/produtos/prod-1/cmv?quantity=1000");
+    await screen.findByText(/PROD-000003/);
+
+    vi.mocked(getProductCmv).mockRejectedValueOnce(
+      new Error("Informe uma quantidade maior que zero para simular o CMV."),
+    );
+    fireEvent.change(screen.getByLabelText("Quantidade a simular"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Calcular CMV" }));
+
+    await screen.findByText("Informe uma quantidade maior que zero para simular o CMV.");
+    // O produto continua sendo o mesmo: o que falhou foi a quantidade.
+    expect(screen.getByText(/PROD-000003/)).toBeInTheDocument();
+    expect(screen.queryByText("CMV total")).not.toBeInTheDocument();
+  });
+
+  it("avisa quando o preço vigente foi fechado sobre outra base de custo", async () => {
+    vi.mocked(getProductPricing).mockResolvedValue({
+      productId: "prod-1",
+      productCode: "PROD-000003",
+      productName: "Whey Protein DEMO",
+      draft: null,
+      current: {
+        id: "prec-1",
+        tiers: [
+          {
+            id: "tier-1000",
+            quantity: "1000",
+            uomCode: "un",
+            costQuality: "PARTIAL",
+            commissionPercent: "5",
+            commissionPerUnit: null,
+            contributionPerUnit: null,
+            contributionMarginPercent: null,
+            markupPercent: null,
+          },
+        ],
+      },
+      versions: [],
+    } as never);
+    vi.mocked(getProductCmv).mockResolvedValue(
+      cmv({
+        pricing: {
+          pricingVersionId: "prec-1",
+          pricingVersionLabel: "PREC-000001 · V1",
+          tierId: "tier-1000",
+          tierQuantity: "1000",
+          unitPrice: "38.9000",
+          availableQuantities: ["1000"],
+        },
+      }),
+    );
+    renderPage("/produtos/prod-1/cmv?quantity=1000");
+
+    // Preço completo ao lado de custo completo passaria uma confiança que a
+    // faixa — fechada sobre custo parcial — não tem.
+    await screen.findByText(/Esta faixa foi definida sobre um custo industrial parcial/);
+  });
+
   it("sem base de custo a tela explica em vez de mostrar número", async () => {
     vi.mocked(getProductCmv).mockResolvedValue(
       cmv({
