@@ -86,6 +86,17 @@ export function IndustrialCostPage() {
   const [saving, setSaving] = useState(false);
 
   const [activateConfirm, setActivateConfirm] = useState(false);
+  const [newVersionConfirm, setNewVersionConfirm] = useState(false);
+  /*
+   * Qual versão está sendo lida.
+   *
+   * A tela abria sempre o rascunho e não oferecia caminho de volta para a
+   * versão ATIVA — depois de criar uma V2, a estrutura que vale na produção
+   * simplesmente sumia da vista, sem link, sem histórico clicável. Rascunho
+   * segue sendo o padrão (é o que está em edição), mas agora é uma escolha
+   * visível, não um destino sem retorno.
+   */
+  const [lendoAtiva, setLendoAtiva] = useState(false);
   const [referenceQuantity, setReferenceQuantity] = useState("");
   const [category, setCategory] = useState<IndustrialCostCategory>("SECONDARY_PACKAGING");
   const [description, setDescription] = useState("");
@@ -144,7 +155,9 @@ export function IndustrialCostPage() {
   if (!data || !productId) return <p>Carregando…</p>;
 
   // A versão em edição é o rascunho; sem rascunho, mostra-se a vigente.
-  const version: IndustrialCostVersionDTO | null = data.draft ?? data.current;
+  const version: IndustrialCostVersionDTO | null =
+    lendoAtiva && data.current ? data.current : (data.draft ?? data.current);
+  const podeAlternar = Boolean(data.draft && data.current);
 
   // Primeira estrutura do produto precisa de base de produção: nunca se
   // assume 1000. Sem base informada nem sugerida, o botão fica bloqueado —
@@ -240,16 +253,22 @@ export function IndustrialCostPage() {
                   }
                 : {})}
               disabled={saving || missingProductionBase || missingActiveFormulation}
-              onClick={() =>
-                void run(() =>
-                  createIndustrialCostVersion(
-                    productId,
-                    referenceQuantity.trim()
-                      ? { referenceOutputQuantity: referenceQuantity.trim() }
-                      : {},
-                  ),
-                )
-              }
+              onClick={() => {
+                // Criar versão grava documento com código, autor e data. Sem
+                // confirmação, quem só queria olhar saía com uma V2 no banco.
+                if (data.versions.length === 0) {
+                  void run(() =>
+                    createIndustrialCostVersion(
+                      productId,
+                      referenceQuantity.trim()
+                        ? { referenceOutputQuantity: referenceQuantity.trim() }
+                        : {},
+                    ),
+                  );
+                  return;
+                }
+                setNewVersionConfirm(true);
+              }}
             >
               {data.versions.length === 0 ? "Criar estrutura de custos" : "Nova versão"}
             </button>
@@ -293,6 +312,27 @@ export function IndustrialCostPage() {
 
       <div className="doc-body">
       <ProductRelatedLinks productId={productId} current="costs" />
+
+        {/* Duas versões coexistindo: a que vale na produção e a que está sendo
+            escrita. Sem este seletor, criar um rascunho escondia a ativa. */}
+        {podeAlternar && (
+          <div className="toolbar__scope">
+            <button
+              type="button"
+              className={!lendoAtiva ? "btn btn--secondary btn--sm" : "btn btn--ghost btn--sm"}
+              onClick={() => setLendoAtiva(false)}
+            >
+              Rascunho {data.draft?.label}
+            </button>
+            <button
+              type="button"
+              className={lendoAtiva ? "btn btn--secondary btn--sm" : "btn btn--ghost btn--sm"}
+              onClick={() => setLendoAtiva(true)}
+            >
+              Ativa {data.current?.label}
+            </button>
+          </div>
+        )}
         {error && <p className="form-alert">{error}</p>}
 
         {!version && (
@@ -889,6 +929,39 @@ export function IndustrialCostPage() {
           </div>
         </FormSection>
       </div>
+
+        <ConfirmDialog
+          open={newVersionConfirm}
+          title="Criar uma nova versão da estrutura de custos?"
+          confirmLabel="Criar versão"
+          cancelLabel="Voltar"
+          confirmTone="accent"
+          message={
+            <>
+              <p>
+                A nova versão nasce como <strong>rascunho</strong>, com código e autoria próprios,
+                e passa a ser o que esta tela abre por padrão.
+              </p>
+              <p>
+                A estrutura ativa continua valendo na produção e segue acessível pelo seletor de
+                versões.
+              </p>
+            </>
+          }
+          onCancel={() => setNewVersionConfirm(false)}
+          onConfirm={() => {
+            setNewVersionConfirm(false);
+            setLendoAtiva(false);
+            void run(() =>
+              createIndustrialCostVersion(
+                productId,
+                referenceQuantity.trim()
+                  ? { referenceOutputQuantity: referenceQuantity.trim() }
+                  : {},
+              ),
+            );
+          }}
+        />
 
       {version && (
         <ConfirmDialog

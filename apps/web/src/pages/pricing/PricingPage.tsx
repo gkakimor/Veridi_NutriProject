@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { EntityLink } from "../../components/EntityLink";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
@@ -165,6 +165,24 @@ export function PricingPage() {
             <dt>Lote mínimo do produto</dt>
             <dd>{pricing.minimumBatchQuantity ?? "—"}</dd>
           </dl>
+
+          {/* Preço fechado sobre custo incompleto continua sendo preço válido —
+              foi acordado assim. O que não pode é a tela deixar isso implícito
+              e depois o CMV do mesmo produto aparecer "Completo" ao lado, sem
+              ninguém entender a diferença. */}
+          {(pricing.costQuality === "PARTIAL" || pricing.costQuality === "NO_COST") && (
+            <p className="form-alert" role="status">
+              Esta precificação foi fechada sobre{" "}
+              {INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality].toLowerCase()} — por isso margem
+              e markup aparecem como "—" nas faixas. Um cálculo de custo mais completo do mesmo
+              produto não muda esta versão: preço acordado não se reescreve. Para precificar sobre
+              a base atual, crie uma nova versão a partir do cálculo vigente em{" "}
+              <Link to={`/produtos/${pricing.productId}/custos`}>
+                Custos industriais → Cálculos salvos
+              </Link>
+              .
+            </p>
+          )}
 
           {pricing.hasCustomerSuppliedMaterials && (
             <p className="field__hint">
