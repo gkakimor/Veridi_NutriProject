@@ -1353,3 +1353,20 @@ td .entity-select {
   color: var(--v-green-700);
   font-weight: var(--fw-medium);
 }
+
+/* Sugestão de preço da linha do orçamento — informa, nunca aplica sozinha. */
+.table tr.quote-suggestion > td {
+  background: var(--selected-bg);
+  border-top: none;
+  padding-top: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.quote-suggestion__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}

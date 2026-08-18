@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import type { ProjectDTO, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
 import { QUOTE_STATUS_LABELS, QUOTE_PRICE_SOURCE_LABELS } from "@veridi/shared";
 import {
@@ -37,6 +38,21 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
+/**
+ * Faixa vigente para EXATAMENTE esta quantidade.
+ *
+ * Comparação numérica, não textual: "1000" e "1000.000000" são a mesma
+ * quantidade e vêm do banco em formatos diferentes. O que nunca acontece é
+ * casar por aproximação — faixa é acordo comercial registrado para uma
+ * quantidade, e escolher a vizinha inventaria negociação.
+ */
+function exactTier(pricing: PricingVersionDTO | null, quantity: string | null) {
+  if (!pricing || !quantity) return null;
+  const alvo = Number(quantity);
+  if (!Number.isFinite(alvo)) return null;
+  return pricing.tiers.find((tier) => Number(tier.quantity) === alvo) ?? null;
+}
+
 function quoteBadgeClass(status: QuoteVersionDTO["status"]): string {
   if (status === "ACCEPTED") return "badge badge--active";
   if (status === "REJECTED") return "badge badge--err";
@@ -56,7 +72,19 @@ export function QuoteVersionsSection({
   const versions = project.quoteVersions;
   const draft = versions.find((quote) => quote.status === "DRAFT") ?? null;
 
-  const [openId, setOpenId] = useState<string | null>(draft?.id ?? versions.at(-1)?.id ?? null);
+  /*
+   * Quem volta da simulação de CMV volta para a versão de onde saiu — e para
+   * a linha de onde saiu. Sem isso, "voltar ao orçamento" devolveria a
+   * pessoa ao rascunho corrente, que pode não ser a versão que ela estava
+   * lendo, e a busca recomeçaria do zero.
+   */
+  const [params] = useSearchParams();
+  const returningToQuoteId = params.get("quoteVersionId");
+  const returningToLineId = params.get("quoteLineId");
+
+  const [openId, setOpenId] = useState<string | null>(
+    returningToQuoteId ?? draft?.id ?? versions.at(-1)?.id ?? null,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addProductId, setAddProductId] = useState("");
@@ -68,6 +96,8 @@ export function QuoteVersionsSection({
   } | null>(null);
   const [pricingLineId, setPricingLineId] = useState<string | null>(null);
   const [pricingOptions, setPricingOptions] = useState<PricingVersionDTO | null>(null);
+  /** Precificação ativa por linha — consultada, nunca aplicada sozinha. */
+  const [tierByLine, setTierByLine] = useState<Record<string, PricingVersionDTO | null>>({});
 
   /*
    * Abre a versão pedida — e só escolhe sozinho quando ninguém pediu nada.
@@ -84,6 +114,46 @@ export function QuoteVersionsSection({
 
   const open = versions.find((quote) => quote.id === openId) ?? null;
   const editable = canEdit && open?.status === "DRAFT";
+
+  // Voltar do CMV traz a linha de volta ao campo de visão — a versão pode ter
+  // muitas linhas, e "está aberta" não é o mesmo que "está visível".
+  useEffect(() => {
+    if (!returningToLineId) return;
+    document.getElementById(`quote-line-${returningToLineId}`)?.scrollIntoView({ block: "center" });
+  }, [returningToLineId, openId]);
+
+  /*
+   * Consulta a precificação vigente de cada linha assim que produto e
+   * quantidade existem. É CONSULTA: o preço da linha continua sendo o que
+   * alguém decidiu, e nada aqui escreve `unitPrice`.
+   */
+  const linesSignature = (open?.lines ?? [])
+    .map((line) => `${line.id}:${line.quotedQuantity ?? ""}`)
+    .join("|");
+  useEffect(() => {
+    if (!open || open.status !== "DRAFT") {
+      setTierByLine({});
+      return;
+    }
+    let active = true;
+    const alvo = open.lines.filter((line) => line.quotedQuantity);
+    void Promise.all(
+      alvo.map(async (line) => {
+        // Sem precificação ativa (ou sem permissão) a resposta é ausência de
+        // opção, não erro técnico.
+        const options = await getQuotePricingOptions(line.id).catch(() => null);
+        return [line.id, options] as const;
+      }),
+    ).then((pares) => {
+      if (active) setTierByLine(Object.fromEntries(pares));
+    });
+    return () => {
+      active = false;
+    };
+    // `linesSignature` cobre produto+quantidade de cada linha: mudar a
+    // quantidade reconsulta, digitar em outro campo não.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open?.id, open?.status, linesSignature]);
 
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
@@ -274,8 +344,19 @@ export function QuoteVersionsSection({
                     </td>
                   </tr>
                 )}
-                {open.lines.map((line) => (
-                  <tr key={line.id}>
+                {open.lines.map((line) => {
+                  const options = tierByLine[line.id] ?? null;
+                  const tier = exactTier(options, line.quotedQuantity);
+                  const cmvHref =
+                    `/produtos/${line.productId}/cmv` +
+                    `?quantity=${encodeURIComponent(line.quotedQuantity ?? "")}` +
+                    `&projectId=${project.id}&quoteVersionId=${open.id}&quoteLineId=${line.id}`;
+                  return (
+                    <Fragment key={line.id}>
+                  <tr
+                    id={`quote-line-${line.id}`}
+                    className={returningToLineId === line.id ? "is-selected" : undefined}
+                  >
                     <td>
                       <EntityLink
                         kind="product"
@@ -383,7 +464,47 @@ export function QuoteVersionsSection({
                       </td>
                     )}
                   </tr>
-                ))}
+
+                  {/* Sugestão de preço: informa e oferece: nunca escreve o
+                      preço da linha sozinha. Preço só muda por decisão de
+                      quem negocia — faixa explícita ou manual. */}
+                  {editable && line.quotedQuantity && (
+                    <tr className="quote-suggestion">
+                      <td colSpan={7}>
+                        {tier && tier.selectedUnitPrice ? (
+                          <div className="quote-suggestion__row">
+                            <span>
+                              Existe uma precificação vigente para {tier.quantity} {tier.uomCode}:{" "}
+                              <strong>{formatBRL(tier.selectedUnitPrice)}</strong> / {tier.uomCode}.
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn--secondary btn--sm"
+                              disabled={saving}
+                              onClick={() => void run(() => applyQuotePricing(line.id, tier.id))}
+                            >
+                              Aplicar preço calculado
+                            </button>
+                            <Link className="btn btn--ghost btn--sm" to={cmvHref}>
+                              Simular CMV
+                            </Link>
+                          </div>
+                        ) : (
+                          <div className="quote-suggestion__row">
+                            <span>
+                              Não existe precificação vigente para esta quantidade.
+                            </span>
+                            <Link className="btn btn--ghost btn--sm" to={cmvHref}>
+                              Simular CMV
+                            </Link>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr>
