@@ -4,12 +4,9 @@ import { useNavigate } from "react-router-dom";
 import type { ReceiptDTO } from "@veridi/shared";
 import { RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
 import { listReceipts } from "../../lib/receiving-api";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /** Compras → Recebimentos. Receipt e historico/somente-leitura apos confirmado. */
 export function ReceiptsPage() {

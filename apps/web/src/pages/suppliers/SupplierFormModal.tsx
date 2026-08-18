@@ -7,6 +7,7 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
 import { SupplierItemsSection } from "../../components/SupplierItemsSection";
+import { formatDate } from "../../lib/dates";
 
 interface SupplierFormModalProps {
   mode: "create" | "edit";
@@ -120,7 +121,7 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
       <>
         <span className="modal-fullscreen__foot-meta">
           Última alteração:{" "}
-          {supplier ? new Date(supplier.updatedAt).toLocaleDateString("pt-BR") : "—"}
+          {supplier ? formatDate(supplier.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>

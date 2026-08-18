@@ -6,6 +6,7 @@ import { COA_STATUSES, COA_STATUS_LABELS, LOT_STATUS_LABELS, ownerLabel } from "
 import { approveCoa, listQualityQueue, rejectCoa } from "../../lib/attachments-api";
 import { useAuth } from "../../app/AuthProvider";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
 
@@ -23,10 +24,6 @@ function coaBadgeClass(status: CoaStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Qualidade → Documentos / CoA.

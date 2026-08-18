@@ -8,11 +8,8 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Detalhe de Receipt — o recebimento físico é sempre histórico/somente

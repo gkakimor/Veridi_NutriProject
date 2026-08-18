@@ -6,15 +6,12 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listCustomerMaterials } from "../../lib/customer-materials-api";
 import { listCustomers } from "../../lib/customers-api";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 type StatusFilter = LotStatus | "all";
 
 const PAGE_SIZE = 20;
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
   if (isExpired) return "badge badge--err";

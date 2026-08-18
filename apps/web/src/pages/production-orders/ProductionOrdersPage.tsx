@@ -8,6 +8,7 @@ import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filter
 import type { ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
 import { PRODUCTION_ORDER_STATUSES, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
 import { listProductionOrders } from "../../lib/production-orders-api";
+import { formatDate } from "../../lib/dates";
 
 type ActiveFilter = ProductionOrderStatus | "all";
 
@@ -29,10 +30,6 @@ function statusBadgeClass(status: ProductionOrderStatus): string {
     case "CANCELLED":
       return "badge badge--err";
   }
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("pt-BR");
 }
 
 function materialsLabel(order: ProductionOrderDTO): string {

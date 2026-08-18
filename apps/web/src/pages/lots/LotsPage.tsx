@@ -8,6 +8,7 @@ import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 type StatusFilter = LotStatus | "all";
 type OwnerFilter = InventoryOwnerType | "all";
@@ -28,10 +29,6 @@ function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Estoque → Lotes. `Recebido` e a quantidade ORIGINAL do recebimento — nao

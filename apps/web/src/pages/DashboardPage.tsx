@@ -24,6 +24,7 @@ import { PERIOD_PRESET_LABELS, dateInputValueOffset, resolvePeriodBounds } from 
 import { formatBRL } from "../lib/currency";
 import { useAuth } from "../app/AuthProvider";
 import "./dashboard.css";
+import { formatDate } from "../lib/dates";
 
 function severityBadgeClass(severity: AttentionSeverity): string {
   switch (severity) {
@@ -36,10 +37,6 @@ function severityBadgeClass(severity: AttentionSeverity): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("pt-BR");
@@ -121,7 +118,7 @@ function MovementActivityChart({ points }: { points: MovementActivityPointDTO[] 
                     height={barHeight}
                     fill={series.color}
                   >
-                    <title>{`${new Date(`${point.date}T12:00:00`).toLocaleDateString("pt-BR")} — ${series.label}: ${value}`}</title>
+                    <title>{`${formatDate(`${point.date}T12:00:00`)} — ${series.label}: ${value}`}</title>
                   </rect>
                 );
               })}

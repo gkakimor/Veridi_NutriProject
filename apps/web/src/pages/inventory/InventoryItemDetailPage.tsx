@@ -9,11 +9,8 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function lotStatusBadgeClass(status: string, isExpired: boolean): string {
   if (isExpired) return "badge badge--err";

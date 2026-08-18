@@ -45,6 +45,7 @@ import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 interface FormulationVersionOption {
   id: string;
@@ -987,7 +988,7 @@ export function ProductionOrderPage() {
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
                       <td>
-                        {line.expiryDate ? new Date(line.expiryDate).toLocaleDateString("pt-BR") : "—"}
+                        {formatDate(line.expiryDate)}
                       </td>
                       <td className="is-numeric">
                         {line.quantity} {line.unitCode}
@@ -1034,7 +1035,7 @@ export function ProductionOrderPage() {
                         </td>
                         <td>{line.lotId ? line.lotCode : "— (sem controle de lote)"}</td>
                         <td>
-                          {line.expiryDate ? new Date(line.expiryDate).toLocaleDateString("pt-BR") : "—"}
+                          {formatDate(line.expiryDate)}
                         </td>
                         <td>{line.location ?? "—"}</td>
                         <td className="is-numeric">

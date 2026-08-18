@@ -28,11 +28,8 @@ import { approveCoa, rejectCoa } from "../../lib/attachments-api";
 import { useAuth } from "../../app/AuthProvider";
 import { QrCode } from "../../components/QrCode";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -75,6 +72,16 @@ export function LotDetailPage() {
   const [productionCost, setProductionCost] = useState<ProductionOrderMaterialCostDTO | null>(null);
 
   const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
+  /*
+   * De onde veio a recusa.
+   *
+   * O lote é uma página longa e o alerta morava só no topo: liberar sem CoA
+   * aprovado devolvia um 400 com a razão certa, o alerta aparecia centenas
+   * de pixels acima da Qualidade, e da cadeira parecia que o clique não fez
+   * nada — justamente no controle que existe para impedir uso de material
+   * não liberado.
+   */
+  const [errorScope, setErrorScope] = useState<"geral" | "qualidade">("geral");
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [blockReason, setBlockReason] = useState("");
 
@@ -137,11 +144,13 @@ export function LotDetailPage() {
     setReleaseDialogOpen(false);
     setSaving(true);
     setError(null);
+    setErrorScope("geral");
     try {
       const updated = await releaseLot(id);
       setLot(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao liberar lote");
+      setErrorScope("qualidade");
     } finally {
       setSaving(false);
     }
@@ -157,11 +166,13 @@ export function LotDetailPage() {
     if (!id) return;
     setSaving(true);
     setError(null);
+    setErrorScope("geral");
     try {
       await approveCoa(id);
       await reloadLot();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao aprovar o CoA");
+      setErrorScope("qualidade");
     } finally {
       setSaving(false);
     }
@@ -172,11 +183,13 @@ export function LotDetailPage() {
     setRejectCoaOpen(false);
     setSaving(true);
     setError(null);
+    setErrorScope("geral");
     try {
       await rejectCoa(id, reason);
       await reloadLot();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao rejeitar o CoA");
+      setErrorScope("qualidade");
     } finally {
       setSaving(false);
     }
@@ -186,6 +199,7 @@ export function LotDetailPage() {
     if (!id) return;
     setSaving(true);
     setError(null);
+    setErrorScope("geral");
     try {
       const updated = await blockLot(id, { reason: blockReason.trim() });
       setBlockDialogOpen(false);
@@ -193,6 +207,7 @@ export function LotDetailPage() {
       setLot(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao bloquear lote");
+      setErrorScope("qualidade");
     } finally {
       setSaving(false);
     }
@@ -249,7 +264,11 @@ export function LotDetailPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && errorScope === "geral" && (
+          <p className="form-alert" role="alert">
+            {error}
+          </p>
+        )}
 
         {lot.origin === "PRODUCTION" ? (
           <FormSection title="Identificação">
@@ -514,6 +533,11 @@ export function LotDetailPage() {
         )}
 
         <FormSection title="Qualidade">
+          {error && errorScope === "qualidade" && (
+            <p className="form-alert" role="alert">
+              {error}
+            </p>
+          )}
           <div className="status-line">
             <span className={statusBadgeClass(lot.status, lot.isExpired)}>
               {LOT_STATUS_LABELS[lot.status]}

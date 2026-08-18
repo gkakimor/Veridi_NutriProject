@@ -13,13 +13,10 @@ import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 25;
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function useSupplierOptions() {
   const [suppliers, setSuppliers] = useState<SupplierDTO[]>([]);

@@ -8,6 +8,7 @@ import {
 import { FormSection } from "../../components/FormSection";
 import { prepareTechnicalProduct } from "../../lib/projects-api";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 /**
  * Custo e precificação dentro do projeto.
@@ -122,9 +123,7 @@ export function ProjectCostingSection({
             </dd>
             <dt>Data de referência do custo</dt>
             <dd>
-              {costing.costReferenceDate
-                ? new Date(costing.costReferenceDate).toLocaleDateString("pt-BR")
-                : "—"}
+              {formatDate(costing.costReferenceDate)}
             </dd>
             <dt>Precificação ativa</dt>
             <dd>

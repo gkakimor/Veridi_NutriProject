@@ -14,6 +14,7 @@ import {
 } from "@veridi/shared";
 import { createBilling, listAwaitingBilling, listBillings } from "../../lib/billings-api";
 import { formatBRL } from "../../lib/currency";
+import { formatDate } from "../../lib/dates";
 
 type ActiveFilter = BillingStatus | "all";
 
@@ -30,10 +31,6 @@ function statusBadgeClass(status: BillingStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Comercial → Faturamento. Foco operacional: primeiro o que está

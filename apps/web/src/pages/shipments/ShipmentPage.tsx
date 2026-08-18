@@ -24,6 +24,7 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 function statusBadgeClass(status: ShipmentStatus): string {
   switch (status) {
@@ -36,10 +37,6 @@ function statusBadgeClass(status: ShipmentStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";

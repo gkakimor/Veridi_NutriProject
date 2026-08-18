@@ -24,6 +24,7 @@ import {
   deletePricingTier,
   getPricingVersion,
 } from "../../lib/pricing-api";
+import { formatDate } from "../../lib/dates";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
@@ -160,7 +161,7 @@ export function PricingPage() {
             <dt>Formulação</dt>
             <dd>V{pricing.formulationVersionNumber}</dd>
             <dt>Data de referência do custo</dt>
-            <dd>{new Date(pricing.costReferenceDate).toLocaleDateString("pt-BR")}</dd>
+            <dd>{formatDate(pricing.costReferenceDate)}</dd>
             <dt>Qualidade do custo</dt>
             <dd>{INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality]}</dd>
             <dt>Base de produção da estrutura</dt>

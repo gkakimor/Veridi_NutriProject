@@ -8,6 +8,7 @@ import {
 import { listPricingVersions } from "../../lib/pricing-api";
 import { EntityLink } from "../../components/EntityLink";
 import { RecordContextChip } from "../../components/RecordContext";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
 
@@ -192,11 +193,11 @@ export function PricingListPage() {
                 </td>
                 <td className="is-code">{row.calculationCode}</td>
                 <td>{row.industrialCostVersionLabel}</td>
-                <td>{new Date(row.costReferenceDate).toLocaleDateString("pt-BR")}</td>
+                <td>{formatDate(row.costReferenceDate)}</td>
                 <td>{INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality]}</td>
                 <td>{row.tierCount}</td>
                 <td>
-                  {row.activatedAt ? new Date(row.activatedAt).toLocaleDateString("pt-BR") : "—"}
+                  {formatDate(row.activatedAt)}
                 </td>
               </tr>
             ))}

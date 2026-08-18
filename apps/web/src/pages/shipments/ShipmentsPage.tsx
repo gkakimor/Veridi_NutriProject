@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import type { ShipmentDTO, ShipmentStatus } from "@veridi/shared";
 import { SHIPMENT_STATUSES, SHIPMENT_STATUS_LABELS } from "@veridi/shared";
 import { listShipments } from "../../lib/shipments-api";
+import { formatDate } from "../../lib/dates";
 
 type ActiveFilter = ShipmentStatus | "all";
 
@@ -21,10 +22,6 @@ function statusBadgeClass(status: ShipmentStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /** Comercial → Expedições. Documento transacional: linhas abrem página própria. */
 export function ShipmentsPage() {

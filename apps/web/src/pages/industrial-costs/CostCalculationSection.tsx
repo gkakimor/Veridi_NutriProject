@@ -14,6 +14,7 @@ import {
   saveIndustrialCostCalculation,
 } from "../../lib/cost-calculation-api";
 import { createPricingVersion } from "../../lib/pricing-api";
+import { formatDate } from "../../lib/dates";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -185,7 +186,7 @@ export function CostCalculationSection({
                 >
                   <td className="is-code">{row.code}</td>
                   <td>{row.industrialCostVersionLabel}</td>
-                  <td>{new Date(row.costReferenceDate).toLocaleDateString("pt-BR")}</td>
+                  <td>{formatDate(row.costReferenceDate)}</td>
                   <td>{formatDateTime(row.calculatedAt)}</td>
                   <td>{INDUSTRIAL_COST_QUALITY_LABELS[row.quality]}</td>
                   <td className="is-numeric">

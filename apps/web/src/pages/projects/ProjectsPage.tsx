@@ -10,6 +10,7 @@ import { ProjectFormModal } from "./ProjectFormModal";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
 
@@ -24,10 +25,6 @@ function statusBadgeClass(status: ProjectStatus): string {
     default:
       return "badge badge--neutral";
   }
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("pt-BR");
 }
 
 /**

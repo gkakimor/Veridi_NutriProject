@@ -47,6 +47,7 @@ import { FlowContext } from "../../components/FlowContext";
 import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 interface LineRow {
   key: string;
@@ -1316,9 +1317,7 @@ export function CustomerOrderPage() {
                     >
                       <td className="is-code">{shipment.code}</td>
                       <td>
-                        {shipment.shipmentDate
-                          ? new Date(shipment.shipmentDate).toLocaleDateString("pt-BR")
-                          : "—"}
+                        {formatDate(shipment.shipmentDate)}
                       </td>
                       <td className="is-numeric">{shipment.totalQuantity}</td>
                       <td>

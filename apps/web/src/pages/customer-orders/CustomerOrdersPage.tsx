@@ -13,6 +13,7 @@ import { listCustomers } from "../../lib/customers-api";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
+import { formatDate } from "../../lib/dates";
 
 type ActiveFilter = CustomerOrderStatus | "all";
 
@@ -34,10 +35,6 @@ function statusBadgeClass(status: CustomerOrderStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /** Comercial → Pedidos. Documento transacional: linhas abrem página própria, não modal. */
 const FILTER_SCOPE = "customer-orders";

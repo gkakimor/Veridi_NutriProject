@@ -18,13 +18,10 @@ import {
 } from "../../lib/supplier-items-api";
 import { qualificationBadgeClass } from "./SupplierItemsPage";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
-}
-
-function formatDate(value: string | null): string {
-  return value ? new Date(value).toLocaleDateString("pt-BR") : "—";
 }
 
 /**

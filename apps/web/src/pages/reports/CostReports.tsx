@@ -16,6 +16,7 @@ import {
 import { formatUnitCost } from "../../components/CostBreakdown";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 25;
 
@@ -89,9 +90,7 @@ export function IndustrialCostByProductReportPage() {
             <td>{row.activeCostVersionLabel ?? "—"}</td>
             <td className="is-code">{row.calculationCode ?? "—"}</td>
             <td>
-              {row.costReferenceDate
-                ? new Date(row.costReferenceDate).toLocaleDateString("pt-BR")
-                : "—"}
+              {formatDate(row.costReferenceDate)}
             </td>
             <td>{row.quality ? INDUSTRIAL_COST_QUALITY_LABELS[row.quality] : "—"}</td>
             <td>
@@ -204,7 +203,7 @@ export function PricingByProductReportPage() {
             <td>{row.markupPercent === null ? "—" : `${row.markupPercent}%`}</td>
             <td>{formatUnitCost(row.contributionPerUnit)}</td>
             <td>
-              {row.activatedAt ? new Date(row.activatedAt).toLocaleDateString("pt-BR") : "—"}
+              {formatDate(row.activatedAt)}
             </td>
           </tr>
         ))}
@@ -333,8 +332,8 @@ export function QuotePricingAuditReportPage() {
                 ? "—"
                 : `${row.contributionMarginPercent}%`}
             </td>
-            <td>{row.sentAt ? new Date(row.sentAt).toLocaleDateString("pt-BR") : "—"}</td>
-            <td>{row.acceptedAt ? new Date(row.acceptedAt).toLocaleDateString("pt-BR") : "—"}</td>
+            <td>{formatDate(row.sentAt)}</td>
+            <td>{formatDate(row.acceptedAt)}</td>
           </tr>
         ))}
       />

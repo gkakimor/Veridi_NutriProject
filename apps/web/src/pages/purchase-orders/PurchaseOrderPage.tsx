@@ -20,6 +20,7 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { formatDate } from "../../lib/dates";
 
 interface SupplierOption {
   id: string;
@@ -560,7 +561,7 @@ export function PurchaseOrderPage() {
               />
             ) : (
               <p className="field-readonly-value">
-                {new Date(purchaseOrder?.orderDate ?? "").toLocaleDateString("pt-BR")}
+                {formatDate(purchaseOrder?.orderDate ?? "")}
               </p>
             )}
           </div>
@@ -749,7 +750,7 @@ export function PurchaseOrderPage() {
                     <td className="is-code">
                       <EntityLink kind="receipt" id={receipt.id} code={receipt.code} />
                     </td>
-                    <td>{new Date(receipt.receivedAt).toLocaleDateString("pt-BR")}</td>
+                    <td>{formatDate(receipt.receivedAt)}</td>
                     <td>{receipt.invoiceNumber ?? "—"}</td>
                     <td className="is-numeric">{receipt.lineCount}</td>
                     <td className="is-numeric">{receipt.receivedQuantity}</td>

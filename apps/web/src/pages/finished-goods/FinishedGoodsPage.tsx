@@ -7,6 +7,7 @@ import { listFinishedGoods } from "../../lib/finished-goods-api";
 import { listProducts } from "../../lib/products-api";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 type StatusFilter = LotStatus | "all";
 
@@ -25,10 +26,6 @@ function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Custo de material por unidade. O serviço de custo já devolve `null` quando

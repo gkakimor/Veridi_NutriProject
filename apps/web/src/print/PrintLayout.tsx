@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
 import type { ControlledDocumentRevisionDTO } from "@veridi/shared";
 import "./print.css";
+import { formatDate } from "../lib/dates";
 
 /**
  * Esqueleto de impressão (documentos e relatórios).
@@ -71,7 +72,7 @@ export function PrintLayout({
             <dt>Data da revisão</dt>
             <dd>
               {revision?.revisionDate
-                ? new Date(revision.revisionDate).toLocaleDateString("pt-BR")
+                ? formatDate(revision.revisionDate)
                 : "—"}
             </dd>
           </div>
@@ -198,7 +199,7 @@ export function PrintActions({ onBack }: { onBack: () => void }) {
 
 export function formatPrintDate(value: string | null | undefined): string {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
+  return formatDate(value);
 }
 
 export function formatPrintDateTime(value: string | null | undefined): string {

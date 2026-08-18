@@ -26,11 +26,8 @@ import { createSample, listSamples } from "../../lib/samples-api";
 import { useAuth } from "../../app/AuthProvider";
 import { ProjectFormModal } from "./ProjectFormModal";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -395,6 +392,17 @@ export function ProjectDetailPage() {
                   Nova amostra (T{samples.length > 0 ? Math.max(...samples.map((sample) => sample.testSequence)) + 1 : 1})
                 </button>
               </div>
+            )}
+
+          {/* Regra de negócio invisível é regra que exige treinamento: a ação
+              sumia e nada na tela dizia por quê. */}
+          {canCreateSample &&
+            (project.status === "APPROVED" || project.status === "CANCELLED") && (
+              <p className="field__hint">
+                {project.status === "APPROVED"
+                  ? "Amostras são etapa de desenvolvimento: depois da aprovação do projeto elas não são mais criadas aqui. As amostras acima continuam consultáveis."
+                  : "Projeto cancelado não recebe amostra nova. As amostras acima continuam consultáveis."}
+              </p>
             )}
         </FormSection>
 

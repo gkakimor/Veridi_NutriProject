@@ -67,6 +67,8 @@ export function SearchableEntitySelect({
   const input = useRef<HTMLInputElement>(null);
   /** Enquanto o cadastro no contexto está aberto, o popover não volta. */
   const creating = useRef(false);
+  /** A seta já foi usada nesta lista? Ver `handleKeyDown`. */
+  const navigated = useRef(false);
   const [anchor, setAnchor] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
 
   /** Espaço de leitura: ~10 resultados, sem passar do que a janela oferece. */
@@ -193,6 +195,19 @@ export function SearchableEntitySelect({
         setOpen(true);
         return;
       }
+      /*
+       * A lista já abre com o primeiro resultado ativo. Quem digita e usa a
+       * seta espera ENTRAR na lista, não pular o primeiro item: com um único
+       * resultado, a primeira seta caía direto em "+ Cadastrar novo" e o
+       * Enter seguinte abria a criação de um registro que já existe.
+       *
+       * A primeira seta depois de filtrar só confirma o item ativo; a
+       * navegação normal continua a partir daí.
+       */
+      if (!navigated.current) {
+        navigated.current = true;
+        if (event.key === "ArrowDown") return;
+      }
       const step = event.key === "ArrowDown" ? 1 : -1;
       setActiveIndex((current) => {
         if (navigableCount === 0) return 0;
@@ -256,6 +271,16 @@ export function SearchableEntitySelect({
           creating.current = false;
           setQuery(event.target.value);
           setOpen(true);
+          navigated.current = false;
+          /*
+           * Filtrar encurta a lista, e o índice ativo ficava onde estava.
+           * Digitar "NutriViva" deixava um resultado real e o cadastro; o
+           * índice herdado já apontava para o cadastro, então a primeira
+           * seta caía em "+ Cadastrar novo cliente" e Enter abria a
+           * criação de um registro que existe. Lista nova começa no
+           * primeiro resultado real.
+           */
+          setActiveIndex(0);
         }}
         onKeyDown={handleKeyDown}
       />

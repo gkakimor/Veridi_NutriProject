@@ -1,11 +1,8 @@
 import type { LotDTO } from "@veridi/shared";
 import { ownerLabel } from "@veridi/shared";
 import { QrCode } from "../../components/QrCode";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Conteúdo da etiqueta de lote — humano-legível sem scanner. NÃO inclui

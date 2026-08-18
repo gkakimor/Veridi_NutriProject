@@ -929,6 +929,99 @@ describe("Aprovação do projeto", () => {
     await app.close();
   });
 
+  it("aprova projeto cujo produto já pertence a outro projeto aprovado", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+
+    // Primeiro projeto aprovado: fica com o ponteiro legado `Project.productId`.
+    const primeiro = await createProject(app);
+    const chain = await buildPricingChain(app, primeiro.id);
+    const q1 = await createQuote(app, primeiro.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${q1.lineId}/apply-pricing`,
+      payload: { pricingTierId: chain.pricing.tiers[0].id },
+    });
+    await app.inject({ method: "POST", url: `/quote-versions/${q1.id}/send`, payload: {} });
+    await app.inject({ method: "POST", url: `/quote-versions/${q1.id}/accept` });
+    const aprovado1 = (
+      await app.inject({ method: "POST", url: `/projects/${primeiro.id}/approve`, payload: {} })
+    ).json();
+    expect(aprovado1.productId).toBe(chain.productId);
+
+    /*
+     * Segunda negociação com o MESMO produto. `Project.productId` é único no
+     * banco: reivindicá-lo de novo estourava a constraint e o erro do Prisma
+     * chegava cru na tela, com caminho de arquivo e nome de índice.
+     */
+    // Mesmo cliente: vincular produto de outro cliente é recusado, e com
+    // razão — o caso aqui é a MESMA carteira negociando de novo.
+    const segundo = (
+      await app.inject({
+        method: "POST",
+        url: "/projects",
+        payload: {
+          name: `Projeto Integração ${marker()}`,
+          customerId: aprovado1.customerId,
+          entryDate: new Date().toISOString(),
+        },
+      })
+    ).json();
+    fixtureProjectIds.push(segundo.id);
+
+    const link = await app.inject({
+      method: "POST",
+      url: `/projects/${segundo.id}/products`,
+      payload: { operation: "link", productId: chain.productId },
+    });
+    expect(link.statusCode).toBe(201);
+
+    const q2 = (
+      await app.inject({ method: "POST", url: `/projects/${segundo.id}/quote-versions`, payload: {} })
+    ).json();
+    const linha = (
+      await app.inject({
+        method: "POST",
+        url: `/quote-versions/${q2.id}/lines`,
+        payload: { projectProductId: link.json().id },
+      })
+    ).json();
+    await app.inject({
+      method: "PATCH",
+      url: `/quote-lines/${linha.lines[0].id}`,
+      payload: { quotedQuantity: "100", unitPrice: "10", uomCode: "un" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/quote-versions/${q2.id}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+    await app.inject({ method: "POST", url: `/quote-versions/${q2.id}/accept` });
+
+    const resposta = await app.inject({
+      method: "POST",
+      url: `/projects/${segundo.id}/approve`,
+      payload: {},
+    });
+    expect(resposta.statusCode).toBe(200);
+
+    const aprovado2 = resposta.json();
+    expect(aprovado2.status).toBe("APPROVED");
+    // Ponteiro legado continua vazio: quem responde é `ProjectProduct`.
+    expect(aprovado2.productId).toBeNull();
+    expect(aprovado2.products).toHaveLength(1);
+    expect(aprovado2.products[0].productId).toBe(chain.productId);
+    expect(aprovado2.products[0].status).toBe("APPROVED");
+
+    // E nenhum produto foi fabricado como efeito colateral da aprovação.
+    expect(
+      await prisma.projectProduct.count({ where: { projectId: segundo.id } }),
+    ).toBe(1);
+
+    await app.close();
+  });
+
   it("recusa proposta sem produto e aprova pelo produto adicionado ao projeto", async () => {
     // Antes do multiproduto, a aprovação podia criar o produto sozinha. Agora
     // a proposta exige linha, e linha exige produto do projeto: o produto

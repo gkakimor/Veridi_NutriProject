@@ -8,6 +8,7 @@ import { PURCHASE_ORDER_STATUSES, PURCHASE_ORDER_STATUS_LABELS } from "@veridi/s
 import { listPurchaseOrders } from "../../lib/purchase-orders-api";
 import { listSuppliers } from "../../lib/suppliers-api";
 import { formatBRL } from "../../lib/currency";
+import { formatDate } from "../../lib/dates";
 
 type ActiveFilter = PurchaseOrderStatus | "all";
 
@@ -27,10 +28,6 @@ function statusBadgeClass(status: PurchaseOrderStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /** Compras → Ordens de Compra. Documento transacional: linhas abrem pagina propria, nao modal. */
 export function PurchaseOrdersPage() {

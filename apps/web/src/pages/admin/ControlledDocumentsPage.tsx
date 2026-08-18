@@ -13,11 +13,8 @@ import {
   createControlledDocumentRevision,
   listControlledDocuments,
 } from "../../lib/auth-api";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Administração → Documentos controlados.

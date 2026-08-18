@@ -7,6 +7,7 @@ import { createCustomer, updateCustomer } from "../../lib/customers-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
+import { formatDate } from "../../lib/dates";
 
 interface CustomerFormModalProps {
   mode: "create" | "edit";
@@ -163,7 +164,7 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
       <>
         <span className="modal-fullscreen__foot-meta">
           Última alteração:{" "}
-          {customer ? new Date(customer.updatedAt).toLocaleDateString("pt-BR") : "—"}
+          {customer ? formatDate(customer.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>

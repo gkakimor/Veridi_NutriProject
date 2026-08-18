@@ -11,6 +11,7 @@ import {
   getQuotePricingOptions,
   useManualQuotePrice,
 } from "../../lib/projects-api";
+import { formatDate } from "../../lib/dates";
 
 function formatPercent(value: string | null): string {
   if (value === null) return "—";
@@ -110,9 +111,7 @@ export function QuotePricingSection({
           </dd>
           <dt>Data de referência do custo</dt>
           <dd>
-            {provenance.costReferenceDate
-              ? new Date(provenance.costReferenceDate).toLocaleDateString("pt-BR")
-              : "—"}
+            {formatDate(provenance.costReferenceDate)}
           </dd>
           <dt>Custo industrial / unidade</dt>
           <dd>{formatUnitCost(provenance.industrialCostPerUnit)}</dd>

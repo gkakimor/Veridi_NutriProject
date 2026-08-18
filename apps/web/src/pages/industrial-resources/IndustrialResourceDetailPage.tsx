@@ -13,10 +13,7 @@ import {
   getIndustrialResource,
   updateIndustrialResource,
 } from "../../lib/industrial-resources-api";
-
-function formatDate(value: string | null): string {
-  return value ? new Date(value).toLocaleDateString("pt-BR") : "—";
-}
+import { formatDate } from "../../lib/dates";
 
 /**
  * Detalhe do recurso industrial com o histórico completo de tarifas.

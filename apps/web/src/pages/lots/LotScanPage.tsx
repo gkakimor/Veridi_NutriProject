@@ -6,11 +6,8 @@ import { lookupLot } from "../../lib/lots-api";
 import { FormSection } from "../../components/FormSection";
 import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function statusBadgeClass(status: LotDTO["status"], isExpired: boolean): string {
   if (isExpired) return "badge badge--err";

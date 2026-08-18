@@ -606,9 +606,29 @@ export async function approveProject(
     // primeiro produto aceito, ou o que já estava lá.
     let productId = project.productId;
     const firstAccepted = project.products.find((link) => acceptedProductIds.has(link.productId));
-    if (!productId && firstAccepted) productId = firstAccepted.productId;
+    if (!productId && firstAccepted) {
+      /*
+       * `Project.productId` é o ponteiro 1:1 do modelo antigo e continua
+       * ÚNICO no banco. No projeto multiproduto o MESMO produto pode ser
+       * desenvolvido em mais de uma negociação — vincular um produto que já
+       * pertence a outro projeto é caso legítimo. Reivindicar o ponteiro
+       * aqui fazia a aprovação estourar a constraint, e o erro do Prisma ia
+       * cru para a tela.
+       *
+       * Quem manda é `ProjectProduct`: o ponteiro legado só é preenchido
+       * quando ninguém mais o reivindicou.
+       */
+      const claimedByAnother = await tx.project.findFirst({
+        where: { productId: firstAccepted.productId, NOT: { id } },
+        select: { id: true },
+      });
+      if (!claimedByAnother) productId = firstAccepted.productId;
+    }
 
-    if (!productId) {
+    // Só cria produto quem não tem nenhum: o ponteiro legado pode continuar
+    // vazio porque outro projeto o reivindicou, e isso NÃO significa que
+    // falta produto — significa que o produto é compartilhado.
+    if (!productId && !firstAccepted) {
       // Projeto sem nenhum produto preparado: a aprovação cria o produto,
       // como sempre fez. A unidade vem da linha aceita — o cabeçalho não
       // guarda mais unidade, e numa proposta com vários produtos cada linha
@@ -646,7 +666,10 @@ export async function approveProject(
 
     await tx.project.update({
       where: { id },
-      data: { status: "APPROVED", approvedAt: new Date(), productId },
+      // `productId` pode continuar null: o projeto multiproduto não depende
+      // do ponteiro legado para nada — `ProjectProduct` já registra o que
+      // foi aprovado.
+      data: { status: "APPROVED", approvedAt: new Date(), ...(productId ? { productId } : {}) },
     });
     await tx.projectStatusHistory.create({
       data: {
