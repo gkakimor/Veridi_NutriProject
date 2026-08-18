@@ -159,8 +159,12 @@ export function SearchableEntitySelect({
    * cai no cadastro — antes essa ação só existia para quem usava mouse, e
    * quem digitava o nome de um cliente que ainda não existe ficava sem saída.
    */
-  const createIndex = canCreate && onCreateNew ? filtered.length : -1;
-  const navigableCount = filtered.length + (createIndex >= 0 ? 1 : 0);
+  // A lista renderiza no máximo 50 resultados; navegar por teclado além
+  // disso apontaria `aria-activedescendant` para um item que não existe no
+  // DOM — e o leitor de tela ficaria mudo no meio da lista.
+  const visible = useMemo(() => filtered.slice(0, 50), [filtered]);
+  const createIndex = canCreate && onCreateNew ? visible.length : -1;
+  const navigableCount = visible.length + (createIndex >= 0 ? 1 : 0);
 
   function startCreate() {
     if (!onCreateNew) return;
@@ -189,7 +193,7 @@ export function SearchableEntitySelect({
         startCreate();
         return;
       }
-      const option = filtered[activeIndex];
+      const option = visible[activeIndex];
       if (option) {
         event.preventDefault();
         choose(option);
@@ -209,8 +213,8 @@ export function SearchableEntitySelect({
     ? undefined
     : createIndex >= 0 && activeIndex === createIndex
       ? createOptionId
-      : filtered[activeIndex]
-        ? `${listId}-${filtered[activeIndex]!.id}`
+      : visible[activeIndex]
+        ? `${listId}-${visible[activeIndex]!.id}`
         : undefined;
 
   return (
@@ -279,7 +283,7 @@ export function SearchableEntitySelect({
                 {emptyMessage}
               </li>
             )}
-            {filtered.slice(0, 50).map((option, index) => (
+            {visible.map((option, index) => (
               <li
                 key={option.id}
                 id={`${listId}-${option.id}`}

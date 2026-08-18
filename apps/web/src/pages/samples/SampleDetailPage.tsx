@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import type {
   InventoryLotBreakdownDTO,
   ItemDTO,
@@ -143,14 +143,15 @@ export function SampleDetailPage() {
             <span className="code">{sample.code}</span> — Teste {sample.testLabel}
           </h1>
           <p className="page__subtitle">
-            <Link to={`/comercial/projetos/${sample.projectId}`}>
-              <EntityLink
+            {/* Um link só: o `EntityLink` já leva ao projeto, e envolvê-lo em
+                outro `<a>` produzia âncora aninhada — HTML inválido e destino
+                imprevisível conforme onde o clique cai. */}
+            <EntityLink
               kind="project"
               id={sample.projectId}
               code={sample.projectCode}
               name={sample.projectName}
-            />
-            </Link>{" "}
+            />{" "}
             · {sample.customerName} ·{" "}
             <span className={sampleStatusBadgeClass(sample.status)}>
               {PROJECT_SAMPLE_STATUS_LABELS[sample.status]}
