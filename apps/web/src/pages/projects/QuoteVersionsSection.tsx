@@ -61,8 +61,16 @@ export function QuoteVersionsSection({
   const [pricingLineId, setPricingLineId] = useState<string | null>(null);
   const [pricingOptions, setPricingOptions] = useState<PricingVersionDTO | null>(null);
 
+  /*
+   * Abre a versão pedida — e só escolhe sozinho quando ninguém pediu nada.
+   *
+   * Antes o efeito voltava para a última versão sempre que o id aberto não
+   * estava na lista. Criar a V2 caía exatamente nesse buraco: o id novo era
+   * selecionado, a lista ainda era a antiga por um render, e a tela voltava
+   * para a V1 enviada — parecendo que a nova versão nasceu bloqueada.
+   */
   useEffect(() => {
-    if (openId && versions.some((quote) => quote.id === openId)) return;
+    if (openId !== null) return;
     setOpenId(draft?.id ?? versions.at(-1)?.id ?? null);
   }, [versions, draft, openId]);
 

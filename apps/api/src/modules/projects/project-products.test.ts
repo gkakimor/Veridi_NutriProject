@@ -267,6 +267,23 @@ describe("Orçamento multilinha", () => {
     await app.close();
   });
 
+  it("a linha nasce com a unidade do produto — o sistema já sabe qual é", async () => {
+    // Pedir que a pessoa digite a unidade que o cadastro já conhece é
+    // atrito, e a linha sem unidade só denuncia o problema no envio.
+    const app = buildTestApp("COMMERCIAL");
+    await app.ready();
+
+    const customer = await createCustomer();
+    const project = await createProject(app, customer.id);
+    const a = (await addProduct(app, project.id, "Produto com unidade")).json();
+
+    const quote = await createQuoteWithLines(app, project.id, [{ projectProductId: a.id }]);
+
+    expect(quote.lines[0].uomCode).toBe("un");
+
+    await app.close();
+  });
+
   it("recusa o mesmo produto duas vezes na proposta", async () => {
     const app = buildTestApp("COMMERCIAL");
     await app.ready();

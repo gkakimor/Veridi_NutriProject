@@ -234,6 +234,32 @@ describe("Histórico de orçamentos", () => {
     expect(within(workspace).getByRole("button", { name: "Registrar aceite" })).toBeTruthy();
   });
 
+  it("a versão aberta continua sendo a escolhida quando a lista recarrega", () => {
+    // Regressão real: ao criar a V2, o id novo era selecionado, a lista ainda
+    // era a antiga por um render, e a tela voltava para a V1 enviada —
+    // parecendo que a nova versão nascia bloqueada.
+    const { rerender } = render(
+      <MemoryRouter>
+        <QuoteVersionsSection project={project({ quoteVersions: [v1] })} canEdit onChanged={() => {}} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getAllByText("ORC-000001 · V1")[0]!);
+
+    rerender(
+      <MemoryRouter>
+        <QuoteVersionsSection
+          project={project({ quoteVersions: [v1, v2] })}
+          canEdit
+          onChanged={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    const workspace = document.querySelector(".quote-workspace") as HTMLElement;
+    expect(within(workspace).getByText(/V1/)).toBeTruthy();
+  });
+
   it("linha sem preço não vira total parcial", () => {
     const incomplete = quote({
       id: "q3",

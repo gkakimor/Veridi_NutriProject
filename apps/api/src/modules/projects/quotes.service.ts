@@ -283,6 +283,20 @@ export async function addQuoteLine(
     throw new QuoteLineDuplicateError(link.productId);
   }
 
+  /*
+   * A unidade vem do item de produto acabado.
+   *
+   * O sistema já sabe em que unidade aquele produto é vendido; pedir que a
+   * pessoa digite de novo é atrito, e uma linha sem unidade só denuncia o
+   * problema na hora de enviar. Produto sem item acabado continua sem
+   * unidade — não se inventa uma.
+   */
+  const produto = await prisma.product.findUnique({
+    where: { id: link.productId },
+    include: { finishedProductItem: true },
+  });
+  const unidade = produto?.finishedProductItem?.unitCode ?? null;
+
   await prisma.quoteLine.create({
     data: {
       quoteVersionId,
@@ -290,6 +304,7 @@ export async function addQuoteLine(
       productId: link.productId,
       sortOrder: quote.lines.length + 1,
       priceSource: "MANUAL",
+      ...(unidade ? { uomCode: unidade } : {}),
     },
   });
 
