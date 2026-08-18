@@ -952,6 +952,24 @@ Full laboratory inspection and COA workflows are outside MVP.
 
 ---
 
+## Durable rules — quality decisions on a lot
+
+- **Release, block and unblock are QUALITY/ADMIN decisions.** The routes
+  accepted any authenticated session, so a commercial user could release a
+  lot waiting on its certificate with a single request while attaching that
+  certificate already required the quality role. The screen matches: the
+  action is absent for other roles, with the reason in its place.
+- **BLOCKED is not terminal.** A block made by mistake used to strand real
+  physical material outside available stock forever, with a permanent
+  critical alert and no action on any screen. Unblocking returns the lot to
+  `AWAITING_RELEASE` — **never straight to `AVAILABLE`**. Reopening the
+  decision is not making it: release stays a separate act, still requires an
+  approved certificate where the item demands one, and stamps its own
+  authorship. The previous block stays in the record, and no quantity becomes
+  available as a side effect.
+
+---
+
 # 11. Physical location
 
 MVP includes **simple physical location**.

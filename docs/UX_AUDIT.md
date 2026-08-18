@@ -766,3 +766,91 @@ alternativo funciona ponta a ponta (verificado: projeto novo → vincular
 produto → versão de orçamento → linha com 1.000 un → faixa sugerida →
 `Aplicar preço calculado` → `Simular CMV` → `Voltar ao orçamento`). O que
 permanece é o número de passos, não um bloqueio.
+
+---
+
+# AUDITORIA FINAL COM AGENTES NATIVOS (checkpoint final)
+
+Três auditores nativos, medição independente no HEAD, sem receber scores,
+achados, metas nem lista de correções anteriores. Todos navegaram pela
+interface real (Playwright/Chromium); onde um deles mediu por leitura de
+código e chamada de API, isso está dito.
+
+## Scores novos
+
+| Dimensão | Gate | Medido | Situação |
+| --- | --- | --- | --- |
+| Navegação | ≥ 9 | 7 | ABAIXO |
+| Continuidade | ≥ 9 | (ver seção operacional) | — |
+| Legibilidade | ≥ 8 | 8 | ok |
+| Consistência | ≥ 9 | 8 | ABAIXO |
+| Acessibilidade | ≥ 8 | 8 | ok |
+| Impressos | ≥ 9 | 9 | ok |
+
+Nenhum número anterior foi reaproveitado.
+
+## CRITICAL confirmados e corrigidos
+
+**Lote bloqueado era estado terminal.** `BLOCKED` não tinha transição de
+saída no domínio — nem para a Administração. Um bloqueio feito por engano
+deixava material físico real fora do estoque disponível para sempre, com
+alerta crítico permanente no painel. Passou a existir desbloqueio, e ele
+devolve o lote à **fila da Qualidade**, nunca ao estoque: reabrir a decisão
+não é tomá-la. Liberar continua exigindo ato próprio e CoA aprovado quando o
+item pede. O bloqueio anterior permanece no histórico.
+
+**Fila da Qualidade levava a uma tela que dizia não ser ela.** O alerta do
+painel e a ação rápida apontavam para a fila de laudos, que respondia, com
+suas próprias palavras, que a liberação se decide em Estoque › Lotes. O
+alerta passou a apontar para lá, e a Qualidade recebeu as duas filas com
+nome próprio: "Laudos / CoA" e "Lotes aguardando liberação".
+
+## HIGH confirmados e corrigidos
+
+| Achado | Correção |
+| --- | --- |
+| `POST /lots/:id/release` e `/block` sem gate de papel — comercial liberava lote em espera de laudo com um POST | `requireRole(QUALITY, ADMIN)`, com teste por papel |
+| Bloquear oferecido a quem o backend recusa: formulário inteiro preenchido e só então a recusa | Ação ausente para o papel, com a razão no lugar dela |
+| Criar precificação não existia em nenhum caminho intuitivo | Estado vazio da lista diz onde a precificação nasce e leva ao cálculo salvo |
+| Falta de material sem causa visível — "falta 35" com os 35 na prateleira aguardando liberação | A linha informa quanto há de físico não liberado e leva aos lotes |
+| Rascunho de custo escondia a versão ativa, sem caminho de volta | Seletor entre ativa e rascunho; a tela abre na **ativa** |
+| Linha de orçamento sem quantidade após aplicar faixa | Campo não-controlado remontado quando o servidor muda o valor |
+| UUID cru na recusa de duplicidade da proposta | Mensagem cita o código do produto |
+| Ação de linha fora da tela em 13 tabelas | `table--sticky-actions` aplicada; ação sempre alcançável |
+
+## MEDIUM corrigidos
+
+Contraste dos rótulos da sidebar (4,31:1 → 6,05:1 no fundo real);
+`role="menu"` sem navegação por seta (setas, Home e End implementados);
+percentual com quatro casas convivendo com duas (uma função só);
+mensagem de campo obrigatório em inglês, do navegador (traduzida no
+documento, usando o rótulo de cada campo); estado vazio saindo da tela junto
+com a tabela; seletor de item por lista fechada onde o resto do sistema usa
+busca; lista de amostras sem dizer onde uma amostra nasce; banner de busca
+preso entre navegações; precificação fechada sobre custo parcial ao lado de
+um CMV completo, sem explicação.
+
+## Falsos positivos rejeitados
+
+**"Vincular produto existente falha em silêncio" (CRITICAL).** Não reproduz.
+Com navegador real: a opção aparece, o campo passa a mostrar
+`PROD-000003 · DEMO Pré-Treino Frutas Vermelhas 300g`, o botão fica
+habilitado, o vínculo é criado e a seção passa a listar o produto — zero
+resposta HTTP ≥ 400. A página tem `<select>`/`<datalist>` que também expõem
+`role=option`, e é neles que um clique automatizado por texto cai.
+
+**"R-18/R-19/R-20 geram segunda página vazia" (HIGH).** Não reproduz como
+descrito. Medindo na largura REAL de impressão (área útil da folha, não a da
+janela), o conteúdo excede uma página: em paisagem, 868px de conteúdo contra
+718px de área útil. A segunda página tem conteúdo real. O que resta é
+estético — uma página final com poucas linhas —, registrado como LOW, sem
+alteração de CSS de impressão sem causa isolada.
+
+## Não corrigido, e por quê
+
+- **Busca do topo não encontra produto por nome.** Pré-existente e fora do
+  escopo: busca global é item explicitamente não implementado.
+- **Menu lateral idêntico para todos os papéis.** As ações já são restritas
+  por papel; filtrar o menu é decisão de produto, não correção de defeito.
+- **Largura máxima do conteúdo em tabelas densas.** Decisão de layout, não
+  bug pontual — a ação da linha, que era o risco concreto, foi resolvida.

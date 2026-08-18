@@ -4501,12 +4501,27 @@ confidencialidade do documento do cliente.
   horizontal de página, cartões de resumo acima da dobra nas três, tabelas
   rolando dentro do próprio contêiner, nenhuma ação essencial invisível.
 
-**Fragilidade conhecida da suíte, pré-existente.** Rodando a bateria inteira,
-`dashboard.test.ts` e vizinhos falham de forma intermitente (~50% das
-execuções, arquivo diferente a cada vez). São testes que contam agregados do
-banco inteiro enquanto outros arquivos criam fixtures em paralelo. Confirmado
-pré-existente: reproduz com o arquivo novo de CMV **excluído**. Nenhum teste
-foi ajustado para acomodar isso.
+**Suíte estabilizada.** A bateria falhava de forma intermitente, em arquivo
+diferente a cada execução. Duas causas distintas, ambas de estado — nenhuma
+de regra:
+
+1. **Agregado global × concorrência.** `dashboard.test.ts` compara dois
+   retratos do banco inteiro (itens distintos em compra, ordens abertas) em
+   volta da própria fixture. Com três workers sobre um Postgres só, a limpeza
+   de outro arquivo caía no meio dos dois retratos e o delta media o vizinho.
+   O arquivo passou a rodar sozinho, depois da faixa paralela
+   (`apps/api/vitest.serial.config.ts`). **Nenhuma expectativa foi alterada** —
+   mudou quando ele roda, não o que ele afirma.
+2. **Precondição implícita no importador.** Os casos de integração descrevem
+   uma base já migrada (106 linhas no template de abertura, zero registro
+   criado numa segunda aplicação), e nada estabelecia isso: o arquivo aplicava
+   o corpus no meio de si mesmo, então a primeira execução contra banco
+   recém-migrado falhava e as seguintes passavam por herança. A precondição
+   virou `beforeAll` explícito — aplicar é idempotente por construção, que é
+   o que o teste vizinho verifica.
+
+Resultado: **5 baterias completas consecutivas verdes**, ~75 s cada, a partir
+de migration limpa.
 
 ## Não implementado
 
@@ -4515,6 +4530,32 @@ cenários lado a lado; CMV de amostra/piloto; fixture de validação manual com
 Biotina (mecanismo pronto — `createScenario` em
 `product-cmv-matrix.test.ts` monta produto, formulação, estrutura e cálculo
 com valores informados; nenhum dado real inserido).
+
+---
+
+# Auditoria final com agentes nativos
+
+Três auditores independentes mediram o HEAD sem receber score, achado, meta
+nem lista de correções anteriores. Resultado e correções em
+`docs/UX_AUDIT.md`.
+
+**Dois CRITICAL confirmados e fechados.** O maior era de domínio, não de
+tela: `BLOCKED` era estado terminal de lote — sem transição de saída para
+ninguém, nem para a Administração. Um bloqueio por engano deixava material
+físico real fora do estoque disponível para sempre. O desbloqueio devolve o
+lote à **fila da Qualidade**, nunca ao estoque disponível: reabrir a decisão
+não é tomá-la, e liberar continua exigindo ato próprio e CoA aprovado quando
+o item pede. O outro era o alerta de "lote aguarda liberação" apontando para
+a fila de laudos, que respondia não ser ela quem decide isso.
+
+**Permissão que faltava.** `POST /lots/:id/release` e `/block` aceitavam
+qualquer sessão autenticada: um usuário comercial liberava lote em espera de
+laudo com um POST, enquanto anexar o próprio CoA já exigia QUALITY/ADMIN. A
+porta da decisão passou a existir, com teste por papel.
+
+**Regra durável registrada:** liberar, bloquear e desbloquear lote são
+decisões de QUALITY/ADMIN. Desbloquear leva a `AWAITING_RELEASE`, nunca a
+`AVAILABLE`, e preserva o registro do bloqueio.
 
 ---
 
