@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { BrandLogo } from "../components/BrandLogo";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { USER_ROLE_LABELS } from "@veridi/shared";
 import { lookupLot } from "../lib/lots-api";
 import { useAuth } from "./AuthProvider";
@@ -36,12 +36,24 @@ function startsCollapsed(): boolean {
 
 export function AppShell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, signOut } = useAuth();
   const [navCollapsed, setNavCollapsed] = useState(startsCollapsed);
 
   const [searchValue, setSearchValue] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  /*
+   * O aviso da busca morre ao trocar de tela.
+   *
+   * Ele ficava colado no topo por navegações inteiras, cobrindo botão de
+   * outra tela e parecendo erro da ação atual. Aviso de busca fala da busca
+   * que acabou de acontecer — mudou de tela, acabou o assunto.
+   */
+  useEffect(() => {
+    setSearchError(null);
+  }, [location.pathname]);
 
   async function handleSearchSubmit(event: FormEvent) {
     event.preventDefault();

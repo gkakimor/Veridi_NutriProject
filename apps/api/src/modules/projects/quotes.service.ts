@@ -298,12 +298,15 @@ export async function addQuoteLine(
   const quote = await requireQuoteWithLines(quoteVersionId);
   if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
 
-  const link = await prisma.projectProduct.findUnique({ where: { id: input.projectProductId } });
+  const link = await prisma.projectProduct.findUnique({
+    where: { id: input.projectProductId },
+    include: { product: { select: { code: true } } },
+  });
   if (!link || link.projectId !== quote.projectId) {
     throw new QuoteLineProductNotInProjectError(input.projectProductId);
   }
   if (quote.lines.some((line) => line.productId === link.productId)) {
-    throw new QuoteLineDuplicateError(link.productId);
+    throw new QuoteLineDuplicateError(link.product.code);
   }
 
   /*

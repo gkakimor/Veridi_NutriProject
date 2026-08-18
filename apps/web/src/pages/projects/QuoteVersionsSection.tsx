@@ -386,6 +386,18 @@ export function QuoteVersionsSection({
                     <td className="is-numeric">
                       {editable ? (
                         <input
+                          /*
+                           * `key` amarrada ao valor do servidor.
+                           *
+                           * O campo é não-controlado (`defaultValue`), então o
+                           * DOM guarda o que foi digitado e ignora mudanças
+                           * vindas de fora. Aplicar uma faixa passa a definir
+                           * quantidade, unidade e preço no servidor — e a
+                           * linha continuava mostrando os campos vazios, num
+                           * documento que pode ser impresso e enviado. Trocar
+                           * a `key` remonta o campo com o valor novo.
+                           */
+                          key={`qtd-${line.quotedQuantity ?? ""}`}
                           type="text"
                           inputMode="decimal"
                           aria-label={`Quantidade de ${line.productCode}`}
@@ -405,6 +417,7 @@ export function QuoteVersionsSection({
                     <td>
                       {editable ? (
                         <input
+                          key={`uom-${line.uomCode ?? ""}`}
                           type="text"
                           aria-label={`Unidade de ${line.productCode}`}
                           defaultValue={line.uomCode ?? ""}
@@ -432,6 +445,7 @@ export function QuoteVersionsSection({
                     <td className="is-numeric">
                       {editable && line.priceSource === "MANUAL" ? (
                         <input
+                          key={`preco-${line.unitPrice ?? ""}`}
                           type="text"
                           inputMode="decimal"
                           aria-label={`Preço unitário de ${line.productCode}`}

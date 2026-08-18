@@ -92,11 +92,15 @@ export function IndustrialCostPage() {
    *
    * A tela abria sempre o rascunho e não oferecia caminho de volta para a
    * versão ATIVA — depois de criar uma V2, a estrutura que vale na produção
-   * simplesmente sumia da vista, sem link, sem histórico clicável. Rascunho
-   * segue sendo o padrão (é o que está em edição), mas agora é uma escolha
-   * visível, não um destino sem retorno.
+   * sumia da vista, sem link e sem histórico clicável, e quem só queria
+   * conferir o custo oficial lia números de um rascunho sem perceber.
+   *
+   * O padrão passou a ser a versão ATIVA: é ela que vale na produção e é ela
+   * que a maioria vem consultar. Editar é intenção declarada — quem vai
+   * mexer no rascunho troca de aba, e criar um rascunho novo já leva para
+   * ele automaticamente.
    */
-  const [lendoAtiva, setLendoAtiva] = useState(false);
+  const [lendoAtiva, setLendoAtiva] = useState(true);
   const [referenceQuantity, setReferenceQuantity] = useState("");
   const [category, setCategory] = useState<IndustrialCostCategory>("SECONDARY_PACKAGING");
   const [description, setDescription] = useState("");

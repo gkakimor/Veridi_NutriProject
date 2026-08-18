@@ -86,9 +86,16 @@ export class QuoteLineNotFoundError extends Error {
 }
 
 export class QuoteLineDuplicateError extends Error {
-  constructor(productId: string) {
+  /**
+   * Recebe o CÓDIGO do produto, não o id.
+   *
+   * A mensagem é lida por quem negocia: "PROD-000006 já está nesta proposta"
+   * é uma frase; um UUID no meio dela é ruído que não ajuda ninguém a
+   * decidir o que fazer.
+   */
+  constructor(productCode: string) {
     super(
-      `Produto ${productId} já está nesta proposta. Ajuste a linha existente em vez de criar outra.`,
+      `Produto ${productCode} já está nesta proposta. Ajuste a linha existente em vez de criar outra.`,
     );
     this.name = "QuoteLineDuplicateError";
   }
