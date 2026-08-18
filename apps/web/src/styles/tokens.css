@@ -48,10 +48,12 @@
      e sobre botoes de cor solida. */
   --on-dark: #ffffff;
   --on-dark-2: #c9dacf;
-  /* 4,95:1 sobre --v-green-800 (#124534), medido — é o fundo real do sidebar,
-     onde este tom rotula grupo de navegação e etiqueta de módulo em 10px.
-     O valor anterior (#8fa99a) media 4,31:1 e reprovava AA por pouco: texto
-     pequeno é justamente onde a margem não pode ser apertada. */
+  /* 6,05:1 sobre --v-green-900 (#0c3629) — o fundo REAL da sidebar (ver
+     `app/shell.css`), onde este tom rotula grupo de navegação e etiqueta de
+     módulo em 10px. O valor anterior (#8fa99a) media 4,31:1 e reprovava AA
+     por pouco: texto pequeno é justamente onde a margem não pode ser
+     apertada. Sobre a topbar (--v-green-800, #124534) o mesmo tom mede
+     4,95:1 — também acima do mínimo. */
   --on-dark-3: #9ab5a6;
 
   /* ===== Tipografia ===== */
