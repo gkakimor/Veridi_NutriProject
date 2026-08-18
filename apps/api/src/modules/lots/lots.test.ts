@@ -299,3 +299,82 @@ describe("Lot lookup (QR/scan)", () => {
     await app.close();
   });
 });
+
+describe("Lots — decisão de qualidade tem dono", () => {
+  /**
+   * Liberar lote é decisão da Qualidade, não conveniência de quem estiver
+   * logado. A rota aceitava qualquer sessão: um usuário comercial soltava um
+   * lote em espera de laudo com um POST, enquanto o anexo do próprio CoA já
+   * exigia QUALITY/ADMIN. A porta que faltava era a da decisão.
+   */
+  async function loteEmEspera(sufixo: string) {
+    const prisma = getPrisma();
+    const lot = await prisma.lot.create({
+      data: {
+        code: `LT-TESTE-${marker}-${sufixo}`,
+        itemId,
+        supplierId,
+        supplierLot: `SUP-${marker}-${sufixo}`,
+        initialReceivedQuantity: "7",
+        status: "AWAITING_RELEASE",
+      },
+    });
+    fixtureLotIds.push(lot.id);
+    return lot;
+  }
+
+  it("comercial, compras e produção não liberam nem bloqueiam lote", async () => {
+    const lot = await loteEmEspera("P1");
+
+    for (const papel of ["COMMERCIAL", "PURCHASING", "PRODUCTION", "VIEWER"] as const) {
+      const app = buildTestApp(papel);
+      await app.ready();
+      const liberar = await app.inject({ method: "POST", url: `/lots/${lot.id}/release` });
+      expect(liberar.statusCode, `${papel} conseguiu liberar`).toBe(403);
+      const bloquear = await app.inject({
+        method: "POST",
+        url: `/lots/${lot.id}/block`,
+        payload: { reason: "tentativa indevida" },
+      });
+      expect(bloquear.statusCode, `${papel} conseguiu bloquear`).toBe(403);
+      await app.close();
+    }
+
+    const prisma = getPrisma();
+    const depois = await prisma.lot.findUniqueOrThrow({ where: { id: lot.id } });
+    // Nada mudou: recusa é recusa, não "quase".
+    expect(depois.status).toBe("AWAITING_RELEASE");
+  });
+
+  it("qualidade libera, e a autoria fica registrada", async () => {
+    const lot = await loteEmEspera("Q1");
+    const app = buildTestApp("QUALITY");
+    await app.ready();
+
+    const response = await app.inject({ method: "POST", url: `/lots/${lot.id}/release` });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().status).toBe("AVAILABLE");
+
+    const prisma = getPrisma();
+    const depois = await prisma.lot.findUniqueOrThrow({ where: { id: lot.id } });
+    expect(depois.releasedBy).toBeTruthy();
+
+    await app.close();
+  });
+
+  it("administração continua podendo decidir", async () => {
+    const lot = await loteEmEspera("A1");
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/lots/${lot.id}/block`,
+      payload: { reason: "bloqueio administrativo de teste" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().status).toBe("BLOCKED");
+
+    await app.close();
+  });
+});

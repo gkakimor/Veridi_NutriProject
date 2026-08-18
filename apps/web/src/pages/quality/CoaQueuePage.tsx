@@ -170,7 +170,7 @@ export function CoaQueuePage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table">
+        <table className="table table--sticky-actions">
           <thead>
             <tr>
               <th>Lote</th>

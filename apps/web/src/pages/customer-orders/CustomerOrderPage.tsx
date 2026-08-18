@@ -909,9 +909,13 @@ export function CustomerOrderPage() {
                             </td>
                             <td className="is-numeric">{line.finishedGoodsAvailable}</td>
                             <td>
+                              {/* Sem nome acessível, um leitor de tela anuncia
+                                  só "editar texto" no campo que decide reserva
+                                  de um pedido confirmado. */}
                               <input
                                 type="text"
                                 inputMode="decimal"
+                                aria-label={`Reservar de ${line.productCode}`}
                                 value={adjustment.reserve}
                                 onChange={(event) =>
                                   handleAdjustReserve(line.customerOrderLineId, line.orderedQuantity, event.target.value)
@@ -922,6 +926,7 @@ export function CustomerOrderPage() {
                               <input
                                 type="text"
                                 inputMode="decimal"
+                                aria-label={`Produzir de ${line.productCode}`}
                                 value={adjustment.produce}
                                 onChange={(event) =>
                                   handleAdjustProduce(line.customerOrderLineId, line.orderedQuantity, event.target.value)
@@ -1254,6 +1259,7 @@ export function CustomerOrderPage() {
                         <input
                           type="text"
                           inputMode="decimal"
+                          aria-label={`Reservar de ${line.productCode}`}
                           disabled={Number(line.stillToReserve) <= 0}
                           value={reserveInputs[line.customerOrderLineId] ?? ""}
                           onChange={(event) =>

@@ -560,7 +560,15 @@ export function LotDetailPage() {
           </div>
 
           <div className="line-actions">
-            {lot.status === "AWAITING_RELEASE" && (
+            {/* Liberar e bloquear são decisão da Qualidade. Oferecer o botão a
+                quem o backend recusa é convite ao erro — e a ausência sem
+                explicação parece tela quebrada, então a razão fica junto. */}
+            {lot.status === "AWAITING_RELEASE" && !canReviewCoa && (
+              <p className="field__hint">
+                A liberação deste lote é decisão da Qualidade.
+              </p>
+            )}
+            {lot.status === "AWAITING_RELEASE" && canReviewCoa && (
               <div className="table__actions">
                 <button
                   type="button"

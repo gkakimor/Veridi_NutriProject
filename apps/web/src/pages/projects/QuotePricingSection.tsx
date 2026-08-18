@@ -12,13 +12,7 @@ import {
   useManualQuotePrice,
 } from "../../lib/projects-api";
 import { formatDate } from "../../lib/dates";
-
-function formatPercent(value: string | null): string {
-  if (value === null) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  return `${number.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
-}
+import { formatPercent } from "../../lib/percent";
 
 /**
  * Origem do preço da proposta.

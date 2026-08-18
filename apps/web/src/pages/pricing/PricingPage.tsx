@@ -25,18 +25,12 @@ import {
   getPricingVersion,
 } from "../../lib/pricing-api";
 import { formatDate } from "../../lib/dates";
+import { formatPercent } from "../../lib/percent";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
   if (status === "INACTIVE") return "badge badge--neutral";
   return "badge badge--warn";
-}
-
-function formatPercent(value: string | null): string {
-  if (value === null) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  return `${number.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 }
 
 /**

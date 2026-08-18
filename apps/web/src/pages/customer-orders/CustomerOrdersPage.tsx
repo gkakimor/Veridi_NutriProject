@@ -192,7 +192,7 @@ export function CustomerOrdersPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
               <th>Pedido</th>

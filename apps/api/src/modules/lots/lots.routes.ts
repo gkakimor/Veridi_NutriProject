@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
-import { requireCurrentUser } from "../../lib/current-user.js";
+import { requireRole } from "../../lib/current-user.js";
+import { ForbiddenError } from "../auth/auth.errors.js";
 import type { ZodError } from "zod";
 import { blockLot, getLotById, listLots, lookupLotByCode, releaseLot } from "./lots.service.js";
 import { CoaNotApprovedError } from "../quality/quality.errors.js";
@@ -59,11 +60,22 @@ export const lotsRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(traceability);
   });
 
+  /*
+   * Liberar e bloquear são decisões da QUALIDADE.
+   *
+   * A rota aceitava qualquer sessão autenticada: comercial conseguia liberar
+   * um lote em espera de laudo com um POST. O anexo de CoA já exigia
+   * QUALITY/ADMIN — a decisão que ele sustenta ficava sem porta.
+   */
   app.post("/lots/:id/release", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      return reply.send(await releaseLot(id, requireCurrentUser(request).name));
+      const actor = requireRole(request, "QUALITY", "ADMIN");
+      return reply.send(await releaseLot(id, actor.name));
     } catch (error) {
+      if (error instanceof ForbiddenError) {
+        return reply.status(403).send({ error: "forbidden", message: error.message });
+      }
       if (error instanceof LotNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }
@@ -88,8 +100,12 @@ export const lotsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.send(await blockLot(id, parsed.data.reason, requireCurrentUser(request).name));
+      const actor = requireRole(request, "QUALITY", "ADMIN");
+      return reply.send(await blockLot(id, parsed.data.reason, actor.name));
     } catch (error) {
+      if (error instanceof ForbiddenError) {
+        return reply.status(403).send({ error: "forbidden", message: error.message });
+      }
       if (error instanceof LotNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }

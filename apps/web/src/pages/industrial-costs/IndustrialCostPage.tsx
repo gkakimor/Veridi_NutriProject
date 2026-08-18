@@ -226,7 +226,11 @@ export function IndustrialCostPage() {
           {canEdit && (
             <button
               type="button"
-              className="btn btn--secondary"
+              // Sem estrutura, criar a estrutura É a tela: o cabeçalho tinha
+              // quatro botões de mesmo peso e nenhuma ação principal.
+              className={
+                data.versions.length === 0 ? "btn btn--accent" : "btn btn--secondary"
+              }
               // Botão cinza sem explicação virava beco sem saída: o motivo
               // acompanha o controle, para leitor de tela e para quem vê.
               {...(missingProductionBase

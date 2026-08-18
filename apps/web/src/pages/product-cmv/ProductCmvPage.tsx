@@ -23,6 +23,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { getProductCmv } from "../../lib/product-cmv-api";
 import { getProductPricing } from "../../lib/pricing-api";
 import { formatBRL } from "../../lib/currency";
+import { formatPercent } from "../../lib/percent";
 import { formatDate } from "../../lib/dates";
 import "./cmv.css";
 
@@ -385,16 +386,16 @@ export function ProductCmvPage() {
                       <dd>
                         {tier.contributionPerUnit ? formatBRL(tier.contributionPerUnit) : "—"}
                         {tier.contributionMarginPercent
-                          ? ` · ${tier.contributionMarginPercent}%`
+                          ? ` · ${formatPercent(tier.contributionMarginPercent)}`
                           : ""}
                       </dd>
                       <dt>Comissão</dt>
                       <dd>
                         {tier.commissionPerUnit ? formatBRL(tier.commissionPerUnit) : "—"}
-                        {` · ${tier.commissionPercent}%`}
+                        {` · ${formatPercent(tier.commissionPercent)}`}
                       </dd>
                       <dt>Markup</dt>
-                      <dd>{tier.markupPercent ? `${tier.markupPercent}%` : "—"}</dd>
+                      <dd>{formatPercent(tier.markupPercent)}</dd>
                     </>
                   )}
                 </dl>

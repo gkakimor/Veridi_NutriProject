@@ -201,7 +201,7 @@ export function FinishedGoodsPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table">
+        <table className="table table--sticky-actions">
           <thead>
             <tr>
               <th>Produto</th>

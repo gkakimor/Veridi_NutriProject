@@ -318,11 +318,21 @@
   justify-content: flex-end;
 }
 
+/*
+ * Estado vazio existe para orientar quem não encontrou nada. Numa tabela
+ * larga ele herdava a largura das colunas do cabeçalho e a orientação
+ * terminava fora da tela, legível só depois de arrastar a tabela — o oposto
+ * do que um estado vazio serve para fazer. Fica preso à borda esquerda e
+ * dentro da largura visível.
+ */
 .table__empty {
   padding: var(--sp-6);
   text-align: center;
   color: var(--ink-2);
   white-space: normal;
+  position: sticky;
+  left: 0;
+  max-width: 100vw;
 }
 
 .table-foot {
@@ -776,6 +786,25 @@
   justify-content: space-between;
   gap: var(--sp-4);
   margin-bottom: var(--sp-5);
+}
+
+/*
+ * Ações do cabeçalho de documento.
+ *
+ * São duas a quatro: uma ou duas saídas de contexto ("← Voltar ao projeto"),
+ * imprimir e, quando existe, a ação da tela. Em 1280 e 1366 o grupo ficava
+ * espremido e cada BOTÃO quebrava internamente — "← Voltar / ao / projeto"
+ * em três linhas, que é ilegível e faz um rótulo curto parecer um parágrafo.
+ * O rótulo passa a ser indivisível e quem quebra é o grupo, botão inteiro
+ * por linha.
+ */
+.doc-header .table__actions {
+  flex-wrap: wrap;
+  row-gap: var(--sp-2);
+}
+
+.doc-header .table__actions .btn {
+  white-space: nowrap;
 }
 
 .doc-crumb {

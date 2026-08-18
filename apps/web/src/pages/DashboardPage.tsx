@@ -259,7 +259,15 @@ const QUICK_ACTIONS: { label: string; path: string; roles: UserRole[] }[] = [
     path: "/compras/recebimentos",
     roles: ["PURCHASING", "QUALITY", "ADMIN"],
   },
-  { label: "Fila da Qualidade", path: "/qualidade/documentos", roles: ["QUALITY", "ADMIN"] },
+  // Duas filas distintas, e a Qualidade usa as duas: o laudo (CoA) e a
+  // liberação do lote para uso. Uma só entrada mandava quem precisava
+  // liberar para a tela do laudo.
+  { label: "Laudos / CoA", path: "/qualidade/documentos", roles: ["QUALITY", "ADMIN"] },
+  {
+    label: "Lotes aguardando liberação",
+    path: "/estoque/lotes?status=AWAITING_RELEASE",
+    roles: ["QUALITY", "ADMIN"],
+  },
 ];
 
 export function DashboardPage() {

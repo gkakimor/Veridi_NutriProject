@@ -13,13 +13,7 @@ import { PrintSheet } from "../../print/PrintSheet";
 import { formatUnitCost } from "../../components/CostBreakdown";
 import { formatBRL } from "../../lib/currency";
 import { getPricingVersion } from "../../lib/pricing-api";
-
-function formatPercent(value: string | null): string {
-  if (value === null) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  return `${number.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
-}
+import { formatPercent } from "../../lib/percent";
 
 /**
  * Simulação de preço e margem impressa.
