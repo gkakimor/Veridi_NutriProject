@@ -67,8 +67,14 @@ export function SearchableEntitySelect({
   const input = useRef<HTMLInputElement>(null);
   /** Enquanto o cadastro no contexto está aberto, o popover não volta. */
   const creating = useRef(false);
-  /** A seta já foi usada nesta lista? Ver `handleKeyDown`. */
-  const navigated = useRef(false);
+  /**
+   * A lista atual já foi navegada por seta?
+   *
+   * Começa `true`: abrir a lista sem digitar e apertar a seta deve ANDAR,
+   * que é o comportamento normal de combobox. Só filtrar zera isto — ver
+   * `handleKeyDown`.
+   */
+  const navigated = useRef(true);
   const [anchor, setAnchor] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
 
   /** Espaço de leitura: ~10 resultados, sem passar do que a janela oferece. */
