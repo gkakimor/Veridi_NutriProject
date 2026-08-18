@@ -399,6 +399,26 @@ async function main(): Promise<void> {
     embalagemId: pote.id,
   });
 
+  /*
+   * Custo conhecido depois da compra.
+   *
+   * A estrutura e o primeiro cálculo nascem antes de existir qualquer
+   * recebimento — é a ordem real: cota-se o produto antes de comprar o
+   * material. Depois das compras acima, o preço de aquisição existe, então
+   * o produto ganha um cálculo NOVO sobre a mesma estrutura ativa. Nada é
+   * reescrito: o CALC antigo continua sendo a base congelada das faixas já
+   * negociadas, e as faixas continuam valendo o que foi acordado.
+   */
+  const estruturaAtiva = await prisma.industrialCostVersion.findFirst({
+    where: { productId: first.productId, status: "ACTIVE" },
+  });
+  if (estruturaAtiva) {
+    const recalculo = await saveIndustrialCostCalculation(estruturaAtiva.id, {}, actor);
+    console.log(
+      `  custo recalculado após as compras: ${recalculo.code} — qualidade ${recalculo.quality}`,
+    );
+  }
+
   const summary = await prisma.projectProduct.findMany({
     where: { projectId: project.id },
     include: { product: true },
