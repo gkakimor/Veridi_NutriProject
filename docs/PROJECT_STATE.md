@@ -4557,6 +4557,24 @@ porta da decisão passou a existir, com teste por papel.
 decisões de QUALITY/ADMIN. Desbloquear leva a `AWAITING_RELEASE`, nunca a
 `AVAILABLE`, e preserva o registro do bloqueio.
 
+**Scores medidos no HEAD** (gate entre parênteses): Navegação 7,5 (9),
+Continuidade 8 (9), Legibilidade 8 (8), Consistência 8 (9), Acessibilidade 8
+(8), Impressos 9 (9). Macrofluxos 5/5 sem FAIL — três em PASS, dois em PASS
+WITH FRICTION. Zero CRITICAL e zero HIGH remanescentes. **Três dimensões
+seguem abaixo do gate**, e por isso o merge não é recomendado ainda: o que
+resta são atritos de descoberta e profundidade de fluxo, não defeito.
+
+**Dois achados graves foram rejeitados por não reproduzirem**, com evidência:
+o vínculo de produto que "falharia em silêncio" (o clique automatizado caía
+em `role=option` de um `<select>` da página) e a proposta que seria enviada
+sem trava de custo (o backend recusa com `409 incomplete_cost` e a tela pede
+confirmação nomeando as linhas — o auditor não clicou no botão).
+
+**Bateria estável:** 5 execuções completas consecutivas verdes, ~79 s cada,
+a partir de migration limpa. Walkthrough de demonstração 18/18 e fluxo CMV
+17/17, ambos só por navegação de interface, com zero erro de console, zero
+5xx e zero 4xx inesperado.
+
 ---
 
 # Next recommended implementation

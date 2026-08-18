@@ -780,12 +780,18 @@ código e chamada de API, isso está dito.
 
 | Dimensão | Gate | Medido | Situação |
 | --- | --- | --- | --- |
-| Navegação | ≥ 9 | 7 | ABAIXO |
-| Continuidade | ≥ 9 | (ver seção operacional) | — |
-| Legibilidade | ≥ 8 | 8 | ok |
-| Consistência | ≥ 9 | 8 | ABAIXO |
-| Acessibilidade | ≥ 8 | 8 | ok |
-| Impressos | ≥ 9 | 9 | ok |
+| Navegação | ≥ 9 | **7,5** | ABAIXO |
+| Continuidade | ≥ 9 | **8** | ABAIXO |
+| Legibilidade | ≥ 8 | **8** | ok |
+| Consistência | ≥ 9 | **8** | ABAIXO |
+| Acessibilidade | ≥ 8 | **8** | ok |
+| Impressos | ≥ 9 | **9** | ok |
+
+Macrofluxos: **5/5 sem FAIL** — Compras/Qualidade, Produção e
+Expedição/Faturamento/Estoque em PASS; Comercial e Amostra em PASS WITH
+FRICTION. A classificação não foi renomeada para melhorar resultado.
+
+CRITICAL remanescentes: **0**. HIGH remanescentes: **0**.
 
 Nenhum número anterior foi reaproveitado.
 
@@ -838,6 +844,16 @@ Com navegador real: a opção aparece, o campo passa a mostrar
 habilitado, o vínculo é criado e a seção passa a listar o produto — zero
 resposta HTTP ≥ 400. A página tem `<select>`/`<datalist>` que também expõem
 `role=option`, e é neles que um clique automatizado por texto cai.
+
+**"Proposta pode ser enviada ao cliente com custo desconhecido, sem bloqueio
+duro" (CRITICAL).** Não reproduz. A trava existe em duas camadas e foi
+exercitada: o backend recusa com `409 incomplete_cost` — *"Esta proposta
+utiliza preço com custo industrial incompleto. Confirme explicitamente para
+enviar."* — e só aceita com `confirmIncompleteCost: true`; a tela abre um
+diálogo próprio ("Enviar com custo incompleto?") que lista QUAIS linhas estão
+sem base antes de qualquer envio. O auditor concluiu pela ausência de trava a
+partir de um botão habilitado, sem clicar nele — a instrução era justamente
+parar antes de confirmar.
 
 **"R-18/R-19/R-20 geram segunda página vazia" (HIGH).** Não reproduz como
 descrito. Medindo na largura REAL de impressão (área útil da folha, não a da
