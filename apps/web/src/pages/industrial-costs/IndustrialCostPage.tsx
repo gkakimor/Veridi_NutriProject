@@ -148,6 +148,13 @@ export function IndustrialCostPage() {
   // Primeira estrutura do produto precisa de base de produção: nunca se
   // assume 1000. Sem base informada nem sugerida, o botão fica bloqueado —
   // e agora diz por quê.
+  /*
+   * Estrutura de custos parte da formulação ATIVA do produto. Sem ela o
+   * backend recusa com a razão certa — mas só depois de a pessoa preencher
+   * a base e clicar; e a recusa cita uma tela que não é esta.
+   */
+  const missingActiveFormulation = data.activeFormulationVersionId === null;
+
   const missingProductionBase =
     data.versions.length === 0 &&
     !referenceQuantity.trim() &&
@@ -227,7 +234,7 @@ export function IndustrialCostPage() {
                     title: "Informe a base de produção para criar a estrutura.",
                   }
                 : {})}
-              disabled={saving || missingProductionBase}
+              disabled={saving || missingProductionBase || missingActiveFormulation}
               onClick={() =>
                 void run(() =>
                   createIndustrialCostVersion(
@@ -242,9 +249,22 @@ export function IndustrialCostPage() {
               {data.versions.length === 0 ? "Criar estrutura de custos" : "Nova versão"}
             </button>
           )}
-          {canEdit && missingProductionBase && (
+          {canEdit && missingProductionBase && !missingActiveFormulation && (
             <p id="create-cost-version-reason" className="field__hint">
               Informe a base de produção para criar a estrutura.
+            </p>
+          )}
+
+          {canEdit && missingActiveFormulation && (
+            <p className="form-alert" role="status">
+              Este produto ainda não tem formulação ativa, e a estrutura de custos parte dela.{" "}
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => navigate(`/producao/formulacoes/${data.productId}`)}
+              >
+                Abrir formulação
+              </button>
             </p>
           )}
           {version && (

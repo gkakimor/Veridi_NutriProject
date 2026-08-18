@@ -848,7 +848,26 @@ export function LotDetailPage() {
       <ConfirmDialog
         open={releaseDialogOpen}
         title="Liberar lote?"
-        message={`"${lot.code}" ficará disponível para uso a partir de agora.`}
+        message={
+          // O backend recusa a liberação com laudo pendente, e recusava
+          // certo. Mas o diálogo era o mesmo do lote sem exigência: a
+          // Qualidade só descobria a pendência depois de confirmar.
+          lot.requiresCoa && lot.coaStatus !== "APPROVED" ? (
+            <>
+              <p>
+                O laudo (CoA) deste lote está como{" "}
+                <strong>{COA_STATUS_LABELS[lot.coaStatus]}</strong>, e o item exige laudo
+                aprovado. A liberação será recusada enquanto isso não mudar.
+              </p>
+              <p>
+                Trate o laudo na seção Qualidade documental desta página: anexe o documento e
+                aprove o CoA antes de liberar.
+              </p>
+            </>
+          ) : (
+            `"${lot.code}" ficará disponível para uso a partir de agora.`
+          )
+        }
         confirmLabel="Liberar"
         confirmTone="accent"
         onCancel={() => setReleaseDialogOpen(false)}

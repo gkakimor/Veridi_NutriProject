@@ -206,7 +206,7 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
 
         <FormSection
           title="Identificação"
-          subtitle="Dados basicos do cliente usados em produtos e ordens de producao."
+          subtitle="Dados básicos do cliente usados em produtos e ordens de produção."
         >
           <div className="field-grid-2">
             <div className="field field--full">

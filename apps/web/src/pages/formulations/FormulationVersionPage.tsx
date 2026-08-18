@@ -530,7 +530,9 @@ export function FormulationVersionPage() {
               <thead>
                 <tr>
                   <th>Item</th>
-                  <th>Tipo</th>
+                  {/* Mostra `stockUnitCode`: chamar de "Tipo" fazia ler
+                      categoria do material onde está a unidade de estoque. */}
+                  <th>Un. estoque</th>
                   <th>Base</th>
                   <th>Fornecimento</th>
                   <th className="is-numeric">Quantidade</th>

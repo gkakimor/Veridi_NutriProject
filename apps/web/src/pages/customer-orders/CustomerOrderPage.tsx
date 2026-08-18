@@ -779,7 +779,7 @@ export function CustomerOrderPage() {
           </div>
         </FormSection>
 
-        <FormSection title="Produtos" subtitle="Um Product por pedido — a unidade vem do item de produto acabado.">
+        <FormSection title="Produtos" subtitle="Um produto por pedido — a unidade vem do item de produto acabado.">
           <div className="table-container">
             {/* Produto é a coluna de decisão: fica com o espaço, e a busca
                 dentro dela precisa de largura para nomes longos. */}

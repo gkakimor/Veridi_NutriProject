@@ -158,7 +158,7 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
 
         <FormSection
           title="Identificação"
-          subtitle="Dados basicos do fornecedor usados em compras e recebimento."
+          subtitle="Dados básicos do fornecedor usados em compras e recebimento."
         >
           <div className="field-grid-2">
             <div className="field field--full">

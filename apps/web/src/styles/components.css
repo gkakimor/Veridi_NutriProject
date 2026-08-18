@@ -1055,6 +1055,17 @@
   position: relative;
 }
 
+/*
+ * Numa tabela larga a célula encolhe até o conteúdo, e o seletor ia junto:
+ * na Formulação o campo do item media 28px — sobrava o "✕" e o item
+ * escolhido ficava invisível enquanto se edita a fórmula. Errar material em
+ * fórmula de suplemento é risco de produto, não detalhe visual.
+ */
+td .entity-select {
+  display: block;
+  min-width: 15rem;
+}
+
 /* Dentro de `.field` o input herdava largura da regra de formulário; numa
    célula de tabela não havia regra nenhuma e ele encolhia para a largura
    nativa do browser — justo na coluna que foi alargada para o produto. */
