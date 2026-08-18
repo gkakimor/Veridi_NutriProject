@@ -177,6 +177,27 @@ describe("Produtos do projeto", () => {
     // Projeto fechado não recebe produto novo.
     expect(screen.queryByRole("button", { name: /Adicionar produto/ })).toBeNull();
   });
+
+  it("projeto aprovado explica por que não há como adicionar produto", () => {
+    render(
+      <MemoryRouter>
+        <ProjectProductsSection
+          projectId="prj-1"
+          customerId="cli-1"
+          products={[product("pp-a", "PROD-000001", "Pré-Treino Frutas Vermelhas", "APPROVED")]}
+          editable={false}
+          projectStatus="APPROVED"
+          onChanged={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    // Sem o texto, a ação simplesmente some e o usuário conclui que a tela
+    // quebrou — foi o que acontecia quando o botão aparecia e o backend
+    // recusava com 409 depois de o nome já ter sido digitado.
+    expect(screen.queryByRole("button", { name: /Adicionar produto/ })).toBeNull();
+    expect(screen.getByText(/Projeto aprovado é histórico/)).toBeTruthy();
+  });
 });
 
 describe("Histórico de orçamentos", () => {

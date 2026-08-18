@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import type { ProductDTO, ProjectProductDTO } from "@veridi/shared";
+import type { ProductDTO, ProjectProductDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_PRODUCT_STATUS_LABELS } from "@veridi/shared";
 import { createProjectProduct, linkProjectProduct } from "../../lib/projects-api";
 import { listProducts } from "../../lib/products-api";
@@ -36,6 +36,7 @@ export function ProjectProductsSection({
   customerId,
   products,
   editable,
+  projectStatus,
   onChanged,
 }: {
   projectId: string;
@@ -43,6 +44,8 @@ export function ProjectProductsSection({
   products: ProjectProductDTO[];
   /** Projeto aprovado ou cancelado é histórico: não recebe produto novo. */
   editable: boolean;
+  /** Só para explicar por que a ação sumiu — nunca para liberar a ação. */
+  projectStatus?: ProjectStatus;
   onChanged: () => void;
 }) {
   const [mode, setMode] = useState<"closed" | "create" | "link">("closed");
@@ -84,7 +87,11 @@ export function ProjectProductsSection({
       title="Produtos do projeto"
       subtitle="Um projeto pode desenvolver vários produtos — cada um com fórmula, custo e preço próprios."
     >
-      {error && <p className="form-alert">{error}</p>}
+      {error && mode === "closed" && (
+        <p className="form-alert" role="alert">
+          {error}
+        </p>
+      )}
 
       {products.length === 0 ? (
         <p className="field__hint">
@@ -161,6 +168,15 @@ export function ProjectProductsSection({
         </div>
       )}
 
+      {/* Ação ausente sem explicação vira "o sistema não fez nada". */}
+      {!editable && (projectStatus === "APPROVED" || projectStatus === "CANCELLED") && (
+        <p className="field__hint">
+          {projectStatus === "APPROVED"
+            ? "Projeto aprovado é histórico: o escopo de produtos ficou definido na proposta aceita. Um produto novo pede um projeto novo."
+            : "Projeto cancelado é histórico e não recebe produto novo."}
+        </p>
+      )}
+
       {editable && mode !== "closed" && (
         <div className="inline-form">
           <div className="toolbar__scope">
@@ -179,6 +195,14 @@ export function ProjectProductsSection({
               Vincular produto existente
             </button>
           </div>
+
+          {/* Perto do botão que falhou: no topo da seção, atrás da tabela de
+              produtos, a recusa passava despercebida e o clique parecia mudo. */}
+          {error && (
+            <p className="form-alert" role="alert">
+              {error}
+            </p>
+          )}
 
           {mode === "create" ? (
             <>

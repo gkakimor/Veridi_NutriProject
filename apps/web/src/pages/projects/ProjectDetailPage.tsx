@@ -301,7 +301,11 @@ export function ProjectDetailPage() {
           projectId={project.id}
           customerId={project.customerId}
           products={project.products}
-          editable={canEdit}
+          // Papel NÃO basta: projeto aprovado ou cancelado é histórico e o
+          // backend recusa produto novo. Oferecer o botão assim mandava o
+          // Comercial preencher um nome para receber 409 no fim.
+          editable={canEdit && project.status !== "APPROVED" && project.status !== "CANCELLED"}
+          projectStatus={project.status}
           onChanged={load}
         />
 
