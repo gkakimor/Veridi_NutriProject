@@ -21,7 +21,8 @@ vi.mock("../../lib/projects-api", () => ({
   addQuoteLine: vi.fn(),
   applyQuotePricing: vi.fn(),
   createQuoteVersion: vi.fn(),
-  getQuotePricingOptions: vi.fn(),
+  // Consultada por linha assim que há quantidade: precisa devolver promessa.
+  getQuotePricingOptions: vi.fn(() => Promise.resolve(null)),
   rejectQuoteVersion: vi.fn(),
   removeQuoteLine: vi.fn(),
   sendQuoteVersion: vi.fn(),

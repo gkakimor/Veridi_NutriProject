@@ -497,19 +497,29 @@ async function main(): Promise<void> {
     where: { productId: first.productId, status: "ACTIVE" },
   });
   if (estruturaAtiva) {
-    // Só recalcula enquanto a base ainda não conhece o custo: reexecutar o
-    // seed não pode empilhar um cálculo novo a cada rodada.
+    /*
+     * Recalcula enquanto a base ainda NÃO fechou.
+     *
+     * A condição é "o custo já é completo?", não "é exatamente NO_COST": o
+     * cálculo criado na ativação nasce PARCIAL — recursos conhecidos,
+     * materiais ainda sem compra — e é justamente ele que precisa de um
+     * sucessor depois dos recebimentos. Reexecutar o seed com a base já
+     * completa não empilha cálculo nenhum.
+     */
     const ultimo = await prisma.industrialCostCalculation.findFirst({
       where: { industrialCostVersionId: estruturaAtiva.id },
       orderBy: { costReferenceDate: "desc" },
       select: { quality: true },
     });
-    if (ultimo && ultimo.quality !== "NO_COST") return;
-
-    const recalculo = await saveIndustrialCostCalculation(estruturaAtiva.id, {}, actor);
-    console.log(
-      `  custo recalculado após as compras: ${recalculo.code} — qualidade ${recalculo.quality}`,
-    );
+    const jaCompleto =
+      ultimo?.quality === "COMPLETE_REAL_REFERENCE" ||
+      ultimo?.quality === "COMPLETE_WITH_ESTIMATES";
+    if (!jaCompleto) {
+      const recalculo = await saveIndustrialCostCalculation(estruturaAtiva.id, {}, actor);
+      console.log(
+        `  custo recalculado após as compras: ${recalculo.code} — qualidade ${recalculo.quality}`,
+      );
+    }
   }
 
   const summary = await prisma.projectProduct.findMany({
