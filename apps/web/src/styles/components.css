@@ -208,6 +208,18 @@
   box-shadow: inset 1px 0 0 var(--line);
 }
 
+/*
+ * Célula fixa com menu aberto sobe no empilhamento.
+ *
+ * Cada célula fixa tem fundo próprio e é pintada na ordem do DOM: as linhas
+ * de baixo cobriam o menu da linha de cima, que aparecia cortado no meio de
+ * um item ("Custos in…"). O `z-index` alto do menu não resolvia — ele é
+ * relativo à própria célula, e é a célula que precisa vir à frente.
+ */
+.table--sticky-actions td:last-child:has(.row-actions__menu) {
+  z-index: 3;
+}
+
 .table--sticky-actions tbody tr:hover td:last-child {
   background: var(--canvas);
 }

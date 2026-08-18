@@ -53,6 +53,9 @@ export function AppShell() {
    */
   useEffect(() => {
     setSearchError(null);
+    // O termo também não sobrevive à troca de tela: um código de lote parado
+    // no campo, três telas depois, parece filtro ativo do que está na frente.
+    setSearchValue("");
   }, [location.pathname]);
 
   async function handleSearchSubmit(event: FormEvent) {
