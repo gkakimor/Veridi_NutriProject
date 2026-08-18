@@ -254,7 +254,7 @@ function AttentionRow({ item, onOpen }: { item: AttentionItemDTO; onOpen: () => 
  * autoridade; aqui só se evita esconder a ação do usuário certo.
  */
 const QUICK_ACTIONS: { label: string; path: string; roles: UserRole[] }[] = [
-  { label: "Novo projeto", path: "/comercial/projetos", roles: ["COMMERCIAL", "ADMIN"] },
+  { label: "Novo projeto", path: "/comercial/projetos?novo=1", roles: ["COMMERCIAL", "ADMIN"] },
   { label: "Novo pedido", path: "/comercial/pedidos/novo", roles: ["COMMERCIAL", "ADMIN"] },
   { label: "Nova ordem de produção", path: "/producao/ordens", roles: ["PRODUCTION", "ADMIN"] },
   {

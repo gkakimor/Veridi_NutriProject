@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState , useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { RecipeSheetDTO, RecipeSheetPartDTO } from "@veridi/shared";
+import type { RecipeSheetDTO, RecipeSheetPartDTO, RecipeSheetRequirementDTO } from "@veridi/shared";
 import {
   PRODUCTION_PART_STATUS_LABELS,
   SUPPLY_RESPONSIBILITY_LABELS,
@@ -48,12 +48,37 @@ export function RecipeSheetPage() {
    * pesada, a ação parecia não ter efeito. Traz o alerta para a vista.
    */
   function reportError(err: unknown, fallback: string) {
-    setError(err instanceof Error ? err.message : fallback);
+    const raw = err instanceof Error ? err.message : fallback;
+    // "restam 0" sozinho não explica a causa: o saldo reservado desta linha
+    // costuma ter sido baixado pelo Consumo Real da própria OP.
+    const translated = /restam 0\b/.test(raw)
+      ? "Esta linha já teve todo o saldo reservado consumido na OP. O apontamento de Consumo Real já baixou o material; registrar a pesagem novamente criaria uma duplicidade de consumo."
+      : raw;
+    setError(translated);
     requestAnimationFrame(() => {
       alertRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
       alertRef.current?.focus();
     });
   }
+  /**
+   * A linha teve o saldo reservado baixado pelo Consumo Real da OP.
+   *
+   * Nada foi pesado nesta folha e não sobrou reserva: quem consumiu foi o
+   * apontamento da OP. Sem esta leitura, a folha só devolvia "restam 0"
+   * depois da tentativa, sem dizer a causa.
+   */
+  function consumedByOrder(requirement: RecipeSheetRequirementDTO): boolean {
+    const reservedRemaining = requirement.reservedLots.reduce(
+      (total, lot) => total + Number(lot.quantity),
+      0,
+    );
+    return (
+      reservedRemaining === 0 &&
+      Number(requirement.weighedQuantity) === 0 &&
+      Number(requirement.plannedQuantity) > 0
+    );
+  }
+
   const [activePart, setActivePart] = useState(1);
 
   const [requirementId, setRequirementId] = useState("");
@@ -136,6 +161,8 @@ export function RecipeSheetPage() {
 
   const part = sheet.parts.find((row) => row.partNumber === activePart) ?? sheet.parts[0];
   const ordemEncerrada = sheet.status === "COMPLETED" || sheet.status === "CANCELLED";
+  const selectedRequirement =
+    part?.requirements.find((row) => row.requirementId === requirementId) ?? null;
 
   return (
     <>
@@ -287,6 +314,9 @@ export function RecipeSheetPage() {
                       </td>
                       <td>
                         {requirement.reservedLots.map((lot) => lot.lotCode).join(", ") || "—"}
+                        {consumedByOrder(requirement) && (
+                          <p className="field__hint">Consumo já registrado nesta OP.</p>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -316,12 +346,37 @@ export function RecipeSheetPage() {
                   >
                     <option value="">Selecione…</option>
                     {part.requirements.map((requirement) => (
-                      <option key={requirement.requirementId} value={requirement.requirementId}>
+                      <option
+                        key={requirement.requirementId}
+                        value={requirement.requirementId}
+                        disabled={consumedByOrder(requirement)}
+                      >
                         {requirement.itemCode} — {requirement.itemName}
+                        {consumedByOrder(requirement) ? " (consumo já registrado na OP)" : ""}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Saldo já baixado pelo Consumo Real: o campo não pode
+                    parecer operável. A regra de negócio não muda — não existe
+                    segundo consumo, nem reserva recriada. */}
+                {selectedRequirement && consumedByOrder(selectedRequirement) && (
+                  <div className="form-alert form-alert--inline" role="status">
+                    <p>Consumo já registrado nesta OP.</p>
+                    <p>
+                      O saldo reservado desta linha já foi consumido pelo apontamento de Consumo
+                      Real. Registrar a pesagem novamente criaria uma duplicidade de consumo.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => navigate(`/producao/ordens/${sheet.productionOrderId}`)}
+                    >
+                      Ver Consumo Real da OP
+                    </button>
+                  </div>
+                )}
 
                 <div className="field field--narrow">
                   <label htmlFor="weighing-lot">Lote (escaneie ou digite)</label>

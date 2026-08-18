@@ -16,7 +16,12 @@ import {
   QuoteNotSentError,
 } from "./projects.errors.js";
 import { getProjectById } from "./projects.service.js";
-import { assertPriceEditable, buildLineSnapshots } from "./quote-pricing.service.js";
+import {
+  assertPriceEditable,
+  buildLineSnapshots,
+  linePricingInclude,
+  pricingProvenanceForLine,
+} from "./quote-pricing.service.js";
 import type { RejectQuoteInput, UpdateQuoteVersionInput } from "./projects.schemas.js";
 
 /**
@@ -37,7 +42,14 @@ const CODE_SEQUENCE = "quote_code_seq";
  * só entra quando quem chamou pode vê-la, e nunca no documento do cliente.
  */
 export const quoteInclude = {
-  lines: { orderBy: { sortOrder: "asc" as const }, include: { product: true } },
+  lines: {
+    orderBy: { sortOrder: "asc" as const },
+    // `pricingVersion`/`pricingTier` vêm junto porque a proveniência é
+    // montada aqui: sem elas o DTO devolvia `pricing: null` mesmo em linha
+    // com `priceSource = PRICING_TIER`, e a UI perdia PREC/faixa/qualidade
+    // de custo — inclusive a detecção de custo incompleto no envio.
+    include: { product: true, ...linePricingInclude },
+  },
 } as const;
 
 export type QuoteWithLines = PrismaTypes.QuoteVersionGetPayload<{ include: typeof quoteInclude }>;
@@ -70,12 +82,20 @@ function toQuoteLineDTO(
   };
 }
 
+/**
+ * Custo, margem, markup e comissão são informação interna: só quem negocia
+ * (ou administra) recebe a proveniência econômica.
+ */
+export function canSeePricingProvenance(role: string): boolean {
+  return role === "COMMERCIAL" || role === "ADMIN";
+}
+
 export function toQuoteVersionDTO(
   quote: QuoteWithLines,
-  pricingByLine: Map<string, QuotePricingProvenanceDTO> | null = null,
+  includePricing: boolean,
 ): QuoteVersionDTO {
   const lines = quote.lines.map((line) =>
-    toQuoteLineDTO(line, pricingByLine?.get(line.id) ?? null),
+    toQuoteLineDTO(line, includePricing ? pricingProvenanceForLine(line, quote.status) : null),
   );
 
   // Total da proposta é a soma das linhas — e só existe quando TODAS têm
@@ -132,9 +152,12 @@ export function toQuoteVersionDTO(
   };
 }
 
-export async function getQuoteById(id: string): Promise<QuoteVersionDTO | null> {
+export async function getQuoteById(
+  id: string,
+  includePricing = false,
+): Promise<QuoteVersionDTO | null> {
   const quote = await getPrisma().quoteVersion.findUnique({ where: { id }, include: quoteInclude });
-  return quote ? toQuoteVersionDTO(quote) : null;
+  return quote ? toQuoteVersionDTO(quote, includePricing) : null;
 }
 
 async function requireQuoteWithLines(id: string): Promise<QuoteWithLines> {

@@ -13,6 +13,7 @@ import {
   PRICING_VERSION_STATUS_LABELS,
 } from "@veridi/shared";
 import { CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
 import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
@@ -53,6 +54,7 @@ export function PricingPage() {
   const [pricing, setPricing] = useState<PricingVersionDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [activateConfirm, setActivateConfirm] = useState(false);
 
   const [quantity, setQuantity] = useState("");
   const [priceMode, setPriceMode] = useState<PriceMode>("TARGET_MARGIN");
@@ -376,17 +378,13 @@ export function PricingPage() {
                   className="btn btn--accent btn--sm"
                   disabled={saving || pricing.tiers.length === 0}
                   onClick={() => {
-                    if (
-                      incompleteCost &&
-                      !window.confirm(
-                        "O custo está incompleto em pelo menos uma faixa. Ativar a precificação assim?",
-                      )
-                    ) {
+                    if (incompleteCost) {
+                      setActivateConfirm(true);
                       return;
                     }
                     void run(() =>
                       activatePricingVersion(pricing.id, {
-                        confirmIncompleteCost: incompleteCost,
+                        confirmIncompleteCost: false,
                         confirmOutdatedStructure: true,
                       }),
                     );
@@ -408,6 +406,53 @@ export function PricingPage() {
           </p>
         </FormSection>
       </div>
+
+      <ConfirmDialog
+        open={activateConfirm}
+        title="Ativar precificação com custo incompleto?"
+        confirmLabel="Ativar precificação"
+        confirmTone="accent"
+        message={
+          <>
+            <p>
+              O custo industrial está incompleto em pelo menos uma faixa. Ativar torna esta a
+              precificação vigente do produto e ela passa a ser oferecida no orçamento.
+            </p>
+            <ul className="confirm-dialog__list">
+              <li>
+                Precificação: <span className="code">{pricing.label}</span>
+              </li>
+              <li>
+                Produto: <span className="code">{pricing.productCode}</span> {pricing.productName}
+              </li>
+              <li>
+                Faixas: {pricing.tiers.length}{" "}
+                {pricing.tiers.length === 1 ? "faixa" : "faixas"} — sem custo completo:{" "}
+                {
+                  pricing.tiers.filter(
+                    (tier) => tier.costQuality === "PARTIAL" || tier.costQuality === "NO_COST",
+                  ).length
+                }
+              </li>
+            </ul>
+            {pricing.warnings.map((warning) => (
+              <p key={warning.code} className="field__hint">
+                {warning.message}
+              </p>
+            ))}
+          </>
+        }
+        onCancel={() => setActivateConfirm(false)}
+        onConfirm={() => {
+          setActivateConfirm(false);
+          void run(() =>
+            activatePricingVersion(pricing.id, {
+              confirmIncompleteCost: true,
+              confirmOutdatedStructure: true,
+            }),
+          );
+        }}
+      />
     </>
   );
 }

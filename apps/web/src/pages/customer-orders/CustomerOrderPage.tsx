@@ -787,8 +787,8 @@ export function CustomerOrderPage() {
                   <th>Produto</th>
                   <th className="col-quantity is-numeric">Quantidade</th>
                   <th className="col-unit">Un.</th>
-                  {!isDraft && <th>Expedido</th>}
-                  {!isDraft && <th>Falta expedir</th>}
+                  {!isDraft && <th className="is-numeric">Expedido</th>}
+                  {!isDraft && <th className="is-numeric">Falta expedir</th>}
                   {isDraft && <th aria-hidden="true" />}
                 </tr>
               </thead>
@@ -829,12 +829,12 @@ export function CustomerOrderPage() {
                     </td>
                     <td>{line.unitCode || "—"}</td>
                     {!isDraft && (
-                      <td>
+                      <td className="is-numeric">
                         {customerOrder?.lines.find((l) => l.productId === line.productId)?.shippedQuantity ?? "—"}
                       </td>
                     )}
                     {!isDraft && (
-                      <td>
+                      <td className="is-numeric">
                         {customerOrder?.lines.find((l) => l.productId === line.productId)?.outstandingQuantity ??
                           "—"}
                       </td>
@@ -1228,10 +1228,10 @@ export function CustomerOrderPage() {
                   <tr>
                     <th>Produto</th>
                     <th>Pedido</th>
-                    <th>Expedido</th>
-                    <th>Reservado restante</th>
-                    <th>Falta reservar</th>
-                    <th>Disponível agora</th>
+                    <th className="is-numeric">Expedido</th>
+                    <th className="is-numeric">Reservado restante</th>
+                    <th className="is-numeric">Falta reservar</th>
+                    <th className="is-numeric">Disponível agora</th>
                     <th>Reservar</th>
                   </tr>
                 </thead>
@@ -1244,10 +1244,10 @@ export function CustomerOrderPage() {
                       <td>
                         {line.orderedQuantity} {line.unitCode}
                       </td>
-                      <td>{line.shippedQuantity}</td>
-                      <td>{line.reservedRemaining}</td>
-                      <td>{line.stillToReserve}</td>
-                      <td>{line.currentAvailable}</td>
+                      <td className="is-numeric">{line.shippedQuantity}</td>
+                      <td className="is-numeric">{line.reservedRemaining}</td>
+                      <td className="is-numeric">{line.stillToReserve}</td>
+                      <td className="is-numeric">{line.currentAvailable}</td>
                       <td>
                         <input
                           type="text"

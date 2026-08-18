@@ -14,8 +14,6 @@ import {
   TierWithoutPriceError,
   applyQuoteLinePricing,
   getQuoteLinePricingOptions,
-  getQuoteLineWithPricing,
-  toPricingProvenance,
   useManualQuoteLinePrice,
 } from "./quote-pricing.service.js";
 import {
@@ -79,6 +77,7 @@ import {
   createQuoteVersion,
   removeQuoteLine,
   updateQuoteLine,
+  canSeePricingProvenance,
   getQuoteById,
   rejectQuoteVersion,
   sendQuoteVersion,
@@ -196,7 +195,10 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/projects/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const project = await getProjectById(id);
+    const user = requireCurrentUser(request);
+    // Mesmo gate do detalhe do orçamento: Produção vê a proposta, nunca
+    // custo, margem ou comissão.
+    const project = await getProjectById(id, canSeePricingProvenance(user.role));
     if (!project) return reply.status(404).send({ error: "not_found" });
     return reply.send(project);
   });
@@ -368,21 +370,15 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/quote-versions/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const user = requireCurrentUser(request);
-    const quote = await getQuoteById(id);
-    if (!quote) return reply.status(404).send({ error: "not_found" });
-
     // Custo, margem, markup e comissão são informação interna: só quem
     // negocia (ou administra) recebe a proveniência econômica — e ela é por
-    // linha, porque cada produto tem a própria cadeia PREC → CALC.
-    if (user.role !== "COMMERCIAL" && user.role !== "ADMIN") return reply.send(quote);
+    // linha, porque cada produto tem a própria cadeia PREC → CALC. O DTO
+    // monta isso a partir das relações já carregadas: antes a rota fazia uma
+    // consulta por linha, e o detalhe do projeto não montava nada.
+    const quote = await getQuoteById(id, canSeePricingProvenance(user.role));
+    if (!quote) return reply.status(404).send({ error: "not_found" });
 
-    const lines = await Promise.all(
-      quote.lines.map(async (line) => ({
-        ...line,
-        pricing: toPricingProvenance(await getQuoteLineWithPricing(line.id)),
-      })),
-    );
-    return reply.send({ ...quote, lines });
+    return reply.send(quote);
   });
 
   /*
@@ -464,7 +460,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
       const quoteVersionId = await applyQuoteLinePricing(id, parsed.data.pricingTierId, actor);
-      return reply.send(await getQuoteById(quoteVersionId));
+      return reply.send(await getQuoteById(quoteVersionId, canSeePricingProvenance(actor.role)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
@@ -477,7 +473,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     try {
       const actor = requireRole(request, "COMMERCIAL", "ADMIN");
       const quoteVersionId = await useManualQuoteLinePrice(id, actor);
-      return reply.send(await getQuoteById(quoteVersionId));
+      return reply.send(await getQuoteById(quoteVersionId, canSeePricingProvenance(actor.role)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

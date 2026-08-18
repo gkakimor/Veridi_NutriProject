@@ -773,6 +773,34 @@ describe("Orçamento com precificação", () => {
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
 
+    /**
+     * A tela só consegue PEDIR a confirmação se enxergar a proveniência da
+     * linha antes de enviar. O DTO devolvia `pricing: null` mesmo com
+     * `priceSource = PRICING_TIER` (o parâmetro que montava a proveniência
+     * nunca era passado por nenhum caller), então a UI nunca detectava custo
+     * incompleto e o usuário só encontrava o 409 — sem saída.
+     */
+    const draftDetail = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    expect(draftDetail.lines[0].priceSource).toBe("PRICING_TIER");
+    expect(draftDetail.lines[0].pricing).not.toBeNull();
+    expect(draftDetail.lines[0].pricing.pricingCode).toBe(chain.pricing.code);
+    expect(draftDetail.lines[0].pricing.pricingVersionNumber).toBe(chain.pricing.versionNumber);
+    expect(draftDetail.lines[0].pricing.tierQuantity).toBeTruthy();
+    expect(draftDetail.lines[0].pricing.costQuality).toBe("PARTIAL");
+
+    // A mesma proveniência precisa chegar pelo detalhe do PROJETO, que é a
+    // tela onde o botão "Enviar ao cliente" realmente vive.
+    const projectDetail = (
+      await app.inject({ method: "GET", url: `/projects/${project.id}` })
+    ).json();
+    const projectQuote = projectDetail.quoteVersions.find(
+      (version: { id: string }) => version.id === quote.id,
+    );
+    expect(projectQuote.lines[0].pricing).not.toBeNull();
+    expect(projectQuote.lines[0].pricing.costQuality).toBe("PARTIAL");
+
     const refused = await app.inject({
       method: "POST",
       url: `/quote-versions/${quote.id}/send`,

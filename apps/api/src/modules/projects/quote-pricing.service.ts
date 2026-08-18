@@ -105,10 +105,25 @@ type QuoteRow = PrismaTypes.QuoteLineGetPayload<{
   include: { pricingVersion: true; pricingTier: true; quoteVersion: true };
 }>;
 
+/**
+ * A linha basta para montar a proveniência: o status da versão entra por
+ * fora, para que o DTO da versão (que já carregou as linhas junto) não
+ * precise reconsultar `quoteVersion` uma vez por linha.
+ */
+export type QuoteLinePricingRow = PrismaTypes.QuoteLineGetPayload<{
+  include: { pricingVersion: true; pricingTier: true };
+}>;
+
 const lineInclude = {
   pricingVersion: true,
   pricingTier: true,
   quoteVersion: true,
+} satisfies PrismaTypes.QuoteLineInclude;
+
+/** Include mínimo para que uma linha carregue a própria proveniência. */
+export const linePricingInclude = {
+  pricingVersion: true,
+  pricingTier: true,
 } satisfies PrismaTypes.QuoteLineInclude;
 
 /**
@@ -119,10 +134,13 @@ const lineInclude = {
  * snapshot congelado — precificação nova, cálculo novo ou compra nova não
  * podem reescrever o que foi apresentado ao cliente.
  */
-export function toPricingProvenance(quote: QuoteRow): QuotePricingProvenanceDTO | null {
+export function pricingProvenanceForLine(
+  quote: QuoteLinePricingRow,
+  quoteVersionStatus: string,
+): QuotePricingProvenanceDTO | null {
   if (quote.priceSource !== "PRICING_TIER") return null;
 
-  if (quote.quoteVersion.status !== "DRAFT" && quote.pricingCodeSnapshot) {
+  if (quoteVersionStatus !== "DRAFT" && quote.pricingCodeSnapshot) {
     return {
       pricingVersionId: quote.pricingVersionId,
       pricingCode: quote.pricingCodeSnapshot,
@@ -189,6 +207,11 @@ export function toPricingProvenance(quote: QuoteRow): QuotePricingProvenanceDTO 
     warnings: (tier.warningsSnapshot as unknown as IndustrialCostWarningDTO[]) ?? [],
     frozen: false,
   };
+}
+
+/** Mesma proveniência, para quem já carregou a linha com `quoteVersion`. */
+export function toPricingProvenance(quote: QuoteRow): QuotePricingProvenanceDTO | null {
+  return pricingProvenanceForLine(quote, quote.quoteVersion.status);
 }
 
 export async function getQuoteLineWithPricing(id: string): Promise<QuoteRow> {

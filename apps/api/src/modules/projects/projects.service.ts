@@ -33,6 +33,7 @@ import type {
   ListProjectsQuery,
   UpdateProjectInput,
 } from "./projects.schemas.js";
+import { linePricingInclude } from "./quote-pricing.service.js";
 import { toQuoteVersionDTO } from "./quotes.service.js";
 
 /**
@@ -72,7 +73,15 @@ const projectInclude = {
   },
   quoteVersions: {
     orderBy: { versionNumber: "asc" as const },
-    include: { lines: { orderBy: { sortOrder: "asc" as const }, include: { product: true } } },
+    // Espelha `quoteInclude`: a linha precisa da faixa/precificação para o
+    // DTO montar a proveniência. Sem isso o detalhe do projeto devolvia
+    // `pricing: null` e a tela do orçamento não enxergava custo incompleto.
+    include: {
+      lines: {
+        orderBy: { sortOrder: "asc" as const },
+        include: { product: true, ...linePricingInclude },
+      },
+    },
   },
   statusHistory: { orderBy: { changedAt: "asc" as const } },
 } as const;
@@ -114,8 +123,10 @@ function toStatusHistoryDTO(
   };
 }
 
-export function toProjectDTO(project: ProjectWithRelations): ProjectDTO {
-  const quotes: QuoteVersionDTO[] = project.quoteVersions.map((quote) => toQuoteVersionDTO(quote));
+export function toProjectDTO(project: ProjectWithRelations, includePricing = false): ProjectDTO {
+  const quotes: QuoteVersionDTO[] = project.quoteVersions.map((quote) =>
+    toQuoteVersionDTO(quote, includePricing),
+  );
   const latest = quotes[quotes.length - 1] ?? null;
   const accepted = quotes.find((quote) => quote.status === "ACCEPTED") ?? null;
 
@@ -172,11 +183,20 @@ async function requireProject(id: string): Promise<ProjectWithRelations> {
 }
 
 /** Detalhe do projeto com a cadeia Produto → Formulação → Custo → Preço. */
-export async function getProjectById(id: string): Promise<ProjectDTO | null> {
+/**
+ * `includePricing` carrega a proveniência econômica das linhas do orçamento
+ * (PREC, faixa, qualidade de custo, margem). É informação interna: quem
+ * chama decide a partir do papel do usuário. Sem ela a tela do projeto não
+ * conseguia nem detectar custo incompleto antes de enviar a proposta.
+ */
+export async function getProjectById(
+  id: string,
+  includePricing = false,
+): Promise<ProjectDTO | null> {
   const project = await getPrisma().project.findUnique({ where: { id }, include: projectInclude });
   if (!project) return null;
 
-  const dto = toProjectDTO(project);
+  const dto = toProjectDTO(project, includePricing);
   // A cadeia técnica/econômica é POR PRODUTO: com vários produtos, um
   // "custo do projeto" seria um número que não corresponde a nada.
   const products = await Promise.all(
@@ -230,7 +250,12 @@ export async function listProjects(
     prisma.project.count({ where }),
   ]);
 
-  return { projects: projects.map(toProjectDTO), ...pageMeta(pagination, total) };
+  // Lista não carrega proveniência econômica: o índice do `map` não pode
+  // virar `includePricing` por acidente.
+  return {
+    projects: projects.map((project) => toProjectDTO(project)),
+    ...pageMeta(pagination, total),
+  };
 }
 
 /**

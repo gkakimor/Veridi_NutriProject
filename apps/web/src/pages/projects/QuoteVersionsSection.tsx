@@ -15,8 +15,10 @@ import {
   useManualQuotePrice,
 } from "../../lib/projects-api";
 import type { PricingVersionDTO } from "@veridi/shared";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
+import { IncompleteCostApiError } from "../../lib/api-errors";
 import { formatBRL } from "../../lib/currency";
 
 /**
@@ -58,6 +60,10 @@ export function QuoteVersionsSection({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addProductId, setAddProductId] = useState("");
+  const [sendConfirm, setSendConfirm] = useState<{
+    quote: QuoteVersionDTO;
+    lines: QuoteLineDTO[];
+  } | null>(null);
   const [pricingLineId, setPricingLineId] = useState<string | null>(null);
   const [pricingOptions, setPricingOptions] = useState<PricingVersionDTO | null>(null);
 
@@ -84,6 +90,45 @@ export function QuoteVersionsSection({
       await action();
       onChanged();
     } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha na operação");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** Linhas cujo preço veio de uma faixa com custo industrial incompleto. */
+  function incompleteCostLines(quote: QuoteVersionDTO): QuoteLineDTO[] {
+    return quote.lines.filter(
+      (line) =>
+        line.pricing?.costQuality === "PARTIAL" || line.pricing?.costQuality === "NO_COST",
+    );
+  }
+
+  /**
+   * Envio do orçamento.
+   *
+   * A proveniência da linha permite ANTECIPAR o custo incompleto e pedir a
+   * confirmação antes de incomodar o servidor. O 409 continua tratado: o
+   * backend é a autoridade final sobre o que é incompleto, então uma recusa
+   * inesperada abre a mesma confirmação em vez de virar texto de erro.
+   */
+  async function trySend(quote: QuoteVersionDTO) {
+    const incomplete = incompleteCostLines(quote);
+    if (incomplete.length > 0) {
+      setSendConfirm({ quote, lines: incomplete });
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await sendQuoteVersion(quote.id, {});
+      onChanged();
+    } catch (err) {
+      if (err instanceof IncompleteCostApiError) {
+        setSendConfirm({ quote, lines: [] });
+        return;
+      }
       setError(err instanceof Error ? err.message : "Falha na operação");
     } finally {
       setSaving(false);
@@ -499,24 +544,7 @@ export function QuoteVersionsSection({
                 type="button"
                 className="btn btn--accent"
                 disabled={saving || open.lines.length === 0}
-                onClick={() => {
-                  const partial = open.lines.some(
-                    (line) =>
-                      line.pricing?.costQuality === "PARTIAL" ||
-                      line.pricing?.costQuality === "NO_COST",
-                  );
-                  if (
-                    partial &&
-                    !window.confirm(
-                      "Esta proposta utiliza preço com custo industrial incompleto. Enviar assim?",
-                    )
-                  ) {
-                    return;
-                  }
-                  void run(() =>
-                    sendQuoteVersion(open.id, partial ? { confirmIncompleteCost: true } : {}),
-                  );
-                }}
+                onClick={() => void trySend(open)}
               >
                 Enviar ao cliente
               </button>
@@ -545,6 +573,53 @@ export function QuoteVersionsSection({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={sendConfirm !== null}
+        title="Enviar com custo incompleto?"
+        confirmLabel="Enviar mesmo assim"
+        cancelLabel="Voltar e revisar"
+        confirmTone="accent"
+        message={
+          <>
+            <p>
+              Uma ou mais linhas desta proposta usam um custo industrial incompleto ou estimado.
+            </p>
+            <p>
+              O preço comercial pode ser enviado, mas a base de custo ainda possui informações
+              pendentes. Confirme somente se deseja enviar esta versão mesmo assim.
+            </p>
+            {sendConfirm && sendConfirm.lines.length > 0 && (
+              <ul className="confirm-dialog__list">
+                {sendConfirm.lines.map((line) => (
+                  <li key={line.id}>
+                    <span className="code">{line.productCode}</span> {line.productName} —{" "}
+                    {line.pricing?.costQuality === "NO_COST"
+                      ? "sem custo industrial conhecido"
+                      : "custo industrial parcial"}
+                    {/* Avisos reais da faixa, quando a precificação registrou algum. */}
+                    {line.pricing?.warnings?.length ? (
+                      <ul>
+                        {line.pricing.warnings.map((warning, index) => (
+                          <li key={index}>{warning.message}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        }
+        onCancel={() => setSendConfirm(null)}
+        onConfirm={() => {
+          const target = sendConfirm;
+          setSendConfirm(null);
+          if (target) {
+            void run(() => sendQuoteVersion(target.quote.id, { confirmIncompleteCost: true }));
+          }
+        }}
+      />
     </FormSection>
   );
 }

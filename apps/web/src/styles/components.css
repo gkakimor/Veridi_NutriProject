@@ -698,6 +698,21 @@
   font-size: var(--fs-sm);
 }
 
+/* Erro preso a um campo dentro de célula de tabela: compacto, sem empurrar
+   a linha inteira. Usado na conferência de lote da Expedição. */
+.form-alert--inline {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  font-size: var(--fs-xs);
+}
+
+/* Lista de linhas afetadas dentro do ConfirmDialog (ex.: custo incompleto). */
+.confirm-dialog__list {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-sm);
+}
+
 /* ---------------- ConfirmDialog ---------------- */
 
 .confirm-overlay {

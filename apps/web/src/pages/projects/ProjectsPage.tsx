@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { CustomerDTO, ProjectDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@veridi/shared";
 import { EntityLink } from "../../components/EntityLink";
@@ -46,7 +46,19 @@ export function ProjectsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  // `?novo=1` abre o cadastro direto — é como a ação rápida do Dashboard
+  // chega aqui sem duplicar o formulário numa rota própria.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [createOpen, setCreateOpen] = useState(searchParams.get("novo") === "1");
+
+  function closeCreate() {
+    setCreateOpen(false);
+    if (searchParams.get("novo") === "1") {
+      const next = new URLSearchParams(searchParams);
+      next.delete("novo");
+      setSearchParams(next, { replace: true });
+    }
+  }
 
   const urlFilter = useInitialFilters();
   const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
@@ -323,9 +335,9 @@ export function ProjectsPage() {
       {createOpen && (
         <ProjectFormModal
           project={null}
-          onClose={() => setCreateOpen(false)}
+          onClose={closeCreate}
           onSaved={(project) => {
-            setCreateOpen(false);
+            closeCreate();
             navigate(`/comercial/projetos/${project.id}`);
           }}
         />

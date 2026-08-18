@@ -131,6 +131,8 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Custo industrial por produto",
     csvPath: "/reports/costs/industrial-by-product/export.csv",
     screenPath: "/relatorios/custos/industrial-por-produto",
+    // Custo industrial por produto: documento interno, como o R-20.
+    internal: true,
     primaryColumns: [
       "Produto",
       "Nome",
@@ -146,6 +148,8 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Precificação por produto",
     csvPath: "/reports/costs/pricing-by-product/export.csv",
     screenPath: "/relatorios/custos/precificacao-por-produto",
+    // Preço, margem e contribuição: documento interno, como o R-20.
+    internal: true,
     primaryColumns: [
       "Produto",
       "Nome",

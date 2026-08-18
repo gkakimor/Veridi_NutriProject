@@ -65,6 +65,8 @@ export function SearchableEntitySelect({
   const [activeIndex, setActiveIndex] = useState(0);
   const container = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  /** Enquanto o cadastro no contexto está aberto, o popover não volta. */
+  const creating = useRef(false);
   const [anchor, setAnchor] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
 
   /** Espaço de leitura: ~10 resultados, sem passar do que a janela oferece. */
@@ -106,6 +108,9 @@ export function SearchableEntitySelect({
   // escolhido no estado e a tela mostra caixa vazia, que lê como "não salvou".
   useEffect(() => {
     if (!value) return;
+    // Cadastro concluído: o registro novo já está escolhido, então o
+    // selector volta ao normal e pode reabrir em novo foco do usuário.
+    creating.current = false;
     setQuery("");
     setOpen(false);
   }, [value]);
@@ -166,8 +171,17 @@ export function SearchableEntitySelect({
   const createIndex = canCreate && onCreateNew ? visible.length : -1;
   const navigableCount = visible.length + (createIndex >= 0 ? 1 : 0);
 
+  /**
+   * Entrega para o cadastro no contexto.
+   *
+   * O popover precisa sumir ANTES do painel de criação aparecer e continuar
+   * fechado: como o `onFocus` do input reabre a lista, o foco devolvido pelo
+   * painel ressuscitava o `listbox` por cima dele — sobrava uma camada
+   * fantasma, com `role=listbox` órfão, sobre o formulário.
+   */
   function startCreate() {
     if (!onCreateNew) return;
+    creating.current = true;
     setOpen(false);
     onCreateNew(query.trim());
   }
@@ -233,8 +247,13 @@ export function SearchableEntitySelect({
         disabled={disabled ?? false}
         placeholder={selected ? `${selected.code} · ${selected.name}` : placeholder}
         value={open ? query : selected ? `${selected.code} · ${selected.name}` : query}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          // Foco devolvido pelo cadastro no contexto não reabre a lista.
+          if (creating.current) return;
+          setOpen(true);
+        }}
         onChange={(event) => {
+          creating.current = false;
           setQuery(event.target.value);
           setOpen(true);
         }}

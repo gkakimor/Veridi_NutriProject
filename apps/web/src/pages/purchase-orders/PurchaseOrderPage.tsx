@@ -784,7 +784,7 @@ export function PurchaseOrderPage() {
             disabled={saving}
             onClick={() => setCancelDialogOpen(true)}
           >
-            Cancelar pedido
+            Cancelar OC
           </button>
         )}
 
@@ -811,7 +811,7 @@ export function PurchaseOrderPage() {
               disabled={saving}
               onClick={() => setConfirmDialogOpen(true)}
             >
-              Confirmar pedido
+              Confirmar OC
             </button>
           )}
           {isReceivable && (
@@ -829,9 +829,9 @@ export function PurchaseOrderPage() {
 
       <ConfirmDialog
         open={confirmDialogOpen}
-        title="Confirmar pedido?"
+        title="Confirmar OC?"
         message='Após confirmar, fornecedor, itens, quantidades e preços não poderão ser alterados. Só será possível ajustar a previsão de entrega e as observações.'
-        confirmLabel="Confirmar pedido"
+        confirmLabel="Confirmar OC"
         confirmTone="accent"
         onCancel={() => setConfirmDialogOpen(false)}
         onConfirm={handleConfirm}
@@ -876,7 +876,7 @@ export function PurchaseOrderPage() {
                 disabled={cancelReason.trim().length < 3 || saving}
                 onClick={handleCancelConfirm}
               >
-                Cancelar pedido
+                Cancelar OC
               </button>
             </div>
           </div>

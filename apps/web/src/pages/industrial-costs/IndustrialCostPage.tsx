@@ -24,6 +24,7 @@ import {
 } from "@veridi/shared";
 import type { IndustrialCostBasis, IndustrialCostCategory } from "@veridi/shared";
 import { CostCalculationSection } from "./CostCalculationSection";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
 import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
@@ -83,6 +84,7 @@ export function IndustrialCostPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [activateConfirm, setActivateConfirm] = useState(false);
   const [referenceQuantity, setReferenceQuantity] = useState("");
   const [category, setCategory] = useState<IndustrialCostCategory>("SECONDARY_PACKAGING");
   const [description, setDescription] = useState("");
@@ -142,6 +144,14 @@ export function IndustrialCostPage() {
 
   // A versão em edição é o rascunho; sem rascunho, mostra-se a vigente.
   const version: IndustrialCostVersionDTO | null = data.draft ?? data.current;
+
+  // Primeira estrutura do produto precisa de base de produção: nunca se
+  // assume 1000. Sem base informada nem sugerida, o botão fica bloqueado —
+  // e agora diz por quê.
+  const missingProductionBase =
+    data.versions.length === 0 &&
+    !referenceQuantity.trim() &&
+    !data.suggestedReferenceOutputQuantity;
   const editable = canEdit && version?.status === "DRAFT";
 
   // Energia direta só existe no modo correspondente; fora dele o recurso de
@@ -186,28 +196,38 @@ export function IndustrialCostPage() {
           {canEdit && data.versions.length === 0 && (
             <div className="field">
               <label htmlFor="new-reference-output">
-                Base de produção ({data.referenceOutputUomCode})
+                Base de produção ({data.referenceOutputUomCode}){" "}
+                <span aria-hidden="true">*</span>
+                <span className="sr-only">(obrigatório)</span>
               </label>
               <input
                 id="new-reference-output"
                 type="text"
                 inputMode="decimal"
+                required
+                aria-describedby="new-reference-output-hint"
                 placeholder={data.suggestedReferenceOutputQuantity ?? "ex.: 1000"}
                 value={referenceQuantity}
                 onChange={(event) => setReferenceQuantity(event.target.value)}
               />
+              <p id="new-reference-output-hint" className="field__hint">
+                Informe a quantidade de referência da estrutura de custos.
+              </p>
             </div>
           )}
           {canEdit && (
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={
-                saving ||
-                (data.versions.length === 0 &&
-                  !referenceQuantity.trim() &&
-                  !data.suggestedReferenceOutputQuantity)
-              }
+              // Botão cinza sem explicação virava beco sem saída: o motivo
+              // acompanha o controle, para leitor de tela e para quem vê.
+              {...(missingProductionBase
+                ? {
+                    "aria-describedby": "create-cost-version-reason",
+                    title: "Informe a base de produção para criar a estrutura.",
+                  }
+                : {})}
+              disabled={saving || missingProductionBase}
               onClick={() =>
                 void run(() =>
                   createIndustrialCostVersion(
@@ -221,6 +241,11 @@ export function IndustrialCostPage() {
             >
               {data.versions.length === 0 ? "Criar estrutura de custos" : "Nova versão"}
             </button>
+          )}
+          {canEdit && missingProductionBase && (
+            <p id="create-cost-version-reason" className="field__hint">
+              Informe a base de produção para criar a estrutura.
+            </p>
           )}
           {version && (
             <button
@@ -345,18 +370,12 @@ export function IndustrialCostPage() {
                       className="btn btn--accent btn--sm"
                       disabled={saving}
                       onClick={() => {
-                        if (
-                          !version.complete &&
-                          !window.confirm(
-                            "Esta estrutura possui premissas de custo ainda não informadas. Ativar assim?",
-                          )
-                        ) {
+                        if (!version.complete) {
+                          setActivateConfirm(true);
                           return;
                         }
                         void run(() =>
-                          activateIndustrialCostVersion(version.id, {
-                            confirmIncomplete: !version.complete,
-                          }),
+                          activateIndustrialCostVersion(version.id, { confirmIncomplete: false }),
                         );
                       }}
                     >
@@ -839,6 +858,39 @@ export function IndustrialCostPage() {
           </div>
         </FormSection>
       </div>
+
+      {version && (
+        <ConfirmDialog
+          open={activateConfirm}
+          title="Ativar estrutura com pendências?"
+          confirmLabel="Ativar estrutura"
+          confirmTone="accent"
+          message={
+            <>
+              <p>
+                Esta estrutura possui premissas de custo ainda não informadas. Ativar assim torna
+                ela a base de custo vigente do produto, com as pendências que existem hoje.
+              </p>
+              <ul className="confirm-dialog__list">
+                <li>
+                  Estrutura: <span className="code">{version.label}</span>
+                </li>
+                <li>
+                  Produto: <span className="code">{data.productCode}</span> {data.productName}
+                </li>
+                <li>Situação: Com pendências</li>
+              </ul>
+            </>
+          }
+          onCancel={() => setActivateConfirm(false)}
+          onConfirm={() => {
+            setActivateConfirm(false);
+            void run(() =>
+              activateIndustrialCostVersion(version.id, { confirmIncomplete: true }),
+            );
+          }}
+        />
+      )}
     </>
   );
 }

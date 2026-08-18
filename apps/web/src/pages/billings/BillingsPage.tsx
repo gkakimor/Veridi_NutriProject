@@ -303,7 +303,7 @@ export function BillingsPage() {
       </div>
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
               <th colSpan={9}>Documentos de faturamento</th>

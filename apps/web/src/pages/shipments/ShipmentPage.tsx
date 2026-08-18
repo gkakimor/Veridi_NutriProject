@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
   ShipmentDTO,
@@ -69,6 +69,9 @@ interface ProductGroupProps {
   onLotInputChange: (reservationLineId: string, value: string) => void;
   onVerify: (line: ShipmentLineDTO) => void;
   verifyingLine: string | null;
+  /** Erro por linha (ex.: conferir sem informar o lote) — mostrado ao lado do campo. */
+  lotErrors: Record<string, string>;
+  registerLotInput: (reservationLineId: string, element: HTMLInputElement | null) => void;
 }
 
 /**
@@ -87,6 +90,8 @@ function ProductGroup({
   onLotInputChange,
   onVerify,
   verifyingLine,
+  lotErrors,
+  registerLotInput,
 }: ProductGroupProps) {
   return (
     <div className="shipment-product">
@@ -118,8 +123,8 @@ function ProductGroup({
                 <th>Lote Veridi</th>
                 <th>Validade</th>
                 <th>Localização</th>
-                <th>Reservado disponível</th>
-                <th>{isDraft ? "Enviar agora" : "Expedido"}</th>
+                <th className="is-numeric">Reservado disponível</th>
+                <th className="is-numeric">{isDraft ? "Enviar agora" : "Expedido"}</th>
                 <th>Conferência</th>
               </tr>
             </thead>
@@ -130,10 +135,10 @@ function ProductGroup({
                   <td>{line.businessLotNumber ?? "—"}</td>
                   <td>{formatDate(line.expiryDate)}</td>
                   <td>{line.location ?? "—"}</td>
-                  <td>
+                  <td className="is-numeric">
                     {line.reservedRemaining} {line.unitCode}
                   </td>
-                  <td>
+                  <td className="is-numeric">
                     {isDraft ? (
                       <input
                         type="text"
@@ -157,30 +162,57 @@ function ProductGroup({
                         </span>
                       </span>
                     ) : isDraft && line.requiresVerification ? (
-                      <div className="lot-scanner__manual-row">
-                        <input
-                          type="text"
-                          aria-label={`Lote conferido da linha ${line.lotCode ?? ""}`}
-                          placeholder="Escaneie ou digite o lote"
-                          value={lotInputs[line.customerOrderReservationLineId] ?? ""}
-                          onChange={(event) =>
-                            onLotInputChange(line.customerOrderReservationLineId, event.target.value)
-                          }
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") onVerify(line);
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn--secondary btn--sm"
-                          disabled={verifyingLine === line.customerOrderReservationLineId}
-                          onClick={() => onVerify(line)}
-                        >
-                          {verifyingLine === line.customerOrderReservationLineId
-                            ? "Conferindo…"
-                            : "Conferir lote"}
-                        </button>
-                      </div>
+                      <>
+                        <div className="lot-scanner__manual-row">
+                          <input
+                            ref={(element) =>
+                              registerLotInput(line.customerOrderReservationLineId, element)
+                            }
+                            type="text"
+                            aria-label={`Lote conferido da linha ${line.lotCode ?? ""}`}
+                            placeholder="Escaneie ou digite o lote"
+                            aria-invalid={
+                              lotErrors[line.customerOrderReservationLineId] ? true : undefined
+                            }
+                            aria-describedby={
+                              lotErrors[line.customerOrderReservationLineId]
+                                ? `lot-error-${line.customerOrderReservationLineId}`
+                                : undefined
+                            }
+                            value={lotInputs[line.customerOrderReservationLineId] ?? ""}
+                            onChange={(event) =>
+                              onLotInputChange(
+                                line.customerOrderReservationLineId,
+                                event.target.value,
+                              )
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") onVerify(line);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn--secondary btn--sm"
+                            disabled={verifyingLine === line.customerOrderReservationLineId}
+                            onClick={() => onVerify(line)}
+                          >
+                            {verifyingLine === line.customerOrderReservationLineId
+                              ? "Conferindo…"
+                              : "Conferir lote"}
+                          </button>
+                        </div>
+                        {/* O erro veio de um clique explícito: precisa ser texto
+                            visível, não só tooltip. */}
+                        {lotErrors[line.customerOrderReservationLineId] && (
+                          <p
+                            id={`lot-error-${line.customerOrderReservationLineId}`}
+                            className="form-alert form-alert--inline"
+                            role="alert"
+                          >
+                            {lotErrors[line.customerOrderReservationLineId]}
+                          </p>
+                        )}
+                      </>
                     ) : (
                       "—"
                     )}
@@ -221,6 +253,8 @@ export function ShipmentPage() {
   /** Código lido/digitado por linha de reserva (a linha é recriada a cada save). */
   const [lotInputs, setLotInputs] = useState<Record<string, string>>({});
   const [verifyingLine, setVerifyingLine] = useState<string | null>(null);
+  const [lotErrors, setLotErrors] = useState<Record<string, string>>({});
+  const lotInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const syncFromServer = useCallback((next: ShipmentDTO) => {
     setShipment(next);
@@ -298,8 +332,23 @@ export function ShipmentPage() {
     if (!id || !shipment) return;
     const reservationLineId = line.customerOrderReservationLineId;
     const lotCode = (lotInputs[reservationLineId] ?? "").trim();
-    if (!lotCode) return;
 
+    // Campo vazio não chama o backend — mas também não pode ser um clique
+    // sem resposta: mensagem visível na linha e foco de volta no campo.
+    if (!lotCode) {
+      setLotErrors((prev) => ({
+        ...prev,
+        [reservationLineId]: "Informe ou escaneie o lote antes de conferir.",
+      }));
+      lotInputRefs.current[reservationLineId]?.focus();
+      return;
+    }
+
+    setLotErrors((prev) => {
+      const next = { ...prev };
+      delete next[reservationLineId];
+      return next;
+    });
     setVerifyingLine(reservationLineId);
     setError(null);
     try {
@@ -323,7 +372,11 @@ export function ShipmentPage() {
       syncFromServer(verified);
       setLotInputs((prev) => ({ ...prev, [reservationLineId]: "" }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao conferir o lote");
+      // Lote errado: mensagem real do backend, junto do campo, e o que foi
+      // digitado continua lá para o operador comparar e corrigir.
+      const message = err instanceof Error ? err.message : "Falha ao conferir o lote";
+      setLotErrors((prev) => ({ ...prev, [reservationLineId]: message }));
+      lotInputRefs.current[reservationLineId]?.focus();
     } finally {
       setVerifyingLine(null);
     }
@@ -530,6 +583,10 @@ export function ShipmentPage() {
                 setLotInputs((prev) => ({ ...prev, [reservationLineId]: value }))
               }
               onVerify={handleVerify}
+              lotErrors={lotErrors}
+              registerLotInput={(reservationLineId, element) => {
+                lotInputRefs.current[reservationLineId] = element;
+              }}
               verifyingLine={verifyingLine}
             />
           ))}
