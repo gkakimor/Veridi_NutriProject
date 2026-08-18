@@ -344,7 +344,13 @@ export async function costForOutputQuantity(
   let other = new Prisma.Decimal(0);
   let overhead = new Prisma.Decimal(0);
   let manualMissing = false;
-  const percentRates: Prisma.Decimal[] = [];
+  /*
+   * Linha percentual não tem valor até o custo direto fechar. Guarda-se a
+   * linha inteira, e não só a taxa, porque a composição do CMV precisa
+   * mostrar de onde saiu o overhead — um total com uma parcela invisível é
+   * um total que ninguém consegue conferir.
+   */
+  const percentLines: { line: (typeof costVersion.lines)[number]; rate: Prisma.Decimal }[] = [];
 
   for (const line of costVersion.lines) {
     // O valor vem do CALC quando ele congelou a linha; a estrutura ativa é
@@ -361,8 +367,19 @@ export async function costForOutputQuantity(
     );
 
     if (computed.percentOfDirect) {
-      if (!computed.known || !frozenRate) manualMissing = true;
-      else percentRates.push(frozenRate);
+      if (!computed.known || !frozenRate) {
+        manualMissing = true;
+        breakdown?.manualLines.push({
+          lineId: line.id,
+          description: line.description,
+          category: line.category,
+          calculationBasis: line.calculationBasis,
+          rate: frozenRate,
+          amount: null,
+        });
+      } else {
+        percentLines.push({ line, rate: frozenRate });
+      }
       continue;
     }
     if (!computed.known || !computed.amount) {
@@ -416,9 +433,17 @@ export async function costForOutputQuantity(
 
   // Percentual só existe sobre custo direto completo — aplicar sobre
   // subtotal parcial produziria overhead menor que o real.
-  for (const rate of percentRates) {
-    if (!direct) continue;
-    overhead = overhead.plus(direct.times(rate).dividedBy(HUNDRED));
+  for (const { line, rate } of percentLines) {
+    const amount = direct ? direct.times(rate).dividedBy(HUNDRED) : null;
+    if (amount) overhead = overhead.plus(amount);
+    breakdown?.manualLines.push({
+      lineId: line.id,
+      description: line.description,
+      category: line.category,
+      calculationBasis: line.calculationBasis,
+      rate,
+      amount,
+    });
   }
 
   const total = direct ? direct.plus(overhead) : null;

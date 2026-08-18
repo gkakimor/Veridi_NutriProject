@@ -26,6 +26,7 @@ import { SampleLabelPrintPage } from "./pages/samples/SampleLabelPrintPage";
 import { ReportPrintPage } from "./pages/print/ReportPrintPage";
 import { IndustrialCostPrintPage } from "./pages/print/IndustrialCostPrintPage";
 import { IndustrialCostPage } from "./pages/industrial-costs/IndustrialCostPage";
+import { ProductCmvPage } from "./pages/product-cmv/ProductCmvPage";
 import { CostCalculationPage } from "./pages/industrial-costs/CostCalculationPage";
 import { PricingListPage } from "./pages/pricing/PricingListPage";
 import { PricingPage } from "./pages/pricing/PricingPage";
@@ -170,6 +171,7 @@ function AuthenticatedApp() {
           <Route path="/cadastros/clientes" element={<CustomersPage />} />
           <Route path="/cadastros/produtos" element={<ProductsPage />} />
           <Route path="/produtos/:productId/custos" element={<IndustrialCostPage />} />
+          <Route path="/produtos/:productId/cmv" element={<ProductCmvPage />} />
           <Route path="/calculos-custo/:id" element={<CostCalculationPage />} />
           <Route path="/compras/ordens" element={<PurchaseOrdersPage />} />
           <Route path="/compras/ordens/nova" element={<PurchaseOrderPage />} />

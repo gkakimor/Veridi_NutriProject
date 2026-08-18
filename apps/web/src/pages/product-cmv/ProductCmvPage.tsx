@@ -1,0 +1,503 @@
+import { useCallback, useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import type {
+  CmvComponentDTO,
+  CmvGroup,
+  IndustrialMaterialCostSource,
+  PricingTierDTO,
+  ProductCmvResponse,
+} from "@veridi/shared";
+import {
+  CMV_GROUP_LABELS,
+  INDUSTRIAL_COST_BASIS_LABELS,
+  INDUSTRIAL_COST_QUALITY_HINTS,
+  INDUSTRIAL_COST_QUALITY_LABELS,
+  INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
+  INDUSTRIAL_RESOURCE_TYPE_LABELS,
+} from "@veridi/shared";
+import { FormSection } from "../../components/FormSection";
+import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
+import { ProjectOriginLink } from "../../components/ProjectOriginLink";
+import { EntityLink } from "../../components/EntityLink";
+import { getProductCmv } from "../../lib/product-cmv-api";
+import { getProductPricing } from "../../lib/pricing-api";
+import { formatBRL } from "../../lib/currency";
+import { formatDate } from "../../lib/dates";
+import "./cmv.css";
+
+/**
+ * CMV — quanto custa produzir uma quantidade deste produto.
+ *
+ * A tela existe para responder uma pergunta de negócio em linguagem de
+ * negócio. Quem usa fala em "produto", "quantidade" e "custo"; estrutura de
+ * custos e cálculo de referência aparecem como procedência, não como
+ * pré-requisito de vocabulário.
+ *
+ * Nenhum número é calculado aqui. Total, custo unitário, custo por mil,
+ * contagem de lotes e composição vêm inteiros da API, que por sua vez usa o
+ * mesmo motor das faixas de precificação. Simular é leitura: entrar nesta
+ * tela não cria cálculo nem altera preço.
+ */
+
+const GROUP_ORDER: CmvGroup[] = [
+  "FORMULA_MATERIAL",
+  "PACKAGING",
+  "CUSTOMER_SUPPLIED",
+  "INDUSTRIAL_RESOURCE",
+  "OVERHEAD",
+];
+
+/** Data de hoje como dia de calendário — a API exige a data explícita. */
+function hojeISO(): string {
+  const agora = new Date();
+  return new Date(agora.getTime() - agora.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function qualityBadgeClass(quality: string): string {
+  if (quality === "COMPLETE_REAL_REFERENCE") return "badge badge--active";
+  if (quality === "COMPLETE_WITH_ESTIMATES") return "badge badge--neutral";
+  if (quality === "PARTIAL") return "badge badge--warn";
+  return "badge badge--err";
+}
+
+/**
+ * Origem do valor da linha, em português.
+ *
+ * Material traz a fonte do custo; recurso e premissa trazem a natureza do
+ * que está sendo cobrado. Nenhum dos dois aparece como enum cru.
+ */
+function describeOrigin(component: CmvComponentDTO): string {
+  if (component.customerSupplied) return "Fornecido pelo cliente";
+  if (component.costSource) {
+    const label =
+      INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[component.costSource as IndustrialMaterialCostSource];
+    return label ?? component.costSource;
+  }
+  if (component.group === "INDUSTRIAL_RESOURCE") {
+    const resource =
+      INDUSTRIAL_RESOURCE_TYPE_LABELS[
+        component.code as keyof typeof INDUSTRIAL_RESOURCE_TYPE_LABELS
+      ];
+    return resource ?? "Energia";
+  }
+  const basis =
+    INDUSTRIAL_COST_BASIS_LABELS[component.code as keyof typeof INDUSTRIAL_COST_BASIS_LABELS];
+  return basis ?? "—";
+}
+
+export function ProductCmvPage() {
+  const { productId } = useParams<{ productId: string }>();
+  const [params] = useSearchParams();
+
+  /*
+   * Contexto de origem: quem chegou de um orçamento volta ao orçamento, não
+   * a uma busca. Identidade vem por id — nunca por código de negócio, que
+   * não é chave de navegação.
+   */
+  const projectId = params.get("projectId");
+  const quoteVersionId = params.get("quoteVersionId");
+  const quoteLineId = params.get("quoteLineId");
+
+  const [quantity, setQuantity] = useState(params.get("quantity") ?? "1000");
+  const [referenceDate, setReferenceDate] = useState(params.get("referenceDate") ?? hojeISO());
+  const [data, setData] = useState<ProductCmvResponse | null>(null);
+  const [tier, setTier] = useState<PricingTierDTO | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const simular = useCallback(
+    async (quantidade: string, data_: string) => {
+      if (!productId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await getProductCmv(productId, {
+          quantity: quantidade,
+          referenceDate: data_,
+        });
+        setData(result);
+        /*
+         * Economia da faixa (contribuição, comissão, markup) é calculada
+         * pela Precificação e lida daqui como está. Refazer a conta no React
+         * criaria uma segunda verdade econômica sobre o mesmo preço.
+         */
+        setTier(null);
+        if (result.pricing?.tierId) {
+          const pricing = await getProductPricing(productId).catch(() => null);
+          const encontrada = pricing?.current?.tiers.find(
+            (candidata) => candidata.id === result.pricing?.tierId,
+          );
+          setTier(encontrada ?? null);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Falha ao calcular o CMV");
+        setData(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [productId],
+  );
+
+  // A quantidade que veio no link já é a pergunta: calcular sozinho evita
+  // pedir um clique para repetir algo que a pessoa já disse.
+  useEffect(() => {
+    void simular(params.get("quantity") ?? "1000", params.get("referenceDate") ?? hojeISO());
+    // Uma vez por produto: recalcular a cada tecla digitada é o oposto de
+    // "informe a quantidade e mande calcular".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simular]);
+
+  if (!productId) return <p className="form-alert">Produto não informado.</p>;
+
+  const simulation = data?.simulation ?? null;
+  const componentsByGroup = (group: CmvGroup): CmvComponentDTO[] =>
+    (simulation?.components ?? []).filter((component) => component.group === group);
+
+  const semTotal = simulation !== null && simulation.totalCost === null;
+
+  return (
+    <>
+      <div className="doc-header">
+        <div>
+          <div className="doc-crumb">Cadastros / Produtos / CMV</div>
+          <div className="doc-title">
+            <h1>
+              CMV ·{" "}
+              <EntityLink kind="product" id={productId} code={data?.productCode ?? ""} />{" "}
+              {data?.productName}
+            </h1>
+            {simulation && (
+              <span
+                className={qualityBadgeClass(simulation.quality)}
+                title={INDUSTRIAL_COST_QUALITY_HINTS[simulation.quality]}
+              >
+                {INDUSTRIAL_COST_QUALITY_LABELS[simulation.quality]}
+              </span>
+            )}
+          </div>
+          {data?.customerName && <p className="field__hint">Cliente: {data.customerName}</p>}
+        </div>
+        <div className="table__actions">
+          {/* Voltar ao orçamento tem prioridade: é de lá que a pessoa veio. */}
+          {projectId && quoteVersionId ? (
+            <Link
+              className="btn btn--ghost btn--sm"
+              to={`/comercial/projetos/${projectId}?quoteVersionId=${quoteVersionId}${
+                quoteLineId ? `&quoteLineId=${quoteLineId}` : ""
+              }`}
+            >
+              ← Voltar ao orçamento
+            </Link>
+          ) : projectId ? (
+            <Link className="btn btn--ghost btn--sm" to={`/comercial/projetos/${projectId}`}>
+              ← Voltar ao projeto
+            </Link>
+          ) : (
+            /* Sem contexto no link, resta a origem registrada no produto —
+               que pode não existir, e aí não se inventa caminho de volta. */
+            <ProjectOriginLink productId={productId} />
+          )}
+        </div>
+      </div>
+
+      <div className="doc-body">
+        {error && (
+          <p className="form-alert" role="alert">
+            {error}
+          </p>
+        )}
+
+        <FormSection
+          title="Custo industrial de uma quantidade"
+          subtitle="Informe quantas unidades deseja produzir. O custo é recalculado para essa quantidade — não é o custo unitário multiplicado."
+        >
+          <div className="cmv-sim">
+            <div className="field field--narrow">
+              <label htmlFor="cmv-quantity">Quantidade a simular</label>
+              <input
+                id="cmv-quantity"
+                type="text"
+                inputMode="decimal"
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+              />
+              <p className="field__hint">Unidade: {data?.outputUomCode ?? "un"}</p>
+            </div>
+            <div className="field field--narrow">
+              <label htmlFor="cmv-reference-date">Data de referência</label>
+              <input
+                id="cmv-reference-date"
+                type="date"
+                value={referenceDate}
+                onChange={(event) => setReferenceDate(event.target.value)}
+              />
+              <p className="field__hint">
+                Define qual cálculo de custo serve de base econômica.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn--accent"
+              disabled={loading || quantity.trim() === ""}
+              onClick={() => void simular(quantity.trim(), referenceDate)}
+            >
+              {loading ? "Calculando…" : "Calcular CMV"}
+            </button>
+          </div>
+
+          {data?.unavailableReason && (
+            <p className="form-alert" role="status">
+              {data.unavailableReason}
+            </p>
+          )}
+
+          {simulation && (
+            <>
+              <div className="cmv-cards">
+                <div className="cmv-card">
+                  <div className="cmv-card__label">Quantidade simulada</div>
+                  <div className="cmv-card__value">
+                    {simulation.quantity} {simulation.uomCode}
+                  </div>
+                  <div className="cmv-card__note">
+                    {simulation.batchCount}{" "}
+                    {simulation.batchCount === "1" ? "lote de referência" : "lotes de referência"}
+                  </div>
+                </div>
+
+                <div className="cmv-card cmv-card--strong">
+                  <div className="cmv-card__label">CMV total</div>
+                  {simulation.totalCost ? (
+                    <div className="cmv-card__value">{formatBRL(simulation.totalCost)}</div>
+                  ) : (
+                    <div className="cmv-card__value cmv-card__value--unavailable">
+                      CMV indisponível
+                    </div>
+                  )}
+                  {semTotal && (
+                    <div className="cmv-card__note">
+                      Subtotal conhecido: {formatBRL(simulation.knownSubtotal)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="cmv-card">
+                  <div className="cmv-card__label">CMV por unidade</div>
+                  <div className="cmv-card__value">
+                    {simulation.costPerUnit ? formatBRL(simulation.costPerUnit) : "—"}
+                  </div>
+                </div>
+
+                <div className="cmv-card">
+                  <div className="cmv-card__label">CMV por 1.000</div>
+                  <div className="cmv-card__value">
+                    {simulation.costPer1000 ? formatBRL(simulation.costPer1000) : "—"}
+                  </div>
+                </div>
+
+                <div className="cmv-card">
+                  <div className="cmv-card__label">Qualidade do custo</div>
+                  <div className="cmv-card__value" style={{ fontSize: "var(--fs-base)" }}>
+                    {INDUSTRIAL_COST_QUALITY_LABELS[simulation.quality]}
+                  </div>
+                  <div className="cmv-card__note">
+                    {INDUSTRIAL_COST_QUALITY_HINTS[simulation.quality]}
+                  </div>
+                </div>
+
+                {data?.pricing?.unitPrice && (
+                  <div className="cmv-card">
+                    <div className="cmv-card__label">Preço vigente</div>
+                    <div className="cmv-card__value">{formatBRL(data.pricing.unitPrice)}</div>
+                    <div className="cmv-card__note">
+                      Faixa de {data.pricing.tierQuantity} {simulation.uomCode}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Parcial não vira total: dizer o subtotal como se fosse o custo
+                  seria informar um número menor que o real. */}
+              {simulation.quality === "PARTIAL" && (
+                <p className="field__hint">
+                  Existem componentes sem custo conhecido. O subtotal conhecido não representa o
+                  CMV total.
+                </p>
+              )}
+
+              {simulation.warnings.length > 0 && (
+                <div className="cmv-warnings" role="status">
+                  <strong>Observações do cálculo</strong>
+                  <ul>
+                    {simulation.warnings.map((warning, index) => (
+                      <li key={index}>{warning.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </FormSection>
+
+        {/* Preço só aparece para quem pode ver economia interna: a API decide,
+            a tela apenas desenha o que recebeu. */}
+        {data?.pricing && (
+          <FormSection
+            title="Precificação vigente"
+            subtitle="Faixa é negociação registrada para uma quantidade exata — o sistema nunca interpola nem aproxima."
+          >
+            {data.pricing.tierId ? (
+              <>
+                <dl className="definition-list cmv-defs">
+                  <dt>Faixa</dt>
+                  <dd>
+                    {data.pricing.tierQuantity} {data.outputUomCode}
+                  </dd>
+                  <dt>Preço</dt>
+                  <dd>
+                    {formatBRL(data.pricing.unitPrice)} / {data.outputUomCode}
+                  </dd>
+                  <dt>CMV por unidade</dt>
+                  <dd>{simulation?.costPerUnit ? formatBRL(simulation.costPerUnit) : "—"}</dd>
+                  {tier && (
+                    <>
+                      <dt>Margem de contribuição</dt>
+                      <dd>
+                        {tier.contributionPerUnit ? formatBRL(tier.contributionPerUnit) : "—"}
+                        {tier.contributionMarginPercent
+                          ? ` · ${tier.contributionMarginPercent}%`
+                          : ""}
+                      </dd>
+                      <dt>Comissão</dt>
+                      <dd>
+                        {tier.commissionPerUnit ? formatBRL(tier.commissionPerUnit) : "—"}
+                        {` · ${tier.commissionPercent}%`}
+                      </dd>
+                      <dt>Markup</dt>
+                      <dd>{tier.markupPercent ? `${tier.markupPercent}%` : "—"}</dd>
+                    </>
+                  )}
+                </dl>
+                <p className="field__hint">
+                  Margem, comissão e markup vêm calculados da Precificação — esta tela não refaz a
+                  conta.
+                </p>
+              </>
+            ) : (
+              <p className="field__hint">
+                Não existe uma faixa de precificação ativa para {simulation?.quantity ?? quantity}{" "}
+                {data.outputUomCode}.
+                {data.pricing.availableQuantities.length > 0 && (
+                  <>
+                    {" "}
+                    Faixas vigentes: {data.pricing.availableQuantities.join(", ")}.
+                  </>
+                )}
+              </p>
+            )}
+            <div className="line-actions">
+              <Link
+                className="btn btn--secondary btn--sm"
+                to={`/gestao/precificacao?productId=${productId}`}
+              >
+                Abrir precificação
+              </Link>
+            </div>
+          </FormSection>
+        )}
+
+        {simulation && (
+          <FormSection
+            title="Composição do custo"
+            subtitle="De onde vem cada real do custo desta quantidade."
+          >
+            {GROUP_ORDER.map((group) => {
+              const rows = componentsByGroup(group);
+              if (rows.length === 0) return null;
+              return (
+                <div className="cmv-group" key={group}>
+                  <h4 className="cmv-group__title">{CMV_GROUP_LABELS[group]}</h4>
+                  {group === "CUSTOMER_SUPPLIED" && (
+                    <p className="field__hint">
+                      Não compõe o custo de aquisição Veridi. A quantidade física continua sendo
+                      necessária para produzir.
+                    </p>
+                  )}
+                  <div className="table-container">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th className="is-numeric">Quantidade</th>
+                          <th>Unidade</th>
+                          <th>Origem do custo</th>
+                          <th className="is-numeric">Custo unitário</th>
+                          <th className="is-numeric">Custo total</th>
+                          <th>Responsabilidade</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((component, index) => (
+                          <tr key={`${group}-${component.itemId ?? component.code}-${index}`}>
+                            <td>
+                              {component.itemId ? (
+                                <EntityLink
+                                  kind="item"
+                                  id={component.itemId}
+                                  code={component.code}
+                                  name={component.name}
+                                />
+                              ) : (
+                                component.name
+                              )}
+                            </td>
+                            <td className="is-numeric">{component.requiredQuantity ?? "—"}</td>
+                            <td>{component.unitCode ?? "—"}</td>
+                            <td>{describeOrigin(component)}</td>
+                            <td className="is-numeric">
+                              {component.unitCost ? formatBRL(component.unitCost) : "—"}
+                            </td>
+                            <td className="is-numeric">
+                              {component.totalCost ? formatBRL(component.totalCost) : "—"}
+                            </td>
+                            <td>{component.customerSupplied ? "Cliente" : "Veridi"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </FormSection>
+        )}
+
+        <FormSection
+          title="Base do cálculo"
+          subtitle="A procedência do número — para conferir de onde ele veio."
+        >
+          <dl className="definition-list cmv-defs">
+            <dt>Formulação</dt>
+            <dd>
+              {data?.formulationVersionNumber ? `V${data.formulationVersionNumber}` : "—"}
+            </dd>
+            <dt>Estrutura de custos</dt>
+            <dd className="is-code">{data?.industrialCostVersionLabel ?? "—"}</dd>
+            <dt>Base de produção</dt>
+            <dd>
+              {data?.referenceOutputQuantity
+                ? `${data.referenceOutputQuantity} ${data.referenceOutputUomCode ?? ""}`
+                : "—"}
+            </dd>
+            <dt>Cálculo de referência</dt>
+            <dd className="is-code">{data?.calculationCode ?? "—"}</dd>
+            <dt>Data do cálculo</dt>
+            <dd>{formatDate(data?.calculationReferenceDate)}</dd>
+          </dl>
+          <ProductRelatedLinks productId={productId} current="cmv" title="Ver do produto" />
+        </FormSection>
+      </div>
+    </>
+  );
+}

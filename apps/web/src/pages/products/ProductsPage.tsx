@@ -321,6 +321,12 @@ export function ProductsPage() {
                   <RowActions
                     actions={[
                       {
+                        // Pergunta de negócio antes do documento: quanto custa
+                        // produzir uma quantidade deste produto.
+                        label: "CMV",
+                        onSelect: () => navigate(`/produtos/${product.id}/cmv`),
+                      },
+                      {
                         // Estrutura de custos é documento versionado: página
                         // própria, não modal.
                         label: "Custos industriais",
