@@ -658,3 +658,44 @@ contexto.
 Link contextual usa **identidade**, nunca busca textual aproximada. Texto pode
 casar mais de um registro, esbarrar em filtro anterior ou simplesmente não ser
 aplicado — foi exatamente o que aconteceu aqui, nas três formas.
+
+---
+
+# Remediação pós-auditoria — HIGH (checkpoints 3H e 3I)
+
+Estado de partida: 4 CRITICAL e 16 HIGH reconciliados a partir dos três
+auditores (usuário final, operacional, visual/acessibilidade). Ao entrar no 3I
+restavam **9 HIGH abertos**. Todos foram fechados, cada um com correção,
+regressão e evidência medida no estado atual — nenhum fechado por leitura de
+código.
+
+| # | Finding | Auditor | Antes | Correção | Evidência |
+|---|---|---|---|---|---|
+| H01 | OC não mostra recebimentos | operacional | conferir uma entrega exigia sair para a lista geral e procurar pelo código da ordem | bloco "Recebimentos" na OC: código, data, nota fiscal, itens, quantidade, lotes gerados — cada código é link | `receiving.test.ts` (OC recarregada expõe o recebimento) + navegador: `OC lista recebimentos`, `link do recebimento abre o recebimento` |
+| H02 | Recebimento → OC frágil | operacional | volta por botão fantasma, sem destino visível | `EntityLink` para a OC | navegador: `recebimento liga de volta a OC` |
+| H03 | Recebimento → lotes frágil | operacional | lote gerado atrás de botão | `EntityLink` para o lote | navegador: `recebimento liga ao lote gerado`, `link do lote abre o lote` |
+| H04 | Lote acabado não sabe para onde foi | operacional | do lote até a expedição só voltando pelo pedido | bloco "Expedições" no lote: expedição, pedido, cliente, quantidade daquele lote, status | `shipments.test.ts` (lote expõe a expedição) + navegador: `lote acabado lista expedicoes` |
+| H05 | Sem alinhamento numérico | visual | quantidade, preço, total e custo à esquerda; `1.000` e `999` com a mesma largura | `.is-numeric` (direita + `tabular-nums`) em **57 tabelas**, cabeçalho junto; impressos idem, com o cabeçalho inferido do rótulo da coluna | navegador: `coluna numerica a direita com cabecalho junto` → `{th:right, td:right, tabular-nums}`; `impresso alinha cabecalho numerico` |
+| H06 | Relatório longo sem identidade por página | visual | 15 páginas, identificação só na primeira | rodapé corrido repetido em toda folha impressa: tipo, código e documento controlado | navegador (mídia `print`): `impresso repete identidade no rodape` |
+| H07 | Folha de receita de OP encerrada operável | operacional | ordem concluída ainda oferecia pesagem e conclusão de parte | folha vira documento de consulta e diz isso | navegador: `folha de OP encerrada nao registra pesagem`, `folha de OP encerrada se explica` |
+| H08 | Faturamento emitido sem preço, sem aviso | usuário final | emitir é definitivo e a confirmação não citava nem o preço ausente nem a irreversibilidade | confirmação nomeia as linhas sem preço e diz que emitir não tem volta (faturamento quantitativo continua permitido) | revisão da confirmação em `BillingPage` |
+| H09 | Movimentação sem documento de origem | operacional | consumo de produção e produção de acabado — as maiores saídas do ledger — com "—" na origem | movimento resolve OP e amostra em consulta em lote; origem virou link | `consumption.test.ts` (movimento expõe a OP) + navegador: `nenhuma movimentacao sem origem` → `["EXP-000001","OP-000001",...]` |
+
+**Custo desconhecido sem caminho** (MEDIUM promovido junto, mesma raiz de H08):
+formulação e OP diziam quais itens estão sem referência de custo sem dizer onde
+a referência nasce. Agora apontam o preço de fornecedor que a resolve.
+
+## Verificação
+
+`scripts/ux-continuity-check.mjs` cresceu de 20 para **35 checagens** e roda
+contra o navegador real com o cenário DEMO: **35/35 PASS**, zero erro de
+console, zero resposta ≥ 400. As checagens clicam nos links e conferem o
+conteúdo do destino — não apenas o `href`.
+
+## O que o sistema não consegue fazer
+
+**Número de página dentro da folha.** O Chrome não implementa as caixas de
+margem de `@page`, então a aplicação não tem como escrever "Página X de Y" no
+papel. O que ficou garantido é que toda página se identifica; o número em si vem
+do diálogo de impressão do navegador. Registrado como limitação, não como
+pendência de implementação.
