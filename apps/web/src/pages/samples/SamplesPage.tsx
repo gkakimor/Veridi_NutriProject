@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { CustomerDTO, ProjectSampleDTO, ProjectSampleStatus } from "@veridi/shared";
 import { PROJECT_SAMPLE_STATUSES, PROJECT_SAMPLE_STATUS_LABELS } from "@veridi/shared";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
@@ -217,7 +217,11 @@ export function SamplesPage() {
             {!loading && samples.length === 0 && (
               <tr>
                 <td colSpan={9} className="table__empty">
-                  Nenhuma amostra encontrada.
+                  {/* Amostra pertence a um projeto — não existe "amostra
+                      solta". Quem chega por este menu procurando criar não
+                      achava o caminho, e a lista vazia não dizia nada. */}
+                  Nenhuma amostra encontrada. Toda amostra nasce dentro de um{" "}
+                  <Link to="/comercial/projetos">projeto</Link>, no bloco "Amostras / testes".
                 </td>
               </tr>
             )}

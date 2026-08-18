@@ -609,18 +609,23 @@ export function PurchaseOrderPage() {
                   <tr key={line.key}>
                     <td>
                       {isDraftEditable ? (
-                        <select
+                        /* Mesmo seletor com busca de Formulação, Amostra e
+                           Pedido. Era o único lugar onde escolher item virava
+                           rolar uma lista fechada — com o catálogo real da
+                           Veridi, procurar "beta-alanina" numa lista de
+                           centenas é trabalho, não escolha. */
+                        <SearchableEntitySelect
+                          id={`po-line-item-${line.key}`}
                           value={line.itemId}
-                          onChange={(event) => handleLineItemChange(line.key, event.target.value)}
-                        >
-                          <option value="">Selecione…</option>
-                          {optionsForRow(line).map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.code} — {item.name}
-                              {!item.active ? " (inativo)" : ""}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(value) => handleLineItemChange(line.key, value)}
+                          placeholder="Digite código ou nome do item…"
+                          options={optionsForRow(line).map((item) => ({
+                            id: item.id,
+                            code: item.code,
+                            name: item.name,
+                            ...(item.active ? {} : { hint: "inativo" }),
+                          }))}
+                        />
                       ) : (
                         <EntityLink
                           kind="item"
