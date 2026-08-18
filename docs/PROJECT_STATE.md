@@ -4398,59 +4398,66 @@ backup do banco, rate limit no login.
 
 ---
 
-# CMV — backend checkpoint
+# CMV — custo de produzir uma quantidade
 
 CMV é a visão de negócio do custo industrial de um produto para uma
 quantidade, composta a partir de Formulação + Estrutura de Custos + cálculo
-vigente. **Não é fonte de verdade separada**: nenhuma entidade e nenhuma
-tabela de CMV foram criadas, e não há migration.
+vigente. **Não é fonte de verdade separada**: nenhuma entidade, nenhuma
+tabela, nenhuma migration — e nenhum motor próprio. Todo número vem de
+`costForOutputQuantity`, o mesmo das faixas de precificação; a composição é
+anotada por esse motor enquanto ele soma.
 
-Implementado (commit `1709766`):
+## Backend
 
-- `GET /products/:id/cmv?quantity=&referenceDate=` — read model, sem
-  persistência; simular não cria CALC;
-- `quantity` e `referenceDate` explícitas — o domínio nunca resolve a data
-  sozinho;
-- compõe FormulationVersion + IndustrialCostVersion + IndustrialCostCalculation
-  + PricingVersion/PricingTier;
-- reutiliza `costForOutputQuantity` (o mesmo motor das faixas de
-  precificação); a composição é anotada por esse motor enquanto ele soma,
-  nunca recalculada depois;
-- material fornecido pelo cliente mantém quantidade física e fica fora da
-  aquisição Veridi — não é zero nem desconhecido;
-- `PricingTier` só por quantidade EXATA: sem interpolação, sem faixa
-  próxima, sem cair para a de baixo;
-- gate de economia interna por `canSeePricingProvenance` — nenhuma permissão
-  nova;
-- verificado no DEMO: 500 → faixa 500; 1000 → faixa 1000; 750 → sem faixa;
-  3000 → faixa 3000.
+- `GET /products/:id/cmv?quantity=&referenceDate=` — leitura, sem
+  persistência; simular não cria CALC.
+- `quantity` e `referenceDate` explícitas. A data escolhe o cálculo salvo
+  vigente **até aquele dia de calendário** — antes de existir cálculo não há
+  CMV, e a resposta diz isso.
+- Faixa por quantidade EXATA: sem interpolação, sem faixa próxima, sem cair
+  para a de baixo.
+- Material do cliente mantém quantidade física e fica fora da aquisição
+  Veridi — nem zero, nem desconhecido.
+- Economia interna (preço, faixa) atrás de `canSeePricingProvenance`; nenhuma
+  permissão nova.
+- Linha percentual passou a aparecer na composição: estava dentro do total e
+  invisível na conferência.
 
-## Blockers abertos — resolver ANTES da UI
+## Web
 
-**B1 — teste de API.** 625/626 PASS; 1 teste quebrado. Causa ainda não
-investigada. Não classificar como interferência de dados nem como regressão
-antes de reproduzir.
+- `/produtos/:productId/cmv` — aceita `quantity`, `projectId`,
+  `quoteVersionId`, `quoteLineId` e `referenceDate` por query; a quantidade
+  do link já calcula sozinha.
+- Cartões de resumo (quantidade, total, por unidade, por 1.000, qualidade,
+  preço vigente) acima da dobra em 1280×720, 1366×768 e 1440×900.
+- Composição por grupo: materiais, embalagens, material do cliente, recursos
+  industriais e outros custos — em português, sem enum cru.
+- Parcial mostra "CMV indisponível" + subtotal conhecido, com a microcópia de
+  que subtotal não é CMV. `R$ 0,00` nunca substitui desconhecido.
+- Entradas: resumo "CMV e precificação" no cadastro do produto, ação **CMV**
+  na linha de Produtos do Projeto (estrutura e precificação foram para o
+  menu de ações, nada sumiu em 1366px) e no menu da lista de Produtos.
+- Volta: "← Voltar ao orçamento" tem prioridade sobre "← Voltar ao projeto",
+  que tem prioridade sobre a origem registrada no produto.
 
-**B1 — fechado.** Era interferência de dado no banco dev compartilhado, não
-regressão: mesmo código, suíte verde em execução isolada. Nenhum teste foi
-ajustado.
+## Orçamento ↔ CMV
 
-**B2 — fechado.** A causa era dataset: `ReceiptLine.actualUnitCost` vinha
-`null` em todos os recebimentos do DEMO, e o domínio deliberadamente nunca
-copia esse valor do preço da OC (preço negociado não é valor pago). Sem
-aquisição real, 30d/90d/último-real ficavam sem candidato e a hierarquia
-terminava, corretamente, em desconhecido. Os recebimentos do DEMO passaram a
-informar o custo efetivo pela própria rota do domínio.
+- A linha do orçamento consulta a precificação vigente assim que produto e
+  quantidade existem, e **sugere**: "Existe uma precificação vigente para
+  1.000 un: R$ 38,90/un" + `Aplicar preço calculado`. Existir faixa nunca
+  muda o preço sozinho.
+- Sem faixa exata: "Não existe precificação vigente para esta quantidade" +
+  `Simular CMV`. Nenhum preço vizinho é oferecido.
+- `Simular CMV` leva produto, quantidade e contexto (projeto, versão, linha);
+  o retorno reabre a MESMA versão e traz a linha ao campo de visão.
+- CMV nunca vira preço: só faixa explícita ou manual.
 
-**Economia industrial do DEMO.** O Product A ganhou recursos industriais
-**fictícios** — mão de obra, misturador (com potência) e energia — para que o
-cenário principal responda "quanto custa produzir 1.000 potes" com total, por
-unidade e por 1.000. Energia é derivada do equipamento (horas × kW × tarifa),
-nunca somada também como consumo direto. **Os valores não representam custo
-real da Veridi** e não foram calibrados para produzir margem: os recursos
-foram definidos primeiro e o CMV é o que o motor devolveu.
+## Dataset DEMO
 
-Baseline (referenceDate 2026-08-18, qualidade `COMPLETE_REAL_REFERENCE`):
+Os recursos industriais do Product A são **fictícios** (mão de obra,
+misturador com potência, energia derivada do equipamento) e **não
+representam custo real da Veridi**; não foram calibrados para produzir
+margem. Baseline reproduzível a partir de migration limpa + `db:demo`:
 
 | Qtd | CMV total | CMV/un | CMV/1.000 | Lotes | Faixa |
 |---|---|---|---|---|---|
@@ -4459,20 +4466,55 @@ Baseline (referenceDate 2026-08-18, qualidade `COMPLETE_REAL_REFERENCE`):
 | 1.000 | 12.043,60 | 12,04 | 12.043,60 | 1 | 1.000 · R$ 38,90 |
 | 3.000 | 36.130,80 | 12,04 | 12.043,60 | 3 | 3.000 · R$ 34,50 |
 
-`referenceDate` deixou de ser decorativa: escolhe o cálculo salvo vigente
-até aquele dia. Antes dela existir cálculo, não há CMV — e a resposta diz
-isso em vez de usar uma base que ninguém poderia conhecer.
+**Bug corrigido no seed:** a guarda de idempotência do recálculo pós-compra
+só recalculava quando o último cálculo era `NO_COST`. O cálculo nascido na
+ativação é PARCIAL (recursos conhecidos, materiais ainda sem compra), então
+em banco recém-migrado o DEMO ficava PARCIAL para sempre — a baseline acima
+só existia por herança de banco antigo. A condição agora é "o custo já está
+completo?".
 
-## Ainda não implementado
+## Cobertura
 
-Tela `/produtos/:id/cmv`; resumo de CMV no Produto; links de CMV em
-Projeto e na lista de Produtos; sugestão de faixa no QuoteLine; "Simular
-CMV" a partir do orçamento; retorno CMV → orçamento; suíte completa de API;
-testes web; Playwright; auditoria curta de usuário final; docs finais da
-capacidade.
+Matriz de API própria (`product-cmv-matrix.test.ts`), sem depender do
+Product A: custo fixo por lote (500/750/1.000 → 1 lote; 3.000 → 3), caixa de
+expedição inteira, percentual sobre o direto, PARCIAL dedicado, `NO_COST`
+dedicado, proveniência `WEIGHTED_AVG_30D`, regressão de `referenceDate`
+(data antiga não escolhe cálculo posterior) e dia de calendário, zero
+explícito × desconhecido. Testes web cobrem a tela, as três qualidades de
+custo, material do cliente, faixa exata e ausência de faixa, as três
+entradas, a sugestão/aplicação no orçamento, a ida e volta, permissões e a
+confidencialidade do documento do cliente.
 
-Próximo checkpoint: CMV frontend + integração comercial, **somente depois de
-B1 e B2 verdes**.
+## Verificação
+
+- API: **645/645** em 48 arquivos. Matriz do CMV fechada em **20 dimensões**
+  (19 testes em dois arquivos), inclusive validação da rota — quantidade e
+  data ausentes são recusadas, não inferidas.
+- Web: **89/89** em 13 arquivos.
+- Scripts (importador): 14/14.
+- `pnpm typecheck` e `pnpm build`: limpos.
+- Migration limpa + `db:demo` ×2: idempotente (3 recursos, 3 tarifas, 2 usos,
+  2 cálculos, 1 projeto) e a baseline acima reproduz exata.
+- Playwright, banco DEMO limpo, navegação só por clique: **17/17 etapas**,
+  zero erro de console, zero 5xx, zero 4xx inesperado.
+- Verificação visual em 1280×720, 1366×768 e 1440×900: sem overflow
+  horizontal de página, cartões de resumo acima da dobra nas três, tabelas
+  rolando dentro do próprio contêiner, nenhuma ação essencial invisível.
+
+**Fragilidade conhecida da suíte, pré-existente.** Rodando a bateria inteira,
+`dashboard.test.ts` e vizinhos falham de forma intermitente (~50% das
+execuções, arquivo diferente a cada vez). São testes que contam agregados do
+banco inteiro enquanto outros arquivos criam fixtures em paralelo. Confirmado
+pré-existente: reproduz com o arquivo novo de CMV **excluído**. Nenhum teste
+foi ajustado para acomodar isso.
+
+## Não implementado
+
+Impressão dedicada de CMV; CMV em relatório gerencial; comparação de
+cenários lado a lado; CMV de amostra/piloto; fixture de validação manual com
+Biotina (mecanismo pronto — `createScenario` em
+`product-cmv-matrix.test.ts` monta produto, formulação, estrutura e cálculo
+com valores informados; nenhum dado real inserido).
 
 ---
 

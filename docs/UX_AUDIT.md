@@ -699,3 +699,70 @@ margem de `@page`, então a aplicação não tem como escrever "Página X de Y" 
 papel. O que ficou garantido é que toda página se identifica; o número em si vem
 do diálogo de impressão do navegador. Registrado como limitação, não como
 pendência de implementação.
+
+---
+
+# AUDITORIA CURTA — CMV COMO BASE DE PROPOSTA (checkpoint CMV 2B)
+
+Uma tarefa, um auditor (`ux-end-user-auditor`), sem dizer menu, rota, botão
+nem nome de tela:
+
+> "Tenho um produto e preciso saber quanto custa produzir 1.000 potes e usar
+> esse cenário como base para uma proposta."
+
+## Resultado
+
+| Passo | Veredito |
+| --- | --- |
+| Achar o produto | PASS — Cadastros → Produtos, busca e lista |
+| Achar onde se responde "quanto custa produzir" | PASS — CMV pelo produto |
+| Informar 1.000 e obter resultado | PASS — recalcula de fato (500 → R$ 6.193,60; 1.000 → R$ 12.043,60) |
+| Entender o resultado | PASS — total, por unidade, por 1.000 e qualidade do custo |
+| Ver o preço vigente da quantidade | PASS — R$ 38,90, faixa de 1.000 un |
+| Chegar ao orçamento | PARCIAL — ver abaixo |
+
+**Veredito do auditor: FAIL**, por dois CRITICAL no passo final. Verificados
+um a um antes de qualquer correção:
+
+**C1 — "Vincular produto existente" falharia em silêncio: NÃO REPRODUZ.**
+Reproduzido com navegador real: a opção aparece, o campo passa a mostrar
+`PROD-000003 · DEMO Pré-Treino Frutas Vermelhas 300g`, o botão fica
+habilitado, o vínculo é criado e a seção passa a listar o produto. Zero
+resposta HTTP ≥ 400. A página tem `<select>`/`<datalist>` que também expõem
+`role=option`, e é neles que um clique automatizado por texto cai — foi o
+que aconteceu com o próprio auditor. Não houve correção porque não havia
+defeito.
+
+**C2 — "gere uma precificação a partir do cálculo atual" não tinha onde
+acontecer: PROCEDE, corrigido.** O aviso de base econômica divergente pedia
+uma ação e o único link ao lado abria uma lista somente leitura. Criar
+precificação nasce do cálculo salvo, na estrutura de custos — é para lá que o
+aviso aponta agora, nomeando o caminho.
+
+## Corrigido no mesmo checkpoint
+
+| Severidade | Achado | Correção |
+| --- | --- | --- |
+| HIGH | Projeto aprovado oferecia "Criar nova versão" e só recusava depois do clique, no fim de um caminho já percorrido | A ação deixa de existir; a explicação toma o lugar dela e diz o que fazer ("crie um projeto novo") |
+| CRITICAL (C2) | Aviso pedia ação sem caminho | Aviso passa a apontar Custos industriais → Cálculos salvos |
+| MEDIUM | `HOUR` na composição do CMV | "hora", pela tabela de rótulos que já existia |
+| MEDIUM | `FIXED_BASIS` na tabela de materiais da estrutura de custos | "Base da fórmula", pelo mesmo mapa usado no editor de formulação |
+| MEDIUM | Preço vigente ao lado de CMV completo sem dizer que a faixa foi fechada sobre custo parcial | Aviso explícito de base divergente |
+| LOW | Erro de quantidade trocava o título por "CMV · —" | Só o resultado sai; a identidade do produto fica |
+
+## Não corrigido, e por quê
+
+- **Busca do topo não encontra produto por nome** (HIGH do auditor).
+  Pré-existente e fora do escopo: busca global é item explicitamente não
+  implementado neste roteiro.
+- **Dois botões "Cancelar" na tela do projeto** (MEDIUM) e **placeholder
+  `0001PL`** (LOW). Pré-existentes, em tela fora do caminho do CMV.
+
+## Fricção residual conhecida
+
+Para um cliente cujo projeto já foi aprovado, propor de novo exige criar um
+projeto novo. A regra agora é dita **antes** do clique e o caminho
+alternativo funciona ponta a ponta (verificado: projeto novo → vincular
+produto → versão de orçamento → linha com 1.000 un → faixa sugerida →
+`Aplicar preço calculado` → `Simular CMV` → `Voltar ao orçamento`). O que
+permanece é o número de passos, não um bloqueio.
