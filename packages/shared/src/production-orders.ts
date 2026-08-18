@@ -401,6 +401,8 @@ export interface RecipeSheetRequirementDTO {
   /** Quanto esta parte deve pesar (divisão determinística em Decimal). */
   plannedQuantity: string;
   weighedQuantity: string;
+  /** Baixado pelo Consumo Real da OP — outro caminho, mesmo material. */
+  consumedQuantity: string;
   /** `pesado - planejado`: registrado e destacado, nunca bloqueado por tolerância inventada. */
   differenceQuantity: string;
   unitCode: string;

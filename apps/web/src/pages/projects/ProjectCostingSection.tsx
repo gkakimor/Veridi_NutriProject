@@ -34,6 +34,14 @@ export function ProjectCostingSection({
   const [error, setError] = useState<string | null>(null);
 
   const costing = project.costing;
+  /*
+   * `costing` deriva do ponteiro legado `Project.productId`, que num projeto
+   * multiproduto pode estar vazio mesmo com produtos vinculados. Oferecer
+   * "Preparar produto técnico" nesse estado criava um SEGUNDO produto — com
+   * o nome do projeto — e deixava o primeiro órfão de formulação e custo.
+   * Preparar só existe quando não há produto nenhum.
+   */
+  const semProduto = !costing && project.products.length === 0;
   const preparable = project.status !== "CANCELLED" && project.status !== "APPROVED";
 
   async function prepare() {
@@ -56,7 +64,16 @@ export function ProjectCostingSection({
     >
       {error && <p className="form-alert">{error}</p>}
 
-      {!costing ? (
+      {!costing && !semProduto ? (
+        // Projeto multiproduto: a cadeia técnica vive em cada produto, e a
+        // tabela "Produtos do projeto" acima é o caminho para ela.
+        <p className="field__hint">
+          Este projeto desenvolve {project.products.length}{" "}
+          {project.products.length === 1 ? "produto" : "produtos"}. Formulação, estrutura de custos
+          e precificação ficam em cada produto — abra o produto na tabela acima para seguir a
+          cadeia técnica.
+        </p>
+      ) : !costing ? (
         <>
           <p className="field__hint">Produto técnico ainda não preparado.</p>
           {canEdit && preparable && (

@@ -67,20 +67,12 @@ export function RecipeSheetPage() {
    * apontamento da OP. Sem esta leitura, a folha só devolvia "restam 0"
    * depois da tentativa, sem dizer a causa.
    *
-   * O saldo é `remainingQuantity`, não `quantity`: a linha reservada
-   * continua listada depois do Consumo Real (é ela que o papel mostra), e
-   * somar o reservado original nunca chegava a zero.
+   * A prova é o consumo REGISTRADO, não a ausência de reserva: quando a
+   * ordem encerra, a reserva é liberada e o saldo zera também na linha que
+   * nunca foi consumida — a folha então anunciava consumo onde não houve.
    */
   function consumedByOrder(requirement: RecipeSheetRequirementDTO): boolean {
-    const reservedRemaining = requirement.reservedLots.reduce(
-      (total, lot) => total + Number(lot.remainingQuantity),
-      0,
-    );
-    return (
-      reservedRemaining === 0 &&
-      Number(requirement.weighedQuantity) === 0 &&
-      Number(requirement.plannedQuantity) > 0
-    );
+    return Number(requirement.consumedQuantity) > 0 && Number(requirement.weighedQuantity) === 0;
   }
 
   const [activePart, setActivePart] = useState(1);
@@ -260,6 +252,19 @@ export function RecipeSheetPage() {
               <span className={partBadgeClass(part.status)}>
                 {PRODUCTION_PART_STATUS_LABELS[part.status]}
               </span>
+              {/*
+                "Pendente" numa OP que já consumiu material descreve uma
+                produção que não aconteceu. A pesagem por partes é UM dos
+                caminhos; o Consumo Real é o outro, e a folha precisa dizer
+                qual foi usado.
+              */}
+              {part.status === "PENDING" && part.requirements.some(consumedByOrder) && (
+                <span className="field__hint">
+                  {" "}
+                  Material registrado via Consumo Real da OP — a pesagem por partes não foi
+                  utilizada nesta ordem.
+                </span>
+              )}
               {part.startedByName && (
                 <span className="field__hint">
                   {" "}
@@ -304,18 +309,40 @@ export function RecipeSheetPage() {
                       <td className="is-numeric">
                         {requirement.plannedQuantity} {requirement.unitCode}
                       </td>
-                      <td>{requirement.weighedQuantity}</td>
-                      <td>
-                        <span
-                          className={
-                            Number(requirement.differenceQuantity) === 0
-                              ? "badge badge--active"
-                              : "badge badge--warn"
-                          }
-                        >
-                          {requirement.differenceQuantity}
-                        </span>
-                      </td>
+                      {/*
+                        Material baixado pelo Consumo Real não foi pesado
+                        AQUI — mas foi consumido. Mostrar "0 pesado" e uma
+                        diferença de -100% num documento formal de produção
+                        descreve um desvio que não existe: a folha impressa
+                        dizia que a ordem rodou sem material.
+                      */}
+                      {consumedByOrder(requirement) ? (
+                        <>
+                          <td className="is-numeric">
+                            <span className="field__hint">
+                              {requirement.consumedQuantity} {requirement.unitCode} via Consumo Real
+                            </span>
+                          </td>
+                          <td>
+                            <span className="badge badge--neutral">—</span>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="is-numeric">{requirement.weighedQuantity}</td>
+                          <td>
+                            <span
+                              className={
+                                Number(requirement.differenceQuantity) === 0
+                                  ? "badge badge--active"
+                                  : "badge badge--warn"
+                              }
+                            >
+                              {requirement.differenceQuantity}
+                            </span>
+                          </td>
+                        </>
+                      )}
                       <td>
                         {requirement.reservedLots.map((lot) => lot.lotCode).join(", ") || "—"}
                         {consumedByOrder(requirement) && (

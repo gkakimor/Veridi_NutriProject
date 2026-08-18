@@ -715,6 +715,21 @@ export function RecipeSheetPrintDocument({ sheet }: { sheet: RecipeSheetDTO }) {
             ))}
           </PrintTable>
 
+          {/*
+            Folha sem pesagem e parte "Pendente" numa OP que já consumiu o
+            material descreve, no papel, uma produção que não aconteceu.
+            Auditoria de qualidade lê este documento sozinho: ele precisa
+            dizer por qual caminho o material foi baixado.
+          */}
+          {part.weighings.length === 0 &&
+            part.requirements.some((requirement) => Number(requirement.consumedQuantity) > 0) && (
+              <p>
+                <strong>Material registrado via Consumo Real da OP.</strong> A pesagem por partes
+                não foi utilizada nesta ordem; o consumo de cada material está na Ordem de
+                Produção, com lote, quantidade e responsável.
+              </p>
+            )}
+
           <p>
             {part.startedByName && (
               <>

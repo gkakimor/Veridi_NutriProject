@@ -144,8 +144,24 @@ export async function getRecipeSheet(id: string): Promise<RecipeSheetDTO> {
           };
         });
 
+      /*
+       * Quanto o Consumo Real da OP já baixou DESTE requisito.
+       *
+       * "Não sobrou reserva" não prova consumo: quando a ordem encerra, a
+       * reserva é liberada e o saldo também zera. Só o consumo registrado
+       * distingue os dois casos — sem ele a folha anunciava "Consumo já
+       * registrado" em linha que nunca foi consumida.
+       */
+      const consumed = (order.reservation?.lines ?? [])
+        .filter((line) => line.productionOrderRequirementId === requirement.id)
+        .reduce(
+          (total, line) => total.plus(consumedByLine.get(line.id) ?? new Prisma.Decimal(0)),
+          new Prisma.Decimal(0),
+        );
+
       return {
         requirementId: requirement.id,
+        consumedQuantity: consumed.toString(),
         itemId: requirement.itemId,
         itemCode: requirement.itemCode,
         itemName: requirement.itemName,
