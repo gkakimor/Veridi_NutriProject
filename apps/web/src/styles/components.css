@@ -657,10 +657,16 @@
   font-size: var(--fs-lg);
 }
 
-.confirm-dialog p {
+.confirm-dialog p,
+.confirm-dialog__message {
   color: var(--ink-2);
   font-size: var(--fs-base);
   line-height: var(--lh-base);
+}
+
+.confirm-dialog__message ul {
+  margin: var(--sp-2) 0;
+  padding-left: var(--sp-4);
 }
 
 .confirm-dialog__actions {

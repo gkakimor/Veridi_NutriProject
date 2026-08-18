@@ -53,7 +53,9 @@ export function ConfirmDialog({
         aria-labelledby="confirm-dialog-title"
       >
         <h2 id="confirm-dialog-title">{title}</h2>
-        <p>{message}</p>
+        {/* `div`, não `p`: a mensagem pode trazer lista ou parágrafos —
+            bloco dentro de parágrafo é HTML inválido e o React avisa. */}
+        <div className="confirm-dialog__message">{message}</div>
         <div className="confirm-dialog__actions">
           <button type="button" className="btn btn--ghost" onClick={onCancel}>
             {cancelLabel}
