@@ -133,8 +133,8 @@ export function QuotePricingSection({
         </dl>
       )}
 
-      {provenance?.warnings.map((warning) => (
-        <p key={warning.code} className="field__hint">
+      {provenance?.warnings.map((warning, index) => (
+        <p key={`${index}-${warning.code}`} className="field__hint">
           {warning.message}
         </p>
       ))}

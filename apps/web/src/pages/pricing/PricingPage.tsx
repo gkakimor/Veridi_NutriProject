@@ -176,8 +176,8 @@ export function PricingPage() {
               Contém material fornecido pelo cliente, que não entra no custo Veridi.
             </p>
           )}
-          {pricing.warnings.map((warning) => (
-            <p key={warning.code} className="field__hint">
+          {pricing.warnings.map((warning, index) => (
+            <p key={`${index}-${warning.code}`} className="field__hint">
               {warning.message}
             </p>
           ))}
@@ -264,8 +264,11 @@ export function PricingPage() {
           {pricing.tiers.some((tier) => tier.warnings.length > 0) && (
             <ul className="candidate-list">
               {pricing.tiers.flatMap((tier) =>
-                tier.warnings.map((warning) => (
-                  <li key={`${tier.id}-${warning.code}`} className="field__hint">
+                // O código do aviso repete dentro da mesma faixa (um
+                // MATERIAL_COST_UNKNOWN por material sem custo), então a
+                // posição entra na chave — sem ela o React descarta avisos.
+                tier.warnings.map((warning, index) => (
+                  <li key={`${tier.id}-${index}-${warning.code}`} className="field__hint">
                     {tier.quantity} {tier.uomCode}: {warning.message}
                   </li>
                 )),
@@ -435,8 +438,8 @@ export function PricingPage() {
                 }
               </li>
             </ul>
-            {pricing.warnings.map((warning) => (
-              <p key={warning.code} className="field__hint">
+            {pricing.warnings.map((warning, index) => (
+              <p key={`${index}-${warning.code}`} className="field__hint">
                 {warning.message}
               </p>
             ))}

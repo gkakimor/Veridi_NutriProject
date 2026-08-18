@@ -66,10 +66,14 @@ export function RecipeSheetPage() {
    * Nada foi pesado nesta folha e não sobrou reserva: quem consumiu foi o
    * apontamento da OP. Sem esta leitura, a folha só devolvia "restam 0"
    * depois da tentativa, sem dizer a causa.
+   *
+   * O saldo é `remainingQuantity`, não `quantity`: a linha reservada
+   * continua listada depois do Consumo Real (é ela que o papel mostra), e
+   * somar o reservado original nunca chegava a zero.
    */
   function consumedByOrder(requirement: RecipeSheetRequirementDTO): boolean {
     const reservedRemaining = requirement.reservedLots.reduce(
-      (total, lot) => total + Number(lot.quantity),
+      (total, lot) => total + Number(lot.remainingQuantity),
       0,
     );
     return (

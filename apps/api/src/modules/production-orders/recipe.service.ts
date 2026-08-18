@@ -9,7 +9,7 @@ import type {
 import { normalizeLotLookupCode } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { toControlledDocumentRevisionDTO } from "../controlled-documents/controlled-documents.service.js";
-import { isLotAvailableForUse } from "../../lib/inventory-ledger.js";
+import { getConsumedByReservationLines, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
 import { partShare } from "../../lib/part-split.js";
 import {
   AlternateLotOwnerMismatchError,
@@ -103,6 +103,14 @@ async function requireOrder(id: string): Promise<OrderWithRecipe> {
 export async function getRecipeSheet(id: string): Promise<RecipeSheetDTO> {
   const order = await requireOrder(id);
 
+  // O saldo reservado que sobrou depois do Consumo Real da OP. Sem ele a
+  // folha anuncia um lote reservado que já não tem saldo, e a tela só
+  // descobre isso quando a pesagem é recusada.
+  const consumedByLine = await getConsumedByReservationLines(
+    getPrisma(),
+    (order.reservation?.lines ?? []).map((line) => line.id),
+  );
+
   const rawMaterials = order.requirements.filter(
     (requirement) => requirement.itemType === "RAW_MATERIAL",
   );
@@ -125,11 +133,16 @@ export async function getRecipeSheet(id: string): Promise<RecipeSheetDTO> {
 
       const reservedLots = (order.reservation?.lines ?? [])
         .filter((line) => line.productionOrderRequirementId === requirement.id && line.releasedAt === null)
-        .map((line) => ({
-          lotId: line.lotId,
-          lotCode: line.lot ? line.lot.code : null,
-          quantity: line.quantity.toString(),
-        }));
+        .map((line) => {
+          const consumed = consumedByLine.get(line.id) ?? new Prisma.Decimal(0);
+          const remaining = Prisma.Decimal.max(line.quantity.minus(consumed), new Prisma.Decimal(0));
+          return {
+            lotId: line.lotId,
+            lotCode: line.lot ? line.lot.code : null,
+            quantity: line.quantity.toString(),
+            remainingQuantity: remaining.toString(),
+          };
+        });
 
       return {
         requirementId: requirement.id,

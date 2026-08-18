@@ -169,15 +169,15 @@ export function PricingPrintPage() {
         <PrintSection title="Observações">
           <PrintTable columns={["Faixa", "Observação"]} isEmpty={false} emptyMessage="">
             <>
-              {pricing.warnings.map((warning) => (
-                <tr key={warning.code}>
+              {pricing.warnings.map((warning, index) => (
+                <tr key={`${index}-${warning.code}`}>
                   <td>—</td>
                   <td>{warning.message}</td>
                 </tr>
               ))}
               {pricing.tiers.flatMap((tier) =>
-                tier.warnings.map((warning) => (
-                  <tr key={`${tier.id}-${warning.code}`}>
+                tier.warnings.map((warning, index) => (
+                  <tr key={`${tier.id}-${index}-${warning.code}`}>
                     <td>
                       {tier.quantity} {tier.uomCode}
                     </td>
