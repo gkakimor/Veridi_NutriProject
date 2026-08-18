@@ -277,6 +277,21 @@
     page-break-inside: avoid;
   }
 
+  /*
+   * Linha principal e linha de detalhe são dois `tr`: `page-break-inside`
+   * protege cada uma, nunca o par. Sem isto a folha nova abria com o
+   * detalhe órfão — "Estrutura ativa: —" sem dizer de qual produto.
+   */
+  .print-row--primary {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .print-row--detail {
+    page-break-before: avoid;
+    break-before: avoid;
+  }
+
   a {
     color: inherit;
     text-decoration: none;

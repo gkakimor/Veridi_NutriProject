@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useInertBackground } from "./useInertBackground";
 import type { ReactNode } from "react";
 
 interface ConfirmDialogProps {
@@ -32,6 +33,8 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useInertBackground(open, dialogRef);
 
   useEffect(() => {
     if (!open) return;

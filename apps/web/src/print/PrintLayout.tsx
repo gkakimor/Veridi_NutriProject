@@ -145,7 +145,7 @@ export function PrintSection({ title, children }: { title: string; children: Rea
  * é ele que decide — e a lista abaixo é a mesma nomenclatura que os
  * documentos já usam.
  */
-const COLUNA_NUMERICA =
+export const COLUNA_NUMERICA =
   /^(qtd\.?|quantidade|quant\.|pedido|reservado\/expedido|reservado|expedido|faturado|falta.*|pre[çc]o.*|total.*|subtotal.*|saldo.*|custo.*|valor.*|f[íi]sico|dispon[íi]vel|em compra|recebido.*|produzido.*|planejado.*|consumido.*|percentual|%|margem.*|comiss[ãa]o.*|peso.*|volume.*|unit[áa]rio.*|itens|lotes.*|meses.*|dias.*|m[íi]nimo.*|necess[áa]rio.*)$/i;
 
 export function PrintTable({

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { API_URL, apiFetch } from "../../lib/api";
-import { PrintTable } from "../../print/PrintLayout";
+import { COLUNA_NUMERICA, PrintTable } from "../../print/PrintLayout";
 import { PrintSheet } from "../../print/PrintSheet";
 
 /**
@@ -315,6 +315,18 @@ export function ReportPrintPage() {
     : [];
   const columns = hierarchical ? primaryIndexes.map((index) => data.header[index]!) : data.header;
 
+  /**
+   * Alinhamento numérico da célula, pela mesma regra do cabeçalho.
+   *
+   * `PrintTable` classificava só o `th`: no papel a coluna "Total" tinha o
+   * título à direita e os valores à esquerda, exatamente nos relatórios que
+   * carregam custo e margem. Aqui a linha vem de CSV, então quem conhece o
+   * nome da coluna é esta página.
+   */
+  function numericCellProps(column: string): { className?: string } {
+    return COLUNA_NUMERICA.test(column.trim()) ? { className: "is-number" } : {};
+  }
+
   return (
     <PrintSheet
       sheetCode={definition.code}
@@ -342,7 +354,9 @@ export function ReportPrintPage() {
                 {data.header.map((column, position) => (
                   // Valor desconhecido continua vindo como "—" do próprio
                   // read model: o papel nunca inventa zero.
-                  <td key={column}>{cells[position]?.trim() || "—"}</td>
+                  <td key={column} {...numericCellProps(column)}>
+                    {cells[position]?.trim() || "—"}
+                  </td>
                 ))}
               </tr>
             );
@@ -350,7 +364,12 @@ export function ReportPrintPage() {
           return [
             <tr key={`${key}-principal`} className="print-row--primary">
               {primaryIndexes.map((position) => (
-                <td key={data.header[position]}>{cells[position]?.trim() || "—"}</td>
+                <td
+                  key={data.header[position]}
+                  {...numericCellProps(data.header[position] ?? "")}
+                >
+                  {cells[position]?.trim() || "—"}
+                </td>
               ))}
             </tr>,
             <tr key={`${key}-detalhe`} className="print-row--detail">

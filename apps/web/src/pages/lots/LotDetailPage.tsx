@@ -22,6 +22,7 @@ import { getReceipt } from "../../lib/receiving-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { RejectCoaDialog } from "../../components/RejectCoaDialog";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { approveCoa, rejectCoa } from "../../lib/attachments-api";
 import { useAuth } from "../../app/AuthProvider";
@@ -63,6 +64,7 @@ export function LotDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [rejectCoaOpen, setRejectCoaOpen] = useState(false);
 
   const [traceability, setTraceability] = useState<LotTraceabilityDTO | null>(null);
   /** Custo real deste lote recebido (via ReceiptLine) — `null` se desconhecido. */
@@ -165,15 +167,13 @@ export function LotDetailPage() {
     }
   }
 
-  async function handleRejectCoa() {
+  async function handleRejectCoa(reason: string) {
     if (!id) return;
-    const reason = window.prompt("Motivo da rejeição do CoA:");
-    if (!reason?.trim()) return;
-
+    setRejectCoaOpen(false);
     setSaving(true);
     setError(null);
     try {
-      await rejectCoa(id, reason.trim());
+      await rejectCoa(id, reason);
       await reloadLot();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao rejeitar o CoA");
@@ -611,7 +611,7 @@ export function LotDetailPage() {
                 type="button"
                 className="btn btn--danger"
                 disabled={saving}
-                onClick={() => void handleRejectCoa()}
+                onClick={() => setRejectCoaOpen(true)}
               >
                 Rejeitar CoA
               </button>
@@ -869,6 +869,14 @@ export function LotDetailPage() {
             </div>
           </div>
         </>
+      )}
+
+      {rejectCoaOpen && (
+        <RejectCoaDialog
+          lotCode={lot.code}
+          onCancel={() => setRejectCoaOpen(false)}
+          onConfirm={(reason) => void handleRejectCoa(reason)}
+        />
       )}
     </>
   );

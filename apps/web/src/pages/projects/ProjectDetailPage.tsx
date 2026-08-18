@@ -4,7 +4,6 @@ import type { ProjectDTO, ProjectSampleDTO } from "@veridi/shared";
 import {
   PROJECT_ATTACHMENT_TYPES,
   PROJECT_SAMPLE_STATUS_LABELS,
-  PROJECT_CANCEL_REASONS,
   PROJECT_CANCEL_REASON_LABELS,
   PROJECT_SOURCE_LABELS,
   PROJECT_STATUS_LABELS,
@@ -14,6 +13,7 @@ import { FormSection } from "../../components/FormSection";
 import { ProjectCostingSection } from "./ProjectCostingSection";
 import { ProjectProductsSection } from "./ProjectProductsSection";
 import { ApprovalPreviewDialog } from "./ApprovalPreviewDialog";
+import { CancelProjectDialog } from "./CancelProjectDialog";
 import { QuoteVersionsSection } from "./QuoteVersionsSection";
 import { FlowContext } from "../../components/FlowContext";
 import {
@@ -58,6 +58,7 @@ export function ProjectDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [sampleProductId, setSampleProductId] = useState("");
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   // Criar amostra é ato de desenvolvimento: Comercial pede, Produção também
   // pode abrir. Quem consome material continua sendo só Produção/ADMIN.
@@ -273,23 +274,7 @@ export function ProjectDetailPage() {
                 type="button"
                 className="btn btn--danger btn--sm"
                 disabled={saving}
-                onClick={() => {
-                  const reason = window.prompt(
-                    `Motivo do cancelamento (${PROJECT_CANCEL_REASONS.map(
-                      (option) => `${option}=${PROJECT_CANCEL_REASON_LABELS[option]}`,
-                    ).join(", ")}):`,
-                    "PRICE",
-                  );
-                  if (!reason) return;
-                  const details =
-                    reason === "OTHER" ? window.prompt("Descreva o motivo:") ?? "" : undefined;
-                  void run(() =>
-                    cancelProject(project.id, {
-                      cancelReason: reason as never,
-                      ...(details ? { cancelReasonDetails: details } : {}),
-                    }),
-                  );
-                }}
+                onClick={() => setCancelOpen(true)}
               >
                 Cancelar projeto
               </button>
@@ -412,6 +397,22 @@ export function ProjectDetailPage() {
               </div>
             )}
         </FormSection>
+
+        {cancelOpen && (
+          <CancelProjectDialog
+            projectCode={project.code}
+            onCancel={() => setCancelOpen(false)}
+            onConfirm={(reason, details) =>
+              void run(async () => {
+                await cancelProject(project.id, {
+                  cancelReason: reason,
+                  ...(details ? { cancelReasonDetails: details } : {}),
+                });
+                setCancelOpen(false);
+              })
+            }
+          />
+        )}
 
         {approvalOpen && (
           <ApprovalPreviewDialog

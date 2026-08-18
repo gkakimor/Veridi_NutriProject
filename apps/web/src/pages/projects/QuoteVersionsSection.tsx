@@ -62,7 +62,9 @@ export function QuoteVersionsSection({
   const [addProductId, setAddProductId] = useState("");
   const [sendConfirm, setSendConfirm] = useState<{
     quote: QuoteVersionDTO;
+    /** Vazio quando a proposta não tem custo incompleto a declarar. */
     lines: QuoteLineDTO[];
+    incompleteCost: boolean;
   } | null>(null);
   const [pricingLineId, setPricingLineId] = useState<string | null>(null);
   const [pricingOptions, setPricingOptions] = useState<PricingVersionDTO | null>(null);
@@ -107,26 +109,38 @@ export function QuoteVersionsSection({
   /**
    * Envio do orçamento.
    *
-   * A proveniência da linha permite ANTECIPAR o custo incompleto e pedir a
-   * confirmação antes de incomodar o servidor. O 409 continua tratado: o
-   * backend é a autoridade final sobre o que é incompleto, então uma recusa
-   * inesperada abre a mesma confirmação em vez de virar texto de erro.
+   * Enviar é ato comercial com data: a versão sai do rascunho, congela a
+   * proveniência e vira o documento que o cliente recebe. Sempre confirma —
+   * antes só o custo incompleto perguntava, e uma proposta de preço manual
+   * saía no primeiro clique, sem volta.
+   *
+   * A proveniência da linha permite ANTECIPAR o custo incompleto e dizer
+   * QUAIS linhas estão sem base. O 409 continua tratado: o backend é a
+   * autoridade final sobre o que é incompleto, então uma recusa inesperada
+   * reabre a confirmação já no tom certo.
    */
-  async function trySend(quote: QuoteVersionDTO) {
+  function trySend(quote: QuoteVersionDTO) {
     const incomplete = incompleteCostLines(quote);
-    if (incomplete.length > 0) {
-      setSendConfirm({ quote, lines: incomplete });
-      return;
-    }
+    setSendConfirm({ quote, lines: incomplete, incompleteCost: incomplete.length > 0 });
+  }
 
+  async function confirmSend(target: {
+    quote: QuoteVersionDTO;
+    lines: QuoteLineDTO[];
+    incompleteCost: boolean;
+  }) {
     setSaving(true);
     setError(null);
     try {
-      await sendQuoteVersion(quote.id, {});
+      await sendQuoteVersion(
+        target.quote.id,
+        target.incompleteCost ? { confirmIncompleteCost: true } : {},
+      );
       onChanged();
     } catch (err) {
       if (err instanceof IncompleteCostApiError) {
-        setSendConfirm({ quote, lines: [] });
+        // O servidor viu um custo incompleto que a tela não antecipou.
+        setSendConfirm({ quote: target.quote, lines: [], incompleteCost: true });
         return;
       }
       setError(err instanceof Error ? err.message : "Falha na operação");
@@ -576,19 +590,39 @@ export function QuoteVersionsSection({
 
       <ConfirmDialog
         open={sendConfirm !== null}
-        title="Enviar com custo incompleto?"
-        confirmLabel="Enviar mesmo assim"
+        title={
+          sendConfirm?.incompleteCost
+            ? "Enviar com custo incompleto?"
+            : "Enviar esta proposta ao cliente?"
+        }
+        confirmLabel={sendConfirm?.incompleteCost ? "Enviar mesmo assim" : "Enviar ao cliente"}
         cancelLabel="Voltar e revisar"
         confirmTone="accent"
         message={
           <>
-            <p>
-              Uma ou mais linhas desta proposta usam um custo industrial incompleto ou estimado.
-            </p>
-            <p>
-              O preço comercial pode ser enviado, mas a base de custo ainda possui informações
-              pendentes. Confirme somente se deseja enviar esta versão mesmo assim.
-            </p>
+            {sendConfirm?.incompleteCost ? (
+              <>
+                <p>
+                  Uma ou mais linhas desta proposta usam um custo industrial incompleto ou
+                  estimado.
+                </p>
+                <p>
+                  O preço comercial pode ser enviado, mas a base de custo ainda possui informações
+                  pendentes. Confirme somente se deseja enviar esta versão mesmo assim.
+                </p>
+              </>
+            ) : (
+              <>
+                <p>
+                  A versão <span className="code">{sendConfirm?.quote.code}</span> sai do rascunho e
+                  passa a ser o documento enviado ao cliente, com data de envio registrada.
+                </p>
+                <p>
+                  Depois disso a versão fica somente leitura: renegociar exige criar uma versão
+                  nova.
+                </p>
+              </>
+            )}
             {sendConfirm && sendConfirm.lines.length > 0 && (
               <ul className="confirm-dialog__list">
                 {sendConfirm.lines.map((line) => (
@@ -615,9 +649,7 @@ export function QuoteVersionsSection({
         onConfirm={() => {
           const target = sendConfirm;
           setSendConfirm(null);
-          if (target) {
-            void run(() => sendQuoteVersion(target.quote.id, { confirmIncompleteCost: true }));
-          }
+          if (target) void confirmSend(target);
         }}
       />
     </FormSection>

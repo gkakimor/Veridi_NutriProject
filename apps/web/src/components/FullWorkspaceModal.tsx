@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useInertBackground } from "./useInertBackground";
 import type { ReactNode } from "react";
 import { CodeChip } from "./CodeChip";
 
@@ -33,6 +34,10 @@ export function FullWorkspaceModal({
   closeLabel = "Fechar",
 }: FullWorkspaceModalProps) {
   const dialog = useRef<HTMLDivElement>(null);
+
+  // `aria-modal` sozinho não esconde a tela de trás de quem navega por
+  // elementos: o fundo precisa ficar inerte de verdade.
+  useInertBackground(true, dialog);
 
   useEffect(() => {
     if (!open) return;

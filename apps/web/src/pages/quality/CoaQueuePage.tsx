@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { RejectCoaDialog } from "../../components/RejectCoaDialog";
 import { useNavigate } from "react-router-dom";
 import type { CoaStatus, QualityQueueRowDTO } from "@veridi/shared";
 import { COA_STATUSES, COA_STATUS_LABELS, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
@@ -44,6 +45,7 @@ export function CoaQueuePage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<{ lotId: string; lotCode: string } | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -94,13 +96,11 @@ export function CoaQueuePage() {
     }
   }
 
-  async function handleReject(lotId: string) {
-    const reason = window.prompt("Motivo da rejeição do CoA:");
-    if (!reason?.trim()) return;
-
+  async function handleReject(lotId: string, reason: string) {
+    setRejecting(null);
     setError(null);
     try {
-      await rejectCoa(lotId, reason.trim());
+      await rejectCoa(lotId, reason);
       reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao rejeitar o CoA");
@@ -237,7 +237,7 @@ export function CoaQueuePage() {
                         <button
                           type="button"
                           className="btn btn--ghost btn--sm"
-                          onClick={() => void handleReject(row.lotId)}
+                          onClick={() => setRejecting({ lotId: row.lotId, lotCode: row.lotCode })}
                         >
                           Rejeitar
                         </button>
@@ -280,6 +280,14 @@ export function CoaQueuePage() {
           Próxima
         </button>
       </div>
+
+      {rejecting && (
+        <RejectCoaDialog
+          lotCode={rejecting.lotCode}
+          onCancel={() => setRejecting(null)}
+          onConfirm={(reason) => void handleReject(rejecting.lotId, reason)}
+        />
+      )}
     </>
   );
 }
