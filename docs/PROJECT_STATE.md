@@ -4398,6 +4398,56 @@ backup do banco, rate limit no login.
 
 ---
 
+# CMV — backend checkpoint
+
+CMV é a visão de negócio do custo industrial de um produto para uma
+quantidade, composta a partir de Formulação + Estrutura de Custos + cálculo
+vigente. **Não é fonte de verdade separada**: nenhuma entidade e nenhuma
+tabela de CMV foram criadas, e não há migration.
+
+Implementado (commit `1709766`):
+
+- `GET /products/:id/cmv?quantity=&referenceDate=` — read model, sem
+  persistência; simular não cria CALC;
+- `quantity` e `referenceDate` explícitas — o domínio nunca resolve a data
+  sozinho;
+- compõe FormulationVersion + IndustrialCostVersion + IndustrialCostCalculation
+  + PricingVersion/PricingTier;
+- reutiliza `costForOutputQuantity` (o mesmo motor das faixas de
+  precificação); a composição é anotada por esse motor enquanto ele soma,
+  nunca recalculada depois;
+- material fornecido pelo cliente mantém quantidade física e fica fora da
+  aquisição Veridi — não é zero nem desconhecido;
+- `PricingTier` só por quantidade EXATA: sem interpolação, sem faixa
+  próxima, sem cair para a de baixo;
+- gate de economia interna por `canSeePricingProvenance` — nenhuma permissão
+  nova;
+- verificado no DEMO: 500 → faixa 500; 1000 → faixa 1000; 750 → sem faixa;
+  3000 → faixa 3000.
+
+## Blockers abertos — resolver ANTES da UI
+
+**B1 — teste de API.** 625/626 PASS; 1 teste quebrado. Causa ainda não
+investigada. Não classificar como interferência de dados nem como regressão
+antes de reproduzir.
+
+**B2 — CMV do DEMO sai `NO_COST`.** Recalcular o custo depois das compras não
+resolveu. Hipótese a rastrear no motor: `resolveMaterialCost` não estaria
+aproveitando o custo real dos recebimentos. Não afirmar a causa sem rastrear.
+
+## Ainda não implementado
+
+Tela `/produtos/:id/cmv`; resumo de CMV no Produto; links de CMV em
+Projeto e na lista de Produtos; sugestão de faixa no QuoteLine; "Simular
+CMV" a partir do orçamento; retorno CMV → orçamento; suíte completa de API;
+testes web; Playwright; auditoria curta de usuário final; docs finais da
+capacidade.
+
+Próximo checkpoint: CMV frontend + integração comercial, **somente depois de
+B1 e B2 verdes**.
+
+---
+
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
