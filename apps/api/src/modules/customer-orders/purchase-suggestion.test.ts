@@ -213,8 +213,17 @@ async function applyPlan(
 }
 
 async function planAndRelease(app: App, opId: string) {
-  await app.inject({ method: "POST", url: `/production-orders/${opId}/plan` });
+  const planned = await app.inject({ method: "POST", url: `/production-orders/${opId}/plan` });
+  expect(planned.statusCode, `plan falhou: ${planned.body}`).toBe(200);
   const released = await app.inject({ method: "POST", url: `/production-orders/${opId}/release` });
+  /*
+   * Falhar aqui, com o corpo da resposta.
+   *
+   * Sem esta checagem, uma recusa do release virava `order.requirements is
+   * not iterable` dez linhas adiante — erro de JavaScript no lugar do motivo
+   * real, que estava no corpo HTTP e era descartado.
+   */
+  expect(released.statusCode, `release falhou: ${released.body}`).toBe(200);
   return released.json();
 }
 
