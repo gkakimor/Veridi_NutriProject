@@ -526,7 +526,10 @@ export function FormulationVersionPage() {
           subtitle="Fornecimento Cliente = material que o cliente envia (exige produto vinculado a cliente). Pureza vazia = desconhecida (nenhuma correção é aplicada). Embalagem normalmente usa base por unidade acabada. O físico por unidade já inclui pureza e overage."
         >
           <div className="table-container">
-            <table className="table">
+            {/* Dez colunas não cabem na largura de leitura: a ação da linha era
+                a primeira a sair de cena. Fixa à direita, ela continua ao
+                alcance mesmo com a tabela rolando. */}
+            <table className="table table--sticky-actions">
               <thead>
                 <tr>
                   <th>Item</th>

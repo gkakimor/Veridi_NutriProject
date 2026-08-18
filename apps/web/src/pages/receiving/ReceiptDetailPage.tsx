@@ -166,7 +166,7 @@ export function ReceiptDetailPage() {
 
         <FormSection title="Itens recebidos">
           <div className="table-container">
-            <table className="table">
+            <table className="table table--sticky-actions">
               <thead>
                 <tr>
                   <th>Item</th>

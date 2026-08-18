@@ -48,7 +48,11 @@
      e sobre botoes de cor solida. */
   --on-dark: #ffffff;
   --on-dark-2: #c9dacf;
-  --on-dark-3: #8fa99a;
+  /* 4,95:1 sobre --v-green-800 (#124534), medido — é o fundo real do sidebar,
+     onde este tom rotula grupo de navegação e etiqueta de módulo em 10px.
+     O valor anterior (#8fa99a) media 4,31:1 e reprovava AA por pouco: texto
+     pequeno é justamente onde a margem não pode ser apertada. */
+  --on-dark-3: #9ab5a6;
 
   /* ===== Tipografia ===== */
   --font-ui: "Inter", system-ui, -apple-system, sans-serif;
