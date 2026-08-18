@@ -35,9 +35,14 @@ function rotuloDe(campo: Validavel): string | null {
 }
 
 function mensagemDe(campo: Validavel): string {
-  const verbo = campo instanceof HTMLSelectElement ? "Selecione" : "Preencha";
   const rotulo = rotuloDe(campo);
-  return rotulo ? `${verbo} ${rotulo.toLowerCase()}.` : `${verbo} este campo.`;
+  // O rótulo entra entre aspas em vez de virar complemento da frase: "tipo"
+  // é masculino e "unidade" é feminino, e nenhuma frase montada com artigo
+  // acerta os dois.
+  if (campo instanceof HTMLSelectElement) {
+    return rotulo ? `Selecione uma opção em "${rotulo}".` : "Selecione uma opção.";
+  }
+  return rotulo ? `Preencha o campo "${rotulo}".` : "Preencha este campo.";
 }
 
 export function instalarMensagensObrigatorias(): () => void {
