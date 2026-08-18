@@ -17,8 +17,14 @@ import {
 import { nextSequenceCode } from "../src/lib/sequence-code.js";
 import { seedIndustrial } from "./demo-industrial.js";
 import {
+  createIndustrialResource,
+  createResourceRate,
+} from "../src/modules/industrial-resources/industrial-resources.service.js";
+import {
   activateIndustrialCostVersion,
   createIndustrialCostVersion,
+  createResourceUsage,
+  updateEnergyMode,
 } from "../src/modules/industrial-costs/industrial-costs.service.js";
 import { saveIndustrialCostCalculation } from "../src/modules/industrial-cost-calculation/snapshot.service.js";
 import {
@@ -145,6 +151,38 @@ async function ensureItem(input: {
       active: true,
     },
   });
+}
+
+/**
+ * Recurso industrial do cenário DEMO — encontra pelo nome ou cria.
+ *
+ * Reexecutar `pnpm db:demo` não pode multiplicar recurso nem tarifa: o
+ * cenário é o mesmo cenário, não um novo a cada execução.
+ */
+async function encontrarOuCriarRecurso(
+  input: { name: string; type: "LABOR" | "EQUIPMENT" | "ENERGY"; powerKw?: string },
+  rateValue: string,
+  actor: User,
+): Promise<{ id: string }> {
+  const existente = await prisma.industrialResource.findFirst({ where: { name: input.name } });
+  const recurso =
+    existente ??
+    (await createIndustrialResource(
+      {
+        name: input.name,
+        type: input.type,
+        ...(input.powerKw ? { powerKw: input.powerKw } : {}),
+      } as never,
+      actor,
+    ));
+
+  const temTarifa = await prisma.industrialResourceRate.count({
+    where: { industrialResourceId: recurso.id },
+  });
+  if (temTarifa === 0) {
+    await createResourceRate(recurso.id, { rateValue } as never, actor);
+  }
+  return { id: recurso.id };
 }
 
 async function main(): Promise<void> {
@@ -304,9 +342,55 @@ async function main(): Promise<void> {
       },
       actor,
     );
-    // A estrutura ativa com pendência conhecida (energia não configurada): o
-    // sistema aceita, mas exige confirmação explícita — e a qualidade do custo
-    // chega marcada como parcial até o fim da cadeia.
+    /*
+     * Recursos industriais do cenário DEMO.
+     *
+     * Valores FICTÍCIOS e determinísticos — não representam custo real da
+     * Veridi. Existem para que a pergunta "quanto custa produzir 1.000
+     * potes?" tenha resposta completa em vez de um subtotal: sem recurso
+     * nenhum a estrutura fica legitimamente parcial e o cenário principal
+     * não demonstra o produto.
+     *
+     * Mão de obra e equipamento são POR LOTE de referência: é o que mostra
+     * o motor diluindo custo fixo — 3.000 un são 3 lotes, e o custo por
+     * unidade cai, mas não linearmente.
+     */
+    const maoDeObra = await encontrarOuCriarRecurso(
+      { name: "DEMO — Mão de obra de produção", type: "LABOR" },
+      "38.00",
+      actor,
+    );
+    const misturador = await encontrarOuCriarRecurso(
+      // A potência é o que permite derivar a energia do próprio equipamento,
+      // em vez de cobrar energia duas vezes.
+      { name: "DEMO — Misturador industrial", type: "EQUIPMENT", powerKw: "7.5" },
+      "22.00",
+      actor,
+    );
+    const energia = await encontrarOuCriarRecurso(
+      { name: "DEMO — Energia elétrica", type: "ENERGY" },
+      "0.92",
+      actor,
+    );
+
+    await createResourceUsage(
+      costVersion.id,
+      { resourceId: maoDeObra.id, usageQuantity: "6", usageBasis: "FIXED_PER_REFERENCE_BATCH" },
+      actor,
+    );
+    await createResourceUsage(
+      costVersion.id,
+      { resourceId: misturador.id, usageQuantity: "4", usageBasis: "FIXED_PER_REFERENCE_BATCH" },
+      actor,
+    );
+    // Energia derivada do equipamento: horas × kW × tarifa. Nunca somada
+    // também como consumo direto — seria a mesma energia contada duas vezes.
+    await updateEnergyMode(
+      costVersion.id,
+      { energyCalculationMode: "FROM_EQUIPMENT", energyResourceId: energia.id },
+      actor,
+    );
+
     await activateIndustrialCostVersion(costVersion.id, { confirmIncomplete: true }, actor);
     const calculation = await saveIndustrialCostCalculation(costVersion.id, {}, actor);
 
@@ -413,6 +497,15 @@ async function main(): Promise<void> {
     where: { productId: first.productId, status: "ACTIVE" },
   });
   if (estruturaAtiva) {
+    // Só recalcula enquanto a base ainda não conhece o custo: reexecutar o
+    // seed não pode empilhar um cálculo novo a cada rodada.
+    const ultimo = await prisma.industrialCostCalculation.findFirst({
+      where: { industrialCostVersionId: estruturaAtiva.id },
+      orderBy: { costReferenceDate: "desc" },
+      select: { quality: true },
+    });
+    if (ultimo && ultimo.quality !== "NO_COST") return;
+
     const recalculo = await saveIndustrialCostCalculation(estruturaAtiva.id, {}, actor);
     console.log(
       `  custo recalculado após as compras: ${recalculo.code} — qualidade ${recalculo.quality}`,

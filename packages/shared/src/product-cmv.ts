@@ -13,7 +13,7 @@
  * `costForOutputQuantity` que a precificação usa para as faixas.
  */
 
-import type { IndustrialCostQuality, IndustrialCostWarningDTO } from "./industrial-costs.js";
+import type { IndustrialCostQuality, IndustrialCostWarningDTO } from "./industrial-cost-calculation.js";
 
 /** Categoria de apresentação — agrupa a composição do jeito que o negócio lê. */
 export type CmvGroup =

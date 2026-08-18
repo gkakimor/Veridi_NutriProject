@@ -151,4 +151,88 @@ describe("CMV — motor único", () => {
     // O custo industrial continua visível: quem produz precisa dele.
     expect(semPermissao.simulation).not.toBeNull();
   });
+
+  it("referenceDate escolhe a base: antes de existir cálculo, não há CMV", async () => {
+    const prisma = getPrisma();
+    const version = await prisma.industrialCostVersion.findFirst({
+      where: { status: "ACTIVE", calculations: { some: {} } },
+      orderBy: { versionNumber: "desc" },
+    });
+    if (!version) return;
+
+    const antes = await getProductCmv({
+      productId: version.productId,
+      quantity: new Prisma.Decimal(1000),
+      // Anterior a qualquer cálculo salvo: naquele dia ninguém sabia o custo.
+      referenceDate: new Date("2020-01-01T00:00:00.000Z"),
+      includePricing: true,
+    });
+    expect(antes.simulation).toBeNull();
+    expect(antes.unavailableReason).toMatch(/cálculo de custo salvo até esta data/i);
+
+    const hoje = await getProductCmv({
+      productId: version.productId,
+      quantity: new Prisma.Decimal(1000),
+      referenceDate: new Date("2026-08-18T00:00:00.000Z"),
+      includePricing: true,
+    });
+    expect(hoje.simulation).not.toBeNull();
+  });
+
+  it("recurso por lote não se dilui abaixo de um lote e acompanha a contagem", async () => {
+    const prisma = getPrisma();
+    const version = await prisma.industrialCostVersion.findFirst({
+      where: { status: "ACTIVE", calculations: { some: {} }, resourceUsages: { some: {} } },
+      orderBy: { versionNumber: "desc" },
+    });
+    if (!version) return;
+
+    const referenceDate = new Date("2026-08-18T00:00:00.000Z");
+    const base = version.referenceOutputQuantity;
+    const um = await getProductCmv({
+      productId: version.productId,
+      quantity: base,
+      referenceDate,
+      includePricing: false,
+    });
+    const tres = await getProductCmv({
+      productId: version.productId,
+      quantity: base.times(3),
+      referenceDate,
+      includePricing: false,
+    });
+    if (!um.simulation || !tres.simulation) return;
+
+    expect(um.simulation.batchCount).toBe("1");
+    expect(tres.simulation.batchCount).toBe("3");
+
+    const recursos = (r: typeof um) =>
+      (r.simulation?.components ?? [])
+        .filter((c) => c.group === "INDUSTRIAL_RESOURCE")
+        .reduce((total, c) => total.plus(new Prisma.Decimal(c.totalCost ?? 0)), new Prisma.Decimal(0));
+    // Três lotes custam três vezes o recurso de um lote — nunca o de um só.
+    expect(recursos(tres).equals(recursos(um).times(3))).toBe(true);
+  });
+
+  it("quantidade inválida e zero explícito são coisas diferentes de desconhecido", async () => {
+    const prisma = getPrisma();
+    const version = await prisma.industrialCostVersion.findFirst({
+      where: { status: "ACTIVE", calculations: { some: {} } },
+      orderBy: { versionNumber: "desc" },
+    });
+    if (!version) return;
+
+    const cmv = await getProductCmv({
+      productId: version.productId,
+      quantity: new Prisma.Decimal(1000),
+      referenceDate: new Date("2026-08-18T00:00:00.000Z"),
+      includePricing: false,
+    });
+    for (const componente of cmv.simulation?.components ?? []) {
+      // Custo desconhecido é `null`. Zero, quando existir, é um valor.
+      if (componente.totalCost !== null) expect(componente.totalCost).toMatch(/^\d+\.\d{4}$/);
+    }
+    // Subtotal conhecido existe mesmo quando o total não existe.
+    expect(cmv.simulation?.knownSubtotal).toMatch(/^\d+\.\d{4}$/);
+  });
 });

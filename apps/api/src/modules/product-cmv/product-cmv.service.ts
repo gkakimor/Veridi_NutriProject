@@ -24,6 +24,13 @@ import { ProductCmvNotFoundError } from "./product-cmv.errors.js";
  * Nada aqui persiste: simular é leitura. Congelar continua sendo o CALC.
  */
 
+/** Último instante do dia da data pedida. */
+function fimDoDia(date: Date): Date {
+  const fim = new Date(date);
+  fim.setUTCHours(23, 59, 59, 999);
+  return fim;
+}
+
 function money(value: Prisma.Decimal | null): string | null {
   return value === null ? null : value.toFixed(4);
 }
@@ -112,15 +119,24 @@ export async function getProductCmv(params: {
    * inventar uma aqui seria um segundo motor de custo.
    */
   const savedCalculation = await prisma.industrialCostCalculation.findFirst({
-    where: { industrialCostVersionId: activeCostVersion.id },
-    orderBy: { calculatedAt: "desc" },
+    where: {
+      industrialCostVersionId: activeCostVersion.id,
+      // A data pedida escolhe a base: um cálculo feito DEPOIS dela não
+      // podia ser conhecido naquele dia. Sem isto `referenceDate` seria
+      // decorativa — a resposta usaria sempre o cálculo mais recente e
+      // diria estar falando de outra data.
+      // O dia inteiro conta: um cálculo salvo às 10h da manhã pertence à
+      // data pedida. `referenceDate` é dia de calendário, não instante.
+      costReferenceDate: { lte: fimDoDia(params.referenceDate) },
+    },
+    orderBy: { costReferenceDate: "desc" },
     select: { id: true },
   });
   if (!savedCalculation) {
     return {
       ...base,
       unavailableReason:
-        "Esta estrutura de custos ainda não tem cálculo salvo. Abra a estrutura e salve um cálculo para simular o CMV.",
+        "Não há cálculo de custo salvo até esta data de referência. Salve um cálculo na estrutura de custos para simular o CMV.",
     };
   }
 

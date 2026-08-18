@@ -4431,9 +4431,37 @@ Implementado (commit `1709766`):
 investigada. Não classificar como interferência de dados nem como regressão
 antes de reproduzir.
 
-**B2 — CMV do DEMO sai `NO_COST`.** Recalcular o custo depois das compras não
-resolveu. Hipótese a rastrear no motor: `resolveMaterialCost` não estaria
-aproveitando o custo real dos recebimentos. Não afirmar a causa sem rastrear.
+**B1 — fechado.** Era interferência de dado no banco dev compartilhado, não
+regressão: mesmo código, suíte verde em execução isolada. Nenhum teste foi
+ajustado.
+
+**B2 — fechado.** A causa era dataset: `ReceiptLine.actualUnitCost` vinha
+`null` em todos os recebimentos do DEMO, e o domínio deliberadamente nunca
+copia esse valor do preço da OC (preço negociado não é valor pago). Sem
+aquisição real, 30d/90d/último-real ficavam sem candidato e a hierarquia
+terminava, corretamente, em desconhecido. Os recebimentos do DEMO passaram a
+informar o custo efetivo pela própria rota do domínio.
+
+**Economia industrial do DEMO.** O Product A ganhou recursos industriais
+**fictícios** — mão de obra, misturador (com potência) e energia — para que o
+cenário principal responda "quanto custa produzir 1.000 potes" com total, por
+unidade e por 1.000. Energia é derivada do equipamento (horas × kW × tarifa),
+nunca somada também como consumo direto. **Os valores não representam custo
+real da Veridi** e não foram calibrados para produzir margem: os recursos
+foram definidos primeiro e o CMV é o que o motor devolveu.
+
+Baseline (referenceDate 2026-08-18, qualidade `COMPLETE_REAL_REFERENCE`):
+
+| Qtd | CMV total | CMV/un | CMV/1.000 | Lotes | Faixa |
+|---|---|---|---|---|---|
+| 500 | 6.193,60 | 12,39 | 12.387,20 | 1 | 500 · R$ 44,90 |
+| 750 | 9.118,60 | 12,16 | 12.158,13 | 1 | não existe |
+| 1.000 | 12.043,60 | 12,04 | 12.043,60 | 1 | 1.000 · R$ 38,90 |
+| 3.000 | 36.130,80 | 12,04 | 12.043,60 | 3 | 3.000 · R$ 34,50 |
+
+`referenceDate` deixou de ser decorativa: escolhe o cálculo salvo vigente
+até aquele dia. Antes dela existir cálculo, não há CMV — e a resposta diz
+isso em vez de usar uma base que ninguém poderia conhecer.
 
 ## Ainda não implementado
 
