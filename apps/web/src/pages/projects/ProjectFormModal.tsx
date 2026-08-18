@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { useAuth } from "../../app/AuthProvider";
+import { CustomerFormModal } from "../customers/CustomerFormModal";
 import type { CustomerDTO, ProjectDTO } from "@veridi/shared";
 import {
   DOSAGE_FORMS,
@@ -72,6 +74,12 @@ export function ProjectFormModal({
   const [concepts, setConcepts] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  // Criação no contexto: o cliente não existe, e voltar depois obrigaria a
+  // refazer o projeto inteiro. `null` = modal fechado.
+  const [newCustomerName, setNewCustomerName] = useState<string | null>(null);
+  const { user } = useAuth();
+  // CTA que termina em 403 é pior que CTA nenhum.
+  const canCreateCustomer = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -148,6 +156,21 @@ export function ProjectFormModal({
     >
       {error && <p className="form-alert">{error}</p>}
 
+      {newCustomerName !== null && (
+        <CustomerFormModal
+          mode="create"
+          customer={null}
+          onClose={() => setNewCustomerName(null)}
+          onSaved={(created) => {
+            setNewCustomerName(null);
+            if (!created) return;
+            // Volta selecionado: quem cadastrou o cliente queria ESTE cliente.
+            setCustomers((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+            setForm((prev) => ({ ...prev, customerId: created.id }));
+          }}
+        />
+      )}
+
       <FormSection title="Projeto" subtitle="Projeto private label sempre pertence a um cliente.">
         <div className="field">
           <label htmlFor="project-customer">
@@ -163,6 +186,9 @@ export function ProjectFormModal({
               code: customer.code,
               name: customer.legalName,
             }))}
+            canCreate={canCreateCustomer}
+            createLabel="Cadastrar novo cliente"
+            onCreateNew={(typed) => setNewCustomerName(typed)}
           />
         </div>
 

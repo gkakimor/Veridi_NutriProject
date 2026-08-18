@@ -8,11 +8,8 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Detalhe de Receipt — o recebimento físico é sempre histórico/somente
@@ -136,13 +133,11 @@ export function ReceiptDetailPage() {
               <>
                 <dt>Ordem de compra</dt>
                 <dd>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/compras/ordens/${receipt.purchaseOrderId}`)}
-                  >
-                    {receipt.purchaseOrderCode}
-                  </button>
+                  <EntityLink
+                    kind="purchaseOrder"
+                    id={receipt.purchaseOrderId}
+                    code={receipt.purchaseOrderCode}
+                  />
                 </dd>
                 <dt>Fornecedor</dt>
                 <dd>
@@ -171,19 +166,19 @@ export function ReceiptDetailPage() {
 
         <FormSection title="Itens recebidos">
           <div className="table-container">
-            <table className="table">
+            <table className="table table--sticky-actions">
               <thead>
                 <tr>
                   <th>Item</th>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Un.</th>
                   <th>Lote fornecedor</th>
                   <th>Validade</th>
                   <th>Localização</th>
                   <th>Lote interno</th>
                   <th>CoA</th>
-                  <th>Preço previsto (OC)</th>
-                  <th>Custo efetivo</th>
+                  <th className="is-numeric">Preço previsto (OC)</th>
+                  <th className="is-numeric">Custo efetivo</th>
                   <th aria-hidden="true" />
                 </tr>
               </thead>
@@ -193,7 +188,7 @@ export function ReceiptDetailPage() {
                     <td>
                       <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
                     </td>
-                    <td>{line.receivedQuantity}</td>
+                    <td className="is-numeric">{line.receivedQuantity}</td>
                     <td>{line.unitCode}</td>
                     <td>{line.supplierLot ?? "—"}</td>
                     <td>{formatDate(line.expiryDate)}</td>
@@ -201,13 +196,7 @@ export function ReceiptDetailPage() {
                     <td>
                       {line.lotId ? (
                         <div className="table__actions">
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
-                            onClick={() => navigate(`/estoque/lotes/${line.lotId}`)}
-                          >
-                            <span className="code">{line.lotCode}</span>
-                          </button>
+                          <EntityLink kind="lot" id={line.lotId} code={line.lotCode} />
                           <button
                             type="button"
                             className="btn btn--ghost btn--sm"
@@ -223,8 +212,8 @@ export function ReceiptDetailPage() {
                     <td>
                       {line.coaStatus ? COA_STATUS_LABELS[line.coaStatus] : "—"}
                     </td>
-                    <td>{formatBRL(line.purchaseUnitPrice)}</td>
-                    <td>
+                    <td className="is-numeric">{formatBRL(line.purchaseUnitPrice)}</td>
+                    <td className="is-numeric">
                       {editingLineId === line.id ? (
                         <input
                           type="text"

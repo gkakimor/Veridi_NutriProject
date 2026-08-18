@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { EntityLink } from "../../components/EntityLink";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
@@ -13,6 +13,7 @@ import {
   PRICING_VERSION_STATUS_LABELS,
 } from "@veridi/shared";
 import { CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
 import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
@@ -23,18 +24,13 @@ import {
   deletePricingTier,
   getPricingVersion,
 } from "../../lib/pricing-api";
+import { formatDate } from "../../lib/dates";
+import { formatPercent } from "../../lib/percent";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
   if (status === "INACTIVE") return "badge badge--neutral";
   return "badge badge--warn";
-}
-
-function formatPercent(value: string | null): string {
-  if (value === null) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  return `${number.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 }
 
 /**
@@ -53,6 +49,7 @@ export function PricingPage() {
   const [pricing, setPricing] = useState<PricingVersionDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [activateConfirm, setActivateConfirm] = useState(false);
 
   const [quantity, setQuantity] = useState("");
   const [priceMode, setPriceMode] = useState<PriceMode>("TARGET_MARGIN");
@@ -158,7 +155,7 @@ export function PricingPage() {
             <dt>Formulação</dt>
             <dd>V{pricing.formulationVersionNumber}</dd>
             <dt>Data de referência do custo</dt>
-            <dd>{new Date(pricing.costReferenceDate).toLocaleDateString("pt-BR")}</dd>
+            <dd>{formatDate(pricing.costReferenceDate)}</dd>
             <dt>Qualidade do custo</dt>
             <dd>{INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality]}</dd>
             <dt>Base de produção da estrutura</dt>
@@ -169,13 +166,31 @@ export function PricingPage() {
             <dd>{pricing.minimumBatchQuantity ?? "—"}</dd>
           </dl>
 
+          {/* Preço fechado sobre custo incompleto continua sendo preço válido —
+              foi acordado assim. O que não pode é a tela deixar isso implícito
+              e depois o CMV do mesmo produto aparecer "Completo" ao lado, sem
+              ninguém entender a diferença. */}
+          {(pricing.costQuality === "PARTIAL" || pricing.costQuality === "NO_COST") && (
+            <p className="form-alert" role="status">
+              Esta precificação foi fechada sobre{" "}
+              {INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality].toLowerCase()} — por isso margem
+              e markup aparecem como "—" nas faixas. Um cálculo de custo mais completo do mesmo
+              produto não muda esta versão: preço acordado não se reescreve. Para precificar sobre
+              a base atual, crie uma nova versão a partir do cálculo vigente em{" "}
+              <Link to={`/produtos/${pricing.productId}/custos`}>
+                Custos industriais → Cálculos salvos
+              </Link>
+              .
+            </p>
+          )}
+
           {pricing.hasCustomerSuppliedMaterials && (
             <p className="field__hint">
               Contém material fornecido pelo cliente, que não entra no custo Veridi.
             </p>
           )}
-          {pricing.warnings.map((warning) => (
-            <p key={warning.code} className="field__hint">
+          {pricing.warnings.map((warning, index) => (
+            <p key={`${index}-${warning.code}`} className="field__hint">
               {warning.message}
             </p>
           ))}
@@ -189,17 +204,17 @@ export function PricingPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Lotes</th>
-                  <th>Custo total</th>
-                  <th>Custo/un</th>
+                  <th className="is-numeric">Custo total</th>
+                  <th className="is-numeric">Custo/un</th>
                   <th>Qualidade</th>
                   <th>Modo</th>
-                  <th>Margem alvo</th>
-                  <th>Comissão</th>
-                  <th>Preço sugerido</th>
-                  <th>Preço escolhido</th>
-                  <th>Margem resultante</th>
+                  <th className="is-numeric">Margem alvo</th>
+                  <th className="is-numeric">Comissão</th>
+                  <th className="is-numeric">Preço sugerido</th>
+                  <th className="is-numeric">Preço escolhido</th>
+                  <th className="is-numeric">Margem resultante</th>
                   <th>Markup</th>
                   <th>Contribuição/un</th>
                   <th>Receita</th>
@@ -210,23 +225,23 @@ export function PricingPage() {
               <tbody>
                 {pricing.tiers.map((tier) => (
                   <tr key={tier.id}>
-                    <td>
+                    <td className="is-numeric">
                       {tier.quantity} {tier.uomCode}
                     </td>
                     <td>{tier.batchCount}</td>
-                    <td>
+                    <td className="is-numeric">
                       {tier.industrialCostTotal === null
                         ? `${formatBRL(tier.knownSubtotal)} (subtotal conhecido)`
                         : formatBRL(tier.industrialCostTotal)}
                     </td>
-                    <td>{formatUnitCost(tier.industrialCostPerUnit)}</td>
+                    <td className="is-numeric">{formatUnitCost(tier.industrialCostPerUnit)}</td>
                     <td>{INDUSTRIAL_COST_QUALITY_LABELS[tier.costQuality]}</td>
                     <td>{PRICE_MODE_LABELS[tier.priceMode]}</td>
-                    <td>{formatPercent(tier.targetContributionMarginPercent)}</td>
-                    <td>{formatPercent(tier.commissionPercent)}</td>
-                    <td>{formatUnitCost(tier.suggestedUnitPrice)}</td>
-                    <td>{formatUnitCost(tier.selectedUnitPrice)}</td>
-                    <td>{formatPercent(tier.contributionMarginPercent)}</td>
+                    <td className="is-numeric">{formatPercent(tier.targetContributionMarginPercent)}</td>
+                    <td className="is-numeric">{formatPercent(tier.commissionPercent)}</td>
+                    <td className="is-numeric">{formatUnitCost(tier.suggestedUnitPrice)}</td>
+                    <td className="is-numeric">{formatUnitCost(tier.selectedUnitPrice)}</td>
+                    <td className="is-numeric">{formatPercent(tier.contributionMarginPercent)}</td>
                     <td>{formatPercent(tier.markupPercent)}</td>
                     <td>{formatUnitCost(tier.contributionPerUnit)}</td>
                     <td>{tier.grossRevenue === null ? "—" : formatBRL(tier.grossRevenue)}</td>
@@ -262,8 +277,11 @@ export function PricingPage() {
           {pricing.tiers.some((tier) => tier.warnings.length > 0) && (
             <ul className="candidate-list">
               {pricing.tiers.flatMap((tier) =>
-                tier.warnings.map((warning) => (
-                  <li key={`${tier.id}-${warning.code}`} className="field__hint">
+                // O código do aviso repete dentro da mesma faixa (um
+                // MATERIAL_COST_UNKNOWN por material sem custo), então a
+                // posição entra na chave — sem ela o React descarta avisos.
+                tier.warnings.map((warning, index) => (
+                  <li key={`${tier.id}-${index}-${warning.code}`} className="field__hint">
                     {tier.quantity} {tier.uomCode}: {warning.message}
                   </li>
                 )),
@@ -376,17 +394,13 @@ export function PricingPage() {
                   className="btn btn--accent btn--sm"
                   disabled={saving || pricing.tiers.length === 0}
                   onClick={() => {
-                    if (
-                      incompleteCost &&
-                      !window.confirm(
-                        "O custo está incompleto em pelo menos uma faixa. Ativar a precificação assim?",
-                      )
-                    ) {
+                    if (incompleteCost) {
+                      setActivateConfirm(true);
                       return;
                     }
                     void run(() =>
                       activatePricingVersion(pricing.id, {
-                        confirmIncompleteCost: incompleteCost,
+                        confirmIncompleteCost: false,
                         confirmOutdatedStructure: true,
                       }),
                     );
@@ -408,6 +422,53 @@ export function PricingPage() {
           </p>
         </FormSection>
       </div>
+
+      <ConfirmDialog
+        open={activateConfirm}
+        title="Ativar precificação com custo incompleto?"
+        confirmLabel="Ativar precificação"
+        confirmTone="accent"
+        message={
+          <>
+            <p>
+              O custo industrial está incompleto em pelo menos uma faixa. Ativar torna esta a
+              precificação vigente do produto e ela passa a ser oferecida no orçamento.
+            </p>
+            <ul className="confirm-dialog__list">
+              <li>
+                Precificação: <span className="code">{pricing.label}</span>
+              </li>
+              <li>
+                Produto: <span className="code">{pricing.productCode}</span> {pricing.productName}
+              </li>
+              <li>
+                Faixas: {pricing.tiers.length}{" "}
+                {pricing.tiers.length === 1 ? "faixa" : "faixas"} — sem custo completo:{" "}
+                {
+                  pricing.tiers.filter(
+                    (tier) => tier.costQuality === "PARTIAL" || tier.costQuality === "NO_COST",
+                  ).length
+                }
+              </li>
+            </ul>
+            {pricing.warnings.map((warning, index) => (
+              <p key={`${index}-${warning.code}`} className="field__hint">
+                {warning.message}
+              </p>
+            ))}
+          </>
+        }
+        onCancel={() => setActivateConfirm(false)}
+        onConfirm={() => {
+          setActivateConfirm(false);
+          void run(() =>
+            activatePricingVersion(pricing.id, {
+              confirmIncompleteCost: true,
+              confirmOutdatedStructure: true,
+            }),
+          );
+        }}
+      />
     </>
   );
 }

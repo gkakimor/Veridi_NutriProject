@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import type {
   InventoryLotBreakdownDTO,
   ItemDTO,
@@ -8,6 +8,7 @@ import type {
 } from "@veridi/shared";
 import { PROJECT_SAMPLE_STATUS_LABELS, SAMPLE_ATTACHMENT_TYPES, ownerLabel } from "@veridi/shared";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { useAuth } from "../../app/AuthProvider";
@@ -49,6 +50,8 @@ export function SampleDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [produceConfirm, setProduceConfirm] = useState(false);
+  const [cancelConfirm, setCancelConfirm] = useState(false);
 
   const [items, setItems] = useState<ItemDTO[]>([]);
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
@@ -131,6 +134,27 @@ export function SampleDetailPage() {
   if (error) return <p className="form-alert">{error}</p>;
   if (!sample || !id) return <p>Carregando…</p>;
 
+  const sampleId = id;
+
+  function doProduce(withoutConsumption: boolean) {
+    void run(() =>
+      produceSample(sampleId, {
+        outputQuantity,
+        outputUomCode,
+        ...(productionNotes.trim() ? { productionNotes: productionNotes.trim() } : {}),
+        ...(withoutConsumption ? { confirmWithoutConsumption: true } : {}),
+      }),
+    );
+  }
+
+  function doCancel() {
+    void run(() =>
+      cancelSample(sampleId, {
+        ...(decisionNotes.trim() ? { decisionNotes: decisionNotes.trim() } : {}),
+      }),
+    );
+  }
+
   const isOpen = sample.status === "DRAFT" || sample.status === "IN_PROGRESS";
   const awaitingDecision = sample.status === "PRODUCED";
   const selectedItem = items.find((item) => item.id === itemId) ?? null;
@@ -143,14 +167,15 @@ export function SampleDetailPage() {
             <span className="code">{sample.code}</span> — Teste {sample.testLabel}
           </h1>
           <p className="page__subtitle">
-            <Link to={`/comercial/projetos/${sample.projectId}`}>
-              <EntityLink
+            {/* Um link só: o `EntityLink` já leva ao projeto, e envolvê-lo em
+                outro `<a>` produzia âncora aninhada — HTML inválido e destino
+                imprevisível conforme onde o clique cai. */}
+            <EntityLink
               kind="project"
               id={sample.projectId}
               code={sample.projectCode}
               name={sample.projectName}
-            />
-            </Link>{" "}
+            />{" "}
             · {sample.customerName} ·{" "}
             <span className={sampleStatusBadgeClass(sample.status)}>
               {PROJECT_SAMPLE_STATUS_LABELS[sample.status]}
@@ -192,6 +217,35 @@ export function SampleDetailPage() {
           subtitle="Amostra não é lote nem ordem de produção — o resultado nunca entra no estoque de produto acabado."
         >
           <dl className="definition-list">
+            <dt>Projeto</dt>
+            <dd>
+              <EntityLink
+                kind="project"
+                id={sample.projectId}
+                code={sample.projectCode}
+                name={sample.projectName}
+              />
+            </dd>
+            <dt>Cliente</dt>
+            <dd>
+              <EntityLink kind="customer" id={sample.customerId} code={sample.customerName} />
+            </dd>
+            {/* Num projeto com vários produtos, saber o que a amostra testa é
+                a informação principal — sem ela T1 e T2 podem ser sabores
+                diferentes e a tela não conta a diferença. */}
+            <dt>Produto testado</dt>
+            <dd>
+              {sample.productId ? (
+                <EntityLink
+                  kind="product"
+                  id={sample.productId}
+                  code={sample.productCode}
+                  name={sample.productName}
+                />
+              ) : (
+                <span className="muted">Produto não identificado</span>
+              )}
+            </dd>
             <dt>Descrição</dt>
             <dd>{sample.description ?? "—"}</dd>
             <dt>Código legado</dt>
@@ -257,7 +311,7 @@ export function SampleDetailPage() {
                   <th>Item</th>
                   <th>Lote</th>
                   <th>Proprietário</th>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Quando</th>
                   <th>Quem</th>
                   <th>Observação</th>
@@ -271,7 +325,7 @@ export function SampleDetailPage() {
                     </td>
                     <td className="is-code">{consumption.lotCode ?? "—"}</td>
                     <td>{ownerLabel(consumption.ownerType, consumption.ownerCustomerName)}</td>
-                    <td>
+                    <td className="is-numeric">
                       {consumption.quantity} {consumption.uomCode}
                     </td>
                     <td>{formatDateTime(consumption.executedAt)}</td>
@@ -289,6 +343,16 @@ export function SampleDetailPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Espelho da explicação que já existe na decisão comercial: sem ela,
+              quem criou a amostra via só "Cancelar amostra" e concluía que a
+              função não existia. Ação ausente sem motivo é bloqueio mudo. */}
+          {!canConsume && isOpen && (
+            <p className="field__hint">
+              Registrar consumo e concluir a amostra são da Produção: é quem pesa o material e
+              executa o teste. Enquanto isso não acontece, a amostra fica aguardando a bancada.
+            </p>
+          )}
 
           {canConsume && isOpen && (
             <form
@@ -393,21 +457,11 @@ export function SampleDetailPage() {
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                const withoutConsumption = sample.consumptions.length === 0;
-                if (
-                  withoutConsumption &&
-                  !window.confirm("Nenhum consumo registrado nesta amostra. Concluir mesmo assim?")
-                ) {
+                if (sample.consumptions.length === 0) {
+                  setProduceConfirm(true);
                   return;
                 }
-                void run(() =>
-                  produceSample(id, {
-                    outputQuantity,
-                    outputUomCode,
-                    ...(productionNotes.trim() ? { productionNotes: productionNotes.trim() } : {}),
-                    ...(withoutConsumption ? { confirmWithoutConsumption: true } : {}),
-                  }),
-                );
+                doProduce(false);
               }}
             >
               <div className="field-grid-2">
@@ -480,6 +534,16 @@ export function SampleDetailPage() {
               />
             </div>
 
+            {/* Ação ausente sem explicação vira bloqueio silencioso: quem
+                executa o teste não decide o destino comercial dele. */}
+            {awaitingDecision && !canDecide && (
+              <p className="field__hint">
+                A decisão desta amostra é do Comercial: é quem responde ao cliente que aprova ou
+                reprova o teste. Registre aqui o parecer técnico — ele fica no histórico da
+                amostra.
+              </p>
+            )}
+
             <div className="line-actions">
               {awaitingDecision && canDecide && (
                 <>
@@ -515,20 +579,7 @@ export function SampleDetailPage() {
                   type="button"
                   className="btn btn--ghost btn--sm"
                   disabled={saving}
-                  onClick={() => {
-                    if (
-                      !window.confirm(
-                        "Cancelar a amostra? O material já consumido NÃO volta para o estoque.",
-                      )
-                    ) {
-                      return;
-                    }
-                    void run(() =>
-                      cancelSample(id, {
-                        ...(decisionNotes.trim() ? { decisionNotes: decisionNotes.trim() } : {}),
-                      }),
-                    );
-                  }}
+                  onClick={() => setCancelConfirm(true)}
                 >
                   Cancelar amostra
                 </button>
@@ -545,6 +596,46 @@ export function SampleDetailPage() {
           types={SAMPLE_ATTACHMENT_TYPES}
         />
       </div>
+
+      <ConfirmDialog
+        open={produceConfirm}
+        title="Concluir sem consumo registrado?"
+        confirmLabel="Concluir mesmo assim"
+        cancelLabel="Voltar"
+        confirmTone="accent"
+        message={
+          <>
+            <p>Nenhum consumo de material foi registrado para esta amostra.</p>
+            <p>
+              A amostra será concluída como produzida, mas sem rastro de material consumido — o
+              que foi usado fisicamente não ficará registrado.
+            </p>
+          </>
+        }
+        onCancel={() => setProduceConfirm(false)}
+        onConfirm={() => {
+          setProduceConfirm(false);
+          doProduce(true);
+        }}
+      />
+
+      <ConfirmDialog
+        open={cancelConfirm}
+        title="Cancelar a amostra?"
+        confirmLabel="Cancelar amostra"
+        cancelLabel="Voltar"
+        message={
+          <p>
+            O material já consumido <strong>não</strong> volta para o estoque. O consumo registrado
+            continua valendo como histórico.
+          </p>
+        }
+        onCancel={() => setCancelConfirm(false)}
+        onConfirm={() => {
+          setCancelConfirm(false);
+          doCancel();
+        }}
+      />
     </>
   );
 }

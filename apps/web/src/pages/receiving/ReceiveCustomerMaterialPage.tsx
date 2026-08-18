@@ -212,7 +212,7 @@ export function ReceiveCustomerMaterialPage() {
               <thead>
                 <tr>
                   <th>Item</th>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Lote do fabricante</th>
                   <th>Validade</th>
                   <th>Localização</th>
@@ -244,7 +244,7 @@ export function ReceiveCustomerMaterialPage() {
                           </div>
                         )}
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         <input
                           type="text"
                           inputMode="decimal"

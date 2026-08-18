@@ -24,6 +24,7 @@ import { PERIOD_PRESET_LABELS, dateInputValueOffset, resolvePeriodBounds } from 
 import { formatBRL } from "../lib/currency";
 import { useAuth } from "../app/AuthProvider";
 import "./dashboard.css";
+import { formatDate } from "../lib/dates";
 
 function severityBadgeClass(severity: AttentionSeverity): string {
   switch (severity) {
@@ -36,10 +37,6 @@ function severityBadgeClass(severity: AttentionSeverity): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("pt-BR");
@@ -121,7 +118,7 @@ function MovementActivityChart({ points }: { points: MovementActivityPointDTO[] 
                     height={barHeight}
                     fill={series.color}
                   >
-                    <title>{`${new Date(`${point.date}T12:00:00`).toLocaleDateString("pt-BR")} — ${series.label}: ${value}`}</title>
+                    <title>{`${formatDate(`${point.date}T12:00:00`)} — ${series.label}: ${value}`}</title>
                   </rect>
                 );
               })}
@@ -254,7 +251,7 @@ function AttentionRow({ item, onOpen }: { item: AttentionItemDTO; onOpen: () => 
  * autoridade; aqui só se evita esconder a ação do usuário certo.
  */
 const QUICK_ACTIONS: { label: string; path: string; roles: UserRole[] }[] = [
-  { label: "Novo projeto", path: "/comercial/projetos", roles: ["COMMERCIAL", "ADMIN"] },
+  { label: "Novo projeto", path: "/comercial/projetos?novo=1", roles: ["COMMERCIAL", "ADMIN"] },
   { label: "Novo pedido", path: "/comercial/pedidos/novo", roles: ["COMMERCIAL", "ADMIN"] },
   { label: "Nova ordem de produção", path: "/producao/ordens", roles: ["PRODUCTION", "ADMIN"] },
   {
@@ -262,7 +259,15 @@ const QUICK_ACTIONS: { label: string; path: string; roles: UserRole[] }[] = [
     path: "/compras/recebimentos",
     roles: ["PURCHASING", "QUALITY", "ADMIN"],
   },
-  { label: "Fila da Qualidade", path: "/qualidade/documentos", roles: ["QUALITY", "ADMIN"] },
+  // Duas filas distintas, e a Qualidade usa as duas: o laudo (CoA) e a
+  // liberação do lote para uso. Uma só entrada mandava quem precisava
+  // liberar para a tela do laudo.
+  { label: "Laudos / CoA", path: "/qualidade/documentos", roles: ["QUALITY", "ADMIN"] },
+  {
+    label: "Lotes aguardando liberação",
+    path: "/estoque/lotes?status=AWAITING_RELEASE",
+    roles: ["QUALITY", "ADMIN"],
+  },
 ];
 
 export function DashboardPage() {
@@ -564,7 +569,7 @@ export function DashboardPage() {
                     <th>Tipo</th>
                     <th>Item</th>
                     <th>Lote</th>
-                    <th>Quantidade</th>
+                    <th className="is-numeric">Quantidade</th>
                     <th>Origem</th>
                   </tr>
                 </thead>
@@ -583,7 +588,7 @@ export function DashboardPage() {
                         </td>
                         <td className="is-code">{movement.lotCode ?? "—"}</td>
                         {/* Cada linha traz a própria unidade — nada é somado entre linhas. */}
-                        <td>
+                        <td className="is-numeric">
                           {movement.quantity} {movement.unitCode}
                         </td>
                         <td>

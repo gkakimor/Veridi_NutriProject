@@ -6,6 +6,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { CostBreakdown, CostQualityBadge } from "../../components/CostBreakdown";
 import { FormSection } from "../../components/FormSection";
 import { getIndustrialCostCalculation } from "../../lib/cost-calculation-api";
+import { formatDate } from "../../lib/dates";
 
 /**
  * Cálculo salvo — somente leitura.
@@ -82,7 +83,7 @@ export function CostCalculationPage() {
               {calculation.referenceOutputQuantity} {calculation.referenceOutputUomCode}
             </dd>
             <dt>Data de referência de custo</dt>
-            <dd>{new Date(calculation.costReferenceDate).toLocaleDateString("pt-BR")}</dd>
+            <dd>{formatDate(calculation.costReferenceDate)}</dd>
             <dt>Calculado em</dt>
             <dd>
               {new Date(calculation.calculatedAt).toLocaleString("pt-BR")} —{" "}

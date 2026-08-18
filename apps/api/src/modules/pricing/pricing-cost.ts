@@ -47,6 +47,47 @@ export interface TierCostResult {
   quality: IndustrialCostQuality;
   warnings: IndustrialCostWarningDTO[];
   hasCustomerSuppliedMaterials: boolean;
+  /**
+   * Composição linha a linha — só é montada quando quem chama pede.
+   *
+   * A faixa de precificação quer o total; a tela de CMV precisa mostrar de
+   * onde ele veio. É o MESMO percurso de cálculo: a composição é anotada
+   * enquanto os subtotais são somados, nunca recalculada depois.
+   */
+  breakdown?: CostBreakdown;
+}
+
+export interface CostBreakdown {
+  materials: {
+    itemId: string;
+    itemCode: string;
+    itemName: string;
+    requiredQuantity: Prisma.Decimal;
+    unitCode: string;
+    itemType: string;
+    supplyResponsibility: string;
+    unitCost: Prisma.Decimal | null;
+    costSource: string | null;
+    totalCost: Prisma.Decimal | null;
+  }[];
+  resources: {
+    resourceId: string;
+    name: string;
+    type: string;
+    quantity: Prisma.Decimal;
+    unitCode: string;
+    rate: Prisma.Decimal | null;
+    totalCost: Prisma.Decimal | null;
+  }[];
+  manualLines: {
+    lineId: string;
+    description: string;
+    category: string;
+    calculationBasis: string;
+    rate: Prisma.Decimal | null;
+    amount: Prisma.Decimal | null;
+  }[];
+  energy: { kwh: Prisma.Decimal | null; rate: Prisma.Decimal | null; total: Prisma.Decimal | null };
 }
 
 /**
@@ -108,9 +149,14 @@ export async function costForOutputQuantity(
     calculation: IndustrialCostCalculationDTO;
     quantity: Prisma.Decimal;
     quantityUomCode: string;
+    /** Anota a composição enquanto soma — usado pela visão de CMV. */
+    collectBreakdown?: boolean;
   },
 ): Promise<TierCostResult> {
   const { costVersion, calculation, quantity } = params;
+  const breakdown: CostBreakdown | undefined = params.collectBreakdown
+    ? { materials: [], resources: [], manualLines: [], energy: { kwh: null, rate: null, total: null } }
+    : undefined;
   const basis = frozenBasis(calculation);
   const warnings: IndustrialCostWarningDTO[] = [];
   const units = await prisma.unitOfMeasure.findMany();
@@ -142,15 +188,31 @@ export async function costForOutputQuantity(
   let hasCustomerSuppliedMaterials = false;
 
   for (const requirement of requirements) {
+    const anotar = (unitCost: Prisma.Decimal | null, costSource: string | null, totalCost: Prisma.Decimal | null) =>
+      breakdown?.materials.push({
+        itemId: requirement.itemId,
+        itemCode: requirement.itemCode,
+        itemName: requirement.itemName,
+        requiredQuantity: requirement.requiredQuantity,
+        unitCode: requirement.stockUnitCode,
+        itemType: requirement.itemType,
+        supplyResponsibility: requirement.supplyResponsibility,
+        unitCost,
+        costSource,
+        totalCost,
+      });
+
     if (requirement.supplyResponsibility === "CUSTOMER") {
       // Material do cliente é estrutura física, não custo Veridi — e isso
       // não degrada a qualidade do custo.
       hasCustomerSuppliedMaterials = true;
+      anotar(null, null, null);
       continue;
     }
     const frozen = basis.materialUnitCost.get(requirement.itemId);
     if (!frozen || !frozen.unitCost) {
       materialMissing = true;
+      anotar(null, frozen?.source ?? null, null);
       warnings.push({
         code: "MATERIAL_COST_UNKNOWN",
         message: `${requirement.itemCode}: sem custo conhecido no cálculo de referência.`,
@@ -158,7 +220,9 @@ export async function costForOutputQuantity(
       continue;
     }
     if (!REAL_REFERENCE_SOURCES.includes(frozen.source as never)) anyEstimate = true;
-    materialsKnown = materialsKnown.plus(requirement.requiredQuantity.times(frozen.unitCost));
+    const totalLinha = requirement.requiredQuantity.times(frozen.unitCost);
+    anotar(frozen.unitCost, frozen.source, totalLinha);
+    materialsKnown = materialsKnown.plus(totalLinha);
   }
 
   if (hasCustomerSuppliedMaterials) {
@@ -191,9 +255,27 @@ export async function costForOutputQuantity(
     if (type === "LABOR" || type === "EQUIPMENT") {
       if (rate) {
         const amount = scaled.times(rate);
+        breakdown?.resources.push({
+          resourceId: usage.industrialResourceId,
+          name: usage.resourceNameSnapshot ?? usage.industrialResource.name,
+          type,
+          quantity: scaled,
+          unitCode: usage.usageUom,
+          rate,
+          totalCost: amount,
+        });
         if (type === "LABOR") laborKnown = laborKnown.plus(amount);
         else equipmentKnown = equipmentKnown.plus(amount);
       } else {
+        breakdown?.resources.push({
+          resourceId: usage.industrialResourceId,
+          name: usage.resourceNameSnapshot ?? usage.industrialResource.name,
+          type,
+          quantity: scaled,
+          unitCode: usage.usageUom,
+          rate: null,
+          totalCost: null,
+        });
         resourceMissing = true;
         warnings.push({
           code: "RESOURCE_RATE_UNKNOWN",
@@ -246,6 +328,14 @@ export async function costForOutputQuantity(
     }
   }
 
+  if (breakdown) {
+    breakdown.energy = {
+      kwh: costVersion.energyCalculationMode === "FROM_EQUIPMENT" ? derivedKwh : null,
+      rate: basis.energyRate,
+      total: energy,
+    };
+  }
+
   // ── premissas manuais ─────────────────────────────────────
   const unitsPerBox =
     costVersion.unitsPerShippingBoxSnapshot ?? costVersion.product.unitsPerShippingBox;
@@ -254,7 +344,13 @@ export async function costForOutputQuantity(
   let other = new Prisma.Decimal(0);
   let overhead = new Prisma.Decimal(0);
   let manualMissing = false;
-  const percentRates: Prisma.Decimal[] = [];
+  /*
+   * Linha percentual não tem valor até o custo direto fechar. Guarda-se a
+   * linha inteira, e não só a taxa, porque a composição do CMV precisa
+   * mostrar de onde saiu o overhead — um total com uma parcela invisível é
+   * um total que ninguém consegue conferir.
+   */
+  const percentLines: { line: (typeof costVersion.lines)[number]; rate: Prisma.Decimal }[] = [];
 
   for (const line of costVersion.lines) {
     // O valor vem do CALC quando ele congelou a linha; a estrutura ativa é
@@ -271,12 +367,31 @@ export async function costForOutputQuantity(
     );
 
     if (computed.percentOfDirect) {
-      if (!computed.known || !frozenRate) manualMissing = true;
-      else percentRates.push(frozenRate);
+      if (!computed.known || !frozenRate) {
+        manualMissing = true;
+        breakdown?.manualLines.push({
+          lineId: line.id,
+          description: line.description,
+          category: line.category,
+          calculationBasis: line.calculationBasis,
+          rate: frozenRate,
+          amount: null,
+        });
+      } else {
+        percentLines.push({ line, rate: frozenRate });
+      }
       continue;
     }
     if (!computed.known || !computed.amount) {
       manualMissing = true;
+      breakdown?.manualLines.push({
+        lineId: line.id,
+        description: line.description,
+        category: line.category,
+        calculationBasis: line.calculationBasis,
+        rate: frozenRate,
+        amount: null,
+      });
       warnings.push({
         code:
           line.calculationBasis === "PER_SHIPPING_BOX" && !unitsPerBox
@@ -286,6 +401,14 @@ export async function costForOutputQuantity(
       });
       continue;
     }
+    breakdown?.manualLines.push({
+      lineId: line.id,
+      description: line.description,
+      category: line.category,
+      calculationBasis: line.calculationBasis,
+      rate: frozenRate,
+      amount: computed.amount,
+    });
     if (line.category === "SECONDARY_PACKAGING") {
       secondaryPackaging = secondaryPackaging.plus(computed.amount);
     } else if (line.category === "THIRD_PARTY_SERVICE") {
@@ -310,9 +433,17 @@ export async function costForOutputQuantity(
 
   // Percentual só existe sobre custo direto completo — aplicar sobre
   // subtotal parcial produziria overhead menor que o real.
-  for (const rate of percentRates) {
-    if (!direct) continue;
-    overhead = overhead.plus(direct.times(rate).dividedBy(HUNDRED));
+  for (const { line, rate } of percentLines) {
+    const amount = direct ? direct.times(rate).dividedBy(HUNDRED) : null;
+    if (amount) overhead = overhead.plus(amount);
+    breakdown?.manualLines.push({
+      lineId: line.id,
+      description: line.description,
+      category: line.category,
+      calculationBasis: line.calculationBasis,
+      rate,
+      amount,
+    });
   }
 
   const total = direct ? direct.plus(overhead) : null;
@@ -334,6 +465,7 @@ export async function costForOutputQuantity(
     quality,
     warnings,
     hasCustomerSuppliedMaterials,
+    ...(breakdown ? { breakdown } : {}),
   };
 }
 

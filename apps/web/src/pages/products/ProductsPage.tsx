@@ -250,7 +250,7 @@ export function ProductsPage() {
       )}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
               <th>Código</th>
@@ -320,6 +320,12 @@ export function ProductsPage() {
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
                     actions={[
+                      {
+                        // Pergunta de negócio antes do documento: quanto custa
+                        // produzir uma quantidade deste produto.
+                        label: "CMV",
+                        onSelect: () => navigate(`/produtos/${product.id}/cmv`),
+                      },
                       {
                         // Estrutura de custos é documento versionado: página
                         // própria, não modal.

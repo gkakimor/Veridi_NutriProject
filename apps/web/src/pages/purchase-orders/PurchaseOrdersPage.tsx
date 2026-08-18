@@ -8,6 +8,7 @@ import { PURCHASE_ORDER_STATUSES, PURCHASE_ORDER_STATUS_LABELS } from "@veridi/s
 import { listPurchaseOrders } from "../../lib/purchase-orders-api";
 import { listSuppliers } from "../../lib/suppliers-api";
 import { formatBRL } from "../../lib/currency";
+import { formatDate } from "../../lib/dates";
 
 type ActiveFilter = PurchaseOrderStatus | "all";
 
@@ -27,10 +28,6 @@ function statusBadgeClass(status: PurchaseOrderStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /** Compras → Ordens de Compra. Documento transacional: linhas abrem pagina propria, nao modal. */
 export function PurchaseOrdersPage() {
@@ -160,15 +157,15 @@ export function PurchaseOrdersPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
               <th>Código</th>
               <th>Fornecedor</th>
               <th>Data</th>
               <th>Previsão</th>
-              <th>Itens</th>
-              <th>Total</th>
+              <th className="is-numeric">Itens</th>
+              <th className="is-numeric">Total</th>
               <th>Status</th>
               <th aria-hidden="true" />
             </tr>
@@ -189,8 +186,8 @@ export function PurchaseOrdersPage() {
                 </td>
                 <td>{formatDate(po.orderDate)}</td>
                 <td>{formatDate(po.expectedDeliveryDate)}</td>
-                <td>{po.lines.length}</td>
-                <td>{formatBRL(po.orderTotal)}</td>
+                <td className="is-numeric">{po.lines.length}</td>
+                <td className="is-numeric">{formatBRL(po.orderTotal)}</td>
                 <td>
                   <span className={statusBadgeClass(po.status)}>
                     {PURCHASE_ORDER_STATUS_LABELS[po.status]}

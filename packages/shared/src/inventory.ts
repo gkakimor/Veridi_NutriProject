@@ -104,6 +104,12 @@ export interface InventoryMovementDTO {
   /** Preenchidos só para `SHIPMENT_OUT` — identifica a Expedição de origem. */
   shipmentId: string | null;
   shipmentCode: string | null;
+  /** Consumo de produção e produção de acabado — a OP que originou o movimento. */
+  productionOrderId: string | null;
+  productionOrderCode: string | null;
+  /** Consumo de amostra — o teste Tn que originou o movimento. */
+  projectSampleId: string | null;
+  projectSampleCode: string | null;
   reason: string | null;
   createdBy: string | null;
   createdAt: string;

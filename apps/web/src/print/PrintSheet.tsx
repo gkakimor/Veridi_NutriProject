@@ -94,6 +94,20 @@ export function PrintSheet({
           Veridi Nutrition · documento gerado pelo sistema em{" "}
           {new Date().toLocaleString("pt-BR")} · {sheetCode}
         </footer>
+
+        {/*
+          Mesmo rodapé corrido do `PrintLayout`.
+
+          Relatório e folha operacional saem com dezenas de folhas: sem isto
+          a identidade documental existia só na página 1 e a folha que se
+          separa da pilha não dizia de que documento veio. O número da página
+          continua vindo do navegador — o que o papel garante é que toda
+          folha se identifica.
+        */}
+        <div className="print-running-foot" aria-hidden="true">
+          <span>{title}</span>
+          <span>{sheetCode}</span>
+        </div>
       </article>
 
       <PrintActions onBack={() => navigate(backTo)} />

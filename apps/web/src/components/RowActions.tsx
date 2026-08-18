@@ -35,6 +35,7 @@ export function RowActions({
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -59,6 +60,33 @@ export function RowActions({
 
   const available = actions.filter((action) => !action.disabled);
 
+  /*
+   * Seta move o foco dentro do menu.
+   *
+   * `role="menu"` é uma promessa: quem usa teclado (e quem usa leitor de
+   * tela) espera navegar com as setas, não com Tab. O menu declarava o papel
+   * e não entregava o comportamento — Tab funcionava, seta não fazia nada.
+   */
+  function itens(): HTMLButtonElement[] {
+    return Array.from(menu.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']") ?? []);
+  }
+
+  function moverFoco(passo: 1 | -1 | "primeiro" | "ultimo") {
+    const lista = itens();
+    if (lista.length === 0) return;
+    if (passo === "primeiro") return lista[0]!.focus();
+    if (passo === "ultimo") return lista[lista.length - 1]!.focus();
+    const atual = lista.indexOf(document.activeElement as HTMLButtonElement);
+    // Fora do menu, a primeira seta entra nele pela ponta correspondente.
+    const proximo =
+      atual === -1
+        ? passo === 1
+          ? 0
+          : lista.length - 1
+        : (atual + passo + lista.length) % lista.length;
+    lista[proximo]!.focus();
+  }
+
   return (
     // A linha da tabela trata Enter como "abrir registro" — só essas teclas
     // param aqui. Parar TODAS impedia o Escape de chegar ao listener que
@@ -68,6 +96,17 @@ export function RowActions({
       ref={container}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+        if (!open) return;
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          event.stopPropagation();
+          moverFoco(event.key === "ArrowDown" ? 1 : -1);
+        }
+        if (event.key === "Home" || event.key === "End") {
+          event.preventDefault();
+          event.stopPropagation();
+          moverFoco(event.key === "Home" ? "primeiro" : "ultimo");
+        }
       }}
     >
       {children}
@@ -84,12 +123,22 @@ export function RowActions({
               event.stopPropagation();
               setOpen((current) => !current);
             }}
+            onKeyDown={(event) => {
+              // Abrir pela seta já entra no menu, como em qualquer menu.
+              if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+              event.preventDefault();
+              event.stopPropagation();
+              if (!open) setOpen(true);
+              requestAnimationFrame(() =>
+                moverFoco(event.key === "ArrowDown" ? "primeiro" : "ultimo"),
+              );
+            }}
           >
             ⋯
           </button>
 
           {open && (
-            <div className="row-actions__menu" role="menu">
+            <div className="row-actions__menu" role="menu" ref={menu}>
               {available.map((action) => (
                 <button
                   key={action.label}

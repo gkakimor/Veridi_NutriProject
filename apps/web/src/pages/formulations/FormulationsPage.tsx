@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import type { FormulationSummaryDTO } from "@veridi/shared";
 import { listFormulations } from "../../lib/formulations-api";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
 
@@ -19,10 +20,6 @@ function situacaoBadge(formulation: FormulationSummaryDTO) {
   return <span className="badge badge--neutral">Sem formulação</span>;
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /** Produção → Formulações — uma linha por Product, nunca por componente. */
 export function FormulationsPage() {
@@ -100,7 +97,7 @@ export function FormulationsPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
               <th>Produto</th>

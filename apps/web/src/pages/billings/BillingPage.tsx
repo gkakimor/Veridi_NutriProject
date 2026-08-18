@@ -8,6 +8,8 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 function statusBadgeClass(status: BillingStatus): string {
   switch (status) {
@@ -20,10 +22,6 @@ function statusBadgeClass(status: BillingStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -166,6 +164,12 @@ export function BillingPage() {
         .toFixed(2)
     : null;
   const displayTotal = isDraft ? previewTotal : billing.totalAmount;
+  /*
+   * Emitir é definitivo. Faturar sem preço continua permitido — existe
+   * faturamento puramente quantitativo — mas quem confirma precisa saber que
+   * está congelando um documento sem valor, e quais linhas estão assim.
+   */
+  const linhasSemPreco = billing.lines.filter((line) => (prices[line.id] ?? "").trim() === "");
 
   return (
     <>
@@ -287,10 +291,10 @@ export function BillingPage() {
                 <tr>
                   <th>Produto</th>
                   <th>Lote</th>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Unidade</th>
-                  <th>Preço unitário</th>
-                  <th>Total</th>
+                  <th className="is-numeric">Preço unitário</th>
+                  <th className="is-numeric">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -309,9 +313,9 @@ export function BillingPage() {
                         {line.lotCode ?? "—"}
                         {line.businessLotNumber ? ` — ${line.businessLotNumber}` : ""}
                       </td>
-                      <td>{line.quantity}</td>
+                      <td className="is-numeric">{line.quantity}</td>
                       <td>{line.unitCode}</td>
-                      <td>
+                      <td className="is-numeric">
                         {isDraft ? (
                           <input
                             type="text"
@@ -326,7 +330,7 @@ export function BillingPage() {
                           formatBRL(line.unitPrice)
                         )}
                       </td>
-                      <td>{formatBRL(lineTotal)}</td>
+                      <td className="is-numeric">{formatBRL(lineTotal)}</td>
                     </tr>
                   );
                 })}
@@ -404,7 +408,15 @@ export function BillingPage() {
       <ConfirmDialog
         open={issueDialogOpen}
         title={`Emitir faturamento ${billing.code}?`}
-        message="O documento será marcado como emitido e ficará somente para leitura. Esta ação não emite Nota Fiscal."
+        message={
+          linhasSemPreco.length === 0
+            ? "O documento será marcado como emitido e ficará somente para leitura. Esta ação não emite Nota Fiscal."
+            : `${linhasSemPreco.length} de ${billing.lines.length} ${
+                billing.lines.length === 1 ? "linha está" : "linhas estão"
+              } sem preço: ${linhasSemPreco
+                .map((line) => line.productCode)
+                .join(", ")}. O faturamento será emitido sem valor total e ficará somente para leitura — emitir não tem volta. Esta ação não emite Nota Fiscal.`
+        }
         confirmLabel="Emitir faturamento"
         confirmTone="accent"
         onCancel={() => setIssueDialogOpen(false)}
@@ -413,8 +425,7 @@ export function BillingPage() {
 
       {cancelDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-billing-title">
+          <ModalDialog labelledBy="cancel-billing-title" onClose={() => setCancelDialogOpen(false)}>
             <h2 id="cancel-billing-title">Cancelar faturamento?</h2>
             <p>
               {billing.code} permanecerá no histórico. Nada muda no estoque nem na expedição — a expedição
@@ -444,7 +455,7 @@ export function BillingPage() {
                 Cancelar faturamento
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
     </>

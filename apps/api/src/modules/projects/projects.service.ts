@@ -2,6 +2,7 @@ import type { Prisma as PrismaTypes, ProjectStatus, User } from "@prisma/client"
 import type {
   ProjectDTO,
   ProjectListResponse,
+  ProjectProductDTO,
   ProjectStatusHistoryDTO,
   ProjectVocabularyResponse,
   QuoteVersionDTO,
@@ -32,6 +33,7 @@ import type {
   ListProjectsQuery,
   UpdateProjectInput,
 } from "./projects.schemas.js";
+import { linePricingInclude } from "./quote-pricing.service.js";
 import { toQuoteVersionDTO } from "./quotes.service.js";
 
 /**
@@ -61,11 +63,52 @@ const projectInclude = {
   product: true,
   responsibleUser: true,
   createdByUser: true,
-  quoteVersions: { orderBy: { versionNumber: "asc" as const } },
+  // Produtos do projeto: a associação real, que pode ser mais de uma.
+  products: {
+    orderBy: { sequence: "asc" as const },
+    include: {
+      product: true,
+      samples: { orderBy: { testSequence: "desc" as const }, take: 1 },
+    },
+  },
+  quoteVersions: {
+    orderBy: { versionNumber: "asc" as const },
+    // Espelha `quoteInclude`: a linha precisa da faixa/precificação para o
+    // DTO montar a proveniência. Sem isso o detalhe do projeto devolvia
+    // `pricing: null` e a tela do orçamento não enxergava custo incompleto.
+    include: {
+      lines: {
+        orderBy: { sortOrder: "asc" as const },
+        include: { product: true, ...linePricingInclude },
+      },
+    },
+  },
   statusHistory: { orderBy: { changedAt: "asc" as const } },
 } as const;
 
 type ProjectWithRelations = PrismaTypes.ProjectGetPayload<{ include: typeof projectInclude }>;
+
+export function toProjectProductDTO(
+  link: ProjectWithRelations["products"][number],
+): ProjectProductDTO {
+  const latestSample = link.samples[0] ?? null;
+  return {
+    id: link.id,
+    projectId: link.projectId,
+    productId: link.productId,
+    productCode: link.product.code,
+    productName: link.product.name,
+    productLifecycle: link.product.lifecycle,
+    productActive: link.product.active,
+    sequence: link.sequence,
+    status: link.status,
+    costing: null,
+    latestSampleCode: latestSample ? latestSample.code : null,
+    latestSampleLabel: latestSample ? `T${latestSample.testSequence}` : null,
+    createdAt: link.createdAt.toISOString(),
+    createdByName: link.createdByNameSnapshot,
+  };
+}
 
 function toStatusHistoryDTO(
   history: ProjectWithRelations["statusHistory"][number],
@@ -80,8 +123,10 @@ function toStatusHistoryDTO(
   };
 }
 
-export function toProjectDTO(project: ProjectWithRelations): ProjectDTO {
-  const quotes: QuoteVersionDTO[] = project.quoteVersions.map((quote) => toQuoteVersionDTO(quote));
+export function toProjectDTO(project: ProjectWithRelations, includePricing = false): ProjectDTO {
+  const quotes: QuoteVersionDTO[] = project.quoteVersions.map((quote) =>
+    toQuoteVersionDTO(quote, includePricing),
+  );
   const latest = quotes[quotes.length - 1] ?? null;
   const accepted = quotes.find((quote) => quote.status === "ACCEPTED") ?? null;
 
@@ -119,6 +164,7 @@ export function toProjectDTO(project: ProjectWithRelations): ProjectDTO {
     productCode: project.product ? project.product.code : null,
     productName: project.product ? project.product.name : null,
     costing: null,
+    products: project.products.map(toProjectProductDTO),
     latestQuoteLabel: latest ? latest.versionLabel : null,
     latestQuoteStatus: latest ? latest.status : null,
     acceptedQuoteLabel: accepted ? accepted.versionLabel : null,
@@ -137,13 +183,30 @@ async function requireProject(id: string): Promise<ProjectWithRelations> {
 }
 
 /** Detalhe do projeto com a cadeia Produto → Formulação → Custo → Preço. */
-export async function getProjectById(id: string): Promise<ProjectDTO | null> {
+/**
+ * `includePricing` carrega a proveniência econômica das linhas do orçamento
+ * (PREC, faixa, qualidade de custo, margem). É informação interna: quem
+ * chama decide a partir do papel do usuário. Sem ela a tela do projeto não
+ * conseguia nem detectar custo incompleto antes de enviar a proposta.
+ */
+export async function getProjectById(
+  id: string,
+  includePricing = false,
+): Promise<ProjectDTO | null> {
   const project = await getPrisma().project.findUnique({ where: { id }, include: projectInclude });
-  if (project) {
-    const dto = toProjectDTO(project);
-    return { ...dto, costing: await getProjectCostingSummary(project.productId) };
-  }
-  return project ? toProjectDTO(project) : null;
+  if (!project) return null;
+
+  const dto = toProjectDTO(project, includePricing);
+  // A cadeia técnica/econômica é POR PRODUTO: com vários produtos, um
+  // "custo do projeto" seria um número que não corresponde a nada.
+  const products = await Promise.all(
+    dto.products.map(async (link) => ({
+      ...link,
+      costing: await getProjectCostingSummary(link.productId),
+    })),
+  );
+
+  return { ...dto, products, costing: await getProjectCostingSummary(project.productId) };
 }
 
 export async function listProjects(
@@ -187,7 +250,12 @@ export async function listProjects(
     prisma.project.count({ where }),
   ]);
 
-  return { projects: projects.map(toProjectDTO), ...pageMeta(pagination, total) };
+  // Lista não carrega proveniência econômica: o índice do `map` não pode
+  // virar `includePricing` por acidente.
+  return {
+    projects: projects.map((project) => toProjectDTO(project)),
+    ...pageMeta(pagination, total),
+  };
 }
 
 /**
@@ -443,6 +511,20 @@ export async function prepareTechnicalProduct(
     );
 
     await tx.project.update({ where: { id }, data: { productId: product.id } });
+
+    // O produto preparado entra na lista de produtos do projeto: a partir
+    // daqui a associação real é `ProjectProduct`, e o `productId` do projeto
+    // é só o principal.
+    await tx.projectProduct.create({
+      data: {
+        projectId: id,
+        productId: product.id,
+        sequence: 1,
+        status: "ACTIVE",
+        createdByUserId: actor.id,
+        createdByNameSnapshot: actor.name,
+      },
+    });
   });
 
   return (await getProjectById(id))!;
@@ -469,7 +551,11 @@ export async function approveProject(
 
     const project = await tx.project.findUnique({
       where: { id },
-      include: { quoteVersions: true, customer: true },
+      include: {
+        quoteVersions: { include: { lines: true } },
+        customer: true,
+        products: true,
+      },
     });
     if (!project) throw new ProjectNotFoundError(id);
     if (project.status === "APPROVED") {
@@ -483,20 +569,72 @@ export async function approveProject(
     const accepted = project.quoteVersions.find((quote) => quote.status === "ACCEPTED");
     if (!accepted) throw new MissingAcceptedQuoteError();
 
-    let productId = project.productId;
-    if (productId) {
-      // Produto técnico existente é PROMOVIDO: mesmo código, mesma
-      // formulação, mesma estrutura de custos e a mesma precificação.
-      await tx.product.updateMany({
-        where: { id: productId, lifecycle: "DEVELOPMENT" },
-        data: { lifecycle: "APPROVED" },
-      });
+    /*
+     * O que a aprovação promove é o que o cliente ACEITOU.
+     *
+     * Um projeto pode desenvolver três sabores e o cliente fechar dois. O
+     * terceiro não vira produto operacional por consequência indireta: ele
+     * sai do escopo comercial desta aprovação e continua em desenvolvimento,
+     * com a história técnica inteira preservada.
+     */
+    const acceptedProductIds = new Set(accepted.lines.map((line) => line.productId));
+
+    for (const link of project.products) {
+      const inScope = acceptedProductIds.has(link.productId);
+
+      if (inScope) {
+        // Produto técnico existente é PROMOVIDO: mesmo código, mesma
+        // formulação, mesma estrutura de custos e a mesma precificação.
+        // Produto que já estava aprovado permanece como está.
+        await tx.product.updateMany({
+          where: { id: link.productId, lifecycle: "DEVELOPMENT" },
+          data: { lifecycle: "APPROVED" },
+        });
+        await tx.projectProduct.update({ where: { id: link.id }, data: { status: "APPROVED" } });
+        continue;
+      }
+
+      if (link.status === "ACTIVE") {
+        await tx.projectProduct.update({
+          where: { id: link.id },
+          data: { status: "OUT_OF_SCOPE" },
+        });
+      }
     }
-    if (!productId) {
-      // Unidade do produto acabado: vem do orçamento aceito quando fizer
-      // sentido; caso contrário o usuário precisa informar — nunca se
-      // inventa unidade.
-      const finishedUnitCode = input.finishedUnitCode ?? accepted.uomCode ?? null;
+
+    // O produto principal do projeto continua existindo para o legado: é o
+    // primeiro produto aceito, ou o que já estava lá.
+    let productId = project.productId;
+    const firstAccepted = project.products.find((link) => acceptedProductIds.has(link.productId));
+    if (!productId && firstAccepted) {
+      /*
+       * `Project.productId` é o ponteiro 1:1 do modelo antigo e continua
+       * ÚNICO no banco. No projeto multiproduto o MESMO produto pode ser
+       * desenvolvido em mais de uma negociação — vincular um produto que já
+       * pertence a outro projeto é caso legítimo. Reivindicar o ponteiro
+       * aqui fazia a aprovação estourar a constraint, e o erro do Prisma ia
+       * cru para a tela.
+       *
+       * Quem manda é `ProjectProduct`: o ponteiro legado só é preenchido
+       * quando ninguém mais o reivindicou.
+       */
+      const claimedByAnother = await tx.project.findFirst({
+        where: { productId: firstAccepted.productId, NOT: { id } },
+        select: { id: true },
+      });
+      if (!claimedByAnother) productId = firstAccepted.productId;
+    }
+
+    // Só cria produto quem não tem nenhum: o ponteiro legado pode continuar
+    // vazio porque outro projeto o reivindicou, e isso NÃO significa que
+    // falta produto — significa que o produto é compartilhado.
+    if (!productId && !firstAccepted) {
+      // Projeto sem nenhum produto preparado: a aprovação cria o produto,
+      // como sempre fez. A unidade vem da linha aceita — o cabeçalho não
+      // guarda mais unidade, e numa proposta com vários produtos cada linha
+      // tem a sua. Sem linha, quem aprova informa; nunca se inventa unidade.
+      const acceptedLine = accepted.lines[0] ?? null;
+      const finishedUnitCode = input.finishedUnitCode ?? acceptedLine?.uomCode ?? null;
       if (!finishedUnitCode) throw new MissingFinishedUnitError();
 
       const unit = await tx.unitOfMeasure.findUnique({ where: { code: finishedUnitCode } });
@@ -511,11 +649,27 @@ export async function approveProject(
         actor,
       );
       productId = created.id;
+
+      await tx.projectProduct.upsert({
+        where: { projectId_productId: { projectId: id, productId } },
+        create: {
+          projectId: id,
+          productId,
+          sequence: project.products.length + 1,
+          status: "APPROVED",
+          createdByUserId: actor.id,
+          createdByNameSnapshot: actor.name,
+        },
+        update: { status: "APPROVED" },
+      });
     }
 
     await tx.project.update({
       where: { id },
-      data: { status: "APPROVED", approvedAt: new Date(), productId },
+      // `productId` pode continuar null: o projeto multiproduto não depende
+      // do ponteiro legado para nada — `ProjectProduct` já registra o que
+      // foi aprovado.
+      data: { status: "APPROVED", approvedAt: new Date(), ...(productId ? { productId } : {}) },
     });
     await tx.projectStatusHistory.create({
       data: {

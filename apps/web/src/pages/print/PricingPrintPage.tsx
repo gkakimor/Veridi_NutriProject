@@ -13,13 +13,7 @@ import { PrintSheet } from "../../print/PrintSheet";
 import { formatUnitCost } from "../../components/CostBreakdown";
 import { formatBRL } from "../../lib/currency";
 import { getPricingVersion } from "../../lib/pricing-api";
-
-function formatPercent(value: string | null): string {
-  if (value === null) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  return `${number.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
-}
+import { formatPercent } from "../../lib/percent";
 
 /**
  * Simulação de preço e margem impressa.
@@ -169,15 +163,15 @@ export function PricingPrintPage() {
         <PrintSection title="Observações">
           <PrintTable columns={["Faixa", "Observação"]} isEmpty={false} emptyMessage="">
             <>
-              {pricing.warnings.map((warning) => (
-                <tr key={warning.code}>
+              {pricing.warnings.map((warning, index) => (
+                <tr key={`${index}-${warning.code}`}>
                   <td>—</td>
                   <td>{warning.message}</td>
                 </tr>
               ))}
               {pricing.tiers.flatMap((tier) =>
-                tier.warnings.map((warning) => (
-                  <tr key={`${tier.id}-${warning.code}`}>
+                tier.warnings.map((warning, index) => (
+                  <tr key={`${tier.id}-${index}-${warning.code}`}>
                     <td>
                       {tier.quantity} {tier.uomCode}
                     </td>

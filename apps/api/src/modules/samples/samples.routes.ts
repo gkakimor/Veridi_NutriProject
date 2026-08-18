@@ -18,6 +18,8 @@ import {
   SampleLotNotFoundError,
   SampleNotFoundError,
   SampleWithoutConsumptionError,
+  SampleProductNotInProjectError,
+  SampleProductRequiredError,
 } from "./samples.errors.js";
 import {
   createSampleSchema,
@@ -48,6 +50,12 @@ function mapDomainError(
   }
   if (error instanceof SampleNotFoundError || error instanceof ProjectNotFoundError) {
     return { status: 404, body: { error: "not_found", message: error.message } };
+  }
+  if (
+    error instanceof SampleProductRequiredError ||
+    error instanceof SampleProductNotInProjectError
+  ) {
+    return { status: 400, body: { error: "sample_product_required", message: error.message } };
   }
   if (error instanceof ProjectNotOpenForSamplesError) {
     return { status: 409, body: { error: "project_closed", message: error.message } };

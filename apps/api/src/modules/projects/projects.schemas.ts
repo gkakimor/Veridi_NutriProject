@@ -91,18 +91,45 @@ export const listProjectsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+/** Cabeçalho da proposta: condições comerciais. Preço vive na linha. */
 export const updateQuoteVersionSchema = z.object({
   quoteDate: requiredDateSchema.optional(),
   validUntil: requiredDateSchema.nullish(),
-  quotedQuantity: optionalDecimal,
-  uomCode: optionalNullableText(20),
-  // Preço `null` = ainda não precificado; `0` é preço zero explícito.
-  unitPrice: optionalDecimal,
   currencyCode: z.string().trim().length(3).optional(),
   commercialNotes: optionalNullableText(2000),
   paymentTerms: optionalNullableText(500),
   leadTimeDays: optionalPositiveInt,
 });
+
+/** Só produto já associado ao projeto entra na proposta. */
+export const addQuoteLineSchema = z.object({
+  projectProductId: z.string().trim().min(1),
+});
+
+export const updateQuoteLineSchema = z.object({
+  quotedQuantity: optionalDecimal,
+  uomCode: optionalNullableText(20),
+  // Preço `null` = ainda não precificado; `0` é preço zero explícito.
+  unitPrice: optionalDecimal,
+});
+
+/**
+ * Produto do projeto: cria um novo ou vincula um existente.
+ *
+ * São as duas formas legítimas — e nenhuma delas é "digitar um nome e
+ * deixar o resto para depois": produto tem ciclo de vida e regras.
+ */
+export const addProjectProductSchema = z.union([
+  z.object({
+    operation: z.literal("create"),
+    name: z.string().trim().min(1).max(200).optional(),
+    finishedUnitCode: z.string().trim().min(1).optional(),
+  }),
+  z.object({
+    operation: z.literal("link"),
+    productId: z.string().trim().min(1),
+  }),
+]);
 
 export const rejectQuoteSchema = z.object({
   reason: z.string().trim().max(1000).optional(),
@@ -115,6 +142,9 @@ export type CancelProjectInput = z.infer<typeof cancelProjectSchema>;
 export type ApproveProjectInput = z.infer<typeof approveProjectSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
 export type UpdateQuoteVersionInput = z.infer<typeof updateQuoteVersionSchema>;
+export type AddQuoteLineInput = z.infer<typeof addQuoteLineSchema>;
+export type UpdateQuoteLineInput = z.infer<typeof updateQuoteLineSchema>;
+export type AddProjectProductInput = z.infer<typeof addProjectProductSchema>;
 export type RejectQuoteInput = z.infer<typeof rejectQuoteSchema>;
 
 /** Unidade do produto acabado: exigida quando o brief não a define. */

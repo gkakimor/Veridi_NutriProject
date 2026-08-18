@@ -1,7 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
-import { requireCurrentUser } from "../../lib/current-user.js";
+import { requireRole } from "../../lib/current-user.js";
+import { ForbiddenError } from "../auth/auth.errors.js";
 import type { ZodError } from "zod";
-import { blockLot, getLotById, listLots, lookupLotByCode, releaseLot } from "./lots.service.js";
+import {
+  blockLot,
+  getLotById,
+  listLots,
+  lookupLotByCode,
+  releaseLot,
+  unblockLot,
+} from "./lots.service.js";
 import { CoaNotApprovedError } from "../quality/quality.errors.js";
 import { InvalidLotTransitionError, LotNotFoundError } from "./lots.errors.js";
 import { blockLotSchema, listLotsQuerySchema, lookupLotQuerySchema } from "./lots.schemas.js";
@@ -52,6 +60,37 @@ export const lotsRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(lot);
   });
 
+  /*
+   * Desbloquear devolve o lote à fila da Qualidade — nunca ao estoque
+   * disponível. Mesmo dono da decisão de bloquear, e motivo obrigatório:
+   * reabrir um bloqueio é ato registrado, não desfazer silencioso.
+   */
+  app.post("/lots/:id/unblock", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = blockLotSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    try {
+      const actor = requireRole(request, "QUALITY", "ADMIN");
+      return reply.send(await unblockLot(id, parsed.data.reason, actor.name));
+    } catch (error) {
+      if (error instanceof ForbiddenError) {
+        return reply.status(403).send({ error: "forbidden", message: error.message });
+      }
+      if (error instanceof LotNotFoundError) {
+        return reply.status(404).send({ error: "not_found" });
+      }
+      if (error instanceof InvalidLotTransitionError) {
+        return reply.status(400).send({ error: "invalid_transition", message: error.message });
+      }
+      throw error;
+    }
+  });
+
   app.get("/lots/:id/traceability", async (request, reply) => {
     const { id } = request.params as { id: string };
     const traceability = await getLotTraceability(id);
@@ -59,11 +98,22 @@ export const lotsRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(traceability);
   });
 
+  /*
+   * Liberar e bloquear são decisões da QUALIDADE.
+   *
+   * A rota aceitava qualquer sessão autenticada: comercial conseguia liberar
+   * um lote em espera de laudo com um POST. O anexo de CoA já exigia
+   * QUALITY/ADMIN — a decisão que ele sustenta ficava sem porta.
+   */
   app.post("/lots/:id/release", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      return reply.send(await releaseLot(id, requireCurrentUser(request).name));
+      const actor = requireRole(request, "QUALITY", "ADMIN");
+      return reply.send(await releaseLot(id, actor.name));
     } catch (error) {
+      if (error instanceof ForbiddenError) {
+        return reply.status(403).send({ error: "forbidden", message: error.message });
+      }
       if (error instanceof LotNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }
@@ -88,8 +138,12 @@ export const lotsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.send(await blockLot(id, parsed.data.reason, requireCurrentUser(request).name));
+      const actor = requireRole(request, "QUALITY", "ADMIN");
+      return reply.send(await blockLot(id, parsed.data.reason, actor.name));
     } catch (error) {
+      if (error instanceof ForbiddenError) {
+        return reply.status(403).send({ error: "forbidden", message: error.message });
+      }
       if (error instanceof LotNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
       }

@@ -13,10 +13,7 @@ import {
   getIndustrialResource,
   updateIndustrialResource,
 } from "../../lib/industrial-resources-api";
-
-function formatDate(value: string | null): string {
-  return value ? new Date(value).toLocaleDateString("pt-BR") : "—";
-}
+import { formatDate } from "../../lib/dates";
 
 /**
  * Detalhe do recurso industrial com o histórico completo de tarifas.
@@ -190,7 +187,7 @@ export function IndustrialResourceDetailPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Valor</th>
+                  <th className="is-numeric">Valor</th>
                   <th>Unidade</th>
                   <th>Vigente desde</th>
                   <th>Válida até</th>
@@ -202,7 +199,7 @@ export function IndustrialResourceDetailPage() {
               <tbody>
                 {resource.rates.map((rate) => (
                   <tr key={rate.id}>
-                    <td>
+                    <td className="is-numeric">
                       {rate.currencyCode} {rate.rateValue}
                     </td>
                     <td>{INDUSTRIAL_RATE_UOM_LABELS[rate.rateUom]}</td>

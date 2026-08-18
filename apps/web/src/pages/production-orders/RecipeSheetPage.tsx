@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState , useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { RecipeSheetDTO, RecipeSheetPartDTO } from "@veridi/shared";
+import type { RecipeSheetDTO, RecipeSheetPartDTO, RecipeSheetRequirementDTO } from "@veridi/shared";
 import {
   PRODUCTION_PART_STATUS_LABELS,
   SUPPLY_RESPONSIBILITY_LABELS,
@@ -48,12 +48,33 @@ export function RecipeSheetPage() {
    * pesada, a ação parecia não ter efeito. Traz o alerta para a vista.
    */
   function reportError(err: unknown, fallback: string) {
-    setError(err instanceof Error ? err.message : fallback);
+    const raw = err instanceof Error ? err.message : fallback;
+    // "restam 0" sozinho não explica a causa: o saldo reservado desta linha
+    // costuma ter sido baixado pelo Consumo Real da própria OP.
+    const translated = /restam 0\b/.test(raw)
+      ? "Esta linha já teve todo o saldo reservado consumido na OP. O apontamento de Consumo Real já baixou o material; registrar a pesagem novamente criaria uma duplicidade de consumo."
+      : raw;
+    setError(translated);
     requestAnimationFrame(() => {
       alertRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
       alertRef.current?.focus();
     });
   }
+  /**
+   * A linha teve o saldo reservado baixado pelo Consumo Real da OP.
+   *
+   * Nada foi pesado nesta folha e não sobrou reserva: quem consumiu foi o
+   * apontamento da OP. Sem esta leitura, a folha só devolvia "restam 0"
+   * depois da tentativa, sem dizer a causa.
+   *
+   * A prova é o consumo REGISTRADO, não a ausência de reserva: quando a
+   * ordem encerra, a reserva é liberada e o saldo zera também na linha que
+   * nunca foi consumida — a folha então anunciava consumo onde não houve.
+   */
+  function consumedByOrder(requirement: RecipeSheetRequirementDTO): boolean {
+    return Number(requirement.consumedQuantity) > 0 && Number(requirement.weighedQuantity) === 0;
+  }
+
   const [activePart, setActivePart] = useState(1);
 
   const [requirementId, setRequirementId] = useState("");
@@ -135,6 +156,9 @@ export function RecipeSheetPage() {
   }
 
   const part = sheet.parts.find((row) => row.partNumber === activePart) ?? sheet.parts[0];
+  const ordemEncerrada = sheet.status === "COMPLETED" || sheet.status === "CANCELLED";
+  const selectedRequirement =
+    part?.requirements.find((row) => row.requirementId === requirementId) ?? null;
 
   return (
     <>
@@ -228,6 +252,19 @@ export function RecipeSheetPage() {
               <span className={partBadgeClass(part.status)}>
                 {PRODUCTION_PART_STATUS_LABELS[part.status]}
               </span>
+              {/*
+                "Pendente" numa OP que já consumiu material descreve uma
+                produção que não aconteceu. A pesagem por partes é UM dos
+                caminhos; o Consumo Real é o outro, e a folha precisa dizer
+                qual foi usado.
+              */}
+              {part.status === "PENDING" && part.requirements.some(consumedByOrder) && (
+                <span className="field__hint">
+                  {" "}
+                  Material registrado via Consumo Real da OP — a pesagem por partes não foi
+                  utilizada nesta ordem.
+                </span>
+              )}
               {part.startedByName && (
                 <span className="field__hint">
                   {" "}
@@ -248,7 +285,7 @@ export function RecipeSheetPage() {
                   <tr>
                     <th>Material</th>
                     <th>Fornecimento</th>
-                    <th>Planejado</th>
+                    <th className="is-numeric">Planejado</th>
                     <th>Pesado</th>
                     <th>Diferença</th>
                     <th>Lotes reservados</th>
@@ -269,23 +306,48 @@ export function RecipeSheetPage() {
                           <div className="field__hint">{requirement.expectedOwnerCustomerName}</div>
                         )}
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {requirement.plannedQuantity} {requirement.unitCode}
                       </td>
-                      <td>{requirement.weighedQuantity}</td>
-                      <td>
-                        <span
-                          className={
-                            Number(requirement.differenceQuantity) === 0
-                              ? "badge badge--active"
-                              : "badge badge--warn"
-                          }
-                        >
-                          {requirement.differenceQuantity}
-                        </span>
-                      </td>
+                      {/*
+                        Material baixado pelo Consumo Real não foi pesado
+                        AQUI — mas foi consumido. Mostrar "0 pesado" e uma
+                        diferença de -100% num documento formal de produção
+                        descreve um desvio que não existe: a folha impressa
+                        dizia que a ordem rodou sem material.
+                      */}
+                      {consumedByOrder(requirement) ? (
+                        <>
+                          <td className="is-numeric">
+                            <span className="field__hint">
+                              {requirement.consumedQuantity} {requirement.unitCode} via Consumo Real
+                            </span>
+                          </td>
+                          <td>
+                            <span className="badge badge--neutral">—</span>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="is-numeric">{requirement.weighedQuantity}</td>
+                          <td>
+                            <span
+                              className={
+                                Number(requirement.differenceQuantity) === 0
+                                  ? "badge badge--active"
+                                  : "badge badge--warn"
+                              }
+                            >
+                              {requirement.differenceQuantity}
+                            </span>
+                          </td>
+                        </>
+                      )}
                       <td>
                         {requirement.reservedLots.map((lot) => lot.lotCode).join(", ") || "—"}
+                        {consumedByOrder(requirement) && (
+                          <p className="field__hint">Consumo já registrado nesta OP.</p>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -293,7 +355,17 @@ export function RecipeSheetPage() {
               </table>
             </div>
 
-            {part.status !== "COMPLETED" && (
+            {/* Ordem encerrada não recebe pesagem: a folha vira documento de
+                consulta. Deixar o formulário operável convidava a registrar
+                material numa produção que já terminou. */}
+            {ordemEncerrada && (
+              <p className="field__hint">
+                Ordem encerrada — esta folha é documento de consulta. Pesagem e
+                conclusão de parte não são mais registradas aqui.
+              </p>
+            )}
+
+            {part.status !== "COMPLETED" && !ordemEncerrada && (
               <>
                 <h4>Registrar pesagem</h4>
                 <div className="field field--narrow">
@@ -305,12 +377,37 @@ export function RecipeSheetPage() {
                   >
                     <option value="">Selecione…</option>
                     {part.requirements.map((requirement) => (
-                      <option key={requirement.requirementId} value={requirement.requirementId}>
+                      <option
+                        key={requirement.requirementId}
+                        value={requirement.requirementId}
+                        disabled={consumedByOrder(requirement)}
+                      >
                         {requirement.itemCode} — {requirement.itemName}
+                        {consumedByOrder(requirement) ? " (consumo já registrado na OP)" : ""}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Saldo já baixado pelo Consumo Real: o campo não pode
+                    parecer operável. A regra de negócio não muda — não existe
+                    segundo consumo, nem reserva recriada. */}
+                {selectedRequirement && consumedByOrder(selectedRequirement) && (
+                  <div className="form-alert form-alert--inline" role="status">
+                    <p>Consumo já registrado nesta OP.</p>
+                    <p>
+                      O saldo reservado desta linha já foi consumido pelo apontamento de Consumo
+                      Real. Registrar a pesagem novamente criaria uma duplicidade de consumo.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => navigate(`/producao/ordens/${sheet.productionOrderId}`)}
+                    >
+                      Ver Consumo Real da OP
+                    </button>
+                  </div>
+                )}
 
                 <div className="field field--narrow">
                   <label htmlFor="weighing-lot">Lote (escaneie ou digite)</label>
@@ -373,7 +470,7 @@ export function RecipeSheetPage() {
                     <th>Material</th>
                     <th>Lote</th>
                     <th>Proprietário</th>
-                    <th>Planejado</th>
+                    <th className="is-numeric">Planejado</th>
                     <th>Pesado</th>
                     <th>Executado por</th>
                     <th>Data/hora</th>
@@ -388,7 +485,7 @@ export function RecipeSheetPage() {
                       </td>
                       <td className="is-code">{weighing.lotCode ?? "—"}</td>
                       <td>{ownerLabel(weighing.ownerType, null)}</td>
-                      <td>{weighing.plannedQuantity}</td>
+                      <td className="is-numeric">{weighing.plannedQuantity}</td>
                       <td>
                         {weighing.actualQuantity} {weighing.uomCode}
                       </td>
@@ -422,7 +519,7 @@ export function RecipeSheetPage() {
                   <tr>
                     <th>Item</th>
                     <th>Fornecimento</th>
-                    <th>Total da OP</th>
+                    <th className="is-numeric">Total da OP</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -432,7 +529,7 @@ export function RecipeSheetPage() {
                         <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                       </td>
                       <td>{SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}</td>
-                      <td>
+                      <td className="is-numeric">
                         {row.totalQuantity} {row.unitCode}
                       </td>
                     </tr>

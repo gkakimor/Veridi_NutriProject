@@ -116,15 +116,47 @@ async function createProject(
   return response;
 }
 
-/** Cria uma versão, preenche e marca como enviada. */
+/** Cria um produto de desenvolvimento no projeto. */
+async function addProjectProduct(app: App, projectId: string, name?: string) {
+  const response = await app.inject({
+    method: "POST",
+    url: `/projects/${projectId}/products`,
+    payload: { operation: "create", ...(name ? { name } : {}) },
+  });
+  return response.json();
+}
+
+/** Adiciona uma linha ao orçamento e devolve o id dela. */
+async function addQuoteLine(
+  app: App,
+  quoteId: string,
+  projectProductId: string,
+  values: { quotedQuantity?: string; uomCode?: string; unitPrice?: string } = {},
+) {
+  const quote = (
+    await app.inject({
+      method: "POST",
+      url: `/quote-versions/${quoteId}/lines`,
+      payload: { projectProductId },
+    })
+  ).json();
+  const line = quote.lines[quote.lines.length - 1];
+  if (Object.keys(values).length > 0) {
+    await app.inject({ method: "PATCH", url: `/quote-lines/${line.id}`, payload: values });
+  }
+  return line.id as string;
+}
+
+/** Cria uma versão com uma linha, preenche e marca como enviada. */
 async function sendQuote(app: App, projectId: string, price = "12.3456") {
+  const link = await addProjectProduct(app, projectId);
   const quote = (
     await app.inject({ method: "POST", url: `/projects/${projectId}/quote-versions` })
   ).json();
-  await app.inject({
-    method: "PATCH",
-    url: `/quote-versions/${quote.id}`,
-    payload: { quotedQuantity: "300", uomCode: "un", unitPrice: price },
+  await addQuoteLine(app, quote.id, link.id, {
+    quotedQuantity: "300",
+    uomCode: "un",
+    unitPrice: price,
   });
   return (await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send` })).json();
 }
@@ -311,10 +343,11 @@ describe("Orçamento versionado", () => {
     ).json();
     expect(again.id).toBe(v1.id);
 
-    await app.inject({
-      method: "PATCH",
-      url: `/quote-versions/${v1.id}`,
-      payload: { quotedQuantity: "300", uomCode: "un", unitPrice: "10" },
+    const link = await addProjectProduct(app, project.id);
+    await addQuoteLine(app, v1.id, link.id, {
+      quotedQuantity: "300",
+      uomCode: "un",
+      unitPrice: "10",
     });
     await app.inject({ method: "POST", url: `/quote-versions/${v1.id}/send` });
 
@@ -323,7 +356,7 @@ describe("Orçamento versionado", () => {
     ).json();
     expect(v2.versionNumber).toBe(2);
     // Dados comerciais são copiados como ponto de partida; status não.
-    expect(v2.quotedQuantity).toBe("300");
+    expect(v2.lines[0].quotedQuantity).toBe("300");
     expect(v2.status).toBe("DRAFT");
 
     const reread = (await app.inject({ method: "GET", url: `/projects/${project.id}` })).json();
@@ -347,10 +380,11 @@ describe("Orçamento versionado", () => {
     expect(incomplete.statusCode).toBe(400);
     expect(incomplete.json().error).toBe("incomplete_quote");
 
-    await app.inject({
-      method: "PATCH",
-      url: `/quote-versions/${quote.id}`,
-      payload: { quotedQuantity: "300", uomCode: "un", unitPrice: "12.3456" },
+    const link = await addProjectProduct(app, project.id);
+    await addQuoteLine(app, quote.id, link.id, {
+      quotedQuantity: "300",
+      uomCode: "un",
+      unitPrice: "12.3456",
     });
     const sent = (
       await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send` })
@@ -361,12 +395,15 @@ describe("Orçamento versionado", () => {
     expect(sent.customerStreet).toBe("Avenida Paulista");
     // Total é derivado em Decimal: 300 × 12,3456 = 3703,68.
     expect(sent.total).toBe("3703.68");
-    expect(new Prisma.Decimal(sent.quotedQuantity).times(sent.unitPrice).toFixed(2)).toBe("3703.68");
+    const sentLine = sent.lines[0];
+    expect(new Prisma.Decimal(sentLine.quotedQuantity).times(sentLine.unitPrice).toFixed(2)).toBe(
+      "3703.68",
+    );
 
     // Enviado é imutável: renegociar exige nova versão.
     const edit = await app.inject({
       method: "PATCH",
-      url: `/quote-versions/${quote.id}`,
+      url: `/quote-lines/${sentLine.id}`,
       payload: { unitPrice: "9" },
     });
     expect(edit.statusCode).toBe(409);
@@ -398,10 +435,11 @@ describe("Orçamento versionado", () => {
     });
     expect(earlyAccept.statusCode).toBe(409);
 
-    await app.inject({
-      method: "PATCH",
-      url: `/quote-versions/${draft.id}`,
-      payload: { quotedQuantity: "100", uomCode: "un", unitPrice: "5" },
+    const acceptLink = await addProjectProduct(app, project.id);
+    await addQuoteLine(app, draft.id, acceptLink.id, {
+      quotedQuantity: "100",
+      uomCode: "un",
+      unitPrice: "5",
     });
     await app.inject({ method: "POST", url: `/quote-versions/${draft.id}/send` });
 
@@ -537,8 +575,24 @@ describe("Aprovação do projeto", () => {
       data: { productId: existingProduct.id },
     });
 
-    const quote = await sendQuote(app, project.id);
-    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
+    // O produto legado é VINCULADO, não recriado: a proposta é sobre ele.
+    const link = (
+      await app.inject({
+        method: "POST",
+        url: `/projects/${project.id}/products`,
+        payload: { operation: "link", productId: existingProduct.id },
+      })
+    ).json();
+    const draft = (
+      await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
+    ).json();
+    await addQuoteLine(app, draft.id, link.id, {
+      quotedQuantity: "300",
+      uomCode: "un",
+      unitPrice: "10",
+    });
+    await app.inject({ method: "POST", url: `/quote-versions/${draft.id}/send` });
+    await app.inject({ method: "POST", url: `/quote-versions/${draft.id}/accept` });
     const approved = (
       await app.inject({ method: "POST", url: `/projects/${project.id}/approve` })
     ).json();

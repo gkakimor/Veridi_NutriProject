@@ -9,11 +9,8 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function lotStatusBadgeClass(status: string, isExpired: boolean): string {
   if (isExpired) return "badge badge--err";
@@ -215,9 +212,9 @@ export function InventoryItemDetailPage() {
                     <th>Validade</th>
                     <th>Localização</th>
                     <th>Status</th>
-                    <th>Físico</th>
-                    <th>Reservado</th>
-                    <th>Disponível</th>
+                    <th className="is-numeric">Físico</th>
+                    <th className="is-numeric">Reservado</th>
+                    <th className="is-numeric">Disponível</th>
                     <th aria-hidden="true" />
                   </tr>
                 </thead>
@@ -232,13 +229,13 @@ export function InventoryItemDetailPage() {
                           {lot.isExpired ? "Vencido" : LOT_STATUS_LABELS[lot.status]}
                         </span>
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {lot.onHand} {detail.unitCode}
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {lot.reserved} {detail.unitCode}
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {lot.available} {detail.unitCode}
                       </td>
                       <td>
@@ -332,7 +329,7 @@ export function InventoryItemDetailPage() {
                         <th>Lote</th>
                         <th>Validade</th>
                         <th>Localização</th>
-                        <th>Disponível</th>
+                        <th className="is-numeric">Disponível</th>
                         <th>Sugerido</th>
                       </tr>
                     </thead>
@@ -358,7 +355,7 @@ export function InventoryItemDetailPage() {
                           </td>
                           <td>{formatDate(allocation.expiryDate)}</td>
                           <td>{allocation.location ?? "—"}</td>
-                          <td>
+                          <td className="is-numeric">
                             {allocation.availableQuantity} {detail.unitCode}
                           </td>
                           <td>

@@ -42,3 +42,4 @@ export * from "./costs.js";
 export * from "./dashboard.js";
 export * from "./finished-goods.js";
 export * from "./reports.js";
+export * from "./product-cmv.js";

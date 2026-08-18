@@ -20,7 +20,12 @@
   --surface: #ffffff;
   --ink: #17251e;
   --ink-2: #5d6c63;
-  --ink-3: #8b978f;
+  /* 4,71:1 sobre --canvas e 5,03:1 sobre --surface (medido, não estimado).
+     Usado em breadcrumb, subtítulo e rodapé de impresso — texto que carrega
+     informação, não decoração, então precisa passar AA nos DOIS fundos.
+     Histórico: #8b978f ficava em 2,84:1; #6b7972 media 4,27:1 sobre canvas
+     (reprovava AA) apesar de o comentário anterior afirmar 4,6:1. */
+  --ink-3: #65726b;
   --line: #e3e9e2;
   --line-strong: #cfd8cf;
 
@@ -43,7 +48,13 @@
      e sobre botoes de cor solida. */
   --on-dark: #ffffff;
   --on-dark-2: #c9dacf;
-  --on-dark-3: #8fa99a;
+  /* 6,05:1 sobre --v-green-900 (#0c3629) — o fundo REAL da sidebar (ver
+     `app/shell.css`), onde este tom rotula grupo de navegação e etiqueta de
+     módulo em 10px. O valor anterior (#8fa99a) media 4,31:1 e reprovava AA
+     por pouco: texto pequeno é justamente onde a margem não pode ser
+     apertada. Sobre a topbar (--v-green-800, #124534) o mesmo tom mede
+     4,95:1 — também acima do mínimo. */
+  --on-dark-3: #9ab5a6;
 
   /* ===== Tipografia ===== */
   --font-ui: "Inter", system-ui, -apple-system, sans-serif;

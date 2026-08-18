@@ -7,12 +7,14 @@ import { createCustomer, updateCustomer } from "../../lib/customers-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
+import { formatDate } from "../../lib/dates";
 
 interface CustomerFormModalProps {
   mode: "create" | "edit";
   customer: CustomerDTO | null;
   onClose: () => void;
-  onSaved: () => void;
+  /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
+  onSaved: (created?: CustomerDTO) => void;
 }
 
 interface FormState {
@@ -117,11 +119,14 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
 
     try {
       if (mode === "create") {
-        await createCustomer(payload);
+        const created = await createCustomer(payload);
+        onSaved(created);
       } else if (customer) {
         await updateCustomer(customer.id, payload);
+        onSaved();
+      } else {
+        onSaved();
       }
-      onSaved();
     } catch (err) {
       if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};
@@ -159,7 +164,7 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
       <>
         <span className="modal-fullscreen__foot-meta">
           Última alteração:{" "}
-          {customer ? new Date(customer.updatedAt).toLocaleDateString("pt-BR") : "—"}
+          {customer ? formatDate(customer.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>
@@ -201,7 +206,7 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
 
         <FormSection
           title="Identificação"
-          subtitle="Dados basicos do cliente usados em produtos e ordens de producao."
+          subtitle="Dados básicos do cliente usados em produtos e ordens de produção."
         >
           <div className="field-grid-2">
             <div className="field field--full">

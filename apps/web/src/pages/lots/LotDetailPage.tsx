@@ -1,30 +1,36 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { CostReferenceDTO, LotDTO, LotTraceabilityDTO, ProductionOrderMaterialCostDTO } from "@veridi/shared";
+import type {
+  CostReferenceDTO,
+  LotDTO,
+  LotTraceabilityDTO,
+  ProductionOrderMaterialCostDTO,
+  ShipmentStatus,
+} from "@veridi/shared";
 import {
   COA_STATUS_LABELS,
   COST_QUALITY_LABELS,
   COST_SOURCE_LABELS,
   LOT_ATTACHMENT_TYPES,
   LOT_STATUS_LABELS,
+  SHIPMENT_STATUS_LABELS,
   ownerLabel,
 } from "@veridi/shared";
-import { blockLot, getLot, getLotTraceability, releaseLot } from "../../lib/lots-api";
+import { blockLot, getLot, getLotTraceability, releaseLot, unblockLot } from "../../lib/lots-api";
 import { getItemCostReference, getProductionOrderMaterialCost } from "../../lib/costs-api";
 import { getReceipt } from "../../lib/receiving-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { RejectCoaDialog } from "../../components/RejectCoaDialog";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { approveCoa, rejectCoa } from "../../lib/attachments-api";
 import { useAuth } from "../../app/AuthProvider";
 import { QrCode } from "../../components/QrCode";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -56,6 +62,7 @@ export function LotDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [rejectCoaOpen, setRejectCoaOpen] = useState(false);
 
   const [traceability, setTraceability] = useState<LotTraceabilityDTO | null>(null);
   /** Custo real deste lote recebido (via ReceiptLine) — `null` se desconhecido. */
@@ -66,7 +73,19 @@ export function LotDetailPage() {
   const [productionCost, setProductionCost] = useState<ProductionOrderMaterialCostDTO | null>(null);
 
   const [releaseDialogOpen, setReleaseDialogOpen] = useState(false);
+  /*
+   * De onde veio a recusa.
+   *
+   * O lote é uma página longa e o alerta morava só no topo: liberar sem CoA
+   * aprovado devolvia um 400 com a razão certa, o alerta aparecia centenas
+   * de pixels acima da Qualidade, e da cadeira parecia que o clique não fez
+   * nada — justamente no controle que existe para impedir uso de material
+   * não liberado.
+   */
+  const [errorScope, setErrorScope] = useState<"geral" | "qualidade">("geral");
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [unblockDialogOpen, setUnblockDialogOpen] = useState(false);
+  const [unblockReason, setUnblockReason] = useState("");
   const [blockReason, setBlockReason] = useState("");
 
   function load(lotId: string) {
@@ -128,11 +147,13 @@ export function LotDetailPage() {
     setReleaseDialogOpen(false);
     setSaving(true);
     setError(null);
+    setErrorScope("geral");
     try {
       const updated = await releaseLot(id);
       setLot(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao liberar lote");
+      setErrorScope("qualidade");
     } finally {
       setSaving(false);
     }
@@ -148,28 +169,48 @@ export function LotDetailPage() {
     if (!id) return;
     setSaving(true);
     setError(null);
+    setErrorScope("geral");
     try {
       await approveCoa(id);
       await reloadLot();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao aprovar o CoA");
+      setErrorScope("qualidade");
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleRejectCoa() {
+  async function handleRejectCoa(reason: string) {
     if (!id) return;
-    const reason = window.prompt("Motivo da rejeição do CoA:");
-    if (!reason?.trim()) return;
-
+    setRejectCoaOpen(false);
     setSaving(true);
     setError(null);
+    setErrorScope("geral");
     try {
-      await rejectCoa(id, reason.trim());
+      await rejectCoa(id, reason);
       await reloadLot();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao rejeitar o CoA");
+      setErrorScope("qualidade");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUnblock() {
+    if (!id) return;
+    setSaving(true);
+    setError(null);
+    setErrorScope("geral");
+    try {
+      const updated = await unblockLot(id, { reason: unblockReason.trim() });
+      setUnblockDialogOpen(false);
+      setUnblockReason("");
+      setLot(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao desbloquear lote");
+      setErrorScope("qualidade");
     } finally {
       setSaving(false);
     }
@@ -179,6 +220,7 @@ export function LotDetailPage() {
     if (!id) return;
     setSaving(true);
     setError(null);
+    setErrorScope("geral");
     try {
       const updated = await blockLot(id, { reason: blockReason.trim() });
       setBlockDialogOpen(false);
@@ -186,6 +228,7 @@ export function LotDetailPage() {
       setLot(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao bloquear lote");
+      setErrorScope("qualidade");
     } finally {
       setSaving(false);
     }
@@ -242,7 +285,11 @@ export function LotDetailPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && errorScope === "geral" && (
+          <p className="form-alert" role="alert">
+            {error}
+          </p>
+        )}
 
         {lot.origin === "PRODUCTION" ? (
           <FormSection title="Identificação">
@@ -366,6 +413,60 @@ export function LotDetailPage() {
           </dl>
         </FormSection>
 
+        {lot.shipments.length > 0 && (
+          <FormSection
+            title="Expedições"
+            subtitle="Para onde este lote foi. Só expedição confirmada saiu de fato do estoque."
+          >
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Expedição</th>
+                    <th>Pedido</th>
+                    <th>Cliente</th>
+                    <th className="is-numeric">Quantidade</th>
+                    <th>Status</th>
+                    <th>Confirmada em</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lot.shipments.map((shipment) => (
+                    <tr key={`${shipment.id}-${shipment.quantity}`}>
+                      <td className="is-code">
+                        <EntityLink kind="shipment" id={shipment.id} code={shipment.code} />
+                      </td>
+                      <td className="is-code">
+                        <EntityLink
+                          kind="customerOrder"
+                          id={shipment.customerOrderId}
+                          code={shipment.customerOrderCode}
+                        />
+                      </td>
+                      <td>
+                        <EntityLink
+                          kind="customer"
+                          id={shipment.customerId}
+                          code={shipment.customerName}
+                        />
+                      </td>
+                      <td className="is-numeric">
+                        {shipment.quantity} {shipment.unitCode}
+                      </td>
+                      <td>
+                        <span className="badge badge--neutral">
+                          {SHIPMENT_STATUS_LABELS[shipment.status as ShipmentStatus] ?? shipment.status}
+                        </span>
+                      </td>
+                      <td>{shipment.shippedAt ? formatDate(shipment.shippedAt) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </FormSection>
+        )}
+
         {lot.origin === "PRODUCTION" ? (
           <FormSection
             title="Custo material da produção"
@@ -453,6 +554,11 @@ export function LotDetailPage() {
         )}
 
         <FormSection title="Qualidade">
+          {error && errorScope === "qualidade" && (
+            <p className="form-alert" role="alert">
+              {error}
+            </p>
+          )}
           <div className="status-line">
             <span className={statusBadgeClass(lot.status, lot.isExpired)}>
               {LOT_STATUS_LABELS[lot.status]}
@@ -474,7 +580,15 @@ export function LotDetailPage() {
           </div>
 
           <div className="line-actions">
-            {lot.status === "AWAITING_RELEASE" && (
+            {/* Liberar e bloquear são decisão da Qualidade. Oferecer o botão a
+                quem o backend recusa é convite ao erro — e a ausência sem
+                explicação parece tela quebrada, então a razão fica junto. */}
+            {lot.status === "AWAITING_RELEASE" && !canReviewCoa && (
+              <p className="field__hint">
+                A liberação deste lote é decisão da Qualidade.
+              </p>
+            )}
+            {lot.status === "AWAITING_RELEASE" && canReviewCoa && (
               <div className="table__actions">
                 <button
                   type="button"
@@ -494,7 +608,7 @@ export function LotDetailPage() {
                 </button>
               </div>
             )}
-            {lot.status === "AVAILABLE" && (
+            {lot.status === "AVAILABLE" && canReviewCoa && (
               <button
                 type="button"
                 className="btn btn--danger btn--sm"
@@ -503,6 +617,28 @@ export function LotDetailPage() {
               >
                 Bloquear
               </button>
+            )}
+            {lot.status === "AVAILABLE" && !canReviewCoa && (
+              <p className="field__hint">O bloqueio deste lote é decisão da Qualidade.</p>
+            )}
+            {/* Bloqueado deixou de ser fim de linha: material físico real não
+                pode ficar fora do estoque para sempre por causa de um
+                bloqueio feito por engano. Desbloquear reabre a decisão — o
+                lote volta para a fila, não para o estoque disponível. */}
+            {lot.status === "BLOCKED" && canReviewCoa && (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                disabled={saving}
+                onClick={() => setUnblockDialogOpen(true)}
+              >
+                Desbloquear
+              </button>
+            )}
+            {lot.status === "BLOCKED" && !canReviewCoa && (
+              <p className="field__hint">
+                O desbloqueio deste lote é decisão da Qualidade.
+              </p>
             )}
           </div>
         </FormSection>
@@ -550,7 +686,7 @@ export function LotDetailPage() {
                 type="button"
                 className="btn btn--danger"
                 disabled={saving}
-                onClick={() => void handleRejectCoa()}
+                onClick={() => setRejectCoaOpen(true)}
               >
                 Rejeitar CoA
               </button>
@@ -603,7 +739,7 @@ export function LotDetailPage() {
                     <th>Item</th>
                     <th>Lote</th>
                     <th>Lote fornecedor</th>
-                    <th>Quantidade consumida</th>
+                    <th className="is-numeric">Quantidade consumida</th>
                     <th>Fornecedor</th>
                   </tr>
                 </thead>
@@ -615,7 +751,7 @@ export function LotDetailPage() {
                       </td>
                       <td>{material.lotCode ?? "—"}</td>
                       <td>{material.supplierLot ?? "—"}</td>
-                      <td>
+                      <td className="is-numeric">
                         {material.quantity} {material.unitCode}
                       </td>
                       <td>{material.supplierName ?? "—"}</td>
@@ -645,26 +781,24 @@ export function LotDetailPage() {
                   <tr>
                     <th>Ordem de Produção</th>
                     <th>Produto</th>
-                    <th>Quantidade consumida</th>
+                    <th className="is-numeric">Quantidade consumida</th>
                     <th>Lote(s) de produto acabado gerados</th>
                   </tr>
                 </thead>
                 <tbody>
                   {traceability.usedIn.map((usage) => (
                     <tr key={usage.productionOrderId}>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/producao/ordens/${usage.productionOrderId}`)}
-                        >
-                          {usage.productionOrderCode}
-                        </button>
+                      <td className="is-code">
+                        <EntityLink
+                          kind="productionOrder"
+                          id={usage.productionOrderId}
+                          code={usage.productionOrderCode}
+                        />
                       </td>
                       <td>
                         <EntityLink kind="product" id={usage.productId} code={usage.productCode} name={usage.productName} />
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {usage.consumedQuantity} {usage.unitCode}
                       </td>
                       <td>
@@ -695,7 +829,7 @@ export function LotDetailPage() {
                     <th>Teste</th>
                     <th>Projeto</th>
                     <th>Cliente</th>
-                    <th>Quantidade consumida</th>
+                    <th className="is-numeric">Quantidade consumida</th>
                     <th>Quando</th>
                   </tr>
                 </thead>
@@ -716,7 +850,7 @@ export function LotDetailPage() {
                         <EntityLink kind="project" id={usage.projectId} code={usage.projectCode} name={usage.projectName} />
                       </td>
                       <td>{usage.customerName}</td>
-                      <td>
+                      <td className="is-numeric">
                         {usage.consumedQuantity} {usage.unitCode}
                       </td>
                       <td>{new Date(usage.consumedAt).toLocaleString("pt-BR")}</td>
@@ -764,7 +898,26 @@ export function LotDetailPage() {
       <ConfirmDialog
         open={releaseDialogOpen}
         title="Liberar lote?"
-        message={`"${lot.code}" ficará disponível para uso a partir de agora.`}
+        message={
+          // O backend recusa a liberação com laudo pendente, e recusava
+          // certo. Mas o diálogo era o mesmo do lote sem exigência: a
+          // Qualidade só descobria a pendência depois de confirmar.
+          lot.requiresCoa && lot.coaStatus !== "APPROVED" ? (
+            <>
+              <p>
+                O laudo (CoA) deste lote está como{" "}
+                <strong>{COA_STATUS_LABELS[lot.coaStatus]}</strong>, e o item exige laudo
+                aprovado. A liberação será recusada enquanto isso não mudar.
+              </p>
+              <p>
+                Trate o laudo na seção Qualidade documental desta página: anexe o documento e
+                aprove o CoA antes de liberar.
+              </p>
+            </>
+          ) : (
+            `"${lot.code}" ficará disponível para uso a partir de agora.`
+          )
+        }
         confirmLabel="Liberar"
         confirmTone="accent"
         onCancel={() => setReleaseDialogOpen(false)}
@@ -773,13 +926,7 @@ export function LotDetailPage() {
 
       {blockDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="block-lot-title"
-          >
+          <ModalDialog labelledBy="block-lot-title" onClose={() => setBlockDialogOpen(false)}>
             <h2 id="block-lot-title">Bloquear lote?</h2>
             <p>
               "{lot.code}" deixará de estar disponível para uso até uma nova decisão da Qualidade.
@@ -808,8 +955,57 @@ export function LotDetailPage() {
                 Bloquear lote
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
+      )}
+
+      {unblockDialogOpen && (
+        <ModalDialog labelledBy="unblock-lot-title" onClose={() => setUnblockDialogOpen(false)}>
+          <h2 id="unblock-lot-title">Desbloquear lote?</h2>
+          <p>
+            "{lot.code}" volta para a fila da Qualidade como <strong>aguardando liberação</strong>.
+            Ele não fica disponível para uso: liberar continua sendo uma decisão à parte.
+          </p>
+          <div className="field">
+            <label htmlFor="unblock-lot-reason">
+              Motivo do desbloqueio <span className="req">*</span>
+            </label>
+            <textarea
+              id="unblock-lot-reason"
+              rows={3}
+              value={unblockReason}
+              onChange={(event) => setUnblockReason(event.target.value)}
+            />
+            <p className="field__hint">
+              O motivo do bloqueio anterior continua registrado no histórico do lote.
+            </p>
+          </div>
+          <div className="confirm-dialog__actions">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => setUnblockDialogOpen(false)}
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              className="btn btn--accent"
+              disabled={unblockReason.trim().length < 3 || saving}
+              onClick={handleUnblock}
+            >
+              Desbloquear lote
+            </button>
+          </div>
+        </ModalDialog>
+      )}
+
+      {rejectCoaOpen && (
+        <RejectCoaDialog
+          lotCode={lot.code}
+          onCancel={() => setRejectCoaOpen(false)}
+          onConfirm={(reason) => void handleRejectCoa(reason)}
+        />
       )}
     </>
   );

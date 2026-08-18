@@ -982,9 +982,12 @@ describe("Precificação — permissões e efeitos colaterais", () => {
         where: { supplierItem: { itemId: scenario.material.id } },
       }),
     ).toBe(0);
-    // Orçamento continua manual até a próxima capacidade.
+    // Orçamento continua manual até a próxima capacidade. O preço mora na
+    // linha, não no cabeçalho.
     expect(
-      await prisma.quoteVersion.count({ where: { unitPrice: { not: null }, project: { productId: scenario.product.id } } }),
+      await prisma.quoteLine.count({
+        where: { unitPrice: { not: null }, productId: scenario.product.id },
+      }),
     ).toBe(0);
 
     await app.close();

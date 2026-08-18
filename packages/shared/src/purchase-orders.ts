@@ -81,6 +81,25 @@ export interface PurchaseOrderDTO {
   cancelReason: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Recebimentos desta OC, do mais antigo ao mais recente. A OC pede, o
+   * recebimento é o que de fato chegou: sem esta lista, conferir uma entrega
+   * obrigava a sair para a lista geral de recebimentos e procurar pelo código
+   * da ordem.
+   */
+  receipts: PurchaseOrderReceiptSummaryDTO[];
+}
+
+export interface PurchaseOrderReceiptSummaryDTO {
+  id: string;
+  code: string;
+  receivedAt: string;
+  invoiceNumber: string | null;
+  lineCount: number;
+  /** Soma do que entrou neste recebimento, na unidade de cada linha. */
+  receivedQuantity: string;
+  /** Quantos lotes internos este recebimento gerou. */
+  lotCount: number;
 }
 
 export interface PurchaseOrderListResponse {

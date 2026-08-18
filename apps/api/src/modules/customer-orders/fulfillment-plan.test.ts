@@ -489,6 +489,9 @@ describe("Plano de Atendimento — aplicação", () => {
     const generated = applied.json().generatedProductionOrders[0];
     expect(generated.plannedQuantity).toBe("250");
     expect(generated.status).toBe("DRAFT");
+    // Quem abre o pedido precisa ver quanto já saiu da fábrica, e nada saiu
+    // ainda — produzido é sempre a soma dos apontamentos reais.
+    expect(generated.producedQuantity).toBe("0");
 
     const opDetail = (await app.inject({ method: "GET", url: `/production-orders/${generated.id}` })).json();
     expect(opDetail.origin).toBe("CUSTOMER_ORDER");
@@ -496,6 +499,10 @@ describe("Plano de Atendimento — aplicação", () => {
     expect(opDetail.customerOrderCode).toBe(order.code);
     expect(opDetail.customerOrderLineId).toBe(lineId);
     expect(opDetail.status).toBe("DRAFT");
+    // O caminho de volta: a OP diz de quem é o pedido, com identidade, não só
+    // o nome do cliente em texto.
+    expect(opDetail.customerId).toBe(order.customerId);
+    expect(opDetail.customerCode).toBeTruthy();
 
     await app.close();
   });

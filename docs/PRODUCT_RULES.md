@@ -687,6 +687,58 @@ Rules that outlived the round that produced them. The UI side of them lives in
 
 ---
 
+# 5.12 Product CMV — cost of goods for a quantity
+
+- **CMV is the business view of a product's industrial cost for a quantity,
+  composed from Formulation + Cost Structure + the calculation in force; it
+  is not a separate source of truth.** No `Cmv` entity, no table, no
+  migration, no second engine: the numbers come from the same
+  `costForOutputQuantity` the pricing tiers use, and the composition is
+  annotated by that engine while it adds up — never recomputed afterwards.
+- The question the screen answers is "how much does it cost to produce 1,000
+  jars of this product?". Answering it must not require knowing that
+  `IndustrialCostVersion`, `IndustrialCostCalculation` or
+  `PricingVersion` exist. Those appear as provenance, in Portuguese, under
+  "Estrutura de custos" and "Cálculo de referência".
+- **Quantity and reference date are always explicit.** The domain never
+  picks the day by itself: the same product simulated today and next month
+  may cost differently, and the answer has to say which day it is talking
+  about. The reference date selects the saved calculation **in force up to
+  that calendar day** — a calculation saved later could not have been known
+  then. Before any calculation exists there is no CMV, and the answer says
+  so instead of using a basis nobody could have had.
+- **Simulating is reading.** Opening the screen, changing the quantity or
+  going back to the quotation never creates a calculation, never writes a
+  price and never persists anything. Freezing remains the job of the
+  saved calculation (CALC).
+- Quantity changes unit cost: fixed-per-batch costs do not dilute below one
+  batch, shipping boxes are whole, and per-reference-batch resources follow
+  the batch count. Never the CALC unit cost multiplied by an arbitrary
+  quantity.
+- **A pricing tier matches by exact quantity only.** No interpolation, no
+  nearest tier, no falling back to the one below. 750 units between the 500
+  and 1,000 tiers has no price in force, and the screen says exactly that —
+  offering a neighbouring price would be inventing a negotiation.
+- **A tier existing never changes a quotation line's price by itself.** The
+  screen suggests; a person applies. After applying, the source is
+  `PRICING_TIER` with the provenance that already existed — CMV itself never
+  becomes a price.
+- Customer-supplied material keeps its physical quantity and stays out of
+  Veridi's acquisition cost. It is neither zero nor unknown.
+- An incomplete cost shows **"CMV indisponível"** plus the known subtotal,
+  explicitly labelled as not being the total. `R$ 0,00` is never shown in
+  place of unknown; zero, when informed, is a real value.
+- Cost provenance, cost quality and internal economics (price, margin,
+  commission, markup) follow the pricing gate that already existed —
+  commercial and administration only. The customer-facing document keeps
+  carrying none of it.
+- CMV **functionally replaces the spreadsheet for simulation in the current
+  flow**. That is not a claim of 100% equivalence with the historical Excel:
+  what is covered is cost for a quantity, its composition and the price in
+  force.
+
+---
+
 # 6. Purchase Orders
 
 Purchase Order is inside MVP.
@@ -897,6 +949,24 @@ Full laboratory inspection and COA workflows are outside MVP.
 - Legacy data is never classified automatically: the historical "laudo"
   column is read as validation statistics only, never written back into
   master data.
+
+---
+
+## Durable rules — quality decisions on a lot
+
+- **Release, block and unblock are QUALITY/ADMIN decisions.** The routes
+  accepted any authenticated session, so a commercial user could release a
+  lot waiting on its certificate with a single request while attaching that
+  certificate already required the quality role. The screen matches: the
+  action is absent for other roles, with the reason in its place.
+- **BLOCKED is not terminal.** A block made by mistake used to strand real
+  physical material outside available stock forever, with a permanent
+  critical alert and no action on any screen. Unblocking returns the lot to
+  `AWAITING_RELEASE` — **never straight to `AVAILABLE`**. Reopening the
+  decision is not making it: release stays a separate act, still requires an
+  approved certificate where the item demands one, and stamps its own
+  authorship. The previous block stays in the record, and no quantity becomes
+  available as a side effect.
 
 ---
 

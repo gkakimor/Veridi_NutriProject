@@ -401,10 +401,23 @@ export interface RecipeSheetRequirementDTO {
   /** Quanto esta parte deve pesar (divisão determinística em Decimal). */
   plannedQuantity: string;
   weighedQuantity: string;
+  /** Baixado pelo Consumo Real da OP — outro caminho, mesmo material. */
+  consumedQuantity: string;
   /** `pesado - planejado`: registrado e destacado, nunca bloqueado por tolerância inventada. */
   differenceQuantity: string;
   unitCode: string;
-  reservedLots: { lotId: string | null; lotCode: string | null; quantity: string }[];
+  /**
+   * `quantity` é o que foi reservado; `remainingQuantity` é o que ainda
+   * resta depois do Consumo Real da OP. A folha precisa dos dois: o papel
+   * mostra o lote reservado, e a tela precisa saber que já não há saldo —
+   * senão só descobre isso depois de tentar pesar.
+   */
+  reservedLots: {
+    lotId: string | null;
+    lotCode: string | null;
+    quantity: string;
+    remainingQuantity: string;
+  }[];
 }
 
 export interface RecipeSheetPartDTO {

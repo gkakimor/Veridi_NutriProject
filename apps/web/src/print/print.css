@@ -133,7 +133,8 @@
   border-bottom: 1px solid var(--line-strong);
 }
 
-.print-table td.is-number {
+.print-table td.is-number,
+.print-table th.is-number {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -175,6 +176,10 @@
   color: var(--ink);
 }
 
+.print-running-foot {
+  display: none;
+}
+
 .print-doc__foot {
   margin-top: var(--sp-6);
   padding-top: var(--sp-2);
@@ -200,7 +205,23 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm;
+    /* Faixa inferior reservada para o rodapé corrido. */
+    margin: 12mm 12mm 16mm;
+  }
+
+  /* `fixed` no papel = repetido em toda folha, que é o objetivo. */
+  .print-running-foot {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    padding-top: 2mm;
+    border-top: 1px solid var(--line);
+    font-size: var(--fs-xs);
+    color: var(--ink-3);
   }
 
   /* Relatórios largos usam paisagem — decidido por layout, não pelo usuário. */
@@ -254,6 +275,21 @@
   tr,
   .print-doc__section {
     page-break-inside: avoid;
+  }
+
+  /*
+   * Linha principal e linha de detalhe são dois `tr`: `page-break-inside`
+   * protege cada uma, nunca o par. Sem isto a folha nova abria com o
+   * detalhe órfão — "Estrutura ativa: —" sem dizer de qual produto.
+   */
+  .print-row--primary {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .print-row--detail {
+    page-break-before: avoid;
+    break-before: avoid;
   }
 
   a {

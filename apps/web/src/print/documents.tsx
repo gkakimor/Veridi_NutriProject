@@ -715,6 +715,21 @@ export function RecipeSheetPrintDocument({ sheet }: { sheet: RecipeSheetDTO }) {
             ))}
           </PrintTable>
 
+          {/*
+            Folha sem pesagem e parte "Pendente" numa OP que já consumiu o
+            material descreve, no papel, uma produção que não aconteceu.
+            Auditoria de qualidade lê este documento sozinho: ele precisa
+            dizer por qual caminho o material foi baixado.
+          */}
+          {part.weighings.length === 0 &&
+            part.requirements.some((requirement) => Number(requirement.consumedQuantity) > 0) && (
+              <p>
+                <strong>Material registrado via Consumo Real da OP.</strong> A pesagem por partes
+                não foi utilizada nesta ordem; o consumo de cada material está na Ordem de
+                Produção, com lote, quantidade e responsável.
+              </p>
+            )}
+
           <p>
             {part.startedByName && (
               <>
@@ -822,13 +837,21 @@ export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
           isEmpty={false}
           emptyMessage=""
         >
-          <tr>
-            <td>{printOrDash(quote.projectName)}</td>
-            <td className="is-number">{printOrDash(quote.quotedQuantity)}</td>
-            <td>{printOrDash(quote.uomCode)}</td>
-            {/* Preço ausente é "não precificado" — nunca zero. */}
-            <td className="is-number">{quote.unitPrice ? formatBRL(quote.unitPrice) : "—"}</td>
-            <td>{quote.currencyCode}</td>
+          {/* Uma linha por produto — a proposta pode cobrir vários. */}
+          {quote.lines.map((line) => (
+            <tr key={line.id}>
+              <td>{line.productName}</td>
+              <td className="is-number">{printOrDash(line.quotedQuantity)}</td>
+              <td>{printOrDash(line.uomCode)}</td>
+              {/* Preço ausente é "não precificado" — nunca zero. */}
+              <td className="is-number">{line.unitPrice ? formatBRL(line.unitPrice) : "—"}</td>
+              <td>{quote.currencyCode}</td>
+              <td className="is-number">{line.total ? formatBRL(line.total) : "—"}</td>
+            </tr>
+          ))}
+          <tr className="print-total-row">
+            <td colSpan={5}>Total geral</td>
+            {/* Total parcial não existe: com linha sem preço, não há total. */}
             <td className="is-number">{quote.total ? formatBRL(quote.total) : "—"}</td>
           </tr>
         </PrintTable>

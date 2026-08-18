@@ -11,6 +11,8 @@ import {
   updatePurchaseOrder,
 } from "../../lib/purchase-orders-api";
 import { listSuppliers } from "../../lib/suppliers-api";
+import { useAuth } from "../../app/AuthProvider";
+import { SupplierFormModal } from "../suppliers/SupplierFormModal";
 import { listSupplierItems } from "../../lib/supplier-items-api";
 import { listItems } from "../../lib/items-api";
 import { formatBRL } from "../../lib/currency";
@@ -18,6 +20,8 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 interface SupplierOption {
   id: string;
@@ -105,6 +109,12 @@ export function PurchaseOrderPage() {
   const [notFound, setNotFound] = useState(false);
 
   const [supplierId, setSupplierId] = useState("");
+  // Criação no contexto: o fornecedor não existe e sair da OC agora
+  // significaria refazer as linhas já digitadas.
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const { user } = useAuth();
+  // CTA que termina em 403 é pior que CTA nenhum.
+  const canCreateSupplier = user?.role === "PURCHASING" || user?.role === "ADMIN";
   const [orderDate, setOrderDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -527,6 +537,9 @@ export function PurchaseOrderPage() {
                   name: supplier.tradeName ?? supplier.legalName,
                   ...(supplier.active ? {} : { hint: "inativo" }),
                 }))}
+                canCreate={canCreateSupplier}
+                createLabel="Cadastrar novo fornecedor"
+                onCreateNew={() => setSupplierModalOpen(true)}
               />
             ) : (
               <p className="field-readonly-value">
@@ -549,7 +562,7 @@ export function PurchaseOrderPage() {
               />
             ) : (
               <p className="field-readonly-value">
-                {new Date(purchaseOrder?.orderDate ?? "").toLocaleDateString("pt-BR")}
+                {formatDate(purchaseOrder?.orderDate ?? "")}
               </p>
             )}
           </div>
@@ -576,10 +589,10 @@ export function PurchaseOrderPage() {
             <thead>
               <tr>
                 <th>Item</th>
-                <th>Quantidade</th>
+                <th className="is-numeric">Quantidade</th>
                 <th>Un.</th>
-                <th>Preço unit.</th>
-                <th>Total</th>
+                <th className="is-numeric">Preço unit.</th>
+                <th className="is-numeric">Total</th>
                 {isDraftEditable && <th aria-hidden="true" />}
               </tr>
             </thead>
@@ -596,18 +609,23 @@ export function PurchaseOrderPage() {
                   <tr key={line.key}>
                     <td>
                       {isDraftEditable ? (
-                        <select
+                        /* Mesmo seletor com busca de Formulação, Amostra e
+                           Pedido. Era o único lugar onde escolher item virava
+                           rolar uma lista fechada — com o catálogo real da
+                           Veridi, procurar "beta-alanina" numa lista de
+                           centenas é trabalho, não escolha. */
+                        <SearchableEntitySelect
+                          id={`po-line-item-${line.key}`}
                           value={line.itemId}
-                          onChange={(event) => handleLineItemChange(line.key, event.target.value)}
-                        >
-                          <option value="">Selecione…</option>
-                          {optionsForRow(line).map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.code} — {item.name}
-                              {!item.active ? " (inativo)" : ""}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(value) => handleLineItemChange(line.key, value)}
+                          placeholder="Digite código ou nome do item…"
+                          options={optionsForRow(line).map((item) => ({
+                            id: item.id,
+                            code: item.code,
+                            name: item.name,
+                            ...(item.active ? {} : { hint: "inativo" }),
+                          }))}
+                        />
                       ) : (
                         <EntityLink
                           kind="item"
@@ -636,7 +654,7 @@ export function PurchaseOrderPage() {
                         );
                       })()}
                     </td>
-                    <td>
+                    <td className="is-numeric">
                       {isDraftEditable ? (
                         <input
                           type="text"
@@ -662,7 +680,7 @@ export function PurchaseOrderPage() {
                       )}
                     </td>
                     <td>{line.unitCode || "—"}</td>
-                    <td>
+                    <td className="is-numeric">
                       {isDraftEditable ? (
                         <input
                           type="text"
@@ -677,7 +695,7 @@ export function PurchaseOrderPage() {
                         formatBRL(line.unitPrice || null)
                       )}
                     </td>
-                    <td>{formatBRL(lineTotal)}</td>
+                    <td className="is-numeric">{formatBRL(lineTotal)}</td>
                     {isDraftEditable && (
                       <td>
                         <button
@@ -715,6 +733,42 @@ export function PurchaseOrderPage() {
         )}
       </FormSection>
 
+      {purchaseOrder && purchaseOrder.receipts.length > 0 && (
+        <FormSection
+          title="Recebimentos"
+          subtitle="O que de fato chegou contra esta ordem. Cada recebimento abre direto pelo código."
+        >
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Recebimento</th>
+                  <th>Data</th>
+                  <th>Nota fiscal</th>
+                  <th className="is-numeric">Itens</th>
+                  <th className="is-numeric">Quantidade</th>
+                  <th className="is-numeric">Lotes gerados</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchaseOrder.receipts.map((receipt) => (
+                  <tr key={receipt.id}>
+                    <td className="is-code">
+                      <EntityLink kind="receipt" id={receipt.id} code={receipt.code} />
+                    </td>
+                    <td>{formatDate(receipt.receivedAt)}</td>
+                    <td>{receipt.invoiceNumber ?? "—"}</td>
+                    <td className="is-numeric">{receipt.lineCount}</td>
+                    <td className="is-numeric">{receipt.receivedQuantity}</td>
+                    <td className="is-numeric">{receipt.lotCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </FormSection>
+      )}
+
       <FormSection title="Observações">
         <div className="field">
           <label htmlFor="po-notes">Notas internas</label>
@@ -737,7 +791,7 @@ export function PurchaseOrderPage() {
             disabled={saving}
             onClick={() => setCancelDialogOpen(true)}
           >
-            Cancelar pedido
+            Cancelar OC
           </button>
         )}
 
@@ -764,7 +818,7 @@ export function PurchaseOrderPage() {
               disabled={saving}
               onClick={() => setConfirmDialogOpen(true)}
             >
-              Confirmar pedido
+              Confirmar OC
             </button>
           )}
           {isReceivable && (
@@ -782,9 +836,9 @@ export function PurchaseOrderPage() {
 
       <ConfirmDialog
         open={confirmDialogOpen}
-        title="Confirmar pedido?"
+        title="Confirmar OC?"
         message='Após confirmar, fornecedor, itens, quantidades e preços não poderão ser alterados. Só será possível ajustar a previsão de entrega e as observações.'
-        confirmLabel="Confirmar pedido"
+        confirmLabel="Confirmar OC"
         confirmTone="accent"
         onCancel={() => setConfirmDialogOpen(false)}
         onConfirm={handleConfirm}
@@ -792,13 +846,7 @@ export function PurchaseOrderPage() {
 
       {cancelDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="cancel-po-title"
-          >
+          <ModalDialog labelledBy="cancel-po-title" onClose={() => setCancelDialogOpen(false)}>
             <h2 id="cancel-po-title">Cancelar ordem de compra?</h2>
             <p>
               {purchaseOrder?.code} permanecerá no histórico, mas deixará de contribuir para "Em
@@ -829,11 +877,28 @@ export function PurchaseOrderPage() {
                 disabled={cancelReason.trim().length < 3 || saving}
                 onClick={handleCancelConfirm}
               >
-                Cancelar pedido
+                Cancelar OC
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
+      )}
+
+      {supplierModalOpen && (
+        <SupplierFormModal
+          mode="create"
+          supplier={null}
+          onClose={() => setSupplierModalOpen(false)}
+          onSaved={(created) => {
+            setSupplierModalOpen(false);
+            if (!created) return;
+            setActiveSuppliers((prev) => [
+              { ...created },
+              ...prev.filter((row) => row.id !== created.id),
+            ]);
+            setSupplierId(created.id);
+          }}
+        />
       )}
     </>
   );

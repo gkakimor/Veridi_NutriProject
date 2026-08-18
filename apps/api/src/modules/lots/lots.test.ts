@@ -299,3 +299,180 @@ describe("Lot lookup (QR/scan)", () => {
     await app.close();
   });
 });
+
+describe("Lots — decisão de qualidade tem dono", () => {
+  /**
+   * Liberar lote é decisão da Qualidade, não conveniência de quem estiver
+   * logado. A rota aceitava qualquer sessão: um usuário comercial soltava um
+   * lote em espera de laudo com um POST, enquanto o anexo do próprio CoA já
+   * exigia QUALITY/ADMIN. A porta que faltava era a da decisão.
+   */
+  async function loteEmEspera(sufixo: string) {
+    const prisma = getPrisma();
+    const lot = await prisma.lot.create({
+      data: {
+        code: `LT-TESTE-${marker}-${sufixo}`,
+        itemId,
+        supplierId,
+        supplierLot: `SUP-${marker}-${sufixo}`,
+        initialReceivedQuantity: "7",
+        status: "AWAITING_RELEASE",
+      },
+    });
+    fixtureLotIds.push(lot.id);
+    return lot;
+  }
+
+  it("comercial, compras e produção não liberam nem bloqueiam lote", async () => {
+    const lot = await loteEmEspera("P1");
+
+    for (const papel of ["COMMERCIAL", "PURCHASING", "PRODUCTION", "VIEWER"] as const) {
+      const app = buildTestApp(papel);
+      await app.ready();
+      const liberar = await app.inject({ method: "POST", url: `/lots/${lot.id}/release` });
+      expect(liberar.statusCode, `${papel} conseguiu liberar`).toBe(403);
+      const bloquear = await app.inject({
+        method: "POST",
+        url: `/lots/${lot.id}/block`,
+        payload: { reason: "tentativa indevida" },
+      });
+      expect(bloquear.statusCode, `${papel} conseguiu bloquear`).toBe(403);
+      await app.close();
+    }
+
+    const prisma = getPrisma();
+    const depois = await prisma.lot.findUniqueOrThrow({ where: { id: lot.id } });
+    // Nada mudou: recusa é recusa, não "quase".
+    expect(depois.status).toBe("AWAITING_RELEASE");
+  });
+
+  it("qualidade libera, e a autoria fica registrada", async () => {
+    const lot = await loteEmEspera("Q1");
+    const app = buildTestApp("QUALITY");
+    await app.ready();
+
+    const response = await app.inject({ method: "POST", url: `/lots/${lot.id}/release` });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().status).toBe("AVAILABLE");
+
+    const prisma = getPrisma();
+    const depois = await prisma.lot.findUniqueOrThrow({ where: { id: lot.id } });
+    expect(depois.releasedBy).toBeTruthy();
+
+    await app.close();
+  });
+
+  it("administração continua podendo decidir", async () => {
+    const lot = await loteEmEspera("A1");
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/lots/${lot.id}/block`,
+      payload: { reason: "bloqueio administrativo de teste" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().status).toBe("BLOCKED");
+
+    await app.close();
+  });
+});
+
+describe("Lots — bloqueio tem volta", () => {
+  /**
+   * Bloquear era caminho só de ida: sem transição de saída, um bloqueio por
+   * engano deixava material físico real fora do estoque para sempre, com
+   * alerta permanente no painel e nenhuma ação em nenhuma tela — nem para a
+   * Administração.
+   *
+   * O retorno é para a FILA, não para o estoque: desbloquear reabre a
+   * decisão da Qualidade, nunca a toma.
+   */
+  it("lote bloqueado volta para a fila da Qualidade, não para o estoque", async () => {
+    const prisma = getPrisma();
+    const lot = await prisma.lot.create({
+      data: {
+        code: `LT-TESTE-${marker}-D1`,
+        itemId,
+        supplierId,
+        supplierLot: `SUP-${marker}-D1`,
+        initialReceivedQuantity: "12",
+        status: "AWAITING_RELEASE",
+      },
+    });
+    fixtureLotIds.push(lot.id);
+
+    const app = buildTestApp("QUALITY");
+    await app.ready();
+
+    const bloqueio = await app.inject({
+      method: "POST",
+      url: `/lots/${lot.id}/block`,
+      payload: { reason: "desvio de aparência" },
+    });
+    expect(bloqueio.statusCode).toBe(200);
+    expect(bloqueio.json().status).toBe("BLOCKED");
+
+    const desbloqueio = await app.inject({
+      method: "POST",
+      url: `/lots/${lot.id}/unblock`,
+      payload: { reason: "desvio esclarecido pelo fornecedor" },
+    });
+    expect(desbloqueio.statusCode).toBe(200);
+    // Volta para a fila — nunca direto para disponível.
+    expect(desbloqueio.json().status).toBe("AWAITING_RELEASE");
+
+    const depois = await prisma.lot.findUniqueOrThrow({ where: { id: lot.id } });
+    // O que aconteceu continua registrado: bloqueio e desbloqueio.
+    expect(depois.blockReason).toContain("desvio de aparência");
+    expect(depois.blockReason).toContain("desvio esclarecido pelo fornecedor");
+    // Liberação anterior não sobrevive ao bloqueio: liberar de novo é ato novo.
+    expect(depois.releasedAt).toBeNull();
+
+    await app.close();
+  });
+
+  it("desbloquear é decisão da Qualidade, e só de lote bloqueado", async () => {
+    const prisma = getPrisma();
+    const disponivel = await prisma.lot.create({
+      data: {
+        code: `LT-TESTE-${marker}-D2`,
+        itemId,
+        supplierId,
+        supplierLot: `SUP-${marker}-D2`,
+        initialReceivedQuantity: "4",
+        status: "AVAILABLE",
+      },
+    });
+    fixtureLotIds.push(disponivel.id);
+
+    const comercial = buildTestApp("COMMERCIAL");
+    await comercial.ready();
+    const recusa = await comercial.inject({
+      method: "POST",
+      url: `/lots/${disponivel.id}/unblock`,
+      payload: { reason: "tentativa indevida" },
+    });
+    expect(recusa.statusCode).toBe(403);
+    await comercial.close();
+
+    const qualidade = buildTestApp("QUALITY");
+    await qualidade.ready();
+    const semBloqueio = await qualidade.inject({
+      method: "POST",
+      url: `/lots/${disponivel.id}/unblock`,
+      payload: { reason: "lote nunca foi bloqueado" },
+    });
+    expect(semBloqueio.statusCode).toBe(400);
+
+    // Motivo é obrigatório: desfazer sem registro não é desfazer.
+    const semMotivo = await qualidade.inject({
+      method: "POST",
+      url: `/lots/${disponivel.id}/unblock`,
+      payload: {},
+    });
+    expect(semMotivo.statusCode).toBe(400);
+    await qualidade.close();
+  });
+});

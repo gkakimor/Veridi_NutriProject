@@ -18,13 +18,10 @@ import {
 } from "../../lib/supplier-items-api";
 import { qualificationBadgeClass } from "./SupplierItemsPage";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
-}
-
-function formatDate(value: string | null): string {
-  return value ? new Date(value).toLocaleDateString("pt-BR") : "—";
 }
 
 /**
@@ -355,7 +352,7 @@ export function SupplierItemDetailModal({
           <table className="table">
             <thead>
               <tr>
-                <th>Preço</th>
+                <th className="is-numeric">Preço</th>
                 <th>Moeda</th>
                 <th>Unidade</th>
                 <th>Pedido mínimo</th>
@@ -369,7 +366,7 @@ export function SupplierItemDetailModal({
             <tbody>
               {supplierItem.offers.map((offer) => (
                 <tr key={offer.id}>
-                  <td>{offer.unitPrice}</td>
+                  <td className="is-numeric">{offer.unitPrice}</td>
                   <td className="is-code">{offer.currencyCode}</td>
                   <td className="is-code">{offer.priceUomCode}</td>
                   <td>

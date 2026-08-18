@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useRef } from "react";
+import { useModalDialog } from "./useModalDialog";
 import type { ReactNode } from "react";
 
 interface ConfirmDialogProps {
@@ -30,16 +31,11 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  useEffect(() => {
-    if (!open) return;
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCancel();
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onCancel]);
+  // Foco, trap, Escape e retorno vivem no hook: oito confirmações do app
+  // remontavam esta marcação na mão e ficavam sem nada disso.
+  useModalDialog(open, dialogRef, onCancel);
 
   if (!open) return null;
 
@@ -47,13 +43,16 @@ export function ConfirmDialog({
     <>
       <div className="confirm-overlay" />
       <div
+        ref={dialogRef}
         className="confirm-dialog"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
       >
         <h2 id="confirm-dialog-title">{title}</h2>
-        <p>{message}</p>
+        {/* `div`, não `p`: a mensagem pode trazer lista ou parágrafos —
+            bloco dentro de parágrafo é HTML inválido e o React avisa. */}
+        <div className="confirm-dialog__message">{message}</div>
         <div className="confirm-dialog__actions">
           <button type="button" className="btn btn--ghost" onClick={onCancel}>
             {cancelLabel}

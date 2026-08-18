@@ -13,6 +13,7 @@ import { listCustomers } from "../../lib/customers-api";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
+import { formatDate } from "../../lib/dates";
 
 type ActiveFilter = CustomerOrderStatus | "all";
 
@@ -34,10 +35,6 @@ function statusBadgeClass(status: CustomerOrderStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /** Comercial → Pedidos. Documento transacional: linhas abrem página própria, não modal. */
 const FILTER_SCOPE = "customer-orders";
@@ -195,7 +192,7 @@ export function CustomerOrdersPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
               <th>Pedido</th>
@@ -203,7 +200,7 @@ export function CustomerOrdersPage() {
               <th>Data</th>
               <th>Entrega</th>
               <th>Produtos</th>
-              <th>Quantidade</th>
+              <th className="is-numeric">Quantidade</th>
               <th>Atendimento</th>
               <th>Faturamento</th>
               <th>Status</th>
@@ -229,7 +226,7 @@ export function CustomerOrdersPage() {
                   <td>{formatDate(order.orderDate)}</td>
                   <td>{formatDate(order.requestedDeliveryDate)}</td>
                   <td>{order.lines.length}</td>
-                  <td>{totalQuantity}</td>
+                  <td className="is-numeric">{totalQuantity}</td>
                   <td>
                     {order.shipments.some((shipment) => shipment.status === "CONFIRMED")
                       ? "Expedido"

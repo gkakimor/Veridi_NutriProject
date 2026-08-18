@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { corpusAvailable } from "../veridi-data/corpus.js";
 import { parseMinimumOrder } from "../veridi-data/supplier-price-analysis.js";
 import { ImportFindingLog, severityOf } from "./findings.js";
@@ -31,6 +31,28 @@ const prisma = new PrismaClient();
 afterAll(async () => {
   await prisma.$disconnect();
 });
+
+/*
+ * Precondição dos casos de integração: o master data do corpus já aplicado.
+ *
+ * Os números conferidos aqui — 106 linhas no template de abertura, zero
+ * registro criado numa segunda aplicação — descrevem uma base JÁ migrada.
+ * Nada estabelecia isso: o próprio arquivo aplicava o corpus no meio da
+ * suíte, então a primeira execução contra um banco recém-migrado falhava e
+ * as seguintes passavam por herança da anterior. Um teste que depende do
+ * histórico do banco não prova nada sobre o importador.
+ *
+ * `runPipeline` com `write` é idempotente por construção — é isso que o
+ * próprio teste de idempotência verifica —, então garantir a precondição
+ * aqui não muda nenhuma expectativa: só torna a suíte determinística a
+ * partir de um schema vazio.
+ */
+let corpusAplicado = false;
+async function garantirCorpusAplicado(): Promise<void> {
+  if (corpusAplicado) return;
+  await runPipeline({ prisma, write: true, overrides: readOverrides() });
+  corpusAplicado = true;
+}
 
 function emptyOverrides(): Overrides {
   return { items: new Map(), priceUoms: new Map(), samples: new Map() };
@@ -171,6 +193,7 @@ describe("Manifesto da fonte", () => {
 });
 
 integration("Migração — corpus real (dry-run)", () => {
+  beforeAll(garantirCorpusAplicado, 120_000);
   it("preserva as invariantes conhecidas do corpus", async () => {
     const result = await runPipeline({ prisma, write: false, overrides: emptyOverrides() });
 
@@ -312,6 +335,7 @@ integration("Migração — corpus real (dry-run)", () => {
 });
 
 integration("Migração — aplicação idempotente", () => {
+  beforeAll(garantirCorpusAplicado, 120_000);
   it("aplica sem duplicar e sem movimentar estoque", async () => {
     const before = {
       items: await prisma.item.count(),
@@ -356,6 +380,7 @@ integration("Migração — aplicação idempotente", () => {
 });
 
 integration("Abertura de estoque — aplicação", () => {
+  beforeAll(garantirCorpusAplicado, 120_000);
   it("cria lote e movimento OPENING_BALANCE uma única vez", async () => {
     const marker = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`.toUpperCase();
     const item = await prisma.item.create({

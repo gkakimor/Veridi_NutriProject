@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { CustomerDTO, ProjectDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@veridi/shared";
 import { EntityLink } from "../../components/EntityLink";
@@ -10,6 +10,7 @@ import { ProjectFormModal } from "./ProjectFormModal";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
 
@@ -24,10 +25,6 @@ function statusBadgeClass(status: ProjectStatus): string {
     default:
       return "badge badge--neutral";
   }
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("pt-BR");
 }
 
 /**
@@ -46,7 +43,19 @@ export function ProjectsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  // `?novo=1` abre o cadastro direto — é como a ação rápida do Dashboard
+  // chega aqui sem duplicar o formulário numa rota própria.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [createOpen, setCreateOpen] = useState(searchParams.get("novo") === "1");
+
+  function closeCreate() {
+    setCreateOpen(false);
+    if (searchParams.get("novo") === "1") {
+      const next = new URLSearchParams(searchParams);
+      next.delete("novo");
+      setSearchParams(next, { replace: true });
+    }
+  }
 
   const urlFilter = useInitialFilters();
   const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
@@ -221,7 +230,7 @@ export function ProjectsPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
               <th>Projeto</th>
@@ -234,6 +243,7 @@ export function ProjectsPage() {
               <th>Última versão</th>
               <th>Status</th>
               <th>Produto</th>
+              <th aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
@@ -246,8 +256,16 @@ export function ProjectsPage() {
                   if (event.key === "Enter") navigate(`/comercial/projetos/${project.id}`);
                 }}
               >
+                {/* O projeto precisa ser o destino explícito da linha: antes o
+                    único link aqui era o do Cliente, e mirar "o projeto"
+                    abria o cadastro do cliente. */}
                 <td>
-                  <span className="code">{project.code}</span> {project.name}
+                  <EntityLink
+                    kind="project"
+                    id={project.id}
+                    code={project.code}
+                    name={project.name}
+                  />
                 </td>
                 <td className="is-code">{project.externalCode ?? "—"}</td>
                 <td>{formatDate(project.entryDate)}</td>
@@ -264,12 +282,23 @@ export function ProjectsPage() {
                   </span>
                 </td>
                 <td className="is-code">{project.productCode ?? "—"}</td>
+                <td onClick={(event) => event.stopPropagation()}>
+                  <div className="table__actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => navigate(`/comercial/projetos/${project.id}`)}
+                    >
+                      Abrir
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
 
             {!loading && projects.length === 0 && (
               <tr>
-                <td colSpan={10} className="table__empty">
+                <td colSpan={11} className="table__empty">
                   Nenhum projeto encontrado.
                 </td>
               </tr>
@@ -303,9 +332,9 @@ export function ProjectsPage() {
       {createOpen && (
         <ProjectFormModal
           project={null}
-          onClose={() => setCreateOpen(false)}
+          onClose={closeCreate}
           onSaved={(project) => {
-            setCreateOpen(false);
+            closeCreate();
             navigate(`/comercial/projetos/${project.id}`);
           }}
         />

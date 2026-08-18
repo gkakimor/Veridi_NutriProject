@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import type { ShipmentDTO, ShipmentStatus } from "@veridi/shared";
 import { SHIPMENT_STATUSES, SHIPMENT_STATUS_LABELS } from "@veridi/shared";
 import { listShipments } from "../../lib/shipments-api";
+import { formatDate } from "../../lib/dates";
 
 type ActiveFilter = ShipmentStatus | "all";
 
@@ -21,10 +22,6 @@ function statusBadgeClass(status: ShipmentStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /** Comercial → Expedições. Documento transacional: linhas abrem página própria. */
 export function ShipmentsPage() {
@@ -120,14 +117,14 @@ export function ShipmentsPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
               <th>Expedição</th>
               <th>Pedido</th>
               <th>Cliente</th>
               <th>Data</th>
-              <th>Quantidade</th>
+              <th className="is-numeric">Quantidade</th>
               <th>Status</th>
               <th aria-hidden="true" />
             </tr>
@@ -148,7 +145,7 @@ export function ShipmentsPage() {
                   <EntityLink kind="customer" id={shipment.customerId} code={shipment.customerName} />
                 </td>
                 <td>{formatDate(shipment.shipmentDate)}</td>
-                <td>{shipment.totalQuantity}</td>
+                <td className="is-numeric">{shipment.totalQuantity}</td>
                 <td>
                   <span className={statusBadgeClass(shipment.status)}>
                     {SHIPMENT_STATUS_LABELS[shipment.status]}

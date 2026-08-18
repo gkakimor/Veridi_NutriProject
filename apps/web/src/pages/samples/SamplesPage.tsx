@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { CustomerDTO, ProjectSampleDTO, ProjectSampleStatus } from "@veridi/shared";
 import { PROJECT_SAMPLE_STATUSES, PROJECT_SAMPLE_STATUS_LABELS } from "@veridi/shared";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
@@ -159,12 +159,13 @@ export function SamplesPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
               <th>Amostra</th>
               <th>Teste</th>
               <th>Projeto</th>
+              <th>Produto</th>
               <th>Cliente</th>
               <th>Descrição</th>
               <th>Status</th>
@@ -188,6 +189,18 @@ export function SamplesPage() {
                   <EntityLink kind="project" id={sample.projectId} code={sample.projectCode} name={sample.projectName} />
                 </td>
                 <td>
+                  {sample.productId ? (
+                    <EntityLink
+                      kind="product"
+                      id={sample.productId}
+                      code={sample.productCode}
+                      name={sample.productName}
+                    />
+                  ) : (
+                    <span className="muted">Produto não identificado</span>
+                  )}
+                </td>
+                <td>
                   <EntityLink kind="customer" id={sample.customerId} code={sample.customerName} />
                 </td>
                 <td>{sample.description ?? "—"}</td>
@@ -203,8 +216,12 @@ export function SamplesPage() {
 
             {!loading && samples.length === 0 && (
               <tr>
-                <td colSpan={8} className="table__empty">
-                  Nenhuma amostra encontrada.
+                <td colSpan={9} className="table__empty">
+                  {/* Amostra pertence a um projeto — não existe "amostra
+                      solta". Quem chega por este menu procurando criar não
+                      achava o caminho, e a lista vazia não dizia nada. */}
+                  Nenhuma amostra encontrada. Toda amostra nasce dentro de um{" "}
+                  <Link to="/comercial/projetos">projeto</Link>, no bloco "Amostras / testes".
                 </td>
               </tr>
             )}

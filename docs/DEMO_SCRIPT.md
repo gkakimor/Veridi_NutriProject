@@ -8,8 +8,9 @@
 > **DEMO READY = YES** (2026-08-17): 5 macrofluxos PASS, walkthrough PASS,
 > zero CRITICAL e zero HIGH, verificado pelos auditores independentes.
 >
-> Base validada no gate pós-Bloco G e no sprint de hardening de UX. Total: **38 min** no ritmo
-> normal; a coluna "corte" indica o que sai primeiro se o tempo apertar.
+> Base validada no gate pós-Bloco G e no sprint de hardening de UX. Total:
+> **42 min** no ritmo normal (a etapa 5B, de CMV, entrou depois); a coluna
+> "corte" indica o que sai primeiro se o tempo apertar.
 
 ## Antes de começar (15 min de preparo, no dia anterior)
 
@@ -17,7 +18,9 @@
 2. Entrar com um usuário **ADMIN** e deixar a sessão aberta.
 3. Preparar o cenário da história (ver "Dados necessários" de cada etapa). O
    caminho mais seguro é executar o roteiro inteiro uma vez na véspera com
-   outro cliente/nome, para saber onde cada botão está.
+   outro cliente/nome, para saber onde cada botão está. Para a etapa 5B basta
+   o cenário DEMO: `pnpm db:demo` deixa `PROD-000003` com estrutura ativa,
+   cálculo salvo e faixas de 500/1.000/3.000 un.
 4. Deixar abertas, em abas separadas: Dashboard, a lista de Projetos e o Hub de
    relatórios.
 5. Conferir que existe **estoque liberado** das matérias-primas da formulação —
@@ -95,6 +98,40 @@
   e mostre que o cálculo registra a qualidade "parcial".
 - **Corte:** pular a prova cênica (−1,5 min).
 
+## Etapa 5B — CMV: quanto custa produzir 1.000 potes · 4 min
+
+- **Mensagem:** esta é a pergunta que o cliente faz por telefone, e a resposta
+  não deveria exigir abrir três telas. CMV é a visão de negócio do mesmo custo
+  industrial: **quantidade muda custo unitário**, e o sistema recalcula em vez
+  de multiplicar. Não existe entidade nova nem segundo motor — é o mesmo
+  cálculo que sustenta as faixas de preço.
+- **Dados:** Product A do DEMO (`PROD-000003`), com estrutura ativa e cálculo
+  salvo.
+- **CTA:** projeto → linha do produto → **CMV** (ou produto → "Abrir CMV") →
+  informar a quantidade → "Calcular CMV".
+- **Provas cênicas (nesta ordem, é o coração da demo):**
+  1. **500 un** → CMV total ≈ R$ 6.193,60 · ≈ R$ 12,39/un · faixa de 500 un a
+     R$ 44,90;
+  2. **1.000 un** → ≈ R$ 12.043,60 · ≈ R$ 12,04/un · faixa de 1.000 un a
+     R$ 38,90. **Diga em voz alta:** o unitário caiu sem nenhum desconto de
+     material — o custo fixo do lote se diluiu;
+  3. **750 un** → o CMV existe (≈ R$ 9.118,60), mas a tela diz *"Não existe uma
+     faixa de precificação ativa para 750 un"*. Nada de faixa vizinha, nada de
+     média: faixa é negociação registrada para uma quantidade;
+  4. **3.000 un** → **3 lotes de referência** e faixa de 3.000 a R$ 34,50.
+- **Composição:** role até "Composição do custo" e mostre o material do
+  cliente — quantidade física visível, sem custo, com *"Não compõe o custo de
+  aquisição Veridi."* É o que separa terceirização de compra.
+- **Aviso honesto:** se o preço vigente tiver sido fechado sobre um cálculo
+  incompleto, a tela avisa em vez de exibir margem que ninguém calculou.
+- **Fallback:** se o CMV aparecer indisponível, é porque não há cálculo salvo
+  até a data de referência — salve um cálculo na estrutura e repita.
+- **Corte:** demonstrar só 1.000 e 750 (−2 min). **Nunca cortar o 750**: é a
+  prova de que o sistema recusa inventar preço.
+- **Valores fictícios:** os recursos industriais do DEMO (mão de obra,
+  misturador, energia) são inventados para o cenário. Não apresente esses
+  números como custo real da Veridi.
+
 ## Etapa 6 — Precificação por faixa (PREC) · 4 min
 
 - **Mensagem:** preço não é custo × fator no Excel: cada faixa de quantidade é
@@ -115,8 +152,13 @@
   origem: PREC, faixa, CALC, estrutura, custo, margem. O documento do cliente
   não mostra nada disso.
 - **Dados:** precificação ativa + orçamento na quantidade **exata** da faixa.
-- **CTA:** projeto → "Novo orçamento" → informar quantidade → "Usar faixa de
-  precificação" → enviar.
+- **CTA:** projeto → "Novo orçamento" → informar quantidade → a linha sugere
+  sozinha *"Existe uma precificação vigente para 1.000 un: R$ 38,90/un"* →
+  "Aplicar preço calculado" → enviar.
+- **Prova cênica extra (ida e volta):** na mesma linha, "Simular CMV" abre o
+  CMV já na quantidade da proposta; "Voltar ao orçamento" devolve à MESMA
+  versão, com a linha no lugar. Simular não altera preço nenhum — o preço só
+  muda por faixa explícita ou manual.
 - **Provas cênicas (as duas melhores da demo):**
   1. pedir a faixa de 500 un para um orçamento de 700 un → recusa explicando que
      faixa é cenário fechado (sem interpolação, sem "faixa mais próxima");

@@ -35,6 +35,18 @@ type LotWithRelations = Lot & {
   ownerCustomer: Customer | null;
   receiptLine: ReceiptLineChain | null;
   productionOrder: ProductionOrder | null;
+  shipmentLines: {
+    quantity: Prisma.Decimal;
+    unitCode: string;
+    shipment: {
+      id: string;
+      code: string;
+      status: string;
+      confirmedAt: Date | null;
+      customerOrderId: string;
+      customerOrder: { code: string; customerId: string; customerName: string | null };
+    };
+  }[];
 };
 
 const lotInclude = {
@@ -43,6 +55,26 @@ const lotInclude = {
   ownerCustomer: true,
   receiptLine: { include: { receipt: { include: { purchaseOrder: true } } } },
   productionOrder: true,
+  // Para onde o lote foi. Sem isto, saber se um lote acabado ja saiu exigia
+  // voltar pelo pedido — e o lote e justamente por onde a rastreabilidade
+  // costuma comecar.
+  shipmentLines: {
+    orderBy: { id: "asc" as const },
+    select: {
+      quantity: true,
+      unitCode: true,
+      shipment: {
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          confirmedAt: true,
+          customerOrderId: true,
+          customerOrder: { select: { code: true, customerId: true, customerName: true } },
+        },
+      },
+    },
+  },
 } as const;
 
 type LotDTOWithoutStock = Omit<LotDTO, "onHand" | "reserved" | "available">;
@@ -94,6 +126,18 @@ function toLotDTO(lot: LotWithRelations, producedQuantity: Prisma.Decimal | null
     blockedAt: lot.blockedAt ? lot.blockedAt.toISOString() : null,
     blockedBy: lot.blockedBy,
     blockReason: lot.blockReason,
+    shipments: lot.shipmentLines.map((line) => ({
+      id: line.shipment.id,
+      code: line.shipment.code,
+      status: line.shipment.status,
+      shippedAt: line.shipment.confirmedAt ? line.shipment.confirmedAt.toISOString() : null,
+      quantity: line.quantity.toString(),
+      unitCode: line.unitCode,
+      customerOrderId: line.shipment.customerOrderId,
+      customerOrderCode: line.shipment.customerOrder.code,
+      customerId: line.shipment.customerOrder.customerId,
+      customerName: line.shipment.customerOrder.customerName,
+    })),
   };
 }
 
@@ -246,6 +290,48 @@ export async function releaseLot(id: string, actorName?: string): Promise<LotDTO
       status: "AVAILABLE",
       releasedAt: new Date(),
       releasedBy: actorName ?? SYSTEM_ACTOR,
+    },
+  });
+
+  return (await getLotById(id))!;
+}
+
+/**
+ * Desbloqueio: `BLOCKED` deixa de ser estado terminal.
+ *
+ * Bloquear era um caminho só de ida. Um bloqueio feito por engano — ou um
+ * desvio depois esclarecido pela Qualidade — deixava material físico real
+ * fora do estoque disponível para sempre, com um alerta permanente no
+ * painel e nenhuma ação em nenhuma tela, nem para a Administração.
+ *
+ * O retorno é DELIBERADAMENTE conservador: o lote volta para
+ * `AWAITING_RELEASE`, nunca direto para `AVAILABLE`. Desbloquear é reabrir a
+ * decisão, não tomá-la — a liberação continua exigindo ato próprio da
+ * Qualidade e, quando o item pede laudo, CoA aprovado. Nenhuma quantidade
+ * fica disponível por consequência deste passo.
+ *
+ * O registro do bloqueio (quem, quando, por quê) permanece: é o histórico do
+ * que aconteceu, e a liberação seguinte carimba a sua própria autoria.
+ */
+export async function unblockLot(
+  id: string,
+  reason: string,
+  actorName?: string,
+): Promise<LotDTO> {
+  const lot = await requireLot(id);
+  if (lot.status !== "BLOCKED") {
+    throw new InvalidLotTransitionError("Somente lotes bloqueados podem ser desbloqueados.");
+  }
+
+  await getPrisma().lot.update({
+    where: { id },
+    data: {
+      status: "AWAITING_RELEASE",
+      // A liberação anterior deixa de valer: o lote volta para a fila da
+      // Qualidade e precisa ser liberado de novo, com autoria nova.
+      releasedAt: null,
+      releasedBy: null,
+      blockReason: `${lot.blockReason ?? "Bloqueio sem motivo registrado"} · Desbloqueado por ${actorName ?? SYSTEM_ACTOR}: ${reason}`,
     },
   });
 

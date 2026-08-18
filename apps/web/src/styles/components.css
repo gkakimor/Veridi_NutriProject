@@ -152,12 +152,76 @@
 
 /* ---------------- Tabela ---------------- */
 
+/**
+ * Container de tabela.
+ *
+ * `overflow-x: auto` sozinho não resolve nada: a barra some quando não está
+ * em uso e a pessoa não descobre que existe coluna à direita — foi assim que
+ * Status e Abrir ficaram fora da tela mesmo em 1920px sem ninguém notar. As
+ * quatro camadas abaixo são o truque clássico de sombra de rolagem: as duas
+ * primeiras (`local`) andam com o conteúdo e cobrem a sombra quando a borda
+ * está visível; as duas de baixo (`scroll`) ficam presas ao container. O
+ * resultado é uma sombra que aparece só do lado em que há conteúdo cortado.
+ */
 .table-container {
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow-1);
+  scrollbar-width: thin;
+  background-image:
+    linear-gradient(to right, var(--surface), rgba(255, 255, 255, 0)),
+    linear-gradient(to left, var(--surface), rgba(255, 255, 255, 0)),
+    linear-gradient(to right, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0)),
+    linear-gradient(to left, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0));
+  background-position:
+    0 0,
+    100% 0,
+    0 0,
+    100% 0;
+  background-repeat: no-repeat;
+  /* A sombra é a ÚNICA pista de que há coluna fora da tela. Medida a 12px
+     e 0,16 de opacidade ela passava despercebida numa lista onde metade das
+     colunas está cortada — o público do sistema não é de gente que sai
+     arrastando tabela para conferir. */
+  background-size:
+    32px 100%,
+    32px 100%,
+    20px 100%,
+    20px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/**
+ * Coluna de ação fixa à direita.
+ *
+ * A ação principal da linha é o motivo de a tabela existir; ela não pode ser
+ * a primeira coisa a sair de cena quando a tabela é larga. Fica encostada na
+ * borda, com um fio à esquerda para não parecer que flutua sobre o texto.
+ */
+.table--sticky-actions th:last-child,
+.table--sticky-actions td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--surface);
+  box-shadow: inset 1px 0 0 var(--line);
+}
+
+/*
+ * Célula fixa com menu aberto sobe no empilhamento.
+ *
+ * Cada célula fixa tem fundo próprio e é pintada na ordem do DOM: as linhas
+ * de baixo cobriam o menu da linha de cima, que aparecia cortado no meio de
+ * um item ("Custos in…"). O `z-index` alto do menu não resolvia — ele é
+ * relativo à própria célula, e é a célula que precisa vir à frente.
+ */
+.table--sticky-actions td:last-child:has(.row-actions__menu) {
+  z-index: 3;
+}
+
+.table--sticky-actions tbody tr:hover td:last-child {
+  background: var(--canvas);
 }
 
 .table-container--spaced {
@@ -203,6 +267,29 @@
   transition: background 0.1s;
 }
 
+/**
+ * Coluna numérica.
+ *
+ * Número se compara pela casa decimal. Alinhado à esquerda, `1.000` e `999`
+ * têm a mesma largura aparente e o olho perde a ordem de grandeza; com o
+ * dígito de largura fixa e a coluna encostada à direita, a comparação sai da
+ * leitura em vez da conta. O cabeçalho acompanha, senão o título flutua longe
+ * dos próprios valores.
+ */
+.table th.is-numeric,
+.table td.is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/** Segunda linha da célula: o contexto que desambigua sem virar coluna nova. */
+.table .cell-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
 .table td.is-code,
 .code {
   font-family: var(--font-code);
@@ -243,11 +330,21 @@
   justify-content: flex-end;
 }
 
+/*
+ * Estado vazio existe para orientar quem não encontrou nada. Numa tabela
+ * larga ele herdava a largura das colunas do cabeçalho e a orientação
+ * terminava fora da tela, legível só depois de arrastar a tabela — o oposto
+ * do que um estado vazio serve para fazer. Fica preso à borda esquerda e
+ * dentro da largura visível.
+ */
 .table__empty {
   padding: var(--sp-6);
   text-align: center;
   color: var(--ink-2);
   white-space: normal;
+  position: sticky;
+  left: 0;
+  max-width: 100vw;
 }
 
 .table-foot {
@@ -627,6 +724,21 @@
   font-size: var(--fs-sm);
 }
 
+/* Erro preso a um campo dentro de célula de tabela: compacto, sem empurrar
+   a linha inteira. Usado na conferência de lote da Expedição. */
+.form-alert--inline {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  font-size: var(--fs-xs);
+}
+
+/* Lista de linhas afetadas dentro do ConfirmDialog (ex.: custo incompleto). */
+.confirm-dialog__list {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-sm);
+}
+
 /* ---------------- ConfirmDialog ---------------- */
 
 .confirm-overlay {
@@ -657,10 +769,16 @@
   font-size: var(--fs-lg);
 }
 
-.confirm-dialog p {
+.confirm-dialog p,
+.confirm-dialog__message {
   color: var(--ink-2);
   font-size: var(--fs-base);
   line-height: var(--lh-base);
+}
+
+.confirm-dialog__message ul {
+  margin: var(--sp-2) 0;
+  padding-left: var(--sp-4);
 }
 
 .confirm-dialog__actions {
@@ -680,6 +798,25 @@
   justify-content: space-between;
   gap: var(--sp-4);
   margin-bottom: var(--sp-5);
+}
+
+/*
+ * Ações do cabeçalho de documento.
+ *
+ * São duas a quatro: uma ou duas saídas de contexto ("← Voltar ao projeto"),
+ * imprimir e, quando existe, a ação da tela. Em 1280 e 1366 o grupo ficava
+ * espremido e cada BOTÃO quebrava internamente — "← Voltar / ao / projeto"
+ * em três linhas, que é ilegível e faz um rótulo curto parecer um parágrafo.
+ * O rótulo passa a ser indivisível e quem quebra é o grupo, botão inteiro
+ * por linha.
+ */
+.doc-header .table__actions {
+  flex-wrap: wrap;
+  row-gap: var(--sp-2);
+}
+
+.doc-header .table__actions .btn {
+  white-space: nowrap;
 }
 
 .doc-crumb {
@@ -704,6 +841,10 @@
 .doc-body {
   max-width: 1040px;
   display: grid;
+  /* Grid sem trilha declarada resolve em `max-content`: a seção mais larga
+     estica o container, o `.table-container` infla junto e o scroll dele
+     nunca engata — a tabela some para fora da tela sem barra nenhuma. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-5);
 }
 
@@ -955,6 +1096,17 @@
   position: relative;
 }
 
+/*
+ * Numa tabela larga a célula encolhe até o conteúdo, e o seletor ia junto:
+ * na Formulação o campo do item media 28px — sobrava o "✕" e o item
+ * escolhido ficava invisível enquanto se edita a fórmula. Errar material em
+ * fórmula de suplemento é risco de produto, não detalhe visual.
+ */
+td .entity-select {
+  display: block;
+  min-width: 15rem;
+}
+
 /* Dentro de `.field` o input herdava largura da regra de formulário; numa
    célula de tabela não havia regra nenhuma e ele encolhia para a largura
    nativa do browser — justo na coluna que foi alargada para o produto. */
@@ -1151,4 +1303,111 @@
   border-radius: var(--radius-sm);
   background: var(--selected-bg);
   font-size: var(--fs-sm);
+}
+
+/**
+ * Orçamento multilinha.
+ *
+ * A proposta cobre vários produtos, então a tabela precisa de espaço: o nome
+ * do produto é o que a pessoa lê para saber do que se trata, e quantidade e
+ * unidade cabem em pouco. Sem rolagem interna — a página rola.
+ */
+.quote-workspace {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.quote-workspace__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+}
+
+.quote-workspace__head h4 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.quote-workspace__conditions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.table--quote-lines th:first-child,
+.table--quote-lines td:first-child {
+  width: 34%;
+}
+
+.table--quote-lines input {
+  width: 100%;
+  max-width: 140px;
+}
+
+.table--quote-lines tfoot td {
+  border-top: 2px solid var(--line-strong);
+  font-size: var(--fs-sm);
+}
+
+/* Formulário curto que nasce dentro de uma seção, sem virar modal. */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.inline-form > * {
+  margin: 0;
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.table tr.is-selected > td {
+  background: var(--selected-bg);
+}
+
+/**
+ * Criação no contexto: última parada da lista, alcançável pela seta como
+ * qualquer resultado, mas separada por um fio para não ser confundida com um.
+ */
+.entity-select__create {
+  border-top: 1px solid var(--line);
+  color: var(--v-green-700);
+  font-weight: var(--fw-medium);
+}
+
+/* Sugestão de preço da linha do orçamento — informa, nunca aplica sozinha. */
+.table tr.quote-suggestion > td {
+  background: var(--selected-bg);
+  border-top: none;
+  padding-top: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.quote-suggestion__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
 }

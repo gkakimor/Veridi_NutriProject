@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { PricingVersionSummaryDTO } from "@veridi/shared";
 import {
   INDUSTRIAL_COST_QUALITY_LABELS,
@@ -8,6 +8,7 @@ import {
 import { listPricingVersions } from "../../lib/pricing-api";
 import { EntityLink } from "../../components/EntityLink";
 import { RecordContextChip } from "../../components/RecordContext";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
 
@@ -155,7 +156,7 @@ export function PricingListPage() {
       )}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
               <th>Precificação</th>
@@ -192,18 +193,31 @@ export function PricingListPage() {
                 </td>
                 <td className="is-code">{row.calculationCode}</td>
                 <td>{row.industrialCostVersionLabel}</td>
-                <td>{new Date(row.costReferenceDate).toLocaleDateString("pt-BR")}</td>
+                <td>{formatDate(row.costReferenceDate)}</td>
                 <td>{INDUSTRIAL_COST_QUALITY_LABELS[row.costQuality]}</td>
                 <td>{row.tierCount}</td>
                 <td>
-                  {row.activatedAt ? new Date(row.activatedAt).toLocaleDateString("pt-BR") : "—"}
+                  {formatDate(row.activatedAt)}
                 </td>
               </tr>
             ))}
             {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={10} className="table__empty">
-                  Nenhuma precificação encontrada.
+                  {/* Lista vazia sem caminho é beco sem saída: precificação
+                      não nasce aqui, nasce de um cálculo de custo salvo. Quem
+                      chegou por um produto específico recebe o link direto. */}
+                  Nenhuma precificação encontrada. Uma precificação nasce de um{" "}
+                  <strong>cálculo de custo salvo</strong>, na estrutura de custos do produto.
+                  {contextProductId && (
+                    <>
+                      {" "}
+                      <Link to={`/produtos/${contextProductId}/custos`}>
+                        Abrir a estrutura de custos deste produto
+                      </Link>
+                      .
+                    </>
+                  )}
                 </td>
               </tr>
             )}

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { RejectCoaDialog } from "../../components/RejectCoaDialog";
+import { useNavigate, Link } from "react-router-dom";
 import type { CoaStatus, QualityQueueRowDTO } from "@veridi/shared";
 import { COA_STATUSES, COA_STATUS_LABELS, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { approveCoa, listQualityQueue, rejectCoa } from "../../lib/attachments-api";
 import { useAuth } from "../../app/AuthProvider";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
 
@@ -22,10 +24,6 @@ function coaBadgeClass(status: CoaStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Qualidade → Documentos / CoA.
@@ -44,6 +42,7 @@ export function CoaQueuePage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<{ lotId: string; lotCode: string } | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -94,13 +93,11 @@ export function CoaQueuePage() {
     }
   }
 
-  async function handleReject(lotId: string) {
-    const reason = window.prompt("Motivo da rejeição do CoA:");
-    if (!reason?.trim()) return;
-
+  async function handleReject(lotId: string, reason: string) {
+    setRejecting(null);
     setError(null);
     try {
-      await rejectCoa(lotId, reason.trim());
+      await rejectCoa(lotId, reason);
       reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao rejeitar o CoA");
@@ -173,17 +170,17 @@ export function CoaQueuePage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table">
+        <table className="table table--sticky-actions">
           <thead>
             <tr>
               <th>Lote</th>
               <th>Item</th>
               <th>Fornecedor / Proprietário</th>
-              <th>Recebido em</th>
+              <th className="is-numeric">Recebido em</th>
               <th>Validade</th>
               <th>CoA</th>
               <th>Qualidade</th>
-              <th>Físico</th>
+              <th className="is-numeric">Físico</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -200,7 +197,7 @@ export function CoaQueuePage() {
                     ? ownerLabel(row.ownerType, row.ownerCustomerName)
                     : (row.supplierName ?? "—")}
                 </td>
-                <td>{formatDate(row.receivedAt)}</td>
+                <td className="is-numeric">{formatDate(row.receivedAt)}</td>
                 <td>{formatDate(row.expiryDate)}</td>
                 <td>
                   <span className={coaBadgeClass(row.coaStatus)}>
@@ -213,7 +210,7 @@ export function CoaQueuePage() {
                     {row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.lotStatus]}
                   </span>
                 </td>
-                <td>
+                <td className="is-numeric">
                   {row.onHand} {row.unitCode}
                 </td>
                 <td>
@@ -237,7 +234,7 @@ export function CoaQueuePage() {
                         <button
                           type="button"
                           className="btn btn--ghost btn--sm"
-                          onClick={() => void handleReject(row.lotId)}
+                          onClick={() => setRejecting({ lotId: row.lotId, lotCode: row.lotCode })}
                         >
                           Rejeitar
                         </button>
@@ -251,7 +248,17 @@ export function CoaQueuePage() {
             {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={9} className="table__empty">
-                  Nenhum lote nesta situação documental.
+                  {/*
+                    Esta fila é sobre LAUDO, não sobre liberação. Um lote
+                    aguardando liberação cujo item não exige CoA nunca
+                    aparece aqui — e o atalho do Dashboard chama esta tela de
+                    "Fila da Qualidade", então o vazio parecia dizer que não
+                    havia trabalho.
+                  */}
+                  Nenhum lote nesta situação documental. Esta fila mostra o andamento do{" "}
+                  <strong>laudo (CoA)</strong>; a liberação de lote para uso é decidida em{" "}
+                  <Link to="/estoque/lotes">Estoque › Lotes</Link>, inclusive para itens que não
+                  exigem CoA.
                 </td>
               </tr>
             )}
@@ -280,6 +287,14 @@ export function CoaQueuePage() {
           Próxima
         </button>
       </div>
+
+      {rejecting && (
+        <RejectCoaDialog
+          lotCode={rejecting.lotCode}
+          onCancel={() => setRejecting(null)}
+          onConfirm={(reason) => void handleReject(rejecting.lotId, reason)}
+        />
+      )}
     </>
   );
 }

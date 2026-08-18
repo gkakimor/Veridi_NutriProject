@@ -16,6 +16,7 @@ import {
   BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
+  PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
   SHIPMENT_STATUS_LABELS,
 } from "@veridi/shared";
@@ -46,6 +47,8 @@ import { FlowContext } from "../../components/FlowContext";
 import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 interface LineRow {
   key: string;
@@ -776,7 +779,7 @@ export function CustomerOrderPage() {
           </div>
         </FormSection>
 
-        <FormSection title="Produtos" subtitle="Um Product por pedido — a unidade vem do item de produto acabado.">
+        <FormSection title="Produtos" subtitle="Um produto por pedido — a unidade vem do item de produto acabado.">
           <div className="table-container">
             {/* Produto é a coluna de decisão: fica com o espaço, e a busca
                 dentro dela precisa de largura para nomes longos. */}
@@ -784,10 +787,10 @@ export function CustomerOrderPage() {
               <thead>
                 <tr>
                   <th>Produto</th>
-                  <th className="col-quantity">Quantidade</th>
+                  <th className="col-quantity is-numeric">Quantidade</th>
                   <th className="col-unit">Un.</th>
-                  {!isDraft && <th>Expedido</th>}
-                  {!isDraft && <th>Falta expedir</th>}
+                  {!isDraft && <th className="is-numeric">Expedido</th>}
+                  {!isDraft && <th className="is-numeric">Falta expedir</th>}
                   {isDraft && <th aria-hidden="true" />}
                 </tr>
               </thead>
@@ -813,7 +816,7 @@ export function CustomerOrderPage() {
                         </>
                       )}
                     </td>
-                    <td>
+                    <td className="is-numeric">
                       {isDraft ? (
                         <input
                           type="text"
@@ -828,12 +831,12 @@ export function CustomerOrderPage() {
                     </td>
                     <td>{line.unitCode || "—"}</td>
                     {!isDraft && (
-                      <td>
+                      <td className="is-numeric">
                         {customerOrder?.lines.find((l) => l.productId === line.productId)?.shippedQuantity ?? "—"}
                       </td>
                     )}
                     {!isDraft && (
-                      <td>
+                      <td className="is-numeric">
                         {customerOrder?.lines.find((l) => l.productId === line.productId)?.outstandingQuantity ??
                           "—"}
                       </td>
@@ -887,7 +890,7 @@ export function CustomerOrderPage() {
                       <tr>
                         <th>Produto</th>
                         <th>Pedido</th>
-                        <th>Disponível</th>
+                        <th className="is-numeric">Disponível</th>
                         <th>Reservar</th>
                         <th>Produzir</th>
                         <th>Situação</th>
@@ -904,11 +907,15 @@ export function CustomerOrderPage() {
                             <td>
                               {line.orderedQuantity} {line.unitCode}
                             </td>
-                            <td>{line.finishedGoodsAvailable}</td>
+                            <td className="is-numeric">{line.finishedGoodsAvailable}</td>
                             <td>
+                              {/* Sem nome acessível, um leitor de tela anuncia
+                                  só "editar texto" no campo que decide reserva
+                                  de um pedido confirmado. */}
                               <input
                                 type="text"
                                 inputMode="decimal"
+                                aria-label={`Reservar de ${line.productCode}`}
                                 value={adjustment.reserve}
                                 onChange={(event) =>
                                   handleAdjustReserve(line.customerOrderLineId, line.orderedQuantity, event.target.value)
@@ -919,6 +926,7 @@ export function CustomerOrderPage() {
                               <input
                                 type="text"
                                 inputMode="decimal"
+                                aria-label={`Produzir de ${line.productCode}`}
                                 value={adjustment.produce}
                                 onChange={(event) =>
                                   handleAdjustProduce(line.customerOrderLineId, line.orderedQuantity, event.target.value)
@@ -950,12 +958,12 @@ export function CustomerOrderPage() {
                       <thead>
                         <tr>
                           <th>Material</th>
-                          <th>Necessário</th>
-                          <th>Físico</th>
-                          <th>Reservado</th>
-                          <th>Disponível</th>
-                          <th>Em Compra</th>
-                          <th>Falta</th>
+                          <th className="is-numeric">Necessário</th>
+                          <th className="is-numeric">Físico</th>
+                          <th className="is-numeric">Reservado</th>
+                          <th className="is-numeric">Disponível</th>
+                          <th className="is-numeric">Em Compra</th>
+                          <th className="is-numeric">Falta</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -964,14 +972,14 @@ export function CustomerOrderPage() {
                             <td>
                               <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                             </td>
-                            <td>
+                            <td className="is-numeric">
                               {row.requiredQuantity} {row.unitCode}
                             </td>
-                            <td>{row.onHand}</td>
-                            <td>{row.reserved}</td>
-                            <td>{row.available}</td>
-                            <td>{row.onOrder}</td>
-                            <td>
+                            <td className="is-numeric">{row.onHand}</td>
+                            <td className="is-numeric">{row.reserved}</td>
+                            <td className="is-numeric">{row.available}</td>
+                            <td className="is-numeric">{row.onOrder}</td>
+                            <td className="is-numeric">
                               <span className={Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"}>
                                 {row.shortage}
                               </span>
@@ -1021,10 +1029,10 @@ export function CustomerOrderPage() {
                     <thead>
                       <tr>
                         <th>Material</th>
-                        <th>Necessário restante</th>
+                        <th className="is-numeric">Necessário restante</th>
                         <th>Reservado p/ este Pedido</th>
-                        <th>Disponível</th>
-                        <th>Em Compra</th>
+                        <th className="is-numeric">Disponível</th>
+                        <th className="is-numeric">Em Compra</th>
                         <th>Falta física</th>
                         <th>Já em rascunho</th>
                         <th>Comprar sugerido</th>
@@ -1084,12 +1092,12 @@ export function CustomerOrderPage() {
                                   </div>
                                 )}
                             </td>
-                            <td>
+                            <td className="is-numeric">
                               {row.remainingRequired} {row.unitCode}
                             </td>
                             <td>{row.ownReserved}</td>
-                            <td>{row.available}</td>
-                            <td>{row.onOrder}</td>
+                            <td className="is-numeric">{row.available}</td>
+                            <td className="is-numeric">{row.onOrder}</td>
                             <td>{row.operationalShortage}</td>
                             <td>{row.draftPurchaseQuantity}</td>
                             <td>{row.newSuggestedPurchase}</td>
@@ -1181,9 +1189,9 @@ export function CustomerOrderPage() {
                       <tr>
                         <th>Item</th>
                         <th>Cliente</th>
-                        <th>Necessário</th>
+                        <th className="is-numeric">Necessário</th>
                         <th>Disponível do cliente</th>
-                        <th>Falta</th>
+                        <th className="is-numeric">Falta</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1193,11 +1201,11 @@ export function CustomerOrderPage() {
                             <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                           </td>
                           <td>{row.customerName ?? "—"}</td>
-                          <td>
+                          <td className="is-numeric">
                             {row.remainingRequired} {row.unitCode}
                           </td>
                           <td>{row.available}</td>
-                          <td>
+                          <td className="is-numeric">
                             <span
                               className={
                                 Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"
@@ -1227,10 +1235,10 @@ export function CustomerOrderPage() {
                   <tr>
                     <th>Produto</th>
                     <th>Pedido</th>
-                    <th>Expedido</th>
-                    <th>Reservado restante</th>
-                    <th>Falta reservar</th>
-                    <th>Disponível agora</th>
+                    <th className="is-numeric">Expedido</th>
+                    <th className="is-numeric">Reservado restante</th>
+                    <th className="is-numeric">Falta reservar</th>
+                    <th className="is-numeric">Disponível agora</th>
                     <th>Reservar</th>
                   </tr>
                 </thead>
@@ -1243,14 +1251,15 @@ export function CustomerOrderPage() {
                       <td>
                         {line.orderedQuantity} {line.unitCode}
                       </td>
-                      <td>{line.shippedQuantity}</td>
-                      <td>{line.reservedRemaining}</td>
-                      <td>{line.stillToReserve}</td>
-                      <td>{line.currentAvailable}</td>
+                      <td className="is-numeric">{line.shippedQuantity}</td>
+                      <td className="is-numeric">{line.reservedRemaining}</td>
+                      <td className="is-numeric">{line.stillToReserve}</td>
+                      <td className="is-numeric">{line.currentAvailable}</td>
                       <td>
                         <input
                           type="text"
                           inputMode="decimal"
+                          aria-label={`Reservar de ${line.productCode}`}
                           disabled={Number(line.stillToReserve) <= 0}
                           value={reserveInputs[line.customerOrderLineId] ?? ""}
                           onChange={(event) =>
@@ -1301,7 +1310,7 @@ export function CustomerOrderPage() {
                   <tr>
                     <th>Expedição</th>
                     <th>Data</th>
-                    <th>Quantidade</th>
+                    <th className="is-numeric">Quantidade</th>
                     <th>Status</th>
                     <th aria-hidden="true" />
                   </tr>
@@ -1315,11 +1324,9 @@ export function CustomerOrderPage() {
                     >
                       <td className="is-code">{shipment.code}</td>
                       <td>
-                        {shipment.shipmentDate
-                          ? new Date(shipment.shipmentDate).toLocaleDateString("pt-BR")
-                          : "—"}
+                        {formatDate(shipment.shipmentDate)}
                       </td>
-                      <td>{shipment.totalQuantity}</td>
+                      <td className="is-numeric">{shipment.totalQuantity}</td>
                       <td>
                         <span className="badge badge--neutral">
                           {SHIPMENT_STATUS_LABELS[shipment.status as ShipmentStatus] ?? shipment.status}
@@ -1383,8 +1390,8 @@ export function CustomerOrderPage() {
                     <tr>
                       <th>Faturamento</th>
                       <th>Expedição</th>
-                      <th>Quantidade</th>
-                      <th>Valor</th>
+                      <th className="is-numeric">Quantidade</th>
+                      <th className="is-numeric">Valor</th>
                       <th>Status</th>
                       <th aria-hidden="true" />
                     </tr>
@@ -1398,8 +1405,8 @@ export function CustomerOrderPage() {
                       >
                         <td className="is-code">{billing.code}</td>
                         <td className="is-code">{billing.shipmentCode}</td>
-                        <td>{billing.totalQuantity}</td>
-                        <td>{billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}</td>
+                        <td className="is-numeric">{billing.totalQuantity}</td>
+                        <td className="is-numeric">{billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}</td>
                         <td>
                           <span className="badge badge--neutral">
                             {BILLING_STATUS_LABELS[
@@ -1433,9 +1440,9 @@ export function CustomerOrderPage() {
                   <tr>
                     <th>OC</th>
                     <th>Fornecedor</th>
-                    <th>Itens</th>
+                    <th className="is-numeric">Itens</th>
                     <th>Status</th>
-                    <th>Valor</th>
+                    <th className="is-numeric">Valor</th>
                     <th aria-hidden="true" />
                   </tr>
                 </thead>
@@ -1444,13 +1451,13 @@ export function CustomerOrderPage() {
                     <tr key={po.id} tabIndex={0} onClick={() => navigate(`/compras/ordens/${po.id}`)}>
                       <td className="is-code">{po.code}</td>
                       <td>{po.supplierName}</td>
-                      <td>{po.lineCount}</td>
+                      <td className="is-numeric">{po.lineCount}</td>
                       <td>
                         <span className="badge badge--neutral">
                           {PURCHASE_ORDER_STATUS_LABELS[po.status as keyof typeof PURCHASE_ORDER_STATUS_LABELS] ?? po.status}
                         </span>
                       </td>
-                      <td>{po.orderTotal ?? "—"}</td>
+                      <td className="is-numeric">{po.orderTotal ?? "—"}</td>
                       <td onClick={(event) => event.stopPropagation()}>
                         <button
                           type="button"
@@ -1481,7 +1488,7 @@ export function CustomerOrderPage() {
                       <tr>
                         <th>Produto</th>
                         <th>Lote</th>
-                        <th>Reservado</th>
+                        <th className="is-numeric">Reservado</th>
                         <th>Expedido</th>
                         <th>Restante</th>
                         <th>Situação</th>
@@ -1516,7 +1523,7 @@ export function CustomerOrderPage() {
                                 </>
                               )}
                             </td>
-                            <td>
+                            <td className="is-numeric">
                               {line.quantity} {line.unitCode}
                             </td>
                             <td>{line.shippedQuantity}</td>
@@ -1557,29 +1564,40 @@ export function CustomerOrderPage() {
             )}
 
             {customerOrder && customerOrder.generatedProductionOrders.length > 0 && (
-              <FormSection title="OPs Geradas" subtitle="Ordens de Produção DRAFT — o usuário revisa e planeja normalmente.">
+              <FormSection
+                title="Ordens de produção"
+                subtitle="O que a fábrica produz para atender este pedido. Cada ordem abre direto pelo código."
+              >
                 <div className="table-container">
                   <table className="table table--clickable-rows">
                     <thead>
                       <tr>
                         <th>OP</th>
                         <th>Produto</th>
-                        <th>Quantidade</th>
+                        <th className="is-numeric">Planejado</th>
+                        <th className="is-numeric">Produzido</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {customerOrder.generatedProductionOrders.map((op) => (
                         <tr key={op.id} tabIndex={0} onClick={() => navigate(`/producao/ordens/${op.id}`)}>
-                          <td className="is-code">{op.code}</td>
+                          <td className="is-code">
+                            <EntityLink kind="productionOrder" id={op.id} code={op.code} />
+                          </td>
                           <td>
                             <EntityLink kind="product" id={op.productId} code={op.productCode} name={op.productName} />
                           </td>
-                          <td>
+                          <td className="is-numeric">
                             {op.plannedQuantity} {op.outputUnitCode}
                           </td>
+                          <td className="is-numeric">
+                            {op.producedQuantity} {op.outputUnitCode}
+                          </td>
                           <td>
-                            <span className="badge badge--neutral">{op.status}</span>
+                            <span className="badge badge--neutral">
+                              {PRODUCTION_ORDER_STATUS_LABELS[op.status]}
+                            </span>
                           </td>
                         </tr>
                       ))}
@@ -1657,8 +1675,7 @@ export function CustomerOrderPage() {
 
       {cancelDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cancel-co-title">
+          <ModalDialog labelledBy="cancel-co-title" onClose={() => setCancelDialogOpen(false)}>
             <h2 id="cancel-co-title">Cancelar pedido?</h2>
             <p>{customerOrder?.code} permanecerá no histórico. Esta ação não pode ser desfeita.</p>
             <div className="field">
@@ -1685,7 +1702,7 @@ export function CustomerOrderPage() {
                 Cancelar pedido
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
     </>

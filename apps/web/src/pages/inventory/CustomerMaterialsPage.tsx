@@ -6,15 +6,12 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listCustomerMaterials } from "../../lib/customer-materials-api";
 import { listCustomers } from "../../lib/customers-api";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 type StatusFilter = LotStatus | "all";
 
 const PAGE_SIZE = 20;
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
   if (isExpired) return "badge badge--err";
@@ -187,9 +184,9 @@ export function CustomerMaterialsPage() {
               <th>Lote externo</th>
               <th>Validade</th>
               <th>Localização</th>
-              <th>Físico</th>
-              <th>Reservado</th>
-              <th>Disponível</th>
+              <th className="is-numeric">Físico</th>
+              <th className="is-numeric">Reservado</th>
+              <th className="is-numeric">Disponível</th>
               <th>Qualidade</th>
             </tr>
           </thead>
@@ -206,11 +203,11 @@ export function CustomerMaterialsPage() {
                 <td>{row.supplierLot ?? "—"}</td>
                 <td>{formatDate(row.expiryDate)}</td>
                 <td>{row.location ?? "—"}</td>
-                <td>
+                <td className="is-numeric">
                   {row.onHand} {row.unitCode}
                 </td>
-                <td>{row.reserved}</td>
-                <td>{row.available}</td>
+                <td className="is-numeric">{row.reserved}</td>
+                <td className="is-numeric">{row.available}</td>
                 <td>
                   <span className={statusBadgeClass(row.status, row.isExpired)}>
                     {row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.status]}

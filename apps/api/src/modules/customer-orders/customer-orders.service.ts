@@ -63,7 +63,7 @@ type ProductWithFinishedItem = Product & { finishedProductItem: Item | null };
 type LineWithProduct = CustomerOrderLine & { product: ProductWithFinishedItem };
 type ReservationLineWithRelations = CustomerOrderReservationLine & { product: Product; item: Item; lot: Lot | null };
 type ReservationWithLines = CustomerOrderReservation & { lines: ReservationLineWithRelations[] };
-type GeneratedOrder = ProductionOrder & { product: Product };
+type GeneratedOrder = ProductionOrder & { product: Product; outputs: { quantity: Prisma.Decimal }[] };
 type LinkedPurchaseOrder = PurchaseOrder & { supplier: Supplier; lines: PurchaseOrderLine[] };
 type ShipmentWithLines = Shipment & { lines: ShipmentLine[] };
 type BillingWithLines = Billing & { lines: BillingLine[] };
@@ -84,7 +84,12 @@ const customerOrderInclude = {
     include: { lines: { include: { product: true, item: true, lot: true } } },
     orderBy: { createdAt: "asc" as const },
   },
-  productionOrders: { include: { product: true }, orderBy: { createdAt: "asc" as const } },
+  productionOrders: {
+    // `outputs` porque o produzido é sempre a soma dos apontamentos reais —
+    // nunca uma coluna agregada que alguém possa editar por fora.
+    include: { product: true, outputs: { select: { quantity: true } } },
+    orderBy: { createdAt: "asc" as const },
+  },
   purchaseOrders: { include: { supplier: true, lines: true }, orderBy: { createdAt: "asc" as const } },
   shipments: { include: { lines: true }, orderBy: { createdAt: "asc" as const } },
   billings: { include: { lines: true }, orderBy: { createdAt: "asc" as const } },
@@ -284,6 +289,9 @@ function toGeneratedProductionOrderDTO(order: GeneratedOrder): CustomerOrderGene
     productName: usingSnapshot ? order.productName! : order.product.name,
     customerOrderLineId: order.customerOrderLineId!,
     plannedQuantity: order.plannedQuantity.toString(),
+    producedQuantity: order.outputs
+      .reduce((total, output) => total.plus(output.quantity), new Prisma.Decimal(0))
+      .toString(),
     outputUnitCode: order.outputUnitCode,
     status: order.status,
   };

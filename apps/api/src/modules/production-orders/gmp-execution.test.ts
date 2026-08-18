@@ -763,4 +763,45 @@ describe("Folha de Receita", () => {
 
     await app.close();
   });
+
+  it("folha de receita informa o saldo reservado que sobrou depois do Consumo Real", async () => {
+    const app = buildTestApp("PRODUCTION");
+    await app.ready();
+
+    const ingredient = await createItem("RAW_MATERIAL");
+    const lot = await receiveStock(ingredient.id, "50");
+    const { product } = await createProductWithFormulation(app, [
+      { itemId: ingredient.id, quantity: "1", unitCode: "kg" },
+    ]);
+    const order = await createReleasedOrder(app, product.id, "10");
+    const line = order.reservation.lines[0];
+
+    const before = (
+      await app.inject({ method: "GET", url: `/production-orders/${order.id}/recipe` })
+    ).json();
+    expect(before.parts[0].requirements[0].reservedLots[0].remainingQuantity).toBe("10");
+
+    await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/picking/${line.id}/confirm`,
+      payload: { lotCode: lot.code },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/consumptions`,
+      payload: { entries: [{ reservationLineId: line.id, quantity: "10" }] },
+    });
+
+    // A linha reservada continua listada — é ela que o papel mostra. O que
+    // muda é o saldo: sem `remainingQuantity` a tela só descobria que não
+    // havia mais reserva depois de a pesagem ser recusada.
+    const after = (
+      await app.inject({ method: "GET", url: `/production-orders/${order.id}/recipe` })
+    ).json();
+    const reserved = after.parts[0].requirements[0].reservedLots[0];
+    expect(reserved.quantity).toBe("10");
+    expect(Number(reserved.remainingQuantity)).toBe(0);
+
+    await app.close();
+  });
 });

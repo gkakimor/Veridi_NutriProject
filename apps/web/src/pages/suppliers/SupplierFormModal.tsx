@@ -7,12 +7,14 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
 import { SupplierItemsSection } from "../../components/SupplierItemsSection";
+import { formatDate } from "../../lib/dates";
 
 interface SupplierFormModalProps {
   mode: "create" | "edit";
   supplier: SupplierDTO | null;
   onClose: () => void;
-  onSaved: () => void;
+  /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
+  onSaved: (created?: SupplierDTO) => void;
 }
 
 interface FormState {
@@ -74,11 +76,14 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
 
     try {
       if (mode === "create") {
-        await createSupplier(payload);
+        const created = await createSupplier(payload);
+        onSaved(created);
       } else if (supplier) {
         await updateSupplier(supplier.id, payload);
+        onSaved();
+      } else {
+        onSaved();
       }
-      onSaved();
     } catch (err) {
       if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};
@@ -116,7 +121,7 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
       <>
         <span className="modal-fullscreen__foot-meta">
           Última alteração:{" "}
-          {supplier ? new Date(supplier.updatedAt).toLocaleDateString("pt-BR") : "—"}
+          {supplier ? formatDate(supplier.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>
@@ -153,7 +158,7 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
 
         <FormSection
           title="Identificação"
-          subtitle="Dados basicos do fornecedor usados em compras e recebimento."
+          subtitle="Dados básicos do fornecedor usados em compras e recebimento."
         >
           <div className="field-grid-2">
             <div className="field field--full">

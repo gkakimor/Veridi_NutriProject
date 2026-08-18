@@ -52,6 +52,16 @@ export async function releaseLot(id: string): Promise<LotDTO> {
   return (await parseJsonOrThrow(response)) as LotDTO;
 }
 
+/** Desbloquear devolve o lote à fila da Qualidade, nunca ao estoque. */
+export async function unblockLot(id: string, input: BlockLotInput): Promise<LotDTO> {
+  const response = await apiFetch(`${API_URL}/lots/${id}/unblock`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await parseJsonOrThrow(response)) as LotDTO;
+}
+
 export async function blockLot(id: string, input: BlockLotInput): Promise<LotDTO> {
   const response = await apiFetch(`${API_URL}/lots/${id}/block`, {
     method: "POST",

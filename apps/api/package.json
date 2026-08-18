@@ -10,12 +10,13 @@
     "start:prod": "node dist/main.js",
     "deploy:prod": "prisma migrate deploy",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --passWithNoTests && vitest run --config vitest.serial.config.ts --passWithNoTests",
     "db:generate": "prisma generate",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
-    "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"
+    "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:demo": "dotenv -e ../../.env -- tsx scripts/seed-demo.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -14,6 +14,7 @@ import {
 } from "@veridi/shared";
 import { createBilling, listAwaitingBilling, listBillings } from "../../lib/billings-api";
 import { formatBRL } from "../../lib/currency";
+import { formatDate } from "../../lib/dates";
 
 type ActiveFilter = BillingStatus | "all";
 
@@ -30,10 +31,6 @@ function statusBadgeClass(status: BillingStatus): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Comercial → Faturamento. Foco operacional: primeiro o que está
@@ -174,7 +171,7 @@ export function BillingsPage() {
               <th>Pedido</th>
               <th>Cliente</th>
               <th>Data</th>
-              <th>Quantidade</th>
+              <th className="is-numeric">Quantidade</th>
               <th>Situação</th>
               <th aria-hidden="true" />
             </tr>
@@ -303,7 +300,7 @@ export function BillingsPage() {
       </div>
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
               <th colSpan={9}>Documentos de faturamento</th>
@@ -313,8 +310,8 @@ export function BillingsPage() {
               <th>Expedição</th>
               <th>Pedido</th>
               <th>Cliente</th>
-              <th>Quantidade</th>
-              <th>Valor</th>
+              <th className="is-numeric">Quantidade</th>
+              <th className="is-numeric">Valor</th>
               <th>Status</th>
               <th>Emitido em</th>
               <th aria-hidden="true" />

@@ -37,6 +37,9 @@ export function SearchableEntitySelect({
   disabled,
   required,
   emptyMessage = "Nenhum resultado.",
+  canCreate = false,
+  createLabel = "Cadastrar novo",
+  onCreateNew,
 }: {
   id: string;
   options: EntityOption[];
@@ -46,6 +49,15 @@ export function SearchableEntitySelect({
   disabled?: boolean;
   required?: boolean;
   emptyMessage?: string;
+  /**
+   * Criação no contexto: quando o que a pessoa procura não existe, cadastrar
+   * ali mesmo evita abandonar o formulário pela metade. Só aparece quando o
+   * papel do usuário permite criar — CTA que termina em 403 é pior que CTA
+   * nenhum.
+   */
+  canCreate?: boolean;
+  createLabel?: string;
+  onCreateNew?: (typed: string) => void;
 }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
@@ -53,6 +65,16 @@ export function SearchableEntitySelect({
   const [activeIndex, setActiveIndex] = useState(0);
   const container = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  /** Enquanto o cadastro no contexto está aberto, o popover não volta. */
+  const creating = useRef(false);
+  /**
+   * A lista atual já foi navegada por seta?
+   *
+   * Começa `true`: abrir a lista sem digitar e apertar a seta deve ANDAR,
+   * que é o comportamento normal de combobox. Só filtrar zera isto — ver
+   * `handleKeyDown`.
+   */
+  const navigated = useRef(true);
   const [anchor, setAnchor] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
 
   /** Espaço de leitura: ~10 resultados, sem passar do que a janela oferece. */
@@ -88,6 +110,18 @@ export function SearchableEntitySelect({
   }, [open, measure]);
 
   const selected = options.find((option) => option.id === value) ?? null;
+
+  // Seleção que chega de fora — criação no contexto devolvendo o registro
+  // recém-cadastrado — precisa aparecer no campo. Sem isto o valor está
+  // escolhido no estado e a tela mostra caixa vazia, que lê como "não salvou".
+  useEffect(() => {
+    if (!value) return;
+    // Cadastro concluído: o registro novo já está escolhido, então o
+    // selector volta ao normal e pode reabrir em novo foco do usuário.
+    creating.current = false;
+    setQuery("");
+    setOpen(false);
+  }, [value]);
 
   /** Busca sem acento e sem caixa: quem digita rápido não acentua. */
   const normalize = (text: string) =>
@@ -132,6 +166,34 @@ export function SearchableEntitySelect({
     input.current?.focus();
   }
 
+  /**
+   * "Cadastrar novo" é a última parada da lista, não um botão solto embaixo
+   * dela. Quem chega ao fim dos resultados com a seta continua a navegação e
+   * cai no cadastro — antes essa ação só existia para quem usava mouse, e
+   * quem digitava o nome de um cliente que ainda não existe ficava sem saída.
+   */
+  // A lista renderiza no máximo 50 resultados; navegar por teclado além
+  // disso apontaria `aria-activedescendant` para um item que não existe no
+  // DOM — e o leitor de tela ficaria mudo no meio da lista.
+  const visible = useMemo(() => filtered.slice(0, 50), [filtered]);
+  const createIndex = canCreate && onCreateNew ? visible.length : -1;
+  const navigableCount = visible.length + (createIndex >= 0 ? 1 : 0);
+
+  /**
+   * Entrega para o cadastro no contexto.
+   *
+   * O popover precisa sumir ANTES do painel de criação aparecer e continuar
+   * fechado: como o `onFocus` do input reabre a lista, o foco devolvido pelo
+   * painel ressuscitava o `listbox` por cima dele — sobrava uma camada
+   * fantasma, com `role=listbox` órfão, sobre o formulário.
+   */
+  function startCreate() {
+    if (!onCreateNew) return;
+    creating.current = true;
+    setOpen(false);
+    onCreateNew(query.trim());
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -139,16 +201,34 @@ export function SearchableEntitySelect({
         setOpen(true);
         return;
       }
+      /*
+       * A lista já abre com o primeiro resultado ativo. Quem digita e usa a
+       * seta espera ENTRAR na lista, não pular o primeiro item: com um único
+       * resultado, a primeira seta caía direto em "+ Cadastrar novo" e o
+       * Enter seguinte abria a criação de um registro que já existe.
+       *
+       * A primeira seta depois de filtrar só confirma o item ativo; a
+       * navegação normal continua a partir daí.
+       */
+      if (!navigated.current) {
+        navigated.current = true;
+        if (event.key === "ArrowDown") return;
+      }
       const step = event.key === "ArrowDown" ? 1 : -1;
       setActiveIndex((current) => {
-        if (filtered.length === 0) return 0;
-        return (current + step + filtered.length) % filtered.length;
+        if (navigableCount === 0) return 0;
+        return (current + step + navigableCount) % navigableCount;
       });
       return;
     }
     if (event.key === "Enter") {
       if (!open) return;
-      const option = filtered[activeIndex];
+      if (createIndex >= 0 && activeIndex === createIndex) {
+        event.preventDefault();
+        startCreate();
+        return;
+      }
+      const option = visible[activeIndex];
       if (option) {
         event.preventDefault();
         choose(option);
@@ -163,7 +243,14 @@ export function SearchableEntitySelect({
     }
   }
 
-  const activeId = open && filtered[activeIndex] ? `${listId}-${filtered[activeIndex]!.id}` : undefined;
+  const createOptionId = `${listId}-create`;
+  const activeId = !open
+    ? undefined
+    : createIndex >= 0 && activeIndex === createIndex
+      ? createOptionId
+      : visible[activeIndex]
+        ? `${listId}-${visible[activeIndex]!.id}`
+        : undefined;
 
   return (
     <div className="entity-select" ref={container}>
@@ -181,10 +268,25 @@ export function SearchableEntitySelect({
         disabled={disabled ?? false}
         placeholder={selected ? `${selected.code} · ${selected.name}` : placeholder}
         value={open ? query : selected ? `${selected.code} · ${selected.name}` : query}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          // Foco devolvido pelo cadastro no contexto não reabre a lista.
+          if (creating.current) return;
+          setOpen(true);
+        }}
         onChange={(event) => {
+          creating.current = false;
           setQuery(event.target.value);
           setOpen(true);
+          navigated.current = false;
+          /*
+           * Filtrar encurta a lista, e o índice ativo ficava onde estava.
+           * Digitar "NutriViva" deixava um resultado real e o cadastro; o
+           * índice herdado já apontava para o cadastro, então a primeira
+           * seta caía em "+ Cadastrar novo cliente" e Enter abria a
+           * criação de um registro que existe. Lista nova começa no
+           * primeiro resultado real.
+           */
+          setActiveIndex(0);
         }}
         onKeyDown={handleKeyDown}
       />
@@ -219,13 +321,19 @@ export function SearchableEntitySelect({
               maxHeight: anchor.maxHeight,
             }}
           >
-            {options.length === 0 && (
-              <li className="entity-select__empty">Nada disponível para escolher.</li>
+            {/* Filho de `listbox` que não é opção precisa dizer que não é —
+                senão o leitor de tela conta aviso e ação como resultado. */}
+            {options.length === 0 && !canCreate && (
+              <li role="presentation" className="entity-select__empty">
+                Nada disponível para escolher.
+              </li>
             )}
             {options.length > 0 && filtered.length === 0 && (
-              <li className="entity-select__empty">{emptyMessage}</li>
+              <li role="presentation" className="entity-select__empty">
+                {emptyMessage}
+              </li>
             )}
-            {filtered.slice(0, 50).map((option, index) => (
+            {visible.map((option, index) => (
               <li
                 key={option.id}
                 id={`${listId}-${option.id}`}
@@ -246,8 +354,29 @@ export function SearchableEntitySelect({
               </li>
             ))}
             {filtered.length > 50 && (
-              <li className="entity-select__empty">
+              <li role="presentation" className="entity-select__empty">
                 +{filtered.length - 50} resultados — refine a busca.
+              </li>
+            )}
+            {createIndex >= 0 && (
+              <li
+                id={createOptionId}
+                role="option"
+                aria-selected={activeIndex === createIndex}
+                className={
+                  activeIndex === createIndex
+                    ? "entity-select__option entity-select__create is-active"
+                    : "entity-select__option entity-select__create"
+                }
+                onMouseDown={(event) => {
+                  // `mousedown` antes do blur fechar a lista.
+                  event.preventDefault();
+                  startCreate();
+                }}
+                onMouseEnter={() => setActiveIndex(createIndex)}
+              >
+                + {createLabel}
+                {query.trim() ? `: “${query.trim()}”` : ""}
               </li>
             )}
           </ul>,

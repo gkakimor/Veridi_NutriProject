@@ -7,6 +7,7 @@ import { listFinishedGoods } from "../../lib/finished-goods-api";
 import { listProducts } from "../../lib/products-api";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
 type StatusFilter = LotStatus | "all";
 
@@ -25,10 +26,6 @@ function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
   }
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /**
  * Custo de material por unidade. O serviço de custo já devolve `null` quando
@@ -204,7 +201,7 @@ export function FinishedGoodsPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table">
+        <table className="table table--sticky-actions">
           <thead>
             <tr>
               <th>Produto</th>
@@ -213,13 +210,13 @@ export function FinishedGoodsPage() {
               <th>Lote Interno</th>
               <th>OP</th>
               <th>Data produção</th>
-              <th>Produzido</th>
-              <th>Físico</th>
+              <th className="is-numeric">Produzido</th>
+              <th className="is-numeric">Físico</th>
               <th>Reserved</th>
               <th>Available</th>
               <th>Qualidade</th>
               <th>Validade</th>
-              <th>Custo Material Un.</th>
+              <th className="is-numeric">Custo Material Un.</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -235,10 +232,10 @@ export function FinishedGoodsPage() {
                 <td className="is-code">{row.productionOrderCode ?? "—"}</td>
                 <td>{formatDate(row.producedAt)}</td>
                 {/* Cada linha carrega a própria unidade: nunca se soma unidades diferentes. */}
-                <td>
+                <td className="is-numeric">
                   {row.producedQuantity} {row.unitCode}
                 </td>
-                <td>
+                <td className="is-numeric">
                   {row.onHand} {row.unitCode}
                 </td>
                 <td>
@@ -253,7 +250,7 @@ export function FinishedGoodsPage() {
                   </span>
                 </td>
                 <td>{formatDate(row.expiryDate)}</td>
-                <td>
+                <td className="is-numeric">
                   <CostCell row={row} />
                 </td>
                 <td>

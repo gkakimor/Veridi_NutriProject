@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   FormulationCalculationMode,
   FormulationComponentBasis,
@@ -33,6 +33,8 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { useAuth } from "../../app/AuthProvider";
+import { ItemFormModal } from "../items/ItemFormModal";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
@@ -127,6 +129,13 @@ export function FormulationVersionPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
+  // Criação no contexto: o item não existe e sair da fórmula agora
+  // significaria perder as linhas já montadas. Guarda a linha de origem
+  // para devolver o item selecionado exatamente onde ele foi pedido.
+  const [itemModalRowKey, setItemModalRowKey] = useState<string | null>(null);
+  const { user } = useAuth();
+  // CTA que termina em 403 é pior que CTA nenhum.
+  const canCreateItem = user?.role === "PURCHASING" || user?.role === "QUALITY" || user?.role === "ADMIN";
   const [costEstimate, setCostEstimate] = useState<FormulationCostEstimateDTO | null>(null);
 
   const syncFromServer = useCallback((dto: FormulationVersionDTO) => {
@@ -517,14 +526,19 @@ export function FormulationVersionPage() {
           subtitle="Fornecimento Cliente = material que o cliente envia (exige produto vinculado a cliente). Pureza vazia = desconhecida (nenhuma correção é aplicada). Embalagem normalmente usa base por unidade acabada. O físico por unidade já inclui pureza e overage."
         >
           <div className="table-container">
-            <table className="table">
+            {/* Dez colunas não cabem na largura de leitura: a ação da linha era
+                a primeira a sair de cena. Fixa à direita, ela continua ao
+                alcance mesmo com a tabela rolando. */}
+            <table className="table table--sticky-actions">
               <thead>
                 <tr>
                   <th>Item</th>
-                  <th>Tipo</th>
+                  {/* Mostra `stockUnitCode`: chamar de "Tipo" fazia ler
+                      categoria do material onde está a unidade de estoque. */}
+                  <th>Un. estoque</th>
                   <th>Base</th>
                   <th>Fornecimento</th>
-                  <th>Quantidade</th>
+                  <th className="is-numeric">Quantidade</th>
                   <th>Unidade</th>
                   <th>Pureza %</th>
                   <th>Overage %</th>
@@ -549,6 +563,9 @@ export function FormulationVersionPage() {
                             name: item.name,
                             ...(item.active ? {} : { hint: "inativo" }),
                           }))}
+                          canCreate={canCreateItem}
+                          createLabel="Cadastrar novo item"
+                          onCreateNew={() => setItemModalRowKey(row.key)}
                         />
                       ) : (
                         <>
@@ -604,7 +621,7 @@ export function FormulationVersionPage() {
                         SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]
                       )}
                     </td>
-                    <td>
+                    <td className="is-numeric">
                       {isDraft ? (
                         <input
                           type="text"
@@ -718,17 +735,17 @@ export function FormulationVersionPage() {
         {costEstimate && (
           <FormSection
             title="Custo estimado de materiais"
-            subtitle="Sempre uma estimativa — a fórmula é um plano, não um realizado. A referência de custo muda com o tempo e nunca é gravada na versão."
+            subtitle="Estimativa de HOJE: lê a referência de custo vigente a cada abertura e nunca é gravada na versão. O CMV e a precificação leem a base CONGELADA do cálculo salvo — por isso os dois podem discordar, e é o cálculo salvo que vale como documento."
           >
             <div className="table-container">
               <table className="table">
                 <thead>
                   <tr>
                     <th>Componente</th>
-                    <th>Quantidade</th>
+                    <th className="is-numeric">Quantidade</th>
                     <th>Referência unitária</th>
                     <th>Origem</th>
-                    <th>Custo estimado</th>
+                    <th className="is-numeric">Custo estimado</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -737,7 +754,7 @@ export function FormulationVersionPage() {
                       <td>
                         <EntityLink kind="item" id={component.itemId} code={component.itemCode} name={component.itemName} />
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {component.normalizedQuantity} {component.stockUnitCode}
                         <br />
                         <span className="field__hint">
@@ -754,7 +771,7 @@ export function FormulationVersionPage() {
                           {COST_SOURCE_LABELS[component.costSource]}
                         </span>
                       </td>
-                      <td>{formatBRL(component.estimatedComponentCost)}</td>
+                      <td className="is-numeric">{formatBRL(component.estimatedComponentCost)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -788,7 +805,14 @@ export function FormulationVersionPage() {
               <p className="field__hint">
                 Custo parcial: {costEstimate.missingCostItems.join(", ")} sem referência de custo. O
                 subtotal conhecido ({formatBRL(costEstimate.knownCostSubtotal)}) não representa o custo
-                total da fórmula.
+                total da fórmula.{" "}
+                {/* Dizer o que falta sem dizer onde resolver deixa a pessoa
+                    parada: a referência de custo vem do preço do fornecedor
+                    para o item, e é lá que ela é corrigida. */}
+                <Link to="/compras/item-fornecedor">
+                  Definir preço de fornecedor para esses itens
+                </Link>
+                .
               </p>
             )}
           </FormSection>
@@ -847,6 +871,34 @@ export function FormulationVersionPage() {
         onCancel={() => setActivateDialogOpen(false)}
         onConfirm={handleActivate}
       />
+      {itemModalRowKey !== null && (
+        <ItemFormModal
+          mode="create"
+          item={null}
+          units={units}
+          onClose={() => setItemModalRowKey(null)}
+          onSaved={(created) => {
+            const rowKey = itemModalRowKey;
+            setItemModalRowKey(null);
+            if (!created || !rowKey) return;
+            // O item novo entra no catálogo e já fica escolhido na linha que
+            // pediu por ele — voltar e procurar de novo seria trabalho que o
+            // sistema acabou de fazer.
+            setActiveItems((prev) => [
+              {
+                id: created.id,
+                code: created.code,
+                name: created.name,
+                unitCode: created.unitCode,
+                unitDimension: created.unit.dimension,
+                active: created.active,
+              },
+              ...prev,
+            ]);
+            handleComponentItemChange(rowKey, created.id);
+          }}
+        />
+      )}
     </>
   );
 }

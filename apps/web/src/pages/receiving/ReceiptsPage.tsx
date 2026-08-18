@@ -4,12 +4,9 @@ import { useNavigate } from "react-router-dom";
 import type { ReceiptDTO } from "@veridi/shared";
 import { RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
 import { listReceipts } from "../../lib/receiving-api";
+import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 /** Compras → Recebimentos. Receipt e historico/somente-leitura apos confirmado. */
 export function ReceiptsPage() {
@@ -101,7 +98,7 @@ export function ReceiptsPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
               <th>Código</th>
@@ -109,7 +106,7 @@ export function ReceiptsPage() {
               <th>OC</th>
               <th>Fornecedor / Cliente</th>
               <th>Data</th>
-              <th>Itens</th>
+              <th className="is-numeric">Itens</th>
               <th>Status</th>
               <th aria-hidden="true" />
             </tr>
@@ -133,7 +130,7 @@ export function ReceiptsPage() {
                     : (receipt.supplierName ?? "—")}
                 </td>
                 <td>{formatDate(receipt.receivedAt)}</td>
-                <td>{receipt.lines.length}</td>
+                <td className="is-numeric">{receipt.lines.length}</td>
                 <td>
                   <span className="badge badge--active">Confirmado</span>
                 </td>

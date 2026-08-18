@@ -1,0 +1,119 @@
+/*
+ * CMV do produto — leitura econômica de uma quantidade.
+ *
+ * Só tokens, como o resto das telas. Os cartões existem porque a resposta
+ * da pergunta ("quanto custa produzir 1.000 potes") precisa estar acima da
+ * dobra e legível de longe; a composição, que é conferência, vem depois em
+ * tabela densa.
+ */
+
+.cmv-sim {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-4);
+}
+
+.cmv-sim .field {
+  margin: 0;
+}
+
+/*
+ * A resposta precisa caber acima da dobra no menor monitor usado na fábrica
+ * (1280×720): seis cartões em duas fileiras curtas, não quatro cartões
+ * largos e uma rolagem para ver o custo por unidade.
+ */
+.cmv-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.cmv-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
+}
+
+.cmv-card--strong {
+  border-color: var(--line-strong);
+  background: var(--selected-bg);
+}
+
+.cmv-card__label {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.cmv-card__value {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* Veredito em palavras não compete em tamanho com o número que ele qualifica. */
+.cmv-card__value--text {
+  font-size: var(--fs-base);
+}
+
+/* Custo indisponível nunca vira número: vira aviso. */
+.cmv-card__value--unavailable {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--warn-fg);
+}
+
+.cmv-card__note {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.cmv-group {
+  margin-top: var(--sp-5);
+}
+
+.cmv-group__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+
+.cmv-warnings {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--warn-bg);
+  border-radius: var(--radius-sm);
+  color: var(--warn-fg);
+  font-size: var(--fs-sm);
+}
+
+.cmv-warnings ul {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-5);
+}
+
+/* Procedência e faixa: rótulo e valor lado a lado, sem virar formulário. */
+.cmv-defs {
+  display: grid;
+  grid-template-columns: minmax(140px, max-content) 1fr;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0;
+}
+
+.cmv-defs dt {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.cmv-defs dd {
+  margin: 0;
+  font-size: var(--fs-base);
+  color: var(--ink);
+}

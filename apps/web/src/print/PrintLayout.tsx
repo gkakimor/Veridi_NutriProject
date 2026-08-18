@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
 import type { ControlledDocumentRevisionDTO } from "@veridi/shared";
 import "./print.css";
+import { formatDate } from "../lib/dates";
 
 /**
  * Esqueleto de impressão (documentos e relatórios).
@@ -71,7 +72,7 @@ export function PrintLayout({
             <dt>Data da revisão</dt>
             <dd>
               {revision?.revisionDate
-                ? new Date(revision.revisionDate).toLocaleDateString("pt-BR")
+                ? formatDate(revision.revisionDate)
                 : "—"}
             </dd>
           </div>
@@ -106,6 +107,23 @@ export function PrintLayout({
         {generatedFor ? ` · ${generatedFor}` : ""}
         {/* Carimbo de geração — NÃO é assinatura digital. */}
       </footer>
+
+      {/*
+        Rodapé corrido, repetido em toda página impressa.
+
+        Um relatório de quinze folhas saía com identidade só na primeira e no
+        fim: a folha que cai da mesa não dizia de onde veio nem a que
+        documento pertence. O número da página em si vem do navegador (o
+        Chrome não implementa as caixas de margem de `@page`, então o sistema
+        não tem como escrevê-lo dentro da folha) — o que o documento garante
+        é que toda página se identifica.
+      */}
+      <div className="print-running-foot" aria-hidden="true">
+        <span>
+          {kind} · {code}
+        </span>
+        <span>{documentCode ?? ""}</span>
+      </div>
     </article>
   );
 }
@@ -118,6 +136,18 @@ export function PrintSection({ title, children }: { title: string; children: Rea
     </section>
   );
 }
+
+/**
+ * Cabeçalho de coluna numérica.
+ *
+ * As células já se marcam com `is-number` uma a uma; o cabeçalho não tinha
+ * como saber disso e ficava à esquerda enquanto os números iam para a
+ * direita. Como o rótulo é a única informação que a tabela dá sobre a coluna,
+ * é ele que decide — e a lista abaixo é a mesma nomenclatura que os
+ * documentos já usam.
+ */
+export const COLUNA_NUMERICA =
+  /^(qtd\.?|quantidade|quant\.|pedido|reservado\/expedido|reservado|expedido|faturado|falta.*|pre[çc]o.*|total.*|subtotal.*|saldo.*|custo.*|valor.*|f[íi]sico|dispon[íi]vel|em compra|recebido.*|produzido.*|planejado.*|consumido.*|percentual|%|margem.*|comiss[ãa]o.*|peso.*|volume.*|unit[áa]rio.*|itens|lotes.*|meses.*|dias.*|m[íi]nimo.*|necess[áa]rio.*)$/i;
 
 export function PrintTable({
   columns,
@@ -135,7 +165,9 @@ export function PrintTable({
       <thead>
         <tr>
           {columns.map((column) => (
-            <th key={column}>{column}</th>
+            <th key={column} {...(COLUNA_NUMERICA.test(column.trim()) ? { className: "is-number" } : {})}>
+              {column}
+            </th>
           ))}
         </tr>
       </thead>
@@ -167,7 +199,7 @@ export function PrintActions({ onBack }: { onBack: () => void }) {
 
 export function formatPrintDate(value: string | null | undefined): string {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
+  return formatDate(value);
 }
 
 export function formatPrintDateTime(value: string | null | undefined): string {

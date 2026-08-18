@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   ItemDTO,
   ProductDTO,
@@ -45,6 +45,8 @@ import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
+import { ModalDialog } from "../../components/ModalDialog";
 
 interface FormulationVersionOption {
   id: string;
@@ -257,6 +259,9 @@ export function ProductionOrderPage() {
   }, [productId]);
 
   const status: ProductionOrderStatus = productionOrder?.status ?? "DRAFT";
+  // Ordem encerrada não pede material: o que a tela recalcula é o estoque de
+  // hoje, e apresentar isso como pendência gera compra indevida.
+  const ordemEncerrada = status === "COMPLETED" || status === "CANCELLED";
   const isDraft = isNew || status === "DRAFT";
   const isCancellable = !isNew && (status === "DRAFT" || status === "PLANNED" || status === "RELEASED");
   const isPlannable = !isNew && status === "DRAFT";
@@ -664,22 +669,36 @@ export function ProductionOrderPage() {
           </FormSection>
         )}
 
-        {productionOrder && productionOrder.origin !== "MANUAL" && (
-          <FormSection title="Origem">
+        {productionOrder && (productionOrder.origin !== "MANUAL" || productionOrder.customerId) && (
+          <FormSection
+            title="Origem"
+            subtitle="Para quem esta ordem produz — o pedido e o cliente abrem direto daqui."
+          >
             <dl className="definition-list">
               <dt>Origem</dt>
               <dd>{PRODUCTION_ORDER_ORIGIN_LABELS[productionOrder.origin]}</dd>
               {productionOrder.customerOrderId && (
                 <>
-                  <dt>Pedido</dt>
+                  <dt>Pedido do cliente</dt>
                   <dd>
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/comercial/pedidos/${productionOrder.customerOrderId}`)}
-                    >
-                      {productionOrder.customerOrderCode}
-                    </button>
+                    <EntityLink
+                      kind="customerOrder"
+                      id={productionOrder.customerOrderId}
+                      code={productionOrder.customerOrderCode}
+                    />
+                  </dd>
+                </>
+              )}
+              {productionOrder.customerId && (
+                <>
+                  <dt>Cliente</dt>
+                  <dd>
+                    <EntityLink
+                      kind="customer"
+                      id={productionOrder.customerId}
+                      code={productionOrder.customerCode}
+                      name={productionOrder.customerName}
+                    />
                   </dd>
                 </>
               )}
@@ -809,18 +828,45 @@ export function ProductionOrderPage() {
             title="Necessidade de Materiais"
             subtitle="Disponibilidade calculada em tempo real a partir do estoque atual — não é uma reserva."
           >
+            {/*
+              Ordem encerrada com material da formulação que nunca foi
+              baixado. O lote de produto acabado já existe e pode ir para
+              expedição: a composição real não é a declarada, e isso não
+              aparecia em tela nenhuma — só na Folha de Receita impressa,
+              que ninguém precisa abrir para expedir.
+            */}
+            {(() => {
+              const encerrada = productionOrder.status === "COMPLETED";
+              const naoConsumidos = productionOrder.requirements.filter(
+                (requirement) =>
+                  Number(requirement.consumedQuantity) === 0 &&
+                  Number(requirement.requiredQuantity) > 0,
+              );
+              if (!encerrada || naoConsumidos.length === 0) return null;
+              return (
+                <p className="form-alert" role="status">
+                  Esta ordem foi concluída sem consumo registrado de{" "}
+                  {naoConsumidos.length}{" "}
+                  {naoConsumidos.length === 1 ? "material" : "materiais"} da formulação:{" "}
+                  {naoConsumidos.map((requirement) => requirement.itemCode).join(", ")}. O lote
+                  produzido não tem, no sistema, a composição que a formulação declara — confira
+                  antes de liberar para expedição.
+                </p>
+              );
+            })()}
+
             <div className="table-container">
               <table className="table">
                 <thead>
                   <tr>
                     <th>Item</th>
                     <th>Fornecimento</th>
-                    <th>Necessário</th>
-                    <th>Físico</th>
-                    <th>Reservado</th>
-                    <th>Disponível</th>
-                    <th>Em Compra</th>
-                    <th>Falta</th>
+                    <th className="is-numeric">Necessário</th>
+                    <th className="is-numeric">Físico</th>
+                    <th className="is-numeric">Reservado</th>
+                    <th className="is-numeric">Disponível</th>
+                    <th className="is-numeric">Em Compra</th>
+                    <th className="is-numeric">Falta</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -851,24 +897,69 @@ export function ProductionOrderPage() {
                           </>
                         )}
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {requirement.requiredQuantity} {requirement.stockUnitCode}
                       </td>
-                      <td>{requirement.onHand}</td>
-                      <td>{requirement.reserved}</td>
-                      <td>{requirement.available}</td>
-                      <td>{requirement.onOrder}</td>
-                      <td>
+                      <td className="is-numeric">{requirement.onHand}</td>
+                      <td className="is-numeric">{requirement.reserved}</td>
+                      <td className="is-numeric">{requirement.available}</td>
+                      <td className="is-numeric">{requirement.onOrder}</td>
+                      <td className="is-numeric">
+                        {/* OP encerrada: a falta é recálculo contra o estoque
+                            de HOJE, não pendência da ordem. Mostrar como
+                            alerta acionável já mandou gente abrir compra de
+                            material que a ordem consumiu semanas atrás. */}
                         <span
                           className={
-                            requirement.availabilityStatus === "AVAILABLE"
-                              ? "badge badge--active"
-                              : "badge badge--warn"
+                            ordemEncerrada
+                              ? "badge badge--neutral"
+                              : requirement.availabilityStatus === "AVAILABLE"
+                                ? "badge badge--active"
+                                : "badge badge--warn"
                           }
                         >
                           {requirement.shortage}
                         </span>
-                        {requirement.supplyResponsibility === "CUSTOMER" &&
+                        {ordemEncerrada && Number(requirement.shortage) > 0 && (
+                          <>
+                            <br />
+                            <span className="field__hint">
+                              Referência histórica — a ordem já foi encerrada.
+                            </span>
+                          </>
+                        )}
+                        {/*
+                          Falta com material já no galpão.
+
+                          `onHand` conta o físico inteiro; `available` só conta
+                          lote liberado. Quando a diferença explica a falta, a
+                          causa não é compra — é uma decisão de Qualidade
+                          pendente, e a tela dizia só "falta 35" enquanto o
+                          material estava na prateleira.
+                        */}
+                        {!ordemEncerrada &&
+                          Number(requirement.shortage) > 0 &&
+                          Number(requirement.onHand) -
+                            Number(requirement.reserved) -
+                            Number(requirement.available) >
+                            0 && (
+                            <>
+                              <br />
+                              <span className="field__hint">
+                                Há{" "}
+                                {(
+                                  Number(requirement.onHand) -
+                                  Number(requirement.reserved) -
+                                  Number(requirement.available)
+                                ).toLocaleString("pt-BR")}{" "}
+                                {requirement.stockUnitCode} em estoque físico ainda não liberado
+                                pela Qualidade.{" "}
+                                <Link to={`/estoque/${requirement.itemId}`}>Ver lotes do item</Link>
+                              </span>
+                            </>
+                          )}
+                        {!ordemEncerrada &&
+                          requirement.supplyResponsibility === "CUSTOMER" &&
                           Number(requirement.shortage) > 0 && (
                             <>
                               <br />
@@ -877,7 +968,8 @@ export function ProductionOrderPage() {
                               <span className="field__hint">Aguardando material do cliente</span>
                             </>
                           )}
-                        {requirement.supplyResponsibility !== "CUSTOMER" &&
+                        {!ordemEncerrada &&
+                          requirement.supplyResponsibility !== "CUSTOMER" &&
                           Number(requirement.shortage) > 0 && (
                             <>
                               <br />
@@ -942,7 +1034,7 @@ export function ProductionOrderPage() {
                     <th>Item</th>
                     <th>Lote</th>
                     <th>Validade</th>
-                    <th>Quantidade reservada</th>
+                    <th className="is-numeric">Quantidade reservada</th>
                     <th>Localização</th>
                   </tr>
                 </thead>
@@ -954,9 +1046,9 @@ export function ProductionOrderPage() {
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
                       <td>
-                        {line.expiryDate ? new Date(line.expiryDate).toLocaleDateString("pt-BR") : "—"}
+                        {formatDate(line.expiryDate)}
                       </td>
-                      <td>
+                      <td className="is-numeric">
                         {line.quantity} {line.unitCode}
                       </td>
                       <td>{line.location ?? "—"}</td>
@@ -981,7 +1073,7 @@ export function ProductionOrderPage() {
                     <th>Lote esperado</th>
                     <th>Validade</th>
                     <th>Localização</th>
-                    <th>Reservado</th>
+                    <th className="is-numeric">Reservado</th>
                     <th>Status</th>
                     <th aria-hidden="true" />
                   </tr>
@@ -1001,10 +1093,10 @@ export function ProductionOrderPage() {
                         </td>
                         <td>{line.lotId ? line.lotCode : "— (sem controle de lote)"}</td>
                         <td>
-                          {line.expiryDate ? new Date(line.expiryDate).toLocaleDateString("pt-BR") : "—"}
+                          {formatDate(line.expiryDate)}
                         </td>
                         <td>{line.location ?? "—"}</td>
-                        <td>
+                        <td className="is-numeric">
                           {line.quantity} {line.unitCode}
                         </td>
                         <td>
@@ -1085,8 +1177,8 @@ export function ProductionOrderPage() {
                   <tr>
                     <th>Item</th>
                     <th>Lote</th>
-                    <th>Reservado</th>
-                    <th>Consumido</th>
+                    <th className="is-numeric">Reservado</th>
+                    <th className="is-numeric">Consumido</th>
                     <th>Restante</th>
                     <th>Consumir agora</th>
                     <th aria-hidden="true" />
@@ -1099,10 +1191,10 @@ export function ProductionOrderPage() {
                         <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
-                      <td>
+                      <td className="is-numeric">
                         {line.quantity} {line.unitCode}
                       </td>
-                      <td>{line.consumedQuantity}</td>
+                      <td className="is-numeric">{line.consumedQuantity}</td>
                       <td>{line.remainingQuantity}</td>
                       <td>
                         <input
@@ -1153,7 +1245,7 @@ export function ProductionOrderPage() {
                       <th>Data</th>
                       <th>Item</th>
                       <th>Lote</th>
-                      <th>Quantidade</th>
+                      <th className="is-numeric">Quantidade</th>
                       <th>Usuário</th>
                     </tr>
                   </thead>
@@ -1165,7 +1257,7 @@ export function ProductionOrderPage() {
                           <EntityLink kind="item" id={consumption.itemId} code={consumption.itemCode} name={consumption.itemName} />
                         </td>
                         <td>{consumption.lotCode ?? "—"}</td>
-                        <td>
+                        <td className="is-numeric">
                           {consumption.quantity} {consumption.unitCode}
                         </td>
                         <td>{consumption.consumedBy ?? "—"}</td>
@@ -1337,7 +1429,7 @@ export function ProductionOrderPage() {
                   <thead>
                     <tr>
                       <th>Data</th>
-                      <th>Quantidade</th>
+                      <th className="is-numeric">Quantidade</th>
                       <th>Lote interno</th>
                       <th>Lote Veridi</th>
                       <th>Usuário</th>
@@ -1348,7 +1440,7 @@ export function ProductionOrderPage() {
                     {productionOrder.outputs.map((output) => (
                       <tr key={output.id}>
                         <td>{formatDateTime(output.producedAt)}</td>
-                        <td>
+                        <td className="is-numeric">
                           {output.quantity} {productionOrder.outputUnitCode}
                         </td>
                         <td>{output.lotCode ?? "—"}</td>
@@ -1512,7 +1604,14 @@ export function ProductionOrderPage() {
               <p className="field__hint">
                 Custo parcial: existem materiais consumidos sem referência de custo (
                 {materialCost.missingCostItems.join(", ")}). O subtotal conhecido (
-                {formatBRL(materialCost.knownMaterialCostSubtotal)}) não representa o custo total.
+                {formatBRL(materialCost.knownMaterialCostSubtotal)}) não representa o custo total.{" "}
+                {/* O custo do material vem do preço de fornecedor do item —
+                    apontar o caminho evita que a pessoa aceite o parcial por
+                    não saber onde ele se resolve. */}
+                <Link to="/compras/item-fornecedor">
+                  Definir preço de fornecedor para esses itens
+                </Link>
+                .
               </p>
             )}
 
@@ -1522,10 +1621,10 @@ export function ProductionOrderPage() {
                   <tr>
                     <th>Item</th>
                     <th>Lote</th>
-                    <th>Consumido</th>
-                    <th>Custo unitário</th>
+                    <th className="is-numeric">Consumido</th>
+                    <th className="is-numeric">Custo unitário</th>
                     <th>Origem</th>
-                    <th>Custo</th>
+                    <th className="is-numeric">Custo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1535,10 +1634,10 @@ export function ProductionOrderPage() {
                         <EntityLink kind="item" id={consumption.itemId} code={consumption.itemCode} name={consumption.itemName} />
                       </td>
                       <td>{consumption.lotCode ?? "—"}</td>
-                      <td>
+                      <td className="is-numeric">
                         {consumption.quantity} {consumption.unitCode}
                       </td>
-                      <td>{formatBRL(consumption.unitCost)}</td>
+                      <td className="is-numeric">{formatBRL(consumption.unitCost)}</td>
                       <td>
                         <span
                           className={
@@ -1552,7 +1651,7 @@ export function ProductionOrderPage() {
                           {COST_SOURCE_LABELS[consumption.costSource]}
                         </span>
                       </td>
-                      <td>{formatBRL(consumption.materialCost)}</td>
+                      <td className="is-numeric">{formatBRL(consumption.materialCost)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1669,13 +1768,7 @@ export function ProductionOrderPage() {
 
       {mismatchDialog && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="mismatch-title"
-          >
+          <ModalDialog labelledBy="mismatch-title" onClose={() => setMismatchDialog(null)}>
             <h2 id="mismatch-title">Lote informado é diferente do esperado</h2>
             <dl className="definition-list">
               <dt>Lote reservado</dt>
@@ -1707,19 +1800,13 @@ export function ProductionOrderPage() {
                 {substituting ? "Substituindo…" : "Usar lote diferente"}
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
 
       {completeDialogOpen && productionOrder && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="complete-op-title"
-          >
+          <ModalDialog labelledBy="complete-op-title" onClose={() => setCompleteDialogOpen(false)}>
             <h2 id="complete-op-title">Concluir ordem de produção?</h2>
             <p>
               Produzido: {productionOrder.producedQuantity} de {productionOrder.plannedQuantity}{" "}
@@ -1759,19 +1846,13 @@ export function ProductionOrderPage() {
                 {completing ? "Concluindo…" : "Concluir OP"}
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
 
       {cancelDialogOpen && (
         <>
-          <div className="confirm-overlay" />
-          <div
-            className="confirm-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="cancel-op-title"
-          >
+          <ModalDialog labelledBy="cancel-op-title" onClose={() => setCancelDialogOpen(false)}>
             <h2 id="cancel-op-title">Cancelar ordem de produção?</h2>
             <p>
               {productionOrder?.code} permanecerá no histórico. Esta ação não pode ser desfeita.
@@ -1805,7 +1886,7 @@ export function ProductionOrderPage() {
                 Cancelar OP
               </button>
             </div>
-          </div>
+          </ModalDialog>
         </>
       )}
     </>

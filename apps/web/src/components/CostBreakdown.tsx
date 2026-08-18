@@ -45,10 +45,10 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
           <thead>
             <tr>
               <th>Material</th>
-              <th>Quantidade</th>
-              <th>Custo unitário</th>
+              <th className="is-numeric">Quantidade</th>
+              <th className="is-numeric">Custo unitário</th>
               <th>Origem do custo</th>
-              <th>Subtotal</th>
+              <th className="is-numeric">Subtotal</th>
             </tr>
           </thead>
           <tbody>
@@ -57,17 +57,17 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
                 <td>
                   <span className="code">{material.itemCode}</span> {material.itemName}
                 </td>
-                <td>
+                <td className="is-numeric">
                   {material.requiredQuantity} {material.unitCode}
                 </td>
-                <td>{formatUnitCost(material.unitCost)}</td>
+                <td className="is-numeric">{formatUnitCost(material.unitCost)}</td>
                 <td>
                   {INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[material.costSource]}
                   {material.costSourceDetails && (
                     <span className="field__hint"> {material.costSourceDetails}</span>
                   )}
                 </td>
-                <td>{material.subtotal === null ? "—" : formatBRL(material.subtotal)}</td>
+                <td className="is-numeric">{material.subtotal === null ? "—" : formatBRL(material.subtotal)}</td>
               </tr>
             ))}
             {result.materials.length === 0 && (
@@ -88,9 +88,9 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
               <tr>
                 <th>Componente industrial</th>
                 <th>Base</th>
-                <th>Quantidade</th>
+                <th className="is-numeric">Quantidade</th>
                 <th>Tarifa / valor</th>
-                <th>Subtotal</th>
+                <th className="is-numeric">Subtotal</th>
               </tr>
             </thead>
             <tbody>
@@ -100,7 +100,7 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
                     <span className="code">{resource.resourceCode}</span> {resource.resourceName}
                   </td>
                   <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.resourceType]}</td>
-                  <td>
+                  <td className="is-numeric">
                     {resource.quantity} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
                   </td>
                   <td>
@@ -109,14 +109,14 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
                       <span className="field__hint"> referência atual</span>
                     )}
                   </td>
-                  <td>{resource.subtotal === null ? "—" : formatBRL(resource.subtotal)}</td>
+                  <td className="is-numeric">{resource.subtotal === null ? "—" : formatBRL(resource.subtotal)}</td>
                 </tr>
               ))}
               {result.manualLines.map((line) => (
                 <tr key={line.lineId}>
                   <td>{line.description}</td>
                   <td>{INDUSTRIAL_COST_CATEGORY_LABELS[line.category]}</td>
-                  <td>
+                  <td className="is-numeric">
                     {line.computedUnits ? `${line.computedUnits} cx` : "—"}
                     <span className="field__hint">
                       {" "}
@@ -130,7 +130,7 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
                         ? `${line.rateValue}%`
                         : formatBRL(line.rateValue)}
                   </td>
-                  <td>{line.subtotal === null ? "—" : formatBRL(line.subtotal)}</td>
+                  <td className="is-numeric">{line.subtotal === null ? "—" : formatBRL(line.subtotal)}</td>
                 </tr>
               ))}
             </tbody>

@@ -27,6 +27,7 @@ import {
   PRODUCT_ATTACHMENT_TYPES,
 } from "@veridi/shared";
 import { listUnits } from "../../lib/units-api";
+import { formatDate } from "../../lib/dates";
 
 interface ProductFormModalProps {
   mode: "create" | "edit";
@@ -263,7 +264,7 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
       <>
         <span className="modal-fullscreen__foot-meta">
           Última alteração:{" "}
-          {product ? new Date(product.updatedAt).toLocaleDateString("pt-BR") : "—"}
+          {product ? formatDate(product.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>

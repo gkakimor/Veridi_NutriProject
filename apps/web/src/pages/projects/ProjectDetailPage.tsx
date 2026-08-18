@@ -1,58 +1,37 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { ProjectDTO, ProjectSampleDTO, QuoteVersionDTO } from "@veridi/shared";
+import type { ProjectDTO, ProjectSampleDTO } from "@veridi/shared";
 import {
   PROJECT_ATTACHMENT_TYPES,
   PROJECT_SAMPLE_STATUS_LABELS,
-  PROJECT_CANCEL_REASONS,
   PROJECT_CANCEL_REASON_LABELS,
   PROJECT_SOURCE_LABELS,
   PROJECT_STATUS_LABELS,
-  QUOTE_STATUS_LABELS,
 } from "@veridi/shared";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
 import { ProjectCostingSection } from "./ProjectCostingSection";
-import { QuotePricingSection } from "./QuotePricingSection";
+import { ProjectProductsSection } from "./ProjectProductsSection";
+import { ApprovalPreviewDialog } from "./ApprovalPreviewDialog";
+import { CancelProjectDialog } from "./CancelProjectDialog";
+import { QuoteVersionsSection } from "./QuoteVersionsSection";
 import { FlowContext } from "../../components/FlowContext";
 import {
-  acceptQuoteVersion,
   approveProject,
   cancelProject,
   changeProjectStatus,
-  createQuoteVersion,
   getProject,
-  rejectQuoteVersion,
-  sendQuoteVersion,
-  updateQuoteVersion,
 } from "../../lib/projects-api";
 import { createSample, listSamples } from "../../lib/samples-api";
 import { useAuth } from "../../app/AuthProvider";
-import { formatBRL } from "../../lib/currency";
 import { ProjectFormModal } from "./ProjectFormModal";
 import { EntityLink } from "../../components/EntityLink";
+import { formatDate } from "../../lib/dates";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("pt-BR");
-}
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleString("pt-BR");
-}
-
-function quoteBadgeClass(status: QuoteVersionDTO["status"]): string {
-  switch (status) {
-    case "ACCEPTED":
-      return "badge badge--active";
-    case "REJECTED":
-      return "badge badge--err";
-    case "SENT":
-      return "badge badge--warn";
-    default:
-      return "badge badge--neutral";
-  }
 }
 
 /**
@@ -74,16 +53,9 @@ export function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-
-  const [draftQuantity, setDraftQuantity] = useState("");
-  const [draftUom, setDraftUom] = useState("un");
-  const [draftPrice, setDraftPrice] = useState("");
-  const [draftValidUntil, setDraftValidUntil] = useState("");
-  const [draftPaymentTerms, setDraftPaymentTerms] = useState("");
-  const [draftLeadTime, setDraftLeadTime] = useState("");
-  const [draftNotes, setDraftNotes] = useState("");
-
-  const draft = project?.quoteVersions.find((quote) => quote.status === "DRAFT") ?? null;
+  const [sampleProductId, setSampleProductId] = useState("");
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   // Criar amostra é ato de desenvolvimento: Comercial pede, Produção também
   // pode abrir. Quem consome material continua sendo só Produção/ADMIN.
@@ -96,19 +68,7 @@ export function ProjectDetailPage() {
     if (!id) return;
     setLoading(true);
     getProject(id)
-      .then((result) => {
-        setProject(result);
-        const currentDraft = result.quoteVersions.find((quote) => quote.status === "DRAFT");
-        if (currentDraft) {
-          setDraftQuantity(currentDraft.quotedQuantity ?? "");
-          setDraftUom(currentDraft.uomCode ?? "un");
-          setDraftPrice(currentDraft.unitPrice ?? "");
-          setDraftValidUntil(currentDraft.validUntil ? currentDraft.validUntil.slice(0, 10) : "");
-          setDraftPaymentTerms(currentDraft.paymentTerms ?? "");
-          setDraftLeadTime(currentDraft.leadTimeDays ? String(currentDraft.leadTimeDays) : "");
-          setDraftNotes(currentDraft.commercialNotes ?? "");
-        }
-      })
+      .then(setProject)
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id]);
@@ -303,7 +263,7 @@ export function ProjectDetailPage() {
                 type="button"
                 className="btn btn--accent btn--sm"
                 disabled={saving}
-                onClick={() => void run(() => approveProject(project.id))}
+                onClick={() => setApprovalOpen(true)}
               >
                 Aprovar projeto
               </button>
@@ -311,23 +271,7 @@ export function ProjectDetailPage() {
                 type="button"
                 className="btn btn--danger btn--sm"
                 disabled={saving}
-                onClick={() => {
-                  const reason = window.prompt(
-                    `Motivo do cancelamento (${PROJECT_CANCEL_REASONS.map(
-                      (option) => `${option}=${PROJECT_CANCEL_REASON_LABELS[option]}`,
-                    ).join(", ")}):`,
-                    "PRICE",
-                  );
-                  if (!reason) return;
-                  const details =
-                    reason === "OTHER" ? window.prompt("Descreva o motivo:") ?? "" : undefined;
-                  void run(() =>
-                    cancelProject(project.id, {
-                      cancelReason: reason as never,
-                      ...(details ? { cancelReasonDetails: details } : {}),
-                    }),
-                  );
-                }}
+                onClick={() => setCancelOpen(true)}
               >
                 Cancelar projeto
               </button>
@@ -335,239 +279,30 @@ export function ProjectDetailPage() {
           )}
         </FormSection>
 
+        <ProjectProductsSection
+          projectId={project.id}
+          customerId={project.customerId}
+          products={project.products}
+          // Papel NÃO basta: projeto aprovado ou cancelado é histórico e o
+          // backend recusa produto novo. Oferecer o botão assim mandava o
+          // Comercial preencher um nome para receber 409 no fim.
+          editable={canEdit && project.status !== "APPROVED" && project.status !== "CANCELLED"}
+          projectStatus={project.status}
+          onChanged={load}
+        />
+
         <ProjectCostingSection
           project={project}
           canEdit={canEdit}
           onChanged={load}
         />
 
-        <FormSection
-          title="Orçamentos"
-          subtitle="Cada negociação é uma versão. Enviado congela o snapshot do cliente e vira histórico."
-        >
-          <div className="table-container">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Versão</th>
-                  <th>Data</th>
-                  <th>Quantidade</th>
-                  <th>Preço unitário</th>
-                  <th>Total</th>
-                  <th>Validade</th>
-                  <th>Status</th>
-                  <th aria-hidden="true" />
-                </tr>
-              </thead>
-              <tbody>
-                {project.quoteVersions.map((quote) => (
-                  <tr key={quote.id}>
-                    <td className="is-code">{quote.versionLabel}</td>
-                    <td>{formatDate(quote.quoteDate)}</td>
-                    <td>
-                      {quote.quotedQuantity ?? "—"} {quote.uomCode ?? ""}
-                    </td>
-                    <td>{quote.unitPrice ? formatBRL(quote.unitPrice) : "—"}</td>
-                    <td>{quote.total ? formatBRL(quote.total) : "—"}</td>
-                    <td>{formatDate(quote.validUntil)}</td>
-                    <td>
-                      <span className={quoteBadgeClass(quote.status)}>
-                        {QUOTE_STATUS_LABELS[quote.status]}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="table__actions">
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() =>
-                            window.open(`/comercial/orcamentos/${quote.id}/imprimir`, "_blank")
-                          }
-                        >
-                          Imprimir
-                        </button>
-                        {quote.status === "SENT" && (
-                          <>
-                            <button
-                              type="button"
-                              className="btn btn--ghost btn--sm"
-                              disabled={saving}
-                              onClick={() => void run(() => acceptQuoteVersion(quote.id))}
-                            >
-                              Aceitar
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn--ghost btn--sm"
-                              disabled={saving}
-                              onClick={() => {
-                                const reason = window.prompt("Motivo da recusa (opcional):") ?? "";
-                                void run(() =>
-                                  rejectQuoteVersion(
-                                    quote.id,
-                                    reason.trim() ? { reason: reason.trim() } : {},
-                                  ),
-                                );
-                              }}
-                            >
-                              Recusar
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-
-                {project.quoteVersions.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="table__empty">
-                      Nenhuma versão de orçamento.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {editable && (
-            <div className="line-actions">
-              <button
-                type="button"
-                className="btn btn--secondary btn--sm"
-                disabled={saving}
-                onClick={() => void run(() => createQuoteVersion(project.id))}
-              >
-                {draft ? "Abrir rascunho" : "Nova versão"}
-              </button>
-            </div>
-          )}
-
-          {draft && (
-            <>
-              <h4>Rascunho {draft.versionLabel}</h4>
-              <div className="field field--narrow">
-                <label htmlFor="quote-quantity">Quantidade</label>
-                <input
-                  id="quote-quantity"
-                  type="text"
-                  inputMode="decimal"
-                  value={draftQuantity}
-                  onChange={(event) => setDraftQuantity(event.target.value)}
-                />
-              </div>
-              <div className="field field--narrow">
-                <label htmlFor="quote-uom">Unidade</label>
-                <input
-                  id="quote-uom"
-                  type="text"
-                  value={draftUom}
-                  onChange={(event) => setDraftUom(event.target.value)}
-                />
-              </div>
-              <div className="field field--narrow">
-                <label htmlFor="quote-price">Preço unitário</label>
-                <input
-                  id="quote-price"
-                  type="text"
-                  inputMode="decimal"
-                  value={draftPrice}
-                  onChange={(event) => setDraftPrice(event.target.value)}
-                />
-                <p className="field__hint">Vazio = ainda não precificado; 0 é preço zero real.</p>
-              </div>
-              <div className="field field--narrow">
-                <label htmlFor="quote-valid-until">Validade da proposta</label>
-                <input
-                  id="quote-valid-until"
-                  type="date"
-                  value={draftValidUntil}
-                  onChange={(event) => setDraftValidUntil(event.target.value)}
-                />
-              </div>
-              <div className="field field--narrow">
-                <label htmlFor="quote-payment-terms">Condições de pagamento</label>
-                <input
-                  id="quote-payment-terms"
-                  type="text"
-                  value={draftPaymentTerms}
-                  onChange={(event) => setDraftPaymentTerms(event.target.value)}
-                />
-              </div>
-              <div className="field field--narrow">
-                <label htmlFor="quote-lead-time">Prazo de entrega (dias)</label>
-                <input
-                  id="quote-lead-time"
-                  type="text"
-                  inputMode="numeric"
-                  value={draftLeadTime}
-                  onChange={(event) => setDraftLeadTime(event.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="quote-notes">Observações comerciais</label>
-                <textarea
-                  id="quote-notes"
-                  rows={2}
-                  value={draftNotes}
-                  onChange={(event) => setDraftNotes(event.target.value)}
-                />
-              </div>
-
-              <div className="line-actions">
-                <button
-                  type="button"
-                  className="btn btn--secondary"
-                  disabled={saving}
-                  onClick={() =>
-                    void run(() =>
-                      updateQuoteVersion(draft.id, {
-                        quotedQuantity: draftQuantity.trim() || null,
-                        uomCode: draftUom.trim() || null,
-                        unitPrice: draftPrice.trim() || null,
-                        validUntil: draftValidUntil
-                          ? new Date(`${draftValidUntil}T12:00:00`).toISOString()
-                          : null,
-                        paymentTerms: draftPaymentTerms.trim() || null,
-                        leadTimeDays: draftLeadTime.trim() ? Number(draftLeadTime) : null,
-                        commercialNotes: draftNotes.trim() || null,
-                      }),
-                    )
-                  }
-                >
-                  Salvar rascunho
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--accent"
-                  disabled={saving}
-                  onClick={() => {
-                    const partial =
-                      draft.pricing?.costQuality === "PARTIAL" ||
-                      draft.pricing?.costQuality === "NO_COST";
-                    if (
-                      partial &&
-                      !window.confirm(
-                        "Esta proposta utiliza preço com custo industrial incompleto. Enviar assim?",
-                      )
-                    ) {
-                      return;
-                    }
-                    void run(() =>
-                      sendQuoteVersion(draft.id, { confirmIncompleteCost: partial }),
-                    );
-                  }}
-                >
-                  Marcar como enviado
-                </button>
-              </div>
-            </>
-          )}
-
-          {draft && (
-            <QuotePricingSection quote={draft} canEdit={canEdit} onChanged={load} />
-          )}
-        </FormSection>
+        <QuoteVersionsSection
+          project={project}
+          canEdit={canEdit}
+          projectStatus={project.status}
+          onChanged={load}
+        />
 
         <FormSection
           title="Amostras / testes"
@@ -626,13 +361,35 @@ export function ProjectDetailPage() {
             project.status !== "APPROVED" &&
             project.status !== "CANCELLED" && (
               <div className="line-actions">
+                {/* Com mais de um produto, qual deles a amostra testa não se
+                    deduz depois — quem cria escolhe agora. */}
+                {project.products.length > 1 && (
+                  <div className="field field--narrow">
+                    <label htmlFor="sample-product">Produto testado</label>
+                    <select
+                      id="sample-product"
+                      value={sampleProductId}
+                      onChange={(event) => setSampleProductId(event.target.value)}
+                    >
+                      <option value="">Selecione…</option>
+                      {project.products.map((link) => (
+                        <option key={link.id} value={link.id}>
+                          {link.productCode} · {link.productName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="btn btn--secondary btn--sm"
-                  disabled={saving}
+                  disabled={saving || (project.products.length > 1 && sampleProductId === "")}
                   onClick={() =>
                     void run(async () => {
-                      const sample = await createSample(id);
+                      const sample = await createSample(
+                        id,
+                        sampleProductId ? { projectProductId: sampleProductId } : {},
+                      );
                       navigate(`/comercial/amostras/${sample.id}`);
                     })
                   }
@@ -641,7 +398,47 @@ export function ProjectDetailPage() {
                 </button>
               </div>
             )}
+
+          {/* Regra de negócio invisível é regra que exige treinamento: a ação
+              sumia e nada na tela dizia por quê. */}
+          {canCreateSample &&
+            (project.status === "APPROVED" || project.status === "CANCELLED") && (
+              <p className="field__hint">
+                {project.status === "APPROVED"
+                  ? "Amostras são etapa de desenvolvimento: depois da aprovação do projeto elas não são mais criadas aqui. As amostras acima continuam consultáveis."
+                  : "Projeto cancelado não recebe amostra nova. As amostras acima continuam consultáveis."}
+              </p>
+            )}
         </FormSection>
+
+        {cancelOpen && (
+          <CancelProjectDialog
+            projectCode={project.code}
+            onCancel={() => setCancelOpen(false)}
+            onConfirm={(reason, details) =>
+              void run(async () => {
+                await cancelProject(project.id, {
+                  cancelReason: reason,
+                  ...(details ? { cancelReasonDetails: details } : {}),
+                });
+                setCancelOpen(false);
+              })
+            }
+          />
+        )}
+
+        {approvalOpen && (
+          <ApprovalPreviewDialog
+            project={project}
+            onCancel={() => setApprovalOpen(false)}
+            onConfirm={() =>
+              void run(async () => {
+                await approveProject(project.id);
+                setApprovalOpen(false);
+              })
+            }
+          />
+        )}
 
         {id && (
           <AttachmentsSection

@@ -12,12 +12,15 @@ import {
   QuoteUomIncompatibleError,
   QuoteWithoutProductError,
   TierWithoutPriceError,
-  applyQuotePricing,
-  getQuotePricingOptions,
-  getQuoteWithPricing,
-  toPricingProvenance,
-  useManualQuotePrice,
+  applyQuoteLinePricing,
+  getQuoteLinePricingOptions,
+  useManualQuoteLinePrice,
 } from "./quote-pricing.service.js";
+import {
+  addProjectProduct,
+  listProjectProducts,
+  removeProjectProduct,
+} from "./project-products.service.js";
 import {
   ProjectNotPreparableError,
   ProjectProductAlreadyExistsError,
@@ -25,6 +28,12 @@ import {
 import {
   CustomerLockedError,
   IncompleteQuoteError,
+  ProjectProductCustomerMismatchError,
+  ProjectProductDuplicateError,
+  ProjectProductNotFoundError,
+  QuoteLineDuplicateError,
+  QuoteLineNotFoundError,
+  QuoteLineProductNotInProjectError,
   InvalidStatusTransitionError,
   MissingAcceptedQuoteError,
   MissingCancelDetailsError,
@@ -46,6 +55,9 @@ import {
   listProjectsQuerySchema,
   rejectQuoteSchema,
   updateProjectSchema,
+  addProjectProductSchema,
+  addQuoteLineSchema,
+  updateQuoteLineSchema,
   updateQuoteVersionSchema,
 } from "./projects.schemas.js";
 import {
@@ -61,7 +73,11 @@ import {
 } from "./projects.service.js";
 import {
   acceptQuoteVersion,
+  addQuoteLine,
   createQuoteVersion,
+  removeQuoteLine,
+  updateQuoteLine,
+  canSeePricingProvenance,
   getQuoteById,
   rejectQuoteVersion,
   sendQuoteVersion,
@@ -78,8 +94,22 @@ function mapDomainError(
   if (error instanceof ForbiddenError) {
     return { status: 403, body: { error: "forbidden", message: error.message } };
   }
-  if (error instanceof ProjectNotFoundError || error instanceof QuoteNotFoundError) {
+  if (
+    error instanceof ProjectNotFoundError ||
+    error instanceof QuoteNotFoundError ||
+    error instanceof QuoteLineNotFoundError ||
+    error instanceof ProjectProductNotFoundError
+  ) {
     return { status: 404, body: { error: "not_found", message: error.message } };
+  }
+  if (error instanceof QuoteLineDuplicateError || error instanceof ProjectProductDuplicateError) {
+    return { status: 409, body: { error: "duplicate", message: error.message } };
+  }
+  if (error instanceof QuoteLineProductNotInProjectError) {
+    return { status: 400, body: { error: "product_not_in_project", message: error.message } };
+  }
+  if (error instanceof ProjectProductCustomerMismatchError) {
+    return { status: 400, body: { error: "customer_mismatch", message: error.message } };
   }
   if (error instanceof ProjectLockedError) {
     return { status: 409, body: { error: "project_locked", message: error.message } };
@@ -165,7 +195,10 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/projects/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const project = await getProjectById(id);
+    const user = requireCurrentUser(request);
+    // Mesmo gate do detalhe do orçamento: Produção vê a proposta, nunca
+    // custo, margem ou comissão.
+    const project = await getProjectById(id, canSeePricingProvenance(user.role));
     if (!project) return reply.status(404).send({ error: "not_found" });
     return reply.send(project);
   });
@@ -279,6 +312,49 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  /*
+   * Produtos do projeto.
+   *
+   * Duas formas legítimas de entrar: criar o produto técnico aqui, ou
+   * vincular um que já existe. Produto de outro cliente é recusado.
+   */
+  app.get("/projects/:id/products", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    requireCurrentUser(request);
+    return reply.send({ products: await listProjectProducts(id) });
+  });
+
+  app.post("/projects/:id/products", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = addProjectProductSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.status(201).send(await addProjectProduct(id, parsed.data, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.delete("/project-products/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+      await removeProjectProduct(id);
+      return reply.status(204).send();
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
   app.post("/projects/:id/quote-versions", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
@@ -294,22 +370,76 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/quote-versions/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const user = requireCurrentUser(request);
-    const quote = await getQuoteById(id);
+    // Custo, margem, markup e comissão são informação interna: só quem
+    // negocia (ou administra) recebe a proveniência econômica — e ela é por
+    // linha, porque cada produto tem a própria cadeia PREC → CALC. O DTO
+    // monta isso a partir das relações já carregadas: antes a rota fazia uma
+    // consulta por linha, e o detalhe do projeto não montava nada.
+    const quote = await getQuoteById(id, canSeePricingProvenance(user.role));
     if (!quote) return reply.status(404).send({ error: "not_found" });
 
-    // Custo, margem, markup e comissão são informação interna: só quem
-    // negocia (ou administra) recebe a proveniência econômica.
-    if (user.role !== "COMMERCIAL" && user.role !== "ADMIN") return reply.send(quote);
-
-    const row = await getQuoteWithPricing(id);
-    return reply.send({ ...quote, pricing: toPricingProvenance(row) });
+    return reply.send(quote);
   });
 
-  app.get("/quote-versions/:id/pricing-options", async (request, reply) => {
+  /*
+   * Linhas do orçamento.
+   *
+   * A proposta é da negociação: só produto associado ao projeto entra, e só
+   * enquanto a versão é rascunho. Proposta apresentada é história.
+   */
+  app.post("/quote-versions/:id/lines", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
       requireRole(request, "COMMERCIAL", "ADMIN");
-      const pricing = await getQuotePricingOptions(id);
+      const parsed = addQuoteLineSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.status(201).send(await addQuoteLine(id, parsed.data));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.patch("/quote-lines/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = updateQuoteLineSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.send(await updateQuoteLine(id, parsed.data));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.delete("/quote-lines/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+      return reply.send(await removeQuoteLine(id));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.get("/quote-lines/:id/pricing-options", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+      const pricing = await getQuoteLinePricingOptions(id);
       if (!pricing) return reply.status(404).send({ error: "not_found" });
       return reply.send(pricing);
     } catch (error) {
@@ -319,7 +449,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post("/quote-versions/:id/apply-pricing", async (request, reply) => {
+  app.post("/quote-lines/:id/apply-pricing", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
       const actor = requireRole(request, "COMMERCIAL", "ADMIN");
@@ -329,7 +459,8 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
           .status(400)
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
-      return reply.send(await applyQuotePricing(id, parsed.data.pricingTierId, actor));
+      const quoteVersionId = await applyQuoteLinePricing(id, parsed.data.pricingTierId, actor);
+      return reply.send(await getQuoteById(quoteVersionId, canSeePricingProvenance(actor.role)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
@@ -337,11 +468,12 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post("/quote-versions/:id/manual-price", async (request, reply) => {
+  app.post("/quote-lines/:id/manual-price", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
       const actor = requireRole(request, "COMMERCIAL", "ADMIN");
-      return reply.send(await useManualQuotePrice(id, actor));
+      const quoteVersionId = await useManualQuoteLinePrice(id, actor);
+      return reply.send(await getQuoteById(quoteVersionId, canSeePricingProvenance(actor.role)));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

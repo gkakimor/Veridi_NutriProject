@@ -220,7 +220,7 @@ export function ItemsPage() {
       </SelectionBar>
 
       <div className="table-container">
-        <table className="table table--clickable-rows">
+        <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
               <SelectionHeaderCell

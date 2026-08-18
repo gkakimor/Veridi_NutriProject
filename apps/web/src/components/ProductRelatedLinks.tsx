@@ -10,7 +10,7 @@ import { RelatedLinks } from "./RelatedLinks";
  *
  * `current` some da barra — link para a tela em que a pessoa já está é ruído.
  */
-export type ProductScreen = "product" | "formulation" | "costs" | "pricing";
+export type ProductScreen = "product" | "formulation" | "costs" | "cmv" | "pricing";
 
 export function ProductRelatedLinks({
   productId,
@@ -27,6 +27,7 @@ export function ProductRelatedLinks({
     { key: "product", label: "Produto", to: `/cadastros/produtos?productId=${productId}&open=${productId}` },
     { key: "formulation", label: "Formulação", to: `/producao/formulacoes/${productId}` },
     { key: "costs", label: "Custos industriais", to: `/produtos/${productId}/custos` },
+    { key: "cmv", label: "CMV", to: `/produtos/${productId}/cmv` },
     { key: "pricing", label: "Precificação", to: `/gestao/precificacao?productId=${productId}` },
   ];
 

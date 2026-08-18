@@ -4398,6 +4398,185 @@ backup do banco, rate limit no login.
 
 ---
 
+# CMV — custo de produzir uma quantidade
+
+CMV é a visão de negócio do custo industrial de um produto para uma
+quantidade, composta a partir de Formulação + Estrutura de Custos + cálculo
+vigente. **Não é fonte de verdade separada**: nenhuma entidade, nenhuma
+tabela, nenhuma migration — e nenhum motor próprio. Todo número vem de
+`costForOutputQuantity`, o mesmo das faixas de precificação; a composição é
+anotada por esse motor enquanto ele soma.
+
+## Backend
+
+- `GET /products/:id/cmv?quantity=&referenceDate=` — leitura, sem
+  persistência; simular não cria CALC.
+- `quantity` e `referenceDate` explícitas. A data escolhe o cálculo salvo
+  vigente **até aquele dia de calendário** — antes de existir cálculo não há
+  CMV, e a resposta diz isso.
+- Faixa por quantidade EXATA: sem interpolação, sem faixa próxima, sem cair
+  para a de baixo.
+- Material do cliente mantém quantidade física e fica fora da aquisição
+  Veridi — nem zero, nem desconhecido.
+- Economia interna (preço, faixa) atrás de `canSeePricingProvenance`; nenhuma
+  permissão nova.
+- Linha percentual passou a aparecer na composição: estava dentro do total e
+  invisível na conferência.
+
+## Web
+
+- `/produtos/:productId/cmv` — aceita `quantity`, `projectId`,
+  `quoteVersionId`, `quoteLineId` e `referenceDate` por query; a quantidade
+  do link já calcula sozinha.
+- Cartões de resumo (quantidade, total, por unidade, por 1.000, qualidade,
+  preço vigente) acima da dobra em 1280×720, 1366×768 e 1440×900.
+- Composição por grupo: materiais, embalagens, material do cliente, recursos
+  industriais e outros custos — em português, sem enum cru.
+- Parcial mostra "CMV indisponível" + subtotal conhecido, com a microcópia de
+  que subtotal não é CMV. `R$ 0,00` nunca substitui desconhecido.
+- Entradas: resumo "CMV e precificação" no cadastro do produto, ação **CMV**
+  na linha de Produtos do Projeto (estrutura e precificação foram para o
+  menu de ações, nada sumiu em 1366px) e no menu da lista de Produtos.
+- Volta: "← Voltar ao orçamento" tem prioridade sobre "← Voltar ao projeto",
+  que tem prioridade sobre a origem registrada no produto.
+
+## Orçamento ↔ CMV
+
+- A linha do orçamento consulta a precificação vigente assim que produto e
+  quantidade existem, e **sugere**: "Existe uma precificação vigente para
+  1.000 un: R$ 38,90/un" + `Aplicar preço calculado`. Existir faixa nunca
+  muda o preço sozinho.
+- Sem faixa exata: "Não existe precificação vigente para esta quantidade" +
+  `Simular CMV`. Nenhum preço vizinho é oferecido.
+- `Simular CMV` leva produto, quantidade e contexto (projeto, versão, linha);
+  o retorno reabre a MESMA versão e traz a linha ao campo de visão.
+- CMV nunca vira preço: só faixa explícita ou manual.
+
+## Dataset DEMO
+
+Os recursos industriais do Product A são **fictícios** (mão de obra,
+misturador com potência, energia derivada do equipamento) e **não
+representam custo real da Veridi**; não foram calibrados para produzir
+margem. Baseline reproduzível a partir de migration limpa + `db:demo`:
+
+| Qtd | CMV total | CMV/un | CMV/1.000 | Lotes | Faixa |
+|---|---|---|---|---|---|
+| 500 | 6.193,60 | 12,39 | 12.387,20 | 1 | 500 · R$ 44,90 |
+| 750 | 9.118,60 | 12,16 | 12.158,13 | 1 | não existe |
+| 1.000 | 12.043,60 | 12,04 | 12.043,60 | 1 | 1.000 · R$ 38,90 |
+| 3.000 | 36.130,80 | 12,04 | 12.043,60 | 3 | 3.000 · R$ 34,50 |
+
+**Bug corrigido no seed:** a guarda de idempotência do recálculo pós-compra
+só recalculava quando o último cálculo era `NO_COST`. O cálculo nascido na
+ativação é PARCIAL (recursos conhecidos, materiais ainda sem compra), então
+em banco recém-migrado o DEMO ficava PARCIAL para sempre — a baseline acima
+só existia por herança de banco antigo. A condição agora é "o custo já está
+completo?".
+
+## Cobertura
+
+Matriz de API própria (`product-cmv-matrix.test.ts`), sem depender do
+Product A: custo fixo por lote (500/750/1.000 → 1 lote; 3.000 → 3), caixa de
+expedição inteira, percentual sobre o direto, PARCIAL dedicado, `NO_COST`
+dedicado, proveniência `WEIGHTED_AVG_30D`, regressão de `referenceDate`
+(data antiga não escolhe cálculo posterior) e dia de calendário, zero
+explícito × desconhecido. Testes web cobrem a tela, as três qualidades de
+custo, material do cliente, faixa exata e ausência de faixa, as três
+entradas, a sugestão/aplicação no orçamento, a ida e volta, permissões e a
+confidencialidade do documento do cliente.
+
+## Verificação
+
+- API: **645/645** em 48 arquivos. Matriz do CMV fechada em **20 dimensões**
+  (19 testes em dois arquivos), inclusive validação da rota — quantidade e
+  data ausentes são recusadas, não inferidas.
+- Web: **89/89** em 13 arquivos.
+- Scripts (importador): 14/14.
+- `pnpm typecheck` e `pnpm build`: limpos.
+- Migration limpa + `db:demo` ×2: idempotente (3 recursos, 3 tarifas, 2 usos,
+  2 cálculos, 1 projeto) e a baseline acima reproduz exata.
+- Playwright, banco DEMO limpo, navegação só por clique: **17/17 etapas**,
+  zero erro de console, zero 5xx, zero 4xx inesperado.
+- Verificação visual em 1280×720, 1366×768 e 1440×900: sem overflow
+  horizontal de página, cartões de resumo acima da dobra nas três, tabelas
+  rolando dentro do próprio contêiner, nenhuma ação essencial invisível.
+
+**Suíte estabilizada.** A bateria falhava de forma intermitente, em arquivo
+diferente a cada execução. Duas causas distintas, ambas de estado — nenhuma
+de regra:
+
+1. **Agregado global × concorrência.** `dashboard.test.ts` compara dois
+   retratos do banco inteiro (itens distintos em compra, ordens abertas) em
+   volta da própria fixture. Com três workers sobre um Postgres só, a limpeza
+   de outro arquivo caía no meio dos dois retratos e o delta media o vizinho.
+   O arquivo passou a rodar sozinho, depois da faixa paralela
+   (`apps/api/vitest.serial.config.ts`). **Nenhuma expectativa foi alterada** —
+   mudou quando ele roda, não o que ele afirma.
+2. **Precondição implícita no importador.** Os casos de integração descrevem
+   uma base já migrada (106 linhas no template de abertura, zero registro
+   criado numa segunda aplicação), e nada estabelecia isso: o arquivo aplicava
+   o corpus no meio de si mesmo, então a primeira execução contra banco
+   recém-migrado falhava e as seguintes passavam por herança. A precondição
+   virou `beforeAll` explícito — aplicar é idempotente por construção, que é
+   o que o teste vizinho verifica.
+
+Resultado: **5 baterias completas consecutivas verdes**, ~75 s cada, a partir
+de migration limpa.
+
+## Não implementado
+
+Impressão dedicada de CMV; CMV em relatório gerencial; comparação de
+cenários lado a lado; CMV de amostra/piloto; fixture de validação manual com
+Biotina (mecanismo pronto — `createScenario` em
+`product-cmv-matrix.test.ts` monta produto, formulação, estrutura e cálculo
+com valores informados; nenhum dado real inserido).
+
+---
+
+# Auditoria final com agentes nativos
+
+Três auditores independentes mediram o HEAD sem receber score, achado, meta
+nem lista de correções anteriores. Resultado e correções em
+`docs/UX_AUDIT.md`.
+
+**Dois CRITICAL confirmados e fechados.** O maior era de domínio, não de
+tela: `BLOCKED` era estado terminal de lote — sem transição de saída para
+ninguém, nem para a Administração. Um bloqueio por engano deixava material
+físico real fora do estoque disponível para sempre. O desbloqueio devolve o
+lote à **fila da Qualidade**, nunca ao estoque disponível: reabrir a decisão
+não é tomá-la, e liberar continua exigindo ato próprio e CoA aprovado quando
+o item pede. O outro era o alerta de "lote aguarda liberação" apontando para
+a fila de laudos, que respondia não ser ela quem decide isso.
+
+**Permissão que faltava.** `POST /lots/:id/release` e `/block` aceitavam
+qualquer sessão autenticada: um usuário comercial liberava lote em espera de
+laudo com um POST, enquanto anexar o próprio CoA já exigia QUALITY/ADMIN. A
+porta da decisão passou a existir, com teste por papel.
+
+**Regra durável registrada:** liberar, bloquear e desbloquear lote são
+decisões de QUALITY/ADMIN. Desbloquear leva a `AWAITING_RELEASE`, nunca a
+`AVAILABLE`, e preserva o registro do bloqueio.
+
+**Scores medidos no HEAD** (gate entre parênteses): Navegação 7,5 (9),
+Continuidade 8 (9), Legibilidade 8 (8), Consistência 8 (9), Acessibilidade 8
+(8), Impressos 9 (9). Macrofluxos 5/5 sem FAIL — três em PASS, dois em PASS
+WITH FRICTION. Zero CRITICAL e zero HIGH remanescentes. **Três dimensões
+seguem abaixo do gate**, e por isso o merge não é recomendado ainda: o que
+resta são atritos de descoberta e profundidade de fluxo, não defeito.
+
+**Dois achados graves foram rejeitados por não reproduzirem**, com evidência:
+o vínculo de produto que "falharia em silêncio" (o clique automatizado caía
+em `role=option` de um `<select>` da página) e a proposta que seria enviada
+sem trava de custo (o backend recusa com `409 incomplete_cost` e a tela pede
+confirmação nomeando as linhas — o auditor não clicou no botão).
+
+**Bateria estável:** 5 execuções completas consecutivas verdes, ~79 s cada,
+a partir de migration limpa. Walkthrough de demonstração 18/18 e fluxo CMV
+17/17, ambos só por navegação de interface, com zero erro de console, zero
+5xx e zero 4xx inesperado.
+
+---
+
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,

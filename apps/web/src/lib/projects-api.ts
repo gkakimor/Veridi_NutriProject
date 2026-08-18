@@ -5,6 +5,7 @@ import type {
   CreateProjectInput,
   ProjectDTO,
   ProjectListResponse,
+  ProjectProductDTO,
   ProjectStatus,
   PricingVersionDTO,
   ProjectVocabularyResponse,
@@ -150,20 +151,86 @@ export async function prepareTechnicalProduct(
 
 /** Precificação ATIVA disponível para embasar a proposta. */
 export async function getQuotePricingOptions(
-  quoteId: string,
+  lineId: string,
 ): Promise<PricingVersionDTO | null> {
-  const response = await apiFetch(`${API_URL}/quote-versions/${quoteId}/pricing-options`);
+  const response = await apiFetch(`${API_URL}/quote-lines/${lineId}/pricing-options`);
   if (response.status === 404) return null;
   return (await parseJsonOrThrow(response)) as PricingVersionDTO;
 }
 
 export async function applyQuotePricing(
-  quoteId: string,
+  lineId: string,
   pricingTierId: string,
 ): Promise<QuoteVersionDTO> {
-  return postJson<QuoteVersionDTO>(`/quote-versions/${quoteId}/apply-pricing`, { pricingTierId });
+  return postJson<QuoteVersionDTO>(`/quote-lines/${lineId}/apply-pricing`, { pricingTierId });
 }
 
-export async function useManualQuotePrice(quoteId: string): Promise<QuoteVersionDTO> {
-  return postJson<QuoteVersionDTO>(`/quote-versions/${quoteId}/manual-price`);
+export async function useManualQuotePrice(
+  lineId: string): Promise<QuoteVersionDTO> {
+  return postJson<QuoteVersionDTO>(`/quote-lines/${lineId}/manual-price`);
+}
+
+/* ─────────────── Produtos do projeto ─────────────── */
+
+export async function listProjectProducts(projectId: string): Promise<ProjectProductDTO[]> {
+  const response = await apiFetch(`${API_URL}/projects/${projectId}/products`);
+  const body = (await parseJsonOrThrow(response)) as { products: ProjectProductDTO[] };
+  return body.products;
+}
+
+/** Cria um produto novo no projeto — nasce em desenvolvimento. */
+export async function createProjectProduct(
+  projectId: string,
+  input: { name?: string; finishedUnitCode?: string },
+): Promise<ProjectProductDTO> {
+  return postJson<ProjectProductDTO>(`/projects/${projectId}/products`, {
+    operation: "create",
+    ...input,
+  });
+}
+
+/** Vincula um produto que já existe. */
+export async function linkProjectProduct(
+  projectId: string,
+  productId: string,
+): Promise<ProjectProductDTO> {
+  return postJson<ProjectProductDTO>(`/projects/${projectId}/products`, {
+    operation: "link",
+    productId,
+  });
+}
+
+export async function removeProjectProduct(projectProductId: string): Promise<void> {
+  const response = await apiFetch(`${API_URL}/project-products/${projectProductId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) await parseJsonOrThrow(response);
+}
+
+/* ─────────────── Linhas do orçamento ─────────────── */
+
+export async function addQuoteLine(
+  quoteVersionId: string,
+  projectProductId: string,
+): Promise<QuoteVersionDTO> {
+  return postJson<QuoteVersionDTO>(`/quote-versions/${quoteVersionId}/lines`, {
+    projectProductId,
+  });
+}
+
+export async function updateQuoteLine(
+  lineId: string,
+  input: { quotedQuantity?: string | null; uomCode?: string | null; unitPrice?: string | null },
+): Promise<QuoteVersionDTO> {
+  const response = await apiFetch(`${API_URL}/quote-lines/${lineId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await parseJsonOrThrow(response)) as QuoteVersionDTO;
+}
+
+export async function removeQuoteLine(lineId: string): Promise<QuoteVersionDTO> {
+  const response = await apiFetch(`${API_URL}/quote-lines/${lineId}`, { method: "DELETE" });
+  return (await parseJsonOrThrow(response)) as QuoteVersionDTO;
 }

@@ -40,8 +40,12 @@ describe("Folha operacional impressa", () => {
     const brand = screen.getByAltText("Veridi Nutrition") as HTMLImageElement;
     expect(brand.getAttribute("src")).toBeTruthy();
     expect(brand.getAttribute("src")).not.toMatch(/^https?:/);
-    expect(screen.getByText("FO-01")).toBeTruthy();
-    expect(screen.getByText("Folha de contagem física de estoque")).toBeTruthy();
+    // O código aparece DUAS vezes de propósito: no cabeçalho e no rodapé
+    // corrido, que se repete em toda folha impressa.
+    expect(document.querySelector(".print-doc__doc-code")?.textContent).toBe("FO-01");
+    expect(document.querySelector(".print-doc__kind")?.textContent).toBe(
+      "Folha de contagem física de estoque",
+    );
     // Filtros aplicados precisam viajar com o papel: sem isso ninguém sabe
     // o que a folha está mostrando.
     expect(screen.getByText("Busca")).toBeTruthy();
@@ -49,6 +53,24 @@ describe("Folha operacional impressa", () => {
     // "Gerado por" existe mesmo sem sessão no teste — nunca um nome inventado.
     expect(screen.getByText(/Gerado por/)).toBeTruthy();
     expect(screen.getByText(/Gerado em/)).toBeTruthy();
+  });
+
+  /**
+   * Relatório e folha operacional saem com dezenas de páginas. Sem rodapé
+   * corrido a identidade documental existia só na folha 1, e a página que se
+   * separa da pilha não dizia de que documento veio.
+   */
+  it("repete a identidade do documento em rodapé corrido", () => {
+    renderSheet(
+      <PrintSheet sheetCode="FO-01" title="Folha de contagem" backTo="/">
+        <p>conteúdo</p>
+      </PrintSheet>,
+    );
+
+    const runningFoot = document.querySelector(".print-running-foot");
+    expect(runningFoot).toBeTruthy();
+    expect(runningFoot?.textContent).toContain("FO-01");
+    expect(runningFoot?.textContent).toContain("Folha de contagem");
   });
 
   it("mantém os controles fora do documento impresso", () => {

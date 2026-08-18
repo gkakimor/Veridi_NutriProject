@@ -28,6 +28,20 @@ export class LotMismatchApiError extends Error {
 }
 
 /**
+ * Erro 409 de custo industrial incompleto.
+ *
+ * O backend continua sendo a autoridade sobre o que é "incompleto": a tela
+ * antecipa pela proveniência da linha, mas se a recusa vier mesmo assim é
+ * este erro que abre a confirmação explícita, em vez de virar um texto solto.
+ */
+export class IncompleteCostApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "IncompleteCostApiError";
+  }
+}
+
+/**
  * Mensagem amigável por código de erro da API.
  *
  * O backend já responde em pt-BR na maior parte dos casos de domínio; este
@@ -86,6 +100,15 @@ export async function parseJsonOrThrow(response: Response): Promise<unknown> {
     ) {
       const typed = body as { message: string; expectedLotCode: string; scannedLotCode: string };
       throw new LotMismatchApiError(typed.message, typed.expectedLotCode, typed.scannedLotCode);
+    }
+
+    if (
+      response.status === 409 &&
+      body !== null &&
+      typeof body === "object" &&
+      (body as { error?: string }).error === "incomplete_cost"
+    ) {
+      throw new IncompleteCostApiError((body as { message: string }).message);
     }
 
     const payload = (body ?? {}) as { message?: unknown; error?: unknown };

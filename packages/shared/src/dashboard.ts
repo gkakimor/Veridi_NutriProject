@@ -53,7 +53,10 @@ export const ATTENTION_TYPE_LABELS: Record<AttentionType, string> = {
 export const ATTENTION_LIST_PATH: Record<AttentionType, string> = {
   LOT_EXPIRED: "/estoque/lotes?status=EXPIRED",
   LOT_BLOCKED: "/estoque/lotes?status=BLOCKED",
-  LOT_AWAITING_QUALITY: "/qualidade/documentos",
+  // A fila de CoA acompanha o LAUDO; liberar lote para uso é decisão de
+  // Estoque › Lotes. Mandar para a fila documental levava a uma tela vazia
+  // que dizia, ela mesma, que a decisão era em outro lugar.
+  LOT_AWAITING_QUALITY: "/estoque/lotes?status=AWAITING_RELEASE",
   LOT_NEAR_EXPIRY: "/relatorios/estoque/vencimentos",
   PRODUCTION_ORDER_SHORTAGE: "/relatorios/producao/necessidades",
   PURCHASE_ORDER_LATE: "/relatorios/compras/atrasadas",

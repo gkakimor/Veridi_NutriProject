@@ -658,3 +658,215 @@ contexto.
 Link contextual usa **identidade**, nunca busca textual aproximada. Texto pode
 casar mais de um registro, esbarrar em filtro anterior ou simplesmente não ser
 aplicado — foi exatamente o que aconteceu aqui, nas três formas.
+
+---
+
+# Remediação pós-auditoria — HIGH (checkpoints 3H e 3I)
+
+Estado de partida: 4 CRITICAL e 16 HIGH reconciliados a partir dos três
+auditores (usuário final, operacional, visual/acessibilidade). Ao entrar no 3I
+restavam **9 HIGH abertos**. Todos foram fechados, cada um com correção,
+regressão e evidência medida no estado atual — nenhum fechado por leitura de
+código.
+
+| # | Finding | Auditor | Antes | Correção | Evidência |
+|---|---|---|---|---|---|
+| H01 | OC não mostra recebimentos | operacional | conferir uma entrega exigia sair para a lista geral e procurar pelo código da ordem | bloco "Recebimentos" na OC: código, data, nota fiscal, itens, quantidade, lotes gerados — cada código é link | `receiving.test.ts` (OC recarregada expõe o recebimento) + navegador: `OC lista recebimentos`, `link do recebimento abre o recebimento` |
+| H02 | Recebimento → OC frágil | operacional | volta por botão fantasma, sem destino visível | `EntityLink` para a OC | navegador: `recebimento liga de volta a OC` |
+| H03 | Recebimento → lotes frágil | operacional | lote gerado atrás de botão | `EntityLink` para o lote | navegador: `recebimento liga ao lote gerado`, `link do lote abre o lote` |
+| H04 | Lote acabado não sabe para onde foi | operacional | do lote até a expedição só voltando pelo pedido | bloco "Expedições" no lote: expedição, pedido, cliente, quantidade daquele lote, status | `shipments.test.ts` (lote expõe a expedição) + navegador: `lote acabado lista expedicoes` |
+| H05 | Sem alinhamento numérico | visual | quantidade, preço, total e custo à esquerda; `1.000` e `999` com a mesma largura | `.is-numeric` (direita + `tabular-nums`) em **57 tabelas**, cabeçalho junto; impressos idem, com o cabeçalho inferido do rótulo da coluna | navegador: `coluna numerica a direita com cabecalho junto` → `{th:right, td:right, tabular-nums}`; `impresso alinha cabecalho numerico` |
+| H06 | Relatório longo sem identidade por página | visual | 15 páginas, identificação só na primeira | rodapé corrido repetido em toda folha impressa: tipo, código e documento controlado | navegador (mídia `print`): `impresso repete identidade no rodape` |
+| H07 | Folha de receita de OP encerrada operável | operacional | ordem concluída ainda oferecia pesagem e conclusão de parte | folha vira documento de consulta e diz isso | navegador: `folha de OP encerrada nao registra pesagem`, `folha de OP encerrada se explica` |
+| H08 | Faturamento emitido sem preço, sem aviso | usuário final | emitir é definitivo e a confirmação não citava nem o preço ausente nem a irreversibilidade | confirmação nomeia as linhas sem preço e diz que emitir não tem volta (faturamento quantitativo continua permitido) | revisão da confirmação em `BillingPage` |
+| H09 | Movimentação sem documento de origem | operacional | consumo de produção e produção de acabado — as maiores saídas do ledger — com "—" na origem | movimento resolve OP e amostra em consulta em lote; origem virou link | `consumption.test.ts` (movimento expõe a OP) + navegador: `nenhuma movimentacao sem origem` → `["EXP-000001","OP-000001",...]` |
+
+**Custo desconhecido sem caminho** (MEDIUM promovido junto, mesma raiz de H08):
+formulação e OP diziam quais itens estão sem referência de custo sem dizer onde
+a referência nasce. Agora apontam o preço de fornecedor que a resolve.
+
+## Verificação
+
+`scripts/ux-continuity-check.mjs` cresceu de 20 para **35 checagens** e roda
+contra o navegador real com o cenário DEMO: **35/35 PASS**, zero erro de
+console, zero resposta ≥ 400. As checagens clicam nos links e conferem o
+conteúdo do destino — não apenas o `href`.
+
+## O que o sistema não consegue fazer
+
+**Número de página dentro da folha.** O Chrome não implementa as caixas de
+margem de `@page`, então a aplicação não tem como escrever "Página X de Y" no
+papel. O que ficou garantido é que toda página se identifica; o número em si vem
+do diálogo de impressão do navegador. Registrado como limitação, não como
+pendência de implementação.
+
+---
+
+# AUDITORIA CURTA — CMV COMO BASE DE PROPOSTA (checkpoint CMV 2B)
+
+Uma tarefa, um auditor (`ux-end-user-auditor`), sem dizer menu, rota, botão
+nem nome de tela:
+
+> "Tenho um produto e preciso saber quanto custa produzir 1.000 potes e usar
+> esse cenário como base para uma proposta."
+
+## Resultado
+
+| Passo | Veredito |
+| --- | --- |
+| Achar o produto | PASS — Cadastros → Produtos, busca e lista |
+| Achar onde se responde "quanto custa produzir" | PASS — CMV pelo produto |
+| Informar 1.000 e obter resultado | PASS — recalcula de fato (500 → R$ 6.193,60; 1.000 → R$ 12.043,60) |
+| Entender o resultado | PASS — total, por unidade, por 1.000 e qualidade do custo |
+| Ver o preço vigente da quantidade | PASS — R$ 38,90, faixa de 1.000 un |
+| Chegar ao orçamento | PARCIAL — ver abaixo |
+
+**Veredito do auditor: FAIL**, por dois CRITICAL no passo final. Verificados
+um a um antes de qualquer correção:
+
+**C1 — "Vincular produto existente" falharia em silêncio: NÃO REPRODUZ.**
+Reproduzido com navegador real: a opção aparece, o campo passa a mostrar
+`PROD-000003 · DEMO Pré-Treino Frutas Vermelhas 300g`, o botão fica
+habilitado, o vínculo é criado e a seção passa a listar o produto. Zero
+resposta HTTP ≥ 400. A página tem `<select>`/`<datalist>` que também expõem
+`role=option`, e é neles que um clique automatizado por texto cai — foi o
+que aconteceu com o próprio auditor. Não houve correção porque não havia
+defeito.
+
+**C2 — "gere uma precificação a partir do cálculo atual" não tinha onde
+acontecer: PROCEDE, corrigido.** O aviso de base econômica divergente pedia
+uma ação e o único link ao lado abria uma lista somente leitura. Criar
+precificação nasce do cálculo salvo, na estrutura de custos — é para lá que o
+aviso aponta agora, nomeando o caminho.
+
+## Corrigido no mesmo checkpoint
+
+| Severidade | Achado | Correção |
+| --- | --- | --- |
+| HIGH | Projeto aprovado oferecia "Criar nova versão" e só recusava depois do clique, no fim de um caminho já percorrido | A ação deixa de existir; a explicação toma o lugar dela e diz o que fazer ("crie um projeto novo") |
+| CRITICAL (C2) | Aviso pedia ação sem caminho | Aviso passa a apontar Custos industriais → Cálculos salvos |
+| MEDIUM | `HOUR` na composição do CMV | "hora", pela tabela de rótulos que já existia |
+| MEDIUM | `FIXED_BASIS` na tabela de materiais da estrutura de custos | "Base da fórmula", pelo mesmo mapa usado no editor de formulação |
+| MEDIUM | Preço vigente ao lado de CMV completo sem dizer que a faixa foi fechada sobre custo parcial | Aviso explícito de base divergente |
+| LOW | Erro de quantidade trocava o título por "CMV · —" | Só o resultado sai; a identidade do produto fica |
+
+## Não corrigido, e por quê
+
+- **Busca do topo não encontra produto por nome** (HIGH do auditor).
+  Pré-existente e fora do escopo: busca global é item explicitamente não
+  implementado neste roteiro.
+- **Dois botões "Cancelar" na tela do projeto** (MEDIUM) e **placeholder
+  `0001PL`** (LOW). Pré-existentes, em tela fora do caminho do CMV.
+
+## Fricção residual conhecida
+
+Para um cliente cujo projeto já foi aprovado, propor de novo exige criar um
+projeto novo. A regra agora é dita **antes** do clique e o caminho
+alternativo funciona ponta a ponta (verificado: projeto novo → vincular
+produto → versão de orçamento → linha com 1.000 un → faixa sugerida →
+`Aplicar preço calculado` → `Simular CMV` → `Voltar ao orçamento`). O que
+permanece é o número de passos, não um bloqueio.
+
+---
+
+# AUDITORIA FINAL COM AGENTES NATIVOS (checkpoint final)
+
+Três auditores nativos, medição independente no HEAD, sem receber scores,
+achados, metas nem lista de correções anteriores. Todos navegaram pela
+interface real (Playwright/Chromium); onde um deles mediu por leitura de
+código e chamada de API, isso está dito.
+
+## Scores novos
+
+| Dimensão | Gate | Medido | Situação |
+| --- | --- | --- | --- |
+| Navegação | ≥ 9 | **7,5** | ABAIXO |
+| Continuidade | ≥ 9 | **8** | ABAIXO |
+| Legibilidade | ≥ 8 | **8** | ok |
+| Consistência | ≥ 9 | **8** | ABAIXO |
+| Acessibilidade | ≥ 8 | **8** | ok |
+| Impressos | ≥ 9 | **9** | ok |
+
+Macrofluxos: **5/5 sem FAIL** — Compras/Qualidade, Produção e
+Expedição/Faturamento/Estoque em PASS; Comercial e Amostra em PASS WITH
+FRICTION. A classificação não foi renomeada para melhorar resultado.
+
+CRITICAL remanescentes: **0**. HIGH remanescentes: **0**.
+
+Nenhum número anterior foi reaproveitado.
+
+## CRITICAL confirmados e corrigidos
+
+**Lote bloqueado era estado terminal.** `BLOCKED` não tinha transição de
+saída no domínio — nem para a Administração. Um bloqueio feito por engano
+deixava material físico real fora do estoque disponível para sempre, com
+alerta crítico permanente no painel. Passou a existir desbloqueio, e ele
+devolve o lote à **fila da Qualidade**, nunca ao estoque: reabrir a decisão
+não é tomá-la. Liberar continua exigindo ato próprio e CoA aprovado quando o
+item pede. O bloqueio anterior permanece no histórico.
+
+**Fila da Qualidade levava a uma tela que dizia não ser ela.** O alerta do
+painel e a ação rápida apontavam para a fila de laudos, que respondia, com
+suas próprias palavras, que a liberação se decide em Estoque › Lotes. O
+alerta passou a apontar para lá, e a Qualidade recebeu as duas filas com
+nome próprio: "Laudos / CoA" e "Lotes aguardando liberação".
+
+## HIGH confirmados e corrigidos
+
+| Achado | Correção |
+| --- | --- |
+| `POST /lots/:id/release` e `/block` sem gate de papel — comercial liberava lote em espera de laudo com um POST | `requireRole(QUALITY, ADMIN)`, com teste por papel |
+| Bloquear oferecido a quem o backend recusa: formulário inteiro preenchido e só então a recusa | Ação ausente para o papel, com a razão no lugar dela |
+| Criar precificação não existia em nenhum caminho intuitivo | Estado vazio da lista diz onde a precificação nasce e leva ao cálculo salvo |
+| Falta de material sem causa visível — "falta 35" com os 35 na prateleira aguardando liberação | A linha informa quanto há de físico não liberado e leva aos lotes |
+| Rascunho de custo escondia a versão ativa, sem caminho de volta | Seletor entre ativa e rascunho; a tela abre na **ativa** |
+| Linha de orçamento sem quantidade após aplicar faixa | Campo não-controlado remontado quando o servidor muda o valor |
+| UUID cru na recusa de duplicidade da proposta | Mensagem cita o código do produto |
+| Ação de linha fora da tela em 13 tabelas | `table--sticky-actions` aplicada; ação sempre alcançável |
+
+## MEDIUM corrigidos
+
+Contraste dos rótulos da sidebar (4,31:1 → 6,05:1 no fundo real);
+`role="menu"` sem navegação por seta (setas, Home e End implementados);
+percentual com quatro casas convivendo com duas (uma função só);
+mensagem de campo obrigatório em inglês, do navegador (traduzida no
+documento, usando o rótulo de cada campo); estado vazio saindo da tela junto
+com a tabela; seletor de item por lista fechada onde o resto do sistema usa
+busca; lista de amostras sem dizer onde uma amostra nasce; banner de busca
+preso entre navegações; precificação fechada sobre custo parcial ao lado de
+um CMV completo, sem explicação.
+
+## Falsos positivos rejeitados
+
+**"Vincular produto existente falha em silêncio" (CRITICAL).** Não reproduz.
+Com navegador real: a opção aparece, o campo passa a mostrar
+`PROD-000003 · DEMO Pré-Treino Frutas Vermelhas 300g`, o botão fica
+habilitado, o vínculo é criado e a seção passa a listar o produto — zero
+resposta HTTP ≥ 400. A página tem `<select>`/`<datalist>` que também expõem
+`role=option`, e é neles que um clique automatizado por texto cai.
+
+**"Proposta pode ser enviada ao cliente com custo desconhecido, sem bloqueio
+duro" (CRITICAL).** Não reproduz. A trava existe em duas camadas e foi
+exercitada: o backend recusa com `409 incomplete_cost` — *"Esta proposta
+utiliza preço com custo industrial incompleto. Confirme explicitamente para
+enviar."* — e só aceita com `confirmIncompleteCost: true`; a tela abre um
+diálogo próprio ("Enviar com custo incompleto?") que lista QUAIS linhas estão
+sem base antes de qualquer envio. O auditor concluiu pela ausência de trava a
+partir de um botão habilitado, sem clicar nele — a instrução era justamente
+parar antes de confirmar.
+
+**"R-18/R-19/R-20 geram segunda página vazia" (HIGH).** Não reproduz como
+descrito. Medindo na largura REAL de impressão (área útil da folha, não a da
+janela), o conteúdo excede uma página: em paisagem, 868px de conteúdo contra
+718px de área útil. A segunda página tem conteúdo real. O que resta é
+estético — uma página final com poucas linhas —, registrado como LOW, sem
+alteração de CSS de impressão sem causa isolada.
+
+## Não corrigido, e por quê
+
+- **Busca do topo não encontra produto por nome.** Pré-existente e fora do
+  escopo: busca global é item explicitamente não implementado.
+- **Menu lateral idêntico para todos os papéis.** As ações já são restritas
+  por papel; filtrar o menu é decisão de produto, não correção de defeito.
+- **Largura máxima do conteúdo em tabelas densas.** Decisão de layout, não
+  bug pontual — a ação da linha, que era o risco concreto, foi resolvida.

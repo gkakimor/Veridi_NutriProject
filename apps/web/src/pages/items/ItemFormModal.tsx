@@ -15,13 +15,15 @@ import {
   PACKAGING_SUBTYPE_LABELS,
 } from "@veridi/shared";
 import { ToggleCard } from "../../components/ToggleCard";
+import { formatDate } from "../../lib/dates";
 
 interface ItemFormModalProps {
   mode: "create" | "edit";
   item: ItemDTO | null;
   units: UnitOfMeasureDTO[];
   onClose: () => void;
-  onSaved: () => void;
+  /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
+  onSaved: (created?: ItemDTO) => void;
 }
 
 interface FormState {
@@ -148,11 +150,14 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
 
     try {
       if (mode === "create") {
-        await createItem(payload);
+        const created = await createItem(payload);
+        onSaved(created);
       } else if (item) {
         await updateItem(item.id, payload);
+        onSaved();
+      } else {
+        onSaved();
       }
-      onSaved();
     } catch (err) {
       if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};
@@ -193,7 +198,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
       <>
         <span className="modal-fullscreen__foot-meta">
           Última alteração:{" "}
-          {item ? new Date(item.updatedAt).toLocaleDateString("pt-BR") : "—"}
+          {item ? formatDate(item.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>

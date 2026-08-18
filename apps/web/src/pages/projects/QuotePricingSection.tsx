@@ -11,13 +11,8 @@ import {
   getQuotePricingOptions,
   useManualQuotePrice,
 } from "../../lib/projects-api";
-
-function formatPercent(value: string | null): string {
-  if (value === null) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  return `${number.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
-}
+import { formatDate } from "../../lib/dates";
+import { formatPercent } from "../../lib/percent";
 
 /**
  * Origem do preço da proposta.
@@ -44,7 +39,7 @@ export function QuotePricingSection({
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getQuotePricingOptions(quote.id)
+    line ? getQuotePricingOptions(line.id) : Promise.resolve(null)
       .then(setPricing)
       .catch(() => setPricing(null));
   }, [quote.id]);
@@ -66,13 +61,14 @@ export function QuotePricingSection({
     }
   }
 
-  const provenance = quote.pricing;
+  const line = quote.lines[0] ?? null;
+  const provenance = line?.pricing ?? null;
 
   return (
     <div className="doc-body">
       <h4>Origem do preço</h4>
       <p className="field__hint">
-        {QUOTE_PRICE_SOURCE_LABELS[quote.priceSource]} — informação interna: o documento do cliente
+        {QUOTE_PRICE_SOURCE_LABELS[(line?.priceSource ?? "MANUAL")]} — informação interna: o documento do cliente
         não mostra custo, margem nem comissão.
       </p>
 
@@ -109,9 +105,7 @@ export function QuotePricingSection({
           </dd>
           <dt>Data de referência do custo</dt>
           <dd>
-            {provenance.costReferenceDate
-              ? new Date(provenance.costReferenceDate).toLocaleDateString("pt-BR")
-              : "—"}
+            {formatDate(provenance.costReferenceDate)}
           </dd>
           <dt>Custo industrial / unidade</dt>
           <dd>{formatUnitCost(provenance.industrialCostPerUnit)}</dd>
@@ -132,21 +126,21 @@ export function QuotePricingSection({
         </dl>
       )}
 
-      {provenance?.warnings.map((warning) => (
-        <p key={warning.code} className="field__hint">
+      {provenance?.warnings.map((warning, index) => (
+        <p key={`${index}-${warning.code}`} className="field__hint">
           {warning.message}
         </p>
       ))}
 
       {canEdit && quote.status === "DRAFT" && (
         <>
-          {quote.priceSource === "PRICING_TIER" ? (
+          {(line?.priceSource ?? "MANUAL") === "PRICING_TIER" ? (
             <div className="line-actions">
               <button
                 type="button"
                 className="btn btn--secondary btn--sm"
                 disabled={busy}
-                onClick={() => void run(() => useManualQuotePrice(quote.id))}
+                onClick={() => void run(() => useManualQuotePrice(line?.id ?? ""))}
               >
                 Usar preço manual
               </button>
@@ -156,36 +150,36 @@ export function QuotePricingSection({
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Quantidade</th>
-                    <th>Custo/un</th>
+                    <th className="is-numeric">Quantidade</th>
+                    <th className="is-numeric">Custo/un</th>
                     <th>Qualidade</th>
-                    <th>Comissão</th>
-                    <th>Preço</th>
-                    <th>Margem de contribuição</th>
+                    <th className="is-numeric">Comissão</th>
+                    <th className="is-numeric">Preço</th>
+                    <th className="is-numeric">Margem de contribuição</th>
                     <th aria-hidden="true" />
                   </tr>
                 </thead>
                 <tbody>
                   {pricing.tiers.map((tier) => {
                     const sameQuantity =
-                      quote.quotedQuantity === null ||
-                      Number(quote.quotedQuantity) === Number(tier.quantity);
+                      line?.quotedQuantity === null ||
+                      Number(line?.quotedQuantity) === Number(tier.quantity);
                     return (
                       <tr key={tier.id}>
-                        <td>
+                        <td className="is-numeric">
                           {tier.quantity} {tier.uomCode}
                         </td>
-                        <td>{formatUnitCost(tier.industrialCostPerUnit)}</td>
+                        <td className="is-numeric">{formatUnitCost(tier.industrialCostPerUnit)}</td>
                         <td>{INDUSTRIAL_COST_QUALITY_LABELS[tier.costQuality]}</td>
-                        <td>{formatPercent(tier.commissionPercent)}</td>
-                        <td>{formatUnitCost(tier.selectedUnitPrice)}</td>
-                        <td>{formatPercent(tier.contributionMarginPercent)}</td>
+                        <td className="is-numeric">{formatPercent(tier.commissionPercent)}</td>
+                        <td className="is-numeric">{formatUnitCost(tier.selectedUnitPrice)}</td>
+                        <td className="is-numeric">{formatPercent(tier.contributionMarginPercent)}</td>
                         <td>
                           <button
                             type="button"
                             className="btn btn--ghost btn--sm"
                             disabled={busy}
-                            onClick={() => void run(() => applyQuotePricing(quote.id, tier.id))}
+                            onClick={() => void run(() => applyQuotePricing(line?.id ?? "", tier.id))}
                           >
                             Usar esta faixa
                           </button>

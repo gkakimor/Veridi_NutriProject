@@ -77,3 +77,58 @@ export class IncompleteQuoteError extends Error {
     this.name = "IncompleteQuoteError";
   }
 }
+
+export class QuoteLineNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Linha de orçamento ${id} não encontrada.`);
+    this.name = "QuoteLineNotFoundError";
+  }
+}
+
+export class QuoteLineDuplicateError extends Error {
+  /**
+   * Recebe o CÓDIGO do produto, não o id.
+   *
+   * A mensagem é lida por quem negocia: "PROD-000006 já está nesta proposta"
+   * é uma frase; um UUID no meio dela é ruído que não ajuda ninguém a
+   * decidir o que fazer.
+   */
+  constructor(productCode: string) {
+    super(
+      `Produto ${productCode} já está nesta proposta. Ajuste a linha existente em vez de criar outra.`,
+    );
+    this.name = "QuoteLineDuplicateError";
+  }
+}
+
+export class QuoteLineProductNotInProjectError extends Error {
+  constructor(projectProductId: string) {
+    super(
+      `Produto ${projectProductId} não pertence a este projeto. A proposta é da negociação: produto de fora entraria como vínculo inventado.`,
+    );
+    this.name = "QuoteLineProductNotInProjectError";
+  }
+}
+
+export class ProjectProductNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Produto do projeto ${id} não encontrado.`);
+    this.name = "ProjectProductNotFoundError";
+  }
+}
+
+export class ProjectProductDuplicateError extends Error {
+  constructor(productCode: string) {
+    super(`O produto ${productCode} já está neste projeto.`);
+    this.name = "ProjectProductDuplicateError";
+  }
+}
+
+export class ProjectProductCustomerMismatchError extends Error {
+  constructor() {
+    super(
+      "Este produto pertence a outro cliente. Vincular seria misturar propriedade de clientes diferentes.",
+    );
+    this.name = "ProjectProductCustomerMismatchError";
+  }
+}
