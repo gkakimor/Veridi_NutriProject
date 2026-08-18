@@ -611,6 +611,60 @@ describe("CMV — matriz de composição e base econômica", () => {
     expect(vespera.unavailableReason).toMatch(/cálculo de custo salvo até esta data/i);
   });
 
+  it("a rota exige quantidade e data e recusa produto inexistente", async () => {
+    const app = buildTestApp();
+    const { product } = await createScenario(app, {
+      materialUnitCost: "10",
+      referenceOutputQuantity: "1000",
+    });
+    const hoje = dia(0).toISOString().slice(0, 10);
+
+    const semQuantidade = await app.inject({
+      method: "GET",
+      url: `/products/${product.id}/cmv?referenceDate=${hoje}`,
+    });
+    expect(semQuantidade.statusCode).toBe(400);
+
+    const quantidadeZero = await app.inject({
+      method: "GET",
+      url: `/products/${product.id}/cmv?quantity=0&referenceDate=${hoje}`,
+    });
+    expect(quantidadeZero.statusCode).toBe(400);
+
+    // A data nunca é inferida: o domínio não decide de qual dia se fala.
+    const semData = await app.inject({
+      method: "GET",
+      url: `/products/${product.id}/cmv?quantity=1000`,
+    });
+    expect(semData.statusCode).toBe(400);
+
+    const inexistente = await app.inject({
+      method: "GET",
+      url: `/products/00000000-0000-0000-0000-000000000000/cmv?quantity=1000&referenceDate=${hoje}`,
+    });
+    expect(inexistente.statusCode).toBe(404);
+  });
+
+  it("papel sem economia interna recebe custo, nunca preço", async () => {
+    const admin = buildTestApp();
+    const { product } = await createScenario(admin, {
+      materialUnitCost: "10",
+      referenceOutputQuantity: "1000",
+    });
+    const hoje = dia(0).toISOString().slice(0, 10);
+
+    const producao = buildTestApp("PRODUCTION");
+    const resposta = await producao.inject({
+      method: "GET",
+      url: `/products/${product.id}/cmv?quantity=1000&referenceDate=${hoje}`,
+    });
+    expect(resposta.statusCode).toBe(200);
+    const corpo = resposta.json();
+    // Quem produz precisa do custo; preço e faixa são economia interna.
+    expect(corpo.simulation).not.toBeNull();
+    expect(corpo.pricing).toBeNull();
+  });
+
   it("zero explícito é um valor; desconhecido continua sendo null", async () => {
     const app = buildTestApp();
     // Premissa informada com valor zero: é uma decisão, não uma lacuna.
