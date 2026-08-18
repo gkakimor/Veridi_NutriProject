@@ -56,6 +56,11 @@
   color: var(--ink);
 }
 
+/* Veredito em palavras não compete em tamanho com o número que ele qualifica. */
+.cmv-card__value--text {
+  font-size: var(--fs-base);
+}
+
 /* Custo indisponível nunca vira número: vira aviso. */
 .cmv-card__value--unavailable {
   font-size: var(--fs-base);

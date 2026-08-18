@@ -316,13 +316,12 @@ export function ProductCmvPage() {
                   </div>
                 </div>
 
-                <div className="cmv-card">
+                {/* O cartão diz o veredito; a explicação inteira mora no
+                    rótulo do cabeçalho, para não esticar a fileira toda. */}
+                <div className="cmv-card" title={INDUSTRIAL_COST_QUALITY_HINTS[simulation.quality]}>
                   <div className="cmv-card__label">Qualidade do custo</div>
-                  <div className="cmv-card__value" style={{ fontSize: "var(--fs-base)" }}>
+                  <div className="cmv-card__value cmv-card__value--text">
                     {INDUSTRIAL_COST_QUALITY_LABELS[simulation.quality]}
-                  </div>
-                  <div className="cmv-card__note">
-                    {INDUSTRIAL_COST_QUALITY_HINTS[simulation.quality]}
                   </div>
                 </div>
 
