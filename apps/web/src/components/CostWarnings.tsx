@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { IndustrialCostWarningDTO } from "@veridi/shared";
+import { entityHref } from "./EntityLink";
 
 /**
  * Observações do cálculo — cada uma com o caminho de quem vai resolver.
@@ -31,16 +32,18 @@ function WarningAction({
   productId?: string | undefined;
   onStructurePage: boolean;
 }) {
-  if (warning.target === "ITEM" && warning.itemId && warning.itemCode) {
+  // Destino por identidade, pelo mesmo montador que o resto do ERP usa:
+  // link escrito à mão erra o parâmetro e cai na lista inteira.
+  if (warning.target === "ITEM" && warning.itemId) {
     return (
-      <Link to={`/cadastros/itens?search=${warning.itemCode}&open=${warning.itemId}`}>
+      <Link to={entityHref("item", warning.itemId)}>
         Ver o item — o custo vem de um recebimento com custo informado
       </Link>
     );
   }
   if (warning.target === "RESOURCE" && warning.resourceId) {
     return (
-      <Link to={`/gestao/recursos-industriais/${warning.resourceId}`}>
+      <Link to={entityHref("industrialResource", warning.resourceId)}>
         Informar a tarifa no recurso
       </Link>
     );

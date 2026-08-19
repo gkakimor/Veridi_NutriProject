@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { IndustrialCostPendencyDTO } from "@veridi/shared";
+import { entityHref } from "./EntityLink";
 
 /**
  * O que falta para a estrutura de custos poder ser ativada.
@@ -53,7 +54,7 @@ function ResolveLink({
 }) {
   if (pendency.target === "RESOURCE" && pendency.resourceId) {
     return (
-      <Link to={`/gestao/recursos-industriais/${pendency.resourceId}`}>
+      <Link to={entityHref("industrialResource", pendency.resourceId)}>
         Abrir o recurso para informar
       </Link>
     );

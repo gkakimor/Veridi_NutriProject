@@ -34,7 +34,7 @@ import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { EntityLink } from "../../components/EntityLink";
+import { EntityLink, entityHref } from "../../components/EntityLink";
 import { useAuth } from "../../app/AuthProvider";
 import { ItemFormModal } from "../items/ItemFormModal";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
@@ -460,7 +460,7 @@ export function FormulationVersionPage() {
               {version.componentIssues.map((issue) => (
                 <li key={`${issue.code}-${issue.itemId}`}>
                   <span>{issue.description}</span>{" "}
-                  <Link to={`/cadastros/itens?search=${issue.itemCode}&open=${issue.itemId}`}>
+                  <Link to={entityHref("item", issue.itemId)}>
                     Abrir o item
                   </Link>
                 </li>
