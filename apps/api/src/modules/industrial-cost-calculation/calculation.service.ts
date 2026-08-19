@@ -636,6 +636,7 @@ export async function calculateIndustrialCost(
       code: "DRAFT_REFERENCE",
       message:
         "Estrutura em rascunho: tarifas e premissas ainda podem mudar até a ativação.",
+      target: "ACTIVATE",
     });
   }
 

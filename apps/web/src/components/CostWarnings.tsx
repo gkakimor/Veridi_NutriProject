@@ -78,6 +78,23 @@ function WarningAction({
       </Link>
     );
   }
+  /*
+   * Não é defeito: o rascunho só ainda não valeu. Mas é o último passo, e
+   * ficar sem ele deixa o CMV do produto sem base — a frase diz o que fazer
+   * em vez de só constatar a situação.
+   */
+  if (warning.target === "ACTIVATE") {
+    if (onStructurePage) {
+      return <span>Ative a estrutura para esta referência passar a valer.</span>;
+    }
+    if (productId) {
+      return (
+        <Link to={`/produtos/${productId}/custos`}>Ativar a estrutura para esta valer</Link>
+      );
+    }
+    return null;
+  }
+
   if (warning.target === "ENERGY") {
     /*
      * Estrutura ativa é congelada, e a seção de energia dela é só leitura —
