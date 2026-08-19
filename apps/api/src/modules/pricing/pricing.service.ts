@@ -384,6 +384,8 @@ export async function getPricingRebasePreview(id: string): Promise<PricingRebase
   const base: PricingRebasePreviewDTO = {
     pricingVersionId: version.id,
     pricingVersionLabel: `${version.code} · V${version.versionNumber}`,
+    mode: version.status === "DRAFT" ? "IN_PLACE" : "NEW_VERSION",
+    targetQuality: null,
     targetCalculationId: null,
     targetCalculationCode: null,
     changes: [],
@@ -468,11 +470,77 @@ export async function getPricingRebasePreview(id: string): Promise<PricingRebase
 
   return {
     ...base,
+    targetQuality: alvo.quality,
     targetCalculationId: alvo.id,
     targetCalculationCode: alvo.code,
     changes,
     tiers,
   };
+}
+
+/**
+ * Troca a base econômica desta precificação pelo cálculo indicado.
+ *
+ * O caminho depende do status, e é por isso que existe como operação própria
+ * em vez de "criar versão": `createPricingVersion` devolve o rascunho já
+ * aberto do produto quando existe um — comportamento correto para não
+ * multiplicar negociação paralela, mas que engolia em silêncio o cálculo
+ * pedido. Quem clicava em refazer a base de um rascunho recebia de volta o
+ * mesmo rascunho, com a mesma base, e a tela reaparecia idêntica.
+ *
+ * Rascunho troca a base no lugar. Versão ativa é preço acordado: nasce um
+ * rascunho novo com as faixas copiadas, e a ativa fica intacta.
+ */
+export async function rebasePricingVersion(
+  id: string,
+  calculationId: string,
+  actor: User,
+): Promise<PricingVersionDTO> {
+  const prisma = getPrisma();
+  const version = await requireVersion(id);
+
+  const calculation = await prisma.industrialCostCalculation.findUnique({
+    where: { id: calculationId },
+    include: { industrialCostVersion: { select: { code: true, versionNumber: true } } },
+  });
+  if (!calculation) throw new CalculationRequiredError();
+  if (calculation.productId !== version.productId) throw new CalculationProductMismatchError();
+
+  if (version.status !== "DRAFT") {
+    /*
+     * Versão ativa não se reescreve. Mas o produto admite UM rascunho: se já
+     * houver um aberto, é nele que a base entra — criar outro esbarraria na
+     * mesma porta e devolveria o rascunho com a base antiga.
+     */
+    const aberto = await prisma.pricingVersion.findFirst({
+      where: { productId: version.productId, status: "DRAFT" },
+      select: { id: true },
+    });
+    if (aberto) return rebasePricingVersion(aberto.id, calculationId, actor);
+    return createPricingVersion(
+      version.productId,
+      { industrialCostCalculationId: calculationId },
+      actor,
+    );
+  }
+
+  /*
+   * As faixas seguem sem tocar: elas guardam o PLANO (quantidade, margem,
+   * comissão, preço manual). Os números econômicos de faixa só nascem na
+   * ativação, então não há snapshot velho para limpar aqui.
+   */
+  await prisma.pricingVersion.update({
+    where: { id },
+    data: {
+      industrialCostCalculationId: calculation.id,
+      calculationCodeSnapshot: calculation.code,
+      industrialCostVersionLabelSnapshot: `${calculation.industrialCostVersion.code} · V${calculation.industrialCostVersion.versionNumber}`,
+      formulationVersionNumberSnapshot: calculation.formulationVersionNumber,
+      costReferenceDateSnapshot: calculation.costReferenceDate,
+      costQualitySnapshot: calculation.quality,
+    },
+  });
+  return getPricingVersion(id);
 }
 
 export async function getProductPricing(productId: string): Promise<ProductPricingResponse> {

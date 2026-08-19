@@ -21,9 +21,9 @@ import { formatBRL } from "../../lib/currency";
 import {
   activatePricingVersion,
   createPricingTier,
-  createPricingVersion,
   deletePricingTier,
   getPricingRebasePreview,
+  rebasePricingVersion,
   getPricingVersion,
 } from "../../lib/pricing-api";
 import { formatDate } from "../../lib/dates";
@@ -191,7 +191,9 @@ export function PricingPage() {
                 className="btn btn--secondary btn--sm"
                 onClick={() => setVerRebase(true)}
               >
-                Ver o que muda com o custo atual ({rebase.targetCalculationCode})
+                {rebase.mode === "IN_PLACE"
+                  ? `Trocar a base pelo custo atual (${rebase.targetCalculationCode})`
+                  : `Ver o que muda com o custo atual (${rebase.targetCalculationCode})`}
               </button>
             </div>
           )}
@@ -454,21 +456,35 @@ export function PricingPage() {
         </FormSection>
       </div>
 
-      {/* O diff antes da decisão. Confirmar cria uma versão NOVA em rascunho —
-          a atual não é tocada, porque preço acordado não se reescreve. */}
+      {/* O diff antes da decisão, e o que a decisão faz de fato: rascunho
+          troca a base nele mesmo; versão ativa gera rascunho novo. Prometer
+          "nasce uma versão nova" para um rascunho era a promessa errada — e
+          quem confirmava recebia de volta a mesma tela, sem entender por quê. */}
       <ConfirmDialog
         open={verRebase && rebase !== null}
-        title="Refazer a precificação sobre o custo atual?"
-        confirmLabel="Criar nova versão"
+        title={
+          rebase?.mode === "IN_PLACE"
+            ? "Trocar a base de custo deste rascunho?"
+            : "Refazer a precificação sobre o custo atual?"
+        }
+        confirmLabel={rebase?.mode === "IN_PLACE" ? "Trocar a base" : "Criar nova versão"}
         cancelLabel="Voltar"
         confirmTone="accent"
         message={
           <>
-            <p>
-              Nasce uma versão nova em rascunho, com as faixas copiadas desta.{" "}
-              <strong>{pricing.code} continua como está</strong> — preço acordado não se
-              reescreve.
-            </p>
+            {rebase?.mode === "IN_PLACE" ? (
+              <p>
+                <strong>{pricing.code} continua sendo a mesma versão</strong> — só a base
+                econômica muda. As faixas, margens e comissões ficam como estão; nenhum preço
+                foi acordado ainda.
+              </p>
+            ) : (
+              <p>
+                Nasce uma versão nova em rascunho, com as faixas copiadas desta.{" "}
+                <strong>{pricing.code} continua como está</strong> — preço acordado não se
+                reescreve.
+              </p>
+            )}
             {rebase && rebase.changes.length > 0 && (
               <>
                 <p>
@@ -501,6 +517,18 @@ export function PricingPage() {
                 </ul>
               </>
             )}
+            {/* Trocar de uma base parcial para outra parcial não destrava
+                preço sugerido. Sem dizer isso, a troca parece o conserto que
+                ela não é, e o "—" continua na tela sem explicação. */}
+            {rebase &&
+              (rebase.targetQuality === "PARTIAL" || rebase.targetQuality === "NO_COST") && (
+                <p>
+                  <strong>Atenção:</strong> o cálculo {rebase.targetCalculationCode} também está{" "}
+                  {rebase.targetQuality === "NO_COST" ? "sem custo" : "parcial"}. A troca atualiza
+                  a base, mas o preço sugerido continua indisponível enquanto houver custo não
+                  informado — resolva as pendências em Custos industriais e salve um cálculo novo.
+                </p>
+              )}
           </>
         }
         onCancel={() => setVerRebase(false)}
@@ -508,10 +536,8 @@ export function PricingPage() {
           setVerRebase(false);
           if (!rebase?.targetCalculationId) return;
           void run(async () => {
-            const criada = await createPricingVersion(pricing.productId, {
-              industrialCostCalculationId: rebase.targetCalculationId!,
-            });
-            navigate(`/gestao/precificacao/${criada.id}`);
+            const versao = await rebasePricingVersion(pricing.id, rebase.targetCalculationId!);
+            if (versao.id !== pricing.id) navigate(`/gestao/precificacao/${versao.id}`);
           });
         }}
       />

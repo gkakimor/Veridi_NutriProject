@@ -78,6 +78,11 @@ afterAll(async () => {
   }
 
   if (fixtureProductIds.length > 0) {
+    // Precificação cita cálculo: sai primeiro, senão a FK barra.
+    await prisma.pricingTier.deleteMany({
+      where: { pricingVersion: { productId: { in: fixtureProductIds } } },
+    });
+    await prisma.pricingVersion.deleteMany({ where: { productId: { in: fixtureProductIds } } });
     await prisma.industrialCostCalculation.deleteMany({
       where: { productId: { in: fixtureProductIds } },
     });
@@ -426,38 +431,77 @@ describe("Descartar cálculo salvo", () => {
     await app.ready();
     const prisma = getPrisma();
 
-    const alvo = await prisma.industrialCostCalculation.findFirst({
-      where: { pricingVersions: { none: {} } },
-      select: { id: true },
+    /*
+     * O alvo é criado aqui. Procurar no banco um cálculo "que ninguém cita"
+     * e apagá-lo achava dado real: este banco é o mesmo do app local, e o
+     * cálculo recém-salvo de um produto em definição é exatamente o que
+     * ainda não tem precificação apontando para ele. Teste destrutivo só
+     * apaga o que o próprio teste criou.
+     */
+    const material = await createItem("RAW_MATERIAL");
+    await receiveWithCost(app, {
+      supplierId: (await createSupplier()).id,
+      itemId: material.id,
+      quantity: "100",
+      unitCost: "10",
     });
-    if (alvo) {
-      const apagado = await app.inject({
-        method: "DELETE",
-        url: `/industrial-cost-calculations/${alvo.id}`,
-      });
-      expect(apagado.statusCode, apagado.body).toBe(204);
-      expect(
-        await prisma.industrialCostCalculation.findUnique({ where: { id: alvo.id } }),
-      ).toBeNull();
-    }
+    const criada = await createStructure(app, {
+      components: [{ itemId: material.id, quantity: "1", unitCode: "kg" }],
+      referenceOutputQuantity: "100",
+    });
+    const { product, version } = criada;
+    expect(version.id, JSON.stringify(version)).toBeTruthy();
+    // Só estrutura ativa produz cálculo salvo.
+    const ativada = await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${version.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
+    expect(ativada.statusCode, ativada.body).toBe(200);
+
+    const alvo = (
+      await app.inject({
+        method: "POST",
+        url: `/industrial-costs/${version.id}/calculations`,
+        payload: {},
+      })
+    ).json();
+    expect(alvo.id, JSON.stringify(alvo)).toBeTruthy();
+
+    const apagado = await app.inject({
+      method: "DELETE",
+      url: `/industrial-cost-calculations/${alvo.id}`,
+    });
+    expect(apagado.statusCode, apagado.body).toBe(204);
+    expect(
+      await prisma.industrialCostCalculation.findUnique({ where: { id: alvo.id } }),
+    ).toBeNull();
 
     // Base de um preço não é descartável: apagá-la deixaria a faixa sem
     // origem verificável.
-    const citado = await prisma.industrialCostCalculation.findFirst({
-      where: { pricingVersions: { some: {} } },
-      select: { id: true },
+    const citado = (
+      await app.inject({
+        method: "POST",
+        url: `/industrial-costs/${version.id}/calculations`,
+        payload: {},
+      })
+    ).json();
+    const precificacao = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/pricing`,
+      payload: { industrialCostCalculationId: citado.id },
     });
-    if (citado) {
-      const recusado = await app.inject({
-        method: "DELETE",
-        url: `/industrial-cost-calculations/${citado.id}`,
-      });
-      expect(recusado.statusCode).toBe(409);
-      expect(recusado.json().error).toBe("calculation_in_use");
-      expect(
-        await prisma.industrialCostCalculation.findUnique({ where: { id: citado.id } }),
-      ).not.toBeNull();
-    }
+    expect(precificacao.statusCode, precificacao.body).toBe(201);
+
+    const recusado = await app.inject({
+      method: "DELETE",
+      url: `/industrial-cost-calculations/${citado.id}`,
+    });
+    expect(recusado.statusCode).toBe(409);
+    expect(recusado.json().error).toBe("calculation_in_use");
+    expect(
+      await prisma.industrialCostCalculation.findUnique({ where: { id: citado.id } }),
+    ).not.toBeNull();
 
     await app.close();
   });

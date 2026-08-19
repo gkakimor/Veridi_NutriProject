@@ -74,9 +74,27 @@ export interface PricingRebaseTierDTO {
   unitPrice: string | null;
 }
 
+/**
+ * Como a troca de base acontece nesta versão.
+ *
+ * `IN_PLACE` — a versão é rascunho: a base troca nela mesma. Rascunho não é
+ * preço acordado; criar uma V2 só para trocar a base de algo que ninguém
+ * combinou ainda deixaria um rastro de versões vazias.
+ * `NEW_VERSION` — a versão está ativa: preço acordado não se reescreve, então
+ * nasce um rascunho novo com as faixas copiadas.
+ */
+export type PricingRebaseMode = "IN_PLACE" | "NEW_VERSION";
+
 export interface PricingRebasePreviewDTO {
   pricingVersionId: string;
   pricingVersionLabel: string;
+  mode: PricingRebaseMode;
+  /**
+   * Qualidade do cálculo de destino. A tela precisa disto mesmo quando ela
+   * não aparece em `changes`: trocar de uma base parcial para outra parcial
+   * não muda nada visível, e prometer que muda seria mentir.
+   */
+  targetQuality: IndustrialCostQuality | null;
   /** `null` quando não existe cálculo mais recente que o atual. */
   targetCalculationId: string | null;
   targetCalculationCode: string | null;
