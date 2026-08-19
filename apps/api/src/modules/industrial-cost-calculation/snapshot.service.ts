@@ -8,7 +8,10 @@ import type {
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { calculateIndustrialCost } from "./calculation.service.js";
-import { IndustrialCostCalculationNotFoundError } from "./calculation.errors.js";
+import {
+  CalculationInUseError,
+  IndustrialCostCalculationNotFoundError,
+} from "./calculation.errors.js";
 
 const CODE_SEQUENCE = "industrial_cost_calculation_code_seq";
 const CODE_PREFIX = "CALC";
@@ -145,4 +148,32 @@ export async function latestCalculationsByProduct(
     latest.set(row.productId, toSummaryDTO(row));
   }
   return latest;
+}
+
+/**
+ * Descarta um cálculo salvo que ninguém cita.
+ *
+ * Congelar existe para proteger COMPROMISSO. Enquanto o produto está sendo
+ * definido e nenhuma precificação apontou para o documento, ele é só um
+ * retrato provisório — e obrigar a conviver com um retrato errado para
+ * sempre não protege nada, só polui o histórico.
+ *
+ * Editar o cálculo continua fora de questão: um documento citado que muda de
+ * conteúdo é pior que um documento a mais. Aqui ou ele some inteiro, ou fica
+ * como está.
+ */
+export async function discardIndustrialCostCalculation(id: string): Promise<void> {
+  const prisma = getPrisma();
+  const calculation = await prisma.industrialCostCalculation.findUnique({ where: { id } });
+  if (!calculation) throw new IndustrialCostCalculationNotFoundError(id);
+
+  const pricing = await prisma.pricingVersion.findMany({
+    where: { industrialCostCalculationId: id },
+    select: { code: true, versionNumber: true },
+  });
+  if (pricing.length > 0) {
+    throw new CalculationInUseError(pricing.map((p) => `${p.code} · V${p.versionNumber}`));
+  }
+
+  await prisma.industrialCostCalculation.delete({ where: { id } });
 }

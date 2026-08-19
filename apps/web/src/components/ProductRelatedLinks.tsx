@@ -10,7 +10,19 @@ import { RelatedLinks } from "./RelatedLinks";
  *
  * `current` some da barra — link para a tela em que a pessoa já está é ruído.
  */
-export type ProductScreen = "product" | "formulation" | "costs" | "cmv" | "pricing";
+/**
+ * `calculation` existe porque o cálculo salvo NÃO é a estrutura de custos.
+ * Ele se declarava como tal, e a barra — que esconde o link da tela atual —
+ * removia justamente "Custos industriais", que é onde a estrutura se ativa.
+ * Quem salvava um cálculo caía numa tela sem saída para o passo seguinte.
+ */
+export type ProductScreen =
+  | "product"
+  | "formulation"
+  | "costs"
+  | "calculation"
+  | "cmv"
+  | "pricing";
 
 export function ProductRelatedLinks({
   productId,

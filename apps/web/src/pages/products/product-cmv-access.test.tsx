@@ -42,6 +42,7 @@ describe("Resumo de CMV no produto", () => {
         formulationVersionNumber: 1,
         referenceOutputQuantity: "1000",
         referenceOutputUomCode: "un",
+        pendencies: [],
       },
       draft: null,
       versions: [{ id: "ec-1" }],
@@ -105,6 +106,15 @@ describe("Resumo de CMV no produto", () => {
         formulationVersionNumber: 1,
         referenceOutputQuantity: "1000",
         referenceOutputUomCode: "un",
+        pendencies: [
+          {
+            code: "ENERGY_RESOURCE_MISSING",
+            description: "Energia derivada dos equipamentos, mas nenhum equipamento foi planejado.",
+            severity: "BLOCKING",
+            target: "SELF",
+            resourceId: null,
+          },
+        ],
       },
       draft: null,
       versions: [{ id: "ec-1" }],
@@ -129,6 +139,19 @@ describe("Resumo de CMV no produto", () => {
     expect(
       screen.getByText(/Não há cálculo de custo salvo até esta data de referência/),
     ).toBeInTheDocument();
+    // O motivo de não haver número aparece na mesma tela, com saída: era
+    // exatamente o "CMV indisponível" sem explicação que mandava o usuário
+    // procurar a pendência duas telas adiante.
+    expect(
+      screen.getByText(/Falta 1 configuração para ativar esta estrutura/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/nenhum equipamento foi planejado/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Abrir a estrutura de custos" })).toHaveAttribute(
+      "href",
+      "/produtos/prod-1/custos",
+    );
     // Sem permissão comercial, nenhuma linha de preço aparece.
     expect(screen.queryByText(/Precificação ativa/)).not.toBeInTheDocument();
     expect(screen.queryByText(/R\$ 0,00/)).not.toBeInTheDocument();

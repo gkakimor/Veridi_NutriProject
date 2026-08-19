@@ -389,6 +389,158 @@ function totalDoGrupo(
 }
 
 describe("CMV — matriz de composição e base econômica", () => {
+  it("material sem custo aponta o caminho certo: comprar, informar no recebimento, ou recalcular", async () => {
+    const app = buildTestApp();
+    // Sem compra nenhuma: o cálculo nasce sem custo de material.
+    const { product, material } = await createScenario(app, { referenceOutputQuantity: "1000" });
+
+    const semCompra = await cmv(product.id, "1000");
+    const aviso = () =>
+      (semCompra.simulation?.warnings ?? []).find((w) => w.code === "MATERIAL_COST_UNKNOWN");
+    // Nunca comprado: mandar para o cadastro do item seria beco — lá não
+    // existe campo de custo, e de propósito.
+    expect(aviso()?.target).toBe("PURCHASE");
+    expect(aviso()?.itemId).toBe(material.id);
+
+    // A compra chega COM custo, depois do cálculo já salvo. O material passa
+    // a ter custo hoje, e quem está velho é a base congelada.
+    const supplier = await createSupplier();
+    await receiveWithCost(app, {
+      supplierId: supplier.id,
+      itemId: material.id,
+      quantity: "1000",
+      unitCost: "10",
+    });
+
+    const depois = await cmv(product.id, "1000");
+    const congelado = (depois.simulation?.warnings ?? []).find(
+      (w) => w.code === "MATERIAL_COST_UNKNOWN",
+    );
+    // O que sobra na base congelada e sumiu da simulação de hoje já está
+    // resolvido: culpar a estrutura mandaria consertar o que já está certo.
+    expect(congelado?.target).toBe("STALE_BASIS");
+    // E a simulação de hoje já nem avisa: o custo existe.
+    expect(
+      (depois.live?.warnings ?? []).some((w) => w.code === "MATERIAL_COST_UNKNOWN"),
+    ).toBe(false);
+
+    await app.close();
+  });
+
+  it("simulação de hoje anda com a receita nova enquanto a base congelada não anda", async () => {
+    const app = buildTestApp();
+    const { product, version } = await createScenario(app, {
+      materialUnitCost: "10",
+      referenceOutputQuantity: "1000",
+    });
+
+    const antes = await cmv(product.id, "1000");
+    // Os dois convivem desde o começo, dizendo a mesma coisa.
+    expect(antes.simulation?.totalCost).not.toBeNull();
+    expect(antes.live).not.toBeNull();
+    expect(antes.live!.formulationVersionNumber).toBe(1);
+    expect(antes.live!.industrialCostVersionId).toBe(version.id);
+    expect(antes.live!.totalCost).toBe(antes.simulation!.totalCost);
+
+    // Um material novo entra na receita, e a receita nova é publicada.
+    const extra = await createItem("RAW_MATERIAL");
+    await receiveWithCost(app, {
+      supplierId: (await createSupplier()).id,
+      itemId: extra.id,
+      quantity: "1000",
+      unitCost: "50",
+    });
+    const v2 = (
+      await app.inject({
+        method: "POST",
+        url: `/formulation-versions/${antes.formulationVersionId}/new-version`,
+      })
+    ).json();
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v2.id}`,
+      payload: {
+        basisQuantity: "1",
+        components: [
+          { itemId: antes.simulation!.components[0]!.itemId, quantity: "0.01", unitCode: "kg" },
+          { itemId: extra.id, quantity: "0.02", unitCode: "kg" },
+        ],
+      },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v2.id}/activate` });
+
+    // Rascunho de estrutura sobre a receita nova — é o que está em definição.
+    const rascunho = (
+      await app.inject({
+        method: "POST",
+        url: `/products/${product.id}/industrial-costs`,
+        payload: { formulationVersionId: v2.id, referenceOutputQuantity: "1000" },
+      })
+    ).json();
+
+    const depois = await cmv(product.id, "1000");
+    // Guarda 1: o congelado continua inteiro na resposta, intocado.
+    expect(depois.simulation!.totalCost).toBe(antes.simulation!.totalCost);
+    expect(depois.basisFormulationVersionNumber).toBe(1);
+    expect(depois.calculationCode).toBe(antes.calculationCode);
+    // ...e o vivo já fala da receita nova, pelo rascunho.
+    expect(depois.live!.industrialCostVersionId).toBe(rascunho.id);
+    expect(depois.live!.industrialCostVersionStatus).toBe("DRAFT");
+    expect(depois.live!.formulationVersionNumber).toBe(2);
+    expect(depois.live!.components.some((c) => c.itemId === extra.id)).toBe(true);
+    expect(depois.live!.totalCost).not.toBe(depois.simulation!.totalCost);
+
+    // Guarda 3: a simulação declara as próprias premissas.
+    expect(depois.live!.costReferenceDate).toBeTruthy();
+    expect(depois.live!.industrialCostVersionLabel).toContain(rascunho.code);
+
+    // Simular continua sendo leitura: nenhum cálculo nasceu por perguntar.
+    const calculos = await getPrisma().industrialCostCalculation.count({
+      where: { industrialCostVersionId: rascunho.id },
+    });
+    expect(calculos).toBe(0);
+
+    await app.close();
+  });
+
+  it("publicar formulação nova não move a base: a resposta diz de qual receita ela fala", async () => {
+    const app = buildTestApp();
+    const { product } = await createScenario(app, {
+      materialUnitCost: "10",
+      referenceOutputQuantity: "1000",
+    });
+
+    const antes = await cmv(product.id, "1000");
+    const formulationId = antes.formulationVersionId!;
+    expect(antes.basisFormulationVersionNumber).toBe(1);
+    expect(antes.formulationVersionNumber).toBe(1);
+
+    // V2 nasce da V1 e é publicada. A estrutura ativa continua congelada na
+    // receita da qual foi feita — trocar a formulação ativa jamais reescreve
+    // custo já em uso.
+    const criacao = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${formulationId}/new-version`,
+      payload: {},
+    });
+    expect(criacao.statusCode, criacao.body).toBe(201);
+    const v2 = criacao.json();
+    const ativacao = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v2.id}/activate`,
+    });
+    expect(ativacao.statusCode, ativacao.body).toBe(200);
+
+    const depois = await cmv(product.id, "1000");
+    expect(depois.formulationVersionNumber).toBe(2);
+    // O ponto do campo: a composição devolvida ainda descreve a V1, e a
+    // resposta admite isso em vez de deixar a tela deduzir.
+    expect(depois.basisFormulationVersionNumber).toBe(1);
+    expect(depois.simulation?.totalCost).toBe(antes.simulation?.totalCost);
+
+    await app.close();
+  });
+
   it("custo fixo por lote não se dilui abaixo de um lote e acompanha a contagem", async () => {
     const app = buildTestApp();
     const { product } = await createScenario(app, {

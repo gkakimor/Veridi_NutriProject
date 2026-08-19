@@ -140,10 +140,6 @@ export function SearchableEntitySelect({
   }, [options, query]);
 
   useEffect(() => {
-    setActiveIndex(0);
-  }, [query, open]);
-
-  useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: MouseEvent) {
       const target = event.target as Node;
@@ -167,17 +163,46 @@ export function SearchableEntitySelect({
   }
 
   /**
-   * "Cadastrar novo" é a última parada da lista, não um botão solto embaixo
-   * dela. Quem chega ao fim dos resultados com a seta continua a navegação e
-   * cai no cadastro — antes essa ação só existia para quem usava mouse, e
-   * quem digitava o nome de um cliente que ainda não existe ficava sem saída.
+   * "Cadastrar novo" é a PRIMEIRA parada da lista.
+   *
+   * Ficava no fim, e com 539 itens no catálogo isso quer dizer rolar até o
+   * fundo para cadastrar o que ainda não existe — a ação some justamente
+   * quando a lista é grande, que é quando ela mais faz falta.
+   *
+   * No topo ela é vista sem rolagem, e a ordem visual, a do DOM e a do
+   * teclado continuam sendo a mesma — nada de item pregado que o leitor de
+   * tela anuncia fora de lugar.
+   *
+   * O que NÃO muda: quem digita e aperta Enter continua escolhendo o
+   * primeiro RESULTADO, nunca criando. O índice ativo nasce no primeiro
+   * item real; chegar ao cadastro exige subir com a seta ou clicar.
    */
   // A lista renderiza no máximo 50 resultados; navegar por teclado além
   // disso apontaria `aria-activedescendant` para um item que não existe no
   // DOM — e o leitor de tela ficaria mudo no meio da lista.
   const visible = useMemo(() => filtered.slice(0, 50), [filtered]);
-  const createIndex = canCreate && onCreateNew ? visible.length : -1;
-  const navigableCount = visible.length + (createIndex >= 0 ? 1 : 0);
+  const canOfferCreate = canCreate && Boolean(onCreateNew);
+  const createIndex = canOfferCreate ? 0 : -1;
+  /** Deslocamento dos resultados quando o cadastro ocupa o índice 0. */
+  const primeiroResultado = canOfferCreate ? 1 : 0;
+  const navigableCount = visible.length + (canOfferCreate ? 1 : 0);
+  /** Opção sob o índice navegável — `null` quando o índice é o cadastro. */
+  const opcaoNoIndice = (indice: number) => visible[indice - primeiroResultado] ?? null;
+  /*
+   * Onde o índice ativo nasce.
+   *
+   * No primeiro RESULTADO, para que Enter escolha em vez de cadastrar. Sem
+   * resultado nenhum — nome que ainda não existe — a única ação possível é
+   * cadastrar, e é nela que o Enter tem que cair: caso contrário quem digita
+   * um fornecedor novo aperta Enter e não acontece nada.
+   */
+  const indiceInicial = visible.length > 0 ? primeiroResultado : Math.max(createIndex, 0);
+
+  // Depois de `indiceInicial` existir: a lista reposiciona o item ativo a
+  // cada busca nova e a cada abertura.
+  useEffect(() => {
+    setActiveIndex(indiceInicial);
+  }, [query, open, indiceInicial]);
 
   /**
    * Entrega para o cadastro no contexto.
@@ -228,7 +253,7 @@ export function SearchableEntitySelect({
         startCreate();
         return;
       }
-      const option = visible[activeIndex];
+      const option = opcaoNoIndice(activeIndex);
       if (option) {
         event.preventDefault();
         choose(option);
@@ -248,8 +273,8 @@ export function SearchableEntitySelect({
     ? undefined
     : createIndex >= 0 && activeIndex === createIndex
       ? createOptionId
-      : visible[activeIndex]
-        ? `${listId}-${visible[activeIndex]!.id}`
+      : opcaoNoIndice(activeIndex)
+        ? `${listId}-${opcaoNoIndice(activeIndex)!.id}`
         : undefined;
 
   return (
@@ -286,7 +311,7 @@ export function SearchableEntitySelect({
            * criação de um registro que existe. Lista nova começa no
            * primeiro resultado real.
            */
-          setActiveIndex(0);
+          setActiveIndex(indiceInicial);
         }}
         onKeyDown={handleKeyDown}
       />
@@ -321,43 +346,6 @@ export function SearchableEntitySelect({
               maxHeight: anchor.maxHeight,
             }}
           >
-            {/* Filho de `listbox` que não é opção precisa dizer que não é —
-                senão o leitor de tela conta aviso e ação como resultado. */}
-            {options.length === 0 && !canCreate && (
-              <li role="presentation" className="entity-select__empty">
-                Nada disponível para escolher.
-              </li>
-            )}
-            {options.length > 0 && filtered.length === 0 && (
-              <li role="presentation" className="entity-select__empty">
-                {emptyMessage}
-              </li>
-            )}
-            {visible.map((option, index) => (
-              <li
-                key={option.id}
-                id={`${listId}-${option.id}`}
-                role="option"
-                aria-selected={option.id === value}
-                className={
-                  index === activeIndex ? "entity-select__option is-active" : "entity-select__option"
-                }
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  choose(option);
-                }}
-                onMouseEnter={() => setActiveIndex(index)}
-              >
-                <span className="code">{option.code}</span>
-                <span className="entity-select__name">{option.name}</span>
-                {option.hint && <span className="entity-select__hint">{option.hint}</span>}
-              </li>
-            ))}
-            {filtered.length > 50 && (
-              <li role="presentation" className="entity-select__empty">
-                +{filtered.length - 50} resultados — refine a busca.
-              </li>
-            )}
             {createIndex >= 0 && (
               <li
                 id={createOptionId}
@@ -377,6 +365,46 @@ export function SearchableEntitySelect({
               >
                 + {createLabel}
                 {query.trim() ? `: “${query.trim()}”` : ""}
+              </li>
+            )}
+
+            {/* Filho de `listbox` que não é opção precisa dizer que não é —
+                senão o leitor de tela conta aviso e ação como resultado. */}
+            {options.length === 0 && !canCreate && (
+              <li role="presentation" className="entity-select__empty">
+                Nada disponível para escolher.
+              </li>
+            )}
+            {options.length > 0 && filtered.length === 0 && (
+              <li role="presentation" className="entity-select__empty">
+                {emptyMessage}
+              </li>
+            )}
+            {visible.map((option, index) => (
+              <li
+                key={option.id}
+                id={`${listId}-${option.id}`}
+                role="option"
+                aria-selected={option.id === value}
+                className={
+                  index + primeiroResultado === activeIndex
+                    ? "entity-select__option is-active"
+                    : "entity-select__option"
+                }
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  choose(option);
+                }}
+                onMouseEnter={() => setActiveIndex(index + primeiroResultado)}
+              >
+                <span className="code">{option.code}</span>
+                <span className="entity-select__name">{option.name}</span>
+                {option.hint && <span className="entity-select__hint">{option.hint}</span>}
+              </li>
+            ))}
+            {filtered.length > 50 && (
+              <li role="presentation" className="entity-select__empty">
+                +{filtered.length - 50} resultados — refine a busca.
               </li>
             )}
           </ul>,

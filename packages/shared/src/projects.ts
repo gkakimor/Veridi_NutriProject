@@ -163,6 +163,48 @@ export interface QuoteLineDTO {
   pricing: QuotePricingProvenanceDTO | null;
 }
 
+export type QuotePaymentMethod = "CASH" | "INSTALLMENTS";
+
+export const QUOTE_PAYMENT_METHOD_LABELS: Record<QuotePaymentMethod, string> = {
+  CASH: "À vista",
+  INSTALLMENTS: "Parcelado",
+};
+
+/** Uma parcela do plano — valor e vencimento em dias a partir do aceite. */
+export interface QuoteInstallmentDTO {
+  number: number;
+  amount: string;
+  dueInDays: number;
+}
+
+/**
+ * O plano de pagamento da proposta, derivado inteiramente no backend.
+ *
+ * Valor de parcela não se digita: se a proposta impressa e a conta do sistema
+ * saíssem de fontes diferentes, elas divergiriam sem ninguém perceber. Tudo
+ * aqui é consequência de subtotal, desconto, entrada, prazo e juros.
+ */
+export interface QuotePaymentScheduleDTO {
+  /** Soma das linhas, antes do desconto. */
+  subtotal: string;
+  discountPercent: string | null;
+  discountAmount: string;
+  /** Subtotal menos desconto — o preço à vista da proposta. */
+  total: string;
+  method: QuotePaymentMethod;
+  downPaymentPercent: string | null;
+  downPayment: string | null;
+  /** Total menos entrada: o que efetivamente é financiado. */
+  financedAmount: string | null;
+  monthlyInterestPercent: string | null;
+  installmentIntervalDays: number | null;
+  installments: QuoteInstallmentDTO[];
+  /** Entrada mais a soma das parcelas. Igual a `total` quando não há juros. */
+  totalPayable: string;
+  /** `totalPayable − total`. `"0.00"` quando o parcelamento é sem juros. */
+  interestAmount: string;
+}
+
 export interface QuoteVersionDTO {
   id: string;
   code: string;
@@ -179,10 +221,21 @@ export interface QuoteVersionDTO {
   /** Uma linha por produto. O cabeçalho não guarda quantidade nem preço. */
   lines: QuoteLineDTO[];
   /**
-   * Soma das linhas. `null` enquanto alguma linha essencial não tem preço —
-   * total parcial não existe: existe subtotal conhecido.
+   * Soma das linhas, JÁ COM O DESCONTO aplicado — é o que a proposta vale.
+   * `null` enquanto alguma linha essencial não tem preço: total parcial não
+   * existe, existe subtotal conhecido.
    */
   total: string | null;
+  /** Soma das linhas ANTES do desconto. `null` pelo mesmo motivo de `total`. */
+  subtotal: string | null;
+  discountPercent: string | null;
+  paymentMethod: QuotePaymentMethod;
+  downPaymentPercent: string | null;
+  installmentCount: number | null;
+  installmentIntervalDays: number | null;
+  monthlyInterestPercent: string | null;
+  /** Derivado. `null` quando ainda não há total (linha sem preço). */
+  paymentSchedule: QuotePaymentScheduleDTO | null;
   commercialNotes: string | null;
   paymentTerms: string | null;
   leadTimeDays: number | null;
@@ -363,6 +416,12 @@ export interface UpdateQuoteVersionInput {
   commercialNotes?: string | null;
   paymentTerms?: string | null;
   leadTimeDays?: number | null;
+  discountPercent?: string | null;
+  paymentMethod?: QuotePaymentMethod;
+  downPaymentPercent?: string | null;
+  installmentCount?: number | null;
+  installmentIntervalDays?: number | null;
+  monthlyInterestPercent?: string | null;
 }
 
 export interface RejectQuoteInput {

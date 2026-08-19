@@ -28,6 +28,7 @@ import { IndustrialCostPrintPage } from "./pages/print/IndustrialCostPrintPage";
 import { IndustrialCostPage } from "./pages/industrial-costs/IndustrialCostPage";
 import { ProductCmvPage } from "./pages/product-cmv/ProductCmvPage";
 import { CostCalculationPage } from "./pages/industrial-costs/CostCalculationPage";
+import { CmvPrintPage } from "./pages/print/CmvPrintPage";
 import { PricingListPage } from "./pages/pricing/PricingListPage";
 import { PricingPage } from "./pages/pricing/PricingPage";
 import { PricingPrintPage } from "./pages/print/PricingPrintPage";
@@ -144,6 +145,7 @@ function AuthenticatedApp() {
         <Route path="/print/relatorios/:reportCode" element={<ReportPrintPage />} />
         <Route path="/print/estrutura-custos/:id" element={<IndustrialCostPrintPage />} />
         <Route path="/print/calculo-custo/:id" element={<CostCalculationPrintPage />} />
+        <Route path="/print/cmv/:productId" element={<CmvPrintPage />} />
         <Route path="/print/custo-producao/:id" element={<ProductionCostPrintPage />} />
         <Route path="/print/precificacao/:id" element={<PricingPrintPage />} />
         <Route path="/print/contagem-fisica" element={<InventoryCountSheetPage />} />

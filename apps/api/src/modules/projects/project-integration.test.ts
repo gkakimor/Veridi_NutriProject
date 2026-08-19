@@ -881,6 +881,184 @@ describe("Orçamento com precificação", () => {
   });
 });
 
+describe("Desconto e plano de pagamento do orçamento", () => {
+  it("desconta sobre o subtotal e divide em entrada mais parcelas com juros", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const project = await createProject(app);
+    const chain = await buildPricingChain(app, project.id, {
+      tierQuantity: "500",
+      unitPrice: "20",
+    });
+    const quote = await createQuote(app, project.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
+      payload: { pricingTierId: chain.pricing.tiers[0].id },
+    });
+
+    // 500 × R$ 20,00 = R$ 10.000,00 de subtotal.
+    const semJuros = (
+      await app.inject({
+        method: "PATCH",
+        url: `/quote-versions/${quote.id}`,
+        payload: {
+          discountPercent: "10",
+          paymentMethod: "INSTALLMENTS",
+          downPaymentPercent: "20",
+          installmentCount: 3,
+          installmentIntervalDays: 30,
+        },
+      })
+    ).json();
+
+    const plano = semJuros.paymentSchedule;
+    expect(semJuros.subtotal).toBe("10000.00");
+    expect(plano.discountAmount).toBe("1000.00");
+    // `total` é o preço à vista: o desconto entra nele, não fica de enfeite.
+    expect(semJuros.total).toBe("9000.00");
+    expect(plano.downPayment).toBe("1800.00");
+    expect(plano.financedAmount).toBe("7200.00");
+    expect(plano.installments.map((p: { amount: string }) => p.amount)).toEqual([
+      "2400.00",
+      "2400.00",
+      "2400.00",
+    ]);
+    expect(plano.installments.map((p: { dueInDays: number }) => p.dueInDays)).toEqual([30, 60, 90]);
+    // Sem juros, quem paga parcelado paga o mesmo que à vista.
+    expect(plano.totalPayable).toBe("9000.00");
+    expect(plano.interestAmount).toBe("0.00");
+
+    // Price sobre R$ 7.200,00 em 3× a 2% a.m.: 7200 × 0,02 / (1 − 1,02⁻³).
+    const comJuros = (
+      await app.inject({
+        method: "PATCH",
+        url: `/quote-versions/${quote.id}`,
+        payload: { monthlyInterestPercent: "2" },
+      })
+    ).json().paymentSchedule;
+
+    expect(comJuros.installments.map((p: { amount: string }) => p.amount)).toEqual([
+      "2496.63",
+      "2496.63",
+      "2496.63",
+    ]);
+    expect(comJuros.totalPayable).toBe("9289.89");
+    expect(comJuros.interestAmount).toBe("289.89");
+
+    // Voltar para à vista não deixa o plano anterior escondido no registro,
+    // pronto para ressuscitar sozinho.
+    const aVista = (
+      await app.inject({
+        method: "PATCH",
+        url: `/quote-versions/${quote.id}`,
+        payload: { paymentMethod: "CASH" },
+      })
+    ).json();
+    expect(aVista.installmentCount).toBeNull();
+    expect(aVista.monthlyInterestPercent).toBeNull();
+    expect(aVista.paymentSchedule.installments).toEqual([]);
+    expect(aVista.paymentSchedule.totalPayable).toBe("9000.00");
+    expect(aVista.total).toBe("9000.00");
+
+    await app.close();
+  });
+
+  it("a soma das parcelas fecha com o valor financiado mesmo quando não divide", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const project = await createProject(app);
+    const chain = await buildPricingChain(app, project.id, {
+      tierQuantity: "500",
+      unitPrice: "20",
+    });
+    const quote = await createQuote(app, project.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
+      payload: { pricingTierId: chain.pricing.tiers[0].id },
+    });
+
+    // R$ 10.000,00 em 3× não divide em centavos exatos.
+    const plano = (
+      await app.inject({
+        method: "PATCH",
+        url: `/quote-versions/${quote.id}`,
+        payload: { paymentMethod: "INSTALLMENTS", installmentCount: 3 },
+      })
+    ).json().paymentSchedule;
+
+    const soma = plano.installments.reduce(
+      (total: number, parcela: { amount: string }) => total + Number(parcela.amount),
+      0,
+    );
+    // Uma proposta que não fecha na conta destrói a confiança no documento.
+    expect(soma.toFixed(2)).toBe("10000.00");
+    expect(plano.totalPayable).toBe("10000.00");
+    expect(plano.interestAmount).toBe("0.00");
+
+    // Desconto acima do teto não passa: 100% não é desconto, é doação.
+    const recusado = await app.inject({
+      method: "PATCH",
+      url: `/quote-versions/${quote.id}`,
+      payload: { discountPercent: "100" },
+    });
+    expect(recusado.statusCode).toBe(400);
+
+    await app.close();
+  });
+});
+
+describe("Simular condições sem gravar", () => {
+  it("devolve o plano das condições enviadas e não toca na proposta", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const project = await createProject(app);
+    const chain = await buildPricingChain(app, project.id, {
+      tierQuantity: "500",
+      unitPrice: "20",
+    });
+    const quote = await createQuote(app, project.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
+      payload: { pricingTierId: chain.pricing.tiers[0].id },
+    });
+
+    const previa = (
+      await app.inject({
+        method: "POST",
+        url: `/quote-versions/${quote.id}/payment-preview`,
+        payload: {
+          discountPercent: "25",
+          paymentMethod: "INSTALLMENTS",
+          installmentCount: 2,
+        },
+      })
+    ).json().schedule;
+
+    // R$ 10.000,00 − 25% = R$ 7.500,00, em 2×.
+    expect(previa.total).toBe("7500.00");
+    expect(previa.installments.map((p: { amount: string }) => p.amount)).toEqual([
+      "3750.00",
+      "3750.00",
+    ]);
+
+    // Simular é leitura: a proposta continua sem desconto e à vista.
+    const guardado = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    expect(guardado.discountPercent).toBeNull();
+    expect(guardado.paymentMethod).toBe("CASH");
+    expect(guardado.total).toBe("10000.00");
+
+    await app.close();
+  });
+});
+
 describe("Aprovação do projeto", () => {
   it("promove o MESMO produto técnico e libera a operação", async () => {
     const app = buildTestApp("ADMIN");

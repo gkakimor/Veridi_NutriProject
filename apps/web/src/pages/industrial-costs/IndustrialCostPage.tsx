@@ -27,6 +27,7 @@ import type { IndustrialCostBasis, IndustrialCostCategory } from "@veridi/shared
 import { CostCalculationSection } from "./CostCalculationSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
+import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
 import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
 import {
@@ -76,6 +77,12 @@ function describeRate(usage: IndustrialCostResourceUsageDTO, status: string): st
  * adicionais. O custo consolidado (CMV) é calculado em outra etapa: nada
  * nesta tela soma um total.
  */
+/** "1 pendência" / "3 pendências" — plural sem parênteses de formulário. */
+function pendencyBadgeLabel(pendencies: { severity: string }[]): string {
+  const total = pendencies.filter((pendency) => pendency.severity === "BLOCKING").length;
+  return total === 1 ? "1 pendência" : `${total} pendências`;
+}
+
 export function IndustrialCostPage() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
@@ -87,6 +94,7 @@ export function IndustrialCostPage() {
 
   const [activateConfirm, setActivateConfirm] = useState(false);
   const [newVersionConfirm, setNewVersionConfirm] = useState(false);
+
   /*
    * Qual versão está sendo lida.
    *
@@ -179,6 +187,12 @@ export function IndustrialCostPage() {
     !data.suggestedReferenceOutputQuantity;
   const editable = canEdit && version?.status === "DRAFT";
 
+  /* A receita ativa do produto já passou da que esta estrutura congelou. */
+  const formulacaoDefasada =
+    version != null &&
+    data.activeFormulationVersionNumber != null &&
+    data.activeFormulationVersionNumber !== version.formulationVersionNumber;
+
   // Energia direta só existe no modo correspondente; fora dele o recurso de
   // energia nem é oferecido, para não induzir dupla contagem.
   const usedResourceIds = new Set(version?.resourceUsages.map((usage) => usage.resourceId) ?? []);
@@ -205,8 +219,10 @@ export function IndustrialCostPage() {
                 <span className={statusBadgeClass(version.status)}>
                   {INDUSTRIAL_COST_VERSION_STATUS_LABELS[version.status]}
                 </span>
+                {/* O rótulo sozinho não dizia quanto falta nem onde olhar; o
+                    número já separa "quase pronta" de "mal começada". */}
                 <span className={version.complete ? "badge badge--active" : "badge badge--warn"}>
-                  {version.complete ? "Completa" : "Com pendências"}
+                  {version.complete ? "Completa" : pendencyBadgeLabel(version.pendencies)}
                 </span>
               </>
             )}
@@ -390,15 +406,11 @@ export function IndustrialCostPage() {
                 </dd>
               </dl>
 
-              {version.pendencies.length > 0 && (
-                <ul className="candidate-list">
-                  {version.pendencies.map((pendency) => (
-                    <li key={pendency.description} className="field__hint">
-                      {pendency.description}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <IndustrialCostPendencies
+                pendencies={version.pendencies}
+                productId={data.productId}
+                onStructurePage
+              />
 
               {editable && (
                 <>
@@ -434,6 +446,28 @@ export function IndustrialCostPage() {
                     >
                       Salvar base
                     </button>
+                    {/* Rascunho SEGUE a receita ativa por padrão. Só fica para
+                        trás quando o usuário escolheu outra versão de
+                        propósito — e aí o caminho de volta precisa existir,
+                        senão a fixação vira armadilha. */}
+                    {version.formulationPinned && data.activeFormulationVersionId && (
+                      <button
+                        type="button"
+                        className="btn btn--secondary btn--sm"
+                        disabled={saving}
+                        title="Volta a acompanhar a formulação ativa do produto. As premissas e recursos informados aqui não são apagados."
+                        onClick={() =>
+                          void run(() =>
+                            updateIndustrialCostVersion(version.id, {
+                              formulationVersionId: data.activeFormulationVersionId!,
+                            }),
+                          )
+                        }
+                      >
+                        Voltar a seguir a formulação ativa V
+                        {data.activeFormulationVersionNumber}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn--accent btn--sm"
@@ -512,6 +546,7 @@ export function IndustrialCostPage() {
             </FormSection>
 
             <FormSection
+              id="secao-premissas"
               title="Premissas de custo adicionais"
               subtitle={`Custos que não estão na formulação. Percentual usa o custo industrial direto: ${DIRECT_INDUSTRIAL_COST_DEFINITION}`}
             >
@@ -659,6 +694,7 @@ export function IndustrialCostPage() {
             </FormSection>
 
             <FormSection
+              id="secao-recursos"
               title="Recursos industriais"
               subtitle="Quanto de mão de obra, equipamento e energia esta base de produção consome. Nenhum valor é multiplicado aqui — o custo consolidado é etapa seguinte."
             >
@@ -797,6 +833,7 @@ export function IndustrialCostPage() {
             </FormSection>
 
             <FormSection
+              id="secao-energia"
               title="Energia"
               subtitle="Consumo informado diretamente e consumo derivado dos equipamentos são exclusivos: somar os dois contaria a mesma energia duas vezes."
             >
@@ -950,6 +987,13 @@ export function IndustrialCostPage() {
                 A estrutura ativa continua valendo na produção e segue acessível pelo seletor de
                 versões.
               </p>
+              {formulacaoDefasada && (
+                <p>
+                  A nova versão nasce sobre a formulação ativa{" "}
+                  <strong>V{data.activeFormulationVersionNumber}</strong> — esta usa a{" "}
+                  <strong>V{version.formulationVersionNumber}</strong>.
+                </p>
+              )}
             </>
           }
           onCancel={() => setNewVersionConfirm(false)}
@@ -986,7 +1030,14 @@ export function IndustrialCostPage() {
                 <li>
                   Produto: <span className="code">{data.productCode}</span> {data.productName}
                 </li>
-                <li>Situação: Com pendências</li>
+              </ul>
+              {/* Confirmar "com pendências" sem ver quais é decidir no escuro. */}
+              <ul className="confirm-dialog__list">
+                {version.pendencies
+                  .filter((pendency) => pendency.severity === "BLOCKING")
+                  .map((pendency, index) => (
+                    <li key={`${pendency.code}-${index}`}>{pendency.description}</li>
+                  ))}
               </ul>
             </>
           }

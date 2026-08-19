@@ -210,6 +210,9 @@ function buildPendencies(
       pendencies.push({
         code: "RATE_NOT_INFORMED",
         description: `"${line.description}" está sem valor informado.`,
+        severity: "BLOCKING",
+        target: "SELF",
+        resourceId: null,
       });
     }
     if (
@@ -219,6 +222,9 @@ function buildPendencies(
       pendencies.push({
         code: "SHIPPING_BOX_NOT_CONFIGURED",
         description: `"${line.description}" usa caixa de expedição, mas o produto não tem unidades por caixa cadastradas.`,
+        severity: "BLOCKING",
+        target: "PRODUCT",
+        resourceId: null,
       });
     }
   }
@@ -227,6 +233,9 @@ function buildPendencies(
     pendencies.push({
       code: "FORMULATION_NOT_STABLE",
       description: "A formulação referenciada ainda é rascunho.",
+      severity: "BLOCKING",
+      target: "FORMULATION",
+      resourceId: null,
     });
   }
 
@@ -241,6 +250,9 @@ function buildPendencies(
         pendencies.push({
           code: "RESOURCE_RATE_NOT_INFORMED",
           description: `"${name}" foi ativado sem tarifa vigente informada.`,
+          severity: "BLOCKING",
+          target: "RESOURCE",
+          resourceId: usage.industrialResourceId,
         });
       }
       continue;
@@ -249,12 +261,18 @@ function buildPendencies(
       pendencies.push({
         code: "RESOURCE_RATE_NOT_INFORMED",
         description: `"${name}" não tem tarifa vigente informada.`,
+        severity: "BLOCKING",
+        target: "RESOURCE",
+        resourceId: usage.industrialResourceId,
       });
     }
     if (!usage.industrialResource.active) {
       pendencies.push({
         code: "RESOURCE_INACTIVE",
         description: `"${name}" está inativo no cadastro de recursos.`,
+        severity: "BLOCKING",
+        target: "RESOURCE",
+        resourceId: usage.industrialResourceId,
       });
     }
   }
@@ -264,6 +282,9 @@ function buildPendencies(
     pendencies.push({
       code: "ENERGY_NOT_CONFIGURED",
       description: "A energia desta estrutura ainda não foi configurada.",
+      severity: "BLOCKING",
+      target: "SELF",
+      resourceId: null,
     });
   }
 
@@ -275,6 +296,9 @@ function buildPendencies(
       pendencies.push({
         code: "ENERGY_RESOURCE_MISSING",
         description: "Modo direto sem consumo de energia informado.",
+        severity: "BLOCKING",
+        target: "SELF",
+        resourceId: null,
       });
     }
   }
@@ -293,6 +317,9 @@ function buildPendencies(
         pendencies.push({
           code: "EQUIPMENT_POWER_NOT_INFORMED",
           description: `"${usage.resourceNameSnapshot ?? usage.industrialResource.name}" está sem potência cadastrada — a energia derivada fica incompleta.`,
+          severity: "BLOCKING",
+          target: "RESOURCE",
+          resourceId: usage.industrialResourceId,
         });
       }
     }
@@ -300,6 +327,9 @@ function buildPendencies(
       pendencies.push({
         code: "ENERGY_RESOURCE_MISSING",
         description: "Energia derivada dos equipamentos, mas nenhum equipamento foi planejado.",
+        severity: "BLOCKING",
+        target: "SELF",
+        resourceId: null,
       });
     }
   }
@@ -313,15 +343,25 @@ function buildPendencies(
     pendencies.push({
       code: "FORMULATION_OUTDATED",
       description: `Esta estrutura usa a formulação V${version.formulationVersion.versionNumber}; a formulação ativa atual é V${activeFormulationVersionNumber}.`,
+      severity: "INFO",
+      target: "FORMULATION",
+      resourceId: null,
     });
   }
 
   return pendencies;
 }
 
-/** Pendência que impede considerar a estrutura completa (a defasagem não impede). */
+/**
+ * Pendência que impede considerar a estrutura completa.
+ *
+ * A severidade viaja no DTO justamente para a tela poder separar "o que
+ * falta para ativar" de "contexto" sem repetir esta regra do lado do
+ * cliente — quem decide `complete` e quem lista o que falta leem o mesmo
+ * campo.
+ */
 function blockingPendencies(pendencies: IndustrialCostPendencyDTO[]): IndustrialCostPendencyDTO[] {
-  return pendencies.filter((pendency) => pendency.code !== "FORMULATION_OUTDATED");
+  return pendencies.filter((pendency) => pendency.severity === "BLOCKING");
 }
 
 function toVersionDTO(
@@ -344,6 +384,7 @@ function toVersionDTO(
     formulationVersionId: version.formulationVersionId,
     formulationVersionNumber: version.formulationVersion.versionNumber,
     formulationStatus: version.formulationVersion.status,
+    formulationPinned: version.formulationPinned,
     activeFormulationVersionNumber,
 
     referenceOutputQuantity: version.referenceOutputQuantity.toString(),
@@ -513,16 +554,23 @@ export async function createIndustrialCostVersion(
     },
   });
 
+  const ativa = await prisma.formulationVersion.findFirst({
+    where: { productId, status: "ACTIVE" },
+    select: { id: true },
+  });
+  /*
+   * A ativa tem precedência sobre a receita da versão de origem.
+   *
+   * Copiar a da origem fazia uma V2 de estrutura nascer na receita velha
+   * mesmo com uma nova publicada, e não havia caminho pela tela para chegar
+   * na nova. Rascunho é trabalho em andamento: o padrão é a receita que vale
+   * hoje. Ficar na antiga continua possível — mas passa a ser pedido
+   * explícito, e aí a versão nasce fixada.
+   */
   const formulationVersionId =
-    input.formulationVersionId ??
-    source?.formulationVersionId ??
-    (
-      await prisma.formulationVersion.findFirst({
-        where: { productId, status: "ACTIVE" },
-        select: { id: true },
-      })
-    )?.id;
+    input.formulationVersionId ?? ativa?.id ?? source?.formulationVersionId;
   if (!formulationVersionId) throw new MissingFormulationVersionError();
+  const nascePinned = formulationVersionId !== ativa?.id;
 
   const formulation = await prisma.formulationVersion.findUnique({
     where: { id: formulationVersionId },
@@ -566,6 +614,7 @@ export async function createIndustrialCostVersion(
         versionNumber: (maxVersion._max.versionNumber ?? 0) + 1,
         status: "DRAFT",
         formulationVersionId,
+        formulationPinned: nascePinned,
         referenceOutputQuantity: new Prisma.Decimal(referenceQuantity),
         referenceOutputUomCode: referenceUom,
         ...(input.notes !== undefined ? { notes: input.notes } : { notes: source?.notes ?? null }),
@@ -634,11 +683,25 @@ export async function updateIndustrialCostVersion(
     );
   }
 
+  /*
+   * Escolher a receita EXPLICITAMENTE é decisão do usuário, e o rascunho para
+   * de seguir a ativa — seguir por cima disso seria sobrescrever intenção.
+   * Escolher justamente a ativa é o contrário: volta a seguir.
+   */
+  let pinned: boolean | undefined;
+  if (input.formulationVersionId) {
+    const ativa = await prisma.formulationVersion.findFirst({
+      where: { productId: version.productId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    pinned = input.formulationVersionId !== ativa?.id;
+  }
+
   await prisma.industrialCostVersion.update({
     where: { id },
     data: {
       ...(input.formulationVersionId
-        ? { formulationVersionId: input.formulationVersionId }
+        ? { formulationVersionId: input.formulationVersionId, formulationPinned: pinned === true }
         : {}),
       ...(input.referenceOutputQuantity
         ? { referenceOutputQuantity: new Prisma.Decimal(input.referenceOutputQuantity) }

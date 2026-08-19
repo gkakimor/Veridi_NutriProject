@@ -10,6 +10,11 @@ export const createPricingVersionSchema = z.object({
   notes: optionalNullableText(2000),
 });
 
+// Trocar a base é uma escolha explícita: o cálculo alvo vem no corpo.
+export const rebasePricingVersionSchema = z.object({
+  industrialCostCalculationId: z.string().trim().min(1),
+});
+
 export const updatePricingVersionSchema = z.object({
   notes: optionalNullableText(2000),
 });

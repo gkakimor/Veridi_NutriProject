@@ -2,6 +2,7 @@ import type {
   ActivatePricingVersionInput,
   CreatePricingTierInput,
   CreatePricingVersionInput,
+  PricingRebasePreviewDTO,
   PricingVersionDTO,
   PricingVersionListResponse,
   ProductPricingResponse,
@@ -89,4 +90,17 @@ export async function activatePricingVersion(
   input: ActivatePricingVersionInput = {},
 ): Promise<PricingVersionDTO> {
   return send(`/pricing-versions/${id}/activate`, "POST", input);
+}
+
+/** O que mudaria ao refazer esta precificação sobre o custo vigente — leitura. */
+export async function getPricingRebasePreview(id: string): Promise<PricingRebasePreviewDTO> {
+  const response = await apiFetch(`${API_URL}/pricing-versions/${id}/rebase-preview`);
+  return (await parseJsonOrThrow(response)) as PricingRebasePreviewDTO;
+}
+
+export async function rebasePricingVersion(
+  id: string,
+  industrialCostCalculationId: string,
+): Promise<PricingVersionDTO> {
+  return send(`/pricing-versions/${id}/rebase`, "POST", { industrialCostCalculationId });
 }

@@ -216,6 +216,10 @@ export async function costForOutputQuantity(
       warnings.push({
         code: "MATERIAL_COST_UNKNOWN",
         message: `${requirement.itemCode}: sem custo conhecido no cálculo de referência.`,
+        // Sem alvo: só o read model sabe se o caminho é um recebimento sem
+        // custo, uma compra que nunca houve, ou uma base congelada velha.
+        itemId: requirement.itemId,
+        itemCode: requirement.itemCode,
       });
       continue;
     }
@@ -280,6 +284,8 @@ export async function costForOutputQuantity(
         warnings.push({
           code: "RESOURCE_RATE_UNKNOWN",
           message: `"${usage.resourceNameSnapshot ?? usage.industrialResource.name}" sem tarifa no cálculo de referência.`,
+          target: "RESOURCE",
+          resourceId: usage.industrialResourceId,
         });
       }
     }
@@ -311,6 +317,7 @@ export async function costForOutputQuantity(
     warnings.push({
       code: "ENERGY_RESOURCE_MISSING",
       message: "Modo de energia direto sem consumo utilizável no cálculo de referência.",
+      target: "ENERGY",
     });
   }
 
@@ -319,9 +326,20 @@ export async function costForOutputQuantity(
       // Um equipamento sem potência ou sem tarifa deixa a energia em aberto:
       // somar só o que é conhecido mostraria consumo menor que o real.
       resourceMissing = true;
+      /*
+       * Três causas possíveis, e a mensagem sozinha não distinguia: nenhum
+       * equipamento planejado, equipamento sem potência, ou nenhuma tarifa
+       * de energia na estrutura. Dizer qual é poupa a caça.
+       */
+      const causa = !hasEquipment
+        ? "nenhum equipamento foi planejado"
+        : !derivedComplete
+          ? "há equipamento sem potência cadastrada"
+          : "não há tarifa de energia vigente na data de referência";
       warnings.push({
         code: "ENERGY_UNKNOWN",
-        message: "Energia derivada indisponível no cálculo de referência.",
+        message: `Energia derivada indisponível no cálculo de referência — ${causa}.`,
+        target: "ENERGY",
       });
     } else {
       energy = derivedKwh.times(basis.energyRate);

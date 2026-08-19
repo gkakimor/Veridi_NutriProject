@@ -13,6 +13,57 @@ import { getIndustrialCostCalculation } from "../industrial-cost-calculation/sna
  * "otimizar" o CMV com uma conta própria, este teste quebra — que é
  * exatamente o ponto: existe um motor só.
  */
+/**
+ * Data de referência tirada do PRÓPRIO cálculo salvo.
+ *
+ * Estes casos garimpam a estrutura que existir no banco compartilhado. Uma
+ * data constante passa a mentir assim que alguém cria dado mais novo: o CMV
+ * responde "não há cálculo salvo até esta data" e a falha aponta para um
+ * defeito de motor que não existe.
+ */
+async function dataDoUltimoCalculo(versionId: string): Promise<Date | null> {
+  const calc = await getPrisma().industrialCostCalculation.findFirst({
+    where: { industrialCostVersionId: versionId },
+    orderBy: { costReferenceDate: "desc" },
+    select: { costReferenceDate: true },
+  });
+  return calc?.costReferenceDate ?? null;
+}
+
+/**
+ * Primeira estrutura garimpada que o CMV consegue de fato responder.
+ *
+ * Escolher só por "ACTIVE e tem cálculo" não basta: o produto pode estar sem
+ * formulação ativa, e aí a resposta é `unavailableReason` — o teste falhava
+ * por dado do banco, não por regra quebrada. Percorrer as candidatas
+ * mantém a asserção intacta e tira a loteria.
+ */
+async function cenarioComCmv(): Promise<{
+  productId: string;
+  referenceDate: Date;
+  version: { id: string; productId: string; referenceOutputQuantity: Prisma.Decimal };
+} | null> {
+  const candidatas = await getPrisma().industrialCostVersion.findMany({
+    where: { status: "ACTIVE", calculations: { some: {} } },
+    orderBy: { versionNumber: "desc" },
+    take: 20,
+  });
+  for (const candidata of candidatas) {
+    const referenceDate = await dataDoUltimoCalculo(candidata.id);
+    if (!referenceDate) continue;
+    const resposta = await getProductCmv({
+      productId: candidata.productId,
+      quantity: new Prisma.Decimal(1000),
+      referenceDate,
+      includePricing: false,
+    });
+    if (resposta.simulation) {
+      return { productId: candidata.productId, referenceDate, version: candidata };
+    }
+  }
+  return null;
+}
+
 describe("CMV — motor único", () => {
   it("simulação do CMV e motor da precificação dão o mesmo custo para a mesma base", async () => {
     const prisma = getPrisma();
@@ -27,7 +78,7 @@ describe("CMV — motor único", () => {
     const saved = await prisma.industrialCostCalculation.findFirst({
       where: { industrialCostVersionId: costVersion.id },
       orderBy: { calculatedAt: "desc" },
-      select: { id: true },
+      select: { id: true, costReferenceDate: true },
     });
     if (!saved) return;
 
@@ -37,7 +88,14 @@ describe("CMV — motor único", () => {
     });
     const uom = product.finishedProductItem?.unitCode ?? costVersion.referenceOutputUomCode;
     const quantity = new Prisma.Decimal(1000);
-    const referenceDate = new Date("2026-08-18T00:00:00.000Z");
+    /*
+     * A data vem do próprio cálculo escolhido, não de uma constante: este
+     * teste garimpa a estrutura que existir no banco compartilhado, e uma
+     * data fixa passa a mentir assim que alguém cria dado mais novo — o
+     * CMV responde "não há cálculo até esta data" e a falha aponta para
+     * um problema de motor que não existe.
+     */
+    const referenceDate = saved.costReferenceDate;
 
     const calculation = await getIndustrialCostCalculation(saved.id);
     const direto = await costForOutputQuantity(prisma, {
@@ -115,17 +173,13 @@ describe("CMV — motor único", () => {
   });
 
   it("material do cliente mantém quantidade física e fica fora da aquisição Veridi", async () => {
-    const prisma = getPrisma();
-    const version = await prisma.industrialCostVersion.findFirst({
-      where: { status: "ACTIVE", calculations: { some: {} } },
-      orderBy: { versionNumber: "desc" },
-    });
-    if (!version) return;
+    const cenario = await cenarioComCmv();
+    if (!cenario) return;
 
     const cmv = await getProductCmv({
-      productId: version.productId,
+      productId: cenario.productId,
       quantity: new Prisma.Decimal(1000),
-      referenceDate: new Date("2026-08-18T00:00:00.000Z"),
+      referenceDate: cenario.referenceDate,
       includePricing: false,
     });
     const doCliente = (cmv.simulation?.components ?? []).filter((c) => c.customerSupplied);
@@ -170,10 +224,12 @@ describe("CMV — motor único", () => {
     expect(antes.simulation).toBeNull();
     expect(antes.unavailableReason).toMatch(/cálculo de custo salvo até esta data/i);
 
+    const dataDaBase = await dataDoUltimoCalculo(version.id);
+    if (!dataDaBase) return;
     const hoje = await getProductCmv({
       productId: version.productId,
       quantity: new Prisma.Decimal(1000),
-      referenceDate: new Date("2026-08-18T00:00:00.000Z"),
+      referenceDate: dataDaBase,
       includePricing: true,
     });
     expect(hoje.simulation).not.toBeNull();
@@ -187,7 +243,8 @@ describe("CMV — motor único", () => {
     });
     if (!version) return;
 
-    const referenceDate = new Date("2026-08-18T00:00:00.000Z");
+    const referenceDate = await dataDoUltimoCalculo(version.id);
+    if (!referenceDate) return;
     const base = version.referenceOutputQuantity;
     const um = await getProductCmv({
       productId: version.productId,
@@ -215,17 +272,13 @@ describe("CMV — motor único", () => {
   });
 
   it("quantidade inválida e zero explícito são coisas diferentes de desconhecido", async () => {
-    const prisma = getPrisma();
-    const version = await prisma.industrialCostVersion.findFirst({
-      where: { status: "ACTIVE", calculations: { some: {} } },
-      orderBy: { versionNumber: "desc" },
-    });
-    if (!version) return;
+    const cenario = await cenarioComCmv();
+    if (!cenario) return;
 
     const cmv = await getProductCmv({
-      productId: version.productId,
+      productId: cenario.productId,
       quantity: new Prisma.Decimal(1000),
-      referenceDate: new Date("2026-08-18T00:00:00.000Z"),
+      referenceDate: cenario.referenceDate,
       includePricing: false,
     });
     for (const componente of cmv.simulation?.components ?? []) {

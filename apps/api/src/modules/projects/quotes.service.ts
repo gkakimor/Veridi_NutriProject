@@ -1,6 +1,11 @@
 import { Prisma } from "@prisma/client";
 import type { Prisma as PrismaTypes, User } from "@prisma/client";
-import type { QuoteLineDTO, QuotePricingProvenanceDTO, QuoteVersionDTO } from "@veridi/shared";
+import type {
+  QuoteLineDTO,
+  QuotePaymentScheduleDTO,
+  QuotePricingProvenanceDTO,
+  QuoteVersionDTO,
+} from "@veridi/shared";
 import { QUOTE_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -16,6 +21,7 @@ import {
   QuoteNotSentError,
 } from "./projects.errors.js";
 import { getProjectById } from "./projects.service.js";
+import { buildPaymentSchedule } from "./quote-payment.js";
 import {
   assertPriceEditable,
   buildLineSnapshots,
@@ -101,12 +107,29 @@ export function toQuoteVersionDTO(
   // Total da proposta é a soma das linhas — e só existe quando TODAS têm
   // preço. Somar o que está precificado e ignorar o resto entregaria um
   // número menor que a proposta, com cara de total.
-  const total =
+  const subtotal =
     lines.length > 0 && lines.every((line) => line.total !== null)
       ? lines
           .reduce((sum, line) => sum.plus(new Prisma.Decimal(line.total ?? 0)), new Prisma.Decimal(0))
           .toFixed(2)
       : null;
+
+  // O plano é derivado: desconto, entrada, parcelas e juros saem daqui, nunca
+  // de um valor digitado. `total` passa a ser o preço à vista JÁ COM desconto
+  // — é o que a proposta vale, e o que a lista de versões mostra.
+  const paymentSchedule =
+    subtotal === null
+      ? null
+      : buildPaymentSchedule({
+          subtotal: new Prisma.Decimal(subtotal),
+          discountPercent: quote.discountPercent,
+          method: quote.paymentMethod,
+          downPaymentPercent: quote.downPaymentPercent,
+          installmentCount: quote.installmentCount,
+          installmentIntervalDays: quote.installmentIntervalDays,
+          monthlyInterestPercent: quote.monthlyInterestPercent,
+        });
+  const total = paymentSchedule ? paymentSchedule.total : null;
 
   return {
     id: quote.id,
@@ -122,6 +145,16 @@ export function toQuoteVersionDTO(
     currencyCode: quote.currencyCode,
     lines,
     total,
+    subtotal,
+    discountPercent: quote.discountPercent ? quote.discountPercent.toFixed(4) : null,
+    paymentMethod: quote.paymentMethod,
+    downPaymentPercent: quote.downPaymentPercent ? quote.downPaymentPercent.toFixed(4) : null,
+    installmentCount: quote.installmentCount,
+    installmentIntervalDays: quote.installmentIntervalDays,
+    monthlyInterestPercent: quote.monthlyInterestPercent
+      ? quote.monthlyInterestPercent.toFixed(4)
+      : null,
+    paymentSchedule,
     commercialNotes: quote.commercialNotes,
     paymentTerms: quote.paymentTerms,
     leadTimeDays: quote.leadTimeDays,
@@ -216,6 +249,14 @@ export async function createQuoteVersion(
               commercialNotes: previous.commercialNotes,
               paymentTerms: previous.paymentTerms,
               leadTimeDays: previous.leadTimeDays,
+              // Desconto e plano de pagamento também são condição comercial:
+              // renegociar quase sempre parte do que já estava na mesa.
+              discountPercent: previous.discountPercent,
+              paymentMethod: previous.paymentMethod,
+              downPaymentPercent: previous.downPaymentPercent,
+              installmentCount: previous.installmentCount,
+              installmentIntervalDays: previous.installmentIntervalDays,
+              monthlyInterestPercent: previous.monthlyInterestPercent,
             }
           : {}),
         createdByUserId: actor.id,
@@ -261,6 +302,54 @@ export async function createQuoteVersion(
   return (await getQuoteById(created.id)) as QuoteVersionDTO;
 }
 
+/**
+ * Como ficaria o plano com estas condições, sem gravar nada.
+ *
+ * A conta continua sendo do backend — a tela desenha o resultado, nunca o
+ * calcula. Sem isto, ver o efeito de um desconto exigia salvar primeiro: a
+ * pessoa gravava para descobrir e depois gravava de novo para desfazer, e o
+ * número na tela sempre descrevia a decisão anterior.
+ *
+ * O subtotal vem das LINHAS, não do que a tela mandou: aceitar um subtotal
+ * de fora deixaria simular um desconto sobre um valor que a proposta não tem.
+ */
+export async function previewQuotePaymentSchedule(
+  id: string,
+  input: UpdateQuoteVersionInput,
+): Promise<QuotePaymentScheduleDTO | null> {
+  const quote = await requireQuoteWithLines(id);
+  const atual = toQuoteVersionDTO(quote, false);
+  if (atual.subtotal === null) return null;
+
+  const decimal = (value: string | null | undefined, atualValue: string | null) => {
+    if (value === undefined) return atualValue === null ? null : new Prisma.Decimal(atualValue);
+    return value === null ? null : new Prisma.Decimal(value);
+  };
+  const inteiro = (value: number | null | undefined, atualValue: number | null) =>
+    value === undefined ? atualValue : value;
+
+  const method = input.paymentMethod ?? atual.paymentMethod;
+  return buildPaymentSchedule({
+    subtotal: new Prisma.Decimal(atual.subtotal),
+    discountPercent: decimal(input.discountPercent, atual.discountPercent),
+    method,
+    // À vista não simula entrada nem parcela: mostrar o parcelamento que a
+    // pessoa acabou de desligar contradiz a escolha na própria tela.
+    downPaymentPercent:
+      method === "CASH" ? null : decimal(input.downPaymentPercent, atual.downPaymentPercent),
+    installmentCount:
+      method === "CASH" ? null : inteiro(input.installmentCount, atual.installmentCount),
+    installmentIntervalDays:
+      method === "CASH"
+        ? null
+        : inteiro(input.installmentIntervalDays, atual.installmentIntervalDays),
+    monthlyInterestPercent:
+      method === "CASH"
+        ? null
+        : decimal(input.monthlyInterestPercent, atual.monthlyInterestPercent),
+  });
+}
+
 export async function updateQuoteVersion(
   id: string,
   input: UpdateQuoteVersionInput,
@@ -278,6 +367,49 @@ export async function updateQuoteVersion(
       ...(input.commercialNotes !== undefined ? { commercialNotes: input.commercialNotes } : {}),
       ...(input.paymentTerms !== undefined ? { paymentTerms: input.paymentTerms } : {}),
       ...(input.leadTimeDays !== undefined ? { leadTimeDays: input.leadTimeDays } : {}),
+      ...(input.discountPercent !== undefined
+        ? {
+            discountPercent:
+              input.discountPercent === null ? null : new Prisma.Decimal(input.discountPercent),
+          }
+        : {}),
+      ...(input.paymentMethod !== undefined ? { paymentMethod: input.paymentMethod } : {}),
+      /*
+       * À vista não guarda entrada, parcelas nem juros. Deixar os números da
+       * negociação anterior escondidos no registro faria o plano ressuscitar
+       * sozinho na hora que alguém voltasse para "Parcelado".
+       */
+      ...(input.paymentMethod === "CASH"
+        ? {
+            downPaymentPercent: null,
+            installmentCount: null,
+            installmentIntervalDays: null,
+            monthlyInterestPercent: null,
+          }
+        : {
+            ...(input.downPaymentPercent !== undefined
+              ? {
+                  downPaymentPercent:
+                    input.downPaymentPercent === null
+                      ? null
+                      : new Prisma.Decimal(input.downPaymentPercent),
+                }
+              : {}),
+            ...(input.installmentCount !== undefined
+              ? { installmentCount: input.installmentCount }
+              : {}),
+            ...(input.installmentIntervalDays !== undefined
+              ? { installmentIntervalDays: input.installmentIntervalDays }
+              : {}),
+            ...(input.monthlyInterestPercent !== undefined
+              ? {
+                  monthlyInterestPercent:
+                    input.monthlyInterestPercent === null
+                      ? null
+                      : new Prisma.Decimal(input.monthlyInterestPercent),
+                }
+              : {}),
+          }),
     },
   });
 

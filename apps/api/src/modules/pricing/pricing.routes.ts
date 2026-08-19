@@ -22,6 +22,7 @@ import {
   activatePricingVersionSchema,
   createPricingTierSchema,
   createPricingVersionSchema,
+  rebasePricingVersionSchema,
   listPricingVersionsQuerySchema,
   updatePricingTierSchema,
   updatePricingVersionSchema,
@@ -32,6 +33,8 @@ import {
   createPricingVersion,
   deletePricingTier,
   getActivePricingForProduct,
+  getPricingRebasePreview,
+  rebasePricingVersion,
   getPricingVersion,
   getProductPricing,
   listPricingVersions,
@@ -123,6 +126,38 @@ export const pricingRoutes: FastifyPluginAsync = async (app) => {
     try {
       requireRole(request, ...READ_ROLES);
       return reply.send(await getPricingVersion(id));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.get("/pricing-versions/:id/rebase-preview", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+      return reply.send(await getPricingRebasePreview(id));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/pricing-versions/:id/rebase", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, ...WRITE_ROLES);
+      const parsed = rebasePricingVersionSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.send(
+        await rebasePricingVersion(id, parsed.data.industrialCostCalculationId, actor),
+      );
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

@@ -152,6 +152,11 @@ enum ProjectSource {
 /// Ciclo do orcamento. So DRAFT e editavel; SUPERSEDED marca a versao
 /// substituida por uma nova negociacao; ARCHIVED cobre historico legado
 /// incompleto (sem preco, sem evidencia de envio).
+enum QuotePaymentMethod {
+  CASH
+  INSTALLMENTS
+}
+
 enum QuoteStatus {
   DRAFT
   SENT
@@ -738,6 +743,23 @@ model QuoteVersion {
   paymentTerms    String?
   leadTimeDays    Int?
 
+  /// Desconto comercial sobre o subtotal das linhas (10 = 10%).
+  discountPercent Decimal? @db.Decimal(7, 4)
+
+  /// A vista ou parcelado. O plano de pagamento e DERIVADO destes campos —
+  /// valor de parcela nao se digita, senao a proposta impressa e a conta do
+  /// sistema divergem sem ninguem perceber.
+  paymentMethod QuotePaymentMethod @default(CASH)
+
+  /// Entrada em % do total (so parcelado). Null = sem entrada.
+  downPaymentPercent      Decimal? @db.Decimal(7, 4)
+  /// Numero de parcelas DEPOIS da entrada.
+  installmentCount        Int?
+  /// Dias entre parcelas. 30 = mensal.
+  installmentIntervalDays Int?
+  /// Juros ao mes sobre o saldo parcelado (2 = 2% a.m.). Null ou zero = sem juros.
+  monthlyInterestPercent  Decimal? @db.Decimal(7, 4)
+
   sentAt             DateTime?
   sentByUserId       String?
   sentByUser         User?     @relation("QuoteSentBy", fields: [sentByUserId], references: [id])
@@ -889,7 +911,17 @@ model IndustrialCostVersion {
   /// Receita exata desta estrutura. DRAFT pode apontar para formulacao
   /// DRAFT (trabalho de engenharia), mas ativar exige formulacao estavel.
   formulationVersionId String
-  formulationVersion   FormulationVersion @relation(fields: [formulationVersionId], references: [id])
+
+  /// Rascunho SEGUE a formulacao ativa do produto por padrao: enquanto o
+  /// produto esta sendo definido nao ha compromisso a proteger, e a lista de
+  /// materiais e reflexo puro da formulacao (nao existe override por material,
+  /// entao nada digitado se perde ao reapontar).
+  ///
+  /// `true` so quando o usuario escolheu EXPLICITAMENTE outra versao — ai
+  /// seguir sozinho sobrescreveria uma decisao dele. Versao ATIVA nunca e
+  /// tocada, fixada ou nao.
+  formulationPinned  Boolean            @default(false)
+  formulationVersion FormulationVersion @relation(fields: [formulationVersionId], references: [id])
 
   /// Base de producao usada para estruturar o custo (ex.: 1000 un). Nunca
   /// assumida: o usuario informa ou confirma a sugestao do lote minimo.
@@ -2112,7 +2144,17 @@ model FormulationVersion {
   inactivatedAt DateTime?
   inactivatedBy String?
 
+  /// Versao que serviu de molde para esta. Null na V1 e em versoes criadas
+  /// antes deste campo existir. Guardado porque, meses depois, um salto de
+  /// custo entre V2 e V3 sem origem declarada nao tem explicacao possivel.
+  sourceVersionId     String?
+  sourceVersion       FormulationVersion? @relation("FormulationVersionSource", fields: [sourceVersionId], references: [id])
+  /// Numero da versao de origem, gravado junto: o rotulo e historico e nao
+  /// deve depender de join para existir.
+  sourceVersionNumber Int?
+
   components             FormulationComponent[]
+  derivedVersions        FormulationVersion[]    @relation("FormulationVersionSource")
   industrialCostVersions IndustrialCostVersion[]
   productionOrders       ProductionOrder[]
 

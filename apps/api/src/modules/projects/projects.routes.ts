@@ -81,6 +81,7 @@ import {
   getQuoteById,
   rejectQuoteVersion,
   sendQuoteVersion,
+  previewQuotePaymentSchedule,
   updateQuoteVersion,
 } from "./quotes.service.js";
 
@@ -492,6 +493,29 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
       return reply.send(await updateQuoteVersion(id, parsed.data));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  /*
+   * Simular condições sem gravar. Uma chamada por clique — recalcular a cada
+   * tecla digitada faria o formulário conversar com o servidor o tempo todo
+   * para mostrar números que ninguém pediu ainda.
+   */
+  app.post("/quote-versions/:id/payment-preview", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = updateQuoteVersionSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.send({ schedule: await previewQuotePaymentSchedule(id, parsed.data) });
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

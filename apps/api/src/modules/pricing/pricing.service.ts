@@ -4,13 +4,18 @@ import type {
   IndustrialCostCalculationDTO,
   IndustrialCostQuality,
   IndustrialCostWarningDTO,
+  PricingRebaseChangeDTO,
+  PricingRebasePreviewDTO,
+  PricingRebaseTierDTO,
   PricingTierDTO,
   PricingVersionDTO,
   PricingVersionListResponse,
   PricingVersionSummaryDTO,
   ProductPricingResponse,
 } from "@veridi/shared";
+import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { getIndustrialCostCalculation } from "../industrial-cost-calculation/snapshot.service.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -350,6 +355,192 @@ async function requireDraft(id: string): Promise<VersionWithRelations> {
 
 export async function getPricingVersion(id: string): Promise<PricingVersionDTO> {
   return toVersionDTO(await requireVersion(id));
+}
+
+/**
+ * O que mudaria ao refazer esta precificação sobre o custo vigente.
+ *
+ * Só leitura — a versão atual não é tocada. Serve para quem decide ver a
+ * diferença antes: trocar de base pode mexer só na data do cálculo ou pode
+ * dobrar o custo por unidade, e a tela não tinha como distinguir os dois.
+ *
+ * O alvo é o cálculo salvo MAIS RECENTE do produto. Se for o mesmo que a
+ * versão já usa, não há o que prever e `targetCalculationId` volta nulo.
+ */
+export async function getPricingRebasePreview(id: string): Promise<PricingRebasePreviewDTO> {
+  const prisma = getPrisma();
+  const version = await requireVersion(id);
+
+  const atual = await prisma.industrialCostCalculation.findUnique({
+    where: { id: version.industrialCostCalculationId },
+    include: { industrialCostVersion: { select: { code: true, versionNumber: true } } },
+  });
+  const alvo = await prisma.industrialCostCalculation.findFirst({
+    where: { productId: version.productId },
+    orderBy: [{ costReferenceDate: "desc" }, { calculatedAt: "desc" }],
+    include: { industrialCostVersion: { select: { code: true, versionNumber: true } } },
+  });
+
+  const base: PricingRebasePreviewDTO = {
+    pricingVersionId: version.id,
+    pricingVersionLabel: `${version.code} · V${version.versionNumber}`,
+    mode: version.status === "DRAFT" ? "IN_PLACE" : "NEW_VERSION",
+    targetQuality: null,
+    targetCalculationId: null,
+    targetCalculationCode: null,
+    changes: [],
+    tiers: [],
+  };
+  if (!alvo || !atual || alvo.id === atual.id) return base;
+
+  const changes: PricingRebaseChangeDTO[] = [];
+  const anotar = (label: string, from: string, to: string) => {
+    if (from !== to) changes.push({ label, from, to });
+  };
+  anotar("Cálculo de custo", atual.code, alvo.code);
+  anotar(
+    "Estrutura de custos",
+    `${atual.industrialCostVersion.code} · V${atual.industrialCostVersion.versionNumber}`,
+    `${alvo.industrialCostVersion.code} · V${alvo.industrialCostVersion.versionNumber}`,
+  );
+  anotar(
+    "Formulação",
+    `V${atual.formulationVersionNumber}`,
+    `V${alvo.formulationVersionNumber}`,
+  );
+  anotar(
+    "Data de referência do custo",
+    atual.costReferenceDate.toISOString(),
+    alvo.costReferenceDate.toISOString(),
+  );
+  anotar(
+    "Qualidade do custo",
+    INDUSTRIAL_COST_QUALITY_LABELS[atual.quality],
+    INDUSTRIAL_COST_QUALITY_LABELS[alvo.quality],
+  );
+
+  /*
+   * Custo por faixa nas DUAS bases, pelo mesmo motor da precificação: dizer
+   * "o cálculo mudou" sem dizer o que acontece com o custo de cada faixa
+   * deixaria a decisão sem o número que importa.
+   */
+  const [versaoAtual, versaoAlvo, snapshotAtual, snapshotAlvo] = await Promise.all([
+    prisma.industrialCostVersion.findUnique({
+      where: { id: atual.industrialCostVersionId },
+      include: pricingVersionInclude,
+    }),
+    prisma.industrialCostVersion.findUnique({
+      where: { id: alvo.industrialCostVersionId },
+      include: pricingVersionInclude,
+    }),
+    getIndustrialCostCalculation(atual.id),
+    getIndustrialCostCalculation(alvo.id),
+  ]);
+
+  const tiers: PricingRebaseTierDTO[] = [];
+  for (const tier of version.tiers) {
+    const de =
+      versaoAtual &&
+      (await costForOutputQuantity(prisma, {
+        costVersion: versaoAtual as CostVersionForPricing,
+        calculation: snapshotAtual,
+        quantity: tier.quantity,
+        quantityUomCode: tier.uomCode,
+      }));
+    const para =
+      versaoAlvo &&
+      (await costForOutputQuantity(prisma, {
+        costVersion: versaoAlvo as CostVersionForPricing,
+        calculation: snapshotAlvo,
+        quantity: tier.quantity,
+        quantityUomCode: tier.uomCode,
+      }));
+    tiers.push({
+      quantity: tier.quantity.toString(),
+      uomCode: tier.uomCode,
+      costPerUnitFrom: de && de.perUnit ? de.perUnit.toFixed(4) : null,
+      costPerUnitTo: para && para.perUnit ? para.perUnit.toFixed(4) : null,
+      unitPrice: tier.selectedPriceSnapshot
+        ? tier.selectedPriceSnapshot.toFixed(4)
+        : tier.manualUnitPrice
+          ? tier.manualUnitPrice.toFixed(4)
+          : null,
+    });
+  }
+
+  return {
+    ...base,
+    targetQuality: alvo.quality,
+    targetCalculationId: alvo.id,
+    targetCalculationCode: alvo.code,
+    changes,
+    tiers,
+  };
+}
+
+/**
+ * Troca a base econômica desta precificação pelo cálculo indicado.
+ *
+ * O caminho depende do status, e é por isso que existe como operação própria
+ * em vez de "criar versão": `createPricingVersion` devolve o rascunho já
+ * aberto do produto quando existe um — comportamento correto para não
+ * multiplicar negociação paralela, mas que engolia em silêncio o cálculo
+ * pedido. Quem clicava em refazer a base de um rascunho recebia de volta o
+ * mesmo rascunho, com a mesma base, e a tela reaparecia idêntica.
+ *
+ * Rascunho troca a base no lugar. Versão ativa é preço acordado: nasce um
+ * rascunho novo com as faixas copiadas, e a ativa fica intacta.
+ */
+export async function rebasePricingVersion(
+  id: string,
+  calculationId: string,
+  actor: User,
+): Promise<PricingVersionDTO> {
+  const prisma = getPrisma();
+  const version = await requireVersion(id);
+
+  const calculation = await prisma.industrialCostCalculation.findUnique({
+    where: { id: calculationId },
+    include: { industrialCostVersion: { select: { code: true, versionNumber: true } } },
+  });
+  if (!calculation) throw new CalculationRequiredError();
+  if (calculation.productId !== version.productId) throw new CalculationProductMismatchError();
+
+  if (version.status !== "DRAFT") {
+    /*
+     * Versão ativa não se reescreve. Mas o produto admite UM rascunho: se já
+     * houver um aberto, é nele que a base entra — criar outro esbarraria na
+     * mesma porta e devolveria o rascunho com a base antiga.
+     */
+    const aberto = await prisma.pricingVersion.findFirst({
+      where: { productId: version.productId, status: "DRAFT" },
+      select: { id: true },
+    });
+    if (aberto) return rebasePricingVersion(aberto.id, calculationId, actor);
+    return createPricingVersion(
+      version.productId,
+      { industrialCostCalculationId: calculationId },
+      actor,
+    );
+  }
+
+  /*
+   * As faixas seguem sem tocar: elas guardam o PLANO (quantidade, margem,
+   * comissão, preço manual). Os números econômicos de faixa só nascem na
+   * ativação, então não há snapshot velho para limpar aqui.
+   */
+  await prisma.pricingVersion.update({
+    where: { id },
+    data: {
+      industrialCostCalculationId: calculation.id,
+      calculationCodeSnapshot: calculation.code,
+      industrialCostVersionLabelSnapshot: `${calculation.industrialCostVersion.code} · V${calculation.industrialCostVersion.versionNumber}`,
+      formulationVersionNumberSnapshot: calculation.formulationVersionNumber,
+      costReferenceDateSnapshot: calculation.costReferenceDate,
+      costQualitySnapshot: calculation.quality,
+    },
+  });
+  return getPricingVersion(id);
 }
 
 export async function getProductPricing(productId: string): Promise<ProductPricingResponse> {

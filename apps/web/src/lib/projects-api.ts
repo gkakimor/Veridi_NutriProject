@@ -12,6 +12,7 @@ import type {
   QuoteVersionDTO,
   RejectQuoteInput,
   UpdateProjectInput,
+  QuotePaymentScheduleDTO,
   UpdateQuoteVersionInput,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
@@ -116,6 +117,18 @@ export async function updateQuoteVersion(
     body: JSON.stringify(input),
   });
   return (await parseJsonOrThrow(response)) as QuoteVersionDTO;
+}
+
+/** Simula as condições sem gravar — a conta continua sendo do backend. */
+export async function previewQuotePaymentSchedule(
+  id: string,
+  input: UpdateQuoteVersionInput,
+): Promise<QuotePaymentScheduleDTO | null> {
+  const body = await postJson<{ schedule: QuotePaymentScheduleDTO | null }>(
+    `/quote-versions/${id}/payment-preview`,
+    input,
+  );
+  return body.schedule;
 }
 
 export async function sendQuoteVersion(

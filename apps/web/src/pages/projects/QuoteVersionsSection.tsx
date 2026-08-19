@@ -21,6 +21,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
 import { IncompleteCostApiError } from "../../lib/api-errors";
 import { formatBRL } from "../../lib/currency";
+import { QuoteConditionsForm } from "./QuoteConditionsForm";
 
 /**
  * Orçamentos do projeto.
@@ -635,67 +636,12 @@ export function QuoteVersionsSection({
             </p>
           )}
 
-          <div className="quote-workspace__conditions">
-            <div className="field field--narrow">
-              <label htmlFor="quote-valid-until">Validade da proposta</label>
-              <input
-                id="quote-valid-until"
-                type="date"
-                disabled={!editable}
-                defaultValue={open.validUntil ? open.validUntil.slice(0, 10) : ""}
-                onBlur={(event) =>
-                  void run(() =>
-                    updateQuoteVersion(open.id, { validUntil: event.target.value || null }),
-                  )
-                }
-              />
-            </div>
-            <div className="field field--narrow">
-              <label htmlFor="quote-payment-terms">Condições de pagamento</label>
-              <input
-                id="quote-payment-terms"
-                type="text"
-                disabled={!editable}
-                defaultValue={open.paymentTerms ?? ""}
-                onBlur={(event) =>
-                  void run(() =>
-                    updateQuoteVersion(open.id, { paymentTerms: event.target.value || null }),
-                  )
-                }
-              />
-            </div>
-            <div className="field field--narrow">
-              <label htmlFor="quote-lead-time">Prazo de entrega (dias)</label>
-              <input
-                id="quote-lead-time"
-                type="text"
-                inputMode="numeric"
-                disabled={!editable}
-                defaultValue={open.leadTimeDays ? String(open.leadTimeDays) : ""}
-                onBlur={(event) =>
-                  void run(() =>
-                    updateQuoteVersion(open.id, {
-                      leadTimeDays: event.target.value ? Number(event.target.value) : null,
-                    }),
-                  )
-                }
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="quote-notes">Observações comerciais</label>
-              <textarea
-                id="quote-notes"
-                rows={2}
-                disabled={!editable}
-                defaultValue={open.commercialNotes ?? ""}
-                onBlur={(event) =>
-                  void run(() =>
-                    updateQuoteVersion(open.id, { commercialNotes: event.target.value || null }),
-                  )
-                }
-              />
-            </div>
-          </div>
+          <QuoteConditionsForm
+            quote={open}
+            editable={editable}
+            saving={saving}
+            onSave={(input) => void run(() => updateQuoteVersion(open.id, input))}
+          />
 
           <div className="line-actions">
             <button

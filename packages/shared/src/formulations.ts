@@ -88,6 +88,23 @@ export interface FormulationComponentDTO {
   position: number;
 }
 
+/**
+ * Problema num componente que impede ativar a versão.
+ *
+ * Existe porque uma versão pode ser criada a partir de outra criada meses
+ * antes: o item pode ter sido inativado, mudado de tipo ou trocado de
+ * unidade nesse intervalo. A cópia mantém a receita — alterar uma fórmula
+ * em silêncio seria pior que copiá-la quebrada — e diz o que vai barrar a
+ * ativação, em vez de deixar a descoberta para o clique final.
+ */
+export interface FormulationComponentIssueDTO {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  code: "ITEM_INACTIVE" | "ITEM_IS_FINISHED_PRODUCT" | "UOM_INCOMPATIBLE" | "INVALID_QUANTITY";
+  description: string;
+}
+
 export interface FormulationVersionDTO {
   id: string;
   productId: string;
@@ -113,6 +130,18 @@ export interface FormulationVersionDTO {
   activatedBy: string | null;
   inactivatedAt: string | null;
   inactivatedBy: string | null;
+  /**
+   * Versão que serviu de molde. `null` na V1 e nas versões criadas antes de
+   * o campo existir.
+   */
+  sourceVersionId: string | null;
+  sourceVersionNumber: number | null;
+  /**
+   * Só para versões em RASCUNHO: uma versão ativa ou histórica é um
+   * documento fechado, e apontar problema nela seria sugerir edição onde
+   * não há edição possível.
+   */
+  componentIssues: FormulationComponentIssueDTO[];
 }
 
 export interface FormulationSummaryDTO {
@@ -127,6 +156,36 @@ export interface FormulationSummaryDTO {
   /** `true` se existe ao menos uma versão (DRAFT/ACTIVE/INACTIVE) para o produto. */
   hasFormulation: boolean;
   updatedAt: string | null;
+}
+
+/**
+ * O que fica defasado se esta versão virar a ativa.
+ *
+ * Ativar não muda documento nenhum — é justamente por isso que a lista
+ * existe. O raio de impacto só é útil ANTES do clique, quando ainda dá para
+ * cancelar; depois, viraria constatação.
+ *
+ * Estrutura de custos ATIVA aparece para ser lida, não consertada: a receita
+ * dela é o que o custo já significa. Rascunho de estrutura e OP em rascunho
+ * aparecem porque têm saída — um clique e uma troca de versão.
+ */
+export interface FormulationActivationImpactDTO {
+  costStructures: {
+    id: string;
+    code: string;
+    label: string;
+    status: "DRAFT" | "ACTIVE";
+    formulationVersionNumber: number;
+  }[];
+  /**
+   * Só ordens em RASCUNHO: uma OP planejada já congelou seus requisitos, e
+   * trocar a formulação ativa não a alcança.
+   */
+  productionOrders: {
+    id: string;
+    code: string;
+    formulationVersionNumber: number;
+  }[];
 }
 
 export interface FormulationListResponse {

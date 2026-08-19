@@ -9,17 +9,30 @@ import {
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
 import { formatBRL } from "../lib/currency";
+import { EntityLink } from "./EntityLink";
+import { CostWarnings } from "./CostWarnings";
 
-/** Custo unitário mantém casas decimais: R$ 0,083421/un não vira R$ 0,08. */
+/**
+ * Dinheiro na tela é real brasileiro com dois centavos.
+ *
+ * Isto já foi seis casas, para preservar custos unitários minúsculos. O preço
+ * de venda pagava a conta: "R$ 1.407,523077" não é um número que alguém
+ * fatura, cobra ou confere, e a precisão extra virou ruído em toda tabela.
+ *
+ * A exceção é o valor pequeno demais para dois centavos: mostrar R$ 0,00 para
+ * uma cápsula a R$ 0,0032 diria que ela é de graça. Aí, e só aí, o formato
+ * abre casas até o número aparecer.
+ */
 export function formatUnitCost(value: string | null): string {
   if (value === null) return "—";
   const number = Number(value);
   if (Number.isNaN(number)) return "—";
+  const desapareceria = number !== 0 && Math.abs(number) < 0.005;
   return number.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
-    maximumFractionDigits: 6,
+    maximumFractionDigits: desapareceria ? 6 : 2,
   });
 }
 
@@ -35,7 +48,19 @@ export function qualityBadgeClass(quality: string): string {
  * Desconhecido aparece como "—", nunca como R$ 0,00, e um cálculo parcial
  * nunca exibe o subtotal conhecido sob o rótulo de total.
  */
-export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO }) {
+export function CostBreakdown({
+  result,
+  productId,
+  onStructurePage,
+  structureLocked,
+}: {
+  result: IndustrialCostCalculationDTO;
+  /** Para a observação de energia poder levar à seção certa. */
+  productId?: string | undefined;
+  onStructurePage?: boolean | undefined;
+  /** Estrutura já congelada: a correção passa a ser uma versão nova. */
+  structureLocked?: boolean | undefined;
+}) {
   const partial = result.totalIndustrialCost === null;
 
   return (
@@ -55,7 +80,15 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
             {result.materials.map((material) => (
               <tr key={material.itemId}>
                 <td>
-                  <span className="code">{material.itemCode}</span> {material.itemName}
+                  {/* Custo desconhecido se resolve no cadastro do item e nas
+                      compras dele — ler "sem custo conhecido" e não ter como
+                      abrir o material deixava o diagnóstico sem conserto. */}
+                  <EntityLink
+                    kind="item"
+                    id={material.itemId}
+                    code={material.itemCode}
+                    name={material.itemName}
+                  />
                 </td>
                 <td className="is-numeric">
                   {material.requiredQuantity} {material.unitCode}
@@ -97,7 +130,12 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
               {result.resources.map((resource) => (
                 <tr key={resource.resourceId}>
                   <td>
-                    <span className="code">{resource.resourceCode}</span> {resource.resourceName}
+                    <EntityLink
+                    kind="industrialResource"
+                    id={resource.resourceId}
+                    code={resource.resourceCode}
+                    name={resource.resourceName}
+                  />
                   </td>
                   <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.resourceType]}</td>
                   <td className="is-numeric">
@@ -198,15 +236,15 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
         </p>
       )}
 
-      {result.warnings.length > 0 && (
-        <ul className="candidate-list">
-          {result.warnings.map((warning) => (
-            <li key={`${warning.code}-${warning.message}`} className="field__hint">
-              {warning.message}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* A observação sem caminho é diagnóstico sem tratamento: aqui é onde
+          "sem custo conhecido" é lido, e daqui tem que dar para agir. */}
+      <CostWarnings
+        warnings={result.warnings}
+        title="Observações do cálculo"
+        productId={productId}
+        onStructurePage={onStructurePage}
+        structureLocked={structureLocked}
+      />
     </>
   );
 }

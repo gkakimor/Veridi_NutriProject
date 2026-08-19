@@ -72,6 +72,24 @@ export function FormulationDetailPage() {
     }
   }
 
+  /**
+   * Voltar para uma receita antiga acontece para frente: a versão histórica
+   * não é reativada — nasce uma nova, idêntica a ela. Reativar reescreveria
+   * o significado de uma versão que já serviu de base para custo e produção.
+   */
+  async function handleCreateFrom(sourceId: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await createNewFormulationVersion(sourceId);
+      navigate(`/producao/formulacoes/${productId}/versoes/${created.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao criar nova versão");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleCreateNewVersion() {
     if (!activeVersion) return;
     setSaving(true);
@@ -218,10 +236,11 @@ export function FormulationDetailPage() {
                 <tr>
                   <th>Versão</th>
                   <th>Status</th>
+                  <th>Origem</th>
                   <th>Base</th>
                   <th>Criada em</th>
                   <th>Ativada em</th>
-                  <th aria-hidden="true" />
+                  <th className="is-actions-head">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -244,12 +263,22 @@ export function FormulationDetailPage() {
                         {FORMULATION_VERSION_STATUS_LABELS[version.status]}
                       </span>
                     </td>
+                    {/* Sem a origem declarada, um salto de custo entre duas
+                        versões não tem explicação meses depois. */}
+                    <td>
+                      {version.sourceVersionNumber
+                        ? `Criada a partir da V${version.sourceVersionNumber}`
+                        : "—"}
+                    </td>
                     <td>
                       {version.basisQuantity} {version.outputUnitCode}
                     </td>
                     <td>{formatDateTime(version.createdAt)}</td>
                     <td>{formatDateTime(version.activatedAt)}</td>
-                    <td onClick={(event) => event.stopPropagation()}>
+                    <td
+                      className="table__actions"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <button
                         type="button"
                         className="btn btn--ghost btn--sm"
@@ -259,6 +288,20 @@ export function FormulationDetailPage() {
                       >
                         Ver
                       </button>
+                      {/* Rascunho não serve de molde: ele ainda é editável, e
+                          duplicá-lo deixaria dois documentos abertos dizendo a
+                          mesma coisa. */}
+                      {version.status !== "DRAFT" && (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          disabled={saving}
+                          title={`Cria uma versão nova idêntica à ${version.versionLabel}`}
+                          onClick={() => void handleCreateFrom(version.id)}
+                        >
+                          Nova versão a partir desta
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

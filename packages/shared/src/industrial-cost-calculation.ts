@@ -89,6 +89,29 @@ export const REALIZED_COST_STATUS_LABELS: Record<RealizedCostStatus, string> = {
 export interface IndustrialCostWarningDTO {
   code: string;
   message: string;
+  /**
+   * Onde a observação se resolve DE FATO.
+   *
+   * Mandar para o cadastro do item era beco: lá não existe campo de custo, e
+   * de propósito — custo de matéria-prima é consequência de compra, não algo
+   * que se digita. Por isso o alvo de um material sem custo depende do que
+   * já existe no histórico dele, e quem sabe isso é o servidor.
+   *
+   * `RECEIPT` = há recebimento com custo em branco; é ali que se informa.
+   * `PURCHASE` = nunca foi comprado; o caminho é uma ordem de compra.
+   * `STALE_BASIS` = o custo existe HOJE, mas o cálculo congelado é anterior
+   *   a ele — resolve-se salvando um cálculo novo, não mexendo no item.
+   * `RESOURCE` = recurso industrial, que é onde mora a tarifa.
+   * `ENERGY` = a seção de energia da própria estrutura de custos.
+   * `ACTIVATE` = nada está errado; o rascunho só precisa ser ativado.
+   */
+  target?: "RECEIPT" | "PURCHASE" | "STALE_BASIS" | "RESOURCE" | "ENERGY" | "ACTIVATE";
+  itemId?: string;
+  itemCode?: string;
+  resourceId?: string;
+  /** Recebimento com custo em branco, quando `target = "RECEIPT"`. */
+  receiptId?: string;
+  receiptCode?: string;
 }
 
 export interface IndustrialMaterialCostLineDTO {

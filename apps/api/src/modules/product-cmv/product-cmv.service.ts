@@ -2,6 +2,8 @@ import { Prisma } from "@prisma/client";
 import type {
   CmvComponentDTO,
   CmvGroup,
+  CmvLiveSimulationDTO,
+  IndustrialCostWarningDTO,
   IndustrialCostCalculationSnapshotDTO,
   ProductCmvResponse,
 } from "@veridi/shared";
@@ -9,6 +11,7 @@ import { getPrisma } from "../../db/prisma.js";
 import { costForOutputQuantity, pricingVersionInclude } from "../pricing/pricing-cost.js";
 import type { CostVersionForPricing } from "../pricing/pricing-cost.js";
 import { getIndustrialCostCalculation } from "../industrial-cost-calculation/snapshot.service.js";
+import { calculateIndustrialCost } from "../industrial-cost-calculation/calculation.service.js";
 import { ProductCmvNotFoundError } from "./product-cmv.errors.js";
 
 /**
@@ -53,6 +56,208 @@ function groupForManualLine(category: string): CmvGroup {
   return category === "SECONDARY_PACKAGING" ? "PACKAGING" : "OVERHEAD";
 }
 
+/**
+ * Composição agrupada a partir do detalhamento do motor.
+ *
+ * Extraído para ser usado pelas DUAS respostas — a base congelada e a
+ * simulação com os dados de hoje. Duas cópias divergiriam, e a diferença
+ * entre os dois blocos passaria a incluir a forma de agrupar, que não é
+ * diferença econômica nenhuma.
+ */
+function componentesDoCusto(cost: Awaited<ReturnType<typeof costForOutputQuantity>>): CmvComponentDTO[] {
+    const components: CmvComponentDTO[] = [];
+    for (const material of cost.breakdown?.materials ?? []) {
+      const customerSupplied = material.supplyResponsibility === "CUSTOMER";
+      components.push({
+        group: groupForMaterial(material.itemType, customerSupplied),
+        itemId: material.itemId,
+        code: material.itemCode,
+        name: material.itemName,
+        requiredQuantity: material.requiredQuantity.toString(),
+        unitCode: material.unitCode,
+        costSource: material.costSource,
+        unitCost: money(material.unitCost),
+        totalCost: money(material.totalCost),
+        customerSupplied,
+      });
+    }
+    for (const resource of cost.breakdown?.resources ?? []) {
+      components.push({
+        group: "INDUSTRIAL_RESOURCE",
+        itemId: null,
+        code: resource.type,
+        name: resource.name,
+        requiredQuantity: resource.quantity.toString(),
+        unitCode: resource.unitCode,
+        costSource: null,
+        unitCost: money(resource.rate),
+        totalCost: money(resource.totalCost),
+        customerSupplied: false,
+      });
+    }
+    const energy = cost.breakdown?.energy;
+    if (energy && (energy.total !== null || energy.kwh !== null)) {
+      components.push({
+        group: "INDUSTRIAL_RESOURCE",
+        itemId: null,
+        code: "ENERGY",
+        name: "Energia",
+        requiredQuantity: energy.kwh ? energy.kwh.toString() : null,
+        unitCode: energy.kwh ? "kWh" : null,
+        costSource: null,
+        unitCost: money(energy.rate),
+        totalCost: money(energy.total),
+        customerSupplied: false,
+      });
+    }
+    for (const line of cost.breakdown?.manualLines ?? []) {
+      components.push({
+        group: groupForManualLine(line.category),
+        itemId: null,
+        code: line.calculationBasis,
+        name: line.description,
+        requiredQuantity: null,
+        unitCode: null,
+        costSource: null,
+        unitCost: money(line.rate),
+        totalCost: money(line.amount),
+        customerSupplied: false,
+      });
+    }
+  return components;
+}
+
+/**
+ * Custo com as premissas de HOJE, sobre a estrutura em trabalho.
+ *
+ * Roda o MESMO motor, sem persistir: `calculateIndustrialCost` já existe
+ * para a tela de estrutura mostrar número antes de congelar, e é ele que
+ * responde aqui. A estrutura escolhida é o RASCUNHO quando existe — é ele
+ * que representa o que está sendo definido — e a ativa quando não há.
+ *
+ * `null` quando não há estrutura nenhuma: sem premissas não há simulação, e
+ * inventar uma seria o segundo motor de custo que este módulo existe para
+ * não ter.
+ */
+async function simulacaoComDadosDeHoje(
+  prisma: ReturnType<typeof getPrisma>,
+  params: {
+    productId: string;
+    quantity: Prisma.Decimal;
+    referenceDate: Date;
+    outputUomCode: string;
+  },
+): Promise<CmvLiveSimulationDTO | null> {
+  const estrutura = await prisma.industrialCostVersion.findFirst({
+    where: { productId: params.productId, status: { in: ["DRAFT", "ACTIVE"] } },
+    include: pricingVersionInclude,
+    // Rascunho primeiro: é ele que carrega o trabalho em andamento.
+    orderBy: [{ status: "asc" }, { versionNumber: "desc" }],
+  });
+  if (!estrutura) return null;
+
+  const previa = await calculateIndustrialCost(estrutura.id, params.referenceDate);
+  const cost = await costForOutputQuantity(prisma, {
+    costVersion: estrutura as CostVersionForPricing,
+    calculation: previa,
+    quantity: params.quantity,
+    quantityUomCode: params.outputUomCode,
+    collectBreakdown: true,
+  });
+
+  return {
+    industrialCostVersionId: estrutura.id,
+    industrialCostVersionLabel: `${estrutura.code} · V${estrutura.versionNumber}`,
+    industrialCostVersionStatus: estrutura.status,
+    formulationVersionNumber: previa.formulationVersionNumber,
+    costReferenceDate: previa.costReferenceDate,
+    quantity: params.quantity.toString(),
+    uomCode: params.outputUomCode,
+    batchCount: cost.batchCount.toString(),
+    totalCost: money(cost.total),
+    costPerUnit: money(cost.perUnit),
+    costPer1000: money(cost.per1000),
+    knownSubtotal: cost.knownSubtotal.toFixed(4),
+    quality: cost.quality,
+    warnings: await comCaminhoDeSolucao(prisma, cost.warnings),
+    hasCustomerSuppliedMaterials: cost.hasCustomerSuppliedMaterials,
+    components: componentesDoCusto(cost),
+  };
+}
+
+/**
+ * Descobre, para cada material sem custo, o que a pessoa precisa FAZER.
+ *
+ * O motor sabe que o custo falta; só o histórico do item diz por quê, e são
+ * três caminhos diferentes:
+ *
+ *   - existe recebimento com custo em branco  -> informar ali
+ *   - nunca houve compra recebida             -> registrar ordem de compra
+ *   - já existe custo hoje                    -> a base congelada é que é
+ *                                                anterior a ele; salvar um
+ *                                                cálculo novo
+ *
+ * Fica no read model, e não no motor de custo: a precificação percorre os
+ * mesmos materiais faixa a faixa e não deve pagar consulta por linha.
+ */
+function chaveDoAviso(warning: IndustrialCostWarningDTO): string {
+  return `${warning.code}:${warning.itemId ?? warning.resourceId ?? ""}`;
+}
+
+async function comCaminhoDeSolucao(
+  prisma: ReturnType<typeof getPrisma>,
+  warnings: IndustrialCostWarningDTO[],
+  /**
+   * Avisos que a simulação de HOJE ainda tem. O que sobra na base congelada e
+   * não aparece aqui já foi resolvido no estado atual — o que está velho é o
+   * cálculo, não a estrutura. Sem esta comparação a tela culpava a estrutura
+   * por uma falta que ela não tem mais, e mandava consertar o que já estava
+   * certo.
+   */
+  aindaAberto?: Set<string>,
+): Promise<IndustrialCostWarningDTO[]> {
+  if (aindaAberto) {
+    warnings = warnings.map((warning) =>
+      aindaAberto.has(chaveDoAviso(warning)) ? warning : { ...warning, target: "STALE_BASIS" as const },
+    );
+  }
+  const semCusto = warnings.filter(
+    (w) => w.code === "MATERIAL_COST_UNKNOWN" && w.itemId && w.target !== "STALE_BASIS",
+  );
+  if (semCusto.length === 0) return warnings;
+
+  const itemIds = [...new Set(semCusto.map((w) => w.itemId!))];
+  const linhas = await prisma.receiptLine.findMany({
+    where: { itemId: { in: itemIds } },
+    select: {
+      itemId: true,
+      actualUnitCost: true,
+      receipt: { select: { id: true, code: true, receivedAt: true } },
+    },
+    orderBy: { receipt: { receivedAt: "desc" } },
+  });
+
+  return warnings.map((warning) => {
+    if (warning.code !== "MATERIAL_COST_UNKNOWN" || !warning.itemId) return warning;
+    if (warning.target === "STALE_BASIS") return warning;
+    const doItem = linhas.filter((linha) => linha.itemId === warning.itemId);
+    if (doItem.length === 0) {
+      return { ...warning, target: "PURCHASE" as const };
+    }
+    const semValor = doItem.find((linha) => linha.actualUnitCost === null);
+    if (semValor) {
+      return {
+        ...warning,
+        target: "RECEIPT" as const,
+        receiptId: semValor.receipt.id,
+        receiptCode: semValor.receipt.code,
+      };
+    }
+    // Todo recebimento já tem custo: o que está velho é o cálculo.
+    return { ...warning, target: "STALE_BASIS" as const };
+  });
+}
+
 export async function getProductCmv(params: {
   productId: string;
   quantity: Prisma.Decimal;
@@ -83,6 +288,18 @@ export async function getProductCmv(params: {
   const outputUomCode =
     product.finishedProductItem?.unitCode ?? activeFormulation?.outputUnitCode ?? "un";
 
+  /*
+   * Calculada ANTES dos retornos antecipados de propósito: a ausência de
+   * base congelada é justamente quando a simulação mais serve — produto em
+   * definição, sem cálculo salvo ainda.
+   */
+  const live = await simulacaoComDadosDeHoje(prisma, {
+    productId: product.id,
+    quantity: params.quantity,
+    referenceDate: params.referenceDate,
+    outputUomCode,
+  });
+
   const base: ProductCmvResponse = {
     productId: product.id,
     productCode: product.code,
@@ -91,6 +308,10 @@ export async function getProductCmv(params: {
     outputUomCode,
     formulationVersionId: activeFormulation?.id ?? null,
     formulationVersionNumber: activeFormulation?.versionNumber ?? null,
+    // A base é a receita congelada pela estrutura ativa; só o cálculo sabe
+    // o número dela, então antes de existir CALC fica só o id.
+    basisFormulationVersionId: activeCostVersion?.formulationVersionId ?? null,
+    basisFormulationVersionNumber: null,
     industrialCostVersionId: activeCostVersion?.id ?? null,
     industrialCostVersionLabel: activeCostVersion
       ? `${activeCostVersion.code} · V${activeCostVersion.versionNumber}`
@@ -103,6 +324,7 @@ export async function getProductCmv(params: {
     referenceDate: params.referenceDate.toISOString(),
     simulation: null,
     unavailableReason: null,
+    live,
     pricing: null,
   };
 
@@ -129,7 +351,12 @@ export async function getProductCmv(params: {
       // data pedida. `referenceDate` é dia de calendário, não instante.
       costReferenceDate: { lte: fimDoDia(params.referenceDate) },
     },
-    orderBy: { costReferenceDate: "desc" },
+    /*
+     * Empate na data é resolvido pelo mais recente: salvar uma base nova no
+     * mesmo dia da anterior precisa ter efeito, senão "corrigir a base" vira
+     * sorteio entre dois documentos igualmente válidos.
+     */
+    orderBy: [{ costReferenceDate: "desc" }, { calculatedAt: "desc" }],
     select: { id: true },
   });
   if (!savedCalculation) {
@@ -152,71 +379,14 @@ export async function getProductCmv(params: {
     collectBreakdown: true,
   });
 
-  const components: CmvComponentDTO[] = [];
-  for (const material of cost.breakdown?.materials ?? []) {
-    const customerSupplied = material.supplyResponsibility === "CUSTOMER";
-    components.push({
-      group: groupForMaterial(material.itemType, customerSupplied),
-      itemId: material.itemId,
-      code: material.itemCode,
-      name: material.itemName,
-      requiredQuantity: material.requiredQuantity.toString(),
-      unitCode: material.unitCode,
-      costSource: material.costSource,
-      unitCost: money(material.unitCost),
-      totalCost: money(material.totalCost),
-      customerSupplied,
-    });
-  }
-  for (const resource of cost.breakdown?.resources ?? []) {
-    components.push({
-      group: "INDUSTRIAL_RESOURCE",
-      itemId: null,
-      code: resource.type,
-      name: resource.name,
-      requiredQuantity: resource.quantity.toString(),
-      unitCode: resource.unitCode,
-      costSource: null,
-      unitCost: money(resource.rate),
-      totalCost: money(resource.totalCost),
-      customerSupplied: false,
-    });
-  }
-  const energy = cost.breakdown?.energy;
-  if (energy && (energy.total !== null || energy.kwh !== null)) {
-    components.push({
-      group: "INDUSTRIAL_RESOURCE",
-      itemId: null,
-      code: "ENERGY",
-      name: "Energia",
-      requiredQuantity: energy.kwh ? energy.kwh.toString() : null,
-      unitCode: energy.kwh ? "kWh" : null,
-      costSource: null,
-      unitCost: money(energy.rate),
-      totalCost: money(energy.total),
-      customerSupplied: false,
-    });
-  }
-  for (const line of cost.breakdown?.manualLines ?? []) {
-    components.push({
-      group: groupForManualLine(line.category),
-      itemId: null,
-      code: line.calculationBasis,
-      name: line.description,
-      requiredQuantity: null,
-      unitCode: null,
-      costSource: null,
-      unitCost: money(line.rate),
-      totalCost: money(line.amount),
-      customerSupplied: false,
-    });
-  }
+  const components = componentesDoCusto(cost);
 
   const response: ProductCmvResponse = {
     ...base,
     calculationId: calculation.id,
     calculationCode: calculation.code,
     calculationReferenceDate: calculation.costReferenceDate,
+    basisFormulationVersionNumber: calculation.formulationVersionNumber,
     simulation: {
       quantity: params.quantity.toString(),
       uomCode: outputUomCode,
@@ -226,7 +396,11 @@ export async function getProductCmv(params: {
       costPer1000: money(cost.per1000),
       knownSubtotal: cost.knownSubtotal.toFixed(4),
       quality: cost.quality,
-      warnings: cost.warnings,
+      warnings: await comCaminhoDeSolucao(
+        prisma,
+        cost.warnings,
+        live ? new Set(live.warnings.map(chaveDoAviso)) : undefined,
+      ),
       hasCustomerSuppliedMaterials: cost.hasCustomerSuppliedMaterials,
       components,
     },

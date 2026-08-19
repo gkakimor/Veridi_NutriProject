@@ -3,7 +3,8 @@ import type { ZodError } from "zod";
 import {
   activateFormulationVersion,
   createFirstFormulationVersion,
-  createNewVersionFromActive,
+  createNewVersionFrom,
+  getFormulationActivationImpact,
   getFormulationVersionById,
   listFormulationVersionsByProduct,
   listFormulations,
@@ -21,6 +22,7 @@ import {
   InvalidComponentQuantityError,
   MissingFinishedItemError,
   ProductNotFoundError,
+  VersionIsDraftSourceError,
   VersionNotActiveError,
   VersionNotDraftError,
 } from "./formulations.errors.js";
@@ -57,6 +59,9 @@ function mapDomainError(
   }
   if (error instanceof VersionNotActiveError) {
     return { status: 400, body: { error: "version_not_active", message: error.message } };
+  }
+  if (error instanceof VersionIsDraftSourceError) {
+    return { status: 400, body: { error: "version_is_draft_source", message: error.message } };
   }
   if (error instanceof DuplicateComponentItemError) {
     return { status: 400, body: { error: "duplicate_component", message: error.message } };
@@ -172,10 +177,21 @@ export const formulationsRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.get("/formulation-versions/:id/activation-impact", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      return reply.send(await getFormulationActivationImpact(id));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
   app.post("/formulation-versions/:id/new-version", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const version = await createNewVersionFromActive(id);
+      const version = await createNewVersionFrom(id);
       return reply.status(201).send(version);
     } catch (error) {
       const mapped = mapDomainError(error);

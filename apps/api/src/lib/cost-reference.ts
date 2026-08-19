@@ -6,6 +6,23 @@ type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * `referenceDate` e DIA DE CALENDARIO, nao instante.
+ *
+ * Uma data vinda da tela chega como meia-noite. Comparar `receivedAt <= ela`
+ * jogava para fora todo recebimento do PROPRIO dia: quem lancava a compra as
+ * 20h e perguntava o custo daquela data recebia `NO_COST`, com o custo ja
+ * gravado no banco. O dia inteiro conta — quem pergunta por 18/08 esta
+ * perguntando pelo dia 18, nao pelo primeiro instante dele.
+ *
+ * A janela de tras nao muda: continua contada a partir da data pedida.
+ */
+function fimDoDia(date: Date): Date {
+  const fim = new Date(date);
+  fim.setUTCHours(23, 59, 59, 999);
+  return fim;
+}
+
 export interface CostReference {
   /** `null` quando `source = "NO_COST"` — desconhecido NUNCA e zero. */
   unitCost: Prisma.Decimal | null;
@@ -64,7 +81,7 @@ async function weightedAverageInWindow(
  * ultimo recurso** — se nao ha custo real historico, o resultado e
  * `NO_COST` com `unitCost = null`.
  *
- * `referenceDate` e sempre respeitada: recebimentos POSTERIORES a ela
+ * `referenceDate` e sempre respeitada: recebimentos posteriores ao DIA dela
  * nunca entram no calculo, para que uma consulta historica (ex.: custo de
  * um consumo antigo) nao use compras que aconteceram depois.
  */
@@ -73,11 +90,12 @@ export async function getItemCostReference(
   itemId: string,
   referenceDate: Date = new Date(),
 ): Promise<CostReference> {
+  const limite = fimDoDia(referenceDate);
   const window30 = await weightedAverageInWindow(
     prisma,
     itemId,
     new Date(referenceDate.getTime() - 30 * DAY_MS),
-    referenceDate,
+    limite,
   );
   if (window30) {
     return {
@@ -92,7 +110,7 @@ export async function getItemCostReference(
     prisma,
     itemId,
     new Date(referenceDate.getTime() - 90 * DAY_MS),
-    referenceDate,
+    limite,
   );
   if (window90) {
     return {
@@ -109,7 +127,7 @@ export async function getItemCostReference(
     where: {
       itemId,
       actualUnitCost: { not: null },
-      receipt: { receivedAt: { lte: referenceDate } },
+      receipt: { receivedAt: { lte: limite } },
     },
     orderBy: { receipt: { receivedAt: "desc" } },
     select: { actualUnitCost: true, receipt: { select: { receivedAt: true, code: true } } },

@@ -66,6 +66,46 @@ export interface CmvPricingMatchDTO {
   availableQuantities: string[];
 }
 
+/**
+ * Custo com as premissas de HOJE — simulação, nunca base econômica.
+ *
+ * Enquanto um produto está sendo definido não existe compromisso a
+ * proteger, e congelar vira atrito: a receita já mudou, o custo do material
+ * já foi informado, e o CMV continuava mostrando o retrato de outro dia.
+ * Este bloco responde "quanto custaria com o que sabemos agora".
+ *
+ * Três coisas que ele NÃO é, e que a tela precisa preservar:
+ *
+ * 1. Não substitui `simulation`. Os dois viajam juntos e aparecem lado a
+ *    lado — trocar o congelado pelo vivo na tela reintroduz o problema de
+ *    reprodutibilidade em forma visual.
+ * 2. Não é consumível. Orçamento e ordem de produção leem base congelada;
+ *    nada aqui pode virar preço ou custo de OP.
+ * 3. Não esconde de onde veio: declara qual estrutura, qual formulação e
+ *    qual data de custo usou.
+ */
+export interface CmvLiveSimulationDTO {
+  /** Estrutura usada — o rascunho quando existe, senão a ativa. */
+  industrialCostVersionId: string;
+  industrialCostVersionLabel: string;
+  industrialCostVersionStatus: "DRAFT" | "ACTIVE" | "INACTIVE";
+  formulationVersionNumber: number;
+  /** Data das referências de custo usadas — sempre a pedida na consulta. */
+  costReferenceDate: string;
+
+  quantity: string;
+  uomCode: string;
+  batchCount: string;
+  totalCost: string | null;
+  costPerUnit: string | null;
+  costPer1000: string | null;
+  knownSubtotal: string;
+  quality: IndustrialCostQuality;
+  warnings: IndustrialCostWarningDTO[];
+  hasCustomerSuppliedMaterials: boolean;
+  components: CmvComponentDTO[];
+}
+
 export interface ProductCmvResponse {
   productId: string;
   productCode: string;
@@ -75,8 +115,22 @@ export interface ProductCmvResponse {
   /** Unidade do item de produto acabado — a unidade em que se simula. */
   outputUomCode: string;
 
+  /**
+   * Formulação ATIVA do produto hoje. Não é necessariamente a que este CMV
+   * usa: a estrutura de custos congela a receita da qual ela foi feita, e
+   * publicar V2 não reescreve a base econômica já ativa.
+   */
   formulationVersionId: string | null;
   formulationVersionNumber: number | null;
+
+  /**
+   * Formulação que ESTES números descrevem — a congelada pela estrutura de
+   * custos ativa. Quando diverge da ativa, a composição abaixo é a receita
+   * antiga, e a tela precisa dizer isso: o contrário é o usuário procurar
+   * na lista um item que ele acabou de remover.
+   */
+  basisFormulationVersionId: string | null;
+  basisFormulationVersionNumber: number | null;
 
   industrialCostVersionId: string | null;
   industrialCostVersionLabel: string | null;
@@ -112,6 +166,12 @@ export interface ProductCmvResponse {
 
   /** Por que a simulação não pôde ser feita, quando for o caso. */
   unavailableReason: string | null;
+
+  /**
+   * Custo com as premissas correntes. `null` quando não há estrutura
+   * nenhuma para simular. Convive com `simulation` — nunca a substitui.
+   */
+  live: CmvLiveSimulationDTO | null;
 
   /** Só para quem pode ver economia interna. `null` para os demais papéis. */
   pricing: CmvPricingMatchDTO | null;

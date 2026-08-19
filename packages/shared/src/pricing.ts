@@ -47,6 +47,62 @@ export const COMMISSION_BASE_DESCRIPTION = "Comissão calculada sobre o preço b
 export const CONTRIBUTION_DEFINITION =
   "Contribuição = preço − comissão − custo industrial. Não é lucro líquido: impostos, despesas financeiras e frete comercial não estão modelados.";
 
+/**
+ * O que muda ao refazer uma precificação sobre o custo vigente.
+ *
+ * A tela dizia "crie uma nova versão a partir do cálculo vigente" e mandava
+ * para outras duas telas, sem dizer o que a troca faria com os números. Quem
+ * decide precisa ver a diferença ANTES: uma base nova pode mexer só na data
+ * ou pode dobrar o custo por unidade.
+ *
+ * Nada aqui altera a versão atual — preço acordado não se reescreve.
+ */
+export interface PricingRebaseChangeDTO {
+  label: string;
+  from: string;
+  to: string;
+}
+
+export interface PricingRebaseTierDTO {
+  quantity: string;
+  uomCode: string;
+  /** Custo por unidade na base ATUAL da versão; `null` quando desconhecido. */
+  costPerUnitFrom: string | null;
+  /** Custo por unidade na base NOVA. */
+  costPerUnitTo: string | null;
+  /** Preço acordado da faixa — carregado como está, para comparar. */
+  unitPrice: string | null;
+}
+
+/**
+ * Como a troca de base acontece nesta versão.
+ *
+ * `IN_PLACE` — a versão é rascunho: a base troca nela mesma. Rascunho não é
+ * preço acordado; criar uma V2 só para trocar a base de algo que ninguém
+ * combinou ainda deixaria um rastro de versões vazias.
+ * `NEW_VERSION` — a versão está ativa: preço acordado não se reescreve, então
+ * nasce um rascunho novo com as faixas copiadas.
+ */
+export type PricingRebaseMode = "IN_PLACE" | "NEW_VERSION";
+
+export interface PricingRebasePreviewDTO {
+  pricingVersionId: string;
+  pricingVersionLabel: string;
+  mode: PricingRebaseMode;
+  /**
+   * Qualidade do cálculo de destino. A tela precisa disto mesmo quando ela
+   * não aparece em `changes`: trocar de uma base parcial para outra parcial
+   * não muda nada visível, e prometer que muda seria mentir.
+   */
+  targetQuality: IndustrialCostQuality | null;
+  /** `null` quando não existe cálculo mais recente que o atual. */
+  targetCalculationId: string | null;
+  targetCalculationCode: string | null;
+  /** Diferenças documento a documento — vazio quando nada mudaria. */
+  changes: PricingRebaseChangeDTO[];
+  tiers: PricingRebaseTierDTO[];
+}
+
 export interface PricingTierDTO {
   id: string;
   quantity: string;

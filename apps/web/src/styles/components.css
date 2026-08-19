@@ -331,6 +331,23 @@
 }
 
 /*
+ * Coluna de ação que é um CAMINHO, não um canto.
+ *
+ * Quando a célula guarda os destinos do registro — a cadeia técnica de um
+ * produto, por exemplo —, encostar tudo à direita deixa um vão largo entre o
+ * dado e a ação, e o olho perde a ligação entre a linha e o que fazer com
+ * ela. Centralizado, o grupo pertence visualmente à coluna que o cabeçalho
+ * nomeia.
+ */
+.table__actions--centered {
+  justify-content: center;
+}
+
+.table th.is-actions-head {
+  text-align: center;
+}
+
+/*
  * Estado vazio existe para orientar quem não encontrou nada. Numa tabela
  * larga ele herdava a largura das colunas do cabeçalho e a orientação
  * terminava fora da tela, legível só depois de arrastar a tabela — o oposto
@@ -589,6 +606,9 @@
   font-size: 12.5px;
   color: var(--ink-3);
   margin-bottom: var(--sp-4);
+  /* Texto explicativo não acompanha a largura da tabela: linha de 1300px é
+     ilegível, e é justamente o texto que ensina a usar a tela. */
+  max-width: 90ch;
 }
 
 .field-grid-2 {
@@ -716,6 +736,53 @@
   color: var(--ink);
 }
 
+/* O que falta para ativar uma estrutura de custos.
+   Bloco de destaque, não dica cinza: era exatamente por ficar em
+   `field__hint` que ninguém achava o motivo de uma estrutura "Com
+   pendências". */
+.pendency-panel {
+  margin: var(--sp-4) 0;
+  padding: var(--sp-4);
+  border-left: 3px solid var(--warn-fg);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+.pendency-panel__title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--warn-fg);
+}
+
+/* Contexto vem depois do bloqueante e não compete com ele. */
+.pendency-panel__title--info {
+  margin-top: var(--sp-4);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.pendency-panel__sub {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-sm);
+}
+
+.pendency-panel__list {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-sm);
+}
+
+.pendency-panel__list li + li {
+  margin-top: var(--sp-2);
+}
+
+.pendency-panel__list a {
+  color: inherit;
+  font-weight: var(--fw-medium);
+}
+
 .form-alert {
   padding: var(--sp-3);
   border-radius: var(--radius-sm);
@@ -730,6 +797,22 @@
   margin-top: var(--sp-2);
   padding: var(--sp-2);
   font-size: var(--fs-xs);
+}
+
+/* Escolha dentro do ConfirmDialog — usada quando confirmar ainda tem uma
+   decisão real embutida (ex.: levar a nova versão para a formulação ativa). */
+.confirm-dialog__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
+.confirm-dialog__choice input {
+  margin-top: 0.2em;
+  width: auto;
+  flex: none;
 }
 
 /* Lista de linhas afetadas dentro do ConfirmDialog (ex.: custo incompleto). */
@@ -838,8 +921,20 @@
   letter-spacing: -0.01em;
 }
 
+/*
+ * Largura do corpo do documento.
+ *
+ * O teto existia em 1040px para não esticar linha de texto — leitura longa
+ * cansa. Só que documento operacional é feito de TABELA densa, e em monitor
+ * de 1920 sobravam quase 900px de tela vazia enquanto a tabela de produtos
+ * do projeto rolava dentro de 990px.
+ *
+ * O teto sobe e a proteção muda de lugar: quem fica limitado é o texto
+ * corrido (`form-section__sub`, `field__hint`), não a tabela. Em telas
+ * menores `100%` continua mandando, então nada muda lá.
+ */
 .doc-body {
-  max-width: 1040px;
+  max-width: min(1600px, 100%);
   display: grid;
   /* Grid sem trilha declarada resolve em `max-content`: a seção mais larga
      estica o container, o `.table-container` infla junto e o scroll dele
@@ -849,7 +944,7 @@
 }
 
 .doc-actions {
-  max-width: 1040px;
+  max-width: min(1600px, 100%);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1339,6 +1434,52 @@ td .entity-select {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--sp-3);
   margin-top: var(--sp-4);
+}
+
+/* Estado de gravação das condições comerciais: sem isto, "salvei?" só se
+   responde recarregando a página. */
+.form-status {
+  align-self: center;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.form-status--dirty {
+  color: var(--warn-fg);
+  font-weight: 600;
+}
+
+.quote-plan {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+/* Simulação não se confunde com o que está gravado. */
+.quote-plan--simulated {
+  border-color: var(--v-green-600);
+  background: var(--surface);
+}
+
+.quote-plan__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+.quote-plan__title em {
+  text-transform: none;
+  letter-spacing: 0;
+  font-style: italic;
+}
+
+.quote-plan .data-table {
+  margin-top: var(--sp-3);
+  max-width: 420px;
 }
 
 .table--quote-lines th:first-child,

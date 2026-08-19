@@ -367,7 +367,16 @@ describe("Estrutura de custos — formulação vinculada", () => {
     await activateFormulation(app, formulationVersionId);
 
     const cost = (await createCostVersion(app, product.id, { referenceOutputQuantity: "1000" })).json();
-    await app.inject({ method: "POST", url: `/industrial-costs/${cost.id}/activate`, payload: {} });
+    // Sem `confirmIncomplete` a ativação era RECUSADA e o retorno descartado:
+    // a estrutura seguia rascunho, e o teste que diz "continua na formulação
+    // congelada" nunca chegava a exercitar uma versão ativa.
+    const ativacao = await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${cost.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
+    expect(ativacao.statusCode, ativacao.body).toBe(200);
+    expect(ativacao.json().status).toBe("ACTIVE");
 
     // Nova formulação ativa do produto (nova versão a partir da ativa).
     const next = (
@@ -392,12 +401,58 @@ describe("Estrutura de custos — formulação vinculada", () => {
     expect(reread.formulationVersionId).toBe(formulationVersionId);
     expect(reread.activeFormulationVersionNumber).toBe(2);
     // A defasagem é informada, não corrigida automaticamente.
-    expect(
-      reread.pendencies.some((row: { code: string }) => row.code === "FORMULATION_OUTDATED"),
-    ).toBe(true);
+    const outdated = reread.pendencies.find(
+      (row: { code: string }) => row.code === "FORMULATION_OUTDATED",
+    );
+    expect(outdated).toBeDefined();
+    // Defasagem é contexto, não bloqueio: a tela precisa dessa distinção
+    // vinda da API para não reimplementar a regra que decide `complete`.
+    expect(outdated.severity).toBe("INFO");
+    expect(outdated.target).toBe("FORMULATION");
 
     const stored = await prisma.industrialCostVersion.findUniqueOrThrow({ where: { id: cost.id } });
     expect(stored.formulationVersionId).toBe(formulationVersionId);
+
+    // Estrutura ATIVA não se move: a receita dela é o que o custo já
+    // significa, e um cálculo salvo aponta para ela.
+    const naAtiva = await app.inject({
+      method: "PATCH",
+      url: `/industrial-costs/${cost.id}`,
+      payload: { formulationVersionId: next.id },
+    });
+    expect(naAtiva.statusCode).toBe(409);
+    expect(naAtiva.json().error).toBe("version_locked");
+
+    // O rascunho, sim: ele não congelou nada. Criado DEPOIS da V2 ativar, ele
+    // já nasce nela — enquanto o produto está sendo definido, seguir a receita
+    // ativa é o padrão, não um clique.
+    const rascunho = (await createCostVersion(app, product.id)).json();
+    expect(rascunho.formulationVersionNumber).toBe(2);
+    expect(rascunho.formulationPinned).toBe(false);
+    // A receita é LIDA da formulação, não copiada: a quantidade da V2 é o que
+    // a estrutura mostra.
+    expect(rascunho.materials[0].quantity).toBe("0.7");
+
+    // Escolher explicitamente a V1 é decisão, e para de seguir.
+    const preso = await app.inject({
+      method: "PATCH",
+      url: `/industrial-costs/${rascunho.id}`,
+      payload: { formulationVersionId: formulationVersionId },
+    });
+    expect(preso.statusCode, preso.body).toBe(200);
+    expect(preso.json().formulationVersionNumber).toBe(1);
+    expect(preso.json().formulationPinned).toBe(true);
+
+    // Voltar para a ativa desfixa: o rascunho volta a acompanhar.
+    const solto = await app.inject({
+      method: "PATCH",
+      url: `/industrial-costs/${rascunho.id}`,
+      payload: { formulationVersionId: next.id },
+    });
+    expect(solto.json().formulationPinned).toBe(false);
+    expect(
+      solto.json().pendencies.some((row: { code: string }) => row.code === "FORMULATION_OUTDATED"),
+    ).toBe(false);
 
     await app.close();
   });
@@ -527,6 +582,10 @@ describe("Estrutura de custos — premissas manuais", () => {
     expect(version.pendencies.map((row: { code: string }) => row.code)).toEqual([
       "ENERGY_NOT_CONFIGURED",
     ]);
+    // Toda pendência diz também QUÃO grave é e ONDE se resolve — sem isso a
+    // tela mostra um aviso que não leva a lugar nenhum.
+    expect(version.pendencies[0].severity).toBe("BLOCKING");
+    expect(version.pendencies[0].target).toBe("SELF");
 
     const withUnknown = (
       await app.inject({

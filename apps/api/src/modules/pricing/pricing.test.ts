@@ -357,6 +357,166 @@ function tierOf(pricing: { tiers: TierResponse[] }, quantity: string): TierRespo
   ) as TierResponse;
 }
 
+describe("Prever o que muda ao refazer sobre o custo atual", () => {
+  it("lista só o que difere, o custo de cada faixa nas duas bases, e não toca na versão", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+
+    const versao = await prisma.pricingVersion.findFirst({
+      include: { tiers: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!versao) {
+      await app.close();
+      return;
+    }
+
+    const antes = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: versao.id } });
+    const previa = (
+      await app.inject({ method: "GET", url: `/pricing-versions/${versao.id}/rebase-preview` })
+    ).json();
+
+    // Prever é leitura: nenhuma versão nasce e a atual não se move.
+    const depois = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: versao.id } });
+    expect(depois.industrialCostCalculationId).toBe(antes.industrialCostCalculationId);
+    expect(depois.status).toBe(antes.status);
+
+    if (previa.targetCalculationId) {
+      // Só entra na lista o que REALMENTE difere — repetir o que ficou igual
+      // esconderia a diferença que importa no meio do ruído.
+      for (const change of previa.changes) {
+        expect(change.from).not.toBe(change.to);
+      }
+      expect(previa.tiers).toHaveLength(versao.tiers.length);
+    } else {
+      // Já está na base mais recente: não há o que prever.
+      expect(previa.changes).toEqual([]);
+    }
+
+    await app.close();
+  });
+
+  it("troca a base do rascunho NA PRÓPRIA versão, sem inventar uma V2 vazia", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { product, version, calculation } = await createScenario(app, {
+      materialUnitCost: "10",
+    });
+    const pricing = await createPricing(app, product.id, calculation.id);
+    await addTier(app, pricing.id, {
+      quantity: "1000",
+      priceMode: "TARGET_MARGIN",
+      targetContributionMarginPercent: "30",
+      commissionPercent: "5",
+    });
+
+    // Um cálculo mais recente da MESMA estrutura — muda a data de referência.
+    const depoisDeAmanha = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+    const novo = (
+      await app.inject({
+        method: "POST",
+        url: `/industrial-costs/${version.id}/calculations`,
+        payload: { costReferenceDate: depoisDeAmanha },
+      })
+    ).json();
+    expect(novo.id).not.toBe(calculation.id);
+
+    const previa = (
+      await app.inject({ method: "GET", url: `/pricing-versions/${pricing.id}/rebase-preview` })
+    ).json();
+    // Rascunho não é preço acordado: a base troca nele mesmo.
+    expect(previa.mode).toBe("IN_PLACE");
+    expect(previa.targetCalculationId).toBe(novo.id);
+
+    const resposta = await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${pricing.id}/rebase`,
+      payload: { industrialCostCalculationId: novo.id },
+    });
+    expect(resposta.statusCode).toBe(200);
+    const depois = resposta.json();
+
+    // A MESMA versão, com a base nova. O bug era devolver o rascunho
+    // existente com a base antiga e a tela reaparecer idêntica.
+    expect(depois.id).toBe(pricing.id);
+    expect(depois.versionNumber).toBe(pricing.versionNumber);
+    expect(depois.calculationCode).toBe(novo.code);
+    expect(depois.costReferenceDate).toBe(novo.costReferenceDate);
+    expect(depois.tiers).toHaveLength(1);
+
+    const prisma = getPrisma();
+    const gravado = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: pricing.id } });
+    expect(gravado.industrialCostCalculationId).toBe(novo.id);
+    const quantas = await prisma.pricingVersion.count({ where: { productId: product.id } });
+    expect(quantas).toBe(1);
+
+    // Nada mais a prever depois da troca.
+    const depoisDaTroca = (
+      await app.inject({ method: "GET", url: `/pricing-versions/${pricing.id}/rebase-preview` })
+    ).json();
+    expect(depoisDaTroca.targetCalculationId).toBeNull();
+
+    await app.close();
+  });
+
+  it("versão ativa não se reescreve: a troca nasce como rascunho novo", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { product, version, calculation } = await createScenario(app, {
+      materialUnitCost: "10",
+    });
+    const pricing = await createPricing(app, product.id, calculation.id);
+    await addTier(app, pricing.id, {
+      quantity: "1000",
+      priceMode: "MANUAL_PRICE",
+      manualUnitPrice: "50",
+      commissionPercent: "5",
+    });
+    const ativada = await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${pricing.id}/activate`,
+      payload: { confirmIncompleteCost: true },
+    });
+    expect(ativada.statusCode).toBe(200);
+
+    const novo = (
+      await app.inject({
+        method: "POST",
+        url: `/industrial-costs/${version.id}/calculations`,
+        payload: { costReferenceDate: new Date(Date.now() + 2 * 86400000).toISOString() },
+      })
+    ).json();
+
+    const previa = (
+      await app.inject({ method: "GET", url: `/pricing-versions/${pricing.id}/rebase-preview` })
+    ).json();
+    expect(previa.mode).toBe("NEW_VERSION");
+
+    const criada = (
+      await app.inject({
+        method: "POST",
+        url: `/pricing-versions/${pricing.id}/rebase`,
+        payload: { industrialCostCalculationId: novo.id },
+      })
+    ).json();
+
+    expect(criada.id).not.toBe(pricing.id);
+    expect(criada.status).toBe("DRAFT");
+    expect(criada.calculationCode).toBe(novo.code);
+
+    // Preço acordado fica intacto.
+    const prisma = getPrisma();
+    const original = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: pricing.id } });
+    expect(original.status).toBe("ACTIVE");
+    expect(original.industrialCostCalculationId).toBe(calculation.id);
+
+    await app.close();
+  });
+});
+
 describe("Precificação — versão e proveniência", () => {
   it("nasce de um cálculo salvo e herda a data de referência de custo", async () => {
     const app = buildTestApp("ADMIN");

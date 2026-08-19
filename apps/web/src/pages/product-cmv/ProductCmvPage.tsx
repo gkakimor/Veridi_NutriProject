@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type {
   CmvComponentDTO,
   CmvGroup,
   IndustrialMaterialCostSource,
   PricingTierDTO,
   ProductCmvResponse,
+  ProductIndustrialCostResponse,
 } from "@veridi/shared";
 import {
   CMV_GROUP_LABELS,
@@ -20,7 +21,14 @@ import { FormSection } from "../../components/FormSection";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
+import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
+import { CostWarnings } from "../../components/CostWarnings";
 import { getProductCmv } from "../../lib/product-cmv-api";
+import { getProductIndustrialCosts } from "../../lib/industrial-costs-api";
+import {
+  discardIndustrialCostCalculation,
+  saveIndustrialCostCalculation,
+} from "../../lib/cost-calculation-api";
 import { getProductPricing } from "../../lib/pricing-api";
 import { formatBRL } from "../../lib/currency";
 import { formatPercent } from "../../lib/percent";
@@ -104,6 +112,7 @@ function describeOrigin(component: CmvComponentDTO): string {
 }
 
 export function ProductCmvPage() {
+  const navigate = useNavigate();
   const { productId } = useParams<{ productId: string }>();
   const [params] = useSearchParams();
 
@@ -122,6 +131,34 @@ export function ProductCmvPage() {
   const [tier, setTier] = useState<PricingTierDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detalhe, setDetalhe] = useState<"frozen" | "live">("frozen");
+  const [salvandoBase, setSalvandoBase] = useState(false);
+  /*
+   * A estrutura só é buscada para EXPLICAR uma resposta vazia. Nenhum número
+   * desta tela vem daqui — o CMV continua saindo inteiro de um endpoint só.
+   */
+  const [pendencyVersion, setPendencyVersion] = useState<
+    ProductIndustrialCostResponse["current"] | null
+  >(null);
+
+  useEffect(() => {
+    if (!productId) return;
+    let ativo = true;
+    getProductIndustrialCosts(productId)
+      .then((estrutura) => {
+        if (!ativo) return;
+        const current = estrutura.current;
+        setPendencyVersion(
+          current && !current.complete ? current : (current ? null : (estrutura.draft ?? null)),
+        );
+      })
+      .catch(() => {
+        if (ativo) setPendencyVersion(null);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [productId]);
 
   const simular = useCallback(
     async (quantidade: string, data_: string) => {
@@ -173,9 +210,64 @@ export function ProductCmvPage() {
 
   const simulation = data?.simulation ?? null;
   const componentsByGroup = (group: CmvGroup): CmvComponentDTO[] =>
-    (simulation?.components ?? []).filter((component) => component.group === group);
+    componentesVisiveis.filter((component) => component.group === group);
 
   const semTotal = simulation !== null && simulation.totalCost === null;
+  const live = data?.live ?? null;
+  /*
+   * Qual composição a tabela detalha. O RESUMO dos dois nunca some da tela —
+   * trocar o número congelado pelo vivo lá em cima reintroduziria o problema
+   * de reprodutibilidade em forma visual. Aqui só o detalhe alterna, e o
+   * título sempre diz qual está aberto.
+   */
+  const composicaoViva = detalhe === "live" && live !== null;
+  const componentesVisiveis = composicaoViva ? live!.components : (simulation?.components ?? []);
+  /* A base econômica ficou para trás da receita ativa. */
+  const formulacaoDefasada =
+    data?.basisFormulationVersionNumber != null &&
+    data.formulationVersionNumber != null &&
+    data.basisFormulationVersionNumber !== data.formulationVersionNumber;
+
+  /*
+   * A base congelada está atrás do estado atual quando algum aviso dela já
+   * não aparece na simulação de hoje — a mesma leitura que decide o texto de
+   * "já está resolvido" — ou quando a receita mudou.
+   */
+  const baseDefasada =
+    (simulation?.warnings ?? []).some((warning) => warning.target === "STALE_BASIS") ||
+    formulacaoDefasada;
+
+  /** Congela o estado atual como a nova base econômica do produto. */
+  async function salvarNovaBase() {
+    if (!productId || !data?.industrialCostVersionId) return;
+    setSalvandoBase(true);
+    setError(null);
+    try {
+      await saveIndustrialCostCalculation(data.industrialCostVersionId, {
+        costReferenceDate: new Date(`${referenceDate}T12:00:00`).toISOString(),
+      });
+      await simular(quantity.trim(), referenceDate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao congelar a base");
+    } finally {
+      setSalvandoBase(false);
+    }
+  }
+
+  /** Descarta a base antiga — recusado se alguma precificação a cita. */
+  async function descartarBase() {
+    if (!data?.calculationId) return;
+    setSalvandoBase(true);
+    setError(null);
+    try {
+      await discardIndustrialCostCalculation(data.calculationId);
+      await simular(quantity.trim(), referenceDate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao descartar o cálculo");
+    } finally {
+      setSalvandoBase(false);
+    }
+  }
 
   return (
     <>
@@ -200,6 +292,23 @@ export function ProductCmvPage() {
           {data?.customerName && <p className="field__hint">Cliente: {data.customerName}</p>}
         </div>
         <div className="table__actions">
+          {/* Só faz sentido imprimir o que existe: sem base congelada o papel
+              sairia com um documento vazio dizendo ser um CMV. */}
+          {data?.calculationId && (
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() =>
+                navigate(
+                  `/print/cmv/${productId}?quantity=${encodeURIComponent(
+                    quantity.trim(),
+                  )}&referenceDate=${referenceDate}`,
+                )
+              }
+            >
+              Imprimir / Salvar PDF
+            </button>
+          )}
           {/* Voltar ao orçamento tem prioridade: é de lá que a pessoa veio. */}
           {projectId && quoteVersionId ? (
             <Link
@@ -278,6 +387,15 @@ export function ProductCmvPage() {
             </p>
           )}
 
+          {/* "Não há custo" precisa vir com o que falta para haver — senão a
+              tela informa o problema e esconde a saída. */}
+          {data?.unavailableReason && pendencyVersion && productId && (
+            <IndustrialCostPendencies
+              pendencies={pendencyVersion.pendencies}
+              productId={productId}
+            />
+          )}
+
           {simulation && (
             <>
               <div className="cmv-cards">
@@ -351,16 +469,11 @@ export function ProductCmvPage() {
                 </p>
               )}
 
-              {simulation.warnings.length > 0 && (
-                <div className="cmv-warnings" role="status">
-                  <strong>Observações do cálculo</strong>
-                  <ul>
-                    {simulation.warnings.map((warning, index) => (
-                      <li key={index}>{warning.message}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <CostWarnings
+                warnings={simulation.warnings}
+                title="Observações do cálculo"
+                productId={productId}
+              />
             </>
           )}
         </FormSection>
@@ -451,11 +564,123 @@ export function ProductCmvPage() {
           </FormSection>
         )}
 
-        {simulation && (
+        {/* A base congelada ficou para trás do que já se sabe. Enquanto
+            nenhuma precificação a cita, insistir nela é conviver com um
+            retrato errado — a saída fica aqui, sem atravessar duas telas. */}
+        {baseDefasada && data?.industrialCostVersionId && (
+          <div className="line-actions">
+            <button
+              type="button"
+              className="btn btn--accent btn--sm"
+              disabled={salvandoBase || loading}
+              onClick={() => void salvarNovaBase()}
+            >
+              {salvandoBase ? "Congelando…" : "Congelar uma base nova com estes dados"}
+            </button>
+            {data.calculationId && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                disabled={salvandoBase || loading}
+                title="Só é possível enquanto nenhuma precificação cita este cálculo."
+                onClick={() => void descartarBase()}
+              >
+                Descartar {data.calculationCode}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Enquanto o produto está sendo definido não há compromisso a
+            proteger, e congelar vira atrito: a receita já mudou, o custo do
+            material já foi informado, e o CMV mostrava o retrato de outro dia.
+            Este bloco responde com o que se sabe agora — e NUNCA substitui o
+            congelado acima, que é o que se consegue repetir. */}
+        {live && (
+          <FormSection
+            title="Com os dados de hoje"
+            subtitle="Simulação sobre as premissas correntes. Não é base econômica: orçamento e ordem de produção continuam lendo o cálculo congelado."
+          >
+            <p className="field__hint">
+              Estrutura{" "}
+              <Link to={`/produtos/${productId}/custos`}>{live.industrialCostVersionLabel}</Link>
+              {live.industrialCostVersionStatus === "DRAFT" ? " (rascunho)" : " (ativa)"} ·
+              formulação{" "}
+              <Link to={`/producao/formulacoes/${productId}`}>V{live.formulationVersionNumber}</Link>{" "}
+              · custos de {formatDate(live.costReferenceDate)}
+            </p>
+
+            <div className="cmv-cards">
+              <div className="cmv-card cmv-card--strong">
+                <div className="cmv-card__label">CMV total hoje</div>
+                {live.totalCost ? (
+                  <div className="cmv-card__value">{formatBRL(live.totalCost)}</div>
+                ) : (
+                  <div className="cmv-card__value cmv-card__value--unavailable">
+                    CMV indisponível
+                  </div>
+                )}
+                <div className="cmv-card__note">
+                  Subtotal conhecido: {formatBRL(live.knownSubtotal)}
+                </div>
+              </div>
+              <div className="cmv-card">
+                <div className="cmv-card__label">Por unidade</div>
+                <div className="cmv-card__value">
+                  {live.costPerUnit ? formatBRL(live.costPerUnit) : "—"}
+                </div>
+              </div>
+              <div className="cmv-card" title={INDUSTRIAL_COST_QUALITY_HINTS[live.quality]}>
+                <div className="cmv-card__label">Qualidade do custo</div>
+                <div className="cmv-card__value cmv-card__value--text">
+                  {INDUSTRIAL_COST_QUALITY_LABELS[live.quality]}
+                </div>
+              </div>
+            </div>
+
+            <CostWarnings
+              warnings={live.warnings}
+              title="Observações da simulação"
+              productId={productId}
+            />
+          </FormSection>
+        )}
+
+        {(simulation || live) && (
           <FormSection
             title="Composição do custo"
-            subtitle="De onde vem cada real do custo desta quantidade."
+            subtitle={
+              composicaoViva
+                ? `Detalhando a SIMULAÇÃO de hoje — ${live!.industrialCostVersionLabel}, formulação V${live!.formulationVersionNumber}.`
+                : data?.calculationCode
+                  ? `Detalhando a base congelada — ${data.calculationCode}, formulação V${data.basisFormulationVersionNumber ?? "—"}.`
+                  : "De onde vem cada real do custo desta quantidade."
+            }
           >
+            {/* Os dois resumos continuam visíveis acima; aqui alterna só o
+                detalhe, e o subtítulo sempre nomeia qual está aberto. */}
+            {simulation && live && (
+              <div className="line-actions">
+                <button
+                  type="button"
+                  className={
+                    detalhe === "frozen" ? "btn btn--secondary btn--sm" : "btn btn--ghost btn--sm"
+                  }
+                  onClick={() => setDetalhe("frozen")}
+                >
+                  Base congelada
+                </button>
+                <button
+                  type="button"
+                  className={
+                    detalhe === "live" ? "btn btn--secondary btn--sm" : "btn btn--ghost btn--sm"
+                  }
+                  onClick={() => setDetalhe("live")}
+                >
+                  Dados de hoje
+                </button>
+              </div>
+            )}
             {GROUP_ORDER.map((group) => {
               const rows = componentsByGroup(group);
               if (rows.length === 0) return null;
@@ -469,7 +694,12 @@ export function ProductCmvPage() {
                     </p>
                   )}
                   <div className="table-container">
-                    <table className="table">
+                    {/* Largura fixa e compartilhada: as quatro tabelas mostram
+                        as MESMAS colunas do mesmo cálculo, e deixá-las se
+                        dimensionar sozinhas fazia "Custo total" cair num lugar
+                        diferente em cada bloco — o olho perde a coluna ao
+                        descer a página. */}
+                    <table className="table cmv-table">
                       <thead>
                         <tr>
                           <th>Item</th>
@@ -478,7 +708,7 @@ export function ProductCmvPage() {
                           <th>Origem do custo</th>
                           <th className="is-numeric">Custo unitário</th>
                           <th className="is-numeric">Custo total</th>
-                          <th>Responsabilidade</th>
+                          <th>Fornecimento</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -517,17 +747,36 @@ export function ProductCmvPage() {
           </FormSection>
         )}
 
+        {/* Procedência do número — e cada documento abre.
+            A formulação listada aqui era a ATIVA do produto, não a que o
+            cálculo congelou. Com uma receita nova publicada, a tela dizia
+            "V2" ao lado de uma composição que descrevia a V1, e um item
+            removido continuava na lista sem nenhuma explicação possível. */}
         <FormSection
           title="Base do cálculo"
-          subtitle="A procedência do número — para conferir de onde ele veio."
+          subtitle="De quais documentos estes números falam. A base econômica é congelada quando a estrutura é ativada — não é o estado de hoje."
         >
           <dl className="definition-list cmv-defs">
-            <dt>Formulação</dt>
+            <dt>Formulação usada</dt>
             <dd>
-              {data?.formulationVersionNumber ? `V${data.formulationVersionNumber}` : "—"}
+              {data?.basisFormulationVersionNumber ? (
+                <Link to={`/producao/formulacoes/${productId}`}>
+                  V{data.basisFormulationVersionNumber}
+                </Link>
+              ) : (
+                "—"
+              )}
             </dd>
             <dt>Estrutura de custos</dt>
-            <dd className="is-code">{data?.industrialCostVersionLabel ?? "—"}</dd>
+            <dd>
+              {data?.industrialCostVersionId ? (
+                <Link to={`/produtos/${productId}/custos`}>
+                  {data.industrialCostVersionLabel}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
             <dt>Base de produção</dt>
             <dd>
               {data?.referenceOutputQuantity
@@ -535,10 +784,37 @@ export function ProductCmvPage() {
                 : "—"}
             </dd>
             <dt>Cálculo de referência</dt>
-            <dd className="is-code">{data?.calculationCode ?? "—"}</dd>
+            <dd>
+              {data?.calculationId ? (
+                <Link to={`/calculos-custo/${data.calculationId}`}>
+                  <span className="code">{data.calculationCode}</span>
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
             <dt>Data do cálculo</dt>
             <dd>{formatDate(data?.calculationReferenceDate)}</dd>
           </dl>
+
+          {formulacaoDefasada && (
+            <div className="cmv-warnings" role="status">
+              <strong>
+                Este CMV descreve a formulação V{data!.basisFormulationVersionNumber}, não a V
+                {data!.formulationVersionNumber} que está ativa
+              </strong>
+              <p>
+                A estrutura de custos ativa congelou a receita da qual foi feita — publicar uma
+                formulação nova não reescreve uma base econômica em uso. Por isso itens removidos
+                na V{data!.formulationVersionNumber} continuam aparecendo na composição acima.
+              </p>
+              <p>
+                Para o CMV passar a falar da V{data!.formulationVersionNumber}, crie uma nova
+                versão da estrutura sobre ela e ative:{" "}
+                <Link to={`/produtos/${productId}/custos`}>abrir a estrutura de custos</Link>.
+              </p>
+            </div>
+          )}
         </FormSection>
       </div>
     </>

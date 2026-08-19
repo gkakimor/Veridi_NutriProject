@@ -34,6 +34,7 @@ import {
   printOrDash,
 } from "./PrintLayout";
 import { formatBRL } from "../lib/currency";
+import { formatPercent } from "../lib/percent";
 
 /**
  * Documentos imprimíveis — componentes PUROS sobre os DTOs que já existem.
@@ -778,6 +779,7 @@ export function RecipeSheetPrintDocument({ sheet }: { sheet: RecipeSheetDTO }) {
  */
 export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
   const isDraft = quote.status === "DRAFT";
+  const plano = quote.paymentSchedule;
 
   return (
     <PrintLayout
@@ -849,6 +851,18 @@ export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
               <td className="is-number">{line.total ? formatBRL(line.total) : "—"}</td>
             </tr>
           ))}
+          {plano && Number(plano.discountAmount) > 0 && (
+            <>
+              <tr>
+                <td colSpan={5}>Subtotal</td>
+                <td className="is-number">{formatBRL(plano.subtotal)}</td>
+              </tr>
+              <tr>
+                <td colSpan={5}>Desconto ({formatPercent(plano.discountPercent)})</td>
+                <td className="is-number">− {formatBRL(plano.discountAmount)}</td>
+              </tr>
+            </>
+          )}
           <tr className="print-total-row">
             <td colSpan={5}>Total geral</td>
             {/* Total parcial não existe: com linha sem preço, não há total. */}
@@ -856,11 +870,61 @@ export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
           </tr>
         </PrintTable>
 
+        {/* O documento do cliente mostra o parcelamento inteiro, parcela por
+            parcela. Uma proposta que diz "12×" sem dizer de quanto obriga o
+            cliente a refazer a conta — e a conta dele pode não bater. */}
+        {plano && plano.method === "INSTALLMENTS" && plano.installments.length > 0 && (
+          <PrintSection title="Plano de pagamento">
+            <PrintTable
+              columns={["Parcela", "Valor", "Vencimento"]}
+              isEmpty={false}
+              emptyMessage=""
+            >
+              {Number(plano.downPayment ?? 0) > 0 && (
+                <tr>
+                  <td>Entrada ({formatPercent(plano.downPaymentPercent)})</td>
+                  <td className="is-number">{formatBRL(plano.downPayment)}</td>
+                  <td className="is-number">No aceite</td>
+                </tr>
+              )}
+              {plano.installments.map((parcela) => (
+                <tr key={parcela.number}>
+                  <td>{parcela.number}ª parcela</td>
+                  <td className="is-number">{formatBRL(parcela.amount)}</td>
+                  <td className="is-number">{parcela.dueInDays} dias</td>
+                </tr>
+              ))}
+              <tr className="print-total-row">
+                <td>
+                  Total a prazo
+                  {plano.monthlyInterestPercent
+                    ? ` (juros de ${formatPercent(plano.monthlyInterestPercent)} ao mês)`
+                    : ""}
+                </td>
+                <td className="is-number">{formatBRL(plano.totalPayable)}</td>
+                <td />
+              </tr>
+            </PrintTable>
+          </PrintSection>
+        )}
+
         <dl className="print-doc__meta">
           <div>
-            <dt>Condições de pagamento</dt>
-            <dd>{printOrDash(quote.paymentTerms)}</dd>
+            <dt>Forma de pagamento</dt>
+            <dd>
+              {plano
+                ? plano.method === "CASH"
+                  ? "À vista"
+                  : `Parcelado em ${plano.installments.length}×`
+                : printOrDash(quote.paymentTerms)}
+            </dd>
           </div>
+          {quote.paymentTerms && (
+            <div>
+              <dt>Condições de pagamento</dt>
+              <dd>{quote.paymentTerms}</dd>
+            </div>
+          )}
           <div>
             <dt>Prazo de entrega</dt>
             <dd>{quote.leadTimeDays ? `${quote.leadTimeDays} dias` : "—"}</dd>
