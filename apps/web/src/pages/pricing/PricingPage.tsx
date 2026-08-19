@@ -28,6 +28,7 @@ import {
 } from "../../lib/pricing-api";
 import { formatDate } from "../../lib/dates";
 import { formatPercent } from "../../lib/percent";
+import { PricingPolicyOrigin } from "../cost-templates/PricingPolicyOrigin";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
@@ -183,6 +184,8 @@ export function PricingPage() {
             <dt>Lote mínimo do produto</dt>
             <dd>{pricing.minimumBatchQuantity ?? "—"}</dd>
           </dl>
+
+          <PricingPolicyOrigin version={pricing} canEdit={canEdit} onChanged={load} />
 
           {/* Refazer sobre o custo vigente era instrução para outras duas
               telas, sem dizer o que a troca faria com os números. A decisão

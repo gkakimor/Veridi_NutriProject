@@ -89,7 +89,17 @@ export const navigation: NavGroup[] = [
         path: "/gestao/recursos-industriais",
         implemented: true,
       },
+      {
+        label: "Templates de Estrutura",
+        path: "/gestao/templates-estrutura",
+        implemented: true,
+      },
       { label: "Precificação", path: "/gestao/precificacao", implemented: true },
+      {
+        label: "Políticas de Precificação",
+        path: "/gestao/politicas-precificacao",
+        implemented: true,
+      },
     ],
   },
   {

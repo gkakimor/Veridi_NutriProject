@@ -66,6 +66,10 @@ import { ProjectDetailPage } from "./pages/projects/ProjectDetailPage";
 import { FormulationsPage } from "./pages/formulations/FormulationsPage";
 import { FormulationTemplatesPage } from "./pages/formulation-templates/FormulationTemplatesPage";
 import { FormulationTemplateDetailPage } from "./pages/formulation-templates/FormulationTemplateDetailPage";
+import { CostTemplatesPage } from "./pages/cost-templates/CostTemplatesPage";
+import { CostTemplateDetailPage } from "./pages/cost-templates/CostTemplateDetailPage";
+import { PricingPoliciesPage } from "./pages/cost-templates/PricingPoliciesPage";
+import { PricingPolicyDetailPage } from "./pages/cost-templates/PricingPolicyDetailPage";
 import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPage";
 import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
 import { ProductionOrdersPage } from "./pages/production-orders/ProductionOrdersPage";
@@ -245,6 +249,16 @@ function AuthenticatedApp() {
           <Route
             path="/gestao/recursos-industriais/:id"
             element={<IndustrialResourceDetailPage />}
+          />
+          <Route path="/gestao/templates-estrutura" element={<CostTemplatesPage />} />
+          <Route
+            path="/gestao/templates-estrutura/:templateId"
+            element={<CostTemplateDetailPage />}
+          />
+          <Route path="/gestao/politicas-precificacao" element={<PricingPoliciesPage />} />
+          <Route
+            path="/gestao/politicas-precificacao/:policyId"
+            element={<PricingPolicyDetailPage />}
           />
           <Route path="/gestao/precificacao" element={<PricingListPage />} />
           <Route path="/gestao/precificacao/:pricingId" element={<PricingPage />} />
