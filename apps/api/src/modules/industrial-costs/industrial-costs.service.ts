@@ -69,6 +69,8 @@ const CODE_PREFIX = "EC";
 
 const versionInclude = {
   energyResource: { select: { id: true, name: true } },
+  // Nome atual do template de origem, só para o rótulo "criada a partir de".
+  originCostTemplateVersion: { include: { industrialCostTemplate: true } },
   product: { include: { customer: true, finishedProductItem: true } },
   formulationVersion: { include: { components: { include: { item: true } } } },
   lines: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] as PrismaTypes.IndustrialCostLineOrderByWithRelationInput[] },
@@ -414,6 +416,11 @@ function toVersionDTO(
     customerNameSnapshot: version.customerNameSnapshot,
     productCodeSnapshot: version.productCodeSnapshot,
     productNameSnapshot: version.productNameSnapshot,
+    // Proveniência no template de estrutura — nunca vínculo vivo.
+    originCostTemplateVersionId: version.originCostTemplateVersionId,
+    originCostTemplateCode: version.originCostTemplateCode,
+    originCostTemplateVersionNumber: version.originCostTemplateVersionNumber,
+    originCostTemplateName: version.originCostTemplateVersion?.industrialCostTemplate.name ?? null,
   };
 }
 

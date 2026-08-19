@@ -154,6 +154,17 @@ export interface PricingVersionDTO {
   /** Base econômica oficial desta precificação. */
   industrialCostCalculationId: string;
   calculationCode: string;
+  /**
+   * Política que serviu de molde. `null` quando a versão nasceu manualmente ou
+   * copiada de outra do mesmo produto.
+   *
+   * A política guarda REGRA, nunca preço: os valores desta versão foram
+   * calculados sobre o custo DESTE produto, no momento em que ela nasceu.
+   */
+  originPricingPolicyVersionId: string | null;
+  originPricingPolicyCode: string | null;
+  originPricingPolicyVersionNumber: number | null;
+  originPricingPolicyName: string | null;
   industrialCostVersionLabel: string;
   formulationVersionNumber: number;
   costReferenceDate: string;

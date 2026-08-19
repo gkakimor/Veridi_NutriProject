@@ -243,6 +243,15 @@ enum FormulationComponentBasis {
 /// ARCHIVED em vez de INACTIVE: a Formulacao de um Produto e desativada
 /// quando outra assume; um template e ARQUIVADO quando sai da biblioteca.
 /// Sao coisas diferentes e o vocabulario acompanha.
+/// Ciclo de vida das matrizes de biblioteca (estrutura de custos e politica
+/// de precificacao). Mesmo vocabulario do template de formulacao: ARQUIVADA
+/// porque sai da biblioteca, nao porque outra assumiu o lugar dela.
+enum TemplateVersionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
 enum FormulationTemplateVersionStatus {
   DRAFT
   ACTIVE
@@ -980,6 +989,17 @@ model IndustrialCostVersion {
 
   updatedAt DateTime @updatedAt
 
+  /// TEMPLATE DE ESTRUTURA QUE SERVIU DE MOLDE — proveniencia, nunca vinculo.
+  ///
+  /// Aplicar um template COPIA a configuracao. Depois disso a estrutura do
+  /// produto e o template seguem separados: o template pode ganhar V2 e esta
+  /// estrutura continua sendo o que era. Nada se sincroniza, por decisao — um
+  /// cliente nao pode ter o custo mudado porque outro pediu ajuste na matriz.
+  originCostTemplateVersionId     String?
+  originCostTemplateVersion       IndustrialCostTemplateVersion? @relation(fields: [originCostTemplateVersionId], references: [id], onDelete: SetNull)
+  originCostTemplateCode          String?
+  originCostTemplateVersionNumber Int?
+
   lines                   IndustrialCostLine[]
   resourceUsages          IndustrialCostResourceUsage[]
   calculations            IndustrialCostCalculation[]
@@ -989,6 +1009,7 @@ model IndustrialCostVersion {
   @@unique([productId, versionNumber])
   @@index([productId])
   @@index([status])
+  @@index([originCostTemplateVersionId])
   @@map("industrial_cost_versions")
 }
 
@@ -1058,9 +1079,11 @@ model IndustrialResource {
   updatedByUser         User?    @relation("IndustrialResourceUpdatedBy", fields: [updatedByUserId], references: [id])
   updatedByNameSnapshot String?
 
-  rates             IndustrialResourceRate[]
-  usages            IndustrialCostResourceUsage[]
-  energyForVersions IndustrialCostVersion[]       @relation("IndustrialCostEnergyResource")
+  rates                  IndustrialResourceRate[]
+  usages                 IndustrialCostResourceUsage[]
+  energyForVersions      IndustrialCostVersion[]               @relation("IndustrialCostEnergyResource")
+  templateUsages         IndustrialCostTemplateResourceUsage[] @relation("CostTemplateResourceUsage")
+  energyForCostTemplates IndustrialCostTemplateVersion[]       @relation("CostTemplateEnergyResource")
 
   @@index([type])
   @@index([active])
@@ -1291,6 +1314,16 @@ model PricingVersion {
 
   updatedAt DateTime @updatedAt
 
+  /// POLITICA QUE SERVIU DE MOLDE — proveniencia, nunca vinculo.
+  ///
+  /// A politica guarda REGRA (faixa, margem alvo, comissao), nunca preco: o
+  /// preco depende do custo deste produto e e calculado no momento da
+  /// aplicacao. Politica nova nao reescreve precificacao existente.
+  originPricingPolicyVersionId     String?
+  originPricingPolicyVersion       PricingPolicyTemplateVersion? @relation(fields: [originPricingPolicyVersionId], references: [id], onDelete: SetNull)
+  originPricingPolicyCode          String?
+  originPricingPolicyVersionNumber Int?
+
   tiers              PricingTier[]
   quoteLines         QuoteLine[]
   customerOrderLines CustomerOrderLine[] @relation("CustomerOrderLinePricingVersion")
@@ -1299,6 +1332,7 @@ model PricingVersion {
   @@index([productId])
   @@index([status])
   @@index([industrialCostCalculationId])
+  @@index([originPricingPolicyVersionId])
   @@map("pricing_versions")
 }
 
@@ -1751,15 +1785,17 @@ model UnitOfMeasure {
   toBaseFactor Decimal      @db.Decimal(18, 6)
 
   items                      Item[]
-  offerPrices                SupplierItemOffer[]          @relation("OfferPriceUom")
-  offerMoqs                  SupplierItemOffer[]          @relation("OfferMoqUom")
-  productsAsDoseUom          Product[]                    @relation("ProductDoseUom")
-  projectsAsDoseUom          Project[]                    @relation("ProjectDoseUom")
-  quoteLines                 QuoteLine[]                  @relation("QuoteLineUom")
-  sampleOutputs              ProjectSample[]              @relation("SampleOutputUom")
-  industrialCostOutputs      IndustrialCostVersion[]      @relation("IndustrialCostOutputUom")
-  pricingTiers               PricingTier[]                @relation("PricingTierUom")
-  formulationTemplateOutputs FormulationTemplateVersion[] @relation("FormulationTemplateOutputUom")
+  offerPrices                SupplierItemOffer[]             @relation("OfferPriceUom")
+  offerMoqs                  SupplierItemOffer[]             @relation("OfferMoqUom")
+  productsAsDoseUom          Product[]                       @relation("ProductDoseUom")
+  projectsAsDoseUom          Project[]                       @relation("ProjectDoseUom")
+  quoteLines                 QuoteLine[]                     @relation("QuoteLineUom")
+  sampleOutputs              ProjectSample[]                 @relation("SampleOutputUom")
+  industrialCostOutputs      IndustrialCostVersion[]         @relation("IndustrialCostOutputUom")
+  pricingTiers               PricingTier[]                   @relation("PricingTierUom")
+  formulationTemplateOutputs FormulationTemplateVersion[]    @relation("FormulationTemplateOutputUom")
+  costTemplateOutputs        IndustrialCostTemplateVersion[] @relation("CostTemplateOutputUom")
+  pricingPolicyTiers         PricingPolicyTemplateTier[]     @relation("PricingPolicyTierUom")
 
   @@map("units_of_measure")
 }
@@ -3568,4 +3604,238 @@ model FormulationTemplateComponent {
   /// Mesmo item nao aparece duas vezes na mesma versao.
   @@unique([formulationTemplateVersionId, itemId])
   @@map("formulation_template_components")
+}
+
+/// BIBLIOTECA TECNICA DE ESTRUTURAS DE CUSTO.
+///
+/// Responde "como normalmente produzimos este TIPO de produto": base de
+/// producao, recursos usados e por quanto tempo, modo de energia, servicos e
+/// rateios. Aplicar cria uma IndustrialCostVersion propria do Produto.
+///
+/// O que NAO vive aqui: tarifa, preco/hora, custo calculado. O template diz
+/// "usar o misturador por 4 horas"; quanto vale essa hora e resolvido pelo
+/// motor, na data de referencia, pela tarifa vigente. Congelar tarifa aqui
+/// faria a biblioteca envelhecer sem ninguem perceber.
+model IndustrialCostTemplate {
+  id String @id @default(uuid())
+
+  /// TEC-000001 — identidade da matriz industrial.
+  code String @unique
+
+  name        String
+  description String?
+
+  archivedAt DateTime?
+  archivedBy String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+  updatedAt DateTime @updatedAt
+
+  versions IndustrialCostTemplateVersion[]
+
+  @@index([name])
+  @@map("industrial_cost_templates")
+}
+
+model IndustrialCostTemplateVersion {
+  id String @id @default(uuid())
+
+  industrialCostTemplateId String
+  industrialCostTemplate   IndustrialCostTemplate @relation(fields: [industrialCostTemplateId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  status        TemplateVersionStatus @default(DRAFT)
+
+  /// Base de producao SUGERIDA. O produto pode adotar outra ao aplicar.
+  referenceOutputQuantity Decimal       @db.Decimal(18, 6)
+  referenceOutputUomCode  String
+  referenceOutputUom      UnitOfMeasure @relation("CostTemplateOutputUom", fields: [referenceOutputUomCode], references: [code])
+
+  /// Modo de energia como CONFIGURACAO. `FROM_EQUIPMENT` continua sendo
+  /// "derive dos equipamentos" — nunca um resultado em kWh ou em reais.
+  energyCalculationMode EnergyCalculationMode @default(NONE)
+  energyResourceId      String?
+  energyResource        IndustrialResource?   @relation("CostTemplateEnergyResource", fields: [energyResourceId], references: [id])
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  activatedAt DateTime?
+  activatedBy String?
+  archivedAt  DateTime?
+  archivedBy  String?
+
+  sourceVersionId     String?
+  sourceVersion       IndustrialCostTemplateVersion?  @relation("CostTemplateVersionSource", fields: [sourceVersionId], references: [id])
+  sourceVersionNumber Int?
+  derivedVersions     IndustrialCostTemplateVersion[] @relation("CostTemplateVersionSource")
+
+  resourceUsages  IndustrialCostTemplateResourceUsage[]
+  additionalCosts IndustrialCostTemplateAdditionalCost[]
+
+  /// Estruturas de custo COPIADAS desta versao — proveniencia, nunca canal.
+  derivedCostVersions IndustrialCostVersion[]
+
+  @@unique([industrialCostTemplateId, versionNumber])
+  @@index([industrialCostTemplateId])
+  @@index([status])
+  @@map("industrial_cost_template_versions")
+}
+
+/// Recurso e QUANTO dele. Sem tarifa: os campos `rate*Snapshot` da estrutura
+/// operacional existem para congelar economia na ativacao, e uma matriz de
+/// biblioteca nao tem economia a congelar.
+model IndustrialCostTemplateResourceUsage {
+  id String @id @default(uuid())
+
+  industrialCostTemplateVersionId String
+  industrialCostTemplateVersion   IndustrialCostTemplateVersion @relation(fields: [industrialCostTemplateVersionId], references: [id], onDelete: Cascade)
+
+  industrialResourceId String
+  industrialResource   IndustrialResource @relation("CostTemplateResourceUsage", fields: [industrialResourceId], references: [id])
+
+  usageBasis    IndustrialResourceUsageBasis @default(FIXED_PER_REFERENCE_BATCH)
+  usageQuantity Decimal                      @db.Decimal(18, 6)
+  usageUom      IndustrialRateUom
+
+  notes     String?
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([industrialCostTemplateVersionId, industrialResourceId])
+  @@index([industrialCostTemplateVersionId])
+  @@map("industrial_cost_template_resource_usages")
+}
+
+/// Premissa adicional: embalagem secundaria, servico de terceiro, overhead.
+///
+/// `rateValue` aqui e o que a pessoa DIGITA como premissa da estrutura
+/// ("R$ 180 por 1000 unidades"), nao uma tarifa resolvida de cadastro — por
+/// isso viaja com o template.
+model IndustrialCostTemplateAdditionalCost {
+  id String @id @default(uuid())
+
+  industrialCostTemplateVersionId String
+  industrialCostTemplateVersion   IndustrialCostTemplateVersion @relation(fields: [industrialCostTemplateVersionId], references: [id], onDelete: Cascade)
+
+  category    IndustrialCostCategory
+  description String
+
+  calculationBasis IndustrialCostBasis
+  rateValue        Decimal?            @db.Decimal(14, 4)
+
+  notes     String?
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([industrialCostTemplateVersionId])
+  @@map("industrial_cost_template_additional_costs")
+}
+
+/// BIBLIOTECA COMERCIAL — POLITICA DE PRECIFICACAO.
+///
+/// Responde "como normalmente COMERCIALIZAMOS este tipo de produto": em que
+/// faixas de quantidade, com que margem alvo e que comissao.
+///
+/// NAO e template de preco. Preco depende do custo do produto: copiar
+/// "R$ 44,90" de um produto para outro levaria o custo alheio disfarcado de
+/// decisao comercial. A politica guarda REGRA, e o preco nasce do motor sobre
+/// o CALC daquele produto, no momento da aplicacao.
+model PricingPolicyTemplate {
+  id String @id @default(uuid())
+
+  /// TPP-000001 — identidade da politica.
+  code String @unique
+
+  name        String
+  description String?
+
+  archivedAt DateTime?
+  archivedBy String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+  updatedAt DateTime @updatedAt
+
+  versions PricingPolicyTemplateVersion[]
+
+  @@index([name])
+  @@map("pricing_policy_templates")
+}
+
+model PricingPolicyTemplateVersion {
+  id String @id @default(uuid())
+
+  pricingPolicyTemplateId String
+  pricingPolicyTemplate   PricingPolicyTemplate @relation(fields: [pricingPolicyTemplateId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  status        TemplateVersionStatus @default(DRAFT)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  activatedAt DateTime?
+  activatedBy String?
+  archivedAt  DateTime?
+  archivedBy  String?
+
+  sourceVersionId     String?
+  sourceVersion       PricingPolicyTemplateVersion?  @relation("PricingPolicyVersionSource", fields: [sourceVersionId], references: [id])
+  sourceVersionNumber Int?
+  derivedVersions     PricingPolicyTemplateVersion[] @relation("PricingPolicyVersionSource")
+
+  tiers PricingPolicyTemplateTier[]
+
+  /// Precificacoes COPIADAS desta politica — proveniencia, nunca canal.
+  derivedPricingVersions PricingVersion[]
+
+  @@unique([pricingPolicyTemplateId, versionNumber])
+  @@index([pricingPolicyTemplateId])
+  @@index([status])
+  @@map("pricing_policy_template_versions")
+}
+
+/// Uma faixa da politica: quantidade, margem alvo e comissao.
+///
+/// Sem `manualUnitPrice`: preco informado a mao e decisao de UMA negociacao,
+/// sobre UM custo. Reutiliza-lo entre produtos seria transportar o acordo de
+/// um cliente para outro sem que ninguem tivesse decidido isso.
+///
+/// Sem custo, preco sugerido, contribuicao ou markup: tudo isso e resultado, e
+/// resultado nao e politica.
+model PricingPolicyTemplateTier {
+  id String @id @default(uuid())
+
+  pricingPolicyTemplateVersionId String
+  pricingPolicyTemplateVersion   PricingPolicyTemplateVersion @relation(fields: [pricingPolicyTemplateVersionId], references: [id], onDelete: Cascade)
+
+  quantity Decimal       @db.Decimal(18, 6)
+  uomCode  String
+  uom      UnitOfMeasure @relation("PricingPolicyTierUom", fields: [uomCode], references: [code])
+
+  /// So TARGET_MARGIN nesta fase — ver o comentario do modelo.
+  priceMode PriceMode @default(TARGET_MARGIN)
+
+  targetContributionMarginPercent Decimal? @db.Decimal(7, 4)
+  commissionPercent               Decimal  @default(0) @db.Decimal(7, 4)
+
+  notes     String?
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([pricingPolicyTemplateVersionId, quantity])
+  @@index([pricingPolicyTemplateVersionId])
+  @@map("pricing_policy_template_tiers")
 }

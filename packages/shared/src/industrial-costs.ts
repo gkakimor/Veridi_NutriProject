@@ -174,6 +174,16 @@ export interface IndustrialCostVersionDTO {
    * dele. Versão ATIVA nunca é arrastada, fixada ou não.
    */
   formulationPinned: boolean;
+  /**
+   * Template de estrutura que serviu de molde. `null` quando a versão nasceu
+   * em branco, copiada de outra versão do produto, ou antes desta capacidade.
+   *
+   * PROVENIÊNCIA, não vínculo: o template pode evoluir sem tocar nesta versão.
+   */
+  originCostTemplateVersionId: string | null;
+  originCostTemplateCode: string | null;
+  originCostTemplateVersionNumber: number | null;
+  originCostTemplateName: string | null;
   activeFormulationVersionNumber: number | null;
 
   referenceOutputQuantity: string;
