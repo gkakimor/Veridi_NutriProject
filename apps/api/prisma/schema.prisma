@@ -238,6 +238,17 @@ enum FormulationComponentBasis {
   PER_FINISHED_UNIT
 }
 
+/// Ciclo de vida de uma versao de TEMPLATE.
+///
+/// ARCHIVED em vez de INACTIVE: a Formulacao de um Produto e desativada
+/// quando outra assume; um template e ARQUIVADO quando sai da biblioteca.
+/// Sao coisas diferentes e o vocabulario acompanha.
+enum FormulationTemplateVersionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
 enum FormulationVersionStatus {
   DRAFT
   ACTIVE
@@ -1739,15 +1750,16 @@ model UnitOfMeasure {
   dimension    UomDimension
   toBaseFactor Decimal      @db.Decimal(18, 6)
 
-  items                 Item[]
-  offerPrices           SupplierItemOffer[]     @relation("OfferPriceUom")
-  offerMoqs             SupplierItemOffer[]     @relation("OfferMoqUom")
-  productsAsDoseUom     Product[]               @relation("ProductDoseUom")
-  projectsAsDoseUom     Project[]               @relation("ProjectDoseUom")
-  quoteLines            QuoteLine[]             @relation("QuoteLineUom")
-  sampleOutputs         ProjectSample[]         @relation("SampleOutputUom")
-  industrialCostOutputs IndustrialCostVersion[] @relation("IndustrialCostOutputUom")
-  pricingTiers          PricingTier[]           @relation("PricingTierUom")
+  items                      Item[]
+  offerPrices                SupplierItemOffer[]          @relation("OfferPriceUom")
+  offerMoqs                  SupplierItemOffer[]          @relation("OfferMoqUom")
+  productsAsDoseUom          Product[]                    @relation("ProductDoseUom")
+  projectsAsDoseUom          Project[]                    @relation("ProjectDoseUom")
+  quoteLines                 QuoteLine[]                  @relation("QuoteLineUom")
+  sampleOutputs              ProjectSample[]              @relation("SampleOutputUom")
+  industrialCostOutputs      IndustrialCostVersion[]      @relation("IndustrialCostOutputUom")
+  pricingTiers               PricingTier[]                @relation("PricingTierUom")
+  formulationTemplateOutputs FormulationTemplateVersion[] @relation("FormulationTemplateOutputUom")
 
   @@map("units_of_measure")
 }
@@ -1833,6 +1845,7 @@ model Item {
   lots                           Lot[]
   inventoryMovements             InventoryMovement[]
   formulationComponents          FormulationComponent[]
+  formulationTemplateComponents  FormulationTemplateComponent[]
   sampleConsumptions             SampleConsumption[]
   formulationVersionsAsOutput    FormulationVersion[]
   productionOrderRequirements    ProductionOrderRequirement[]
@@ -2163,6 +2176,22 @@ model FormulationVersion {
   /// deve depender de join para existir.
   sourceVersionNumber Int?
 
+  /// TEMPLATE QUE SERVIU DE MOLDE — provenance, nunca vinculo vivo.
+  ///
+  /// Usar um template COPIA os dados para esta versao. Depois disso as duas
+  /// seguem independentes: o template pode ganhar V4 e esta formulacao
+  /// continua sendo o que era. Nada aqui se sincroniza, por decisao — um
+  /// cliente nao pode ter a receita mudada porque outro cliente pediu algo.
+  ///
+  /// Null em toda formulacao criada em branco, copiada de outra versao do
+  /// mesmo produto, ou anterior a esta capacidade.
+  originTemplateVersionId     String?
+  originTemplateVersion       FormulationTemplateVersion? @relation(fields: [originTemplateVersionId], references: [id], onDelete: SetNull)
+  /// Codigo e numero gravados junto: o rotulo "criada a partir de FT-000008
+  /// V3" e historico e nao deve depender de join para existir.
+  originTemplateCode          String?
+  originTemplateVersionNumber Int?
+
   components             FormulationComponent[]
   derivedVersions        FormulationVersion[]    @relation("FormulationVersionSource")
   industrialCostVersions IndustrialCostVersion[]
@@ -2172,6 +2201,7 @@ model FormulationVersion {
   @@unique([productId, versionNumber])
   @@index([productId])
   @@index([status])
+  @@index([originTemplateVersionId])
   @@map("formulation_versions")
 }
 
@@ -3409,4 +3439,133 @@ model BillingLine {
   @@index([shipmentLineId])
   @@index([customerOrderLineId])
   @@map("billing_lines")
+}
+
+/// BIBLIOTECA TECNICA DE FORMULACOES.
+///
+/// Uma matriz reutilizavel entre clientes e produtos. O template NAO e a
+/// formulacao de ninguem: usar um template COPIA os dados para uma
+/// FormulationVersion propria do Produto, e a partir dai as duas vidas
+/// seguem separadas.
+///
+/// A alternativa — varios produtos apontando para a mesma formulacao viva —
+/// foi recusada de proposito: mexer na receita de um cliente reescreveria a
+/// de outro, e ninguem descobriria antes da producao.
+model FormulationTemplate {
+  id String @id @default(uuid())
+
+  /// FT-000001 — identidade da matriz na biblioteca.
+  code String @unique
+
+  name        String
+  description String?
+
+  /// Arquivar tira da biblioteca sem apagar historia: formulacoes criadas a
+  /// partir dele continuam validas e continuam apontando para ele.
+  archivedAt DateTime?
+  archivedBy String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+  updatedAt DateTime @updatedAt
+
+  versions FormulationTemplateVersion[]
+
+  @@index([name])
+  @@map("formulation_templates")
+}
+
+/// Uma versao da matriz. DRAFT edita, ACTIVE e historico.
+///
+/// Nao guarda item de saida — o template nao pertence a produto nenhum. Guarda
+/// so a UNIDADE a que a base se refere, que e o suficiente para a copia fazer
+/// sentido em qualquer produto medido naquela unidade.
+model FormulationTemplateVersion {
+  id String @id @default(uuid())
+
+  formulationTemplateId String
+  formulationTemplate   FormulationTemplate @relation(fields: [formulationTemplateId], references: [id], onDelete: Cascade)
+
+  /// Sequencial por template (V1, V2...), gerado sob lock.
+  versionNumber Int
+
+  status FormulationTemplateVersionStatus @default(DRAFT)
+
+  /// Mesmo significado da formulacao: estas quantidades produzem
+  /// `basisQuantity` do produto acabado.
+  basisQuantity   Decimal                    @db.Decimal(18, 6)
+  calculationMode FormulationCalculationMode @default(FIXED_BASIS)
+  dosesPerPackage Int?
+  /// Unidade do produto acabado a que a base se refere ("un", "kg").
+  outputUnitCode  String
+  outputUnit      UnitOfMeasure              @relation("FormulationTemplateOutputUom", fields: [outputUnitCode], references: [code])
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  activatedAt DateTime?
+  activatedBy String?
+
+  archivedAt DateTime?
+  archivedBy String?
+
+  /// Versao que serviu de molde para esta, dentro do proprio template.
+  sourceVersionId     String?
+  sourceVersion       FormulationTemplateVersion?  @relation("FormulationTemplateVersionSource", fields: [sourceVersionId], references: [id])
+  sourceVersionNumber Int?
+  derivedVersions     FormulationTemplateVersion[] @relation("FormulationTemplateVersionSource")
+
+  components FormulationTemplateComponent[]
+
+  /// Formulacoes de Produto COPIADAS desta versao. Relacao de proveniencia:
+  /// existe para responder "de onde veio esta receita", nunca para propagar
+  /// mudanca de volta.
+  derivedFormulationVersions FormulationVersion[]
+
+  @@unique([formulationTemplateId, versionNumber])
+  @@index([formulationTemplateId])
+  @@index([status])
+  @@map("formulation_template_versions")
+}
+
+/// Linha tecnica da matriz.
+///
+/// Espelha `FormulationComponent` no que e tecnico. Fica de fora o bloco
+/// `legacy*`, que existe para conferir ERP contra planilha durante a
+/// migracao — uma matriz de biblioteca nunca teve planilha para conferir.
+model FormulationTemplateComponent {
+  id String @id @default(uuid())
+
+  formulationTemplateVersionId String
+  formulationTemplateVersion   FormulationTemplateVersion @relation(fields: [formulationTemplateVersionId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  quantity Decimal @db.Decimal(18, 6)
+  unitCode String
+
+  basis FormulationComponentBasis @default(FIXED_BASIS)
+
+  /// SUGESTAO, nao imposicao: quem fornece cada material muda de cliente
+  /// para cliente. A copia leva este valor como ponto de partida e o
+  /// usuario ajusta no produto sem tocar no template.
+  supplyResponsibility SupplyResponsibility @default(VERIDI)
+
+  purityPercentApplied Decimal? @db.Decimal(6, 3)
+  overagePercent       Decimal? @db.Decimal(6, 3)
+
+  notes String?
+
+  /// Ordem de exibicao estavel.
+  position Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Mesmo item nao aparece duas vezes na mesma versao.
+  @@unique([formulationTemplateVersionId, itemId])
+  @@map("formulation_template_components")
 }

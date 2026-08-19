@@ -31,6 +31,7 @@ export * from "./lots.js";
 export * from "./inventory.js";
 export * from "./allocation.js";
 export * from "./formulations.js";
+export * from "./formulation-templates.js";
 export * from "./production-orders.js";
 export * from "./traceability.js";
 export * from "./customer-orders.js";

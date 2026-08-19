@@ -18,6 +18,7 @@ import { industrialResourcesRoutes } from "./modules/industrial-resources/indust
 import { industrialCostCalculationRoutes } from "./modules/industrial-cost-calculation/calculation.routes.js";
 import { pricingRoutes } from "./modules/pricing/pricing.routes.js";
 import { productCmvRoutes } from "./modules/product-cmv/product-cmv.routes.js";
+import { formulationTemplatesRoutes } from "./modules/formulation-templates/formulation-templates.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
 import { controlledDocumentsRoutes } from "./modules/controlled-documents/controlled-documents.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
@@ -89,6 +90,7 @@ export function buildApp() {
   app.register(industrialCostCalculationRoutes);
   app.register(pricingRoutes);
   app.register(productCmvRoutes);
+  app.register(formulationTemplatesRoutes);
   app.register(itemsRoutes);
   app.register(unitsRoutes);
   app.register(suppliersRoutes);

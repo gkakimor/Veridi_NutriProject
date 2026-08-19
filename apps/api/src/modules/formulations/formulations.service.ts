@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import type {
   FormulationComponent,
+  FormulationTemplate,
+  FormulationTemplateVersion,
   FormulationVersion,
   Item,
   Product,
@@ -49,6 +51,9 @@ type ComponentWithItem = FormulationComponent & { item: Item };
 type VersionWithRelations = FormulationVersion & {
   product: Product;
   components: ComponentWithItem[];
+  originTemplateVersion?:
+    | (FormulationTemplateVersion & { formulationTemplate: FormulationTemplate })
+    | null;
 };
 
 function toComponentDTO(
@@ -143,6 +148,12 @@ function toVersionDTO(
     inactivatedBy: version.inactivatedBy,
     sourceVersionId: version.sourceVersionId,
     sourceVersionNumber: version.sourceVersionNumber,
+    // Proveniência do template — nunca vínculo vivo. O código fica gravado
+    // para o rótulo sobreviver mesmo se o template for removido.
+    originTemplateVersionId: version.originTemplateVersionId,
+    originTemplateCode: version.originTemplateCode,
+    originTemplateVersionNumber: version.originTemplateVersionNumber,
+    originTemplateName: version.originTemplateVersion?.formulationTemplate.name ?? null,
     componentIssues: version.status === "DRAFT" ? componentIssues(version, units) : [],
   };
 }
@@ -197,6 +208,8 @@ function componentIssues(
 const versionInclude = {
   product: true,
   components: { include: { item: true } },
+  // Nome atual do template de origem, só para o rótulo "criada a partir de".
+  originTemplateVersion: { include: { formulationTemplate: true } },
 } as const;
 
 async function getUnits(): Promise<UnitOfMeasure[]> {
