@@ -736,6 +736,53 @@
   color: var(--ink);
 }
 
+/* O que falta para ativar uma estrutura de custos.
+   Bloco de destaque, não dica cinza: era exatamente por ficar em
+   `field__hint` que ninguém achava o motivo de uma estrutura "Com
+   pendências". */
+.pendency-panel {
+  margin: var(--sp-4) 0;
+  padding: var(--sp-4);
+  border-left: 3px solid var(--warn-fg);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+.pendency-panel__title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--warn-fg);
+}
+
+/* Contexto vem depois do bloqueante e não compete com ele. */
+.pendency-panel__title--info {
+  margin-top: var(--sp-4);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.pendency-panel__sub {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-sm);
+}
+
+.pendency-panel__list {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-sm);
+}
+
+.pendency-panel__list li + li {
+  margin-top: var(--sp-2);
+}
+
+.pendency-panel__list a {
+  color: inherit;
+  font-weight: var(--fw-medium);
+}
+
 .form-alert {
   padding: var(--sp-3);
   border-radius: var(--radius-sm);

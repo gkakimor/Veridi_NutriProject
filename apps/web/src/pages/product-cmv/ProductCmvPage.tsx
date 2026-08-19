@@ -6,6 +6,7 @@ import type {
   IndustrialMaterialCostSource,
   PricingTierDTO,
   ProductCmvResponse,
+  ProductIndustrialCostResponse,
 } from "@veridi/shared";
 import {
   CMV_GROUP_LABELS,
@@ -20,7 +21,9 @@ import { FormSection } from "../../components/FormSection";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
+import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
 import { getProductCmv } from "../../lib/product-cmv-api";
+import { getProductIndustrialCosts } from "../../lib/industrial-costs-api";
 import { getProductPricing } from "../../lib/pricing-api";
 import { formatBRL } from "../../lib/currency";
 import { formatPercent } from "../../lib/percent";
@@ -122,6 +125,32 @@ export function ProductCmvPage() {
   const [tier, setTier] = useState<PricingTierDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /*
+   * A estrutura só é buscada para EXPLICAR uma resposta vazia. Nenhum número
+   * desta tela vem daqui — o CMV continua saindo inteiro de um endpoint só.
+   */
+  const [pendencyVersion, setPendencyVersion] = useState<
+    ProductIndustrialCostResponse["current"] | null
+  >(null);
+
+  useEffect(() => {
+    if (!productId) return;
+    let ativo = true;
+    getProductIndustrialCosts(productId)
+      .then((estrutura) => {
+        if (!ativo) return;
+        const current = estrutura.current;
+        setPendencyVersion(
+          current && !current.complete ? current : (current ? null : (estrutura.draft ?? null)),
+        );
+      })
+      .catch(() => {
+        if (ativo) setPendencyVersion(null);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [productId]);
 
   const simular = useCallback(
     async (quantidade: string, data_: string) => {
@@ -276,6 +305,15 @@ export function ProductCmvPage() {
             <p className="form-alert" role="status">
               {data.unavailableReason}
             </p>
+          )}
+
+          {/* "Não há custo" precisa vir com o que falta para haver — senão a
+              tela informa o problema e esconde a saída. */}
+          {data?.unavailableReason && pendencyVersion && productId && (
+            <IndustrialCostPendencies
+              pendencies={pendencyVersion.pendencies}
+              productId={productId}
+            />
           )}
 
           {simulation && (

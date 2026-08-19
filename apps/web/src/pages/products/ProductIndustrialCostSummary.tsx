@@ -10,6 +10,7 @@ import {
   INDUSTRIAL_COST_VERSION_STATUS_LABELS,
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
+import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
 import { getProductIndustrialCosts } from "../../lib/industrial-costs-api";
 import { getProductPricing } from "../../lib/pricing-api";
 import { getProductCmv } from "../../lib/product-cmv-api";
@@ -70,6 +71,12 @@ export function ProductIndustrialCostSummary({ productId }: { productId: string 
   }, [productId]);
 
   const current = data?.current ?? null;
+  /*
+   * Qual versão explica a ausência de custo: a ativa quando ela mesma está
+   * incompleta, senão o rascunho que ainda não foi ativado.
+   */
+  const pendencyVersion =
+    current && !current.complete ? current : (current ? null : (data?.draft ?? null));
   const activePricing = pricing?.current ?? null;
   const simulation = cmv?.simulation ?? null;
 
@@ -131,6 +138,15 @@ export function ProductIndustrialCostSummary({ productId }: { productId: string 
       )}
 
       {cmv?.unavailableReason && <p className="field__hint">{cmv.unavailableReason}</p>}
+
+      {/* Sem isto o produto só dizia "CMV indisponível" e a razão ficava a
+          duas telas de distância, dentro da estrutura. */}
+      {pendencyVersion && (
+        <IndustrialCostPendencies
+          pendencies={pendencyVersion.pendencies}
+          productId={productId}
+        />
+      )}
 
       {pricing && (
         <p className="field__hint">

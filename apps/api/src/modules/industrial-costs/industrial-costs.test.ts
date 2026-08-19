@@ -392,9 +392,14 @@ describe("Estrutura de custos — formulação vinculada", () => {
     expect(reread.formulationVersionId).toBe(formulationVersionId);
     expect(reread.activeFormulationVersionNumber).toBe(2);
     // A defasagem é informada, não corrigida automaticamente.
-    expect(
-      reread.pendencies.some((row: { code: string }) => row.code === "FORMULATION_OUTDATED"),
-    ).toBe(true);
+    const outdated = reread.pendencies.find(
+      (row: { code: string }) => row.code === "FORMULATION_OUTDATED",
+    );
+    expect(outdated).toBeDefined();
+    // Defasagem é contexto, não bloqueio: a tela precisa dessa distinção
+    // vinda da API para não reimplementar a regra que decide `complete`.
+    expect(outdated.severity).toBe("INFO");
+    expect(outdated.target).toBe("FORMULATION");
 
     const stored = await prisma.industrialCostVersion.findUniqueOrThrow({ where: { id: cost.id } });
     expect(stored.formulationVersionId).toBe(formulationVersionId);
@@ -527,6 +532,10 @@ describe("Estrutura de custos — premissas manuais", () => {
     expect(version.pendencies.map((row: { code: string }) => row.code)).toEqual([
       "ENERGY_NOT_CONFIGURED",
     ]);
+    // Toda pendência diz também QUÃO grave é e ONDE se resolve — sem isso a
+    // tela mostra um aviso que não leva a lugar nenhum.
+    expect(version.pendencies[0].severity).toBe("BLOCKING");
+    expect(version.pendencies[0].target).toBe("SELF");
 
     const withUnknown = (
       await app.inject({

@@ -114,20 +114,40 @@ export interface IndustrialCostMaterialDTO {
   customerSupplied: boolean;
 }
 
+export type IndustrialCostPendencyCode =
+  | "RATE_NOT_INFORMED"
+  | "SHIPPING_BOX_NOT_CONFIGURED"
+  | "FORMULATION_NOT_STABLE"
+  | "FORMULATION_OUTDATED"
+  | "RESOURCE_RATE_NOT_INFORMED"
+  | "ENERGY_NOT_CONFIGURED"
+  | "EQUIPMENT_POWER_NOT_INFORMED"
+  | "ENERGY_RESOURCE_MISSING"
+  | "ENERGY_RATE_NOT_INFORMED"
+  | "RESOURCE_INACTIVE";
+
+/**
+ * Onde a pendência se resolve.
+ *
+ * A descrição diz O QUE falta; sem isto a tela não sabe PARA ONDE mandar
+ * quem vai resolver, e o usuário fica lendo um aviso que não leva a lugar
+ * nenhum. `SELF` = nesta mesma estrutura (a seção é escolhida pelo código).
+ */
+export type IndustrialCostPendencyTarget = "SELF" | "PRODUCT" | "FORMULATION" | "RESOURCE";
+
 /** Motivo pelo qual a estrutura ainda não está completa. */
 export interface IndustrialCostPendencyDTO {
-  code:
-    | "RATE_NOT_INFORMED"
-    | "SHIPPING_BOX_NOT_CONFIGURED"
-    | "FORMULATION_NOT_STABLE"
-    | "FORMULATION_OUTDATED"
-    | "RESOURCE_RATE_NOT_INFORMED"
-    | "ENERGY_NOT_CONFIGURED"
-    | "EQUIPMENT_POWER_NOT_INFORMED"
-    | "ENERGY_RESOURCE_MISSING"
-    | "ENERGY_RATE_NOT_INFORMED"
-    | "RESOURCE_INACTIVE";
+  code: IndustrialCostPendencyCode;
   description: string;
+  /**
+   * `BLOCKING` impede a estrutura ser considerada completa; `INFO` é aviso
+   * de contexto. Publicado pela API para a tela não reimplementar a regra
+   * que decide `complete` — uma fonte só.
+   */
+  severity: "BLOCKING" | "INFO";
+  target: IndustrialCostPendencyTarget;
+  /** Id do recurso industrial quando `target = "RESOURCE"`. */
+  resourceId: string | null;
 }
 
 export interface IndustrialCostVersionDTO {
