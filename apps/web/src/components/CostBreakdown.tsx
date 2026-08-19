@@ -9,6 +9,7 @@ import {
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
 import { formatBRL } from "../lib/currency";
+import { EntityLink } from "./EntityLink";
 
 /** Custo unitário mantém casas decimais: R$ 0,083421/un não vira R$ 0,08. */
 export function formatUnitCost(value: string | null): string {
@@ -55,7 +56,15 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
             {result.materials.map((material) => (
               <tr key={material.itemId}>
                 <td>
-                  <span className="code">{material.itemCode}</span> {material.itemName}
+                  {/* Custo desconhecido se resolve no cadastro do item e nas
+                      compras dele — ler "sem custo conhecido" e não ter como
+                      abrir o material deixava o diagnóstico sem conserto. */}
+                  <EntityLink
+                    kind="item"
+                    id={material.itemId}
+                    code={material.itemCode}
+                    name={material.itemName}
+                  />
                 </td>
                 <td className="is-numeric">
                   {material.requiredQuantity} {material.unitCode}
@@ -97,7 +106,12 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
               {result.resources.map((resource) => (
                 <tr key={resource.resourceId}>
                   <td>
-                    <span className="code">{resource.resourceCode}</span> {resource.resourceName}
+                    <EntityLink
+                    kind="industrialResource"
+                    id={resource.resourceId}
+                    code={resource.resourceCode}
+                    name={resource.resourceName}
+                  />
                   </td>
                   <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.resourceType]}</td>
                   <td className="is-numeric">
