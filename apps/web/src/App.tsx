@@ -64,6 +64,8 @@ import { CoaQueuePage } from "./pages/quality/CoaQueuePage";
 import { ProjectsPage } from "./pages/projects/ProjectsPage";
 import { ProjectDetailPage } from "./pages/projects/ProjectDetailPage";
 import { FormulationsPage } from "./pages/formulations/FormulationsPage";
+import { FormulationTemplatesPage } from "./pages/formulation-templates/FormulationTemplatesPage";
+import { FormulationTemplateDetailPage } from "./pages/formulation-templates/FormulationTemplateDetailPage";
 import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPage";
 import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
 import { ProductionOrdersPage } from "./pages/production-orders/ProductionOrdersPage";
@@ -198,6 +200,14 @@ function AuthenticatedApp() {
           <Route path="/estoque/:itemId" element={<InventoryItemDetailPage />} />
           <Route path="/qualidade/documentos" element={<CoaQueuePage />} />
           <Route path="/producao/formulacoes" element={<FormulationsPage />} />
+          <Route
+            path="/producao/templates-formulacao"
+            element={<FormulationTemplatesPage />}
+          />
+          <Route
+            path="/producao/templates-formulacao/:templateId"
+            element={<FormulationTemplateDetailPage />}
+          />
           <Route path="/producao/formulacoes/:productId" element={<FormulationDetailPage />} />
           <Route
             path="/producao/formulacoes/:productId/versoes/:versionId"

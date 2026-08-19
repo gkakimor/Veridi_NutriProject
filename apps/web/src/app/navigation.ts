@@ -41,6 +41,11 @@ export const navigation: NavGroup[] = [
       { label: "Ordens de Produção", path: "/producao/ordens", implemented: true },
       { label: "Picking / Consumo", path: "/producao/picking", implemented: true },
       { label: "Formulações", path: "/producao/formulacoes", implemented: true },
+      {
+        label: "Templates de Formulação",
+        path: "/producao/templates-formulacao",
+        implemented: true,
+      },
       { label: "Produto Acabado", path: "/producao/produto-acabado", implemented: true },
     ],
   },

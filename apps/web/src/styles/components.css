@@ -412,6 +412,15 @@
 
 /* ---------------- Paginacao ---------------- */
 
+.toolbar__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
 .pagination {
   display: flex;
   flex-wrap: wrap;
@@ -1584,4 +1593,52 @@ td .entity-select {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-3);
+}
+
+/* Origem da formulação num template da biblioteca. Discreta: explica, não comanda. */
+.template-origin {
+  margin: var(--sp-3) 0;
+}
+
+.template-origin__line {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  margin: 0 0 var(--sp-2);
+}
+
+.template-origin__update {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--v-green-600);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  font-size: var(--fs-sm);
+}
+
+.template-origin__update p {
+  margin: 0 0 var(--sp-2);
+}
+
+.template-origin__save {
+  margin-top: var(--sp-2);
+}
+
+.template-diff {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.template-diff__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--v-green-700);
+}
+
+.template-diff-wrapper {
+  margin-top: var(--sp-3);
 }
