@@ -5011,6 +5011,74 @@ CALC salvo, que exige a estrutura ativada e calculada), e agrupar esconderia
 qual camada envelheceu.
 
 ---
+
+# Fechamento pré-merge da stack (comercial + formulação + custo/preço)
+
+`feat/cost-pricing-templates` nasceu sobre `feat/formulation-templates`, que
+nasceu sobre `overnight/commercial-integrity`. A branch de baixo já contém as
+três capacidades — **é a única candidata a merge**, e por isso o caminho é um
+merge só, um push só, um deploy só. Merges intermediários gerariam três
+deploys Railway sem necessidade.
+
+## Fragilidade de teste eliminada
+
+`product-cmv.test.ts` garimpava o banco compartilhado em todos os casos: "a
+estrutura ativa mais recente", "algum produto com custo", "alguma
+precificação com faixas". Duas consequências. O resultado dependia de quem
+tinha rodado o quê — a mesma suíte passava e falhava sem mudança de código. E
+os `if (!x) return` espalhados transformavam banco vazio em aprovação
+silenciosa: um caso que não achava cenário reportava verde, e as asserções
+abaixo dele nunca rodavam.
+
+Cada caso agora monta produto, formulação, estrutura e CALC próprios e lê só
+os próprios IDs. Nada foi enfraquecido para isso — as asserções ficaram mais
+específicas, porque fixture conhecida permite afirmação exata: o caso de
+material do cliente exige exatamente um componente e o nomeia; o de faixas
+exige a lista exata de quantidades com preço.
+
+`product-cmv-matrix.test.ts` já estava limpo (nenhum `findFirst`/`findMany`,
+todo `deleteMany` filtrado por IDs próprios). A mesma correção já havia sido
+feita em `pricing.test.ts`.
+
+## O que foi revalidado
+
+| Item | Resultado |
+|---|---|
+| Smoke Formulação: FT → produto, cópia profunda, origem | PASS |
+| Smoke Estrutura: TEC → EC, tarifa resolvida na data, CALC | PASS |
+| Smoke Política: TPP → PREC, preço calculado sobre o CALC | PASS |
+| Isolamento: FT V2 / TEC V2 / TPP V2 não tocam o já aplicado | PASS — nenhum live-link |
+| Versão nova é anunciada, nunca aplicada | PASS |
+| Comercial: faixa → orçamento → aceite → pedido | PASS |
+| Proveniência PRICING_TIER e snapshot de pagamento no pedido | PASS |
+| Pedido manual sem origem inventada | PASS |
+| Gerar o pedido duas vezes devolve o mesmo | PASS |
+| E2E UI completo: FT → EC → CALC → CMV → TPP → PREC → Orçamento → Pedido | 16/16 |
+| Console / 5xx / ≥400 inesperado | zero |
+| Fresh migration (42) | PASS |
+| Upgrade a partir da `main` atual (39 → 42) | PASS — esquema idêntico ao fresh |
+| `db:demo` duas vezes | idempotente (3 produtos, não 6) |
+
+As três migrations empilhadas, na ordem: `customer_order_commercial_provenance`,
+`formulation_templates`, `cost_and_pricing_templates`.
+
+## Banco local de validação
+
+Não foi resetado. Ele guarda trabalho real de validação — 443 produtos, 103
+clientes, 18 orçamentos, 9 pedidos, 5 ordens de produção, 32 lotes — e um dos
+três produtos `DEMO FT A/B` remanescentes da rodada anterior está referenciado
+por uma linha de orçamento e duas de pedido. Apagá-lo órfanaria documentos
+comerciais reais. Ficam registrados como **fixtures locais antigas**, sem
+feature de limpeza e sem migration.
+
+## Product Blueprint
+
+Continua só no backlog, por decisão aprovada: as três camadas têm
+pré-condições diferentes (Formulação → Estrutura → CALC → Precificação), e um
+pacote automático exigiria decidir hoje o que fazer quando um passo
+intermediário não roda. Espera-se o uso real das três bibliotecas.
+
+---
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
