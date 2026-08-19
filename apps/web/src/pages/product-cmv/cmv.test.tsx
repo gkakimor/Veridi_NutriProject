@@ -16,6 +16,9 @@ import { ProductCmvPage } from "./ProductCmvPage";
 
 vi.mock("../../lib/product-cmv-api", () => ({ getProductCmv: vi.fn() }));
 vi.mock("../../lib/pricing-api", () => ({ getProductPricing: vi.fn() }));
+vi.mock("../../lib/industrial-costs-api", () => ({
+  getProductIndustrialCosts: () => Promise.resolve({ current: null, draft: null }),
+}));
 vi.mock("../../components/ProjectOriginLink", () => ({ ProjectOriginLink: () => null }));
 
 import { getProductCmv } from "../../lib/product-cmv-api";
@@ -30,6 +33,8 @@ function cmv(overrides: Partial<ProductCmvResponse> = {}): ProductCmvResponse {
     outputUomCode: "un",
     formulationVersionId: "form-1",
     formulationVersionNumber: 1,
+    basisFormulationVersionId: "form-1",
+    basisFormulationVersionNumber: 1,
     industrialCostVersionId: "ec-1",
     industrialCostVersionLabel: "EC-000001 · V1",
     referenceOutputQuantity: "1000",
@@ -471,5 +476,32 @@ describe("Tela de CMV", () => {
 
     await screen.findByText(/Não há cálculo de custo salvo até esta data de referência/);
     expect(screen.queryByText("CMV total")).not.toBeInTheDocument();
+  });
+
+  it("diz de qual formulação a composição fala e avisa quando ela ficou para trás", async () => {
+    vi.mocked(getProductCmv).mockResolvedValue(
+      cmv({
+        // Produto já publicou a V2; a estrutura ativa continua na V1.
+        formulationVersionNumber: 2,
+        basisFormulationVersionNumber: 1,
+      }),
+    );
+    renderPage("/produtos/prod-1/cmv?quantity=1000");
+
+    // Sem este aviso, um item removido na V2 aparecendo na composição vira
+    // suspeita de bug em vez de base congelada.
+    await screen.findByText(/Este CMV descreve a formulação V1, não a V2 que está ativa/);
+    expect(screen.getByRole("link", { name: "V1" })).toHaveAttribute(
+      "href",
+      "/producao/formulacoes/prod-1",
+    );
+    expect(screen.getByRole("link", { name: "EC-000001 · V1" })).toHaveAttribute(
+      "href",
+      "/produtos/prod-1/custos",
+    );
+    expect(screen.getByRole("link", { name: "CALC-000001" })).toHaveAttribute(
+      "href",
+      "/calculos-custo/calc-1",
+    );
   });
 });

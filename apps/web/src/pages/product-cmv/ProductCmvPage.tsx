@@ -205,6 +205,11 @@ export function ProductCmvPage() {
     (simulation?.components ?? []).filter((component) => component.group === group);
 
   const semTotal = simulation !== null && simulation.totalCost === null;
+  /* A base econômica ficou para trás da receita ativa. */
+  const formulacaoDefasada =
+    data?.basisFormulationVersionNumber != null &&
+    data.formulationVersionNumber != null &&
+    data.basisFormulationVersionNumber !== data.formulationVersionNumber;
 
   return (
     <>
@@ -555,17 +560,36 @@ export function ProductCmvPage() {
           </FormSection>
         )}
 
+        {/* Procedência do número — e cada documento abre.
+            A formulação listada aqui era a ATIVA do produto, não a que o
+            cálculo congelou. Com uma receita nova publicada, a tela dizia
+            "V2" ao lado de uma composição que descrevia a V1, e um item
+            removido continuava na lista sem nenhuma explicação possível. */}
         <FormSection
           title="Base do cálculo"
-          subtitle="A procedência do número — para conferir de onde ele veio."
+          subtitle="De quais documentos estes números falam. A base econômica é congelada quando a estrutura é ativada — não é o estado de hoje."
         >
           <dl className="definition-list cmv-defs">
-            <dt>Formulação</dt>
+            <dt>Formulação usada</dt>
             <dd>
-              {data?.formulationVersionNumber ? `V${data.formulationVersionNumber}` : "—"}
+              {data?.basisFormulationVersionNumber ? (
+                <Link to={`/producao/formulacoes/${productId}`}>
+                  V{data.basisFormulationVersionNumber}
+                </Link>
+              ) : (
+                "—"
+              )}
             </dd>
             <dt>Estrutura de custos</dt>
-            <dd className="is-code">{data?.industrialCostVersionLabel ?? "—"}</dd>
+            <dd>
+              {data?.industrialCostVersionId ? (
+                <Link to={`/produtos/${productId}/custos`}>
+                  {data.industrialCostVersionLabel}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
             <dt>Base de produção</dt>
             <dd>
               {data?.referenceOutputQuantity
@@ -573,10 +597,37 @@ export function ProductCmvPage() {
                 : "—"}
             </dd>
             <dt>Cálculo de referência</dt>
-            <dd className="is-code">{data?.calculationCode ?? "—"}</dd>
+            <dd>
+              {data?.calculationId ? (
+                <Link to={`/calculos-custo/${data.calculationId}`}>
+                  <span className="code">{data.calculationCode}</span>
+                </Link>
+              ) : (
+                "—"
+              )}
+            </dd>
             <dt>Data do cálculo</dt>
             <dd>{formatDate(data?.calculationReferenceDate)}</dd>
           </dl>
+
+          {formulacaoDefasada && (
+            <div className="cmv-warnings" role="status">
+              <strong>
+                Este CMV descreve a formulação V{data!.basisFormulationVersionNumber}, não a V
+                {data!.formulationVersionNumber} que está ativa
+              </strong>
+              <p>
+                A estrutura de custos ativa congelou a receita da qual foi feita — publicar uma
+                formulação nova não reescreve uma base econômica em uso. Por isso itens removidos
+                na V{data!.formulationVersionNumber} continuam aparecendo na composição acima.
+              </p>
+              <p>
+                Para o CMV passar a falar da V{data!.formulationVersionNumber}, crie uma nova
+                versão da estrutura sobre ela e ative:{" "}
+                <Link to={`/produtos/${productId}/custos`}>abrir a estrutura de custos</Link>.
+              </p>
+            </div>
+          )}
         </FormSection>
       </div>
     </>

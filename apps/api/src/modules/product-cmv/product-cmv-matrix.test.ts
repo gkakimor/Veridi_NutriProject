@@ -389,6 +389,44 @@ function totalDoGrupo(
 }
 
 describe("CMV — matriz de composição e base econômica", () => {
+  it("publicar formulação nova não move a base: a resposta diz de qual receita ela fala", async () => {
+    const app = buildTestApp();
+    const { product } = await createScenario(app, {
+      materialUnitCost: "10",
+      referenceOutputQuantity: "1000",
+    });
+
+    const antes = await cmv(product.id, "1000");
+    const formulationId = antes.formulationVersionId!;
+    expect(antes.basisFormulationVersionNumber).toBe(1);
+    expect(antes.formulationVersionNumber).toBe(1);
+
+    // V2 nasce da V1 e é publicada. A estrutura ativa continua congelada na
+    // receita da qual foi feita — trocar a formulação ativa jamais reescreve
+    // custo já em uso.
+    const criacao = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${formulationId}/new-version`,
+      payload: {},
+    });
+    expect(criacao.statusCode, criacao.body).toBe(201);
+    const v2 = criacao.json();
+    const ativacao = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v2.id}/activate`,
+    });
+    expect(ativacao.statusCode, ativacao.body).toBe(200);
+
+    const depois = await cmv(product.id, "1000");
+    expect(depois.formulationVersionNumber).toBe(2);
+    // O ponto do campo: a composição devolvida ainda descreve a V1, e a
+    // resposta admite isso em vez de deixar a tela deduzir.
+    expect(depois.basisFormulationVersionNumber).toBe(1);
+    expect(depois.simulation?.totalCost).toBe(antes.simulation?.totalCost);
+
+    await app.close();
+  });
+
   it("custo fixo por lote não se dilui abaixo de um lote e acompanha a contagem", async () => {
     const app = buildTestApp();
     const { product } = await createScenario(app, {

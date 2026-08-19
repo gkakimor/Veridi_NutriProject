@@ -91,6 +91,10 @@ export async function getProductCmv(params: {
     outputUomCode,
     formulationVersionId: activeFormulation?.id ?? null,
     formulationVersionNumber: activeFormulation?.versionNumber ?? null,
+    // A base é a receita congelada pela estrutura ativa; só o cálculo sabe
+    // o número dela, então antes de existir CALC fica só o id.
+    basisFormulationVersionId: activeCostVersion?.formulationVersionId ?? null,
+    basisFormulationVersionNumber: null,
     industrialCostVersionId: activeCostVersion?.id ?? null,
     industrialCostVersionLabel: activeCostVersion
       ? `${activeCostVersion.code} · V${activeCostVersion.versionNumber}`
@@ -217,6 +221,7 @@ export async function getProductCmv(params: {
     calculationId: calculation.id,
     calculationCode: calculation.code,
     calculationReferenceDate: calculation.costReferenceDate,
+    basisFormulationVersionNumber: calculation.formulationVersionNumber,
     simulation: {
       quantity: params.quantity.toString(),
       uomCode: outputUomCode,

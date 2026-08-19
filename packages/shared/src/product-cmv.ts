@@ -75,8 +75,22 @@ export interface ProductCmvResponse {
   /** Unidade do item de produto acabado — a unidade em que se simula. */
   outputUomCode: string;
 
+  /**
+   * Formulação ATIVA do produto hoje. Não é necessariamente a que este CMV
+   * usa: a estrutura de custos congela a receita da qual ela foi feita, e
+   * publicar V2 não reescreve a base econômica já ativa.
+   */
   formulationVersionId: string | null;
   formulationVersionNumber: number | null;
+
+  /**
+   * Formulação que ESTES números descrevem — a congelada pela estrutura de
+   * custos ativa. Quando diverge da ativa, a composição abaixo é a receita
+   * antiga, e a tela precisa dizer isso: o contrário é o usuário procurar
+   * na lista um item que ele acabou de remover.
+   */
+  basisFormulationVersionId: string | null;
+  basisFormulationVersionNumber: number | null;
 
   industrialCostVersionId: string | null;
   industrialCostVersionLabel: string | null;

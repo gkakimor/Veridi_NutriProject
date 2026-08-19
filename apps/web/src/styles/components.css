@@ -799,6 +799,22 @@
   font-size: var(--fs-xs);
 }
 
+/* Escolha dentro do ConfirmDialog — usada quando confirmar ainda tem uma
+   decisão real embutida (ex.: levar a nova versão para a formulação ativa). */
+.confirm-dialog__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
+.confirm-dialog__choice input {
+  margin-top: 0.2em;
+  width: auto;
+  flex: none;
+}
+
 /* Lista de linhas afetadas dentro do ConfirmDialog (ex.: custo incompleto). */
 .confirm-dialog__list {
   margin: var(--sp-3) 0 0;

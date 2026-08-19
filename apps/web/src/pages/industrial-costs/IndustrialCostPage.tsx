@@ -95,6 +95,13 @@ export function IndustrialCostPage() {
   const [activateConfirm, setActivateConfirm] = useState(false);
   const [newVersionConfirm, setNewVersionConfirm] = useState(false);
   /*
+   * Criar versão COPIA a formulação da versão de origem — é o padrão certo
+   * para revisar tarifas sem trocar a receita. Mas quando a receita ativa já
+   * mudou, repetir a antiga em silêncio deixava o usuário sem nenhum caminho
+   * para o custo passar a falar da nova. A escolha passa a ser explícita.
+   */
+  const [adotarFormulacaoAtiva, setAdotarFormulacaoAtiva] = useState(true);
+  /*
    * Qual versão está sendo lida.
    *
    * A tela abria sempre o rascunho e não oferecia caminho de volta para a
@@ -185,6 +192,12 @@ export function IndustrialCostPage() {
     !referenceQuantity.trim() &&
     !data.suggestedReferenceOutputQuantity;
   const editable = canEdit && version?.status === "DRAFT";
+
+  /* A receita ativa do produto já passou da que esta estrutura congelou. */
+  const formulacaoDefasada =
+    version != null &&
+    data.activeFormulationVersionNumber != null &&
+    data.activeFormulationVersionNumber !== version.formulationVersionNumber;
 
   // Energia direta só existe no modo correspondente; fora dele o recurso de
   // energia nem é oferecido, para não induzir dupla contagem.
@@ -958,6 +971,27 @@ export function IndustrialCostPage() {
                 A estrutura ativa continua valendo na produção e segue acessível pelo seletor de
                 versões.
               </p>
+              {formulacaoDefasada && (
+                <>
+                  <p>
+                    Esta estrutura usa a formulação <strong>V{version.formulationVersionNumber}</strong>;
+                    a ativa do produto é{" "}
+                    <strong>V{data.activeFormulationVersionNumber}</strong>.
+                  </p>
+                  <label className="confirm-dialog__choice">
+                    <input
+                      type="checkbox"
+                      checked={adotarFormulacaoAtiva}
+                      onChange={(event) => setAdotarFormulacaoAtiva(event.target.checked)}
+                    />
+                    <span>
+                      Criar a nova versão sobre a formulação ativa V
+                      {data.activeFormulationVersionNumber}. Desmarque para continuar na V
+                      {version.formulationVersionNumber}.
+                    </span>
+                  </label>
+                </>
+              )}
             </>
           }
           onCancel={() => setNewVersionConfirm(false)}
@@ -965,12 +999,16 @@ export function IndustrialCostPage() {
             setNewVersionConfirm(false);
             setLendoAtiva(false);
             void run(() =>
-              createIndustrialCostVersion(
-                productId,
-                referenceQuantity.trim()
+              createIndustrialCostVersion(productId, {
+                ...(referenceQuantity.trim()
                   ? { referenceOutputQuantity: referenceQuantity.trim() }
-                  : {},
-              ),
+                  : {}),
+                ...(formulacaoDefasada &&
+                adotarFormulacaoAtiva &&
+                data.activeFormulationVersionId
+                  ? { formulationVersionId: data.activeFormulationVersionId }
+                  : {}),
+              }),
             );
           }}
         />
