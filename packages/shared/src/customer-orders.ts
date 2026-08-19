@@ -3,6 +3,7 @@
 import type { CustomerOrderBillingStatus } from "./billings.js";
 import type { CustomerAddress } from "./customers.js";
 import type { ProductionOrderStatus } from "./production-orders.js";
+import type { QuotePaymentScheduleDTO, QuotePriceSource } from "./projects.js";
 
 export const CUSTOMER_ORDER_CODE_PREFIX = "PED";
 
@@ -41,6 +42,26 @@ export const CUSTOMER_ORDER_STATUSES: readonly CustomerOrderStatus[] = [
 
 export type CustomerOrderReservationStatus = "ACTIVE" | "RELEASED";
 
+/**
+ * De onde veio o preço desta linha.
+ *
+ * Identidade apenas: código da precificação e faixa usada. Custo, margem,
+ * markup e comissão continuam sendo informação interna do orçamento e não
+ * atravessam para o Pedido.
+ */
+export interface CustomerOrderLineAgreedPriceDTO {
+  unitPrice: string;
+  /** `quantidade × preço acordado`, derivado. */
+  lineTotal: string;
+  source: QuotePriceSource;
+  pricingVersionId: string | null;
+  pricingCode: string | null;
+  pricingVersionNumber: number | null;
+  pricingTierId: string | null;
+  tierQuantity: string | null;
+  tierUomCode: string | null;
+}
+
 export interface CustomerOrderLineDTO {
   id: string;
   productId: string;
@@ -60,6 +81,13 @@ export interface CustomerOrderLineDTO {
   billedQuantity: string;
   /** `shippedQuantity - billedQuantity`, nunca negativo — expedido ainda não faturado. */
   unbilledShippedQuantity: string;
+  /** Linha do orçamento que originou esta. `null` em pedido digitado direto. */
+  sourceQuoteLineId: string | null;
+  /**
+   * O preço aceito pelo cliente, congelado. `null` quando o Pedido não veio
+   * de orçamento — nesse caso não existe preço acordado a preservar.
+   */
+  agreedPrice: CustomerOrderLineAgreedPriceDTO | null;
 }
 
 export interface CustomerOrderReservationLineDTO {
@@ -152,6 +180,30 @@ export interface CustomerOrderGeneratedProductionOrderDTO {
   status: ProductionOrderStatus;
 }
 
+/**
+ * A proposta aceita que originou este Pedido.
+ *
+ * Responde, meses depois, "por que este pedido foi fechado por este valor":
+ * qual orçamento, de qual projeto, com que desconto e em que condição de
+ * pagamento. Tudo congelado — o Pedido não reconstrói o acordo pela
+ * precificação nem pelo CMV de hoje.
+ */
+export interface CustomerOrderCommercialOriginDTO {
+  quoteVersionId: string | null;
+  quoteCode: string;
+  quoteVersionNumber: number;
+  projectId: string | null;
+  projectCode: string | null;
+  /** Soma das linhas antes do desconto. */
+  subtotalAmount: string | null;
+  /** Desconto GLOBAL sobre o subtotal — nunca rateado nas linhas. */
+  discountPercent: string | null;
+  /** O que a proposta valia: subtotal menos desconto. */
+  totalAmount: string | null;
+  /** Plano como foi apresentado ao cliente. `null` em proposta sem plano. */
+  paymentSchedule: QuotePaymentScheduleDTO | null;
+}
+
 export interface CustomerOrderDTO {
   id: string;
   code: string;
@@ -167,6 +219,11 @@ export interface CustomerOrderDTO {
   status: CustomerOrderStatus;
   notes: string | null;
   lines: CustomerOrderLineDTO[];
+  /**
+   * `null` em pedido criado direto em Comercial › Pedidos — caminho que
+   * continua válido e não exige orçamento retroativo.
+   */
+  commercialOrigin: CustomerOrderCommercialOriginDTO | null;
   /** Null até o Plano de Atendimento ser aplicado. */
   reservation: CustomerOrderReservationDTO | null;
   /** OPs DRAFT geradas ao aplicar o Plano — uma por linha com déficit. */

@@ -16,6 +16,8 @@ import {
 } from "../../lib/cost-calculation-api";
 import { createPricingVersion } from "../../lib/pricing-api";
 import { formatDate } from "../../lib/dates";
+import { UsePricingPolicyDialog } from "../cost-templates/UsePricingPolicyDialog";
+import { applyPricingPolicyToProduct } from "../../lib/cost-pricing-templates-api";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -49,6 +51,11 @@ export function CostCalculationSection({
   const [history, setHistory] = useState<IndustrialCostCalculationSummaryDTO[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Aplicar política precisa de uma base de custo escolhida: o preço nasce
+  // de um CALC, não do produto em abstrato.
+  const [politicaPara, setPoliticaPara] = useState<IndustrialCostCalculationSummaryDTO | null>(
+    null,
+  );
 
   const loadHistory = useCallback(() => {
     listProductCostCalculations(productId)
@@ -240,6 +247,14 @@ export function CostCalculationSection({
                       >
                         Criar precificação
                       </button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        disabled={busy}
+                        onClick={() => setPoliticaPara(row)}
+                      >
+                        Usar política
+                      </button>
                     </td>
                   )}
                 </tr>
@@ -255,6 +270,28 @@ export function CostCalculationSection({
           </table>
         </div>
       </FormSection>
+
+      {politicaPara && (
+        <UsePricingPolicyDialog
+          productId={productId}
+          calculationId={politicaPara.id}
+          calculationCode={politicaPara.code}
+          saving={busy}
+          onCancel={() => setPoliticaPara(null)}
+          onApply={(pricingPolicyVersionId) => {
+            const calculationId = politicaPara.id;
+            setPoliticaPara(null);
+            void run(async () => {
+              const pricing = await applyPricingPolicyToProduct(
+                productId,
+                pricingPolicyVersionId,
+                calculationId,
+              );
+              navigate(`/gestao/precificacao/${pricing.id}`);
+            });
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmarIncompleto}

@@ -43,6 +43,7 @@ import {
 } from "../../lib/shipments-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
+import { AgreedPriceCell, CommercialOriginSection } from "./CommercialOriginSection";
 import { FlowContext } from "../../components/FlowContext";
 import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -235,6 +236,22 @@ export function CustomerOrderPage() {
 
   const status: CustomerOrderStatus = customerOrder?.status ?? "DRAFT";
   const isDraft = isNew || status === "DRAFT";
+  /*
+   * A coluna de preço só aparece quando há acordo a mostrar. Pedido digitado
+   * direto não tem preço de origem, e uma coluna inteira de "—" só ocuparia
+   * espaço para dizer que não há nada.
+   */
+  const temPrecoAcordado = Boolean(
+    customerOrder?.lines.some((line) => line.agreedPrice !== null),
+  );
+  /*
+   * Pedido nascido de proposta aceita não renegocia aqui: produto e
+   * quantidade vieram de um acordo com o cliente. O backend já recusa a
+   * alteração — a tela precisa parar de oferecê-la, senão a pessoa edita,
+   * salva e só então descobre que não podia.
+   */
+  const origemComercial = customerOrder?.commercialOrigin ?? null;
+  const linhasEditaveis = isDraft && origemComercial === null;
   const isCancellable = !isNew && (status === "DRAFT" || status === "CONFIRMED");
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
   const showPlan = !isNew && status === "CONFIRMED";
@@ -733,6 +750,8 @@ export function CustomerOrderPage() {
           </FormSection>
         )}
 
+        {customerOrder && <CommercialOriginSection order={customerOrder} />}
+
         <FormSection
           title="Cliente e datas"
           subtitle={
@@ -779,7 +798,14 @@ export function CustomerOrderPage() {
           </div>
         </FormSection>
 
-        <FormSection title="Produtos" subtitle="Um produto por pedido — a unidade vem do item de produto acabado.">
+        <FormSection
+          title="Produtos"
+          subtitle={
+            origemComercial
+              ? `Produtos e quantidades vieram do orçamento ${origemComercial.quoteCode}. Para mudar, renegocie criando uma nova versão do orçamento.`
+              : "Um produto por pedido — a unidade vem do item de produto acabado."
+          }
+        >
           <div className="table-container">
             {/* Produto é a coluna de decisão: fica com o espaço, e a busca
                 dentro dela precisa de largura para nomes longos. */}
@@ -789,16 +815,17 @@ export function CustomerOrderPage() {
                   <th>Produto</th>
                   <th className="col-quantity is-numeric">Quantidade</th>
                   <th className="col-unit">Un.</th>
+                  {temPrecoAcordado && <th className="is-numeric">Preço acordado</th>}
                   {!isDraft && <th className="is-numeric">Expedido</th>}
                   {!isDraft && <th className="is-numeric">Falta expedir</th>}
-                  {isDraft && <th aria-hidden="true" />}
+                  {linhasEditaveis && <th aria-hidden="true" />}
                 </tr>
               </thead>
               <tbody>
                 {lines.map((line) => (
                   <tr key={line.key}>
                     <td>
-                      {isDraft ? (
+                      {linhasEditaveis ? (
                         <SearchableEntitySelect
                           id={`pedido-produto-${line.key}`}
                           value={line.productId}
@@ -817,7 +844,7 @@ export function CustomerOrderPage() {
                       )}
                     </td>
                     <td className="is-numeric">
-                      {isDraft ? (
+                      {linhasEditaveis ? (
                         <input
                           type="text"
                           inputMode="decimal"
@@ -830,6 +857,16 @@ export function CustomerOrderPage() {
                       )}
                     </td>
                     <td>{line.unitCode || "—"}</td>
+                    {temPrecoAcordado && (
+                      <td className="is-numeric">
+                        <AgreedPriceCell
+                          price={
+                            customerOrder?.lines.find((l) => l.productId === line.productId)
+                              ?.agreedPrice ?? null
+                          }
+                        />
+                      </td>
+                    )}
                     {!isDraft && (
                       <td className="is-numeric">
                         {customerOrder?.lines.find((l) => l.productId === line.productId)?.shippedQuantity ?? "—"}
@@ -841,7 +878,7 @@ export function CustomerOrderPage() {
                           "—"}
                       </td>
                     )}
-                    {isDraft && (
+                    {linhasEditaveis && (
                       <td>
                         <button
                           type="button"
@@ -858,7 +895,7 @@ export function CustomerOrderPage() {
 
                 {lines.length === 0 && (
                   <tr>
-                    <td colSpan={isDraft ? 4 : 5} className="table__empty">
+                    <td colSpan={(isDraft ? 4 : 5) + (temPrecoAcordado ? 1 : 0)} className="table__empty">
                       Nenhum produto adicionado.
                     </td>
                   </tr>
@@ -867,7 +904,7 @@ export function CustomerOrderPage() {
             </table>
           </div>
 
-          {isDraft && (
+          {linhasEditaveis && (
             <div className="line-actions">
               <button type="button" className="btn btn--secondary btn--sm" onClick={handleAddLine}>
                 + Adicionar produto

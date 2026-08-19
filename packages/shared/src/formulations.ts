@@ -137,6 +137,19 @@ export interface FormulationVersionDTO {
   sourceVersionId: string | null;
   sourceVersionNumber: number | null;
   /**
+   * Template da biblioteca que serviu de molde. `null` quando a versão nasceu
+   * em branco, copiada de outra versão do mesmo produto, ou antes desta
+   * capacidade existir.
+   *
+   * É PROVENIÊNCIA, não vínculo: o template pode evoluir sem tocar nesta
+   * versão, e editar esta versão nunca volta para o template.
+   */
+  originTemplateVersionId: string | null;
+  originTemplateCode: string | null;
+  originTemplateVersionNumber: number | null;
+  /** Nome atual do template de origem, para o rótulo. */
+  originTemplateName: string | null;
+  /**
    * Só para versões em RASCUNHO: uma versão ativa ou histórica é um
    * documento fechado, e apontar problema nela seria sugerir edição onde
    * não há edição possível.

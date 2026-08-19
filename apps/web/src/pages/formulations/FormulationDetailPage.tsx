@@ -12,6 +12,8 @@ import {
   listFormulationVersionsByProduct,
 } from "../../lib/formulations-api";
 import { FormSection } from "../../components/FormSection";
+import { UseTemplateDialog } from "../formulation-templates/UseTemplateDialog";
+import { applyTemplateToProduct } from "../../lib/formulation-templates-api";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -39,6 +41,7 @@ export function FormulationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [usandoTemplate, setUsandoTemplate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -202,6 +205,12 @@ export function FormulationDetailPage() {
             )}
           </div>
 
+          {/*
+            Três caminhos para chegar a uma fórmula, lado a lado: em branco,
+            copiando outra versão deste produto, ou partindo de uma matriz da
+            biblioteca. Esconder o terceiro atrás da Biblioteca obrigaria quem
+            está no produto a sair dele para reaproveitar o que já existe.
+          */}
           <div className="line-actions">
             {versions.length === 0 ? (
               <button
@@ -210,7 +219,7 @@ export function FormulationDetailPage() {
                 disabled={saving || !product.finishedProductItem}
                 onClick={handleCreateFirst}
               >
-                Criar formulação
+                Criar formulação em branco
               </button>
             ) : activeVersion ? (
               <button
@@ -219,13 +228,21 @@ export function FormulationDetailPage() {
                 disabled={saving}
                 onClick={handleCreateNewVersion}
               >
-                Criar nova versão
+                Copiar versão deste produto
               </button>
             ) : (
               <span className="field__hint">
                 Existe uma versão em rascunho sem ativação — abra-a no histórico abaixo.
               </span>
             )}
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              disabled={saving || !product.finishedProductItem}
+              onClick={() => setUsandoTemplate(true)}
+            >
+              Usar template da biblioteca
+            </button>
           </div>
         </FormSection>
 
@@ -318,6 +335,28 @@ export function FormulationDetailPage() {
           </div>
         </FormSection>
       </div>
+
+      {usandoTemplate && (
+        <UseTemplateDialog
+          saving={saving}
+          onCancel={() => setUsandoTemplate(false)}
+          onApply={(templateVersionId) => {
+            setUsandoTemplate(false);
+            void (async () => {
+              setSaving(true);
+              setError(null);
+              try {
+                const criada = await applyTemplateToProduct(productId!, templateVersionId);
+                navigate(`/producao/formulacoes/${productId}/versoes/${criada.id}`);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Falha ao aplicar o template");
+              } finally {
+                setSaving(false);
+              }
+            })();
+          }}
+        />
+      )}
     </>
   );
 }

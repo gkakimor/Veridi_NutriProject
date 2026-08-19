@@ -224,6 +224,23 @@
   background: var(--canvas);
 }
 
+/*
+ * Segunda linha dentro de uma célula: o recurso do template, a descrição da
+ * política, o "rascunho em edição". Precisa de `display: block` — `span` com
+ * `.field__hint` corria colado no valor e a célula lia "V1Rascunho em
+ * edição". Truncar em vez de esticar: uma lista com seis recursos no nome
+ * empurrava as últimas colunas para fora da largura de trabalho.
+ */
+.cell-sub {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .table-container--spaced {
   margin-top: var(--sp-4);
 }
@@ -411,6 +428,15 @@
 }
 
 /* ---------------- Paginacao ---------------- */
+
+.toolbar__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
 
 .pagination {
   display: flex;
@@ -1436,6 +1462,39 @@ td .entity-select {
   margin-top: var(--sp-4);
 }
 
+/* Fechamento da proposta aceita: o que ainda falta depois do "sim". */
+.quote-closing {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--v-green-600);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.quote-closing__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--v-green-700);
+}
+
+.commercial-origin__plan {
+  margin-top: var(--sp-3);
+}
+
+.commercial-origin__plan summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--v-green-700);
+}
+
+.commercial-origin__plan .table {
+  margin-top: var(--sp-2);
+  max-width: 460px;
+}
+
 /* Estado de gravação das condições comerciais: sem isto, "salvei?" só se
    responde recarregando a página. */
 .form-status {
@@ -1551,4 +1610,52 @@ td .entity-select {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-3);
+}
+
+/* Origem da formulação num template da biblioteca. Discreta: explica, não comanda. */
+.template-origin {
+  margin: var(--sp-3) 0;
+}
+
+.template-origin__line {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  margin: 0 0 var(--sp-2);
+}
+
+.template-origin__update {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--v-green-600);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  font-size: var(--fs-sm);
+}
+
+.template-origin__update p {
+  margin: 0 0 var(--sp-2);
+}
+
+.template-origin__save {
+  margin-top: var(--sp-2);
+}
+
+.template-diff {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.template-diff__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--v-green-700);
+}
+
+.template-diff-wrapper {
+  margin-top: var(--sp-3);
 }

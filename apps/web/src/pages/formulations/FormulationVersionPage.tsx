@@ -33,6 +33,7 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
+import { FormulationTemplateOrigin } from "../formulation-templates/FormulationTemplateOrigin";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
 import { useAuth } from "../../app/AuthProvider";
@@ -468,6 +469,13 @@ export function FormulationVersionPage() {
             </ul>
           </div>
         )}
+
+        {/* Origem no template e o que mudou nela desde então. */}
+        <FormulationTemplateOrigin
+          version={version}
+          canEdit={user?.role === "ADMIN" || user?.role === "PRODUCTION"}
+          onChanged={load}
+        />
 
         <FormSection
           title="Produto e base"

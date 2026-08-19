@@ -71,6 +71,8 @@ const HUNDRED = new Prisma.Decimal(100);
 const versionInclude = {
   product: { include: { customer: true, finishedProductItem: true } },
   industrialCostCalculation: true,
+  // Nome atual da política de origem, só para o rótulo.
+  originPricingPolicyVersion: { include: { pricingPolicyTemplate: true } },
   tiers: { orderBy: { quantity: "asc" } as PrismaTypes.PricingTierOrderByWithRelationInput },
 } satisfies PrismaTypes.PricingVersionInclude;
 
@@ -314,6 +316,12 @@ async function toVersionDTO(version: VersionWithRelations): Promise<PricingVersi
     createdByName: version.createdByNameSnapshot,
     activatedAt: version.activatedAt ? version.activatedAt.toISOString() : null,
     activatedByName: version.activatedByNameSnapshot,
+    // Proveniência na política — a política guarda regra, não preço.
+    originPricingPolicyVersionId: version.originPricingPolicyVersionId,
+    originPricingPolicyCode: version.originPricingPolicyCode,
+    originPricingPolicyVersionNumber: version.originPricingPolicyVersionNumber,
+    originPricingPolicyName:
+      version.originPricingPolicyVersion?.pricingPolicyTemplate.name ?? null,
   };
 }
 

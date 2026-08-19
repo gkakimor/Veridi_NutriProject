@@ -289,3 +289,52 @@ and must never be inferred from cost or from Purchase Order prices.
 
 # HR
 Only expand beyond user/access identity if clear business value emerges.
+
+---
+
+# Parameterised formulation templates / technical configurator
+
+Formulation templates ship as a **versioned structured copy**: choose a
+matrix, and it is copied into the product's own formulation. What was
+deliberately left out — and belongs here until real use justifies it:
+
+- placeholders and variables (30/60/90 day presentations from one matrix);
+- configurable formulas and dynamic fields;
+- sub-templates and inheritance between matrices;
+- a product configurator built on top of the above.
+
+The reason to wait: parameterisation multiplies the ways a recipe can be
+expressed, and every one of them has to survive costing, pricing and a
+production order. Which parameters are actually needed should come from
+watching people reuse templates, not from anticipating it. Whatever is built
+must keep rule §35 intact — the product's formulation stays an independent
+copy, and no parameter change reaches a formulation that already exists.
+
+---
+
+# Product Blueprint (formulation + cost structure + pricing policy)
+
+Three libraries now exist and each stands alone: a formulation template, a
+cost structure template (TEC) and a pricing policy (TPP). The obvious next
+ask is a package that applies all three to a new product in one step —
+"cápsula 60 comprimidos private label" as a single choice.
+
+Deliberately not built now. Reasons to wait:
+
+- **The three do not fail together.** A formulation applies with no
+  precondition; a cost structure needs an active formulation and refuses when
+  a draft is already open; a policy needs a *saved calculation*, which cannot
+  exist until the structure is activated and calculated. A one-click package
+  would have to define what happens when step three cannot run — and any
+  answer invented before real use will be the wrong one.
+- **Bundling hides which layer is stale.** Provenance today names one origin
+  per artefact, so "the policy has a new version" is a precise statement. A
+  blueprint version wrapping three matrices would announce updates whose
+  cause is not visible without opening each one.
+- **The reuse pattern is unknown.** Whether shops reuse the same three
+  together, or mix one shop's cost structure with another's pricing, should
+  come from watching the libraries in use.
+
+Whatever is built must keep rules §35 and §36 intact: each application stays
+an independent copy, no tariff enters a cost template, no price enters a
+policy, and nothing propagates back into an artefact that already exists.

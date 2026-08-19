@@ -77,6 +77,9 @@ const projectInclude = {
     // DTO montar a proveniência. Sem isso o detalhe do projeto devolvia
     // `pricing: null` e a tela do orçamento não enxergava custo incompleto.
     include: {
+      sourcedCustomerOrder: {
+        select: { id: true, code: true, status: true, createdAt: true },
+      },
       lines: {
         orderBy: { sortOrder: "asc" as const },
         include: { product: true, ...linePricingInclude },

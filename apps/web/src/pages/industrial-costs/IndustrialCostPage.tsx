@@ -25,6 +25,9 @@ import {
 } from "@veridi/shared";
 import type { IndustrialCostBasis, IndustrialCostCategory } from "@veridi/shared";
 import { CostCalculationSection } from "./CostCalculationSection";
+import { CostTemplateOrigin } from "../cost-templates/CostTemplateOrigin";
+import { UseCostTemplateDialog } from "../cost-templates/UseCostTemplateDialog";
+import { applyCostTemplateToProduct } from "../../lib/cost-pricing-templates-api";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
 import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
@@ -94,6 +97,7 @@ export function IndustrialCostPage() {
 
   const [activateConfirm, setActivateConfirm] = useState(false);
   const [newVersionConfirm, setNewVersionConfirm] = useState(false);
+  const [usarTemplate, setUsarTemplate] = useState(false);
 
   /*
    * Qual versão está sendo lida.
@@ -293,6 +297,18 @@ export function IndustrialCostPage() {
               {data.versions.length === 0 ? "Criar estrutura de custos" : "Nova versão"}
             </button>
           )}
+          {/* Partir de um template é alternativa a montar do zero, não ação
+              principal: quem já tem estrutura raramente troca a base inteira. */}
+          {canEdit && !missingActiveFormulation && (
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={saving}
+              onClick={() => setUsarTemplate(true)}
+            >
+              Usar template
+            </button>
+          )}
           {canEdit && missingProductionBase && !missingActiveFormulation && (
             <p id="create-cost-version-reason" className="field__hint">
               Informe a base de produção para criar a estrutura.
@@ -410,6 +426,13 @@ export function IndustrialCostPage() {
                 pendencies={version.pendencies}
                 productId={data.productId}
                 onStructurePage
+              />
+
+              <CostTemplateOrigin
+                version={version}
+                productId={productId}
+                canEdit={canEdit}
+                onChanged={load}
               />
 
               {editable && (
@@ -1010,6 +1033,18 @@ export function IndustrialCostPage() {
             );
           }}
         />
+
+      {usarTemplate && (
+        <UseCostTemplateDialog
+          saving={saving}
+          onCancel={() => setUsarTemplate(false)}
+          onApply={(costTemplateVersionId) => {
+            setUsarTemplate(false);
+            setLendoAtiva(false);
+            void run(() => applyCostTemplateToProduct(productId, costTemplateVersionId));
+          }}
+        />
+      )}
 
       {version && (
         <ConfirmDialog

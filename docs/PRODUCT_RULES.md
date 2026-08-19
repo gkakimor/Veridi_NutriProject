@@ -2342,3 +2342,197 @@ evolve to know when and how much money actually left the cash register.*
   directly attributable expenses can be folded in later without breaking
   the schema. Packaging is normal material cost, exactly like raw
   material.
+
+---
+
+# 34. Commercial provenance: accepted quote → customer order (implemented)
+
+## The question the model must answer
+
+"Why was this order closed at this price?" — months later, without anyone
+reconstructing the negotiation from memory. The chain is
+Order → Quote → Quote line → Pricing tier (when applicable) → Cost calculation,
+navigable in both directions.
+
+## Durable rules
+
+- **The order never recalculates.** It does not look up the current pricing
+  version and does not rebuild the deal from today's CMV. A newer pricing
+  version, a newer cost calculation or a fresh purchase never rewrite what the
+  customer accepted. Confirming an order applies the operational lifecycle
+  only — it touches no commercial snapshot.
+- **MANUAL stays MANUAL.** A line priced by hand keeps `MANUAL` as its origin.
+  No pricing version is matched retroactively, because none took part in the
+  negotiation.
+- **The global discount is not spread across lines.** The system has no
+  apportionment rule, and inventing one would create a per-line price nobody
+  agreed to. Line prices, discount, subtotal and total are preserved side by
+  side; the deal reproduces from those.
+- **The payment plan is frozen as its result, not its parameters.** The
+  parameters live on the quote and no longer change after acceptance, but the
+  arithmetic translating them into instalments is code. Recomputing years
+  later under a different formula would produce a plan nobody signed. This is
+  provenance, not accounts receivable — no financial module is implied.
+- **One accepted quote yields at most one order.** The invariant lives in the
+  database as a unique index over a nullable column, so manual orders (null)
+  never collide. Repeating the action reopens the existing order rather than
+  raising a conflict the user did not cause.
+- **Gates.** The quote must be ACCEPTED and the project APPROVED. The second
+  is not bureaucracy: `Product.lifecycle` only becomes operational on
+  approval, and generating earlier would bypass it.
+- **Scope.** Only lines of the accepted quote enter. A product marked
+  OUT_OF_SCOPE at approval stays out.
+- **Units must match.** If the quote's unit differs from the finished
+  product's, the operation stops. Converting would change the quantity without
+  changing the agreed unit price, and the order would stop representing the
+  agreement.
+- **A derived order does not renegotiate.** Product and quantity are frozen —
+  changing them means a new quote version. Delivery date and internal notes
+  stay editable; they are operational, not part of the deal.
+- **Manual orders remain first-class.** Creating an order directly is still
+  valid and requires no retroactive quote; it simply has no commercial origin.
+- **Confidentiality.** Identity travels to the order (quote code, pricing
+  code, tier). Cost, margin, markup and commission do not — those stay the
+  quote's internal economics.
+
+---
+
+# 35. Formulation templates (implemented)
+
+## The rule
+
+**Um Template de Formulação é uma matriz técnica versionada usada para criar
+Formulações de Produto. O uso de um template gera uma cópia independente.
+Alterações posteriores no template nunca modificam automaticamente
+Formulações, CMV, Estruturas de Custos, Precificações, Orçamentos, Pedidos ou
+OPs existentes.**
+
+## Why copy and not link
+
+Pointing several products at the same live formulation would have cost less
+code. It was refused because the first change one customer asked for would
+rewrite another customer's recipe, and the discovery would happen in
+production — the one place where a wrong batch cannot be undone.
+
+## Durable rules
+
+- **Using a template copies.** New rows, new ids. Nothing is shared with the
+  template or between products that used it. There is no sync, no bulk update
+  and no "apply to all products" — those features would break the rule above.
+- **Versions.** DRAFT edits, ACTIVE is history, ARCHIVED leaves the library.
+  Changing an active version means creating a new one; the previous stays,
+  because formulations point at it. One ACTIVE version per template, enforced
+  by a partial unique index. One DRAFT at a time — two would be two technical
+  truths in edit, and the second activation would silently erase the first.
+- **Only ACTIVE versions can be used.** A draft is work in progress nobody has
+  reviewed.
+- **The empty V1 is filled, not bypassed.** A technical product is born with an
+  empty draft; using a template fills it. If the target already has components,
+  a new version is created and the previous one is left untouched — never
+  overwritten.
+- **Supply responsibility is a suggestion.** Who supplies each material changes
+  per customer. The copy carries the template's value as a starting point and
+  the product can change it without touching the library.
+- **Nothing commercial travels.** No customer, no project, no quote, no cost
+  structure, no calculation, no pricing, no order. A matrix meant to be reused
+  across customers cannot carry the name of one of them, so the template's name
+  is chosen by whoever creates it.
+- **Saving a formulation as a template is a copy too.** The original does not
+  move, convert or change owner, and the template starts as a DRAFT so someone
+  reviews before it is reused.
+- **Provenance, not a channel.** `FormulationVersion.originTemplateVersionId`
+  records where the recipe came from, with code and number frozen alongside so
+  the label survives the link. Changes never flow back through it.
+- **A newer template version is announced, never applied.** There is no
+  "update to V4" that overwrites: overwriting would rewrite a recipe that may
+  already have backed a cost, a price and a production order. The path is
+  compare, then create a new formulation version.
+- **The cost engine never reads a template.** CMV, cost structures, pricing,
+  quotes and orders keep reading Product → FormulationVersion. A test asserts
+  that no operational table carries a foreign key to the template tables.
+- **Legacy.** Formulations created before this capability keep a null origin.
+  No backfill, no template invented from the existing corpus.
+
+## Deliberately not built
+
+Parameterised templates — placeholders, 30/60/90 variables, configurable
+formulas, dynamic fields, sub-templates, inheritance, a product configurator.
+A template is a versioned structured copy. See the backlog entry.
+
+---
+
+# 36. Cost structure and pricing policy templates (implemented)
+
+## The two rules
+
+**Um Template de Estrutura de Custos é uma configuração industrial
+reutilizável. Ele não contém preços, tarifas ou valores calculados. Ao ser
+aplicado, gera uma Estrutura de Custos independente do Produto.**
+
+**Uma Política de Precificação é um conjunto reutilizável de regras
+comerciais (faixas, margem alvo, comissão). Ela não contém preços. Preços
+são sempre calculados sobre o custo real do Produto.**
+
+## What each library holds — and what it refuses to hold
+
+A cost template (TEC) carries the base output quantity, which resources are
+used and how much of each, the energy mode and its resource, plus the typed
+premises of the structure (services, overheads, secondary packaging). It does
+**not** carry a tariff, a price per hour, or any computed cost. It says "use
+the encapsulator for 4 hours"; what an hour is worth is resolved by
+`IndustrialResourceRate` on the calculation's reference date.
+
+A pricing policy (TPP) carries quantity bands, target contribution margin and
+commission. It does **not** carry a price. Price is produced by the same
+pricing engine the manual path uses, over that product's own CALC.
+
+## Why the exclusions are the point
+
+A tariff frozen into a template would be a number with no date. Copied into
+ten products and read six months later, it would quote machine time at last
+year's rate while the resource registry showed the correct one, and nothing on
+screen would explain the gap. Keeping the tariff out means an old template
+still produces a current cost.
+
+A price frozen into a policy is worse: it is another product's cost wearing a
+commercial decision's clothes. The same policy on a product whose input costs
+R$ 10/kg and on one at R$ 25/kg must give different prices — that is the whole
+reason a policy is a rule and not a table of numbers.
+
+## Consequences that hold
+
+- **Applying copies.** A cost template application creates a new
+  `IndustrialCostVersion` in DRAFT with its own code and its own resource
+  usage rows. A policy application creates a new `PricingVersion` over a CALC
+  the user chose. Neither is a link.
+- **Copies carry no snapshot.** The copied usage rows have no
+  `rate*Snapshot`. Those are frozen where they have always been frozen: when
+  the *structure* is activated.
+- **Manual price is never a policy.** Saving a pricing version as a policy
+  keeps only the bands priced by target margin. Bands with a typed price are
+  dropped, and the screen says why: a typed price is a decision about one
+  negotiation, not a reusable rule. A version with no rule-based band is
+  refused outright.
+- **No price without a preview.** Applying a policy shows, before writing
+  anything, the prices it would produce *for this product* over the chosen
+  CALC — computed by `computePrice`, so preview and application cannot drift.
+- **A busy draft is not overwritten.** A product may hold one cost draft. If
+  one is open, applying a template returns `cost_draft_in_use` (409) naming
+  it, instead of silently replacing work in progress.
+- **Provenance, not a channel.** `IndustrialCostVersion.originCostTemplateVersionId`
+  and `PricingVersion.originPricingPolicyVersionId` record where each came
+  from, with code and number frozen alongside. Nothing flows back.
+- **A newer version is announced, never applied.** Both screens offer compare
+  and create-a-new-version. There is no in-place update: the current version
+  may already explain a cost, a CMV, a price and an order.
+- **The engines never read a library.** Cost calculation, CMV, pricing,
+  quotes and orders keep reading Product → structure → CALC. A test asserts
+  that no operational table carries a foreign key to the template tables.
+- **Legacy.** Structures and pricing versions created before this capability
+  keep a null origin. No backfill.
+
+## Deliberately not built
+
+A "Product Blueprint" that would bundle formulation + cost structure + pricing
+policy into one applicable package. Each library stands alone; composing them
+is a later decision. See the backlog entry.

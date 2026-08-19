@@ -205,6 +205,14 @@ export interface QuotePaymentScheduleDTO {
   interestAmount: string;
 }
 
+/** O pedido que nasceu de uma proposta aceita. */
+export interface QuoteSourcedOrderDTO {
+  id: string;
+  code: string;
+  status: string;
+  createdAt: string;
+}
+
 export interface QuoteVersionDTO {
   id: string;
   code: string;
@@ -236,6 +244,13 @@ export interface QuoteVersionDTO {
   monthlyInterestPercent: string | null;
   /** Derivado. `null` quando ainda não há total (linha sem preço). */
   paymentSchedule: QuotePaymentScheduleDTO | null;
+  /**
+   * Pedido gerado a partir desta proposta aceita. `null` enquanto não houver.
+   *
+   * Existe para a navegação não ser de mão única: quem abre a proposta chega
+   * ao pedido, e quem abre o pedido chega à proposta.
+   */
+  sourcedOrder: QuoteSourcedOrderDTO | null;
   commercialNotes: string | null;
   paymentTerms: string | null;
   leadTimeDays: number | null;

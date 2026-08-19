@@ -43,6 +43,14 @@ afterAll(async () => {
   const prisma = getPrisma();
 
   if (fixtureProjectIds.length > 0) {
+    // Pedido gerado da proposta sai primeiro: ele aponta para a versão e para
+    // o projeto. Só o que ESTE arquivo criou, pelos ids das próprias fixtures.
+    await prisma.customerOrderLine.deleteMany({
+      where: { customerOrder: { sourceProjectId: { in: fixtureProjectIds } } },
+    });
+    await prisma.customerOrder.deleteMany({
+      where: { sourceProjectId: { in: fixtureProjectIds } },
+    });
     await prisma.quoteVersion.deleteMany({ where: { projectId: { in: fixtureProjectIds } } });
     await prisma.projectStatusHistory.deleteMany({
       where: { projectId: { in: fixtureProjectIds } },
@@ -64,6 +72,23 @@ afterAll(async () => {
     .filter((id): id is string => id !== null);
 
   if (productIds.length > 0) {
+    /*
+     * Pedido manual criado pelos testes também segura o produto por FK. Sai
+     * pela IDENTIDADE dos pedidos que citam produtos DESTAS fixtures — nunca
+     * por "qualquer pedido que se pareça com o nosso": este banco é
+     * compartilhado com o app local.
+     */
+    const pedidos = await prisma.customerOrder.findMany({
+      where: { lines: { some: { productId: { in: productIds } } } },
+      select: { id: true },
+    });
+    const pedidoIds = pedidos.map((pedido) => pedido.id);
+    if (pedidoIds.length > 0) {
+      await prisma.customerOrderLine.deleteMany({
+        where: { customerOrderId: { in: pedidoIds } },
+      });
+      await prisma.customerOrder.deleteMany({ where: { id: { in: pedidoIds } } });
+    }
     await prisma.pricingTier.deleteMany({
       where: { pricingVersion: { productId: { in: productIds } } },
     });
@@ -233,10 +258,19 @@ async function receiveWithCost(
 async function buildPricingChain(
   app: App,
   projectId: string,
-  options: { tierQuantity?: string; unitPrice?: string; withMaterialCost?: boolean } = {},
+  options: {
+    tierQuantity?: string;
+    unitPrice?: string;
+    withMaterialCost?: boolean;
+    /** Segundo produto do mesmo projeto: o técnico só nasce uma vez. */
+    productId?: string;
+  } = {},
 ) {
-  const project = (await prepareTechnicalProduct(app, projectId)).json();
-  const productId = project.productId as string;
+  let productId = options.productId;
+  if (!productId) {
+    const project = (await prepareTechnicalProduct(app, projectId)).json();
+    productId = project.productId as string;
+  }
   fixtureProductIds.push(productId);
 
   const material = await createItem("RAW_MATERIAL");
@@ -328,7 +362,7 @@ async function buildPricingChain(
     })
   ).json();
 
-  return { productId, calculation, pricing: activated, material };
+  return { productId, calculation, pricing: activated, material, costVersionId: costVersion.id as string };
 }
 
 /**
@@ -1054,6 +1088,664 @@ describe("Simular condições sem gravar", () => {
     expect(guardado.discountPercent).toBeNull();
     expect(guardado.paymentMethod).toBe("CASH");
     expect(guardado.total).toBe("10000.00");
+
+    await app.close();
+  });
+});
+
+/**
+ * P1 — integridade comercial: proposta aceita → Pedido.
+ *
+ * O que estes testes protegem é uma pergunta que precisa ter resposta meses
+ * depois: "por que este pedido foi fechado por este valor". Cada caso aqui
+ * fecha um caminho pelo qual a resposta se perderia.
+ */
+describe("Proposta aceita → Pedido", () => {
+  /** Cadeia completa até a proposta aceita e o projeto aprovado. */
+  async function cenarioFechado(
+    app: App,
+    options: { tierQuantity?: string; unitPrice?: string; aprovar?: boolean } = {},
+  ) {
+    const project = await createProject(app);
+    const chain = await buildPricingChain(app, project.id, {
+      tierQuantity: options.tierQuantity ?? "500",
+      unitPrice: options.unitPrice ?? "20",
+    });
+    const quote = await createQuote(app, project.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
+      payload: { pricingTierId: chain.pricing.tiers[0].id },
+    });
+    await app.inject({
+      method: "PATCH",
+      url: `/quote-versions/${quote.id}`,
+      payload: {
+        discountPercent: "10",
+        paymentMethod: "INSTALLMENTS",
+        downPaymentPercent: "25",
+        installmentCount: 3,
+        monthlyInterestPercent: "1.5",
+      },
+    });
+    const enviado = await app.inject({
+      method: "POST",
+      url: `/quote-versions/${quote.id}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+    expect(enviado.statusCode, enviado.body).toBe(200);
+    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
+    if (options.aprovar !== false) {
+      const aprovado = await app.inject({
+        method: "POST",
+        url: `/projects/${project.id}/approve`,
+        payload: {},
+      });
+      expect(aprovado.statusCode, aprovado.body).toBe(200);
+    }
+    return { project, chain, quote };
+  }
+
+  const gerar = (app: App, quoteId: string) =>
+    app.inject({ method: "POST", url: `/quote-versions/${quoteId}/create-order` });
+
+  it("recusa quando a proposta não foi aceita", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const project = await createProject(app);
+    const chain = await buildPricingChain(app, project.id, {
+      tierQuantity: "500",
+      unitPrice: "20",
+    });
+    const quote = await createQuote(app, project.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
+      payload: { pricingTierId: chain.pricing.tiers[0].id },
+    });
+
+    const recusado = await gerar(app, quote.id);
+    expect(recusado.statusCode).toBe(409);
+    expect(recusado.json().error).toBe("quote_not_accepted");
+
+    await app.close();
+  });
+
+  it("recusa quando o projeto ainda não foi aprovado", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { quote } = await cenarioFechado(app, { aprovar: false });
+    const recusado = await gerar(app, quote.id);
+    // O produto técnico só vira operacional na aprovação: gerar antes
+    // contornaria `Product.lifecycle` pela porta dos fundos.
+    expect(recusado.statusCode).toBe(409);
+    expect(recusado.json().error).toBe("project_not_approved");
+
+    await app.close();
+  });
+
+  it("gera o pedido com cliente, quantidade, preço e origem do acordo", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { project, quote } = await cenarioFechado(app);
+    const criado = await gerar(app, quote.id);
+    expect(criado.statusCode, criado.body).toBe(201);
+    const order = criado.json();
+
+    expect(order.code.startsWith("PED-")).toBe(true);
+    expect(order.status).toBe("DRAFT");
+    expect(order.customerId).toBe(project.customerId);
+
+    // Origem comercial legível sem busca textual.
+    expect(order.commercialOrigin).not.toBeNull();
+    expect(order.commercialOrigin.quoteVersionId).toBe(quote.id);
+    expect(order.commercialOrigin.quoteCode).toBe(quote.code);
+    expect(order.commercialOrigin.projectId).toBe(project.id);
+    expect(order.commercialOrigin.projectCode).toBe(project.code);
+
+    // 500 × R$ 20,00 = R$ 10.000,00, menos 10%.
+    expect(order.commercialOrigin.subtotalAmount).toBe("10000.00");
+    expect(order.commercialOrigin.discountPercent).toBe("10.0000");
+    expect(order.commercialOrigin.totalAmount).toBe("9000.00");
+
+    expect(order.lines).toHaveLength(1);
+    const linha = order.lines[0];
+    expect(linha.orderedQuantity).toBe("500");
+    expect(linha.sourceQuoteLineId).toBeTruthy();
+    expect(linha.agreedPrice.unitPrice).toBe("20.0000");
+    expect(linha.agreedPrice.lineTotal).toBe("10000.00");
+
+    await app.close();
+  });
+
+  it("preserva o desconto global sem ratear nas linhas", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { quote } = await cenarioFechado(app);
+    const order = (await gerar(app, quote.id)).json();
+
+    /*
+     * O preço da linha continua sendo o preço da proposta. Distribuir o
+     * desconto criaria um preço por linha que ninguém acordou — e o sistema
+     * não tem essa regra.
+     */
+    expect(order.lines[0].agreedPrice.unitPrice).toBe("20.0000");
+    expect(order.lines[0].agreedPrice.lineTotal).toBe("10000.00");
+    expect(order.commercialOrigin.discountPercent).toBe("10.0000");
+    expect(order.commercialOrigin.totalAmount).toBe("9000.00");
+
+    await app.close();
+  });
+
+  it("congela o plano de pagamento aceito", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { quote } = await cenarioFechado(app);
+    const order = (await gerar(app, quote.id)).json();
+    const plano = order.commercialOrigin.paymentSchedule;
+
+    expect(plano.method).toBe("INSTALLMENTS");
+    expect(plano.total).toBe("9000.00");
+    expect(plano.downPayment).toBe("2250.00");
+    expect(plano.installments).toHaveLength(3);
+    expect(plano.monthlyInterestPercent).toBe("1.5000");
+    // Entrada mais parcelas reconcilia com o total a prazo, ao centavo.
+    const soma = plano.installments.reduce(
+      (total: number, parcela: { amount: string }) => total + Number(parcela.amount),
+      Number(plano.downPayment),
+    );
+    expect(soma.toFixed(2)).toBe(plano.totalPayable);
+
+    await app.close();
+  });
+
+  it("preserva a proveniência da faixa quando o preço veio de precificação", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { chain, quote } = await cenarioFechado(app);
+    const order = (await gerar(app, quote.id)).json();
+    const preco = order.lines[0].agreedPrice;
+
+    expect(preco.source).toBe("PRICING_TIER");
+    expect(preco.pricingVersionId).toBe(chain.pricing.id);
+    expect(preco.pricingCode).toBe(chain.pricing.code);
+    expect(preco.pricingTierId).toBe(chain.pricing.tiers[0].id);
+    expect(Number(preco.tierQuantity)).toBe(500);
+
+    await app.close();
+  });
+
+  it("mantém MANUAL como MANUAL, sem procurar precificação retroativa", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const project = await createProject(app);
+    const chain = await buildPricingChain(app, project.id, {
+      tierQuantity: "500",
+      unitPrice: "20",
+    });
+    const quote = await createQuote(app, project.id);
+    // Preço digitado à mão: exceção comercial legítima.
+    await app.inject({
+      method: "PATCH",
+      url: `/quote-lines/${quote.lineId}`,
+      payload: { quotedQuantity: "500", uomCode: "un", unitPrice: "31.50" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/quote-versions/${quote.id}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
+    await app.inject({ method: "POST", url: `/projects/${project.id}/approve`, payload: {} });
+
+    const order = (await gerar(app, quote.id)).json();
+    const preco = order.lines[0].agreedPrice;
+
+    expect(preco.source).toBe("MANUAL");
+    expect(preco.unitPrice).toBe("31.5000");
+    // A precificação existe, mas não participou da negociação: apontar para
+    // ela agora seria proveniência inventada.
+    expect(preco.pricingVersionId).toBeNull();
+    expect(preco.pricingCode).toBeNull();
+    expect(preco.pricingTierId).toBeNull();
+    expect(chain.pricing.id).toBeTruthy();
+
+    await app.close();
+  });
+
+  it("não duplica: o segundo pedido devolve o primeiro", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+
+    const { quote } = await cenarioFechado(app);
+    const primeiro = await gerar(app, quote.id);
+    expect(primeiro.statusCode).toBe(201);
+
+    const segundo = await gerar(app, quote.id);
+    // 200, não 201: reabre o existente em vez de estourar conflito.
+    expect(segundo.statusCode).toBe(200);
+    expect(segundo.json().id).toBe(primeiro.json().id);
+
+    const quantos = await prisma.customerOrder.count({
+      where: { sourceQuoteVersionId: quote.id },
+    });
+    expect(quantos).toBe(1);
+
+    await app.close();
+  });
+
+  it("chamadas simultâneas não criam dois pedidos", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+
+    const { quote } = await cenarioFechado(app);
+    // O invariante vive no banco (índice único), não só no serviço.
+    const respostas = await Promise.all([
+      gerar(app, quote.id),
+      gerar(app, quote.id),
+      gerar(app, quote.id),
+    ]);
+    const criados = respostas.filter((r) => r.statusCode === 201);
+    expect(criados.length).toBeLessThanOrEqual(1);
+
+    const quantos = await prisma.customerOrder.count({
+      where: { sourceQuoteVersionId: quote.id },
+    });
+    expect(quantos).toBe(1);
+
+    await app.close();
+  });
+
+  it("precificação nova depois do pedido não altera o que foi acordado", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { chain, quote } = await cenarioFechado(app);
+    const order = (await gerar(app, quote.id)).json();
+    const antes = JSON.stringify(order.lines[0].agreedPrice);
+
+    // Uma precificação nova, com outro preço, ativada depois do fechamento.
+    const nova = (
+      await app.inject({
+        method: "POST",
+        url: `/products/${chain.productId}/pricing`,
+        payload: { industrialCostCalculationId: chain.calculation.id },
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${nova.id}/tiers`,
+      payload: {
+        quantity: "500",
+        priceMode: "MANUAL_PRICE",
+        manualUnitPrice: "99",
+        commissionPercent: "0",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${nova.id}/activate`,
+      payload: { confirmIncompleteCost: true, confirmOutdatedStructure: true },
+    });
+
+    const relido = (
+      await app.inject({ method: "GET", url: `/customer-orders/${order.id}` })
+    ).json();
+    expect(JSON.stringify(relido.lines[0].agreedPrice)).toBe(antes);
+    expect(relido.lines[0].agreedPrice.unitPrice).toBe("20.0000");
+    expect(relido.commercialOrigin.totalAmount).toBe("9000.00");
+
+    await app.close();
+  });
+
+  it("cálculo de custo novo depois do pedido não altera a origem comercial", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { chain, quote } = await cenarioFechado(app);
+    const order = (await gerar(app, quote.id)).json();
+    const antes = JSON.stringify(order.commercialOrigin);
+
+    const novoCalculo = await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${chain.costVersionId}/calculations`,
+      payload: { costReferenceDate: new Date(Date.now() + 3 * 86400000).toISOString() },
+    });
+    expect(novoCalculo.statusCode).toBe(201);
+
+    const relido = (
+      await app.inject({ method: "GET", url: `/customer-orders/${order.id}` })
+    ).json();
+    expect(JSON.stringify(relido.commercialOrigin)).toBe(antes);
+
+    await app.close();
+  });
+
+  it("confirmar o pedido não recalcula preço nem troca a origem", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { quote } = await cenarioFechado(app);
+    const order = (await gerar(app, quote.id)).json();
+    const precoAntes = JSON.stringify(order.lines[0].agreedPrice);
+    const origemAntes = JSON.stringify(order.commercialOrigin);
+
+    const confirmado = await app.inject({
+      method: "POST",
+      url: `/customer-orders/${order.id}/confirm`,
+    });
+    expect(confirmado.statusCode, confirmado.body).toBe(200);
+    const depois = confirmado.json();
+
+    expect(depois.status).toBe("CONFIRMED");
+    expect(JSON.stringify(depois.lines[0].agreedPrice)).toBe(precoAntes);
+    expect(JSON.stringify(depois.commercialOrigin)).toBe(origemAntes);
+
+    await app.close();
+  });
+
+  it("pedido derivado não deixa trocar produto nem quantidade", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { chain, quote } = await cenarioFechado(app);
+    const order = (await gerar(app, quote.id)).json();
+
+    const travado = await app.inject({
+      method: "PATCH",
+      url: `/customer-orders/${order.id}`,
+      payload: { lines: [{ productId: chain.productId, orderedQuantity: "999" }] },
+    });
+    expect(travado.statusCode).toBe(409);
+    expect(travado.json().error).toBe("commercial_origin_locked");
+
+    // Campos operacionais seguem livres.
+    const operacional = await app.inject({
+      method: "PATCH",
+      url: `/customer-orders/${order.id}`,
+      payload: { notes: "Entregar pela manhã" },
+    });
+    expect(operacional.statusCode, operacional.body).toBe(200);
+    expect(operacional.json().notes).toBe("Entregar pela manhã");
+
+    await app.close();
+  });
+
+  it("a proposta aceita passa a apontar para o pedido gerado", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { project, quote } = await cenarioFechado(app);
+    const antes = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    expect(antes.sourcedOrder).toBeNull();
+
+    const order = (await gerar(app, quote.id)).json();
+
+    // Navegação de mão dupla: proposta → pedido...
+    const depois = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    expect(depois.sourcedOrder.id).toBe(order.id);
+    expect(depois.sourcedOrder.code).toBe(order.code);
+
+    // ...e o detalhe do projeto carrega a mesma informação.
+    const projeto = (
+      await app.inject({ method: "GET", url: `/projects/${project.id}` })
+    ).json();
+    const aceita = projeto.quoteVersions.find(
+      (q: { status: string }) => q.status === "ACCEPTED",
+    );
+    expect(aceita.sourcedOrder.code).toBe(order.code);
+
+    // ...e o pedido → proposta.
+    expect(order.commercialOrigin.quoteVersionId).toBe(quote.id);
+
+    await app.close();
+  });
+
+  it("proposta multiproduto gera uma linha por produto", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const project = await createProject(app);
+    const primeiro = await buildPricingChain(app, project.id, {
+      tierQuantity: "500",
+      unitPrice: "20",
+    });
+    // O produto técnico nasce uma vez; o segundo entra explicitamente.
+    const extra = (
+      await app.inject({
+        method: "POST",
+        url: `/projects/${project.id}/products`,
+        payload: { operation: "create", name: `Segundo ${marker()}`, finishedUnitCode: "un" },
+      })
+    ).json();
+    const segundo = await buildPricingChain(app, project.id, {
+      tierQuantity: "300",
+      unitPrice: "35",
+      productId: extra.productId,
+    });
+
+    const links = (
+      await app.inject({ method: "GET", url: `/projects/${project.id}/products` })
+    ).json().products as { id: string; productId: string }[];
+    expect(links.length).toBeGreaterThanOrEqual(2);
+
+    const quote = (
+      await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
+    ).json();
+    for (const link of links) {
+      if (quote.lines.some((l: { productId: string }) => l.productId === link.productId)) continue;
+      await app.inject({
+        method: "POST",
+        url: `/quote-versions/${quote.id}/lines`,
+        payload: { projectProductId: link.id },
+      });
+    }
+    const comLinhas = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    for (const linha of comLinhas.lines) {
+      const cadeia = linha.productId === primeiro.productId ? primeiro : segundo;
+      await app.inject({
+        method: "POST",
+        url: `/quote-lines/${linha.id}/apply-pricing`,
+        payload: { pricingTierId: cadeia.pricing.tiers[0].id },
+      });
+    }
+    await app.inject({
+      method: "POST",
+      url: `/quote-versions/${quote.id}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
+    await app.inject({ method: "POST", url: `/projects/${project.id}/approve`, payload: {} });
+
+    const order = (await gerar(app, quote.id)).json();
+    expect(order.lines).toHaveLength(comLinhas.lines.length);
+    for (const linha of order.lines) {
+      expect(linha.agreedPrice).not.toBeNull();
+      expect(linha.sourceQuoteLineId).toBeTruthy();
+    }
+    // Cada produto entra uma vez só, com o preço da sua própria faixa.
+    const porProduto = new Map(
+      order.lines.map((l: { productId: string; agreedPrice: { unitPrice: string } }) => [
+        l.productId,
+        l.agreedPrice.unitPrice,
+      ]),
+    );
+    expect(porProduto.get(primeiro.productId)).toBe("20.0000");
+    expect(porProduto.get(segundo.productId)).toBe("35.0000");
+
+    await app.close();
+  });
+
+  it("produto fora do escopo da proposta aceita não entra no pedido", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+
+    const project = await createProject(app);
+    const dentro = await buildPricingChain(app, project.id, {
+      tierQuantity: "500",
+      unitPrice: "20",
+    });
+    // Desenvolvido no projeto, mas fora da proposta que o cliente aceitou.
+    const extra = (
+      await app.inject({
+        method: "POST",
+        url: `/projects/${project.id}/products`,
+        payload: { operation: "create", name: `Fora ${marker()}`, finishedUnitCode: "un" },
+      })
+    ).json();
+    const fora = await buildPricingChain(app, project.id, {
+      tierQuantity: "300",
+      unitPrice: "35",
+      productId: extra.productId,
+    });
+
+    const links = (
+      await app.inject({ method: "GET", url: `/projects/${project.id}/products` })
+    ).json().products as { id: string; productId: string }[];
+    const linkDentro = links.find((link) => link.productId === dentro.productId)!;
+
+    const quote = (
+      await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
+    ).json();
+    // Só o produto acordado entra na proposta. O outro fica no projeto.
+    let linhaDentro = quote.lines.find(
+      (l: { productId: string }) => l.productId === dentro.productId,
+    );
+    for (const outra of quote.lines) {
+      if (outra.productId !== dentro.productId) {
+        await app.inject({ method: "DELETE", url: `/quote-lines/${outra.id}` });
+      }
+    }
+    if (!linhaDentro) {
+      const comLinha = (
+        await app.inject({
+          method: "POST",
+          url: `/quote-versions/${quote.id}/lines`,
+          payload: { projectProductId: linkDentro.id },
+        })
+      ).json();
+      linhaDentro = comLinha.lines.find(
+        (l: { productId: string }) => l.productId === dentro.productId,
+      );
+    }
+    expect(linhaDentro, "linha do produto acordado").toBeTruthy();
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${linhaDentro.id}/apply-pricing`,
+      payload: { pricingTierId: dentro.pricing.tiers[0].id },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/quote-versions/${quote.id}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
+    await app.inject({ method: "POST", url: `/projects/${project.id}/approve`, payload: {} });
+
+    const marcado = await prisma.projectProduct.findFirst({
+      where: { projectId: project.id, productId: fora.productId },
+      select: { status: true },
+    });
+    expect(marcado?.status).toBe("OUT_OF_SCOPE");
+
+    const order = (await gerar(app, quote.id)).json();
+    expect(order.lines).toHaveLength(1);
+    expect(order.lines[0].productId).toBe(dentro.productId);
+
+    await app.close();
+  });
+
+  it("pedido criado direto continua válido e sem origem comercial", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { project, chain } = await cenarioFechado(app);
+
+    const manual = await app.inject({
+      method: "POST",
+      url: "/customer-orders",
+      payload: {
+        customerId: project.customerId,
+        lines: [{ productId: chain.productId, orderedQuantity: "120" }],
+      },
+    });
+    expect(manual.statusCode, manual.body).toBe(201);
+    const order = manual.json();
+
+    // O caminho antigo não exige orçamento retroativo.
+    expect(order.commercialOrigin).toBeNull();
+    expect(order.lines[0].sourceQuoteLineId).toBeNull();
+    expect(order.lines[0].agreedPrice).toBeNull();
+
+    // E continua editável: nada trava um pedido sem acordo por trás.
+    const editado = await app.inject({
+      method: "PATCH",
+      url: `/customer-orders/${order.id}`,
+      payload: { lines: [{ productId: chain.productId, orderedQuantity: "150" }] },
+    });
+    expect(editado.statusCode, editado.body).toBe(200);
+    expect(editado.json().lines[0].orderedQuantity).toBe("150");
+
+    await app.close();
+  });
+
+  it("papel sem autorização comercial recebe 403 e nada é criado", async () => {
+    const admin = buildTestApp("ADMIN");
+    await admin.ready();
+    const { quote } = await cenarioFechado(admin);
+    await admin.close();
+
+    const viewer = buildTestApp("VIEWER");
+    await viewer.ready();
+    const negado = await viewer.inject({
+      method: "POST",
+      url: `/quote-versions/${quote.id}/create-order`,
+    });
+    expect(negado.statusCode).toBe(403);
+    await viewer.close();
+
+    const prisma = getPrisma();
+    expect(
+      await prisma.customerOrder.count({ where: { sourceQuoteVersionId: quote.id } }),
+    ).toBe(0);
+  });
+
+  it("falha no meio da geração não deixa pedido pela metade", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+
+    const { chain, quote } = await cenarioFechado(app);
+    // Unidade da proposta divergente da unidade do produto acabado: a
+    // operação precisa parar por inteiro, sem cabeçalho órfão.
+    await prisma.quoteLine.updateMany({
+      where: { quoteVersionId: quote.id },
+      data: { uomCode: "kg" },
+    });
+
+    const recusado = await gerar(app, quote.id);
+    expect(recusado.statusCode).toBe(409);
+    expect(recusado.json().error).toBe("uom_mismatch");
+    expect(
+      await prisma.customerOrder.count({ where: { sourceQuoteVersionId: quote.id } }),
+    ).toBe(0);
+    expect(chain.productId).toBeTruthy();
 
     await app.close();
   });

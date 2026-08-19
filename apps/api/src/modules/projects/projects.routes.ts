@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
+import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
+import { createOrderFromAcceptedQuote } from "./quote-to-order.service.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import {
   IncompleteCostQuoteError,
@@ -43,6 +45,10 @@ import {
   QuoteNotDraftError,
   QuoteNotFoundError,
   QuoteNotSentError,
+  ProjectNotApprovedForOrderError,
+  QuoteNotAcceptedForOrderError,
+  QuoteOrderUomMismatchError,
+  QuoteWithoutOrderableLinesError,
 } from "./projects.errors.js";
 import {
   applyQuotePricingSchema,
@@ -111,6 +117,21 @@ function mapDomainError(
   }
   if (error instanceof ProjectProductCustomerMismatchError) {
     return { status: 400, body: { error: "customer_mismatch", message: error.message } };
+  }
+  if (error instanceof QuoteNotAcceptedForOrderError) {
+    return { status: 409, body: { error: "quote_not_accepted", message: error.message } };
+  }
+  if (error instanceof ProjectNotApprovedForOrderError) {
+    return { status: 409, body: { error: "project_not_approved", message: error.message } };
+  }
+  if (error instanceof QuoteWithoutOrderableLinesError) {
+    return { status: 409, body: { error: "quote_without_lines", message: error.message } };
+  }
+  if (error instanceof QuoteOrderUomMismatchError) {
+    return { status: 409, body: { error: "uom_mismatch", message: error.message } };
+  }
+  if (error instanceof ProductNotOperationalError) {
+    return { status: 409, body: { error: "product_not_operational", message: error.message } };
   }
   if (error instanceof ProjectLockedError) {
     return { status: 409, body: { error: "project_locked", message: error.message } };
@@ -516,6 +537,25 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
       return reply.send({ schedule: await previewQuotePaymentSchedule(id, parsed.data) });
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  /*
+   * Proposta aceita → Pedido. Uma única maneira de executar a operação: não
+   * existe caminho paralelo pelo Projeto que faça a mesma coisa por outra
+   * porta. 201 quando nasce, 200 quando já existia — clicar duas vezes abre
+   * o mesmo pedido em vez de criar um segundo.
+   */
+  app.post("/quote-versions/:id/create-order", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const { order, alreadyExisted } = await createOrderFromAcceptedQuote(id, actor);
+      return reply.status(alreadyExisted ? 200 : 201).send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

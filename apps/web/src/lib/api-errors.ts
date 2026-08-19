@@ -42,6 +42,45 @@ export class IncompleteCostApiError extends Error {
 }
 
 /**
+ * A requisição não chegou ao servidor.
+ *
+ * `fetch` rejeita com `TypeError` quando não há resposta nenhuma — API fora do
+ * ar, rede caída, DNS. Sem distinguir isso de uma resposta HTTP, a tela conta
+ * a história errada: no login, "não consegui falar com o sistema" virava
+ * "e-mail ou senha inválidos", e a pessoa passava a duvidar da própria senha.
+ */
+export class ApiUnreachableError extends Error {
+  constructor() {
+    super("Não foi possível conectar ao sistema. Tente novamente em instantes.");
+    this.name = "ApiUnreachableError";
+  }
+}
+
+/**
+ * Credencial recusada.
+ *
+ * A mensagem é a mesma para e-mail inexistente e senha errada: dizer qual dos
+ * dois falhou entregaria a lista de e-mails cadastrados a quem tenta adivinhar.
+ */
+export class InvalidCredentialsError extends Error {
+  constructor() {
+    super("E-mail ou senha inválidos.");
+    this.name = "InvalidCredentialsError";
+  }
+}
+
+/** Falha do servidor: chegou lá, mas ele não conseguiu responder. */
+export class ApiServerError extends Error {
+  status: number;
+
+  constructor(status: number) {
+    super("Não foi possível acessar o sistema no momento. Tente novamente em instantes.");
+    this.name = "ApiServerError";
+    this.status = status;
+  }
+}
+
+/**
  * Mensagem amigável por código de erro da API.
  *
  * O backend já responde em pt-BR na maior parte dos casos de domínio; este

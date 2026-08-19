@@ -20,14 +20,17 @@ import type {
 import type {
   CustomerOrderBillingStatus,
   CustomerOrderBillingSummaryDTO,
+  CustomerOrderCommercialOriginDTO,
   CustomerOrderDTO,
   CustomerOrderGeneratedProductionOrderDTO,
+  CustomerOrderLineAgreedPriceDTO,
   CustomerOrderLineDTO,
   CustomerOrderLinkedPurchaseOrderDTO,
   CustomerOrderListResponse,
   CustomerOrderReservationDTO,
   CustomerOrderReservationLineDTO,
   CustomerOrderShipmentSummaryDTO,
+  QuotePaymentScheduleDTO,
 } from "@veridi/shared";
 import { CUSTOMER_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -37,6 +40,7 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   CancellationBlockedError,
+  CommercialOriginLockedError,
   CustomerNotFoundError,
   CustomerOrderNotFoundError,
   DuplicateLineProductError,
@@ -162,6 +166,53 @@ function toLineDTO(
     outstandingQuantity: outstanding.toString(),
     billedQuantity: billed.toString(),
     unbilledShippedQuantity: unbilledShipped.toString(),
+    sourceQuoteLineId: line.sourceQuoteLineId,
+    agreedPrice: agreedPriceOf(line),
+  };
+}
+
+/**
+ * O preco aceito pelo cliente, como ficou congelado na criacao do Pedido.
+ *
+ * Nunca recalculado: precificacao nova, calculo de custo novo ou compra nova
+ * nao reescrevem o que foi acordado. `null` em Pedido digitado direto — ali
+ * nao houve proposta, e inventar um preco de origem seria falsear a historia.
+ */
+function agreedPriceOf(line: CustomerOrderLine): CustomerOrderLineAgreedPriceDTO | null {
+  if (line.agreedUnitPrice === null || line.agreedPriceSource === null) return null;
+  return {
+    unitPrice: line.agreedUnitPrice.toFixed(4),
+    lineTotal: line.orderedQuantity.times(line.agreedUnitPrice).toFixed(2),
+    source: line.agreedPriceSource,
+    pricingVersionId: line.agreedPricingVersionId,
+    pricingCode: line.agreedPricingCode,
+    pricingVersionNumber: line.agreedPricingVersionNumber,
+    pricingTierId: line.agreedPricingTierId,
+    tierQuantity: line.agreedPricingTierQuantity ? line.agreedPricingTierQuantity.toString() : null,
+    tierUomCode: line.agreedPricingTierUom,
+  };
+}
+
+/**
+ * A proposta aceita que originou o Pedido.
+ *
+ * `sourceQuoteCode` e a chave: enquanto ele existir, a origem e legivel —
+ * mesmo que a FK tenha sido anulada por remocao da proposta.
+ */
+function commercialOriginOf(order: CustomerOrder): CustomerOrderCommercialOriginDTO | null {
+  if (!order.sourceQuoteCode || order.sourceQuoteVersionNumber === null) return null;
+  return {
+    quoteVersionId: order.sourceQuoteVersionId,
+    quoteCode: order.sourceQuoteCode,
+    quoteVersionNumber: order.sourceQuoteVersionNumber,
+    projectId: order.sourceProjectId,
+    projectCode: order.sourceProjectCode,
+    subtotalAmount: order.agreedSubtotalAmount ? order.agreedSubtotalAmount.toFixed(2) : null,
+    discountPercent: order.agreedDiscountPercent
+      ? order.agreedDiscountPercent.toFixed(4)
+      : null,
+    totalAmount: order.agreedTotalAmount ? order.agreedTotalAmount.toFixed(2) : null,
+    paymentSchedule: (order.agreedPaymentSchedule as QuotePaymentScheduleDTO | null) ?? null,
   };
 }
 
@@ -351,6 +402,7 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
     status: order.status,
     notes: order.notes,
     lines: order.lines.map((line) => toLineDTO(line, shippedByLine, billedByLine)),
+    commercialOrigin: commercialOriginOf(order),
     reservation: reservation ? toReservationDTO(reservation, shippedByResLine) : null,
     generatedProductionOrders: order.productionOrders.map(toGeneratedProductionOrderDTO),
     linkedPurchaseOrders: order.purchaseOrders.map(toLinkedPurchaseOrderDTO),
@@ -531,6 +583,15 @@ export async function updateCustomerOrder(
     throw new OrderLockedError(
       "Após confirmado, o pedido só permite alterar previsão de entrega e observações.",
     );
+  }
+
+  /*
+   * Origem comercial trava o que foi acordado. Previsão de entrega e
+   * observações continuam livres — são operacionais, não fazem parte do
+   * acordo com o cliente.
+   */
+  if (current.sourceQuoteVersionId !== null && touchesLockedFields) {
+    throw new CommercialOriginLockedError(current.sourceQuoteCode ?? "de origem");
   }
 
   let customer: Customer | null = null;
