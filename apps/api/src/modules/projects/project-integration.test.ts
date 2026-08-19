@@ -1011,6 +1011,54 @@ describe("Desconto e plano de pagamento do orçamento", () => {
   });
 });
 
+describe("Simular condições sem gravar", () => {
+  it("devolve o plano das condições enviadas e não toca na proposta", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const project = await createProject(app);
+    const chain = await buildPricingChain(app, project.id, {
+      tierQuantity: "500",
+      unitPrice: "20",
+    });
+    const quote = await createQuote(app, project.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${quote.lineId}/apply-pricing`,
+      payload: { pricingTierId: chain.pricing.tiers[0].id },
+    });
+
+    const previa = (
+      await app.inject({
+        method: "POST",
+        url: `/quote-versions/${quote.id}/payment-preview`,
+        payload: {
+          discountPercent: "25",
+          paymentMethod: "INSTALLMENTS",
+          installmentCount: 2,
+        },
+      })
+    ).json().schedule;
+
+    // R$ 10.000,00 − 25% = R$ 7.500,00, em 2×.
+    expect(previa.total).toBe("7500.00");
+    expect(previa.installments.map((p: { amount: string }) => p.amount)).toEqual([
+      "3750.00",
+      "3750.00",
+    ]);
+
+    // Simular é leitura: a proposta continua sem desconto e à vista.
+    const guardado = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    expect(guardado.discountPercent).toBeNull();
+    expect(guardado.paymentMethod).toBe("CASH");
+    expect(guardado.total).toBe("10000.00");
+
+    await app.close();
+  });
+});
+
 describe("Aprovação do projeto", () => {
   it("promove o MESMO produto técnico e libera a operação", async () => {
     const app = buildTestApp("ADMIN");

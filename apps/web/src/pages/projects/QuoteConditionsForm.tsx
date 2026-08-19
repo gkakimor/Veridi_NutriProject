@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import type { QuotePaymentMethod, QuoteVersionDTO, UpdateQuoteVersionInput } from "@veridi/shared";
+import type {
+  QuotePaymentMethod,
+  QuotePaymentScheduleDTO,
+  QuoteVersionDTO,
+  UpdateQuoteVersionInput,
+} from "@veridi/shared";
 import { QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
 import { formatBRL } from "../../lib/currency";
+import { formatPercent } from "../../lib/percent";
+import { previewQuotePaymentSchedule } from "../../lib/projects-api";
 
 /**
  * Condições comerciais da proposta.
@@ -15,6 +22,13 @@ import { formatBRL } from "../../lib/currency";
  * Desconto, entrada, parcelas e juros entram; o plano de pagamento sai
  * calculado do backend. Valor de parcela não se digita — proposta impressa e
  * conta do sistema saindo de fontes diferentes divergem sem ninguém notar.
+ *
+ * Alterar as condições mostra "Simular": o plano abaixo descreve o que está
+ * GRAVADO, e sem um jeito de ver o efeito antes a pessoa precisava salvar
+ * para descobrir e salvar de novo para desfazer. Simular é uma chamada por
+ * clique, não a cada tecla — recalcular no meio da digitação faria o
+ * formulário conversar com o servidor o tempo todo para mostrar números que
+ * ninguém pediu ainda.
  */
 
 interface Campos {
@@ -73,10 +87,17 @@ interface Props {
 export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) {
   const original = useMemo(() => camposDe(quote), [quote]);
   const [campos, setCampos] = useState<Campos>(original);
+  const [simulacao, setSimulacao] = useState<QuotePaymentScheduleDTO | null>(null);
+  const [simulando, setSimulando] = useState(false);
+  const [erroSimulacao, setErroSimulacao] = useState<string | null>(null);
 
   // Recarregar a proposta (ou trocar de versão) descarta o rascunho de tela:
   // o formulário passa a descrever o que está gravado.
-  useEffect(() => setCampos(original), [original]);
+  useEffect(() => {
+    setCampos(original);
+    setSimulacao(null);
+    setErroSimulacao(null);
+  }, [original]);
 
   const sujo = useMemo(
     () => (Object.keys(original) as (keyof Campos)[]).some((k) => original[k] !== campos[k]),
@@ -87,7 +108,28 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
 
   function set<K extends keyof Campos>(chave: K, valor: Campos[K]) {
     setCampos((atual) => ({ ...atual, [chave]: valor }));
+    // A simulação anterior descrevia outros números: mantê-la na tela depois
+    // de mexer num campo seria a mesma armadilha que ela veio resolver.
+    setSimulacao(null);
+    setErroSimulacao(null);
   }
+
+  async function simular() {
+    setSimulando(true);
+    setErroSimulacao(null);
+    try {
+      setSimulacao(await previewQuotePaymentSchedule(quote.id, paraEnvio(campos)));
+    } catch (err) {
+      setSimulacao(null);
+      setErroSimulacao(err instanceof Error ? err.message : "Não foi possível simular");
+    } finally {
+      setSimulando(false);
+    }
+  }
+
+  // Simulação na tela vence o gravado: é o que a pessoa está decidindo agora.
+  const exibido = simulacao ?? plano;
+  const eSimulacao = simulacao !== null;
 
   return (
     <div className="quote-conditions">
@@ -207,6 +249,17 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
 
       {editable && (
         <div className="line-actions">
+          {/* Aparece com a alteração: ver o efeito não pode custar salvar. */}
+          {sujo && (
+            <button
+              type="button"
+              className="btn btn--secondary"
+              disabled={simulando}
+              onClick={() => void simular()}
+            >
+              {simulando ? "Simulando…" : "Simular"}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn--secondary"
@@ -230,51 +283,59 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
         </div>
       )}
 
-      {/* O plano descreve o que ESTÁ GRAVADO. Enquanto houver alteração
-          pendente ele não muda — recalcular no rascunho de tela mostraria um
-          parcelamento que a proposta ainda não tem. */}
-      {plano && (
-        <div className="quote-plan">
+      {erroSimulacao && <p className="form-alert">{erroSimulacao}</p>}
+
+      {/* Sem simular, o bloco descreve o que ESTÁ GRAVADO, e diz isso quando
+          há alteração pendente: um plano que se apresentasse como o atual
+          enquanto os campos dizem outra coisa é pior do que não mostrar. */}
+      {exibido && (
+        <div className={eSimulacao ? "quote-plan quote-plan--simulated" : "quote-plan"}>
           <h4 className="quote-plan__title">
-            Plano de pagamento {sujo && <em>— referente ao que está salvo</em>}
+            {eSimulacao ? (
+              <>
+                Simulação <em>— ainda não salva</em>
+              </>
+            ) : (
+              <>Plano de pagamento {sujo && <em>— referente ao que está salvo</em>}</>
+            )}
           </h4>
           <dl className="definition-list">
             <dt>Subtotal dos produtos</dt>
-            <dd>{formatBRL(plano.subtotal)}</dd>
-            {plano.discountPercent && (
+            <dd>{formatBRL(exibido.subtotal)}</dd>
+            {exibido.discountPercent && (
               <>
-                <dt>Desconto ({Number(plano.discountPercent)}%)</dt>
-                <dd>− {formatBRL(plano.discountAmount)}</dd>
+                <dt>Desconto ({formatPercent(exibido.discountPercent)})</dt>
+                <dd>− {formatBRL(exibido.discountAmount)}</dd>
               </>
             )}
             <dt>
-              <strong>Total {plano.method === "CASH" ? "à vista" : "da proposta"}</strong>
+              <strong>Total {exibido.method === "CASH" ? "à vista" : "da proposta"}</strong>
             </dt>
             <dd>
-              <strong>{formatBRL(plano.total)}</strong>
+              <strong>{formatBRL(exibido.total)}</strong>
             </dd>
-            {plano.method === "INSTALLMENTS" && (
+            {exibido.method === "INSTALLMENTS" && (
               <>
-                {plano.downPayment && Number(plano.downPayment) > 0 && (
+                {exibido.downPayment && Number(exibido.downPayment) > 0 && (
                   <>
-                    <dt>Entrada ({Number(plano.downPaymentPercent)}%)</dt>
-                    <dd>{formatBRL(plano.downPayment)}</dd>
+                    <dt>Entrada ({formatPercent(exibido.downPaymentPercent)})</dt>
+                    <dd>{formatBRL(exibido.downPayment)}</dd>
                   </>
                 )}
                 <dt>Parcelas</dt>
                 <dd>
-                  {plano.installments.length}× de{" "}
-                  {formatBRL(plano.installments[0]?.amount ?? null)}
-                  {plano.installmentIntervalDays !== 30
-                    ? ` a cada ${plano.installmentIntervalDays} dias`
+                  {exibido.installments.length}× de{" "}
+                  {formatBRL(exibido.installments[0]?.amount ?? null)}
+                  {exibido.installmentIntervalDays !== 30
+                    ? ` a cada ${exibido.installmentIntervalDays} dias`
                     : " por mês"}
                 </dd>
-                {plano.monthlyInterestPercent && (
+                {exibido.monthlyInterestPercent && (
                   <>
                     <dt>Juros</dt>
                     <dd>
-                      {Number(plano.monthlyInterestPercent)}% ao mês —{" "}
-                      {formatBRL(plano.interestAmount)} no total
+                      {formatPercent(exibido.monthlyInterestPercent)} ao mês —{" "}
+                      {formatBRL(exibido.interestAmount)} no total
                     </dd>
                   </>
                 )}
@@ -282,13 +343,13 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
                   <strong>Total a prazo</strong>
                 </dt>
                 <dd>
-                  <strong>{formatBRL(plano.totalPayable)}</strong>
+                  <strong>{formatBRL(exibido.totalPayable)}</strong>
                 </dd>
               </>
             )}
           </dl>
 
-          {plano.installments.length > 1 && (
+          {exibido.installments.length > 1 && (
             <table className="data-table data-table--compact">
               <thead>
                 <tr>
@@ -298,7 +359,7 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
                 </tr>
               </thead>
               <tbody>
-                {plano.installments.map((parcela) => (
+                {exibido.installments.map((parcela) => (
                   <tr key={parcela.number}>
                     <td>{parcela.number}ª</td>
                     <td className="is-numeric">{formatBRL(parcela.amount)}</td>

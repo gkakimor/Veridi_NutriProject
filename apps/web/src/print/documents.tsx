@@ -34,6 +34,7 @@ import {
   printOrDash,
 } from "./PrintLayout";
 import { formatBRL } from "../lib/currency";
+import { formatPercent } from "../lib/percent";
 
 /**
  * Documentos imprimíveis — componentes PUROS sobre os DTOs que já existem.
@@ -857,7 +858,7 @@ export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
                 <td className="is-number">{formatBRL(plano.subtotal)}</td>
               </tr>
               <tr>
-                <td colSpan={5}>Desconto ({Number(plano.discountPercent)}%)</td>
+                <td colSpan={5}>Desconto ({formatPercent(plano.discountPercent)})</td>
                 <td className="is-number">− {formatBRL(plano.discountAmount)}</td>
               </tr>
             </>
@@ -881,7 +882,7 @@ export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
             >
               {Number(plano.downPayment ?? 0) > 0 && (
                 <tr>
-                  <td>Entrada ({Number(plano.downPaymentPercent)}%)</td>
+                  <td>Entrada ({formatPercent(plano.downPaymentPercent)})</td>
                   <td className="is-number">{formatBRL(plano.downPayment)}</td>
                   <td className="is-number">No aceite</td>
                 </tr>
@@ -897,7 +898,7 @@ export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
                 <td>
                   Total a prazo
                   {plano.monthlyInterestPercent
-                    ? ` (juros de ${Number(plano.monthlyInterestPercent)}% ao mês)`
+                    ? ` (juros de ${formatPercent(plano.monthlyInterestPercent)} ao mês)`
                     : ""}
                 </td>
                 <td className="is-number">{formatBRL(plano.totalPayable)}</td>

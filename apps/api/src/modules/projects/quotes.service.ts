@@ -1,6 +1,11 @@
 import { Prisma } from "@prisma/client";
 import type { Prisma as PrismaTypes, User } from "@prisma/client";
-import type { QuoteLineDTO, QuotePricingProvenanceDTO, QuoteVersionDTO } from "@veridi/shared";
+import type {
+  QuoteLineDTO,
+  QuotePaymentScheduleDTO,
+  QuotePricingProvenanceDTO,
+  QuoteVersionDTO,
+} from "@veridi/shared";
 import { QUOTE_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -295,6 +300,54 @@ export async function createQuoteVersion(
   });
 
   return (await getQuoteById(created.id)) as QuoteVersionDTO;
+}
+
+/**
+ * Como ficaria o plano com estas condições, sem gravar nada.
+ *
+ * A conta continua sendo do backend — a tela desenha o resultado, nunca o
+ * calcula. Sem isto, ver o efeito de um desconto exigia salvar primeiro: a
+ * pessoa gravava para descobrir e depois gravava de novo para desfazer, e o
+ * número na tela sempre descrevia a decisão anterior.
+ *
+ * O subtotal vem das LINHAS, não do que a tela mandou: aceitar um subtotal
+ * de fora deixaria simular um desconto sobre um valor que a proposta não tem.
+ */
+export async function previewQuotePaymentSchedule(
+  id: string,
+  input: UpdateQuoteVersionInput,
+): Promise<QuotePaymentScheduleDTO | null> {
+  const quote = await requireQuoteWithLines(id);
+  const atual = toQuoteVersionDTO(quote, false);
+  if (atual.subtotal === null) return null;
+
+  const decimal = (value: string | null | undefined, atualValue: string | null) => {
+    if (value === undefined) return atualValue === null ? null : new Prisma.Decimal(atualValue);
+    return value === null ? null : new Prisma.Decimal(value);
+  };
+  const inteiro = (value: number | null | undefined, atualValue: number | null) =>
+    value === undefined ? atualValue : value;
+
+  const method = input.paymentMethod ?? atual.paymentMethod;
+  return buildPaymentSchedule({
+    subtotal: new Prisma.Decimal(atual.subtotal),
+    discountPercent: decimal(input.discountPercent, atual.discountPercent),
+    method,
+    // À vista não simula entrada nem parcela: mostrar o parcelamento que a
+    // pessoa acabou de desligar contradiz a escolha na própria tela.
+    downPaymentPercent:
+      method === "CASH" ? null : decimal(input.downPaymentPercent, atual.downPaymentPercent),
+    installmentCount:
+      method === "CASH" ? null : inteiro(input.installmentCount, atual.installmentCount),
+    installmentIntervalDays:
+      method === "CASH"
+        ? null
+        : inteiro(input.installmentIntervalDays, atual.installmentIntervalDays),
+    monthlyInterestPercent:
+      method === "CASH"
+        ? null
+        : decimal(input.monthlyInterestPercent, atual.monthlyInterestPercent),
+  });
 }
 
 export async function updateQuoteVersion(

@@ -1457,6 +1457,12 @@ td .entity-select {
   background: var(--canvas);
 }
 
+/* Simulação não se confunde com o que está gravado. */
+.quote-plan--simulated {
+  border-color: var(--v-green-600);
+  background: var(--surface);
+}
+
 .quote-plan__title {
   margin: 0 0 var(--sp-2);
   font-size: var(--fs-sm);
