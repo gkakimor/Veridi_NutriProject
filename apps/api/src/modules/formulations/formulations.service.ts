@@ -7,6 +7,7 @@ import type {
   UnitOfMeasure,
 } from "@prisma/client";
 import type {
+  FormulationActivationImpactDTO,
   FormulationComponentDTO,
   FormulationComponentIssueDTO,
   FormulationListResponse,
@@ -364,6 +365,60 @@ export async function createFirstFormulationVersion(
  * receita em silêncio para caber nas regras de hoje seria inventar fórmula.
  * O que não passar aparece em `componentIssues` do rascunho criado.
  */
+/**
+ * Raio de impacto de ativar esta versão.
+ *
+ * Nada aqui é alterado por ativar — cada documento continua apontando para a
+ * receita que ele escolheu. O que muda é o que passa a estar DEFASADO, e essa
+ * informação só serve antes do clique.
+ */
+export async function getFormulationActivationImpact(
+  versionId: string,
+): Promise<FormulationActivationImpactDTO> {
+  const version = await requireVersion(versionId);
+  const prisma = getPrisma();
+
+  const [costVersions, orders] = await Promise.all([
+    prisma.industrialCostVersion.findMany({
+      where: {
+        productId: version.productId,
+        formulationVersionId: { not: versionId },
+        status: { in: ["DRAFT", "ACTIVE"] },
+      },
+      include: { formulationVersion: { select: { versionNumber: true } } },
+      orderBy: { versionNumber: "asc" },
+    }),
+    // Ordem planejada já congelou requisitos: trocar a formulação ativa não
+    // a alcança, e listá-la seria alarme sem consequência.
+    prisma.productionOrder.findMany({
+      where: {
+        productId: version.productId,
+        status: "DRAFT",
+        formulationVersionId: { not: null, notIn: [versionId] },
+      },
+      include: { formulationVersion: { select: { versionNumber: true } } },
+      orderBy: { code: "asc" },
+    }),
+  ]);
+
+  return {
+    costStructures: costVersions.map((costVersion) => ({
+      id: costVersion.id,
+      code: costVersion.code,
+      label: `${costVersion.code} · V${costVersion.versionNumber}`,
+      status: costVersion.status as "DRAFT" | "ACTIVE",
+      formulationVersionNumber: costVersion.formulationVersion.versionNumber,
+    })),
+    productionOrders: orders
+      .filter((order) => order.formulationVersion !== null)
+      .map((order) => ({
+        id: order.id,
+        code: order.code,
+        formulationVersionNumber: order.formulationVersion!.versionNumber,
+      })),
+  };
+}
+
 export async function createNewVersionFrom(
   sourceVersionId: string,
 ): Promise<FormulationVersionDTO> {

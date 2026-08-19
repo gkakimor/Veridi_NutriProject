@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
+  FormulationActivationImpactDTO,
   FormulationCalculationMode,
   FormulationComponentBasis,
   FormulationCostEstimateDTO,
@@ -21,6 +22,7 @@ import {
 } from "@veridi/shared";
 import {
   activateFormulationVersion,
+  getFormulationActivationImpact,
   createNewFormulationVersion,
   getFormulationVersion,
   updateFormulationVersion,
@@ -129,6 +131,7 @@ export function FormulationVersionPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
+  const [impact, setImpact] = useState<FormulationActivationImpactDTO | null>(null);
   // Criação no contexto: o item não existe e sair da fórmula agora
   // significaria perder as linhas já montadas. Guarda a linha de origem
   // para devolver o item selecionado exatamente onde ele foi pedido.
@@ -330,6 +333,23 @@ export function FormulationVersionPage() {
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * O raio de impacto é buscado ao ABRIR o diálogo, não a cada render: a
+   * pergunta só existe no momento em que ainda dá para cancelar.
+   */
+  async function abrirDialogoDeAtivacao() {
+    if (!versionId) return;
+    setActivateDialogOpen(true);
+    setImpact(null);
+    try {
+      setImpact(await getFormulationActivationImpact(versionId));
+    } catch {
+      // Sem o impacto o diálogo continua valendo pelo texto que já tinha —
+      // uma falha de leitura não pode impedir a ativação.
+      setImpact(null);
     }
   }
 
@@ -873,7 +893,7 @@ export function FormulationVersionPage() {
               type="button"
               className="btn btn--accent"
               disabled={saving}
-              onClick={() => setActivateDialogOpen(true)}
+              onClick={() => void abrirDialogoDeAtivacao()}
             >
               Ativar versão
             </button>
@@ -894,7 +914,51 @@ export function FormulationVersionPage() {
       <ConfirmDialog
         open={activateDialogOpen}
         title={`Ativar formulação ${version.versionLabel}?`}
-        message="Esta versão passará a ser a formulação oficial do produto; a versão ativa anterior (se houver) será inativada; a versão ativada não poderá mais ser editada — futuras alterações exigirão uma nova versão."
+        message={
+          <>
+            <p>
+              Esta versão passará a ser a formulação oficial do produto; a versão ativa anterior
+              (se houver) será inativada; a versão ativada não poderá mais ser editada — futuras
+              alterações exigirão uma nova versão.
+            </p>
+            {/* Nada nesta lista é alterado por ativar: cada documento continua
+                apontando para a receita que escolheu. O que muda é o que passa
+                a estar defasado — e isso só é útil enquanto dá para cancelar. */}
+            {impact && impact.costStructures.length > 0 && (
+              <>
+                <p>
+                  <strong>Continuam na receita atual:</strong>
+                </p>
+                <ul className="confirm-dialog__list">
+                  {impact.costStructures.map((structure) => (
+                    <li key={structure.id}>
+                      <Link to={`/produtos/${productId}/custos`}>{structure.label}</Link> — usa a V
+                      {structure.formulationVersionNumber}
+                      {structure.status === "ACTIVE"
+                        ? ". Estrutura ativa não se move: a receita dela é o que o custo já significa."
+                        : ". Rascunho: dá para trazer para a nova receita em um clique, depois de ativar."}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {impact && impact.productionOrders.length > 0 && (
+              <>
+                <p>
+                  <strong>Ordens em rascunho que precisarão trocar de versão:</strong>
+                </p>
+                <ul className="confirm-dialog__list">
+                  {impact.productionOrders.map((order) => (
+                    <li key={order.id}>
+                      <Link to={`/producao/ordens/${order.id}`}>{order.code}</Link> — usa a V
+                      {order.formulationVersionNumber}; planejar exige a versão ativa.
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        }
         confirmLabel="Ativar versão"
         confirmTone="accent"
         onCancel={() => setActivateDialogOpen(false)}

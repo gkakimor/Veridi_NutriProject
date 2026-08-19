@@ -158,6 +158,36 @@ export interface FormulationSummaryDTO {
   updatedAt: string | null;
 }
 
+/**
+ * O que fica defasado se esta versão virar a ativa.
+ *
+ * Ativar não muda documento nenhum — é justamente por isso que a lista
+ * existe. O raio de impacto só é útil ANTES do clique, quando ainda dá para
+ * cancelar; depois, viraria constatação.
+ *
+ * Estrutura de custos ATIVA aparece para ser lida, não consertada: a receita
+ * dela é o que o custo já significa. Rascunho de estrutura e OP em rascunho
+ * aparecem porque têm saída — um clique e uma troca de versão.
+ */
+export interface FormulationActivationImpactDTO {
+  costStructures: {
+    id: string;
+    code: string;
+    label: string;
+    status: "DRAFT" | "ACTIVE";
+    formulationVersionNumber: number;
+  }[];
+  /**
+   * Só ordens em RASCUNHO: uma OP planejada já congelou seus requisitos, e
+   * trocar a formulação ativa não a alcança.
+   */
+  productionOrders: {
+    id: string;
+    code: string;
+    formulationVersionNumber: number;
+  }[];
+}
+
 export interface FormulationListResponse {
   formulations: FormulationSummaryDTO[];
   page: number;

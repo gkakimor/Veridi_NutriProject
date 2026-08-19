@@ -555,6 +555,78 @@ describe("Formulations — versionamento", () => {
     await app.close();
   });
 
+  it("o raio de impacto de ativar lista o que fica defasado — e nada além disso", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT", "un");
+    const product = await createProduct(app, finishedItem.id);
+    const material = await createItem("RAW_MATERIAL");
+    const v1 = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v1.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: material.id, quantity: "5", unitCode: "kg" }],
+      },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v1.json().id}/activate` });
+
+    // Estrutura de custos nasce na V1 e é ativada.
+    const estrutura = (
+      await app.inject({
+        method: "POST",
+        url: `/products/${product.id}/industrial-costs`,
+        payload: { referenceOutputQuantity: "1000" },
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${estrutura.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
+
+    const v2 = (
+      await app.inject({
+        method: "POST",
+        url: `/formulation-versions/${v1.json().id}/new-version`,
+      })
+    ).json();
+
+    const impacto = await app.inject({
+      method: "GET",
+      url: `/formulation-versions/${v2.id}/activation-impact`,
+    });
+    expect(impacto.statusCode, impacto.body).toBe(200);
+    expect(impacto.json().costStructures).toHaveLength(1);
+    expect(impacto.json().costStructures[0].id).toBe(estrutura.id);
+    expect(impacto.json().costStructures[0].status).toBe("ACTIVE");
+    expect(impacto.json().costStructures[0].formulationVersionNumber).toBe(1);
+    expect(impacto.json().productionOrders).toEqual([]);
+
+    // Consultar o impacto é leitura: nada se moveu por perguntar.
+    const estruturaDepois = await app.inject({
+      method: "GET",
+      url: `/industrial-costs/${estrutura.id}`,
+    });
+    expect(estruturaDepois.json().status).toBe("ACTIVE");
+    expect(estruturaDepois.json().formulationVersionNumber).toBe(1);
+
+    // A própria versão que está sendo ativada nunca aparece como defasada.
+    const daV1 = await app.inject({
+      method: "GET",
+      url: `/formulation-versions/${v1.json().id}/activation-impact`,
+    });
+    expect(daV1.json().costStructures).toEqual([]);
+
+    await app.close();
+  });
+
   it("rascunho não serve de origem, e a cópia declara o que vai barrar a ativação", async () => {
     const app = buildTestApp();
     await app.ready();

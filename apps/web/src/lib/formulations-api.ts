@@ -1,5 +1,6 @@
 import type {
   CreateFormulationVersionInput,
+  FormulationActivationImpactDTO,
   FormulationListResponse,
   FormulationVersionDTO,
   FormulationVersionListResponse,
@@ -67,6 +68,14 @@ export async function activateFormulationVersion(id: string): Promise<Formulatio
     method: "POST",
   });
   return (await parseJsonOrThrow(response)) as FormulationVersionDTO;
+}
+
+/** O que fica defasado se esta versão virar a ativa — leitura, nada muda. */
+export async function getFormulationActivationImpact(
+  id: string,
+): Promise<FormulationActivationImpactDTO> {
+  const response = await apiFetch(`${API_URL}/formulation-versions/${id}/activation-impact`);
+  return (await parseJsonOrThrow(response)) as FormulationActivationImpactDTO;
 }
 
 export async function createNewFormulationVersion(

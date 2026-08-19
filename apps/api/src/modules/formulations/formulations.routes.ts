@@ -4,6 +4,7 @@ import {
   activateFormulationVersion,
   createFirstFormulationVersion,
   createNewVersionFrom,
+  getFormulationActivationImpact,
   getFormulationVersionById,
   listFormulationVersionsByProduct,
   listFormulations,
@@ -169,6 +170,17 @@ export const formulationsRoutes: FastifyPluginAsync = async (app) => {
     try {
       const version = await activateFormulationVersion(id);
       return reply.send(version);
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.get("/formulation-versions/:id/activation-impact", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      return reply.send(await getFormulationActivationImpact(id));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
