@@ -4592,7 +4592,7 @@ tarefas de usuário final sem FAIL, 5/5 macrofluxos sem FAIL, walkthrough
 UX pós-MVP**, não como pendência desta entrega: o que falta é profundidade de
 fluxo, descoberta e vocabulário — redesenho, não correção.
 
-**Deploy do Railway: BLOQUEADO por incidente da plataforma.** O push disparou
+**Deploy do Railway (histórico do incidente).** O push disparou
 o deploy e ele parou em `QUEUED`, com a própria razão dada pelo Railway:
 *"Deployment queued due to upstream GitHub issues"*. O bypass documentado
 (`railway up`, que envia o código direto ao mesmo serviço, sem webhook) foi
@@ -4600,12 +4600,11 @@ aplicado duas vezes: as duas passaram do GitHub e travaram em `INITIALIZING`
 sem builder associado — uma terminou em `FAILED` sem log de build. Nada foi
 alterado no serviço, no `railway.json` ou na arquitetura.
 
-**Produção segue no ar na versão anterior** (`1575d63`), `/health` = 200,
-banco conectado. **O banco de produção NÃO foi resetado**: zerar o schema com
-o binário antigo servindo deixaria a aplicação publicada quebrada por tempo
-indeterminado, e o que impede o deploy está fora do nosso controle. O reset,
-as migrations versionadas e o `db:demo` continuam autorizados e pendentes de
-uma janela de deploy saudável.
+Durante o bloqueio, produção seguiu na versão anterior (`1575d63`) e o banco
+de produção NÃO foi resetado — zerar o schema com o binário antigo servindo
+deixaria a aplicação quebrada por tempo indeterminado. **Incidente encerrado:
+ver a seção seguinte.** O reset do banco e o `db:demo` continuam autorizados e
+pendentes, agora sem impedimento de plataforma.
 
 **CLIENT ACCESS READY: NO** — antes de credencial real ao cliente: rate limit
 de login, backup externo do PostgreSQL, teste de restore e credenciais
@@ -4613,6 +4612,180 @@ finais.
 
 ---
 
+---
+
+# Produção pós-publicação — validação manual (CMV, precificação, orçamento)
+
+**Publicado em produção.** Serviço do Railway normalizado pelo Product Owner;
+`main` em `d4c89b7` (merge `--no-ff` de `validacao/ajustes-ux` sobre
+`4b8f714`, 30 commits). Antes do push: `tsc` limpo em api e web, `vite build`
+ok, 658 testes de API, 7 na lane serial e 90 de web verdes.
+
+## Publicado em produção
+
+1. Cadeia de custo com pendências explicadas e link para onde cada uma se resolve.
+2. CMV identifica a formulação e a base congelada que descreve.
+3. Formulação histórica não é reativada: voltar a uma receita antiga cria versão
+   nova derivada, com a origem registrada ("V3 — criada a partir da V1").
+4. Rascunho de estrutura de custos acompanha a formulação ativa enquanto não
+   houve escolha explícita de versão (`formulationPinned`).
+5. Impacto da ativação de formulação visível antes de confirmar.
+6. `referenceDate` corrigida para semântica de dia de calendário.
+7. CMV mostra base congelada e simulação com dados atuais separadamente — a
+   simulação não substitui o número congelado nem sai da tela para orçamento/OP.
+8. Confirmação explícita antes de congelar custo parcial.
+9. Impressão do CMV com tudo que serviu de base.
+10. Precificação pode ser refeita sobre o custo atual, com prévia do que muda.
+11. Correções de criação/recálculo de `PricingVersion` (troca de base in-place em
+    rascunho, versão nova quando ativa; corpo da requisição com content type).
+12. Valores monetários exibidos em reais com duas casas.
+13. Orçamento com desconto e condições de pagamento: à vista; parcelado; entrada;
+    juros ao mês; Tabela Price; parcelas com vencimentos; total a prazo.
+14. Simular condição comercial sem persistir (`POST /quote-versions/:id/payment-preview`).
+15. Salvamento explícito do orçamento, com estado de alteração pendente visível.
+
+Migrations que acompanham a publicação (todas aditivas, sem `DROP`):
+`20260917090000_formulation_version_source`,
+`20260918090000_industrial_cost_formulation_pin`,
+`20260919090000_quote_discount_and_payment_plan`.
+
+Os três scores de UX registrados no Release Candidate continuam sendo dívida
+aceita pelo Product Owner — não são regressão desta publicação.
+
+## Pendências pós-produção
+
+**P1 — Orçamento aceito → Pedido. RESOLVIDO** na branch
+`overnight/commercial-integrity` (ver seção seguinte).
+
+**P2 — Login com API indisponível. RESOLVIDO** na mesma branch.
+
+**P3 — Migrations aplicadas antes de a API atender. PASS (lógico).**
+`railway.json` define `preDeployCommand: "pnpm deploy:prod"` →
+`prisma migrate deploy`, executado antes de `startCommand: "pnpm start:prod"`.
+Deploy que falha no pré-deploy não promove a release, logo a API só atende
+consultas de orçamento com as três migrations aplicadas. Evidência é de
+configuração, não de leitura do log do deploy — se o log for consultado,
+anexar a confirmação aqui.
+
+**P4 — `PROD-004817`: `V3 DRAFT` residual.**
+Criada apenas durante a validação manual do item C (retorno a formulação
+anterior). Não apagar agora. Resíduo de validação a revisar.
+
+**P5 — Ordem de produção em rascunho no impacto da ativação. Backlog UX.**
+Aparece na lista de impacto com link, mas sem resolução de um clique.
+
+**P6 — Tela própria de orçamento. Backlog UX, não bloqueia.**
+Mantido dentro da tela do Projeto; o salvamento explícito (item 15) atendeu a
+condição colocada pelo Product Owner. O formulário já é componente isolado
+(`QuoteConditionsForm`), então extrair para rota própria é barato.
+
+**Autorizado e pendente, sem impedimento de plataforma:** reset do banco de
+produção, `db:demo`, smokes de deploy e a tag `rc-multiproduto-cmv-2026-08-18`.
+
+**Documento de apoio ao usuário:** `docs/Guia_Fluxo_Comercial_Veridi.docx` —
+guia do fluxo comercial do projeto ao pedido, 14 etapas, telas capturadas do
+sistema em funcionamento. Não versionado ainda.
+
+---
+---
+
+# Integridade comercial pós-produção — branch `overnight/commercial-integrity`
+
+Branch a partir de `main @ d4c89b7`, **não mergeada**. `main` intocada.
+
+## P1 — Orçamento aceito → Pedido: IMPLEMENTADO
+
+`POST /quote-versions/:id/create-order` (papéis `COMMERCIAL`/`ADMIN`), servido
+por `quote-to-order.service.ts`, transacional. 201 quando nasce, 200 quando já
+existia. Uma única maneira de executar a operação — não há caminho paralelo
+pelo Projeto.
+
+Modelo (migração `20260920090000_customer_order_commercial_provenance`, toda
+aditiva e anulável, sem `DROP`; pedidos existentes seguem válidos):
+
+- `CustomerOrder`: `sourceQuoteVersionId` (FK, **UNIQUE**, `ON DELETE SET NULL`),
+  `sourceProjectId`, `sourceQuoteCode`, `sourceQuoteVersionNumber`,
+  `sourceProjectCode`, `agreedSubtotalAmount`, `agreedDiscountPercent`,
+  `agreedTotalAmount`, `agreedPaymentSchedule` (JSON).
+- `CustomerOrderLine`: `sourceQuoteLineId` (UNIQUE), `agreedUnitPrice`,
+  `agreedPriceSource`, e a proveniência da faixa
+  (`agreedPricingVersionId/TierId/Code/VersionNumber/TierQuantity/TierUom`).
+
+Decisões de modelagem, com o porquê:
+
+- **Menor duplicação onde a fonte é imutável, congelamento onde não é.** A
+  `QuoteVersion` aceita já não muda (só DRAFT edita), então desconto e total
+  poderiam ser lidos dela — mas ficam no Pedido porque ele é documento
+  histórico por si, e não pode depender de outro registro continuar existindo.
+  O plano de pagamento é congelado como **resultado**, não como parâmetros: a
+  aritmética que os traduz em parcelas é código, e recalcular anos depois sob
+  outra fórmula daria um plano que ninguém assinou.
+- **Idempotência no banco.** Índice único sobre coluna anulável: Postgres
+  admite vários NULL, então pedidos manuais não colidem. Corrida perdida
+  (P2002) reabre o pedido do vencedor em vez de estourar.
+- **`ON DELETE SET NULL`** nas FKs: apagar a proposta jamais apaga o Pedido, e
+  os campos de código mantêm a origem legível se o vínculo se perder.
+- **Unidades têm de coincidir.** Converter mudaria a quantidade sem mudar o
+  preço unitário acordado. A operação recusa em vez de oferecer bypass.
+
+UI: bloco **Fechamento** na proposta aceita (orienta antes da aprovação, gera
+depois, abre o existente quando já há); **Origem comercial** no topo do Pedido
+com links por identidade; preço acordado e sua origem por linha; pedido
+derivado com produto e quantidade em leitura; pedido manual dizendo que foi
+criado diretamente. A impressão do Pedido (documento interno) ganhou a linha
+de origem no cabeçalho.
+
+Regras duráveis registradas em `docs/PRODUCT_RULES.md` §34.
+
+## P2 — Login / API indisponível: IMPLEMENTADO
+
+Três desfechos separados na origem (`auth-api.ts`): `InvalidCredentialsError`
+(401, genérico de propósito — não revela se o e-mail existe),
+`ApiUnreachableError` (`fetch` rejeitado, sem resposta) e `ApiServerError`
+(5xx). Nada técnico chega à tela. O parágrafo de erro ganhou `role="alert"`.
+
+## Higiene de testes
+
+Auditoria dos módulos industrial cost, pricing, quote, customer order, project
+e CMV. Todos os teardowns já estavam escopados por identidade de fixture. Um
+escavador restante corrigido (`purchase-suggestion.test.ts` pegava qualquer
+`FINISHED_PRODUCT` do banco compartilhado; passa a usar o próprio). Leituras
+frágeis no CMV foram deixadas como estão: escavam, mas não mutam — reescrevê-las
+é outro trabalho, não correção de segurança.
+
+## Verificação
+
+| Item | Resultado |
+|---|---|
+| `pnpm test` 5× consecutivos | 5/5 PASS |
+| API | 686 testes, 48 arquivos |
+| Web | 113 testes, 15 arquivos |
+| Lane serial | 7 testes |
+| `pnpm typecheck` / `pnpm build` | PASS |
+| Fresh migration (schema vazio) | PASS |
+| Upgrade a partir do schema de `d4c89b7` | PASS, colunas e índice único conferidos |
+| Playwright P1 ponta a ponta | 28/28 |
+| Pedido manual (caminho antigo) | 9/9 |
+| Walkthrough + visual 1280/1366/1600 + acessibilidade | 19/19 |
+| Login P2 no navegador | 9/9 |
+| Console / rede | zero erros, zero ≥400 inesperado |
+
+Golden explícito da Tabela Price em `quote-payment.test.ts`, com a aritmética
+escrita por extenso no comentário — um dos casos flagrou uma conta minha
+errada, que é exatamente o que um golden derivado do código não faria.
+
+## Não tocado nesta madrugada, por instrução
+
+Railway (nenhuma ação), banco de produção, `main`, resíduo `V3 DRAFT` em
+`PROD-004817`, resolução de um clique para OP em rascunho, tela própria de
+orçamento, e `docs/Guia_Fluxo_Comercial_Veridi.docx`.
+
+**Nota sobre o guia do cliente:** o fluxo manual de Pedido continua idêntico,
+então nenhuma instrução do guia ficou incorreta. Quando houver nova revisão,
+vale acrescentar "Gerar pedido a partir do orçamento aceito" como caminho mais
+curto entre as etapas 12 e 13.
+
+---
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,

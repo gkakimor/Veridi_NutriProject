@@ -2342,3 +2342,55 @@ evolve to know when and how much money actually left the cash register.*
   directly attributable expenses can be folded in later without breaking
   the schema. Packaging is normal material cost, exactly like raw
   material.
+
+---
+
+# 34. Commercial provenance: accepted quote → customer order (implemented)
+
+## The question the model must answer
+
+"Why was this order closed at this price?" — months later, without anyone
+reconstructing the negotiation from memory. The chain is
+Order → Quote → Quote line → Pricing tier (when applicable) → Cost calculation,
+navigable in both directions.
+
+## Durable rules
+
+- **The order never recalculates.** It does not look up the current pricing
+  version and does not rebuild the deal from today's CMV. A newer pricing
+  version, a newer cost calculation or a fresh purchase never rewrite what the
+  customer accepted. Confirming an order applies the operational lifecycle
+  only — it touches no commercial snapshot.
+- **MANUAL stays MANUAL.** A line priced by hand keeps `MANUAL` as its origin.
+  No pricing version is matched retroactively, because none took part in the
+  negotiation.
+- **The global discount is not spread across lines.** The system has no
+  apportionment rule, and inventing one would create a per-line price nobody
+  agreed to. Line prices, discount, subtotal and total are preserved side by
+  side; the deal reproduces from those.
+- **The payment plan is frozen as its result, not its parameters.** The
+  parameters live on the quote and no longer change after acceptance, but the
+  arithmetic translating them into instalments is code. Recomputing years
+  later under a different formula would produce a plan nobody signed. This is
+  provenance, not accounts receivable — no financial module is implied.
+- **One accepted quote yields at most one order.** The invariant lives in the
+  database as a unique index over a nullable column, so manual orders (null)
+  never collide. Repeating the action reopens the existing order rather than
+  raising a conflict the user did not cause.
+- **Gates.** The quote must be ACCEPTED and the project APPROVED. The second
+  is not bureaucracy: `Product.lifecycle` only becomes operational on
+  approval, and generating earlier would bypass it.
+- **Scope.** Only lines of the accepted quote enter. A product marked
+  OUT_OF_SCOPE at approval stays out.
+- **Units must match.** If the quote's unit differs from the finished
+  product's, the operation stops. Converting would change the quantity without
+  changing the agreed unit price, and the order would stop representing the
+  agreement.
+- **A derived order does not renegotiate.** Product and quantity are frozen —
+  changing them means a new quote version. Delivery date and internal notes
+  stay editable; they are operational, not part of the deal.
+- **Manual orders remain first-class.** Creating an order directly is still
+  valid and requires no retroactive quote; it simply has no commercial origin.
+- **Confidentiality.** Identity travels to the order (quote code, pricing
+  code, tier). Cost, margin, markup and commission do not — those stay the
+  quote's internal economics.
