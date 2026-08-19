@@ -12,14 +12,40 @@ import type {
   UserRole,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
-import { parseJsonOrThrow } from "./api-errors";
+import {
+  ApiServerError,
+  ApiUnreachableError,
+  InvalidCredentialsError,
+  parseJsonOrThrow,
+} from "./api-errors";
 
+/**
+ * Entrar.
+ *
+ * Os três desfechos são separados na origem porque significam coisas
+ * diferentes para quem está na tela: credencial errada, sistema fora do ar e
+ * falha do servidor pedem reações diferentes. Tratar tudo como credencial
+ * errada — que era o comportamento — faz o usuário duvidar da própria senha
+ * enquanto o problema está do nosso lado.
+ *
+ * O 401 continua genérico de propósito: não revela se o e-mail existe.
+ */
 export async function login(input: LoginInput): Promise<AuthenticatedUserDTO> {
-  const response = await apiFetch(`${API_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  let response: Response;
+  try {
+    response = await apiFetch(`${API_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch {
+    // `fetch` só rejeita quando não houve resposta nenhuma.
+    throw new ApiUnreachableError();
+  }
+
+  if (response.status >= 500) throw new ApiServerError(response.status);
+  if (response.status === 401) throw new InvalidCredentialsError();
+
   return (await parseJsonOrThrow(response)) as AuthenticatedUserDTO;
 }
 
