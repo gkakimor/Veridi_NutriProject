@@ -854,7 +854,7 @@
  * menores `100%` continua mandando, então nada muda lá.
  */
 .doc-body {
-  max-width: min(1320px, 100%);
+  max-width: min(1600px, 100%);
   display: grid;
   /* Grid sem trilha declarada resolve em `max-content`: a seção mais larga
      estica o container, o `.table-container` infla junto e o scroll dele
@@ -864,7 +864,7 @@
 }
 
 .doc-actions {
-  max-width: min(1320px, 100%);
+  max-width: min(1600px, 100%);
   display: flex;
   align-items: center;
   justify-content: space-between;
