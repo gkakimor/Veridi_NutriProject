@@ -32,13 +32,36 @@ function WarningAction({
   productId?: string | undefined;
   onStructurePage: boolean;
 }) {
-  // Destino por identidade, pelo mesmo montador que o resto do ERP usa:
-  // link escrito à mão erra o parâmetro e cai na lista inteira.
-  if (warning.target === "ITEM" && warning.itemId) {
+  /*
+   * Custo de matéria-prima não é campo de cadastro — mandar para o item era
+   * beco. Cada caso tem um caminho diferente, e o servidor já disse qual.
+   */
+  if (warning.target === "RECEIPT" && warning.receiptId) {
     return (
-      <Link to={entityHref("item", warning.itemId)}>
-        Ver o item — o custo vem de um recebimento com custo informado
+      <Link to={`/compras/recebimentos/${warning.receiptId}`}>
+        Informar o custo no recebimento {warning.receiptCode}
       </Link>
+    );
+  }
+  if (warning.target === "PURCHASE") {
+    return (
+      <Link to="/compras/ordens">
+        Nunca foi comprado — o custo nasce de uma ordem de compra recebida
+      </Link>
+    );
+  }
+  if (warning.target === "STALE_BASIS") {
+    return (
+      <span>
+        O custo já existe hoje; este cálculo é anterior a ele — salve um cálculo novo
+        {productId ? (
+          <>
+            {" "}
+            <Link to={`/produtos/${productId}/custos`}>na estrutura de custos</Link>
+          </>
+        ) : null}
+        .
+      </span>
     );
   }
   if (warning.target === "RESOURCE" && warning.resourceId) {

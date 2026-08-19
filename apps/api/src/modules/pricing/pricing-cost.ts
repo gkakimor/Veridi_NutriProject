@@ -216,7 +216,8 @@ export async function costForOutputQuantity(
       warnings.push({
         code: "MATERIAL_COST_UNKNOWN",
         message: `${requirement.itemCode}: sem custo conhecido no cálculo de referência.`,
-        target: "ITEM",
+        // Sem alvo: só o read model sabe se o caminho é um recebimento sem
+        // custo, uma compra que nunca houve, ou uma base congelada velha.
         itemId: requirement.itemId,
         itemCode: requirement.itemCode,
       });

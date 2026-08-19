@@ -3,6 +3,7 @@ import type {
   CmvComponentDTO,
   CmvGroup,
   CmvLiveSimulationDTO,
+  IndustrialCostWarningDTO,
   IndustrialCostCalculationSnapshotDTO,
   ProductCmvResponse,
 } from "@veridi/shared";
@@ -178,10 +179,63 @@ async function simulacaoComDadosDeHoje(
     costPer1000: money(cost.per1000),
     knownSubtotal: cost.knownSubtotal.toFixed(4),
     quality: cost.quality,
-    warnings: cost.warnings,
+    warnings: await comCaminhoDeSolucao(prisma, cost.warnings),
     hasCustomerSuppliedMaterials: cost.hasCustomerSuppliedMaterials,
     components: componentesDoCusto(cost),
   };
+}
+
+/**
+ * Descobre, para cada material sem custo, o que a pessoa precisa FAZER.
+ *
+ * O motor sabe que o custo falta; só o histórico do item diz por quê, e são
+ * três caminhos diferentes:
+ *
+ *   - existe recebimento com custo em branco  -> informar ali
+ *   - nunca houve compra recebida             -> registrar ordem de compra
+ *   - já existe custo hoje                    -> a base congelada é que é
+ *                                                anterior a ele; salvar um
+ *                                                cálculo novo
+ *
+ * Fica no read model, e não no motor de custo: a precificação percorre os
+ * mesmos materiais faixa a faixa e não deve pagar consulta por linha.
+ */
+async function comCaminhoDeSolucao(
+  prisma: ReturnType<typeof getPrisma>,
+  warnings: IndustrialCostWarningDTO[],
+): Promise<IndustrialCostWarningDTO[]> {
+  const semCusto = warnings.filter((w) => w.code === "MATERIAL_COST_UNKNOWN" && w.itemId);
+  if (semCusto.length === 0) return warnings;
+
+  const itemIds = [...new Set(semCusto.map((w) => w.itemId!))];
+  const linhas = await prisma.receiptLine.findMany({
+    where: { itemId: { in: itemIds } },
+    select: {
+      itemId: true,
+      actualUnitCost: true,
+      receipt: { select: { id: true, code: true, receivedAt: true } },
+    },
+    orderBy: { receipt: { receivedAt: "desc" } },
+  });
+
+  return warnings.map((warning) => {
+    if (warning.code !== "MATERIAL_COST_UNKNOWN" || !warning.itemId) return warning;
+    const doItem = linhas.filter((linha) => linha.itemId === warning.itemId);
+    if (doItem.length === 0) {
+      return { ...warning, target: "PURCHASE" as const };
+    }
+    const semValor = doItem.find((linha) => linha.actualUnitCost === null);
+    if (semValor) {
+      return {
+        ...warning,
+        target: "RECEIPT" as const,
+        receiptId: semValor.receipt.id,
+        receiptCode: semValor.receipt.code,
+      };
+    }
+    // Todo recebimento já tem custo: o que está velho é o cálculo.
+    return { ...warning, target: "STALE_BASIS" as const };
+  });
 }
 
 export async function getProductCmv(params: {
@@ -317,7 +371,7 @@ export async function getProductCmv(params: {
       costPer1000: money(cost.per1000),
       knownSubtotal: cost.knownSubtotal.toFixed(4),
       quality: cost.quality,
-      warnings: cost.warnings,
+      warnings: await comCaminhoDeSolucao(prisma, cost.warnings),
       hasCustomerSuppliedMaterials: cost.hasCustomerSuppliedMaterials,
       components,
     },

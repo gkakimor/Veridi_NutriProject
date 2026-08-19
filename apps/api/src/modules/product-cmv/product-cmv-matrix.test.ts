@@ -389,6 +389,42 @@ function totalDoGrupo(
 }
 
 describe("CMV — matriz de composição e base econômica", () => {
+  it("material sem custo aponta o caminho certo: comprar, informar no recebimento, ou recalcular", async () => {
+    const app = buildTestApp();
+    // Sem compra nenhuma: o cálculo nasce sem custo de material.
+    const { product, material } = await createScenario(app, { referenceOutputQuantity: "1000" });
+
+    const semCompra = await cmv(product.id, "1000");
+    const aviso = () =>
+      (semCompra.simulation?.warnings ?? []).find((w) => w.code === "MATERIAL_COST_UNKNOWN");
+    // Nunca comprado: mandar para o cadastro do item seria beco — lá não
+    // existe campo de custo, e de propósito.
+    expect(aviso()?.target).toBe("PURCHASE");
+    expect(aviso()?.itemId).toBe(material.id);
+
+    // A compra chega COM custo, depois do cálculo já salvo. O material passa
+    // a ter custo hoje, e quem está velho é a base congelada.
+    const supplier = await createSupplier();
+    await receiveWithCost(app, {
+      supplierId: supplier.id,
+      itemId: material.id,
+      quantity: "1000",
+      unitCost: "10",
+    });
+
+    const depois = await cmv(product.id, "1000");
+    const congelado = (depois.simulation?.warnings ?? []).find(
+      (w) => w.code === "MATERIAL_COST_UNKNOWN",
+    );
+    expect(congelado?.target).toBe("STALE_BASIS");
+    // E a simulação de hoje já nem avisa: o custo existe.
+    expect(
+      (depois.live?.warnings ?? []).some((w) => w.code === "MATERIAL_COST_UNKNOWN"),
+    ).toBe(false);
+
+    await app.close();
+  });
+
   it("simulação de hoje anda com a receita nova enquanto a base congelada não anda", async () => {
     const app = buildTestApp();
     const { product, version } = await createScenario(app, {
