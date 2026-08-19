@@ -59,3 +59,14 @@ export async function getProductionOrderCost(
   const response = await apiFetch(`${API_URL}/production-orders/${productionOrderId}/cost`);
   return (await parseJsonOrThrow(response)) as ProductionOrderCostDTO;
 }
+
+/**
+ * Descarta um cálculo salvo. Recusado (409) se alguma precificação o cita —
+ * apagar a base de um preço deixaria o preço sem origem verificável.
+ */
+export async function discardIndustrialCostCalculation(id: string): Promise<void> {
+  const response = await apiFetch(`${API_URL}/industrial-cost-calculations/${id}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) await parseJsonOrThrow(response);
+}

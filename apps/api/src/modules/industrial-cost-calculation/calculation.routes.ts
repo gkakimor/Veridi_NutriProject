@@ -6,11 +6,13 @@ import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industri
 import { ProductionOrderNotFoundError } from "../production-orders/production-orders.errors.js";
 import { calculateIndustrialCost } from "./calculation.service.js";
 import {
+  CalculationInUseError,
   IndustrialCostCalculationNotFoundError,
   InvalidCostReferenceDateError,
 } from "./calculation.errors.js";
 import { getProductionOrderCost } from "./production-cost.service.js";
 import {
+  discardIndustrialCostCalculation,
   getIndustrialCostCalculation,
   listProductCostCalculations,
   saveIndustrialCostCalculation,
@@ -106,6 +108,22 @@ export const industrialCostCalculationRoutes: FastifyPluginAsync = async (app) =
         ),
       );
     } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.delete("/industrial-cost-calculations/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+      await discardIndustrialCostCalculation(id);
+      return reply.status(204).send();
+    } catch (error) {
+      if (error instanceof CalculationInUseError) {
+        return reply.status(409).send({ error: "calculation_in_use", message: error.message });
+      }
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
       throw error;

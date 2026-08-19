@@ -7,6 +7,7 @@ import type {
 import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
 import { CostBreakdown, CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
 import { FormSection } from "../../components/FormSection";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { formatBRL } from "../../lib/currency";
 import {
   calculateIndustrialCost,
@@ -43,6 +44,7 @@ export function CostCalculationSection({
 }) {
   const navigate = useNavigate();
   const [referenceDate, setReferenceDate] = useState(today());
+  const [confirmarIncompleto, setConfirmarIncompleto] = useState(false);
   const [result, setResult] = useState<IndustrialCostCalculationDTO | null>(null);
   const [history, setHistory] = useState<IndustrialCostCalculationSummaryDTO[]>([]);
   const [busy, setBusy] = useState(false);
@@ -73,6 +75,25 @@ export function CostCalculationSection({
     } finally {
       setBusy(false);
     }
+  }
+
+  /*
+   * "Incompleto" é a MESMA noção que o motor publica na qualidade — a tela
+   * não redefine o que é um custo fechado.
+   */
+  const incompleto =
+    result !== null &&
+    result.quality !== "COMPLETE_REAL_REFERENCE" &&
+    result.quality !== "COMPLETE_WITH_ESTIMATES";
+
+  async function salvar() {
+    await run(async () => {
+      const saved = await saveIndustrialCostCalculation(versionId, {
+        costReferenceDate: new Date(`${referenceDate}T12:00:00`).toISOString(),
+      });
+      loadHistory();
+      navigate(`/calculos-custo/${saved.id}`);
+    });
   }
 
   return (
@@ -119,15 +140,16 @@ export function CostCalculationSection({
               type="button"
               className="btn btn--accent btn--sm"
               disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const saved = await saveIndustrialCostCalculation(versionId, {
-                    costReferenceDate: new Date(`${referenceDate}T12:00:00`).toISOString(),
-                  });
-                  loadHistory();
-                  navigate(`/calculos-custo/${saved.id}`);
-                })
-              }
+              onClick={() => {
+                // Congelar é decisão de quem salva — mas congelar um custo
+                // INCOMPLETO em silêncio não é decisão, é acidente: o número
+                // vira a base econômica do produto e nada mais avisa.
+                if (incompleto) {
+                  setConfirmarIncompleto(true);
+                  return;
+                }
+                void salvar();
+              }}
             >
               Salvar cálculo
             </button>
@@ -233,6 +255,34 @@ export function CostCalculationSection({
           </table>
         </div>
       </FormSection>
+
+      <ConfirmDialog
+        open={confirmarIncompleto}
+        title="Congelar um custo incompleto?"
+        confirmLabel="Salvar assim mesmo"
+        cancelLabel="Voltar e completar"
+        confirmTone="accent"
+        message={
+          <>
+            <p>
+              Este cálculo vira a base econômica do produto: é dele que o CMV e a precificação
+              passam a falar. Salvo incompleto, o custo total continua sem existir — o que aparece
+              é só o subtotal conhecido.
+            </p>
+            <p>O que está em aberto:</p>
+            <ul className="confirm-dialog__list">
+              {(result?.warnings ?? []).map((warning, index) => (
+                <li key={`${warning.code}-${index}`}>{warning.message}</li>
+              ))}
+            </ul>
+          </>
+        }
+        onCancel={() => setConfirmarIncompleto(false)}
+        onConfirm={() => {
+          setConfirmarIncompleto(false);
+          void salvar();
+        }}
+      />
     </>
   );
 }

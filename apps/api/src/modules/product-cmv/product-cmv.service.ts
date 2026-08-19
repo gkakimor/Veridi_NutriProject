@@ -351,7 +351,12 @@ export async function getProductCmv(params: {
       // data pedida. `referenceDate` é dia de calendário, não instante.
       costReferenceDate: { lte: fimDoDia(params.referenceDate) },
     },
-    orderBy: { costReferenceDate: "desc" },
+    /*
+     * Empate na data é resolvido pelo mais recente: salvar uma base nova no
+     * mesmo dia da anterior precisa ter efeito, senão "corrigir a base" vira
+     * sorteio entre dois documentos igualmente válidos.
+     */
+    orderBy: [{ costReferenceDate: "desc" }, { calculatedAt: "desc" }],
     select: { id: true },
   });
   if (!savedCalculation) {

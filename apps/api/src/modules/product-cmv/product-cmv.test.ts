@@ -173,7 +173,6 @@ describe("CMV — motor único", () => {
   });
 
   it("material do cliente mantém quantidade física e fica fora da aquisição Veridi", async () => {
-    const prisma = getPrisma();
     const cenario = await cenarioComCmv();
     if (!cenario) return;
 

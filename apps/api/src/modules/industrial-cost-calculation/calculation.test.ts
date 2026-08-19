@@ -419,6 +419,50 @@ async function orderCost(app: App, orderId: string) {
   return (await app.inject({ method: "GET", url: `/production-orders/${orderId}/cost` })).json();
 }
 
+
+describe("Descartar cálculo salvo", () => {
+  it("descarta o que ninguém cita e recusa o que é base de uma precificação", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+
+    const alvo = await prisma.industrialCostCalculation.findFirst({
+      where: { pricingVersions: { none: {} } },
+      select: { id: true },
+    });
+    if (alvo) {
+      const apagado = await app.inject({
+        method: "DELETE",
+        url: `/industrial-cost-calculations/${alvo.id}`,
+      });
+      expect(apagado.statusCode, apagado.body).toBe(204);
+      expect(
+        await prisma.industrialCostCalculation.findUnique({ where: { id: alvo.id } }),
+      ).toBeNull();
+    }
+
+    // Base de um preço não é descartável: apagá-la deixaria a faixa sem
+    // origem verificável.
+    const citado = await prisma.industrialCostCalculation.findFirst({
+      where: { pricingVersions: { some: {} } },
+      select: { id: true },
+    });
+    if (citado) {
+      const recusado = await app.inject({
+        method: "DELETE",
+        url: `/industrial-cost-calculations/${citado.id}`,
+      });
+      expect(recusado.statusCode).toBe(409);
+      expect(recusado.json().error).toBe("calculation_in_use");
+      expect(
+        await prisma.industrialCostCalculation.findUnique({ where: { id: citado.id } }),
+      ).not.toBeNull();
+    }
+
+    await app.close();
+  });
+});
+
 describe("Custo padrão — referência de material", () => {
   it("usa média PONDERADA por quantidade nos últimos 30 dias", async () => {
     const app = buildTestApp("ADMIN");

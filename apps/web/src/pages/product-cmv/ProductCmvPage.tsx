@@ -25,6 +25,10 @@ import { IndustrialCostPendencies } from "../../components/IndustrialCostPendenc
 import { CostWarnings } from "../../components/CostWarnings";
 import { getProductCmv } from "../../lib/product-cmv-api";
 import { getProductIndustrialCosts } from "../../lib/industrial-costs-api";
+import {
+  discardIndustrialCostCalculation,
+  saveIndustrialCostCalculation,
+} from "../../lib/cost-calculation-api";
 import { getProductPricing } from "../../lib/pricing-api";
 import { formatBRL } from "../../lib/currency";
 import { formatPercent } from "../../lib/percent";
@@ -127,6 +131,7 @@ export function ProductCmvPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [detalhe, setDetalhe] = useState<"frozen" | "live">("frozen");
+  const [salvandoBase, setSalvandoBase] = useState(false);
   /*
    * A estrutura só é buscada para EXPLICAR uma resposta vazia. Nenhum número
    * desta tela vem daqui — o CMV continua saindo inteiro de um endpoint só.
@@ -221,6 +226,47 @@ export function ProductCmvPage() {
     data?.basisFormulationVersionNumber != null &&
     data.formulationVersionNumber != null &&
     data.basisFormulationVersionNumber !== data.formulationVersionNumber;
+
+  /*
+   * A base congelada está atrás do estado atual quando algum aviso dela já
+   * não aparece na simulação de hoje — a mesma leitura que decide o texto de
+   * "já está resolvido" — ou quando a receita mudou.
+   */
+  const baseDefasada =
+    (simulation?.warnings ?? []).some((warning) => warning.target === "STALE_BASIS") ||
+    formulacaoDefasada;
+
+  /** Congela o estado atual como a nova base econômica do produto. */
+  async function salvarNovaBase() {
+    if (!productId || !data?.industrialCostVersionId) return;
+    setSalvandoBase(true);
+    setError(null);
+    try {
+      await saveIndustrialCostCalculation(data.industrialCostVersionId, {
+        costReferenceDate: new Date(`${referenceDate}T12:00:00`).toISOString(),
+      });
+      await simular(quantity.trim(), referenceDate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao congelar a base");
+    } finally {
+      setSalvandoBase(false);
+    }
+  }
+
+  /** Descarta a base antiga — recusado se alguma precificação a cita. */
+  async function descartarBase() {
+    if (!data?.calculationId) return;
+    setSalvandoBase(true);
+    setError(null);
+    try {
+      await discardIndustrialCostCalculation(data.calculationId);
+      await simular(quantity.trim(), referenceDate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao descartar o cálculo");
+    } finally {
+      setSalvandoBase(false);
+    }
+  }
 
   return (
     <>
@@ -498,6 +544,33 @@ export function ProductCmvPage() {
               </Link>
             </div>
           </FormSection>
+        )}
+
+        {/* A base congelada ficou para trás do que já se sabe. Enquanto
+            nenhuma precificação a cita, insistir nela é conviver com um
+            retrato errado — a saída fica aqui, sem atravessar duas telas. */}
+        {baseDefasada && data?.industrialCostVersionId && (
+          <div className="line-actions">
+            <button
+              type="button"
+              className="btn btn--accent btn--sm"
+              disabled={salvandoBase || loading}
+              onClick={() => void salvarNovaBase()}
+            >
+              {salvandoBase ? "Congelando…" : "Congelar uma base nova com estes dados"}
+            </button>
+            {data.calculationId && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                disabled={salvandoBase || loading}
+                title="Só é possível enquanto nenhuma precificação cita este cálculo."
+                onClick={() => void descartarBase()}
+              >
+                Descartar {data.calculationCode}
+              </button>
+            )}
+          </div>
         )}
 
         {/* Enquanto o produto está sendo definido não há compromisso a
