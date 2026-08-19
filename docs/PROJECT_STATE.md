@@ -4774,6 +4774,23 @@ Golden explícito da Tabela Price em `quote-payment.test.ts`, com a aritmética
 escrita por extenso no comentário — um dos casos flagrou uma conta minha
 errada, que é exatamente o que um golden derivado do código não faria.
 
+## Blocker registrado — decisão do Product Owner
+
+**Data-base do prazo de entrega.** A proposta guarda `leadTimeDays` ("entrega
+em X dias"), mas o domínio não define de quando esses dias contam: do aceite,
+da aprovação do projeto, da confirmação do pedido ou do pagamento da entrada.
+Escolher aqui inventaria um compromisso de data que ninguém acordou, então o
+Pedido gerado **nasce sem entrega prevista** e o campo é preenchido por quem
+sabe. Definida a regra, derivar passa a ser trivial.
+
+## Ponto a confirmar — não bloqueia
+
+**Unidade divergente entre proposta e produto acabado.** Hoje a geração recusa
+quando `QuoteLine.uomCode` difere da unidade do item acabado, em vez de
+converter: converter mudaria a quantidade sem mudar o preço unitário acordado.
+Se na prática houver cotação legítima em outra unidade (caixa × unidade), a
+regra precisa de uma decisão explícita sobre o que acontece com o preço.
+
 ## Não tocado nesta madrugada, por instrução
 
 Railway (nenhuma ação), banco de produção, `main`, resíduo `V3 DRAFT` em

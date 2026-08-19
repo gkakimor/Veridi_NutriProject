@@ -170,13 +170,15 @@ export async function createOrderFromAcceptedQuote(
             : {}),
           agreedTotalAmount: new Prisma.Decimal(plano.total),
           agreedPaymentSchedule: plano as unknown as Prisma.InputJsonValue,
-          ...(proposta.leadTimeDays
-            ? {
-                requestedDeliveryDate: new Date(
-                  Date.now() + proposta.leadTimeDays * 24 * 60 * 60 * 1000,
-                ),
-              }
-            : {}),
+          /*
+           * A entrega prevista NÃO é derivada do prazo da proposta.
+           *
+           * O prazo é "X dias" — mas contados de quando? Do aceite, da
+           * aprovação, da confirmação do pedido, do pagamento da entrada? A
+           * regra não existe no domínio, e escolher uma aqui inventaria um
+           * compromisso de data que ninguém acordou. O campo nasce vazio e é
+           * preenchido por quem sabe. Pendente de definição do Product Owner.
+           */
           createdBy: actor.name,
         },
       });
