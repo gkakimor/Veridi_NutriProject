@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type { IndustrialCostCalculationSnapshotDTO } from "@veridi/shared";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { EntityLink } from "../../components/EntityLink";
@@ -49,6 +49,17 @@ export function CostCalculationPage() {
               <span className="badge badge--warn">Estrutura em rascunho</span>
             )}
           </div>
+          {/* Aviso que não leva a lugar nenhum vira beco: a ativação acontece
+              na estrutura, e é de lá que este cálculo passa a valer. */}
+          {calculation.structureStatusAtCalculation === "DRAFT" && (
+            <p className="field__hint">
+              Esta estrutura ainda é rascunho — tarifas e premissas podem mudar até a ativação.{" "}
+              <Link to={`/produtos/${calculation.productId}/custos`}>
+                Abrir a estrutura de custos para ativar
+              </Link>
+              .
+            </p>
+          )}
         </div>
         <div className="table__actions">
           <button
@@ -69,7 +80,7 @@ export function CostCalculationPage() {
       </div>
 
       <div className="doc-body">
-      <ProductRelatedLinks productId={calculation.productId} current="costs" />
+      <ProductRelatedLinks productId={calculation.productId} current="calculation" />
         <FormSection title="Contexto do cálculo">
           <dl className="definition-list">
             <dt>Cliente</dt>
