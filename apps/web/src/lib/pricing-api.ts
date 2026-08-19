@@ -102,9 +102,5 @@ export async function rebasePricingVersion(
   id: string,
   industrialCostCalculationId: string,
 ): Promise<PricingVersionDTO> {
-  const response = await apiFetch(`${API_URL}/pricing-versions/${id}/rebase`, {
-    method: "POST",
-    body: JSON.stringify({ industrialCostCalculationId }),
-  });
-  return (await parseJsonOrThrow(response)) as PricingVersionDTO;
+  return send(`/pricing-versions/${id}/rebase`, "POST", { industrialCostCalculationId });
 }

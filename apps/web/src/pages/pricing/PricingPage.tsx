@@ -149,7 +149,11 @@ export function PricingPage() {
 
         <FormSection
           title="Base de custo"
-          subtitle="Todas as faixas desta versão compartilham a mesma base econômica. Custo novo exige um novo cálculo e uma nova versão."
+          subtitle={
+            pricing.status === "DRAFT"
+              ? "Todas as faixas desta versão compartilham a mesma base econômica. Enquanto for rascunho, a base pode ser trocada por um cálculo mais recente."
+              : "Todas as faixas desta versão compartilham a mesma base econômica. Custo novo exige um novo cálculo e uma nova versão."
+          }
         >
           <dl className="definition-list">
             <dt>Cliente</dt>
@@ -204,16 +208,31 @@ export function PricingPage() {
               ninguém entender a diferença. */}
           {(pricing.costQuality === "PARTIAL" || pricing.costQuality === "NO_COST") && (
             <p className="form-alert" role="status">
-              Esta precificação foi fechada sobre{" "}
-              {INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality].toLowerCase()} — por isso margem
-              e markup aparecem como "—" nas faixas. Um cálculo de custo mais completo do mesmo
-              produto não muda esta versão: preço acordado não se reescreve. Para precificar sobre
-              a base atual, crie uma nova versão — o botão acima mostra o que muda antes de
-              decidir, ou abra{" "}
-              <Link to={`/produtos/${pricing.productId}/custos`}>
-                Custos industriais → Cálculos salvos
-              </Link>
-              .
+              {/* Rascunho não foi acordado com ninguém: falar em "preço fechado"
+                  e mandar criar outra versão descrevia o estado errado e
+                  escondia a saída, que é trocar a base aqui mesmo. */}
+              {pricing.status === "DRAFT" ? (
+                <>
+                  A base deste rascunho está{" "}
+                  {INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality].toLowerCase()} — por isso
+                  margem e markup aparecem como "—" nas faixas. Resolva as pendências em{" "}
+                  <Link to={`/produtos/${pricing.productId}/custos`}>Custos industriais</Link> e
+                  salve um cálculo novo; ele aparece aqui como troca de base.
+                </>
+              ) : (
+                <>
+                  Esta precificação foi fechada sobre{" "}
+                  {INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality].toLowerCase()} — por isso
+                  margem e markup aparecem como "—" nas faixas. Um cálculo de custo mais completo
+                  do mesmo produto não muda esta versão: preço acordado não se reescreve. Para
+                  precificar sobre a base atual, crie uma nova versão — o botão acima mostra o que
+                  muda antes de decidir, ou abra{" "}
+                  <Link to={`/produtos/${pricing.productId}/custos`}>
+                    Custos industriais → Cálculos salvos
+                  </Link>
+                  .
+                </>
+              )}
             </p>
           )}
 
