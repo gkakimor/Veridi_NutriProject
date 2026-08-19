@@ -12,16 +12,27 @@ import { formatBRL } from "../lib/currency";
 import { EntityLink } from "./EntityLink";
 import { CostWarnings } from "./CostWarnings";
 
-/** Custo unitário mantém casas decimais: R$ 0,083421/un não vira R$ 0,08. */
+/**
+ * Dinheiro na tela é real brasileiro com dois centavos.
+ *
+ * Isto já foi seis casas, para preservar custos unitários minúsculos. O preço
+ * de venda pagava a conta: "R$ 1.407,523077" não é um número que alguém
+ * fatura, cobra ou confere, e a precisão extra virou ruído em toda tabela.
+ *
+ * A exceção é o valor pequeno demais para dois centavos: mostrar R$ 0,00 para
+ * uma cápsula a R$ 0,0032 diria que ela é de graça. Aí, e só aí, o formato
+ * abre casas até o número aparecer.
+ */
 export function formatUnitCost(value: string | null): string {
   if (value === null) return "—";
   const number = Number(value);
   if (Number.isNaN(number)) return "—";
+  const desapareceria = number !== 0 && Math.abs(number) < 0.005;
   return number.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
-    maximumFractionDigits: 6,
+    maximumFractionDigits: desapareceria ? 6 : 2,
   });
 }
 
