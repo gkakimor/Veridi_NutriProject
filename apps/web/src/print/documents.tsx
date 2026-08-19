@@ -62,6 +62,20 @@ export function CustomerOrderPrintDocument({ order }: { order: CustomerOrderDTO 
         { label: "CNPJ", value: printOrDash(order.customerCnpj) },
         { label: "Data do pedido", value: formatPrintDate(order.orderDate) },
         { label: "Entrega solicitada", value: formatPrintDate(order.requestedDeliveryDate) },
+        /*
+         * Origem comercial no cabeçalho: este documento já é interno (traz
+         * reservado, faturado e falta expedir), e sem a linha ninguém sabe de
+         * qual proposta o pedido saiu. Só a identidade — o acordo inteiro
+         * continua no orçamento.
+         */
+        ...(order.commercialOrigin
+          ? [
+              {
+                label: "Origem comercial",
+                value: `${order.commercialOrigin.quoteCode} · V${order.commercialOrigin.quoteVersionNumber}`,
+              },
+            ]
+          : []),
       ]}
     >
       <PrintSection title="Produtos">

@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { ProjectDTO, ProjectStatus, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
 import { QUOTE_STATUS_LABELS, QUOTE_PRICE_SOURCE_LABELS } from "@veridi/shared";
 import {
   acceptQuoteVersion,
   addQuoteLine,
   applyQuotePricing,
+  createOrderFromQuote,
   createQuoteVersion,
   getQuotePricingOptions,
   rejectQuoteVersion,
@@ -17,7 +18,8 @@ import {
 } from "../../lib/projects-api";
 import type { PricingVersionDTO } from "@veridi/shared";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { EntityLink } from "../../components/EntityLink";
+import { EntityLink, entityHref } from "../../components/EntityLink";
+import { QuoteClosingSection } from "./QuoteClosingSection";
 import { FormSection } from "../../components/FormSection";
 import { IncompleteCostApiError } from "../../lib/api-errors";
 import { formatBRL } from "../../lib/currency";
@@ -89,6 +91,7 @@ export function QuoteVersionsSection({
    * pessoa ao rascunho corrente, que pode não ser a versão que ela estava
    * lendo, e a busca recomeçaria do zero.
    */
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const returningToQuoteId = params.get("quoteVersionId");
   const returningToLineId = params.get("quoteLineId");
@@ -684,6 +687,21 @@ export function QuoteVersionsSection({
               </>
             )}
           </div>
+
+          {/* O que falta depois do "sim" do cliente. */}
+          <QuoteClosingSection
+            quote={open}
+            projectId={project.id}
+            projectStatus={projectStatus}
+            canEdit={canEdit}
+            saving={saving}
+            onGenerate={() =>
+              void run(async () => {
+                const pedido = await createOrderFromQuote(open.id);
+                navigate(entityHref("customerOrder", pedido.id));
+              })
+            }
+          />
         </div>
       )}
 

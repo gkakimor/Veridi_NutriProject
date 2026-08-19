@@ -1436,6 +1436,39 @@ td .entity-select {
   margin-top: var(--sp-4);
 }
 
+/* Fechamento da proposta aceita: o que ainda falta depois do "sim". */
+.quote-closing {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--v-green-600);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.quote-closing__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--v-green-700);
+}
+
+.commercial-origin__plan {
+  margin-top: var(--sp-3);
+}
+
+.commercial-origin__plan summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--v-green-700);
+}
+
+.commercial-origin__plan .table {
+  margin-top: var(--sp-2);
+  max-width: 460px;
+}
+
 /* Estado de gravação das condições comerciais: sem isto, "salvei?" só se
    responde recarregando a página. */
 .form-status {

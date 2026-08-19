@@ -1,4 +1,5 @@
 import type {
+  CustomerOrderDTO,
   ApproveProjectInput,
   CancelProjectInput,
   ChangeProjectStatusInput,
@@ -136,6 +137,16 @@ export async function sendQuoteVersion(
   input: { confirmIncompleteCost?: boolean } = {},
 ): Promise<QuoteVersionDTO> {
   return postJson<QuoteVersionDTO>(`/quote-versions/${id}/send`, input);
+}
+
+/**
+ * Gera o pedido da proposta aceita — ou reabre o que já existe.
+ *
+ * A API responde 201 quando nasce e 200 quando já havia. Do lado da tela o
+ * resultado é o mesmo: o pedido do acordo, aberto.
+ */
+export async function createOrderFromQuote(id: string): Promise<CustomerOrderDTO> {
+  return postJson<CustomerOrderDTO>(`/quote-versions/${id}/create-order`, {});
 }
 
 export async function acceptQuoteVersion(id: string): Promise<QuoteVersionDTO> {

@@ -43,6 +43,7 @@ import {
 } from "../../lib/shipments-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
+import { AgreedPriceCell, CommercialOriginSection } from "./CommercialOriginSection";
 import { FlowContext } from "../../components/FlowContext";
 import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -235,6 +236,14 @@ export function CustomerOrderPage() {
 
   const status: CustomerOrderStatus = customerOrder?.status ?? "DRAFT";
   const isDraft = isNew || status === "DRAFT";
+  /*
+   * A coluna de preço só aparece quando há acordo a mostrar. Pedido digitado
+   * direto não tem preço de origem, e uma coluna inteira de "—" só ocuparia
+   * espaço para dizer que não há nada.
+   */
+  const temPrecoAcordado = Boolean(
+    customerOrder?.lines.some((line) => line.agreedPrice !== null),
+  );
   const isCancellable = !isNew && (status === "DRAFT" || status === "CONFIRMED");
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
   const showPlan = !isNew && status === "CONFIRMED";
@@ -733,6 +742,8 @@ export function CustomerOrderPage() {
           </FormSection>
         )}
 
+        {customerOrder && <CommercialOriginSection order={customerOrder} />}
+
         <FormSection
           title="Cliente e datas"
           subtitle={
@@ -789,6 +800,7 @@ export function CustomerOrderPage() {
                   <th>Produto</th>
                   <th className="col-quantity is-numeric">Quantidade</th>
                   <th className="col-unit">Un.</th>
+                  {temPrecoAcordado && <th className="is-numeric">Preço acordado</th>}
                   {!isDraft && <th className="is-numeric">Expedido</th>}
                   {!isDraft && <th className="is-numeric">Falta expedir</th>}
                   {isDraft && <th aria-hidden="true" />}
@@ -830,6 +842,16 @@ export function CustomerOrderPage() {
                       )}
                     </td>
                     <td>{line.unitCode || "—"}</td>
+                    {temPrecoAcordado && (
+                      <td className="is-numeric">
+                        <AgreedPriceCell
+                          price={
+                            customerOrder?.lines.find((l) => l.productId === line.productId)
+                              ?.agreedPrice ?? null
+                          }
+                        />
+                      </td>
+                    )}
                     {!isDraft && (
                       <td className="is-numeric">
                         {customerOrder?.lines.find((l) => l.productId === line.productId)?.shippedQuantity ?? "—"}
@@ -858,7 +880,7 @@ export function CustomerOrderPage() {
 
                 {lines.length === 0 && (
                   <tr>
-                    <td colSpan={isDraft ? 4 : 5} className="table__empty">
+                    <td colSpan={(isDraft ? 4 : 5) + (temPrecoAcordado ? 1 : 0)} className="table__empty">
                       Nenhum produto adicionado.
                     </td>
                   </tr>
