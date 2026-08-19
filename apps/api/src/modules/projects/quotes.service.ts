@@ -16,6 +16,7 @@ import {
   QuoteNotSentError,
 } from "./projects.errors.js";
 import { getProjectById } from "./projects.service.js";
+import { buildPaymentSchedule } from "./quote-payment.js";
 import {
   assertPriceEditable,
   buildLineSnapshots,
@@ -101,12 +102,29 @@ export function toQuoteVersionDTO(
   // Total da proposta é a soma das linhas — e só existe quando TODAS têm
   // preço. Somar o que está precificado e ignorar o resto entregaria um
   // número menor que a proposta, com cara de total.
-  const total =
+  const subtotal =
     lines.length > 0 && lines.every((line) => line.total !== null)
       ? lines
           .reduce((sum, line) => sum.plus(new Prisma.Decimal(line.total ?? 0)), new Prisma.Decimal(0))
           .toFixed(2)
       : null;
+
+  // O plano é derivado: desconto, entrada, parcelas e juros saem daqui, nunca
+  // de um valor digitado. `total` passa a ser o preço à vista JÁ COM desconto
+  // — é o que a proposta vale, e o que a lista de versões mostra.
+  const paymentSchedule =
+    subtotal === null
+      ? null
+      : buildPaymentSchedule({
+          subtotal: new Prisma.Decimal(subtotal),
+          discountPercent: quote.discountPercent,
+          method: quote.paymentMethod,
+          downPaymentPercent: quote.downPaymentPercent,
+          installmentCount: quote.installmentCount,
+          installmentIntervalDays: quote.installmentIntervalDays,
+          monthlyInterestPercent: quote.monthlyInterestPercent,
+        });
+  const total = paymentSchedule ? paymentSchedule.total : null;
 
   return {
     id: quote.id,
@@ -122,6 +140,16 @@ export function toQuoteVersionDTO(
     currencyCode: quote.currencyCode,
     lines,
     total,
+    subtotal,
+    discountPercent: quote.discountPercent ? quote.discountPercent.toFixed(4) : null,
+    paymentMethod: quote.paymentMethod,
+    downPaymentPercent: quote.downPaymentPercent ? quote.downPaymentPercent.toFixed(4) : null,
+    installmentCount: quote.installmentCount,
+    installmentIntervalDays: quote.installmentIntervalDays,
+    monthlyInterestPercent: quote.monthlyInterestPercent
+      ? quote.monthlyInterestPercent.toFixed(4)
+      : null,
+    paymentSchedule,
     commercialNotes: quote.commercialNotes,
     paymentTerms: quote.paymentTerms,
     leadTimeDays: quote.leadTimeDays,
@@ -216,6 +244,14 @@ export async function createQuoteVersion(
               commercialNotes: previous.commercialNotes,
               paymentTerms: previous.paymentTerms,
               leadTimeDays: previous.leadTimeDays,
+              // Desconto e plano de pagamento também são condição comercial:
+              // renegociar quase sempre parte do que já estava na mesa.
+              discountPercent: previous.discountPercent,
+              paymentMethod: previous.paymentMethod,
+              downPaymentPercent: previous.downPaymentPercent,
+              installmentCount: previous.installmentCount,
+              installmentIntervalDays: previous.installmentIntervalDays,
+              monthlyInterestPercent: previous.monthlyInterestPercent,
             }
           : {}),
         createdByUserId: actor.id,
@@ -278,6 +314,49 @@ export async function updateQuoteVersion(
       ...(input.commercialNotes !== undefined ? { commercialNotes: input.commercialNotes } : {}),
       ...(input.paymentTerms !== undefined ? { paymentTerms: input.paymentTerms } : {}),
       ...(input.leadTimeDays !== undefined ? { leadTimeDays: input.leadTimeDays } : {}),
+      ...(input.discountPercent !== undefined
+        ? {
+            discountPercent:
+              input.discountPercent === null ? null : new Prisma.Decimal(input.discountPercent),
+          }
+        : {}),
+      ...(input.paymentMethod !== undefined ? { paymentMethod: input.paymentMethod } : {}),
+      /*
+       * À vista não guarda entrada, parcelas nem juros. Deixar os números da
+       * negociação anterior escondidos no registro faria o plano ressuscitar
+       * sozinho na hora que alguém voltasse para "Parcelado".
+       */
+      ...(input.paymentMethod === "CASH"
+        ? {
+            downPaymentPercent: null,
+            installmentCount: null,
+            installmentIntervalDays: null,
+            monthlyInterestPercent: null,
+          }
+        : {
+            ...(input.downPaymentPercent !== undefined
+              ? {
+                  downPaymentPercent:
+                    input.downPaymentPercent === null
+                      ? null
+                      : new Prisma.Decimal(input.downPaymentPercent),
+                }
+              : {}),
+            ...(input.installmentCount !== undefined
+              ? { installmentCount: input.installmentCount }
+              : {}),
+            ...(input.installmentIntervalDays !== undefined
+              ? { installmentIntervalDays: input.installmentIntervalDays }
+              : {}),
+            ...(input.monthlyInterestPercent !== undefined
+              ? {
+                  monthlyInterestPercent:
+                    input.monthlyInterestPercent === null
+                      ? null
+                      : new Prisma.Decimal(input.monthlyInterestPercent),
+                }
+              : {}),
+          }),
     },
   });
 

@@ -1436,6 +1436,46 @@ td .entity-select {
   margin-top: var(--sp-4);
 }
 
+/* Estado de gravação das condições comerciais: sem isto, "salvei?" só se
+   responde recarregando a página. */
+.form-status {
+  align-self: center;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.form-status--dirty {
+  color: var(--warn-fg);
+  font-weight: 600;
+}
+
+.quote-plan {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.quote-plan__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+.quote-plan__title em {
+  text-transform: none;
+  letter-spacing: 0;
+  font-style: italic;
+}
+
+.quote-plan .data-table {
+  margin-top: var(--sp-3);
+  max-width: 420px;
+}
+
 .table--quote-lines th:first-child,
 .table--quote-lines td:first-child {
   width: 34%;

@@ -92,6 +92,14 @@ export const listProjectsQuerySchema = z.object({
 });
 
 /** Cabeçalho da proposta: condições comerciais. Preço vive na linha. */
+/** Percentual opcional com teto — desconto de 100% não é desconto, é doação. */
+function optionalPercent(max: number) {
+  return optionalDecimal.refine(
+    (value) => value === undefined || value === null || Number(value) <= max,
+    { message: `Percentual precisa ser no máximo ${max}` },
+  );
+}
+
 export const updateQuoteVersionSchema = z.object({
   quoteDate: requiredDateSchema.optional(),
   validUntil: requiredDateSchema.nullish(),
@@ -99,6 +107,19 @@ export const updateQuoteVersionSchema = z.object({
   commercialNotes: optionalNullableText(2000),
   paymentTerms: optionalNullableText(500),
   leadTimeDays: optionalPositiveInt,
+  discountPercent: optionalPercent(99.99),
+  paymentMethod: z.enum(["CASH", "INSTALLMENTS"]).optional(),
+  // Entrada de 100% seria a proposta à vista com outro nome.
+  downPaymentPercent: optionalPercent(99.99),
+  installmentCount: optionalPositiveInt.refine(
+    (value) => value === undefined || value === null || value <= 120,
+    { message: "No máximo 120 parcelas" },
+  ),
+  installmentIntervalDays: optionalPositiveInt.refine(
+    (value) => value === undefined || value === null || value <= 365,
+    { message: "Intervalo entre parcelas: no máximo 365 dias" },
+  ),
+  monthlyInterestPercent: optionalPercent(100),
 });
 
 /** Só produto já associado ao projeto entra na proposta. */
