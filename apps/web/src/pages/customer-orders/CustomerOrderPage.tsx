@@ -244,6 +244,14 @@ export function CustomerOrderPage() {
   const temPrecoAcordado = Boolean(
     customerOrder?.lines.some((line) => line.agreedPrice !== null),
   );
+  /*
+   * Pedido nascido de proposta aceita não renegocia aqui: produto e
+   * quantidade vieram de um acordo com o cliente. O backend já recusa a
+   * alteração — a tela precisa parar de oferecê-la, senão a pessoa edita,
+   * salva e só então descobre que não podia.
+   */
+  const origemComercial = customerOrder?.commercialOrigin ?? null;
+  const linhasEditaveis = isDraft && origemComercial === null;
   const isCancellable = !isNew && (status === "DRAFT" || status === "CONFIRMED");
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
   const showPlan = !isNew && status === "CONFIRMED";
@@ -790,7 +798,14 @@ export function CustomerOrderPage() {
           </div>
         </FormSection>
 
-        <FormSection title="Produtos" subtitle="Um produto por pedido — a unidade vem do item de produto acabado.">
+        <FormSection
+          title="Produtos"
+          subtitle={
+            origemComercial
+              ? `Produtos e quantidades vieram do orçamento ${origemComercial.quoteCode}. Para mudar, renegocie criando uma nova versão do orçamento.`
+              : "Um produto por pedido — a unidade vem do item de produto acabado."
+          }
+        >
           <div className="table-container">
             {/* Produto é a coluna de decisão: fica com o espaço, e a busca
                 dentro dela precisa de largura para nomes longos. */}
@@ -803,14 +818,14 @@ export function CustomerOrderPage() {
                   {temPrecoAcordado && <th className="is-numeric">Preço acordado</th>}
                   {!isDraft && <th className="is-numeric">Expedido</th>}
                   {!isDraft && <th className="is-numeric">Falta expedir</th>}
-                  {isDraft && <th aria-hidden="true" />}
+                  {linhasEditaveis && <th aria-hidden="true" />}
                 </tr>
               </thead>
               <tbody>
                 {lines.map((line) => (
                   <tr key={line.key}>
                     <td>
-                      {isDraft ? (
+                      {linhasEditaveis ? (
                         <SearchableEntitySelect
                           id={`pedido-produto-${line.key}`}
                           value={line.productId}
@@ -829,7 +844,7 @@ export function CustomerOrderPage() {
                       )}
                     </td>
                     <td className="is-numeric">
-                      {isDraft ? (
+                      {linhasEditaveis ? (
                         <input
                           type="text"
                           inputMode="decimal"
@@ -863,7 +878,7 @@ export function CustomerOrderPage() {
                           "—"}
                       </td>
                     )}
-                    {isDraft && (
+                    {linhasEditaveis && (
                       <td>
                         <button
                           type="button"
@@ -889,7 +904,7 @@ export function CustomerOrderPage() {
             </table>
           </div>
 
-          {isDraft && (
+          {linhasEditaveis && (
             <div className="line-actions">
               <button type="button" className="btn btn--secondary btn--sm" onClick={handleAddLine}>
                 + Adicionar produto
