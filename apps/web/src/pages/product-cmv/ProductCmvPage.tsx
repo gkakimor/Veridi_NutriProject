@@ -676,7 +676,12 @@ export function ProductCmvPage() {
                     </p>
                   )}
                   <div className="table-container">
-                    <table className="table">
+                    {/* Largura fixa e compartilhada: as quatro tabelas mostram
+                        as MESMAS colunas do mesmo cálculo, e deixá-las se
+                        dimensionar sozinhas fazia "Custo total" cair num lugar
+                        diferente em cada bloco — o olho perde a coluna ao
+                        descer a página. */}
+                    <table className="table cmv-table">
                       <thead>
                         <tr>
                           <th>Item</th>
@@ -685,7 +690,7 @@ export function ProductCmvPage() {
                           <th>Origem do custo</th>
                           <th className="is-numeric">Custo unitário</th>
                           <th className="is-numeric">Custo total</th>
-                          <th>Responsabilidade</th>
+                          <th>Fornecimento</th>
                         </tr>
                       </thead>
                       <tbody>

@@ -117,3 +117,64 @@
   font-size: var(--fs-base);
   color: var(--ink);
 }
+
+/* Composição: quatro tabelas, as mesmas sete colunas.
+   Sem largura fixa cada bloco se dimensiona pelo próprio conteúdo, e
+   "Custo total" aparece num x diferente em cada um — descer a página vira
+   um exercício de reencontrar a coluna. As proporções somam 100% e a de
+   Item fica com a folga, que é onde o texto é imprevisível. */
+.cmv-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Abaixo desta largura os rótulos começam a ser cortados, e cortar um
+   cabeçalho de palavra única não tem conserto tipográfico — quebrar linha
+   não ajuda "Quantidade". Em tela estreita a tabela rola dentro do próprio
+   contêiner, que é para isso que ele existe; o alinhamento entre os quatro
+   blocos continua valendo porque a largura mínima é a mesma. */
+.cmv-table {
+  min-width: 1080px;
+}
+
+.cmv-table th:nth-child(1),
+.cmv-table td:nth-child(1) {
+  width: 26%;
+}
+
+.cmv-table th:nth-child(2),
+.cmv-table td:nth-child(2) {
+  width: 9%;
+}
+
+.cmv-table th:nth-child(3),
+.cmv-table td:nth-child(3) {
+  width: 7%;
+}
+
+.cmv-table th:nth-child(4),
+.cmv-table td:nth-child(4) {
+  width: 24%;
+}
+
+.cmv-table th:nth-child(5),
+.cmv-table td:nth-child(5) {
+  width: 11%;
+}
+
+.cmv-table th:nth-child(6),
+.cmv-table td:nth-child(6) {
+  width: 11%;
+}
+
+.cmv-table th:nth-child(7),
+.cmv-table td:nth-child(7) {
+  width: 12%;
+}
+
+/* Origem do custo traz frase inteira ("Média ponderada de compras (30 dias)"):
+   com largura fixa ela precisa poder quebrar em vez de estourar a célula. */
+.cmv-table td:nth-child(4) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
