@@ -10,6 +10,7 @@ import {
 } from "@veridi/shared";
 import { formatBRL } from "../lib/currency";
 import { EntityLink } from "./EntityLink";
+import { CostWarnings } from "./CostWarnings";
 
 /** Custo unitário mantém casas decimais: R$ 0,083421/un não vira R$ 0,08. */
 export function formatUnitCost(value: string | null): string {
@@ -36,7 +37,16 @@ export function qualityBadgeClass(quality: string): string {
  * Desconhecido aparece como "—", nunca como R$ 0,00, e um cálculo parcial
  * nunca exibe o subtotal conhecido sob o rótulo de total.
  */
-export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO }) {
+export function CostBreakdown({
+  result,
+  productId,
+  onStructurePage,
+}: {
+  result: IndustrialCostCalculationDTO;
+  /** Para a observação de energia poder levar à seção certa. */
+  productId?: string | undefined;
+  onStructurePage?: boolean | undefined;
+}) {
   const partial = result.totalIndustrialCost === null;
 
   return (
@@ -212,15 +222,14 @@ export function CostBreakdown({ result }: { result: IndustrialCostCalculationDTO
         </p>
       )}
 
-      {result.warnings.length > 0 && (
-        <ul className="candidate-list">
-          {result.warnings.map((warning) => (
-            <li key={`${warning.code}-${warning.message}`} className="field__hint">
-              {warning.message}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* A observação sem caminho é diagnóstico sem tratamento: aqui é onde
+          "sem custo conhecido" é lido, e daqui tem que dar para agir. */}
+      <CostWarnings
+        warnings={result.warnings}
+        title="Observações do cálculo"
+        productId={productId}
+        onStructurePage={onStructurePage}
+      />
     </>
   );
 }

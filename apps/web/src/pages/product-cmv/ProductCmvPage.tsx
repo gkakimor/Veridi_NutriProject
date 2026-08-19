@@ -22,6 +22,7 @@ import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
 import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
+import { CostWarnings } from "../../components/CostWarnings";
 import { getProductCmv } from "../../lib/product-cmv-api";
 import { getProductIndustrialCosts } from "../../lib/industrial-costs-api";
 import { getProductPricing } from "../../lib/pricing-api";
@@ -404,16 +405,11 @@ export function ProductCmvPage() {
                 </p>
               )}
 
-              {simulation.warnings.length > 0 && (
-                <div className="cmv-warnings" role="status">
-                  <strong>Observações do cálculo</strong>
-                  <ul>
-                    {simulation.warnings.map((warning, index) => (
-                      <li key={index}>{warning.message}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <CostWarnings
+                warnings={simulation.warnings}
+                title="Observações do cálculo"
+                productId={productId}
+              />
             </>
           )}
         </FormSection>
@@ -551,16 +547,11 @@ export function ProductCmvPage() {
               </div>
             </div>
 
-            {live.warnings.length > 0 && (
-              <div className="cmv-warnings" role="status">
-                <strong>Observações da simulação</strong>
-                <ul>
-                  {live.warnings.map((warning, index) => (
-                    <li key={index}>{warning.message}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <CostWarnings
+              warnings={live.warnings}
+              title="Observações da simulação"
+              productId={productId}
+            />
           </FormSection>
         )}
 

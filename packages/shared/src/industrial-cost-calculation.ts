@@ -89,6 +89,19 @@ export const REALIZED_COST_STATUS_LABELS: Record<RealizedCostStatus, string> = {
 export interface IndustrialCostWarningDTO {
   code: string;
   message: string;
+  /**
+   * Onde a observação se resolve. Sem isto a tela dizia o que está faltando
+   * e escondia a saída: quem lia "sem custo conhecido" tinha que descobrir
+   * sozinho, item por item, onde custo de matéria-prima nasce.
+   *
+   * `ITEM` = cadastro do item (de onde se chega a compras e recebimentos).
+   * `RESOURCE` = recurso industrial, que é onde mora a tarifa.
+   * `ENERGY` = a seção de energia da própria estrutura de custos.
+   */
+  target?: "ITEM" | "RESOURCE" | "ENERGY";
+  itemId?: string;
+  itemCode?: string;
+  resourceId?: string;
 }
 
 export interface IndustrialMaterialCostLineDTO {

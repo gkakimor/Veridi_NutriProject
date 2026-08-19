@@ -488,6 +488,41 @@ describe("Referência de custo — média ponderada e fallback", () => {
 
     await app.close();
   });
+
+  it("data de referência é o DIA inteiro: recebimento da tarde do mesmo dia conta", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const supplier = await createSupplier();
+    const item = await createItem("RAW_MATERIAL");
+
+    // Compra lançada à tarde. Uma consulta pela data dela chega como
+    // meia-noite — e comparar contra o instante jogava a própria compra
+    // para fora, devolvendo "sem custo" com o custo gravado no banco.
+    const tarde = new Date();
+    tarde.setUTCHours(20, 53, 0, 0);
+    await receiveWithCost(app, {
+      supplierId: supplier.id,
+      itemId: item.id,
+      quantity: "30",
+      unitCost: "180",
+      receivedAt: tarde,
+    });
+
+    const meiaNoite = new Date(tarde);
+    meiaNoite.setUTCHours(0, 0, 0, 0);
+    const noDia = await getCostReference(app, item.id, meiaNoite);
+    expect(noDia.unitCost).toBe("180.0000");
+    expect(noDia.source).toBe("ESTIMATED_30D");
+
+    // A véspera continua sem enxergar nada: o dia seguinte não vaza para trás.
+    const vespera = new Date(meiaNoite.getTime() - DAY_MS);
+    const antes = await getCostReference(app, item.id, vespera);
+    expect(antes.unitCost).toBeNull();
+    expect(antes.source).toBe("NO_COST");
+
+    await app.close();
+  });
 });
 
 describe("Custo estimado da formulação", () => {
