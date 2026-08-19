@@ -4577,6 +4577,42 @@ a partir de migration limpa. Walkthrough de demonstração 18/18 e fluxo CMV
 
 ---
 
+# Release Candidate — multiproduto + CMV
+
+**Mergeado em main** (`81f2ab1`, merge `--no-ff` sobre `1575d63`): projeto
+multiproduto e CMV. Histórico preservado de propósito — o merge é o ponto de
+rollback dessa evolução. Na main mergeada: `pnpm test`, `typecheck` e `build`
+verdes.
+
+**Override do Product Owner registrado.** O gate automatizado recomendava NÃO
+mergear apenas por score de UX — Navegação 7,5, Continuidade 8, Consistência
+8, contra meta 9. O PO autorizou o merge com CRITICAL = 0, HIGH = 0, 26
+tarefas de usuário final sem FAIL, 5/5 macrofluxos sem FAIL, walkthrough
+18/18 e bateria verde 5×. **Os três scores ficam registrados como dívida de
+UX pós-MVP**, não como pendência desta entrega: o que falta é profundidade de
+fluxo, descoberta e vocabulário — redesenho, não correção.
+
+**Deploy do Railway: BLOQUEADO por incidente da plataforma.** O push disparou
+o deploy e ele parou em `QUEUED`, com a própria razão dada pelo Railway:
+*"Deployment queued due to upstream GitHub issues"*. O bypass documentado
+(`railway up`, que envia o código direto ao mesmo serviço, sem webhook) foi
+aplicado duas vezes: as duas passaram do GitHub e travaram em `INITIALIZING`
+sem builder associado — uma terminou em `FAILED` sem log de build. Nada foi
+alterado no serviço, no `railway.json` ou na arquitetura.
+
+**Produção segue no ar na versão anterior** (`1575d63`), `/health` = 200,
+banco conectado. **O banco de produção NÃO foi resetado**: zerar o schema com
+o binário antigo servindo deixaria a aplicação publicada quebrada por tempo
+indeterminado, e o que impede o deploy está fora do nosso controle. O reset,
+as migrations versionadas e o `db:demo` continuam autorizados e pendentes de
+uma janela de deploy saudável.
+
+**CLIENT ACCESS READY: NO** — antes de credencial real ao cliente: rate limit
+de login, backup externo do PostgreSQL, teste de restore e credenciais
+finais.
+
+---
+
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,
