@@ -417,4 +417,55 @@ describe("Documento do cliente", () => {
     // (o separador entre "R$" e o número é espaço não-quebrável na formatação pt-BR)
     expect(texto).toContain("38,90");
   });
+
+  it("imprime o acordo inteiro: desconto, entrada, parcelas, vencimentos e total a prazo", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <QuotePrintDocument
+          quote={quote({
+            status: "SENT",
+            subtotal: "10000.00",
+            total: "9000.00",
+            discountPercent: "10.0000",
+            paymentMethod: "INSTALLMENTS",
+            lines: [line({ unitPrice: "10.0000", total: "10000.0000" })],
+            paymentSchedule: {
+              subtotal: "10000.00",
+              discountPercent: "10.0000",
+              discountAmount: "1000.00",
+              total: "9000.00",
+              method: "INSTALLMENTS",
+              downPaymentPercent: "20.0000",
+              downPayment: "1800.00",
+              financedAmount: "7200.00",
+              monthlyInterestPercent: "2.0000",
+              installmentIntervalDays: 30,
+              installments: [
+                { number: 1, amount: "2496.63", dueInDays: 30 },
+                { number: 2, amount: "2496.63", dueInDays: 60 },
+                { number: 3, amount: "2496.63", dueInDays: 90 },
+              ],
+              totalPayable: "9289.89",
+              interestAmount: "289.89",
+            },
+          } as Partial<QuoteVersionDTO>)}
+        />
+      </MemoryRouter>,
+    );
+
+    const texto = container.textContent ?? "";
+    // Dizer "3×" sem dizer de quanto obriga o cliente a refazer a conta.
+    expect(texto).toContain("1.800,00");
+    expect(texto).toContain("2.496,63");
+    expect(texto).toContain("9.289,89");
+    expect(texto).toContain("30 dias");
+    expect(texto).toContain("90 dias");
+    expect(texto).toContain("Desconto (10%)");
+    expect(texto).toContain("2%");
+
+    // O plano completo aparece sem trazer economics interno junto.
+    for (const proibido of ["CMV", "custo", "margem", "markup", "PREC-", "CALC-", "EC-"]) {
+      expect(texto).not.toContain(proibido);
+    }
+  });
 });
