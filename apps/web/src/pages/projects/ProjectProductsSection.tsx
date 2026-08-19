@@ -107,7 +107,9 @@ export function ProjectProductsSection({
                 <th>Situação técnica</th>
                 <th>Situação no projeto</th>
                 <th>Última amostra</th>
-                <th aria-label="Ações" />
+                {/* A coluna tem nome: são os quatro destinos do produto, na
+                    ordem em que a cadeia é percorrida. */}
+                <th className="is-actions-head">Cadeia técnica</th>
               </tr>
             </thead>
             <tbody>
@@ -139,7 +141,7 @@ export function ProjectProductsSection({
                       largura — com a coluna de ação fixa e o corpo do documento
                       mais largo, esconder metade do caminho passou a ser
                       escolha ruim, não restrição. */}
-                  <td className="table__actions">
+                  <td className="table__actions table__actions--centered">
                     <Link
                       className="btn btn--ghost btn--sm"
                       to={`/producao/formulacoes/${link.productId}`}

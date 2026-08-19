@@ -331,6 +331,23 @@
 }
 
 /*
+ * Coluna de ação que é um CAMINHO, não um canto.
+ *
+ * Quando a célula guarda os destinos do registro — a cadeia técnica de um
+ * produto, por exemplo —, encostar tudo à direita deixa um vão largo entre o
+ * dado e a ação, e o olho perde a ligação entre a linha e o que fazer com
+ * ela. Centralizado, o grupo pertence visualmente à coluna que o cabeçalho
+ * nomeia.
+ */
+.table__actions--centered {
+  justify-content: center;
+}
+
+.table th.is-actions-head {
+  text-align: center;
+}
+
+/*
  * Estado vazio existe para orientar quem não encontrou nada. Numa tabela
  * larga ele herdava a largura das colunas do cabeçalho e a orientação
  * terminava fora da tela, legível só depois de arrastar a tabela — o oposto
