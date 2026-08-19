@@ -589,6 +589,9 @@
   font-size: 12.5px;
   color: var(--ink-3);
   margin-bottom: var(--sp-4);
+  /* Texto explicativo não acompanha a largura da tabela: linha de 1300px é
+     ilegível, e é justamente o texto que ensina a usar a tela. */
+  max-width: 90ch;
 }
 
 .field-grid-2 {
@@ -838,8 +841,20 @@
   letter-spacing: -0.01em;
 }
 
+/*
+ * Largura do corpo do documento.
+ *
+ * O teto existia em 1040px para não esticar linha de texto — leitura longa
+ * cansa. Só que documento operacional é feito de TABELA densa, e em monitor
+ * de 1920 sobravam quase 900px de tela vazia enquanto a tabela de produtos
+ * do projeto rolava dentro de 990px.
+ *
+ * O teto sobe e a proteção muda de lugar: quem fica limitado é o texto
+ * corrido (`form-section__sub`, `field__hint`), não a tabela. Em telas
+ * menores `100%` continua mandando, então nada muda lá.
+ */
 .doc-body {
-  max-width: 1040px;
+  max-width: min(1320px, 100%);
   display: grid;
   /* Grid sem trilha declarada resolve em `max-content`: a seção mais larga
      estica o container, o `.table-container` infla junto e o scroll dele
@@ -849,7 +864,7 @@
 }
 
 .doc-actions {
-  max-width: 1040px;
+  max-width: min(1320px, 100%);
   display: flex;
   align-items: center;
   justify-content: space-between;
