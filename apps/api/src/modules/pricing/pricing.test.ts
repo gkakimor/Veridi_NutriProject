@@ -357,6 +357,47 @@ function tierOf(pricing: { tiers: TierResponse[] }, quantity: string): TierRespo
   ) as TierResponse;
 }
 
+describe("Prever o que muda ao refazer sobre o custo atual", () => {
+  it("lista só o que difere, o custo de cada faixa nas duas bases, e não toca na versão", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+
+    const versao = await prisma.pricingVersion.findFirst({
+      include: { tiers: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!versao) {
+      await app.close();
+      return;
+    }
+
+    const antes = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: versao.id } });
+    const previa = (
+      await app.inject({ method: "GET", url: `/pricing-versions/${versao.id}/rebase-preview` })
+    ).json();
+
+    // Prever é leitura: nenhuma versão nasce e a atual não se move.
+    const depois = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: versao.id } });
+    expect(depois.industrialCostCalculationId).toBe(antes.industrialCostCalculationId);
+    expect(depois.status).toBe(antes.status);
+
+    if (previa.targetCalculationId) {
+      // Só entra na lista o que REALMENTE difere — repetir o que ficou igual
+      // esconderia a diferença que importa no meio do ruído.
+      for (const change of previa.changes) {
+        expect(change.from).not.toBe(change.to);
+      }
+      expect(previa.tiers).toHaveLength(versao.tiers.length);
+    } else {
+      // Já está na base mais recente: não há o que prever.
+      expect(previa.changes).toEqual([]);
+    }
+
+    await app.close();
+  });
+});
+
 describe("Precificação — versão e proveniência", () => {
   it("nasce de um cálculo salvo e herda a data de referência de custo", async () => {
     const app = buildTestApp("ADMIN");

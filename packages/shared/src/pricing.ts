@@ -47,6 +47,44 @@ export const COMMISSION_BASE_DESCRIPTION = "Comissão calculada sobre o preço b
 export const CONTRIBUTION_DEFINITION =
   "Contribuição = preço − comissão − custo industrial. Não é lucro líquido: impostos, despesas financeiras e frete comercial não estão modelados.";
 
+/**
+ * O que muda ao refazer uma precificação sobre o custo vigente.
+ *
+ * A tela dizia "crie uma nova versão a partir do cálculo vigente" e mandava
+ * para outras duas telas, sem dizer o que a troca faria com os números. Quem
+ * decide precisa ver a diferença ANTES: uma base nova pode mexer só na data
+ * ou pode dobrar o custo por unidade.
+ *
+ * Nada aqui altera a versão atual — preço acordado não se reescreve.
+ */
+export interface PricingRebaseChangeDTO {
+  label: string;
+  from: string;
+  to: string;
+}
+
+export interface PricingRebaseTierDTO {
+  quantity: string;
+  uomCode: string;
+  /** Custo por unidade na base ATUAL da versão; `null` quando desconhecido. */
+  costPerUnitFrom: string | null;
+  /** Custo por unidade na base NOVA. */
+  costPerUnitTo: string | null;
+  /** Preço acordado da faixa — carregado como está, para comparar. */
+  unitPrice: string | null;
+}
+
+export interface PricingRebasePreviewDTO {
+  pricingVersionId: string;
+  pricingVersionLabel: string;
+  /** `null` quando não existe cálculo mais recente que o atual. */
+  targetCalculationId: string | null;
+  targetCalculationCode: string | null;
+  /** Diferenças documento a documento — vazio quando nada mudaria. */
+  changes: PricingRebaseChangeDTO[];
+  tiers: PricingRebaseTierDTO[];
+}
+
 export interface PricingTierDTO {
   id: string;
   quantity: string;

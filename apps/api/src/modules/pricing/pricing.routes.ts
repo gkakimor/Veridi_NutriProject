@@ -32,6 +32,7 @@ import {
   createPricingVersion,
   deletePricingTier,
   getActivePricingForProduct,
+  getPricingRebasePreview,
   getPricingVersion,
   getProductPricing,
   listPricingVersions,
@@ -123,6 +124,18 @@ export const pricingRoutes: FastifyPluginAsync = async (app) => {
     try {
       requireRole(request, ...READ_ROLES);
       return reply.send(await getPricingVersion(id));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.get("/pricing-versions/:id/rebase-preview", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, "COMMERCIAL", "ADMIN");
+      return reply.send(await getPricingRebasePreview(id));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { EntityLink } from "../../components/EntityLink";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
-import type { PriceMode, PricingVersionDTO } from "@veridi/shared";
+import type { PriceMode, PricingRebasePreviewDTO, PricingVersionDTO } from "@veridi/shared";
 import {
   COMMISSION_BASE_DESCRIPTION,
   CONTRIBUTION_DEFINITION,
@@ -21,7 +21,9 @@ import { formatBRL } from "../../lib/currency";
 import {
   activatePricingVersion,
   createPricingTier,
+  createPricingVersion,
   deletePricingTier,
+  getPricingRebasePreview,
   getPricingVersion,
 } from "../../lib/pricing-api";
 import { formatDate } from "../../lib/dates";
@@ -41,6 +43,11 @@ function statusBadgeClass(status: string): string {
  * custo unitário muda entre faixas. Nada é calculado no navegador — a tela
  * envia os inputs e desenha o que o backend responde.
  */
+/** Data no diff sai como data; o resto sai como veio. */
+function formatarMudanca(label: string, valor: string): string {
+  return label.toLowerCase().includes("data") ? formatDate(valor) : valor;
+}
+
 export function PricingPage() {
   const { pricingId } = useParams<{ pricingId: string }>();
   const navigate = useNavigate();
@@ -50,6 +57,8 @@ export function PricingPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [activateConfirm, setActivateConfirm] = useState(false);
+  const [rebase, setRebase] = useState<PricingRebasePreviewDTO | null>(null);
+  const [verRebase, setVerRebase] = useState(false);
 
   const [quantity, setQuantity] = useState("");
   const [priceMode, setPriceMode] = useState<PriceMode>("TARGET_MARGIN");
@@ -66,6 +75,11 @@ export function PricingPage() {
       .catch((err: unknown) =>
         setError(err instanceof Error ? err.message : "Falha ao carregar a precificação"),
       );
+    // Leitura à parte: saber se existe custo mais novo não pode impedir a
+    // tela de abrir, e quem não pode ver economia interna nem recebe.
+    getPricingRebasePreview(pricingId)
+      .then(setRebase)
+      .catch(() => setRebase(null));
   }, [pricingId]);
 
   useEffect(() => {
@@ -166,6 +180,22 @@ export function PricingPage() {
             <dd>{pricing.minimumBatchQuantity ?? "—"}</dd>
           </dl>
 
+          {/* Refazer sobre o custo vigente era instrução para outras duas
+              telas, sem dizer o que a troca faria com os números. A decisão
+              precisa do diff antes: uma base nova pode mexer só na data ou
+              pode dobrar o custo por unidade. */}
+          {rebase && rebase.targetCalculationId && (
+            <div className="line-actions">
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                onClick={() => setVerRebase(true)}
+              >
+                Ver o que muda com o custo atual ({rebase.targetCalculationCode})
+              </button>
+            </div>
+          )}
+
           {/* Preço fechado sobre custo incompleto continua sendo preço válido —
               foi acordado assim. O que não pode é a tela deixar isso implícito
               e depois o CMV do mesmo produto aparecer "Completo" ao lado, sem
@@ -176,7 +206,8 @@ export function PricingPage() {
               {INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality].toLowerCase()} — por isso margem
               e markup aparecem como "—" nas faixas. Um cálculo de custo mais completo do mesmo
               produto não muda esta versão: preço acordado não se reescreve. Para precificar sobre
-              a base atual, crie uma nova versão a partir do cálculo vigente em{" "}
+              a base atual, crie uma nova versão — o botão acima mostra o que muda antes de
+              decidir, ou abra{" "}
               <Link to={`/produtos/${pricing.productId}/custos`}>
                 Custos industriais → Cálculos salvos
               </Link>
@@ -422,6 +453,68 @@ export function PricingPage() {
           </p>
         </FormSection>
       </div>
+
+      {/* O diff antes da decisão. Confirmar cria uma versão NOVA em rascunho —
+          a atual não é tocada, porque preço acordado não se reescreve. */}
+      <ConfirmDialog
+        open={verRebase && rebase !== null}
+        title="Refazer a precificação sobre o custo atual?"
+        confirmLabel="Criar nova versão"
+        cancelLabel="Voltar"
+        confirmTone="accent"
+        message={
+          <>
+            <p>
+              Nasce uma versão nova em rascunho, com as faixas copiadas desta.{" "}
+              <strong>{pricing.code} continua como está</strong> — preço acordado não se
+              reescreve.
+            </p>
+            {rebase && rebase.changes.length > 0 && (
+              <>
+                <p>
+                  <strong>O que muda na base:</strong>
+                </p>
+                <ul className="confirm-dialog__list">
+                  {rebase.changes.map((change) => (
+                    <li key={change.label}>
+                      {change.label}: {formatarMudanca(change.label, change.from)} →{" "}
+                      {formatarMudanca(change.label, change.to)}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {rebase && rebase.tiers.length > 0 && (
+              <>
+                <p>
+                  <strong>Custo por unidade em cada faixa:</strong>
+                </p>
+                <ul className="confirm-dialog__list">
+                  {rebase.tiers.map((tier) => (
+                    <li key={tier.quantity}>
+                      {tier.quantity} {tier.uomCode}:{" "}
+                      {tier.costPerUnitFrom ? formatUnitCost(tier.costPerUnitFrom) : "—"} →{" "}
+                      {tier.costPerUnitTo ? formatUnitCost(tier.costPerUnitTo) : "—"}
+                      {tier.unitPrice ? ` (preço acordado ${formatBRL(tier.unitPrice)})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        }
+        onCancel={() => setVerRebase(false)}
+        onConfirm={() => {
+          setVerRebase(false);
+          if (!rebase?.targetCalculationId) return;
+          void run(async () => {
+            const criada = await createPricingVersion(pricing.productId, {
+              industrialCostCalculationId: rebase.targetCalculationId!,
+            });
+            navigate(`/gestao/precificacao/${criada.id}`);
+          });
+        }}
+      />
 
       <ConfirmDialog
         open={activateConfirm}
