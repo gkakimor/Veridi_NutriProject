@@ -452,6 +452,28 @@ export function IndustrialCostPage() {
                     >
                       Salvar base
                     </button>
+                    {/* Rascunho não congelou nada: apontar para a receita
+                        ativa é seguro e resolve, num clique, o aviso que até
+                        aqui só constatava a defasagem. Não vale para versão
+                        ativa — lá a receita é o que o custo já significa. */}
+                    {formulacaoDefasada && data.activeFormulationVersionId && (
+                      <button
+                        type="button"
+                        className="btn btn--secondary btn--sm"
+                        disabled={saving}
+                        title="Substitui a receita deste rascunho pela da formulação ativa. As premissas e recursos informados aqui não são apagados."
+                        onClick={() =>
+                          void run(() =>
+                            updateIndustrialCostVersion(version.id, {
+                              formulationVersionId: data.activeFormulationVersionId!,
+                            }),
+                          )
+                        }
+                      >
+                        Trazer para a formulação ativa V
+                        {data.activeFormulationVersionNumber}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn--accent btn--sm"

@@ -367,7 +367,16 @@ describe("Estrutura de custos — formulação vinculada", () => {
     await activateFormulation(app, formulationVersionId);
 
     const cost = (await createCostVersion(app, product.id, { referenceOutputQuantity: "1000" })).json();
-    await app.inject({ method: "POST", url: `/industrial-costs/${cost.id}/activate`, payload: {} });
+    // Sem `confirmIncomplete` a ativação era RECUSADA e o retorno descartado:
+    // a estrutura seguia rascunho, e o teste que diz "continua na formulação
+    // congelada" nunca chegava a exercitar uma versão ativa.
+    const ativacao = await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${cost.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
+    expect(ativacao.statusCode, ativacao.body).toBe(200);
+    expect(ativacao.json().status).toBe("ACTIVE");
 
     // Nova formulação ativa do produto (nova versão a partir da ativa).
     const next = (
@@ -403,6 +412,34 @@ describe("Estrutura de custos — formulação vinculada", () => {
 
     const stored = await prisma.industrialCostVersion.findUniqueOrThrow({ where: { id: cost.id } });
     expect(stored.formulationVersionId).toBe(formulationVersionId);
+
+    // Estrutura ATIVA não se move: a receita dela é o que o custo já
+    // significa, e um cálculo salvo aponta para ela.
+    const naAtiva = await app.inject({
+      method: "PATCH",
+      url: `/industrial-costs/${cost.id}`,
+      payload: { formulationVersionId: next.id },
+    });
+    expect(naAtiva.statusCode).toBe(409);
+    expect(naAtiva.json().error).toBe("version_locked");
+
+    // O rascunho, sim: ele não congelou nada, e trazer a receita nova
+    // resolve a defasagem em vez de só constatá-la.
+    const rascunho = (await createCostVersion(app, product.id)).json();
+    expect(rascunho.formulationVersionNumber).toBe(1);
+    const trazido = await app.inject({
+      method: "PATCH",
+      url: `/industrial-costs/${rascunho.id}`,
+      payload: { formulationVersionId: next.id },
+    });
+    expect(trazido.statusCode, trazido.body).toBe(200);
+    expect(trazido.json().formulationVersionNumber).toBe(2);
+    // A receita nova é lida da formulação, não copiada: o material com a
+    // quantidade da V2 é o que a estrutura passa a mostrar.
+    expect(trazido.json().materials[0].quantity).toBe("0.7");
+    expect(
+      trazido.json().pendencies.some((row: { code: string }) => row.code === "FORMULATION_OUTDATED"),
+    ).toBe(false);
 
     await app.close();
   });
