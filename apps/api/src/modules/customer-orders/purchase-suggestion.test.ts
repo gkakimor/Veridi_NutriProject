@@ -618,7 +618,7 @@ describe("Sugestão de Compra — geração de OC DRAFT", () => {
     const rawMaterial = await createRawMaterial();
     const inactiveSupplier = await createSupplier({ active: false });
     const activeSupplier = await createSupplier();
-    const { product } = await createProductWithFormulation(app, [
+    const { product, finishedItem } = await createProductWithFormulation(app, [
       { itemId: rawMaterial.id, quantity: "1", unitCode: "kg" },
     ]);
     const customer = await createCustomer();
@@ -635,11 +635,13 @@ describe("Sugestão de Compra — geração de OC DRAFT", () => {
     expect(inactiveSupplierResponse.statusCode).toBe(400);
     expect(inactiveSupplierResponse.json().error).toBe("inactive_supplier");
 
-    const finishedItemForOrder = await getPrisma().item.findFirst({ where: { type: "FINISHED_PRODUCT" } });
+    // O item acabado deste próprio cenário, não "qualquer produto acabado do
+    // banco": este banco é compartilhado com o app local, e escavar registro
+    // alheio é o começo de um teste que mexe no que não é dele.
     const invalidItemResponse = await app.inject({
       method: "POST",
       url: `/customer-orders/${order.id}/purchase-drafts`,
-      payload: { lines: [{ itemId: finishedItemForOrder!.id, supplierId: activeSupplier.id, quantity: "5" }] },
+      payload: { lines: [{ itemId: finishedItem.id, supplierId: activeSupplier.id, quantity: "5" }] },
     });
     expect(invalidItemResponse.statusCode).toBe(400);
     expect(invalidItemResponse.json().error).toBe("invalid_item_type");
