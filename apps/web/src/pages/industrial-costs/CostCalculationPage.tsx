@@ -107,7 +107,11 @@ export function CostCalculationPage() {
           title="Detalhamento"
           subtitle="Resultado congelado: alterações posteriores em compras, tarifas ou estrutura não mudam este documento."
         >
-          <CostBreakdown result={calculation} productId={calculation.productId} />
+          <CostBreakdown
+            result={calculation}
+            productId={calculation.productId}
+            structureLocked={calculation.structureStatus !== "DRAFT"}
+          />
         </FormSection>
       </div>
     </>

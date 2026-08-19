@@ -41,11 +41,14 @@ export function CostBreakdown({
   result,
   productId,
   onStructurePage,
+  structureLocked,
 }: {
   result: IndustrialCostCalculationDTO;
   /** Para a observação de energia poder levar à seção certa. */
   productId?: string | undefined;
   onStructurePage?: boolean | undefined;
+  /** Estrutura já congelada: a correção passa a ser uma versão nova. */
+  structureLocked?: boolean | undefined;
 }) {
   const partial = result.totalIndustrialCost === null;
 
@@ -229,6 +232,7 @@ export function CostBreakdown({
         title="Observações do cálculo"
         productId={productId}
         onStructurePage={onStructurePage}
+        structureLocked={structureLocked}
       />
     </>
   );

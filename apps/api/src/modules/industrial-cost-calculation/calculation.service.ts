@@ -386,6 +386,7 @@ export async function computeResourceCosts(
           message: selected.selected
             ? `"${selected.resourceName}" não tem tarifa vigente para valorizar o consumo derivado.`
             : "Nenhum recurso de energia foi escolhido para valorizar o consumo derivado dos equipamentos.",
+          target: "ENERGY",
         });
       }
     }

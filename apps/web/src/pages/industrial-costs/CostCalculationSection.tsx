@@ -144,7 +144,12 @@ export function CostCalculationSection({
                 <span className="badge badge--warn">Referência de rascunho</span>
               )}
             </div>
-            <CostBreakdown result={result} onStructurePage />
+            <CostBreakdown
+              result={result}
+              productId={productId}
+              onStructurePage
+              structureLocked={result.structureStatus !== "DRAFT"}
+            />
           </>
         )}
 

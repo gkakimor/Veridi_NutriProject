@@ -21,16 +21,23 @@ interface Props {
   productId?: string | undefined;
   /** `true` quando o painel já está DENTRO da estrutura de custos. */
   onStructurePage?: boolean | undefined;
+  /**
+   * `true` quando a estrutura de referência não é mais editável. Muda a saída:
+   * o que se ajusta num rascunho, numa versão ativa vira versão nova.
+   */
+  structureLocked?: boolean | undefined;
 }
 
 function WarningAction({
   warning,
   productId,
   onStructurePage,
+  structureLocked,
 }: {
   warning: IndustrialCostWarningDTO;
   productId?: string | undefined;
   onStructurePage: boolean;
+  structureLocked: boolean;
 }) {
   /*
    * Custo de matéria-prima não é campo de cadastro — mandar para o item era
@@ -72,6 +79,27 @@ function WarningAction({
     );
   }
   if (warning.target === "ENERGY") {
+    /*
+     * Estrutura ativa é congelada, e a seção de energia dela é só leitura —
+     * mandar para lá era mostrar o problema ao lado de um campo que não
+     * existe. Numa versão ativa a correção acontece numa versão nova.
+     */
+    if (structureLocked) {
+      return (
+        <span>
+          Esta estrutura já está ativa e não se edita — crie uma nova versão
+          {!onStructurePage && productId ? (
+            <>
+              {" "}
+              <Link to={`/produtos/${productId}/custos`}>na estrutura de custos</Link>
+            </>
+          ) : (
+            " pelo botão “Nova versão”, no topo desta página"
+          )}
+          .
+        </span>
+      );
+    }
     if (onStructurePage) return <a href="#secao-energia">Ir para Energia</a>;
     if (productId) {
       return <Link to={`/produtos/${productId}/custos#secao-energia`}>Ajustar a energia</Link>;
@@ -80,7 +108,13 @@ function WarningAction({
   return null;
 }
 
-export function CostWarnings({ warnings, title, productId, onStructurePage = false }: Props) {
+export function CostWarnings({
+  warnings,
+  title,
+  productId,
+  onStructurePage = false,
+  structureLocked = false,
+}: Props) {
   if (warnings.length === 0) return null;
   return (
     <div className="cmv-warnings" role="status">
@@ -93,6 +127,7 @@ export function CostWarnings({ warnings, title, productId, onStructurePage = fal
               warning={warning}
               productId={productId}
               onStructurePage={onStructurePage}
+              structureLocked={structureLocked}
             />
           </li>
         ))}
