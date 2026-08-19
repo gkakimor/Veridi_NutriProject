@@ -60,7 +60,7 @@ function WarningAction({
   if (warning.target === "STALE_BASIS") {
     return (
       <span>
-        O custo já existe hoje; este cálculo é anterior a ele — salve um cálculo novo
+        Já está resolvido no estado atual; este cálculo é anterior — salve um cálculo novo
         {productId ? (
           <>
             {" "}

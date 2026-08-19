@@ -416,6 +416,8 @@ describe("CMV — matriz de composição e base econômica", () => {
     const congelado = (depois.simulation?.warnings ?? []).find(
       (w) => w.code === "MATERIAL_COST_UNKNOWN",
     );
+    // O que sobra na base congelada e sumiu da simulação de hoje já está
+    // resolvido: culpar a estrutura mandaria consertar o que já está certo.
     expect(congelado?.target).toBe("STALE_BASIS");
     // E a simulação de hoje já nem avisa: o custo existe.
     expect(

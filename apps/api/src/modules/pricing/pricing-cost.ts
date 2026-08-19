@@ -335,7 +335,7 @@ export async function costForOutputQuantity(
         ? "nenhum equipamento foi planejado"
         : !derivedComplete
           ? "há equipamento sem potência cadastrada"
-          : "a estrutura não tem tarifa de energia";
+          : "não há tarifa de energia vigente na data de referência";
       warnings.push({
         code: "ENERGY_UNKNOWN",
         message: `Energia derivada indisponível no cálculo de referência — ${causa}.`,

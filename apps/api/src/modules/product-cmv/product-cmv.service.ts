@@ -200,11 +200,30 @@ async function simulacaoComDadosDeHoje(
  * Fica no read model, e não no motor de custo: a precificação percorre os
  * mesmos materiais faixa a faixa e não deve pagar consulta por linha.
  */
+function chaveDoAviso(warning: IndustrialCostWarningDTO): string {
+  return `${warning.code}:${warning.itemId ?? warning.resourceId ?? ""}`;
+}
+
 async function comCaminhoDeSolucao(
   prisma: ReturnType<typeof getPrisma>,
   warnings: IndustrialCostWarningDTO[],
+  /**
+   * Avisos que a simulação de HOJE ainda tem. O que sobra na base congelada e
+   * não aparece aqui já foi resolvido no estado atual — o que está velho é o
+   * cálculo, não a estrutura. Sem esta comparação a tela culpava a estrutura
+   * por uma falta que ela não tem mais, e mandava consertar o que já estava
+   * certo.
+   */
+  aindaAberto?: Set<string>,
 ): Promise<IndustrialCostWarningDTO[]> {
-  const semCusto = warnings.filter((w) => w.code === "MATERIAL_COST_UNKNOWN" && w.itemId);
+  if (aindaAberto) {
+    warnings = warnings.map((warning) =>
+      aindaAberto.has(chaveDoAviso(warning)) ? warning : { ...warning, target: "STALE_BASIS" as const },
+    );
+  }
+  const semCusto = warnings.filter(
+    (w) => w.code === "MATERIAL_COST_UNKNOWN" && w.itemId && w.target !== "STALE_BASIS",
+  );
   if (semCusto.length === 0) return warnings;
 
   const itemIds = [...new Set(semCusto.map((w) => w.itemId!))];
@@ -220,6 +239,7 @@ async function comCaminhoDeSolucao(
 
   return warnings.map((warning) => {
     if (warning.code !== "MATERIAL_COST_UNKNOWN" || !warning.itemId) return warning;
+    if (warning.target === "STALE_BASIS") return warning;
     const doItem = linhas.filter((linha) => linha.itemId === warning.itemId);
     if (doItem.length === 0) {
       return { ...warning, target: "PURCHASE" as const };
@@ -371,7 +391,11 @@ export async function getProductCmv(params: {
       costPer1000: money(cost.per1000),
       knownSubtotal: cost.knownSubtotal.toFixed(4),
       quality: cost.quality,
-      warnings: await comCaminhoDeSolucao(prisma, cost.warnings),
+      warnings: await comCaminhoDeSolucao(
+        prisma,
+        cost.warnings,
+        live ? new Set(live.warnings.map(chaveDoAviso)) : undefined,
+      ),
       hasCustomerSuppliedMaterials: cost.hasCustomerSuppliedMaterials,
       components,
     },
