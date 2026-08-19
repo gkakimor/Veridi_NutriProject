@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type {
   CmvComponentDTO,
   CmvGroup,
@@ -112,6 +112,7 @@ function describeOrigin(component: CmvComponentDTO): string {
 }
 
 export function ProductCmvPage() {
+  const navigate = useNavigate();
   const { productId } = useParams<{ productId: string }>();
   const [params] = useSearchParams();
 
@@ -291,6 +292,23 @@ export function ProductCmvPage() {
           {data?.customerName && <p className="field__hint">Cliente: {data.customerName}</p>}
         </div>
         <div className="table__actions">
+          {/* Só faz sentido imprimir o que existe: sem base congelada o papel
+              sairia com um documento vazio dizendo ser um CMV. */}
+          {data?.calculationId && (
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() =>
+                navigate(
+                  `/print/cmv/${productId}?quantity=${encodeURIComponent(
+                    quantity.trim(),
+                  )}&referenceDate=${referenceDate}`,
+                )
+              }
+            >
+              Imprimir / Salvar PDF
+            </button>
+          )}
           {/* Voltar ao orçamento tem prioridade: é de lá que a pessoa veio. */}
           {projectId && quoteVersionId ? (
             <Link

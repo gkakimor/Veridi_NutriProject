@@ -16,8 +16,16 @@
  */
 
 /** `true` quando o valor é meia-noite UTC, isto é, data sem hora. */
+/**
+ * Data sem hora — em ISO completo (`...T00:00:00Z`) ou na forma curta que os
+ * campos `<input type="date">` e as URLs carregam (`2026-08-19`).
+ *
+ * A forma curta ficava de fora e era lida como meia-noite UTC: no fuso de
+ * Brasília o documento aparecia com o dia ANTERIOR ao que estava escrito no
+ * próprio endereço.
+ */
 function isDateOnly(value: string): boolean {
-  return /T00:00:00(\.000)?Z$/.test(value);
+  return /T00:00:00(\.000)?Z$/.test(value) || /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 /** Data de documento: sempre o dia gravado, independente do fuso do leitor. */
