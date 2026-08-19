@@ -355,7 +355,7 @@ export function CostTemplateDetailPage() {
                       .filter((recurso) => recurso.type === "ENERGY")
                       .map((recurso) => (
                         <option key={recurso.id} value={recurso.id}>
-                          {recurso.name}
+                          {recurso.code} — {recurso.name}
                         </option>
                       ))}
                   </select>
