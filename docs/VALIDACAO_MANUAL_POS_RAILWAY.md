@@ -3,7 +3,7 @@
 Registro do que o Product Owner pediu clicando no sistema local, o que foi
 aplicado e o que virou backlog.
 
-- **Branch:** `validacao/ajustes-ux` (9 commits)
+- **Branch:** `validacao/ajustes-ux` (13 commits)
 - **`main`:** intocada em `4b8f714` — nada publicado, nenhum deploy disparado
 - **Ambiente:** local (`127.0.0.1:3333` API / `127.0.0.1:5173` web)
 - **Período:** a partir da interrupção do deploy Railway (incidente de
@@ -212,58 +212,100 @@ remoção de ingrediente incluída.
 
 ---
 
-## Backlog — decidido, não construído
+## 11. Avisar o impacto de alterar uma formulação
 
-Ordem definida pelo PO: **C → B → A**.
+**Pedido:** "quando eu alterar uma formulação, todas as cadeias que a utilizam
+deveriam ser atualizadas automaticamente... Também seria bom guardar o
+histórico, caso eu decida voltar para uma formulação antiga... A ideia principal
+é notificar o usuário de que as cadeias serão alteradas."
 
-### C. Criar nova versão a partir de qualquer versão do histórico
+**Decisão de produto:** propagação automática para estruturas **ATIVAS** foi
+recusada. Uma estrutura ativa é referenciada por cálculo salvo, precificação e
+OP liberada; se mudasse sozinha, o custo de uma OP já liberada mudaria depois do
+fato. Congelar é o que torna o CMV reproduzível. Rascunho é outra história — ali
+seguir a receita nova é legítimo.
 
-**Prioridade 1 — é o único que corrige defeito, não que adiciona conforto.**
+Ordem de execução definida pelo PO: **C → B → A**, com a justificativa de que C
+corrige defeito, B transforma aviso em ação, e A é o mais caro e o único que
+gasta atenção — melhor construído depois de B e C, para cada link do diálogo
+levar a algo que resolve em um clique.
 
-[formulations.service.ts:304](../apps/api/src/modules/formulations/formulations.service.ts#L304)
-só deixa forkar da ATIVA:
+**Ressalva registrada e aceita:** cada aviso novo custa atenção. Se toda ação
+abrir diálogo, o usuário passa a clicar "Confirmar" sem ler, e o aviso que
+importa se perde junto.
 
-```ts
-if (source.status !== "ACTIVE") throw new VersionNotActiveError();
+### 11.C — Voltar para uma formulação antiga · APLICADO (`6d99f43`)
+
+O histórico era decorativo: [formulations.service.ts](../apps/api/src/modules/formulations/formulations.service.ts)
+só deixava criar versão a partir da ATIVA, então voltar para a receita da V1
+significava redigitar os componentes à mão.
+
+A volta acontece **para frente**: a V1 não é reativada, uma V3 nasce idêntica a
+ela. Reativar reescreveria o significado de uma versão que já serviu de base
+para custo e produção.
+
+| verificação pedida pelo PO | como ficou |
+|---|---|
+| validar o clone | `componentIssues` no rascunho, pelas MESMAS regras da ativação: item inativado, item que virou produto acabado, unidade incompatível, quantidade inválida |
+| rotular a origem | coluna "Origem" no histórico — "Criada a partir da V1", com `sourceVersionId` + `sourceVersionNumber` (migration `20260917090000_formulation_version_source`) |
+
+A cópia é **fiel** mesmo quando o cadastro mudou: alterar uma receita em
+silêncio para caber nas regras de hoje seria inventar fórmula. O que muda é
+*quando* o problema aparece — no rascunho, não no clique final.
+
+Regra adicionada: **rascunho não serve de molde** (`400
+version_is_draft_source`). Duplicá-lo deixaria dois documentos abertos dizendo a
+mesma coisa.
+
+Verificado por clique no `PROD-004817`: V3 criada a partir da V1, com os dois
+materiais da V1; V2 seguiu ativa; painel de problemas apareceu ao inativar
+`MP-000003` de verdade (e o item foi restaurado).
+
+### 11.B — Trazer rascunho para a formulação ativa · APLICADO (`0942698`)
+
+A pendência `FORMULATION_OUTDATED` constatava a defasagem e parava aí. A API já
+aceitava `formulationVersionId` no PATCH; nada na tela mandava um.
+
+Botão no rascunho: **"Trazer para a formulação ativa V2"**. Estrutura ativa
+continua recusando (`409 version_locked`).
+
+Verificado por clique: rascunho `EC-001253` na V1 → depois do clique, os
+materiais viraram os da V2 (`MP-000001` sumiu), botão e aviso sumiram.
+
+**Defeito de teste corrigido junto:** o teste "continua na formulação congelada
+quando outra versão vira ativa" ativava a estrutura sem `confirmIncomplete` e
+descartava o retorno — a ativação era recusada em silêncio e o teste rodava
+contra um rascunho, nunca contra uma versão ativa.
+
+### 11.A — Diálogo de impacto ao ativar · APLICADO (`43fdb5a`)
+
+`GET /formulation-versions/:id/activation-impact` — leitura pura, nada se move
+por perguntar (tem asserção provando).
+
+Reaproveita a confirmação que já existia, em vez de somar uma segunda, e fica
+**calado quando não há nada a dizer**. Estruturas ATIVAS são listadas para
+serem lidas, não consertadas; rascunhos e OPs em rascunho são listados porque
+agora têm saída.
+
+Ordens **planejadas** ficam de fora de propósito: já congelaram requisitos, e
+trocar a formulação ativa não as alcança — listá-las seria alarme sem
+consequência.
+
+Verificado por clique (cancelando ao fim, sem ativar):
+
+```
+Ativar formulação V3?
+...
+Continuam na receita atual:
+ EC-001003 · V1 — usa a V1. Estrutura ativa não se move: a receita dela
+                  é o que o custo já significa.
+ EC-001253 · V2 — usa a V2. Rascunho: dá para trazer para a nova receita
+                  em um clique, depois de ativar.
 ```
 
-Hoje não dá para voltar para a V1 — o histórico é guardado e não pode ser usado.
-Guardar a história sem caminho de volta é meia história.
-
-Verificações exigidas pelo PO:
-
-1. Validar o clone: componente pode ter sido desativado ou removido desde então.
-   Mostrar o que não veio, em vez de criar uma V3 quebrada.
-2. Rotular a origem no histórico ("V3 — criada a partir da V1"). Sem isso, daqui
-   a seis meses o salto de custo entre V2 e V3 fica sem explicação.
-
-### B. Trazer rascunho de estrutura para a formulação ativa
-
-**Prioridade 2 — transforma um aviso existente em ação.**
-
-A pendência `FORMULATION_OUTDATED` já avisa que o rascunho ficou defasado, mas
-não oferece saída. Rascunho não congelou nada, então repor a receita é seguro.
-
-### A. Diálogo de impacto ao ativar formulação
-
-**Prioridade 3 — e menor do que a proposta original.**
-
-Antes de ativar a V2, listar o que fica defasado com link em cada um:
-estruturas de custo ATIVAS (não mudam, e o diálogo diz isso), rascunhos de
-estrutura, ordens de produção em rascunho apontando para a versão antiga.
-
-**Pendência aberta:** ordens de produção em rascunho aparecem na lista de A, mas
-nem B nem C as consertam. Ou ganham o mesmo botão de B, ou o diálogo lista um
-item sem caminho de saída.
-
-**Decisão de produto registrada:** propagação automática para estruturas ATIVAS
-foi **recusada**. Uma estrutura ativa é referenciada por cálculo salvo,
-precificação e OP liberada; se mudasse sozinha, o custo de uma OP já liberada
-mudaria depois do fato. Congelar é o que torna o CMV reproduzível.
-
-**Ressalva sobre fadiga de diálogo** (aceita pelo PO): cada aviso novo custa
-atenção. Se toda ação abrir diálogo, o usuário passa a clicar "Confirmar" sem
-ler. Poucos diálogos, nos pontos onde a ação muda o que outra tela vai mostrar.
+**Pendência aberta:** ordens de produção em rascunho aparecem no diálogo e
+ganham link, mas não têm o botão de um clique que a estrutura tem — a troca de
+versão é feita na própria OP. Levantado pelo PO; não construído.
 
 ---
 
@@ -302,7 +344,7 @@ publicado durante um incidente fora do nosso controle.
 | | |
 |---|---|
 | Testes web | 90 passando |
-| Testes API (CMV + custos industriais) | 35 passando |
+| Testes API (formulações + custos + CMV + OPs) | 164 passando |
 | Typecheck | limpo em `apps/api` e `apps/web` |
 | Validação de tela | Playwright headless, clique real, em cada item |
 
