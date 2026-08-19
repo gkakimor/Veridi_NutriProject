@@ -423,22 +423,35 @@ describe("Estrutura de custos — formulação vinculada", () => {
     expect(naAtiva.statusCode).toBe(409);
     expect(naAtiva.json().error).toBe("version_locked");
 
-    // O rascunho, sim: ele não congelou nada, e trazer a receita nova
-    // resolve a defasagem em vez de só constatá-la.
+    // O rascunho, sim: ele não congelou nada. Criado DEPOIS da V2 ativar, ele
+    // já nasce nela — enquanto o produto está sendo definido, seguir a receita
+    // ativa é o padrão, não um clique.
     const rascunho = (await createCostVersion(app, product.id)).json();
-    expect(rascunho.formulationVersionNumber).toBe(1);
-    const trazido = await app.inject({
+    expect(rascunho.formulationVersionNumber).toBe(2);
+    expect(rascunho.formulationPinned).toBe(false);
+    // A receita é LIDA da formulação, não copiada: a quantidade da V2 é o que
+    // a estrutura mostra.
+    expect(rascunho.materials[0].quantity).toBe("0.7");
+
+    // Escolher explicitamente a V1 é decisão, e para de seguir.
+    const preso = await app.inject({
+      method: "PATCH",
+      url: `/industrial-costs/${rascunho.id}`,
+      payload: { formulationVersionId: formulationVersionId },
+    });
+    expect(preso.statusCode, preso.body).toBe(200);
+    expect(preso.json().formulationVersionNumber).toBe(1);
+    expect(preso.json().formulationPinned).toBe(true);
+
+    // Voltar para a ativa desfixa: o rascunho volta a acompanhar.
+    const solto = await app.inject({
       method: "PATCH",
       url: `/industrial-costs/${rascunho.id}`,
       payload: { formulationVersionId: next.id },
     });
-    expect(trazido.statusCode, trazido.body).toBe(200);
-    expect(trazido.json().formulationVersionNumber).toBe(2);
-    // A receita nova é lida da formulação, não copiada: o material com a
-    // quantidade da V2 é o que a estrutura passa a mostrar.
-    expect(trazido.json().materials[0].quantity).toBe("0.7");
+    expect(solto.json().formulationPinned).toBe(false);
     expect(
-      trazido.json().pendencies.some((row: { code: string }) => row.code === "FORMULATION_OUTDATED"),
+      solto.json().pendencies.some((row: { code: string }) => row.code === "FORMULATION_OUTDATED"),
     ).toBe(false);
 
     await app.close();

@@ -889,6 +889,16 @@ model IndustrialCostVersion {
   /// Receita exata desta estrutura. DRAFT pode apontar para formulacao
   /// DRAFT (trabalho de engenharia), mas ativar exige formulacao estavel.
   formulationVersionId String
+
+  /// Rascunho SEGUE a formulacao ativa do produto por padrao: enquanto o
+  /// produto esta sendo definido nao ha compromisso a proteger, e a lista de
+  /// materiais e reflexo puro da formulacao (nao existe override por material,
+  /// entao nada digitado se perde ao reapontar).
+  ///
+  /// `true` so quando o usuario escolheu EXPLICITAMENTE outra versao — ai
+  /// seguir sozinho sobrescreveria uma decisao dele. Versao ATIVA nunca e
+  /// tocada, fixada ou nao.
+  formulationPinned Boolean @default(false)
   formulationVersion   FormulationVersion @relation(fields: [formulationVersionId], references: [id])
 
   /// Base de producao usada para estruturar o custo (ex.: 1000 un). Nunca

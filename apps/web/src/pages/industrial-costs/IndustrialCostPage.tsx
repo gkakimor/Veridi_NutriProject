@@ -94,13 +94,7 @@ export function IndustrialCostPage() {
 
   const [activateConfirm, setActivateConfirm] = useState(false);
   const [newVersionConfirm, setNewVersionConfirm] = useState(false);
-  /*
-   * Criar versão COPIA a formulação da versão de origem — é o padrão certo
-   * para revisar tarifas sem trocar a receita. Mas quando a receita ativa já
-   * mudou, repetir a antiga em silêncio deixava o usuário sem nenhum caminho
-   * para o custo passar a falar da nova. A escolha passa a ser explícita.
-   */
-  const [adotarFormulacaoAtiva, setAdotarFormulacaoAtiva] = useState(true);
+
   /*
    * Qual versão está sendo lida.
    *
@@ -452,16 +446,16 @@ export function IndustrialCostPage() {
                     >
                       Salvar base
                     </button>
-                    {/* Rascunho não congelou nada: apontar para a receita
-                        ativa é seguro e resolve, num clique, o aviso que até
-                        aqui só constatava a defasagem. Não vale para versão
-                        ativa — lá a receita é o que o custo já significa. */}
-                    {formulacaoDefasada && data.activeFormulationVersionId && (
+                    {/* Rascunho SEGUE a receita ativa por padrão. Só fica para
+                        trás quando o usuário escolheu outra versão de
+                        propósito — e aí o caminho de volta precisa existir,
+                        senão a fixação vira armadilha. */}
+                    {version.formulationPinned && data.activeFormulationVersionId && (
                       <button
                         type="button"
                         className="btn btn--secondary btn--sm"
                         disabled={saving}
-                        title="Substitui a receita deste rascunho pela da formulação ativa. As premissas e recursos informados aqui não são apagados."
+                        title="Volta a acompanhar a formulação ativa do produto. As premissas e recursos informados aqui não são apagados."
                         onClick={() =>
                           void run(() =>
                             updateIndustrialCostVersion(version.id, {
@@ -470,7 +464,7 @@ export function IndustrialCostPage() {
                           )
                         }
                       >
-                        Trazer para a formulação ativa V
+                        Voltar a seguir a formulação ativa V
                         {data.activeFormulationVersionNumber}
                       </button>
                     )}
@@ -994,25 +988,11 @@ export function IndustrialCostPage() {
                 versões.
               </p>
               {formulacaoDefasada && (
-                <>
-                  <p>
-                    Esta estrutura usa a formulação <strong>V{version.formulationVersionNumber}</strong>;
-                    a ativa do produto é{" "}
-                    <strong>V{data.activeFormulationVersionNumber}</strong>.
-                  </p>
-                  <label className="confirm-dialog__choice">
-                    <input
-                      type="checkbox"
-                      checked={adotarFormulacaoAtiva}
-                      onChange={(event) => setAdotarFormulacaoAtiva(event.target.checked)}
-                    />
-                    <span>
-                      Criar a nova versão sobre a formulação ativa V
-                      {data.activeFormulationVersionNumber}. Desmarque para continuar na V
-                      {version.formulationVersionNumber}.
-                    </span>
-                  </label>
-                </>
+                <p>
+                  A nova versão nasce sobre a formulação ativa{" "}
+                  <strong>V{data.activeFormulationVersionNumber}</strong> — esta usa a{" "}
+                  <strong>V{version.formulationVersionNumber}</strong>.
+                </p>
               )}
             </>
           }
@@ -1021,16 +1001,12 @@ export function IndustrialCostPage() {
             setNewVersionConfirm(false);
             setLendoAtiva(false);
             void run(() =>
-              createIndustrialCostVersion(productId, {
-                ...(referenceQuantity.trim()
+              createIndustrialCostVersion(
+                productId,
+                referenceQuantity.trim()
                   ? { referenceOutputQuantity: referenceQuantity.trim() }
-                  : {}),
-                ...(formulacaoDefasada &&
-                adotarFormulacaoAtiva &&
-                data.activeFormulationVersionId
-                  ? { formulationVersionId: data.activeFormulationVersionId }
-                  : {}),
-              }),
+                  : {},
+              ),
             );
           }}
         />

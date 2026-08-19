@@ -680,6 +680,23 @@ export async function activateFormulationVersion(id: string): Promise<Formulatio
       where: { id },
       data: { status: "ACTIVE", activatedAt: new Date(), activatedBy: SYSTEM_ACTOR },
     });
+
+    /*
+     * Rascunho de estrutura de custos acompanha, na mesma transação.
+     *
+     * Congelar a receita protege COMPROMISSO — orçamento enviado, OP
+     * liberada. Um rascunho não tem nenhum: deixá-lo para trás só obrigava a
+     * refazer à mão o que o sistema sabia. Nada digitado se perde: a lista de
+     * materiais é reflexo da formulação, e premissas, recursos e base de
+     * produção não vêm dela.
+     *
+     * Versão ATIVA nunca entra aqui, e rascunho FIXADO também não: escolher
+     * explicitamente outra receita é decisão, não defasagem.
+     */
+    await tx.industrialCostVersion.updateMany({
+      where: { productId: version.productId, status: "DRAFT", formulationPinned: false },
+      data: { formulationVersionId: id },
+    });
   });
 
   return (await getFormulationVersionById(id))!;

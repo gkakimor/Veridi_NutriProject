@@ -125,6 +125,7 @@ export function ProductCmvPage() {
   const [tier, setTier] = useState<PricingTierDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detalhe, setDetalhe] = useState<"frozen" | "live">("frozen");
   /*
    * A estrutura só é buscada para EXPLICAR uma resposta vazia. Nenhum número
    * desta tela vem daqui — o CMV continua saindo inteiro de um endpoint só.
@@ -202,9 +203,18 @@ export function ProductCmvPage() {
 
   const simulation = data?.simulation ?? null;
   const componentsByGroup = (group: CmvGroup): CmvComponentDTO[] =>
-    (simulation?.components ?? []).filter((component) => component.group === group);
+    componentesVisiveis.filter((component) => component.group === group);
 
   const semTotal = simulation !== null && simulation.totalCost === null;
+  const live = data?.live ?? null;
+  /*
+   * Qual composição a tabela detalha. O RESUMO dos dois nunca some da tela —
+   * trocar o número congelado pelo vivo lá em cima reintroduziria o problema
+   * de reprodutibilidade em forma visual. Aqui só o detalhe alterna, e o
+   * título sempre diz qual está aberto.
+   */
+  const composicaoViva = detalhe === "live" && live !== null;
+  const componentesVisiveis = composicaoViva ? live!.components : (simulation?.components ?? []);
   /* A base econômica ficou para trás da receita ativa. */
   const formulacaoDefasada =
     data?.basisFormulationVersionNumber != null &&
@@ -494,11 +504,101 @@ export function ProductCmvPage() {
           </FormSection>
         )}
 
-        {simulation && (
+        {/* Enquanto o produto está sendo definido não há compromisso a
+            proteger, e congelar vira atrito: a receita já mudou, o custo do
+            material já foi informado, e o CMV mostrava o retrato de outro dia.
+            Este bloco responde com o que se sabe agora — e NUNCA substitui o
+            congelado acima, que é o que se consegue repetir. */}
+        {live && (
+          <FormSection
+            title="Com os dados de hoje"
+            subtitle="Simulação sobre as premissas correntes. Não é base econômica: orçamento e ordem de produção continuam lendo o cálculo congelado."
+          >
+            <p className="field__hint">
+              Estrutura{" "}
+              <Link to={`/produtos/${productId}/custos`}>{live.industrialCostVersionLabel}</Link>
+              {live.industrialCostVersionStatus === "DRAFT" ? " (rascunho)" : " (ativa)"} ·
+              formulação{" "}
+              <Link to={`/producao/formulacoes/${productId}`}>V{live.formulationVersionNumber}</Link>{" "}
+              · custos de {formatDate(live.costReferenceDate)}
+            </p>
+
+            <div className="cmv-cards">
+              <div className="cmv-card cmv-card--strong">
+                <div className="cmv-card__label">CMV total hoje</div>
+                {live.totalCost ? (
+                  <div className="cmv-card__value">{formatBRL(live.totalCost)}</div>
+                ) : (
+                  <div className="cmv-card__value cmv-card__value--unavailable">
+                    CMV indisponível
+                  </div>
+                )}
+                <div className="cmv-card__note">
+                  Subtotal conhecido: {formatBRL(live.knownSubtotal)}
+                </div>
+              </div>
+              <div className="cmv-card">
+                <div className="cmv-card__label">Por unidade</div>
+                <div className="cmv-card__value">
+                  {live.costPerUnit ? formatBRL(live.costPerUnit) : "—"}
+                </div>
+              </div>
+              <div className="cmv-card" title={INDUSTRIAL_COST_QUALITY_HINTS[live.quality]}>
+                <div className="cmv-card__label">Qualidade do custo</div>
+                <div className="cmv-card__value cmv-card__value--text">
+                  {INDUSTRIAL_COST_QUALITY_LABELS[live.quality]}
+                </div>
+              </div>
+            </div>
+
+            {live.warnings.length > 0 && (
+              <div className="cmv-warnings" role="status">
+                <strong>Observações da simulação</strong>
+                <ul>
+                  {live.warnings.map((warning, index) => (
+                    <li key={index}>{warning.message}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </FormSection>
+        )}
+
+        {(simulation || live) && (
           <FormSection
             title="Composição do custo"
-            subtitle="De onde vem cada real do custo desta quantidade."
+            subtitle={
+              composicaoViva
+                ? `Detalhando a SIMULAÇÃO de hoje — ${live!.industrialCostVersionLabel}, formulação V${live!.formulationVersionNumber}.`
+                : data?.calculationCode
+                  ? `Detalhando a base congelada — ${data.calculationCode}, formulação V${data.basisFormulationVersionNumber ?? "—"}.`
+                  : "De onde vem cada real do custo desta quantidade."
+            }
           >
+            {/* Os dois resumos continuam visíveis acima; aqui alterna só o
+                detalhe, e o subtítulo sempre nomeia qual está aberto. */}
+            {simulation && live && (
+              <div className="line-actions">
+                <button
+                  type="button"
+                  className={
+                    detalhe === "frozen" ? "btn btn--secondary btn--sm" : "btn btn--ghost btn--sm"
+                  }
+                  onClick={() => setDetalhe("frozen")}
+                >
+                  Base congelada
+                </button>
+                <button
+                  type="button"
+                  className={
+                    detalhe === "live" ? "btn btn--secondary btn--sm" : "btn btn--ghost btn--sm"
+                  }
+                  onClick={() => setDetalhe("live")}
+                >
+                  Dados de hoje
+                </button>
+              </div>
+            )}
             {GROUP_ORDER.map((group) => {
               const rows = componentsByGroup(group);
               if (rows.length === 0) return null;

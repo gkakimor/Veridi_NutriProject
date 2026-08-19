@@ -166,6 +166,14 @@ export interface IndustrialCostVersionDTO {
   formulationVersionNumber: number;
   formulationStatus: string;
   /** Versão ACTIVE do produto agora — pode ser diferente da usada aqui. */
+  /**
+   * `false` (padrão) = rascunho SEGUE a formulação ativa do produto: enquanto
+   * o produto está sendo definido não há compromisso a proteger, e a lista de
+   * materiais é reflexo puro da formulação. `true` quando o usuário escolheu
+   * explicitamente outra versão — aí seguir sozinho sobrescreveria a decisão
+   * dele. Versão ATIVA nunca é arrastada, fixada ou não.
+   */
+  formulationPinned: boolean;
   activeFormulationVersionNumber: number | null;
 
   referenceOutputQuantity: string;

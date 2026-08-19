@@ -34,6 +34,11 @@ beforeAll(async () => {
 afterAll(async () => {
   const prisma = getPrisma();
   if (fixtureProductIds.length > 0) {
+    // Estrutura de custos referencia a versão de formulação: sai primeiro,
+    // senão a limpeza esbarra na FK e derruba o arquivo inteiro no `afterAll`.
+    await prisma.industrialCostVersion.deleteMany({
+      where: { productId: { in: fixtureProductIds } },
+    });
     await prisma.formulationVersion.deleteMany({ where: { productId: { in: fixtureProductIds } } });
     await prisma.product.deleteMany({ where: { id: { in: fixtureProductIds } } });
   }
@@ -555,11 +560,109 @@ describe("Formulations — versionamento", () => {
     await app.close();
   });
 
+  it("ativar a receita nova arrasta rascunho de custo, e nunca versão ativa nem rascunho fixado", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT", { unitCode: "un" });
+    const product = await createProduct(app, finishedItem.id);
+    const material = await createItem("RAW_MATERIAL");
+    const v1 = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v1.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: material.id, quantity: "5", unitCode: "kg" }],
+      },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v1.json().id}/activate` });
+
+    const criarEstrutura = async (payload: Record<string, unknown>) =>
+      (
+        await app.inject({
+          method: "POST",
+          url: `/products/${product.id}/industrial-costs`,
+          payload: { referenceOutputQuantity: "1000", ...payload },
+        })
+      ).json();
+
+    // Uma estrutura vira ATIVA na V1 — ela é base econômica e não se move.
+    const ativa = await criarEstrutura({});
+    await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${ativa.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
+    // Um rascunho por produto: nasce seguindo a ativa.
+    const rascunho = await criarEstrutura({});
+    expect(rascunho.formulationPinned).toBe(false);
+
+    const v2 = (
+      await app.inject({
+        method: "POST",
+        url: `/formulation-versions/${v1.json().id}/new-version`,
+      })
+    ).json();
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v2.id}`,
+      payload: { components: [{ itemId: material.id, quantity: "7", unitCode: "kg" }] },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v2.id}/activate` });
+
+    const ler = async (id: string) =>
+      (await app.inject({ method: "GET", url: `/industrial-costs/${id}` })).json();
+
+    // Rascunho sem compromisso acompanha — e a receita nova é LIDA da
+    // formulação, não copiada.
+    expect((await ler(rascunho.id)).formulationVersionNumber).toBe(2);
+    expect((await ler(rascunho.id)).materials[0].quantity).toBe("7");
+    // Base econômica jamais se move.
+    expect((await ler(ativa.id)).formulationVersionNumber).toBe(1);
+    expect((await ler(ativa.id)).status).toBe("ACTIVE");
+
+    // Ficar na V1 agora é distinguível de "usar a ativa" — e vira decisão.
+    const preso = await app.inject({
+      method: "PATCH",
+      url: `/industrial-costs/${rascunho.id}`,
+      payload: { formulationVersionId: v1.json().id },
+    });
+    expect(preso.json().formulationPinned).toBe(true);
+
+    // Uma V3 ativa não arrasta o que foi fixado.
+    const v3 = (
+      await app.inject({ method: "POST", url: `/formulation-versions/${v2.id}/new-version` })
+    ).json();
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v3.id}`,
+      payload: { components: [{ itemId: material.id, quantity: "9", unitCode: "kg" }] },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v3.id}/activate` });
+    expect((await ler(rascunho.id)).formulationVersionNumber).toBe(1);
+
+    // Voltar para a ativa desfixa, e o rascunho volta a acompanhar.
+    const solto = await app.inject({
+      method: "PATCH",
+      url: `/industrial-costs/${rascunho.id}`,
+      payload: { formulationVersionId: v3.id },
+    });
+    expect(solto.json().formulationPinned).toBe(false);
+    expect((await ler(rascunho.id)).formulationVersionNumber).toBe(3);
+
+    await app.close();
+  });
+
   it("o raio de impacto de ativar lista o que fica defasado — e nada além disso", async () => {
     const app = buildTestApp();
     await app.ready();
 
-    const finishedItem = await createItem("FINISHED_PRODUCT", "un");
+    const finishedItem = await createItem("FINISHED_PRODUCT", { unitCode: "un" });
     const product = await createProduct(app, finishedItem.id);
     const material = await createItem("RAW_MATERIAL");
     const v1 = await app.inject({

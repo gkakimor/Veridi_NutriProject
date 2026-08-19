@@ -384,6 +384,7 @@ function toVersionDTO(
     formulationVersionId: version.formulationVersionId,
     formulationVersionNumber: version.formulationVersion.versionNumber,
     formulationStatus: version.formulationVersion.status,
+    formulationPinned: version.formulationPinned,
     activeFormulationVersionNumber,
 
     referenceOutputQuantity: version.referenceOutputQuantity.toString(),
@@ -553,16 +554,23 @@ export async function createIndustrialCostVersion(
     },
   });
 
+  const ativa = await prisma.formulationVersion.findFirst({
+    where: { productId, status: "ACTIVE" },
+    select: { id: true },
+  });
+  /*
+   * A ativa tem precedência sobre a receita da versão de origem.
+   *
+   * Copiar a da origem fazia uma V2 de estrutura nascer na receita velha
+   * mesmo com uma nova publicada, e não havia caminho pela tela para chegar
+   * na nova. Rascunho é trabalho em andamento: o padrão é a receita que vale
+   * hoje. Ficar na antiga continua possível — mas passa a ser pedido
+   * explícito, e aí a versão nasce fixada.
+   */
   const formulationVersionId =
-    input.formulationVersionId ??
-    source?.formulationVersionId ??
-    (
-      await prisma.formulationVersion.findFirst({
-        where: { productId, status: "ACTIVE" },
-        select: { id: true },
-      })
-    )?.id;
+    input.formulationVersionId ?? ativa?.id ?? source?.formulationVersionId;
   if (!formulationVersionId) throw new MissingFormulationVersionError();
+  const nascePinned = formulationVersionId !== ativa?.id;
 
   const formulation = await prisma.formulationVersion.findUnique({
     where: { id: formulationVersionId },
@@ -606,6 +614,7 @@ export async function createIndustrialCostVersion(
         versionNumber: (maxVersion._max.versionNumber ?? 0) + 1,
         status: "DRAFT",
         formulationVersionId,
+        formulationPinned: nascePinned,
         referenceOutputQuantity: new Prisma.Decimal(referenceQuantity),
         referenceOutputUomCode: referenceUom,
         ...(input.notes !== undefined ? { notes: input.notes } : { notes: source?.notes ?? null }),
@@ -674,11 +683,25 @@ export async function updateIndustrialCostVersion(
     );
   }
 
+  /*
+   * Escolher a receita EXPLICITAMENTE é decisão do usuário, e o rascunho para
+   * de seguir a ativa — seguir por cima disso seria sobrescrever intenção.
+   * Escolher justamente a ativa é o contrário: volta a seguir.
+   */
+  let pinned: boolean | undefined;
+  if (input.formulationVersionId) {
+    const ativa = await prisma.formulationVersion.findFirst({
+      where: { productId: version.productId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    pinned = input.formulationVersionId !== ativa?.id;
+  }
+
   await prisma.industrialCostVersion.update({
     where: { id },
     data: {
       ...(input.formulationVersionId
-        ? { formulationVersionId: input.formulationVersionId }
+        ? { formulationVersionId: input.formulationVersionId, formulationPinned: pinned === true }
         : {}),
       ...(input.referenceOutputQuantity
         ? { referenceOutputQuantity: new Prisma.Decimal(input.referenceOutputQuantity) }

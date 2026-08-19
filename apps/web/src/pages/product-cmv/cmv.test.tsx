@@ -43,6 +43,7 @@ function cmv(overrides: Partial<ProductCmvResponse> = {}): ProductCmvResponse {
     calculationCode: "CALC-000001",
     calculationReferenceDate: "2026-08-18T00:00:00.000Z",
     referenceDate: "2026-08-18T00:00:00.000Z",
+    live: null,
     simulation: {
       quantity: "1000",
       uomCode: "un",
