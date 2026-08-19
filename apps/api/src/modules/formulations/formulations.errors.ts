@@ -40,6 +40,17 @@ export class VersionNotActiveError extends Error {
   }
 }
 
+/**
+ * Rascunho não serve de molde: ele ainda é editável, e duplicá-lo deixaria
+ * dois documentos abertos dizendo a mesma coisa.
+ */
+export class VersionIsDraftSourceError extends Error {
+  constructor() {
+    super("Rascunho não serve de origem — edite o próprio rascunho");
+    this.name = "VersionIsDraftSourceError";
+  }
+}
+
 export class DuplicateComponentItemError extends Error {
   constructor(itemCode: string) {
     super(`Item duplicado na mesma versão: ${itemCode}`);

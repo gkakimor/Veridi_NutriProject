@@ -2112,7 +2112,17 @@ model FormulationVersion {
   inactivatedAt DateTime?
   inactivatedBy String?
 
+  /// Versao que serviu de molde para esta. Null na V1 e em versoes criadas
+  /// antes deste campo existir. Guardado porque, meses depois, um salto de
+  /// custo entre V2 e V3 sem origem declarada nao tem explicacao possivel.
+  sourceVersionId     String?
+  sourceVersion       FormulationVersion? @relation("FormulationVersionSource", fields: [sourceVersionId], references: [id])
+  /// Numero da versao de origem, gravado junto: o rotulo e historico e nao
+  /// deve depender de join para existir.
+  sourceVersionNumber Int?
+
   components             FormulationComponent[]
+  derivedVersions        FormulationVersion[]    @relation("FormulationVersionSource")
   industrialCostVersions IndustrialCostVersion[]
   productionOrders       ProductionOrder[]
 

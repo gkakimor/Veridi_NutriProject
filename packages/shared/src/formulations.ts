@@ -88,6 +88,23 @@ export interface FormulationComponentDTO {
   position: number;
 }
 
+/**
+ * Problema num componente que impede ativar a versão.
+ *
+ * Existe porque uma versão pode ser criada a partir de outra criada meses
+ * antes: o item pode ter sido inativado, mudado de tipo ou trocado de
+ * unidade nesse intervalo. A cópia mantém a receita — alterar uma fórmula
+ * em silêncio seria pior que copiá-la quebrada — e diz o que vai barrar a
+ * ativação, em vez de deixar a descoberta para o clique final.
+ */
+export interface FormulationComponentIssueDTO {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  code: "ITEM_INACTIVE" | "ITEM_IS_FINISHED_PRODUCT" | "UOM_INCOMPATIBLE" | "INVALID_QUANTITY";
+  description: string;
+}
+
 export interface FormulationVersionDTO {
   id: string;
   productId: string;
@@ -113,6 +130,18 @@ export interface FormulationVersionDTO {
   activatedBy: string | null;
   inactivatedAt: string | null;
   inactivatedBy: string | null;
+  /**
+   * Versão que serviu de molde. `null` na V1 e nas versões criadas antes de
+   * o campo existir.
+   */
+  sourceVersionId: string | null;
+  sourceVersionNumber: number | null;
+  /**
+   * Só para versões em RASCUNHO: uma versão ativa ou histórica é um
+   * documento fechado, e apontar problema nela seria sugerir edição onde
+   * não há edição possível.
+   */
+  componentIssues: FormulationComponentIssueDTO[];
 }
 
 export interface FormulationSummaryDTO {

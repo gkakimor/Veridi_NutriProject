@@ -420,6 +420,35 @@ export function FormulationVersionPage() {
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
 
+        {/* Uma versão copiada de outra criada meses antes pode trazer item
+            inativado, item que virou produto acabado ou unidade que deixou de
+            ser compatível. A cópia é fiel de propósito — alterar a receita em
+            silêncio seria inventar fórmula — então o que vai barrar a ativação
+            é dito aqui, e não só no clique final. */}
+        {version && version.componentIssues.length > 0 && (
+          <div className="pendency-panel">
+            <h4 className="pendency-panel__title">
+              {version.componentIssues.length === 1
+                ? "1 componente impede ativar esta versão"
+                : `${version.componentIssues.length} componentes impedem ativar esta versão`}
+            </h4>
+            <p className="pendency-panel__sub">
+              A receita foi copiada como estava. O cadastro mudou desde então — ajuste o item ou
+              troque o componente antes de ativar.
+            </p>
+            <ul className="pendency-panel__list">
+              {version.componentIssues.map((issue) => (
+                <li key={`${issue.code}-${issue.itemId}`}>
+                  <span>{issue.description}</span>{" "}
+                  <Link to={`/cadastros/itens?search=${issue.itemCode}&open=${issue.itemId}`}>
+                    Abrir o item
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <FormSection
           title="Produto e base"
           subtitle={

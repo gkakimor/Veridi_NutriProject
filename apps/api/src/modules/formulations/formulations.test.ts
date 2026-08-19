@@ -481,6 +481,143 @@ describe("Formulations — versionamento", () => {
     await app.close();
   });
 
+  it("volta a uma receita antiga criando versão a partir dela, sem reativar nada", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const original = await createItem("RAW_MATERIAL");
+    const substituto = await createItem("RAW_MATERIAL");
+
+    const v1 = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v1.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: original.id, quantity: "5", unitCode: "kg" }],
+      },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v1.json().id}/activate` });
+
+    // V2 troca o componente e passa a valer; a V1 vira histórica.
+    const v2 = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v1.json().id}/new-version`,
+    });
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v2.json().id}`,
+      payload: { components: [{ itemId: substituto.id, quantity: "5", unitCode: "kg" }] },
+    });
+    await app.inject({ method: "POST", url: `/formulation-versions/${v2.json().id}/activate` });
+
+    const v1Historica = await app.inject({
+      method: "GET",
+      url: `/formulation-versions/${v1.json().id}`,
+    });
+    expect(v1Historica.json().status).toBe("INACTIVE");
+
+    // Arrependimento: voltar para a receita da V1. Reativar seria reescrever
+    // o significado de uma versão que já serviu de base para custo; a volta
+    // acontece para frente, como V3.
+    const v3 = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v1.json().id}/new-version`,
+    });
+    expect(v3.statusCode, v3.body).toBe(201);
+    expect(v3.json().versionNumber).toBe(3);
+    expect(v3.json().status).toBe("DRAFT");
+    expect(v3.json().components).toHaveLength(1);
+    expect(v3.json().components[0].itemId).toBe(original.id);
+    // Sem a origem declarada, o salto de custo entre V2 e V3 não teria
+    // explicação possível meses depois.
+    expect(v3.json().sourceVersionNumber).toBe(1);
+    expect(v3.json().sourceVersionId).toBe(v1.json().id);
+
+    // Nada do passado se moveu: a V2 continua sendo a ativa até a V3 ser.
+    const v2Depois = await app.inject({
+      method: "GET",
+      url: `/formulation-versions/${v2.json().id}`,
+    });
+    expect(v2Depois.json().status).toBe("ACTIVE");
+    const v1Depois = await app.inject({
+      method: "GET",
+      url: `/formulation-versions/${v1.json().id}`,
+    });
+    expect(v1Depois.json().status).toBe("INACTIVE");
+
+    await app.close();
+  });
+
+  it("rascunho não serve de origem, e a cópia declara o que vai barrar a ativação", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const product = await createProduct(app, finishedItem.id);
+    const material = await createItem("RAW_MATERIAL");
+    const v1 = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/formulation-versions`,
+      payload: {},
+    });
+    await app.inject({
+      method: "PATCH",
+      url: `/formulation-versions/${v1.json().id}`,
+      payload: {
+        basisQuantity: "1000",
+        components: [{ itemId: material.id, quantity: "5", unitCode: "kg" }],
+      },
+    });
+
+    // Rascunho ainda é editável: duplicá-lo deixaria dois documentos abertos
+    // dizendo a mesma coisa.
+    const deRascunho = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v1.json().id}/new-version`,
+    });
+    expect(deRascunho.statusCode).toBe(400);
+    expect(deRascunho.json().error).toBe("version_is_draft_source");
+
+    await app.inject({ method: "POST", url: `/formulation-versions/${v1.json().id}/activate` });
+    // O item some do catálogo DEPOIS de a receita existir.
+    await getPrisma().item.update({ where: { id: material.id }, data: { active: false } });
+
+    const v2 = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v1.json().id}/new-version`,
+    });
+    expect(v2.statusCode, v2.body).toBe(201);
+    // A cópia é fiel — alterar a receita em silêncio para caber nas regras de
+    // hoje seria inventar fórmula.
+    expect(v2.json().components).toHaveLength(1);
+    // ...e diz o que vai barrar, antes do clique de ativar.
+    expect(v2.json().componentIssues).toHaveLength(1);
+    expect(v2.json().componentIssues[0].code).toBe("ITEM_INACTIVE");
+    expect(v2.json().componentIssues[0].itemId).toBe(material.id);
+
+    const ativacao = await app.inject({
+      method: "POST",
+      url: `/formulation-versions/${v2.json().id}/activate`,
+    });
+    expect(ativacao.statusCode).toBe(400);
+
+    // Versão fechada não lista problema: não há edição possível nela.
+    const v1Fetched = await app.inject({
+      method: "GET",
+      url: `/formulation-versions/${v1.json().id}`,
+    });
+    expect(v1Fetched.json().componentIssues).toEqual([]);
+
+    await app.close();
+  });
+
   it("ativar V2 torna V1 INACTIVE atomicamente; produto tem no máximo uma ACTIVE", async () => {
     const app = buildTestApp();
     await app.ready();

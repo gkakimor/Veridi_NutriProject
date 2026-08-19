@@ -8,6 +8,7 @@ import type {
 } from "@prisma/client";
 import type {
   FormulationComponentDTO,
+  FormulationComponentIssueDTO,
   FormulationListResponse,
   FormulationSummaryDTO,
   FormulationVersionDTO,
@@ -30,7 +31,7 @@ import {
   InvalidComponentQuantityError,
   MissingFinishedItemError,
   ProductNotFoundError,
-  VersionNotActiveError,
+  VersionIsDraftSourceError,
   VersionNotDraftError,
 } from "./formulations.errors.js";
 import type {
@@ -139,7 +140,57 @@ function toVersionDTO(
     activatedBy: version.activatedBy,
     inactivatedAt: version.inactivatedAt ? version.inactivatedAt.toISOString() : null,
     inactivatedBy: version.inactivatedBy,
+    sourceVersionId: version.sourceVersionId,
+    sourceVersionNumber: version.sourceVersionNumber,
+    componentIssues: version.status === "DRAFT" ? componentIssues(version, units) : [],
   };
+}
+
+/**
+ * O que, nos componentes desta versão, vai barrar a ativação.
+ *
+ * São as MESMAS regras que `activateFormulationVersion` aplica — apuradas
+ * antes, não em paralelo. Uma versão criada a partir de outra de meses atrás
+ * pode carregar item inativado, item que virou produto acabado ou unidade que
+ * deixou de ser compatível; descobrir isso só no clique de ativar é descobrir
+ * tarde.
+ */
+function componentIssues(
+  version: VersionWithRelations,
+  units: readonly UnitOfMeasure[],
+): FormulationComponentIssueDTO[] {
+  const issues: FormulationComponentIssueDTO[] = [];
+  for (const component of version.components) {
+    const item = component.item;
+    const base = { itemId: item.id, itemCode: item.code, itemName: item.name };
+    if (item.type === "FINISHED_PRODUCT") {
+      issues.push({
+        ...base,
+        code: "ITEM_IS_FINISHED_PRODUCT",
+        description: `${item.code} passou a ser produto acabado e não pode ser componente.`,
+      });
+    } else if (!item.active) {
+      issues.push({
+        ...base,
+        code: "ITEM_INACTIVE",
+        description: `${item.code} foi inativado no cadastro de itens.`,
+      });
+    }
+    if (new Prisma.Decimal(component.quantity).lessThanOrEqualTo(0)) {
+      issues.push({
+        ...base,
+        code: "INVALID_QUANTITY",
+        description: `${item.code} está com quantidade inválida.`,
+      });
+    } else if (!isUomCompatible(component.unitCode, item.unitCode, units)) {
+      issues.push({
+        ...base,
+        code: "UOM_INCOMPATIBLE",
+        description: `${item.code} usa ${component.unitCode}, incompatível com a unidade de estoque ${item.unitCode}.`,
+      });
+    }
+  }
+  return issues;
 }
 
 const versionInclude = {
@@ -297,11 +348,27 @@ export async function createFirstFormulationVersion(
   return (await getFormulationVersionById(versionId))!;
 }
 
-export async function createNewVersionFromActive(
+/**
+ * Nova versão a partir de OUTRA versão — a ativa ou uma histórica.
+ *
+ * Voltar para uma receita antiga só existe para frente: a V1 não é
+ * reativada, uma V3 nasce igual a ela. Reativar reescreveria o significado
+ * de uma versão que já serviu de base para custo e produção; copiar não
+ * mexe em nada do passado.
+ *
+ * Rascunho não serve de molde: ele ainda é editável, e duplicá-lo cria dois
+ * documentos abertos dizendo a mesma coisa — quem quer mudar um rascunho
+ * edita o rascunho.
+ *
+ * A cópia é FIEL, mesmo que o cadastro tenha mudado desde então: alterar uma
+ * receita em silêncio para caber nas regras de hoje seria inventar fórmula.
+ * O que não passar aparece em `componentIssues` do rascunho criado.
+ */
+export async function createNewVersionFrom(
   sourceVersionId: string,
 ): Promise<FormulationVersionDTO> {
   const source = await requireVersion(sourceVersionId);
-  if (source.status !== "ACTIVE") throw new VersionNotActiveError();
+  if (source.status === "DRAFT") throw new VersionIsDraftSourceError();
 
   const versionId = await getPrisma().$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM products WHERE id = ${source.productId} FOR UPDATE`;
@@ -329,6 +396,10 @@ export async function createNewVersionFromActive(
         outputUnitCode: source.outputUnitCode,
         notes: source.notes,
         createdBy: SYSTEM_ACTOR,
+        // Origem declarada: sem ela, um salto de custo entre duas versões
+        // não tem explicação possível meses depois.
+        sourceVersionId: source.id,
+        sourceVersionNumber: source.versionNumber,
         components: {
           create: source.components.map((component) => ({
             itemId: component.itemId,
