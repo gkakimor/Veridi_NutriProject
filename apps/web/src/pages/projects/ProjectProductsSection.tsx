@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import type { ProductDTO, ProjectProductDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_PRODUCT_STATUS_LABELS } from "@veridi/shared";
 import { createProjectProduct, linkProjectProduct } from "../../lib/projects-api";
 import { listProducts } from "../../lib/products-api";
 import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
-import { RowActions } from "../../components/RowActions";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 
 /**
@@ -49,7 +48,6 @@ export function ProjectProductsSection({
   projectStatus?: ProjectStatus;
   onChanged: () => void;
 }) {
-  const navigate = useNavigate();
   const [mode, setMode] = useState<"closed" | "create" | "link">("closed");
   const [name, setName] = useState("");
   const [catalog, setCatalog] = useState<ProductDTO[]>([]);
@@ -135,37 +133,37 @@ export function ProjectProductsSection({
                     )}
                   </td>
                   <td>{link.latestSampleLabel ?? "—"}</td>
-                  {/* Quatro destinos não cabem lado a lado em 1366px sem cortar
-                      o último. Os dois do dia a dia ficam visíveis; estrutura e
-                      precificação vão para o menu, sem nenhum sumir. */}
+                  {/* A cadeia técnica inteira do produto, na ordem em que se
+                      percorre: fórmula, custo de produzir, estrutura de custos,
+                      preço. Duas delas moravam num menu "⋯" por falta de
+                      largura — com a coluna de ação fixa e o corpo do documento
+                      mais largo, esconder metade do caminho passou a ser
+                      escolha ruim, não restrição. */}
                   <td className="table__actions">
-                    <RowActions
-                      label={`Mais ações de ${link.productCode}`}
-                      actions={[
-                        {
-                          label: "Custos industriais",
-                          onSelect: () => navigate(`/produtos/${link.productId}/custos`),
-                        },
-                        {
-                          label: "Precificação",
-                          onSelect: () =>
-                            navigate(`/gestao/precificacao?productId=${link.productId}`),
-                        },
-                      ]}
+                    <Link
+                      className="btn btn--ghost btn--sm"
+                      to={`/producao/formulacoes/${link.productId}`}
                     >
-                      <Link
-                        className="btn btn--ghost btn--sm"
-                        to={`/producao/formulacoes/${link.productId}`}
-                      >
-                        Formulação
-                      </Link>
-                      <Link
-                        className="btn btn--ghost btn--sm"
-                        to={`/produtos/${link.productId}/cmv?projectId=${projectId}`}
-                      >
-                        CMV
-                      </Link>
-                    </RowActions>
+                      Formulação
+                    </Link>
+                    <Link
+                      className="btn btn--ghost btn--sm"
+                      to={`/produtos/${link.productId}/cmv?projectId=${projectId}`}
+                    >
+                      CMV
+                    </Link>
+                    <Link
+                      className="btn btn--ghost btn--sm"
+                      to={`/produtos/${link.productId}/custos`}
+                    >
+                      Custos
+                    </Link>
+                    <Link
+                      className="btn btn--ghost btn--sm"
+                      to={`/gestao/precificacao?productId=${link.productId}`}
+                    >
+                      Precificação
+                    </Link>
                   </td>
                 </tr>
               ))}
