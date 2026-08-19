@@ -224,6 +224,23 @@
   background: var(--canvas);
 }
 
+/*
+ * Segunda linha dentro de uma célula: o recurso do template, a descrição da
+ * política, o "rascunho em edição". Precisa de `display: block` — `span` com
+ * `.field__hint` corria colado no valor e a célula lia "V1Rascunho em
+ * edição". Truncar em vez de esticar: uma lista com seis recursos no nome
+ * empurrava as últimas colunas para fora da largura de trabalho.
+ */
+.cell-sub {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .table-container--spaced {
   margin-top: var(--sp-4);
 }

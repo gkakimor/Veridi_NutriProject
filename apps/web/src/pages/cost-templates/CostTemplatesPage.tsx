@@ -155,12 +155,12 @@ export function CostTemplatesPage() {
                 <td>
                   {template.name}
                   {template.resourceNames.length > 0 && (
-                    <span className="field__hint">{template.resourceNames.join(" · ")}</span>
+                    <span className="cell-sub">{template.resourceNames.join(" · ")}</span>
                   )}
                 </td>
                 <td>
                   {template.activeVersionNumber !== null ? `V${template.activeVersionNumber}` : "—"}
-                  {template.hasDraft && <span className="field__hint">Rascunho em edição</span>}
+                  {template.hasDraft && <span className="cell-sub">Rascunho em edição</span>}
                 </td>
                 <td className="is-numeric">
                   {template.referenceOutputQuantity
@@ -170,7 +170,7 @@ export function CostTemplatesPage() {
                 <td className="is-numeric">
                   {template.resourceCount}
                   {template.additionalCostCount > 0 && (
-                    <span className="field__hint">
+                    <span className="cell-sub">
                       + {template.additionalCostCount} premissa
                       {template.additionalCostCount > 1 ? "s" : ""}
                     </span>

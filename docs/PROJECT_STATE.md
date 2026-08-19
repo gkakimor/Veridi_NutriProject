@@ -4899,6 +4899,118 @@ implementado por decisão: hoje um template é cópia estruturada versionada, e 
 parametrização deve nascer do uso real — não da antecipação.
 
 ---
+
+# Templates de Estrutura de Custos e Políticas de Precificação — branch `feat/cost-pricing-templates`
+
+Branch a partir de `feat/formulation-templates @ b48c2ab`, **não mergeada**.
+`main` (`d4c89b7`), `overnight/commercial-integrity` (`3b6ac9e`) e
+`feat/formulation-templates` (`b48c2ab`) intocadas.
+
+## O problema
+
+O template de formulação resolveu a receita. Sobraram os dois blocos que
+também se repetem entre produtos: como o produto é fabricado (recursos, horas,
+premissas) e com que regra é vendido (faixas, margem, comissão).
+
+Cada um tem uma exclusão que o define, e é dela que a capacidade depende:
+
+- **O template de custo não guarda tarifa.** Guardá-la produziria um número sem
+  data: aplicado em dez produtos e lido seis meses depois, orçaria a hora de
+  máquina pela tabela do ano passado enquanto o cadastro mostrava a certa, e
+  nada na tela explicaria a diferença.
+- **A política não guarda preço.** Preço copiado é o custo de outro produto
+  vestido de decisão comercial. A mesma política sobre um insumo de R$ 10/kg e
+  sobre um de R$ 25/kg tem de dar preços diferentes — é a razão de ser regra.
+
+## Modelo
+
+Migração `20260922090000_cost_and_pricing_templates`, aditiva:
+
+- `TemplateVersionStatus` (DRAFT/ACTIVE/ARCHIVED), compartilhado pelas duas.
+- `IndustrialCostTemplate` / `...Version` / `...ResourceUsage` /
+  `...AdditionalCost` — `TEC-000001`. A versão guarda base de produção
+  sugerida, modo de energia e recurso de energia. O uso guarda recurso, base,
+  quantidade e unidade — **sem nenhum campo `rate*Snapshot`**.
+- `PricingPolicyTemplate` / `...Version` / `...Tier` — `TPP-000001`. A faixa
+  guarda quantidade, unidade, margem alvo e comissão. Não existe coluna de
+  preço.
+- Uma ativa por template, por índice único PARCIAL no banco
+  (`industrial_cost_template_versions_one_active_per_template`,
+  `pricing_policy_template_versions_one_active_per_template`), no padrão dos
+  `one_active_per_*` existentes.
+- `IndustrialCostVersion` ganha `originCostTemplateVersionId` (FK `SET NULL`)
+  + código e número congelados; `PricingVersion` ganha os equivalentes de
+  política.
+
+Decisões, com o porquê:
+
+- **A premissa digitada viaja, a tarifa não.** "R$ 180 por 1.000 unidades" foi
+  escrito por alguém dentro da estrutura e é parte da configuração. "R$ 20/h"
+  vem do cadastro de recursos e muda com a data — são naturezas diferentes e o
+  modelo separa as duas.
+- **Rascunho ocupado não é sobrescrito.** Um produto comporta um rascunho de
+  custo. Havendo um, aplicar template devolve `cost_draft_in_use` (409)
+  nomeando-o, em vez de apagar trabalho em curso.
+- **Faixa com preço à mão não vira política.** Salvar uma precificação como
+  política mantém só as faixas por margem alvo; versão sem nenhuma é recusada.
+
+## Regras aplicadas
+
+Registradas em `docs/PRODUCT_RULES.md` §36, com as duas regras duráveis na
+íntegra.
+
+## UI
+
+`Gestão → Templates de Estrutura` e `Gestão → Políticas de Precificação`:
+bibliotecas com busca (a de custos também por **recurso** — quem procura uma
+matriz lembra do equipamento antes do nome), versão ativa em leitura, rascunho
+editável, histórico e comparação.
+
+Na estrutura de custos do produto, "Usar template" ao lado de "Nova versão", com
+prévia que mostra configuração e **nenhum valor em reais**. Na lista de cálculos
+salvos, "Usar política" por linha — a base de custo já está escolhida, porque o
+preço nasce de um CALC e não do produto em abstrato. A prévia da política mostra
+os preços que sairiam **neste** produto, calculados por `computePrice`, sem
+gravar nada até confirmar.
+
+Origem discreta nas duas telas, aviso de versão nova com comparar e criar nova
+versão, e "Salvar como template"/"Salvar como política" dizendo o que fica de
+fora.
+
+## Verificação
+
+| Item | Resultado |
+|---|---|
+| API — templates de custo e políticas | 34 testes novos |
+| API total | 743 testes |
+| Web — as duas bibliotecas | 27 testes novos (14 + 13) |
+| Web total | 159 testes, 18 arquivos |
+| Playwright ponta a ponta (TEC + TPP + PREC) | 29/29 |
+| Regressão fluxo antigo + visual 1280/1366/1600 | 15/15 |
+| Tarefas de UX 65-66 (estrutura padrão, faixas 500/1.000/3.000) | 15/15 |
+| Fresh migration (schema vazio) | PASS |
+| Upgrade a partir do schema de `b48c2ab` | PASS — colunas, índices e enums idênticos ao fresh |
+| Console / rede | zero erros |
+
+Tarifa resolvida na data, provada de ponta a ponta: 4 h × R$ 20/h = R$ 80 no
+cálculo, com o template não guardando nenhum dos dois números. Mesma política
+sobre dois produtos: R$ 4,49 e R$ 1,99 na faixa de 500.
+
+## Fora de escopo, mantido como estava
+
+Nenhum merge feito. Railway, banco de produção e
+`docs/Guia_Fluxo_Comercial_Veridi.docx` não foram tocados. Data-base de
+`leadTimeDays` e conversão de unidade QuoteLine × Produto seguem pendentes de
+decisão do Product Owner.
+
+## Backlog registrado
+
+**Product Blueprint** — pacote que aplicaria formulação + estrutura + política
+de uma vez. Não implementado: as três não falham juntas (a política exige um
+CALC salvo, que exige a estrutura ativada e calculada), e agrupar esconderia
+qual camada envelheceu.
+
+---
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,

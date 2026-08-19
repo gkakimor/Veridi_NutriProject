@@ -154,14 +154,14 @@ export function PricingPoliciesPage() {
                 <td>
                   {policy.name}
                   {policy.tierQuantities.length > 0 && (
-                    <span className="field__hint">
+                    <span className="cell-sub">
                       {policy.tierQuantities.join(" · ")} unidades
                     </span>
                   )}
                 </td>
                 <td>
                   {policy.activeVersionNumber !== null ? `V${policy.activeVersionNumber}` : "—"}
-                  {policy.hasDraft && <span className="field__hint">Rascunho em edição</span>}
+                  {policy.hasDraft && <span className="cell-sub">Rascunho em edição</span>}
                 </td>
                 <td className="is-numeric">{policy.tierCount}</td>
                 <td>{formatDate(policy.updatedAt)}</td>

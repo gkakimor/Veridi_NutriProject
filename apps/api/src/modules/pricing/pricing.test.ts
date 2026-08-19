@@ -363,35 +363,74 @@ describe("Prever o que muda ao refazer sobre o custo atual", () => {
     await app.ready();
     const prisma = getPrisma();
 
-    const versao = await prisma.pricingVersion.findFirst({
-      include: { tiers: true },
-      orderBy: { createdAt: "desc" },
+    /*
+     * Cenário próprio, de propósito.
+     *
+     * Este teste lia `pricingVersion.findFirst` ordenado por data — a versão
+     * mais recente do banco inteiro, fosse ela de quem fosse. Passava ou
+     * falhava conforme o que existisse na hora, e um `if (!versao) return`
+     * escondia a ausência como se fosse aprovação. Com fixture própria as
+     * duas bases são conhecidas e a diferença prevista é verificável.
+     */
+    const { product, version, calculation } = await createScenario(app, {
+      materialUnitCost: "10",
     });
-    if (!versao) {
-      await app.close();
-      return;
-    }
+    const pricing = await createPricing(app, product.id, calculation.id);
+    await addTier(app, pricing.id, {
+      quantity: "1000",
+      priceMode: "TARGET_MARGIN",
+      targetContributionMarginPercent: "30",
+      commissionPercent: "5",
+    });
+    await addTier(app, pricing.id, {
+      quantity: "3000",
+      priceMode: "TARGET_MARGIN",
+      targetContributionMarginPercent: "25",
+      commissionPercent: "5",
+    });
 
-    const antes = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: versao.id } });
+    // Uma base mais recente da MESMA estrutura: é o que a prévia compara.
+    const depoisDeAmanha = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+    const novo = (
+      await app.inject({
+        method: "POST",
+        url: `/industrial-costs/${version.id}/calculations`,
+        payload: { costReferenceDate: depoisDeAmanha },
+      })
+    ).json();
+
+    const antes = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: pricing.id } });
+    const quantasAntes = await prisma.pricingVersion.count({ where: { productId: product.id } });
+
     const previa = (
-      await app.inject({ method: "GET", url: `/pricing-versions/${versao.id}/rebase-preview` })
+      await app.inject({ method: "GET", url: `/pricing-versions/${pricing.id}/rebase-preview` })
     ).json();
 
     // Prever é leitura: nenhuma versão nasce e a atual não se move.
-    const depois = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: versao.id } });
+    const depois = await prisma.pricingVersion.findUniqueOrThrow({ where: { id: pricing.id } });
     expect(depois.industrialCostCalculationId).toBe(antes.industrialCostCalculationId);
     expect(depois.status).toBe(antes.status);
+    expect(await prisma.pricingVersion.count({ where: { productId: product.id } })).toBe(
+      quantasAntes,
+    );
 
-    if (previa.targetCalculationId) {
-      // Só entra na lista o que REALMENTE difere — repetir o que ficou igual
-      // esconderia a diferença que importa no meio do ruído.
-      for (const change of previa.changes) {
-        expect(change.from).not.toBe(change.to);
-      }
-      expect(previa.tiers).toHaveLength(versao.tiers.length);
-    } else {
-      // Já está na base mais recente: não há o que prever.
-      expect(previa.changes).toEqual([]);
+    expect(previa.targetCalculationId).toBe(novo.id);
+    // Só entra na lista o que REALMENTE difere — repetir o que ficou igual
+    // esconderia a diferença que importa no meio do ruído.
+    expect(previa.changes.length).toBeGreaterThan(0);
+    for (const change of previa.changes) {
+      expect(change.from).not.toBe(change.to);
+    }
+    // A data de referência mudou; é ela que a prévia tem de anunciar.
+    expect(previa.changes.some((change: { label: string }) => /data/i.test(change.label))).toBe(
+      true,
+    );
+
+    // Uma linha por faixa, com o custo nas DUAS bases: comparar é o ponto.
+    expect(previa.tiers).toHaveLength(2);
+    for (const faixa of previa.tiers) {
+      expect(faixa.costPerUnitFrom).not.toBeNull();
+      expect(faixa.costPerUnitTo).not.toBeNull();
     }
 
     await app.close();

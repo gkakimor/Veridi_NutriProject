@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type {
   CostTemplateDTO,
@@ -113,7 +113,7 @@ function versao(overrides: Partial<CostTemplateVersionDTO> = {}): CostTemplateVe
         resourceCode: "REC-001",
         resourceName: "Encapsuladora",
         resourceType: "EQUIPMENT",
-        usageBasis: "PER_BATCH",
+        usageBasis: "FIXED_PER_REFERENCE_BATCH",
         usageQuantity: "4",
         usageUom: "HOUR",
         notes: null,

@@ -2458,3 +2458,81 @@ production — the one place where a wrong batch cannot be undone.
 Parameterised templates — placeholders, 30/60/90 variables, configurable
 formulas, dynamic fields, sub-templates, inheritance, a product configurator.
 A template is a versioned structured copy. See the backlog entry.
+
+---
+
+# 36. Cost structure and pricing policy templates (implemented)
+
+## The two rules
+
+**Um Template de Estrutura de Custos é uma configuração industrial
+reutilizável. Ele não contém preços, tarifas ou valores calculados. Ao ser
+aplicado, gera uma Estrutura de Custos independente do Produto.**
+
+**Uma Política de Precificação é um conjunto reutilizável de regras
+comerciais (faixas, margem alvo, comissão). Ela não contém preços. Preços
+são sempre calculados sobre o custo real do Produto.**
+
+## What each library holds — and what it refuses to hold
+
+A cost template (TEC) carries the base output quantity, which resources are
+used and how much of each, the energy mode and its resource, plus the typed
+premises of the structure (services, overheads, secondary packaging). It does
+**not** carry a tariff, a price per hour, or any computed cost. It says "use
+the encapsulator for 4 hours"; what an hour is worth is resolved by
+`IndustrialResourceRate` on the calculation's reference date.
+
+A pricing policy (TPP) carries quantity bands, target contribution margin and
+commission. It does **not** carry a price. Price is produced by the same
+pricing engine the manual path uses, over that product's own CALC.
+
+## Why the exclusions are the point
+
+A tariff frozen into a template would be a number with no date. Copied into
+ten products and read six months later, it would quote machine time at last
+year's rate while the resource registry showed the correct one, and nothing on
+screen would explain the gap. Keeping the tariff out means an old template
+still produces a current cost.
+
+A price frozen into a policy is worse: it is another product's cost wearing a
+commercial decision's clothes. The same policy on a product whose input costs
+R$ 10/kg and on one at R$ 25/kg must give different prices — that is the whole
+reason a policy is a rule and not a table of numbers.
+
+## Consequences that hold
+
+- **Applying copies.** A cost template application creates a new
+  `IndustrialCostVersion` in DRAFT with its own code and its own resource
+  usage rows. A policy application creates a new `PricingVersion` over a CALC
+  the user chose. Neither is a link.
+- **Copies carry no snapshot.** The copied usage rows have no
+  `rate*Snapshot`. Those are frozen where they have always been frozen: when
+  the *structure* is activated.
+- **Manual price is never a policy.** Saving a pricing version as a policy
+  keeps only the bands priced by target margin. Bands with a typed price are
+  dropped, and the screen says why: a typed price is a decision about one
+  negotiation, not a reusable rule. A version with no rule-based band is
+  refused outright.
+- **No price without a preview.** Applying a policy shows, before writing
+  anything, the prices it would produce *for this product* over the chosen
+  CALC — computed by `computePrice`, so preview and application cannot drift.
+- **A busy draft is not overwritten.** A product may hold one cost draft. If
+  one is open, applying a template returns `cost_draft_in_use` (409) naming
+  it, instead of silently replacing work in progress.
+- **Provenance, not a channel.** `IndustrialCostVersion.originCostTemplateVersionId`
+  and `PricingVersion.originPricingPolicyVersionId` record where each came
+  from, with code and number frozen alongside. Nothing flows back.
+- **A newer version is announced, never applied.** Both screens offer compare
+  and create-a-new-version. There is no in-place update: the current version
+  may already explain a cost, a CMV, a price and an order.
+- **The engines never read a library.** Cost calculation, CMV, pricing,
+  quotes and orders keep reading Product → structure → CALC. A test asserts
+  that no operational table carries a foreign key to the template tables.
+- **Legacy.** Structures and pricing versions created before this capability
+  keep a null origin. No backfill.
+
+## Deliberately not built
+
+A "Product Blueprint" that would bundle formulation + cost structure + pricing
+policy into one applicable package. Each library stands alone; composing them
+is a later decision. See the backlog entry.

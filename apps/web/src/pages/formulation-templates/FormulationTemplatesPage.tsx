@@ -180,19 +180,19 @@ export function FormulationTemplatesPage() {
                 <td>
                   {template.name}
                   {template.description && (
-                    <span className="field__hint">{template.description}</span>
+                    <span className="cell-sub">{template.description}</span>
                   )}
                 </td>
                 <td>
                   {template.activeVersionNumber !== null ? `V${template.activeVersionNumber}` : "—"}
-                  {template.hasDraft && <span className="field__hint">Rascunho em edição</span>}
+                  {template.hasDraft && <span className="cell-sub">Rascunho em edição</span>}
                 </td>
                 <td className="is-numeric">
                   {template.basisQuantity
                     ? `${template.basisQuantity} ${template.outputUnitCode ?? ""}`.trim()
                     : "—"}
                   {template.calculationMode && (
-                    <span className="field__hint">
+                    <span className="cell-sub">
                       {FORMULATION_CALCULATION_MODE_LABELS[template.calculationMode]}
                     </span>
                   )}
