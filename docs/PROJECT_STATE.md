@@ -4803,6 +4803,102 @@ vale acrescentar "Gerar pedido a partir do orçamento aceito" como caminho mais
 curto entre as etapas 12 e 13.
 
 ---
+---
+
+# Templates de Formulação — branch `feat/formulation-templates`
+
+Branch a partir de `overnight/commercial-integrity @ 3b6ac9e`, **não mergeada**.
+`main` (`d4c89b7`) e `overnight` intocadas.
+
+## O problema
+
+Uma mesma lógica de fórmula serve a vários clientes, e reaproveitá-la exigia
+redigitar. O atalho tentador — vários produtos apontando para a mesma
+`FormulationVersion` viva — foi **recusado**: a primeira alteração pedida por um
+cliente reescreveria a receita de outro, e a descoberta viria na produção.
+
+## Modelo
+
+Migração `20260921090000_formulation_templates`, aditiva:
+
+- `FormulationTemplate` — `FT-000001`, nome, descrição, arquivamento.
+- `FormulationTemplateVersion` — versão da matriz. DRAFT/ACTIVE/ARCHIVED, base,
+  modo de cálculo, doses, unidade da base, origem interna. **Uma ativa por
+  template**, garantida por índice único PARCIAL no banco
+  (`formulation_template_versions_one_active_per_template`), no mesmo padrão dos
+  `one_active_per_*` já existentes.
+- `FormulationTemplateComponent` — item, quantidade, unidade, base,
+  fornecimento padrão, pureza, overage, posição. Sem o bloco `legacy*`: ele
+  existe para conferir ERP contra planilha na migração, e uma matriz de
+  biblioteca nunca teve planilha.
+- `FormulationVersion` ganha `originTemplateVersionId` (FK, `SET NULL`) +
+  `originTemplateCode` e `originTemplateVersionNumber` congelados.
+
+Decisões, com o porquê:
+
+- **`ARCHIVED`, não `INACTIVE`.** A formulação de um produto é desativada
+  quando outra assume; um template é arquivado quando sai da biblioteca. São
+  coisas diferentes e o vocabulário acompanha.
+- **`SET NULL` na origem.** Remover um template jamais pode apagar a formulação
+  que nasceu dele; o código gravado mantém o rótulo legível sem o vínculo.
+- **Um rascunho por template.** Dois seriam duas verdades técnicas em edição, e
+  a segunda ativação apagaria em silêncio o trabalho da primeira.
+- **Template sem item de saída.** Ele não pertence a produto nenhum: guarda só a
+  unidade a que a base se refere.
+
+## Regras aplicadas
+
+Registradas em `docs/PRODUCT_RULES.md` §35. Em resumo: usar um template copia;
+só versão ativa pode ser usada; a V1 vazia é preenchida em vez de gerar uma V2
+órfã; formulação com conteúdo nunca é sobrescrita; fornecimento padrão é
+sugestão; nada comercial viaja; salvar como template é cópia e nasce em
+rascunho; versão nova é anunciada, nunca aplicada.
+
+## UI
+
+`Produção → Templates de Formulação`: biblioteca com busca por código, nome e
+**componente** — quem procura uma matriz lembra do princípio ativo antes do
+nome que alguém deu a ela. Detalhe com versão ativa em leitura, rascunho
+editável, histórico e comparação.
+
+Na formulação do produto, três caminhos lado a lado: em branco, copiar versão
+deste produto, ou usar template. O seletor abre de dentro do produto — obrigar
+a passar pela Biblioteca faria perder o contexto no meio do caminho. Preview
+antes de aplicar, origem discreta depois, aviso de versão nova com comparar e
+criar nova versão, e "Salvar como template" dizendo que é cópia.
+
+## Verificação
+
+| Item | Resultado |
+|---|---|
+| API — templates | 23 testes novos |
+| API total | 709 testes, 49 arquivos |
+| Web — templates | 19 testes novos |
+| Web total | 132 testes, 16 arquivos |
+| Playwright templates ponta a ponta | 29/29 |
+| Regressão Formulação → EC → CMV → Precificação | 8/8 |
+| Regressão P1 (proposta → pedido) | 9/9 |
+| Regressão P2 (login) | 9/9 |
+| Visual 1280/1366/1600 + acessibilidade | 17/17 |
+| Fresh migration (41 migrations, schema vazio) | PASS |
+| Upgrade a partir do schema de `3b6ac9e` | PASS, tabelas/colunas/índice conferidos |
+| Console / rede | zero erros, zero ≥400 inesperado |
+
+## Fora de escopo, mantido como estava
+
+Data-base de `leadTimeDays` e conversão de unidade entre QuoteLine e Produto
+seguem pendentes de decisão do Product Owner. OP em rascunho, tela própria de
+orçamento, resíduo em `PROD-004817` e o `docs/Guia_Fluxo_Comercial_Veridi.docx`
+não foram tocados.
+
+## Backlog registrado
+
+**Templates parametrizados / configurador técnico.** Placeholders, variáveis
+30/60/90, fórmula configurável, campos dinâmicos, subtemplates e herança. Não
+implementado por decisão: hoje um template é cópia estruturada versionada, e a
+parametrização deve nascer do uso real — não da antecipação.
+
+---
 # Next recommended implementation
 
 Blocos A-C completos (exceto Usuários), **Bloco D completo (22-28)**,

@@ -2394,3 +2394,67 @@ navigable in both directions.
 - **Confidentiality.** Identity travels to the order (quote code, pricing
   code, tier). Cost, margin, markup and commission do not — those stay the
   quote's internal economics.
+
+---
+
+# 35. Formulation templates (implemented)
+
+## The rule
+
+**Um Template de Formulação é uma matriz técnica versionada usada para criar
+Formulações de Produto. O uso de um template gera uma cópia independente.
+Alterações posteriores no template nunca modificam automaticamente
+Formulações, CMV, Estruturas de Custos, Precificações, Orçamentos, Pedidos ou
+OPs existentes.**
+
+## Why copy and not link
+
+Pointing several products at the same live formulation would have cost less
+code. It was refused because the first change one customer asked for would
+rewrite another customer's recipe, and the discovery would happen in
+production — the one place where a wrong batch cannot be undone.
+
+## Durable rules
+
+- **Using a template copies.** New rows, new ids. Nothing is shared with the
+  template or between products that used it. There is no sync, no bulk update
+  and no "apply to all products" — those features would break the rule above.
+- **Versions.** DRAFT edits, ACTIVE is history, ARCHIVED leaves the library.
+  Changing an active version means creating a new one; the previous stays,
+  because formulations point at it. One ACTIVE version per template, enforced
+  by a partial unique index. One DRAFT at a time — two would be two technical
+  truths in edit, and the second activation would silently erase the first.
+- **Only ACTIVE versions can be used.** A draft is work in progress nobody has
+  reviewed.
+- **The empty V1 is filled, not bypassed.** A technical product is born with an
+  empty draft; using a template fills it. If the target already has components,
+  a new version is created and the previous one is left untouched — never
+  overwritten.
+- **Supply responsibility is a suggestion.** Who supplies each material changes
+  per customer. The copy carries the template's value as a starting point and
+  the product can change it without touching the library.
+- **Nothing commercial travels.** No customer, no project, no quote, no cost
+  structure, no calculation, no pricing, no order. A matrix meant to be reused
+  across customers cannot carry the name of one of them, so the template's name
+  is chosen by whoever creates it.
+- **Saving a formulation as a template is a copy too.** The original does not
+  move, convert or change owner, and the template starts as a DRAFT so someone
+  reviews before it is reused.
+- **Provenance, not a channel.** `FormulationVersion.originTemplateVersionId`
+  records where the recipe came from, with code and number frozen alongside so
+  the label survives the link. Changes never flow back through it.
+- **A newer template version is announced, never applied.** There is no
+  "update to V4" that overwrites: overwriting would rewrite a recipe that may
+  already have backed a cost, a price and a production order. The path is
+  compare, then create a new formulation version.
+- **The cost engine never reads a template.** CMV, cost structures, pricing,
+  quotes and orders keep reading Product → FormulationVersion. A test asserts
+  that no operational table carries a foreign key to the template tables.
+- **Legacy.** Formulations created before this capability keep a null origin.
+  No backfill, no template invented from the existing corpus.
+
+## Deliberately not built
+
+Parameterised templates — placeholders, 30/60/90 variables, configurable
+formulas, dynamic fields, sub-templates, inheritance, a product configurator.
+A template is a versioned structured copy. See the backlog entry.

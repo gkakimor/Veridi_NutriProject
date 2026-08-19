@@ -289,3 +289,23 @@ and must never be inferred from cost or from Purchase Order prices.
 
 # HR
 Only expand beyond user/access identity if clear business value emerges.
+
+---
+
+# Parameterised formulation templates / technical configurator
+
+Formulation templates ship as a **versioned structured copy**: choose a
+matrix, and it is copied into the product's own formulation. What was
+deliberately left out — and belongs here until real use justifies it:
+
+- placeholders and variables (30/60/90 day presentations from one matrix);
+- configurable formulas and dynamic fields;
+- sub-templates and inheritance between matrices;
+- a product configurator built on top of the above.
+
+The reason to wait: parameterisation multiplies the ways a recipe can be
+expressed, and every one of them has to survive costing, pricing and a
+production order. Which parameters are actually needed should come from
+watching people reuse templates, not from anticipating it. Whatever is built
+must keep rule §35 intact — the product's formulation stays an independent
+copy, and no parameter change reaches a formulation that already exists.
