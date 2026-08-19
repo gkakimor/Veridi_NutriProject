@@ -74,3 +74,20 @@ export class CancellationBlockedError extends Error {
     this.name = "CancellationBlockedError";
   }
 }
+
+/**
+ * Pedido nascido de proposta aceita nao renegocia sozinho.
+ *
+ * Produto, quantidade e preco vieram de um acordo com o cliente. Deixar
+ * alterar aqui faria o Pedido parar de representar o que foi aceito, sem que
+ * a proposta registrasse nada — o acordo e a execucao passariam a contar
+ * historias diferentes. Mudar exige renegociar: nova versao de orcamento.
+ */
+export class CommercialOriginLockedError extends Error {
+  constructor(quoteCode: string) {
+    super(
+      `Este pedido veio do orçamento ${quoteCode}: produto e quantidade seguem o que foi acordado. Para mudar, renegocie criando uma nova versão do orçamento.`,
+    );
+    this.name = "CommercialOriginLockedError";
+  }
+}

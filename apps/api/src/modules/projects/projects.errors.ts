@@ -132,3 +132,54 @@ export class ProjectProductCustomerMismatchError extends Error {
     this.name = "ProjectProductCustomerMismatchError";
   }
 }
+
+/**
+ * Gerar Pedido a partir de proposta que o cliente não aceitou seria inventar
+ * um acordo. Enquanto a negociação corre, não há o que executar.
+ */
+export class QuoteNotAcceptedForOrderError extends Error {
+  constructor(status: string) {
+    super(
+      `Só uma proposta aceita gera pedido. Esta versão está em "${status}" — registre o aceite do cliente antes.`,
+    );
+    this.name = "QuoteNotAcceptedForOrderError";
+  }
+}
+
+/**
+ * O produto técnico do projeto não é operacional até a aprovação. Gerar o
+ * Pedido antes contornaria `Product.lifecycle` pela porta dos fundos.
+ */
+export class ProjectNotApprovedForOrderError extends Error {
+  constructor(status: string) {
+    super(
+      `O orçamento foi aceito, mas o projeto ainda está em "${status}". Aprove o projeto para liberar os produtos e então gere o pedido.`,
+    );
+    this.name = "ProjectNotApprovedForOrderError";
+  }
+}
+
+/** Proposta sem linha precificada não descreve nenhum acordo executável. */
+export class QuoteWithoutOrderableLinesError extends Error {
+  constructor() {
+    super(
+      "A proposta aceita não tem nenhuma linha com produto e preço para gerar pedido.",
+    );
+    this.name = "QuoteWithoutOrderableLinesError";
+  }
+}
+
+/**
+ * A unidade da proposta e a do produto acabado precisam ser a mesma.
+ *
+ * Converter aqui mudaria a quantidade sem mudar o preço unitário acordado, e
+ * o Pedido deixaria de representar o que o cliente aceitou.
+ */
+export class QuoteOrderUomMismatchError extends Error {
+  constructor(productCode: string, quoteUom: string, productUom: string) {
+    super(
+      `${productCode}: a proposta está em "${quoteUom}" e o produto acabado é medido em "${productUom}". Alinhe a unidade antes de gerar o pedido.`,
+    );
+    this.name = "QuoteOrderUomMismatchError";
+  }
+}

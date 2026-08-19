@@ -48,6 +48,11 @@ const CODE_SEQUENCE = "quote_code_seq";
  * só entra quando quem chamou pode vê-la, e nunca no documento do cliente.
  */
 export const quoteInclude = {
+  // O Pedido gerado entra no include para a navegação não ser de mão única:
+  // quem abre a proposta aceita precisa chegar ao pedido sem buscar por texto.
+  sourcedCustomerOrder: {
+    select: { id: true, code: true, status: true, createdAt: true },
+  },
   lines: {
     orderBy: { sortOrder: "asc" as const },
     // `pricingVersion`/`pricingTier` vêm junto porque a proveniência é
@@ -155,6 +160,14 @@ export function toQuoteVersionDTO(
       ? quote.monthlyInterestPercent.toFixed(4)
       : null,
     paymentSchedule,
+    sourcedOrder: quote.sourcedCustomerOrder
+      ? {
+          id: quote.sourcedCustomerOrder.id,
+          code: quote.sourcedCustomerOrder.code,
+          status: quote.sourcedCustomerOrder.status,
+          createdAt: quote.sourcedCustomerOrder.createdAt.toISOString(),
+        }
+      : null,
     commercialNotes: quote.commercialNotes,
     paymentTerms: quote.paymentTerms,
     leadTimeDays: quote.leadTimeDays,

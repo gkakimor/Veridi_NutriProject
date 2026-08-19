@@ -17,6 +17,7 @@ import {
   EmptyOrderError,
   InactiveCustomerError,
   InactiveLineProductError,
+  CommercialOriginLockedError,
   InvalidTransitionError,
   LineProductNotFoundError,
   MissingFinishedItemError,
@@ -66,6 +67,9 @@ function mapDomainError(
   }
   if (error instanceof InvalidTransitionError) {
     return { status: 400, body: { error: "invalid_transition", message: error.message } };
+  }
+  if (error instanceof CommercialOriginLockedError) {
+    return { status: 409, body: { error: "commercial_origin_locked", message: error.message } };
   }
   if (error instanceof OrderLockedError) {
     return { status: 400, body: { error: "order_locked", message: error.message } };

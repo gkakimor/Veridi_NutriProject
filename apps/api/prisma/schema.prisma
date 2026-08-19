@@ -641,6 +641,9 @@ model Project {
   /// produto principal/legado; a associacao real vive aqui.
   products      ProjectProduct[]
 
+  /// Pedidos originados de propostas aceitas deste projeto.
+  sourcedCustomerOrders CustomerOrder[] @relation("CustomerOrderSourceProject")
+
   @@index([customerId])
   @@index([status])
   @@index([externalCode])
@@ -805,6 +808,9 @@ model QuoteVersion {
   /// fontes de verdade.
   lines QuoteLine[]
 
+  /// O Pedido gerado a partir desta proposta aceita (no maximo um).
+  sourcedCustomerOrder CustomerOrder? @relation("CustomerOrderSourceQuote")
+
   @@unique([projectId, versionNumber])
   @@index([projectId])
   @@index([status])
@@ -875,6 +881,8 @@ model QuoteLine {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  sourcedCustomerOrderLine CustomerOrderLine? @relation("CustomerOrderLineSourceQuoteLine")
 
   /// O mesmo produto nao entra duas vezes na mesma versao.
   @@unique([quoteVersionId, productId])
@@ -1272,8 +1280,9 @@ model PricingVersion {
 
   updatedAt DateTime @updatedAt
 
-  tiers      PricingTier[]
-  quoteLines QuoteLine[]
+  tiers              PricingTier[]
+  quoteLines         QuoteLine[]
+  customerOrderLines CustomerOrderLine[] @relation("CustomerOrderLinePricingVersion")
 
   @@unique([productId, versionNumber])
   @@index([productId])
@@ -1334,7 +1343,8 @@ model PricingTier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  quoteLines QuoteLine[]
+  quoteLines         QuoteLine[]
+  customerOrderLines CustomerOrderLine[] @relation("CustomerOrderLinePricingTier")
 
   @@unique([pricingVersionId, quantity])
   @@index([pricingVersionId])
@@ -2982,6 +2992,49 @@ model CustomerOrder {
   customerCity       String?
   customerState      String?
 
+  /// ORIGEM COMERCIAL — de qual proposta aceita este Pedido nasceu.
+  ///
+  /// Nulo em Pedido digitado direto (o caminho manual continua valido) e em
+  /// todo Pedido anterior a esta capacidade. UNIQUE garante o invariante no
+  /// banco: uma QuoteVersion aceita origina no maximo um Pedido. Postgres
+  /// admite varios NULL num indice unico, entao Pedidos manuais nao colidem.
+  ///
+  /// SetNull, e nao Cascade: apagar a proposta nao pode apagar o Pedido. Os
+  /// snapshots abaixo mantem a origem legivel mesmo se o vinculo se perder.
+  sourceQuoteVersionId String?       @unique
+  sourceQuoteVersion   QuoteVersion? @relation("CustomerOrderSourceQuote", fields: [sourceQuoteVersionId], references: [id], onDelete: SetNull)
+  sourceProjectId      String?
+  sourceProject        Project?      @relation("CustomerOrderSourceProject", fields: [sourceProjectId], references: [id], onDelete: SetNull)
+
+  /// Identidade da origem, congelada: le-se sem depender do join.
+  sourceQuoteCode          String?
+  sourceQuoteVersionNumber Int?
+  sourceProjectCode        String?
+
+  /// O ACORDO, congelado no momento em que o Pedido nasceu.
+  ///
+  /// A QuoteVersion aceita ja e imutavel (so DRAFT edita), entao subtotal,
+  /// desconto e total poderiam ser lidos dela. Ficam aqui porque o Pedido e
+  /// um documento historico por si: ele responde "por que fechou por este
+  /// valor" sem depender de nenhum outro registro continuar existindo.
+  ///
+  /// O desconto e GLOBAL sobre o subtotal e NAO e rateado nas linhas — o
+  /// sistema nao possui essa regra, e inventar rateio criaria um preco por
+  /// linha que ninguem acordou.
+  agreedSubtotalAmount  Decimal? @db.Decimal(14, 2)
+  agreedDiscountPercent Decimal? @db.Decimal(7, 4)
+  agreedTotalAmount     Decimal? @db.Decimal(14, 2)
+
+  /// Plano de pagamento como foi apresentado ao cliente (entrada, cada
+  /// parcela com vencimento, juros, total a prazo).
+  ///
+  /// Congelado como resultado, e nao como parametros, de proposito: os
+  /// parametros vivem na Quote e nao mudam, mas a ARITMETICA que os traduz
+  /// em parcelas e codigo. Recalcular anos depois, com outra formula, daria
+  /// um plano diferente do que o cliente assinou. Isto nao e financeiro nem
+  /// contas a receber — e o registro do que foi acordado.
+  agreedPaymentSchedule Json?
+
   confirmedAt DateTime?
   confirmedBy String?
 
@@ -3002,6 +3055,7 @@ model CustomerOrder {
 
   @@index([status])
   @@index([customerId])
+  @@index([sourceProjectId])
   @@map("customer_orders")
 }
 
@@ -3029,6 +3083,33 @@ model CustomerOrderLine {
   finishedItemId   String?
   finishedItemCode String?
   finishedItemName String?
+
+  /// ORIGEM COMERCIAL DA LINHA — qual linha da proposta virou esta.
+  sourceQuoteLineId String?    @unique
+  sourceQuoteLine   QuoteLine? @relation("CustomerOrderLineSourceQuoteLine", fields: [sourceQuoteLineId], references: [id], onDelete: SetNull)
+
+  /// O PRECO ACORDADO e sua origem, congelados na criacao.
+  ///
+  /// O Pedido nunca recalcula preco, nunca busca a precificacao vigente e
+  /// nunca reconstroi o acordo pelo CMV atual: PREC nova, CALC novo ou
+  /// compra nova nao reescrevem o que o cliente aceitou.
+  ///
+  /// MANUAL permanece MANUAL — nao se procura uma PREC correspondente
+  /// retroativamente, porque ela nao existiu na negociacao.
+  agreedUnitPrice   Decimal?          @db.Decimal(14, 4)
+  agreedPriceSource QuotePriceSource?
+
+  /// Proveniencia da faixa, quando o preco veio de precificacao. Identidade
+  /// apenas — custo, margem, markup e comissao continuam sendo informacao
+  /// interna do orcamento e nao atravessam para o Pedido.
+  agreedPricingVersionId     String?
+  agreedPricingVersion       PricingVersion? @relation("CustomerOrderLinePricingVersion", fields: [agreedPricingVersionId], references: [id], onDelete: SetNull)
+  agreedPricingTierId        String?
+  agreedPricingTier          PricingTier?    @relation("CustomerOrderLinePricingTier", fields: [agreedPricingTierId], references: [id], onDelete: SetNull)
+  agreedPricingCode          String?
+  agreedPricingVersionNumber Int?
+  agreedPricingTierQuantity  Decimal?        @db.Decimal(18, 6)
+  agreedPricingTierUom       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
