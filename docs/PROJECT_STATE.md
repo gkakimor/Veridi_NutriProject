@@ -5165,6 +5165,28 @@ texto do botão que os abriu.
 **Retomada**: depois do deploy, o Caso 01 recomeça criando a V2 da formulação
 de `PROD-000005` com 60 doses por embalagem, e segue do CALC em diante.
 
+## Endurecimento operacional (branch `overnight/operational-hardening`)
+
+Todo o backlog aberto da auditoria VAL-LEG-01 foi implementado:
+
+- **Item × Fornecedor** cria relação, homologação, preferência e primeira
+  oferta numa ação só, em uma transação, validando antes de escrever;
+- **nova versão da EC** passa a copiar o recurso de energia; energia derivada
+  sem recurso tarifário virou pendência bloqueante;
+- **Posição de Estoque** explica na linha o que está retido e por quê;
+- **Calcular custo** virou ação primária e **Salvar cálculo** secundária, com
+  confirmação e trava de duplo envio (a auditoria gerou dois CALC idênticos);
+- **observações comerciais** em textarea; **Inativar relação** com peso
+  destrutivo e confirmação; um único "Fechar" por modal;
+- **rótulos de confirmação** deixaram de repetir o botão que os abriu;
+- **importação**: parser conservador de endereço legado e política de
+  validade histórica (ver `VERIDI_MIGRATION.md`);
+- **compra antes da aprovação do projeto**: comportamento mantido e
+  documentado como regra (`PRODUCT_RULES.md` §38).
+
+Zero migration — todas as colunas usadas já existiam.
+
+
 ---
 
 # State maintenance

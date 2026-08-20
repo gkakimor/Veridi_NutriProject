@@ -216,3 +216,59 @@ sobrescrita silenciosa).
 `pnpm veridi:data:validate` e `pnpm veridi:data:seed` continuam existindo
 para não quebrar hábito antigo. `veridi:data:seed` executa **o mesmo
 pipeline** do importador oficial — não existe uma segunda implementação.
+
+## Política de dados históricos
+
+Duas decisões que a auditoria VAL-LEG-01 forçou a explicitar. Ambas nascem da
+mesma regra: o importador registra o que a planilha diz, e nunca melhora o
+dado para ele caber.
+
+### Validade: datas históricas são preservadas
+
+**O importador nunca renova validade.** Um lote com validade 09/09/2023
+continua com 09/09/2023 depois de importado, e portanto continua vencido.
+
+Isso é inconveniente de propósito. Deslocar a data para o futuro tornaria o
+lote utilizável, e a produção consumiria material vencido sem que ninguém
+tivesse decidido isso — a decisão de aceitar, descartar ou reanalisar é da
+Qualidade, não de um script de migração.
+
+Os dois contextos não se misturam:
+
+| | Validade |
+|---|---|
+| Importação histórica | preservada como está; lote vencido segue vencido |
+| Simulação / validação | data futura pode ser criada, explicitamente, pelo operador — e classificada como SINTÉTICA |
+
+O saldo inicial pode entrar com lote vencido, mas nunca como `AVAILABLE`: a
+validação recusa com `EXPIRED_OPENING_LOT` e pede `AWAITING_RELEASE` ou
+`BLOCKED`. O saldo existe; a disponibilidade é que não se presume.
+
+### Endereço: decomposição conservadora, sem falsa precisão
+
+O legado guarda o endereço numa string só — "Rua Vicente José de Almeida, n°
+158, bairro Cupece" — e o ERP tem Logradouro, Número e Bairro separados.
+
+`scripts/veridi-data/legacy-address.ts` resolve os padrões que o corpus
+realmente usa:
+
+- logradouro: só a primeira parte, e só quando começa com um tipo conhecido
+  (Rua, Av., Travessa, Rodovia…);
+- número: rotulado (`n°`, `nº`, `no`, `num`, `número`) ou uma parte que seja
+  apenas dígitos. "Km 13" e "Apto 42" não são número de porta;
+- bairro: **só quando vem rotulado**. Heurística posicional erra em endereço
+  com complemento, e complemento é o que mais aparece no cadastro antigo.
+
+Nos 80 clientes do corpus: 1 sem endereço, 65 começam com logradouro
+reconhecível, 66 têm número rotulado e 69 têm bairro rotulado. O resto vai
+para revisão.
+
+**O que não dá para afirmar fica `null`** e gera
+`ADDRESS_PARSE_REVIEW_REQUIRED` no plano, com o texto original junto. Nada de
+`S/N`, número `0` ou bairro "desconhecido": campo que parece respondido não é
+revisitado, e um cadastro errado com aparência de completo é pior que um
+campo vazio.
+
+A string original continua preservada nas notas de migração — é ela que
+alguém vai ler para decidir os casos duvidosos.
+
