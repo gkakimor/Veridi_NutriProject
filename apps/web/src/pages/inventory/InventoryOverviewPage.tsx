@@ -2,11 +2,18 @@ import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
 import type { InventoryItemSummaryDTO, ItemType } from "@veridi/shared";
-import { ITEM_TYPES, ITEM_TYPE_LABELS } from "@veridi/shared";
+import { INVENTORY_UNAVAILABLE_REASON_LABELS, ITEM_TYPES, ITEM_TYPE_LABELS } from "@veridi/shared";
 import { useInitialFilters } from "../../lib/filter-params";
 import { listInventory } from "../../lib/inventory-api";
 
 type TypeFilter = ItemType | "all";
+
+/** "3 kg aguardando liberação da Qualidade · 2 kg reservado" */
+function explicarIndisponibilidade(item: InventoryItemSummaryDTO): string {
+  return item.unavailable
+    .map((linha) => `${linha.quantity} ${item.unitCode} ${INVENTORY_UNAVAILABLE_REASON_LABELS[linha.reason]}`)
+    .join(" · ");
+}
 
 const PAGE_SIZE = 20;
 
@@ -180,7 +187,20 @@ export function InventoryOverviewPage() {
                 <td>{item.unitCode}</td>
                 <td className="is-numeric">{item.onHand}</td>
                 <td className="is-numeric">{item.reserved}</td>
-                <td className="is-numeric">{item.available}</td>
+                <td className="is-numeric">
+                  {item.available}
+                  {/*
+                      A linha que destoa é a única que alguém pergunta.
+                      Físico 5 e Disponível 0 sem explicação obriga o
+                      operador a abrir o item para descobrir que o lote
+                      aguarda a Qualidade. A causa vem dos lotes reais.
+                  */}
+                  {item.unavailable.length > 0 && (
+                    <span className="cell-sub cell-sub--wrap">
+                      {explicarIndisponibilidade(item)}
+                    </span>
+                  )}
+                </td>
                 <td className="is-numeric">{item.onOrder}</td>
               </tr>
             ))}
