@@ -357,6 +357,23 @@ function buildPendencies(
         resourceId: null,
       });
     }
+    /*
+     * kWh sem tarifa é quantidade, não custo.
+     *
+     * A estrutura se dizia "Completa" e o cálculo é que revelava a falta —
+     * tarde demais, porque a versão já estava ativa e não se edita. Se a
+     * energia derivada não tem como virar dinheiro, a premissa falta aqui.
+     */
+    if (!version.energyResourceId) {
+      pendencies.push({
+        code: "ENERGY_RATE_NOT_INFORMED",
+        description:
+          "Nenhum recurso de energia foi escolhido para valorizar o consumo derivado dos equipamentos.",
+        severity: "BLOCKING",
+        target: "SELF",
+        resourceId: null,
+      });
+    }
   }
 
   // Informativo: a estrutura continua válida sobre a receita que ela
@@ -649,6 +666,17 @@ export async function createIndustrialCostVersion(
         referenceOutputUomCode: referenceUom,
         ...(input.notes !== undefined ? { notes: input.notes } : { notes: source?.notes ?? null }),
         energyCalculationMode: source?.energyCalculationMode ?? "NONE",
+        /*
+         * O recurso que valoriza o kWh derivado é PREMISSA, não resultado.
+         *
+         * Ele ficava de fora da cópia junto com os snapshots econômicos, e
+         * a consequência apareceu em produção: a versão nova nascia
+         * "Completa", o cálculo saía PARTIAL com energia "—", e o operador
+         * precisava criar mais uma versão só para reescolher o mesmo
+         * recurso. A tarifa continua sendo resolvida pela data do cálculo;
+         * o que se copia é a escolha de QUAL recurso tarifa a energia.
+         */
+        ...(source?.energyResourceId ? { energyResourceId: source.energyResourceId } : {}),
         createdByUserId: actor.id,
         createdByNameSnapshot: actor.name,
       },
