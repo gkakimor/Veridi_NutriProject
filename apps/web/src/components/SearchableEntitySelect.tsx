@@ -8,6 +8,15 @@ export interface EntityOption {
   name: string;
   /** Complemento opcional à direita (ex.: unidade, cliente). */
   hint?: string;
+  /**
+   * Texto que a busca enxerga mas a lista não mostra.
+   *
+   * Cliente é o caso que obrigou isto: a linha exibe a razão social, e
+   * quem procura digita o nome fantasia ou o CNPJ. Sem este campo, "THE
+   * KING" não encontrava o cliente chamado "35.301.394 THIAGO LUZ DE
+   * SOUZA" — e a única opção na tela era cadastrar de novo.
+   */
+  searchTerms?: string;
 }
 
 /**
@@ -130,12 +139,24 @@ export function SearchableEntitySelect({
       .normalize("NFD")
       .replace(/[̀-ͯ]/g, "");
 
+  /** Só letras e dígitos: "35.301.394/0001-00" e "35301394" viram o mesmo. */
+  const compact = (text: string) => text.replace(/[^a-z0-9]/g, "");
+
   const filtered = useMemo(() => {
     const words = normalize(query.trim()).split(/\s+/).filter(Boolean);
     if (words.length === 0) return options;
     return options.filter((option) => {
-      const haystack = normalize(`${option.code} ${option.name} ${option.hint ?? ""}`);
-      return words.every((word) => haystack.includes(word));
+      const haystack = normalize(
+        `${option.code} ${option.name} ${option.hint ?? ""} ${option.searchTerms ?? ""}`,
+      );
+      const haystackCompacto = compact(haystack);
+      return words.every((word) => {
+        if (haystack.includes(word)) return true;
+        // Documento digitado com ou sem pontuação é a MESMA busca. Palavra
+        // que some ao compactar (só pontuação) não vira casamento vazio.
+        const palavraCompacta = compact(word);
+        return palavraCompacta.length > 0 && haystackCompacto.includes(palavraCompacta);
+      });
     });
   }, [options, query]);
 
@@ -182,9 +203,18 @@ export function SearchableEntitySelect({
   // DOM — e o leitor de tela ficaria mudo no meio da lista.
   const visible = useMemo(() => filtered.slice(0, 50), [filtered]);
   const canOfferCreate = canCreate && Boolean(onCreateNew);
-  const createIndex = canOfferCreate ? 0 : -1;
+  /*
+   * "+ Cadastrar novo" só encabeça a lista quando não há resultado.
+   *
+   * Enquanto ele era sempre o primeiro, a ação mais destrutiva do
+   * formulário — criar um registro duplicado — era também a mais fácil de
+   * clicar. Havendo correspondência, ela vem primeiro e o cadastro desce
+   * para o fim.
+   */
+  const criarPrimeiro = canOfferCreate && visible.length === 0;
+  const createIndex = canOfferCreate ? (criarPrimeiro ? 0 : visible.length) : -1;
   /** Deslocamento dos resultados quando o cadastro ocupa o índice 0. */
-  const primeiroResultado = canOfferCreate ? 1 : 0;
+  const primeiroResultado = criarPrimeiro ? 1 : 0;
   const navigableCount = visible.length + (canOfferCreate ? 1 : 0);
   /** Opção sob o índice navegável — `null` quando o índice é o cadastro. */
   const opcaoNoIndice = (indice: number) => visible[indice - primeiroResultado] ?? null;
@@ -277,6 +307,29 @@ export function SearchableEntitySelect({
         ? `${listId}-${opcaoNoIndice(activeIndex)!.id}`
         : undefined;
 
+  const itemCadastrar =
+    createIndex >= 0 ? (
+      <li
+        id={createOptionId}
+        role="option"
+        aria-selected={activeIndex === createIndex}
+        className={
+          activeIndex === createIndex
+            ? "entity-select__option entity-select__create is-active"
+            : "entity-select__option entity-select__create"
+        }
+        onMouseDown={(event) => {
+          // `mousedown` antes do blur fechar a lista.
+          event.preventDefault();
+          startCreate();
+        }}
+        onMouseEnter={() => setActiveIndex(createIndex)}
+      >
+        + {createLabel}
+        {query.trim() ? `: “${query.trim()}”` : ""}
+      </li>
+    ) : null;
+
   return (
     <div className="entity-select" ref={container}>
       <input
@@ -346,30 +399,10 @@ export function SearchableEntitySelect({
               maxHeight: anchor.maxHeight,
             }}
           >
-            {createIndex >= 0 && (
-              <li
-                id={createOptionId}
-                role="option"
-                aria-selected={activeIndex === createIndex}
-                className={
-                  activeIndex === createIndex
-                    ? "entity-select__option entity-select__create is-active"
-                    : "entity-select__option entity-select__create"
-                }
-                onMouseDown={(event) => {
-                  // `mousedown` antes do blur fechar a lista.
-                  event.preventDefault();
-                  startCreate();
-                }}
-                onMouseEnter={() => setActiveIndex(createIndex)}
-              >
-                + {createLabel}
-                {query.trim() ? `: “${query.trim()}”` : ""}
-              </li>
-            )}
-
             {/* Filho de `listbox` que não é opção precisa dizer que não é —
                 senão o leitor de tela conta aviso e ação como resultado. */}
+            {criarPrimeiro && itemCadastrar}
+
             {options.length === 0 && !canCreate && (
               <li role="presentation" className="entity-select__empty">
                 Nada disponível para escolher.
@@ -407,6 +440,8 @@ export function SearchableEntitySelect({
                 +{filtered.length - 50} resultados — refine a busca.
               </li>
             )}
+
+            {!criarPrimeiro && itemCadastrar}
           </ul>,
           document.body,
         )}

@@ -185,6 +185,13 @@ export function ProjectFormModal({
               id: customer.id,
               code: customer.code,
               name: customer.legalName,
+              // Nome fantasia é como o cliente se chama no telefone; a
+              // razão social é como ele assina contrato. Quem procura usa
+              // o primeiro, e o CNPJ quando não lembra nenhum dos dois.
+              ...(customer.tradeName ? { hint: customer.tradeName } : {}),
+              searchTerms: [customer.tradeName ?? "", customer.cnpj ?? ""]
+                .filter(Boolean)
+                .join(" "),
             }))}
             canCreate={canCreateCustomer}
             createLabel="Cadastrar novo cliente"
