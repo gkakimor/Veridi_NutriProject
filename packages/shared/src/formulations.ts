@@ -81,9 +81,11 @@ export interface FormulationComponentDTO {
   stockEquivalentQuantity: string;
   stockUnitCode: string;
   /** Necessidade teórica para uma unidade acabada, antes de pureza/overage. */
-  theoreticalPerUnit: string;
+  /** `null` quando a versão ainda não tem premissa para quantificar. Nunca zero. */
+  theoreticalPerUnit: string | null;
   /** Necessidade física para uma unidade acabada, já com pureza/overage. */
-  physicalPerUnit: string;
+  /** `null` quando a versão ainda não tem premissa para quantificar. Nunca zero. */
+  physicalPerUnit: string | null;
   notes: string | null;
   position: number;
 }

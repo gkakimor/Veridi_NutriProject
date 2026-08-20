@@ -119,6 +119,8 @@ export type IndustrialCostPendencyCode =
   | "SHIPPING_BOX_NOT_CONFIGURED"
   | "FORMULATION_NOT_STABLE"
   | "FORMULATION_OUTDATED"
+  /** Componentes por dose sem doses por embalagem: material não quantificável. */
+  | "FORMULATION_DOSES_MISSING"
   | "RESOURCE_RATE_NOT_INFORMED"
   | "ENERGY_NOT_CONFIGURED"
   | "EQUIPMENT_POWER_NOT_INFORMED"

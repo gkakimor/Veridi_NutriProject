@@ -104,8 +104,17 @@ export interface IndustrialCostWarningDTO {
    * `RESOURCE` = recurso industrial, que é onde mora a tarifa.
    * `ENERGY` = a seção de energia da própria estrutura de custos.
    * `ACTIVATE` = nada está errado; o rascunho só precisa ser ativado.
+   * `FORMULATION` = a receita não tem premissa para quantificar material;
+   *   é na formulação que se informa, não no custo.
    */
-  target?: "RECEIPT" | "PURCHASE" | "STALE_BASIS" | "RESOURCE" | "ENERGY" | "ACTIVATE";
+  target?:
+    | "RECEIPT"
+    | "PURCHASE"
+    | "STALE_BASIS"
+    | "RESOURCE"
+    | "ENERGY"
+    | "ACTIVATE"
+    | "FORMULATION";
   itemId?: string;
   itemCode?: string;
   resourceId?: string;

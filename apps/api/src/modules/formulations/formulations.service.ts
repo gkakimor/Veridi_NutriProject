@@ -18,7 +18,10 @@ import type {
   FormulationVersionListResponse,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import { computeComponentRequirement } from "../../lib/formulation-math.js";
+import {
+  missingFormulationContext,
+  tryComputeComponentRequirement,
+} from "../../lib/formulation-math.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
@@ -73,7 +76,7 @@ function toComponentDTO(
 
   // Previa por UNIDADE acabada — mesma matematica do Requirement da OP,
   // nunca uma conta paralela so para a tela.
-  const perUnit = computeComponentRequirement(
+  const perUnit = tryComputeComponentRequirement(
     {
       basis: component.basis,
       quantity: component.quantity,
@@ -107,8 +110,10 @@ function toComponentDTO(
       : null,
     legacyTotalUnitCode: component.legacyTotalUnitCode,
     legacyBatchUnits: component.legacyBatchUnits ? component.legacyBatchUnits.toString() : null,
-    theoreticalPerUnit: perUnit.theoreticalQuantity.toString(),
-    physicalPerUnit: perUnit.requiredQuantity.toString(),
+    // `null` = a versão ainda não tem premissa para quantificar este
+    // componente. Nunca zero: zero seria "não precisa de material".
+    theoreticalPerUnit: perUnit ? perUnit.theoreticalQuantity.toString() : null,
+    physicalPerUnit: perUnit ? perUnit.requiredQuantity.toString() : null,
     stockEquivalentQuantity: stockEquivalentQuantity.toString(),
     stockUnitCode: item.unitCode,
     notes: component.notes,
@@ -656,6 +661,22 @@ export async function activateFormulationVersion(id: string): Promise<Formulatio
   }
   if (invalidComponents.length > 0) {
     reasons.push(`componentes precisam de revisão: ${invalidComponents.join(", ")}`);
+  }
+
+  /*
+   * Premissa que a fórmula usa mas ninguém informou.
+   *
+   * A pergunta é sobre a base de CADA componente, não sobre o modo da
+   * versão: a auditoria VAL-LEG-01 ativou uma versão `FIXED_BASIS` com
+   * quatro componentes `PER_DOSE` e doses em branco. Cada material saiu
+   * com necessidade zero, e o custo industrial se declarou completo.
+   *
+   * Rascunho pode ficar incompleto — é onde se corrige. Ativa, não.
+   */
+  if (missingFormulationContext(version.components, version) === "DOSES_PER_PACKAGE") {
+    reasons.push(
+      "informe as doses por embalagem — há componentes calculados por dose",
+    );
   }
 
   // Material fornecido pelo cliente só existe se houver cliente: sem isso a

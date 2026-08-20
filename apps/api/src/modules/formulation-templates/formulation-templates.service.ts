@@ -18,6 +18,11 @@ import type {
 } from "@veridi/shared";
 import { FORMULATION_TEMPLATE_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import {
+  basisRequiresDosesPerPackage,
+  hasUsableDosesPerPackage,
+  missingFormulationContext,
+} from "../../lib/formulation-math.js";
 import { isUomCompatible } from "../items/uom.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import type { Pagination } from "../../lib/pagination.js";
@@ -379,6 +384,19 @@ export async function updateFormulationTemplateVersion(
   const doses = input.dosesPerPackage !== undefined ? input.dosesPerPackage : current.dosesPerPackage;
   if (modo === "PER_DOSE" && !doses) throw new TemplateDosesRequiredError();
 
+  /*
+   * Quem manda é a base do COMPONENTE, não o modo da versão.
+   *
+   * Uma matriz `FIXED_BASIS` com componentes `PER_DOSE` é exatamente o
+   * arranjo que zerou o material da auditoria VAL-LEG-01. Enquanto houver
+   * um componente por dose, as doses ficam — e continuam obrigatórias.
+   */
+  const componentesFinais = input.components ?? current.components;
+  const dependeDeDoses = componentesFinais.some(
+    (component) => component.basis !== undefined && basisRequiresDosesPerPackage(component.basis),
+  );
+  if (dependeDeDoses && !hasUsableDosesPerPackage(doses)) throw new TemplateDosesRequiredError();
+
   if (input.components) {
     const units = await getPrisma().unitOfMeasure.findMany();
     const anteriores = new Set(current.components.map((component) => component.itemId));
@@ -396,9 +414,9 @@ export async function updateFormulationTemplateVersion(
         ...(input.calculationMode !== undefined ? { calculationMode: input.calculationMode } : {}),
         ...(input.dosesPerPackage !== undefined ? { dosesPerPackage: input.dosesPerPackage } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
-        // Modo FIXED_BASIS não carrega doses: deixá-las escondidas faria a
-        // fórmula ressuscitar um número que ninguém está vendo.
-        ...(modo === "FIXED_BASIS" ? { dosesPerPackage: null } : {}),
+        // Modo FIXED_BASIS não carrega doses POR SI — mas um componente por
+        // dose carrega. Limpar aqui apagaria a premissa que a fórmula usa.
+        ...(modo === "FIXED_BASIS" && !dependeDeDoses ? { dosesPerPackage: null } : {}),
       },
     });
 
@@ -451,6 +469,11 @@ export async function activateFormulationTemplateVersion(
   const current = await requireTemplateVersion(id);
   if (current.status !== "DRAFT") throw new TemplateVersionNotDraftError(current.status);
   if (current.components.length === 0) throw new TemplateVersionWithoutComponentsError();
+  // Matriz da biblioteca não pode ser um caminho novo para formulação
+  // inválida: quem aplicar o template herdaria a premissa em branco.
+  if (missingFormulationContext(current.components, current) === "DOSES_PER_PACKAGE") {
+    throw new TemplateDosesRequiredError();
+  }
 
   await getPrisma().$transaction(async (tx) => {
     // Uma ativa por template — o índice único parcial no banco garante o

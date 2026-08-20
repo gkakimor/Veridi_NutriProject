@@ -9,6 +9,7 @@ import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { calculateIndustrialCost } from "./calculation.service.js";
 import {
+  CalculationBlockedByFormulationError,
   CalculationInUseError,
   IndustrialCostCalculationNotFoundError,
 } from "./calculation.errors.js";
@@ -33,6 +34,13 @@ export async function saveIndustrialCostCalculation(
   const prisma = getPrisma();
   const referenceDate = input.costReferenceDate ?? new Date();
   const result = await calculateIndustrialCost(versionId, referenceDate);
+
+  // Cálculo parcial por falta de custo de compra é documento legítimo — ele
+  // diz o que não sabe. Cálculo sem quantidade de material não é: ele nem
+  // chega a perguntar o preço.
+  if (result.warnings.some((warning) => warning.code === "FORMULATION_DOSES_MISSING")) {
+    throw new CalculationBlockedByFormulationError();
+  }
 
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, CODE_PREFIX);
   const created = await prisma.industrialCostCalculation.create({

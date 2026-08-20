@@ -39,8 +39,64 @@ export interface ComponentCalculationInput {
 export interface VersionCalculationContext {
   /** Base da versão no modo FIXED_BASIS. */
   basisQuantity: Prisma.Decimal;
-  /** Doses por embalagem — obrigatório no modo PER_DOSE. */
+  /** Doses por embalagem — obrigatório para qualquer componente PER_DOSE. */
   dosesPerPackage: number | null;
+}
+
+/**
+ * Premissa obrigatória ausente.
+ *
+ * Existe porque a versão anterior desta matemática fazia
+ * `dosesPerPackage ?? 0`: uma premissa em branco virava zero, zero
+ * multiplicava toda a fórmula, e o custo de material saía R$ 0,00 sendo
+ * anunciado como completo. Ausência de premissa é cálculo inválido, não
+ * resultado barato.
+ */
+export class FormulationContextIncompleteError extends Error {
+  constructor(readonly missing: "DOSES_PER_PACKAGE") {
+    super(
+      "Informe as doses por embalagem antes de calcular esta formulação. Há componentes calculados por dose.",
+    );
+    this.name = "FormulationContextIncompleteError";
+  }
+}
+
+/**
+ * A base do componente depende de doses por embalagem?
+ *
+ * A pergunta é sobre a BASE DO COMPONENTE, nunca sobre o modo da versão.
+ * O caso que originou este hotfix era exatamente uma versão `FIXED_BASIS`
+ * com quatro componentes `PER_DOSE`: olhar só o modo deixava passar.
+ */
+export function basisRequiresDosesPerPackage(basis: FormulationComponentBasis): boolean {
+  return basis === "PER_DOSE";
+}
+
+/** Doses por embalagem utilizável: inteiro presente e positivo. */
+export function hasUsableDosesPerPackage(dosesPerPackage: number | null | undefined): boolean {
+  return (
+    typeof dosesPerPackage === "number" && Number.isFinite(dosesPerPackage) && dosesPerPackage > 0
+  );
+}
+
+/**
+ * A versão pode ser calculada com o contexto que tem?
+ *
+ * Serve às barreiras que precisam DECIDIR antes de calcular — ativação da
+ * formulação, pendências da estrutura de custos — sem provocar a exceção
+ * só para ler a resposta.
+ */
+export function missingFormulationContext(
+  components: readonly { basis: FormulationComponentBasis }[],
+  context: Pick<VersionCalculationContext, "dosesPerPackage">,
+): "DOSES_PER_PACKAGE" | null {
+  const dependsOnDoses = components.some((component) =>
+    basisRequiresDosesPerPackage(component.basis),
+  );
+  if (dependsOnDoses && !hasUsableDosesPerPackage(context.dosesPerPackage)) {
+    return "DOSES_PER_PACKAGE";
+  }
+  return null;
 }
 
 export interface ComponentRequirement {
@@ -69,7 +125,13 @@ function basisFactor(
       return producedQuantity.dividedBy(context.basisQuantity);
     case "PER_DOSE": {
       // mg por dose → por embalagem → pela quantidade produzida.
-      const doses = new Prisma.Decimal(context.dosesPerPackage ?? 0);
+      //
+      // Sem doses por embalagem não existe fator: `?? 0` daria zero e o
+      // chamador receberia um número que parece custo e não é.
+      if (!hasUsableDosesPerPackage(context.dosesPerPackage)) {
+        throw new FormulationContextIncompleteError("DOSES_PER_PACKAGE");
+      }
+      const doses = new Prisma.Decimal(context.dosesPerPackage!);
       return doses.times(producedQuantity);
     }
     case "PER_FINISHED_UNIT":
@@ -130,4 +192,26 @@ export function computeComponentRequirement(
     purityPercentApplied: component.purityPercentApplied,
     overagePercent: component.overagePercent,
   };
+}
+
+/**
+ * Mesma conta, para quem só EXIBE.
+ *
+ * A tela da formulação em rascunho precisa continuar abrindo mesmo com
+ * premissa faltando — é lá que a pessoa vai informar a premissa. Devolve
+ * `null` em vez de explodir, e `null` é o que a coluna mostra como "—".
+ * Nenhum caminho financeiro usa esta função.
+ */
+export function tryComputeComponentRequirement(
+  component: ComponentCalculationInput,
+  producedQuantity: Prisma.Decimal,
+  context: VersionCalculationContext,
+  units: UnitOfMeasure[],
+): ComponentRequirement | null {
+  try {
+    return computeComponentRequirement(component, producedQuantity, context, units);
+  } catch (error) {
+    if (error instanceof FormulationContextIncompleteError) return null;
+    throw error;
+  }
 }

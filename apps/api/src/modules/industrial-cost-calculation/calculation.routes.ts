@@ -6,6 +6,7 @@ import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industri
 import { ProductionOrderNotFoundError } from "../production-orders/production-orders.errors.js";
 import { calculateIndustrialCost } from "./calculation.service.js";
 import {
+  CalculationBlockedByFormulationError,
   CalculationInUseError,
   IndustrialCostCalculationNotFoundError,
   InvalidCostReferenceDateError,
@@ -53,6 +54,9 @@ function mapDomainError(
   }
   if (error instanceof InvalidCostReferenceDateError) {
     return { status: 400, body: { error: "invalid_reference_date", message: error.message } };
+  }
+  if (error instanceof CalculationBlockedByFormulationError) {
+    return { status: 409, body: { error: "formulation_incomplete", message: error.message } };
   }
   return null;
 }
