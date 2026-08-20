@@ -2536,3 +2536,44 @@ reason a policy is a rule and not a table of numbers.
 A "Product Blueprint" that would bundle formulation + cost structure + pricing
 policy into one applicable package. Each library stands alone; composing them
 is a later decision. See the backlog entry.
+
+## §37 — Formulation assumptions are never implicitly zero
+
+Found by the real operational audit VAL-LEG-01, in production. A formulation
+version in `FIXED_BASIS` mode carried four `PER_DOSE` components and a null
+`dosesPerPackage`. The engine read the assumption as `dosesPerPackage ?? 0`,
+every component resolved to zero required quantity, and the industrial cost
+calculation reported **"Complete — real purchase references"** with a material
+subtotal of R$ 0.00. Hand arithmetic for that batch says R$ 370.42.
+
+The durable rule:
+
+> **Mandatory formulation assumptions never receive an implicit zero. When
+> components depend on doses per package, `dosesPerPackage` must be explicitly
+> informed and positive before activation and before calculation.**
+
+What follows from it:
+
+- **The component's basis decides, not the version's mode.** A `FIXED_BASIS`
+  version with one `PER_DOSE` component needs doses. Reading only the version
+  mode is what let the original defect through, and the same mistake existed
+  in the formulation template guard.
+- **Absence is refused, not priced.** `computeComponentRequirement` throws
+  `FormulationContextIncompleteError` rather than returning a quantity. A
+  number that looks like a requirement and is not one is worse than an error.
+- **Three barriers, not one.** Activation refuses the version; the cost
+  structure raises a `FORMULATION_DOSES_MISSING` blocking pendency; the
+  calculation fails closed — no material lines, no `COMPLETE_*` quality, no
+  direct industrial cost. A legacy version activated before the gate existed
+  still cannot produce a complete cost.
+- **A misleading calculation is not persisted.** Saving returns 409. A partial
+  calculation that says what it does not know is a legitimate document; one
+  that never asks the price of material is not.
+- **Drafts may be incomplete.** That is where the assumption gets informed.
+  The screen shows the pendency; `ACTIVE` is never born invalid.
+- **Nothing is inferred.** Not from the project, not from the product name,
+  not from the basis, not from history. `createNewVersionFrom` keeps copying
+  the legacy null forward — the recovery path is V1 ACTIVE → V2 DRAFT → inform
+  → activate V2, with V1 preserved exactly as it was.
+- **No destructive migration.** Existing active versions are not deactivated
+  and no doses are invented for them.
