@@ -374,6 +374,117 @@ export async function getAvailableByItems(
   return result;
 }
 
+/**
+ * Por que o disponível é menor que o físico.
+ *
+ * A tela mostrava Físico 5 e Disponível 0 sem nada na linha explicando a
+ * diferença — a legenda descrevia a regra geral, mas a única linha que
+ * destoava era a única sem resposta. Quem olha estoque quer saber onde o
+ * material está preso, e o sistema já sabe: está nos lotes.
+ *
+ * As causas saem dos lotes REAIS, uma por vez e na ordem em que o domínio
+ * as aplica — um lote vencido não é "aguardando qualidade" só porque
+ * também não foi liberado. Nada é inferido a partir de `available === 0`.
+ */
+export type UnavailableReason =
+  | "AWAITING_QUALITY_RELEASE"
+  | "COA_PENDING"
+  | "BLOCKED"
+  | "EXPIRED"
+  | "RESERVED";
+
+export interface UnavailableBreakdown {
+  reason: UnavailableReason;
+  quantity: Prisma.Decimal;
+}
+
+/** A causa de UM lote não estar disponível, na ordem de precedência. */
+export function unavailableReasonForLot(lot: {
+  status: string;
+  expiryDate: Date | null;
+  requiresCoaSnapshot?: boolean;
+  coaStatus?: string;
+}): UnavailableReason | null {
+  if (isLotExpired(lot)) return "EXPIRED";
+  if (lot.status === "BLOCKED") return "BLOCKED";
+  if (lot.status === "AWAITING_RELEASE") return "AWAITING_QUALITY_RELEASE";
+  if (lot.status !== "AVAILABLE") return "BLOCKED";
+  if (lot.requiresCoaSnapshot && lot.coaStatus !== "APPROVED") return "COA_PENDING";
+  return null;
+}
+
+export async function getUnavailabilityByItems(
+  prisma: PrismaOrTx,
+  items: readonly { id: string; controlsLot: boolean }[],
+  scope?: InventoryOwnerScope,
+): Promise<Map<string, UnavailableBreakdown[]>> {
+  const itemIds = items.map((item) => item.id);
+  const lotControlledIds = items.filter((item) => item.controlsLot).map((item) => item.id);
+
+  const lots = lotControlledIds.length
+    ? await prisma.lot.findMany({
+        where: { itemId: { in: lotControlledIds }, ...(scope ? lotOwnerWhere(scope) : {}) },
+      })
+    : [];
+  const lotIds = lots.map((lot) => lot.id);
+  const [onHandByLot, reservedByLot, onHandByItem, reservedByItem] = await Promise.all([
+    getOnHandByLots(prisma, lotIds),
+    getReservedByLots(prisma, lotIds),
+    getOnHandByItems(prisma, itemIds, scope),
+    getReservedByItems(prisma, itemIds, scope),
+  ]);
+
+  const porItem = new Map<string, Map<UnavailableReason, Prisma.Decimal>>();
+  const somar = (itemId: string, reason: UnavailableReason, quantity: Prisma.Decimal) => {
+    if (quantity.lessThanOrEqualTo(0)) return;
+    const atual = porItem.get(itemId) ?? new Map<UnavailableReason, Prisma.Decimal>();
+    atual.set(reason, (atual.get(reason) ?? new Prisma.Decimal(0)).plus(quantity));
+    porItem.set(itemId, atual);
+  };
+
+  const comLote = new Set(lotControlledIds);
+  for (const lot of lots) {
+    const lotOnHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
+    if (lotOnHand.lessThanOrEqualTo(0)) continue;
+    const motivo = unavailableReasonForLot(lot);
+    if (motivo) {
+      // Lote inelegível segura o saldo inteiro: reserva sobre ele não é
+      // uma segunda causa, é consequência da primeira.
+      somar(lot.itemId, motivo, lotOnHand);
+      continue;
+    }
+    const lotReserved = reservedByLot.get(lot.id) ?? new Prisma.Decimal(0);
+    somar(lot.itemId, "RESERVED", Prisma.Decimal.min(lotReserved, lotOnHand));
+  }
+
+  // Item sem controle de lote: a única retenção possível é reserva.
+  for (const item of items) {
+    if (comLote.has(item.id)) continue;
+    const onHand = onHandByItem.get(item.id) ?? new Prisma.Decimal(0);
+    const reserved = reservedByItem.get(item.id) ?? new Prisma.Decimal(0);
+    somar(item.id, "RESERVED", Prisma.Decimal.min(reserved, onHand));
+  }
+
+  const ORDEM: UnavailableReason[] = [
+    "AWAITING_QUALITY_RELEASE",
+    "COA_PENDING",
+    "BLOCKED",
+    "EXPIRED",
+    "RESERVED",
+  ];
+  const resultado = new Map<string, UnavailableBreakdown[]>();
+  for (const [itemId, motivos] of porItem) {
+    resultado.set(
+      itemId,
+      ORDEM.filter((reason) => motivos.has(reason)).map((reason) => ({
+        reason,
+        quantity: motivos.get(reason)!,
+      })),
+    );
+  }
+  return resultado;
+}
+
 function sumDirectional(
   rows: { type: InventoryMovementType; _sum: { quantity: Prisma.Decimal | null } }[],
 ): Prisma.Decimal {

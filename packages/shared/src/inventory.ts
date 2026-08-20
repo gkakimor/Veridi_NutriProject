@@ -138,7 +138,35 @@ export interface InventoryItemSummaryDTO {
   available: string;
   /** Quantidade aberta em OCs ORDERED/PARTIALLY_RECEIVED — nunca uma segunda quantidade persistida. */
   onOrder: string;
+  /**
+   * Por que o disponível é menor que o físico, derivado dos lotes reais.
+   *
+   * Vazio quando não há retenção. Nunca é inferido de `available === 0`:
+   * cada causa vem do lote que a produz, e um lote vencido não é
+   * "aguardando qualidade" só porque também não foi liberado.
+   */
+  unavailable: InventoryUnavailableReasonDTO[];
 }
+
+export type InventoryUnavailableReason =
+  | "AWAITING_QUALITY_RELEASE"
+  | "COA_PENDING"
+  | "BLOCKED"
+  | "EXPIRED"
+  | "RESERVED";
+
+export interface InventoryUnavailableReasonDTO {
+  reason: InventoryUnavailableReason;
+  quantity: string;
+}
+
+export const INVENTORY_UNAVAILABLE_REASON_LABELS: Record<InventoryUnavailableReason, string> = {
+  AWAITING_QUALITY_RELEASE: "aguardando liberação da Qualidade",
+  COA_PENDING: "laudo pendente",
+  BLOCKED: "bloqueado",
+  EXPIRED: "vencido",
+  RESERVED: "reservado",
+};
 
 export interface InventoryListResponse {
   items: InventoryItemSummaryDTO[];

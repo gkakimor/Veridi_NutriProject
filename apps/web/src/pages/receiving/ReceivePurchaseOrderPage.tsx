@@ -430,7 +430,7 @@ export function ReceivePurchaseOrderPage() {
         open={confirmOpen}
         title="Confirmar recebimento?"
         message="O recebimento será registrado no histórico e lotes internos serão criados para os itens que controlam lote. A operação não poderá ser simplesmente apagada depois."
-        confirmLabel="Confirmar recebimento"
+        confirmLabel="Confirmar"
         confirmTone="accent"
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleConfirmReceipt}

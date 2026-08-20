@@ -996,7 +996,7 @@ export function FormulationVersionPage() {
             )}
           </>
         }
-        confirmLabel="Ativar versão"
+        confirmLabel="Ativar"
         confirmTone="accent"
         onCancel={() => setActivateDialogOpen(false)}
         onConfirm={handleActivate}

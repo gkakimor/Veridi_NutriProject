@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { FindingSink } from "./corpus.js";
 import { cleanText, digitsOnly, isValidCnpj, readCorpusCsv, safeDecimal } from "./corpus.js";
+import { parseLegacyAddress } from "./legacy-address.js";
 
 /**
  * Tradução do corpus real da Veridi para o domínio do ERP.
@@ -50,8 +51,17 @@ export interface MappedCustomer {
   cnpj: string | null;
   city: string | null;
   state: string | null;
-  /** Endereço legado preservado como texto — sem parser "esperto". */
+  /** Endereço legado preservado como texto — a origem, sempre. */
   legacyAddress: string | null;
+  /**
+   * Decomposição conservadora do endereço legado.
+   *
+   * Campos que o parser não conseguiu afirmar vêm `null` e viram finding.
+   * O texto original continua em `legacyAddress` e nas notas de migração.
+   */
+  street: string | null;
+  number: string | null;
+  district: string | null;
 }
 
 export function mapCustomers(findings: FindingSink): MappedCustomer[] {
@@ -100,10 +110,21 @@ export function mapCustomers(findings: FindingSink): MappedCustomer[] {
     }
 
     const legacyAddress = cleanText(row["endereco"]);
-    if (legacyAddress) {
-      // Decomposição não é inequívoca: preserva o texto e deixa a
-      // estruturação definitiva para a capacidade 41.
-      findings.add("CUSTOMER_ADDRESS_UNSTRUCTURED", "Customer", externalCode, "endereço legado mantido em notas");
+    const endereco = parseLegacyAddress(legacyAddress);
+    if (legacyAddress && endereco.needsReview) {
+      /*
+       * O que o parser não afirma continua em aberto.
+       *
+       * "S/N" e bairro "desconhecido" preencheriam a tela e apagariam a
+       * pergunta — e ninguém volta a conferir um campo que já parece
+       * respondido. O texto bruto segue nas notas para revisão.
+       */
+      findings.add(
+        "ADDRESS_PARSE_REVIEW_REQUIRED",
+        "Customer",
+        externalCode,
+        `${endereco.reviewReason} — original: "${legacyAddress}"`,
+      );
     }
 
     customers.push({
@@ -114,6 +135,9 @@ export function mapCustomers(findings: FindingSink): MappedCustomer[] {
       city: cleanText(row["cidade"]),
       state: cleanText(row["uf"])?.toUpperCase() ?? null,
       legacyAddress,
+      street: endereco.street,
+      number: endereco.number,
+      district: endereco.district,
     });
   }
   return customers;

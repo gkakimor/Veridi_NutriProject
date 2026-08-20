@@ -349,7 +349,7 @@ export function ReceiveCustomerMaterialPage() {
         open={confirmOpen}
         title="Confirmar recebimento de material do cliente?"
         message="Os lotes criados ficarão com o cliente como proprietário e só poderão ser usados em Ordens de Produção desse cliente. O recebimento confirmado é histórico e não pode ser editado."
-        confirmLabel="Confirmar recebimento"
+        confirmLabel="Confirmar"
         confirmTone="accent"
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleConfirm}

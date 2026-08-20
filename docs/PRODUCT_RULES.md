@@ -2577,3 +2577,73 @@ What follows from it:
   → activate V2, with V1 preserved exactly as it was.
 - **No destructive migration.** Existing active versions are not deactivated
   and no doses are invented for them.
+
+## §38 — Operational rules from the VAL-LEG-01 hardening
+
+### A new cost version copies assumptions, never results
+
+`IndustrialCostVersion` created from an existing one carries the reference
+base, the manual cost lines, the resource usages, the energy calculation mode
+**and the resource chosen to price derived kWh**. It carries no rate snapshot,
+no calculation, no cost result and no reference date — those belong to the
+activation and to the calculation date, and copying them would freeze
+yesterday's tariff into tomorrow's document.
+
+The energy resource was the one assumption left out. The consequence was
+measured in production: the new version reported `Completa`, the calculation
+came back `PARTIAL` with energy `—`, and the operator had to create a further
+version to re-pick the same resource. Related: derived energy with no tariff
+resource is now a **blocking pendency**, because kWh without a tariff is a
+quantity, not a cost.
+
+### Purchasing does not depend on project approval
+
+A purchase order can be created and confirmed while its project is still in
+development. Raw material enters generic stock, not a project reservation, and
+buying is driven by stock, lead time, MOQ, aggregate need and commercial
+opportunity — none of which wait for a quote to be accepted. There is no
+`Project APPROVED → PurchaseOrder` gate, and adding one would model a
+constraint the business does not have.
+
+### Historical import never renews an expiry date
+
+A 2023 expiry stays 2023. The importer does not shift dates forward so that
+legacy lots become usable, because a lot that expired did expire — the
+inventory would then offer material that no one decided to accept.
+
+Two contexts, never mixed: **historical import** preserves the original date;
+**simulation** may create a future date, entered explicitly by the operator and
+labelled synthetic. Opening balance refuses to bring an expired lot in as
+`AVAILABLE` (`EXPIRED_OPENING_LOT`) — the balance may enter, the availability
+may not.
+
+### Unparseable address data gets no false precision
+
+The legacy address is one string; the ERP wants street, number and district.
+The importer parses the patterns the corpus actually uses and stops there.
+What it cannot assert stays `null` and raises `ADDRESS_PARSE_REVIEW_REQUIRED`,
+with the original text preserved in the migration notes.
+
+No `S/N`, no number `0`, no district "unknown". A field that looks answered is
+never revisited, so false precision costs more than an empty one.
+
+### Availability explains itself
+
+When physical is greater than available, the inventory row states which lots
+are holding the difference and why — awaiting quality release, pending CoA,
+blocked, expired or reserved. Causes come from the real lots and follow the
+domain's own precedence; an expired lot is not "awaiting quality" merely
+because it is also unreleased. Nothing is inferred from `available === 0`.
+
+### A registration form asks for what its grid shows
+
+Item × Supplier is created with qualification, preference, price and minimum
+order in the same action, inside one transaction, with everything validated
+before the first write. All four stay optional — a relation with no offer is a
+legitimate record, and the screen says "sem oferta cadastrada" rather than
+implying completeness. The offer remains its own immutable entity; what
+changed is when it may be informed, not how it is stored.
+
+Qualification history records what happened: a relation born approved is one
+`null → APPROVED` event, not an invented `PENDING` that never existed.
+

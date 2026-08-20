@@ -45,3 +45,8 @@ uploads/
 # Pacote de handoff e screenshots gerados localmente — as telas capturadas
 # com a base DEV mostram dados reais de cliente/produto.
 handoff/
+
+# Guia comercial em DOCX — material do Product Owner, mantido fora do Git
+# de propósito. Entrou uma vez por um `git add docs/` distraído; a linha
+# abaixo é para não entrar de novo.
+docs/*.docx

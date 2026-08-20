@@ -15,6 +15,7 @@ import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import {
   getAvailableByItems,
+  getUnavailabilityByItems,
   getOnHand,
   getOnHandByItems,
   getOnHandByLots,
@@ -156,12 +157,14 @@ async function buildItemSummaries(
   items: Item[],
 ): Promise<InventoryItemSummaryDTO[]> {
   const itemIds = items.map((item) => item.id);
-  const [onHandByItem, onOrderByItem, availableByItem, reservedByItem] = await Promise.all([
-    getOnHandByItems(prisma, itemIds),
-    getOnOrderByItems(prisma, itemIds),
-    getAvailableByItems(prisma, items),
-    getReservedByItems(prisma, itemIds),
-  ]);
+  const [onHandByItem, onOrderByItem, availableByItem, reservedByItem, unavailableByItem] =
+    await Promise.all([
+      getOnHandByItems(prisma, itemIds),
+      getOnOrderByItems(prisma, itemIds),
+      getAvailableByItems(prisma, items),
+      getReservedByItems(prisma, itemIds),
+      getUnavailabilityByItems(prisma, items),
+    ]);
 
   return items.map((item) => {
     const onHand = onHandByItem.get(item.id) ?? new Prisma.Decimal(0);
@@ -180,6 +183,10 @@ async function buildItemSummaries(
       reserved: reserved.toString(),
       available: available.toString(),
       onOrder: onOrder.toString(),
+      unavailable: (unavailableByItem.get(item.id) ?? []).map((linha) => ({
+        reason: linha.reason,
+        quantity: linha.quantity.toString(),
+      })),
     };
   });
 }

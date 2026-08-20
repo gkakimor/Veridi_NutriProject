@@ -171,6 +171,24 @@ export function validateOpeningRows(
     ) {
       errors.push(`linha ${row.lineNumber}: qualityStatus inválido (${row.qualityStatus})`);
     }
+    /*
+     * Lote vencido nunca abre como disponível.
+     *
+     * A validade histórica é preservada exatamente como está — o importador
+     * não renova data. Mas um lote de 2023 declarado AVAILABLE em 2026
+     * entraria como saldo utilizável, e a produção consumiria material
+     * vencido sem que ninguém tivesse decidido isso. O saldo pode entrar;
+     * disponível, não.
+     */
+    if (row.expiryDate && row.qualityStatus === "AVAILABLE") {
+      const validade = new Date(`${row.expiryDate}T12:00:00`);
+      const referencia = row.cutoverDate ? new Date(`${row.cutoverDate}T12:00:00`) : new Date();
+      if (validade.getTime() < referencia.getTime()) {
+        errors.push(
+          `linha ${row.lineNumber}: EXPIRED_OPENING_LOT — validade ${row.expiryDate} anterior à data de corte; abra como AWAITING_RELEASE ou BLOCKED, ou decida o descarte`,
+        );
+      }
+    }
   }
 
   const total = rows.reduce(

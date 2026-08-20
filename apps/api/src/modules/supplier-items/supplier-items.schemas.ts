@@ -3,11 +3,46 @@ import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { decimalStringSchema } from "../../lib/decimal-schema.js";
 import { optionalNullableDateSchema } from "../../lib/date-schema.js";
 
+/**
+ * Oferta informada junto com a relação.
+ *
+ * Mesma forma de `createOfferSchema` — a oferta continua sendo entidade
+ * própria e imutável. O que muda é só quando ela pode ser informada.
+ */
+export const initialOfferSchema = z.object({
+  unitPrice: decimalStringSchema({ allowZero: true }),
+  currencyCode: z.string().trim().min(3).max(3).optional(),
+  priceUomCode: z.string().trim().min(1, "Unidade do preço é obrigatória"),
+  minimumOrderQuantity: decimalStringSchema().optional(),
+  minimumOrderUomCode: z.string().trim().min(1).optional(),
+  effectiveAt: optionalNullableDateSchema,
+  validUntil: optionalNullableDateSchema,
+  notes: optionalNullableText(1000),
+});
+
+/**
+ * Cadastro da relação Item × Fornecedor.
+ *
+ * A grade mostra homologação, preferencial, preço e pedido mínimo; até
+ * aqui o formulário pedia só item, fornecedor, código e observações, e a
+ * relação nascia `PENDING` sem preço. Quem cadastrava em lote terminava com
+ * uma base de fornecedores que não sabia precificar nada.
+ *
+ * Os quatro campos passam a caber na mesma ação. Todos continuam
+ * OPCIONAIS: relação sem oferta é registro legítimo, e a tela diz "Sem
+ * oferta cadastrada" em vez de fingir completude.
+ */
 export const createSupplierItemSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
   supplierId: z.string().trim().min(1, "Fornecedor é obrigatório"),
   supplierItemCode: optionalNullableText(60),
   commercialNotes: optionalNullableText(1000),
+  /** Homologação inicial. Ausente = `PENDING`, como sempre foi. */
+  qualificationStatus: z.enum(["PENDING", "APPROVED", "BLOCKED"]).optional(),
+  qualificationNote: optionalNullableText(1000),
+  /** Só é aceito com homologação APPROVED — a regra é a mesma da rota. */
+  preferred: z.boolean().optional(),
+  initialOffer: initialOfferSchema.optional(),
 });
 
 export const updateSupplierItemSchema = z.object({

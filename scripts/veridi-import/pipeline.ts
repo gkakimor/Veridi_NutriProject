@@ -224,6 +224,10 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
       cnpj: customer.cnpj,
       city: customer.city,
       state: customer.state,
+      // Só o que o parser conseguiu afirmar. `null` continua null.
+      street: customer.street,
+      number: customer.number,
+      district: customer.district,
       // Endereço legado fica em notas: decompor não é inequívoco e inventar
       // rua/número/CEP seria pior que preservar o texto original.
       notes: customer.legacyAddress ? `Endereço (planilha): ${customer.legacyAddress}` : null,

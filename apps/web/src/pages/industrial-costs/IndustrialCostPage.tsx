@@ -1050,7 +1050,7 @@ export function IndustrialCostPage() {
         <ConfirmDialog
           open={activateConfirm}
           title="Ativar estrutura com pendências?"
-          confirmLabel="Ativar estrutura"
+          confirmLabel="Ativar"
           confirmTone="accent"
           message={
             <>

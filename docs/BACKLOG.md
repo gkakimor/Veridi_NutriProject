@@ -338,3 +338,111 @@ Deliberately not built now. Reasons to wait:
 Whatever is built must keep rules §35 and §36 intact: each application stays
 an independent copy, no tariff enters a cost template, no price enters a
 policy, and nothing propagates back into an artefact that already exists.
+
+---
+
+# Findings from the VAL-LEG-01 operational audit
+
+Case 01 of the operational audit was run in production against the published
+UI, using legacy Veridi data, on release `24de17a`. Two findings were
+promoted out of this list and fixed (`d76afe7`): the per-dose formulation
+CRITICAL and the customer typeahead HIGH. What follows is what stayed open.
+
+None of these are in MVP scope. They are here because a real operator hit
+each one while trying to take a real product from customer to cost.
+
+## Item x Supplier is a two-step registration — MEDIUM
+
+The grid shows Qualification, Preferred, Price and MOQ. The creation form
+offers none of them: it takes item, supplier, supplier code and notes. A
+relation is born `Pendente` with no price, and all four fields only exist in
+the detail modal afterwards.
+
+Consequence measured: registering four materials produced four relations with
+no commercial reference at all, so `resolveMaterialCost` had nothing to fall
+back on. Whoever loads suppliers in bulk ends up with a supplier base that
+cannot price anything.
+
+Not a bug — the detail modal does the job, and offers are correctly
+immutable. The cost is that the fast path produces incomplete records.
+
+## "New version" of a cost structure drops the energy resource — MEDIUM
+
+Creating a new `IndustrialCostVersion` from an active one carries the
+reference base, the resource usages and the energy calculation mode, but not
+`energyResourceId` — the resource that turns derived kWh into money.
+
+The new version is therefore reported as `Completa`, and only the calculation
+reveals the gap: energy comes out `—` and quality drops to `PARTIAL`. Found
+during the hotfix deploy itself; it cost an extra structure version
+(`EC-000002` became a discard in practice).
+
+The screen explains it well once it happens — *"Nenhum recurso de energia foi
+escolhido para valorizar o consumo derivado dos equipamentos"* — so this is
+about the copy being incomplete, not about the message.
+
+## Legacy address arrives as one line — MEDIUM (migration)
+
+`clientes.csv` stores "Rua Vicente Jose de Almeida, n 158, bairro Cupece" in
+a single field. The customer form wants Logradouro, Numero and Bairro apart.
+Every migrated customer needs a manual split.
+
+This is an import policy question, not a screen defect. Decide whether the
+importer parses, or whether the form accepts a single free-form line for
+migrated records.
+
+## Legacy expiry dates are all in the past — MEDIUM (migration)
+
+Every `validade` in the legacy purchase history is 2023 or earlier. Received
+literally in 2026 they are expired on arrival, so no lot can be released and
+nothing can be produced. The audit had to substitute synthetic future dates
+and label them.
+
+Again a policy decision: refuse expired legacy lots, import them as blocked,
+or require an explicit override per lot.
+
+## Action labels differ from screen to screen — LOW
+
+"Criar item", "Criar relação", "Criar fornecedor", "Salvar", "Registrar
+tarifa", "Salvar rascunho", "Salvar base". Each screen asks the operator to
+re-learn which button commits. Worth one pass of naming, not a redesign.
+
+## Confirmation dialogs repeat the label of the button that opened them — LOW
+
+"Ativar versão" opens a dialog whose confirm button is also "Ativar versão";
+same for "Confirmar OC", "Confirmar recebimento" and "Ativar estrutura". The
+dialog text itself is good — it says what becomes immutable. Only the button
+label is ambiguous about which of the two is being pressed.
+
+## Purchasing is allowed against a non-approved project — decision, not defect
+
+Purchase orders were created and confirmed while `PROJ-000004` was still "Em
+desenvolvimento". This is coherent with the domain: raw material enters
+generic stock and is not reserved to a project. Recorded so Product Ownership
+can decide deliberately rather than discover it later.
+
+## Visual observations from the audit screenshots
+
+Reviewed from the captures taken during the run, not from a dedicated
+accessibility pass.
+
+- **Stock position does not say why available is zero.** `MP-000003` shows
+  Físico 5 and Disponível 0 because the lot awaits quality release. The
+  column legend above the table explains the rule in general, but the row
+  that actually differs carries no marker. It is the one row a person will
+  ask about, and the only one with nothing to point at.
+- **"Salvar cálculo" sits next to "Calcular custo" as the visually primary
+  action.** Recalculating is exploratory and free; saving freezes an
+  immutable document that quotes and prices will cite. The committing action
+  should not be the easier of the two to hit.
+- **Commercial notes are a single-line input holding sentence-length text.**
+  In `Item x Fornecedor` the stored note renders as "Preço LEGADO R$ 272/kg;
+  pedido mínimo 1. Fonte: precos_for…" with no way to read the rest in place.
+- **"Inativar relação" is styled as plain text between two bordered
+  buttons.** The least reversible action on the panel has the least visual
+  weight, while "Marcar como preferencial" is the filled one.
+- **Two "Fechar" affordances on the same detail modal** — one top-right, one
+  bottom-right. Harmless, but it reads as two different exits.
+- **Leftover test data is visible in the production stock list** —
+  `PA-000003 Test` and `PA-000004 Test 2`. Data hygiene, not code.
+
