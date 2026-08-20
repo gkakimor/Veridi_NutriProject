@@ -95,6 +95,15 @@ function WarningAction({
     return null;
   }
 
+  if (warning.target === "FORMULATION") {
+    // Premissa da receita não se conserta no custo. O caminho é a
+    // formulação, e a versão ativa se corrige por versão nova.
+    if (productId) {
+      return <Link to={`/produtos/${productId}/formulacao`}>Ir para a formulação</Link>;
+    }
+    return null;
+  }
+
   if (warning.target === "ENERGY") {
     /*
      * Estrutura ativa é congelada, e a seção de energia dela é só leitura —

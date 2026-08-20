@@ -5134,6 +5134,39 @@ Não criar as tabelas futuras antes do próximo slice ser confirmado.
 
 ---
 
+# Auditoria VAL-LEG-01 e hotfix da formulação por dose
+
+A auditoria operacional real (dados legados da Veridi, executada inteiramente
+pela UI publicada, release `24de17a`) chegou até o cálculo de custo e **parou
+ali**: `PROJ-000004` / `PROD-000005` / `EC-000001` continuam no Railway,
+preservados de propósito para retomar a etapa quebrada depois do deploy.
+
+O que ela encontrou (CRITICAL): componentes `PER_DOSE` com
+`FormulationVersion.dosesPerPackage` nulo produziam quantidade zero de
+material, e o custo se declarava completo com material R$ 0,00. Regra durável
+em `PRODUCT_RULES.md` §37.
+
+Hotfix na branch `fix/per-dose-formulation-integrity` (não mergeada):
+
+- `lib/formulation-math.ts` recusa contexto incompleto em vez de devolver
+  zero; a decisão olha a base do COMPONENTE, nunca o modo da versão;
+- ativação da formulação, pendência da estrutura de custos e o próprio
+  cálculo falham fechado — inclusive sobre versão ATIVA legada;
+- salvar CALC nessa condição retorna 409;
+- editor de formulação passou a expor "Doses por embalagem";
+- busca de cliente no Projeto encontra por razão social, nome fantasia e CNPJ
+  com ou sem pontuação, e o resultado existente vem antes de "Cadastrar novo".
+
+Findings da auditoria ainda ABERTOS, deliberadamente fora deste hotfix:
+Item × Fornecedor em dois passos; endereço legado em linha única; validades
+históricas vencidas; rótulos de ação inconsistentes; diálogos que repetem o
+texto do botão que os abriu.
+
+**Retomada**: depois do deploy, o Caso 01 recomeça criando a V2 da formulação
+de `PROD-000005` com 60 doses por embalagem, e segue do CALC em diante.
+
+---
+
 # State maintenance
 Keep this file concise.
 Rewrite/condense after meaningful changes.

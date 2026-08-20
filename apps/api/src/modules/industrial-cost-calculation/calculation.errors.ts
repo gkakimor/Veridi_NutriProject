@@ -27,3 +27,20 @@ export class CalculationInUseError extends Error {
     this.name = "CalculationInUseError";
   }
 }
+
+/**
+ * Cálculo que não pode virar documento.
+ *
+ * Salvar congela uma base econômica que orçamento e preço vão citar. Se a
+ * formulação não consegue nem dizer quanto material entra, o que se
+ * congelaria seria um custo sem matéria-prima — o defeito que a auditoria
+ * VAL-LEG-01 encontrou em produção.
+ */
+export class CalculationBlockedByFormulationError extends Error {
+  constructor() {
+    super(
+      "Não é possível salvar este cálculo: a formulação usada tem componentes por dose e não informa as doses por embalagem. Informe as doses na formulação e calcule novamente.",
+    );
+    this.name = "CalculationBlockedByFormulationError";
+  }
+}

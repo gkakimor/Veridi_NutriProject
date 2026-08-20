@@ -66,7 +66,7 @@ interface ComponentRow {
   overagePercent: string;
   notes: string;
   stockEquivalentQuantity: string;
-  physicalPerUnit: string;
+  physicalPerUnit: string | null;
 }
 
 function statusBadgeClass(status: FormulationVersionDTO["status"]): string {
@@ -201,6 +201,18 @@ export function FormulationVersionPage() {
 
   const isDraft = version?.status === "DRAFT";
 
+  /*
+   * Doses por embalagem: quem exige é a base do COMPONENTE.
+   *
+   * O modo da versão continua importando para o default de linha nova, mas
+   * não pode ser o critério de exibição — foi assim que o campo sumiu numa
+   * fórmula que precisava dele.
+   */
+  const dosesObrigatorias =
+    calculationMode === "PER_DOSE" || components.some((row) => row.basis === "PER_DOSE");
+  const dosesInformadas = Number(dosesPerPackage.trim()) > 0;
+  const mostrarDoses = dosesObrigatorias || dosesPerPackage.trim() !== "";
+
   function optionsForRow(row: ComponentRow): ItemOption[] {
     const usedByOtherRows = new Set(components.filter((c) => c.key !== row.key).map((c) => c.itemId));
     const base = activeItems.filter((item) => !usedByOtherRows.has(item.id));
@@ -247,7 +259,7 @@ export function FormulationVersionPage() {
         overagePercent: "",
         notes: "",
         stockEquivalentQuantity: "",
-        physicalPerUnit: "",
+        physicalPerUnit: null,
       },
     ]);
   }
@@ -555,10 +567,18 @@ export function FormulationVersionPage() {
             </p>
           </div>
 
-          {calculationMode === "PER_DOSE" && (
+          {/*
+              Quem decide se o campo aparece é a fórmula, não o modo.
+              A auditoria VAL-LEG-01 tinha modo "Base fixa" com quatro
+              componentes por dose: o campo ficava escondido, as doses
+              ficavam nulas e todo material saía zerado. Um valor já
+              gravado também mantém o campo à vista — campo que some
+              levando o número junto é pior que campo a mais.
+          */}
+          {mostrarDoses && (
             <div className="field field--narrow">
               <label htmlFor="version-doses">
-                Doses por embalagem <span className="req">*</span>
+                Doses por embalagem {dosesObrigatorias && <span className="req">*</span>}
               </label>
               {isDraft ? (
                 <input
@@ -570,6 +590,15 @@ export function FormulationVersionPage() {
                 />
               ) : (
                 <p className="field-readonly-value">{version.dosesPerPackage ?? "—"}</p>
+              )}
+              <p className="field__hint">
+                Usado para calcular a quantidade total de componentes definidos por dose.
+              </p>
+              {dosesObrigatorias && !dosesInformadas && (
+                <p className="field__error">
+                  Há componentes calculados por dose. Sem este número a formulação não pode ser
+                  ativada — e a quantidade de material não existe.
+                </p>
               )}
               {fieldErrors["dosesPerPackage"] && (
                 <p className="field__error">{fieldErrors["dosesPerPackage"]}</p>

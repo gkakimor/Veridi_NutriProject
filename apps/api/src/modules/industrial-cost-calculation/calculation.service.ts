@@ -13,6 +13,7 @@ import { REAL_REFERENCE_SOURCES } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { convertUomDecimal } from "../items/uom.js";
 import { computeFormulationRequirements } from "../production-orders/requirement-calc.js";
+import { FormulationContextIncompleteError } from "../../lib/formulation-math.js";
 import { pickCurrentRate } from "../industrial-resources/industrial-resources.service.js";
 import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industrial-costs.errors.js";
 import { resolveMaterialCost } from "./material-cost.js";
@@ -437,13 +438,34 @@ export async function calculateIndustrialCost(
     units,
   );
 
-  // Quantidade física vem da MESMA matemática dos Requirements — pureza e
-  // overage inclusos, sem segunda implementação da fórmula.
-  const requirements = await computeFormulationRequirements(
-    prisma,
-    version.formulationVersionId,
-    referenceOutputInFormulaUom,
-  );
+  /*
+   * Quantidade física vem da MESMA matemática dos Requirements — pureza e
+   * overage inclusos, sem segunda implementação da fórmula.
+   *
+   * Se a formulação não tem premissa para quantificar seus componentes, o
+   * cálculo falha FECHADO: nenhum material entra, e a lista de materiais
+   * fica vazia em vez de mostrar quatro linhas de R$ 0,00. Formulação ativa
+   * antiga também cai aqui — o gate de ativação não existia quando ela foi
+   * ativada.
+   */
+  let requirements: Awaited<ReturnType<typeof computeFormulationRequirements>> = [];
+  let formulationIncomplete = false;
+  try {
+    requirements = await computeFormulationRequirements(
+      prisma,
+      version.formulationVersionId,
+      referenceOutputInFormulaUom,
+    );
+  } catch (error) {
+    if (!(error instanceof FormulationContextIncompleteError)) throw error;
+    formulationIncomplete = true;
+    warnings.push({
+      code: "FORMULATION_DOSES_MISSING",
+      message:
+        "Formulação incompleta: informe as doses por embalagem para calcular os componentes por dose. Enquanto isso, o custo de material não existe — não é zero.",
+      target: "FORMULATION",
+    });
+  }
 
   const materials: IndustrialMaterialCostLineDTO[] = [];
   const customerSuppliedMaterials: CustomerSuppliedMaterialDTO[] = [];
@@ -592,7 +614,11 @@ export async function calculateIndustrialCost(
     .plus(buckets.THIRD_PARTY_SERVICE)
     .plus(buckets.OTHER);
 
-  const directComplete = !materialMissing && !resourceCosts.missing && !manualMissing;
+  // Formulacao sem premissa contamina o direto inteiro: sem quantidade de
+  // material nao existe custo industrial direto, por mais completa que
+  // esteja a parte de recursos.
+  const directComplete =
+    !formulationIncomplete && !materialMissing && !resourceCosts.missing && !manualMissing;
   const directIndustrialCost = directComplete ? directKnown : null;
 
   // Percentuais só existem sobre um custo direto completo — aplicar sobre

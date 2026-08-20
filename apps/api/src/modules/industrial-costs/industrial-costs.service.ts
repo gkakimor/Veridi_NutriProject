@@ -12,6 +12,7 @@ import type {
 import { MAX_INDUSTRIAL_COST_PERCENT, usageUomForResourceType } from "@veridi/shared";
 import { pickCurrentRate, toRateDTO } from "../industrial-resources/industrial-resources.service.js";
 import { getPrisma } from "../../db/prisma.js";
+import { missingFormulationContext } from "../../lib/formulation-math.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { convertUomDecimal, UomDimensionMismatchError, UomNotFoundError } from "../items/uom.js";
 import {
@@ -235,6 +236,28 @@ function buildPendencies(
     pendencies.push({
       code: "FORMULATION_NOT_STABLE",
       description: "A formulação referenciada ainda é rascunho.",
+      severity: "BLOCKING",
+      target: "FORMULATION",
+      resourceId: null,
+    });
+  }
+
+  /*
+   * Terceira barreira: mesmo uma formulação ATIVA antiga pode estar
+   * inválida — versões ativadas antes deste hotfix passaram pelo gate
+   * quando ele ainda não existia. Uma estrutura que depende dela não pode
+   * se declarar completa nem produzir custo de material.
+   */
+  if (
+    missingFormulationContext(
+      version.formulationVersion.components,
+      version.formulationVersion,
+    ) === "DOSES_PER_PACKAGE"
+  ) {
+    pendencies.push({
+      code: "FORMULATION_DOSES_MISSING",
+      description:
+        "A formulação usada tem componentes calculados por dose, mas não informa as doses por embalagem. Sem isso, a quantidade de material não existe.",
       severity: "BLOCKING",
       target: "FORMULATION",
       resourceId: null,
