@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type {
   IndustrialCostCalculationDTO,
@@ -47,6 +47,15 @@ export function CostCalculationSection({
   const navigate = useNavigate();
   const [referenceDate, setReferenceDate] = useState(today());
   const [confirmarIncompleto, setConfirmarIncompleto] = useState(false);
+  const [confirmarSalvar, setConfirmarSalvar] = useState(false);
+  /*
+   * Trava de duplo envio.
+   *
+   * `busy` chega tarde: entre o clique e o re-render o botão ainda aceita
+   * outro. Na auditoria isso gerou CALC-000001 e CALC-000002 idênticos, e
+   * snapshot é imutável — não dá para desfazer depois.
+   */
+  const salvando = useRef(false);
   const [result, setResult] = useState<IndustrialCostCalculationDTO | null>(null);
   const [history, setHistory] = useState<IndustrialCostCalculationSummaryDTO[]>([]);
   const [busy, setBusy] = useState(false);
@@ -94,13 +103,19 @@ export function CostCalculationSection({
     result.quality !== "COMPLETE_WITH_ESTIMATES";
 
   async function salvar() {
-    await run(async () => {
-      const saved = await saveIndustrialCostCalculation(versionId, {
-        costReferenceDate: new Date(`${referenceDate}T12:00:00`).toISOString(),
+    if (salvando.current) return;
+    salvando.current = true;
+    try {
+      await run(async () => {
+        const saved = await saveIndustrialCostCalculation(versionId, {
+          costReferenceDate: new Date(`${referenceDate}T12:00:00`).toISOString(),
+        });
+        loadHistory();
+        navigate(`/calculos-custo/${saved.id}`);
       });
-      loadHistory();
-      navigate(`/calculos-custo/${saved.id}`);
-    });
+    } finally {
+      salvando.current = false;
+    }
   }
 
   return (
@@ -109,7 +124,9 @@ export function CostCalculationSection({
         title="Cálculo padrão"
         subtitle="Quanto custa produzir a base de referência desta estrutura pelas informações conhecidas na data escolhida. Não é o custo realizado de uma produção."
       >
-        <div className="field-grid-2">
+        {/* Campo único e curto: o padrão do app é `field--narrow` fora da
+            grade de duas colunas, não meia tela em branco ao lado. */}
+        <div className="field field--narrow">
           <div className="field">
             <label htmlFor="cost-reference-date">Data de referência de custo</label>
             <input
@@ -127,7 +144,7 @@ export function CostCalculationSection({
         <div className="line-actions">
           <button
             type="button"
-            className="btn btn--secondary btn--sm"
+            className="btn btn--accent btn--sm"
             disabled={busy}
             onClick={() =>
               void run(async () => {
@@ -142,10 +159,16 @@ export function CostCalculationSection({
           >
             Calcular custo
           </button>
+          {/*
+              Calcular é exploração reversível; salvar cria documento
+              imutável que orçamento e preço vão citar. A ação que
+              compromete não deve ser a mais fácil de acertar — por isso
+              ela é secundária, e sempre pergunta antes.
+          */}
           {canSave && result && (
             <button
               type="button"
-              className="btn btn--accent btn--sm"
+              className="btn btn--secondary btn--sm"
               disabled={busy}
               onClick={() => {
                 // Congelar é decisão de quem salva — mas congelar um custo
@@ -155,7 +178,7 @@ export function CostCalculationSection({
                   setConfirmarIncompleto(true);
                   return;
                 }
-                void salvar();
+                setConfirmarSalvar(true);
               }}
             >
               Salvar cálculo
@@ -292,6 +315,35 @@ export function CostCalculationSection({
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmarSalvar}
+        title="Salvar este cálculo?"
+        confirmLabel="Salvar cálculo"
+        cancelLabel="Cancelar"
+        confirmTone="accent"
+        message={
+          <>
+            <p>
+              Será criado um registro imutável com a data de referência{" "}
+              <b>{formatDate(referenceDate)}</b> e as premissas desta estrutura. Precificações
+              podem citá-lo como base econômica, e por isso ele não é reescrito depois.
+            </p>
+            {result && (
+              <p>
+                Custo total <b>{result.totalIndustrialCost ? formatBRL(result.totalIndustrialCost) : "—"}</b>{" "}
+                · por unidade{" "}
+                <b>{result.costPerUnit ? formatUnitCost(result.costPerUnit) : "—"}</b>.
+              </p>
+            )}
+          </>
+        }
+        onCancel={() => setConfirmarSalvar(false)}
+        onConfirm={() => {
+          setConfirmarSalvar(false);
+          void salvar();
+        }}
+      />
 
       <ConfirmDialog
         open={confirmarIncompleto}

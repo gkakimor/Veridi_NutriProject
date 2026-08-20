@@ -838,7 +838,7 @@ export function PurchaseOrderPage() {
         open={confirmDialogOpen}
         title="Confirmar OC?"
         message='Após confirmar, fornecedor, itens, quantidades e preços não poderão ser alterados. Só será possível ajustar a previsão de entrega e as observações.'
-        confirmLabel="Confirmar OC"
+        confirmLabel="Confirmar"
         confirmTone="accent"
         onCancel={() => setConfirmDialogOpen(false)}
         onConfirm={handleConfirm}
