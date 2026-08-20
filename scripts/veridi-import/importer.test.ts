@@ -210,7 +210,7 @@ integration("Migração — corpus real (dry-run)", () => {
     const codes = new Set(result.findings.summary().map((row) => row.code));
     for (const expected of [
       "CUSTOMER_CNPJ_INVALID",
-      "CUSTOMER_ADDRESS_UNSTRUCTURED",
+      "ADDRESS_PARSE_REVIEW_REQUIRED",
       "ITEM_ENRICHMENT_UNMATCHED",
       "SUPPLIER_ITEM_ITEM_UNRESOLVED",
       "SUPPLIER_PRICE_INVALID",
