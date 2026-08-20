@@ -126,11 +126,15 @@ async function createRawMaterial() {
 }
 
 async function adjustStock(app: App, itemId: string, quantity: string) {
-  await app.inject({
+  // Entrada de estoque que falha em silêncio reaparece dez linhas adiante
+  // como "estoque disponível insuficiente" — mensagem que culpa o release
+  // por um lançamento que nunca aconteceu.
+  const response = await app.inject({
     method: "POST",
     url: "/inventory-adjustments",
     payload: { itemId, type: "ADJUSTMENT_IN", quantity, reason: "Estoque inicial para teste" },
   });
+  expect(response.statusCode, `ajuste de estoque falhou: ${response.body}`).toBe(201);
 }
 
 async function createProductWithFormulation(
