@@ -118,6 +118,17 @@ export interface CreateSupplierItemInput {
   supplierId: string;
   supplierItemCode?: string | null;
   commercialNotes?: string | null;
+  /**
+   * Homologação, preferência e primeira oferta no mesmo cadastro.
+   *
+   * Todos opcionais: relação sem oferta continua sendo registro legítimo.
+   * A oferta permanece entidade própria e imutável — o que mudou é apenas
+   * quando ela pode ser informada, não como é guardada.
+   */
+  qualificationStatus?: "PENDING" | "APPROVED" | "BLOCKED";
+  qualificationNote?: string | null;
+  preferred?: boolean;
+  initialOffer?: CreateSupplierItemOfferInput;
 }
 
 export interface UpdateSupplierItemInput {

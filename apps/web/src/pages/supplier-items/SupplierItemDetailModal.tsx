@@ -7,6 +7,7 @@ import {
 } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAuth } from "../../app/AuthProvider";
 import { listUnits } from "../../lib/units-api";
 import {
@@ -43,6 +44,7 @@ export function SupplierItemDetailModal({
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmarInativacao, setConfirmarInativacao] = useState(false);
 
   const [supplierItemCode, setSupplierItemCode] = useState("");
   const [commercialNotes, setCommercialNotes] = useState("");
@@ -103,13 +105,7 @@ export function SupplierItemDetailModal({
         crumb="Compras / Item × Fornecedor"
         crumbActive="Detalhe"
         title="Carregando…"
-        footer={
-          <div className="modal-fullscreen__actions">
-            <button type="button" className="btn btn--ghost" onClick={onClose}>
-              Fechar
-            </button>
-          </div>
-        }
+        footer={null}
       >
         {error ? <p className="form-alert">{error}</p> : <p>Carregando…</p>}
       </FullWorkspaceModal>
@@ -130,11 +126,6 @@ export function SupplierItemDetailModal({
             Preço aqui é referência do fornecedor — o custo real de aquisição continua vindo do
             recebimento.
           </span>
-          <div className="modal-fullscreen__actions">
-            <button type="button" className="btn btn--ghost" onClick={onClose}>
-              Fechar
-            </button>
-          </div>
         </>
       }
     >
@@ -176,12 +167,17 @@ export function SupplierItemDetailModal({
                   value={supplierItemCode}
                   onChange={(event) => setSupplierItemCode(event.target.value)}
                 />
+                <span className="field__hint">
+                  Referência do catálogo do fornecedor — não é o código interno nem o legado.
+                </span>
               </div>
               <div className="field">
                 <label htmlFor="detail-commercial-notes">Observações comerciais</label>
-                <input
+                {/* Texto de frase inteira em input de uma linha aparecia
+                    cortado, sem forma de ler o resto ali. */}
+                <textarea
                   id="detail-commercial-notes"
-                  type="text"
+                  rows={3}
                   value={commercialNotes}
                   onChange={(event) => setCommercialNotes(event.target.value)}
                 />
@@ -205,15 +201,24 @@ export function SupplierItemDetailModal({
                 Salvar dados comerciais
               </button>
 
+              {/*
+                  A ação menos reversível do painel tinha o menor peso
+                  visual: texto puro entre dois botões com borda, ao lado de
+                  "Marcar como preferencial" preenchido. Inativar agora usa
+                  a variante destrutiva e pergunta antes; reativar é
+                  construtivo e segue sendo discreto.
+              */}
               <button
                 type="button"
-                className="btn btn--ghost btn--sm"
+                className={supplierItem.active ? "btn btn--danger btn--sm" : "btn btn--ghost btn--sm"}
                 disabled={saving}
-                onClick={() =>
-                  void run(() =>
-                    updateSupplierItem(supplierItem.id, { active: !supplierItem.active }),
-                  )
-                }
+                onClick={() => {
+                  if (supplierItem.active) {
+                    setConfirmarInativacao(true);
+                    return;
+                  }
+                  void run(() => updateSupplierItem(supplierItem.id, { active: true }));
+                }}
               >
                 {supplierItem.active ? "Inativar relação" : "Reativar relação"}
               </button>
@@ -339,6 +344,15 @@ export function SupplierItemDetailModal({
                   <td>{event.note ?? "—"}</td>
                 </tr>
               ))}
+              {/* Mesma cortesia que a tabela de ofertas logo abaixo já faz:
+                  cabeçalho sobre corpo vazio não diz nada a ninguém. */}
+              {supplierItem.qualificationHistory.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="table__empty">
+                    Nenhuma decisão de homologação registrada.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -533,6 +547,32 @@ export function SupplierItemDetailModal({
           </>
         )}
       </FormSection>
+
+      <ConfirmDialog
+        open={confirmarInativacao}
+        title="Inativar esta relação?"
+        confirmLabel="Inativar relação"
+        cancelLabel="Cancelar"
+        confirmTone="danger"
+        message={
+          <>
+            <p>
+              <b>{supplierItem.supplierName}</b> deixa de ser fornecedor considerado para{" "}
+              <b>{supplierItem.itemCode}</b>: a relação sai do sourcing e as ofertas dela param de
+              valer como referência de custo.
+            </p>
+            <p>
+              As ofertas já registradas continuam no histórico, e ordens de compra passadas não são
+              afetadas. A relação pode ser reativada depois.
+            </p>
+          </>
+        }
+        onCancel={() => setConfirmarInativacao(false)}
+        onConfirm={() => {
+          setConfirmarInativacao(false);
+          void run(() => updateSupplierItem(supplierItem.id, { active: false }));
+        }}
+      />
     </FullWorkspaceModal>
   );
 }

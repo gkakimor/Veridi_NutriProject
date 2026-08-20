@@ -136,10 +136,10 @@ export function SupplierItemsPage() {
   }, [search, qualificationStatus, supplierId, itemFamily, preferredOnly, activeOnly]);
 
   useEffect(() => {
-    listSuppliers({ active: true, pageSize: 100 })
+    listSuppliers({ active: true, pageSize: 1000 })
       .then((result) => setSuppliers(result.suppliers))
       .catch(() => setSuppliers([]));
-    listItems({ active: true, pageSize: 100 })
+    listItems({ active: true, pageSize: 1000 })
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
   }, []);

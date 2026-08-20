@@ -271,7 +271,35 @@ export async function createSupplierItem(
   });
   if (existing) throw new SupplierItemAlreadyExistsError();
 
+  /*
+   * Tudo o que pode ser recusado é recusado ANTES de escrever.
+   *
+   * Preço em moeda inexistente ou unidade incompatível não pode deixar
+   * para trás uma relação criada sem a oferta que a justificava — o
+   * usuário pediu uma coisa só.
+   */
+  const qualificationStatus = input.qualificationStatus ?? "PENDING";
+  const preferred = input.preferred === true;
+  if (preferred && qualificationStatus !== "APPROVED") {
+    throw new SupplierItemNotEligibleForPreferredError();
+  }
+
+  let preparedOffer: ReturnType<typeof prepareOffer> | null = null;
+  if (input.initialOffer) {
+    const units = await prisma.unitOfMeasure.findMany();
+    preparedOffer = prepareOffer(input.initialOffer, item.unitCode, units);
+  }
+
   const id = await prisma.$transaction(async (tx) => {
+    // Preferencial é único por Item: o lock é o mesmo que `setPreferred` usa.
+    if (preferred) {
+      await tx.$queryRaw`SELECT id FROM items WHERE id = ${input.itemId} FOR UPDATE`;
+      await tx.supplierItem.updateMany({
+        where: { itemId: input.itemId, preferred: true },
+        data: { preferred: false, updatedByUserId: actor.id, updatedByNameSnapshot: actor.name },
+      });
+    }
+
     const created = await tx.supplierItem.create({
       data: {
         itemId: input.itemId,
@@ -282,7 +310,8 @@ export async function createSupplierItem(
         ...(input.commercialNotes !== undefined
           ? { commercialNotes: input.commercialNotes }
           : {}),
-        qualificationStatus: "PENDING",
+        qualificationStatus,
+        preferred,
         createdByUserId: actor.id,
         createdByNameSnapshot: actor.name,
         updatedByUserId: actor.id,
@@ -290,16 +319,35 @@ export async function createSupplierItem(
       },
     });
 
-    // A relação nasce conhecida, não homologada — e isso fica no histórico.
+    /*
+     * O histórico registra o que aconteceu, não o que o formulário parecia.
+     *
+     * Nascer já homologado é UM evento `null → APPROVED`, com a observação
+     * de quem decidiu. Inventar um `PENDING` intermediário que nunca
+     * existiu seria escrever ficção no histórico da Qualidade.
+     */
     await tx.supplierItemQualificationHistory.create({
       data: {
         supplierItemId: created.id,
         fromStatus: null,
-        toStatus: "PENDING",
+        toStatus: qualificationStatus,
+        ...(input.qualificationNote !== undefined ? { note: input.qualificationNote } : {}),
         changedByUserId: actor.id,
         changedByNameSnapshot: actor.name,
       },
     });
+
+    if (preparedOffer) {
+      await tx.supplierItemOffer.create({
+        data: {
+          supplierItemId: created.id,
+          ...preparedOffer,
+          createdByUserId: actor.id,
+          createdByNameSnapshot: actor.name,
+        },
+      });
+    }
+
     return created.id;
   });
 
@@ -431,17 +479,43 @@ export async function createOffer(
   const prisma = getPrisma();
   const supplierItem = await requireSupplierItem(supplierItemId);
 
+  const units = await prisma.unitOfMeasure.findMany();
+  const prepared = prepareOffer(input, supplierItem.item.unitCode, units);
+
+  await prisma.supplierItemOffer.create({
+    data: {
+      supplierItemId,
+      ...prepared,
+      createdByUserId: actor.id,
+      createdByNameSnapshot: actor.name,
+    },
+  });
+
+  return (await getSupplierItemById(supplierItemId))!;
+}
+
+/**
+ * Valida e normaliza uma oferta ANTES de qualquer escrita.
+ *
+ * Vive fora da transação de propósito: moeda inválida, unidade
+ * incompatível ou vigência invertida devem impedir a relação de nascer, e
+ * não derrubar metade dela depois de criada.
+ */
+function prepareOffer(
+  input: CreateOfferInput,
+  itemUnitCode: string,
+  units: readonly UnitOfMeasureDecimalLike[],
+) {
   const currencyCode = normalizeCurrencyCode(input.currencyCode ?? DEFAULT_OFFER_CURRENCY);
   if (!isValidCurrencyCode(currencyCode)) throw new InvalidCurrencyCodeError(currencyCode);
 
-  const units = await prisma.unitOfMeasure.findMany();
-  assertUomCompatibleWithItem(input.priceUomCode, supplierItem.item.unitCode, units);
+  assertUomCompatibleWithItem(input.priceUomCode, itemUnitCode, units);
 
   if (input.minimumOrderQuantity !== undefined) {
     if (!input.minimumOrderUomCode) {
       throw new InvalidMinimumOrderError("Informe a unidade do pedido mínimo.");
     }
-    assertUomCompatibleWithItem(input.minimumOrderUomCode, supplierItem.item.unitCode, units);
+    assertUomCompatibleWithItem(input.minimumOrderUomCode, itemUnitCode, units);
   } else if (input.minimumOrderUomCode) {
     throw new InvalidMinimumOrderError("Informe a quantidade do pedido mínimo.");
   }
@@ -453,28 +527,21 @@ export async function createOffer(
     throw new InvalidOfferValidityError();
   }
 
-  await prisma.supplierItemOffer.create({
-    data: {
-      supplierItemId,
-      unitPrice: new Prisma.Decimal(input.unitPrice),
-      currencyCode,
-      priceUomCode: input.priceUomCode,
-      ...(input.minimumOrderQuantity !== undefined
-        ? {
-            minimumOrderQuantity: new Prisma.Decimal(input.minimumOrderQuantity),
-            minimumOrderUomCode: input.minimumOrderUomCode!,
-          }
-        : {}),
-      effectiveAt,
-      validUntil,
-      source: "MANUAL",
-      ...(input.notes !== undefined ? { notes: input.notes } : {}),
-      createdByUserId: actor.id,
-      createdByNameSnapshot: actor.name,
-    },
-  });
-
-  return (await getSupplierItemById(supplierItemId))!;
+  return {
+    unitPrice: new Prisma.Decimal(input.unitPrice),
+    currencyCode,
+    priceUomCode: input.priceUomCode,
+    ...(input.minimumOrderQuantity !== undefined
+      ? {
+          minimumOrderQuantity: new Prisma.Decimal(input.minimumOrderQuantity),
+          minimumOrderUomCode: input.minimumOrderUomCode!,
+        }
+      : {}),
+    effectiveAt,
+    validUntil,
+    source: "MANUAL" as const,
+    ...(input.notes !== undefined ? { notes: input.notes } : {}),
+  };
 }
 
 function assertUomCompatibleWithItem(
