@@ -33,6 +33,7 @@ import {
   substituteReservationLine,
   updateProductionOrder,
 } from "../../lib/production-orders-api";
+import { ExtraConsumptionDialog } from "../../components/ExtraConsumptionDialog";
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
 import { getItem } from "../../lib/items-api";
@@ -151,6 +152,7 @@ export function ProductionOrderPage() {
   const [substituting, setSubstituting] = useState(false);
   const [consumeQuantities, setConsumeQuantities] = useState<Record<string, string>>({});
   const [consumingLineId, setConsumingLineId] = useState<string | null>(null);
+  const [extraLineId, setExtraLineId] = useState<string | null>(null);
 
   const [finishedItem, setFinishedItem] = useState<ItemDTO | null>(null);
   const [outputQuantity, setOutputQuantity] = useState("");
@@ -279,6 +281,19 @@ export function ProductionOrderPage() {
   const activeReservationLines = (productionOrder?.requirements ?? []).flatMap((requirement) =>
     requirement.reservationLines.filter((line) => line.releasedAt === null),
   );
+
+  /* Quanto ainda cabe apontar nesta ordem. O servidor sempre recusou o
+     excesso (`output_exceeds_planned`); o que faltava era a tela dizer o
+     limite antes do envio. */
+  const restanteParaProduzir = productionOrder
+    ? Math.max(Number(productionOrder.plannedQuantity) - Number(productionOrder.producedQuantity), 0)
+    : 0;
+  const producaoAcimaDoPlanejado = (() => {
+    const digitado = outputQuantity.trim();
+    if (digitado === "") return false;
+    const valor = Number(digitado.replace(",", "."));
+    return Number.isFinite(valor) && valor > restanteParaProduzir;
+  })();
 
   function handleProductChange(nextProductId: string) {
     setProductId(nextProductId);
@@ -1182,6 +1197,7 @@ export function ProductionOrderPage() {
                     <th>Restante</th>
                     <th>Consumir agora</th>
                     <th aria-hidden="true" />
+                    <th aria-hidden="true" />
                   </tr>
                 </thead>
                 <tbody>
@@ -1223,12 +1239,25 @@ export function ProductionOrderPage() {
                           {consumingLineId === line.id ? "Confirmando…" : "Confirmar consumo"}
                         </button>
                       </td>
+                      <td>
+                        {/* Precisou de mais material do que o reservado? O
+                            limite do consumo continua de pé; o que muda é
+                            existir um caminho legítimo para ampliá-lo. */}
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--sm"
+                          disabled={line.pickingStatus !== "CONFIRMED"}
+                          onClick={() => setExtraLineId(line.id)}
+                        >
+                          Adicionar consumo extra
+                        </button>
+                      </td>
                     </tr>
                   ))}
 
                   {activeReservationLines.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="table__empty">
+                      <td colSpan={8} className="table__empty">
                         Nenhuma linha de reserva para consumir.
                       </td>
                     </tr>
@@ -1308,9 +1337,19 @@ export function ProductionOrderPage() {
                       type="text"
                       inputMode="decimal"
                       placeholder="0"
+                      aria-invalid={producaoAcimaDoPlanejado || undefined}
+                      className={producaoAcimaDoPlanejado ? "is-invalid" : undefined}
                       value={outputQuantity}
                       onChange={(event) => setOutputQuantity(event.target.value)}
                     />
+                    {/* A regra sempre existiu no servidor; a tela deixava
+                        o botão aceso e o operador descobria no envio. */}
+                    {producaoAcimaDoPlanejado && (
+                      <p className="field__error">
+                        Máximo {restanteParaProduzir} {productionOrder.outputUnitCode} — produzido
+                        nunca ultrapassa o planejado desta ordem.
+                      </p>
+                    )}
                     {fieldErrors["quantity"] && <p className="field__error">{fieldErrors["quantity"]}</p>}
                   </div>
 
@@ -1412,6 +1451,7 @@ export function ProductionOrderPage() {
                     disabled={
                       registeringOutput ||
                       !outputQuantity.trim() ||
+                      producaoAcimaDoPlanejado ||
                       (outputDestination === "EXISTING_LOT" && !outputLotId) ||
                       (outputDestination === "NEW_LOT" && !outputBusinessLotNumber.trim())
                     }
@@ -1755,6 +1795,18 @@ export function ProductionOrderPage() {
           )}
         </div>
       </div>
+
+      {extraLineId && productionOrder && (
+        <ExtraConsumptionDialog
+          productionOrderId={productionOrder.id}
+          line={activeReservationLines.find((line) => line.id === extraLineId)!}
+          onClose={() => setExtraLineId(null)}
+          onAdded={(atualizada) => {
+            setExtraLineId(null);
+            setProductionOrder(atualizada);
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={releaseDialogOpen}

@@ -1,12 +1,19 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
-import { confirmPicking, recordConsumption, substituteReservationLine } from "./picking.service.js";
+import {
+  addExtraReservation,
+  confirmPicking,
+  recordConsumption,
+  substituteReservationLine,
+} from "./picking.service.js";
 import {
   AlternateLotItemMismatchError,
   AlternateLotOwnerMismatchError,
   ConsumptionExceedsReservedError,
   ConsumptionLotNotEligibleError,
   EmptyConsumptionBatchError,
+  ExtraReservationLotItemMismatchError,
+  ExtraReservationReasonRequiredError,
   InsufficientAlternateLotError,
   InsufficientOnHandError,
   InvalidConsumptionQuantityError,
@@ -17,6 +24,7 @@ import {
   LotNoLongerEligibleError,
   LotNotFoundByCodeError,
   MissingLotCodeError,
+  NoUnreservedStockError,
   PickingRequiredError,
   ProductionOrderNotReleasedError,
   ReservationLineNotFoundError,
@@ -26,6 +34,7 @@ import {
 import { requireCurrentUser } from "../../lib/current-user.js";
 import { ProductionOrderNotFoundError } from "./production-orders.errors.js";
 import {
+  addExtraReservationSchema,
   confirmPickingSchema,
   recordConsumptionSchema,
   substituteReservationLineSchema,
@@ -112,6 +121,15 @@ function mapDomainError(
   if (error instanceof EmptyConsumptionBatchError) {
     return { status: 400, body: { error: "empty_consumption_batch", message: error.message } };
   }
+  if (error instanceof ExtraReservationReasonRequiredError) {
+    return { status: 400, body: { error: "extra_reservation_reason_required", message: error.message } };
+  }
+  if (error instanceof NoUnreservedStockError) {
+    return { status: 400, body: { error: "no_unreserved_stock", message: error.message } };
+  }
+  if (error instanceof ExtraReservationLotItemMismatchError) {
+    return { status: 400, body: { error: "extra_reservation_lot_item_mismatch", message: error.message } };
+  }
   return null;
 }
 
@@ -170,6 +188,30 @@ export const pickingRoutes: FastifyPluginAsync = async (app) => {
         requireCurrentUser(request),
       );
       return reply.send(order);
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/production-orders/:id/picking/:reservationLineId/extra", async (request, reply) => {
+    const { id, reservationLineId } = request.params as { id: string; reservationLineId: string };
+    const parsed = addExtraReservationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    try {
+      const order = await addExtraReservation(
+        id,
+        reservationLineId,
+        parsed.data,
+        requireCurrentUser(request),
+      );
+      return reply.status(201).send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

@@ -2,16 +2,25 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { requireCurrentUser } from "../../lib/current-user.js";
 import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
-import { applyFulfillmentPlan, getFulfillmentPlan } from "./fulfillment-plan.service.js";
+import {
+  applyFulfillmentPlan,
+  createRemainderProductionOrder,
+  getFulfillmentPlan,
+} from "./fulfillment-plan.service.js";
 import {
   CustomerOrderNotConfirmedError,
   ExcessiveReserveError,
   IncompletePlanCoverageError,
   MissingPlanLineError,
+  NoPendingProductionError,
   ProductNoLongerValidForProductionError,
+  RemainderExceedsPendingError,
   UnknownPlanLineError,
 } from "./fulfillment-plan.errors.js";
-import { applyFulfillmentPlanSchema } from "./fulfillment-plan.schemas.js";
+import {
+  applyFulfillmentPlanSchema,
+  createRemainderOrderSchema,
+} from "./fulfillment-plan.schemas.js";
 
 function formatZodError(error: ZodError) {
   return error.issues.map((issue) => ({
@@ -40,6 +49,12 @@ function mapDomainError(
   }
   if (error instanceof ExcessiveReserveError) {
     return { status: 400, body: { error: "excessive_reserve", message: error.message } };
+  }
+  if (error instanceof NoPendingProductionError) {
+    return { status: 400, body: { error: "no_pending_production", message: error.message } };
+  }
+  if (error instanceof RemainderExceedsPendingError) {
+    return { status: 400, body: { error: "remainder_exceeds_pending", message: error.message } };
   }
   if (error instanceof ProductNoLongerValidForProductionError) {
     return { status: 400, body: { error: "product_no_longer_valid", message: error.message } };
@@ -75,6 +90,25 @@ export const fulfillmentPlanRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       return reply.send(await applyFulfillmentPlan(id, parsed.data, requireCurrentUser(request)));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/customer-orders/:id/remainder-production-order", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = createRemainderOrderSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    try {
+      const order = await createRemainderProductionOrder(id, parsed.data, requireCurrentUser(request));
+      return reply.status(201).send(order);
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

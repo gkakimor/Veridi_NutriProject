@@ -1,12 +1,16 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
-import { requireCurrentUser } from "../../lib/current-user.js";
+import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
+import { ForbiddenError } from "../auth/auth.errors.js";
 import {
   ActiveBillingAlreadyExistsError,
+  AgreedPriceNotEditableError,
   BillingLineNotFoundError,
   BillingNotDraftError,
   BillingNotFoundError,
   EmptyShipmentForBillingError,
+  NoAgreedPriceToOverrideError,
+  PriceOverrideReasonRequiredError,
   ShipmentNotBillableError,
 } from "./billings.errors.js";
 import {
@@ -16,12 +20,14 @@ import {
   issueBilling,
   listAwaitingBilling,
   listBillings,
+  overrideBillingLinePrice,
   updateBilling,
 } from "./billings.service.js";
 import {
   cancelBillingSchema,
   createBillingSchema,
   listBillingsQuerySchema,
+  overrideBillingPriceSchema,
   updateBillingSchema,
 } from "./billings.schemas.js";
 
@@ -35,6 +41,9 @@ function formatZodError(error: ZodError) {
 function mapDomainError(
   error: unknown,
 ): { status: number; body: { error: string; message: string } } | null {
+  if (error instanceof ForbiddenError) {
+    return { status: 403, body: { error: "forbidden", message: error.message } };
+  }
   if (error instanceof BillingNotFoundError) {
     return { status: 404, body: { error: "not_found", message: error.message } };
   }
@@ -46,6 +55,15 @@ function mapDomainError(
   }
   if (error instanceof EmptyShipmentForBillingError) {
     return { status: 400, body: { error: "empty_billing", message: error.message } };
+  }
+  if (error instanceof AgreedPriceNotEditableError) {
+    return { status: 400, body: { error: "agreed_price_not_editable", message: error.message } };
+  }
+  if (error instanceof PriceOverrideReasonRequiredError) {
+    return { status: 400, body: { error: "override_reason_required", message: error.message } };
+  }
+  if (error instanceof NoAgreedPriceToOverrideError) {
+    return { status: 400, body: { error: "no_agreed_price_to_override", message: error.message } };
   }
   if (error instanceof BillingNotDraftError) {
     return { status: 400, body: { error: "billing_not_draft", message: error.message } };
@@ -116,6 +134,31 @@ export const billingsRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       return reply.send(await updateBilling(id, parsed.data));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  /**
+   * Alterar o preço faturado é decisão comercial, não operação de
+   * expedição: Produção, Qualidade, Compras e Viewer não passam daqui.
+   * Mesma política já usada em precificação e orçamento.
+   */
+  app.post("/billings/:id/lines/:lineId/price-override", async (request, reply) => {
+    const { id, lineId } = request.params as { id: string; lineId: string };
+    const parsed = overrideBillingPriceSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply
+        .status(400)
+        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const billing = await overrideBillingLinePrice(id, lineId, parsed.data, actor);
+      return reply.send(billing);
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

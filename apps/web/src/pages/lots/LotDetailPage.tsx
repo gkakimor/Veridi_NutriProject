@@ -770,6 +770,87 @@ export function LotDetailPage() {
           </FormSection>
         )}
 
+        {/* Seção própria, e não uma linha a mais na genealogia: cliente
+            não é origem de material. Junto, o operador fecha a cadeia
+            fornecedor → cliente sem sair da tela. */}
+        {traceability &&
+          traceability.kind === "FINISHED_GOOD" &&
+          traceability.commercialDestination && (
+            <FormSection
+              title="Destino comercial"
+              subtitle="Para quem este lote foi produzido e por onde saiu — não faz parte da genealogia de material."
+            >
+              <dl className="definition-list">
+                <dt>Pedido</dt>
+                <dd>
+                  <EntityLink
+                    kind="customerOrder"
+                    id={traceability.commercialDestination.customerOrderId}
+                    code={traceability.commercialDestination.customerOrderCode}
+                  />
+                </dd>
+                <dt>Cliente</dt>
+                <dd>
+                  <EntityLink
+                    kind="customer"
+                    id={traceability.commercialDestination.customerId}
+                    code={traceability.commercialDestination.customerCode}
+                    name={traceability.commercialDestination.customerName}
+                  />
+                </dd>
+                {traceability.commercialDestination.projectId && (
+                  <>
+                    <dt>Projeto</dt>
+                    <dd>
+                      <EntityLink
+                        kind="project"
+                        id={traceability.commercialDestination.projectId}
+                        code={traceability.commercialDestination.projectCode ?? ""}
+                        name={traceability.commercialDestination.projectName ?? ""}
+                      />
+                    </dd>
+                  </>
+                )}
+              </dl>
+
+              <div className="table-container table-container--spaced">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Expedição</th>
+                      <th>Data</th>
+                      <th className="is-numeric">Quantidade deste lote</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {traceability.commercialDestination.shipments.map((shipment) => (
+                      <tr key={shipment.shipmentId}>
+                        <td className="is-code">
+                          <EntityLink
+                            kind="shipment"
+                            id={shipment.shipmentId}
+                            code={shipment.shipmentCode}
+                          />
+                        </td>
+                        <td>{formatDate(shipment.shipmentDate)}</td>
+                        <td className="is-numeric">
+                          {shipment.quantity} {traceability.unitCode}
+                        </td>
+                      </tr>
+                    ))}
+                    {traceability.commercialDestination.shipments.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="table__empty">
+                          Este lote ainda não foi expedido.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </FormSection>
+          )}
+
         {traceability && traceability.kind === "RAW_MATERIAL" && (
           <FormSection
             title="Rastreabilidade — Utilizado em"

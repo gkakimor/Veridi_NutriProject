@@ -39,3 +39,29 @@ export class BillingLineNotFoundError extends Error {
     this.name = "BillingLineNotFoundError";
   }
 }
+
+export class AgreedPriceNotEditableError extends Error {
+  constructor(agreed: string) {
+    super(
+      `O preço deste item foi acordado no Pedido (R$ ${agreed}) e não se digita de novo aqui. ` +
+        'Para faturar outro valor use "Alterar preço de faturamento", com justificativa.',
+    );
+    this.name = "AgreedPriceNotEditableError";
+  }
+}
+
+export class PriceOverrideReasonRequiredError extends Error {
+  constructor() {
+    super("Informe o motivo — faturar um valor diferente do acordado é uma decisão que fica registrada.");
+    this.name = "PriceOverrideReasonRequiredError";
+  }
+}
+
+export class NoAgreedPriceToOverrideError extends Error {
+  constructor() {
+    super(
+      "Esta linha não tem preço acordado no Pedido — não há o que sobrepor. Informe o preço normalmente.",
+    );
+    this.name = "NoAgreedPriceToOverrideError";
+  }
+}

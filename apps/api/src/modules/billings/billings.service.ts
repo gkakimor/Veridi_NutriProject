@@ -15,13 +15,20 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
   ActiveBillingAlreadyExistsError,
+  AgreedPriceNotEditableError,
   BillingLineNotFoundError,
   BillingNotDraftError,
   BillingNotFoundError,
   EmptyShipmentForBillingError,
+  NoAgreedPriceToOverrideError,
+  PriceOverrideReasonRequiredError,
   ShipmentNotBillableError,
 } from "./billings.errors.js";
-import type { ListBillingsQuery, UpdateBillingInput } from "./billings.schemas.js";
+import type {
+  ListBillingsQuery,
+  OverrideBillingPriceInput,
+  UpdateBillingInput,
+} from "./billings.schemas.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -61,8 +68,13 @@ function toBillingLineDTO(line: BillingLine): BillingLineDTO {
     businessLotNumber: line.businessLotNumber,
     quantity: line.quantity.toString(),
     unitCode: line.unitCode,
+    agreedUnitPrice: line.agreedUnitPrice ? formatMoney(line.agreedUnitPrice) : null,
     unitPrice: line.unitPrice ? formatMoney(line.unitPrice) : null,
     lineTotal: lineTotal ? formatMoney(lineTotal) : null,
+    priceOverridden: line.priceOverridden,
+    overrideReason: line.overrideReason,
+    overriddenBy: line.overriddenBy,
+    overriddenAt: line.overriddenAt ? line.overriddenAt.toISOString() : null,
     position: line.position,
   };
 }
@@ -293,6 +305,25 @@ export async function createBilling(
 
     if (shipment.lines.length === 0) throw new EmptyShipmentForBillingError();
 
+    /*
+     * O PREÇO VEM DO PEDIDO, não do preço de hoje.
+     *
+     * `agreedUnitPrice` foi congelado quando o cliente aceitou o
+     * orçamento. Precificação nova, CALC novo ou compra nova não o
+     * reescrevem — e é por isso que se lê a linha do Pedido e não a
+     * PricingVersion vigente. Faturar o preço de hoje um mês depois seria
+     * cobrar um acordo que nunca existiu.
+     *
+     * Nulo só quando o Pedido de origem realmente não tinha preço; nesse
+     * caso o faturamento quantitativo continua válido e o preço é
+     * informado à mão, como antes.
+     */
+    const orderLines = await tx.customerOrderLine.findMany({
+      where: { id: { in: [...new Set(shipment.lines.map((line) => line.customerOrderLineId))] } },
+      select: { id: true, agreedUnitPrice: true },
+    });
+    const agreedByOrderLine = new Map(orderLines.map((line) => [line.id, line.agreedUnitPrice]));
+
     const order = shipment.customerOrder;
     const billing = await tx.billing.create({
       data: {
@@ -328,7 +359,9 @@ export async function createBilling(
         businessLotNumber: line.businessLotNumber,
         quantity: line.quantity,
         unitCode: line.unitCode,
-        unitPrice: null,
+        agreedUnitPrice: agreedByOrderLine.get(line.customerOrderLineId) ?? null,
+        // Nasce igual ao acordado. Só um override explícito os separa.
+        unitPrice: agreedByOrderLine.get(line.customerOrderLineId) ?? null,
         position: index,
       })),
     });
@@ -340,9 +373,15 @@ export async function createBilling(
 }
 
 /**
- * Enquanto DRAFT so `unitPrice`/`notes`/`externalReference` sao editaveis.
- * Nunca adiciona/remove linha, nunca muda quantidade/lote/unidade — o
- * Billing representa a Expedicao, nao um documento livre.
+ * Enquanto DRAFT so `notes`/`externalReference` e o preco de linhas SEM
+ * preco acordado sao editaveis. Nunca adiciona/remove linha, nunca muda
+ * quantidade/lote/unidade — o Billing representa a Expedicao, nao um
+ * documento livre.
+ *
+ * Linha COM preco acordado nao aceita edicao por aqui: mudar o valor
+ * faturado de um acordo e um ato proprio, com permissao e motivo
+ * (`overrideBillingLinePrice`). Deixar o campo livre transformaria a
+ * quebra do acordo num deslize de digitacao.
  */
 export async function updateBilling(id: string, input: UpdateBillingInput): Promise<BillingDTO> {
   await getPrisma().$transaction(async (tx) => {
@@ -359,6 +398,11 @@ export async function updateBilling(id: string, input: UpdateBillingInput): Prom
       for (const line of input.lines) {
         if (!lineIds.has(line.billingLineId)) throw new BillingLineNotFoundError(line.billingLineId);
         if (line.unitPrice === undefined) continue;
+
+        const current = billing.lines.find((row) => row.id === line.billingLineId)!;
+        if (current.agreedUnitPrice !== null) {
+          throw new AgreedPriceNotEditableError(formatMoney(current.agreedUnitPrice));
+        }
 
         await tx.billingLine.update({
           where: { id: line.billingLineId },
@@ -377,6 +421,60 @@ export async function updateBilling(id: string, input: UpdateBillingInput): Prom
   });
 
   return (await getBillingById(id))!;
+}
+
+/**
+ * SOBREPOE O PRECO FATURADO de uma linha, preservando o acordado.
+ *
+ * O acordado nao e apagado, nem "atualizado": ele fica ao lado do
+ * faturado, e a diferenca entre os dois E a evidencia. Quem auditar o
+ * documento seis meses depois ve os dois numeros, o motivo, o autor e a
+ * data — nao um valor solitario que pode ou nao ter sido o combinado.
+ *
+ * So faz sentido onde existe acordo. Linha sem preco acordado nao tem o
+ * que sobrepor: informa-se o preco pelo caminho normal.
+ */
+export async function overrideBillingLinePrice(
+  billingId: string,
+  billingLineId: string,
+  input: OverrideBillingPriceInput,
+  actor?: { id: string; name: string },
+): Promise<BillingDTO> {
+  const reason = input.reason.trim();
+  if (reason.length === 0) throw new PriceOverrideReasonRequiredError();
+
+  await getPrisma().$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM billings WHERE id = ${billingId} FOR UPDATE`;
+
+    const billing = await tx.billing.findUnique({ where: { id: billingId }, include: { lines: true } });
+    if (!billing) throw new BillingNotFoundError(billingId);
+    if (billing.status !== "DRAFT") {
+      throw new BillingNotDraftError(
+        "Somente faturamentos em rascunho podem ter o preço alterado — um faturamento emitido é histórico.",
+      );
+    }
+
+    const line = billing.lines.find((row) => row.id === billingLineId);
+    if (!line) throw new BillingLineNotFoundError(billingLineId);
+    if (line.agreedUnitPrice === null) throw new NoAgreedPriceToOverrideError();
+
+    const novoPreco = new Prisma.Decimal(input.unitPrice);
+
+    await tx.billingLine.update({
+      where: { id: line.id },
+      data: {
+        unitPrice: novoPreco,
+        // Voltar exatamente ao acordado nao e uma sobreposicao — e desfazer
+        // uma. O documento deixa de carregar a marca de divergencia.
+        priceOverridden: !novoPreco.equals(line.agreedUnitPrice),
+        overrideReason: novoPreco.equals(line.agreedUnitPrice) ? null : reason,
+        overriddenBy: novoPreco.equals(line.agreedUnitPrice) ? null : (actor?.name ?? SYSTEM_ACTOR),
+        overriddenAt: novoPreco.equals(line.agreedUnitPrice) ? null : new Date(),
+      },
+    });
+  });
+
+  return (await getBillingById(billingId))!;
 }
 
 /**

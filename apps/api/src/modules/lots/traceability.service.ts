@@ -66,6 +66,57 @@ async function buildFinishedLotTraceability(lot: Lot): Promise<FinishedLotTracea
     };
   });
 
+  /*
+   * DESTINO COMERCIAL — para quem este lote foi feito, e para onde saiu.
+   *
+   * A genealogia técnica parava na OP: o operador via fornecedor, lote e
+   * material, mas para chegar ao cliente precisava abrir a OP e de lá o
+   * Pedido. A cadeia existia e não era navegável num lugar só.
+   *
+   * Fica em campo separado de propósito: cliente NÃO é origem de
+   * material, e misturá-lo aos materiais consumidos leria como se fosse.
+   */
+  const commercialDestination = order.customerOrderId
+    ? await (async () => {
+        const pedido = await prisma.customerOrder.findUnique({
+          where: { id: order.customerOrderId! },
+          include: { customer: true },
+        });
+        if (!pedido) return null;
+
+        // Só expedições CONFIRMED que levaram ESTE lote — rascunho não
+        // saiu, e outro lote do mesmo pedido não é deste documento.
+        const expedicoes = await prisma.shipment.findMany({
+          where: { customerOrderId: pedido.id, status: "CONFIRMED", lines: { some: { lotId: lot.id } } },
+          include: { lines: { where: { lotId: lot.id } } },
+          orderBy: { shipmentDate: "asc" },
+        });
+
+        const projeto = pedido.sourceProjectId
+          ? await prisma.project.findUnique({ where: { id: pedido.sourceProjectId } })
+          : null;
+
+        return {
+          customerOrderId: pedido.id,
+          customerOrderCode: pedido.code,
+          customerId: pedido.customerId,
+          customerCode: pedido.customerCode ?? pedido.customer.code,
+          customerName: pedido.customerName ?? pedido.customer.legalName,
+          projectId: projeto?.id ?? null,
+          projectCode: projeto?.code ?? null,
+          projectName: projeto?.name ?? null,
+          shipments: expedicoes.map((expedicao) => ({
+            shipmentId: expedicao.id,
+            shipmentCode: expedicao.code,
+            shipmentDate: expedicao.shipmentDate ? expedicao.shipmentDate.toISOString() : null,
+            quantity: expedicao.lines
+              .reduce((soma, linha) => soma.plus(linha.quantity), new Prisma.Decimal(0))
+              .toString(),
+          })),
+        };
+      })()
+    : null;
+
   return {
     kind: "FINISHED_GOOD",
     lotId: lot.id,
@@ -79,6 +130,7 @@ async function buildFinishedLotTraceability(lot: Lot): Promise<FinishedLotTracea
     producedQuantity: producedQuantity.toString(),
     unitCode: order.outputUnitCode,
     consumedMaterials,
+    commercialDestination,
   };
 }
 

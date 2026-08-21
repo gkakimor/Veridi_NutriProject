@@ -33,7 +33,12 @@ import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
-import { getConsumedByReservationLines, isLotExpired } from "../../lib/inventory-ledger.js";
+import {
+  getConsumedByReservationLines,
+  getOnHandByLots,
+  getReservedByLots,
+  isLotExpired,
+} from "../../lib/inventory-ledger.js";
 import type { InventoryOwnerScope } from "../../lib/inventory-ledger.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
 import { findCompatibleCostVersion } from "../industrial-cost-calculation/production-cost.service.js";
@@ -176,6 +181,7 @@ function toOutputDTO(output: OutputWithRelations): ProductionOutputDTO {
 function toReservationLineDTO(
   line: ReservationLineWithRelations,
   consumedByLine: Map<string, Prisma.Decimal>,
+  freeByLot: Map<string, Prisma.Decimal> = new Map(),
 ): MaterialReservationLineDTO {
   const consumed = consumedByLine.get(line.id) ?? new Prisma.Decimal(0);
   const remaining = Prisma.Decimal.max(line.quantity.minus(consumed), 0);
@@ -201,12 +207,17 @@ function toReservationLineDTO(
     releasedBy: line.releasedBy,
     releaseReason: line.releaseReason,
     replacesLineId: line.replacesLineId,
+    extraReason: line.extraReason,
+    extraRequestedBy: line.extraRequestedBy,
+    extraRequestedAt: line.extraRequestedAt ? line.extraRequestedAt.toISOString() : null,
+    lotFreeQuantity: line.lotId ? (freeByLot.get(line.lotId) ?? new Prisma.Decimal(0)).toString() : null,
   };
 }
 
 function toReservationDTO(
   reservation: ReservationWithLines,
   consumedByLine: Map<string, Prisma.Decimal>,
+  freeByLot: Map<string, Prisma.Decimal>,
 ): MaterialReservationDTO {
   return {
     id: reservation.id,
@@ -217,7 +228,7 @@ function toReservationDTO(
     releasedAt: reservation.releasedAt ? reservation.releasedAt.toISOString() : null,
     releasedBy: reservation.releasedBy,
     releaseReason: reservation.releaseReason,
-    lines: reservation.lines.map((line) => toReservationLineDTO(line, consumedByLine)),
+    lines: reservation.lines.map((line) => toReservationLineDTO(line, consumedByLine, freeByLot)),
   };
 }
 
@@ -334,6 +345,7 @@ async function attachRequirementAvailability(
   /** Consumo registrado por item — vale quando a reserva já foi liberada. */
   consumidoPorItem: Map<string, Prisma.Decimal>,
   orderCustomer: { id: string; name: string } | null,
+  freeByLot: Map<string, Prisma.Decimal>,
 ): Promise<ProductionOrderRequirementDTO[]> {
   if (requirements.length === 0) return [];
 
@@ -425,7 +437,9 @@ async function attachRequirementAvailability(
         : (consumidoPorItem.get(requirement.itemId) ?? new Prisma.Decimal(0))
       ).toString(),
       remainingReservedQuantity: remainingReservedQuantity.toString(),
-      reservationLines: linesForRequirement.map((line) => toReservationLineDTO(line, consumedByLine)),
+      reservationLines: linesForRequirement.map((line) =>
+        toReservationLineDTO(line, consumedByLine, freeByLot),
+      ),
     });
   }
   return results;
@@ -437,6 +451,28 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     getPrisma(),
     allLines.map((line) => line.id),
   );
+
+  /*
+   * Saldo LIVRE por lote — físico menos tudo que já está reservado, por
+   * qualquer OP. É o teto de uma ampliação de reserva, e a tela precisa
+   * mostrá-lo antes de o operador pedir: sem isso ele descobre o limite
+   * apenas ao ser recusado.
+   *
+   * Derivado do ledger, nunca de `quantity - consumed` da própria linha:
+   * o que outra OP reservou é intocável, e essa distinção é exatamente o
+   * que a coluna comunica.
+   */
+  const lotIds = [...new Set(allLines.map((line) => line.lotId).filter((id): id is string => id !== null))];
+  const freeByLot = new Map<string, Prisma.Decimal>();
+  if (lotIds.length > 0) {
+    const onHandByLot = await getOnHandByLots(getPrisma(), lotIds);
+    const reservedByLot = await getReservedByLots(getPrisma(), lotIds);
+    for (const lotId of lotIds) {
+      const onHand = onHandByLot.get(lotId) ?? new Prisma.Decimal(0);
+      const reserved = reservedByLot.get(lotId) ?? new Prisma.Decimal(0);
+      freeByLot.set(lotId, Prisma.Decimal.max(onHand.minus(reserved), 0));
+    }
+  }
 
   const reservationLinesByRequirement = new Map<string, ReservationLineWithRelations[]>();
   for (const line of allLines) {
@@ -473,6 +509,7 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     consumedByLine,
     consumidoPorItem,
     orderCustomer,
+    freeByLot,
   );
   const shortageItemCount = requirements.filter((r) => r.availabilityStatus === "SHORTAGE").length;
   const materialsStatus: ProductionOrderMaterialsStatus =
@@ -594,7 +631,9 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     plannedBy: order.plannedBy,
     releasedAt: order.releasedAt ? order.releasedAt.toISOString() : null,
     releasedBy: order.releasedBy,
-    reservation: order.reservation ? toReservationDTO(order.reservation, consumedByLine) : null,
+    reservation: order.reservation
+      ? toReservationDTO(order.reservation, consumedByLine, freeByLot)
+      : null,
     startedAt: order.startedAt ? order.startedAt.toISOString() : null,
     startedBy: order.startedBy,
     consumptions: order.consumptions.map(toConsumptionDTO),

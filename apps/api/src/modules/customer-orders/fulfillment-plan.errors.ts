@@ -45,3 +45,20 @@ export class ProductNoLongerValidForProductionError extends Error {
     this.name = "ProductNoLongerValidForProductionError";
   }
 }
+
+export class NoPendingProductionError extends Error {
+  constructor(productCode: string) {
+    super(
+      `Não há saldo pendente de produção em ${productCode} — o pedido já está coberto por expedição, ` +
+        "reserva de produto acabado ou ordem em andamento.",
+    );
+    this.name = "NoPendingProductionError";
+  }
+}
+
+export class RemainderExceedsPendingError extends Error {
+  constructor(pending: string) {
+    super(`Quantidade maior que o saldo pendente de produção desta linha (restam ${pending}).`);
+    this.name = "RemainderExceedsPendingError";
+  }
+}

@@ -27,6 +27,21 @@ export const updateBillingSchema = z.object({
   lines: z.array(updateBillingLineSchema).optional(),
 });
 
+/**
+ * Sobreposicao do preco faturado. Nao e "editar o campo": e um ato
+ * proprio, com motivo obrigatorio, que preserva o preco acordado ao lado.
+ * Zero e aceito (bonificacao); negativo, nao.
+ */
+export const overrideBillingPriceSchema = z.object({
+  unitPrice: z
+    .union([z.string(), z.number()])
+    .transform((value) => String(value).trim())
+    .refine((value) => /^\d+(\.\d+)?$/.test(value), {
+      message: "Preço unitário inválido (não pode ser negativo)",
+    }),
+  reason: z.string().trim().min(3, "Motivo da alteração é obrigatório").max(500),
+});
+
 export const cancelBillingSchema = z.object({
   reason: z.string().trim().min(3, "Motivo do cancelamento é obrigatório").max(500),
 });
@@ -47,5 +62,6 @@ export const listBillingsQuerySchema = z.object({
 export type CreateBillingInput = z.infer<typeof createBillingSchema>;
 export type UpdateBillingLineInput = z.infer<typeof updateBillingLineSchema>;
 export type UpdateBillingInput = z.infer<typeof updateBillingSchema>;
+export type OverrideBillingPriceInput = z.infer<typeof overrideBillingPriceSchema>;
 export type CancelBillingInput = z.infer<typeof cancelBillingSchema>;
 export type ListBillingsQuery = z.infer<typeof listBillingsQuerySchema>;

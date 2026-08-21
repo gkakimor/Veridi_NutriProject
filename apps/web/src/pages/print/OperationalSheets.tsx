@@ -392,17 +392,17 @@ export function ShipmentPickingSheetPage() {
         { label: "Emitida em", value: formatPrintDate(data.createdAt) },
       ]}
     >
+      {/*
+        A folha trazia a quantidade preenchida numa coluna e uma segunda
+        coluna "Qtd. separar" em branco — dois lugares para o mesmo número,
+        e o que o operador precisa ler saía vazio.
+
+        A semântica da FO-05 é a mesma da FO-04: o sistema diz quanto
+        separar, o papel confirma. Uma coluna de quantidade, preenchida, e
+        o visto de conferência ao lado.
+      */}
       <PrintTable
-        columns={[
-          "Produto",
-          "Quantidade",
-          "Lote",
-          "Validade",
-          "Localização",
-          "Qtd. separar",
-          "Conferido",
-          "Observação",
-        ]}
+        columns={["Produto", "Qtd. separar", "Lote", "Validade", "Localização", "Conferido", "Observação"]}
         isEmpty={data.lines.length === 0}
         emptyMessage="Nenhuma linha nesta expedição."
       >
@@ -417,7 +417,6 @@ export function ShipmentPickingSheetPage() {
             <td>{line.lotCode}</td>
             <td>{formatPrintDate(line.expiryDate)}</td>
             <td>{printOrDash(line.location)}</td>
-            <PrintWriteCell />
             <PrintCheckCell />
             <PrintWriteCell width="120px" />
           </tr>

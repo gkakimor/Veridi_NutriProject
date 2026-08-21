@@ -611,6 +611,50 @@ export function LotTraceabilityPrintDocument({
               ))}
             </PrintTable>
           </PrintSection>
+
+          {/* Fecha a cadeia fornecedor → cliente no mesmo documento. Seção
+              separada: cliente é destino, não origem de material. */}
+          {traceability.commercialDestination && (
+            <PrintSection title="Destino comercial">
+              <dl className="print-doc__meta">
+                <div>
+                  <dt>Pedido do cliente</dt>
+                  <dd>{traceability.commercialDestination.customerOrderCode}</dd>
+                </div>
+                <div>
+                  <dt>Cliente</dt>
+                  <dd>
+                    {traceability.commercialDestination.customerCode} —{" "}
+                    {traceability.commercialDestination.customerName}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Projeto</dt>
+                  <dd>
+                    {traceability.commercialDestination.projectCode
+                      ? `${traceability.commercialDestination.projectCode} — ${traceability.commercialDestination.projectName ?? ""}`
+                      : "—"}
+                  </dd>
+                </div>
+              </dl>
+
+              <PrintTable
+                columns={["Expedição", "Data", "Quantidade deste lote"]}
+                isEmpty={traceability.commercialDestination.shipments.length === 0}
+                emptyMessage="Este lote ainda não foi expedido."
+              >
+                {traceability.commercialDestination.shipments.map((shipment) => (
+                  <tr key={shipment.shipmentId}>
+                    <td>{shipment.shipmentCode}</td>
+                    <td>{formatPrintDate(shipment.shipmentDate)}</td>
+                    <td className="is-number">
+                      {shipment.quantity} {traceability.unitCode}
+                    </td>
+                  </tr>
+                ))}
+              </PrintTable>
+            </PrintSection>
+          )}
         </>
       ) : (
         <PrintSection title="Ordens de Produção que consumiram este lote">

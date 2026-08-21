@@ -7,6 +7,8 @@ const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
 const fixtureSupplierIds: string[] = [];
 const fixtureProductionOrderIds: string[] = [];
+const fixtureCustomerIds: string[] = [];
+const fixtureCustomerOrderIds: string[] = [];
 
 type App = ReturnType<typeof buildTestApp>;
 
@@ -33,6 +35,17 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const prisma = getPrisma();
+  // Antes de tudo: a OP aponta para o Pedido, e o Pedido para o Cliente.
+  if (fixtureCustomerOrderIds.length > 0) {
+    await prisma.productionOrder.updateMany({
+      where: { customerOrderId: { in: fixtureCustomerOrderIds } },
+      data: { customerOrderId: null },
+    });
+    await prisma.customerOrder.deleteMany({ where: { id: { in: fixtureCustomerOrderIds } } });
+  }
+  if (fixtureCustomerIds.length > 0) {
+    await prisma.customer.deleteMany({ where: { id: { in: fixtureCustomerIds } } });
+  }
   if (fixtureProductionOrderIds.length > 0) {
     await prisma.productionOutput.deleteMany({
       where: { productionOrderId: { in: fixtureProductionOrderIds } },
@@ -210,6 +223,77 @@ describe("Rastreabilidade bidirecional (backward/forward)", () => {
     expect(body.consumedMaterials[0].supplierLot).toBe("FORN-LOTE-X");
     expect(body.consumedMaterials[0].supplierName).toBe(supplierName);
     expect(body.consumedMaterials[0].quantity).toBe("20");
+    // Produção para estoque: não há pedido, e nada é inventado.
+    expect(body.commercialDestination).toBeNull();
+
+    await app.close();
+  });
+
+  it("ordem nascida de Pedido expõe o destino comercial, fora da genealogia", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    const rawLot = await receiveStock(rawMaterial.id, "50", "FORN-LOTE-DEST");
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const order = await createReleasedOrder(app, finishedItem.id, rawMaterial.id, "20", "1");
+
+    // A OP passa a apontar para um Pedido — é o que a aplicação do Plano
+    // faz; aqui a fixture grava o mesmo vínculo, porque o que se testa é
+    // a leitura da genealogia, não como o Pedido nasce.
+    const prisma = getPrisma();
+    const marcador = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const customer = await prisma.customer.create({
+      data: { code: `CLI-TRC-${marcador}`, legalName: `Cliente Rastreio ${marcador}` },
+    });
+    fixtureCustomerIds.push(customer.id);
+    const customerOrder = await prisma.customerOrder.create({
+      data: {
+        code: `PED-TRC-${marcador}`,
+        customerId: customer.id,
+        orderDate: new Date(),
+        status: "IN_FULFILLMENT",
+      },
+    });
+    fixtureCustomerOrderIds.push(customerOrder.id);
+    await prisma.productionOrder.update({
+      where: { id: order.id },
+      data: { customerOrderId: customerOrder.id },
+    });
+
+    const line = order.requirements[0].reservationLines[0];
+    await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/picking/${line.id}/confirm`,
+      payload: { lotCode: rawLot.code },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/consumptions`,
+      payload: { entries: [{ reservationLineId: line.id, quantity: "20" }] },
+    });
+    const output = await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/outputs`,
+      payload: { quantity: "1", destination: "NEW_LOT", businessLotNumber: `VD-DEST-${marcador}` },
+    });
+    const finishedLotId = output.json().outputs[0].lotId;
+
+    const body = (
+      await app.inject({ method: "GET", url: `/lots/${finishedLotId}/traceability` })
+    ).json();
+
+    // A cadeia fornecedor → cliente fecha num documento só.
+    expect(body.consumedMaterials[0].supplierName).toBe(supplierName);
+    expect(body.commercialDestination).toBeTruthy();
+    expect(body.commercialDestination.customerOrderCode).toBe(customerOrder.code);
+    expect(body.commercialDestination.customerName).toBe(customer.legalName);
+    // Ainda não expedido — a seção existe, a lista está vazia.
+    expect(body.commercialDestination.shipments).toEqual([]);
+    // E o cliente NÃO aparece como origem de material.
+    expect(body.consumedMaterials.some((m: { supplierName: string | null }) =>
+      m.supplierName === customer.legalName,
+    )).toBe(false);
 
     await app.close();
   });

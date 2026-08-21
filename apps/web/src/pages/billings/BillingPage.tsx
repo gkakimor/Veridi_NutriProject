@@ -8,6 +8,7 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { PriceOverrideDialog } from "./PriceOverrideDialog";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 
@@ -45,6 +46,7 @@ export function BillingPage() {
   const [saving, setSaving] = useState(false);
 
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [overrideLineId, setOverrideLineId] = useState<string | null>(null);
   const [externalReference, setExternalReference] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -79,10 +81,14 @@ export function BillingPage() {
     return {
       externalReference: externalReference.trim(),
       notes: notes.trim(),
-      lines: (billing?.lines ?? []).map((line) => ({
-        billingLineId: line.id,
-        unitPrice: (prices[line.id] ?? "").trim(),
-      })),
+      // Linha com preço acordado nunca vai no PATCH — ela só muda por
+      // "Alterar preço de faturamento", com permissão e motivo.
+      lines: (billing?.lines ?? [])
+        .filter((line) => line.agreedUnitPrice === null)
+        .map((line) => ({
+          billingLineId: line.id,
+          unitPrice: (prices[line.id] ?? "").trim(),
+        })),
     };
   }
 
@@ -293,7 +299,8 @@ export function BillingPage() {
                   <th>Lote</th>
                   <th className="is-numeric">Quantidade</th>
                   <th>Unidade</th>
-                  <th className="is-numeric">Preço unitário</th>
+                  <th className="is-numeric">Preço acordado</th>
+                  <th className="is-numeric">Preço faturado</th>
                   <th className="is-numeric">Total</th>
                 </tr>
               </thead>
@@ -301,7 +308,7 @@ export function BillingPage() {
                 {billing.lines.map((line) => {
                   const price = (prices[line.id] ?? "").trim();
                   const lineTotal =
-                    isDraft && price !== "" && !Number.isNaN(Number(price))
+                    isDraft && !line.agreedUnitPrice && price !== "" && !Number.isNaN(Number(price))
                       ? (Number(line.quantity) * Number(price)).toFixed(2)
                       : line.lineTotal;
                   return (
@@ -316,11 +323,34 @@ export function BillingPage() {
                       <td className="is-numeric">{line.quantity}</td>
                       <td>{line.unitCode}</td>
                       <td className="is-numeric">
-                        {isDraft ? (
+                        {/* Veio do Pedido e não se redigita. Deixá-lo
+                            editável transformaria a quebra de um acordo
+                            num deslize de digitação. */}
+                        {line.agreedUnitPrice ? formatBRL(line.agreedUnitPrice) : "—"}
+                      </td>
+                      <td className="is-numeric">
+                        {line.agreedUnitPrice ? (
+                          <div className="cell-stack">
+                            <span>{formatBRL(line.unitPrice)}</span>
+                            {line.priceOverridden && (
+                              <span className="badge badge--warn">Alterado</span>
+                            )}
+                            {isDraft && (
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--sm"
+                                onClick={() => setOverrideLineId(line.id)}
+                              >
+                                Alterar preço de faturamento
+                              </button>
+                            )}
+                          </div>
+                        ) : isDraft ? (
                           <input
                             type="text"
                             inputMode="decimal"
                             placeholder="Opcional"
+                            aria-label={`Preço faturado de ${line.productCode}`}
                             value={prices[line.id] ?? ""}
                             onChange={(event) =>
                               setPrices((prev) => ({ ...prev, [line.id]: event.target.value }))
@@ -340,6 +370,42 @@ export function BillingPage() {
               Quantidade total: {billing.totalQuantity} · Valor total:{" "}
               {displayTotal ? formatBRL(displayTotal) : "Valores incompletos"}
             </div>
+            {/* O acordado não é substituído: quem auditar vê os dois
+                números, o motivo e o autor, e não um valor solitário. */}
+            {billing.lines.some((line) => line.priceOverridden) && (
+              <div className="table-container table-container--spaced">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Produto</th>
+                      <th className="is-numeric">Preço acordado</th>
+                      <th className="is-numeric">Preço faturado</th>
+                      <th>Motivo</th>
+                      <th>Alterado por</th>
+                      <th>Quando</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {billing.lines
+                      .filter((line) => line.priceOverridden)
+                      .map((line) => (
+                        <tr key={line.id}>
+                          <td>{line.productCode}</td>
+                          <td className="is-numeric">{formatBRL(line.agreedUnitPrice)}</td>
+                          <td className="is-numeric">{formatBRL(line.unitPrice)}</td>
+                          <td className="cell-sub cell-sub--wrap">{line.overrideReason}</td>
+                          <td>{line.overriddenBy ?? "—"}</td>
+                          <td>
+                            {line.overriddenAt
+                              ? new Date(line.overriddenAt).toLocaleString("pt-BR")
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
           {!displayTotal && (
             <p className="field__hint">
@@ -404,6 +470,18 @@ export function BillingPage() {
           )}
         </div>
       </div>
+
+      {overrideLineId && (
+        <PriceOverrideDialog
+          billingId={billing.id}
+          line={billing.lines.find((line) => line.id === overrideLineId)!}
+          onClose={() => setOverrideLineId(null)}
+          onOverridden={(atualizado) => {
+            setOverrideLineId(null);
+            setBilling(atualizado);
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={issueDialogOpen}

@@ -16,6 +16,8 @@ import {
   ConsumptionExceedsReservedError,
   ConsumptionLotNotEligibleError,
   EmptyConsumptionBatchError,
+  ExtraReservationLotItemMismatchError,
+  ExtraReservationReasonRequiredError,
   InsufficientAlternateLotError,
   InsufficientOnHandError,
   InvalidConsumptionQuantityError,
@@ -26,6 +28,7 @@ import {
   LotNoLongerEligibleError,
   LotNotFoundByCodeError,
   MissingLotCodeError,
+  NoUnreservedStockError,
   PickingRequiredError,
   ProductionOrderNotReleasedError,
   ReservationLineNotFoundError,
@@ -199,6 +202,144 @@ export async function substituteReservationLine(
         replacesLineId: line.id,
         pickedAt: new Date(),
         pickedBy: actor?.name ?? SYSTEM_ACTOR,
+      },
+    });
+  });
+
+  return (await getProductionOrderById(productionOrderId))!;
+}
+
+/**
+ * AMPLIA EXPLICITAMENTE A RESERVA DE UMA OP.
+ *
+ * O consumo real continua limitado ao reservado — esse limite e o que
+ * impede uma OP de se servir sozinha do estoque livre e do estoque
+ * alheio. O que faltava era o caminho legitimo para o desvio mais comum
+ * do chao de fabrica: pesou-se um pouco mais do que a formulacao previa.
+ *
+ * Antes, esse evento simplesmente nao tinha como ser registrado, e as
+ * unicas saidas falsificavam o registro (apontar menos do que se
+ * consumiu, ou nao apontar). Agora ele tem um ato proprio: o operador
+ * pede mais material, diz por que, o sistema confere o saldo REALMENTE
+ * livre e cria uma linha de reserva NOVA.
+ *
+ * O que esta funcao deliberadamente NAO faz:
+ *
+ *   * nao toca a linha original — planejado, reservado e ampliacao ficam
+ *     lado a lado, e ninguem precisa deduzir o que mudou;
+ *   * nao movimenta estoque — ampliar reserva nao e consumir. O consumo
+ *     continua sendo um segundo ato, pelo caminho de sempre;
+ *   * nao usa saldo reservado por outra OP, nem lote vencido, bloqueado
+ *     ou aguardando Qualidade — reusa a mesma nocao de disponibilidade do
+ *     RELEASE, sem criar um conceito paralelo de "quase disponivel";
+ *   * nao escolhe lote sozinho. Sem `lotCode`, amplia no proprio lote da
+ *     linha; com `lotCode`, no lote que o operador confirmou.
+ *
+ * A linha nova ja nasce com Picking confirmado: pedir material adicional
+ * de um lote identificado E a conferencia fisica dele.
+ */
+export async function addExtraReservation(
+  productionOrderId: string,
+  reservationLineId: string,
+  input: { quantity: string; reason: string; lotCode?: string | undefined },
+  actor?: { id: string; name: string },
+): Promise<ProductionOrderDTO> {
+  const reason = input.reason.trim();
+  if (reason.length === 0) throw new ExtraReservationReasonRequiredError();
+
+  const quantity = new Prisma.Decimal(input.quantity);
+  if (quantity.lessThanOrEqualTo(0)) throw new InvalidConsumptionQuantityError();
+
+  await getPrisma().$transaction(async (tx) => {
+    await lockOrderAndAssertReleasable(tx, productionOrderId);
+
+    await tx.$queryRaw`SELECT id FROM material_reservation_lines WHERE id = ${reservationLineId} FOR UPDATE`;
+
+    const line = await tx.materialReservationLine.findUnique({
+      where: { id: reservationLineId },
+      include: {
+        item: true,
+        lot: true,
+        reservation: { include: { productionOrder: true } },
+        productionOrderRequirement: true,
+      },
+    });
+    if (!line || line.reservation.productionOrderId !== productionOrderId) {
+      throw new ReservationLineNotFoundError(reservationLineId);
+    }
+    if (line.releasedAt !== null) throw new LineNotActiveError();
+
+    // Trava o Item — mesmo padrao de concorrencia do RELEASE e da
+    // substituicao. Duas OPs disputando o mesmo saldo livre serializam
+    // aqui: a segunda le o `reserved` ja atualizado pela primeira e e
+    // recusada, em vez de ambas passarem no mesmo teste.
+    await tx.$queryRaw`SELECT id FROM items WHERE id = ${line.itemId} FOR UPDATE`;
+
+    let targetLotId = line.lotId;
+
+    if (line.item.controlsLot) {
+      if (input.lotCode) {
+        const normalized = normalizeLotLookupCode(input.lotCode);
+        const lot = await tx.lot.findUnique({ where: { code: normalized } });
+        if (!lot) throw new LotNotFoundByCodeError(input.lotCode);
+        if (lot.itemId !== line.itemId) throw new ExtraReservationLotItemMismatchError(lot.code);
+
+        // Proprietario e criterio de elegibilidade tanto quanto Qualidade
+        // e validade: material do cliente A nunca entra na OP do cliente B.
+        const scope = requirementOwnerScope(
+          line.productionOrderRequirement.supplyResponsibility,
+          line.reservation.productionOrder.customerId,
+        );
+        const ownerMatches =
+          scope !== null &&
+          (scope.ownerType === "VERIDI"
+            ? lot.ownerType === "VERIDI"
+            : lot.ownerType === "CUSTOMER" && lot.ownerCustomerId === scope.customerId);
+        if (!ownerMatches) {
+          const expectedOwner =
+            line.productionOrderRequirement.supplyResponsibility === "CUSTOMER"
+              ? "cliente desta OP"
+              : "Veridi";
+          throw new AlternateLotOwnerMismatchError(lot.code, expectedOwner);
+        }
+
+        if (!isLotAvailableForUse(lot)) throw new LotNoLongerEligibleError(lot.code);
+        targetLotId = lot.id;
+      } else {
+        if (!line.lot) throw new ReservationLineNotFoundError(line.id);
+        // O lote original pode ter vencido ou sido bloqueado entre o
+        // RELEASE e agora — ampliar nele seria reservar o que ninguem
+        // pode usar.
+        if (!isLotAvailableForUse(line.lot)) throw new LotNoLongerEligibleError(line.lot.code);
+      }
+    }
+
+    const onHand = await getOnHand(tx, { itemId: line.itemId, lotId: targetLotId });
+    const reserved =
+      targetLotId === null
+        ? new Prisma.Decimal(0)
+        : (await getReservedByLots(tx, [targetLotId])).get(targetLotId) ?? new Prisma.Decimal(0);
+    const available = Prisma.Decimal.max(onHand.minus(reserved), 0);
+    if (quantity.greaterThan(available)) {
+      const lotCode = targetLotId === null ? line.item.code : (line.lot?.code ?? input.lotCode ?? "");
+      throw new NoUnreservedStockError(lotCode, available.toString());
+    }
+
+    const requestedAt = new Date();
+    await tx.materialReservationLine.create({
+      data: {
+        reservationId: line.reservationId,
+        productionOrderRequirementId: line.productionOrderRequirementId,
+        itemId: line.itemId,
+        lotId: targetLotId,
+        quantity,
+        // Pedir material adicional de um lote identificado ja e a
+        // conferencia fisica dele — nao ha um segundo Picking a fazer.
+        pickedAt: requestedAt,
+        pickedBy: actor?.name ?? SYSTEM_ACTOR,
+        extraReason: reason,
+        extraRequestedBy: actor?.name ?? SYSTEM_ACTOR,
+        extraRequestedAt: requestedAt,
       },
     });
   });
