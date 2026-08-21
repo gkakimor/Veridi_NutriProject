@@ -65,10 +65,23 @@ export interface BillingLineDTO {
   /** Idêntica à `ShipmentLine.quantity` — nunca editável. */
   quantity: string;
   unitCode: string;
-  /** Opcional — o MVP não possui preço comercial confiável no Pedido. BRL quando informado. */
+  /**
+   * O **preço acordado** no Pedido, congelado na criação do Faturamento.
+   * `null` só quando o Pedido de origem não tinha preço acordado.
+   */
+  agreedUnitPrice: string | null;
+  /**
+   * O **preço efetivamente faturado**. Nasce igual a `agreedUnitPrice` e só
+   * difere após um override explícito. BRL quando informado.
+   */
   unitPrice: string | null;
   /** `quantity × unitPrice`; `null` quando a linha não tem preço. Nunca persistido. */
   lineTotal: string | null;
+  /** `true` quando o faturado difere do acordado por ação explícita. */
+  priceOverridden: boolean;
+  overrideReason: string | null;
+  overriddenBy: string | null;
+  overriddenAt: string | null;
   position: number;
 }
 

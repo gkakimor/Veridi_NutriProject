@@ -1698,3 +1698,43 @@ td .entity-select {
 .template-diff-wrapper {
   margin-top: var(--sp-3);
 }
+
+/*
+ * Campo numérico acima do teto permitido.
+ *
+ * Vem da expedição do VAL-LEG-01, onde o campo aceitava 100 enquanto o
+ * resumo dizia 98 e o servidor expedia 98 — dois números na mesma tela,
+ * um deles falso. A borda marca o campo enquanto a mensagem ao lado diz
+ * qual é o limite; nada é corrigido em silêncio.
+ */
+.field input.is-invalid,
+input.is-invalid {
+  border-color: var(--err-fg);
+  background: var(--err-bg);
+}
+
+/*
+ * Bloco de continuidade: o sistema constatou uma pendência e oferece o
+ * próximo passo na própria seção onde ela aparece.
+ *
+ * Não é erro nem aviso de risco — é trabalho que sobrou. Por isso o tom
+ * neutro-informativo, e não o vermelho de `.form-alert`.
+ */
+.callout {
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--v-lime);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  font-size: var(--fs-sm);
+}
+
+.callout p {
+  margin: 0 0 var(--sp-2);
+  color: var(--ink-2);
+}
+
+.callout .line-actions {
+  margin: 0;
+}

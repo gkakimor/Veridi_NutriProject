@@ -2927,6 +2927,20 @@ model MaterialReservationLine {
   releasedBy    String?
   releaseReason String?
 
+  /// AMPLIACAO EXPLICITA DA RESERVA — preenchidos quando esta linha nao
+  /// veio do RELEASE e sim de um "Adicionar consumo extra": o operador
+  /// constatou que a producao precisa de mais material do que o reservado
+  /// e pediu, com justificativa, que a reserva desta OP crescesse.
+  ///
+  /// A linha original nunca e tocada. Planejado, reservado originalmente,
+  /// ampliacao e consumido real permanecem todos legiveis lado a lado.
+  ///
+  /// Nunca preenchidos automaticamente: estoque livre so vira reserva por
+  /// ato explicito, nunca porque um consumo passou do limite.
+  extraReason      String?
+  extraRequestedBy String?
+  extraRequestedAt DateTime?
+
   /// Self-relacao: a linha NOVA de uma substituicao aponta para a linha
   /// ORIGINAL que ela substitui — preserva a genealogia completa (nunca
   /// sobrescreve lotId apagando o lote originalmente reservado).
@@ -3461,10 +3475,27 @@ model BillingLine {
   quantity Decimal @db.Decimal(18, 6)
   unitCode String
 
-  /// Opcional: o MVP nao possui preco comercial confiavel no Pedido, entao
-  /// o faturamento quantitativo vale mesmo sem preco. Nunca inferido de
-  /// PurchaseOrder (custo != preco de venda). BRL quando informado.
+  /// O PRECO ACORDADO no Pedido, congelado na criacao do Faturamento.
+  ///
+  /// Copia de CustomerOrderLine.agreedUnitPrice. Precificacao nova, CALC
+  /// novo ou negociacao posterior nao o reescrevem — ele e a prova do que
+  /// o cliente aceitou, nao uma consulta ao preco de hoje.
+  ///
+  /// Nulo apenas quando o Pedido de origem nao tinha preco acordado.
+  agreedUnitPrice Decimal? @db.Decimal(14, 4)
+
+  /// O PRECO EFETIVAMENTE FATURADO. Nasce igual a `agreedUnitPrice` e so
+  /// difere apos um override explicito. Nunca inferido de PurchaseOrder
+  /// (custo != preco de venda). BRL quando informado.
   unitPrice Decimal? @db.Decimal(14, 4)
+
+  /// Override do preco faturado: acao separada, com permissao comercial,
+  /// motivo obrigatorio e autoria. O acordado permanece intocado ao lado
+  /// — a diferenca entre os dois e a evidencia.
+  priceOverridden Boolean   @default(false)
+  overrideReason  String?
+  overriddenBy    String?
+  overriddenAt    DateTime?
 
   /// Ordem de exibicao estavel.
   position Int

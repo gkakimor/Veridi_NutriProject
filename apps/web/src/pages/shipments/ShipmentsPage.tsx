@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { ShipmentDTO, ShipmentStatus } from "@veridi/shared";
 import { SHIPMENT_STATUSES, SHIPMENT_STATUS_LABELS } from "@veridi/shared";
 import { listShipments } from "../../lib/shipments-api";
@@ -82,6 +82,18 @@ export function ShipmentsPage() {
         </div>
         <ExportCsvButton path="/shipments/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
 </div>
+
+      {/* Um único caminho de criação — Pedido → Expedição — evita expedição
+          sem pedido nem reserva. O que faltava era dizer isso aqui, em vez
+          de deixar o operador procurar um botão que não existe. */}
+      <div className="callout">
+        <p>Novas expedições são criadas a partir do Pedido do Cliente, com a reserva já feita.</p>
+        <div className="line-actions">
+          <Link className="btn btn--secondary btn--sm" to="/comercial/pedidos">
+            Ir para Pedidos
+          </Link>
+        </div>
+      </div>
 
       <div className="toolbar">
         <div className="toolbar__search">

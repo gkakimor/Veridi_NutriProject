@@ -150,3 +150,23 @@ export async function completeProductionOrder(
   });
   return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
 }
+
+/**
+ * Ampliação explícita da reserva desta OP ("Adicionar consumo extra").
+ * Sem `lotCode`, amplia no próprio lote da linha.
+ */
+export async function addExtraReservation(
+  productionOrderId: string,
+  reservationLineId: string,
+  input: { quantity: string; reason: string; lotCode?: string },
+): Promise<ProductionOrderDTO> {
+  const response = await apiFetch(
+    `${API_URL}/production-orders/${productionOrderId}/picking/${reservationLineId}/extra`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}

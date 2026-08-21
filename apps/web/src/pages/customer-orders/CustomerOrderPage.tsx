@@ -26,6 +26,7 @@ import {
   cancelCustomerOrder,
   confirmCustomerOrder,
   createCustomerOrder,
+  createRemainderProductionOrder,
   generatePurchaseDrafts,
   getCustomerOrder,
   getFulfillmentPlan,
@@ -258,6 +259,29 @@ export function CustomerOrderPage() {
   const showPurchaseSuggestion = !isNew && status === "IN_FULFILLMENT";
   /** Reserva complementar/expedição continuam disponíveis até o pedido ser totalmente expedido. */
   const isOperational = !isNew && (status === "IN_FULFILLMENT" || status === "PARTIALLY_SHIPPED");
+  /* Linhas cujo saldo ainda precisa ser PRODUZIDO — o que já está
+     reservado ou em OP aberta não conta, senão sugeriríamos produzir o
+     dobro. O cálculo é do servidor; aqui só se lê. */
+  const linhasComSaldoPendente = (customerOrder?.lines ?? []).filter(
+    (line) => Number(line.pendingProductionQuantity) > 0,
+  );
+  const [saldoDialogLineId, setSaldoDialogLineId] = useState<string | null>(null);
+  const [gerandoSaldoLineId, setGerandoSaldoLineId] = useState<string | null>(null);
+
+  async function handleGerarSaldo(lineId: string) {
+    if (!id) return;
+    setSaldoDialogLineId(null);
+    setGerandoSaldoLineId(lineId);
+    setError(null);
+    try {
+      setCustomerOrder(await createRemainderProductionOrder(id, { customerOrderLineId: lineId }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao gerar OP para o saldo restante");
+    } finally {
+      setGerandoSaldoLineId(null);
+    }
+  }
+
   const hasFulfillmentResult =
     !!customerOrder && (customerOrder.reservation !== null || customerOrder.generatedProductionOrders.length > 0);
 
@@ -1605,6 +1629,40 @@ export function CustomerOrderPage() {
                 title="Ordens de produção"
                 subtitle="O que a fábrica produz para atender este pedido. Cada ordem abre direto pelo código."
               >
+                {/* Produção real abaixo do planejado é normal, e o pedido
+                    já mostrava a pendência em toda parte — sem oferecer
+                    como continuar. O Plano de Atendimento não serve: ele
+                    só existe enquanto o pedido está confirmado e cobre a
+                    quantidade inteira. */}
+                {linhasComSaldoPendente.length > 0 && (
+                  <div className="callout">
+                    <p>
+                      {linhasComSaldoPendente
+                        .map(
+                          (line) =>
+                            `${line.productCode}: faltam ${line.pendingProductionQuantity} ${line.unitCode}`,
+                        )
+                        .join(" · ")}
+                    </p>
+                    <div className="line-actions">
+                      {linhasComSaldoPendente.map((line) => (
+                        <button
+                          key={line.id}
+                          type="button"
+                          className="btn btn--accent btn--sm"
+                          disabled={gerandoSaldoLineId !== null}
+                          onClick={() => setSaldoDialogLineId(line.id)}
+                        >
+                          {gerandoSaldoLineId === line.id
+                            ? "Gerando…"
+                            : `Gerar OP para saldo restante${
+                                linhasComSaldoPendente.length > 1 ? ` (${line.productCode})` : ""
+                              }`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="table-container">
                   <table className="table table--clickable-rows">
                     <thead>
@@ -1688,6 +1746,21 @@ export function CustomerOrderPage() {
         confirmTone="accent"
         onCancel={() => setConfirmDialogOpen(false)}
         onConfirm={handleConfirm}
+      />
+
+      <ConfirmDialog
+        open={saldoDialogLineId !== null}
+        title="Gerar OP para o saldo restante?"
+        message={(() => {
+          const linha = linhasComSaldoPendente.find((row) => row.id === saldoDialogLineId);
+          return linha
+            ? `Será criada uma Ordem de Produção em rascunho de ${linha.pendingProductionQuantity} ${linha.unitCode} de ${linha.productCode}, vinculada a este pedido. Nada é liberado nem reservado automaticamente.`
+            : "";
+        })()}
+        confirmLabel="Gerar OP"
+        confirmTone="accent"
+        onCancel={() => setSaldoDialogLineId(null)}
+        onConfirm={() => void handleGerarSaldo(saldoDialogLineId!)}
       />
 
       <ConfirmDialog

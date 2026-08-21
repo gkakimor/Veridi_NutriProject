@@ -50,6 +50,35 @@ export interface FinishedLotTraceabilityDTO {
   producedQuantity: string;
   unitCode: string;
   consumedMaterials: TraceabilityConsumedMaterialDTO[];
+  /**
+   * Para quem este lote foi produzido e para onde saiu. `null` quando a
+   * ordem não nasceu de um Pedido (produção para estoque).
+   *
+   * Deliberadamente **fora** de `consumedMaterials`: cliente não é origem
+   * de material, e a tela apresenta os dois como seções distintas —
+   * genealogia de produção de um lado, destino comercial do outro.
+   */
+  commercialDestination: TraceabilityCommercialDestinationDTO | null;
+}
+
+export interface TraceabilityCommercialDestinationDTO {
+  customerOrderId: string;
+  customerOrderCode: string;
+  customerId: string;
+  customerCode: string;
+  customerName: string;
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  /** Só expedições CONFIRMED que levaram **este** lote. */
+  shipments: TraceabilityShipmentDTO[];
+}
+
+export interface TraceabilityShipmentDTO {
+  shipmentId: string;
+  shipmentCode: string;
+  shipmentDate: string | null;
+  quantity: string;
 }
 
 export interface RawMaterialUsageFinishedLotDTO {

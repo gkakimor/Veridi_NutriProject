@@ -212,8 +212,8 @@ export function FinishedGoodsPage() {
               <th>Data produção</th>
               <th className="is-numeric">Produzido</th>
               <th className="is-numeric">Físico</th>
-              <th>Reserved</th>
-              <th>Available</th>
+              <th>Reservado</th>
+              <th>Disponível</th>
               <th>Qualidade</th>
               <th>Validade</th>
               <th className="is-numeric">Custo Material Un.</th>

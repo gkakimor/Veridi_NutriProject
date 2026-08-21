@@ -138,15 +138,42 @@ function ProductGroup({
                   </td>
                   <td className="is-numeric">
                     {isDraft ? (
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        aria-label={`Quantidade do lote ${line.lotCode ?? ""}`}
-                        value={quantities[line.customerOrderReservationLineId] ?? ""}
-                        onChange={(event) =>
-                          onQuantityChange(line.customerOrderReservationLineId, event.target.value)
-                        }
-                      />
+                      (() => {
+                        /* O campo aceitava 100 enquanto o resumo dizia 98,
+                           e o servidor expedia 98 em silêncio: dois números
+                           na mesma tela, um deles falso. O teto agora é
+                           dito antes, não descoberto depois. */
+                        const digitado = (
+                          quantities[line.customerOrderReservationLineId] ?? ""
+                        ).trim();
+                        const valor = Number(digitado.replace(",", "."));
+                        const teto = Number(line.reservedRemaining);
+                        const excede = digitado !== "" && Number.isFinite(valor) && valor > teto;
+                        return (
+                          <>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              aria-label={`Quantidade do lote ${line.lotCode ?? ""}`}
+                              aria-invalid={excede || undefined}
+                              className={excede ? "is-invalid" : undefined}
+                              value={quantities[line.customerOrderReservationLineId] ?? ""}
+                              onChange={(event) =>
+                                onQuantityChange(
+                                  line.customerOrderReservationLineId,
+                                  event.target.value,
+                                )
+                              }
+                            />
+                            {excede && (
+                              <p className="field__error">
+                                Máximo {line.reservedRemaining} {line.unitCode} — é o que está
+                                reservado a este pedido.
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()
                     ) : (
                       `${line.quantity} ${line.unitCode}`
                     )}
@@ -443,6 +470,15 @@ export function ShipmentPage() {
     0,
   );
 
+  /* Confirmar não corrige silenciosamente para o teto: enquanto houver
+     linha acima do reservado, a ação fica bloqueada e a linha diz por quê. */
+  const linhasAcimaDoReservado = shipment.lines.filter((line) => {
+    const digitado = (quantities[line.customerOrderReservationLineId] ?? "").trim();
+    if (digitado === "") return false;
+    const valor = Number(digitado.replace(",", "."));
+    return Number.isFinite(valor) && valor > Number(line.reservedRemaining);
+  });
+
   return (
     <>
       <div className="doc-header">
@@ -715,12 +751,19 @@ export function ShipmentPage() {
               <button
                 type="button"
                 className="btn btn--accent"
-                disabled={saving || totalToShip <= 0 || !shipment.verification.allLotsVerified}
+                disabled={
+                  saving ||
+                  totalToShip <= 0 ||
+                  linhasAcimaDoReservado.length > 0 ||
+                  !shipment.verification.allLotsVerified
+                }
                 onClick={() => setConfirmDialogOpen(true)}
                 title={
-                  shipment.verification.allLotsVerified
-                    ? undefined
-                    : "Existem lotes ainda não conferidos nesta expedição."
+                  linhasAcimaDoReservado.length > 0
+                    ? "Há quantidade acima do reservado — corrija antes de confirmar."
+                    : shipment.verification.allLotsVerified
+                      ? undefined
+                      : "Existem lotes ainda não conferidos nesta expedição."
                 }
               >
                 Confirmar expedição

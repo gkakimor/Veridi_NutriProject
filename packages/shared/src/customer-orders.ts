@@ -77,6 +77,14 @@ export interface CustomerOrderLineDTO {
   shippedQuantity: string;
   /** `orderedQuantity - shippedQuantity`, nunca negativo. */
   outstandingQuantity: string;
+  /**
+   * O que ainda **precisa ser produzido** para fechar esta linha:
+   * `pedido − expedido − reservado restante − (planejado − produzido em OPs abertas)`.
+   *
+   * Diferente de `outstandingQuantity`: um saldo já coberto por estoque
+   * reservado ou por uma OP em andamento não é pendência de produção.
+   */
+  pendingProductionQuantity: string;
   /** Soma das BillingLines de Faturamentos ISSUED — DRAFT/CANCELLED nunca contam. */
   billedQuantity: string;
   /** `shippedQuantity - billedQuantity`, nunca negativo — expedido ainda não faturado. */

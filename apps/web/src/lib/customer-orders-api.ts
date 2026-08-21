@@ -111,3 +111,22 @@ export async function generatePurchaseDrafts(
   });
   return (await parseJsonOrThrow(response)) as CustomerOrderDTO;
 }
+
+/**
+ * Ordem de produção para o saldo que ainda falta produzir de uma linha.
+ * Sem `quantity`, usa o pendente inteiro.
+ */
+export async function createRemainderProductionOrder(
+  customerOrderId: string,
+  input: { customerOrderLineId: string; quantity?: string },
+): Promise<CustomerOrderDTO> {
+  const response = await apiFetch(
+    `${API_URL}/customer-orders/${customerOrderId}/remainder-production-order`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  return (await parseJsonOrThrow(response)) as CustomerOrderDTO;
+}

@@ -5186,6 +5186,41 @@ Todo o backlog aberto da auditoria VAL-LEG-01 foi implementado:
 
 Zero migration — todas as colunas usadas já existiam.
 
+## VAL-LEG-01 fechado ponta a ponta
+
+O primeiro caso real percorreu Cliente → Projeto → Formulação → Fornecedores →
+Compras → Recebimentos → Qualidade → EC → CALC → CMV → Precificação →
+Orçamento → Aceite → Pedido → Plano → OP → Picking → Consumo → Produção →
+Produto Acabado → Qualidade → Rastreabilidade → Expedição → Faturamento, pela
+interface publicada, sem um único contorno. Terminou em 98 de 100 unidades —
+produção real abaixo da planejada — e o pedido representa a pendência
+corretamente.
+
+Nenhum CRITICAL. Dois HIGH, ambos casos de o domínio estar certo e o sistema
+não deixar o operador dizê-lo:
+
+1. **consumo real não podia exceder o reservado** e não havia caminho para
+   ampliar a reserva — o desvio de chão de fábrica mais comum era
+   irregistrável;
+2. **faturamento não herdava o preço acordado** no Pedido: o operador
+   redigitava um valor que o sistema já conhecia, quebrando a proveniência
+   PREC → ORC → PED → FAT.
+
+Os dois foram corrigidos com decisão do Product Owner (ampliação explícita e
+auditada; herança com override permissionado), junto com a continuidade de
+pedido parcial, a rastreabilidade até cliente/pedido e um lote de correções de
+interface. Ver `PRODUCT_RULES.md` §39.
+
+**Uma migration aditiva**: `agreedUnitPrice`/override em `billing_lines` e
+motivo/autor/data de ampliação em `material_reservation_lines`.
+
+**Higiene**: `PROD-000003 Test` e `PROD-000004 Test 2` (e seus itens
+`PA-000003`/`PA-000004`) foram inativados pelo fluxo oficial — sem lote, sem
+estoque, sem OP, sem custo e sem precificação. O domínio não oferece exclusão;
+o histórico fica preservado.
+
+**Próximo caso**: VAL-LEG-02 — falta de material, recebimento parcial e FEFO.
+
 
 ---
 

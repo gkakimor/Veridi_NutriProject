@@ -145,6 +145,7 @@ function toLineDTO(
   line: LineWithProduct,
   shippedByLine: Map<string, Prisma.Decimal>,
   billedByLine: Map<string, Prisma.Decimal>,
+  pendingProductionByLine: Map<string, Prisma.Decimal>,
 ): CustomerOrderLineDTO {
   const usingSnapshot = line.productCode !== null;
   const shipped = shippedByLine.get(line.id) ?? new Prisma.Decimal(0);
@@ -164,6 +165,9 @@ function toLineDTO(
     position: line.position,
     shippedQuantity: shipped.toString(),
     outstandingQuantity: outstanding.toString(),
+    pendingProductionQuantity: (
+      pendingProductionByLine.get(line.id) ?? new Prisma.Decimal(0)
+    ).toString(),
     billedQuantity: billed.toString(),
     unbilledShippedQuantity: unbilledShipped.toString(),
     sourceQuoteLineId: line.sourceQuoteLineId,
@@ -378,6 +382,67 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
   const shippedByResLine = shippedByReservationLine(order.shipments);
   const billedByLine = billedByOrderLine(order.billings);
 
+  /*
+   * QUANTO AINDA PRECISA SER PRODUZIDO para fechar este pedido.
+   *
+   * Não é `pedido - expedido`. Um saldo já coberto não é pendência de
+   * produção, e sugerir uma OP para ele produziria o dobro. São quatro
+   * coberturas, e cada uma existe porque a anterior não a cobre:
+   *
+   *   expedido            já saiu;
+   *   reservado restante  está em estoque com destino a este pedido;
+   *   OP ainda aberta     vai virar produto (`planejado - produzido`);
+   *   produzido em espera o que as OPs deste pedido já fizeram e ainda
+   *                       não foi reservado nem expedido.
+   *
+   * A última existe para o intervalo entre concluir a produção e reservar
+   * o lote: sem ela um pedido recém-produzido pareceria precisar produzir
+   * tudo de novo. E o `planejado - produzido` de uma ordem CONCLUÍDA é
+   * variação de produção, não promessa — por isso só ordens abertas
+   * contam nessa parcela.
+   */
+  const pendingProductionByLine = new Map<string, Prisma.Decimal>();
+  for (const line of order.lines) {
+    const expedido = shippedByLine.get(line.id) ?? new Prisma.Decimal(0);
+
+    const reservadoRestante = (reservation?.lines ?? [])
+      .filter((row) => row.customerOrderLineId === line.id)
+      .reduce((sum, row) => {
+        const enviado = shippedByResLine.get(row.id) ?? new Prisma.Decimal(0);
+        return sum.plus(Prisma.Decimal.max(row.quantity.minus(enviado), 0));
+      }, new Prisma.Decimal(0));
+
+    const ordensDaLinha = order.productionOrders.filter(
+      (po) => po.customerOrderLineId === line.id && po.status !== "CANCELLED",
+    );
+    const produzidoNoTotal = ordensDaLinha.reduce(
+      (sum, po) => sum.plus(po.outputs.reduce((t, o) => t.plus(o.quantity), new Prisma.Decimal(0))),
+      new Prisma.Decimal(0),
+    );
+    const aindaVaiProduzir = ordensDaLinha
+      .filter((po) => po.status !== "COMPLETED")
+      .reduce((sum, po) => {
+        const produzido = po.outputs.reduce((t, o) => t.plus(o.quantity), new Prisma.Decimal(0));
+        return sum.plus(Prisma.Decimal.max(po.plannedQuantity.minus(produzido), 0));
+      }, new Prisma.Decimal(0));
+    const produzidoEmEspera = Prisma.Decimal.max(
+      produzidoNoTotal.minus(expedido).minus(reservadoRestante),
+      0,
+    );
+
+    pendingProductionByLine.set(
+      line.id,
+      Prisma.Decimal.max(
+        line.orderedQuantity
+          .minus(expedido)
+          .minus(reservadoRestante)
+          .minus(aindaVaiProduzir)
+          .minus(produzidoEmEspera),
+        0,
+      ),
+    );
+  }
+
   return {
     id: order.id,
     code: order.code,
@@ -401,7 +466,7 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
     requestedDeliveryDate: order.requestedDeliveryDate ? order.requestedDeliveryDate.toISOString() : null,
     status: order.status,
     notes: order.notes,
-    lines: order.lines.map((line) => toLineDTO(line, shippedByLine, billedByLine)),
+    lines: order.lines.map((line) => toLineDTO(line, shippedByLine, billedByLine, pendingProductionByLine)),
     commercialOrigin: commercialOriginOf(order),
     reservation: reservation ? toReservationDTO(reservation, shippedByResLine) : null,
     generatedProductionOrders: order.productionOrders.map(toGeneratedProductionOrderDTO),

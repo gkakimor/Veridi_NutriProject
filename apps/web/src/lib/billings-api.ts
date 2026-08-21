@@ -80,3 +80,23 @@ export async function cancelBilling(id: string, input: CancelBillingInput): Prom
   });
   return (await parseJsonOrThrow(response)) as BillingDTO;
 }
+
+/**
+ * Altera o preço faturado de uma linha, preservando o acordado.
+ * Exige perfil comercial/administrativo e motivo — a API recusa o resto.
+ */
+export async function overrideBillingPrice(
+  billingId: string,
+  billingLineId: string,
+  input: { unitPrice: string; reason: string },
+): Promise<BillingDTO> {
+  const response = await apiFetch(
+    `${API_URL}/billings/${billingId}/lines/${billingLineId}/price-override`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  return (await parseJsonOrThrow(response)) as BillingDTO;
+}

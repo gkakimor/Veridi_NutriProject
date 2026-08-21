@@ -26,10 +26,15 @@ import {
   ExcessiveReserveError,
   IncompletePlanCoverageError,
   MissingPlanLineError,
+  NoPendingProductionError,
+  RemainderExceedsPendingError,
   ProductNoLongerValidForProductionError,
   UnknownPlanLineError,
 } from "./fulfillment-plan.errors.js";
-import type { ApplyFulfillmentPlanInput } from "./fulfillment-plan.schemas.js";
+import type {
+  ApplyFulfillmentPlanInput,
+  CreateRemainderOrderInput,
+} from "./fulfillment-plan.schemas.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -370,6 +375,159 @@ export async function applyFulfillmentPlan(
     await tx.customerOrder.update({
       where: { id: customerOrderId },
       data: { status: "IN_FULFILLMENT" },
+    });
+  });
+
+  return (await getCustomerOrderById(customerOrderId))!;
+}
+
+
+/**
+ * OP PARA O SALDO RESTANTE de uma linha do Pedido.
+ *
+ * Produção real abaixo do planejado é normal, e o VAL-LEG-01 terminou
+ * exatamente assim: 98 de 100. O Pedido representava a pendência
+ * corretamente em toda parte — falta expedir 2, falta reservar 2, status
+ * parcial — e mesmo assim não havia como continuar. O Plano de
+ * Atendimento só existe enquanto o Pedido está CONFIRMED e cobre a
+ * quantidade pedida inteira; ele não serve para um saldo.
+ *
+ * Esta função é o caminho estreito que faltava: uma OP, uma linha, o
+ * saldo que ainda precisa ser PRODUZIDO — não o que falta expedir. Um
+ * saldo já coberto por estoque reservado ou por OP aberta não é
+ * pendência de produção, e pedir OP para ele produziria o dobro.
+ *
+ * Nunca automática: expedir parcialmente não gera ordem nenhuma sozinho.
+ * Quem decide continuar é o operador.
+ */
+export async function createRemainderProductionOrder(
+  customerOrderId: string,
+  input: CreateRemainderOrderInput,
+  actor?: { id: string; name: string },
+): Promise<CustomerOrderDTO> {
+  const prisma = getPrisma();
+  const code = await nextSequenceCode(prisma, PRODUCTION_ORDER_CODE_SEQUENCE, PRODUCTION_ORDER_CODE_PREFIX);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM customer_orders WHERE id = ${customerOrderId} FOR UPDATE`;
+
+    const order = await tx.customerOrder.findUnique({
+      where: { id: customerOrderId },
+      include: {
+        lines: true,
+        reservations: { include: { lines: true } },
+        productionOrders: { include: { outputs: { select: { quantity: true } } } },
+        shipments: { include: { lines: true } },
+      },
+    });
+    if (!order) throw new CustomerOrderNotFoundError(customerOrderId);
+    if (order.status !== "IN_FULFILLMENT" && order.status !== "PARTIALLY_SHIPPED") {
+      throw new CustomerOrderNotConfirmedError(
+        "Só um pedido em atendimento tem saldo restante — antes disso o caminho é o Plano de Atendimento.",
+      );
+    }
+
+    const orderLine = order.lines.find((line) => line.id === input.customerOrderLineId);
+    if (!orderLine) throw new UnknownPlanLineError(input.customerOrderLineId);
+
+    /*
+     * Mesmo cálculo que o Pedido publica em `pendingProductionQuantity`,
+     * refeito aqui sob lock: o que a tela leu pode ter envelhecido entre
+     * o carregamento e o clique.
+     */
+    const expedido = order.shipments
+      .filter((shipment) => shipment.status === "CONFIRMED")
+      .flatMap((shipment) => shipment.lines)
+      .filter((line) => line.customerOrderLineId === orderLine.id)
+      .reduce((sum, line) => sum.plus(line.quantity), new Prisma.Decimal(0));
+
+    const enviadoPorLinhaDeReserva = new Map<string, Prisma.Decimal>();
+    for (const shipment of order.shipments) {
+      if (shipment.status !== "CONFIRMED") continue;
+      for (const line of shipment.lines) {
+        if (!line.customerOrderReservationLineId) continue;
+        const atual = enviadoPorLinhaDeReserva.get(line.customerOrderReservationLineId) ?? new Prisma.Decimal(0);
+        enviadoPorLinhaDeReserva.set(line.customerOrderReservationLineId, atual.plus(line.quantity));
+      }
+    }
+
+    const reservadoRestante = order.reservations
+      .filter((reservation) => reservation.status === "ACTIVE")
+      .flatMap((reservation) => reservation.lines)
+      .filter((line) => line.customerOrderLineId === orderLine.id)
+      .reduce((sum, line) => {
+        const enviado = enviadoPorLinhaDeReserva.get(line.id) ?? new Prisma.Decimal(0);
+        return sum.plus(Prisma.Decimal.max(line.quantity.minus(enviado), 0));
+      }, new Prisma.Decimal(0));
+
+    const ordensDaLinha = order.productionOrders.filter(
+      (po) => po.customerOrderLineId === orderLine.id && po.status !== "CANCELLED",
+    );
+    const produzidoNoTotal = ordensDaLinha.reduce(
+      (sum, po) => sum.plus(po.outputs.reduce((t, o) => t.plus(o.quantity), new Prisma.Decimal(0))),
+      new Prisma.Decimal(0),
+    );
+    // `planejado - produzido` de uma ordem CONCLUÍDA é variação de
+    // produção, não promessa: ela não vai produzir mais nada.
+    const aindaVaiProduzir = ordensDaLinha
+      .filter((po) => po.status !== "COMPLETED")
+      .reduce((sum, po) => {
+        const produzido = po.outputs.reduce((t, o) => t.plus(o.quantity), new Prisma.Decimal(0));
+        return sum.plus(Prisma.Decimal.max(po.plannedQuantity.minus(produzido), 0));
+      }, new Prisma.Decimal(0));
+    // O intervalo entre concluir a produção e reservar o lote.
+    const produzidoEmEspera = Prisma.Decimal.max(
+      produzidoNoTotal.minus(expedido).minus(reservadoRestante),
+      0,
+    );
+
+    const pendente = Prisma.Decimal.max(
+      orderLine.orderedQuantity
+        .minus(expedido)
+        .minus(reservadoRestante)
+        .minus(aindaVaiProduzir)
+        .minus(produzidoEmEspera),
+      0,
+    );
+    if (pendente.lessThanOrEqualTo(0)) {
+      throw new NoPendingProductionError(orderLine.productCode ?? orderLine.productId);
+    }
+
+    const quantidade = input.quantity ? new Prisma.Decimal(input.quantity) : pendente;
+    if (quantidade.lessThanOrEqualTo(0)) throw new NoPendingProductionError(orderLine.productCode ?? orderLine.productId);
+    if (quantidade.greaterThan(pendente)) throw new RemainderExceedsPendingError(pendente.toString());
+
+    // Mesma revalidação da aplicação do plano: produto inativado depois
+    // da confirmação não volta a produzir por uma porta lateral.
+    const product = await tx.product.findUnique({
+      where: { id: orderLine.productId },
+      include: { finishedProductItem: true },
+    });
+    if (
+      !product ||
+      !product.active ||
+      !product.finishedProductItem ||
+      !product.finishedProductItem.active ||
+      product.finishedProductItem.type !== "FINISHED_PRODUCT"
+    ) {
+      throw new ProductNoLongerValidForProductionError(orderLine.productCode ?? orderLine.productId);
+    }
+
+    const activeVersion = await tx.formulationVersion.findFirst({
+      where: { productId: orderLine.productId, status: "ACTIVE" },
+    });
+
+    await createDraftProductionOrderInTx(tx, {
+      code,
+      productId: product.id,
+      outputUnitCode: product.finishedProductItem.unitCode,
+      formulationVersionId: activeVersion?.id ?? null,
+      plannedQuantity: quantidade,
+      customerOrderId,
+      // A proveniência é a mesma da primeira OP: quem auditar vê as duas
+      // ordens penduradas na mesma linha do mesmo Pedido.
+      customerOrderLineId: orderLine.id,
+      ...(actor ? { createdBy: actor.name } : {}),
     });
   });
 

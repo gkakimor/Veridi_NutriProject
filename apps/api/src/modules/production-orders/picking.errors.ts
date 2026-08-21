@@ -152,3 +152,27 @@ export class AlternateLotOwnerMismatchError extends Error {
     this.name = "AlternateLotOwnerMismatchError";
   }
 }
+
+export class ExtraReservationReasonRequiredError extends Error {
+  constructor() {
+    super("Informe o motivo do consumo adicional — ampliar uma reserva é uma decisão que fica registrada.");
+    this.name = "ExtraReservationReasonRequiredError";
+  }
+}
+
+export class NoUnreservedStockError extends Error {
+  constructor(lotCode: string, available: string) {
+    super(
+      `Lote ${lotCode} não tem saldo livre suficiente: disponível não reservado ${available}. ` +
+        "Estoque reservado por outra operação nunca é usado para consumo adicional.",
+    );
+    this.name = "NoUnreservedStockError";
+  }
+}
+
+export class ExtraReservationLotItemMismatchError extends Error {
+  constructor(lotCode: string) {
+    super(`Lote ${lotCode} é de outro item — o consumo adicional é do mesmo material da linha.`);
+    this.name = "ExtraReservationLotItemMismatchError";
+  }
+}

@@ -2647,3 +2647,71 @@ changed is when it may be informed, not how it is stored.
 Qualification history records what happened: a relation born approved is one
 `null → APPROVED` event, not an invented `PENDING` that never existed.
 
+
+## §39 — Rules from the first end-to-end case (VAL-LEG-01)
+
+The first real order went from customer to invoice through the published UI.
+It passed, and it left three places where the domain was right but the system
+gave the operator no way to say so.
+
+### Consuming beyond the reservation is explicit, never automatic
+
+Real consumption stays capped by what is reserved. That cap is what stops one
+order from helping itself to free stock and to stock another order is holding.
+
+What was missing was the legitimate path for the most ordinary variance on a
+shop floor: a little more was weighed than the formula called for. That event
+now has an act of its own — the operator asks for the extra material, states
+why, and the system checks the genuinely free balance of the lot before
+enlarging that order's reservation. Only then can it be consumed.
+
+Free stock is never consumed automatically, and stock reserved by another
+operation is never touched. Eligibility is the same notion used at release:
+owner, quality, expiry. The original reservation line is never rewritten — the
+enlargement is a new line beside it, carrying reason, author and timestamp, so
+planned, reserved, enlarged and actually consumed all stay readable at once.
+
+Enlarging a reservation is not consuming: no stock moves until the consumption
+itself is recorded. Completing or cancelling the order releases an unconsumed
+enlargement exactly like any other reservation — nothing is left stranded.
+
+### Billing inherits the price the customer agreed to
+
+A billing line is created with `agreedUnitPrice` copied from the order line —
+the price frozen when the quote was accepted. Not today's pricing version, not
+a recalculation from current cost. A later PREC, a new CALC or a future
+negotiation never rewrite what was already agreed.
+
+`unitPrice` is what is actually billed. It is born equal to the agreed price
+and only differs after an explicit override, which requires a commercial or
+administrative role and a mandatory reason, and which preserves the agreed
+price beside it. The difference between the two is the evidence; replacing one
+with the other would destroy it. Billing exactly the agreed amount is not a
+divergence, so returning to it clears the override rather than recording one.
+
+Where no price was agreed, the quantitative billing document remains valid and
+the price is informed by hand, as before. Nothing is invented to fill the gap.
+
+### Partial fulfilment keeps its balance and offers a way to close it
+
+Shipping less than ordered leaves the order partially fulfilled, and every
+view says so. The order now also offers the next step: a production order for
+the balance that still needs to be *made*.
+
+That balance is not "ordered minus shipped". Quantity already covered by
+reserved finished goods, by an open production order, or by goods those orders
+have already produced and not yet reserved, is not pending production —
+suggesting an order for it would produce twice. The planned-minus-produced of
+a *completed* order is production variance, not a promise, and does not count
+as coverage.
+
+It is never automatic. Shipping partially generates no order by itself; the
+operator decides. The new order hangs from the same order line as the first,
+so an order can show several production orders without losing provenance.
+
+### Traceability shows destination without polluting genealogy
+
+A finished lot's traceability reaches the customer order, customer, project
+and the shipments that carried that lot — in a section of its own. Commercial
+destination is not material origin, and merging the two would read as if the
+customer had supplied something.

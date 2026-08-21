@@ -139,6 +139,20 @@ export interface MaterialReservationLineDTO {
   releaseReason: string | null;
   /** `id` da linha original que esta linha substitui, quando esta linha nasceu de uma substituição. */
   replacesLineId: string | null;
+  /**
+   * Preenchidos quando esta linha é uma **ampliação explícita** da reserva
+   * ("Adicionar consumo extra"), e não uma linha vinda da liberação da OP.
+   * A linha original permanece intacta ao lado desta.
+   */
+  extraReason: string | null;
+  extraRequestedBy: string | null;
+  extraRequestedAt: string | null;
+  /**
+   * Saldo do lote que **não está reservado por ninguém** — físico menos
+   * toda reserva ativa, de qualquer OP. É o teto de uma ampliação desta
+   * linha. `null` quando o item não controla lote.
+   */
+  lotFreeQuantity: string | null;
 }
 
 export interface ProductionConsumptionDTO {
