@@ -23,20 +23,35 @@ export function optionalEnum<const T extends readonly [string, ...string[]]>(val
 /**
  * Inteiro positivo opcional e limpável. `0` e negativos são rejeitados:
  * "zero dose por embalagem" não é um dado, é um erro.
+ *
+ * Campo VAZIO é limpeza, não zero. A união com `z.coerce.number()` resolvia
+ * `""` pela coerção antes de chegar ao literal — `Number("")` é `0` —, então
+ * um formulário que devolvia o campo vazio como veio era recusado por
+ * "maior que zero". O efeito prático era pior que o sintoma: um produto que
+ * nasceu sem Unidades por caixa não podia mais ter NENHUM outro campo
+ * editado. Tratar cada caso explicitamente mantém as três leituras separadas:
+ * ausente = não mexe, vazio = limpa, `0` = erro de quem digitou.
  */
 export function optionalPositiveInt(message: string) {
   return z
-    .union([z.coerce.number(), z.literal("")])
-    .nullish()
-    .transform((value) => {
+    .any()
+    .optional()
+    .transform((value, ctx) => {
       if (value === undefined) return undefined;
-      if (value === null || value === "") return null;
-      return value;
-    })
-    .refine((value) => value === undefined || value === null || Number.isInteger(value), {
-      message: "Informe um número inteiro",
-    })
-    .refine((value) => value === undefined || value === null || value > 0, { message });
+      if (value === null) return null;
+      if (typeof value === "string" && value.trim() === "") return null;
+
+      const numero = typeof value === "number" ? value : Number(String(value).trim());
+      if (!Number.isFinite(numero) || !Number.isInteger(numero)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Informe um número inteiro" });
+        return z.NEVER;
+      }
+      if (numero <= 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+        return z.NEVER;
+      }
+      return numero;
+    });
 }
 
 /**
