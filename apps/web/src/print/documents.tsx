@@ -225,6 +225,10 @@ export function ProductionOrderPrintDocument({
   order: ProductionOrderDTO;
   cost: ProductionOrderMaterialCostDTO | null;
 }) {
+  const ampliacoes = order.requirements
+    .flatMap((requirement) => requirement.reservationLines)
+    .filter((linha) => linha.extraReason !== null && linha.releasedAt === null);
+
   return (
     <PrintLayout
       kind="Ordem de Produção"
@@ -406,6 +410,34 @@ export function ProductionOrderPrintDocument({
           ))}
         </PrintTable>
       </PrintSection>
+
+      {/* Ampliações de reserva ficam num bloco próprio: o consumo já aparece
+          acima, o que faltava no papel era POR QUE foi além do planejado,
+          quem pediu e quando. */}
+      {ampliacoes.length > 0 && (
+        <PrintSection title="Consumo extra autorizado">
+          <PrintTable
+            columns={["Item", "Lote", "Quantidade adicional", "Motivo", "Solicitado por", "Quando"]}
+            isEmpty={false}
+            emptyMessage="Nenhuma ampliação de reserva."
+          >
+            {ampliacoes.map((linha) => (
+              <tr key={linha.id}>
+                <td>
+                  {linha.itemCode} — {linha.itemName}
+                </td>
+                <td>{printOrDash(linha.lotCode)}</td>
+                <td className="is-number">
+                  {linha.quantity} {linha.unitCode}
+                </td>
+                <td>{printOrDash(linha.extraReason)}</td>
+                <td>{printOrDash(linha.extraRequestedBy)}</td>
+                <td>{formatPrintDateTime(linha.extraRequestedAt)}</td>
+              </tr>
+            ))}
+          </PrintTable>
+        </PrintSection>
+      )}
 
       <PrintSection title="Produção realizada">
         <PrintTable
@@ -593,7 +625,7 @@ export function LotTraceabilityPrintDocument({
 
           <PrintSection title="Materiais realmente consumidos">
             <PrintTable
-              columns={["Item", "Lote interno", "Lote do fornecedor", "Fornecedor", "Quantidade", "Unidade"]}
+              columns={["Item", "Lote interno", "Lote de origem", "Origem do material", "Quantidade", "Unidade"]}
               isEmpty={traceability.consumedMaterials.length === 0}
               emptyMessage="Nenhum consumo registrado para este lote."
             >
@@ -604,7 +636,11 @@ export function LotTraceabilityPrintDocument({
                   </td>
                   <td>{printOrDash(material.lotCode)}</td>
                   <td>{printOrDash(material.supplierLot)}</td>
-                  <td>{printOrDash(material.supplierName)}</td>
+                  <td>
+                    {material.ownerType === "CUSTOMER"
+                      ? `Material do cliente — ${material.ownerCustomerName ?? "cliente não identificado"}`
+                      : printOrDash(material.supplierName)}
+                  </td>
                   <td className="is-number">{material.quantity}</td>
                   <td>{material.unitCode}</td>
                 </tr>

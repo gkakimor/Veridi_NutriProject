@@ -2,7 +2,11 @@ import { Prisma } from "@prisma/client";
 import type { ReceiptDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { getReceiptById } from "../receiving/receiving.service.js";
-import { InvalidAcquisitionCostError, ReceiptLineNotFoundError } from "./costs.errors.js";
+import {
+  CustomerSuppliedAcquisitionCostError,
+  InvalidAcquisitionCostError,
+  ReceiptLineNotFoundError,
+} from "./costs.errors.js";
 import type { SetAcquisitionCostInput } from "./costs.schemas.js";
 
 /** Sem autenticacao/Usuarios no MVP ainda — mesma string ja usada na topbar. */
@@ -27,8 +31,16 @@ export async function setAcquisitionCost(
   const prisma = getPrisma();
 
   const receiptId = await prisma.$transaction(async (tx) => {
-    const line = await tx.receiptLine.findUnique({ where: { id: receiptLineId } });
+    const line = await tx.receiptLine.findUnique({
+      where: { id: receiptLineId },
+      include: { receipt: { select: { sourceType: true } } },
+    });
     if (!line) throw new ReceiptLineNotFoundError(receiptLineId);
+    // A tela ja nao oferece a acao, mas a recusa precisa existir no dominio:
+    // material do cliente nao tem custo de aquisicao Veridi para informar.
+    if (line.receipt.sourceType === "CUSTOMER_SUPPLIED") {
+      throw new CustomerSuppliedAcquisitionCostError();
+    }
 
     const raw = input.unitCost.trim();
     const unitCost = raw === "" ? null : new Prisma.Decimal(raw);

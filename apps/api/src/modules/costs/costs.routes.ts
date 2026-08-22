@@ -5,6 +5,7 @@ import { ProductionOrderNotFoundError } from "../production-orders/production-or
 import { setAcquisitionCost } from "./acquisition-cost.service.js";
 import {
   FormulationVersionNotFoundError,
+  CustomerSuppliedAcquisitionCostError,
   InvalidAcquisitionCostError,
   ReceiptLineNotFoundError,
 } from "./costs.errors.js";
@@ -39,6 +40,9 @@ function mapDomainError(
   }
   if (error instanceof InvalidAcquisitionCostError) {
     return { status: 400, body: { error: "invalid_acquisition_cost", message: error.message } };
+  }
+  if (error instanceof CustomerSuppliedAcquisitionCostError) {
+    return { status: 400, body: { error: "customer_supplied_material", message: error.message } };
   }
   return null;
 }
