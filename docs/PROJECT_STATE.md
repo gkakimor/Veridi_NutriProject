@@ -5228,3 +5228,30 @@ o histórico fica preservado.
 Keep this file concise.
 Rewrite/condense after meaningful changes.
 Do not turn it into a chronological log.
+
+## Operational MVP validated — pre-client hardening
+
+Three deep legacy-derived cases ran end to end against the published
+interface, each pressing a different part of the domain.
+
+- **VAL-LEG-01 — PASS.** `PED-000001` from order to billing: OP, picking,
+  real consumption, production, finished goods, quality, traceability,
+  shipment, invoicing. Two HIGH findings, both fixed and released.
+- **VAL-LEG-02 — PASS.** Shortage, complementary purchase from an alternative
+  supplier, partial receipt, a third lot, FEFO across three lots, multi-lot
+  reservation, extra consumption with reason, realised cost, partial
+  production (147 of 150), balance and a second OP, shipment and billing
+  inheriting the agreed price.
+- **VAL-LEG-03 — PASS.** Customer-supplied material end to end: ownership and
+  segregation, receipt without a Veridi purchase order, quality, formulation
+  template, cost structure template, calculation excluding customer
+  acquisition, pricing policy, instalments with interest, quote, order,
+  production, traceability, shipment and billing. One HIGH (plan owner scope)
+  and four MEDIUM, all closed in the hardening round.
+
+The hardening round that followed changed no business capability. It closed
+the whole known functional and UX backlog from those three cases, added
+regression coverage for each, and shipped a single release candidate for
+client validation. See §40 of `PRODUCT_RULES.md` for the rules the findings
+became, and `BACKLOG.md` for the findings themselves.
+

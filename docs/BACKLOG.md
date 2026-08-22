@@ -446,3 +446,38 @@ accessibility pass.
 - **Leftover test data is visible in the production stock list** —
   `PA-000003 Test` and `PA-000004 Test 2`. Data hygiene, not code.
 
+## Closed by the pre-client hardening round
+
+Findings from the three deep cases, kept here with what they were and how
+they were closed. History is not deleted — the finding is what justifies the
+rule.
+
+- **HIGH — Fulfilment Plan ignored owner scope on customer material.**
+  Found in VAL-LEG-03. The plan showed 2.5 kg available to IGEIA's order when
+  0.5 kg of that belonged to another customer; the OP correctly showed 2.
+  Closed by resolving plan availability through the same `requirementOwnerScope`
+  the OP and the reservation already use, with a test that asserts plan and OP
+  agree.
+- **MEDIUM — Draft billing total disagreed with its own line.** Found in
+  VAL-LEG-02, reproduced in VAL-LEG-03 (R$ 1.677,27 on the line, R$ 1.677,00
+  in the footer). Closed by making both read the server value.
+- **MEDIUM — Extra consumption audit was persisted and invisible.** Found in
+  VAL-LEG-02. Closed by showing reason, author and time on the extra line.
+- **MEDIUM — Shortage had no route to purchasing before the OP existed.**
+  Found in VAL-LEG-02. Closed by reusing the supplier candidate engine at the
+  plan stage.
+- **MEDIUM — Customer lot read as "no cost informed".** Found in VAL-LEG-03,
+  together with a "Definir custo" action that should not exist for customer
+  material. Closed in the screen and in the service.
+- **MEDIUM — Traceability showed customer lots with an empty supplier.**
+  Found in VAL-LEG-03. Closed by naming the owner.
+- **MEDIUM — `unitsPerShippingBox` blocked unrelated edits.** Found in
+  VAL-LEG-02. Root cause was `z.coerce.number()` resolving `""` to `0` before
+  the empty-string branch. Closed in `optionalPositiveInt`.
+- **LOW — Consumption above the reservation was only refused by the server.**
+  Found in VAL-LEG-02. Closed by stating the limit before submit; the server
+  remains the authority.
+- **LOW — The cost page offered a reference quantity that applying a template
+  ignored.** Found in VAL-LEG-03. The template remains the source of the base;
+  the copy now says so instead of implying otherwise.
+
