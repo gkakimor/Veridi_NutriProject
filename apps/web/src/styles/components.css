@@ -1754,3 +1754,18 @@ input.is-invalid {
 .field__hint--error {
   color: var(--err-fg);
 }
+
+/* Afasta a ação destrutiva das de rotina sem mudar o modo de layout da
+   linha inteira — separação é margem, não um novo sistema de grid. */
+.btn--set-apart {
+  margin-left: var(--sp-5);
+}
+
+/* Observação de uma frase dentro de tabela: quebra em vez de esticar a
+   coluna, e nada fica escondido atrás de reticências. */
+.cell-note {
+  max-width: 22rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink-2);
+}

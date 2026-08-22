@@ -201,32 +201,10 @@ export function SupplierItemDetailModal({
                 Salvar dados comerciais
               </button>
 
-              {/*
-                  A ação menos reversível do painel tinha o menor peso
-                  visual: texto puro entre dois botões com borda, ao lado de
-                  "Marcar como preferencial" preenchido. Inativar agora usa
-                  a variante destrutiva e pergunta antes; reativar é
-                  construtivo e segue sendo discreto.
-              */}
-              <button
-                type="button"
-                className={supplierItem.active ? "btn btn--danger btn--sm" : "btn btn--ghost btn--sm"}
-                disabled={saving}
-                onClick={() => {
-                  if (supplierItem.active) {
-                    setConfirmarInativacao(true);
-                    return;
-                  }
-                  void run(() => updateSupplierItem(supplierItem.id, { active: true }));
-                }}
-              >
-                {supplierItem.active ? "Inativar relação" : "Reativar relação"}
-              </button>
-
               {/* Preferencial é decisão operacional — não muda porque alguém baixou o preço. */}
               <button
                 type="button"
-                className="btn btn--accent btn--sm"
+                className="btn btn--secondary btn--sm"
                 disabled={
                   saving ||
                   (!supplierItem.preferred &&
@@ -237,6 +215,33 @@ export function SupplierItemDetailModal({
                 }
               >
                 {supplierItem.preferred ? "Remover preferencial" : "Marcar como preferencial"}
+              </button>
+
+              {/*
+                  A ação menos reversível do painel tinha o menor peso visual:
+                  texto puro ENTRE dois botões com borda. Ganhou a variante
+                  destrutiva e a confirmação; o que faltava era sair do meio do
+                  grupo de rotina — encostada em "Salvar" e "Preferencial" ela
+                  continuava vizinha de quem só queria salvar. Agora fica no fim
+                  da linha, separada. Reativar é construtivo e segue discreto.
+              */}
+              <button
+                type="button"
+                className={
+                  supplierItem.active
+                    ? "btn btn--danger btn--sm btn--set-apart"
+                    : "btn btn--ghost btn--sm btn--set-apart"
+                }
+                disabled={saving}
+                onClick={() => {
+                  if (supplierItem.active) {
+                    setConfirmarInativacao(true);
+                    return;
+                  }
+                  void run(() => updateSupplierItem(supplierItem.id, { active: true }));
+                }}
+              >
+                {supplierItem.active ? "Inativar relação" : "Reativar relação"}
               </button>
             </div>
           </>
@@ -375,6 +380,7 @@ export function SupplierItemDetailModal({
                 <th>Situação</th>
                 <th>Origem</th>
                 <th>Registrada</th>
+                <th>Observação</th>
               </tr>
             </thead>
             <tbody>
@@ -401,11 +407,15 @@ export function SupplierItemDetailModal({
                   </td>
                   <td>{SUPPLIER_ITEM_OFFER_SOURCE_LABELS[offer.source]}</td>
                   <td>{formatDateTime(offer.createdAt)}</td>
+                  {/* O formulário pede a observação da oferta e a tabela não
+                      tinha onde mostrá-la: o texto era gravado e não voltava
+                      para ninguém. É onde ficam as notas de origem do legado. */}
+                  <td className="cell-note">{offer.notes ?? "—"}</td>
                 </tr>
               ))}
               {supplierItem.offers.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="table__empty">
+                  <td colSpan={10} className="table__empty">
                     Nenhum preço registrado.
                   </td>
                 </tr>
