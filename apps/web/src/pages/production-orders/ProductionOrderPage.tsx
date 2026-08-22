@@ -8,7 +8,11 @@ import type {
   ProductionOrderStatus,
   ProductionOutputDestination,
 } from "@veridi/shared";
-import type { ProductionOrderCostDTO, ProductionOrderMaterialCostDTO } from "@veridi/shared";
+import type {
+  MaterialReservationLineDTO,
+  ProductionOrderCostDTO,
+  ProductionOrderMaterialCostDTO,
+} from "@veridi/shared";
 import {
   COST_QUALITY_LABELS,
   COST_SOURCE_LABELS,
@@ -281,6 +285,17 @@ export function ProductionOrderPage() {
   const activeReservationLines = (productionOrder?.requirements ?? []).flatMap((requirement) =>
     requirement.reservationLines.filter((line) => line.releasedAt === null),
   );
+
+  /* Consumir acima do reservado sempre foi recusado pelo servidor; o botão
+     só ficava habilitado até o 400 chegar. Aqui a tela antecipa o limite —
+     sem tirar a autoridade do domínio. */
+  function excedeReserva(line: MaterialReservationLineDTO): boolean {
+    const pedido = (consumeQuantities[line.id] ?? "").trim();
+    if (pedido === "") return false;
+    const valor = Number(pedido.replace(",", "."));
+    if (!Number.isFinite(valor)) return false;
+    return valor > Number(line.remainingQuantity);
+  }
 
   /* Quanto ainda cabe apontar nesta ordem. O servidor sempre recusou o
      excesso (`output_exceeds_planned`); o que faltava era a tela dizer o
@@ -1058,6 +1073,21 @@ export function ProductionOrderPage() {
                     <tr key={line.id}>
                       <td>
                         <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
+                        {/* A ampliação já era gravada com motivo, autor e
+                            data; faltava alguém conseguir vê-la. Só aparece
+                            na linha que é de fato extra. */}
+                        {line.extraReason && (
+                          <div className="line-audit">
+                            <span className="badge badge--info">Consumo extra</span>
+                            <div className="field__hint">
+                              +{line.quantity} {line.unitCode} · {line.extraReason}
+                            </div>
+                            <div className="field__hint">
+                              {line.extraRequestedBy ?? "—"}
+                              {line.extraRequestedAt ? ` · ${formatDateTime(line.extraRequestedAt)}` : ""}
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
                       <td>
@@ -1103,6 +1133,12 @@ export function ProductionOrderPage() {
                             <>
                               <br />
                               <span className="field__hint">Lote substituído no Picking</span>
+                            </>
+                          )}
+                          {line.extraReason && (
+                            <>
+                              <br />
+                              <span className="badge badge--info">Consumo extra</span>
                             </>
                           )}
                         </td>
@@ -1205,6 +1241,21 @@ export function ProductionOrderPage() {
                     <tr key={line.id}>
                       <td>
                         <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
+                        {/* A ampliação já era gravada com motivo, autor e data;
+                            faltava alguém conseguir vê-la. Só aparece na linha
+                            que é de fato extra. */}
+                        {line.extraReason && (
+                          <div className="line-audit">
+                            <span className="badge badge--info">Consumo extra</span>
+                            <div className="field__hint">
+                              +{line.quantity} {line.unitCode} · {line.extraReason}
+                            </div>
+                            <div className="field__hint">
+                              {line.extraRequestedBy ?? "—"}
+                              {line.extraRequestedAt ? ` · ${formatDateTime(line.extraRequestedAt)}` : ""}
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
                       <td className="is-numeric">
@@ -1217,12 +1268,22 @@ export function ProductionOrderPage() {
                           type="text"
                           inputMode="decimal"
                           placeholder="0"
+                          className={excedeReserva(line) ? "is-invalid" : undefined}
                           disabled={line.pickingStatus !== "CONFIRMED" || Number(line.remainingQuantity) <= 0}
                           value={consumeQuantities[line.id] ?? ""}
                           onChange={(event) =>
                             setConsumeQuantities((prev) => ({ ...prev, [line.id]: event.target.value }))
                           }
                         />
+                        {/* O servidor continua sendo a autoridade — isto só
+                            diz o limite antes do envio, em vez de deixar o
+                            operador descobrir pelo erro. */}
+                        {excedeReserva(line) && (
+                          <p className="field__hint field__hint--error">
+                            Máximo disponível nesta reserva: {line.remainingQuantity} {line.unitCode}. Para
+                            consumir acima disso, use “Adicionar consumo extra”.
+                          </p>
+                        )}
                       </td>
                       <td>
                         <button
@@ -1232,6 +1293,7 @@ export function ProductionOrderPage() {
                             line.pickingStatus !== "CONFIRMED" ||
                             Number(line.remainingQuantity) <= 0 ||
                             !(consumeQuantities[line.id] ?? "").trim() ||
+                            excedeReserva(line) ||
                             consumingLineId === line.id
                           }
                           onClick={() => handleConsumeNow(line.id)}
