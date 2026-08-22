@@ -7,6 +7,7 @@ import {
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAuth } from "../../app/AuthProvider";
 import {
   createIndustrialResourceRate,
@@ -29,6 +30,7 @@ export function IndustrialResourceDetailPage() {
   const [resource, setResource] = useState<IndustrialResourceDetailDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmarInativacao, setConfirmarInativacao] = useState(false);
 
   const [rateValue, setRateValue] = useState("");
   const [effectiveAt, setEffectiveAt] = useState("");
@@ -87,14 +89,25 @@ export function IndustrialResourceDetailPage() {
           </div>
         </div>
         <div className="table__actions">
+          {/*
+              Mesma correção da relação Item x Fornecedor, mesma família de
+              problema: inativar tinha peso de ação de rotina e nem perguntava.
+              A consequência aqui é forte — toda estrutura de custo que usa o
+              recurso ganha pendência BLOQUEANTE e não pode mais ser ativada.
+              Reativar é construtivo e segue discreto.
+          */}
           {canEdit && (
             <button
               type="button"
-              className="btn btn--secondary"
+              className={resource.active ? "btn btn--danger" : "btn btn--secondary"}
               disabled={saving}
-              onClick={() =>
-                void run(() => updateIndustrialResource(resource.id, { active: !resource.active }))
-              }
+              onClick={() => {
+                if (resource.active) {
+                  setConfirmarInativacao(true);
+                  return;
+                }
+                void run(() => updateIndustrialResource(resource.id, { active: true }));
+              }}
             >
               {resource.active ? "Inativar recurso" : "Reativar recurso"}
             </button>
@@ -275,6 +288,32 @@ export function IndustrialResourceDetailPage() {
           )}
         </FormSection>
       </div>
+
+      <ConfirmDialog
+        open={confirmarInativacao}
+        title="Inativar este recurso?"
+        confirmLabel="Inativar recurso"
+        cancelLabel="Cancelar"
+        confirmTone="danger"
+        message={
+          <>
+            <p>
+              <b>{resource.name}</b> deixa de ser oferecido em novas estruturas de custo. Toda
+              estrutura que já o utiliza passa a acusar pendência bloqueante e não poderá ser
+              ativada enquanto ele estiver inativo.
+            </p>
+            <p>
+              As tarifas registradas e os cálculos já salvos continuam no histórico. O recurso pode
+              ser reativado depois.
+            </p>
+          </>
+        }
+        onCancel={() => setConfirmarInativacao(false)}
+        onConfirm={() => {
+          setConfirmarInativacao(false);
+          void run(() => updateIndustrialResource(resource.id, { active: false }));
+        }}
+      />
     </>
   );
 }

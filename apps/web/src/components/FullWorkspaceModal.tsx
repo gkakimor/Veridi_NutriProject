@@ -118,11 +118,19 @@ export function FullWorkspaceModal({
               {codeChip && <CodeChip>{codeChip}</CodeChip>}
             </div>
           </div>
+          {/*
+              O ✕ e a palavra sempre foram um controle só, mas o aria-label
+              trocava o nome acessível por outro texto: quem navega por voz
+              dizia "Fechar" e nada acontecia, porque para a tecnologia
+              assistiva o botão se chamava "Fechar sem salvar". O nome visível
+              agora é o nome acessível, e o aviso vira title — informação, não
+              substituição.
+          */}
           <button
             type="button"
             className="modal-fullscreen__close"
             onClick={onClose}
-            aria-label="Fechar sem salvar"
+            title="Fecha sem salvar as alterações"
           >
             <span aria-hidden="true">✕</span> {closeLabel}
           </button>
