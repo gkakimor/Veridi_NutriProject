@@ -5273,3 +5273,38 @@ visual 0**. What remains documented and open is two migration-policy decisions
 domain decision — all listed at the end of `BACKLOG.md` rather than folded into
 a zero.
 
+## Release candidata para validação do cliente
+
+**Release congelada:** `9a653a0`
+**Ambiente:** Railway, deploy `8949e780`, health 200.
+
+O MVP operacional está validado internamente. Os três casos profundos passaram
+ponta a ponta contra a interface publicada, o backlog auditado está zerado
+(CRITICAL, HIGH, MEDIUM, LOW e observações visuais), e o polimento final foi
+publicado.
+
+**Próximo gate: validação com a Veridi.** Nenhum desenvolvimento novo até que
+essa conversa aconteça e o feedback seja classificado — o que a operação real
+apontar vale mais do que qualquer item que possamos priorizar sozinhos daqui.
+
+### Material preparado para a validação
+
+- `Guia_Fluxo_Comercial_Veridi.docx` — guia do usuário em 36 capítulos, do
+  projeto do cliente ao faturamento, incluindo templates, plano de atendimento,
+  consumo extra, rastreabilidade e material fornecido pelo cliente. Documento
+  para o usuário final, em português, sem termos de implementação. Não é
+  versionado no repositório, conforme a política atual.
+- `ROTEIRO_VALIDACAO_CLIENTE.md` — roteiro da reunião em quinze blocos, com as
+  perguntas abertas por etapa e a grade de classificação do feedback (bug,
+  regra de negócio, melhoria, novo módulo, dúvida de treinamento).
+
+### O que continua aberto
+
+Nada operacional. Seguem documentados em `BACKLOG.md`, sem terem sido
+implementados e sem serem tratados como resolvidos:
+
+- duas decisões de política de migração — endereço legado em linha única e
+  validades legadas no passado;
+- duas passadas de nomenclatura de baixa severidade;
+- uma decisão de domínio já registrada (compra contra projeto não aprovado).
+
