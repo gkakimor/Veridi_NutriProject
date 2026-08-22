@@ -276,6 +276,77 @@ describe("Faturamento herda o preço acordado", () => {
   });
 });
 
+describe("Precisão do preço acordado", () => {
+  /*
+   * O preço acordado guarda 4 casas; a tela mostra 2. Somar pelo valor
+   * EXIBIDO dava outro total — a linha dizia R$ 1.677,27 e o rodapé do
+   * rascunho R$ 1.677,00. Estes casos prendem o servidor como fonte: quem
+   * exibe pode arredondar, quem calcula não.
+   */
+  it("os dois casos das auditorias: 9,7203 × 147 e 5,5909 × 300", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const primeiro = await pedidoComPrecoAcordado(app, { quantidade: "147", preco: "9.7203" });
+    const expedicaoA = await expedir(app, primeiro.orderId);
+    const faturaA = (
+      await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicaoA.id } })
+    ).json();
+    expect(faturaA.lines[0].lineTotal).toBe("1428.88");
+    expect(faturaA.totalAmount).toBe("1428.88");
+
+    const segundo = await pedidoComPrecoAcordado(app, { quantidade: "300", preco: "5.5909" });
+    const expedicaoB = await expedir(app, segundo.orderId);
+    const faturaB = (
+      await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicaoB.id } })
+    ).json();
+    expect(faturaB.lines[0].lineTotal).toBe("1677.27");
+    expect(faturaB.totalAmount).toBe("1677.27");
+
+    await app.close();
+  });
+
+  it("total do documento é a soma das linhas, não quantidade × preço exibido", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { orderId } = await pedidoComPrecoAcordado(app, { quantidade: "300", preco: "5.5909" });
+    const expedicao = await expedir(app, orderId);
+    const fatura = (
+      await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
+    ).json();
+
+    const somaDasLinhas = fatura.lines.reduce(
+      (soma: number, linha: { lineTotal: string }) => soma + Number(linha.lineTotal),
+      0,
+    );
+    expect(Number(fatura.totalAmount)).toBeCloseTo(somaDasLinhas, 2);
+    // O arredondamento de exibição daria 1.677,00 — 27 centavos a menos.
+    expect(Number(fatura.totalAmount)).not.toBe(300 * 5.59);
+
+    await app.close();
+  });
+
+  it("emitir não recalcula: o total emitido é o mesmo do rascunho", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { orderId } = await pedidoComPrecoAcordado(app, { quantidade: "300", preco: "5.5909" });
+    const expedicao = await expedir(app, orderId);
+    const rascunho = (
+      await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
+    ).json();
+    const emitido = (
+      await app.inject({ method: "POST", url: `/billings/${rascunho.id}/issue` })
+    ).json();
+
+    expect(emitido.totalAmount).toBe(rascunho.totalAmount);
+    expect(emitido.lines[0].lineTotal).toBe(rascunho.lines[0].lineTotal);
+
+    await app.close();
+  });
+});
+
 describe("O acordo não é reescrito pelo presente", () => {
   it("preço acordado é snapshot — mudar o Pedido depois não muda o faturamento", async () => {
     const app = buildTestApp();
