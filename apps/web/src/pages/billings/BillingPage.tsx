@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { BillingDTO, BillingStatus } from "@veridi/shared";
+import type { BillingDTO, BillingLineDTO, BillingStatus } from "@veridi/shared";
 import { BILLING_STATUS_LABELS } from "@veridi/shared";
 import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../lib/billings-api";
 import { formatBRL } from "../../lib/currency";
@@ -161,13 +161,32 @@ export function BillingPage() {
     );
   }
 
-  // Prévia local do total enquanto edita — só existe com pricing completo,
-  // nunca somando apenas parte das linhas.
-  const previewComplete = billing.lines.length > 0 && billing.lines.every((line) => (prices[line.id] ?? "").trim() !== "");
+  /*
+   * Total da linha — UM cálculo só, usado na célula e no rodapé.
+   *
+   * O preço acordado é guardado com mais casas do que a tela mostra
+   * (9,7203 aparece como R$ 9,72). Recalcular a partir do texto exibido
+   * dava um total diferente do que o servidor emitiria — a linha dizia
+   * R$ 1.677,27 e o rodapé R$ 1.677,00, e o operador via os dois números
+   * discordando justamente na hora de emitir. Por isso o total da linha
+   * vem do servidor sempre que existe; só quando o operador está digitando
+   * um preço novo (linha sem preço acordado) a prévia é local, e aí o valor
+   * digitado É a precisão.
+   */
+  function totalDaLinha(line: BillingLineDTO): string | null {
+    const digitado = (prices[line.id] ?? "").trim();
+    if (isDraft && !line.agreedUnitPrice) {
+      if (digitado === "" || Number.isNaN(Number(digitado))) return null;
+      return (Number(line.quantity) * Number(digitado)).toFixed(2);
+    }
+    return line.lineTotal;
+  }
+
+  const totaisDeLinha = billing.lines.map((line) => totalDaLinha(line));
+  const previewComplete = billing.lines.length > 0 && totaisDeLinha.every((total) => total !== null);
+  // Soma de valores já monetários (2 casas) — nunca de preço unitário formatado.
   const previewTotal = previewComplete
-    ? billing.lines
-        .reduce((sum, line) => sum + Number(line.quantity) * Number(prices[line.id] ?? "0"), 0)
-        .toFixed(2)
+    ? totaisDeLinha.reduce((sum, total) => sum + Number(total), 0).toFixed(2)
     : null;
   const displayTotal = isDraft ? previewTotal : billing.totalAmount;
   /*
@@ -305,12 +324,8 @@ export function BillingPage() {
                 </tr>
               </thead>
               <tbody>
-                {billing.lines.map((line) => {
-                  const price = (prices[line.id] ?? "").trim();
-                  const lineTotal =
-                    isDraft && !line.agreedUnitPrice && price !== "" && !Number.isNaN(Number(price))
-                      ? (Number(line.quantity) * Number(price)).toFixed(2)
-                      : line.lineTotal;
+                {billing.lines.map((line, indice) => {
+                  const lineTotal = totaisDeLinha[indice] ?? line.lineTotal;
                   return (
                     <tr key={line.id}>
                       <td>

@@ -256,7 +256,8 @@ export function IndustrialCostPage() {
                 onChange={(event) => setReferenceQuantity(event.target.value)}
               />
               <p id="new-reference-output-hint" className="field__hint">
-                Informe a quantidade de referência da estrutura de custos.
+                Usada por “Criar estrutura de custos”. Ao usar um template, a base vem do próprio
+                template e este campo é ignorado.
               </p>
             </div>
           )}

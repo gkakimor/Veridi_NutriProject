@@ -456,6 +456,12 @@
   font-weight: var(--fw-medium);
 }
 
+/* Informativo — qualifica o registro sem pedir ação. */
+.badge--info {
+  background: var(--info-bg);
+  color: var(--info-fg);
+}
+
 .badge--warn {
   background: var(--warn-bg);
   color: var(--warn-fg);
@@ -1737,4 +1743,14 @@ input.is-invalid {
 
 .callout .line-actions {
   margin: 0;
+}
+
+/* Trilha de auditoria dentro da linha da tabela: aparece só quando existe
+   (consumo extra), e nunca vira coluna vazia nas linhas normais. */
+.line-audit {
+  margin-top: var(--sp-1);
+}
+
+.field__hint--error {
+  color: var(--err-fg);
 }

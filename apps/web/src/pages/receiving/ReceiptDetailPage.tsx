@@ -183,7 +183,9 @@ export function ReceiptDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {receipt.lines.map((line) => (
+                {receipt.lines.map((line) => {
+                  const materialDoCliente = receipt.sourceType === "CUSTOMER_SUPPLIED";
+                  return (
                   <tr key={line.id}>
                     <td>
                       <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
@@ -228,12 +230,19 @@ export function ReceiptDetailPage() {
                           <br />
                           <span className="field__hint">Real</span>
                         </>
+                      ) : materialDoCliente ? (
+                        <span className="field__hint">Não aplicável</span>
                       ) : (
                         <span className="field__hint">Sem custo informado</span>
                       )}
                     </td>
                     <td>
-                      {editingLineId === line.id ? (
+                      {/* Material do cliente não tem aquisição da Veridi: a
+                          ação de custo não existe aqui, nem desabilitada —
+                          não há valor a informar. */}
+                      {materialDoCliente ? (
+                        <span className="field__hint">Material do cliente</span>
+                      ) : editingLineId === line.id ? (
                         <div className="table__actions">
                           <button
                             type="button"
@@ -265,7 +274,8 @@ export function ReceiptDetailPage() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

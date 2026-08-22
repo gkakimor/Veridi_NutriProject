@@ -36,6 +36,11 @@
   --warn-bg: #fbf3dc;
   --warn-fg: #8a6a12;
 
+  /* Informativo: fato que qualifica a linha (material do cliente, consumo
+     extra), nunca alerta. Contraste medido sobre --surface e --canvas. */
+  --info-bg: #e7eff8;
+  --info-fg: #1f5687;
+
   --err-bg: #fbe9e7;
   --err-fg: #b3362a;
   --err-border: #f0c6c0;

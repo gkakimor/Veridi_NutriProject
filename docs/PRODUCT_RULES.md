@@ -2715,3 +2715,86 @@ A finished lot's traceability reaches the customer order, customer, project
 and the shipments that carried that lot — in a section of its own. Commercial
 destination is not material origin, and merging the two would read as if the
 customer had supplied something.
+
+## §40 — Rules from the pre-client hardening round
+
+Three deep cases (VAL-LEG-01, 02, 03) ran end to end before this round. What
+follows are the rules their findings turned into.
+
+### Customer-supplied material only ever sees its own owner's stock
+
+For a component whose `supplyResponsibility` is `CUSTOMER`, availability,
+shortage, FEFO and reservation are computed **only over lots belonging to the
+same customer**. Veridi stock of the same item never substitutes, and another
+customer's stock never counts.
+
+This was already true where it reserves — the Production Order — and was not
+true where it projects. The Fulfilment Plan summed every lot of the item
+regardless of owner: 1.5 kg belonging to customer A plus 1.0 kg belonging to
+customer B was presented to A's order as 2.5 kg available and "no shortage",
+while the OP created moments later found 1.5 and the shortage. A projection
+that promises material the factory cannot use is worse than no projection.
+Both readings now come from the same owner scope, and a test holds them equal.
+
+A customer material with no resolvable customer has **no** eligible stock —
+the shortage is the whole requirement. Nothing is quietly covered by someone
+else's lot.
+
+### A Veridi purchase order never covers a customer material
+
+`On order` is a Veridi commitment. For `CUSTOMER` components it is always
+zero, and the plan shows "—" rather than a number that would suggest the gap
+is already being closed by a purchase we made.
+
+### Customer material has no Veridi acquisition cost, and none can be recorded
+
+Material the customer sends is physically consumed and physically necessary,
+and it carries **no** acquisition cost of ours. Screens say "não aplicável",
+never "sem custo informado" — the second reads as a field someone forgot to
+fill.
+
+The action to set a cost does not exist on a customer-supplied receipt line,
+and the service refuses it: *"Materiais fornecidos pelo cliente não recebem
+custo de aquisição Veridi."* A number recorded there would enter reporting as
+a purchase we never made.
+
+### Genealogy names the owner, not an empty supplier
+
+A consumed customer lot appeared in traceability with supplier "—", which
+reads as *unknown supplier*. The material origin column now says "Material do
+cliente" with the owner's name, distinct from a Veridi supplier — in the
+screen and in the printed document.
+
+### Money is never re-derived from a formatted number
+
+Agreed prices carry four decimals; screens show two. Any total recomputed
+from the displayed value disagrees with the document the server will issue —
+147 × 9,7203 is R$ 1.428,88, not R$ 1.428,84. The line total and the document
+total come from the same server value, and the draft shows what issuing will
+produce. A local preview exists only where the operator is typing the price,
+and there the typed value *is* the precision.
+
+### An expanded reservation is auditable on screen
+
+Extra consumption records reason, author and timestamp. Those three fields
+were persisted and shown nowhere, which made the mandatory justification
+invisible to whoever audits. The reservation line now carries a "Consumo
+extra" marker with the added quantity, reason, author and time — on the order,
+in picking, in the consumption table and in the printed order. Ordinary lines
+show none of it: no empty audit columns.
+
+### Shortage offers the path to purchasing where it is detected
+
+When the plan finds a Veridi shortage it offers the same supplier analysis
+the purchase suggestion already provides — qualified suppliers, preferred
+one, current offer, MOQ — without leaving the order. It is planning, not
+buying: no purchase order is created. Customer-material shortage gets no
+purchase call to action, because buying does not resolve it.
+
+### An empty optional number means "not informed", never zero
+
+Optional integer fields treat an absent key as *no change*, an empty string or
+`null` as *cleared*, and `0` as an error. Coercing `""` to `0` made a product
+born without units-per-box impossible to edit at all — the failure named a
+field the user had not touched.
+

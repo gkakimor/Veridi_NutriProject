@@ -165,7 +165,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
               </dd>
               <dt>Nome</dt>
               <dd>{selecionado.name}</dd>
-              <dt>Base de produção sugerida</dt>
+              <dt>Base de produção do template</dt>
               <dd>
                 {versao.referenceOutputQuantity} {versao.referenceOutputUomCode}
               </dd>
@@ -227,6 +227,15 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
             <p className="field__hint">
               O template define o uso dos recursos. As tarifas — valor da hora, da energia — vêm do
               cadastro na data de cada cálculo, e não são copiadas para cá.
+            </p>
+            {/* A tela de custos oferece um campo de base de produção que este
+                fluxo não usa: quem aplicava um template com 300 digitado
+                recebia a estrutura com a base 150 do template e não entendia
+                por quê. A regra continua a mesma — o template manda —, o que
+                muda é dizê-la antes. */}
+            <p className="field__hint">
+              A estrutura será criada com a base do template ({versao.referenceOutputQuantity}{" "}
+              {versao.referenceOutputUomCode}). Você pode ajustá-la no rascunho antes de ativar.
             </p>
           </>
         ) : (

@@ -512,7 +512,24 @@ export function LotDetailPage() {
           </FormSection>
         ) : (
           <FormSection title="Custo de aquisição">
-            {lotActualCost !== null ? (
+            {/* Material do cliente não tem aquisição da Veridi — e "sem custo
+                informado" lia como um dado que faltava preencher, quando na
+                verdade não existe custo a preencher. */}
+            {lot.ownerType === "CUSTOMER" ? (
+              <>
+                <dl className="definition-list">
+                  <dt>Custo de aquisição Veridi</dt>
+                  <dd>
+                    <span className="badge badge--info">Não aplicável</span>
+                  </dd>
+                  <dt>Proprietário</dt>
+                  <dd>{lot.ownerCustomerName ?? "Cliente não identificado"}</dd>
+                </dl>
+                <p className="field__hint">
+                  Material fornecido pelo cliente — a aquisição não compõe o custo Veridi.
+                </p>
+              </>
+            ) : lotActualCost !== null ? (
               <dl className="definition-list">
                 <dt>Custo de aquisição</dt>
                 <dd>
@@ -738,9 +755,9 @@ export function LotDetailPage() {
                   <tr>
                     <th>Item</th>
                     <th>Lote</th>
-                    <th>Lote fornecedor</th>
+                    <th>Lote de origem</th>
                     <th className="is-numeric">Quantidade consumida</th>
-                    <th>Fornecedor</th>
+                    <th>Origem do material</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -754,7 +771,18 @@ export function LotDetailPage() {
                       <td className="is-numeric">
                         {material.quantity} {material.unitCode}
                       </td>
-                      <td>{material.supplierName ?? "—"}</td>
+                      {/* Material do cliente não é fornecedor: dizer "—" aqui
+                          lia como fornecedor desconhecido. */}
+                      <td>
+                        {material.ownerType === "CUSTOMER" ? (
+                          <>
+                            <span className="badge badge--info">Material do cliente</span>
+                            <div className="field__hint">{material.ownerCustomerName ?? "Cliente não identificado"}</div>
+                          </>
+                        ) : (
+                          (material.supplierName ?? "—")
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {traceability.consumedMaterials.length === 0 && (

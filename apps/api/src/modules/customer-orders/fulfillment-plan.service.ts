@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, SupplyResponsibility } from "@prisma/client";
 import type {
   CustomerOrderDTO,
   FulfillmentLineSituation,
@@ -15,9 +15,13 @@ import {
   getOnOrderByItems,
   getReservedByItems,
 } from "../../lib/inventory-ledger.js";
+import type { InventoryOwnerScope } from "../../lib/inventory-ledger.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
 import { PRODUCTION_ORDER_CODE_PREFIX } from "@veridi/shared";
-import { createDraftProductionOrderInTx } from "../production-orders/production-orders.service.js";
+import {
+  createDraftProductionOrderInTx,
+  requirementOwnerScope,
+} from "../production-orders/production-orders.service.js";
 import { computeFormulationRequirements } from "../production-orders/requirement-calc.js";
 import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
 import { getCustomerOrderById } from "./customer-orders.service.js";
@@ -59,12 +63,19 @@ export async function itemScopesFor(prisma: PrismaOrTx, itemIds: string[]) {
 async function computeMaterialImpact(
   prisma: PrismaOrTx,
   needs: { productId: string; produceQuantity: Prisma.Decimal }[],
+  orderCustomerId: string | null,
 ): Promise<MaterialImpactRowDTO[]> {
   if (needs.length === 0) return [];
 
   const aggregated = new Map<
     string,
-    { itemCode: string; itemName: string; unitCode: string; required: Prisma.Decimal }
+    {
+      itemCode: string;
+      itemName: string;
+      unitCode: string;
+      required: Prisma.Decimal;
+      supplyResponsibility: SupplyResponsibility;
+    }
   >();
 
   for (const need of needs) {
@@ -75,31 +86,80 @@ async function computeMaterialImpact(
 
     const rows = await computeFormulationRequirements(prisma, version.id, need.produceQuantity);
     for (const row of rows) {
+      // A responsabilidade e do MATERIAL, nao do produto: se o mesmo item
+      // aparece como material do cliente em qualquer formulacao do Pedido,
+      // ele nunca volta a ser coberto por estoque Veridi.
       const current = aggregated.get(row.itemId);
       if (current) {
         current.required = current.required.plus(row.requiredQuantity);
+        if (row.supplyResponsibility === "CUSTOMER") current.supplyResponsibility = "CUSTOMER";
       } else {
         aggregated.set(row.itemId, {
           itemCode: row.itemCode,
           itemName: row.itemName,
           unitCode: row.stockUnitCode,
           required: row.requiredQuantity,
+          supplyResponsibility: row.supplyResponsibility,
         });
       }
     }
   }
 
   if (aggregated.size === 0) return [];
-  const itemIds = [...aggregated.keys()];
-  const [onHandByItem, reservedByItem, onOrderByItem, availableByItem] = await Promise.all([
-    getOnHandByItems(prisma, itemIds),
-    getReservedByItems(prisma, itemIds),
-    getOnOrderByItems(prisma, itemIds),
-    getAvailableByItems(prisma, await itemScopesFor(prisma, itemIds)),
-  ]);
 
-  return itemIds.map((itemId) => {
+  const customer = orderCustomerId
+    ? await prisma.customer.findUnique({
+        where: { id: orderCustomerId },
+        select: { id: true, legalName: true, tradeName: true },
+      })
+    : null;
+
+  // Uma resolucao de estoque por ESCOPO DE PROPRIEDADE — exatamente a mesma
+  // semantica de `requirementOwnerScope`, que a OP e a reserva ja usam. O
+  // Plano nao pode ter uma segunda interpretacao de "quem pode usar este
+  // lote": se divergisse, a projecao prometeria material que a OP recusa.
+  const porEscopo = new Map<string, { scope: InventoryOwnerScope | null; itemIds: string[] }>();
+  for (const [itemId, info] of aggregated) {
+    const scope = requirementOwnerScope(info.supplyResponsibility, orderCustomerId);
+    const chave =
+      scope === null ? "SEM_DONO" : scope.ownerType === "VERIDI" ? "VERIDI" : `CUSTOMER:${scope.customerId}`;
+    const grupo = porEscopo.get(chave) ?? { scope, itemIds: [] };
+    grupo.itemIds.push(itemId);
+    porEscopo.set(chave, grupo);
+  }
+
+  const onHandByItem = new Map<string, Prisma.Decimal>();
+  const reservedByItem = new Map<string, Prisma.Decimal>();
+  const onOrderByItem = new Map<string, Prisma.Decimal>();
+  const availableByItem = new Map<string, Prisma.Decimal>();
+
+  for (const grupo of porEscopo.values()) {
+    // Material do cliente sem cliente resolvido: nada e elegivel. Zerar aqui
+    // e a unica leitura honesta — a falta vira a necessidade inteira.
+    if (grupo.scope === null) continue;
+    const scope = grupo.scope;
+    const [onHand, reserved, onOrder, available] = await Promise.all([
+      getOnHandByItems(prisma, grupo.itemIds, scope),
+      getReservedByItems(prisma, grupo.itemIds, scope),
+      // Ordem de Compra e compromisso da Veridi: material do cliente nunca
+      // ganha "em compra" por uma OC nossa.
+      scope.ownerType === "CUSTOMER"
+        ? Promise.resolve(new Map<string, Prisma.Decimal>())
+        : getOnOrderByItems(prisma, grupo.itemIds),
+      getAvailableByItems(prisma, await itemScopesFor(prisma, grupo.itemIds), scope),
+    ]);
+    for (const itemId of grupo.itemIds) {
+      onHandByItem.set(itemId, onHand.get(itemId) ?? new Prisma.Decimal(0));
+      reservedByItem.set(itemId, reserved.get(itemId) ?? new Prisma.Decimal(0));
+      onOrderByItem.set(itemId, onOrder.get(itemId) ?? new Prisma.Decimal(0));
+      availableByItem.set(itemId, available.get(itemId) ?? new Prisma.Decimal(0));
+    }
+  }
+
+  return [...aggregated.keys()].map((itemId) => {
     const info = aggregated.get(itemId)!;
+    const donoCliente = info.supplyResponsibility === "CUSTOMER";
+    const semDono = donoCliente && !orderCustomerId;
     const onHand = onHandByItem.get(itemId) ?? new Prisma.Decimal(0);
     const reserved = reservedByItem.get(itemId) ?? new Prisma.Decimal(0);
     const onOrder = onOrderByItem.get(itemId) ?? new Prisma.Decimal(0);
@@ -117,6 +177,10 @@ async function computeMaterialImpact(
       available: available.toString(),
       onOrder: onOrder.toString(),
       shortage: shortage.toString(),
+      supplyResponsibility: info.supplyResponsibility,
+      ownerCustomerId: donoCliente ? (customer?.id ?? null) : null,
+      ownerCustomerName: donoCliente ? (customer?.tradeName ?? customer?.legalName ?? null) : null,
+      noEligibleOwner: semDono,
     };
   });
 }
@@ -188,7 +252,7 @@ export async function getFulfillmentPlan(customerOrderId: string): Promise<Fulfi
     });
   }
 
-  const materialImpact = await computeMaterialImpact(prisma, productionNeeds);
+  const materialImpact = await computeMaterialImpact(prisma, productionNeeds, order.customerId);
 
   return { customerOrderId, lines, materialImpact };
 }
