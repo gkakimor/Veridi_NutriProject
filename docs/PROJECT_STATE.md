@@ -5255,3 +5255,21 @@ regression coverage for each, and shipped a single release candidate for
 client validation. See §40 of `PRODUCT_RULES.md` for the rules the findings
 became, and `BACKLOG.md` for the findings themselves.
 
+### Final visual polish
+
+The last round closed the three visual observations the audit had left and one
+variant of the same family found beside them: the offer note that was captured
+and rendered nowhere, the deactivation action that sat in the middle of the
+routine group, the modal close control whose accessible name was not its
+visible name, and "Inativar recurso", which had routine weight and asked
+nothing before making every cost structure that used the resource
+un-activatable.
+
+No business rule changed and no migration was needed.
+
+Audited backlog after this release: **CRITICAL 0 · HIGH 0 · MEDIUM 0 · LOW 0 ·
+visual 0**. What remains documented and open is two migration-policy decisions
+(legacy address, legacy expiry dates), two LOW naming passes and one recorded
+domain decision — all listed at the end of `BACKLOG.md` rather than folded into
+a zero.
+

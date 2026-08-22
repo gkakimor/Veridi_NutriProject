@@ -351,7 +351,7 @@ CRITICAL and the customer typeahead HIGH. What follows is what stayed open.
 None of these are in MVP scope. They are here because a real operator hit
 each one while trying to take a real product from customer to cost.
 
-## Item x Supplier is a two-step registration — MEDIUM
+## Item x Supplier is a two-step registration — MEDIUM · RESOLVIDO
 
 The grid shows Qualification, Preferred, Price and MOQ. The creation form
 offers none of them: it takes item, supplier, supplier code and notes. A
@@ -366,7 +366,12 @@ cannot price anything.
 Not a bug — the detail modal does the job, and offers are correctly
 immutable. The cost is that the fast path produces incomplete records.
 
-## "New version" of a cost structure drops the energy resource — MEDIUM
+**Resolvido** em `fff3b61` (*fix: complete supplier relationship creation*): a
+criação passou a aceitar homologação, preferencial e a oferta inicial com
+preço, unidade e MOQ na mesma ação. Os quatro campos continuam opcionais —
+relação sem oferta segue sendo registro legítimo.
+
+## "New version" of a cost structure drops the energy resource — MEDIUM · RESOLVIDO
 
 Creating a new `IndustrialCostVersion` from an active one carries the
 reference base, the resource usages and the energy calculation mode, but not
@@ -381,7 +386,12 @@ The screen explains it well once it happens — *"Nenhum recurso de energia foi
 escolhido para valorizar o consumo derivado dos equipamentos"* — so this is
 about the copy being incomplete, not about the message.
 
-## Legacy address arrives as one line — MEDIUM (migration)
+**Resolvido**: a nova versão passou a copiar `energyResourceId` junto com o
+modo de energia. A tarifa continua sendo resolvida pela data do cálculo; o que
+se copia é a escolha de QUAL recurso tarifa a energia. Exercitado no
+VAL-LEG-03, onde o TEC aplicado trouxe `REC-000003` e 12 kWh derivados.
+
+## Legacy address arrives as one line — MEDIUM (migration) · ABERTO — decisão de Product Ownership
 
 `clientes.csv` stores "Rua Vicente Jose de Almeida, n 158, bairro Cupece" in
 a single field. The customer form wants Logradouro, Numero and Bairro apart.
@@ -391,7 +401,7 @@ This is an import policy question, not a screen defect. Decide whether the
 importer parses, or whether the form accepts a single free-form line for
 migrated records.
 
-## Legacy expiry dates are all in the past — MEDIUM (migration)
+## Legacy expiry dates are all in the past — MEDIUM (migration) · ABERTO — decisão de Product Ownership
 
 Every `validade` in the legacy purchase history is 2023 or earlier. Received
 literally in 2026 they are expired on arrival, so no lot can be released and
@@ -401,13 +411,13 @@ and label them.
 Again a policy decision: refuse expired legacy lots, import them as blocked,
 or require an explicit override per lot.
 
-## Action labels differ from screen to screen — LOW
+## Action labels differ from screen to screen — LOW · ABERTO
 
 "Criar item", "Criar relação", "Criar fornecedor", "Salvar", "Registrar
 tarifa", "Salvar rascunho", "Salvar base". Each screen asks the operator to
 re-learn which button commits. Worth one pass of naming, not a redesign.
 
-## Confirmation dialogs repeat the label of the button that opened them — LOW
+## Confirmation dialogs repeat the label of the button that opened them — LOW · ABERTO
 
 "Ativar versão" opens a dialog whose confirm button is also "Ativar versão";
 same for "Confirmar OC", "Confirmar recebimento" and "Ativar estrutura". The
@@ -426,25 +436,52 @@ can decide deliberately rather than discover it later.
 Reviewed from the captures taken during the run, not from a dedicated
 accessibility pass.
 
-- **Stock position does not say why available is zero.** `MP-000003` shows
-  Físico 5 and Disponível 0 because the lot awaits quality release. The
-  column legend above the table explains the rule in general, but the row
-  that actually differs carries no marker. It is the one row a person will
-  ask about, and the only one with nothing to point at.
-- **"Salvar cálculo" sits next to "Calcular custo" as the visually primary
-  action.** Recalculating is exploratory and free; saving freezes an
-  immutable document that quotes and prices will cite. The committing action
-  should not be the easier of the two to hit.
-- **Commercial notes are a single-line input holding sentence-length text.**
-  In `Item x Fornecedor` the stored note renders as "Preço LEGADO R$ 272/kg;
-  pedido mínimo 1. Fonte: precos_for…" with no way to read the rest in place.
-- **"Inativar relação" is styled as plain text between two bordered
-  buttons.** The least reversible action on the panel has the least visual
-  weight, while "Marcar como preferencial" is the filled one.
-- **Two "Fechar" affordances on the same detail modal** — one top-right, one
-  bottom-right. Harmless, but it reads as two different exits.
-- **Leftover test data is visible in the production stock list** —
-  `PA-000003 Test` and `PA-000004 Test 2`. Data hygiene, not code.
+- **RESOLVIDO — Stock position does not say why available is zero.**
+  `MP-000003` showed Físico 5 and Disponível 0 with no marker on the row that
+  differed. *Correção:* the row now states the reason — VAL-LEG-02 read
+  "0.2 kg aguardando liberação da Qualidade" straight from the grid.
+- **RESOLVIDO — "Salvar cálculo" sits next to "Calcular custo" as the visually
+  primary action.** *Correção:* "Calcular custo" is the accent action,
+  "Salvar cálculo" is secondary and goes through a confirmation that names the
+  reference date and the total before freezing the document.
+- **RESOLVIDO — Commercial notes are a single-line input holding
+  sentence-length text.** In `Item x Fornecedor` the stored note rendered as
+  "Preço LEGADO R$ 272/kg; pedido mínimo 1. Fonte: precos_for…" with no way to
+  read the rest in place. *Impacto:* text the operator was asked to write came
+  back unreadable. *Correção:* the relation's note became a textarea in an
+  earlier round; the surviving half was the **offer** note — captured by both
+  forms, stored, and rendered nowhere at all. The offers table gained an
+  "Observação" column that wraps the full text instead of truncating it.
+  *Release:* `fix/final-visual-polish`.
+- **RESOLVIDO — "Inativar relação" is styled as plain text between two
+  bordered buttons.** The least reversible action on the panel had the least
+  visual weight, while "Marcar como preferencial" was the filled one.
+  *Impacto:* a state change that removes a supplier from sourcing sat one slip
+  away from "Salvar". *Correção:* the destructive variant (`btn--danger`) and a
+  confirmation dialog arrived in an earlier round; this one finished the
+  placement half — the action left the middle of the routine group, and
+  "preferencial" stopped being the filled primary beside it. Reactivation stays
+  discreet, and no copy promises deletion. *Release:*
+  `fix/final-visual-polish`.
+- **RESOLVIDO — Two "Fechar" affordances on the same detail modal** — one
+  top-right, one bottom-right. *Impacto:* read as two different exits.
+  *Correção:* already a single control by the time this round reproduced it —
+  the header button is one target labelled "✕ Fechar" and the footer offers
+  "Cancelar". What remained was an accessibility defect in that same control:
+  `aria-label="Fechar sem salvar"` replaced the accessible name, so voice
+  control saying "Fechar" hit nothing. The visible name is now the accessible
+  name and the warning moved to `title`. *Release:* `fix/final-visual-polish`.
+- **RESOLVIDO (variante) — "Inativar recurso" had routine weight and no
+  confirmation.** Found while checking the same family in neighbouring
+  screens. *Impacto:* worse than the original — one click deactivated an
+  industrial resource, and every cost structure using it gains a BLOCKING
+  pendency and can no longer be activated. *Correção:* destructive variant plus
+  a confirmation that states that consequence and that reactivation is
+  possible. *Release:* `fix/final-visual-polish`.
+- **RESOLVIDO — Leftover test data is visible in the production stock list** —
+  `PA-000003 Test` and `PA-000004 Test 2`. *Correção:* both were inactivated
+  through the official flow during the post-VAL-LEG-01 checkpoint. Data
+  hygiene, not code.
 
 ## Closed by the pre-client hardening round
 
@@ -480,4 +517,31 @@ rule.
 - **LOW — The cost page offered a reference quantity that applying a template
   ignored.** Found in VAL-LEG-03. The template remains the source of the base;
   the copy now says so instead of implying otherwise.
+
+## Estado do backlog auditado — after the final visual polish
+
+Everything the three deep cases (VAL-LEG-01, 02, 03) and the visual pass
+raised is closed:
+
+- **CRITICAL: 0** · **HIGH: 0** · **MEDIUM operacional: 0** · **LOW
+  operacional: 0** · **observações visuais: 0**
+
+What is still open here, and deliberately so:
+
+- **2 MEDIUM de migração** — legacy address on one line, and legacy expiry
+  dates all in the past. Both are import-policy decisions for Product
+  Ownership, not screen defects: whether the importer parses the address, and
+  whether expired legacy lots are refused, imported blocked, or overridden per
+  lot. Neither blocks operation today; the audits worked around both with
+  labelled synthetic data.
+- **2 LOW de nomenclatura** — commit-button labels differ across screens
+  ("Criar item", "Salvar", "Registrar tarifa", "Salvar rascunho"), and
+  confirmation dialogs repeat the label of the button that opened them. Both
+  are a naming pass, not a redesign, and neither was raised by an operator
+  during the three cases.
+- **1 decisão registrada** — purchasing against a non-approved project is
+  coherent with the domain and stays as a deliberate decision, not a defect.
+
+Nothing above is hidden behind a "zero": the audited backlog is zero, the
+policy and naming items remain visible and unstarted.
 
