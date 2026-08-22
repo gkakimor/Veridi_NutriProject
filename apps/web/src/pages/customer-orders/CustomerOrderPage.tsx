@@ -7,6 +7,7 @@ import type {
   CustomerOrderStatus,
   FulfillmentPlanDTO,
   ProductDTO,
+  PlanPurchaseSourcingDTO,
   PurchaseSuggestionDTO,
   ReservationStatusDTO,
   ShipmentStatus,
@@ -30,6 +31,7 @@ import {
   generatePurchaseDrafts,
   getCustomerOrder,
   getFulfillmentPlan,
+  getPlanPurchaseSourcing,
   getPurchaseSuggestion,
   updateCustomerOrder,
 } from "../../lib/customer-orders-api";
@@ -192,6 +194,10 @@ export function CustomerOrderPage() {
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [applying, setApplying] = useState(false);
 
+  // Sourcing na fase de Plano — o Pedido ainda nao tem OP, mas ja sabe a falta.
+  const [sourcing, setSourcing] = useState<PlanPurchaseSourcingDTO | null>(null);
+  const [sourcingLoading, setSourcingLoading] = useState(false);
+
   const [suggestion, setSuggestion] = useState<PurchaseSuggestionDTO | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [activeSuppliers, setActiveSuppliers] = useState<SupplierDTO[]>([]);
@@ -257,6 +263,15 @@ export function CustomerOrderPage() {
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
   const showPlan = !isNew && status === "CONFIRMED";
   const showPurchaseSuggestion = !isNew && status === "IN_FULFILLMENT";
+
+  /* Falta por responsabilidade: material Veridi se resolve comprando,
+     material do cliente nao. Separar aqui evita oferecer a acao errada. */
+  const faltaVeridi = (plan?.materialImpact ?? []).filter(
+    (row) => row.supplyResponsibility === "VERIDI" && Number(row.shortage) > 0,
+  );
+  const faltaCliente = (plan?.materialImpact ?? []).filter(
+    (row) => row.supplyResponsibility === "CUSTOMER" && Number(row.shortage) > 0,
+  );
   /** Reserva complementar/expedição continuam disponíveis até o pedido ser totalmente expedido. */
   const isOperational = !isNew && (status === "IN_FULFILLMENT" || status === "PARTIALLY_SHIPPED");
   /* Linhas cujo saldo ainda precisa ser PRODUZIDO — o que já está
@@ -306,6 +321,17 @@ export function CustomerOrderPage() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Falha ao carregar plano de atendimento"))
       .finally(() => setPlanLoading(false));
   }, [showPlan, id]);
+
+  const carregarSourcing = useCallback(() => {
+    if (!id) return;
+    setSourcingLoading(true);
+    getPlanPurchaseSourcing(id)
+      .then(setSourcing)
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Falha ao carregar sugestão de compra"),
+      )
+      .finally(() => setSourcingLoading(false));
+  }, [id]);
 
   const reloadSuggestion = useCallback(() => {
     if (!id) return;
@@ -1014,42 +1040,165 @@ export function CustomerOrderPage() {
                 )}
 
                 {plan.materialImpact.length > 0 && (
-                  <div className="table-container table-container--spaced">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Material</th>
-                          <th className="is-numeric">Necessário</th>
-                          <th className="is-numeric">Físico</th>
-                          <th className="is-numeric">Reservado</th>
-                          <th className="is-numeric">Disponível</th>
-                          <th className="is-numeric">Em Compra</th>
-                          <th className="is-numeric">Falta</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {plan.materialImpact.map((row) => (
-                          <tr key={row.itemId}>
-                            <td>
-                              <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
-                            </td>
-                            <td className="is-numeric">
-                              {row.requiredQuantity} {row.unitCode}
-                            </td>
-                            <td className="is-numeric">{row.onHand}</td>
-                            <td className="is-numeric">{row.reserved}</td>
-                            <td className="is-numeric">{row.available}</td>
-                            <td className="is-numeric">{row.onOrder}</td>
-                            <td className="is-numeric">
-                              <span className={Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"}>
-                                {row.shortage}
-                              </span>
-                            </td>
+                  <>
+                    <div className="table-container table-container--spaced">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Material</th>
+                            <th>Fornecimento</th>
+                            <th className="is-numeric">Necessário</th>
+                            <th className="is-numeric">Físico</th>
+                            <th className="is-numeric">Reservado</th>
+                            <th className="is-numeric">Disponível</th>
+                            <th className="is-numeric">Em Compra</th>
+                            <th className="is-numeric">Falta</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {plan.materialImpact.map((row) => (
+                            <tr key={row.itemId}>
+                              <td>
+                                <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
+                              </td>
+                              {/* Material do cliente enxerga somente lotes do
+                                  próprio cliente — dizer de quem é o estoque
+                                  explica os números da linha. */}
+                              <td>
+                                {row.supplyResponsibility === "CUSTOMER" ? (
+                                  <>
+                                    <span className="badge badge--info">Material do cliente</span>
+                                    <div className="field__hint">
+                                      {row.ownerCustomerName ?? "Cliente não identificado"}
+                                    </div>
+                                  </>
+                                ) : (
+                                  "Veridi"
+                                )}
+                              </td>
+                              <td className="is-numeric">
+                                {row.requiredQuantity} {row.unitCode}
+                              </td>
+                              <td className="is-numeric">{row.onHand}</td>
+                              <td className="is-numeric">{row.reserved}</td>
+                              <td className="is-numeric">{row.available}</td>
+                              <td className="is-numeric">
+                                {row.supplyResponsibility === "CUSTOMER" ? "—" : row.onOrder}
+                              </td>
+                              <td className="is-numeric">
+                                <span className={Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"}>
+                                  {row.shortage}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* A falta era detectada aqui e o caminho ate Compras exigia
+                        sair do Pedido e reconstruir item, quantidade e fornecedor
+                        de cabeca. O CTA abre a MESMA analise de fornecedores da
+                        Sugestao de Compra — nenhuma OC nasce sozinha. */}
+                    {faltaVeridi.length > 0 && (
+                      <div className="callout">
+                        <p>
+                          <strong>
+                            {faltaVeridi.length === 1
+                              ? "1 material Veridi com falta."
+                              : faltaVeridi.length + " materiais Veridi com falta."}
+                          </strong>{" "}
+                          Ver fornecedores homologados, preço de referência e pedido mínimo sem sair do
+                          Pedido.
+                        </p>
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--sm"
+                          disabled={sourcingLoading}
+                          onClick={carregarSourcing}
+                        >
+                          {sourcingLoading ? "Carregando…" : "Ver sugestão de compra"}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Falta de material do cliente nao se resolve comprando:
+                        oferecer compra da Veridi aqui seria a sugestao errada. */}
+                    {faltaCliente.length > 0 && (
+                      <div className="callout">
+                        <p>
+                          <strong>Material fornecido pelo cliente com falta.</strong> Não há compra da
+                          Veridi a sugerir — depende de nova remessa do cliente.
+                        </p>
+                        <ul>
+                          {faltaCliente.map((row) => (
+                            <li key={row.itemId}>
+                              {row.itemCode} — {row.itemName}: faltam {row.shortage} {row.unitCode}
+                              {row.ownerCustomerName ? " (" + row.ownerCustomerName + ")" : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {sourcing && sourcing.rows.length > 0 && (
+                      <div className="table-container table-container--spaced">
+                        <table className="table">
+                          <thead>
+                            <tr>
+                              <th>Material</th>
+                              <th className="is-numeric">Falta</th>
+                              <th className="is-numeric">Em Compra</th>
+                              <th>Fornecedores homologados</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sourcing.rows.map((row) => (
+                              <tr key={row.itemId}>
+                                <td>
+                                  <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
+                                </td>
+                                <td className="is-numeric">
+                                  {row.shortage} {row.unitCode}
+                                </td>
+                                <td className="is-numeric">{row.onOrder}</td>
+                                <td>
+                                  {row.supplierCandidates.length === 0 ? (
+                                    <span className="field__hint">
+                                      Nenhum fornecedor homologado para este item.
+                                    </span>
+                                  ) : (
+                                    <ul>
+                                      {row.supplierCandidates.map((candidate) => (
+                                        <li key={candidate.supplierItemId}>
+                                          {candidate.supplierCode} — {candidate.supplierName}
+                                          {candidate.supplierItemId === row.recommendedSupplierItemId ? (
+                                            <span className="badge badge--active"> preferencial</span>
+                                          ) : null}
+                                          <div className="field__hint">
+                                            {candidate.referencePriceInItemUom
+                                              ? candidate.referencePriceInItemUom + " / " + row.unitCode
+                                              : "sem preço vigente"}
+                                            {candidate.minimumOrderInItemUom
+                                              ? " · mínimo " + candidate.minimumOrderInItemUom + " " + row.unitCode
+                                              : ""}
+                                          </div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <p className="field__hint">
+                          Análise de planejamento — nenhuma Ordem de Compra é criada aqui. Abra Compras
+                          para registrar o pedido.
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <div className="line-actions">

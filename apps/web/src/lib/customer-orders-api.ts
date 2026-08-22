@@ -7,6 +7,7 @@ import type {
   CustomerOrderStatus,
   FulfillmentPlanDTO,
   GeneratePurchaseDraftsInput,
+  PlanPurchaseSourcingDTO,
   PurchaseSuggestionDTO,
   UpdateCustomerOrderInput,
 } from "@veridi/shared";
@@ -98,6 +99,16 @@ export async function applyFulfillmentPlan(
 export async function getPurchaseSuggestion(customerOrderId: string): Promise<PurchaseSuggestionDTO> {
   const response = await apiFetch(`${API_URL}/customer-orders/${customerOrderId}/purchase-suggestion`);
   return (await parseJsonOrThrow(response)) as PurchaseSuggestionDTO;
+}
+
+/** Sourcing na fase de Plano — antes de existir OP. */
+export async function getPlanPurchaseSourcing(
+  customerOrderId: string,
+): Promise<PlanPurchaseSourcingDTO> {
+  const response = await apiFetch(
+    `${API_URL}/customer-orders/${customerOrderId}/plan-purchase-sourcing`,
+  );
+  return (await parseJsonOrThrow(response)) as PlanPurchaseSourcingDTO;
 }
 
 export async function generatePurchaseDrafts(

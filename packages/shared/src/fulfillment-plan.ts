@@ -40,9 +40,23 @@ export interface MaterialImpactRowDTO {
   onHand: string;
   reserved: string;
   available: string;
-  /** Informativo — nunca reduz `shortage`. */
+  /** Informativo — nunca reduz `shortage`. Sempre "0" em material do cliente. */
   onOrder: string;
   shortage: string;
+  /**
+   * De quem é a responsabilidade de fornecer este material. Material do
+   * cliente só enxerga lotes do próprio cliente — nunca estoque Veridi nem
+   * de outro cliente.
+   */
+  supplyResponsibility: "VERIDI" | "CUSTOMER";
+  /** Preenchido quando `supplyResponsibility` é CUSTOMER e o dono é conhecido. */
+  ownerCustomerId: string | null;
+  ownerCustomerName: string | null;
+  /**
+   * `true` quando o material é do cliente mas o Pedido não tem cliente
+   * resolvido: nada é elegível e a falta é a necessidade inteira.
+   */
+  noEligibleOwner: boolean;
 }
 
 export interface FulfillmentPlanDTO {

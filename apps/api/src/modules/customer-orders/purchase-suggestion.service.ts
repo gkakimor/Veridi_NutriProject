@@ -4,6 +4,7 @@ import type {
   CustomerOrderDTO,
   CustomerSuppliedMaterialRowDTO,
   PendingProductionOrderDTO,
+  PlanPurchaseSourcingDTO,
   PurchaseSuggestionDTO,
   PurchaseSuggestionRowDTO,
   PurchaseSupplierCandidateDTO,
@@ -28,7 +29,7 @@ import {
 import type { UnitOfMeasureDecimalLike } from "../items/uom.js";
 import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
 import { getCustomerOrderById } from "./customer-orders.service.js";
-import { itemScopesFor } from "./fulfillment-plan.service.js";
+import { getFulfillmentPlan, itemScopesFor } from "./fulfillment-plan.service.js";
 import {
   CustomerOrderNotInFulfillmentError,
   CustomerSuppliedItemPurchaseError,
@@ -386,6 +387,67 @@ async function buildCustomerSuppliedRows(
     });
   }
   return rows;
+}
+
+/**
+ * Sourcing de compra AINDA NA FASE DE PLANO.
+ *
+ * O Plano já sabe a falta; o que faltava era o caminho para Compras sem
+ * sair do Pedido e reconstruir item, quantidade e fornecedor de cabeca.
+ * Reusa `buildSupplierCandidatesByItem` — a mesma regra de homologação,
+ * preferencial, MOQ e oferta vigente da Sugestão de Compra. Nenhuma OC é
+ * criada aqui: isto é planejamento, o operador confirma depois.
+ *
+ * Material do cliente é separado de propósito: falta dele não se resolve
+ * comprando, e oferecer compra da Veridi ali seria uma sugestão errada.
+ */
+export async function getPlanPurchaseSourcing(
+  customerOrderId: string,
+): Promise<PlanPurchaseSourcingDTO> {
+  const prisma = getPrisma();
+  const plan = await getFulfillmentPlan(customerOrderId);
+
+  const comFalta = plan.materialImpact.filter((row) => new Prisma.Decimal(row.shortage).greaterThan(0));
+  const veridi = comFalta.filter((row) => row.supplyResponsibility === "VERIDI");
+  const doCliente = comFalta.filter((row) => row.supplyResponsibility === "CUSTOMER");
+
+  const quantidadePorItem = new Map(
+    veridi.map((row) => [row.itemId, new Prisma.Decimal(row.shortage)]),
+  );
+  const candidatosPorItem = await buildSupplierCandidatesByItem(
+    prisma,
+    veridi.map((row) => row.itemId),
+    quantidadePorItem,
+  );
+
+  return {
+    customerOrderId,
+    rows: veridi.map((row) => {
+      const sourcing = candidatosPorItem.get(row.itemId);
+      return {
+        itemId: row.itemId,
+        itemCode: row.itemCode,
+        itemName: row.itemName,
+        unitCode: row.unitCode,
+        requiredQuantity: row.requiredQuantity,
+        available: row.available,
+        onOrder: row.onOrder,
+        shortage: row.shortage,
+        supplierCandidates: sourcing?.candidates ?? [],
+        recommendedSupplierItemId: sourcing?.recommended ?? null,
+      };
+    }),
+    customerSuppliedShortages: doCliente.map((row) => ({
+      itemId: row.itemId,
+      itemCode: row.itemCode,
+      itemName: row.itemName,
+      unitCode: row.unitCode,
+      requiredQuantity: row.requiredQuantity,
+      available: row.available,
+      shortage: row.shortage,
+      ownerCustomerName: row.ownerCustomerName,
+    })),
+  };
 }
 
 export async function getPurchaseSuggestion(customerOrderId: string): Promise<PurchaseSuggestionDTO> {

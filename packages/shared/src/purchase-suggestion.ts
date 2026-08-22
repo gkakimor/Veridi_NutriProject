@@ -116,3 +116,41 @@ export interface GeneratePurchaseDraftLineInput {
 export interface GeneratePurchaseDraftsInput {
   lines: GeneratePurchaseDraftLineInput[];
 }
+
+/**
+ * Sourcing na fase de PLANO — antes de existir OP.
+ *
+ * Mesma capacidade de fornecedores/MOQ/oferta da Sugestão de Compra, lida a
+ * partir da falta que o próprio Plano já calculou. Não é um segundo motor:
+ * reusa `buildSupplierCandidatesByItem`. Material do cliente nunca entra
+ * aqui — ele não se resolve com compra da Veridi.
+ */
+export interface PlanPurchaseSourcingRowDTO {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unitCode: string;
+  requiredQuantity: string;
+  available: string;
+  /** Informativo — nunca reduz a falta. */
+  onOrder: string;
+  shortage: string;
+  supplierCandidates: PurchaseSupplierCandidateDTO[];
+  recommendedSupplierItemId: string | null;
+}
+
+export interface PlanPurchaseSourcingDTO {
+  customerOrderId: string;
+  rows: PlanPurchaseSourcingRowDTO[];
+  /** Materiais do cliente com falta — mostrados para explicar por que não há compra. */
+  customerSuppliedShortages: {
+    itemId: string;
+    itemCode: string;
+    itemName: string;
+    unitCode: string;
+    requiredQuantity: string;
+    available: string;
+    shortage: string;
+    ownerCustomerName: string | null;
+  }[];
+}

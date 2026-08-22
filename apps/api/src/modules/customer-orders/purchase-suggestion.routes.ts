@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
+import { CustomerOrderNotConfirmedError } from "./fulfillment-plan.errors.js";
 import {
   InactiveLineItemError,
   InactiveSupplierError,
@@ -13,7 +14,11 @@ import {
   CustomerSuppliedItemPurchaseError,
   EmptyPurchaseDraftsError,
 } from "./purchase-suggestion.errors.js";
-import { generatePurchaseDrafts, getPurchaseSuggestion } from "./purchase-suggestion.service.js";
+import {
+  generatePurchaseDrafts,
+  getPlanPurchaseSourcing,
+  getPurchaseSuggestion,
+} from "./purchase-suggestion.service.js";
 import { generatePurchaseDraftsSchema } from "./purchase-suggestion.schemas.js";
 
 function formatZodError(error: ZodError) {
@@ -31,6 +36,9 @@ function mapDomainError(
   }
   if (error instanceof CustomerOrderNotInFulfillmentError) {
     return { status: 400, body: { error: "order_not_in_fulfillment", message: error.message } };
+  }
+  if (error instanceof CustomerOrderNotConfirmedError) {
+    return { status: 400, body: { error: "order_not_confirmed", message: error.message } };
   }
   if (error instanceof SupplierNotFoundError) {
     return { status: 400, body: { error: "supplier_not_found", message: error.message } };
@@ -66,6 +74,18 @@ export const purchaseSuggestionRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.params as { id: string };
     try {
       return reply.send(await getPurchaseSuggestion(id));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  // Sourcing na fase de Plano — mesma capacidade, antes de existir OP.
+  app.get("/customer-orders/:id/plan-purchase-sourcing", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      return reply.send(await getPlanPurchaseSourcing(id));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
