@@ -46,3 +46,4 @@ export * from "./dashboard.js";
 export * from "./finished-goods.js";
 export * from "./reports.js";
 export * from "./product-cmv.js";
+export * from "./customer-consultation.js";
