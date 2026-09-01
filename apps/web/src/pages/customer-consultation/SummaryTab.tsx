@@ -44,6 +44,12 @@ export function SummaryTab() {
             key={card.label}
             className="consult-counter"
             to={consultationPath(customerId, card.segment)}
+            /*
+             * Rótulo e número são dois blocos separados: lidos em sequência
+             * viram "Projetos2", e "Projetos" sozinho não se distingue da aba
+             * de mesmo nome. O nome acessível diz as duas coisas de uma vez.
+             */
+            aria-label={`${card.label}: ${card.value}`}
           >
             <span className="consult-counter__label">{card.label}</span>
             <strong className="consult-counter__value">{card.value}</strong>

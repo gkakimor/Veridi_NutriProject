@@ -11,16 +11,7 @@ import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ItemsPage } from "./pages/items/ItemsPage";
 import { SuppliersPage } from "./pages/suppliers/SuppliersPage";
 import { CustomersPage } from "./pages/customers/CustomersPage";
-import { ConsultationSearchPage } from "./pages/customer-consultation/ConsultationSearchPage";
-import { ConsultationShell } from "./pages/customer-consultation/ConsultationShell";
-import { SummaryTab } from "./pages/customer-consultation/SummaryTab";
-import { ProjectsTab } from "./pages/customer-consultation/ProjectsTab";
-import { ProjectPage as ConsultationProjectPage } from "./pages/customer-consultation/ProjectPage";
-import { OrdersTab } from "./pages/customer-consultation/OrdersTab";
-import { OrderPage as ConsultationOrderPage } from "./pages/customer-consultation/OrderPage";
-import { MaterialsTab } from "./pages/customer-consultation/MaterialsTab";
-import { BillingsTab } from "./pages/customer-consultation/BillingsTab";
-import { BillingPage as ConsultationBillingPage } from "./pages/customer-consultation/BillingPage";
+import { consultationRoutes } from "./pages/customer-consultation/routes";
 import { ProductsPage } from "./pages/products/ProductsPage";
 import { PurchaseOrdersPage } from "./pages/purchase-orders/PurchaseOrdersPage";
 import { PurchaseOrderPage } from "./pages/purchase-orders/PurchaseOrderPage";
@@ -192,23 +183,11 @@ function AuthenticatedApp() {
           {/*
             CONSULTA DO CLIENTE — leitura sob o contexto do Cliente.
 
-            O `:customerId` fica na URL de propósito: é ele que carrega o
-            contexto, então refresh, deep link, abrir em nova aba e o
-            back/forward do navegador funcionam sem estado global. As rotas
-            operacionais acima continuam exatamente como estavam.
+            A árvore vive em `pages/customer-consultation/routes` porque o
+            teste de navegação monta exatamente ela. As rotas operacionais
+            acima continuam exatamente como estavam.
           */}
-          <Route path="/consultas/clientes" element={<ConsultationSearchPage />} />
-          <Route path="/consultas/clientes/:customerId" element={<ConsultationShell />}>
-            <Route index element={<Navigate to="resumo" replace />} />
-            <Route path="resumo" element={<SummaryTab />} />
-            <Route path="projetos" element={<ProjectsTab />} />
-            <Route path="projetos/:projectId" element={<ConsultationProjectPage />} />
-            <Route path="pedidos" element={<OrdersTab />} />
-            <Route path="pedidos/:orderId" element={<ConsultationOrderPage />} />
-            <Route path="materiais" element={<MaterialsTab />} />
-            <Route path="faturamentos" element={<BillingsTab />} />
-            <Route path="faturamentos/:billingId" element={<ConsultationBillingPage />} />
-          </Route>
+          {consultationRoutes}
           <Route path="/produtos/:productId/custos" element={<IndustrialCostPage />} />
           <Route path="/produtos/:productId/cmv" element={<ProductCmvPage />} />
           <Route path="/calculos-custo/:id" element={<CostCalculationPage />} />
