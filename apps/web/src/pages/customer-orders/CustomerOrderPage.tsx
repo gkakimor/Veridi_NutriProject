@@ -428,7 +428,9 @@ export function CustomerOrderPage() {
         businessLotSuffix: null,
         active: false,
         createdAt: "",
+        createdByName: null,
         updatedAt: "",
+        updatedByName: null,
       },
     ];
   }, [activeCustomers, customerOrder]);

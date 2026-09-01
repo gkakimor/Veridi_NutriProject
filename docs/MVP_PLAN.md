@@ -342,7 +342,7 @@ The MVP is ready for operational validation when users can:
 
 # Explicitly outside this MVP
 
-See `docs/BACKLOG.md`.
+See `docs/ROADMAP_POST_MVP.md`.
 
 Do not implement future items simply because they appear easy.
 

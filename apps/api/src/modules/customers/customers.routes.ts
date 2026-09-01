@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import {
   activateCustomer,
   createCustomer,
@@ -58,7 +59,7 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const customer = await createCustomer(parsed.data);
+      const customer = await createCustomer(parsed.data, requireCurrentUser(request));
       return reply.status(201).send(customer);
     } catch (error) {
       if (error instanceof DuplicateCnpjError) {
@@ -80,7 +81,7 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const customer = await updateCustomer(id, parsed.data);
+      const customer = await updateCustomer(id, parsed.data, requireCurrentUser(request));
       return reply.send(customer);
     } catch (error) {
       if (error instanceof CustomerNotFoundError) {
@@ -98,7 +99,7 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
   app.post("/customers/:id/activate", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      return reply.send(await activateCustomer(id));
+      return reply.send(await activateCustomer(id, requireCurrentUser(request)));
     } catch (error) {
       if (error instanceof CustomerNotFoundError) {
         return reply.status(404).send({ error: "not_found" });
@@ -110,7 +111,7 @@ export const customersRoutes: FastifyPluginAsync = async (app) => {
   app.post("/customers/:id/deactivate", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      return reply.send(await deactivateCustomer(id));
+      return reply.send(await deactivateCustomer(id, requireCurrentUser(request)));
     } catch (error) {
       if (error instanceof CustomerNotFoundError) {
         return reply.status(404).send({ error: "not_found" });

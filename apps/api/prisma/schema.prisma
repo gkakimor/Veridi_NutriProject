@@ -388,6 +388,8 @@ model User {
   activatedPricingVersions   PricingVersion[]                   @relation("PricingVersionActivatedBy")
   createdIndustrialResources IndustrialResource[]               @relation("IndustrialResourceCreatedBy")
   updatedIndustrialResources IndustrialResource[]               @relation("IndustrialResourceUpdatedBy")
+  createdCustomers           Customer[]                         @relation("CustomerCreatedBy")
+  updatedCustomers           Customer[]                         @relation("CustomerUpdatedBy")
   createdIndustrialRates     IndustrialResourceRate[]           @relation("IndustrialResourceRateCreatedBy")
 
   @@index([active])
@@ -2031,8 +2033,18 @@ model Customer {
 
   active Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// Autoria do cadastro. Nullable de proposito: cliente criado antes desta
+  /// capacidade (ou importado do legado) nao tem autor conhecido, e inventar
+  /// um seria pior que exibir "Nao disponivel".
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("CustomerCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+
+  updatedAt             DateTime @updatedAt
+  updatedByUserId       String?
+  updatedByUser         User?    @relation("CustomerUpdatedBy", fields: [updatedByUserId], references: [id])
+  updatedByNameSnapshot String?
 
   /// Sufixo do lote comercial deste cliente (ex.: "A3"). So alimenta a
   /// SUGESTAO de businessLotNumber — nunca obriga nem valida.

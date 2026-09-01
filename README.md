@@ -79,4 +79,6 @@ pnpm dev
 | Regras de negócio | `docs/PRODUCT_RULES.md` |
 | UI e marca | `docs/UI_BRAND.md` |
 | Baseline técnica | `docs/TECH_BASELINE.md` |
-| Escopo adiado | `docs/BACKLOG.md` |
+| Pendências abertas | `docs/BACKLOG.md` |
+| Escopo adiado | `docs/ROADMAP_POST_MVP.md` |
+| Histórico (não é contexto padrão) | `docs/archive/` |
