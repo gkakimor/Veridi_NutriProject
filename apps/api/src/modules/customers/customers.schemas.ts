@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BR_STATE_CODES } from "@veridi/shared";
 import { optionalCnpjSchema, optionalNullableText } from "../../lib/cnpj-schema.js";
+import { optionalBrPhoneSchema, optionalEmailSchema } from "../../lib/contact-schema.js";
 import { optionalZipCode } from "../../lib/industrial-schema.js";
 
 const optionalStateSchema = z
@@ -24,8 +25,8 @@ export const createCustomerSchema = z.object({
   legalName: z.string().trim().min(1, "Razão social é obrigatória").max(200),
   tradeName: optionalNullableText(200),
   cnpj: optionalCnpjSchema,
-  email: optionalNullableText(200),
-  phone: optionalNullableText(30),
+  email: optionalEmailSchema,
+  phone: optionalBrPhoneSchema,
   street: optionalNullableText(200),
   number: optionalNullableText(20),
   complement: optionalNullableText(100),
@@ -46,8 +47,8 @@ export const updateCustomerSchema = z.object({
     .optional(),
   tradeName: optionalNullableText(200),
   cnpj: optionalCnpjSchema,
-  email: optionalNullableText(200),
-  phone: optionalNullableText(30),
+  email: optionalEmailSchema,
+  phone: optionalBrPhoneSchema,
   street: optionalNullableText(200),
   number: optionalNullableText(20),
   complement: optionalNullableText(100),

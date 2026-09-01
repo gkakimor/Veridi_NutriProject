@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { getPrisma } from "../../db/prisma.js";
+import { maskCnpj, uniqueCnpj } from "../../test-support/br-documents.js";
 
 const createdSupplierIds: string[] = [];
 
@@ -78,8 +79,8 @@ describe("Suppliers", () => {
     const app = buildTestApp();
     await app.ready();
 
-    const digits = `33444555${Date.now().toString().slice(-6)}`;
-    const masked = `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
+    const digits = uniqueCnpj();
+    const masked = maskCnpj(digits);
     const response = await createTestSupplier(app, {
       legalName: "Fornecedor com CNPJ",
       cnpj: masked,
@@ -106,7 +107,7 @@ describe("Suppliers", () => {
     const app = buildTestApp();
     await app.ready();
 
-    const cnpj = `11222333${Date.now().toString().slice(-6)}`;
+    const cnpj = uniqueCnpj();
     const first = await createTestSupplier(app, { cnpj });
     expect(first.statusCode).toBe(201);
 

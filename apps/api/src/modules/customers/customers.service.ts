@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { Customer } from "@prisma/client";
+import type { Customer, User } from "@prisma/client";
 import type { CustomerDTO, CustomerListResponse } from "@veridi/shared";
 import { CUSTOMER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -51,7 +51,9 @@ function toCustomerDTO(customer: Customer): CustomerDTO {
     businessLotSuffix: customer.businessLotSuffix,
     active: customer.active,
     createdAt: customer.createdAt.toISOString(),
+    createdByName: customer.createdByNameSnapshot,
     updatedAt: customer.updatedAt.toISOString(),
+    updatedByName: customer.updatedByNameSnapshot,
   };
 }
 
@@ -115,6 +117,7 @@ export async function getCustomerById(id: string): Promise<CustomerDTO | null> {
 
 export async function createCustomer(
   input: CreateCustomerInput,
+  actor: User,
 ): Promise<CustomerDTO> {
   if (input.cnpj) await assertCnpjAvailable(input.cnpj);
 
@@ -135,6 +138,10 @@ export async function createCustomer(
         ...(input.businessLotSuffix !== undefined
           ? { businessLotSuffix: input.businessLotSuffix }
           : {}),
+        createdByUserId: actor.id,
+        createdByNameSnapshot: actor.name,
+        updatedByUserId: actor.id,
+        updatedByNameSnapshot: actor.name,
       },
     });
     return toCustomerDTO(customer);
@@ -149,6 +156,7 @@ export async function createCustomer(
 export async function updateCustomer(
   id: string,
   input: UpdateCustomerInput,
+  actor: User,
 ): Promise<CustomerDTO> {
   await requireCustomer(id);
   if (input.cnpj) await assertCnpjAvailable(input.cnpj, id);
@@ -167,6 +175,9 @@ export async function updateCustomer(
         ...(input.businessLotSuffix !== undefined
           ? { businessLotSuffix: input.businessLotSuffix }
           : {}),
+        // Quem criou nao muda numa alteracao — so quem alterou por ultimo.
+        updatedByUserId: actor.id,
+        updatedByNameSnapshot: actor.name,
       },
     });
     return toCustomerDTO(customer);
@@ -178,20 +189,33 @@ export async function updateCustomer(
   }
 }
 
-export async function activateCustomer(id: string): Promise<CustomerDTO> {
+/**
+ * Ativar/inativar tambem e alteracao persistida: `updatedAt` ja muda por
+ * conta do `@updatedAt`, entao deixar a autoria parada faria a tela mostrar
+ * data nova com autor velho.
+ */
+export async function activateCustomer(id: string, actor: User): Promise<CustomerDTO> {
   await requireCustomer(id);
   const customer = await getPrisma().customer.update({
     where: { id },
-    data: { active: true },
+    data: {
+      active: true,
+      updatedByUserId: actor.id,
+      updatedByNameSnapshot: actor.name,
+    },
   });
   return toCustomerDTO(customer);
 }
 
-export async function deactivateCustomer(id: string): Promise<CustomerDTO> {
+export async function deactivateCustomer(id: string, actor: User): Promise<CustomerDTO> {
   await requireCustomer(id);
   const customer = await getPrisma().customer.update({
     where: { id },
-    data: { active: false },
+    data: {
+      active: false,
+      updatedByUserId: actor.id,
+      updatedByNameSnapshot: actor.name,
+    },
   });
   return toCustomerDTO(customer);
 }

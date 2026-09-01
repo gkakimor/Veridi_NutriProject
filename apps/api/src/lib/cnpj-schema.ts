@@ -1,9 +1,15 @@
 import { z } from "zod";
-import { normalizeCnpj } from "@veridi/shared";
+import { CNPJ_LENGTH, isValidCnpj, normalizeCnpj } from "@veridi/shared";
 
 /**
- * CNPJ opcional: normaliza para somente dígitos e valida formato básico
- * (14 dígitos). Não valida dígito verificador nem consulta a Receita.
+ * CNPJ opcional: normaliza (remove pontuação, mantém letras, aplica
+ * maiúsculas) e valida os dígitos verificadores.
+ *
+ * Aceita as duas formas em circulação — o numérico de sempre e o
+ * alfanumérico da IN RFB nº 2.229/2024, cujas 12 primeiras posições podem
+ * conter letras. Não consulta a Receita: o que se afirma aqui é que o número
+ * é internamente consistente, não que a empresa existe.
+ *
  * String vazia vira `null` (permite limpar um CNPJ existente em updates).
  */
 export const optionalCnpjSchema = z
@@ -16,8 +22,18 @@ export const optionalCnpjSchema = z
     if (value.length === 0) return null;
     return normalizeCnpj(value);
   })
-  .refine((value) => value === undefined || value === null || value.length === 14, {
-    message: "CNPJ deve conter 14 dígitos",
+  .superRefine((value, ctx) => {
+    if (value === undefined || value === null) return;
+    if (value.length !== CNPJ_LENGTH) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `CNPJ deve conter ${CNPJ_LENGTH} caracteres`,
+      });
+      return;
+    }
+    if (!isValidCnpj(value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CNPJ inválido" });
+    }
   });
 
 /**

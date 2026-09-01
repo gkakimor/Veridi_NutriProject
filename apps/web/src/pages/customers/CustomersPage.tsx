@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { CustomerDTO } from "@veridi/shared";
-import { BR_STATE_CODES, formatCnpj } from "@veridi/shared";
+import { BR_STATE_CODES, formatBrPhone, formatCnpj } from "@veridi/shared";
 import { listCustomers, setCustomerActive } from "../../lib/customers-api";
 import { CustomerFormModal } from "./CustomerFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -215,7 +215,7 @@ export function CustomersPage() {
                     ? `${customer.city}/${customer.state}`
                     : customer.city ?? customer.state ?? "—"}
                 </td>
-                <td>{customer.phone ?? "—"}</td>
+                <td>{formatBrPhone(customer.phone) ?? "—"}</td>
                 <td>
                   <span
                     className={

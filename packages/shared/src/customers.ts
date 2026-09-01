@@ -37,7 +37,16 @@ export interface CustomerDTO {
   businessLotSuffix: string | null;
   active: boolean;
   createdAt: string;
+  /**
+   * Nome de quem cadastrou/alterou, congelado no momento da acao. `null`
+   * para registros anteriores a esta capacidade ou importados do legado —
+   * a tela mostra "Nao disponivel", nunca atribui a alguem.
+   *
+   * Somente o nome trafega: o id do usuario e detalhe interno.
+   */
+  createdByName: string | null;
   updatedAt: string;
+  updatedByName: string | null;
 }
 
 export interface CustomerListResponse {
