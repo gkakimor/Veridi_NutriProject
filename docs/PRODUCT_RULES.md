@@ -2798,3 +2798,61 @@ Optional integer fields treat an absent key as *no change*, an empty string or
 born without units-per-box impossible to edit at all — the failure named a
 field the user had not touched.
 
+
+---
+
+## §41 — Cliente: identificação, contato e autoria
+
+### CNPJ tem duas formas válidas, e nenhuma delas é "14 dígitos"
+
+Desde a IN RFB nº 2.229/2024 circulam o CNPJ numérico e o alfanumérico, cujas
+12 primeiras posições podem conter letras (`00.000.000/E08G-12`). Os dois
+dígitos verificadores continuam numéricos.
+
+Um único algoritmo atende aos dois: o módulo 11 de sempre, com o valor de cada
+posição sendo `código ASCII − 48`. Isso mantém `'0'..'9'` valendo `0..9`, então
+o numérico é caso particular do alfanumérico.
+
+Consequências que não podem ser desfeitas por conveniência:
+
+- **normalizar nunca remove letras.** `replace(/\D/g, "")` transformava um CNPJ
+  alfanumérico válido em oito caracteres sem sentido, gravados como identidade
+  de alguém;
+- **o campo é texto**, nunca `type="number"`;
+- **o dígito verificador é conferido.** Contar 14 posições aceitava qualquer
+  transposição de dígito, e o número errado seguia para documento e
+  faturamento;
+- a busca por CNPJ vale para as duas formas.
+
+O que isto **não** afirma: que a empresa existe. Não há consulta à Receita, e
+validade estrutural não é prova cadastral.
+
+### Contato preenchido tem que ser contato
+
+E-mail e telefone continuam **opcionais**. Preenchidos, precisam ser reais:
+e-mail com formato válido, telefone brasileiro **com DDD** — 10 dígitos para
+fixo, 11 para celular. Guardados só com dígitos, como CEP e CNPJ; a máscara é
+da tela. A tela valida para o operador ver o erro ao lado do campo; o servidor
+revalida porque o formulário não é a única porta de entrada.
+
+### Serviço externo não decide se um cadastro pode existir
+
+O endereço é preenchido a partir do CEP por consulta externa. Toda falha —
+CEP inexistente, timeout, indisponibilidade, rede — termina em "preencha
+manualmente", nunca em cadastro bloqueado.
+
+O preenchimento automático toca apenas campo vazio ou campo que a consulta
+anterior escreveu; o que o operador digitou é dele. **Número nunca é
+preenchido automaticamente**: a consulta não sabe qual é, e um número errado
+com aparência de correto é pior que um campo vazio — a mesma razão que já vale
+para o endereço legado (§38).
+
+### Autoria vem da sessão, e ausência de autor não vira palpite
+
+`createdBy`/`updatedBy` do Cliente saem do usuário autenticado, nunca de campo
+enviado pelo cliente HTTP. Visualizar não altera autoria; ativar/inativar
+altera, porque é alteração persistida.
+
+Registro anterior a esta capacidade, ou importado do legado, fica **sem autor**
+e a tela diz "Não disponível". Atribuir esses registros a quem rodou a
+migration inventaria um fato auditável.

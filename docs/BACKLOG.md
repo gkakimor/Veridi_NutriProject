@@ -14,7 +14,7 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 2 |
+| LOW | 3 |
 
 Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
@@ -49,6 +49,18 @@ foi feita como passada deliberada.
 
 **Decisão / próxima ação:** mesma passada de nomenclatura do item 1.
 
+### 3. `pnpm test` quebra de forma intermitente no monorepo — LOW
+
+Rodando api e web juntos, a suíte às vezes morre com
+`Error: Channel closed` / `ERR_IPC_CHANNEL_CLOSED` no encerramento dos workers
+do vitest. Nenhuma asserção falha — as suítes passam inteiras quando rodadas
+uma a uma. Reproduzido também em `96e2c07`, antes das mudanças de Cliente:
+é anterior, não regressão.
+
+**Decisão / próxima ação:** rodar as suítes separadas quando o gate precisar
+ser confiável. Se incomodar, reduzir `maxWorkers` ou serializar os pacotes no
+script `test` da raiz.
+
 ### Decisões de produto em aberto — não bloqueantes
 
 Herdadas de `PROJECT_STATE.md`, trazidas para cá para terem fonte única. Nenhuma
@@ -74,7 +86,7 @@ depende da prática real da casa, não de escolha técnica.
 e o feedback ser classificado. Roteiro da sessão e grade de classificação em
 [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md).
 
-Os dois LOW acima não bloqueiam a validação e não devem ser corrigidos durante
+Os três LOW acima não bloqueiam a validação e não devem ser corrigidos durante
 a reunião.
 
 ---

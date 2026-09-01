@@ -56,14 +56,34 @@ Material preparado:
   reunião em quinze blocos, com perguntas abertas por etapa e a grade de
   classificação do feedback.
 
+## Em andamento — melhorias no cadastro de Cliente
+
+Rodada curta promovida pelo PO, sobre a release congelada. Sem módulo novo.
+
+- **E-mail, CNPJ e telefone passaram a ser validados** na tela e na API. CNPJ
+  agora confere os dígitos verificadores e aceita as duas formas em
+  circulação: a numérica e a alfanumérica da IN RFB nº 2.229/2024. O validador
+  é compartilhado, então **Fornecedor herdou a mesma regra** — a importação do
+  legado já rejeitava CNPJ com DV inválido, então não há registro existente
+  que deixe de ser editável.
+- **Endereço preenchido pelo CEP** via ViaCEP. Falha do serviço nunca bloqueia
+  o cadastro; número nunca é preenchido automaticamente.
+- **Autoria do cadastro** (quem criou, quem alterou por último) reusando o
+  padrão `createdByUserId`/`NameSnapshot` já existente. Migration aditiva e
+  nullable, sem backfill: cliente importado do legado mostra "Não disponível".
+- **Histórico detalhado por campo NÃO foi implementado**: não existe
+  infraestrutura genérica de auditoria para reusar — só duas tabelas de
+  histórico de status com propósito próprio. Construir uma é capacidade
+  transversal, não cabe numa rodada curta.
+
 ## Blockers
 
 Nenhum.
 
 ## Backlog aberto
 
-Duas passadas de nomenclatura de severidade LOW, não bloqueantes. Ver
-[BACKLOG.md](BACKLOG.md).
+Duas passadas de nomenclatura de severidade LOW e uma instabilidade de
+infraestrutura da suíte, todas não bloqueantes. Ver [BACKLOG.md](BACKLOG.md).
 
 ## Decisões de produto ainda em aberto (não bloqueantes)
 
