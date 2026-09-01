@@ -135,7 +135,8 @@ Task-to-doc map:
 - domain behavior → `docs/PRODUCT_RULES.md`
 - UI/UX → `docs/UI_BRAND.md`
 - architecture/setup → `docs/TECH_BASELINE.md`
-- future scope → `docs/BACKLOG.md`
+- open pendencies → `docs/BACKLOG.md`
+- future scope → `docs/ROADMAP_POST_MVP.md` (do not read unless discussing new capabilities)
 - benchmark rationale only when needed → `docs/BENCHMARK_NOTES.md`
 
 Do not reread every document on every task.
@@ -147,7 +148,9 @@ Keep `docs/PROJECT_STATE.md` compact. Rewrite/condense it; do not append an endl
 - business rules: `docs/PRODUCT_RULES.md`
 - UI/brand: `docs/UI_BRAND.md`
 - technical guardrails: `docs/TECH_BASELINE.md`
-- deferred scope: `docs/BACKLOG.md`
+- open pendencies: `docs/BACKLOG.md`
+- deferred scope: `docs/ROADMAP_POST_MVP.md`
+- history (not default context): `docs/archive/`
 - benchmark rationale: `docs/BENCHMARK_NOTES.md`
 - current implementation: `docs/PROJECT_STATE.md`
 - legacy migration runbook: `docs/VERIDI_MIGRATION.md`

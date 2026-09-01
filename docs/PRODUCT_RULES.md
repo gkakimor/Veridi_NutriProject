@@ -2040,7 +2040,7 @@ quantity (e.g. order 1000, deliver 600 → invoice 600). Partial invoicing
 is supported through multiple shipments. Commercial invoicing and
 Brazilian fiscal NF issuance are related but distinct concepts and are
 **not** merged — fiscal integration remains its own future evolution (see
-`docs/BACKLOG.md`).
+`docs/ROADMAP_POST_MVP.md`).
 
 ### Durable rules confirmed at implementation (§28)
 

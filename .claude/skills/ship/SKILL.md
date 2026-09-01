@@ -17,7 +17,7 @@ Then only what is needed:
 - UI → `docs/UI_BRAND.md`
 - sequencing/scope → `docs/MVP_PLAN.md`
 - architecture → `docs/TECH_BASELINE.md`
-- future-scope check → `docs/BACKLOG.md`
+- future-scope check → `docs/ROADMAP_POST_MVP.md`
 
 Do not read `docs/BENCHMARK_NOTES.md` unless rationale/comparison is actually needed.
 
@@ -49,7 +49,7 @@ Ask only if ambiguity changes:
 - destructive behavior.
 
 ## Scope discipline
-If a request drifts into `docs/BACKLOG.md`:
+If a request drifts into `docs/ROADMAP_POST_MVP.md`:
 - do not implement it automatically;
 - mention the scope conflict;
 - wait for Product Ownership to promote it.
