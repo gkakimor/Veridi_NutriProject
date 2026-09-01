@@ -56,25 +56,33 @@ Material preparado:
   reunião em quinze blocos, com perguntas abertas por etapa e a grade de
   classificação do feedback.
 
-## Em andamento — melhorias no cadastro de Cliente
+## Rodadas curtas sobre a release congelada
 
-Rodada curta promovida pelo PO, sobre a release congelada. Sem módulo novo.
+Promovidas pelo PO, sem módulo novo e sem mudança de domínio.
 
-- **E-mail, CNPJ e telefone passaram a ser validados** na tela e na API. CNPJ
-  agora confere os dígitos verificadores e aceita as duas formas em
-  circulação: a numérica e a alfanumérica da IN RFB nº 2.229/2024. O validador
-  é compartilhado, então **Fornecedor herdou a mesma regra** — a importação do
-  legado já rejeitava CNPJ com DV inválido, então não há registro existente
-  que deixe de ser editável.
-- **Endereço preenchido pelo CEP** via ViaCEP. Falha do serviço nunca bloqueia
-  o cadastro; número nunca é preenchido automaticamente.
-- **Autoria do cadastro** (quem criou, quem alterou por último) reusando o
-  padrão `createdByUserId`/`NameSnapshot` já existente. Migration aditiva e
-  nullable, sem backfill: cliente importado do legado mostra "Não disponível".
-- **Histórico detalhado por campo NÃO foi implementado**: não existe
-  infraestrutura genérica de auditoria para reusar — só duas tabelas de
-  histórico de status com propósito próprio. Construir uma é capacidade
-  transversal, não cabe numa rodada curta.
+**Cadastro de Cliente** (`cab5bf3`, em produção). E-mail, CNPJ (numérico e a
+forma alfanumérica da IN RFB nº 2.229/2024) e telefone com DDD validados na
+tela e na API; validador compartilhado, então **Fornecedor herdou a regra de
+CNPJ**. Endereço preenchido pelo CEP via ViaCEP, com falha nunca bloqueando o
+cadastro. Autoria do cadastro reusando `createdByUserId`/`NameSnapshot`,
+migration aditiva e nullable. Histórico detalhado por campo **não** foi
+implementado: exigiria infraestrutura genérica de auditoria, que é capacidade
+transversal. Regras em [PRODUCT_RULES.md](PRODUCT_RULES.md) §41.
+
+**Consulta do Cliente** (`feat/customer-consultation`). Capacidade de leitura
+em `/consultas/clientes/:customerId` (Gestão › Consulta de Cliente): shell
+persistente com Resumo, Projetos, Pedidos, Materiais do cliente e
+Faturamentos, e detalhe consultivo de Projeto, Pedido e Faturamento sem sair
+do Cliente. Sem migration — lista reusa os endpoints operacionais já
+filtrados por `customerId`; o que é novo é o resumo e o **escopo**, que
+recusa com 404 entidade de outro Cliente. Produção/OP ficou de fora:
+`GET /production-orders` não filtra por cliente e seu DTO faz três consultas
+extras por linha, então a aba exigiria read model próprio. Regra durável em
+[PRODUCT_RULES.md](PRODUCT_RULES.md) §42.
+
+Na mesma rodada, **Fornecedor passou a usar os validadores compartilhados de
+e-mail e telefone** — antes texto livre. Nenhum dos 219 fornecedores tem esses
+campos preenchidos, então nenhum registro existente deixou de ser editável.
 
 ## Blockers
 
