@@ -370,8 +370,21 @@ describe("Sugestão de Compra — análise", () => {
       { customerOrderLineId: order.lines[0].id, reserveQuantity: "0", produceQuantity: "1" },
       { customerOrderLineId: order.lines[1].id, reserveQuantity: "0", produceQuantity: "1" },
     ]);
-    const opA = applied.generatedProductionOrders[0];
-    const opB = applied.generatedProductionOrders[1];
+    /**
+     * Escolhidas pelo produto, nunca pela posição: as duas OPs nascem na
+     * mesma transação, e `orderBy: createdAt asc` empata quando os carimbos
+     * coincidem. Sob carga o desempate virava, o teste cancelava a OP B e
+     * tentava liberar a A — que não tem estoque — falhando com "falta 10 kg".
+     */
+    const porProduto = (productId: string) => {
+      const encontrada = applied.generatedProductionOrders.find(
+        (op: { productId: string }) => op.productId === productId,
+      );
+      if (!encontrada) throw new Error(`OP do produto ${productId} não foi gerada`);
+      return encontrada;
+    };
+    const opA = porProduto(productA.id);
+    const opB = porProduto(productB.id);
 
     // Cancela a OP A (ainda DRAFT).
     await app.inject({ method: "POST", url: `/production-orders/${opA.id}/cancel`, payload: { reason: "Teste" } });
