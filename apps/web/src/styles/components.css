@@ -1877,6 +1877,9 @@ input.is-invalid {
   gap: var(--sp-2);
   flex-wrap: wrap;
   list-style: none;
+  /* `list-style: none` não tira o recuo do marcador: sem zerar o padding, a
+     trilha nasce deslocada da tabela e dos cartões logo abaixo dela. */
+  padding-inline-start: 0;
 }
 
 .consult-trail li + li::before {
