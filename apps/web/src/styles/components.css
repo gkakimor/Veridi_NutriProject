@@ -1769,3 +1769,179 @@ input.is-invalid {
   word-break: break-word;
   color: var(--ink-2);
 }
+
+
+/* ---------------- Consulta do Cliente ---------------- */
+
+/*
+ * O cabeçalho do Cliente é PERSISTENTE: ele sobrevive à navegação entre abas
+ * e detalhes, porque é ele que responde "sob qual cliente estou olhando".
+ * Persistente não quer dizer grande — ele ocupa uma faixa, não meia tela.
+ */
+
+.consult-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+}
+
+.consult-head__identity h1 {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+  line-height: var(--lh-tight);
+}
+
+.consult-head__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+/* Telefone e e-mail ajudam, mas não competem com a identidade. */
+.consult-head__contact {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.consult-tabs {
+  display: flex;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+  margin-top: var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+/*
+ * Cada aba é um LINK de rota, não um botão que troca estado: o endereço muda,
+ * então histórico, nova aba e teclado funcionam sem tratamento especial.
+ */
+.consult-tabs__link {
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-base);
+  color: var(--ink-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.consult-tabs__link:hover {
+  color: var(--ink);
+}
+
+.consult-tabs__link.is-active {
+  color: var(--v-green-700);
+  font-weight: var(--fw-semibold);
+  border-bottom-color: var(--v-green-700);
+}
+
+.consult-tabs__link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+.consult-body {
+  margin-top: var(--sp-4);
+}
+
+/*
+ * Breadcrumb da Consulta.
+ *
+ * "Projetos" aqui volta para os Projetos DESTE cliente — é esse detalhe que
+ * permite trocar de PROJ-001 para PROJ-002 sem nunca sair do cliente.
+ */
+.consult-trail {
+  margin-bottom: var(--sp-3);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.consult-trail ol {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  list-style: none;
+}
+
+.consult-trail li + li::before {
+  content: "/";
+  margin-right: var(--sp-2);
+  color: var(--line-strong);
+}
+
+.consult-trail a {
+  color: var(--ink-2);
+}
+
+.consult-trail a:hover {
+  color: var(--v-green-700);
+  text-decoration: underline;
+}
+
+.consult-counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-6);
+}
+
+/* O contador é a porta da aba: contar sem levar a lugar nenhum seria trivia. */
+.consult-counter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: inherit;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.consult-counter:hover {
+  border-color: var(--v-green-600);
+  box-shadow: var(--shadow-1);
+}
+
+.consult-counter:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.consult-counter__label {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.consult-counter__value {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+  line-height: var(--lh-tight);
+}
+
+.consult-section {
+  margin-bottom: var(--sp-6);
+}
+
+.consult-section h2 {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  margin-bottom: var(--sp-3);
+}

@@ -359,6 +359,17 @@ export function CustomerFormModal({ mode, customer, onClose, onSaved }: Customer
         {customer && (
           <RelatedLinks
             links={[
+              /*
+               * Os quatro atalhos abaixo continuam levando ao módulo, como
+               * sempre levaram: "quero ir trabalhar em Pedidos deste
+               * cliente". A Consulta completa é a alternativa, não a
+               * substituta — "quero acompanhar o cliente como contexto".
+               */
+              {
+                label: "Consulta completa",
+                to: `/consultas/clientes/${customer.id}/resumo`,
+                highlight: true,
+              },
               { label: "Projetos", to: `/comercial/projetos?customerId=${customer.id}` },
               { label: "Pedidos", to: `/comercial/pedidos?customerId=${customer.id}` },
               { label: "Faturamentos", to: `/comercial/faturamento?customerId=${customer.id}` },
