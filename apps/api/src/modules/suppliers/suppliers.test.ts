@@ -13,6 +13,15 @@ afterEach(async () => {
 
 type App = ReturnType<typeof buildTestApp>;
 
+/** Mensagem da API para um campo — o teste afirma a regra, não o formato do envelope. */
+function issueFor(
+  response: { json: () => { issues?: { path: string; message: string }[] } },
+  path: string,
+): string | undefined {
+  return response.json().issues?.find((issue) => issue.path === path)?.message;
+}
+
+
 async function createTestSupplier(app: App, overrides: Record<string, unknown> = {}) {
   const response = await app.inject({
     method: "POST",
@@ -204,5 +213,34 @@ describe("Suppliers", () => {
     expect(body.total).toBe(1);
     expect(body.suppliers).toHaveLength(1);
     expect(body.suppliers[0].id).toBe(alvoId);
+  });
+  /*
+   * Fornecedor tem exatamente os mesmos conceitos que Cliente — e-mail de
+   * contato e telefone brasileiro — e passou a usar os MESMOS validadores.
+   * Antes eram texto livre: qualquer coisa entrava.
+   */
+  it("valida e-mail e telefone com as regras compartilhadas", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const invalidEmail = await createTestSupplier(app, { email: "contato-sem-arroba" });
+    expect(invalidEmail.statusCode).toBe(400);
+    expect(issueFor(invalidEmail, "email")).toBe("E-mail inválido.");
+
+    // Dez dígitos, mas "10" não é DDD de ninguém.
+    const invalidPhone = await createTestSupplier(app, { phone: "1099998888" });
+    expect(invalidPhone.statusCode).toBe(400);
+    expect(issueFor(invalidPhone, "phone")).toBe("Informe um telefone com DDD.");
+
+    const ok = await createTestSupplier(app, {
+      email: "compras@fornecedor.com.br",
+      phone: "(11) 99999-8888",
+    });
+    expect(ok.statusCode).toBe(201);
+    createdSupplierIds.push(ok.json().id);
+    // Guarda só dígitos: a máscara é da tela, como em CNPJ e CEP.
+    expect(ok.json().phone).toBe("11999998888");
+
+    await app.close();
   });
 });
