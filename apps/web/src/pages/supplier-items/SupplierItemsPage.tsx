@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ItemDTO, SupplierDTO, SupplierItemDTO, SupplierItemQualificationStatus } from "@veridi/shared";
 import {
   ITEM_FAMILIES,
@@ -77,8 +77,34 @@ export function SupplierItemsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [createOpen, setCreateOpen] = useState(false);
+  /**
+   * A relação nova mora na URL enquanto está aberta (`?nova=1`).
+   *
+   * Não é enfeite: os campos Item e Fornecedor saem para a TELA OFICIAL de
+   * cadastro, e sair DESMONTA o formulário. Quem volta precisa encontrá-lo
+   * aberto de novo, e a única coisa que sobrevive à navegação é a URL — o
+   * rascunho volta pelo contexto, mas só se houver formulário montado para
+   * recebê-lo. De quebra, um F5 no meio do cadastro deixa de fechar a tela.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [createOpen, setCreateOpen] = useState(() => searchParams.get("nova") === "1");
   const [detailId, setDetailId] = useState<string | null>(null);
+
+  function abrirCriacao() {
+    setCreateOpen(true);
+    if (searchParams.get("nova") === "1") return;
+    const proximo = new URLSearchParams(searchParams);
+    proximo.set("nova", "1");
+    setSearchParams(proximo, { replace: true });
+  }
+
+  function fecharCriacao() {
+    setCreateOpen(false);
+    if (searchParams.get("nova") !== "1") return;
+    const proximo = new URLSearchParams(searchParams);
+    proximo.delete("nova");
+    setSearchParams(proximo, { replace: true });
+  }
 
   const [search, setSearch] = usePersistentFilter(user?.id ?? null, FILTER_SCOPE, "search", "");
   const [qualificationStatus, setQualificationStatus] = usePersistentFilter<
@@ -197,7 +223,7 @@ export function SupplierItemsPage() {
             referência comercial do fornecedor — o custo real continua vindo do recebimento.
           </p>
         </div>
-        <button type="button" className="btn btn--primary" onClick={() => setCreateOpen(true)}>
+        <button type="button" className="btn btn--primary" onClick={abrirCriacao}>
           Nova relação
         </button>
         <ExportCsvButton
@@ -422,9 +448,9 @@ export function SupplierItemsPage() {
         <SupplierItemFormModal
           items={items}
           suppliers={suppliers}
-          onClose={() => setCreateOpen(false)}
+          onClose={fecharCriacao}
           onSaved={(created) => {
-            setCreateOpen(false);
+            fecharCriacao();
             reload();
             setDetailId(created.id);
           }}

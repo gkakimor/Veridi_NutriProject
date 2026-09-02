@@ -9,7 +9,7 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
-import { CustomerFormModal } from "../customers/CustomerFormModal";
+import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
@@ -35,6 +35,34 @@ function nextLineKey(): string {
   return `linha-${lineKeySeq}`;
 }
 
+/**
+ * O contador reinicia junto com o módulo, e o rascunho atravessa um F5 na
+ * tela de cadastro: sem empurrá-lo para além das chaves restauradas,
+ * "Adicionar material" devolveria uma chave que uma linha já usa — duas
+ * linhas mudariam juntas.
+ */
+function absorverChaves(linhas: LineDraft[]) {
+  for (const linha of linhas) {
+    const numero = Number(linha.key.split("-")[1]);
+    if (Number.isFinite(numero) && numero > lineKeySeq) lineKeySeq = numero;
+  }
+}
+
+/**
+ * O que o recebimento leva junto ao sair para cadastrar o cliente.
+ *
+ * Só o formulário: `customers` e `items` vêm do servidor e são recarregados
+ * na volta, então guardá-los seria copiar catálogo para dentro do rascunho.
+ */
+type RascunhoRecebimento = {
+  customerId: string;
+  receivedAt: string;
+  documentReference: string;
+  invoiceNumber: string;
+  notes: string;
+  lines: LineDraft[];
+};
+
 function emptyLine(): LineDraft {
   return {
     key: nextLineKey(),
@@ -58,12 +86,6 @@ export function ReceiveCustomerMaterialPage() {
   const [items, setItems] = useState<ItemDTO[]>([]);
 
   const [customerId, setCustomerId] = useState("");
-  /**
-   * Cadastro de cliente no contexto. Material do cliente chega na doca com
-   * a nota na mão; se o cliente ainda não existe, sair daqui para cadastrar
-   * significa redigitar lotes, validades e quantidades já conferidos.
-   */
-  const [newCustomerName, setNewCustomerName] = useState<string | null>(null);
   const [receivedAt, setReceivedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [documentReference, setDocumentReference] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -74,6 +96,39 @@ export function ReceiveCustomerMaterialPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  /**
+   * Cadastro de cliente na TELA OFICIAL, sem perder o recebimento.
+   *
+   * Material do cliente chega na doca com o documento na mão; se o cliente
+   * ainda não existe, sair daqui significaria redigitar lotes, validades e
+   * quantidades já conferidos. O rascunho vai junto e volta inteiro, com o
+   * cliente novo selecionado pelo id.
+   */
+  const origem = useContextualCreateOrigin<RascunhoRecebimento>({
+    collectDraft: () => ({
+      customerId,
+      receivedAt,
+      documentReference,
+      invoiceNumber,
+      notes,
+      lines,
+    }),
+    restoreDraft: (draft) => {
+      setCustomerId(draft.customerId ?? "");
+      setReceivedAt(draft.receivedAt ?? "");
+      setDocumentReference(draft.documentReference ?? "");
+      setInvoiceNumber(draft.invoiceNumber ?? "");
+      setNotes(draft.notes ?? "");
+      // Rascunho sem linha volta com a linha vazia com que a tela nasce:
+      // tabela sem linha nenhuma não dá onde digitar.
+      const linhas = Array.isArray(draft.lines) ? draft.lines : [];
+      absorverChaves(linhas);
+      setLines(linhas.length > 0 ? linhas : [emptyLine()]);
+    },
+    // Pelo id: o nome digitado na busca escolheria o cliente errado.
+    onCreated: (result) => setCustomerId(result.entityId),
+  });
 
   useEffect(() => {
     listCustomers({ active: true, pageSize: 1000 })
@@ -188,7 +243,13 @@ export function ReceiveCustomerMaterialPage() {
               }))}
               canCreate
               createLabel="Novo cliente"
-              onCreateNew={(typed) => setNewCustomerName(typed)}
+              onCreateNew={() =>
+                origem.goCreate({
+                  route: "/cadastros/clientes/novo",
+                  fieldKey: "customerId",
+                  entityType: "customer",
+                })
+              }
             />
             {fieldErrors["customerId"] && (
               <p className="field__error">{fieldErrors["customerId"]}</p>
@@ -385,22 +446,6 @@ export function ReceiveCustomerMaterialPage() {
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleConfirm}
       />
-
-      {newCustomerName !== null && (
-        <CustomerFormModal
-          mode="create"
-          customer={null}
-          onClose={() => setNewCustomerName(null)}
-          onSaved={(created) => {
-            setNewCustomerName(null);
-            if (!created) return;
-            // Volta selecionado; as linhas já conferidas continuam como
-            // estavam.
-            setCustomers((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
-            setCustomerId(created.id);
-          }}
-        />
-      )}
     </>
   );
 }

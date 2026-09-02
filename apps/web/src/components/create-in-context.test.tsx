@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { CustomerDTO, FormulationTemplateDTO, ItemDTO, ProjectDTO } from "@veridi/shared";
 
@@ -72,9 +71,7 @@ vi.mock("../pages/items/ItemFormModal", () => ({
 
 import { SearchableEntitySelect } from "./SearchableEntitySelect";
 import { ApprovalPreviewDialog } from "../pages/projects/ApprovalPreviewDialog";
-import { ReceiveCustomerMaterialPage } from "../pages/receiving/ReceiveCustomerMaterialPage";
 import { FormulationTemplateDetailPage } from "../pages/formulation-templates/FormulationTemplateDetailPage";
-import { listCustomers } from "../lib/customers-api";
 import { listItems } from "../lib/items-api";
 import { listUnits } from "../lib/units-api";
 import { getFormulationTemplate } from "../lib/formulation-templates-api";
@@ -231,14 +228,6 @@ const CLIENTE_NOVO = {
   active: true,
 } as unknown as CustomerDTO;
 
-const CLIENTE_EXISTENTE = {
-  id: "cli-1",
-  code: "CLI-000001",
-  legalName: "Vida Saudável Ltda",
-  tradeName: "Vida Saudável",
-  active: true,
-} as unknown as CustomerDTO;
-
 const ITEM_NOVO = {
   id: "item-novo",
   code: "MP-000777",
@@ -264,95 +253,6 @@ const ITEM_EXISTENTE = {
  * um `button` dentro do `<label>` — a consulta acha dois elementos e falha
  * por ambiguidade, sem que nada esteja errado na tela.
  */
-function campo(id: string): HTMLInputElement {
-  const elemento = document.getElementById(id);
-  if (!elemento) throw new Error(`Campo #${id} não está na tela.`);
-  return elemento as HTMLInputElement;
-}
-
-/** Digita no campo e aciona o "+ Novo …", que encabeça a lista. */
-async function acionarCadastro(
-  user: ReturnType<typeof userEvent.setup>,
-  campo: HTMLElement,
-  termo: string,
-) {
-  await user.type(campo, termo);
-  await user.click(opcoes()[0]!);
-}
-
-describe("Criação no contexto — campo simples (Material do cliente)", () => {
-  beforeEach(() => {
-    vi.mocked(listCustomers).mockResolvedValue({ customers: [CLIENTE_EXISTENTE] } as never);
-    vi.mocked(listItems).mockResolvedValue({ items: [ITEM_EXISTENTE] } as never);
-  });
-
-  function abrir() {
-    render(
-      <MemoryRouter>
-        <ReceiveCustomerMaterialPage />
-      </MemoryRouter>,
-    );
-  }
-
-  it("cliente criado volta selecionado pelo id, sem levar o recebimento junto", async () => {
-    const user = userEvent.setup();
-    abrir();
-
-    // Material do cliente chega na doca com a nota na mão: o que já foi
-    // conferido não pode se perder porque o cliente ainda não existe.
-    const documento = await screen.findByLabelText(/Documento de remessa/);
-    await user.type(documento, "REM-2026-0031");
-
-    // O termo digitado NÃO é o nome do registro criado — é isso que separa
-    // "selecionou pelo id" de "ecoou o texto digitado".
-    await acionarCadastro(user, campo("customer-receipt-customer"), "cliente que ainda nao existe");
-
-    await user.click(await screen.findByRole("button", { name: "salvar-cliente" }));
-
-    // Selecionado pelo id: o campo mostra código e razão social vindos do
-    // registro criado, não o que foi digitado.
-    await waitFor(() =>
-      expect(campo("customer-receipt-customer")).toHaveValue(
-        "CLI-000042 · Nutrição Viva Indústria Ltda",
-      ),
-    );
-    // E o recebimento continua como estava.
-    expect(documento).toHaveValue("REM-2026-0031");
-    expect(screen.queryByRole("button", { name: "salvar-cliente" })).toBeNull();
-  });
-
-  it("fechar o cadastro sem salvar não escolhe nada nem apaga o rascunho", async () => {
-    const user = userEvent.setup();
-    abrir();
-
-    const documento = await screen.findByLabelText(/Documento de remessa/);
-    await user.type(documento, "REM-2026-0099");
-
-    await acionarCadastro(user, campo("customer-receipt-customer"), "desisti no meio");
-
-    await user.click(await screen.findByRole("button", { name: "fechar-cliente-sem-salvar" }));
-
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "fechar-cliente-sem-salvar" })).toBeNull(),
-    );
-    /*
-     * Nada escolhido, e o campo volta VAZIO.
-     *
-     * Deixar "desisti no meio" parado ali faria o termo digitado parecer uma
-     * seleção confirmada — é o mesmo motivo pelo qual clicar fora descarta a
-     * busca. A prova de que não há registro escolhido é dupla: o botão
-     * "Limpar seleção" só existe com opção escolhida, e o recebimento
-     * continua sem poder ser confirmado, o que só acontece com `customerId`
-     * vazio.
-     */
-    expect(campo("customer-receipt-customer")).toHaveValue("");
-    expect(screen.queryByLabelText("Limpar seleção")).toBeNull();
-    expect(screen.getByRole("button", { name: /Confirmar recebimento/ })).toBeDisabled();
-    // E o que já estava digitado continua lá.
-    expect(documento).toHaveValue("REM-2026-0099");
-  });
-});
-
 function templateComRascunho(): FormulationTemplateDTO {
   const versao = {
     id: "ver-1",
@@ -439,33 +339,6 @@ describe("Criação no contexto — coluna de tabela (Template de formulação)"
       </MemoryRouter>,
     );
   }
-
-  it("o item criado volta na LINHA que pediu, e o resto do rascunho fica", async () => {
-    const user = userEvent.setup();
-    abrir();
-
-    // Duas linhas: a primeira já resolvida, a segunda é a que pede o item
-    // novo. Sem guardar QUAL linha pediu, o item voltaria para a primeira.
-    await waitFor(() => expect(camposDeItem()).toHaveLength(2));
-
-    // Rascunho do formulário hospedeiro, fora da tabela.
-    const base = campo("template-base");
-    await user.clear(base);
-    await user.type(base, "25");
-
-    await acionarCadastro(user, camposDeItem()[1]!, "creatina que ainda nao existe");
-    await user.click(await screen.findByRole("button", { name: "salvar-item" }));
-
-    await waitFor(() =>
-      expect(camposDeItem()[1]!.value).toBe("MP-000777 · Creatina monoidratada"),
-    );
-    // Linha 1 intocada: o item novo foi para a linha que pediu, e o valor
-    // exibido vem do catálogo resolvido PELO ID — não do texto digitado,
-    // que nem parecido com o nome é.
-    expect(camposDeItem()[0]!.value).toBe("MP-000001 · Maltodextrina");
-    // E a base digitada sobreviveu ao cadastro.
-    expect(base).toHaveValue("25");
-  });
 
   it("o campo do item respeita quem não pode editar, como os vizinhos", () => {
     // Era o único campo do rascunho sem `disabled`: quem não é ADMIN nem

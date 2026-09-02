@@ -3044,14 +3044,27 @@ Campo de busca de entidade criável oferece a criação ali mesmo, e devolve a
 entidade nova **selecionada pelo id** — nunca pelo texto digitado, que casaria
 com o registro errado sempre que dois nomes se parecerem.
 
-O caminho é o cadastro OFICIAL da entidade, o mesmo que a tela de listagem
-abre. Não existe segundo formulário: um cadastro paralelo fica atrás do
-oficial em validação e regra, e a divergência só aparece meses depois, num
-registro que passou por onde não devia.
+O caminho é a TELA OFICIAL de cadastro da entidade — `/cadastros/clientes/novo`
+e irmãs. Não existe segundo formulário: os campos vivem num módulo só, usado
+pela página e pelo modal de edição. Um cadastro paralelo fica atrás do oficial
+em validação e regra, e a divergência só aparece meses depois, num registro
+que passou por onde não devia.
 
 O formulário de origem não perde nada. Quem monta um pedido, descobre no meio
 que o cliente ainda não existe e o cadastra, volta com data, condição,
-observação e linhas como estavam.
+observação e linhas como estavam. Cancelar devolve ao mesmo ponto, com o
+rascunho de pé e nada selecionado.
+
+Navegar de verdade é o que dá as três coisas que um modal não tem: a tela de
+cadastro **sobrevive a um F5**, vale como link e entra no histórico do
+navegador. O preço é que o rascunho da origem precisa ser guardado enquanto a
+pessoa está fora — vive em `sessionStorage`, por token de uso único levado na
+URL, com validade de horas. Não é dado do domínio: é estado de navegação, e
+morre com a aba.
+
+A trilha da tela de cadastro permanece canônica nos dois caminhos. De onde a
+pessoa veio é caminho de volta — oferecido como ação secundária, "← Voltar
+para Pedido" — e não um nível da hierarquia.
 
 ### Onde a criação NÃO é oferecida
 

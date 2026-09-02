@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   FormulationActivationImpactDTO,
@@ -27,7 +27,7 @@ import {
   getFormulationVersion,
   updateFormulationVersion,
 } from "../../lib/formulations-api";
-import { listItems } from "../../lib/items-api";
+import { getItem, listItems } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { getFormulationCostEstimate } from "../../lib/costs-api";
@@ -39,7 +39,7 @@ import { FormulationTemplateOrigin } from "../formulation-templates/FormulationT
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
 import { useAuth } from "../../app/AuthProvider";
-import { ItemFormModal } from "../items/ItemFormModal";
+import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
@@ -86,6 +86,45 @@ let rowKeySeq = 0;
 function nextRowKey(): string {
   rowKeySeq += 1;
   return `component-${rowKeySeq}`;
+}
+
+/**
+ * O contador reinicia junto com o módulo, e o rascunho atravessa um F5 na
+ * tela de cadastro de item: sem empurrá-lo para além das chaves
+ * restauradas, "Adicionar componente" devolveria uma chave que uma linha já
+ * usa — e duas linhas passariam a mudar juntas.
+ */
+function absorverChaves(linhas: ComponentRow[]) {
+  for (const linha of linhas) {
+    const numero = Number(linha.key.split("-")[1]);
+    if (Number.isFinite(numero) && numero > rowKeySeq) rowKeySeq = numero;
+  }
+}
+
+/**
+ * O que a versão leva junto ao sair para cadastrar um item.
+ *
+ * Só o formulário. Catálogo de itens, unidades, estimativa de custo e
+ * impacto de ativação vêm do servidor e são recarregados na volta.
+ */
+type RascunhoVersao = {
+  basisQuantity: string;
+  calculationMode: FormulationCalculationMode;
+  dosesPerPackage: string;
+  notes: string;
+  components: ComponentRow[];
+};
+
+/**
+ * A linha que pediu o cadastro.
+ *
+ * O contexto atravessa `sessionStorage` e o token viaja na URL: é dado
+ * desconhecido, lido com desconfiança. Sem chave legítima o item novo não
+ * entra em linha nenhuma — melhor que entrar na primeira, que é a errada.
+ */
+function lerChaveDaLinha(contexto: Record<string, unknown> | null | undefined): string | null {
+  const chave = contexto?.["rowKey"];
+  return typeof chave === "string" && chave.length > 0 ? chave : null;
 }
 
 function rowFromDTO(component: FormulationVersionDTO["components"][number]): ComponentRow {
@@ -141,10 +180,6 @@ export function FormulationVersionPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
   const [impact, setImpact] = useState<FormulationActivationImpactDTO | null>(null);
-  // Criação no contexto: o item não existe e sair da fórmula agora
-  // significaria perder as linhas já montadas. Guarda a linha de origem
-  // para devolver o item selecionado exatamente onde ele foi pedido.
-  const [itemModalRowKey, setItemModalRowKey] = useState<string | null>(null);
   const { user } = useAuth();
   const [costEstimate, setCostEstimate] = useState<FormulationCostEstimateDTO | null>(null);
 
@@ -156,6 +191,16 @@ export function FormulationVersionPage() {
     setComponents(dto.components.map(rowFromDTO));
   }, []);
 
+  /**
+   * O rascunho restaurado ganha do servidor — uma vez.
+   *
+   * Quem volta do cadastro de item chega junto com a carga da versão, e ela
+   * traz a fórmula como está salva. Sem esta trava a resposta chegaria
+   * depois e apagaria o que a pessoa acabou de montar. Vale só para a
+   * primeira carga: depois de salvar, o servidor é a verdade.
+   */
+  const rascunhoRestaurado = useRef(false);
+
   const load = useCallback(() => {
     if (!versionId) return;
     setLoading(true);
@@ -163,6 +208,10 @@ export function FormulationVersionPage() {
     getFormulationVersion(versionId)
       .then((dto) => {
         setVersion(dto);
+        if (rascunhoRestaurado.current) {
+          rascunhoRestaurado.current = false;
+          return;
+        }
         syncFromServer(dto);
       })
       .catch(() => setNotFound(true))
@@ -204,6 +253,73 @@ export function FormulationVersionPage() {
       .then(setUnits)
       .catch(() => setUnits([]));
   }, []);
+
+  /**
+   * Cadastro de item na TELA OFICIAL, sem perder a fórmula.
+   *
+   * A coluna Item vive em linha de tabela: o contexto carrega QUAL linha
+   * pediu, porque sem isso o item criado voltaria para a primeira.
+   */
+  const origem = useContextualCreateOrigin<RascunhoVersao>({
+    collectDraft: () => ({ basisQuantity, calculationMode, dosesPerPackage, notes, components }),
+    restoreDraft: (draft) => {
+      // Antes de qualquer `setState`: a carga da versão está a caminho.
+      rascunhoRestaurado.current = true;
+      setBasisQuantity(draft.basisQuantity ?? "");
+      setCalculationMode(draft.calculationMode ?? "FIXED_BASIS");
+      setDosesPerPackage(draft.dosesPerPackage ?? "");
+      setNotes(draft.notes ?? "");
+      const linhas = Array.isArray(draft.components) ? draft.components : [];
+      absorverChaves(linhas);
+      setComponents(linhas);
+    },
+    onCreated: (result, record) => {
+      const chave = lerChaveDaLinha(record.context);
+      if (!chave) return;
+      // Pelo id, imediatamente — o rótulo só ocupa a coluna até o item real
+      // chegar logo abaixo.
+      setComponents((prev) =>
+        prev.map((row) =>
+          row.key === chave ? { ...row, itemId: result.entityId, itemName: result.label } : row,
+        ),
+      );
+      /*
+       * A linha precisa da unidade de estoque, e o resultado da criação
+       * traz só id e rótulo. Buscar o item pelo id é o que completa a linha
+       * — e o que põe a opção no seletor antes de o catálogo recarregar.
+       * Falha aqui não desfaz a seleção: o id já está na linha.
+       */
+      void getItem(result.entityId)
+        .then((item) => {
+          setActiveItems((prev) => [
+            {
+              id: item.id,
+              code: item.code,
+              name: item.name,
+              unitCode: item.unitCode,
+              unitDimension: item.unit.dimension,
+              active: item.active,
+            },
+            ...prev.filter((row) => row.id !== item.id),
+          ]);
+          setComponents((prev) =>
+            prev.map((row) =>
+              row.key === chave
+                ? {
+                    ...row,
+                    itemCode: item.code,
+                    itemName: item.name,
+                    itemActive: item.active,
+                    stockUnitCode: item.unitCode,
+                    unitCode: row.unitCode || item.unitCode,
+                  }
+                : row,
+            ),
+          );
+        })
+        .catch(() => undefined);
+    },
+  });
 
   const isDraft = version?.status === "DRAFT";
 
@@ -673,7 +789,15 @@ export function FormulationVersionPage() {
                           }))}
                           canCreate
                           createLabel="Novo item de estoque"
-                          onCreateNew={() => setItemModalRowKey(row.key)}
+                          onCreateNew={() =>
+                            origem.goCreate({
+                              route: "/cadastros/itens/novo",
+                              fieldKey: "itemId",
+                              entityType: "item",
+                              // Qual linha pediu — o item volta para ela.
+                              context: { rowKey: row.key },
+                            })
+                          }
                         />
                       ) : (
                         <>
@@ -1023,34 +1147,6 @@ export function FormulationVersionPage() {
         onCancel={() => setActivateDialogOpen(false)}
         onConfirm={handleActivate}
       />
-      {itemModalRowKey !== null && (
-        <ItemFormModal
-          mode="create"
-          item={null}
-          units={units}
-          onClose={() => setItemModalRowKey(null)}
-          onSaved={(created) => {
-            const rowKey = itemModalRowKey;
-            setItemModalRowKey(null);
-            if (!created || !rowKey) return;
-            // O item novo entra no catálogo e já fica escolhido na linha que
-            // pediu por ele — voltar e procurar de novo seria trabalho que o
-            // sistema acabou de fazer.
-            setActiveItems((prev) => [
-              {
-                id: created.id,
-                code: created.code,
-                name: created.name,
-                unitCode: created.unitCode,
-                unitDimension: created.unit.dimension,
-                active: created.active,
-              },
-              ...prev,
-            ]);
-            handleComponentItemChange(rowKey, created.id);
-          }}
-        />
-      )}
     </>
   );
 }

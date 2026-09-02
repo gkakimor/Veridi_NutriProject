@@ -9,10 +9,14 @@ import { navItems } from "./app/navigation";
 import { DashboardPage } from "./pages/DashboardPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ItemsPage } from "./pages/items/ItemsPage";
+import { ItemCreatePage } from "./pages/items/ItemCreatePage";
 import { SuppliersPage } from "./pages/suppliers/SuppliersPage";
+import { SupplierCreatePage } from "./pages/suppliers/SupplierCreatePage";
 import { CustomersPage } from "./pages/customers/CustomersPage";
+import { CustomerCreatePage } from "./pages/customers/CustomerCreatePage";
 import { consultationRoutes } from "./pages/customer-consultation/routes";
 import { ProductsPage } from "./pages/products/ProductsPage";
+import { ProductCreatePage } from "./pages/products/ProductCreatePage";
 import { PurchaseOrdersPage } from "./pages/purchase-orders/PurchaseOrdersPage";
 import { PurchaseOrderPage } from "./pages/purchase-orders/PurchaseOrderPage";
 import { ReceiptsPage } from "./pages/receiving/ReceiptsPage";
@@ -176,9 +180,16 @@ function AuthenticatedApp() {
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
           <Route path="/cadastros/itens" element={<ItemsPage />} />
+          <Route path="/cadastros/itens/novo" element={<ItemCreatePage />} />
           <Route path="/cadastros/fornecedores" element={<SuppliersPage />} />
+          {/* Rota antes da listagem não é necessária: `/novo` é estático e o
+              router casa segmento estático antes de dinâmico. Fica junto da
+              lista para quem lê o arquivo achar as duas de uma vez. */}
+          <Route path="/cadastros/fornecedores/novo" element={<SupplierCreatePage />} />
           <Route path="/cadastros/clientes" element={<CustomersPage />} />
+          <Route path="/cadastros/clientes/novo" element={<CustomerCreatePage />} />
           <Route path="/cadastros/produtos" element={<ProductsPage />} />
+          <Route path="/cadastros/produtos/novo" element={<ProductCreatePage />} />
 
           {/*
             CONSULTA DO CLIENTE — leitura sob o contexto do Cliente.

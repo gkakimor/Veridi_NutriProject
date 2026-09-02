@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { ProjectDTO, ProjectSampleDTO } from "@veridi/shared";
 import {
   PROJECT_ATTACHMENT_TYPES,
@@ -66,10 +66,35 @@ export function ProjectDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
+  /**
+   * A edição mora na URL enquanto está aberta (`?editar=1`).
+   *
+   * O campo Cliente do formulário sai para a TELA OFICIAL de cadastro, e
+   * sair DESMONTA o modal. Quem volta precisa encontrá-lo aberto de novo, e
+   * a URL é a única coisa que atravessa a navegação — o rascunho volta pelo
+   * contexto, mas só se houver formulário montado para recebê-lo.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [editOpen, setEditOpen] = useState(() => searchParams.get("editar") === "1");
   const [sampleProductId, setSampleProductId] = useState("");
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+
+  function abrirEdicao() {
+    setEditOpen(true);
+    if (searchParams.get("editar") === "1") return;
+    const proximo = new URLSearchParams(searchParams);
+    proximo.set("editar", "1");
+    setSearchParams(proximo, { replace: true });
+  }
+
+  function fecharEdicao() {
+    setEditOpen(false);
+    if (searchParams.get("editar") !== "1") return;
+    const proximo = new URLSearchParams(searchParams);
+    proximo.delete("editar");
+    setSearchParams(proximo, { replace: true });
+  }
 
   // Criar amostra é ato de desenvolvimento: Comercial pede, Produção também
   // pode abrir. Quem consome material continua sendo só Produção/ADMIN.
@@ -176,7 +201,7 @@ export function ProjectDetailPage() {
         </div>
         <div className="table__actions">
           {editable && (
-            <button type="button" className="btn btn--secondary" onClick={() => setEditOpen(true)}>
+            <button type="button" className="btn btn--secondary" onClick={abrirEdicao}>
               Editar
             </button>
           )}
@@ -505,12 +530,14 @@ export function ProjectDetailPage() {
         </FormSection>
       </div>
 
-      {editOpen && (
+      {/* `editable` também aqui: `?editar=1` não pode abrir a edição de um
+          projeto aprovado ou cancelado, que o botão já não oferece. */}
+      {editOpen && editable && (
         <ProjectFormModal
           project={project}
-          onClose={() => setEditOpen(false)}
+          onClose={fecharEdicao}
           onSaved={() => {
-            setEditOpen(false);
+            fecharEdicao();
             load();
           }}
         />

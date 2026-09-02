@@ -230,10 +230,24 @@ The label matches the create button on that entity's list screen, word for
 word: "Novo cliente", "Novo produto", "Novo fornecedor", "Novo item de
 estoque". One convention, no synonyms.
 
-The action opens the entity's **official form** — the same modal the list
-screen opens, never a parallel mini-form. The host form stays mounted
-underneath, so the draft survives, and the new entity is selected **by id**,
-never by the text that was typed.
+The action **navigates to the entity's canonical create page** —
+`/cadastros/clientes/novo` and siblings — never a parallel mini-form. The
+fields come from one shared module, so the page and the modal cannot drift
+apart.
+
+Navigating means the host form unmounts, so its draft is snapshotted to
+`sessionStorage` under a one-shot token carried in the URL, and restored on
+the way back. That is what buys the three things a modal cannot give: the
+create screen survives a refresh, it has a shareable URL, and it appears in
+browser history. Coming back selects the new entity **by id**, never by the
+text that was typed.
+
+Cancelling returns to the same place with the draft restored and nothing
+selected. The breadcrumb on the create page stays canonical either way —
+`Cadastros › Clientes › Novo cliente`. Where the person came from is a way
+back, offered as a secondary "← Voltar para Pedido", not a level of the
+hierarchy; putting it in the trail would teach a structure the system does
+not have.
 
 Do not offer it where the domain would reject the result: an item with no
 balance in a stock count, an item with no stock in a sample consumption, a

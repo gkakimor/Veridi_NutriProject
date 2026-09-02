@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import type {
@@ -36,7 +36,7 @@ import {
   updateCustomerOrder,
 } from "../../lib/customer-orders-api";
 import { listCustomers } from "../../lib/customers-api";
-import { listProducts } from "../../lib/products-api";
+import { getProduct, listProducts } from "../../lib/products-api";
 import { listSuppliers } from "../../lib/suppliers-api";
 import {
   createShipmentDraft,
@@ -56,8 +56,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
-import { CustomerFormModal } from "../customers/CustomerFormModal";
-import { ProductFormModal } from "../products/ProductFormModal";
+import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 
 /**
  * Ícone de ajuda de uma coluna do Plano, lido do registro central.
@@ -114,6 +113,47 @@ let rowKeySeq = 0;
 function nextRowKey(): string {
   rowKeySeq += 1;
   return `row-${rowKeySeq}`;
+}
+
+/**
+ * O contador reinicia junto com o módulo, e o rascunho atravessa um F5 na
+ * tela de cadastro: sem empurrá-lo para além das chaves restauradas,
+ * "Adicionar produto" devolveria uma chave que uma linha já usa — e duas
+ * linhas passariam a mudar juntas.
+ */
+function absorverChaves(linhas: LineRow[]) {
+  for (const linha of linhas) {
+    const numero = Number(linha.key.split("-")[1]);
+    if (Number.isFinite(numero) && numero > rowKeySeq) rowKeySeq = numero;
+  }
+}
+
+/**
+ * O que o Pedido leva junto ao sair para cadastrar cliente ou produto.
+ *
+ * São QUATRO campos, não os trinta `useState` da tela. Tudo o mais é
+ * derivado do servidor e volta de lá na remontagem — o pedido carregado, os
+ * catálogos, o plano de atendimento com seus ajustes, o sourcing, a
+ * sugestão de compra, o status de reserva — ou é estado de diálogo, que não
+ * é rascunho de coisa nenhuma.
+ */
+type RascunhoPedido = {
+  customerId: string;
+  requestedDeliveryDate: string;
+  notes: string;
+  lines: LineRow[];
+};
+
+/**
+ * A linha que pediu o cadastro.
+ *
+ * O contexto atravessa `sessionStorage` e o token viaja na URL: é dado
+ * desconhecido. Sem chave legítima o produto novo não entra em linha
+ * nenhuma — melhor que entrar na primeira, que é a errada.
+ */
+function lerChaveDaLinha(contexto: Record<string, unknown> | null | undefined): string | null {
+  const chave = contexto?.["rowKey"];
+  return typeof chave === "string" && chave.length > 0 ? chave : null;
 }
 
 function lineFromDTO(line: CustomerOrderDTO["lines"][number]): LineRow {
@@ -196,16 +236,6 @@ export function CustomerOrderPage() {
 
   const [activeCustomers, setActiveCustomers] = useState<CustomerDTO[]>([]);
   const [activeProducts, setActiveProducts] = useState<ProductDTO[]>([]);
-  /**
-   * Cadastro no contexto.
-   *
-   * O cliente é campo único, então basta lembrar o que foi digitado. Produto
-   * vive em linha de tabela: sem guardar QUAL linha pediu, o produto novo
-   * voltaria para a primeira — ou para nenhuma.
-   */
-  const [newCustomerName, setNewCustomerName] = useState<string | null>(null);
-  const [productModalRowKey, setProductModalRowKey] = useState<string | null>(null);
-
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -244,6 +274,16 @@ export function CustomerOrderPage() {
     setLines(order.lines.map(lineFromDTO));
   }, []);
 
+  /**
+   * O rascunho restaurado ganha do servidor — uma vez.
+   *
+   * Quem volta do cadastro chega junto com a carga do pedido, e ela traz o
+   * documento como está salvo. Sem esta trava a resposta chegaria depois e
+   * apagaria as linhas recém-digitadas. Vale só para a primeira carga:
+   * depois de salvar, confirmar ou cancelar, o servidor é a verdade.
+   */
+  const rascunhoRestaurado = useRef(false);
+
   useEffect(() => {
     if (isNew || !id) return;
     setLoading(true);
@@ -251,6 +291,10 @@ export function CustomerOrderPage() {
     getCustomerOrder(id)
       .then((order) => {
         setCustomerOrder(order);
+        if (rascunhoRestaurado.current) {
+          rascunhoRestaurado.current = false;
+          return;
+        }
         syncFormFromServer(order);
       })
       .catch(() => setNotFound(true))
@@ -469,6 +513,80 @@ export function CustomerOrderPage() {
       if (known) return [...base, known];
     }
     return base;
+  }
+
+  /**
+   * Cadastro de cliente e de produto na TELA OFICIAL, sem perder o pedido.
+   *
+   * Cliente é campo único: basta saber que foi ele quem pediu. Produto vive
+   * em linha de tabela, então o contexto carrega QUAL linha — sem isso o
+   * produto criado voltaria para a primeira.
+   */
+  const origem = useContextualCreateOrigin<RascunhoPedido>({
+    collectDraft: () => ({ customerId, requestedDeliveryDate, notes, lines }),
+    restoreDraft: (draft) => {
+      // Antes de qualquer `setState`: a carga do pedido está a caminho.
+      rascunhoRestaurado.current = true;
+      setCustomerId(draft.customerId ?? "");
+      setRequestedDeliveryDate(draft.requestedDeliveryDate ?? "");
+      setNotes(draft.notes ?? "");
+      const linhas = Array.isArray(draft.lines) ? draft.lines : [];
+      absorverChaves(linhas);
+      setLines(linhas);
+    },
+    onCreated: (result, record) => {
+      // Pelo id, sempre. O tipo do registro diz qual campo pediu.
+      if (record.entityType === "customer") {
+        setCustomerId(result.entityId);
+        return;
+      }
+      const chave = lerChaveDaLinha(record.context);
+      if (!chave) return;
+      setLines((prev) =>
+        prev.map((line) =>
+          line.key === chave
+            ? {
+                ...line,
+                productId: result.entityId,
+                productCode: "",
+                productName: result.label,
+                // Como no resto da tela: a unidade vem do Finished Product
+                // Item e só é conhecida depois de salvar.
+                unitCode: "",
+              }
+            : line,
+        ),
+      );
+      /*
+       * O catálogo da tela é recarregado na volta e o produto novo estará
+       * nele — mas só quando a resposta chegar, e até lá a coluna pareceria
+       * vazia com a linha já escolhida. Buscar o produto pelo id fecha essa
+       * janela e não depende do filtro da listagem. Falha aqui não desfaz a
+       * seleção: o id já está na linha.
+       */
+      void getProduct(result.entityId)
+        .then((produto) =>
+          setActiveProducts((prev) => [produto, ...prev.filter((row) => row.id !== produto.id)]),
+        )
+        .catch(() => undefined);
+    },
+  });
+
+  /**
+   * O cliente do pedido viaja junto no cadastro de produto.
+   *
+   * Um Pedido já é de um cliente, e o produto que nasce dele é desse
+   * cliente. A tela oficial trava o campo com o que chega aqui em vez de
+   * oferecer a divergência — produto de um cliente dentro do documento de
+   * outro.
+   */
+  function contextoDoProdutoNovo(rowKey: string): Record<string, unknown> {
+    const cliente = customerOptions.find((row) => row.id === customerId);
+    return {
+      rowKey,
+      ...(customerId ? { customerId } : {}),
+      ...(cliente ? { customerLabel: cliente.tradeName ?? cliente.legalName } : {}),
+    };
   }
 
   function handleAddLine() {
@@ -857,7 +975,13 @@ export function CustomerOrderPage() {
                   }))}
                   canCreate
                   createLabel="Novo cliente"
-                  onCreateNew={(typed) => setNewCustomerName(typed)}
+                  onCreateNew={() =>
+                    origem.goCreate({
+                      route: "/cadastros/clientes/novo",
+                      fieldKey: "customerId",
+                      entityType: "customer",
+                    })
+                  }
                 />
               ) : (
                 <p className="field-readonly-value">
@@ -919,7 +1043,14 @@ export function CustomerOrderPage() {
                           }))}
                           canCreate
                           createLabel="Novo produto"
-                          onCreateNew={() => setProductModalRowKey(line.key)}
+                          onCreateNew={() =>
+                            origem.goCreate({
+                              route: "/cadastros/produtos/novo",
+                              fieldKey: "productId",
+                              entityType: "product",
+                              context: contextoDoProdutoNovo(line.key),
+                            })
+                          }
                         />
                       ) : (
                         <>
@@ -2020,53 +2151,6 @@ export function CustomerOrderPage() {
         </>
       )}
 
-      {newCustomerName !== null && (
-        <CustomerFormModal
-          mode="create"
-          customer={null}
-          onClose={() => setNewCustomerName(null)}
-          onSaved={(created) => {
-            setNewCustomerName(null);
-            if (!created) return;
-            // Volta selecionado, e as linhas já digitadas continuam onde
-            // estavam: quem cadastrou o cliente queria ESTE cliente.
-            setActiveCustomers((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
-            setCustomerId(created.id);
-          }}
-        />
-      )}
-
-      {productModalRowKey !== null && (
-        <ProductFormModal
-          mode="create"
-          product={null}
-          onClose={() => setProductModalRowKey(null)}
-          onSaved={(created) => {
-            const rowKey = productModalRowKey;
-            setProductModalRowKey(null);
-            if (!created || !rowKey) return;
-            setActiveProducts((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
-            // A linha é preenchida a partir do registro criado, não por
-            // busca em `activeProducts`: o `setState` acima só vale no
-            // próximo render, e a procura aqui devolveria `undefined`.
-            setLines((prev) =>
-              prev.map((line) =>
-                line.key === rowKey
-                  ? {
-                      ...line,
-                      productId: created.id,
-                      productCode: created.code,
-                      productName: created.name,
-                      // Como no resto da tela: a unidade vem do Finished
-                      // Product Item e só é conhecida depois de salvar.
-                      unitCode: "",
-                    }
-                  : line,
-              ),
-            );
-          }}
-        />
-      )}
     </>
   );
 }

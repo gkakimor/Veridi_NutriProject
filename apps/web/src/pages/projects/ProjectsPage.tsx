@@ -56,10 +56,26 @@ export function ProjectsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // `?novo=1` abre o cadastro direto — é como a ação rápida do Dashboard
-  // chega aqui sem duplicar o formulário numa rota própria.
+  /*
+   * `?novo=1` abre o cadastro direto — é como a ação rápida do Dashboard
+   * chega aqui sem duplicar o formulário numa rota própria.
+   *
+   * O botão daqui também põe o parâmetro, e não por simetria: o campo
+   * Cliente do formulário sai para a TELA OFICIAL de cadastro, e sair
+   * DESMONTA o modal. Quem volta precisa encontrá-lo aberto, e a URL é a
+   * única coisa que atravessa a navegação — o rascunho volta pelo contexto,
+   * mas só se houver formulário montado para recebê-lo.
+   */
   const [searchParams, setSearchParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(searchParams.get("novo") === "1");
+
+  function openCreate() {
+    setCreateOpen(true);
+    if (searchParams.get("novo") === "1") return;
+    const next = new URLSearchParams(searchParams);
+    next.set("novo", "1");
+    setSearchParams(next, { replace: true });
+  }
 
   function closeCreate() {
     setCreateOpen(false);
@@ -157,7 +173,7 @@ export function ProjectsPage() {
             operacional nasce a partir daqui.
           </p>
         </div>
-        <button type="button" className="btn btn--primary" onClick={() => setCreateOpen(true)}>
+        <button type="button" className="btn btn--primary" onClick={openCreate}>
           Novo projeto
         </button>
         <ExportCsvButton

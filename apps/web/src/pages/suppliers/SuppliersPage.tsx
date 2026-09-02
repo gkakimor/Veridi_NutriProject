@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { SupplierDTO } from "@veridi/shared";
 import { formatBrPhone } from "@veridi/shared";
@@ -121,13 +122,12 @@ export function SuppliersPage() {
             rastreabilidade.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => setModalState({ mode: "create" })}
-        >
+        {/* Leva à tela oficial, não ao modal: o cadastro passou a ter URL
+            própria, e é ela que sobrevive a um F5 e vale como link. O modal
+            continua servindo à EDIÇÃO, aberta a partir da linha. */}
+        <Link className="btn btn--primary" to="/cadastros/fornecedores/novo">
           + Novo fornecedor
-        </button>
+        </Link>
         <ExportCsvButton path="/suppliers/export.csv" filters={{ search, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 
