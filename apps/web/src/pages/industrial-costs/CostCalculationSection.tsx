@@ -319,7 +319,7 @@ export function CostCalculationSection({
       <ConfirmDialog
         open={confirmarSalvar}
         title="Salvar este cálculo?"
-        confirmLabel="Salvar cálculo"
+        confirmLabel="Salvar"
         cancelLabel="Cancelar"
         confirmTone="accent"
         message={

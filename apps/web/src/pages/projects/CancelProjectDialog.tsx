@@ -31,6 +31,12 @@ export function CancelProjectDialog({
     <ConfirmDialog
       open
       title="Cancelar o projeto?"
+      /*
+       * Exceção deliberada ao verbo curto. Num diálogo, "Cancelar" sozinho
+       * é lido como "desistir e fechar" — por isso o botão de sair aqui é
+       * "Voltar". Encurtar o confirmar para "Cancelar" devolveria a
+       * ambiguidade justamente no botão sem volta. O objeto fica.
+       */
       confirmLabel="Cancelar projeto"
       cancelLabel="Voltar"
       onCancel={onCancel}

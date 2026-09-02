@@ -828,7 +828,7 @@ export function PurchaseOrderPage() {
               disabled={saving}
               onClick={handleSaveForecastOnly}
             >
-              {saving ? "Salvando…" : "Salvar"}
+              {saving ? "Salvando…" : "Salvar previsão e observações"}
             </button>
           )}
           {isConfirmable && (

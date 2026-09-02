@@ -47,8 +47,12 @@ export function ApprovalPreviewDialog({
   return (
     <ConfirmDialog
       open
-      title="Aprovar projeto"
-      confirmLabel="Aprovar projeto"
+      // O botão que abriu este diálogo já diz "Aprovar projeto". Repetir a
+      // frase inteira aqui faz o confirmar parecer o mesmo botão de novo —
+      // quem lê rápido não sabe se avançou. O título faz a pergunta; o
+      // botão responde com o verbo.
+      title="Aprovar o projeto?"
+      confirmLabel="Aprovar"
       confirmTone="accent"
       onCancel={onCancel}
       onConfirm={onConfirm}

@@ -567,7 +567,7 @@ export function PricingPage() {
       <ConfirmDialog
         open={activateConfirm}
         title="Ativar precificação com custo incompleto?"
-        confirmLabel="Ativar precificação"
+        confirmLabel="Ativar"
         confirmTone="accent"
         message={
           <>

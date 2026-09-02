@@ -280,7 +280,7 @@ export function ReceiptDetailPage() {
                             disabled={savingCost}
                             onClick={() => handleSaveCost(line.id)}
                           >
-                            {savingCost ? "Salvando…" : "Salvar"}
+                            {savingCost ? "Salvando…" : "Salvar custo"}
                           </button>
                           <button
                             type="button"

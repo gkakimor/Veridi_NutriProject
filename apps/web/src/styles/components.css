@@ -2005,11 +2005,13 @@ input.is-invalid {
   color: var(--v-green-700);
 }
 
+/* `fixed`, não `absolute`: a bolha nasce em cabeçalho de tabela, e
+   `.table-container` tem `overflow-x: auto` — que recorta o eixo Y junto.
+   Ancorada ao viewport ela escapa de qualquer ancestral recortado. Quem
+   calcula `top`/`left` é o componente, porque só ele mede o gatilho. */
 .info-hint__bubble {
-  position: absolute;
+  position: fixed;
   z-index: 60;
-  top: calc(100% + var(--sp-1));
-  left: 0;
   display: block;
   /* Frase curta não deve virar coluna estreita, nem faixa de tela inteira. */
   width: max-content;
@@ -2031,11 +2033,10 @@ input.is-invalid {
   white-space: normal;
 }
 
-/* Perto da borda direita da janela a bolha vira para dentro. Quem mede é o
-   componente (`InfoHint`); aqui só mora a posição. */
-.info-hint__bubble--end {
-  left: auto;
-  right: 0;
+/* Enquanto não foi medida a bolha existe no DOM mas não aparece: sem isso
+   ela pisca no canto superior esquerdo antes de ir para o lugar. */
+.info-hint__bubble--medindo {
+  visibility: hidden;
 }
 
 /* ---------------- ContextHelp ---------------- */

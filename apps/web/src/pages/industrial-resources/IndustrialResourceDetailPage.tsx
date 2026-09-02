@@ -15,6 +15,8 @@ import {
   updateIndustrialResource,
 } from "../../lib/industrial-resources-api";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 /**
  * Detalhe do recurso industrial com o histórico completo de tarifas.
@@ -124,6 +126,11 @@ export function IndustrialResourceDetailPage() {
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
+
+        {/* Mesma explicação da lista, repetida aqui porque é nesta tela que a
+            tarifa é cadastrada — e é aqui que a ausência de "editar tarifa"
+            precisa de motivo, não só de ausência. */}
+        <ContextHelp topic={helpTopics["recursoIndustrial.comoFunciona"]} />
 
         <FormSection
           title="Dados do recurso"
@@ -292,7 +299,9 @@ export function IndustrialResourceDetailPage() {
       <ConfirmDialog
         open={confirmarInativacao}
         title="Inativar este recurso?"
-        confirmLabel="Inativar recurso"
+        /* O botão que abriu já diz "Inativar recurso": o confirmar responde
+            com o verbo, senão parece o mesmo botão de novo. */
+        confirmLabel="Inativar"
         cancelLabel="Cancelar"
         confirmTone="danger"
         message={

@@ -18,6 +18,14 @@ import {
   useOpenRecord,
   useRecordContext,
 } from "../../components/RecordContext";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -153,6 +161,11 @@ export function ItemsPage() {
         <ExportCsvButton path="/items/export.csv" filters={{ search, type: typeFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 
+      {/* "Item" e "produto" são a confusão de estreia desta tela, e tipo e
+          unidade travam no primeiro uso operacional — as duas coisas
+          precisam estar ditas antes do primeiro cadastro, não depois. */}
+      <ContextHelp topic={helpTopics["item.comoFunciona"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="items-search">
@@ -230,13 +243,31 @@ export function ItemsPage() {
               />
               <th>Código</th>
               <th>Nome</th>
-              <th>Tipo</th>
+              <th>
+                Tipo
+                <DicaDaColuna id="item.tipo" />
+              </th>
               <th>Família</th>
-              <th>Fonte</th>
-              <th>Unidade</th>
-              <th>Lote</th>
-              <th>Validade</th>
-              <th>Status</th>
+              <th>
+                Fonte
+                <DicaDaColuna id="item.fonte" />
+              </th>
+              <th>
+                Unidade
+                <DicaDaColuna id="item.unidade" />
+              </th>
+              <th>
+                Lote
+                <DicaDaColuna id="item.controlaLote" />
+              </th>
+              <th>
+                Validade
+                <DicaDaColuna id="item.controlaValidade" />
+              </th>
+              <th>
+                Status
+                <DicaDaColuna id="item.situacao" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

@@ -813,7 +813,7 @@ export function ShipmentPage() {
           `Conferência: ${shipment.verification.lotsVerified}/${shipment.verification.lotsRequired} ✓. ` +
           "A confirmação registrará a saída física do estoque e não poderá ser cancelada depois."
         }
-        confirmLabel="Confirmar expedição"
+        confirmLabel="Confirmar"
         confirmTone="accent"
         onCancel={() => setConfirmDialogOpen(false)}
         onConfirm={handleConfirm}

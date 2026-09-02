@@ -6,6 +6,14 @@ import { FormSection } from "../../components/FormSection";
 import { ApiValidationError } from "../../lib/api-errors";
 import { createUser, listUsers, resetUserPassword, updateUser } from "../../lib/auth-api";
 import { useAuth } from "../../app/AuthProvider";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 type Mode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; user: UserDTO };
 
@@ -100,6 +108,11 @@ export function UsersPage() {
         </button>
       </div>
 
+      {/* Inativar em vez de excluir, senha que só troca de propósito e um
+          perfil que decide o que o servidor aceita: nada disso se lê numa
+          tabela de cinco colunas. */}
+      <ContextHelp topic={helpTopics["usuario.comoFunciona"]} />
+
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
@@ -109,8 +122,14 @@ export function UsersPage() {
               <th>Código</th>
               <th>Nome</th>
               <th>E-mail</th>
-              <th>Perfil</th>
-              <th>Status</th>
+              <th>
+                Perfil
+                <DicaDaColuna id="usuario.perfil" />
+              </th>
+              <th>
+                Status
+                <DicaDaColuna id="usuario.situacao" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

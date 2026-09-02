@@ -17,6 +17,8 @@ import {
 } from "@veridi/shared";
 import type { InventoryMovementType } from "@veridi/shared";
 import { EntityLink } from "../components/EntityLink";
+import { ContextHelp } from "../components/help";
+import { helpTopics } from "../help/help-content";
 import { getDashboard } from "../lib/dashboard-api";
 import type { UserRole } from "@veridi/shared";
 import type { PeriodPreset } from "../lib/period";
@@ -317,6 +319,11 @@ export function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* O filtro de período fica logo abaixo e não vale para metade da tela.
+          É a primeira coisa que confunde, e por isso a explicação vem antes
+          do filtro, não depois dos cartões. */}
+      <ContextHelp topic={helpTopics["painel.comoFunciona"]} />
 
       <div className="dash-filter">
         <span className="dash-filter__label">Período:</span>

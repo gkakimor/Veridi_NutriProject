@@ -213,6 +213,31 @@ It remains a valid pattern only for lightweight, non-CRUD contextual
 panels (quick details, filters, secondary properties) if that need
 arises — none exist yet.
 
+### Commit-action vocabulary
+
+Screens were each inventing their own confirm label ("Criar item",
+"Criar relação", "Salvar", "Registrar tarifa", "Salvar base"), so the
+operator had to relearn which button commits on every screen. The rule:
+
+- **Creating a record:** `Criar <coisa>` — "Criar produto", "Criar
+  fornecedor", "Criar projeto". Never a bare "Criar".
+- **Editing an existing record:** `Salvar alterações`.
+- **Saving part of a document** (a document that is not created or closed
+  by this button): name the part — "Salvar observações", "Salvar custo",
+  "Salvar previsão e observações". Never a bare "Salvar": on a screen with
+  three save-shaped buttons it says nothing about which one this is.
+- **Draft:** `Salvar rascunho`, only where the saved state really is a
+  draft.
+- **Confirmation dialogs:** the confirm button carries the **short verb**
+  ("Ativar", "Confirmar", "Liberar", "Inativar", "Aprovar"), and the
+  dialog title carries the question ("Aprovar o projeto?"). Repeating the
+  opening button's full label makes the confirm read as the same button
+  again, so the reader cannot tell whether anything happened.
+  - Deliberate exception: `CancelProjectDialog` and `CancelSampleDialog`
+    keep the object ("Cancelar projeto"). In a dialog a bare "Cancelar" is
+    read as "dismiss", which is the opposite action — the ambiguity would
+    land on the irreversible button.
+
 ---
 
 # 4. Navigation baseline

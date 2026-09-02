@@ -14,7 +14,14 @@ import {
   listControlledDocuments,
 } from "../../lib/auth-api";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 /**
  * Administração → Documentos controlados.
@@ -97,6 +104,11 @@ export function ControlledDocumentsPage() {
         </button>
       </div>
 
+      {/* A tela é pequena e o alcance dela não é: é o cabeçalho de todo papel
+          impresso daqui em diante. Também é onde se descobre que revisão não
+          se edita — corrigir é criar outra. */}
+      <ContextHelp topic={helpTopics["documentoControlado.comoFunciona"]} />
+
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
@@ -105,11 +117,17 @@ export function ControlledDocumentsPage() {
             <tr>
               <th>Tipo</th>
               <th>Código</th>
-              <th>Revisão</th>
+              <th>
+                Revisão
+                <DicaDaColuna id="documentoControlado.revisao" />
+              </th>
               <th>Data da revisão</th>
               <th>Elaborado por</th>
               <th>Aprovado por</th>
-              <th>Situação</th>
+              <th>
+                Situação
+                <DicaDaColuna id="documentoControlado.vigente" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

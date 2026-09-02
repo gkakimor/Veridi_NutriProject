@@ -1,5 +1,12 @@
 // Veridi Nutrition — schema Prisma
 
+/// ATENCAO: as acoes de ON DELETE que valem sao as das migrations, nao a
+/// opcionalidade dos campos deste arquivo. Relacao opcional (`Tipo?`) sem
+/// `onDelete:` sugere SET NULL, mas boa parte delas virou ON DELETE RESTRICT
+/// no banco. Antes de escrever script de manutencao ou raciocinar sobre
+/// cascata, confira a acao real: `node scripts/maintenance/fk-order.mjs` le
+/// `pg_constraint`, imprime a ordem de remocao e lista cada divergencia.
+
 generator client {
   provider = "prisma-client-js"
 }

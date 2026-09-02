@@ -14,7 +14,7 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 7 |
+| LOW | 3 |
 
 Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
@@ -24,30 +24,51 @@ correções em [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md).
 
 ## Pendências abertas
 
-### 1. Rótulos de ação divergentes entre telas — LOW
+### 1. Rótulos de ação divergentes entre telas — resolvido
 
 "Criar item", "Criar relação", "Criar fornecedor", "Salvar", "Registrar
-tarifa", "Salvar rascunho", "Salvar base". Cada tela pede ao operador que
-reaprenda qual botão confirma.
+tarifa", "Salvar rascunho", "Salvar base". Cada tela pedia ao operador que
+reaprendesse qual botão confirma.
 
-**Decisão / próxima ação:** uma passada de nomenclatura, não redesign. Definir o
-vocabulário de commit e aplicar. Nenhum operador levantou isso nos três casos —
-candidato natural a entrar depois do feedback da Veridi, que pode mudar o
-vocabulário escolhido.
+O vocabulário foi definido e ficou registrado em
+[UI_BRAND.md](UI_BRAND.md), seção *Commit-action vocabulary*: `Criar <coisa>`
+para criar, `Salvar alterações` para editar, `Salvar <parte>` quando o botão
+grava um pedaço de um documento maior, `Salvar rascunho` só onde o estado
+salvo é mesmo rascunho.
 
-### 2. Diálogo de confirmação repete o rótulo de quem o abriu — LOW
+Aplicado onde o rótulo era genérico. Os seis botões que diziam só "Salvar"
+passaram a dizer o que salvam — "Salvar observações" (ordem de produção),
+"Salvar prazo e observações" (pedido), "Salvar previsão e observações" (ordem
+de compra), "Salvar custo" (linha do recebimento) — e o formulário de Projeto
+passou a distinguir "Criar projeto" de "Salvar alterações". Nenhum bare
+"Salvar" restou fora de diálogo.
+
+**Decisão / próxima ação:** nenhuma. Se o feedback da Veridi trouxer outro
+vocabulário, a mudança é editar a seção do `UI_BRAND.md` e reaplicar.
+
+### 2. Diálogo de confirmação repete o rótulo de quem o abriu — resolvido
 
 "Ativar versão" abria diálogo cujo confirmar também era "Ativar versão"; idem
 "Confirmar OC", "Confirmar recebimento" e "Ativar estrutura". O texto do
 diálogo é bom — diz o que se torna imutável. Ambíguo é só o rótulo do botão.
 
-**Estado parcial, sem fechamento comprovado:** hoje a maioria dos diálogos já
-usa verbo curto ("Ativar", "Confirmar", "Liberar", "Inativar"), mas
-`IndustrialResourceDetailPage`, `CancelProjectDialog` e `ApprovalPreviewDialog`
-ainda repetem o rótulo inteiro. Não marcado como resolvido: a correção nunca
-foi feita como passada deliberada.
+**Fechado como passada deliberada.** Auditados todos os `confirmLabel` do web
+contra o rótulo do botão que abre cada diálogo. Oito repetiam a frase inteira
+e passaram ao verbo curto, com o objeto migrando para o título:
+`ApprovalPreviewDialog` ("Aprovar o projeto?" › "Aprovar"),
+`IndustrialResourceDetailPage` e `SupplierItemDetailModal` ("Inativar"),
+`CustomerOrderPage` e `ShipmentPage` ("Confirmar"), `ProductionOrderPage`
+("Liberar"), `BillingPage` ("Emitir"), `PricingPage` ("Ativar") e
+`CostCalculationSection` ("Salvar").
 
-**Decisão / próxima ação:** mesma passada de nomenclatura do item 1.
+**Exceção deliberada, documentada no código:** `CancelProjectDialog` e
+`CancelSampleDialog` mantêm o objeto ("Cancelar projeto", "Cancelar
+amostra"). Num diálogo, "Cancelar" sozinho é lido como "desistir e fechar" —
+a ação oposta. Encurtar devolveria a ambiguidade justamente no botão sem
+volta.
+
+**Decisão / próxima ação:** nenhuma. Regra em
+[PRODUCT_RULES.md](PRODUCT_RULES.md) §45 e em [UI_BRAND.md](UI_BRAND.md).
 
 ### 3. `pnpm test` quebra de forma intermitente no monorepo — LOW
 
@@ -119,7 +140,7 @@ quem pertencem os 348 — ou se eles ficam como estão, já que o histórico
 deles é anterior ao sistema. Os 54 itens órfãos são candidatos a inativação,
 não a exclusão.
 
-### 7. O schema Prisma não descreve as ações de delete reais — LOW
+### 7. Ordem real de delete — resolvido com `fk-order.mjs`
 
 Ao limpar o banco de produção, a ordem de remoção derivada do
 `schema.prisma` quebrou: várias relações aparecem como opcionais ali — o que
@@ -127,26 +148,59 @@ sugeriria `SET NULL` —, mas as migrations criaram **`ON DELETE RESTRICT`** no
 banco. A limpeza só passou calculando a ordem por ordenação topológica sobre
 `pg_constraint`, que é a fonte da verdade.
 
-Não afeta operação: o comportamento correto é o do banco, e ele está certo.
-Afeta quem for escrever script de manutenção ou raciocinar sobre cascata
-lendo o schema.
+Isso vivia só como parágrafo de backlog. Agora tem ferramenta:
+[`fk-order.mjs`](../scripts/maintenance/fk-order.mjs), somente leitura, no
+mesmo padrão dos outros scripts de manutenção —
+`railway run --service Postgres node scripts/maintenance/fk-order.mjs`, ou
+`pnpm exec dotenv -e .env -- node scripts/maintenance/fk-order.mjs` contra a
+base local. Lê `pg_constraint` e imprime:
 
-**Decisão / próxima ação:** nenhuma ação obrigatória. Se alguém for mexer em
-relação com deleção, conferir `pg_constraint` antes de confiar no schema.
+- toda FK do schema `public` — tabela filha, tabela pai, coluna e as ações
+  reais de `ON DELETE` e `ON UPDATE`;
+- a ordem topológica de remoção, filhas antes das pais, que é o que um script
+  de limpeza precisa. RESTRICT, NO ACTION e CASCADE ordenam; SET NULL e SET
+  DEFAULT não;
+- ciclo de FK, quando existe, com as tabelas que fecham o anel — e sai com
+  código 1, porque nesse caso a ordem impressa está incompleta;
+- as divergências contra o `schema.prisma`, destacando a armadilha original:
+  relação opcional sem `onDelete:` explícito que no banco trava o delete.
 
-### 8. Bolha do InfoHint dentro de tabela rolável — LOW
+`--json` para outro script consumir a saída.
 
-O `InfoHint` posiciona a bolha em `position: absolute`. Nos cabeçalhos da
-tabela de impacto de material do Plano de Atendimento, o ancestral
-`.table-container` tem `overflow-x: auto`, que também recorta o eixo Y — com
-poucas linhas na tabela a bolha pode aparecer cortada.
+Na base local: **194 FKs, 64 tabelas, nenhum ciclo, 27 divergências — todas a
+mesma armadilha** (`Tipo?` no Prisma, `RESTRICT` no banco), entre elas
+`lots.productionOrderId`, a que derrubou a primeira limpeza. `ON UPDATE` é
+`CASCADE` nas 194. Seis auto-referências, uma delas `RESTRICT`
+(`material_reservation_lines.replacesLineId`), que importa para quem apagar
+linha a linha.
 
-Não reproduzido: os cinco ⓘ abriram corretamente na validação em 1280, 1366
-e 1600. Fica registrado porque a condição existe no CSS.
+O aviso também ficou no topo do `schema.prisma`, que é onde se tropeça nele.
 
-**Decisão / próxima ação:** se aparecer, dar folga vertical ao container ou
-tratar `.info-hint__bubble` dentro de tabela. Verificar com tabela de uma
-linha só.
+**Decisão / próxima ação:** nenhuma. Conferir a ação real deixou de depender
+de alguém lembrar deste parágrafo.
+
+### 8. Bolha do InfoHint dentro de tabela rolável — resolvido
+
+O `InfoHint` posicionava a bolha em `position: absolute`. Dentro de
+`.table-container`, cujo `overflow-x: auto` recorta o eixo Y junto, tabela com
+poucas linhas cortava a explicação.
+
+Era condição teórica quando foi registrado — havia cinco ⓘ no sistema, todos
+em telas que não reproduziam. Deixou de ser: a rodada de ajuda contextual
+levou o ícone a 98 pontos, e a maioria é cabeçalho de coluna, exatamente o
+caso descrito.
+
+**Corrigido na origem.** A bolha passou a ser `position: fixed`, com `top` e
+`left` medidos a partir do gatilho — ancorada ao viewport, escapa de qualquer
+ancestral recortado. Vira para dentro quando não cabe à direita, abre para
+cima quando não cabe embaixo, e recalcula na rolagem (com captura, porque a
+rolagem que importa é a do container, que não sobe por bubbling) e no resize.
+Enquanto não foi medida fica invisível, para não piscar no canto.
+
+Teste em `help-kit.test.tsx` renderiza o ⓘ dentro de um `.table-container` e
+prova que a bolha recebeu coordenada.
+
+**Decisão / próxima ação:** nenhuma.
 
 ### Decisões de produto em aberto — não bloqueantes
 
@@ -173,8 +227,9 @@ depende da prática real da casa, não de escolha técnica.
 e o feedback ser classificado. Roteiro da sessão e grade de classificação em
 [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md).
 
-Os três LOW acima não bloqueiam a validação e não devem ser corrigidos durante
-a reunião.
+Os três LOW ainda abertos — a instabilidade da suíte (3), o smoke autenticado
+em produção (5) e o dado legado sem cliente (6) — não bloqueiam a validação e
+não devem ser corrigidos durante a reunião.
 
 ---
 
@@ -194,6 +249,22 @@ estavam resolvidas** — a entrada era obsoleta, não pendência.
 
 Se Product Ownership quiser política diferente, isso é pedido de mudança — não
 pendência herdada.
+
+### Sessões de produção — inventariadas, revogação dispensada
+
+A tabela tem 542 sessões: **539 expiradas**, 4 já revogadas e **3 vigentes**,
+todas de `admin@veridi.demo` e criadas nas horas anteriores à conferência.
+Nenhum usuário inativo tinha sessão viva — o caso que exigiria ação.
+
+Product Ownership dispensou a revogação (2026-09-02): as três vigentes são
+sessões de trabalho em curso, e derrubá-las custaria login sem ganhar nada.
+As expiradas não abrem porta e ficam como histórico de acesso.
+
+Não é pendência. Reabrir só se aparecer sessão vigente de usuário inativo ou
+de conta que não deveria existir — é o que
+[`prod-sessions.mjs`](../scripts/maintenance/prod-sessions.mjs) confere, e
+[`prod-sessions-revoke.mjs`](../scripts/maintenance/prod-sessions-revoke.mjs)
+executa, simulando por padrão.
 
 ---
 

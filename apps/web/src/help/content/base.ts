@@ -114,7 +114,33 @@ export const baseTopics = {
     module: "comercial",
     title: "Como o Plano de Atendimento decide o que fazer",
     summary:
-      "O Plano é projeção, não decisão: ele lê o pedido confirmado, compara com o estoque disponível e propõe reservar o que existe e produzir o que falta. Nada muda no estoque enquanto você não aplicar.",
+      "O Plano de Atendimento é onde um pedido confirmado vira decisão linha a linha: quanto sai do produto acabado que já existe e quanto precisa ser produzido. Até você aplicar, ele é leitura — compara o pedido com o saldo livre de agora e propõe a divisão, sem reservar nada e sem criar ordem nenhuma.",
+    concepts: [
+      {
+        term: "Reservar × produzir",
+        text: "As duas colunas editáveis de cada linha: quanto sai do estoque que já existe e quanto entra na fila de produção. A soma das duas tem que fechar exatamente a quantidade pedida da linha, senão o plano não aplica.",
+      },
+      {
+        term: "Disponível",
+        text: "O saldo livre do produto acabado: o que está em estoque menos o que já está reservado para outro compromisso. Lote bloqueado, aguardando liberação da qualidade ou vencido continua no físico e não entra aqui. É este número que limita quanto dá para reservar.",
+      },
+      {
+        term: "Situação da linha",
+        text: "Estoque suficiente, Requer produção ou Sem formulação ativa. A última não impede aplicar: a ordem de produção nasce mesmo assim, só que sem receita — e enquanto não tiver versão escolhida, a necessidade de material dela não aparece.",
+      },
+      {
+        term: "Necessidade de material",
+        text: "A segunda tabela: matéria-prima e embalagem que a produção proposta vai exigir, somadas entre todas as linhas que vão produzir. Sai da versão ativa da formulação de cada produto, e o mesmo material usado em dois produtos aparece numa linha só.",
+      },
+      {
+        term: "Falta",
+        text: "Necessário menos disponível, material a material. É falta física: o que está em compra aparece na coluna ao lado e não abate a conta, porque só vira estoque no recebimento.",
+      },
+      {
+        term: "Aplicar",
+        text: "O único ato desta tela que grava alguma coisa. A disponibilidade é recalculada na hora, a reserva do produto acabado e as ordens de produção em rascunho entram na mesma transação, e o pedido passa a Em atendimento. Depois disso o plano não é recalculado nem reaplicado.",
+      },
+    ],
     flow: [
       { label: "Pedido" },
       { label: "Estoque" },
@@ -155,7 +181,33 @@ export const baseTopics = {
     module: "producao",
     title: "Como a ordem de produção movimenta o estoque",
     summary:
-      "A ordem separa dois momentos que costumam ser confundidos: reservar material é compromisso, consumir material é baixa física. Só o consumo tira quantidade do estoque.",
+      "A ordem de produção é o documento de uma produção: um produto, uma quantidade planejada, uma versão da formulação — e o registro do que foi separado, consumido e produzido de verdade. Dentro dela convivem dois momentos que costumam ser confundidos: reservar material é compromisso, consumir material é baixa física. Só o consumo tira quantidade do estoque.",
+    concepts: [
+      {
+        term: "Situação",
+        text: "Rascunho, Planejada, Liberada, Em produção, Concluída ou Cancelada. É a situação que diz o que ainda dá para fazer: só rascunho aceita trocar produto, formulação e quantidade, e só ordem planejada pode ser liberada.",
+      },
+      {
+        term: "Versão congelada",
+        text: "Produto, item de saída e versão da formulação são copiados para dentro da ordem no momento em que ela é planejada, não quando é criada. Enquanto rascunho, a tela mostra o estado atual do produto; depois de planejada, ativar uma versão nova não reescreve esta ordem.",
+      },
+      {
+        term: "Necessidade de materiais",
+        text: "O que a formulação exige para a quantidade planejada, já convertido para a unidade de estoque de cada item. Físico, reservado, disponível, em compra e falta ao lado são calculados na hora a partir do estoque atual — nenhum deles é reserva.",
+      },
+      {
+        term: "Liberação",
+        text: "O ato que transforma necessidade em reserva e prende lotes concretos à ordem. Exige cobertura total por estoque disponível, material a material: material em compra não cobre, e se uma linha não fecha, nenhuma reserva é feita.",
+      },
+      {
+        term: "Planejado × produzido",
+        text: "Planejado é a quantidade congelada no planejamento; produzido é a soma dos apontamentos reais. Produção parcial é normal, mas o produzido nunca ultrapassa o planejado. Antes de concluir, a diferença aparece como Restante; ao concluir, vira Variação e exige motivo.",
+      },
+      {
+        term: "Folha de Receita",
+        text: "O documento de execução da produção: quem pesou, quanto, de qual lote e quando, parte por parte quando a ordem é fracionada. A pesagem registrada ali baixa o material pelo mesmo consumo real desta tela — é registro de execução, não um segundo estoque.",
+      },
+    ],
     flow: [
       { label: "OP" },
       { label: "Reserva" },
@@ -215,6 +267,36 @@ export const baseTopics = {
     title: "Como o CMV de uma quantidade é montado",
     summary:
       "O CMV responde “quanto custa produzir esta quantidade”. Não é um cadastro à parte: soma a formulação, os recursos e as premissas da estrutura de custos usando o cálculo em vigor na data de referência.",
+    concepts: [
+      {
+        term: "Estrutura de custos",
+        text: "O documento que declara sobre qual versão da formulação se calcula, qual é a base de produção e quais recursos, energia e premissas entram. Ela congela a receita de que foi feita: ativar uma versão nova da formulação depois não reescreve a estrutura que já está ativa.",
+      },
+      {
+        term: "Cálculo de referência",
+        text: "O cálculo salvo que serve de base econômica: aplica as referências de custo de uma data à estrutura e congela o resultado. É ele que a precificação e o orçamento leem. Enquanto não existir nenhum cálculo salvo não existe CMV, e a tela diz isso em vez de improvisar uma base.",
+      },
+      {
+        term: "Data de referência",
+        text: "O dia sobre o qual se pergunta. Ela seleciona o cálculo em vigor até aquela data — o sistema nunca escolhe o dia sozinho. Trocar a data pode trocar a base inteira do número.",
+      },
+      {
+        term: "Lote de referência",
+        text: "A base de produção declarada na estrutura. A quantidade simulada é convertida em número de lotes, e é isso que faz o unitário mudar com a quantidade: custo fixo por lote não dilui abaixo de um lote.",
+      },
+      {
+        term: "Qualidade do custo",
+        text: "O veredito sobre de onde vieram os preços: completo com referências reais de compra, completo com estimativa de fornecedor, parcial quando há custo não informado, ou sem custo conhecido. É ela que diz o quanto o número sustenta uma decisão.",
+      },
+      {
+        term: "Subtotal conhecido",
+        text: "O que dá para somar quando algum custo falta. Aparece rotulado como subtotal, ao lado de “CMV indisponível” — nunca no lugar do total e nunca como R$ 0,00. Zero informado é valor real; desconhecido não é.",
+      },
+      {
+        term: "Com os dados de hoje",
+        text: "Simulação sobre as premissas correntes, exibida ao lado do número congelado, para responder quanto custaria com o que se sabe agora. Não é base econômica: nada dela vira preço nem custo de ordem de produção.",
+      },
+    ],
     flow: [
       { label: "Formulação" },
       { label: "Materiais" },
@@ -268,6 +350,36 @@ export const baseTopics = {
     title: "O que o Faturamento faz — e o que ele não faz",
     summary:
       "O faturamento é o documento comercial do que foi efetivamente expedido. Ele fecha o ciclo do pedido, mas não emite Nota Fiscal, não movimenta estoque e não é Contas a Receber.",
+    concepts: [
+      {
+        term: "Aguardando faturamento",
+        text: "A fila de expedições confirmadas que ainda não têm faturamento ativo. Cada expedição é faturada por um documento de cada vez; cancelar o rascunho devolve a expedição para essa fila.",
+      },
+      {
+        term: "Quantidade faturada",
+        text: "Vem da expedição confirmada e não é editável aqui. Nunca é a quantidade pedida, a reservada nem a produzida: fatura-se o que saiu fisicamente.",
+      },
+      {
+        term: "Preço acordado",
+        text: "O preço unitário congelado no pedido quando o orçamento foi aceito, copiado para o faturamento na criação. Onde ele existe, não se redigita. Fica em branco só quando o pedido de origem não tinha preço.",
+      },
+      {
+        term: "Preço faturado",
+        text: "O que este documento efetivamente cobra. Nasce igual ao acordado e só difere depois de uma alteração explícita; onde não houve acordo, é informado à mão aqui.",
+      },
+      {
+        term: "Alteração de preço",
+        text: "Faturar diferente do acordado é ação restrita: só perfil comercial ou administrativo pode fazer, e o motivo é obrigatório. O acordado não é substituído — os dois valores, o motivo, o autor e a data ficam no documento. Voltar ao valor acordado desfaz a alteração em vez de registrar outra.",
+      },
+      {
+        term: "Situação",
+        text: "Rascunho, Emitido ou Cancelado. Só rascunho aceita edição, alteração de preço, emissão e cancelamento — emitido é histórico.",
+      },
+      {
+        term: "Valor total",
+        text: "Só existe quando todas as linhas têm preço; faltando alguma, o documento mostra valores incompletos em vez de somar parte. Preço não trava a emissão: o faturamento quantitativo vale mesmo sem valor.",
+      },
+    ],
     flow: [{ label: "Pedido" }, { label: "Expedição" }, { label: "Faturamento", tone: "accent" }],
     steps: [
       {
