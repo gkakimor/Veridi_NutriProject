@@ -90,6 +90,15 @@ fantasia e CNPJ e cadastro de cliente no contexto. Produto em uso não muda
 de Cliente. Sem migration: `finishedProductItemId` já era `@unique`. Regras
 em [PRODUCT_RULES.md](PRODUCT_RULES.md) §43.
 
+**Prontidão para o cliente + navegação** (`feat/client-readiness-navigation`).
+A Consulta do Cliente ganhou **Produtos** e **Estoque** — este com duas
+visões separadas, produto acabado da Veridi e material do próprio Cliente.
+Breadcrumb canônico chegou às telas principais; dentro da Consulta a trilha
+contextual do Cliente permanece. O kit de ajuda contextual (InfoHint,
+ContextHelp, FlowSteps) foi integrado em Formulação, Plano de Atendimento,
+Ordem de Produção, CMV e Faturamento. Sem migration. Regras em
+[PRODUCT_RULES.md](PRODUCT_RULES.md) §44.
+
 Na mesma rodada, **Fornecedor passou a usar os validadores compartilhados de
 e-mail e telefone** — antes texto livre. Nenhum dos 219 fornecedores tem esses
 campos preenchidos, então nenhum registro existente deixou de ser editável.
