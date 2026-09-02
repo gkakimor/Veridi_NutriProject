@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -30,7 +31,7 @@ async function criarProdutoSemUnidadesPorCaixa(app: ReturnType<typeof buildTestA
   const criado = await app.inject({
     method: "POST",
     url: "/products",
-    payload: { name: `Produto opcional ${marca()}` },
+    payload: { customerId: await fixtureCustomerId(), name: `Produto opcional ${marca()}` },
   });
   const product = criado.json();
   fixtureProductIds.push(product.id);

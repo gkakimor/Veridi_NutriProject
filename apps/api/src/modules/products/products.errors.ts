@@ -54,3 +54,29 @@ export class DuplicateFinishedItemError extends Error {
     this.name = "DuplicateFinishedItemError";
   }
 }
+
+/** A unidade de estoque do item de produto acabado precisa existir. */
+export class FinishedUnitNotFoundError extends Error {
+  constructor(code: string) {
+    super(`Unidade de estoque inválida: ${code}`);
+    this.name = "FinishedUnitNotFoundError";
+  }
+}
+
+/**
+ * Produto já em uso não muda de Cliente.
+ *
+ * Trocar o dono de um produto que já tem pedido, ordem de produção ou
+ * orçamento reescreveria, em silêncio, de quem era aquele histórico. O
+ * caminho correto é cadastrar um produto do outro Cliente — inclusive porque
+ * cada Cliente tem o seu item de produto acabado.
+ */
+export class ProductCustomerLockedError extends Error {
+  constructor(code: string, reasons: string[]) {
+    super(
+      `O produto ${code} não pode mudar de cliente: ${reasons.join(", ")}. ` +
+        "Cadastre um produto para o outro cliente.",
+    );
+    this.name = "ProductCustomerLockedError";
+  }
+}

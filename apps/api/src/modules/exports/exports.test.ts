@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 import { buildCsv, csvDecimal, csvFileName, csvMoney, sanitizeCsvValue } from "../../lib/csv.js";
 import { csvExportPaths } from "./exports.routes.js";
@@ -394,7 +395,7 @@ describe("Exportação CSV — relatórios", () => {
       await app.inject({
         method: "POST",
         url: "/products",
-        payload: { name: `Produto Exportação ${marker()}`, finishedProductItemId: finishedItem.id },
+        payload: { customerId: await fixtureCustomerId(), name: `Produto Exportação ${marker()}`, finishedProductItemId: finishedItem.id },
       })
     ).json();
     fixtureProductIds.push(product.id);
@@ -513,7 +514,7 @@ describe("Exportação CSV — relatórios", () => {
       await app.inject({
         method: "POST",
         url: "/products",
-        payload: { name: `Produto Custo ${marker()}`, finishedProductItemId: finishedItem.id },
+        payload: { customerId: await fixtureCustomerId(), name: `Produto Custo ${marker()}`, finishedProductItemId: finishedItem.id },
       })
     ).json();
     fixtureProductIds.push(product.id);

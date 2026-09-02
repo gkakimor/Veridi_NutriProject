@@ -76,7 +76,7 @@ export const navigation: NavGroup[] = [
     items: [
       { label: "Clientes", path: "/cadastros/clientes", implemented: true },
       { label: "Fornecedores", path: "/cadastros/fornecedores", implemented: true },
-      { label: "Itens", path: "/cadastros/itens", implemented: true },
+      { label: "Itens de estoque", path: "/cadastros/itens", implemented: true },
       { label: "Produtos", path: "/cadastros/produtos", implemented: true },
     ],
   },

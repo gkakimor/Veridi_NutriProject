@@ -2898,3 +2898,39 @@ transacionais continuam nos módulos operacionais, que continuam sendo a única
 autoridade sobre elas. A Consulta também não recalcula dinheiro: total
 faturado nasce linha a linha no módulo de Faturamento e não é somado aqui em
 paralelo.
+
+
+---
+
+## §43 — Produto e o seu item de produto acabado
+
+### Produto pertence a um Cliente
+
+Um Produto tem um dono, e só um. Dois Clientes com o mesmo produto técnico
+— "Cafeína 60 cápsulas" para os dois — são dois Produtos, cada um com o seu
+item de produto acabado. O reuso entre Clientes acontece por **Template de
+Formulação**, nunca compartilhando Produto ou item.
+
+A exigência vale na **criação**. Produto importado do legado sem cliente
+resolvido continua editável: exigir o vínculo na edição tornaria
+inalteráveis registros que já estão em uso.
+
+### O Produto cria o seu item de estoque
+
+No fluxo normal ninguém cadastra o item de produto acabado à mão. Ele nasce
+com o Produto, na mesma transação, com código da sequence oficial
+(`PA-000123`), controle de lote, validade e liberação da Qualidade. Item e
+Produto continuam entidades separadas — o item responde por estoque, o
+Produto por cliente, formulação, custo e preço —, mas o usuário só cadastra
+um dos dois.
+
+Vincular um item existente continua possível pela API, para importação e
+migração, e é validado: precisa ser do tipo produto acabado, estar ativo e
+não pertencer a outro Produto. O banco garante o 1:1.
+
+### Produto em uso não muda de Cliente
+
+Havendo pedido, ordem de produção, orçamento ou origem em projeto, o
+Produto não migra para outro Cliente: isso reescreveria em silêncio de quem
+era aquele histórico. O caminho é cadastrar um Produto do outro Cliente.
+Produto ainda sem uso pode ser corrigido.

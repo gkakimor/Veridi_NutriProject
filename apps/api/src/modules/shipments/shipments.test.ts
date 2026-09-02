@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -89,11 +90,14 @@ function marker(): string {
 
 async function createCustomer() {
   const prisma = getPrisma();
-  const m = marker();
-  const customer = await prisma.customer.create({
-    data: { code: `CLI-EXP-${m}`, legalName: `Cliente Expedição Teste ${m}`, active: true },
+  /*
+   * O MESMO cliente do produto: produto do Cliente A não é produzido sob
+   * pedido do Cliente B (`resolveOrderCustomerId`). Enquanto o produto não
+   * tinha dono isso nunca disparava; agora todo produto tem cliente.
+   */
+  const customer = await prisma.customer.findUniqueOrThrow({
+    where: { id: await fixtureCustomerId() },
   });
-  fixtureCustomerIds.push(customer.id);
   return customer;
 }
 
@@ -151,7 +155,7 @@ async function createProduct(app: App, finishedItemId: string) {
   const response = await app.inject({
     method: "POST",
     url: "/products",
-    payload: { name: `Produto Expedição Teste ${marker()}`, finishedProductItemId: finishedItemId },
+    payload: { customerId: await fixtureCustomerId(), name: `Produto Expedição Teste ${marker()}`, finishedProductItemId: finishedItemId },
   });
   const product = response.json();
   fixtureProductIds.push(product.id);

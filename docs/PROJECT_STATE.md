@@ -80,6 +80,16 @@ recusa com 404 entidade de outro Cliente. Produção/OP ficou de fora:
 extras por linha, então a aba exigiria read model próprio. Regra durável em
 [PRODUCT_RULES.md](PRODUCT_RULES.md) §42.
 
+**Produto + item de produto acabado** (`feat/product-finished-item-simplification`).
+O usuário cadastrava o item de produto acabado em Itens e depois o
+selecionava no Produto — dois cadastros para uma coisa só. Agora o Produto
+cria o seu item na mesma transação, e "Produto acabado" saiu da criação
+manual em Itens, que virou **Itens de estoque**. Cliente passou a ser
+obrigatório na criação do Produto, com busca por código, razão social,
+fantasia e CNPJ e cadastro de cliente no contexto. Produto em uso não muda
+de Cliente. Sem migration: `finishedProductItemId` já era `@unique`. Regras
+em [PRODUCT_RULES.md](PRODUCT_RULES.md) §43.
+
 Na mesma rodada, **Fornecedor passou a usar os validadores compartilhados de
 e-mail e telefone** — antes texto livre. Nenhum dos 219 fornecedores tem esses
 campos preenchidos, então nenhum registro existente deixou de ser editável.

@@ -33,8 +33,29 @@ const industrialProductFields = {
 
 export const createProductSchema = z.object({
   name: z.string().trim().min(1, "Nome é obrigatório").max(200),
-  customerId: optionalRelationId,
+  /**
+   * Produto pertence a UM Cliente, e no cadastro isso é obrigatório: um
+   * produto sem dono não tem a quem faturar nem de quem herdar contexto
+   * comercial.
+   *
+   * Vale só para a CRIAÇÃO. A base traz produtos importados do legado sem
+   * cliente resolvido, e exigir o vínculo na edição os tornaria
+   * inalteráveis — ver `updateProductSchema`.
+   */
+  customerId: z
+    .string({ required_error: "Cliente é obrigatório" })
+    .trim()
+    .min(1, "Cliente é obrigatório"),
+  /**
+   * Item de produto acabado. Ausente, o sistema cria o item automaticamente
+   * — que é o caminho normal da tela. Informado, é validado com rigor
+   * (tipo, ativo e não pertencer a outro produto).
+   *
+   * Continua aceito para não quebrar importação, migração e integrações.
+   */
   finishedProductItemId: optionalRelationId,
+  /** Unidade de estoque do item criado automaticamente. */
+  finishedUnitCode: z.string().trim().min(1).max(20).optional(),
   ...industrialProductFields,
   externalCode: optionalNullableText(100),
   notes: optionalNullableText(1000),

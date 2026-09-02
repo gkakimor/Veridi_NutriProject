@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { Prisma as PrismaTypes, ProductLifecycle, Project, User } from "@prisma/client";
 import type { ProjectCostingSummaryDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { createFinishedItemForProduct } from "../items/finished-item-for-product.js";
 
 type PrismaOrTx = PrismaTypes.TransactionClient;
 
@@ -60,22 +61,12 @@ export async function createProjectProduct(
   const unit = await tx.unitOfMeasure.findUnique({ where: { code: input.finishedUnitCode } });
   if (!unit) throw new Error(`Unidade não encontrada: ${input.finishedUnitCode}`);
 
-  const itemCodeRows = await tx.$queryRawUnsafe<{ nextval: bigint }[]>(
-    "SELECT nextval('item_code_finished_product_seq') AS nextval",
-  );
-  const itemCode = `PA-${(itemCodeRows[0]?.nextval ?? 1n).toString().padStart(6, "0")}`;
-
-  const finishedItem = await tx.item.create({
-    data: {
-      code: itemCode,
-      type: "FINISHED_PRODUCT",
-      name: input.name ?? project.name,
-      unitCode: input.finishedUnitCode,
-      controlsLot: true,
-      controlsExpiry: true,
-      requiresQualityRelease: true,
-      active: true,
-    },
+  // Mesma construção do cadastro direto de Produto — ver
+  // `items/finished-item-for-product`. Duas definições de "como nasce o PA"
+  // divergiriam com o tempo.
+  const finishedItem = await createFinishedItemForProduct(tx, {
+    name: input.name ?? project.name,
+    unitCode: input.finishedUnitCode,
   });
 
   const productCodeRows = await tx.$queryRawUnsafe<{ nextval: bigint }[]>(

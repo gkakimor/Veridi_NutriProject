@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -180,11 +181,25 @@ async function createProductWithFormulation(
       payload: {
         name: `Produto Owner Teste ${marker()}`,
         finishedProductItemId: finishedItem.id,
-        ...(customerId ? { customerId } : {}),
+        customerId: customerId ?? (await fixtureCustomerId()),
       },
     })
   ).json();
   fixtureProductIds.push(product.id);
+
+  /*
+   * Produto SEM cliente não é mais criável pela API — a regra passou a exigir
+   * dono. Mas o estado existe na base (produtos importados do legado), e é
+   * justamente ele que estes testes precisam: material do cliente numa OP de
+   * produto sem cliente definido. Montado direto no banco, que é de onde ele
+   * realmente vem.
+   */
+  if (customerId === null) {
+    await getPrisma().product.update({
+      where: { id: product.id },
+      data: { customerId: null },
+    });
+  }
 
   const version = (
     await app.inject({ method: "POST", url: `/products/${product.id}/formulation-versions`, payload: {} })

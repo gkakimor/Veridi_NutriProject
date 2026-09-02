@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -86,14 +87,20 @@ function marker(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/**
+ * O MESMO cliente do produto.
+ *
+ * Produto do Cliente A não é produzido sob pedido do Cliente B — a regra
+ * está em `resolveOrderCustomerId`. Enquanto o produto não tinha dono, o
+ * pedido podia ser de qualquer um; agora todo produto tem cliente, e usar
+ * um cliente diferente aqui faria o Plano de Atendimento recusar por
+ * divergência, num arquivo que não testa nada disso.
+ *
+ * Não entra na limpeza: é a fixture compartilhada, criada uma vez.
+ */
 async function createCustomer() {
-  const prisma = getPrisma();
-  const m = marker();
-  const customer = await prisma.customer.create({
-    data: { code: `CLI-PS-${m}`, legalName: `Cliente Compra Teste ${m}`, active: true },
-  });
-  fixtureCustomerIds.push(customer.id);
-  return customer;
+  const id = await fixtureCustomerId();
+  return (await getPrisma().customer.findUniqueOrThrow({ where: { id } }));
 }
 
 async function createSupplier(overrides: { active?: boolean } = {}) {
@@ -160,7 +167,7 @@ async function createProductWithFormulation(
   const productResp = await app.inject({
     method: "POST",
     url: "/products",
-    payload: { name: `Produto Compra Teste ${m}`, finishedProductItemId: finishedItem.id },
+    payload: { customerId: await fixtureCustomerId(), name: `Produto Compra Teste ${m}`, finishedProductItemId: finishedItem.id },
   });
   const product = productResp.json();
   fixtureProductIds.push(product.id);

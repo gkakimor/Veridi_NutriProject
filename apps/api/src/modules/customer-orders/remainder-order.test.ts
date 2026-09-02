@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -125,7 +126,7 @@ async function criarProduto(app: App, finishedItemId: string) {
     await app.inject({
       method: "POST",
       url: "/products",
-      payload: { name: `Produto Saldo ${m}`, finishedProductItemId: finishedItemId },
+      payload: { customerId: await fixtureCustomerId(), name: `Produto Saldo ${m}`, finishedProductItemId: finishedItemId },
     })
   ).json();
   fixtureProductIds.push(product.id);
@@ -150,12 +151,15 @@ async function pedidoDe100(app: App) {
   const acabado = await criarItemAcabado();
   const product = await criarProduto(app, acabado.id);
   const prisma = getPrisma();
-  const m = marca();
 
-  const customer = await prisma.customer.create({
-    data: { code: `CLI-SALDO-${m}`, legalName: `Cliente Saldo ${m}` },
+  /*
+   * O MESMO cliente do produto: produto do Cliente A não é produzido sob
+   * pedido do Cliente B (`resolveOrderCustomerId`). Enquanto o produto não
+   * tinha dono isso nunca disparava; agora todo produto tem cliente.
+   */
+  const customer = await prisma.customer.findUniqueOrThrow({
+    where: { id: await fixtureCustomerId() },
   });
-  fixtureCustomerIds.push(customer.id);
 
   const criado = (
     await app.inject({
@@ -384,11 +388,9 @@ describe("Gerar OP para o saldo restante", () => {
     const acabado = await criarItemAcabado();
     const product = await criarProduto(app, acabado.id);
     const prisma = getPrisma();
-    const m = marca();
-    const customer = await prisma.customer.create({
-      data: { code: `CLI-SALDO-${m}`, legalName: `Cliente Saldo ${m}` },
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { id: await fixtureCustomerId() },
     });
-    fixtureCustomerIds.push(customer.id);
     const criado = (
       await app.inject({
         method: "POST",

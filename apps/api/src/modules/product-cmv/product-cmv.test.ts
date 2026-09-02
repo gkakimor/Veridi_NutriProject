@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getProductCmv } from "./product-cmv.service.js";
 import { costForOutputQuantity, pricingVersionInclude } from "../pricing/pricing-cost.js";
 import type { CostVersionForPricing } from "../pricing/pricing-cost.js";
@@ -229,7 +230,7 @@ async function criarCenario(app: App, options: CenarioOptions = {}) {
       payload: {
         name: `Produto CMV ${m}`,
         finishedProductItemId: acabado.id,
-        ...(customerId ? { customerId } : {}),
+        customerId: customerId ?? (await fixtureCustomerId()),
       },
     })
   ).json();

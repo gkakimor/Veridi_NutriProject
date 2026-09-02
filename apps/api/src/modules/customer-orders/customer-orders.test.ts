@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureCustomerOrderIds: string[] = [];
@@ -91,13 +92,28 @@ async function createProduct(
   const response = await app.inject({
     method: "POST",
     url: "/products",
-    payload: {
+    payload: { customerId: await fixtureCustomerId(),
       name: `Produto Pedido Teste ${marker()}`,
       ...(finishedProductItemId ? { finishedProductItemId } : {}),
     },
   });
   const product = response.json();
   fixtureProductIds.push(product.id);
+
+  /*
+   * Produto SEM item de produto acabado não é mais construível pela API —
+   * todo produto novo nasce com o seu. O estado continua existindo na base
+   * (produtos importados do legado), então o teste o monta direto no banco,
+   * que é de onde ele realmente vem.
+   */
+  if (overrides.finishedItemId === null) {
+    await getPrisma().product.update({
+      where: { id: product.id },
+      data: { finishedProductItemId: null },
+    });
+    const semItem = await app.inject({ method: "GET", url: `/products/${product.id}` });
+    return semItem.json();
+  }
 
   if (overrides.active === false) {
     await app.inject({ method: "POST", url: `/products/${product.id}/deactivate` });

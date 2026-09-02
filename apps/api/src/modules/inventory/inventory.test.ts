@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureSupplierIds: string[] = [];
@@ -155,7 +156,7 @@ async function reserveStockViaProductionOrder(app: App, itemId: string, quantity
   const product = await app.inject({
     method: "POST",
     url: "/products",
-    payload: { name: `Produto Reserva Teste ${marker()}`, finishedProductItemId: finishedItem.id },
+    payload: { customerId: await fixtureCustomerId(), name: `Produto Reserva Teste ${marker()}`, finishedProductItemId: finishedItem.id },
   });
   fixtureProductIds.push(product.json().id);
 

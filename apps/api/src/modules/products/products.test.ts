@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const createdProductIds: string[] = [];
@@ -108,7 +109,7 @@ async function createTestProduct(app: App, overrides: Record<string, unknown> = 
   const response = await app.inject({
     method: "POST",
     url: "/products",
-    payload: {
+    payload: { customerId: await fixtureCustomerId(),
       name: `Produto de teste ${Date.now()}-${Math.random()}`,
       ...overrides,
     },
@@ -178,22 +179,33 @@ describe("Products", () => {
     const app = buildTestApp();
     await app.ready();
 
-    const response = await app.inject({ method: "POST", url: "/products", payload: {} });
+    const response = await app.inject({ method: "POST", url: "/products", payload: { customerId: await fixtureCustomerId(),} });
 
     expect(response.statusCode).toBe(400);
 
     await app.close();
   });
 
-  it("cria produto sem cliente", async () => {
+  /*
+   * A regra virou: produto pertence a um Cliente. Antes este teste provava o
+   * contrário — produto sem dono era aceito, e foi assim que a base ganhou
+   * 348 produtos importados sem cliente resolvido.
+   */
+  it("recusa produto sem cliente", async () => {
     const app = buildTestApp();
     await app.ready();
 
-    const response = await createTestProduct(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/products",
+      payload: { name: `Produto sem cliente ${Date.now()}` },
+    });
 
-    expect(response.statusCode).toBe(201);
-    expect(response.json().customerId).toBeNull();
-    expect(response.json().customer).toBeNull();
+    expect(response.statusCode).toBe(400);
+    expect(
+      response.json().issues?.find((issue: { path: string }) => issue.path === "customerId")
+        ?.message,
+    ).toBe("Cliente é obrigatório");
 
     await app.close();
   });

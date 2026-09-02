@@ -14,7 +14,7 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 4 |
+| LOW | 5 |
 
 Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
@@ -95,6 +95,29 @@ exceto onde indicado.
 - *Consulta do Cliente:* Gestão › Consulta de Cliente, buscar um cliente
   existente, abrir, Projetos, abrir um projeto, voltar pela trilha, Pedidos,
   Materiais, Faturamentos. Nada é criado.
+
+### 6. Produtos do legado sem cliente e itens acabados órfãos — LOW
+
+Diagnóstico feito na rodada de Produto + item de produto acabado, sobre a
+base de desenvolvimento com o corpus legado importado:
+
+- **348 dos 661 produtos não têm cliente**, todos ativos, e **91 já estão em
+  uso** em pedido, ordem de produção ou orçamento;
+- **8 produtos sem item de produto acabado** — todos são fixtures de teste
+  antigas, não corpus real;
+- **54 itens de produto acabado órfãos**, sem produto nenhum apontando para
+  eles;
+- zero item compartilhado entre produtos e zero divergência entre o cliente
+  do produto e o do projeto de origem.
+
+A regra nova vale só na criação, então nada disso bloqueia operação nem
+edição. Não foi corrigido automaticamente: atribuir cliente a um produto em
+uso é decisão de negócio, não de migração.
+
+**Decisão / próxima ação:** decidir com a Veridi se vale um saneamento — a
+quem pertencem os 348 — ou se eles ficam como estão, já que o histórico
+deles é anterior ao sistema. Os 54 itens órfãos são candidatos a inativação,
+não a exclusão.
 
 ### Decisões de produto em aberto — não bloqueantes
 

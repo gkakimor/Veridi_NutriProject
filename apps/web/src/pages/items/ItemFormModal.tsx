@@ -222,9 +222,9 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
     <FullWorkspaceModal
       open
       onClose={onClose}
-      crumb="Cadastros / Itens"
+      crumb="Cadastros / Itens de estoque"
       crumbActive={mode === "create" ? "Novo" : "Editar"}
-      title={mode === "create" ? "Novo item" : item?.name}
+      title={mode === "create" ? "Novo item de estoque" : item?.name}
       {...(codeChip ? { codeChip } : {})}
       footer={footer}
     >
@@ -263,12 +263,30 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
                 <option value="" disabled>
                   Selecione…
                 </option>
-                {Object.entries(ITEM_TYPE_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
+                {Object.entries(ITEM_TYPE_LABELS)
+                  /*
+                   * Produto acabado sai da criação manual: ele nasce junto
+                   * com o Produto, que é quem tem cliente, formulação e
+                   * custo. Criar o item solto aqui produzia um acabado sem
+                   * dono, e a dúvida "preciso cadastrar o produto acabado
+                   * duas vezes?".
+                   *
+                   * Na EDIÇÃO o tipo continua aparecendo — item já existente
+                   * não pode perder a própria identidade na tela.
+                   */
+                  .filter(([value]) => mode === "edit" || value !== "FINISHED_PRODUCT")
+                  .map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
               </select>
+              {mode === "create" && (
+                <p className="field__hint">
+                  Produtos acabados são criados automaticamente pelo cadastro
+                  de Produtos.
+                </p>
+              )}
               {fieldErrors["type"] && (
                 <p className="field__error">{fieldErrors["type"]}</p>
               )}

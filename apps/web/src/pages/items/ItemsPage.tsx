@@ -136,10 +136,11 @@ export function ItemsPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Itens</h1>
+          <h1 className="page__title">Itens de estoque</h1>
           <p className="page__subtitle">
-            Matérias-primas, embalagens e produtos acabados controlados pela
-            operação.
+            Cadastre matérias-primas, materiais de embalagem e outros itens
+            utilizados na operação. Produtos acabados aparecem aqui, mas são
+            criados pelo cadastro de Produtos.
           </p>
         </div>
         <button
@@ -147,7 +148,7 @@ export function ItemsPage() {
           className="btn btn--primary"
           onClick={() => setModalState({ mode: "create" })}
         >
-          + Novo item
+          + Novo item de estoque
         </button>
         <ExportCsvButton path="/items/export.csv" filters={{ search, type: typeFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
