@@ -14,7 +14,7 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 3 |
+| LOW | 2 |
 
 Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
@@ -78,9 +78,23 @@ do vitest. Nenhuma asserção falha — as suítes passam inteiras quando rodada
 uma a uma. Reproduzido também em `96e2c07`, antes das mudanças de Cliente:
 é anterior, não regressão.
 
-**Decisão / próxima ação:** rodar as suítes separadas quando o gate precisar
-ser confiável. Se incomodar, reduzir `maxWorkers` ou serializar os pacotes no
-script `test` da raiz.
+**Não reproduzido em 3 execuções consecutivas** de `pnpm test` na raiz, em
+`fix/industrial-resource-create-page` (2026-09-02). As três saíram com exit 0
+e nenhuma ocorrência de `ERR_IPC_CHANNEL_CLOSED`, `Channel closed`, falha de
+segmentação ou `ELIFECYCLE`. Cada rodada: web 447 testes, api 895 + 7 na
+configuração serial, scripts 25. `pnpm -r test` executa api e web em
+paralelo, então a condição descrita foi de fato exercida — não é o caso de
+"passou porque rodou serializado".
+
+**Continua aberto de propósito.** Falha intermitente não se fecha com três
+amostras limpas: a ausência em 3 execuções reduz a frequência estimada, não
+demonstra que sumiu. Nenhuma mudança de tooling foi feita — corrigir sem
+reproduzir seria mexer no runner às cegas.
+
+**Decisão / próxima ação:** manter as suítes separadas quando o gate precisar
+ser confiável. Se voltar a aparecer, anexar o log da execução aqui antes de
+mexer em `maxWorkers` ou em serializar os pacotes — a correção precisa de uma
+reprodução para ser verificável.
 
 ### 4. Aba Produção na Consulta do Cliente — candidato para próxima FAST
 
@@ -128,8 +142,13 @@ escrita continua atrás de flag de propósito.
 
 ### 6. Produtos do legado sem cliente e itens acabados órfãos — LOW
 
-Diagnóstico feito na rodada de Produto + item de produto acabado, sobre a
-base de desenvolvimento com o corpus legado importado:
+**Escopo: banco LOCAL de desenvolvimento, com o corpus legado importado.
+Não é risco de produção.** A base de produção foi limpa, e produto novo exige
+cliente desde a rodada de Produto + item de produto acabado — os números
+abaixo são um retrato histórico do ambiente local, não algo que a operação
+encontre.
+
+Diagnóstico da época:
 
 - **348 dos 661 produtos não têm cliente**, todos ativos, e **91 já estão em
   uso** em pedido, ordem de produção ou orçamento;
@@ -287,7 +306,7 @@ pauta da validação com a Veridi, e quando ela existir a ordem é fechar no
 servidor ANTES de esconder no front — a inversa dá falsa sensação de
 controle.
 
-### 11. Recurso industrial sem tela de criação — LOW
+### 11. Recurso industrial sem tela de criação — resolvido
 
 As outras quatro entidades de cadastro ganharam página oficial; Recurso
 industrial ficou no modal, deliberadamente.
@@ -301,9 +320,30 @@ compartilha formulário nenhum com o modal de criação: são edições inline c
 a campo, cada uma com sua regra. Não existe "o formulário de recurso" para os
 dois lados reusarem.
 
-**Decisão / próxima ação:** fazer quando houver um segundo consumidor, ou
-quando a edição do recurso virar formulário de verdade. Enquanto for uma tela
-para um papel, o modal basta.
+**Feito**, alinhando a última das cinco entidades ao padrão das outras
+quatro: `/gestao/recursos-industriais/novo`, com os campos extraídos para
+`industrial-resource-form.tsx`. O campo Recurso da estrutura de custos passou
+a navegar, guardando o rascunho da linha em edição e voltando com o recurso
+selecionado pelo id; o botão da listagem virou link para a rota.
+
+O argumento acima continua verdadeiro sobre o VALOR, e por isso vale
+registrar o que mudou de fato: a criação ganhou URL, sobrevive a um F5 e
+entra no histórico, e a regra de energia fora do modo direto — que recusa a
+seleção com aviso em vez de escolher em silêncio — foi preservada.
+
+**O modal foi removido.** Ele existia só para esta criação: recurso não tem
+edição em modal, a edição é inline na tela de detalhe. Depois de mover a
+listagem e o campo, ficou sem nenhum importador, e código morto num cadastro
+é onde a próxima divergência nasce.
+
+Três desvios do formulário antigo, todos para alinhar ao padrão dos outros
+quatro: o botão de commit virou `type="submit" form="…"` com `required` no
+nome, em vez de ficar desabilitado sem dizer o que faltava; `ApiValidationError`
+passou a ser mapeado por campo, então `invalid_power` pousa na potência em vez
+de virar faixa genérica; e salvar pelo acesso direto leva ao detalhe, que é
+onde a tarifa entra — recurso sem tarifa não serve a estrutura nenhuma.
+
+**Decisão / próxima ação:** nenhuma.
 
 ### Decisões de produto em aberto — não bloqueantes
 
@@ -330,10 +370,10 @@ depende da prática real da casa, não de escolha técnica.
 e o feedback ser classificado. Roteiro da sessão e grade de classificação em
 [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md).
 
-Os três LOW ainda abertos — instabilidade da suíte (3), dado legado sem
-cliente (6) e a tela de Recurso industrial (11) — não bloqueiam a validação e
-não devem ser corrigidos durante a reunião. A matriz de permissão por papel é
-boa pauta PARA a reunião.
+Os dois LOW ainda abertos — instabilidade da suíte (3) e o dado legado sem
+cliente (6), este restrito ao banco local — não bloqueiam a validação e não
+devem ser corrigidos durante a reunião. A matriz de permissão por papel é boa
+pauta PARA a reunião.
 
 ---
 

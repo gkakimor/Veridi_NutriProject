@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { useNavigate, useParams } from "react-router-dom";
+import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import type {
   EnergyCalculationMode,
   IndustrialCostResourceUsageDTO,
@@ -47,7 +48,6 @@ import {
   updateIndustrialCostVersion,
 } from "../../lib/industrial-costs-api";
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
-import { IndustrialResourceFormModal } from "../industrial-resources/IndustrialResourceFormModal";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
 
@@ -125,8 +125,75 @@ export function IndustrialCostPage() {
   const [resources, setResources] = useState<IndustrialResourceDTO[]>([]);
   const [usageResourceId, setUsageResourceId] = useState("");
   /** Cadastro de recurso aberto a partir do campo de busca. */
-  const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [usageQuantity, setUsageQuantity] = useState("");
+
+  /*
+   * Sair para cadastrar um recurso desmonta esta tela. O rascunho que
+   * importa é o da LINHA em edição — categoria, descrição, base, valor e
+   * uso. `data` e `resources` ficam de fora: vêm do servidor e recarregam
+   * sozinhos, e serializá-los faria o retorno restaurar uma versão da
+   * estrutura que pode ter mudado enquanto a pessoa estava fora.
+   */
+  /*
+   * `resources` e `version` só existem mais abaixo, depois da leitura do
+   * servidor; o retorno da criação contextual precisa deles. Refs
+   * atualizadas a cada render resolvem sem reordenar a tela — `onCreated` só
+   * roda em resposta a navegação, nunca durante o render.
+   */
+  const resourcesRef = useRef<IndustrialResourceDTO[]>([]);
+  const versionRef = useRef<IndustrialCostVersionDTO | null>(null);
+
+  const { goCreate } = useContextualCreateOrigin<Record<string, unknown>>({
+    collectDraft: () => ({
+      /*
+       * A ABA vai junto, e não é detalhe de apresentação.
+       *
+       * Produto com rascunho E versão ativa abre na aba "Ativa". Quem troca
+       * para "Rascunho", preenche a linha e sai para cadastrar o recurso
+       * voltava na aba "Ativa" — onde os campos nem são renderizados, porque
+       * versão ativa não se edita. O rascunho estava intacto por baixo, mas
+       * a pessoa via o trabalho sumido, que dá no mesmo.
+       */
+      lendoAtiva,
+      referenceQuantity,
+      category,
+      description,
+      basis,
+      rateValue,
+      usageResourceId,
+      usageQuantity,
+    }),
+    restoreDraft: (rascunho) => {
+      const texto = (chave: string) =>
+        typeof rascunho[chave] === "string" ? (rascunho[chave] as string) : "";
+      // Rascunho antigo, gravado antes de a aba viajar junto: `undefined`
+      // cai no padrão da tela em vez de virar `false` por coincidência.
+      if (typeof rascunho["lendoAtiva"] === "boolean") setLendoAtiva(rascunho["lendoAtiva"]);
+      setReferenceQuantity(texto("referenceQuantity"));
+      setCategory(texto("category") as IndustrialCostCategory);
+      setDescription(texto("description"));
+      setBasis(texto("basis") as IndustrialCostBasis);
+      setRateValue(texto("rateValue"));
+      setUsageResourceId(texto("usageResourceId"));
+      setUsageQuantity(texto("usageQuantity"));
+    },
+    onCreated: (resultado) => {
+      /*
+       * Energia fora do modo "consumo informado diretamente" não é
+       * escolhível aqui — é a regra que evita contar energia duas vezes.
+       * Selecionar assim mesmo deixaria o campo em branco com um id
+       * escolhido por baixo; melhor dizer o que aconteceu.
+       */
+      const criado = resourcesRef.current.find((row) => row.id === resultado.entityId);
+      if (criado?.type === "ENERGY" && versionRef.current?.energyCalculationMode !== "DIRECT") {
+        setError(
+          `${criado.code} foi criado, mas recursos de energia só entram nesta estrutura no modo de consumo informado diretamente.`,
+        );
+        return;
+      }
+      setUsageResourceId(resultado.entityId);
+    },
+  });
 
   const canEdit = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
   /*
@@ -186,6 +253,9 @@ export function IndustrialCostPage() {
   const version: IndustrialCostVersionDTO | null =
     lendoAtiva && data.current ? data.current : (data.draft ?? data.current);
   const podeAlternar = Boolean(data.draft && data.current);
+
+  resourcesRef.current = resources;
+  versionRef.current = version;
 
   // Primeira estrutura do produto precisa de base de produção: nunca se
   // assume 1000. Sem base informada nem sugerida, o botão fica bloqueado —
@@ -824,7 +894,13 @@ export function IndustrialCostPage() {
                         }))}
                         canCreate={canCreateResource}
                         createLabel="Novo recurso"
-                        onCreateNew={() => setResourceModalOpen(true)}
+                        onCreateNew={() =>
+                          goCreate({
+                            route: "/gestao/recursos-industriais/novo",
+                            fieldKey: "usageResourceId",
+                            entityType: "industrialResource",
+                          })
+                        }
                       />
                       <span className="field__hint">
                         {version.energyCalculationMode === "DIRECT"
@@ -1107,28 +1183,6 @@ export function IndustrialCostPage() {
         />
       )}
 
-      {resourceModalOpen && (
-        <IndustrialResourceFormModal
-          onClose={() => setResourceModalOpen(false)}
-          onSaved={(created) => {
-            setResourceModalOpen(false);
-            setResources((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
-            /*
-             * Energia fora do modo "consumo informado diretamente" não é
-             * escolhível aqui — é a regra que evita contar energia duas
-             * vezes. Selecionar assim mesmo deixaria o campo em branco com
-             * um id escolhido por baixo; melhor dizer o que aconteceu.
-             */
-            if (created.type === "ENERGY" && version?.energyCalculationMode !== "DIRECT") {
-              setError(
-                `${created.code} foi criado, mas recursos de energia só entram nesta estrutura no modo de consumo informado diretamente.`,
-              );
-              return;
-            }
-            setUsageResourceId(created.id);
-          }}
-        />
-      )}
     </>
   );
 }

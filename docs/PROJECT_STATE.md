@@ -58,9 +58,8 @@ Material preparado:
 
 ## Rodadas curtas sobre a release congelada
 
-Promovidas pelo PO, sem módulo novo e sem mudança de domínio. A regra durável
-de cada uma vive em [PRODUCT_RULES.md](PRODUCT_RULES.md); aqui fica só o que
-mudou de estado.
+Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive em
+[PRODUCT_RULES.md](PRODUCT_RULES.md); aqui fica só o que mudou de estado.
 
 - **Cadastro de Cliente** (`cab5bf3`, em produção) — e-mail, CNPJ (numérico e
   alfanumérico da IN RFB 2.229/2024) e telefone validados na tela e na API,
@@ -101,6 +100,11 @@ navegador também restauram. A trilha permanece canônica; a origem aparece como
 ação secundária. Fecha os itens 9 e 10 do [BACKLOG.md](BACKLOG.md). Sem
 migration. §46.
 
+**Recurso industrial** completou o conjunto na micro-rodada seguinte
+(`fix/industrial-resource-create-page`): mesma extração, rota
+`/gestao/recursos-industriais/novo`, campo da estrutura de custos navegando, e
+o modal removido — recurso não tem edição em modal, então ele só servia à
+criação. Restam **dois** LOW, nenhum bloqueante.
 
 ## Validação em produção
 
