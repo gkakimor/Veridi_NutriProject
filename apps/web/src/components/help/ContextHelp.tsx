@@ -1,97 +1,155 @@
 import { useId, useRef, useState } from "react";
+import { ModalDialog } from "../ModalDialog";
 import { FlowSteps } from "./FlowSteps";
 import type { HelpTopic } from "../../help/help-content";
 
 /**
- * Painel "Como funciona" — a explicação longa de uma regra de negócio.
+ * Ajuda da tela — o que ela faz, por quais caminhos, e o que costuma pegar.
  *
- * Nasce FECHADO e não abre sozinho: quem já conhece a regra usa a tela todo
- * dia, e um painel que se abre por conta própria empurra o trabalho para
- * baixo da dobra sem ninguém ter pedido. Não é modal — não rouba o foco nem
- * inertiza o fundo: a pessoa lê a explicação enquanto olha os dados.
+ * É um MODAL, não um painel embutido: a explicação de uma tela inteira é
+ * longa, e aberta no meio do conteúdo empurrava a operação para debaixo da
+ * dobra. Em modal ela ocupa o espaço que precisa, é lida, e a tela volta
+ * exatamente como estava.
  *
- * O conteúdo vem de `help/help-content.ts`, nunca escrito na tela.
+ * Nasce fechado e nunca abre sozinho — quem usa a tela todo dia não quer ser
+ * interrompido. A casca (foco preso, Escape, retorno de foco) vem do
+ * `ModalDialog` já usado nas confirmações; aqui não se reimplementa nada
+ * disso.
+ *
+ * Todo o texto vem de `help/help-content`, nunca escrito na tela.
  */
 export function ContextHelp({
   topic,
   triggerLabel = "Como funciona",
 }: {
   topic: HelpTopic;
-  /** Só troque quando "Como funciona" não descrever o painel. */
+  /** Só troque quando "Como funciona" não descrever o conteúdo. */
   triggerLabel?: string;
 }) {
-  const panelId = useId();
+  const titleId = useId();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
 
+  /*
+   * Duas formas para a mesma coisa: `flows` nomeia cada caminho, `flow` é a
+   * forma curta de quem só tem um. A tela não precisa saber a diferença.
+   */
+  const flows =
+    topic.flows ?? (topic.flow ? [{ name: "Fluxo da tela", steps: topic.flow }] : []);
+
+  function fechar() {
+    setOpen(false);
+    // O foco volta para onde estava: quem leu a ajuda continua de onde parou.
+    trigger.current?.focus();
+  }
+
   return (
-    <section
-      className="context-help"
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" || !open) return;
-        // Não deixa o Escape subir: dentro de um modal, fechar a ajuda não
-        // pode fechar o formulário junto.
-        event.stopPropagation();
-        setOpen(false);
-        trigger.current?.focus();
-      }}
-    >
+    <>
       <button
         ref={trigger}
         type="button"
         className="btn btn--ghost btn--sm context-help__trigger"
+        aria-haspopup="dialog"
         aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((atual) => !atual)}
+        onClick={() => setOpen(true)}
       >
-        <span aria-hidden="true" className="context-help__caret" />
+        <span aria-hidden="true" className="context-help__icon">
+          ⓘ
+        </span>
         {triggerLabel}
       </button>
 
       {open && (
-        <div id={panelId} className="context-help__panel">
-          <h3 className="context-help__title">{topic.title}</h3>
-          <p className="context-help__summary">{topic.summary}</p>
+        <ModalDialog labelledBy={titleId} onClose={fechar}>
+          <div className="help-modal">
+            <h2 id={titleId} className="help-modal__title">
+              {topic.title}
+            </h2>
+            <p className="help-modal__summary">{topic.summary}</p>
 
-          {topic.flow && topic.flow.length > 0 && (
-            <FlowSteps steps={topic.flow} label={`Fluxo: ${topic.title}`} />
-          )}
-
-          <ol className="context-help__steps">
-            {topic.steps.map((step, index) => (
-              <li key={`${index}-${step.label}`}>
-                <b>{step.label}</b>
-                {step.detail && <span className="context-help__step-detail">{step.detail}</span>}
-              </li>
+            {/*
+              Vários caminhos = a tela é usada de mais de um jeito. Cada um
+              recebe nome e a condição em que vale, porque "qual dos dois é o
+              meu caso?" é a pergunta que vem antes de qualquer etapa.
+            */}
+            {flows.map((flow) => (
+              <section key={flow.name} className="help-modal__flow">
+                {flows.length > 1 && (
+                  <h3 className="help-modal__flow-name">{flow.name}</h3>
+                )}
+                {flow.when && <p className="help-modal__flow-when">{flow.when}</p>}
+                <FlowSteps steps={flow.steps} label={`Fluxo: ${flow.name}`} />
+                {/*
+                  A MESMA lista, agora com a explicação de cada etapa — a
+                  numeração casa com as caixas acima, e é por ela que a pessoa
+                  liga o desenho ao texto. Some quando nenhuma etapa tem
+                  detalhe: repetir os rótulos logo abaixo das caixas não
+                  acrescenta nada.
+                */}
+                {flow.steps.some((step) => step.detail) && (
+                <ol className="help-modal__steps">
+                  {flow.steps.map((step, index) => (
+                    <li key={`${index}-${step.label}`}>
+                      <b>{step.label}</b>
+                      {step.detail && (
+                        <span className="help-modal__step-detail">{step.detail}</span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+                )}
+              </section>
             ))}
-          </ol>
 
-          {topic.notes && topic.notes.length > 0 && (
-            <>
-              <h4 className="context-help__subtitle">Observações</h4>
-              <ul className="context-help__notes">
-                {topic.notes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            </>
-          )}
+            {topic.steps && topic.steps.length > 0 && (
+              <>
+                <h3 className="help-modal__subtitle">Passo a passo</h3>
+                <ol className="help-modal__steps">
+                  {topic.steps.map((step, index) => (
+                    <li key={`${index}-${step.label}`}>
+                      <b>{step.label}</b>
+                      {step.detail && (
+                        <span className="help-modal__step-detail">{step.detail}</span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
 
-          {topic.doc && (
-            <a
-              className="context-help__doc"
-              href={topic.doc.href}
-              // Documentação externa abre fora: sair do ERP no meio de um
-              // pedido custa o formulário em andamento.
-              {...(/^https?:/i.test(topic.doc.href)
-                ? { target: "_blank", rel: "noreferrer" }
-                : {})}
-            >
-              {topic.doc.label}
-            </a>
-          )}
-        </div>
+            {topic.notes && topic.notes.length > 0 && (
+              <>
+                <h3 className="help-modal__subtitle">O que costuma pegar</h3>
+                <ul className="help-modal__notes">
+                  {topic.notes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            {topic.doc && (
+              <a
+                className="help-modal__doc"
+                href={topic.doc.href}
+                // Documentação externa abre fora: sair do ERP no meio de um
+                // pedido custa o formulário em andamento.
+                {...(/^https?:/i.test(topic.doc.href)
+                  ? { target: "_blank", rel: "noreferrer" }
+                  : {})}
+              >
+                {topic.doc.label}
+              </a>
+            )}
+
+            <div className="help-modal__actions">
+              <button type="button" className="btn btn--secondary" onClick={fechar}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </ModalDialog>
       )}
-    </section>
+    </>
   );
 }

@@ -18,11 +18,14 @@
  * dono declarado, e é possível saber o que ainda falta sem varrer as telas.
  */
 export const HELP_MODULES = [
-  "formulacao",
-  "planoAtendimento",
-  "ordemProducao",
-  "cmv",
-  "faturamento",
+  "cadastros",
+  "comercial",
+  "producao",
+  "compras",
+  "estoque",
+  "qualidade",
+  "gestao",
+  "administracao",
 ] as const;
 
 export type HelpModule = (typeof HELP_MODULES)[number];
@@ -44,19 +47,39 @@ export interface HelpDocLink {
   href: string;
 }
 
+export interface HelpFlow {
+  /** Nome do caminho — "Fluxo A · Produção sob pedido". */
+  name: string;
+  /** Em que situação este caminho vale. */
+  when?: string;
+  steps: HelpStep[];
+}
+
 export interface HelpTopic {
   module: HelpModule;
   /** Título do painel — nomeia a regra, não a tela. */
   title: string;
   /** Uma ou duas frases: o que é e por que existe. */
   summary: string;
-  /** Etapas na ordem em que acontecem. */
-  steps: HelpStep[];
+  /**
+   * Etapas soltas, para tela de fluxo único e simples. Havendo `flows`, a
+   * explicação de cada etapa vive dentro do fluxo a que pertence.
+   */
+  steps?: HelpStep[];
   /** Ressalvas e casos de borda — o que costuma gerar chamado. */
   notes?: string[];
   /**
-   * Fluxo curto desenhado acima das etapas (ex.: Pedido → Estoque → Falta).
-   * Resumo visual, não substitui `steps`.
+   * Caminhos pelos quais a tela é usada.
+   *
+   * Mais de um quando a tela serve a situações diferentes — produção sob
+   * pedido e produção para estoque, por exemplo. Cada um tem nome e diz
+   * quando vale, porque "qual desses é o meu caso?" é a pergunta que vem
+   * antes de qualquer etapa.
+   */
+  flows?: HelpFlow[];
+  /**
+   * Fluxo único e sem nome. Forma curta para tela que só tem um caminho —
+   * equivale a um `flows` de um item.
    */
   flow?: HelpStep[];
   /**
@@ -76,7 +99,7 @@ export interface HelpTopic {
  */
 export const helpTopics = {
   "formulacao.comoFunciona": {
-    module: "formulacao",
+    module: "producao",
     title: "Como a formulação vira custo e preço",
     summary:
       "A formulação é a receita oficial do produto, e só passa a valer quando uma versão é ativada. É a versão ativa que a estrutura de custos, o cálculo e a precificação leem — e que a produção executa.",
@@ -129,7 +152,7 @@ export const helpTopics = {
     ],
   },
   "planoAtendimento.comoFunciona": {
-    module: "planoAtendimento",
+    module: "comercial",
     title: "Como o Plano de Atendimento decide o que fazer",
     summary:
       "O Plano é projeção, não decisão: ele lê o pedido confirmado, compara com o estoque disponível e propõe reservar o que existe e produzir o que falta. Nada muda no estoque enquanto você não aplicar.",
@@ -170,7 +193,7 @@ export const helpTopics = {
     ],
   },
   "ordemProducao.comoFunciona": {
-    module: "ordemProducao",
+    module: "producao",
     title: "Como a ordem de produção movimenta o estoque",
     summary:
       "A ordem separa dois momentos que costumam ser confundidos: reservar material é compromisso, consumir material é baixa física. Só o consumo tira quantidade do estoque.",
@@ -229,7 +252,7 @@ export const helpTopics = {
     ],
   },
   "cmv.comoFunciona": {
-    module: "cmv",
+    module: "gestao",
     title: "Como o CMV de uma quantidade é montado",
     summary:
       "O CMV responde “quanto custa produzir esta quantidade”. Não é um cadastro à parte: soma a formulação, os recursos e as premissas da estrutura de custos usando o cálculo em vigor na data de referência.",
@@ -282,7 +305,7 @@ export const helpTopics = {
     ],
   },
   "faturamento.comoFunciona": {
-    module: "faturamento",
+    module: "comercial",
     title: "O que o Faturamento faz — e o que ele não faz",
     summary:
       "O faturamento é o documento comercial do que foi efetivamente expedido. Ele fecha o ciclo do pedido, mas não emite Nota Fiscal, não movimenta estoque e não é Contas a Receber.",
@@ -336,27 +359,27 @@ export interface HelpHint {
  */
 export const helpHints = {
   "planoAtendimento.fisico": {
-    module: "planoAtendimento",
+    module: "comercial",
     label: "Físico",
     text: "O que existe de fato no estoque, somando todos os lotes do item — inclusive lote bloqueado, aguardando liberação ou vencido. É o que está na prateleira, não o que está livre para usar.",
   },
   "planoAtendimento.reservado": {
-    module: "planoAtendimento",
+    module: "comercial",
     label: "Reservado",
     text: "Quantidade já comprometida com ordens de produção liberadas e ainda não consumida. Continua no estoque físico, mas nenhuma outra ordem pode contar com ela.",
   },
   "planoAtendimento.disponivel": {
-    module: "planoAtendimento",
+    module: "comercial",
     label: "Disponível",
     text: "Saldo livre para uso: o que está em estoque menos o que já está reservado. Lote bloqueado, aguardando liberação ou vencido não entra na conta.",
   },
   "planoAtendimento.emCompra": {
-    module: "planoAtendimento",
+    module: "comercial",
     label: "Em compra",
     text: "Quantidade já pedida ao fornecedor e ainda não recebida. É informativo: não conta como disponível para reservar nem para liberar produção.",
   },
   "planoAtendimento.falta": {
-    module: "planoAtendimento",
+    module: "comercial",
     label: "Falta",
     text: "Quanto o necessário passa do disponível. É falta física: material em compra não abate esta conta, e falta de material do cliente se resolve com nova remessa dele, não com compra da Veridi.",
   },

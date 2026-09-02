@@ -12,7 +12,7 @@ import type { HelpTopic } from "../../help/help-content";
  */
 
 const topicoBase: HelpTopic = {
-  module: "formulacao",
+  module: "producao",
   title: "Como a versão ativa é escolhida",
   summary: "Só uma versão fica ativa por produto.",
   steps: [
@@ -120,7 +120,7 @@ describe("ContextHelp", () => {
 
     await user.click(screen.getByRole("button", { name: /Como funciona/ }));
 
-    expect(screen.getByRole("heading", { name: "Observações" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "O que costuma pegar" })).toBeInTheDocument();
     expect(screen.getByText("Versão publicada não volta a rascunho.")).toBeInTheDocument();
   });
 
@@ -167,13 +167,14 @@ describe("ContextHelp", () => {
 
     await user.click(screen.getByRole("button", { name: /Como funciona/ }));
 
-    const fluxo = screen.getByRole("list", { name: `Fluxo: ${topico.title}` });
-    expect(within(fluxo).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "Pedido",
-      "Estoque",
-      "Falta",
-      "Produção/Compra",
-    ]);
+    const fluxo = screen.getByRole("list", { name: "Fluxo: Fluxo da tela" });
+    // Derivado do próprio tópico: o teste prova a NUMERAÇÃO e a ordem, não
+    // decora o conteúdo — que é revisado por quem conhece a regra.
+    const esperado = (topico.flow ?? []).map((etapa, i) => `${i + 1}${etapa.label}`);
+    expect(within(fluxo).getAllByRole("listitem").map((item) => item.textContent)).toEqual(
+      esperado,
+    );
+    expect(esperado.length).toBeGreaterThan(1);
   });
 });
 
@@ -191,19 +192,26 @@ describe("FlowSteps", () => {
     );
 
     // As setas são desenho em CSS: não entram no texto lido nem no textContent.
+    // O número entra, e é ele que o leitor usa para achar a etapa no texto.
     expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "Pedido",
-      "Estoque",
-      "Falta",
-      "Produção/Compra",
+      "1Pedido",
+      "2Estoque",
+      "3Falta",
+      "4Produção/Compra",
     ]);
   });
 
-  it("mostra o detalhe junto do rótulo da etapa", () => {
+  /*
+   * O número é o que liga a caixa ao passo a passo logo abaixo. O detalhe
+   * não fica na caixa de propósito: repetido nos dois lugares, polui o
+   * desenho e a pessoa lê a mesma frase duas vezes.
+   */
+  it("numera as etapas para casar com o passo a passo", () => {
     render(<FlowSteps steps={[{ label: "Falta", detail: "Pedido maior que o disponível" }]} />);
 
     expect(screen.getByText("Falta")).toBeInTheDocument();
-    expect(screen.getByText("Pedido maior que o disponível")).toBeInTheDocument();
+    expect(screen.queryByText("Pedido maior que o disponível")).not.toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
   });
 
   it("sem etapas não sobra lista vazia na tela", () => {

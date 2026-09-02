@@ -137,9 +137,15 @@ async function verificaPainel(tituloEsperado: string, regraEsperada: RegExp) {
   expect(screen.getByRole("heading", { name: tituloEsperado })).toBeInTheDocument();
   expect(screen.getByText(regraEsperada)).toBeInTheDocument();
 
-  await user.click(gatilho);
+  /*
+   * A ajuda virou modal: o gatilho fica atrás do overlay enquanto está
+   * aberta, então quem fecha é o botão do próprio diálogo — clicar no
+   * gatilho de novo não chega nele.
+   */
+  await user.click(screen.getByRole("button", { name: "Fechar" }));
 
   expect(gatilho).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("heading", { name: tituloEsperado })).toBeNull();
   expect(screen.queryByRole("heading", { name: tituloEsperado })).toBeNull();
 }
 
@@ -179,12 +185,14 @@ describe("Formulação", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
 
-    const fluxo = screen.getByRole("list", {
-      name: `Fluxo: ${helpTopics["formulacao.comoFunciona"].title}`,
-    });
+    // O rótulo acessível nomeia o FLUXO, não a tela: uma tela pode ter mais
+    // de um caminho. Cada caixa vem numerada, e é o número que casa com o
+    // passo a passo logo abaixo.
+    const fluxo = screen.getByRole("list", { name: "Fluxo: Fluxo da tela" });
+    const etapas = helpTopics["formulacao.comoFunciona"].flow ?? [];
     expect(
       Array.from(fluxo.querySelectorAll("li")).map((item) => item.textContent),
-    ).toEqual(["Produto", "Formulação", "Versão ativa", "Estrutura de custos", "Cálculo", "Precificação"]);
+    ).toEqual(etapas.map((etapa, i) => `${i + 1}${etapa.label}`));
   });
 });
 
