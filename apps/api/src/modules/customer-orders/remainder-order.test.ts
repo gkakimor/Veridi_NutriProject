@@ -151,12 +151,15 @@ async function pedidoDe100(app: App) {
   const acabado = await criarItemAcabado();
   const product = await criarProduto(app, acabado.id);
   const prisma = getPrisma();
-  const m = marca();
 
-  const customer = await prisma.customer.create({
-    data: { code: `CLI-SALDO-${m}`, legalName: `Cliente Saldo ${m}` },
+  /*
+   * O MESMO cliente do produto: produto do Cliente A não é produzido sob
+   * pedido do Cliente B (`resolveOrderCustomerId`). Enquanto o produto não
+   * tinha dono isso nunca disparava; agora todo produto tem cliente.
+   */
+  const customer = await prisma.customer.findUniqueOrThrow({
+    where: { id: await fixtureCustomerId() },
   });
-  fixtureCustomerIds.push(customer.id);
 
   const criado = (
     await app.inject({
@@ -385,11 +388,9 @@ describe("Gerar OP para o saldo restante", () => {
     const acabado = await criarItemAcabado();
     const product = await criarProduto(app, acabado.id);
     const prisma = getPrisma();
-    const m = marca();
-    const customer = await prisma.customer.create({
-      data: { code: `CLI-SALDO-${m}`, legalName: `Cliente Saldo ${m}` },
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { id: await fixtureCustomerId() },
     });
-    fixtureCustomerIds.push(customer.id);
     const criado = (
       await app.inject({
         method: "POST",

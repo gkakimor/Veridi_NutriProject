@@ -90,11 +90,14 @@ function marker(): string {
 
 async function createCustomer() {
   const prisma = getPrisma();
-  const m = marker();
-  const customer = await prisma.customer.create({
-    data: { code: `CLI-EXP-${m}`, legalName: `Cliente Expedição Teste ${m}`, active: true },
+  /*
+   * O MESMO cliente do produto: produto do Cliente A não é produzido sob
+   * pedido do Cliente B (`resolveOrderCustomerId`). Enquanto o produto não
+   * tinha dono isso nunca disparava; agora todo produto tem cliente.
+   */
+  const customer = await prisma.customer.findUniqueOrThrow({
+    where: { id: await fixtureCustomerId() },
   });
-  fixtureCustomerIds.push(customer.id);
   return customer;
 }
 

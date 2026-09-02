@@ -6,6 +6,7 @@ import { addMonths, suggestedExpiryDate } from "../../lib/date-months.js";
 import { splitDecimal } from "../../lib/part-split.js";
 import { suggestBusinessLotNumber } from "../../lib/business-lot.js";
 import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
 /**
  * Capacidade 36 — documentos controlados, numeração oficial, produção
@@ -186,7 +187,7 @@ async function createProductWithFormulation(
       payload: {
         name: `Produto GMP ${marker()}`,
         finishedProductItemId: finishedItem.id,
-        ...(overrides.customerId ? { customerId: overrides.customerId } : {}),
+        customerId: overrides.customerId ?? (await fixtureCustomerId()),
         ...(overrides.shelfLifeMonths ? { shelfLifeMonths: overrides.shelfLifeMonths } : {}),
         ...(overrides.businessLotCode ? { businessLotCode: overrides.businessLotCode } : {}),
       },

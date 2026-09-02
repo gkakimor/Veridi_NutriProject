@@ -118,7 +118,16 @@ describe("Formulations — versionamento", () => {
     const app = buildTestApp();
     await app.ready();
 
+    /*
+     * Produto SEM item de produto acabado não é mais criável pela API — todo
+     * produto novo nasce com o seu. O estado existe na base (importados do
+     * legado), então é montado direto no banco, que é de onde ele vem.
+     */
     const product = await createProduct(app);
+    await getPrisma().product.update({
+      where: { id: product.id },
+      data: { finishedProductItemId: null },
+    });
     const response = await app.inject({
       method: "POST",
       url: `/products/${product.id}/formulation-versions`,

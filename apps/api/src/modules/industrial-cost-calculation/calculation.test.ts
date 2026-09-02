@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
 /**
  * Capacidade 45 — cálculo do custo industrial.
@@ -300,7 +301,7 @@ async function createStructure(app: App, options: StructureOptions) {
       payload: {
         name: `Produto Cálculo ${m}`,
         finishedProductItemId: finishedItem.id,
-        ...(customer ? { customerId: customer.id } : {}),
+        customerId: customer?.id ?? (await fixtureCustomerId()),
         ...(options.unitsPerShippingBox
           ? { unitsPerShippingBox: options.unitsPerShippingBox }
           : {}),
