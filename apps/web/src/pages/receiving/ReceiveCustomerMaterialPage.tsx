@@ -8,6 +8,7 @@ import { createCustomerSuppliedReceipt } from "../../lib/receiving-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 
 interface LineDraft {
   key: string;
@@ -126,18 +127,16 @@ export function ReceiveCustomerMaterialPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Compras / Recebimentos</div>
+          <PageBreadcrumbs
+            items={[
+              { label: "Recebimentos", href: "/compras/recebimentos" },
+              { label: "Material do cliente" },
+            ]}
+          />
           <div className="doc-title">
             <h1>Material enviado pelo cliente</h1>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => navigate("/compras/recebimentos")}
-        >
-          ← Voltar
-        </button>
       </div>
 
       <div className="doc-body">
