@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { Link, useNavigate } from "react-router-dom";
 import type { ShipmentDTO, ShipmentStatus } from "@veridi/shared";
@@ -10,6 +13,17 @@ import { formatDate } from "../../lib/dates";
 type ActiveFilter = ShipmentStatus | "all";
 
 const PAGE_SIZE = 20;
+
+/**
+ * ⓘ de rótulo e cabeçalho de coluna. O texto mora em `help-content`: a
+ * mesma palavra quer dizer a mesma coisa na lista e na ficha, e quem revisa
+ * a explicação não deveria precisar abrir duas telas.
+ */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
+
 
 function statusBadgeClass(status: ShipmentStatus): string {
   switch (status) {
@@ -83,6 +97,10 @@ export function ShipmentsPage() {
         <ExportCsvButton path="/shipments/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
 </div>
 
+      {/* Rascunho e confirmada não são dois estágios do mesmo documento:
+          um não toca em estoque e o outro é a saída física, definitiva. */}
+      <ContextHelp topic={helpTopics["comercial.expedicoes"]} />
+
       {/* Um único caminho de criação — Pedido → Expedição — evita expedição
           sem pedido nem reserva. O que faltava era dizer isso aqui, em vez
           de deixar o operador procurar um botão que não existe. */}
@@ -136,8 +154,14 @@ export function ShipmentsPage() {
               <th>Pedido</th>
               <th>Cliente</th>
               <th>Data</th>
-              <th className="is-numeric">Quantidade</th>
-              <th>Status</th>
+              <th className="is-numeric">
+                Quantidade
+                <DicaDaColuna id="comercial.expedicaoQuantidade" />
+              </th>
+              <th>
+                Status
+                <DicaDaColuna id="comercial.expedicaoStatus" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

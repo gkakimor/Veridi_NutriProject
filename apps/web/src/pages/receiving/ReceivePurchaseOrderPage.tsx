@@ -9,6 +9,15 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
+function DicaDoCampo({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 interface LineDraft {
   purchaseOrderLineId: string;
@@ -178,6 +187,8 @@ export function ReceivePurchaseOrderPage() {
         </div>
 
         <div className="doc-body">
+          <ContextHelp topic={helpTopics["compras.recebimentos"]} />
+
           <FormSection
             title="Selecionar ordem de compra"
             subtitle="Somente OCs confirmadas com quantidade em aberto podem receber materiais."
@@ -243,6 +254,10 @@ export function ReceivePurchaseOrderPage() {
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
+
+        {/* Confirmar aqui é irreversível: cria lote e entrada de estoque, e
+            não existe edição depois. Vale dizer isso antes, não no erro. */}
+        <ContextHelp topic={helpTopics["compras.recebimentos"]} />
 
         <FormSection title="Dados do recebimento">
           <div className="field-grid-2">
@@ -316,6 +331,7 @@ export function ReceivePurchaseOrderPage() {
                   <div className="field">
                     <label htmlFor={`supplier-lot-${line.purchaseOrderLineId}`}>
                       Lote do fornecedor <span className="req">*</span>
+                      <DicaDoCampo id="estoque.loteFornecedor" />
                     </label>
                     <input
                       id={`supplier-lot-${line.purchaseOrderLineId}`}
@@ -348,6 +364,7 @@ export function ReceivePurchaseOrderPage() {
                 <div className="field">
                   <label htmlFor={`cost-${line.purchaseOrderLineId}`}>
                     Custo efetivo de aquisição ({line.unitCode})
+                    <DicaDoCampo id="compras.custoEfetivo" />
                   </label>
                   <input
                     id={`cost-${line.purchaseOrderLineId}`}

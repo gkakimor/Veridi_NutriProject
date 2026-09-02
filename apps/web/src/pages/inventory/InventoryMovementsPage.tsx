@@ -10,10 +10,19 @@ import {
 import { useInitialFilters } from "../../lib/filter-params";
 import { listInventoryMovements } from "../../lib/inventory-api";
 import { EntityLink } from "../../components/EntityLink";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 
 type TypeFilter = InventoryMovementType | "all";
 
 const PAGE_SIZE = 20;
+
+/** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("pt-BR");
@@ -83,6 +92,10 @@ export function InventoryMovementsPage() {
         <ExportCsvButton path="/inventory-movements/export.csv" filters={{ search, type: typeFilter === "all" ? undefined : typeFilter, itemId }} />
 </div>
 
+      {/* "Histórico imutável" no subtítulo diz o QUE; quem procura o botão de
+          corrigir precisa saber o ONDE — e que o saldo sai daqui. */}
+      <ContextHelp topic={helpTopics["estoque.movimentacoes"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="movements-search">
@@ -136,9 +149,15 @@ export function InventoryMovementsPage() {
               <th>Tipo</th>
               <th>Entrada/Saída</th>
               <th className="is-numeric">Quantidade</th>
-              <th>Origem</th>
+              <th>
+                Origem
+                <DicaDaColuna id="estoque.origemMovimento" />
+              </th>
               <th>Usuário</th>
-              <th>Motivo</th>
+              <th>
+                Motivo
+                <DicaDaColuna id="estoque.motivoMovimento" />
+              </th>
             </tr>
           </thead>
           <tbody>

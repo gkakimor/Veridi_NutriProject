@@ -27,6 +27,19 @@ import { createSample, listSamples } from "../../lib/samples-api";
 import { useAuth } from "../../app/AuthProvider";
 import { ProjectFormModal } from "./ProjectFormModal";
 import { EntityLink } from "../../components/EntityLink";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/**
+ * ⓘ de rótulo e cabeçalho de coluna. O texto mora em `help-content`: a
+ * mesma palavra quer dizer a mesma coisa na lista e na ficha, e quem revisa
+ * a explicação não deveria precisar abrir duas telas.
+ */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 import { formatDate } from "../../lib/dates";
 
 
@@ -190,6 +203,12 @@ export function ProjectDetailPage() {
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
 
+        {/* A ficha reúne quatro assuntos que a pessoa costuma tratar como
+            telas diferentes — produto, custo, proposta e amostra. Dizer o
+            que é um projeto, e o que a aprovação faz, vem antes de
+            qualquer botão. */}
+        <ContextHelp topic={helpTopics["comercial.projeto"]} />
+
         <FormSection title="Resumo">
           <dl className="definition-list">
             <dt>Cliente</dt>
@@ -204,11 +223,20 @@ export function ProjectDetailPage() {
             <dd>{formatDate(project.entryDate)}</dd>
             <dt>Responsável</dt>
             <dd>{project.responsibleUserName ?? "—"}</dd>
-            <dt>Código legado</dt>
+            <dt>
+              Código legado
+              <DicaDaColuna id="comercial.projetoCodigoLegado" />
+            </dt>
             <dd>{project.externalCode ?? "—"}</dd>
-            <dt>Origem do registro</dt>
+            <dt>
+              Origem do registro
+              <DicaDaColuna id="comercial.projetoOrigem" />
+            </dt>
             <dd>{PROJECT_SOURCE_LABELS[project.source]}</dd>
-            <dt>Produto resultante</dt>
+            <dt>
+              Produto resultante
+              <DicaDaColuna id="comercial.projetoProduto" />
+            </dt>
             <dd>
               {project.productId ? (
                 <EntityLink

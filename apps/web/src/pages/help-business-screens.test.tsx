@@ -180,19 +180,42 @@ describe("Formulação", () => {
     );
   });
 
-  it("mostra o fluxo até a precificação, na ordem em que ele acontece", async () => {
+  it("mostra cada fluxo numerado, na ordem em que ele acontece", async () => {
     await abrir();
 
     await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
 
-    // O rótulo acessível nomeia o FLUXO, não a tela: uma tela pode ter mais
-    // de um caminho. Cada caixa vem numerada, e é o número que casa com o
-    // passo a passo logo abaixo.
-    const fluxo = screen.getByRole("list", { name: "Fluxo: Fluxo da tela" });
-    const etapas = helpTopics["formulacao.comoFunciona"].flow ?? [];
+    // O rótulo acessível nomeia o FLUXO, não a tela: esta tela tem dois
+    // caminhos — montar a versão, e o que a versão ativa dispara depois.
+    // Cada caixa vem numerada, e é o número que casa com o passo a passo.
+    const fluxos = helpTopics["formulacao.comoFunciona"].flows ?? [];
+    expect(fluxos.length).toBeGreaterThan(1);
+
+    for (const fluxo of fluxos) {
+      const lista = screen.getByRole("list", { name: `Fluxo: ${fluxo.name}` });
+      expect(
+        Array.from(lista.querySelectorAll("li")).map((item) => item.textContent),
+      ).toEqual(fluxo.steps.map((etapa, i) => `${i + 1}${etapa.label}`));
+    }
+  });
+
+  it("explica o que a tela É antes de explicar o caminho", async () => {
+    await abrir();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+
+    // A queixa que originou isto: a ajuda desenhava a cadeia macro e não
+    // dizia o que uma formulação é. O glossário da tela vem antes do fluxo.
+    const conceitos = helpTopics["formulacao.comoFunciona"].concepts ?? [];
+    expect(conceitos.length).toBeGreaterThan(0);
+
+    // Busca dentro do glossário: "Versão ativa" também é caixa de fluxo, e
+    // uma busca solta acharia as duas.
+    const glossario = screen.getByRole("heading", { name: "Nesta tela" })
+      .nextElementSibling as HTMLElement;
     expect(
-      Array.from(fluxo.querySelectorAll("li")).map((item) => item.textContent),
-    ).toEqual(etapas.map((etapa, i) => `${i + 1}${etapa.label}`));
+      Array.from(glossario.querySelectorAll("dt")).map((item) => item.textContent),
+    ).toEqual(conceitos.map((conceito) => conceito.term));
   });
 });
 

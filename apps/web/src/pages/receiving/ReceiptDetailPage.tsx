@@ -10,6 +10,15 @@ import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 
 /**
@@ -112,6 +121,10 @@ export function ReceiptDetailPage() {
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
 
+        {/* "Confirmado" no cabeçalho é lido como "ainda dá para editar". Aqui
+            não dá: o recebimento é histórico, e a correção mora no estoque. */}
+        <ContextHelp topic={helpTopics["compras.recebimentos"]} />
+
         <FormSection title="Dados do recebimento">
           <dl className="definition-list">
             <dt>Origem</dt>
@@ -171,13 +184,31 @@ export function ReceiptDetailPage() {
                   <th>Item</th>
                   <th className="is-numeric">Quantidade</th>
                   <th>Un.</th>
-                  <th>Lote fornecedor</th>
+                  {/* Lote do fornecedor e lote interno lado a lado é
+                      justamente onde nasce a pergunta "por que dois lotes?".
+                      Preço previsto e custo efetivo têm o mesmo problema. */}
+                  <th>
+                    Lote fornecedor
+                    <DicaDaColuna id="estoque.loteFornecedor" />
+                  </th>
                   <th>Validade</th>
                   <th>Localização</th>
-                  <th>Lote interno</th>
-                  <th>CoA</th>
-                  <th className="is-numeric">Preço previsto (OC)</th>
-                  <th className="is-numeric">Custo efetivo</th>
+                  <th>
+                    Lote interno
+                    <DicaDaColuna id="estoque.loteInterno" />
+                  </th>
+                  <th>
+                    CoA
+                    <DicaDaColuna id="estoque.laudo" />
+                  </th>
+                  <th className="is-numeric">
+                    Preço previsto (OC)
+                    <DicaDaColuna id="compras.precoPrevisto" />
+                  </th>
+                  <th className="is-numeric">
+                    Custo efetivo
+                    <DicaDaColuna id="compras.custoEfetivo" />
+                  </th>
                   <th aria-hidden="true" />
                 </tr>
               </thead>

@@ -5,6 +5,9 @@ import type { InventoryItemSummaryDTO, ItemType } from "@veridi/shared";
 import { INVENTORY_UNAVAILABLE_REASON_LABELS, ITEM_TYPES, ITEM_TYPE_LABELS } from "@veridi/shared";
 import { useInitialFilters } from "../../lib/filter-params";
 import { listInventory } from "../../lib/inventory-api";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 
 type TypeFilter = ItemType | "all";
 
@@ -13,6 +16,12 @@ function explicarIndisponibilidade(item: InventoryItemSummaryDTO): string {
   return item.unavailable
     .map((linha) => `${linha.quantity} ${item.unitCode} ${INVENTORY_UNAVAILABLE_REASON_LABELS[linha.reason]}`)
     .join(" · ");
+}
+
+/** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
 }
 
 const PAGE_SIZE = 20;
@@ -93,6 +102,11 @@ export function InventoryOverviewPage() {
         <ExportCsvButton path="/inventory/export.csv" filters={{ search, type: typeFilter === "all" ? undefined : typeFilter, onlyWithStock }} />
 </div>
 
+      {/* A legenda abaixo define as quatro palavras; o painel explica de onde
+          os números VÊM — que é a pergunta seguinte, e a que faz alguém
+          procurar um campo de saldo que não existe. */}
+      <ContextHelp topic={helpTopics["estoque.posicao"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="inventory-search">
@@ -165,10 +179,22 @@ export function InventoryOverviewPage() {
               <th>Item</th>
               <th>Tipo</th>
               <th>Un.</th>
-              <th className="is-numeric">Físico</th>
-              <th className="is-numeric">Reservado</th>
-              <th className="is-numeric">Disponível</th>
-              <th className="is-numeric">Em Compra</th>
+              <th className="is-numeric">
+                Físico
+                <DicaDaColuna id="estoque.fisico" />
+              </th>
+              <th className="is-numeric">
+                Reservado
+                <DicaDaColuna id="estoque.reservado" />
+              </th>
+              <th className="is-numeric">
+                Disponível
+                <DicaDaColuna id="estoque.disponivel" />
+              </th>
+              <th className="is-numeric">
+                Em Compra
+                <DicaDaColuna id="estoque.emCompra" />
+              </th>
             </tr>
           </thead>
           <tbody>

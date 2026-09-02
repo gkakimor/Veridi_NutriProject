@@ -23,7 +23,7 @@ type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
  */
 export async function createFinishedItemForProduct(
   tx: PrismaOrTx,
-  input: { name: string; unitCode: string },
+  input: { name: string; unitCode: string; requiresCoa?: boolean },
 ): Promise<Item> {
   const code = await nextItemCode(tx, "FINISHED_PRODUCT");
 
@@ -36,6 +36,10 @@ export async function createFinishedItemForProduct(
       controlsLot: true,
       controlsExpiry: true,
       requiresQualityRelease: true,
+      // O laudo é o único que varia: há produto que exige CoA aprovado
+      // para liberar o lote e há produto que não. Ausente, segue desligado
+      // — exigir laudo sem que ninguém tenha pedido travaria expedição.
+      requiresCoa: input.requiresCoa ?? false,
       active: true,
     },
   });

@@ -56,6 +56,15 @@ export const createProductSchema = z.object({
   finishedProductItemId: optionalRelationId,
   /** Unidade de estoque do item criado automaticamente. */
   finishedUnitCode: z.string().trim().min(1).max(20).optional(),
+  /**
+   * Se os lotes deste produto exigem laudo aprovado para serem liberados.
+   *
+   * Único dos quatro controles do item que a criação do produto decide:
+   * lote, validade e liberação da Qualidade são padrão da casa e não têm
+   * chave. Só vale quando o item é criado aqui — informar item pronto em
+   * `finishedProductItemId` mantém os controles que aquele item já tem.
+   */
+  finishedRequiresCoa: z.boolean().optional(),
   ...industrialProductFields,
   externalCode: optionalNullableText(100),
   notes: optionalNullableText(1000),

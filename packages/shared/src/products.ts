@@ -13,6 +13,19 @@ export interface ProductFinishedItemSummary {
   id: string;
   code: string;
   name: string;
+  /**
+   * Como o estoque deste produto é controlado.
+   *
+   * Quem cadastra o produto nunca vê o item de estoque que nasce junto, e
+   * portanto não vê que ele já nasce controlando lote, controlando validade
+   * e exigindo liberação da Qualidade. Sem isso na tela do produto, a única
+   * forma de descobrir era abrir o cadastro de Itens — e a resposta a "este
+   * produto gera lote?" tem que estar onde o produto está.
+   */
+  controlsLot: boolean;
+  controlsExpiry: boolean;
+  requiresQualityRelease: boolean;
+  requiresCoa: boolean;
 }
 
 /** Forma farmacêutica do produto. */
@@ -140,6 +153,16 @@ export interface CreateProductInput {
   name: string;
   customerId?: string;
   finishedProductItemId?: string;
+  /** Unidade de estoque do item de produto acabado criado junto. */
+  finishedUnitCode?: string;
+  /**
+   * Se os lotes deste produto só são liberados com laudo aprovado.
+   *
+   * É o único dos quatro controles que varia de produto para produto —
+   * lote, validade e liberação da Qualidade são padrão da casa e ligados
+   * sempre. Por isso é o único que a tela pergunta.
+   */
+  finishedRequiresCoa?: boolean;
   /**
    * Enum ou `""` para limpar — o backend valida o domínio. Números chegam
    * como string do formulário e são convertidos no servidor, nunca por

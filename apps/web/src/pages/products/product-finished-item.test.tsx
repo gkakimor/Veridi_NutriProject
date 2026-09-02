@@ -87,7 +87,15 @@ const PRODUTO_SALVO = {
   customerId: CLIENTE.id,
   customer: { id: CLIENTE.id, code: CLIENTE.code, legalName: CLIENTE.legalName },
   finishedProductItemId: "item-1",
-  finishedProductItem: { id: "item-1", code: "PA-000008", name: "Coenzima Q10 60 cápsulas" },
+  finishedProductItem: {
+    id: "item-1",
+    code: "PA-000008",
+    name: "Coenzima Q10 60 cápsulas",
+    controlsLot: true,
+    controlsExpiry: true,
+    requiresQualityRelease: true,
+    requiresCoa: true,
+  },
   originProjectId: null,
   active: true,
 } as unknown as ProductDTO;
@@ -189,6 +197,31 @@ describe("Produto — item de produto acabado", () => {
     });
   });
 
+  it("a exigência de laudo vai no payload — e é a única que a tela pergunta", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const campo = await screen.findByLabelText(/Cliente/);
+    await user.type(campo, "THE KING");
+    await user.click(await screen.findByText(/THIAGO LUZ DE SOUZA/));
+    await user.type(screen.getByLabelText(/^Nome/), "Coenzima Q10");
+    await user.click(screen.getByLabelText(/Exige CoA \/ Laudo/));
+    await user.click(screen.getByRole("button", { name: /Criar produto|Salvar/ }));
+
+    await waitFor(() => {
+      expect(vi.mocked(createProduct)).toHaveBeenCalledWith(
+        expect.objectContaining({ finishedRequiresCoa: true }),
+      );
+    });
+
+    // Lote, validade e liberação da Qualidade são padrão da casa: oferecer
+    // um interruptor daria a impressão de que dá para produzir acabado sem
+    // lote, o que o sistema não permite.
+    expect(screen.queryByLabelText(/Controla lote/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Controla validade/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/liberação da Qualidade/)).not.toBeInTheDocument();
+  });
+
   it("produto salvo mostra o item e o caminho para o estoque", async () => {
     renderModal({ mode: "edit", product: PRODUTO_SALVO });
 
@@ -197,6 +230,11 @@ describe("Produto — item de produto acabado", () => {
     expect(link).toHaveAttribute("href", "/estoque/item-1");
     // Trocar o item de um produto com histórico não é operação de formulário.
     expect(screen.queryByLabelText(/Item de produto acabado/)).not.toBeInTheDocument();
+    // Como o estoque é controlado é fato na tela do produto: antes disso a
+    // resposta só existia no cadastro de Itens.
+    expect(
+      screen.getByText(/controla lote · controla validade · exige liberação da Qualidade · exige CoA/),
+    ).toBeInTheDocument();
   });
 });
 

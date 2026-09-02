@@ -26,6 +26,19 @@ import {
 } from "../../lib/samples-api";
 import { sampleStatusBadgeClass } from "./SamplesPage";
 import { EntityLink } from "../../components/EntityLink";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/**
+ * ⓘ de rótulo e cabeçalho de coluna. O texto mora em `help-content`: a
+ * mesma palavra quer dizer a mesma coisa na lista e na ficha, e quem revisa
+ * a explicação não deveria precisar abrir duas telas.
+ */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
@@ -212,6 +225,11 @@ export function SampleDetailPage() {
       {actionError && <p className="form-alert">{actionError}</p>}
 
       <div className="doc-body">
+        {/* Consumo aqui é baixa de estoque na hora, e reprovar não estorna.
+            As duas coisas são irreversíveis e nenhuma delas se deduz da
+            tela. */}
+        <ContextHelp topic={helpTopics["comercial.amostra"]} />
+
         <FormSection
           title="Dados da amostra"
           subtitle="Amostra não é lote nem ordem de produção — o resultado nunca entra no estoque de produto acabado."
@@ -233,7 +251,10 @@ export function SampleDetailPage() {
             {/* Num projeto com vários produtos, saber o que a amostra testa é
                 a informação principal — sem ela T1 e T2 podem ser sabores
                 diferentes e a tela não conta a diferença. */}
-            <dt>Produto testado</dt>
+            <dt>
+              Produto testado
+              <DicaDaColuna id="comercial.amostraProdutoTestado" />
+            </dt>
             <dd>
               {sample.productId ? (
                 <EntityLink
@@ -250,7 +271,10 @@ export function SampleDetailPage() {
             <dd>{sample.description ?? "—"}</dd>
             <dt>Código legado</dt>
             <dd className="is-code">{sample.externalCode ?? "—"}</dd>
-            <dt>Quantidade produzida</dt>
+            <dt>
+              Quantidade produzida
+              <DicaDaColuna id="comercial.amostraQuantidadeProduzida" />
+            </dt>
             <dd>
               {sample.outputQuantity
                 ? `${sample.outputQuantity} ${sample.outputUomCode ?? ""}`
@@ -293,7 +317,10 @@ export function SampleDetailPage() {
             )}
             {sample.decisionNotes && (
               <>
-                <dt>Parecer</dt>
+                <dt>
+                  Parecer
+                  <DicaDaColuna id="comercial.amostraParecer" />
+                </dt>
                 <dd>{sample.decisionNotes}</dd>
               </>
             )}
@@ -310,7 +337,10 @@ export function SampleDetailPage() {
                 <tr>
                   <th>Item</th>
                   <th>Lote</th>
-                  <th>Proprietário</th>
+                  <th>
+                    Proprietário
+                    <DicaDaColuna id="comercial.amostraProprietario" />
+                  </th>
                   <th className="is-numeric">Quantidade</th>
                   <th>Quando</th>
                   <th>Quem</th>

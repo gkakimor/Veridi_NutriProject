@@ -5,6 +5,15 @@ import type { ItemDTO, StockCountResultDTO } from "@veridi/shared";
 import { listItems } from "../../lib/items-api";
 import { getInventoryItem, createStockCount } from "../../lib/inventory-api";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
+function DicaDoCampo({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 interface LotOption {
   lotId: string;
@@ -139,6 +148,10 @@ export function StockCountPage() {
         </div>
       </div>
 
+      {/* Contagem não é o mesmo que ajuste: quem conta espera "acertar o
+          saldo", e o que acontece é um lançamento novo pela diferença. */}
+      <ContextHelp topic={helpTopics["estoque.inventario"]} />
+
       <FormSection title="Contagem">
         <div className="field-grid-2">
           <div className="field">
@@ -175,7 +188,10 @@ export function StockCountPage() {
           )}
 
           <div className="field">
-            <label>Saldo sistema</label>
+            <label>
+              Saldo sistema
+              <DicaDoCampo id="estoque.saldoSistema" />
+            </label>
             <div className="field-readonly-value">
               {loadingScope
                 ? "Carregando…"
@@ -201,7 +217,10 @@ export function StockCountPage() {
           </div>
 
           <div className="field">
-            <label>Diferença</label>
+            <label>
+              Diferença
+              <DicaDoCampo id="estoque.diferenca" />
+            </label>
             <div className="field-readonly-value">
               {difference !== null ? `${difference} ${selectedItem?.unitCode ?? ""}` : "—"}
             </div>

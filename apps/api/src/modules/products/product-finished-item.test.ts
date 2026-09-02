@@ -91,6 +91,47 @@ describe("Produto — item de produto acabado automático", () => {
     expect(item?.controlsLot).toBe(true);
     expect(item?.controlsExpiry).toBe(true);
     expect(item?.requiresQualityRelease).toBe(true);
+    // Laudo não é padrão: exigir CoA sem ninguém ter pedido travaria a
+    // liberação de todo lote produzido.
+    expect(item?.requiresCoa).toBe(false);
+
+    // Os controles viajam no resumo: a tela do produto responde "como o
+    // estoque deste produto é controlado?" sem abrir o cadastro de Itens.
+    expect(body.finishedProductItem).toMatchObject({
+      controlsLot: true,
+      controlsExpiry: true,
+      requiresQualityRelease: true,
+      requiresCoa: false,
+    });
+
+    await app.close();
+  });
+
+  it("liga a exigência de laudo quando o produto pede", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const customerId = await fixtureCustomerId();
+
+    const response = await createProduct(app, {
+      customerId,
+      name: `Vitamina D3 com laudo ${marker()}`,
+      finishedUnitCode: "un",
+      finishedRequiresCoa: true,
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+
+    const item = await getPrisma().item.findUnique({
+      where: { id: body.finishedProductItemId },
+    });
+    expect(item?.requiresCoa).toBe(true);
+    // Os outros três não mudam: são padrão da casa, e o formulário do
+    // produto não os oferece.
+    expect(item?.controlsLot).toBe(true);
+    expect(item?.controlsExpiry).toBe(true);
+    expect(item?.requiresQualityRelease).toBe(true);
+    expect(body.finishedProductItem.requiresCoa).toBe(true);
 
     await app.close();
   });

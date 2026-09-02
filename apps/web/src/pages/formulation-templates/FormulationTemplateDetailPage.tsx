@@ -27,6 +27,9 @@ import { SearchableEntitySelect } from "../../components/SearchableEntitySelect"
 import { TemplateDiff } from "./TemplateDiff";
 import { formatDateTime } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 
 /**
  * Detalhe de um template da biblioteca.
@@ -35,6 +38,12 @@ import { useAuth } from "../../app/AuthProvider";
  * ativa, cria-se uma versão nova — a anterior continua existindo porque
  * formulações de produto apontam para ela.
  */
+
+/** ⓘ de um conceito da matriz, lido do registro central. */
+function Dica({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 interface LinhaEditavel extends FormulationTemplateComponentInput {
   chave: string;
@@ -124,7 +133,10 @@ export function FormulationTemplateDetailPage() {
             <th>Item</th>
             <th className="is-numeric">Quantidade</th>
             <th>Unidade</th>
-            <th>Fornecimento padrão</th>
+            <th>
+              Fornecimento padrão
+              <Dica id="producao.template.fornecimentoPadrao" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -173,6 +185,11 @@ export function FormulationTemplateDetailPage() {
       </div>
 
       <div className="doc-body">
+        {/* Rascunho, ativa e arquivada convivem nesta tela, e a diferença
+            entre elas é a regra inteira da capacidade. A explicação vem
+            antes da primeira seção. */}
+        <ContextHelp topic={helpTopics["producao.templateDetalhe"]} />
+
         {error && <p className="form-alert">{error}</p>}
 
         <FormSection
@@ -268,7 +285,10 @@ export function FormulationTemplateDetailPage() {
           >
             <div className="field-grid-2">
               <div className="field field--narrow">
-                <label htmlFor="template-base">Base da formulação</label>
+                <label htmlFor="template-base">
+                  Base da formulação
+                  <Dica id="producao.template.base" />
+                </label>
                 <input
                   id="template-base"
                   type="text"
@@ -462,7 +482,10 @@ export function FormulationTemplateDetailPage() {
                   <th>Situação</th>
                   <th>Origem</th>
                   <th className="is-numeric">Componentes</th>
-                  <th className="is-numeric">Usada por</th>
+                  <th className="is-numeric">
+                    Usada por
+                    <Dica id="producao.template.usadaPor" />
+                  </th>
                   <th>Criada em</th>
                   <th aria-hidden="true" />
                 </tr>

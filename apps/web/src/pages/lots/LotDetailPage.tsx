@@ -30,6 +30,15 @@ import { QrCode } from "../../components/QrCode";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
+function DicaDoCampo({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 
 function formatDateTime(value: string | null): string {
@@ -285,6 +294,11 @@ export function LotDetailPage() {
       </div>
 
       <div className="doc-body">
+        {/* Duas identidades, um dono, uma situação operacional e uma
+            documental — quatro conceitos numa página só, e nenhum deles
+            óbvio pelo rótulo. */}
+        <ContextHelp topic={helpTopics["estoque.lotes"]} />
+
         {error && errorScope === "geral" && (
           <p className="form-alert" role="alert">
             {error}
@@ -325,7 +339,10 @@ export function LotDetailPage() {
               <dd>
                 <EntityLink kind="item" id={lot.itemId} code={lot.itemCode} name={lot.itemName} />
               </dd>
-              <dt>Proprietário</dt>
+              <dt>
+                Proprietário
+                <DicaDoCampo id="estoque.proprietario" />
+              </dt>
               <dd>
                 {ownerLabel(lot.ownerType, lot.ownerCustomerName)}
                 {lot.ownerType === "CUSTOMER" && lot.ownerCustomerCode ? (
@@ -341,7 +358,10 @@ export function LotDetailPage() {
                   name={lot.supplierName}
                 />
               </dd>
-              <dt>Lote do fornecedor</dt>
+              <dt>
+                Lote do fornecedor
+                <DicaDoCampo id="estoque.loteFornecedor" />
+              </dt>
               <dd>{lot.supplierLot ?? "—"}</dd>
               <dt>Origem — Recebimento</dt>
               <dd>
@@ -384,7 +404,10 @@ export function LotDetailPage() {
           }
         >
           <dl className="definition-list">
-            <dt>{lot.origin === "PRODUCTION" ? "Quantidade produzida" : "Quantidade recebida"}</dt>
+            <dt>
+              {lot.origin === "PRODUCTION" ? "Quantidade produzida" : "Quantidade recebida"}
+              <DicaDoCampo id="estoque.recebido" />
+            </dt>
             <dd>
               {lot.origin === "PRODUCTION" ? lot.producedQuantity : lot.initialReceivedQuantity}{" "}
               {lot.unitCode}
@@ -398,15 +421,24 @@ export function LotDetailPage() {
 
         <FormSection title="Saldo" subtitle="Derivado do histórico de movimentações — nunca uma coluna própria do lote.">
           <dl className="definition-list">
-            <dt>Físico</dt>
+            <dt>
+              Físico
+              <DicaDoCampo id="estoque.fisico" />
+            </dt>
             <dd>
               {lot.onHand} {lot.unitCode}
             </dd>
-            <dt>Reservado</dt>
+            <dt>
+              Reservado
+              <DicaDoCampo id="estoque.reservado" />
+            </dt>
             <dd>
               {lot.reserved} {lot.unitCode}
             </dd>
-            <dt>Disponível</dt>
+            <dt>
+              Disponível
+              <DicaDoCampo id="estoque.disponivel" />
+            </dt>
             <dd>
               {lot.available} {lot.unitCode}
             </dd>
@@ -667,7 +699,10 @@ export function LotDetailPage() {
           <dl className="definition-list">
             <dt>Exige CoA</dt>
             <dd>{lot.requiresCoa ? "Sim" : "Não"}</dd>
-            <dt>Situação do CoA</dt>
+            <dt>
+              Situação do CoA
+              <DicaDoCampo id="estoque.laudo" />
+            </dt>
             <dd>
               <span
                 className={

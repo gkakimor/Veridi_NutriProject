@@ -8,47 +8,98 @@ import type { HelpHint, HelpTopic } from "../help-content";
 export const baseTopics = {
   "formulacao.comoFunciona": {
     module: "producao",
-    title: "Como a formulação vira custo e preço",
+    title: "Formulação: o que é e como usar esta tela",
     summary:
-      "A formulação é a receita oficial do produto, e só passa a valer quando uma versão é ativada. É a versão ativa que a estrutura de custos, o cálculo e a precificação leem — e que a produção executa.",
-    flow: [
-      { label: "Produto" },
-      { label: "Formulação" },
-      { label: "Versão ativa", tone: "accent" },
-      { label: "Estrutura de custos" },
-      { label: "Cálculo" },
-      { label: "Precificação" },
+      "A formulação é a receita oficial de um produto: quais matérias-primas entram, quanto de cada uma, e sobre qual base essa quantidade é declarada. Ela não é editada no lugar — é escrita em versões. Uma versão vale enquanto é rascunho, e vira documento no momento em que é ativada: dali em diante ela não muda mais, e é ela que a produção executa e que o custo e o preço leem.",
+    concepts: [
+      {
+        term: "Versão",
+        text: "Cada revisão da receita é uma versão própria, com número e situação. Mudar a receita é criar uma versão nova, nunca reescrever a anterior — é assim que o histórico do que já foi produzido continua verdadeiro.",
+      },
+      {
+        term: "Versão ativa",
+        text: "A única versão que vale para produzir e custear. Só existe uma por produto. Ativar é o ato que fecha a receita: a partir daí ela é histórico.",
+      },
+      {
+        term: "Base de cálculo",
+        text: "A referência das quantidades que você digita: por lote (a receita inteira de uma batelada), por unidade acabada, ou por dose. Ela muda o significado de todo número da tabela, não o número em si.",
+      },
+      {
+        term: "Componente",
+        text: "Uma linha da receita: um item de estoque com a quantidade que entra. Matéria-prima, embalagem ou material que o próprio cliente fornece.",
+      },
+      {
+        term: "Quantidade declarada × equivalente em estoque",
+        text: "Você declara na unidade em que se pensa a fórmula; o sistema converte para a unidade em que o item é comprado e estocado. É o valor convertido que reserva e baixa material.",
+      },
+      {
+        term: "Pureza e overage",
+        text: "Correções sobre a quantidade declarada: pureza compensa o que o insumo tem de ativo, overage compensa a perda de processo. Ambos aumentam o que sai do estoque sem mudar a fórmula pretendida.",
+      },
+      {
+        term: "Fornecimento",
+        text: "Diz de quem é o material: Veridi ou o cliente. Material do cliente entra na receita e na necessidade de compra, mas nunca no custo de aquisição da Veridi.",
+      },
     ],
-    steps: [
+    flows: [
       {
-        label: "Produto com item acabado",
-        detail:
-          "A formulação pertence ao produto. Sem item de produto acabado vinculado não há o que produzir nem o que custear.",
+        name: "A. Montar e ativar uma versão",
+        when: "É o que você faz nesta tela.",
+        steps: [
+          {
+            label: "Nova versão",
+            tone: "accent",
+            detail:
+              "Nasce em rascunho. Criada a partir da versão ativa, já vem com a receita atual copiada — você altera só o que mudou.",
+          },
+          {
+            label: "Base de cálculo",
+            detail:
+              "Escolha antes de digitar quantidade: ela define o que cada número significa. Trocar depois não reinterpreta o que já foi digitado.",
+          },
+          {
+            label: "Componentes",
+            detail:
+              "Cada linha é um item de estoque e quanto dele entra. O equivalente em estoque aparece ao lado, já convertido para a unidade de compra.",
+          },
+          {
+            label: "Correções",
+            detail:
+              "Pureza, overage e fornecimento por linha. Só onde houver motivo — linha sem correção é a leitura mais fácil.",
+          },
+          {
+            label: "Ativar",
+            tone: "accent",
+            detail:
+              "Fecha a versão e substitui a anterior. A partir daqui a receita não muda mais, e é ela que a produção passa a executar.",
+          },
+        ],
       },
       {
-        label: "Rascunho",
-        detail:
-          "Enquanto está em rascunho a receita é livre: componentes, quantidades, base de cálculo e doses mudam à vontade.",
-      },
-      {
-        label: "Ativar a versão",
-        detail:
-          "Só uma versão fica ativa por produto. Ativar é o que autoriza produzir e calcular custo por ela.",
-      },
-      {
-        label: "Estrutura de custos",
-        detail:
-          "Declara sobre qual versão da receita se calcula, qual base de produção e quais recursos, energia e premissas entram.",
-      },
-      {
-        label: "Cálculo",
-        detail:
-          "Aplica as referências de custo de uma data à estrutura e congela o resultado. É o documento que a precificação lê.",
-      },
-      {
-        label: "Precificação",
-        detail:
-          "Margem e faixas por quantidade partem do cálculo congelado — nunca de um custo recalculado na hora da venda.",
+        name: "B. Da versão ativa ao preço",
+        when: "O que acontece depois, em outras telas, por causa do que você ativou aqui.",
+        steps: [
+          {
+            label: "Versão ativa",
+            tone: "accent",
+            detail: "O ponto de partida de tudo que vem abaixo é a versão que está ativa agora.",
+          },
+          {
+            label: "Estrutura de custos",
+            detail:
+              "Declara sobre qual versão se calcula, qual base de produção e quais recursos, energia e premissas entram.",
+          },
+          {
+            label: "Cálculo",
+            detail:
+              "Aplica as referências de custo de uma data à estrutura e congela o resultado. É o documento que a precificação lê.",
+          },
+          {
+            label: "Precificação",
+            detail:
+              "Margem e faixas por quantidade partem do cálculo congelado — nunca de um custo recalculado na hora da venda.",
+          },
+        ],
       },
     ],
     notes: [
@@ -282,6 +333,42 @@ export const baseHints = {
     module: "comercial",
     label: "Falta",
     text: "Quanto o necessário passa do disponível. É falta física: material em compra não abate esta conta, e falta de material do cliente se resolve com nova remessa dele, não com compra da Veridi.",
+  },
+
+  /*
+   * Conceitos da tela de Formulação. Estavam em texto corrido no subtítulo
+   * da seção, onde ninguém lê depois da primeira vez — e são exatamente os
+   * que fazem a conta dar diferente do esperado.
+   */
+  "formulacao.base": {
+    module: "producao",
+    label: "Base da formulação",
+    text: "A quantidade de produto acabado que a receita abaixo produz. Tudo o que for declarado nos componentes se refere a essa quantidade.",
+  },
+  "formulacao.modoCalculo": {
+    module: "producao",
+    label: "Modo de cálculo",
+    text: "Base fixa: as quantidades declaradas produzem a base informada. Por dose: a quantidade é declarada para UMA dose e multiplicada pelas doses por embalagem. Embalagem continua por unidade acabada — não se multiplica por dose.",
+  },
+  "formulacao.fornecimento": {
+    module: "producao",
+    label: "Fornecimento",
+    text: "Veridi: o material é comprado e custeado pela casa. Cliente: o material vem do cliente, exige produto vinculado a um cliente, e não entra no custo de aquisição da Veridi.",
+  },
+  "formulacao.pureza": {
+    module: "producao",
+    label: "Pureza",
+    text: "Teor real do insumo. Com 80% de pureza é preciso pesar mais para entregar a mesma quantidade ativa. Deixar vazio significa pureza desconhecida — nenhuma correção é aplicada.",
+  },
+  "formulacao.overage": {
+    module: "producao",
+    label: "Overage",
+    text: "Excesso declarado de propósito, para compensar perda de processo ou de validade. Entra no físico a pesar, nunca no que é declarado ao cliente.",
+  },
+  "formulacao.equivalenteEstoque": {
+    module: "producao",
+    label: "Equivalente estoque",
+    text: "Quanto sai do estoque por unidade acabada, já com pureza e overage aplicados. É este número que a ordem de produção reserva e consome.",
   },
 } satisfies Record<string, HelpHint>;
 

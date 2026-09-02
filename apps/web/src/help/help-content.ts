@@ -61,12 +61,28 @@ export interface HelpFlow {
   steps: HelpStep[];
 }
 
+/** Um termo da tela e o que ele significa ali — não no dicionário. */
+export interface HelpConcept {
+  term: string;
+  text: string;
+}
+
 export interface HelpTopic {
   module: HelpModule;
   /** Título do painel — nomeia a regra, não a tela. */
   title: string;
   /** Uma ou duas frases: o que é e por que existe. */
   summary: string;
+  /**
+   * O vocabulário próprio da tela — os termos que aparecem em campo, coluna
+   * e situação e que ninguém adivinha pelo nome.
+   *
+   * Vem ANTES do fluxo de propósito: saber o caminho não adianta para quem
+   * ainda não sabe o que a tela é. O `InfoHint` explica o termo onde ele
+   * aparece; aqui ele é apresentado junto com os outros, que é como a
+   * pessoa aprende a tela pela primeira vez.
+   */
+  concepts?: HelpConcept[];
   /**
    * Etapas soltas, para tela de fluxo único e simples. Havendo `flows`, a
    * explicação de cada etapa vive dentro do fluxo a que pertence.

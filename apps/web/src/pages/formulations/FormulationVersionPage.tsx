@@ -33,8 +33,8 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
-import { ContextHelp } from "../../components/help";
-import { helpTopics } from "../../help/help-content";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
 import { FormulationTemplateOrigin } from "../formulation-templates/FormulationTemplateOrigin";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
@@ -113,6 +113,12 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
  * não modal. DRAFT é totalmente editável; ACTIVE/INACTIVE são read-only por
  * construção (backend também bloqueia).
  */
+/** ⓘ de um conceito da tela — o texto vive no registro de ajuda. */
+function Dica({ id }: { id: "formulacao.base" | "formulacao.modoCalculo" | "formulacao.fornecimento" | "formulacao.pureza" | "formulacao.overage" | "formulacao.equivalenteEstoque" }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
+
 export function FormulationVersionPage() {
   const navigate = useNavigate();
   const { productId, versionId } = useParams<{ productId: string; versionId: string }>();
@@ -527,7 +533,8 @@ export function FormulationVersionPage() {
 
           <div className="field field--narrow">
             <label htmlFor="version-basis">
-              Base da formulação ({version.outputUnitCode}) <span className="req">*</span>
+              Base da formulação ({version.outputUnitCode}) <span className="req">*</span>{" "}
+              <Dica id="formulacao.base" />
             </label>
             {isDraft ? (
               <input
@@ -548,7 +555,9 @@ export function FormulationVersionPage() {
           </div>
 
           <div className="field field--narrow">
-            <label htmlFor="version-mode">Modo de cálculo</label>
+            <label htmlFor="version-mode">
+              Modo de cálculo <Dica id="formulacao.modoCalculo" />
+            </label>
             {isDraft ? (
               <select
                 id="version-mode"
@@ -630,12 +639,20 @@ export function FormulationVersionPage() {
                       categoria do material onde está a unidade de estoque. */}
                   <th>Un. estoque</th>
                   <th>Base</th>
-                  <th>Fornecimento</th>
+                  <th>
+                    Fornecimento <Dica id="formulacao.fornecimento" />
+                  </th>
                   <th className="is-numeric">Quantidade</th>
                   <th>Unidade</th>
-                  <th>Pureza %</th>
-                  <th>Overage %</th>
-                  <th>Equivalente estoque</th>
+                  <th>
+                    Pureza % <Dica id="formulacao.pureza" />
+                  </th>
+                  <th>
+                    Overage % <Dica id="formulacao.overage" />
+                  </th>
+                  <th>
+                    Equivalente estoque <Dica id="formulacao.equivalenteEstoque" />
+                  </th>
                   <th>Físico / unidade</th>
                   {isDraft && <th aria-hidden="true" />}
                 </tr>

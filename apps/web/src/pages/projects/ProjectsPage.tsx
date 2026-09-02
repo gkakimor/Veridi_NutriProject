@@ -4,6 +4,9 @@ import type { CustomerDTO, ProjectDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@veridi/shared";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 import { listProjects, getProjectVocabulary } from "../../lib/projects-api";
 import { listCustomers } from "../../lib/customers-api";
 import { ProjectFormModal } from "./ProjectFormModal";
@@ -13,6 +16,16 @@ import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filter
 import { formatDate } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
+
+/**
+ * ⓘ de cabeçalho de coluna. O texto mora em `help-content`: "Status" quer
+ * dizer a mesma coisa aqui e na ficha do projeto, e quem revisa a explicação
+ * não deveria precisar abrir duas telas.
+ */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 function statusBadgeClass(status: ProjectStatus): string {
   switch (status) {
@@ -158,6 +171,11 @@ export function ProjectsPage() {
         />
       </div>
 
+      {/* "Projeto" é a palavra mais sobrecarregada do módulo: aqui ele é a
+          negociação ANTES do produto existir, e o funil só termina quando a
+          aprovação cria o produto operacional. */}
+      <ContextHelp topic={helpTopics["comercial.projetos"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="projects-search">
@@ -234,15 +252,30 @@ export function ProjectsPage() {
           <thead>
             <tr>
               <th>Projeto</th>
-              <th>Código legado</th>
+              <th>
+                Código legado
+                <DicaDaColuna id="comercial.projetoCodigoLegado" />
+              </th>
               <th>Entrada</th>
               <th>Cliente</th>
               <th>Conceito</th>
-              <th>Canal</th>
+              <th>
+                Canal
+                <DicaDaColuna id="comercial.projetoCanal" />
+              </th>
               <th>Responsável</th>
-              <th>Última versão</th>
-              <th>Status</th>
-              <th>Produto</th>
+              <th>
+                Última versão
+                <DicaDaColuna id="comercial.projetoUltimaVersao" />
+              </th>
+              <th>
+                Status
+                <DicaDaColuna id="comercial.projetoStatus" />
+              </th>
+              <th>
+                Produto
+                <DicaDaColuna id="comercial.projetoProduto" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

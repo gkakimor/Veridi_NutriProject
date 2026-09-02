@@ -6,8 +6,22 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listSamples } from "../../lib/samples-api";
 import { listCustomers } from "../../lib/customers-api";
 import { EntityLink } from "../../components/EntityLink";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 
 const PAGE_SIZE = 20;
+
+/**
+ * ⓘ de rótulo e cabeçalho de coluna. O texto mora em `help-content`: a
+ * mesma palavra quer dizer a mesma coisa na lista e na ficha, e quem revisa
+ * a explicação não deveria precisar abrir duas telas.
+ */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
+
 
 export function sampleStatusBadgeClass(status: ProjectSampleStatus): string {
   switch (status) {
@@ -109,6 +123,11 @@ export function SamplesPage() {
         />
       </div>
 
+      {/* "Amostra" é lida como "lote pequeno" por quem chega da produção.
+          O painel diz o que ela é antes que alguém procure o resultado no
+          estoque de produto acabado. */}
+      <ContextHelp topic={helpTopics["comercial.amostras"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="samples-search">
@@ -163,13 +182,25 @@ export function SamplesPage() {
           <thead>
             <tr>
               <th>Amostra</th>
-              <th>Teste</th>
+              <th>
+                Teste
+                <DicaDaColuna id="comercial.amostraTeste" />
+              </th>
               <th>Projeto</th>
-              <th>Produto</th>
+              <th>
+                Produto
+                <DicaDaColuna id="comercial.amostraProdutoTestado" />
+              </th>
               <th>Cliente</th>
               <th>Descrição</th>
-              <th>Status</th>
-              <th>Consumos</th>
+              <th>
+                Status
+                <DicaDaColuna id="comercial.amostraStatus" />
+              </th>
+              <th>
+                Consumos
+                <DicaDaColuna id="comercial.amostraConsumos" />
+              </th>
               <th>Produzida em</th>
             </tr>
           </thead>

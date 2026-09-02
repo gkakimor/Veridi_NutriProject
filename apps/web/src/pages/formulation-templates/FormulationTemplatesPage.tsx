@@ -5,6 +5,9 @@ import { FORMULATION_CALCULATION_MODE_LABELS } from "@veridi/shared";
 import { createFormulationTemplate, listFormulationTemplates } from "../../lib/formulation-templates-api";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 
 /**
  * Produção → Templates de Formulação.
@@ -13,6 +16,12 @@ import { useAuth } from "../../app/AuthProvider";
  * pertence a um cliente — usar um template cria uma cópia independente na
  * formulação do produto.
  */
+
+/** ⓘ de uma coluna, lido do registro central. */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 const PAGE_SIZE = 20;
 
@@ -97,6 +106,8 @@ export function FormulationTemplatesPage() {
         )}
       </div>
 
+      <ContextHelp topic={helpTopics["producao.templates"]} />
+
       {creating && (
         <div className="inline-form">
           <label htmlFor="template-name">Nome do template</label>
@@ -163,11 +174,20 @@ export function FormulationTemplatesPage() {
             <tr>
               <th>Código</th>
               <th>Nome</th>
-              <th>Versão ativa</th>
-              <th className="is-numeric">Base</th>
+              <th>
+                Versão ativa
+                <DicaDaColuna id="producao.template.versaoAtiva" />
+              </th>
+              <th className="is-numeric">
+                Base
+                <DicaDaColuna id="producao.template.base" />
+              </th>
               <th className="is-numeric">Componentes</th>
               <th>Atualização</th>
-              <th>Situação</th>
+              <th>
+                Situação
+                <DicaDaColuna id="producao.template.situacao" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>
