@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { CustomerFormModal } from "../customers/CustomerFormModal";
 import type { CustomerDTO, ProjectDTO } from "@veridi/shared";
 import {
   DOSAGE_FORMS,
@@ -14,9 +13,10 @@ import { FormSection } from "../../components/FormSection";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { ApiValidationError } from "../../lib/api-errors";
 import { listCustomers } from "../../lib/customers-api";
+import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { createProject, getProjectVocabulary, updateProject } from "../../lib/projects-api";
 
-interface FormState {
+type FormState = {
   customerId: string;
   name: string;
   concept: string;
@@ -31,7 +31,7 @@ interface FormState {
   targetAgeGroup: string;
   minimumBatchQuantity: string;
   shelfLifeMonths: string;
-}
+};
 
 function initialState(project: ProjectDTO | null): FormState {
   return {
@@ -73,10 +73,24 @@ export function ProjectFormModal({
   const [concepts, setConcepts] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  // Criação no contexto: o cliente não existe, e voltar depois obrigaria a
-  // refazer o projeto inteiro. `null` = modal fechado.
-  const [newCustomerName, setNewCustomerName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Cadastro de cliente na TELA OFICIAL, sem perder o projeto.
+   *
+   * Sair daqui DESMONTA este formulário — é modal, não rota. Quem o reabre
+   * na volta é a tela hospedeira, que mantém `?novo=1` (listagem) ou
+   * `?editar=1` (ficha) na URL enquanto ele está aberto; o rascunho volta
+   * pelo contexto e é reaplicado assim que o formulário monta de novo.
+   */
+  const origem = useContextualCreateOrigin<FormState>({
+    // Só o formulário: clientes, conceitos e canais vêm do servidor e são
+    // recarregados na volta.
+    collectDraft: () => form,
+    restoreDraft: (draft) => setForm((prev) => ({ ...prev, ...draft })),
+    // Pelo id: o nome digitado na busca escolheria o cliente errado.
+    onCreated: (result) => setForm((prev) => ({ ...prev, customerId: result.entityId })),
+  });
 
   useEffect(() => {
     listCustomers({ active: true, pageSize: 1000 })
@@ -152,21 +166,6 @@ export function ProjectFormModal({
     >
       {error && <p className="form-alert">{error}</p>}
 
-      {newCustomerName !== null && (
-        <CustomerFormModal
-          mode="create"
-          customer={null}
-          onClose={() => setNewCustomerName(null)}
-          onSaved={(created) => {
-            setNewCustomerName(null);
-            if (!created) return;
-            // Volta selecionado: quem cadastrou o cliente queria ESTE cliente.
-            setCustomers((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
-            setForm((prev) => ({ ...prev, customerId: created.id }));
-          }}
-        />
-      )}
-
       <FormSection title="Projeto" subtitle="Projeto private label sempre pertence a um cliente.">
         <div className="field">
           <label htmlFor="project-customer">
@@ -191,7 +190,13 @@ export function ProjectFormModal({
             }))}
             canCreate
             createLabel="Novo cliente"
-            onCreateNew={(typed) => setNewCustomerName(typed)}
+            onCreateNew={() =>
+              origem.goCreate({
+                route: "/cadastros/clientes/novo",
+                fieldKey: "customerId",
+                entityType: "customer",
+              })
+            }
           />
         </div>
 

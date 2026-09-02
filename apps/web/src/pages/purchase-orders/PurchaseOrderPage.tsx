@@ -6,7 +6,6 @@ import type {
   PurchaseOrderDTO,
   PurchaseOrderStatus,
   SupplierItemDTO,
-  UnitOfMeasureDTO,
 } from "@veridi/shared";
 import { PURCHASE_ORDER_STATUS_LABELS, SUPPLIER_ITEM_QUALIFICATION_LABELS } from "@veridi/shared";
 import {
@@ -17,11 +16,9 @@ import {
   updatePurchaseOrder,
 } from "../../lib/purchase-orders-api";
 import { listSuppliers } from "../../lib/suppliers-api";
-import { SupplierFormModal } from "../suppliers/SupplierFormModal";
 import { listSupplierItems } from "../../lib/supplier-items-api";
-import { listItems } from "../../lib/items-api";
-import { listUnits } from "../../lib/units-api";
-import { ItemFormModal } from "../items/ItemFormModal";
+import { getItem, listItems } from "../../lib/items-api";
+import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { formatBRL } from "../../lib/currency";
 import { ApiValidationError } from "../../lib/api-errors";
 import { EntityLink } from "../../components/EntityLink";
@@ -96,6 +93,46 @@ function nextRowKey(): string {
   return `row-${rowKeySeq}`;
 }
 
+/**
+ * O contador reinicia junto com o módulo, e o rascunho atravessa um F5 na
+ * tela de cadastro: sem empurrá-lo para além das chaves restauradas,
+ * "Adicionar linha" devolveria uma chave que uma linha já usa — duas linhas
+ * passariam a mudar juntas.
+ */
+function absorverChaves(linhas: LineRow[]) {
+  for (const linha of linhas) {
+    const numero = Number(linha.key.split("-")[1]);
+    if (Number.isFinite(numero) && numero > rowKeySeq) rowKeySeq = numero;
+  }
+}
+
+/**
+ * O que a OC leva junto ao sair para cadastrar fornecedor ou item.
+ *
+ * Só o documento em edição. O que é derivado do servidor — a OC carregada,
+ * os catálogos, as unidades, as relações item × fornecedor — é recarregado
+ * na volta, e guardá-lo seria copiar o servidor para dentro do rascunho.
+ */
+type RascunhoOrdemCompra = {
+  supplierId: string;
+  orderDate: string;
+  expectedDeliveryDate: string;
+  notes: string;
+  lines: LineRow[];
+};
+
+/**
+ * A linha que pediu o cadastro.
+ *
+ * O contexto atravessa `sessionStorage` e o token viaja na URL: é dado
+ * desconhecido. Sem chave legítima o item novo não entra em linha nenhuma —
+ * melhor que entrar na primeira, que é a errada.
+ */
+function lerChaveDaLinha(contexto: Record<string, unknown> | null | undefined): string | null {
+  const chave = contexto?.["rowKey"];
+  return typeof chave === "string" && chave.length > 0 ? chave : null;
+}
+
 function lineFromDTO(line: PurchaseOrderDTO["lines"][number]): LineRow {
   return {
     key: nextRowKey(),
@@ -125,9 +162,6 @@ export function PurchaseOrderPage() {
   const [notFound, setNotFound] = useState(false);
 
   const [supplierId, setSupplierId] = useState("");
-  // Criação no contexto: o fornecedor não existe e sair da OC agora
-  // significaria refazer as linhas já digitadas.
-  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
   const [orderDate, setOrderDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -145,12 +179,6 @@ export function PurchaseOrderPage() {
 
   const [activeSuppliers, setActiveSuppliers] = useState<SupplierOption[]>([]);
   const [activeItems, setActiveItems] = useState<ItemOption[]>([]);
-  const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
-  /**
-   * Cadastro de item no contexto: guarda QUAL linha da OC pediu. Sem a
-   * chave, o item criado voltaria para a primeira linha.
-   */
-  const [itemModalRowKey, setItemModalRowKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +196,16 @@ export function PurchaseOrderPage() {
     setLines(po.lines.map(lineFromDTO));
   }, []);
 
+  /**
+   * O rascunho restaurado ganha do servidor — uma vez.
+   *
+   * Quem volta do cadastro chega junto com a carga da OC, e ela traz o
+   * documento como está salvo. Sem esta trava a resposta chegaria depois e
+   * apagaria as linhas que a pessoa acabou de digitar. Vale só para a
+   * primeira carga: depois de salvar, o servidor é a verdade.
+   */
+  const rascunhoRestaurado = useRef(false);
+
   useEffect(() => {
     if (isNew || !id) return;
     setLoading(true);
@@ -175,6 +213,10 @@ export function PurchaseOrderPage() {
     getPurchaseOrder(id)
       .then((po) => {
         setPurchaseOrder(po);
+        if (rascunhoRestaurado.current) {
+          rascunhoRestaurado.current = false;
+          return;
+        }
         syncFormFromServer(po);
       })
       .catch(() => setNotFound(true))
@@ -201,10 +243,6 @@ export function PurchaseOrderPage() {
         ),
       )
       .catch(() => setActiveItems([]));
-    // O cadastro de item no contexto pede as unidades do catálogo.
-    listUnits()
-      .then(setUnits)
-      .catch(() => setUnits([]));
   }, []);
 
   const status: PurchaseOrderStatus = purchaseOrder?.status ?? "DRAFT";
@@ -283,6 +321,77 @@ export function PurchaseOrderPage() {
       },
     ]);
   }, [isNew, shortageItemId, shortageQuantity, activeItems]);
+
+  /**
+   * Cadastro de fornecedor e de item na TELA OFICIAL, sem perder a OC.
+   *
+   * Fornecedor é campo único: basta lembrar que foi ele quem pediu. Item
+   * vive em linha de tabela, então o contexto carrega QUAL linha — sem isso
+   * o item criado voltaria para a primeira.
+   */
+  const origem = useContextualCreateOrigin<RascunhoOrdemCompra>({
+    collectDraft: () => ({ supplierId, orderDate, expectedDeliveryDate, notes, lines }),
+    restoreDraft: (draft) => {
+      // Antes de qualquer `setState`: a carga da OC está a caminho.
+      rascunhoRestaurado.current = true;
+      /*
+       * O atalho "Ir para compras" continua na URL de retorno, e o efeito de
+       * pré-preenchimento trocaria as linhas restauradas por uma linha só. O
+       * rascunho é mais recente que o atalho.
+       */
+      prefilled.current = true;
+      setSupplierId(draft.supplierId ?? "");
+      setOrderDate(draft.orderDate ?? "");
+      setExpectedDeliveryDate(draft.expectedDeliveryDate ?? "");
+      setNotes(draft.notes ?? "");
+      const linhas = Array.isArray(draft.lines) ? draft.lines : [];
+      absorverChaves(linhas);
+      setLines(linhas);
+    },
+    onCreated: (result, record) => {
+      // Pelo id, sempre. O tipo do registro diz qual campo pediu.
+      if (record.entityType === "supplier") {
+        setSupplierId(result.entityId);
+        return;
+      }
+      const chave = lerChaveDaLinha(record.context);
+      if (!chave) return;
+      // O nome ocupa a coluna enquanto o item real não chega: `optionsForRow`
+      // monta a opção da linha a partir dele.
+      setLines((prev) =>
+        prev.map((line) =>
+          line.key === chave ? { ...line, itemId: result.entityId, itemName: result.label } : line,
+        ),
+      );
+      /*
+       * A linha precisa de código e unidade, e o resultado da criação traz
+       * só id e rótulo. Buscar o item pelo id completa a linha e põe a opção
+       * no seletor antes de o catálogo recarregar. Falha aqui não desfaz a
+       * seleção: o id já está na linha.
+       */
+      void getItem(result.entityId)
+        .then((item) => {
+          setActiveItems((prev) => [
+            {
+              id: item.id,
+              code: item.code,
+              name: item.name,
+              unitCode: item.unitCode,
+              active: item.active,
+            },
+            ...prev.filter((row) => row.id !== item.id),
+          ]);
+          setLines((prev) =>
+            prev.map((line) =>
+              line.key === chave
+                ? { ...line, itemCode: item.code, itemName: item.name, unitCode: item.unitCode }
+                : line,
+            ),
+          );
+        })
+        .catch(() => undefined);
+    },
+  });
 
   function handleAddLine() {
     setLines((prev) => [
@@ -568,7 +677,13 @@ export function PurchaseOrderPage() {
                 }))}
                 canCreate
                 createLabel="Novo fornecedor"
-                onCreateNew={() => setSupplierModalOpen(true)}
+                onCreateNew={() =>
+                  origem.goCreate({
+                    route: "/cadastros/fornecedores/novo",
+                    fieldKey: "supplierId",
+                    entityType: "supplier",
+                  })
+                }
               />
             ) : (
               <p className="field-readonly-value">
@@ -659,7 +774,15 @@ export function PurchaseOrderPage() {
                           }))}
                           canCreate
                           createLabel="Novo item de estoque"
-                          onCreateNew={() => setItemModalRowKey(line.key)}
+                          onCreateNew={() =>
+                            origem.goCreate({
+                              route: "/cadastros/itens/novo",
+                              fieldKey: "itemId",
+                              entityType: "item",
+                              // Qual linha pediu — o item volta para ela.
+                              context: { rowKey: line.key },
+                            })
+                          }
                         />
                       ) : (
                         <EntityLink
@@ -920,57 +1043,6 @@ export function PurchaseOrderPage() {
         </>
       )}
 
-      {supplierModalOpen && (
-        <SupplierFormModal
-          mode="create"
-          supplier={null}
-          onClose={() => setSupplierModalOpen(false)}
-          onSaved={(created) => {
-            setSupplierModalOpen(false);
-            if (!created) return;
-            setActiveSuppliers((prev) => [
-              { ...created },
-              ...prev.filter((row) => row.id !== created.id),
-            ]);
-            setSupplierId(created.id);
-          }}
-        />
-      )}
-
-      {itemModalRowKey !== null && (
-        <ItemFormModal
-          mode="create"
-          item={null}
-          units={units}
-          onClose={() => setItemModalRowKey(null)}
-          onSaved={(created) => {
-            const rowKey = itemModalRowKey;
-            setItemModalRowKey(null);
-            if (!created || !rowKey) return;
-            setActiveItems((prev) => [
-              { id: created.id, code: created.code, name: created.name, unitCode: created.unitCode, active: created.active },
-              ...prev.filter((row) => row.id !== created.id),
-            ]);
-            // A linha é preenchida a partir do registro criado: o `setState`
-            // acima só vale no próximo render, então procurar em
-            // `activeItems` aqui devolveria `undefined` e a linha ficaria
-            // com código, nome e unidade em branco.
-            setLines((prev) =>
-              prev.map((line) =>
-                line.key === rowKey
-                  ? {
-                      ...line,
-                      itemId: created.id,
-                      itemCode: created.code,
-                      itemName: created.name,
-                      unitCode: created.unitCode,
-                    }
-                  : line,
-              ),
-            );
-          }}
-        />
-      )}
     </>
   );
 }

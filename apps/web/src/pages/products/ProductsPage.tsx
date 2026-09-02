@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
@@ -172,13 +172,12 @@ export function ProductsPage() {
             Produtos comerciais e industriais fabricados pela Veridi.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => setModalState({ mode: "create" })}
-        >
+        {/* Leva à tela oficial, não ao modal: o cadastro passou a ter URL
+            própria, e é ela que sobrevive a um F5 e vale como link. O modal
+            continua servindo à EDIÇÃO, aberta a partir da linha. */}
+        <Link className="btn btn--primary" to="/cadastros/produtos/novo">
           + Novo produto
-        </button>
+        </Link>
         <ExportCsvButton path="/products/export.csv" filters={{ search, customerId: customerFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 

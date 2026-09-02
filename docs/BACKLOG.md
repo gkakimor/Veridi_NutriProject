@@ -14,7 +14,7 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 4 |
+| LOW | 3 |
 
 Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
@@ -217,7 +217,7 @@ célula fixa saiu junto, porque o menu deixou de ser pintado dentro dela.
 
 **Decisão / próxima ação:** nenhuma.
 
-### 9. Criar entidade só existe em modal, não em rota — LOW
+### 9. Criar entidade só existe em modal, não em rota — resolvido
 
 Cliente, Produto, Fornecedor, Item de estoque e Recurso industrial **não têm
 tela de criação**. Cada um existe como modal (`CustomerFormModal` e irmãos),
@@ -230,17 +230,26 @@ não custa rascunho — o modal renderiza por cima sem desmontar o formulário d
 origem, então quem sai para cadastrar um cliente no meio de um pedido volta
 com tudo preenchido.
 
-O que falta é só o que uma URL dá: **refresh no meio da criação perde o
-formulário**, e não há link direto para "novo cliente". Product Ownership
-decidiu manter o modal nesta rodada (2026-09-02) — construir cinco páginas
-exigiria serializar o rascunho de cada tela de origem, e `CustomerOrderPage`
-sozinha tem cerca de trinta `useState` soltos.
+O que faltava era só o que uma URL dá: refresh no meio da criação perdia o
+formulário, e não havia link direto para "novo cliente".
 
-**Decisão / próxima ação:** nenhuma agora. Se a criação por URL virar
-requisito, o caminho é migrar uma entidade por vez começando por Cliente, que
-é a de mais ocorrências.
+**Feito.** Cliente, Produto, Item de estoque e Fornecedor têm página própria
+em `/cadastros/<entidade>/novo`. Os campos foram extraídos para um módulo por
+entidade (`customer-form.tsx` e irmãos), usado pela página E pelo modal — não
+há segunda implementação a divergir. A extração saiu barata porque o botão de
+commit já usava `type="submit" form="…"`, atributo que aciona um `<form>` em
+que o botão não está aninhado e funciona igual nos dois hospedeiros.
 
-### 10. Três fontes divergem sobre quem pode criar cadastro — LOW
+O rascunho da origem sobrevive à navegação em `sessionStorage`, endereçado por
+token de uso único levado na URL, com validade de horas e guarda contra
+retorno para fora do sistema. Cancelar e o botão Voltar do navegador também
+restauram. Os modais continuam servindo à edição, aberta pela linha da lista.
+
+**Recurso industrial ficou de fora, e é decisão, não pendência** — ver item 11.
+
+**Decisão / próxima ação:** nenhuma.
+
+### 10. Três fontes divergem sobre quem pode criar cadastro — resolvido
 
 O `POST` de Cliente, Produto, Fornecedor e Item **não tem `requireRole`** —
 qualquer sessão autenticada cria. Os botões "+ Novo X" das telas de listagem
@@ -260,9 +269,41 @@ front deixou de esconder uma ação que ninguém recusa. A matriz de permissão
 por papel está entre as decisões adiadas deste mesmo arquivo, e é lá que a
 pergunta "quem pode cadastrar cliente?" será respondida.
 
-**Decisão / próxima ação:** entra na pauta de permissões da validação com a
-Veridi. Fechar no servidor antes de esconder no front — a ordem inversa dá
-falsa sensação de controle.
+**Auditado de novo com as telas oficiais no ar** (2026-09-02), e as três
+fontes agora concordam para as cinco entidades:
+
+| Entidade | Botão da lista | Campo de busca | Página nova | API |
+|---|---|---|---|---|
+| Cliente, Produto, Item, Fornecedor | sem gate | sem gate | sem gate | sem `requireRole` |
+| Recurso industrial | `ADMIN` | `ADMIN` | não tem página | `requireRole("ADMIN")` |
+
+Nenhuma regra documentada está sendo violada: a matriz por papel está entre as
+decisões adiadas deste arquivo, e o que existe hoje é o modelo simples que
+`PRODUCT_RULES` §1 descreve — autorização exigida no servidor, sem matriz por
+botão nesta fase. Não inventamos gate novo em nenhum lado.
+
+**Decisão / próxima ação:** nenhuma aqui. A matriz por papel continua sendo
+pauta da validação com a Veridi, e quando ela existir a ordem é fechar no
+servidor ANTES de esconder no front — a inversa dá falsa sensação de
+controle.
+
+### 11. Recurso industrial sem tela de criação — LOW
+
+As outras quatro entidades de cadastro ganharam página oficial; Recurso
+industrial ficou no modal, deliberadamente.
+
+O formulário é o mais simples dos cinco e seria o recorte mais barato. O que
+falta é para quem: a listagem **já navega** para o detalhe depois de criar
+(`IndustrialResourcesPage`), então a página não entregaria destino novo —
+entregaria só a URL. Existe **um** único ponto de criação em contexto
+(`IndustrialCostPage`), restrito a `ADMIN`. E a tela de edição do recurso não
+compartilha formulário nenhum com o modal de criação: são edições inline campo
+a campo, cada uma com sua regra. Não existe "o formulário de recurso" para os
+dois lados reusarem.
+
+**Decisão / próxima ação:** fazer quando houver um segundo consumidor, ou
+quando a edição do recurso virar formulário de verdade. Enquanto for uma tela
+para um papel, o modal basta.
 
 ### Decisões de produto em aberto — não bloqueantes
 
@@ -289,10 +330,10 @@ depende da prática real da casa, não de escolha técnica.
 e o feedback ser classificado. Roteiro da sessão e grade de classificação em
 [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md).
 
-Os quatro LOW ainda abertos — instabilidade da suíte (3), dado legado sem
-cliente (6), criação só em modal (9) e a divergência de permissão de cadastro
-(10) — não bloqueiam a validação e não devem ser corrigidos durante a
-reunião. Os itens 9 e 10 são boa pauta PARA a reunião.
+Os três LOW ainda abertos — instabilidade da suíte (3), dado legado sem
+cliente (6) e a tela de Recurso industrial (11) — não bloqueiam a validação e
+não devem ser corrigidos durante a reunião. A matriz de permissão por papel é
+boa pauta PARA a reunião.
 
 ---
 

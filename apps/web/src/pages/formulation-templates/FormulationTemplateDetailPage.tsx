@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
   FormulationTemplateComponentInput,
@@ -6,7 +6,6 @@ import type {
   FormulationTemplateDiffDTO,
   FormulationTemplateVersionDTO,
   ItemDTO,
-  UnitOfMeasureDTO,
 } from "@veridi/shared";
 import {
   FORMULATION_CALCULATION_MODE_LABELS,
@@ -22,9 +21,8 @@ import {
   updateFormulationTemplate,
   updateFormulationTemplateVersion,
 } from "../../lib/formulation-templates-api";
-import { listItems } from "../../lib/items-api";
-import { listUnits } from "../../lib/units-api";
-import { ItemFormModal } from "../items/ItemFormModal";
+import { getItem, listItems } from "../../lib/items-api";
+import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { FormSection } from "../../components/FormSection";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { TemplateDiff } from "./TemplateDiff";
@@ -52,6 +50,33 @@ interface LinhaEditavel extends FormulationTemplateComponentInput {
   chave: string;
 }
 
+/**
+ * O que a matriz leva junto ao sair para cadastrar um item.
+ *
+ * Só o rascunho editável: o template carregado, o catálogo de itens e a
+ * comparação de versões voltam do servidor na remontagem.
+ */
+type RascunhoTemplate = {
+  nome: string;
+  descricao: string;
+  base: string;
+  unidade: string;
+  linhas: LinhaEditavel[];
+};
+
+/**
+ * A linha que pediu o cadastro.
+ *
+ * O contexto atravessa `sessionStorage` e o token viaja na URL: o conteúdo
+ * é lido como dado desconhecido. Chave que não é string vira `null`, e aí o
+ * item novo não é aplicado em linha nenhuma — melhor que aplicá-lo na
+ * primeira, que é a linha errada.
+ */
+function lerChaveDaLinha(contexto: Record<string, unknown> | null | undefined): string | null {
+  const chave = contexto?.["rowKey"];
+  return typeof chave === "string" && chave.length > 0 ? chave : null;
+}
+
 export function FormulationTemplateDetailPage() {
   const { templateId } = useParams<{ templateId: string }>();
   const navigate = useNavigate();
@@ -60,12 +85,6 @@ export function FormulationTemplateDetailPage() {
 
   const [template, setTemplate] = useState<FormulationTemplateDTO | null>(null);
   const [items, setItems] = useState<ItemDTO[]>([]);
-  const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
-  /**
-   * Cadastro no contexto: guarda QUAL linha do rascunho pediu o item novo.
-   * Sem a chave, o item criado voltaria para a primeira linha da matriz.
-   */
-  const [itemModalChave, setItemModalChave] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [linhas, setLinhas] = useState<LinhaEditavel[]>([]);
@@ -75,11 +94,26 @@ export function FormulationTemplateDetailPage() {
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
 
+  /**
+   * O rascunho restaurado ganha do servidor — uma vez.
+   *
+   * Quem volta do cadastro de item chega junto com a carga do template, e
+   * ela traz a matriz como está salva. Sem esta trava a resposta chegaria
+   * depois e apagaria exatamente o que a pessoa tinha acabado de digitar.
+   * Vale só para a primeira carga: `run()` recarrega depois de cada ação, e
+   * aí o servidor é a verdade.
+   */
+  const rascunhoRestaurado = useRef(false);
+
   const load = useCallback(() => {
     if (!templateId) return;
     getFormulationTemplate(templateId)
       .then((result) => {
         setTemplate(result);
+        if (rascunhoRestaurado.current) {
+          rascunhoRestaurado.current = false;
+          return;
+        }
         setNome(result.name);
         setDescricao(result.description ?? "");
         const rascunho = result.draftVersion;
@@ -107,11 +141,54 @@ export function FormulationTemplateDetailPage() {
     listItems({ pageSize: 200 })
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
-    // O cadastro de item no contexto pede as unidades do catálogo.
-    listUnits()
-      .then(setUnits)
-      .catch(() => setUnits([]));
   }, []);
+
+  /**
+   * Cadastro de item na TELA OFICIAL, sem perder a matriz.
+   *
+   * A coluna Item vive em linha de tabela, então o contexto carrega QUAL
+   * linha pediu: sem isso o item criado voltaria para a primeira, que é a
+   * linha errada.
+   */
+  const origem = useContextualCreateOrigin<RascunhoTemplate>({
+    collectDraft: () => ({ nome, descricao, base, unidade, linhas }),
+    restoreDraft: (draft) => {
+      // Antes de qualquer `setState`: a carga do template está a caminho e
+      // não pode sobrescrever o que volta aqui.
+      rascunhoRestaurado.current = true;
+      setNome(draft.nome ?? "");
+      setDescricao(draft.descricao ?? "");
+      setBase(draft.base ?? "");
+      setUnidade(draft.unidade ?? "");
+      setLinhas(Array.isArray(draft.linhas) ? draft.linhas : []);
+    },
+    onCreated: (result, record) => {
+      const chave = lerChaveDaLinha(record.context);
+      if (!chave) return;
+      // Pelo id, imediatamente. O nome é provisório: fica no lugar até o
+      // item real chegar logo abaixo.
+      setLinhas((atual) =>
+        atual.map((l) => (l.chave === chave ? { ...l, itemId: result.entityId } : l)),
+      );
+      /*
+       * O catálogo desta tela vem paginado (200 itens) e o item recém-criado
+       * pode não estar nele. Buscá-lo pelo id resolve as duas coisas de uma
+       * vez: a linha ganha a unidade que o cadastro definiu, e o seletor
+       * passa a ter o que mostrar. Falha aqui não desfaz a seleção — o id
+       * já está na linha.
+       */
+      void getItem(result.entityId)
+        .then((item) => {
+          setItems((atual) => [item, ...atual.filter((row) => row.id !== item.id)]);
+          setLinhas((atual) =>
+            atual.map((l) =>
+              l.chave === chave ? { ...l, unitCode: l.unitCode || item.unitCode } : l,
+            ),
+          );
+        })
+        .catch(() => undefined);
+    },
+  });
 
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
@@ -358,7 +435,15 @@ export function FormulationTemplateDetailPage() {
                           }))}
                           canCreate={editavel}
                           createLabel="Novo item de estoque"
-                          onCreateNew={() => setItemModalChave(linha.chave)}
+                          onCreateNew={() =>
+                            origem.goCreate({
+                              route: "/cadastros/itens/novo",
+                              fieldKey: "itemId",
+                              entityType: "item",
+                              // Qual linha pediu — o item volta para ela.
+                              context: { rowKey: linha.chave },
+                            })
+                          }
                         />
                       </td>
                       <td className="is-numeric">
@@ -575,30 +660,6 @@ export function FormulationTemplateDetailPage() {
           )}
         </FormSection>
       </div>
-
-      {itemModalChave !== null && (
-        <ItemFormModal
-          mode="create"
-          item={null}
-          units={units}
-          onClose={() => setItemModalChave(null)}
-          onSaved={(created) => {
-            const chave = itemModalChave;
-            setItemModalChave(null);
-            if (!created || !chave) return;
-            // O item novo entra no catálogo e já fica escolhido na linha que
-            // pediu por ele — o resto do rascunho continua como estava.
-            setItems((atual) => [created, ...atual.filter((item) => item.id !== created.id)]);
-            setLinhas((atual) =>
-              atual.map((l) =>
-                l.chave === chave
-                  ? { ...l, itemId: created.id, unitCode: l.unitCode || created.unitCode }
-                  : l,
-              ),
-            );
-          }}
-        />
-      )}
     </div>
   );
 }

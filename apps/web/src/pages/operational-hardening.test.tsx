@@ -125,15 +125,20 @@ describe("Cadastro de Item × Fornecedor", () => {
   }
 
   function abrirFormulario() {
+    // Router porque os campos Item e Fornecedor NAVEGAM para a tela oficial
+    // de cadastro em vez de abrir modal aninhado — o formulário agora lê a
+    // rota de onde saiu.
     render(
-      <SupplierItemFormModal
-        // Os DTOs completos trazem dezenas de campos que este formulário não
-        // lê; o teste fornece os que ele usa.
-        items={itens as never}
-        suppliers={fornecedores as never}
-        onClose={() => {}}
-        onSaved={() => {}}
-      />,
+      <MemoryRouter>
+        <SupplierItemFormModal
+          // Os DTOs completos trazem dezenas de campos que este formulário não
+          // lê; o teste fornece os que ele usa.
+          items={itens as never}
+          suppliers={fornecedores as never}
+          onClose={() => {}}
+          onSaved={() => {}}
+        />
+      </MemoryRouter>,
     );
   }
 

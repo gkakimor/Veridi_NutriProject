@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import {
   SelectionBar,
@@ -151,13 +152,12 @@ export function ItemsPage() {
             criados pelo cadastro de Produtos.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => setModalState({ mode: "create" })}
-        >
+        {/* Leva à tela oficial, não ao modal: o cadastro passou a ter URL
+            própria, e é ela que sobrevive a um F5 e vale como link. O modal
+            continua servindo à EDIÇÃO, aberta a partir da linha. */}
+        <Link className="btn btn--primary" to="/cadastros/itens/novo">
           + Novo item de estoque
-        </button>
+        </Link>
         <ExportCsvButton path="/items/export.csv" filters={{ search, type: typeFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 

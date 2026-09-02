@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { CustomerDTO } from "@veridi/shared";
 
 /**
@@ -9,6 +9,12 @@ import type { CustomerDTO } from "@veridi/shared";
  *
  * O ViaCEP é mockado — teste de tela não depende de internet, e o que
  * importa aqui é o que a tela faz com cada resposta possível.
+ *
+ * O cadastro tem duas portas — o modal e a página `/cadastros/clientes/novo`
+ * — e os campos vêm do mesmo módulo (`customer-form`). Os blocos do fim
+ * cobrem o que difere entre elas, e repetem PELA PÁGINA as validações que já
+ * eram cobertas pelo modal: é a prova de que a extração não deixou uma das
+ * portas mais permissiva que a outra.
  */
 
 vi.mock("../../lib/customers-api", () => ({
@@ -24,7 +30,13 @@ vi.mock("../../lib/cep-api", async () => {
 
 import { createCustomer, updateCustomer } from "../../lib/customers-api";
 import { lookupCep } from "../../lib/cep-api";
+import {
+  discardContextualCreate,
+  readContextualCreate,
+  startContextualCreate,
+} from "../../lib/contextual-create";
 import { CustomerFormModal } from "./CustomerFormModal";
+import { CustomerCreatePage } from "./CustomerCreatePage";
 
 const ENDERECO_SAO_PAULO = {
   street: "Rua Vicente José de Almeida",
@@ -81,9 +93,26 @@ function renderEdicao(customer: CustomerDTO) {
   );
 }
 
+/**
+ * A página com as rotas que ela pode alcançar: a lista, para onde o caminho
+ * direto termina, e uma tela de origem, para onde a criação contextual volta.
+ */
+function renderPagina(entrada = "/cadastros/clientes/novo") {
+  return render(
+    <MemoryRouter initialEntries={[entrada]}>
+      <Routes>
+        <Route path="/cadastros/clientes/novo" element={<CustomerCreatePage />} />
+        <Route path="/cadastros/clientes" element={<p>lista de clientes</p>} />
+        <Route path="/comercial/pedidos" element={<p>tela de origem</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 const campo = (label: string) => screen.getByLabelText(label, { exact: false });
 
 beforeEach(() => {
+  window.sessionStorage.clear();
   vi.mocked(createCustomer).mockReset();
   vi.mocked(updateCustomer).mockReset();
   vi.mocked(lookupCep).mockReset();
@@ -374,5 +403,203 @@ describe("Cliente — informações do cadastro", () => {
 
     expect((campo("Telefone") as HTMLInputElement).value).toBe("(11) 99999-8888");
     expect((campo("CEP") as HTMLInputElement).value).toBe("04816-100");
+  });
+});
+
+describe("Cliente — página oficial de criação", () => {
+  it("acesso direto: salva e termina na lista", async () => {
+    renderPagina();
+
+    fireEvent.change(campo("Razão Social"), { target: { value: "Nutrição Viva Ltda" } });
+    fireEvent.click(screen.getByRole("button", { name: "Criar cliente" }));
+
+    await waitFor(() => expect(createCustomer).toHaveBeenCalled());
+    expect(vi.mocked(createCustomer).mock.calls[0]?.[0]).toMatchObject({
+      legalName: "Nutrição Viva Ltda",
+    });
+    expect(await screen.findByText("lista de clientes")).toBeTruthy();
+  });
+
+  it("acesso direto: cancelar volta para a lista sem salvar", async () => {
+    renderPagina();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(await screen.findByText("lista de clientes")).toBeTruthy();
+    expect(createCustomer).not.toHaveBeenCalled();
+  });
+
+  it("a trilha é a canônica, não o caminho de volta", () => {
+    renderPagina();
+
+    const trilha = screen.getByRole("navigation", { name: "Trilha da página" });
+    expect(trilha.textContent).toContain("Cadastros");
+    expect(trilha.textContent).toContain("Clientes");
+    expect(trilha.textContent).toContain("Novo cliente");
+    // Fora do modo contextual não há para onde voltar além da lista.
+    expect(screen.queryByRole("button", { name: /Voltar para/ })).toBeNull();
+  });
+
+  it("os blocos que só existem em edição continuam fora da criação", () => {
+    renderPagina();
+
+    expect(screen.queryByText("Informações do cadastro")).toBeNull();
+    expect(screen.queryByText("Status")).toBeNull();
+    expect(screen.queryByText("Consulta completa")).toBeNull();
+  });
+});
+
+describe("Cliente — a página recusa o que o modal recusa", () => {
+  /*
+   * Mesmas três validações já cobertas pelo modal, agora exercidas pela
+   * página. Não é repetição ociosa: elas são o motivo de o formulário ter
+   * virado módulo compartilhado, e uma porta que aceitasse um CNPJ inválido
+   * só apareceria no dia em que o registro entrasse por ela.
+   */
+  it("e-mail inválido é recusado na tela, junto do campo", () => {
+    renderPagina();
+
+    const email = campo("Email");
+    fireEvent.change(email, { target: { value: "contato@" } });
+    fireEvent.blur(email);
+
+    const erro = screen.getByText("E-mail inválido.");
+    expect(email.getAttribute("aria-invalid")).toBe("true");
+    expect(email.getAttribute("aria-describedby")).toBe(erro.id);
+  });
+
+  it("telefone sem DDD é recusado na tela", () => {
+    renderPagina();
+
+    const telefone = campo("Telefone");
+    fireEvent.change(telefone, { target: { value: "123232" } });
+    fireEvent.blur(telefone);
+
+    expect(screen.getByText("Informe um telefone com DDD.")).toBeTruthy();
+    expect(telefone.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("CNPJ inválido é recusado na tela, e o alfanumérico continua passando", () => {
+    renderPagina();
+
+    const cnpj = campo("CNPJ");
+    fireEvent.change(cnpj, { target: { value: "11222333000180" } });
+    fireEvent.blur(cnpj);
+    expect(screen.getByText("CNPJ inválido.")).toBeTruthy();
+
+    fireEvent.change(cnpj, { target: { value: "00000000e08g12" } });
+    fireEvent.blur(cnpj);
+    expect(screen.queryByText("CNPJ inválido.")).toBeNull();
+    expect((cnpj as HTMLInputElement).value).toBe("00.000.000/E08G-12");
+  });
+
+  it("campo inválido segura o envio e a pessoa continua na tela", async () => {
+    renderPagina();
+
+    fireEvent.change(campo("Razão Social"), { target: { value: "Cliente X" } });
+    fireEvent.change(campo("Telefone"), { target: { value: "123232" } });
+    fireEvent.click(screen.getByRole("button", { name: "Criar cliente" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Corrija os campos destacados.")).toBeTruthy();
+    });
+    expect(createCustomer).not.toHaveBeenCalled();
+    // Nada de navegar: o formulário fica onde está, com o que foi digitado.
+    expect(screen.queryByText("lista de clientes")).toBeNull();
+    expect((campo("Razão Social") as HTMLInputElement).value).toBe("Cliente X");
+  });
+
+  it("o CEP continua preenchendo o endereço pela página", async () => {
+    vi.mocked(lookupCep).mockResolvedValue({
+      status: "found",
+      address: ENDERECO_SAO_PAULO,
+    });
+
+    renderPagina();
+    const cep = campo("CEP");
+    fireEvent.change(cep, { target: { value: "04816100" } });
+    fireEvent.blur(cep);
+
+    await waitFor(() => {
+      expect((campo("Cidade") as HTMLInputElement).value).toBe(ENDERECO_SAO_PAULO.city);
+    });
+    // Número é do operador: a consulta não sabe qual é.
+    expect((campo("Número") as HTMLInputElement).value).toBe("");
+  });
+});
+
+describe("Cliente — criação contextual", () => {
+  function abrirComContexto() {
+    const token = startContextualCreate({
+      originRoute: "/comercial/pedidos",
+      fieldKey: "customerId",
+      entityType: "customer",
+      draft: { observacao: "pedido pela metade" },
+    })!;
+    renderPagina(`/cadastros/clientes/novo?origem=${token}`);
+    return token;
+  }
+
+  it("salvar devolve à origem com o cliente registrado, em vez de ir para a lista", async () => {
+    const token = abrirComContexto();
+
+    // O botão diz PARA ONDE volta — quem saiu do meio de um documento
+    // precisa saber disso antes de clicar.
+    expect(screen.getByRole("button", { name: "← Voltar para Pedido" })).toBeTruthy();
+
+    fireEvent.change(campo("Razão Social"), { target: { value: "Nutrição Viva Ltda" } });
+    fireEvent.click(screen.getByRole("button", { name: "Criar cliente" }));
+
+    expect(await screen.findByText("tela de origem")).toBeTruthy();
+    expect(screen.queryByText("lista de clientes")).toBeNull();
+    // O registro criado viaja pelo id: casar por nome escolheria outro.
+    expect(readContextualCreate(token)?.result).toMatchObject({
+      entityType: "customer",
+      entityId: "cli-1",
+      label: "IGEIA Suplementos LTDA",
+    });
+  });
+
+  it("cancelar também devolve à origem — sem resultado, com o rascunho de pé", async () => {
+    const token = abrirComContexto();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(await screen.findByText("tela de origem")).toBeTruthy();
+    expect(screen.queryByText("lista de clientes")).toBeNull();
+    const registro = readContextualCreate(token);
+    // Sem `result` a origem entende cancelamento; o rascunho ainda é dela.
+    expect(registro?.result).toBeUndefined();
+    expect(registro?.draft).toMatchObject({ observacao: "pedido pela metade" });
+    discardContextualCreate(token);
+  });
+
+  it("a trilha continua canônica mesmo vindo de um documento", () => {
+    abrirComContexto();
+
+    const trilha = screen.getByRole("navigation", { name: "Trilha da página" });
+    // De onde a pessoa veio é caminho de volta, não hierarquia: "Pedido" só
+    // aparece no botão de retorno.
+    expect(trilha.textContent).toContain("Cadastros");
+    expect(trilha.textContent).toContain("Clientes");
+    expect(trilha.textContent).not.toContain("Pedido");
+  });
+
+  it("contexto de outro tipo de entidade não sequestra a tela", async () => {
+    const token = startContextualCreate({
+      originRoute: "/comercial/pedidos",
+      fieldKey: "supplierId",
+      entityType: "supplier",
+      draft: {},
+    })!;
+    renderPagina(`/cadastros/clientes/novo?origem=${token}`);
+
+    expect(screen.queryByRole("button", { name: /Voltar para/ })).toBeNull();
+
+    fireEvent.change(campo("Razão Social"), { target: { value: "Nutrição Viva Ltda" } });
+    fireEvent.click(screen.getByRole("button", { name: "Criar cliente" }));
+
+    // Comporta-se como criação normal: a lista, não a origem alheia.
+    expect(await screen.findByText("lista de clientes")).toBeTruthy();
   });
 });
