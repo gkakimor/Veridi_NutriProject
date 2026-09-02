@@ -1948,3 +1948,261 @@ input.is-invalid {
   font-weight: var(--fw-semibold);
   margin-bottom: var(--sp-3);
 }
+
+/* ── Ajuda contextual (kit reutilizável) ─────────────────────────
+   Infra de `components/help/` + `help/help-content.ts`. Ainda não está
+   ligada a nenhuma tela: as regras vivem aqui para que a primeira
+   integração não precise inventar estilo — e para que a segunda não invente
+   outro. Somente tokens. */
+
+/* ---------------- InfoHint ---------------- */
+
+.info-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.info-hint__trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: var(--sp-1);
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  font-style: normal;
+  line-height: 1;
+  /* O rótulo ao lado pode ser um `th` em caixa alta: o ícone não herda. */
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+}
+
+/* Alvo de 24px sem círculo de 24px: a marca visual continua discreta ao lado
+   do texto, mas o clique não exige pontaria. */
+.info-hint__trigger::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+
+.info-hint__trigger:hover {
+  border-color: var(--v-green-600);
+  color: var(--v-green-700);
+}
+
+.info-hint__trigger[aria-expanded="true"] {
+  border-color: var(--v-green-700);
+  background: var(--selected-bg);
+  color: var(--v-green-700);
+}
+
+.info-hint__bubble {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + var(--sp-1));
+  left: 0;
+  display: block;
+  /* Frase curta não deve virar coluna estreita, nem faixa de tela inteira. */
+  width: max-content;
+  max-width: 320px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--ink);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  font-style: normal;
+  line-height: var(--lh-base);
+  /* Herança de cabeçalho de tabela quebraria a leitura da explicação. */
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+}
+
+/* Perto da borda direita da janela a bolha vira para dentro. Quem mede é o
+   componente (`InfoHint`); aqui só mora a posição. */
+.info-hint__bubble--end {
+  left: auto;
+  right: 0;
+}
+
+/* ---------------- ContextHelp ---------------- */
+
+.context-help {
+  display: block;
+  margin: var(--sp-3) 0;
+}
+
+.context-help__trigger {
+  gap: var(--sp-2);
+}
+
+/* Seta do estado: aponta para o lado quando fechado, para baixo quando
+   aberto. Desenhada com borda — sem glifo, nada para o leitor de tela ler
+   duas vezes (o `aria-expanded` já diz o estado). */
+.context-help__caret {
+  width: 5px;
+  height: 5px;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--transition);
+}
+
+.context-help__trigger[aria-expanded="true"] .context-help__caret {
+  transform: rotate(135deg);
+}
+
+.context-help__panel {
+  margin-top: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--v-green-600);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  /* Linha de texto explicativo fica ilegível esticada em 1600px. */
+  max-width: 760px;
+}
+
+.context-help__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+}
+
+.context-help__summary {
+  margin-top: var(--sp-2);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  text-wrap: pretty;
+}
+
+.context-help__steps {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-sm);
+}
+
+.context-help__steps li + li {
+  margin-top: var(--sp-2);
+}
+
+.context-help__step-detail {
+  display: block;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+
+.context-help__subtitle {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.context-help__notes {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-5);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+.context-help__notes li + li {
+  margin-top: var(--sp-1);
+}
+
+.context-help__doc {
+  display: inline-block;
+  margin-top: var(--sp-4);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+/* ---------------- FlowSteps ---------------- */
+
+.help-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.help-flow__step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* Chevron entre as etapas: `content` vazio de propósito — a ordem já é
+   semântica (`<ol>`), então a seta é só desenho e não deve ser lida nem
+   entrar no texto do elemento. */
+.help-flow__step + .help-flow__step::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-top: 1.5px solid var(--ink-3);
+  border-right: 1.5px solid var(--ink-3);
+  transform: rotate(45deg);
+}
+
+.help-flow__box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+}
+
+.help-flow__label {
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-tight);
+  white-space: nowrap;
+}
+
+.help-flow__detail {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-tight);
+}
+
+/* Desvio do caminho feliz (falta, pendência) não pode ler igual ao resto. */
+.help-flow__box--warn {
+  border-color: var(--warn-fg);
+  background: var(--warn-bg);
+}
+
+.help-flow__box--warn .help-flow__label,
+.help-flow__box--warn .help-flow__detail {
+  color: var(--warn-fg);
+}
+
+/* Etapa em que o sistema age (gerar OP, gerar OC). */
+.help-flow__box--accent {
+  border-color: var(--v-green-600);
+  background: var(--selected-bg);
+}
+
+.help-flow__box--accent .help-flow__label {
+  color: var(--v-green-700);
+}
