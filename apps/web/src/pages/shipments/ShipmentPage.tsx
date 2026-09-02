@@ -24,6 +24,7 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 
@@ -483,7 +484,12 @@ export function ShipmentPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Comercial / Expedições / Detalhe</div>
+          <PageBreadcrumbs
+            items={[
+              { label: "Expedições", href: "/comercial/expedicoes" },
+              { label: shipment.code },
+            ]}
+          />
           <div className="doc-title">
             <h1>{shipment.code}</h1>
             <span className={statusBadgeClass(shipment.status)}>
@@ -505,9 +511,6 @@ export function ShipmentPage() {
             onClick={() => navigate(`/print/expedicao-separacao/${shipment.id}`)}
           >
             Folha de separação (FO-05)
-          </button>
-          <button type="button" className="btn btn--ghost" onClick={() => navigate("/comercial/expedicoes")}>
-            ← Voltar
           </button>
         </div>
       </div>

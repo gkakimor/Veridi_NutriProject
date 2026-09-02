@@ -80,11 +80,18 @@ export function ConsultationTrail({ steps }: { steps: TrailStep[] }) {
   );
 }
 
+/*
+ * Ordem: o que o Cliente É antes do que aconteceu com ele. Produtos vem
+ * logo depois do Resumo porque é a pergunta mais frequente — "o que a gente
+ * faz para esse cliente?" —, e Estoque substituiu "Materiais do cliente"
+ * porque agora carrega duas coisas: o acabado da Veridi e o material dele.
+ */
 const TABS: { label: string; segment: string }[] = [
   { label: "Resumo", segment: "resumo" },
+  { label: "Produtos", segment: "produtos" },
   { label: "Projetos", segment: "projetos" },
   { label: "Pedidos", segment: "pedidos" },
-  { label: "Materiais do cliente", segment: "materiais" },
+  { label: "Estoque", segment: "estoque" },
   { label: "Faturamentos", segment: "faturamentos" },
 ];
 

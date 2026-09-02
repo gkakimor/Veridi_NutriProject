@@ -3,7 +3,7 @@ import type { CustomerMaterialRowDTO } from "@veridi/shared";
 import { COA_STATUS_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
 import { listCustomerMaterials } from "../../lib/customer-materials-api";
 import { formatDate } from "../../lib/dates";
-import { ConsultationTrail, useConsultationContext } from "./ConsultationShell";
+import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationCount, ConsultationPager } from "./ConsultationPager";
 import { useScopedList } from "./useScopedList";
 
@@ -34,7 +34,12 @@ export function MaterialsTab() {
 
   return (
     <>
-      <ConsultationTrail steps={[{ label: "Materiais do cliente" }]} />
+      <ConsultationTrail
+        steps={[
+          { label: "Estoque", to: consultationPath(customerId, "estoque", "acabados") },
+          { label: "Materiais do cliente" },
+        ]}
+      />
 
       {list.error && <p className="form-alert">{list.error}</p>}
 

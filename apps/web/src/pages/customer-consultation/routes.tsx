@@ -8,6 +8,9 @@ import { ProjectPage } from "./ProjectPage";
 import { OrdersTab } from "./OrdersTab";
 import { OrderPage } from "./OrderPage";
 import { MaterialsTab } from "./MaterialsTab";
+import { ProductsTab } from "./ProductsTab";
+import { ProductPage } from "./ProductPage";
+import { FinishedGoodsTab, StockTab } from "./StockTab";
 import { BillingsTab } from "./BillingsTab";
 import { BillingPage } from "./BillingPage";
 
@@ -32,7 +35,15 @@ export const consultationRoutes = (
       <Route path="projetos/:projectId" element={<ProjectPage />} />
       <Route path="pedidos" element={<OrdersTab />} />
       <Route path="pedidos/:orderId" element={<OrderPage />} />
-      <Route path="materiais" element={<MaterialsTab />} />
+      <Route path="produtos" element={<ProductsTab />} />
+      <Route path="produtos/:productId" element={<ProductPage />} />
+      <Route path="estoque" element={<StockTab />}>
+        <Route index element={<Navigate to="acabados" replace />} />
+        <Route path="acabados" element={<FinishedGoodsTab />} />
+        <Route path="materiais" element={<MaterialsTab />} />
+      </Route>
+      {/* Endereço antigo continua funcionando: link salvo não vira 404. */}
+      <Route path="materiais" element={<Navigate to="../estoque/materiais" replace />} />
       <Route path="faturamentos" element={<BillingsTab />} />
       <Route path="faturamentos/:billingId" element={<BillingPage />} />
     </Route>

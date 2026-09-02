@@ -10,6 +10,7 @@ import {
 } from "@veridi/shared";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { ProjectCostingSection } from "./ProjectCostingSection";
 import { ProjectProductsSection } from "./ProjectProductsSection";
 import { ApprovalPreviewDialog } from "./ApprovalPreviewDialog";
@@ -132,7 +133,12 @@ export function ProjectDetailPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Comercial / Projetos / {project.customerName}</div>
+          <PageBreadcrumbs
+            items={[
+              { label: "Projetos", href: "/comercial/projetos" },
+              { label: project.code },
+            ]}
+          />
           <div className="doc-title">
             <h1>
               {project.code} · {project.name}
@@ -161,13 +167,6 @@ export function ProjectDetailPage() {
               Editar
             </button>
           )}
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => navigate("/comercial/projetos")}
-          >
-            ← Voltar
-          </button>
         </div>
       </div>
 

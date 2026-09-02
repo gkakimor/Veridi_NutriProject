@@ -2206,3 +2206,47 @@ input.is-invalid {
 .help-flow__box--accent .help-flow__label {
   color: var(--v-green-700);
 }
+
+/* ── Trilha da página (breadcrumb global) ────────────────────────
+   Mesma linguagem visual da `.consult-trail`, em classe própria: a trilha
+   da Consulta de Cliente vive dentro do contexto de UM cliente e pode
+   divergir daqui sem arrastar todas as outras telas junto.
+
+   Substitui o `.doc-crumb`, que era texto morto: parecia trilha, mas não
+   levava a lugar nenhum. */
+.page-crumbs {
+  margin-bottom: var(--sp-1);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.page-crumbs ol {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  list-style: none;
+  /* `list-style: none` não tira o recuo do marcador nem a margem padrão do
+     `ol`: sem zerar os dois, a trilha nasce deslocada do título abaixo. */
+  padding-inline-start: 0;
+  margin: 0;
+}
+
+.page-crumbs li + li::before {
+  content: "/";
+  margin-right: var(--sp-2);
+  color: var(--line-strong);
+}
+
+.page-crumbs a {
+  color: var(--ink-2);
+}
+
+.page-crumbs a:hover {
+  color: var(--v-green-700);
+  text-decoration: underline;
+}
+
+/* O nível atual não é link — não pode ter cor de link e convidar o clique. */
+.page-crumbs [aria-current="page"] {
+  color: var(--ink-3);
+}
