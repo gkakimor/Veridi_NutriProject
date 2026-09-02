@@ -7,6 +7,8 @@ import { ProjectsTab } from "./ProjectsTab";
 import { ProjectPage } from "./ProjectPage";
 import { OrdersTab } from "./OrdersTab";
 import { OrderPage } from "./OrderPage";
+import { ProductionTab } from "./ProductionTab";
+import { ProductionOrderPage } from "./ProductionOrderPage";
 import { MaterialsTab } from "./MaterialsTab";
 import { ProductsTab } from "./ProductsTab";
 import { ProductPage } from "./ProductPage";
@@ -35,6 +37,8 @@ export const consultationRoutes = (
       <Route path="projetos/:projectId" element={<ProjectPage />} />
       <Route path="pedidos" element={<OrdersTab />} />
       <Route path="pedidos/:orderId" element={<OrderPage />} />
+      <Route path="producao" element={<ProductionTab />} />
+      <Route path="producao/:productionOrderId" element={<ProductionOrderPage />} />
       <Route path="produtos" element={<ProductsTab />} />
       <Route path="produtos/:productId" element={<ProductPage />} />
       <Route path="estoque" element={<StockTab />}>

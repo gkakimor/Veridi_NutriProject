@@ -3087,3 +3087,55 @@ Não é ausência de recurso; é regra de domínio, e cada caso tem motivo:
 A regra geral: só se oferece criação onde a entidade recém-nascida é
 utilizável naquele campo. Onde o domínio a recusaria, a ausência da ação é a
 mensagem correta.
+
+---
+
+## §47 — Produção na Consulta do Cliente
+
+A Consulta do Cliente mostra as ordens de produção daquele Cliente, e só as
+dele. O filtro é o `customerId` da própria ordem — resolvido na escrita, que
+recusa gravar quando o cliente do produto discorda do cliente do pedido.
+
+**Ordem sem cliente não aparece em Consulta nenhuma.** Produção manual sem
+pedido pode existir sem dono, e é a maioria do histórico. Mostrá-la sob o
+cabeçalho de um Cliente afirmaria que pertence a ele; escolher um dono
+provável seria pior ainda. A ausência é a resposta correta, e a tela diz isso
+em vez de fingir que não há nada.
+
+### A consulta lê, a ordem completa opera
+
+O que a Consulta mostra é o que responde "o que este cliente tem em
+produção": código, situação, produto, pedido de origem, planejado, produzido,
+saldo, datas e os lotes acabados com a situação de Qualidade.
+
+Fica de fora, de propósito, a necessidade de material — reserva, consumo,
+falta e sugestão de lote. Aquilo responde a outra pergunta, "dá para liberar
+esta ordem?", que é ato operacional e mora na ordem completa. Liberar,
+apontar, consumir e cancelar não existem aqui: a saída para o módulo é
+explícita, nunca um botão de ação embutido na consulta.
+
+### Produzido é soma, saldo não é dívida
+
+Quantidade produzida é a soma dos apontamentos, nunca uma segunda coluna
+mantida à mão. Saldo é `planejado − produzido` e **nunca é negativo**:
+apontar acima do planejado é variação de produção, não falta — um número
+negativo na tela leria como "ainda falta produzir".
+
+### Lote acabado é lista
+
+Uma ordem pode gerar mais de um lote. Hoje não gera, e é por isso mesmo que a
+consulta trata como lista: escrever um-para-um transformaria um dado que o
+banco aceita num campo que a tela perderia em silêncio no dia em que
+acontecesse.
+
+A situação mostrada é a do lote — o material pode ser usado —, não a do
+laudo. Aprovar o CoA não libera o lote sozinho, e usar o estado do documento
+como se fosse o do material diria que há produto disponível quando não há.
+
+### "Em aberto", não "em andamento"
+
+O recorte de ordens ainda vivas é o que o domínio já tem: rascunho,
+planejada, liberada e em produção — o mesmo conjunto que o painel e os
+relatórios usam. Não existe um agrupamento chamado "em andamento", e criar um
+aqui daria dois números para a mesma pergunta, que divergiriam no dia em que
+uma situação nova aparecesse.

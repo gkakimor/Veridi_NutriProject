@@ -25,6 +25,10 @@ export const productScopeParamsSchema = customerScopeParamsSchema.extend({
   productId: z.string().trim().min(1),
 });
 
+export const productionOrderScopeParamsSchema = customerScopeParamsSchema.extend({
+  productionOrderId: z.string().trim().min(1),
+});
+
 /** Mesma paginação das demais listas da Consulta. */
 export const finishedGoodsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
