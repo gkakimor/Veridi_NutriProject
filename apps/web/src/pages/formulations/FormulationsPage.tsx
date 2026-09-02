@@ -5,6 +5,8 @@ import type { FormulationSummaryDTO } from "@veridi/shared";
 import { listFormulations } from "../../lib/formulations-api";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 const PAGE_SIZE = 20;
 
@@ -78,6 +80,8 @@ export function FormulationsPage() {
         </div>
         <ExportCsvButton path="/formulations/export.csv" filters={{ search }} />
 </div>
+
+      <ContextHelp topic={helpTopics["formulacao.comoFunciona"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">
