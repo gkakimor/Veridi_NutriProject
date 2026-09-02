@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { IndustrialResourceDTO, IndustrialResourceType } from "@veridi/shared";
 import {
   INDUSTRIAL_RATE_UOM_LABELS,
@@ -9,7 +9,6 @@ import {
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useAuth } from "../../app/AuthProvider";
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
-import { IndustrialResourceFormModal } from "./IndustrialResourceFormModal";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
@@ -46,7 +45,6 @@ export function IndustrialResourcesPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
-  const [creating, setCreating] = useState(false);
 
   const canEdit = user?.role === "ADMIN";
 
@@ -95,10 +93,13 @@ export function IndustrialResourcesPage() {
             declarado na estrutura de custos do produto.
           </p>
         </div>
+        {/* Leva à tela oficial: o cadastro passou a ter URL própria, e é ela
+            que sobrevive a um F5 e vale como link. O gate de ADMIN continua
+            aqui e também na página e no servidor. */}
         {canEdit && (
-          <button type="button" className="btn btn--primary" onClick={() => setCreating(true)}>
+          <Link className="btn btn--primary" to="/gestao/recursos-industriais/novo">
             + Novo recurso
-          </button>
+          </Link>
         )}
         <ExportCsvButton
           path="/industrial-resources/export.csv"
@@ -258,15 +259,6 @@ export function IndustrialResourcesPage() {
         </div>
       </div>
 
-      {creating && (
-        <IndustrialResourceFormModal
-          onClose={() => setCreating(false)}
-          onSaved={(created) => {
-            setCreating(false);
-            navigate(`/gestao/recursos-industriais/${created.id}`);
-          }}
-        />
-      )}
     </>
   );
 }

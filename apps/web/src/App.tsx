@@ -46,6 +46,7 @@ import { CostCalculationPrintPage } from "./pages/print/CostCalculationPrintPage
 import { ProductionCostPrintPage } from "./pages/print/ProductionCostPrintPage";
 import { IndustrialResourceDetailPage } from "./pages/industrial-resources/IndustrialResourceDetailPage";
 import { IndustrialResourcesPage } from "./pages/industrial-resources/IndustrialResourcesPage";
+import { IndustrialResourceCreatePage } from "./pages/industrial-resources/IndustrialResourceCreatePage";
 import {
   OrderOperationPrintPage,
   ProductionTraceabilityPrintPage,
@@ -266,6 +267,13 @@ function AuthenticatedApp() {
           <Route
             path="/gestao/recursos-industriais"
             element={<IndustrialResourcesPage />}
+          />
+          {/* `/novo` antes de `:id`: segmento estático ganha do dinâmico no
+              router, mas deixar na ordem certa poupa a próxima pessoa de
+              conferir isso. */}
+          <Route
+            path="/gestao/recursos-industriais/novo"
+            element={<IndustrialResourceCreatePage />}
           />
           <Route
             path="/gestao/recursos-industriais/:id"
