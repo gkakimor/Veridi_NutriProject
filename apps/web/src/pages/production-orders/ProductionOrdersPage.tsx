@@ -206,14 +206,14 @@ export function ProductionOrdersPage() {
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
-              <th>OP</th>
-              <th>Produto</th>
-              <th>Cliente</th>
-              <th>Formulação</th>
-              <th className="is-numeric">Quantidade</th>
-              <th>Materiais</th>
-              <th>Status</th>
-              <th>Criada em</th>
+              <th className="col-tight">OP</th>
+              <th className="col-flex">Produto</th>
+              <th className="col-flex">Cliente</th>
+              <th className="col-tight">Formulação</th>
+              <th className="col-tight is-numeric">Quantidade</th>
+              <th className="col-tight">Materiais</th>
+              <th className="col-tight">Status</th>
+              <th className="col-tight">Criada em</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -227,7 +227,7 @@ export function ProductionOrdersPage() {
                   if (event.key === "Enter") navigate(`/producao/ordens/${op.id}`);
                 }}
               >
-                <td className="is-code">
+                <td className="col-tight is-code">
                   {op.code}
                   {op.customerOrderId && (
                     <span className="cell-sub">
@@ -239,7 +239,7 @@ export function ProductionOrdersPage() {
                     </span>
                   )}
                 </td>
-                <td>
+                <td className="col-flex">
                   <EntityLink
                     kind="product"
                     id={op.productId}
@@ -247,7 +247,7 @@ export function ProductionOrdersPage() {
                     name={op.productName}
                   />
                 </td>
-                <td>
+                <td className="col-flex">
                   <EntityLink
                     kind="customer"
                     id={op.customerId}
@@ -255,19 +255,19 @@ export function ProductionOrdersPage() {
                     name={op.customerName}
                   />
                 </td>
-                <td>{op.formulationVersionLabel ?? "—"}</td>
-                <td className="is-numeric">
+                <td className="col-tight">{op.formulationVersionLabel ?? "—"}</td>
+                <td className="col-tight is-numeric">
                   {op.plannedQuantity} {op.outputUnitCode}
                 </td>
-                <td>
+                <td className="col-tight">
                   <span className={materialsBadgeClass(op)}>{materialsLabel(op)}</span>
                 </td>
-                <td>
+                <td className="col-tight">
                   <span className={statusBadgeClass(op.status)}>
                     {PRODUCTION_ORDER_STATUS_LABELS[op.status]}
                   </span>
                 </td>
-                <td>{formatDate(op.createdAt)}</td>
+                <td className="col-tight">{formatDate(op.createdAt)}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
                     <button

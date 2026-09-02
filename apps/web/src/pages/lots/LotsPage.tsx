@@ -8,6 +8,7 @@ import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { EntityLink } from "../../components/EntityLink";
+import { RowActions } from "../../components/RowActions";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -231,33 +232,35 @@ export function LotsPage() {
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
-              <th>
+              <th className="col-tight">
                 Lote Interno
                 <DicaDaColuna id="estoque.loteInterno" />
               </th>
-              <th>Item</th>
+              <th className="col-flex">Item</th>
               {/* Status ao lado da identidade: era a última coluna antes das
                   ações e saía da tela junto com elas, justamente a informação
                   que decide se o lote pode ser usado. */}
-              <th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="estoque.situacaoLote" />
               </th>
-              <th>
+              {/* Variável apesar de parecer curta: `ownerLabel` devolve
+                  "Cliente — <razão social>" quando o lote é de terceiro. */}
+              <th className="col-flex">
                 Proprietário
                 <DicaDaColuna id="estoque.proprietario" />
               </th>
-              <th>
+              <th className="col-tight">
                 Lote Fornecedor
                 <DicaDaColuna id="estoque.loteFornecedor" />
               </th>
-              <th>Fornecedor</th>
-              <th className="is-numeric">
+              <th className="col-flex">Fornecedor</th>
+              <th className="col-tight is-numeric">
                 Recebido
                 <DicaDaColuna id="estoque.recebido" />
               </th>
-              <th>Validade</th>
-              <th>Localização</th>
+              <th className="col-tight">Validade</th>
+              <th className="col-tight">Localização</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -271,29 +274,42 @@ export function LotsPage() {
                   if (event.key === "Enter") navigate(`/estoque/lotes/${lot.id}`);
                 }}
               >
-                <td className="is-code">
+                <td className="col-tight is-code">
                   <EntityLink kind="lot" id={lot.id} code={lot.code} />
                 </td>
-                <td>
+                <td className="col-flex">
                   <EntityLink kind="item" id={lot.itemId} code={lot.itemCode} name={lot.itemName} />
                 </td>
-                <td>
+                <td className="col-tight">
                   <span className={statusBadgeClass(lot.status, lot.isExpired)}>
                     {lot.isExpired ? "Vencido" : LOT_STATUS_LABELS[lot.status]}
                   </span>
                 </td>
-                <td>{ownerLabel(lot.ownerType, lot.ownerCustomerName)}</td>
-                <td>{lot.supplierLot ?? "—"}</td>
-                <td>
+                <td className="col-flex">{ownerLabel(lot.ownerType, lot.ownerCustomerName)}</td>
+                <td className="col-tight">{lot.supplierLot ?? "—"}</td>
+                <td className="col-flex">
                   <EntityLink kind="supplier" id={lot.supplierId} code={lot.supplierCode} name={lot.supplierName} />
                 </td>
-                <td className="is-numeric">
+                <td className="col-tight is-numeric">
                   {lot.initialReceivedQuantity} {lot.unitCode}
                 </td>
-                <td>{formatDate(lot.expiryDate)}</td>
-                <td>{lot.location ?? "—"}</td>
+                <td className="col-tight">{formatDate(lot.expiryDate)}</td>
+                <td className="col-tight">{lot.location ?? "—"}</td>
                 <td onClick={(event) => event.stopPropagation()}>
-                  <div className="table__actions">
+                  {/*
+                    Abrir é a ação da linha; a etiqueta é de exceção AQUI.
+                    O momento de rotina da impressão é o recebimento — o
+                    Recebimento e a própria página do lote têm o botão — e na
+                    LISTA ela custava mais largura que seis colunas de negócio.
+                  */}
+                  <RowActions
+                    actions={[
+                      {
+                        label: "Imprimir etiqueta (QR)",
+                        onSelect: () => navigate(`/estoque/lotes/${lot.id}/etiqueta`),
+                      },
+                    ]}
+                  >
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
@@ -301,14 +317,7 @@ export function LotsPage() {
                     >
                       Abrir
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/estoque/lotes/${lot.id}/etiqueta`)}
-                    >
-                      QR / Etiqueta
-                    </button>
-                  </div>
+                  </RowActions>
                 </td>
               </tr>
             ))}

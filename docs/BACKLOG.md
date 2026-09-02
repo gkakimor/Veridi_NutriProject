@@ -14,7 +14,7 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 2 |
+| LOW | 4 |
 
 Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
@@ -188,7 +188,7 @@ O aviso também ficou no topo do `schema.prisma`, que é onde se tropeça nele.
 **Decisão / próxima ação:** nenhuma. Conferir a ação real deixou de depender
 de alguém lembrar deste parágrafo.
 
-### 8. Bolha do InfoHint dentro de tabela rolável — resolvido
+### 8. Bolha do InfoHint e menu de linha recortados por tabela — resolvido
 
 O `InfoHint` posicionava a bolha em `position: absolute`. Dentro de
 `.table-container`, cujo `overflow-x: auto` recorta o eixo Y junto, tabela com
@@ -209,7 +209,60 @@ Enquanto não foi medida fica invisível, para não piscar no canto.
 Teste em `help-kit.test.tsx` renderiza o ⓘ dentro de um `.table-container` e
 prova que a bolha recebeu coordenada.
 
+**O menu `⋯` das linhas tinha o mesmo defeito** e foi corrigido junto: o menu
+de uma linha perto do rodapé aparecia cortado no meio de um item. Mesmo
+remédio — `position: fixed` com coordenada medida, abrindo para cima quando
+não cabe embaixo. O `z-index: 3` que existia para contornar o sintoma na
+célula fixa saiu junto, porque o menu deixou de ser pintado dentro dela.
+
 **Decisão / próxima ação:** nenhuma.
+
+### 9. Criar entidade só existe em modal, não em rota — LOW
+
+Cliente, Produto, Fornecedor, Item de estoque e Recurso industrial **não têm
+tela de criação**. Cada um existe como modal (`CustomerFormModal` e irmãos),
+aberto tanto pelo botão da listagem quanto pelo "+ Novo X" dos campos de
+busca. Não há `/cadastros/clientes/novo` nem equivalente.
+
+Não é duplicação: o modal É o formulário oficial, é `FullWorkspaceModal` com
+breadcrumb e título, e a listagem abre exatamente o mesmo componente. Também
+não custa rascunho — o modal renderiza por cima sem desmontar o formulário de
+origem, então quem sai para cadastrar um cliente no meio de um pedido volta
+com tudo preenchido.
+
+O que falta é só o que uma URL dá: **refresh no meio da criação perde o
+formulário**, e não há link direto para "novo cliente". Product Ownership
+decidiu manter o modal nesta rodada (2026-09-02) — construir cinco páginas
+exigiria serializar o rascunho de cada tela de origem, e `CustomerOrderPage`
+sozinha tem cerca de trinta `useState` soltos.
+
+**Decisão / próxima ação:** nenhuma agora. Se a criação por URL virar
+requisito, o caminho é migrar uma entidade por vez começando por Cliente, que
+é a de mais ocorrências.
+
+### 10. Três fontes divergem sobre quem pode criar cadastro — LOW
+
+O `POST` de Cliente, Produto, Fornecedor e Item **não tem `requireRole`** —
+qualquer sessão autenticada cria. Os botões "+ Novo X" das telas de listagem
+também não checam nada. Mas quatro campos de busca haviam inventado gates no
+front (`COMMERCIAL || ADMIN` para Cliente, `PURCHASING || ADMIN` para
+Fornecedor, `PURCHASING || QUALITY || ADMIN` para Item), mais restritivos que
+o servidor e inconsistentes com o botão da listagem: o mesmo usuário via o
+cadastro numa tela e não via na outra.
+
+Alinhado com a listagem (2026-09-02): a ação aparece para quem está
+autenticado, que é o que a API de fato permite. Recurso industrial é a
+exceção e mantém `ADMIN` — ali o gate é real nos dois lados
+(`industrial-resources.routes.ts`).
+
+Isto **não** é regressão de segurança: nada foi afrouxado no servidor, só o
+front deixou de esconder uma ação que ninguém recusa. A matriz de permissão
+por papel está entre as decisões adiadas deste mesmo arquivo, e é lá que a
+pergunta "quem pode cadastrar cliente?" será respondida.
+
+**Decisão / próxima ação:** entra na pauta de permissões da validação com a
+Veridi. Fechar no servidor antes de esconder no front — a ordem inversa dá
+falsa sensação de controle.
 
 ### Decisões de produto em aberto — não bloqueantes
 
@@ -236,9 +289,10 @@ depende da prática real da casa, não de escolha técnica.
 e o feedback ser classificado. Roteiro da sessão e grade de classificação em
 [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md).
 
-Os dois LOW ainda abertos — a instabilidade da suíte (3) e o dado legado sem
-cliente (6) — não bloqueiam a validação e não devem ser corrigidos durante a
-reunião.
+Os quatro LOW ainda abertos — instabilidade da suíte (3), dado legado sem
+cliente (6), criação só em modal (9) e a divergência de permissão de cadastro
+(10) — não bloqueiam a validação e não devem ser corrigidos durante a
+reunião. Os itens 9 e 10 são boa pauta PARA a reunião.
 
 ---
 

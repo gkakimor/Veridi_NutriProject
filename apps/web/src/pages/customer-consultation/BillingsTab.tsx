@@ -47,12 +47,18 @@ export function BillingsTab() {
         <table className="table table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>Pedido</th>
-              <th>Data</th>
-              <th>Situação</th>
-              <th>Quantidade</th>
-              <th>Total</th>
+              {/* Nenhuma coluna aqui é texto variável — código, pedido, data,
+                  badge de situação, quantidade e valor são todos curtos. Sem
+                  uma coluna de texto para receber a sobra, a tabela (que é
+                  `width: 100%`) espalha a folga por todas; deixar duas sem
+                  classe só concentrava a folga nelas: Total ia a 555px em
+                  1600, largura que não carrega informação nenhuma. */}
+              <th className="col-tight">Código</th>
+              <th className="col-tight">Pedido</th>
+              <th className="col-tight">Data</th>
+              <th className="col-tight">Situação</th>
+              <th className="col-tight">Quantidade</th>
+              <th className="col-tight">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -65,10 +71,12 @@ export function BillingsTab() {
                   if (event.key === "Enter") open(billing);
                 }}
               >
-                <td className="is-code">{billing.code}</td>
-                <td className="is-code">{billing.customerOrderCode}</td>
-                <td>{formatDate(billing.issuedAt ?? billing.shipmentDate)}</td>
-                <td>
+                <td className="is-code col-tight">{billing.code}</td>
+                <td className="is-code col-tight">{billing.customerOrderCode}</td>
+                <td className="col-tight">
+                  {formatDate(billing.issuedAt ?? billing.shipmentDate)}
+                </td>
+                <td className="col-tight">
                   <span
                     className={
                       billing.status === "ISSUED"
@@ -81,8 +89,8 @@ export function BillingsTab() {
                     {BILLING_STATUS_LABELS[billing.status]}
                   </span>
                 </td>
-                <td>{billing.totalQuantity}</td>
-                <td>
+                <td className="col-tight">{billing.totalQuantity}</td>
+                <td className="col-tight">
                   {billing.hasCompletePricing ? (
                     formatBRL(billing.totalAmount)
                   ) : (

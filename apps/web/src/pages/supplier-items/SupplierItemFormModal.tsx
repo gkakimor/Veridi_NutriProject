@@ -11,6 +11,8 @@ import { FormSection } from "../../components/FormSection";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { createSupplierItem } from "../../lib/supplier-items-api";
 import { listUnits } from "../../lib/units-api";
+import { ItemFormModal } from "../items/ItemFormModal";
+import { SupplierFormModal } from "../suppliers/SupplierFormModal";
 
 /**
  * Nova relação item × fornecedor.
@@ -56,6 +58,18 @@ export function SupplierItemFormModal({
   const [offerNotes, setOfferNotes] = useState("");
 
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
+  /*
+   * Cadastro no contexto — item e fornecedor.
+   *
+   * As duas listas chegam por prop, de quem abriu este formulário. O que
+   * nasce aqui não pode esperar o recarregamento do pai: fica numa lista
+   * própria que se junta à recebida, e o pai recarrega quando `onSaved`
+   * fecha a relação.
+   */
+  const [itensNovos, setItensNovos] = useState<ItemDTO[]>([]);
+  const [fornecedoresNovos, setFornecedoresNovos] = useState<SupplierDTO[]>([]);
+  const [itemModalAberto, setItemModalAberto] = useState(false);
+  const [fornecedorModalAberto, setFornecedorModalAberto] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,8 +79,17 @@ export function SupplierItemFormModal({
       .catch(() => setUnits([]));
   }, []);
 
+  const itensDisponiveis = [
+    ...itensNovos,
+    ...items.filter((item) => !itensNovos.some((novo) => novo.id === item.id)),
+  ];
+  const fornecedoresDisponiveis = [
+    ...fornecedoresNovos,
+    ...suppliers.filter((row) => !fornecedoresNovos.some((novo) => novo.id === row.id)),
+  ];
+
   // Produto acabado é produzido, não comprado — fica fora da lista.
-  const purchasableItems = items.filter(
+  const purchasableItems = itensDisponiveis.filter(
     (item) => item.type === "RAW_MATERIAL" || item.type === "PACKAGING",
   );
   const selectedItem = purchasableItems.find((item) => item.id === itemId);
@@ -190,6 +213,9 @@ export function SupplierItemFormModal({
                   name: item.name,
                   hint: item.unitCode,
                 }))}
+                canCreate
+                createLabel="Novo item de estoque"
+                onCreateNew={() => setItemModalAberto(true)}
               />
             </div>
 
@@ -203,14 +229,18 @@ export function SupplierItemFormModal({
                 onChange={setSupplierId}
                 required
                 placeholder="Digite código ou nome do fornecedor…"
-                options={suppliers.map((supplier) => ({
+                options={fornecedoresDisponiveis.map((supplier) => ({
                   id: supplier.id,
                   code: supplier.code,
                   name: supplier.legalName,
+                  ...(supplier.tradeName ? { hint: supplier.tradeName } : {}),
                   searchTerms: [supplier.tradeName ?? "", supplier.cnpj ?? ""]
                     .filter(Boolean)
                     .join(" "),
                 }))}
+                canCreate
+                createLabel="Novo fornecedor"
+                onCreateNew={() => setFornecedorModalAberto(true)}
               />
             </div>
 
@@ -400,6 +430,35 @@ export function SupplierItemFormModal({
           </div>
         </FormSection>
       </form>
+
+      {itemModalAberto && (
+        <ItemFormModal
+          mode="create"
+          item={null}
+          units={units}
+          onClose={() => setItemModalAberto(false)}
+          onSaved={(created) => {
+            setItemModalAberto(false);
+            if (!created) return;
+            setItensNovos((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+            setItemId(created.id);
+          }}
+        />
+      )}
+
+      {fornecedorModalAberto && (
+        <SupplierFormModal
+          mode="create"
+          supplier={null}
+          onClose={() => setFornecedorModalAberto(false)}
+          onSaved={(created) => {
+            setFornecedorModalAberto(false);
+            if (!created) return;
+            setFornecedoresNovos((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+            setSupplierId(created.id);
+          }}
+        />
+      )}
     </FullWorkspaceModal>
   );
 }

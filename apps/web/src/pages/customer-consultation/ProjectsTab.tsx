@@ -47,11 +47,11 @@ export function ProjectsTab() {
         <table className="table table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>Projeto</th>
-              <th>Produto</th>
-              <th>Situação</th>
-              <th>Entrada</th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">Projeto</th>
+              <th className="col-flex">Produto</th>
+              <th className="col-tight">Situação</th>
+              <th className="col-tight">Entrada</th>
             </tr>
           </thead>
           <tbody>
@@ -64,10 +64,10 @@ export function ProjectsTab() {
                   if (event.key === "Enter") open(project);
                 }}
               >
-                <td className="is-code">{project.code}</td>
-                <td>{project.name}</td>
-                <td>{project.productName ?? "—"}</td>
-                <td>
+                <td className="is-code col-tight">{project.code}</td>
+                <td className="col-flex">{project.name}</td>
+                <td className="col-flex">{project.productName ?? "—"}</td>
+                <td className="col-tight">
                   <span
                     className={
                       project.status === "APPROVED"
@@ -80,7 +80,7 @@ export function ProjectsTab() {
                     {PROJECT_STATUS_LABELS[project.status]}
                   </span>
                 </td>
-                <td>{formatDate(project.entryDate)}</td>
+                <td className="col-tight">{formatDate(project.entryDate)}</td>
               </tr>
             ))}
 

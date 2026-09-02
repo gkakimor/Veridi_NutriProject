@@ -91,21 +91,24 @@ export function PickingConsumptionPage() {
         <table className="table table--clickable-rows">
           <thead>
             <tr>
-              <th>OP</th>
-              <th>Produto</th>
-              <th>
+              <th className="col-tight">OP</th>
+              <th className="col-flex">Produto</th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="producao.picking.situacao" />
               </th>
-              <th>
+              <th className="col-tight">
                 Picking
                 <DicaDaColuna id="producao.picking.conferencia" />
               </th>
-              <th>
+              <th className="col-tight">
                 Consumo
                 <DicaDaColuna id="producao.picking.consumo" />
               </th>
-              <th aria-hidden="true" />
+              {/* `col-actions` explícito: esta tabela não tem
+                  `table--sticky-actions`, então a regra automática da última
+                  coluna não vale aqui. */}
+              <th className="col-actions" aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
@@ -118,16 +121,16 @@ export function PickingConsumptionPage() {
                   if (event.key === "Enter") navigate(`/producao/ordens/${order.id}`);
                 }}
               >
-                <td className="is-code">{order.code}</td>
-                <td>
+                <td className="col-tight is-code">{order.code}</td>
+                <td className="col-flex">
                   {order.productCode} — {order.productName}
                 </td>
-                <td>
+                <td className="col-tight">
                   <span className={statusBadgeClass(order.status)}>{statusLabel(order.status)}</span>
                 </td>
-                <td>{pickingSummary(order)}</td>
-                <td>{consumptionSummary(order)}</td>
-                <td onClick={(event) => event.stopPropagation()}>
+                <td className="col-tight">{pickingSummary(order)}</td>
+                <td className="col-tight">{consumptionSummary(order)}</td>
+                <td className="col-actions" onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
                     <button
                       type="button"

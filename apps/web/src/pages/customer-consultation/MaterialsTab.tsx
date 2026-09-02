@@ -47,38 +47,38 @@ export function MaterialsTab() {
         <table className="table">
           <thead>
             <tr>
-              <th>Item</th>
-              <th>Lote</th>
-              <th>Físico</th>
-              <th>Reservado</th>
-              <th>Disponível</th>
-              <th>Validade</th>
-              <th>Situação</th>
-              <th>Laudo</th>
+              <th className="col-flex">Item</th>
+              <th className="col-tight">Lote</th>
+              <th className="col-tight">Físico</th>
+              <th className="col-tight">Reservado</th>
+              <th className="col-tight">Disponível</th>
+              <th className="col-tight">Validade</th>
+              <th className="col-tight">Situação</th>
+              <th className="col-tight">Laudo</th>
             </tr>
           </thead>
           <tbody>
             {list.rows.map((row) => (
               <tr key={row.lotId}>
-                <td>
+                <td className="col-flex">
                   <span className="is-code">{row.itemCode}</span> {row.itemName}
                 </td>
-                <td className="is-code">{row.lotCode}</td>
-                <td>
+                <td className="is-code col-tight">{row.lotCode}</td>
+                <td className="col-tight">
                   {row.onHand} {row.unitCode}
                 </td>
-                <td>
+                <td className="col-tight">
                   {row.reserved} {row.unitCode}
                 </td>
-                <td>
+                <td className="col-tight">
                   {row.available} {row.unitCode}
                 </td>
-                <td>
+                <td className="col-tight">
                   {formatDate(row.expiryDate)}
                   {row.isExpired && <span className="badge badge--err">Vencido</span>}
                 </td>
-                <td>{LOT_STATUS_LABELS[row.status]}</td>
-                <td>{COA_STATUS_LABELS[row.coaStatus]}</td>
+                <td className="col-tight">{LOT_STATUS_LABELS[row.status]}</td>
+                <td className="col-tight">{COA_STATUS_LABELS[row.coaStatus]}</td>
               </tr>
             ))}
 

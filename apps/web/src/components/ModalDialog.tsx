@@ -18,12 +18,23 @@ import { useModalDialog } from "./useModalDialog";
 export function ModalDialog({
   labelledBy,
   onClose,
+  role = "alertdialog",
   children,
 }: {
   /** `id` do título dentro do diálogo — o rótulo acessível. */
   labelledBy: string;
   /** Escape e clique em cancelar chegam aqui. */
   onClose: () => void;
+  /**
+   * `alertdialog` é o padrão porque a casca nasceu para confirmações — e
+   * `alertdialog` é o que faz o leitor de tela anunciar o conteúdo inteiro
+   * de imediato, que é o certo para "isto não tem volta".
+   *
+   * Painel de ajuda passa `dialog`: quem clicou em "Como funciona" pediu
+   * para ler, não foi interrompido. Anunciar ajuda com urgência de alerta
+   * ensina o usuário a ignorar o alerta seguinte, que pode ser de verdade.
+   */
+  role?: "alertdialog" | "dialog";
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -35,7 +46,7 @@ export function ModalDialog({
       <div
         ref={ref}
         className="confirm-dialog"
-        role="alertdialog"
+        role={role}
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}

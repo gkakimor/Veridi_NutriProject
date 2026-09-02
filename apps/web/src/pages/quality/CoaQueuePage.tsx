@@ -186,23 +186,26 @@ export function CoaQueuePage() {
         <table className="table table--sticky-actions">
           <thead>
             <tr>
-              <th>Lote</th>
-              <th>Item</th>
-              <th>
+              <th className="col-tight">Lote</th>
+              <th className="col-flex">Item</th>
+              <th className="col-flex">
                 Fornecedor / Proprietário
                 <DicaDaColuna id="qualidade.proprietario" />
               </th>
-              <th className="is-numeric">Recebido em</th>
-              <th>Validade</th>
-              <th>
+              <th className="col-tight is-numeric">Recebido em</th>
+              <th className="col-tight">Validade</th>
+              {/* Variável por causa do motivo da rejeição, que é texto livre:
+                  em `nowrap` uma justificativa comprida arrastaria a fila
+                  inteira para fora da tela. */}
+              <th className="col-flex">
                 CoA
                 <DicaDaColuna id="qualidade.coa" />
               </th>
-              <th>
+              <th className="col-tight">
                 Qualidade
                 <DicaDaColuna id="qualidade.situacaoLote" />
               </th>
-              <th className="is-numeric">
+              <th className="col-tight is-numeric">
                 Físico
                 <DicaDaColuna id="qualidade.fisico" />
               </th>
@@ -212,30 +215,30 @@ export function CoaQueuePage() {
           <tbody>
             {rows.map((row) => (
               <tr key={row.lotId}>
-                <td className="is-code">{row.lotCode}</td>
-                <td>
+                <td className="col-tight is-code">{row.lotCode}</td>
+                <td className="col-flex">
                   <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                   {row.sourceName && <div className="field__hint">Fonte: {row.sourceName}</div>}
                 </td>
-                <td>
+                <td className="col-flex">
                   {row.ownerType === "CUSTOMER"
                     ? ownerLabel(row.ownerType, row.ownerCustomerName)
                     : (row.supplierName ?? "—")}
                 </td>
-                <td className="is-numeric">{formatDate(row.receivedAt)}</td>
-                <td>{formatDate(row.expiryDate)}</td>
-                <td>
+                <td className="col-tight is-numeric">{formatDate(row.receivedAt)}</td>
+                <td className="col-tight">{formatDate(row.expiryDate)}</td>
+                <td className="col-flex">
                   <span className={coaBadgeClass(row.coaStatus)}>
                     {COA_STATUS_LABELS[row.coaStatus]}
                   </span>
                   {row.coaReviewNote && <div className="field__hint">{row.coaReviewNote}</div>}
                 </td>
-                <td>
+                <td className="col-tight">
                   <span className="badge badge--neutral">
                     {row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.lotStatus]}
                   </span>
                 </td>
-                <td className="is-numeric">
+                <td className="col-tight is-numeric">
                   {row.onHand} {row.unitCode}
                 </td>
                 <td>

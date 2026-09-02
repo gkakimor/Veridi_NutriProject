@@ -191,31 +191,31 @@ export function CustomerMaterialsPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Cliente</th>
-              <th>Item</th>
-              <th>
+              <th className="col-flex">Cliente</th>
+              <th className="col-flex">Item</th>
+              <th className="col-tight">
                 Lote interno
                 <DicaDaColuna id="estoque.loteInterno" />
               </th>
-              <th>
+              <th className="col-tight">
                 Lote externo
                 <DicaDaColuna id="estoque.loteFornecedor" />
               </th>
-              <th>Validade</th>
-              <th>Localização</th>
-              <th className="is-numeric">
+              <th className="col-tight">Validade</th>
+              <th className="col-tight">Localização</th>
+              <th className="col-tight is-numeric">
                 Físico
                 <DicaDaColuna id="estoque.fisico" />
               </th>
-              <th className="is-numeric">
+              <th className="col-tight is-numeric">
                 Reservado
                 <DicaDaColuna id="estoque.reservado" />
               </th>
-              <th className="is-numeric">
+              <th className="col-tight is-numeric">
                 Disponível
                 <DicaDaColuna id="estoque.disponivel" />
               </th>
-              <th>
+              <th className="col-tight">
                 Qualidade
                 <DicaDaColuna id="estoque.situacaoLote" />
               </th>
@@ -224,22 +224,22 @@ export function CustomerMaterialsPage() {
           <tbody>
             {rows.map((row) => (
               <tr key={row.lotId}>
-                <td>
+                <td className="col-flex">
                   <EntityLink kind="customer" id={row.customerId} code={row.customerCode} name={row.customerName} />
                 </td>
-                <td>
+                <td className="col-flex">
                   <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                 </td>
-                <td className="is-code">{row.lotCode}</td>
-                <td>{row.supplierLot ?? "—"}</td>
-                <td>{formatDate(row.expiryDate)}</td>
-                <td>{row.location ?? "—"}</td>
-                <td className="is-numeric">
+                <td className="col-tight is-code">{row.lotCode}</td>
+                <td className="col-tight">{row.supplierLot ?? "—"}</td>
+                <td className="col-tight">{formatDate(row.expiryDate)}</td>
+                <td className="col-tight">{row.location ?? "—"}</td>
+                <td className="col-tight is-numeric">
                   {row.onHand} {row.unitCode}
                 </td>
-                <td className="is-numeric">{row.reserved}</td>
-                <td className="is-numeric">{row.available}</td>
-                <td>
+                <td className="col-tight is-numeric">{row.reserved}</td>
+                <td className="col-tight is-numeric">{row.available}</td>
+                <td className="col-tight">
                   <span className={statusBadgeClass(row.status, row.isExpired)}>
                     {row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.status]}
                   </span>

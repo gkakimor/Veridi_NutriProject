@@ -3,7 +3,6 @@ import { RelatedLinks } from "../../components/RelatedLinks";
 import { Link } from "react-router-dom";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { CustomerFormModal } from "../customers/CustomerFormModal";
-import { useAuth } from "../../app/AuthProvider";
 import type { FormEvent } from "react";
 import type {
   DosageForm,
@@ -36,7 +35,8 @@ interface ProductFormModalProps {
   mode: "create" | "edit";
   product: ProductDTO | null;
   onClose: () => void;
-  onSaved: () => void;
+  /** Recebe o registro criado — permite selecioná-lo de volta na origem. */
+  onSaved: (created?: ProductDTO) => void;
 }
 
 interface CustomerOption {
@@ -125,12 +125,9 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const { user } = useAuth();
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
   /** Cadastro de cliente aberto a partir do campo de busca. */
   const [newCustomerName, setNewCustomerName] = useState<string | null>(null);
-  // CTA que termina em 403 é pior que CTA nenhum.
-  const canCreateCustomer = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
 
   useEffect(() => {
     // A dose pode ser em mg/g/ml — unidades vêm do cadastro existente.
@@ -228,11 +225,12 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
 
     try {
       if (mode === "create") {
-        await createProduct(payload);
-      } else if (product) {
-        await updateProduct(product.id, payload);
+        const created = await createProduct(payload);
+        onSaved(created);
+      } else {
+        if (product) await updateProduct(product.id, payload);
+        onSaved();
       }
-      onSaved();
     } catch (err) {
       if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};
@@ -362,8 +360,8 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
                     .filter(Boolean)
                     .join(" "),
                 }))}
-                canCreate={canCreateCustomer}
-                createLabel="Cadastrar novo cliente"
+                canCreate
+                createLabel="Novo cliente"
                 onCreateNew={(typed) => setNewCustomerName(typed)}
               />
               {fieldErrors["customerId"] && (

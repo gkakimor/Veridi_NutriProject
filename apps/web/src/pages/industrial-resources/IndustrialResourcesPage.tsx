@@ -165,25 +165,25 @@ export function IndustrialResourcesPage() {
         <table className="table table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>Recurso</th>
-              <th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">Recurso</th>
+              <th className="col-tight">
                 Tipo
                 <DicaDaColuna id="recurso.tipo" />
               </th>
-              <th>
+              <th className="col-tight">
                 Potência (kW)
                 <DicaDaColuna id="recurso.potencia" />
               </th>
-              <th>
+              <th className="col-tight">
                 Tarifa vigente
                 <DicaDaColuna id="recurso.tarifaVigente" />
               </th>
-              <th>
+              <th className="col-tight">
                 Tarifas
                 <DicaDaColuna id="recurso.tarifas" />
               </th>
-              <th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="recurso.situacao" />
               </th>
@@ -201,18 +201,18 @@ export function IndustrialResourcesPage() {
                   }
                 }}
               >
-                <td className="is-code">{resource.code}</td>
-                <td>{resource.name}</td>
-                <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type]}</td>
+                <td className="col-tight is-code">{resource.code}</td>
+                <td className="col-flex">{resource.name}</td>
+                <td className="col-tight">{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type]}</td>
                 {/* Potência desconhecida fica em branco — não vira zero. */}
-                <td>{resource.powerKw ?? "—"}</td>
-                <td>
+                <td className="col-tight">{resource.powerKw ?? "—"}</td>
+                <td className="col-tight">
                   {resource.currentRate
                     ? `R$ ${resource.currentRate.rateValue} / ${INDUSTRIAL_RATE_UOM_LABELS[resource.currentRate.rateUom]}`
                     : "Não informada"}
                 </td>
-                <td>{resource.rateCount}</td>
-                <td>
+                <td className="col-tight">{resource.rateCount}</td>
+                <td className="col-tight">
                   <span className={resource.active ? "badge badge--active" : "badge badge--inactive"}>
                     {resource.active ? "Ativo" : "Inativo"}
                   </span>

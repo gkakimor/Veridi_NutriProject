@@ -85,33 +85,33 @@ export function FinishedGoodsTab() {
         <table className="table">
           <thead>
             <tr>
-              <th>Produto</th>
-              <th>Item</th>
-              <th>Físico</th>
-              <th>Reservado</th>
-              <th>Disponível</th>
-              <th>Lotes</th>
-              <th>Qualidade</th>
+              <th className="col-flex">Produto</th>
+              <th className="col-tight">Item</th>
+              <th className="col-tight">Físico</th>
+              <th className="col-tight">Reservado</th>
+              <th className="col-tight">Disponível</th>
+              <th className="col-tight">Lotes</th>
+              <th className="col-tight">Qualidade</th>
             </tr>
           </thead>
           <tbody>
             {list.rows.map((row) => (
               <tr key={row.itemId}>
-                <td>
+                <td className="col-flex">
                   <span className="is-code">{row.productCode}</span> {row.productName}
                 </td>
-                <td className="is-code">{row.itemCode}</td>
-                <td>
+                <td className="is-code col-tight">{row.itemCode}</td>
+                <td className="col-tight">
                   {row.onHand} {row.unitCode}
                 </td>
-                <td>
+                <td className="col-tight">
                   {row.reserved} {row.unitCode}
                 </td>
-                <td>
+                <td className="col-tight">
                   {row.available} {row.unitCode}
                 </td>
-                <td>{row.lotCount}</td>
-                <td>
+                <td className="col-tight">{row.lotCount}</td>
+                <td className="col-tight">
                   {row.awaitingQualityLots > 0 ? (
                     <span className="badge badge--warn">
                       {row.awaitingQualityLots} aguardando liberação

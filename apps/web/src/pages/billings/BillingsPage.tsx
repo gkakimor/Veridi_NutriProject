@@ -171,41 +171,49 @@ export function BillingsPage() {
               <th colSpan={7}>Aguardando faturamento</th>
             </tr>
             <tr>
-              <th>Expedição</th>
-              <th>Pedido</th>
-              <th>Cliente</th>
-              <th>Data</th>
-              <th className="is-numeric">Quantidade</th>
-              <th>Situação</th>
-              <th aria-hidden="true" />
+              <th className="col-tight">Expedição</th>
+              <th className="col-tight">Pedido</th>
+              <th className="col-flex">Cliente</th>
+              <th className="col-tight">Data</th>
+              <th className="is-numeric col-tight">Quantidade</th>
+              <th className="col-tight">Situação</th>
+              {/* Esta tabela não é `table--sticky-actions`, então a regra que
+                  congela a última coluna não vale aqui: a classe vai à mão. */}
+              <th aria-hidden="true" className="col-actions" />
             </tr>
           </thead>
           <tbody>
             {awaiting.map((row) => (
               <tr key={row.shipmentId}>
-                <td className="is-code">{row.shipmentCode}</td>
-                <td className="is-code">{row.customerOrderCode}</td>
-                <td>
+                <td className="is-code col-tight">{row.shipmentCode}</td>
+                <td className="is-code col-tight">{row.customerOrderCode}</td>
+                <td className="col-flex">
                   <EntityLink kind="customer" id={row.customerId} code={row.customerName} />
                 </td>
-                <td>{formatDate(row.shipmentDate)}</td>
-                <td>{row.totalQuantity}</td>
-                <td>
+                <td className="col-tight">{formatDate(row.shipmentDate)}</td>
+                <td className="col-tight">{row.totalQuantity}</td>
+                <td className="col-tight">
                   <span
                     className={row.billingStatus === "DRAFT" ? "badge badge--warn" : "badge badge--neutral"}
                   >
                     {SHIPMENT_BILLING_STATUS_LABELS[row.billingStatus]}
                   </span>
                 </td>
-                <td>
+                <td className="col-actions">
                   <button
                     type="button"
                     className="btn btn--secondary btn--sm"
                     disabled={preparingShipmentId === row.shipmentId}
+                    /* O código do faturamento já está na linha (coluna
+                       Expedição/Pedido) e repeti-lo dentro do botão fazia a
+                       coluna de ações virar a 2ª mais larga da tela. Fica só
+                       no nome acessível, para quem navega por leitor de tela
+                       ouvir qual documento vai abrir. */
+                    aria-label={row.billingId ? `Abrir ${row.billingCode}` : undefined}
                     onClick={() => handlePrepare(row)}
                   >
                     {row.billingId
-                      ? `Abrir ${row.billingCode}`
+                      ? "Abrir"
                       : preparingShipmentId === row.shipmentId
                         ? "Preparando…"
                         : "Preparar faturamento"}
@@ -310,14 +318,15 @@ export function BillingsPage() {
               <th colSpan={9}>Documentos de faturamento</th>
             </tr>
             <tr>
-              <th>Faturamento</th>
-              <th>Expedição</th>
-              <th>Pedido</th>
-              <th>Cliente</th>
-              <th className="is-numeric">Quantidade</th>
-              <th className="is-numeric">Valor</th>
-              <th>Status</th>
-              <th>Emitido em</th>
+              <th className="col-tight">Faturamento</th>
+              <th className="col-tight">Expedição</th>
+              <th className="col-tight">Pedido</th>
+              <th className="col-flex">Cliente</th>
+              <th className="is-numeric col-tight">Quantidade</th>
+              {/* Valor nunca trunca: meio número parece um número verdadeiro. */}
+              <th className="is-numeric col-tight">Valor</th>
+              <th className="col-tight">Status</th>
+              <th className="col-tight">Emitido em</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -331,20 +340,22 @@ export function BillingsPage() {
                   if (event.key === "Enter") navigate(`/comercial/faturamento/${billing.id}`);
                 }}
               >
-                <td className="is-code">{billing.code}</td>
-                <td className="is-code">{billing.shipmentCode}</td>
-                <td className="is-code">{billing.customerOrderCode}</td>
-                <td>
+                <td className="is-code col-tight">{billing.code}</td>
+                <td className="is-code col-tight">{billing.shipmentCode}</td>
+                <td className="is-code col-tight">{billing.customerOrderCode}</td>
+                <td className="col-flex">
                   <EntityLink kind="customer" id={billing.customerId} code={billing.customerName} />
                 </td>
-                <td>{billing.totalQuantity}</td>
-                <td>{billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}</td>
-                <td>
+                <td className="col-tight">{billing.totalQuantity}</td>
+                <td className="col-tight">
+                  {billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}
+                </td>
+                <td className="col-tight">
                   <span className={statusBadgeClass(billing.status)}>
                     {BILLING_STATUS_LABELS[billing.status]}
                   </span>
                 </td>
-                <td>{formatDate(billing.issuedAt)}</td>
+                <td className="col-tight">{formatDate(billing.issuedAt)}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
                     <button

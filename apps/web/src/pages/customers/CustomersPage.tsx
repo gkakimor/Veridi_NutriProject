@@ -197,19 +197,19 @@ export function CustomersPage() {
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">
                 Razão Social / Nome
                 <DicaDaColuna id="cliente.razaoSocial" />
               </th>
-              <th>Nome Fantasia</th>
-              <th>
+              <th className="col-flex">Nome Fantasia</th>
+              <th className="col-tight">
                 CNPJ
                 <DicaDaColuna id="cliente.cnpj" />
               </th>
-              <th>Cidade/UF</th>
-              <th>Telefone</th>
-              <th>
+              <th className="col-flex">Cidade/UF</th>
+              <th className="col-tight">Telefone</th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="cliente.situacao" />
               </th>
@@ -228,17 +228,19 @@ export function CustomersPage() {
                   }
                 }}
               >
-                <td className="is-code">{customer.code}</td>
-                <td>{customer.legalName}</td>
-                <td>{customer.tradeName ?? "—"}</td>
-                <td>{customer.cnpj ? formatCnpj(customer.cnpj) : "—"}</td>
-                <td>
+                <td className="is-code col-tight">{customer.code}</td>
+                <td className="col-flex">{customer.legalName}</td>
+                <td className="col-flex">{customer.tradeName ?? "—"}</td>
+                <td className="col-tight">
+                  {customer.cnpj ? formatCnpj(customer.cnpj) : "—"}
+                </td>
+                <td className="col-flex">
                   {customer.city && customer.state
                     ? `${customer.city}/${customer.state}`
                     : customer.city ?? customer.state ?? "—"}
                 </td>
-                <td>{formatBrPhone(customer.phone) ?? "—"}</td>
-                <td>
+                <td className="col-tight">{formatBrPhone(customer.phone) ?? "—"}</td>
+                <td className="col-tight">
                   <span
                     className={
                       customer.active ? "badge badge--active" : "badge badge--inactive"

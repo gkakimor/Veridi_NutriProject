@@ -249,8 +249,9 @@ describe("Produto — cadastrar cliente no contexto", () => {
 
     const campo = screen.getByLabelText(/Cliente/);
     await user.type(campo, "Cliente que ainda não existe");
-    // "+ Cadastrar novo" encabeça a lista justamente quando não há resultado.
-    await user.click(await screen.findByRole("option", { name: /Cadastrar novo cliente/ }));
+    // "+ Novo cliente" encabeça a lista — o rótulo é o mesmo do botão da
+    // listagem de Clientes, que abre este mesmo cadastro.
+    await user.click(await screen.findByRole("option", { name: /Novo cliente/ }));
 
     await user.click(await screen.findByRole("button", { name: "simular-cadastro-de-cliente" }));
 

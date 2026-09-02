@@ -45,11 +45,11 @@ export function ProductsTab() {
         <table className="table table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>Produto</th>
-              <th>Apresentação</th>
-              <th>Item de produto acabado</th>
-              <th>Situação</th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">Produto</th>
+              <th className="col-tight">Apresentação</th>
+              <th className="col-tight">Item de produto acabado</th>
+              <th className="col-tight">Situação</th>
             </tr>
           </thead>
           <tbody>
@@ -62,15 +62,17 @@ export function ProductsTab() {
                   if (event.key === "Enter") open(product);
                 }}
               >
-                <td className="is-code">{product.code}</td>
-                <td>{product.name}</td>
-                <td>
+                <td className="is-code col-tight">{product.code}</td>
+                <td className="col-flex">{product.name}</td>
+                <td className="col-tight">
                   {product.presentationType
                     ? PRESENTATION_TYPE_LABELS[product.presentationType]
                     : "—"}
                 </td>
-                <td className="is-code">{product.finishedProductItem?.code ?? "—"}</td>
-                <td>
+                <td className="is-code col-tight">
+                  {product.finishedProductItem?.code ?? "—"}
+                </td>
+                <td className="col-tight">
                   <span
                     className={
                       product.lifecycle === "APPROVED"

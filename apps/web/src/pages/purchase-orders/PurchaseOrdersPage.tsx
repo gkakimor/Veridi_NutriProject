@@ -167,13 +167,13 @@ export function PurchaseOrdersPage() {
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>Fornecedor</th>
-              <th>Data</th>
-              <th>Previsão</th>
-              <th className="is-numeric">Itens</th>
-              <th className="is-numeric">Total</th>
-              <th>Status</th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">Fornecedor</th>
+              <th className="col-tight">Data</th>
+              <th className="col-tight">Previsão</th>
+              <th className="col-tight is-numeric">Itens</th>
+              <th className="col-tight is-numeric">Total</th>
+              <th className="col-tight">Status</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -187,15 +187,15 @@ export function PurchaseOrdersPage() {
                   if (event.key === "Enter") navigate(`/compras/ordens/${po.id}`);
                 }}
               >
-                <td className="is-code">{po.code}</td>
-                <td>
+                <td className="col-tight is-code">{po.code}</td>
+                <td className="col-flex">
                   <EntityLink kind="supplier" id={po.supplierId} code={po.supplierCode} name={po.supplierName} />
                 </td>
-                <td>{formatDate(po.orderDate)}</td>
-                <td>{formatDate(po.expectedDeliveryDate)}</td>
-                <td className="is-numeric">{po.lines.length}</td>
-                <td className="is-numeric">{formatBRL(po.orderTotal)}</td>
-                <td>
+                <td className="col-tight">{formatDate(po.orderDate)}</td>
+                <td className="col-tight">{formatDate(po.expectedDeliveryDate)}</td>
+                <td className="col-tight is-numeric">{po.lines.length}</td>
+                <td className="col-tight is-numeric">{formatBRL(po.orderTotal)}</td>
+                <td className="col-tight">
                   <span className={statusBadgeClass(po.status)}>
                     {PURCHASE_ORDER_STATUS_LABELS[po.status]}
                   </span>

@@ -315,6 +315,14 @@
   position: relative;
   overflow-y: auto;
   min-height: 0;
+  /*
+   * Item de grid tem largura mínima automática igual ao conteúdo: uma tabela
+   * larga empurraria a trilha `1fr` e a página inteira ganharia rolagem
+   * horizontal. Hoje isso não acontece porque `overflow-y: auto` zera o
+   * mínimo automático como efeito colateral — proteção que some no dia em
+   * que alguém trocar aquele valor por `visible`. Declarado, não deduzido.
+   */
+  min-width: 0;
   padding: var(--sp-6) var(--sp-8);
 }
 

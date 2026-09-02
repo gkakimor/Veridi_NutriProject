@@ -251,28 +251,28 @@ export function ProjectsPage() {
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
-              <th>Projeto</th>
-              <th>
+              <th className="col-flex">Projeto</th>
+              <th className="col-tight">
                 Código legado
                 <DicaDaColuna id="comercial.projetoCodigoLegado" />
               </th>
-              <th>Entrada</th>
-              <th>Cliente</th>
-              <th>Conceito</th>
-              <th>
+              <th className="col-tight">Entrada</th>
+              <th className="col-flex">Cliente</th>
+              <th className="col-tight">Conceito</th>
+              <th className="col-tight">
                 Canal
                 <DicaDaColuna id="comercial.projetoCanal" />
               </th>
-              <th>Responsável</th>
-              <th>
+              <th className="col-tight">Responsável</th>
+              <th className="col-tight">
                 Última versão
                 <DicaDaColuna id="comercial.projetoUltimaVersao" />
               </th>
-              <th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="comercial.projetoStatus" />
               </th>
-              <th>
+              <th className="col-tight">
                 Produto
                 <DicaDaColuna id="comercial.projetoProduto" />
               </th>
@@ -292,7 +292,7 @@ export function ProjectsPage() {
                 {/* O projeto precisa ser o destino explícito da linha: antes o
                     único link aqui era o do Cliente, e mirar "o projeto"
                     abria o cadastro do cliente. */}
-                <td>
+                <td className="col-flex">
                   <EntityLink
                     kind="project"
                     id={project.id}
@@ -300,21 +300,21 @@ export function ProjectsPage() {
                     name={project.name}
                   />
                 </td>
-                <td className="is-code">{project.externalCode ?? "—"}</td>
-                <td>{formatDate(project.entryDate)}</td>
-                <td>
+                <td className="is-code col-tight">{project.externalCode ?? "—"}</td>
+                <td className="col-tight">{formatDate(project.entryDate)}</td>
+                <td className="col-flex">
                   <EntityLink kind="customer" id={project.customerId} code={project.customerCode} name={project.customerName} />
                 </td>
-                <td>{project.concept ?? "—"}</td>
-                <td>{project.channel ?? "—"}</td>
-                <td>{project.responsibleUserName ?? "—"}</td>
-                <td className="is-code">{project.latestQuoteLabel ?? "—"}</td>
-                <td>
+                <td className="col-tight">{project.concept ?? "—"}</td>
+                <td className="col-tight">{project.channel ?? "—"}</td>
+                <td className="col-tight">{project.responsibleUserName ?? "—"}</td>
+                <td className="is-code col-tight">{project.latestQuoteLabel ?? "—"}</td>
+                <td className="col-tight">
                   <span className={statusBadgeClass(project.status)}>
                     {PROJECT_STATUS_LABELS[project.status]}
                   </span>
                 </td>
-                <td className="is-code">{project.productCode ?? "—"}</td>
+                <td className="is-code col-tight">{project.productCode ?? "—"}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
                     <button

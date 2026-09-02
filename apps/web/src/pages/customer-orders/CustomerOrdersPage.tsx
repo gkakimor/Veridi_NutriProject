@@ -199,15 +199,15 @@ export function CustomerOrdersPage() {
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
-              <th>Pedido</th>
-              <th>Cliente</th>
-              <th>Data</th>
-              <th>Entrega</th>
-              <th>Produtos</th>
-              <th className="is-numeric">Quantidade</th>
-              <th>Atendimento</th>
-              <th>Faturamento</th>
-              <th>Status</th>
+              <th className="col-tight">Pedido</th>
+              <th className="col-flex">Cliente</th>
+              <th className="col-tight">Data</th>
+              <th className="col-tight">Entrega</th>
+              <th className="col-tight">Produtos</th>
+              <th className="is-numeric col-tight">Quantidade</th>
+              <th className="col-tight">Atendimento</th>
+              <th className="col-tight">Faturamento</th>
+              <th className="col-tight">Status</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -223,23 +223,25 @@ export function CustomerOrdersPage() {
                     if (event.key === "Enter") navigate(`/comercial/pedidos/${order.id}`);
                   }}
                 >
-                  <td className="is-code">{order.code}</td>
-                  <td>
+                  <td className="is-code col-tight">{order.code}</td>
+                  <td className="col-flex">
                     <EntityLink kind="customer" id={order.customerId} code={order.customerName} />
                   </td>
-                  <td>{formatDate(order.orderDate)}</td>
-                  <td>{formatDate(order.requestedDeliveryDate)}</td>
-                  <td>{order.lines.length}</td>
-                  <td className="is-numeric">{totalQuantity}</td>
-                  <td>
+                  <td className="col-tight">{formatDate(order.orderDate)}</td>
+                  <td className="col-tight">{formatDate(order.requestedDeliveryDate)}</td>
+                  <td className="col-tight">{order.lines.length}</td>
+                  <td className="is-numeric col-tight">{totalQuantity}</td>
+                  <td className="col-tight">
                     {order.shipments.some((shipment) => shipment.status === "CONFIRMED")
                       ? "Expedido"
                       : order.reservation || order.generatedProductionOrders.length > 0
                         ? "Em atendimento"
                         : "Não analisado"}
                   </td>
-                  <td>{CUSTOMER_ORDER_BILLING_STATUS_LABELS[order.billingStatus]}</td>
-                  <td>
+                  <td className="col-tight">
+                    {CUSTOMER_ORDER_BILLING_STATUS_LABELS[order.billingStatus]}
+                  </td>
+                  <td className="col-tight">
                     <span className={statusBadgeClass(order.status)}>
                       {CUSTOMER_ORDER_STATUS_LABELS[order.status]}
                     </span>

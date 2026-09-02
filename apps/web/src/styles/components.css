@@ -208,18 +208,6 @@
   box-shadow: inset 1px 0 0 var(--line);
 }
 
-/*
- * Célula fixa com menu aberto sobe no empilhamento.
- *
- * Cada célula fixa tem fundo próprio e é pintada na ordem do DOM: as linhas
- * de baixo cobriam o menu da linha de cima, que aparecia cortado no meio de
- * um item ("Custos in…"). O `z-index` alto do menu não resolvia — ele é
- * relativo à própria célula, e é a célula que precisa vir à frente.
- */
-.table--sticky-actions td:last-child:has(.row-actions__menu) {
-  z-index: 3;
-}
-
 .table--sticky-actions tbody tr:hover td:last-child {
   background: var(--canvas);
 }
@@ -243,6 +231,77 @@
 
 .table-container--spaced {
   margin-top: var(--sp-4);
+}
+
+/*
+ * ---------------- Largura de coluna ----------------
+ *
+ * `.table` é `table-layout: auto` e toda célula é `nowrap`, então a largura
+ * mínima da tabela é a soma do conteúdo mais longo de cada coluna — sem
+ * teto. Uma razão social de sessenta caracteres empurra sozinha metade da
+ * tabela, e a sobra em telas largas é redistribuída para TODAS as colunas,
+ * inclusive a de ações, que engorda sem ter o que mostrar.
+ *
+ * As duas classes abaixo separam o que é curto do que é variável. Precisam
+ * ir no `th` E nos `td` da coluna: `white-space` não desce por `<col>`, que
+ * só carrega largura, fundo, borda e visibilidade.
+ */
+
+/*
+ * Coluna curta — código, situação, data, quantidade, ações.
+ *
+ * `width: 1%` sob layout automático quer dizer "o mínimo que o conteúdo
+ * permitir": a coluna para de receber sobra e devolve o espaço para quem
+ * tem texto de verdade.
+ */
+.table .col-tight {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/*
+ * Coluna variável — nome, descrição, cliente, produto.
+ *
+ * Quebrar é o que derruba a largura mínima da tabela. O `min-width` impede o
+ * outro extremo, a coluna espremida em uma palavra por linha.
+ */
+.table .col-flex {
+  white-space: normal;
+  min-width: 11rem;
+}
+
+/*
+ * Variante para texto que não deve ocupar três linhas — observação, endereço,
+ * lista de recursos. Trunca com reticências; quem precisa do texto inteiro
+ * tem o `title` na própria célula.
+ *
+ * Nunca use em valor monetário, código, quantidade ou situação: cortar um
+ * número pela metade produz um valor que parece verdadeiro e não é.
+ *
+ * `max-width` e `overflow: hidden` andam JUNTOS aqui, e não por estética:
+ * sob `table-layout: auto` o navegador ignora `max-width` sozinho numa
+ * célula — é o `overflow: hidden` que zera a contribuição mínima da coluna e
+ * faz o teto valer. Tirar um dos dois devolve a coluna ao tamanho do texto.
+ */
+.table .col-flex--truncate {
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * A coluna de ações não cresce nunca.
+ *
+ * Ela é a única cuja largura não carrega informação: dois botões dizem o
+ * mesmo em 88px ou em 211px. Sem teto ela chegou a ser a segunda coluna mais
+ * larga da tela de Faturamento, à frente de situação, quantidade e datas.
+ */
+.table .col-actions,
+.table--sticky-actions th:last-child,
+.table--sticky-actions td:last-child {
+  width: 1%;
+  white-space: nowrap;
 }
 
 .table {
@@ -1172,10 +1231,21 @@
   line-height: 1;
 }
 
+/*
+ * `fixed`, não `absolute`: o menu vive dentro de `.table-container`, que tem
+ * `overflow-x: auto` — e overflow num eixo recorta o outro também. O menu de
+ * uma linha perto do rodapé aparecia cortado no meio de um item. Ancorado ao
+ * viewport ele escapa do recorte; quem calcula `top`/`left` é o componente,
+ * porque só ele sabe onde o botão caiu.
+ */
+/* Antes de medida o menu existe no DOM (é preciso medi-lo) e não aparece:
+   sem isto ele pisca no canto superior esquerdo. */
+.row-actions__menu--medindo {
+  visibility: hidden;
+}
+
 .row-actions__menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 2px);
+  position: fixed;
   z-index: 20;
   min-width: 180px;
   display: grid;
@@ -1634,10 +1704,17 @@ td .entity-select {
  * Criação no contexto: última parada da lista, alcançável pela seta como
  * qualquer resultado, mas separada por um fio para não ser confundida com um.
  */
+/* A ação encabeça a lista, então a divisa é EMBAIXO — a borda de cima
+   desenhava uma linha solta no topo do popover. */
 .entity-select__create {
-  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   color: var(--v-green-700);
   font-weight: var(--fw-medium);
+}
+
+/* Lista sem nenhum resultado: a divisa separaria a ação do nada. */
+.entity-select__create:last-child {
+  border-bottom: none;
 }
 
 /* Sugestão de preço da linha do orçamento — informa, nunca aplica sozinha. */
@@ -2041,94 +2118,22 @@ input.is-invalid {
 
 /* ---------------- ContextHelp ---------------- */
 
-.context-help {
-  display: block;
-  margin: var(--sp-3) 0;
-}
+/* O painel virou modal: o conteúdo é estilizado por `.help-modal__*`, dentro
+   da casca de diálogo. O que resta aqui é só o gatilho, que continua sendo um
+   botão comum na barra de ações da tela. */
 
 .context-help__trigger {
   gap: var(--sp-2);
 }
 
-/* Seta do estado: aponta para o lado quando fechado, para baixo quando
-   aberto. Desenhada com borda — sem glifo, nada para o leitor de tela ler
-   duas vezes (o `aria-expanded` já diz o estado). */
-.context-help__caret {
-  width: 5px;
-  height: 5px;
-  border-top: 1.5px solid currentColor;
-  border-right: 1.5px solid currentColor;
-  transform: rotate(45deg);
-  transition: transform var(--transition);
+/* O ⓘ do gatilho herdaria o tamanho do texto do botão e ficaria maior que o
+   ⓘ do `InfoHint`, que é 16px. Dois ícones com o mesmo desenho e tamanhos
+   diferentes na mesma tela leem como coisas diferentes. */
+.context-help__icon {
+  font-size: 14px;
+  line-height: 1;
 }
 
-.context-help__trigger[aria-expanded="true"] .context-help__caret {
-  transform: rotate(135deg);
-}
-
-.context-help__panel {
-  margin-top: var(--sp-2);
-  padding: var(--sp-4);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--v-green-600);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  /* Linha de texto explicativo fica ilegível esticada em 1600px. */
-  max-width: 760px;
-}
-
-.context-help__title {
-  margin: 0;
-  font-size: var(--fs-md);
-  font-weight: var(--fw-semibold);
-}
-
-.context-help__summary {
-  margin-top: var(--sp-2);
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-  text-wrap: pretty;
-}
-
-.context-help__steps {
-  margin: var(--sp-3) 0 0;
-  padding-left: var(--sp-5);
-  font-size: var(--fs-sm);
-}
-
-.context-help__steps li + li {
-  margin-top: var(--sp-2);
-}
-
-.context-help__step-detail {
-  display: block;
-  color: var(--ink-2);
-  text-wrap: pretty;
-}
-
-.context-help__subtitle {
-  margin: var(--sp-4) 0 0;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-}
-
-.context-help__notes {
-  margin: var(--sp-2) 0 0;
-  padding-left: var(--sp-5);
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-}
-
-.context-help__notes li + li {
-  margin-top: var(--sp-1);
-}
-
-.context-help__doc {
-  display: inline-block;
-  margin-top: var(--sp-4);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-}
 
 /* ---------------- FlowSteps ---------------- */
 
@@ -2179,12 +2184,6 @@ input.is-invalid {
   font-weight: var(--fw-medium);
   line-height: var(--lh-tight);
   white-space: nowrap;
-}
-
-.help-flow__detail {
-  color: var(--ink-2);
-  font-size: var(--fs-xs);
-  line-height: var(--lh-tight);
 }
 
 /* Desvio do caminho feliz (falta, pendência) não pode ler igual ao resto. */

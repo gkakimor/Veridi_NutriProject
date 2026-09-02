@@ -143,18 +143,21 @@ export function InventoryMovementsPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Data</th>
-              <th>Item</th>
-              <th>Lote</th>
-              <th>Tipo</th>
-              <th>Entrada/Saída</th>
-              <th className="is-numeric">Quantidade</th>
-              <th>
+              <th className="col-tight">Data</th>
+              <th className="col-flex">Item</th>
+              <th className="col-tight">Lote</th>
+              <th className="col-tight">Tipo</th>
+              <th className="col-tight">Entrada/Saída</th>
+              <th className="col-tight is-numeric">Quantidade</th>
+              <th className="col-tight">
                 Origem
                 <DicaDaColuna id="estoque.origemMovimento" />
               </th>
-              <th>Usuário</th>
-              <th>
+              <th className="col-flex">Usuário</th>
+              {/* Texto livre digitado no ajuste. Hoje quase sempre vazio, e é
+                  justamente por isso que estava sem teto: o primeiro motivo
+                  longo empurraria o extrato inteiro. */}
+              <th className="col-flex">
                 Motivo
                 <DicaDaColuna id="estoque.motivoMovimento" />
               </th>
@@ -163,28 +166,28 @@ export function InventoryMovementsPage() {
           <tbody>
             {movements.map((movement) => (
               <tr key={movement.id}>
-                <td>{formatDateTime(movement.occurredAt)}</td>
-                <td>
+                <td className="col-tight">{formatDateTime(movement.occurredAt)}</td>
+                <td className="col-flex">
                   <EntityLink kind="item" id={movement.itemId} code={movement.itemCode} name={movement.itemName} />
                 </td>
-                <td className="is-code">
+                <td className="col-tight is-code">
                   {movement.lotId ? (
                     <EntityLink kind="lot" id={movement.lotId} code={movement.lotCode} />
                   ) : (
                     "—"
                   )}
                 </td>
-                <td>{INVENTORY_MOVEMENT_TYPE_LABELS[movement.type]}</td>
-                <td>
+                <td className="col-tight">{INVENTORY_MOVEMENT_TYPE_LABELS[movement.type]}</td>
+                <td className="col-tight">
                   <span className={INVENTORY_MOVEMENT_DIRECTION[movement.type] > 0 ? "badge badge--active" : "badge badge--err"}>
                     {INVENTORY_MOVEMENT_DIRECTION[movement.type] > 0 ? "Entrada" : "Saída"}
                   </span>
                 </td>
-                <td className="is-numeric">{movement.quantity}</td>
+                <td className="col-tight is-numeric">{movement.quantity}</td>
                 {/* Todo movimento tem um documento que o causou; o extrato só
                     conhecia recebimento e expedição, e as saídas de produção
                     — as maiores do ledger — apareciam sem origem nenhuma. */}
-                <td className="is-code">
+                <td className="col-tight is-code">
                   {movement.receiptId ? (
                     <EntityLink kind="receipt" id={movement.receiptId} code={movement.receiptCode} />
                   ) : movement.shipmentId ? (
@@ -205,8 +208,8 @@ export function InventoryMovementsPage() {
                     INVENTORY_MOVEMENT_SOURCE_LABELS[movement.sourceType]
                   )}
                 </td>
-                <td>{movement.createdBy ?? "—"}</td>
-                <td>{movement.reason ?? "—"}</td>
+                <td className="col-flex">{movement.createdBy ?? "—"}</td>
+                <td className="col-flex">{movement.reason ?? "—"}</td>
               </tr>
             ))}
 
