@@ -175,23 +175,27 @@ export function InventoryOverviewPage() {
         <table className="table table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>Item</th>
-              <th>Tipo</th>
-              <th>Un.</th>
-              <th className="is-numeric">
+              <th className="col-tight">Código</th>
+              <th className="col-flex">Item</th>
+              <th className="col-tight">Tipo</th>
+              <th className="col-tight">Un.</th>
+              <th className="col-tight is-numeric">
                 Físico
                 <DicaDaColuna id="estoque.fisico" />
               </th>
-              <th className="is-numeric">
+              <th className="col-tight is-numeric">
                 Reservado
                 <DicaDaColuna id="estoque.reservado" />
               </th>
+              {/* Sem `col-tight`: esta é a única célula que carrega a
+                  explicação da indisponibilidade (`cell-sub--wrap`), e é ela
+                  que precisa da sobra da tela para não quebrar em cinco
+                  linhas. */}
               <th className="is-numeric">
                 Disponível
                 <DicaDaColuna id="estoque.disponivel" />
               </th>
-              <th className="is-numeric">
+              <th className="col-tight is-numeric">
                 Em Compra
                 <DicaDaColuna id="estoque.emCompra" />
               </th>
@@ -207,12 +211,12 @@ export function InventoryOverviewPage() {
                   if (event.key === "Enter") navigate(`/estoque/${item.itemId}`);
                 }}
               >
-                <td className="is-code">{item.itemCode}</td>
-                <td>{item.itemName}</td>
-                <td>{ITEM_TYPE_LABELS[item.itemType]}</td>
-                <td>{item.unitCode}</td>
-                <td className="is-numeric">{item.onHand}</td>
-                <td className="is-numeric">{item.reserved}</td>
+                <td className="col-tight is-code">{item.itemCode}</td>
+                <td className="col-flex">{item.itemName}</td>
+                <td className="col-tight">{ITEM_TYPE_LABELS[item.itemType]}</td>
+                <td className="col-tight">{item.unitCode}</td>
+                <td className="col-tight is-numeric">{item.onHand}</td>
+                <td className="col-tight is-numeric">{item.reserved}</td>
                 <td className="is-numeric">
                   {item.available}
                   {/*
@@ -227,7 +231,7 @@ export function InventoryOverviewPage() {
                     </span>
                   )}
                 </td>
-                <td className="is-numeric">{item.onOrder}</td>
+                <td className="col-tight is-numeric">{item.onOrder}</td>
               </tr>
             ))}
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 export interface RowAction {
@@ -36,6 +36,54 @@ export function RowActions({
   const container = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  /**
+   * Onde o menu é pintado, em coordenada de viewport.
+   *
+   * O menu mora dentro de `.table-container`, que tem `overflow-x: auto` — e
+   * overflow num eixo recorta o outro. Posicionado pelo ancestral, o menu da
+   * última linha aparecia cortado ao meio. Ancorado ao viewport ele escapa;
+   * o preço é que a coordenada precisa ser medida aqui.
+   */
+  const [posicao, setPosicao] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPosicao(null);
+      return;
+    }
+
+    function medir() {
+      const gatilho = toggle.current?.getBoundingClientRect();
+      const caixa = menu.current?.getBoundingClientRect();
+      if (!gatilho || !caixa) return;
+
+      const MARGEM = 8;
+      // Alinhado pela direita do botão: o menu é mais largo que ele, e a
+      // coluna de ações fica na borda da tabela.
+      let left = Math.max(MARGEM, gatilho.right - caixa.width);
+      if (left + caixa.width > window.innerWidth - MARGEM) {
+        left = Math.max(MARGEM, window.innerWidth - MARGEM - caixa.width);
+      }
+
+      // Linha no rodapé da janela: abre para cima em vez de sair da tela.
+      let top = gatilho.bottom + 2;
+      if (top + caixa.height > window.innerHeight - MARGEM) {
+        top = Math.max(MARGEM, gatilho.top - caixa.height - 2);
+      }
+
+      setPosicao({ top, left });
+    }
+
+    medir();
+    // Captura: a rolagem que desloca o botão é a do `.table-container`, e
+    // evento de rolagem de elemento não sobe por bubbling.
+    window.addEventListener("scroll", medir, true);
+    window.addEventListener("resize", medir);
+    return () => {
+      window.removeEventListener("scroll", medir, true);
+      window.removeEventListener("resize", medir);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -138,7 +186,14 @@ export function RowActions({
           </button>
 
           {open && (
-            <div className="row-actions__menu" role="menu" ref={menu}>
+            <div
+              className={
+                posicao ? "row-actions__menu" : "row-actions__menu row-actions__menu--medindo"
+              }
+              role="menu"
+              ref={menu}
+              {...(posicao ? { style: { top: posicao.top, left: posicao.left } } : {})}
+            >
               {available.map((action) => (
                 <button
                   key={action.label}

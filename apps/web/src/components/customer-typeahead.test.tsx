@@ -69,12 +69,27 @@ describe("Busca de cliente", () => {
     expect(screen.getByRole("option", { name: /Cadastrar novo cliente/ })).toBeTruthy();
   });
 
-  it("havendo correspondência, o cliente vem antes do cadastro", () => {
+  /*
+   * A ação de cadastrar encabeça a lista mesmo havendo correspondência: no
+   * fim dela, com dez resultados, ficava abaixo da dobra do popover e quem
+   * não achava o cliente concluía que não dava para criar.
+   *
+   * A proteção contra duplicata mudou de lugar em vez de sumir — é o teste
+   * seguinte que a guarda: o item ATIVO continua sendo o primeiro resultado,
+   * então Enter escolhe e nunca cria.
+   */
+  it("o cadastro encabeça a lista, mesmo com resultado", () => {
     abrirComBusca("THE KING");
     const opcoes = screen.getAllByRole("option").map((node) => node.textContent ?? "");
-    expect(opcoes[0]).toContain("THIAGO LUZ DE SOUZA");
-    // Criar duplicata deixa de ser a ação mais fácil de acertar com o mouse.
-    expect(opcoes[opcoes.length - 1]).toContain("Cadastrar novo cliente");
+    expect(opcoes[0]).toContain("Cadastrar novo cliente");
+    expect(opcoes[1]).toContain("THIAGO LUZ DE SOUZA");
+  });
+
+  it("o item ativo é o primeiro resultado — Enter escolhe, não cria", () => {
+    abrirComBusca("THE KING");
+    const ativo = document.querySelector(".entity-select__option.is-active");
+    expect(ativo?.textContent).toContain("THIAGO LUZ DE SOUZA");
+    expect(ativo?.className).not.toContain("entity-select__create");
   });
 
   it("busca por código continua funcionando", () => {

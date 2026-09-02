@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useInertBackground } from "./useInertBackground";
 import type { ReactNode } from "react";
 import { CodeChip } from "./CodeChip";
@@ -15,6 +15,15 @@ interface FullWorkspaceModalProps {
   children: ReactNode;
   closeLabel?: string;
 }
+
+/**
+ * Modais abertos, do fundo para o topo.
+ *
+ * Mora no módulo porque os dois modais empilhados não têm relação de props
+ * entre si — o de dentro é aberto por um campo do de fora, e nenhum recebe o
+ * outro. Sem uma lista compartilhada não há como saber quem está por cima.
+ */
+const pilha: object[] = [];
 
 /**
  * Modal fullscreen dentro do workspace — padrao oficial de CRUD (Itens,
@@ -34,6 +43,23 @@ export function FullWorkspaceModal({
   closeLabel = "Fechar",
 }: FullWorkspaceModalProps) {
   const dialog = useRef<HTMLDivElement>(null);
+  /**
+   * Identidade deste modal dentro da pilha.
+   *
+   * Cadastro dentro de cadastro é rotina agora: um campo de busca oferece
+   * "+ Novo item de estoque" e abre o cadastro de Item por cima da relação
+   * Item × Fornecedor. Com o listener de Escape no `document`, os DOIS
+   * modais fechavam na mesma tecla — quem desistia do item perdia a relação
+   * inteira junto, sem ter pedido.
+   */
+  const identidade = useRef({});
+  /*
+   * `id` fixo no título dava dois elementos com a mesma `id` quando um
+   * cadastro abria por cima de outro, e o `aria-labelledby` do de cima
+   * resolvia para o título do de baixo: quem usa leitor de tela abria
+   * "Novo item de estoque" e ouvia "Nova relação Item × Fornecedor".
+   */
+  const tituloId = useId();
 
   // `aria-modal` sozinho não esconde a tela de trás de quem navega por
   // elementos: o fundo precisa ficar inerte de verdade.
@@ -55,6 +81,8 @@ export function FullWorkspaceModal({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        // Só o modal do topo responde. Um Escape fecha uma camada.
+        if (pilha[pilha.length - 1] !== identidade.current) return;
         onClose();
         return;
       }
@@ -85,12 +113,19 @@ export function FullWorkspaceModal({
     const initial = focusable()[0];
     (initial ?? dialog.current)?.focus();
 
+    const eu = identidade.current;
+    pilha.push(eu);
+
     document.addEventListener("keydown", handleKeyDown);
     document.body.style.overflow = "hidden";
 
     return () => {
+      const posicao = pilha.lastIndexOf(eu);
+      if (posicao !== -1) pilha.splice(posicao, 1);
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
+      // Só a última camada devolve a rolagem: um modal fechando por cima de
+      // outro não pode destravar o fundo que o de baixo ainda esconde.
+      if (pilha.length === 0) document.body.style.overflow = "";
       opener?.focus?.();
     };
   }, [open, onClose]);
@@ -106,7 +141,7 @@ export function FullWorkspaceModal({
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="full-workspace-modal-title"
+        aria-labelledby={tituloId}
       >
         <div className="modal-fullscreen__head">
           <div>
@@ -114,7 +149,7 @@ export function FullWorkspaceModal({
               {crumb} / <b>{crumbActive}</b>
             </div>
             <div className="modal-fullscreen__title">
-              <h2 id="full-workspace-modal-title">{title}</h2>
+              <h2 id={tituloId}>{title}</h2>
               {codeChip && <CodeChip>{codeChip}</CodeChip>}
             </div>
           </div>

@@ -120,6 +120,30 @@ do Produto passou a mostrar os controles de estoque do item como fato; e
 controles que varia por produto. Regras em
 [PRODUCT_RULES.md](PRODUCT_RULES.md) §45.
 
+**Tabelas e criação no contexto** (`feat/contextual-create-and-table-ux`).
+Duas frentes numa rodada. Nas tabelas, a medição derrubou a suspeita inicial:
+**não havia estouro global em nenhuma das 24 telas em três viewports** — o que
+havia era rolagem local em 18 listagens e coluna de ações desproporcional em
+6. A causa era única: toda célula é `nowrap` sob `table-layout: auto`, então
+duas colunas de texto livre definiam sozinhas a largura mínima da tabela, e a
+sobra em telas largas engordava até a coluna de ações. Três classes de coluna
+(`col-tight`, `col-flex`, `col-flex--truncate`) e um teto para a coluna de
+ações. Lotes caiu de 1356px de rolagem para 537px, Amostras de 1220 para 424,
+Projetos de 1044 para 493; oito telas zeraram. A coluna de ações parou de
+crescer com o viewport.
+
+Na criação, "+ Novo X" passou a encabeçar todo campo de busca de entidade
+criável — 8 campos novos, além dos 4 que já tinham. A trava contra duplicata
+mudou de lugar em vez de sumir: o item ativo continua sendo o primeiro
+resultado, então Enter escolhe e nunca cria. **Continua sendo modal**, porque
+nenhuma das cinco entidades tem tela de criação e o modal já é o formulário
+oficial — decisão registrada em [BACKLOG.md](BACKLOG.md) item 9. Sem
+migration. Regras em [PRODUCT_RULES.md](PRODUCT_RULES.md) §46.
+
+Três defeitos fechados de passagem: Escape fechava os dois modais empilhados,
+o menu `⋯` era recortado pelo `overflow` da tabela, e a ajuda contextual se
+anunciava como `alertdialog`.
+
 ## Validação em produção
 
 **Smoke autenticado feito** (`344d00e`, 2026-09-02), e automatizado em

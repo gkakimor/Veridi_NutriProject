@@ -119,36 +119,41 @@ export function UsersPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>Nome</th>
-              <th>E-mail</th>
-              <th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">Nome</th>
+              {/* Curta, não variável: e-mail é um token sem espaço, então
+                  `col-flex` não teria onde quebrar — só pararia de crescer se
+                  fosse truncado, e meio endereço não identifica ninguém. */}
+              <th className="col-tight">E-mail</th>
+              <th className="col-tight">
                 Perfil
                 <DicaDaColuna id="usuario.perfil" />
               </th>
-              <th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="usuario.situacao" />
               </th>
-              <th aria-hidden="true" />
+              {/* `col-actions` explícito: a tabela não tem
+                  `table--sticky-actions`. */}
+              <th className="col-actions" aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
             {users.map((user) => (
               <tr key={user.id}>
-                <td className="is-code">{user.code}</td>
-                <td>
+                <td className="col-tight is-code">{user.code}</td>
+                <td className="col-flex">
                   {user.name}
                   {user.id === currentUser?.id && <span className="field__hint"> (você)</span>}
                 </td>
-                <td>{user.email}</td>
-                <td>{USER_ROLE_LABELS[user.role]}</td>
-                <td>
+                <td className="col-tight">{user.email}</td>
+                <td className="col-tight">{USER_ROLE_LABELS[user.role]}</td>
+                <td className="col-tight">
                   <span className={user.active ? "badge badge--active" : "badge badge--neutral"}>
                     {user.active ? "Ativo" : "Inativo"}
                   </span>
                 </td>
-                <td>
+                <td className="col-actions">
                   <button
                     type="button"
                     className="btn btn--ghost btn--sm"

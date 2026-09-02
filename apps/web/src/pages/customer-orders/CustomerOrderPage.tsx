@@ -56,6 +56,8 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+import { CustomerFormModal } from "../customers/CustomerFormModal";
+import { ProductFormModal } from "../products/ProductFormModal";
 
 /**
  * Ícone de ajuda de uma coluna do Plano, lido do registro central.
@@ -194,6 +196,15 @@ export function CustomerOrderPage() {
 
   const [activeCustomers, setActiveCustomers] = useState<CustomerDTO[]>([]);
   const [activeProducts, setActiveProducts] = useState<ProductDTO[]>([]);
+  /**
+   * Cadastro no contexto.
+   *
+   * O cliente é campo único, então basta lembrar o que foi digitado. Produto
+   * vive em linha de tabela: sem guardar QUAL linha pediu, o produto novo
+   * voltaria para a primeira — ou para nenhuma.
+   */
+  const [newCustomerName, setNewCustomerName] = useState<string | null>(null);
+  const [productModalRowKey, setProductModalRowKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -844,6 +855,9 @@ export function CustomerOrderPage() {
                     name: customer.tradeName ?? customer.legalName,
                     ...(customer.active ? {} : { hint: "inativo" }),
                   }))}
+                  canCreate
+                  createLabel="Novo cliente"
+                  onCreateNew={(typed) => setNewCustomerName(typed)}
                 />
               ) : (
                 <p className="field-readonly-value">
@@ -903,6 +917,9 @@ export function CustomerOrderPage() {
                             code: product.code,
                             name: product.name,
                           }))}
+                          canCreate
+                          createLabel="Novo produto"
+                          onCreateNew={() => setProductModalRowKey(line.key)}
                         />
                       ) : (
                         <>
@@ -2001,6 +2018,54 @@ export function CustomerOrderPage() {
             </div>
           </ModalDialog>
         </>
+      )}
+
+      {newCustomerName !== null && (
+        <CustomerFormModal
+          mode="create"
+          customer={null}
+          onClose={() => setNewCustomerName(null)}
+          onSaved={(created) => {
+            setNewCustomerName(null);
+            if (!created) return;
+            // Volta selecionado, e as linhas já digitadas continuam onde
+            // estavam: quem cadastrou o cliente queria ESTE cliente.
+            setActiveCustomers((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+            setCustomerId(created.id);
+          }}
+        />
+      )}
+
+      {productModalRowKey !== null && (
+        <ProductFormModal
+          mode="create"
+          product={null}
+          onClose={() => setProductModalRowKey(null)}
+          onSaved={(created) => {
+            const rowKey = productModalRowKey;
+            setProductModalRowKey(null);
+            if (!created || !rowKey) return;
+            setActiveProducts((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+            // A linha é preenchida a partir do registro criado, não por
+            // busca em `activeProducts`: o `setState` acima só vale no
+            // próximo render, e a procura aqui devolveria `undefined`.
+            setLines((prev) =>
+              prev.map((line) =>
+                line.key === rowKey
+                  ? {
+                      ...line,
+                      productId: created.id,
+                      productCode: created.code,
+                      productName: created.name,
+                      // Como no resto da tela: a unidade vem do Finished
+                      // Product Item e só é conhecida depois de salvar.
+                      unitCode: "",
+                    }
+                  : line,
+              ),
+            );
+          }}
+        />
       )}
     </>
   );

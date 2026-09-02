@@ -325,27 +325,27 @@ export function SupplierItemsPage() {
         <table className="table table--clickable-rows">
           <thead>
             <tr>
-              <th>Item</th>
-              <th>Fornecedor</th>
-              <th>Código no fornecedor</th>
-              <th>
+              <th className="col-flex">Item</th>
+              <th className="col-flex">Fornecedor</th>
+              <th className="col-tight">Código no fornecedor</th>
+              <th className="col-tight">
                 Homologação
                 <DicaDaColuna id="compras.homologacao" />
               </th>
-              <th>
+              <th className="col-tight">
                 Preferencial
                 <DicaDaColuna id="compras.preferencial" />
               </th>
-              <th className="is-numeric">
+              <th className="col-tight is-numeric">
                 Preço
                 <DicaDaColuna id="compras.precoOferta" />
               </th>
-              <th>
+              <th className="col-tight">
                 Pedido mínimo
                 <DicaDaColuna id="compras.pedidoMinimo" />
               </th>
-              <th>Referências</th>
-              <th>Situação</th>
+              <th className="col-tight">Referências</th>
+              <th className="col-tight">Situação</th>
             </tr>
           </thead>
           <tbody>
@@ -358,21 +358,21 @@ export function SupplierItemsPage() {
                   if (event.key === "Enter") setDetailId(row.id);
                 }}
               >
-                <td>
+                <td className="col-flex">
                   <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                 </td>
-                <td>{row.supplierName}</td>
-                <td className="is-code">{row.supplierItemCode ?? "—"}</td>
-                <td>
+                <td className="col-flex">{row.supplierName}</td>
+                <td className="col-tight is-code">{row.supplierItemCode ?? "—"}</td>
+                <td className="col-tight">
                   <span className={qualificationBadgeClass(row.qualificationStatus)}>
                     {SUPPLIER_ITEM_QUALIFICATION_LABELS[row.qualificationStatus]}
                   </span>
                 </td>
-                <td>{row.preferred ? "Sim" : "—"}</td>
-                <td className="is-numeric">
+                <td className="col-tight">{row.preferred ? "Sim" : "—"}</td>
+                <td className="col-tight is-numeric">
                   <SupplierItemPriceCell row={row} />
                 </td>
-                <td>
+                <td className="col-tight">
                   {row.currentOffer?.minimumOrderQuantity
                     ? `${row.currentOffer.minimumOrderQuantity} ${row.currentOffer.minimumOrderUomCode ?? ""}`
                     : (row.latestLegacyOffer?.minimumOrderQuantity ?? "—") +
@@ -380,8 +380,8 @@ export function SupplierItemsPage() {
                         ? ` ${row.latestLegacyOffer.minimumOrderUomCode ?? ""}`
                         : "")}
                 </td>
-                <td>{row.offerCount}</td>
-                <td>{row.active ? "Ativa" : "Inativa"}</td>
+                <td className="col-tight">{row.offerCount}</td>
+                <td className="col-tight">{row.active ? "Ativa" : "Inativa"}</td>
               </tr>
             ))}
 

@@ -179,18 +179,18 @@ export function SuppliersPage() {
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">
                 Razão Social / Nome
                 <DicaDaColuna id="fornecedor.razaoSocial" />
               </th>
-              <th>Nome Fantasia</th>
-              <th>
+              <th className="col-flex">Nome Fantasia</th>
+              <th className="col-tight">
                 CNPJ
                 <DicaDaColuna id="fornecedor.cnpj" />
               </th>
-              <th>Telefone</th>
-              <th>
+              <th className="col-tight">Telefone</th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="fornecedor.situacao" />
               </th>
@@ -209,12 +209,14 @@ export function SuppliersPage() {
                   }
                 }}
               >
-                <td className="is-code">{supplier.code}</td>
-                <td>{supplier.legalName}</td>
-                <td>{supplier.tradeName ?? "—"}</td>
-                <td>{supplier.cnpj ? formatCnpj(supplier.cnpj) : "—"}</td>
-                <td>{formatBrPhone(supplier.phone) ?? "—"}</td>
-                <td>
+                <td className="is-code col-tight">{supplier.code}</td>
+                <td className="col-flex">{supplier.legalName}</td>
+                <td className="col-flex">{supplier.tradeName ?? "—"}</td>
+                <td className="col-tight">
+                  {supplier.cnpj ? formatCnpj(supplier.cnpj) : "—"}
+                </td>
+                <td className="col-tight">{formatBrPhone(supplier.phone) ?? "—"}</td>
+                <td className="col-tight">
                   <span
                     className={
                       supplier.active ? "badge badge--active" : "badge badge--inactive"

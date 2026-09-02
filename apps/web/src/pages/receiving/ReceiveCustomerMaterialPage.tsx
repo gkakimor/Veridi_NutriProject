@@ -9,6 +9,7 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import { CustomerFormModal } from "../customers/CustomerFormModal";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
@@ -57,6 +58,12 @@ export function ReceiveCustomerMaterialPage() {
   const [items, setItems] = useState<ItemDTO[]>([]);
 
   const [customerId, setCustomerId] = useState("");
+  /**
+   * Cadastro de cliente no contexto. Material do cliente chega na doca com
+   * a nota na mão; se o cliente ainda não existe, sair daqui para cadastrar
+   * significa redigitar lotes, validades e quantidades já conferidos.
+   */
+  const [newCustomerName, setNewCustomerName] = useState<string | null>(null);
   const [receivedAt, setReceivedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [documentReference, setDocumentReference] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -174,7 +181,14 @@ export function ReceiveCustomerMaterialPage() {
                 id: customer.id,
                 code: customer.code,
                 name: customer.legalName,
+                ...(customer.tradeName ? { hint: customer.tradeName } : {}),
+                searchTerms: [customer.tradeName ?? "", customer.cnpj ?? ""]
+                  .filter(Boolean)
+                  .join(" "),
               }))}
+              canCreate
+              createLabel="Novo cliente"
+              onCreateNew={(typed) => setNewCustomerName(typed)}
             />
             {fieldErrors["customerId"] && (
               <p className="field__error">{fieldErrors["customerId"]}</p>
@@ -371,6 +385,22 @@ export function ReceiveCustomerMaterialPage() {
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleConfirm}
       />
+
+      {newCustomerName !== null && (
+        <CustomerFormModal
+          mode="create"
+          customer={null}
+          onClose={() => setNewCustomerName(null)}
+          onSaved={(created) => {
+            setNewCustomerName(null);
+            if (!created) return;
+            // Volta selecionado; as linhas já conferidas continuam como
+            // estavam.
+            setCustomers((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+            setCustomerId(created.id);
+          }}
+        />
+      )}
     </>
   );
 }

@@ -150,15 +150,15 @@ export function ShipmentsPage() {
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
-              <th>Expedição</th>
-              <th>Pedido</th>
-              <th>Cliente</th>
-              <th>Data</th>
-              <th className="is-numeric">
+              <th className="col-tight">Expedição</th>
+              <th className="col-tight">Pedido</th>
+              <th className="col-flex">Cliente</th>
+              <th className="col-tight">Data</th>
+              <th className="is-numeric col-tight">
                 Quantidade
                 <DicaDaColuna id="comercial.expedicaoQuantidade" />
               </th>
-              <th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="comercial.expedicaoStatus" />
               </th>
@@ -175,14 +175,14 @@ export function ShipmentsPage() {
                   if (event.key === "Enter") navigate(`/comercial/expedicoes/${shipment.id}`);
                 }}
               >
-                <td className="is-code">{shipment.code}</td>
-                <td className="is-code">{shipment.customerOrderCode}</td>
-                <td>
+                <td className="is-code col-tight">{shipment.code}</td>
+                <td className="is-code col-tight">{shipment.customerOrderCode}</td>
+                <td className="col-flex">
                   <EntityLink kind="customer" id={shipment.customerId} code={shipment.customerName} />
                 </td>
-                <td>{formatDate(shipment.shipmentDate)}</td>
-                <td className="is-numeric">{shipment.totalQuantity}</td>
-                <td>
+                <td className="col-tight">{formatDate(shipment.shipmentDate)}</td>
+                <td className="is-numeric col-tight">{shipment.totalQuantity}</td>
+                <td className="col-tight">
                   <span className={statusBadgeClass(shipment.status)}>
                     {SHIPMENT_STATUS_LABELS[shipment.status]}
                   </span>

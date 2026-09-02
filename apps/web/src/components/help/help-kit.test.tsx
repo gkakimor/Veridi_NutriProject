@@ -150,6 +150,24 @@ describe("ContextHelp", () => {
     expect(etapas[1]).toContain("Publicação");
   });
 
+  /*
+   * Ajuda não é alerta. `alertdialog` faz o leitor de tela anunciar o
+   * conteúdo inteiro com urgência — certo para "isto não tem volta", errado
+   * para quem clicou em "Como funciona" porque quis ler. Anunciar ajuda como
+   * alerta ensina a ignorar o alerta seguinte, que pode ser de verdade.
+   */
+  it("abre como diálogo comum, não como alerta", async () => {
+    const user = userEvent.setup();
+    render(<ContextHelp topic={topicoBase} />);
+
+    await user.click(screen.getByRole("button", { name: /Como funciona/ }));
+
+    const painel = screen.getByRole("dialog");
+    expect(painel).toHaveAttribute("aria-modal", "true");
+    expect(painel).toHaveAccessibleName(topicoBase.title);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
   it("mostra observações quando o tópico tem ressalvas", async () => {
     const user = userEvent.setup();
     render(

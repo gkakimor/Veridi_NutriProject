@@ -241,30 +241,30 @@ export function ItemsPage() {
                 checked={selection.allOnPageSelected}
                 onToggle={selection.togglePage}
               />
-              <th>Código</th>
-              <th>Nome</th>
-              <th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">Nome</th>
+              <th className="col-tight">
                 Tipo
                 <DicaDaColuna id="item.tipo" />
               </th>
-              <th>Família</th>
-              <th>
+              <th className="col-tight">Família</th>
+              <th className="col-flex">
                 Fonte
                 <DicaDaColuna id="item.fonte" />
               </th>
-              <th>
+              <th className="col-tight">
                 Unidade
                 <DicaDaColuna id="item.unidade" />
               </th>
-              <th>
+              <th className="col-tight">
                 Lote
                 <DicaDaColuna id="item.controlaLote" />
               </th>
-              <th>
+              <th className="col-tight">
                 Validade
                 <DicaDaColuna id="item.controlaValidade" />
               </th>
-              <th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="item.situacao" />
               </th>
@@ -283,8 +283,8 @@ export function ItemsPage() {
                   onToggle={() => selection.toggle(item.id)}
                   label={item.code}
                 />
-                <td className="is-code">{item.code}</td>
-                <td>
+                <td className="is-code col-tight">{item.code}</td>
+                <td className="col-flex">
                   {item.name}
                   {/* Nutriente declarado como texto secundário: informa sem
                       alargar a tabela. */}
@@ -292,17 +292,19 @@ export function ItemsPage() {
                     <div className="muted is-small">{item.declaredNutrient}</div>
                   )}
                 </td>
-                <td>
+                <td className="col-tight">
                   <span className="badge badge--neutral">
                     {ITEM_TYPE_LABELS[item.type]}
                   </span>
                 </td>
-                <td>{item.family ? ITEM_FAMILY_LABELS[item.family] : "—"}</td>
-                <td>{item.sourceName ?? "—"}</td>
-                <td>{item.unit.code}</td>
-                <td>{item.controlsLot ? "Sim" : "Não"}</td>
-                <td>{item.controlsExpiry ? "Sim" : "Não"}</td>
-                <td>
+                <td className="col-tight">
+                  {item.family ? ITEM_FAMILY_LABELS[item.family] : "—"}
+                </td>
+                <td className="col-flex">{item.sourceName ?? "—"}</td>
+                <td className="col-tight">{item.unit.code}</td>
+                <td className="col-tight">{item.controlsLot ? "Sim" : "Não"}</td>
+                <td className="col-tight">{item.controlsExpiry ? "Sim" : "Não"}</td>
+                <td className="col-tight">
                   <span
                     className={
                       item.active ? "badge badge--active" : "badge badge--inactive"

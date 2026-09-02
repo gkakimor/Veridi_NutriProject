@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState , useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
-import type { PurchaseOrderDTO, PurchaseOrderStatus, SupplierItemDTO } from "@veridi/shared";
+import type {
+  PurchaseOrderDTO,
+  PurchaseOrderStatus,
+  SupplierItemDTO,
+  UnitOfMeasureDTO,
+} from "@veridi/shared";
 import { PURCHASE_ORDER_STATUS_LABELS, SUPPLIER_ITEM_QUALIFICATION_LABELS } from "@veridi/shared";
 import {
   cancelPurchaseOrder,
@@ -12,10 +17,11 @@ import {
   updatePurchaseOrder,
 } from "../../lib/purchase-orders-api";
 import { listSuppliers } from "../../lib/suppliers-api";
-import { useAuth } from "../../app/AuthProvider";
 import { SupplierFormModal } from "../suppliers/SupplierFormModal";
 import { listSupplierItems } from "../../lib/supplier-items-api";
 import { listItems } from "../../lib/items-api";
+import { listUnits } from "../../lib/units-api";
+import { ItemFormModal } from "../items/ItemFormModal";
 import { formatBRL } from "../../lib/currency";
 import { ApiValidationError } from "../../lib/api-errors";
 import { EntityLink } from "../../components/EntityLink";
@@ -122,9 +128,6 @@ export function PurchaseOrderPage() {
   // Criação no contexto: o fornecedor não existe e sair da OC agora
   // significaria refazer as linhas já digitadas.
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
-  const { user } = useAuth();
-  // CTA que termina em 403 é pior que CTA nenhum.
-  const canCreateSupplier = user?.role === "PURCHASING" || user?.role === "ADMIN";
   const [orderDate, setOrderDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -142,6 +145,12 @@ export function PurchaseOrderPage() {
 
   const [activeSuppliers, setActiveSuppliers] = useState<SupplierOption[]>([]);
   const [activeItems, setActiveItems] = useState<ItemOption[]>([]);
+  const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
+  /**
+   * Cadastro de item no contexto: guarda QUAL linha da OC pediu. Sem a
+   * chave, o item criado voltaria para a primeira linha.
+   */
+  const [itemModalRowKey, setItemModalRowKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -192,6 +201,10 @@ export function PurchaseOrderPage() {
         ),
       )
       .catch(() => setActiveItems([]));
+    // O cadastro de item no contexto pede as unidades do catálogo.
+    listUnits()
+      .then(setUnits)
+      .catch(() => setUnits([]));
   }, []);
 
   const status: PurchaseOrderStatus = purchaseOrder?.status ?? "DRAFT";
@@ -553,8 +566,8 @@ export function PurchaseOrderPage() {
                   name: supplier.tradeName ?? supplier.legalName,
                   ...(supplier.active ? {} : { hint: "inativo" }),
                 }))}
-                canCreate={canCreateSupplier}
-                createLabel="Cadastrar novo fornecedor"
+                canCreate
+                createLabel="Novo fornecedor"
                 onCreateNew={() => setSupplierModalOpen(true)}
               />
             ) : (
@@ -644,6 +657,9 @@ export function PurchaseOrderPage() {
                             name: item.name,
                             ...(item.active ? {} : { hint: "inativo" }),
                           }))}
+                          canCreate
+                          createLabel="Novo item de estoque"
+                          onCreateNew={() => setItemModalRowKey(line.key)}
                         />
                       ) : (
                         <EntityLink
@@ -917,6 +933,41 @@ export function PurchaseOrderPage() {
               ...prev.filter((row) => row.id !== created.id),
             ]);
             setSupplierId(created.id);
+          }}
+        />
+      )}
+
+      {itemModalRowKey !== null && (
+        <ItemFormModal
+          mode="create"
+          item={null}
+          units={units}
+          onClose={() => setItemModalRowKey(null)}
+          onSaved={(created) => {
+            const rowKey = itemModalRowKey;
+            setItemModalRowKey(null);
+            if (!created || !rowKey) return;
+            setActiveItems((prev) => [
+              { id: created.id, code: created.code, name: created.name, unitCode: created.unitCode, active: created.active },
+              ...prev.filter((row) => row.id !== created.id),
+            ]);
+            // A linha é preenchida a partir do registro criado: o `setState`
+            // acima só vale no próximo render, então procurar em
+            // `activeItems` aqui devolveria `undefined` e a linha ficaria
+            // com código, nome e unidade em branco.
+            setLines((prev) =>
+              prev.map((line) =>
+                line.key === rowKey
+                  ? {
+                      ...line,
+                      itemId: created.id,
+                      itemCode: created.code,
+                      itemName: created.name,
+                      unitCode: created.unitCode,
+                    }
+                  : line,
+              ),
+            );
           }}
         />
       )}

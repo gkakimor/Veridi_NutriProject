@@ -68,7 +68,7 @@ export function ContextHelp({
       </button>
 
       {open && (
-        <ModalDialog labelledBy={titleId} onClose={fechar}>
+        <ModalDialog labelledBy={titleId} onClose={fechar} role="dialog">
           <div className="help-modal">
             <h2 id={titleId} className="help-modal__title">
               {topic.title}

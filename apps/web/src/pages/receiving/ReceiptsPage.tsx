@@ -108,13 +108,13 @@ export function ReceiptsPage() {
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>Origem</th>
-              <th>OC</th>
-              <th>Fornecedor / Cliente</th>
-              <th>Data</th>
-              <th className="is-numeric">Itens</th>
-              <th>Status</th>
+              <th className="col-tight">Código</th>
+              <th className="col-tight">Origem</th>
+              <th className="col-tight">OC</th>
+              <th className="col-flex">Fornecedor / Cliente</th>
+              <th className="col-tight">Data</th>
+              <th className="col-tight is-numeric">Itens</th>
+              <th className="col-tight">Status</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -128,17 +128,17 @@ export function ReceiptsPage() {
                   if (event.key === "Enter") navigate(`/compras/recebimentos/${receipt.id}`);
                 }}
               >
-                <td className="is-code">{receipt.code}</td>
-                <td>{RECEIPT_SOURCE_TYPE_LABELS[receipt.sourceType]}</td>
-                <td className="is-code">{receipt.purchaseOrderCode ?? "—"}</td>
-                <td>
+                <td className="col-tight is-code">{receipt.code}</td>
+                <td className="col-tight">{RECEIPT_SOURCE_TYPE_LABELS[receipt.sourceType]}</td>
+                <td className="col-tight is-code">{receipt.purchaseOrderCode ?? "—"}</td>
+                <td className="col-flex">
                   {receipt.sourceType === "CUSTOMER_SUPPLIED"
                     ? `Cliente — ${receipt.customerName ?? ""}`
                     : (receipt.supplierName ?? "—")}
                 </td>
-                <td>{formatDate(receipt.receivedAt)}</td>
-                <td className="is-numeric">{receipt.lines.length}</td>
-                <td>
+                <td className="col-tight">{formatDate(receipt.receivedAt)}</td>
+                <td className="col-tight is-numeric">{receipt.lines.length}</td>
+                <td className="col-tight">
                   <span className="badge badge--active">Confirmado</span>
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>

@@ -266,30 +266,30 @@ export function ProductsPage() {
         <table className="table table--sticky-actions table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">
                 Produto
                 <DicaDaColuna id="produto.cicloDeVida" />
               </th>
-              <th>
+              <th className="col-flex">
                 Cliente
                 <DicaDaColuna id="produto.cliente" />
               </th>
-              <th>Forma</th>
-              <th>Apresentação</th>
-              <th>
+              <th className="col-tight">Forma</th>
+              <th className="col-tight">Apresentação</th>
+              <th className="col-tight">
                 Item acabado
                 <DicaDaColuna id="produto.itemAcabado" />
               </th>
-              <th>
+              <th className="col-tight">
                 Vida útil
                 <DicaDaColuna id="produto.vidaUtil" />
               </th>
-              <th>
+              <th className="col-tight">
                 Formulação
                 <DicaDaColuna id="produto.formulacaoAtiva" />
               </th>
-              <th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="produto.situacao" />
               </th>
@@ -308,38 +308,40 @@ export function ProductsPage() {
                   }
                 }}
               >
-                <td className="is-code">{product.code}</td>
-                <td>
+                <td className="is-code col-tight">{product.code}</td>
+                <td className="col-flex">
                   {product.name}
                   {/* Produto técnico de projeto: existe para custo, não para venda. */}
                   {product.lifecycle === "DEVELOPMENT" && (
                     <span className="badge badge--warn"> Em desenvolvimento</span>
                   )}
                 </td>
-                <td>
+                <td className="col-flex">
                   {product.customer
                     ? product.customer.tradeName ?? product.customer.legalName
                     : "—"}
                 </td>
-                <td>{product.dosageForm ? DOSAGE_FORM_LABELS[product.dosageForm] : "—"}</td>
-                <td>
+                <td className="col-tight">
+                  {product.dosageForm ? DOSAGE_FORM_LABELS[product.dosageForm] : "—"}
+                </td>
+                <td className="col-tight">
                   {product.presentationType
                     ? PRESENTATION_TYPE_LABELS[product.presentationType]
                     : "—"}
                 </td>
-                <td>
+                <td className="col-tight">
                   <EntityLink
                     kind="item"
                     id={product.finishedProductItem?.id}
                     code={product.finishedProductItem?.code}
                   />
                 </td>
-                <td>
+                <td className="col-tight">
                   {product.shelfLifeMonths ? `${product.shelfLifeMonths} meses` : "—"}
                 </td>
                 {/* Versão ACTIVE já existente — nenhuma lógica nova de versionamento. */}
-                <td>{product.activeFormulationVersionLabel ?? "—"}</td>
-                <td>
+                <td className="col-tight">{product.activeFormulationVersionLabel ?? "—"}</td>
+                <td className="col-tight">
                   <span
                     className={
                       product.active ? "badge badge--active" : "badge badge--inactive"

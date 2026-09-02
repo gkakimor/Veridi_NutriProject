@@ -146,8 +146,6 @@ export function FormulationVersionPage() {
   // para devolver o item selecionado exatamente onde ele foi pedido.
   const [itemModalRowKey, setItemModalRowKey] = useState<string | null>(null);
   const { user } = useAuth();
-  // CTA que termina em 403 é pior que CTA nenhum.
-  const canCreateItem = user?.role === "PURCHASING" || user?.role === "QUALITY" || user?.role === "ADMIN";
   const [costEstimate, setCostEstimate] = useState<FormulationCostEstimateDTO | null>(null);
 
   const syncFromServer = useCallback((dto: FormulationVersionDTO) => {
@@ -673,8 +671,8 @@ export function FormulationVersionPage() {
                             name: item.name,
                             ...(item.active ? {} : { hint: "inativo" }),
                           }))}
-                          canCreate={canCreateItem}
-                          createLabel="Cadastrar novo item"
+                          canCreate
+                          createLabel="Novo item de estoque"
                           onCreateNew={() => setItemModalRowKey(row.key)}
                         />
                       ) : (

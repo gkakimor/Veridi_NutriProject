@@ -3035,3 +3035,42 @@ carrega a pergunta. Repetir ali o rótulo inteiro do botão que abriu faz o
 confirmar parecer o mesmo botão de novo, e quem lê rápido não sabe se
 avançou. A exceção é o cancelamento: "Cancelar" sozinho é lido como
 "desistir", que é a ação oposta, então o objeto fica.
+
+---
+
+## §46 — Criar entidade sem perder o formulário
+
+Campo de busca de entidade criável oferece a criação ali mesmo, e devolve a
+entidade nova **selecionada pelo id** — nunca pelo texto digitado, que casaria
+com o registro errado sempre que dois nomes se parecerem.
+
+O caminho é o cadastro OFICIAL da entidade, o mesmo que a tela de listagem
+abre. Não existe segundo formulário: um cadastro paralelo fica atrás do
+oficial em validação e regra, e a divergência só aparece meses depois, num
+registro que passou por onde não devia.
+
+O formulário de origem não perde nada. Quem monta um pedido, descobre no meio
+que o cliente ainda não existe e o cadastra, volta com data, condição,
+observação e linhas como estavam.
+
+### Onde a criação NÃO é oferecida
+
+Não é ausência de recurso; é regra de domínio, e cada caso tem motivo:
+
+- **Contagem física** — a contagem existe contra o saldo do sistema. Item
+  recém-criado tem saldo nulo e nenhum lote: não há o que contar.
+- **Consumo de amostra** — o serviço recusa consumo acima do disponível.
+  Item novo tem zero, então a criação levaria a uma falha garantida.
+- **Produto no vínculo de Projeto** — o bloco já tem, ao lado, um modo de
+  criar produto que nasce vinculado ao projeto e ao cliente dele, em
+  desenvolvimento. Oferecer criação no campo de busca duplicaria o caminho
+  vizinho com outra semântica.
+- **Produto na Ordem de Produção** — produto novo não tem formulação ativa, e
+  a ordem nasceria travada em rascunho. A tela já avisa; criar ali é beco sem
+  saída.
+- **Filtro de listagem** — criar um cliente para filtrar por ele devolve uma
+  lista vazia.
+
+A regra geral: só se oferece criação onde a entidade recém-nascida é
+utilizável naquele campo. Onde o domínio a recusaria, a ausência da ação é a
+mensagem correta.

@@ -47,6 +47,7 @@ import {
   updateIndustrialCostVersion,
 } from "../../lib/industrial-costs-api";
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
+import { IndustrialResourceFormModal } from "../industrial-resources/IndustrialResourceFormModal";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
 
@@ -123,9 +124,18 @@ export function IndustrialCostPage() {
 
   const [resources, setResources] = useState<IndustrialResourceDTO[]>([]);
   const [usageResourceId, setUsageResourceId] = useState("");
+  /** Cadastro de recurso aberto a partir do campo de busca. */
+  const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [usageQuantity, setUsageQuantity] = useState("");
 
   const canEdit = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
+  /*
+   * Recurso industrial é a exceção do cadastro no contexto: o gate existe
+   * dos dois lados. A API exige ADMIN (`requireRole(request, "ADMIN")`), e
+   * o botão da listagem checa o mesmo. Oferecer aqui a quem só pode editar
+   * custo daria um CTA que termina em 403.
+   */
+  const canCreateResource = user?.role === "ADMIN";
 
   const load = useCallback(() => {
     if (!productId) return;
@@ -812,6 +822,9 @@ export function IndustrialCostPage() {
                           name: resource.name,
                           hint: INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type],
                         }))}
+                        canCreate={canCreateResource}
+                        createLabel="Novo recurso"
+                        onCreateNew={() => setResourceModalOpen(true)}
                       />
                       <span className="field__hint">
                         {version.energyCalculationMode === "DIRECT"
@@ -1090,6 +1103,29 @@ export function IndustrialCostPage() {
             void run(() =>
               activateIndustrialCostVersion(version.id, { confirmIncomplete: true }),
             );
+          }}
+        />
+      )}
+
+      {resourceModalOpen && (
+        <IndustrialResourceFormModal
+          onClose={() => setResourceModalOpen(false)}
+          onSaved={(created) => {
+            setResourceModalOpen(false);
+            setResources((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+            /*
+             * Energia fora do modo "consumo informado diretamente" não é
+             * escolhível aqui — é a regra que evita contar energia duas
+             * vezes. Selecionar assim mesmo deixaria o campo em branco com
+             * um id escolhido por baixo; melhor dizer o que aconteceu.
+             */
+            if (created.type === "ENERGY" && version?.energyCalculationMode !== "DIRECT") {
+              setError(
+                `${created.code} foi criado, mas recursos de energia só entram nesta estrutura no modo de consumo informado diretamente.`,
+              );
+              return;
+            }
+            setUsageResourceId(created.id);
           }}
         />
       )}

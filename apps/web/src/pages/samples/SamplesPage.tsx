@@ -178,30 +178,34 @@ export function SamplesPage() {
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
-        <table className="table table--clickable-rows table--sticky-actions">
+        {/* Sem `table--sticky-actions`: esta tabela não tem coluna de ações —
+            a linha inteira é clicável. A classe congelava a última coluna de
+            NEGÓCIO ("Produzida em") na borda direita, e numa tabela com mais
+            de mil pixels de rolagem o dado que ficava fixo era o errado. */}
+        <table className="table table--clickable-rows">
           <thead>
             <tr>
-              <th>Amostra</th>
-              <th>
+              <th className="col-tight">Amostra</th>
+              <th className="col-tight">
                 Teste
                 <DicaDaColuna id="comercial.amostraTeste" />
               </th>
-              <th>Projeto</th>
-              <th>
+              <th className="col-flex">Projeto</th>
+              <th className="col-flex">
                 Produto
                 <DicaDaColuna id="comercial.amostraProdutoTestado" />
               </th>
-              <th>Cliente</th>
-              <th>Descrição</th>
-              <th>
+              <th className="col-flex">Cliente</th>
+              <th className="col-flex col-flex--truncate">Descrição</th>
+              <th className="col-tight">
                 Status
                 <DicaDaColuna id="comercial.amostraStatus" />
               </th>
-              <th>
+              <th className="col-tight">
                 Consumos
                 <DicaDaColuna id="comercial.amostraConsumos" />
               </th>
-              <th>Produzida em</th>
+              <th className="col-tight">Produzida em</th>
             </tr>
           </thead>
           <tbody>
@@ -214,12 +218,12 @@ export function SamplesPage() {
                   if (event.key === "Enter") navigate(`/comercial/amostras/${sample.id}`);
                 }}
               >
-                <td className="is-code">{sample.code}</td>
-                <td className="is-code">{sample.testLabel}</td>
-                <td>
+                <td className="is-code col-tight">{sample.code}</td>
+                <td className="is-code col-tight">{sample.testLabel}</td>
+                <td className="col-flex">
                   <EntityLink kind="project" id={sample.projectId} code={sample.projectCode} name={sample.projectName} />
                 </td>
-                <td>
+                <td className="col-flex">
                   {sample.productId ? (
                     <EntityLink
                       kind="product"
@@ -231,17 +235,21 @@ export function SamplesPage() {
                     <span className="muted">Produto não identificado</span>
                   )}
                 </td>
-                <td>
+                <td className="col-flex">
                   <EntityLink kind="customer" id={sample.customerId} code={sample.customerName} />
                 </td>
-                <td>{sample.description ?? "—"}</td>
-                <td>
+                {/* Descrição livre: truncada com reticências para não virar
+                    três linhas — o texto inteiro fica no `title`. */}
+                <td className="col-flex col-flex--truncate" title={sample.description ?? undefined}>
+                  {sample.description ?? "—"}
+                </td>
+                <td className="col-tight">
                   <span className={sampleStatusBadgeClass(sample.status)}>
                     {PROJECT_SAMPLE_STATUS_LABELS[sample.status]}
                   </span>
                 </td>
-                <td>{sample.consumptions.length}</td>
-                <td>{formatDateTime(sample.producedAt)}</td>
+                <td className="col-tight">{sample.consumptions.length}</td>
+                <td className="col-tight">{formatDateTime(sample.producedAt)}</td>
               </tr>
             ))}
 

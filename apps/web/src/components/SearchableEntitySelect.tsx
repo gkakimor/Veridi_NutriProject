@@ -204,16 +204,22 @@ export function SearchableEntitySelect({
   const visible = useMemo(() => filtered.slice(0, 50), [filtered]);
   const canOfferCreate = canCreate && Boolean(onCreateNew);
   /*
-   * "+ Cadastrar novo" só encabeça a lista quando não há resultado.
+   * "+ Novo X" encabeça a lista SEMPRE, com ou sem resultado.
    *
-   * Enquanto ele era sempre o primeiro, a ação mais destrutiva do
-   * formulário — criar um registro duplicado — era também a mais fácil de
-   * clicar. Havendo correspondência, ela vem primeiro e o cadastro desce
-   * para o fim.
+   * Ele já morou no fim quando havia correspondência, para que a ação mais
+   * destrutiva do formulário — criar um duplicado — não fosse a mais fácil
+   * de clicar. O problema é que ali ninguém o achava: com dez resultados a
+   * ação ficava abaixo da dobra da lista, e quem não encontrava o registro
+   * concluía que não dava para criar.
+   *
+   * A proteção contra o duplicado mudou de lugar em vez de sumir: o índice
+   * ativo continua nascendo no primeiro RESULTADO, então quem digita e
+   * aperta Enter escolhe — nunca cria. Chegar ao cadastro exige subir com a
+   * seta ou clicar, que são atos deliberados.
    */
-  const criarPrimeiro = canOfferCreate && visible.length === 0;
-  const createIndex = canOfferCreate ? (criarPrimeiro ? 0 : visible.length) : -1;
-  /** Deslocamento dos resultados quando o cadastro ocupa o índice 0. */
+  const criarPrimeiro = canOfferCreate;
+  const createIndex = canOfferCreate ? 0 : -1;
+  /** Deslocamento dos resultados: o cadastro ocupa o índice 0. */
   const primeiroResultado = criarPrimeiro ? 1 : 0;
   const navigableCount = visible.length + (canOfferCreate ? 1 : 0);
   /** Opção sob o índice navegável — `null` quando o índice é o cadastro. */
@@ -246,7 +252,21 @@ export function SearchableEntitySelect({
     if (!onCreateNew) return;
     creating.current = true;
     setOpen(false);
-    onCreateNew(query.trim());
+    /*
+     * A busca é descartada aqui, e não na volta do cadastro.
+     *
+     * Salvando, o campo passa a mostrar a entidade criada — o texto digitado
+     * não tem mais o que fazer ali. Desistindo, o campo fica vazio, que é a
+     * verdade: nada foi escolhido. Mantê-lo deixava o nome digitado parado
+     * no campo parecendo seleção confirmada, exatamente o que o descarte no
+     * clique-fora existe para evitar.
+     *
+     * O texto vai inteiro para `onCreateNew` antes de sumir, então o
+     * cadastro ainda nasce com o que a pessoa escreveu.
+     */
+    const digitado = query.trim();
+    setQuery("");
+    onCreateNew(digitado);
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -440,8 +460,6 @@ export function SearchableEntitySelect({
                 +{filtered.length - 50} resultados — refine a busca.
               </li>
             )}
-
-            {!criarPrimeiro && itemCadastrar}
           </ul>,
           document.body,
         )}

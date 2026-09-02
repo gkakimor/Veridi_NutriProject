@@ -116,7 +116,12 @@ describe("Cadastro de Item × Fornecedor", () => {
     fireEvent.focus(campo);
     fireEvent.change(campo, { target: { value: termo } });
     const lista = screen.getAllByRole("listbox").at(-1)!;
-    fireEvent.mouseDown(within(lista).getAllByRole("option")[0]!);
+    // "+ Novo …" encabeça a lista sempre: escolher é pegar o primeiro
+    // RESULTADO, que é o que a pessoa faz ao digitar o código e confirmar.
+    const resultado = within(lista)
+      .getAllByRole("option")
+      .find((opcao) => !opcao.classList.contains("entity-select__create"));
+    fireEvent.mouseDown(resultado!);
   }
 
   function abrirFormulario() {

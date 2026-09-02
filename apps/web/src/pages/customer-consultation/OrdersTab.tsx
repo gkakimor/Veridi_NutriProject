@@ -49,11 +49,11 @@ export function OrdersTab() {
         <table className="table table--clickable-rows">
           <thead>
             <tr>
-              <th>Código</th>
-              <th>Produto</th>
-              <th>Data</th>
-              <th>Entrega pedida</th>
-              <th>Situação</th>
+              <th className="col-tight">Código</th>
+              <th className="col-flex">Produto</th>
+              <th className="col-tight">Data</th>
+              <th className="col-tight">Entrega pedida</th>
+              <th className="col-tight">Situação</th>
             </tr>
           </thead>
           <tbody>
@@ -66,11 +66,11 @@ export function OrdersTab() {
                   if (event.key === "Enter") open(order);
                 }}
               >
-                <td className="is-code">{order.code}</td>
-                <td>{productLabel(order)}</td>
-                <td>{formatDate(order.orderDate)}</td>
-                <td>{formatDate(order.requestedDeliveryDate)}</td>
-                <td>
+                <td className="is-code col-tight">{order.code}</td>
+                <td className="col-flex">{productLabel(order)}</td>
+                <td className="col-tight">{formatDate(order.orderDate)}</td>
+                <td className="col-tight">{formatDate(order.requestedDeliveryDate)}</td>
+                <td className="col-tight">
                   <span
                     className={
                       order.status === "CANCELLED"

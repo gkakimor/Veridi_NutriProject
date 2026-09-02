@@ -213,6 +213,58 @@ It remains a valid pattern only for lightweight, non-CRUD contextual
 panels (quick details, filters, secondary properties) if that need
 arises — none exist yet.
 
+### Creating an entity from a search field
+
+Searchable entity fields (`SearchableEntitySelect`) offer **"+ Novo X" as the
+first item in the list**, always — with results, without results, and before
+the user types anything. It used to sit at the bottom whenever the search
+matched something, so that creating a duplicate would not be the easiest
+thing to click; with ten results it fell below the fold of the popover and
+people concluded creation was not available.
+
+The duplicate guard moved rather than disappeared: **the active item is still
+the first result**, so typing and pressing Enter selects and never creates.
+Reaching the create action takes an arrow key or a click — both deliberate.
+
+The label matches the create button on that entity's list screen, word for
+word: "Novo cliente", "Novo produto", "Novo fornecedor", "Novo item de
+estoque". One convention, no synonyms.
+
+The action opens the entity's **official form** — the same modal the list
+screen opens, never a parallel mini-form. The host form stays mounted
+underneath, so the draft survives, and the new entity is selected **by id**,
+never by the text that was typed.
+
+Do not offer it where the domain would reject the result: an item with no
+balance in a stock count, an item with no stock in a sample consumption, a
+product in a field that already has a create-product mode beside it, or a
+toolbar filter (creating there yields a filter with zero results).
+
+### Table columns
+
+`.table` is `table-layout: auto` and every cell is `nowrap`, so the table's
+minimum width is the sum of each column's longest content — with no ceiling.
+Two columns of free text can take half the table on their own. Classify every
+column, on the `<th>` **and** on its `<td>`s (`white-space` does not travel
+through `<col>`):
+
+- **`col-tight`** — code, status, date, quantity, balance. `width: 1%`, so
+  the column stops absorbing slack and hands the space back.
+- **`col-flex`** — name, description, customer, product. Wrapping is what
+  brings the table's minimum width down.
+- **`col-flex--truncate`** — long text that should not become three lines.
+  Pair it with `title` on the cell. **Never** on money, codes, quantities or
+  status: a number cut in half still looks like a number. `max-width` and
+  `overflow: hidden` are a pair: under `table-layout: auto` a cell's
+  `max-width` alone is ignored — the hidden overflow is what makes the cap
+  bind.
+
+The **actions column never grows**. It is the one column whose width carries
+no information — two buttons say the same thing at 88px or at 211px. It is
+capped automatically on tables with `table--sticky-actions`, and by
+`col-actions` elsewhere. Keep the document code out of the button label; put
+it in the `aria-label` instead.
+
 ### Commit-action vocabulary
 
 Screens were each inventing their own confirm label ("Criar item",

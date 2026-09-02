@@ -6,6 +6,7 @@ import type {
   FormulationTemplateDiffDTO,
   FormulationTemplateVersionDTO,
   ItemDTO,
+  UnitOfMeasureDTO,
 } from "@veridi/shared";
 import {
   FORMULATION_CALCULATION_MODE_LABELS,
@@ -22,6 +23,8 @@ import {
   updateFormulationTemplateVersion,
 } from "../../lib/formulation-templates-api";
 import { listItems } from "../../lib/items-api";
+import { listUnits } from "../../lib/units-api";
+import { ItemFormModal } from "../items/ItemFormModal";
 import { FormSection } from "../../components/FormSection";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { TemplateDiff } from "./TemplateDiff";
@@ -57,6 +60,12 @@ export function FormulationTemplateDetailPage() {
 
   const [template, setTemplate] = useState<FormulationTemplateDTO | null>(null);
   const [items, setItems] = useState<ItemDTO[]>([]);
+  const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
+  /**
+   * Cadastro no contexto: guarda QUAL linha do rascunho pediu o item novo.
+   * Sem a chave, o item criado voltaria para a primeira linha da matriz.
+   */
+  const [itemModalChave, setItemModalChave] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [linhas, setLinhas] = useState<LinhaEditavel[]>([]);
@@ -98,6 +107,10 @@ export function FormulationTemplateDetailPage() {
     listItems({ pageSize: 200 })
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
+    // O cadastro de item no contexto pede as unidades do catálogo.
+    listUnits()
+      .then(setUnits)
+      .catch(() => setUnits([]));
   }, []);
 
   async function run(action: () => Promise<unknown>) {
@@ -334,11 +347,18 @@ export function FormulationTemplateDetailPage() {
                             )
                           }
                           placeholder="Digite código ou nome do item…"
+                          /* Era o único campo do rascunho sem o `disabled` dos
+                             vizinhos: quem não edita trocava o item na tela e
+                             só descobria a recusa ao salvar. */
+                          disabled={!editavel}
                           options={items.map((item) => ({
                             id: item.id,
                             code: item.code,
                             name: item.name,
                           }))}
+                          canCreate={editavel}
+                          createLabel="Novo item de estoque"
+                          onCreateNew={() => setItemModalChave(linha.chave)}
                         />
                       </td>
                       <td className="is-numeric">
@@ -555,6 +575,30 @@ export function FormulationTemplateDetailPage() {
           )}
         </FormSection>
       </div>
+
+      {itemModalChave !== null && (
+        <ItemFormModal
+          mode="create"
+          item={null}
+          units={units}
+          onClose={() => setItemModalChave(null)}
+          onSaved={(created) => {
+            const chave = itemModalChave;
+            setItemModalChave(null);
+            if (!created || !chave) return;
+            // O item novo entra no catálogo e já fica escolhido na linha que
+            // pediu por ele — o resto do rascunho continua como estava.
+            setItems((atual) => [created, ...atual.filter((item) => item.id !== created.id)]);
+            setLinhas((atual) =>
+              atual.map((l) =>
+                l.chave === chave
+                  ? { ...l, itemId: created.id, unitCode: l.unitCode || created.unitCode }
+                  : l,
+              ),
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

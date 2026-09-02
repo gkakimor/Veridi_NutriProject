@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { useAuth } from "../../app/AuthProvider";
 import { CustomerFormModal } from "../customers/CustomerFormModal";
 import type { CustomerDTO, ProjectDTO } from "@veridi/shared";
 import {
@@ -77,9 +76,6 @@ export function ProjectFormModal({
   // Criação no contexto: o cliente não existe, e voltar depois obrigaria a
   // refazer o projeto inteiro. `null` = modal fechado.
   const [newCustomerName, setNewCustomerName] = useState<string | null>(null);
-  const { user } = useAuth();
-  // CTA que termina em 403 é pior que CTA nenhum.
-  const canCreateCustomer = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -193,8 +189,8 @@ export function ProjectFormModal({
                 .filter(Boolean)
                 .join(" "),
             }))}
-            canCreate={canCreateCustomer}
-            createLabel="Cadastrar novo cliente"
+            canCreate
+            createLabel="Novo cliente"
             onCreateNew={(typed) => setNewCustomerName(typed)}
           />
         </div>
