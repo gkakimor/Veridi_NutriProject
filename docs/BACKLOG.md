@@ -14,7 +14,7 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 3 |
+| LOW | 4 |
 
 Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
@@ -75,6 +75,26 @@ então a informação não está inacessível — falta o corte por Cliente.
 
 **Decisão / próxima ação:** promover como rodada curta própria, se o
 acompanhamento por Cliente pedir Produção depois da validação com a Veridi.
+
+### 5. Smoke autenticado em produção — pendente em duas rodadas — LOW
+
+Nem a rodada do **cadastro de Cliente** (`cab5bf3`) nem a da **Consulta do
+Cliente** (`7cd61f2`) tiveram smoke autenticado em produção. Nos dois casos o
+deploy subiu e `/health` respondeu 200; o que falta é percorrer as telas com
+sessão real.
+
+As contas DEMO de produção existem em `.local-data/prod-demo.json`, mas login
+em produção com senha armazenada é ação de quem opera, não do agente.
+
+**Decisão / próxima ação:** rodar os dois roteiros, ambos somente leitura,
+exceto onde indicado.
+
+- *Cliente:* e-mail inválido rejeitado, telefone curto rejeitado, CNPJ válido
+  aceito, CEP preenchendo endereço, salvar, conferir os metadados de autoria,
+  inativar o cliente de teste pelo fluxo oficial.
+- *Consulta do Cliente:* Gestão › Consulta de Cliente, buscar um cliente
+  existente, abrir, Projetos, abrir um projeto, voltar pela trilha, Pedidos,
+  Materiais, Faturamentos. Nada é criado.
 
 ### Decisões de produto em aberto — não bloqueantes
 

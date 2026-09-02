@@ -84,6 +84,12 @@ Na mesma rodada, **Fornecedor passou a usar os validadores compartilhados de
 e-mail e telefone** — antes texto livre. Nenhum dos 219 fornecedores tem esses
 campos preenchidos, então nenhum registro existente deixou de ser editável.
 
+## Validação em produção
+
+As duas rodadas curtas subiram e respondem `/health` 200. O **smoke
+autenticado ainda não foi feito em nenhuma das duas** — ver
+[BACKLOG.md](BACKLOG.md), item 5. Não bloqueia; é verificação pendente.
+
 ## Blockers
 
 Nenhum.
