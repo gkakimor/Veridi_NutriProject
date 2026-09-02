@@ -42,7 +42,10 @@ export const createProductSchema = z.object({
    * cliente resolvido, e exigir o vínculo na edição os tornaria
    * inalteráveis — ver `updateProductSchema`.
    */
-  customerId: z.string().trim().min(1, "Cliente é obrigatório"),
+  customerId: z
+    .string({ required_error: "Cliente é obrigatório" })
+    .trim()
+    .min(1, "Cliente é obrigatório"),
   /**
    * Item de produto acabado. Ausente, o sistema cria o item automaticamente
    * — que é o caminho normal da tela. Informado, é validado com rigor

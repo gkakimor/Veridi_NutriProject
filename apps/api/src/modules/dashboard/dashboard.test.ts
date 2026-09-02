@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 import { buildAttentionList } from "./attention.service.js";
 
@@ -250,7 +251,7 @@ async function createProduct(app: App, finishedItemId: string) {
     await app.inject({
       method: "POST",
       url: "/products",
-      payload: { name: `Produto Dashboard ${marker()}`, finishedProductItemId: finishedItemId },
+      payload: { customerId: await fixtureCustomerId(), name: `Produto Dashboard ${marker()}`, finishedProductItemId: finishedItemId },
     })
   ).json();
   fixtureProductIds.push(product.id);

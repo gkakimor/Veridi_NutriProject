@@ -3,6 +3,7 @@ import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { sanitizeFileName } from "../../lib/file-storage.js";
 import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
 /**
  * Capacidade 37 — qualidade documental (CoA) e anexos.
@@ -319,7 +320,7 @@ describe("Upload e validação de arquivo", () => {
       await app.inject({
         method: "POST",
         url: "/products",
-        payload: { name: `Produto CoA ${marker()}`, finishedProductItemId: finishedItem.id },
+        payload: { customerId: await fixtureCustomerId(), name: `Produto CoA ${marker()}`, finishedProductItemId: finishedItem.id },
       })
     ).json();
     fixtureProductIds.push(product.id);

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -210,7 +211,7 @@ async function criarProduto(app: App) {
     await app.inject({
       method: "POST",
       url: "/products",
-      payload: { name: `Produto TEC ${m}`, finishedProductItemId: acabado.id },
+      payload: { customerId: await fixtureCustomerId(), name: `Produto TEC ${m}`, finishedProductItemId: acabado.id },
     })
   ).json();
   fixtureProductIds.push(product.id);
