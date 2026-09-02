@@ -122,9 +122,15 @@ controles que varia por produto. Regras em
 
 ## Validação em produção
 
-As duas rodadas curtas subiram e respondem `/health` 200. O **smoke
-autenticado ainda não foi feito em nenhuma das duas** — ver
-[BACKLOG.md](BACKLOG.md), item 5. Não bloqueia; é verificação pendente.
+**Smoke autenticado feito** (`344d00e`, 2026-09-02), e automatizado em
+[`scripts/smoke-prod.mjs`](../scripts/smoke-prod.mjs). Sessão real, oito telas
+abertas, onze endpoints de listagem, console e rede limpos. A perna de escrita
+(`--escrita`) criou um cliente, provou as validações de e-mail, telefone, CNPJ
+e CEP, conferiu a autoria gravada a partir do usuário autenticado e inativou
+pelo fluxo oficial. Tudo passou.
+
+Era o que faltava desde a rodada do cadastro de Cliente. Rodar antes de fechar
+cada rodada passa a ser o padrão.
 
 ## Blockers
 
@@ -132,10 +138,10 @@ Nenhum.
 
 ## Backlog aberto
 
-Uma instabilidade de infraestrutura da suíte (api e web juntos), o smoke
-autenticado em produção e duas pendências de dado legado — todas não
-bloqueantes. As duas passadas de nomenclatura e a bolha do `InfoHint` foram
-fechadas na rodada de ajuda contextual. Ver [BACKLOG.md](BACKLOG.md).
+Dois LOW: a instabilidade da suíte rodando api e web juntos, e o dado legado
+sem cliente. Nenhum bloqueia. As duas passadas de nomenclatura, a ordem real
+de delete, a bolha do `InfoHint` e o smoke autenticado foram fechados na
+rodada de ajuda contextual. Ver [BACKLOG.md](BACKLOG.md).
 
 ## Decisões de produto ainda em aberto (não bloqueantes)
 

@@ -11,16 +11,18 @@ import fs from "node:fs";
  * quebra ao montar, um endpoint que passou a exigir campo novo, ou uma
  * migration que subiu pela metade.
  *
- * NÃO ESCREVE NADA. Nenhum POST, PATCH ou DELETE de domínio; o único POST é
- * o login. A perna de escrita do roteiro (criar cliente, conferir autoria,
- * inativar) fica de fora de propósito: ela cria registro em produção, e isso
- * é decisão de quem opera, não efeito colateral de uma verificação.
+ * Duas pernas. A de LEITURA é o padrão. A de ESCRITA — criar um cliente,
+ * conferir a autoria e inativá-lo — só roda com `--escrita`, porque cria
+ * registro em produção; isso é decisão de quem opera, nunca efeito colateral
+ * de uma verificação. O cliente criado é inativado no fim pelo fluxo oficial
+ * e leva "SMOKE" no nome, para nunca ser confundido com cadastro de verdade.
  *
  * A credencial sai de `.local-data/prod-demo.json` e não passa por linha de
  * comando, log, screenshot nem mensagem de erro.
  */
 
 const OUT = process.argv[2] ?? ".";
+const COM_ESCRITA = process.argv.includes("--escrita");
 const credenciais = JSON.parse(
   fs.readFileSync(new URL("../.local-data/prod-demo.json", import.meta.url), "utf8"),
 );
@@ -180,6 +182,8 @@ async function main() {
     await pagina.keyboard.press("Escape");
   }
 
+  if (COM_ESCRITA) await pernaDeEscrita(pagina);
+
   check(
     "console sem erros durante a navegação",
     errosDeConsole.length === 0,
@@ -192,6 +196,109 @@ async function main() {
   );
 
   await navegador.close();
+}
+
+/**
+ * Roteiro do Cliente — item 5 do backlog.
+ *
+ * Prova o que só uma sessão real prova: que a validação recusa antes de
+ * chegar ao servidor, que o CEP preenche endereço, que a autoria é gravada a
+ * partir do usuário autenticado, e que o cliente sai pelo fluxo oficial de
+ * inativação. Nada é apagado — inativar preserva o registro, que é a regra
+ * da casa.
+ */
+async function pernaDeEscrita(pagina) {
+  const marca = `SMOKE ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
+
+  await pagina.goto(`${BASE}/cadastros/clientes`, { waitUntil: "networkidle" });
+  await pagina.getByRole("button", { name: /Novo cliente/ }).click();
+  await pagina.locator("#customer-legal-name").waitFor();
+
+  await pagina.locator("#customer-legal-name").fill(`${marca} LTDA`);
+
+  // E-mail inválido: a recusa tem de vir da tela, sem ida ao servidor.
+  await pagina.locator("#customer-email").fill("nao-e-email");
+  await pagina.locator("#customer-legal-name").click();
+  const erroEmail = await pagina
+    .locator("#customer-email")
+    .locator("xpath=ancestor::div[contains(@class,'field')][1]")
+    .locator(".field__error")
+    .isVisible()
+    .catch(() => false);
+  check("e-mail inválido recusado na tela", erroEmail);
+
+  await pagina.locator("#customer-email").fill("smoke@veridi.demo");
+
+  // Telefone curto: mesma prova, outro validador.
+  await pagina.locator("#customer-phone").fill("119");
+  await pagina.locator("#customer-legal-name").click();
+  const erroTelefone = await pagina
+    .locator("#customer-phone")
+    .locator("xpath=ancestor::div[contains(@class,'field')][1]")
+    .locator(".field__error")
+    .isVisible()
+    .catch(() => false);
+  check("telefone curto recusado na tela", erroTelefone);
+
+  await pagina.locator("#customer-phone").fill("11987654321");
+
+  // CNPJ válido tem de passar — o validador não pode ser restritivo demais.
+  await pagina.locator("#customer-cnpj").fill("11222333000181");
+  await pagina.locator("#customer-legal-name").click();
+  const erroCnpj = await pagina
+    .locator("#customer-cnpj")
+    .locator("xpath=ancestor::div[contains(@class,'field')][1]")
+    .locator(".field__error")
+    .isVisible()
+    .catch(() => false);
+  check("CNPJ válido aceito", !erroCnpj);
+
+  // CEP preenche endereço. Depende do ViaCEP: falha aqui é rede, não regra —
+  // e por isso o cadastro nunca é bloqueado por ela.
+  await pagina.locator("#customer-zip").fill("01310100");
+  await pagina.locator("#customer-legal-name").click();
+  await pagina.waitForTimeout(2500);
+  const cidade = await pagina.locator("#customer-city").inputValue();
+  check("CEP preencheu o endereço", cidade.trim().length > 0, `cidade "${cidade}"`);
+
+  await pagina.screenshot({ path: `${OUT}/prod-cliente-formulario.png` });
+
+  await pagina.getByRole("button", { name: /Criar cliente/ }).click();
+  await pagina.waitForTimeout(2500);
+
+  const criado = await get(`/customers?search=${encodeURIComponent(marca)}&page=1&pageSize=5`);
+  const cliente = (criado.corpo?.customers ?? [])[0];
+  check("cliente criado em produção", Boolean(cliente), `busca por "${marca}"`);
+  if (!cliente) return;
+
+  // Autoria: o ponto da rodada do cadastro de Cliente. Sem sessão real ela
+  // nunca tinha sido verificada em produção.
+  check(
+    "autoria gravada a partir do usuário autenticado",
+    Boolean(cliente.createdByName),
+    `createdByName ${JSON.stringify(cliente.createdByName)}`,
+  );
+
+  await pagina.goto(`${BASE}/cadastros/clientes?search=${encodeURIComponent(marca)}`, {
+    waitUntil: "networkidle",
+  });
+  await pagina.screenshot({ path: `${OUT}/prod-cliente-criado.png` });
+
+  // Sai pelo fluxo oficial: inativar, nunca apagar.
+  await pagina.getByRole("row", { name: new RegExp(marca) }).getByRole("button").last().click();
+  await pagina.getByText("Inativar", { exact: true }).click();
+  await pagina.getByRole("button", { name: "Inativar", exact: true }).click();
+  await pagina.waitForTimeout(2000);
+
+  const depois = await get(`/customers?search=${encodeURIComponent(marca)}&page=1&pageSize=5`);
+  const inativado = (depois.corpo?.customers ?? [])[0];
+  check(
+    "cliente do smoke inativado pelo fluxo oficial",
+    inativado?.active === false,
+    `active ${inativado?.active}`,
+  );
+  await pagina.screenshot({ path: `${OUT}/prod-cliente-inativado.png` });
+  console.log(`       cliente do smoke: ${cliente.code} — ${marca} (inativo)`);
 }
 
 main()

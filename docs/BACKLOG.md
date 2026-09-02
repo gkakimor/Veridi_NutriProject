@@ -14,7 +14,7 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 3 |
+| LOW | 2 |
 
 Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
@@ -97,25 +97,34 @@ então a informação não está inacessível — falta o corte por Cliente.
 **Decisão / próxima ação:** promover como rodada curta própria, se o
 acompanhamento por Cliente pedir Produção depois da validação com a Veridi.
 
-### 5. Smoke autenticado em produção — pendente em duas rodadas — LOW
+### 5. Smoke autenticado em produção — resolvido
 
-Nem a rodada do **cadastro de Cliente** (`cab5bf3`) nem a da **Consulta do
-Cliente** (`7cd61f2`) tiveram smoke autenticado em produção. Nos dois casos o
-deploy subiu e `/health` respondeu 200; o que falta é percorrer as telas com
-sessão real.
+Três rodadas subiram sem smoke autenticado: cadastro de Cliente (`cab5bf3`),
+Consulta do Cliente (`7cd61f2`) e a navegação (`cdcb235`). Nos três o deploy
+respondeu `/health` 200, que não diz nada sobre uma tela que quebra ao montar
+nem sobre migration pela metade.
 
-As contas DEMO de produção existem em `.local-data/prod-demo.json`, mas login
-em produção com senha armazenada é ação de quem opera, não do agente.
+**Feito e automatizado.** Product Ownership autorizou o uso da conta DEMO de
+produção. O roteiro virou script:
+[`smoke-prod.mjs`](../scripts/smoke-prod.mjs).
 
-**Decisão / próxima ação:** rodar os dois roteiros, ambos somente leitura,
-exceto onde indicado.
+- Leitura, sempre: `/health`, login, `/auth/me`, onze endpoints de listagem, e
+  oito telas abertas com sessão real conferindo que nenhuma cai no login.
+  Console e rede vigiados — qualquer 4xx/5xx reprova.
+- Escrita, só com `--escrita`: cria um cliente marcado `SMOKE`, prova que
+  e-mail inválido e telefone curto são recusados na tela, que CNPJ válido
+  passa, que o CEP preenche endereço, confere a autoria gravada a partir do
+  usuário autenticado, e **inativa pelo fluxo oficial** — nada é apagado.
 
-- *Cliente:* e-mail inválido rejeitado, telefone curto rejeitado, CNPJ válido
-  aceito, CEP preenchendo endereço, salvar, conferir os metadados de autoria,
-  inativar o cliente de teste pelo fluxo oficial.
-- *Consulta do Cliente:* Gestão › Consulta de Cliente, buscar um cliente
-  existente, abrir, Projetos, abrir um projeto, voltar pela trilha, Pedidos,
-  Materiais, Faturamentos. Nada é criado.
+Rodado sobre a release da ajuda contextual: tudo passou, console limpo, zero
+requisição 4xx/5xx. O cliente do smoke ficou como `CLI-000008`, inativo.
+
+Um achado veio junto e era do próprio script, não do produto: `/estoque` não
+tem sufixo, e a URL errada `/estoque/posicao` caía em `/estoque/:itemId`
+buscando um item chamado "posicao".
+
+**Decisão / próxima ação:** rodar antes de fechar cada rodada. A perna de
+escrita continua atrás de flag de propósito.
 
 ### 6. Produtos do legado sem cliente e itens acabados órfãos — LOW
 
@@ -227,9 +236,9 @@ depende da prática real da casa, não de escolha técnica.
 e o feedback ser classificado. Roteiro da sessão e grade de classificação em
 [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md).
 
-Os três LOW ainda abertos — a instabilidade da suíte (3), o smoke autenticado
-em produção (5) e o dado legado sem cliente (6) — não bloqueiam a validação e
-não devem ser corrigidos durante a reunião.
+Os dois LOW ainda abertos — a instabilidade da suíte (3) e o dado legado sem
+cliente (6) — não bloqueiam a validação e não devem ser corrigidos durante a
+reunião.
 
 ---
 
