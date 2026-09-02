@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import type { SupplierDTO } from "@veridi/shared";
+import { formatBrPhone } from "@veridi/shared";
 import { formatCnpj } from "@veridi/shared";
 import { listSuppliers, setSupplierActive } from "../../lib/suppliers-api";
 import { SupplierFormModal } from "./SupplierFormModal";
@@ -190,7 +191,7 @@ export function SuppliersPage() {
                 <td>{supplier.legalName}</td>
                 <td>{supplier.tradeName ?? "—"}</td>
                 <td>{supplier.cnpj ? formatCnpj(supplier.cnpj) : "—"}</td>
-                <td>{supplier.phone ?? "—"}</td>
+                <td>{formatBrPhone(supplier.phone) ?? "—"}</td>
                 <td>
                   <span
                     className={

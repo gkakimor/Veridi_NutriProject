@@ -69,6 +69,22 @@ export class InvalidCredentialsError extends Error {
   }
 }
 
+/**
+ * 404 da API.
+ *
+ * Estende `Error` com a mesma mensagem que já era lançada, então toda tela
+ * que só faz `catch (err) { setError(err.message) }` continua idêntica. Quem
+ * precisa distinguir "não existe" de "falhou" — a Consulta do Cliente, que
+ * mostra um estado próprio quando a entidade não é daquele Cliente — passa a
+ * poder fazer isso sem comparar texto de mensagem.
+ */
+export class NotFoundApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotFoundApiError";
+  }
+}
+
 /** Falha do servidor: chegou lá, mas ele não conseguiu responder. */
 export class ApiServerError extends Error {
   status: number;
@@ -160,6 +176,7 @@ export async function parseJsonOrThrow(response: Response): Promise<unknown> {
     // Detalhe técnico continua visível para quem investiga — a tela mostra
     // a mensagem tratada, o console mostra o código real.
     if (code) console.warn(`API ${response.status} ${code}`);
+    if (response.status === 404) throw new NotFoundApiError(message);
     throw new Error(message);
   }
 

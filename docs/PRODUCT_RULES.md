@@ -2856,3 +2856,45 @@ altera, porque é alteração persistida.
 Registro anterior a esta capacidade, ou importado do legado, fica **sem autor**
 e a tela diz "Não disponível". Atribuir esses registros a quem rodou a
 migration inventaria um fato auditável.
+
+
+---
+
+## §42 — Consulta do Cliente: o contexto não se perde por clique
+
+### Dentro da Consulta, o Cliente é a raiz da navegação
+
+Um clique comum em Projeto, Pedido ou Faturamento abre o detalhe **dentro do
+contexto daquele Cliente** — o cabeçalho continua na tela e a trilha volta
+para a lista daquele Cliente, nunca para a lista global do módulo. A saída
+para a tela operacional acontece **apenas por ação explícita** ("Abrir …
+completo").
+
+A alternativa — clique comum levando ao módulo — é o comportamento dos
+atalhos de "Ver relacionados", que continuam existindo e continuam levando
+ao módulo. São duas intenções diferentes: acompanhar o Cliente e ir trabalhar
+no módulo. Nenhuma das duas substitui a outra.
+
+### O contexto vive na URL, nunca em estado global
+
+O Cliente da Consulta é o `:customerId` da rota. Refresh, deep link, aba nova
+e o Voltar do navegador funcionam por consequência, e nenhum módulo
+operacional passa a carregar a noção de "cliente atual" — estado global de
+cliente contaminaria Pedidos, Estoque e Produção com um contexto que não é
+deles.
+
+### O id da URL nunca basta
+
+Uma entidade só aparece sob um Cliente se pertencer àquele Cliente. Endereço
+bem formado apontando para registro de outro Cliente responde **404** — o
+mesmo 404 de "não existe", porque distinguir os dois casos entregaria a
+informação que o recorte existe para proteger. O escopo de dono do material
+do Cliente é o já existente, nunca um filtro paralelo.
+
+### A Consulta é somente leitura
+
+Nada de editar, confirmar, produzir, expedir, emitir ou liberar lote. Ações
+transacionais continuam nos módulos operacionais, que continuam sendo a única
+autoridade sobre elas. A Consulta também não recalcula dinheiro: total
+faturado nasce linha a linha no módulo de Faturamento e não é somado aqui em
+paralelo.

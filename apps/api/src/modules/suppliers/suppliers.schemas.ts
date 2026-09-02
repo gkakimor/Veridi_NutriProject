@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { optionalCnpjSchema, optionalNullableText } from "../../lib/cnpj-schema.js";
+import { optionalBrPhoneSchema, optionalEmailSchema } from "../../lib/contact-schema.js";
 
 export const createSupplierSchema = z.object({
   legalName: z.string().trim().min(1, "Razão social é obrigatória").max(200),
   tradeName: optionalNullableText(200),
   cnpj: optionalCnpjSchema,
-  email: optionalNullableText(200),
-  phone: optionalNullableText(30),
+  email: optionalEmailSchema,
+  phone: optionalBrPhoneSchema,
   notes: optionalNullableText(1000),
 });
 
@@ -19,8 +20,8 @@ export const updateSupplierSchema = z.object({
     .optional(),
   tradeName: optionalNullableText(200),
   cnpj: optionalCnpjSchema,
-  email: optionalNullableText(200),
-  phone: optionalNullableText(30),
+  email: optionalEmailSchema,
+  phone: optionalBrPhoneSchema,
   notes: optionalNullableText(1000),
 });
 

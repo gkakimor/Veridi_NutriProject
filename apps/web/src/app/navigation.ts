@@ -84,6 +84,13 @@ export const navigation: NavGroup[] = [
     title: "Gestão",
     items: [
       { label: "Relatórios", path: "/relatorios", implemented: true },
+      /*
+       * Consulta do Cliente: acompanhar um cliente através dos módulos sem
+       * precisar saber em qual deles procurar. Mora em Gestão porque é
+       * consulta, como os Relatórios — a operação diária continua sendo
+       * feita nos módulos de Comercial, Produção, Compras e Estoque.
+       */
+      { label: "Consulta de Cliente", path: "/consultas/clientes", implemented: true },
       {
         label: "Recursos Industriais",
         path: "/gestao/recursos-industriais",

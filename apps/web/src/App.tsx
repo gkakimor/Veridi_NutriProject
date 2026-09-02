@@ -11,6 +11,7 @@ import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ItemsPage } from "./pages/items/ItemsPage";
 import { SuppliersPage } from "./pages/suppliers/SuppliersPage";
 import { CustomersPage } from "./pages/customers/CustomersPage";
+import { consultationRoutes } from "./pages/customer-consultation/routes";
 import { ProductsPage } from "./pages/products/ProductsPage";
 import { PurchaseOrdersPage } from "./pages/purchase-orders/PurchaseOrdersPage";
 import { PurchaseOrderPage } from "./pages/purchase-orders/PurchaseOrderPage";
@@ -178,6 +179,15 @@ function AuthenticatedApp() {
           <Route path="/cadastros/fornecedores" element={<SuppliersPage />} />
           <Route path="/cadastros/clientes" element={<CustomersPage />} />
           <Route path="/cadastros/produtos" element={<ProductsPage />} />
+
+          {/*
+            CONSULTA DO CLIENTE — leitura sob o contexto do Cliente.
+
+            A árvore vive em `pages/customer-consultation/routes` porque o
+            teste de navegação monta exatamente ela. As rotas operacionais
+            acima continuam exatamente como estavam.
+          */}
+          {consultationRoutes}
           <Route path="/produtos/:productId/custos" element={<IndustrialCostPage />} />
           <Route path="/produtos/:productId/cmv" element={<ProductCmvPage />} />
           <Route path="/calculos-custo/:id" element={<CostCalculationPage />} />

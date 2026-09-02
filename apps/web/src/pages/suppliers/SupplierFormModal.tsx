@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { SupplierDTO } from "@veridi/shared";
+import { formatBrPhone, maskPhoneInput } from "@veridi/shared";
 import { RelatedLinks } from "../../components/RelatedLinks";
 import { createSupplier, updateSupplier } from "../../lib/suppliers-api";
 import { ApiValidationError } from "../../lib/api-errors";
@@ -33,7 +34,7 @@ function initialState(supplier: SupplierDTO | null): FormState {
       tradeName: supplier.tradeName ?? "",
       cnpj: supplier.cnpj ?? "",
       email: supplier.email ?? "",
-      phone: supplier.phone ?? "",
+      phone: formatBrPhone(supplier.phone) ?? "",
       notes: supplier.notes ?? "",
     };
   }
@@ -216,11 +217,16 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
               <input
                 id="supplier-email"
                 type="email"
+                placeholder="contato@empresa.com.br"
                 value={form.email}
+                aria-invalid={fieldErrors["email"] ? true : undefined}
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, email: event.target.value }))
                 }
               />
+              {/* Sem isto, a recusa da API viraria "Corrija os campos
+                  destacados" sem nenhum campo destacado. */}
+              {fieldErrors["email"] && <p className="field__error">{fieldErrors["email"]}</p>}
             </div>
 
             <div className="field">
@@ -228,11 +234,15 @@ export function SupplierFormModal({ mode, supplier, onClose, onSaved }: Supplier
               <input
                 id="supplier-phone"
                 type="text"
+                inputMode="tel"
+                placeholder="(11) 99999-8888"
                 value={form.phone}
+                aria-invalid={fieldErrors["phone"] ? true : undefined}
                 onChange={(event) =>
-                  setForm((prev) => ({ ...prev, phone: event.target.value }))
+                  setForm((prev) => ({ ...prev, phone: maskPhoneInput(event.target.value) }))
                 }
               />
+              {fieldErrors["phone"] && <p className="field__error">{fieldErrors["phone"]}</p>}
             </div>
           </div>
         </FormSection>

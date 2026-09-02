@@ -61,6 +61,21 @@ uma a uma. Reproduzido também em `96e2c07`, antes das mudanças de Cliente:
 ser confiável. Se incomodar, reduzir `maxWorkers` ou serializar os pacotes no
 script `test` da raiz.
 
+### 4. Aba Produção na Consulta do Cliente — candidato para próxima FAST
+
+A Consulta do Cliente entregou Resumo, Projetos, Pedidos, Materiais e
+Faturamentos. Produção ficou de fora: `GET /production-orders` não aceita
+`customerId` (a coluna existe e é snapshot, o filtro é que não) e
+`toProductionOrderDTO` faz três consultas extras por OP — vinte linhas
+custariam cerca de sessenta consultas. Uma aba honesta exige read model
+próprio, não um filtro colado no endpoint atual.
+
+OPs geradas por um Pedido já aparecem no detalhe consultivo daquele Pedido,
+então a informação não está inacessível — falta o corte por Cliente.
+
+**Decisão / próxima ação:** promover como rodada curta própria, se o
+acompanhamento por Cliente pedir Produção depois da validação com a Veridi.
+
 ### Decisões de produto em aberto — não bloqueantes
 
 Herdadas de `PROJECT_STATE.md`, trazidas para cá para terem fonte única. Nenhuma
