@@ -61,29 +61,24 @@ Material preparado:
 Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive em
 [PRODUCT_RULES.md](PRODUCT_RULES.md); aqui fica só o que mudou de estado.
 
-- **Cadastro de Cliente** (`cab5bf3`, em produção) — e-mail, CNPJ (numérico e
-  alfanumérico da IN RFB 2.229/2024) e telefone validados na tela e na API,
-  com validador compartilhado que Fornecedor herdou; endereço por CEP via
-  ViaCEP, falha nunca bloqueando; autoria do cadastro. §41.
+- **Cadastro de Cliente** (`cab5bf3`) — e-mail, CNPJ (numérico e alfanumérico
+  da IN RFB 2.229/2024) e telefone validados na tela e na API, com validador
+  compartilhado que Fornecedor herdou; endereço por CEP; autoria. §41.
 - **Consulta do Cliente** (`7cd61f2`) — leitura em `/consultas/clientes/:id`,
   reusando os endpoints operacionais já filtrados; o novo é o resumo e o
-  escopo, que recusa com 404 entidade de outro Cliente. Produção ficou de fora
-  por exigir read model próprio. §42.
+  escopo, que recusa com 404 entidade de outro Cliente. §42.
 - **Produto + item de produto acabado** — o Produto cria o seu item na mesma
-  transação, e "Produto acabado" saiu da criação manual em Itens. Cliente
-  passou a ser obrigatório na criação. §43.
-- **Prontidão para o cliente + navegação** (`cdcb235`) — Produtos e Estoque na
-  Consulta, breadcrumb canônico nas telas principais. §44.
+  transação; "Produto acabado" saiu da criação manual em Itens, e Cliente
+  virou obrigatório. §43.
+- **Prontidão para o cliente** (`cdcb235`) — Produtos e Estoque na Consulta,
+  breadcrumb canônico. §44.
 - **Ajuda contextual em todas as telas** (`344d00e`) — "Como funciona" abre
-  modal, e a ordem é conceito › glossário da tela › fluxos numerados ›
-  ressalvas. Product Ownership reprovou a primeira versão por explicar onde a
-  tela ficava numa cadeia em vez do que ela é. 35 tópicos, 98 dicas de campo,
-  37 telas. §45.
-- **Tabelas** (`f6f93c0`) — a medição derrubou a suspeita: não havia estouro
-  global em nenhuma das 24 telas em três viewports. Havia rolagem local em 18
-  listagens, por `nowrap` sob `table-layout: auto` sem teto. Três classes de
-  coluna e um teto para a coluna de ações; Lotes caiu de 1356px para 537px,
-  oito telas zeraram.
+  modal: conceito › glossário da tela › fluxos numerados › ressalvas. 35
+  tópicos, 98 dicas de campo, 37 telas. §45.
+- **Tabelas** (`f6f93c0`) — não havia estouro global em nenhuma das 24 telas;
+  havia rolagem local em 18 listagens, por `nowrap` sob `table-layout: auto`
+  sem teto. Três classes de coluna e teto para a coluna de ações; Lotes caiu
+  de 1356px para 537px, oito telas zeraram.
 
 **Telas oficiais de cadastro** (`feat/canonical-create-return`). Cliente,
 Produto, Item de estoque e Fornecedor ganharam página própria de criação —
@@ -105,6 +100,15 @@ migration. §46.
 `/gestao/recursos-industriais/novo`, campo da estrutura de custos navegando, e
 o modal removido — recurso não tem edição em modal, então ele só servia à
 criação. Restam **dois** LOW, nenhum bloqueante.
+
+**Produção na Consulta do Cliente** (`feat/customer-consultation-production`).
+Read model próprio, o segundo depois de Produto Acabado: o DTO operacional
+custa **548 consultas por página de 25** montando a necessidade de material —
+a conta de liberar a ordem, não a pergunta da Consulta. A forma nova custa
+**quatro por página**, com teste que conta consultas pelo log do driver.
+Filtro por `ProductionOrder.customerId`; os outros caminhos foram medidos e
+não recuperam uma linha. 78 das 108 ordens locais não têm cliente, então a aba
+fica vazia para a maioria estando correta, e o estado vazio diz isso. §47.
 
 ## Validação em produção
 

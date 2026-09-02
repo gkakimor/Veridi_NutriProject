@@ -4,6 +4,9 @@ import type {
   CustomerFinishedGoodsResponse,
   CustomerFinishedGoodsRowDTO,
   CustomerOrderDTO,
+  CustomerProductionOrderRowDTO,
+  CustomerProductionOrdersResponse,
+  LotStatus,
   ProductDTO,
   ProjectDTO,
 } from "@veridi/shared";
@@ -22,6 +25,7 @@ import { getCustomerById } from "../customers/customers.service.js";
 import { CustomerNotFoundError } from "../customers/customers.errors.js";
 import { getProductById } from "../products/products.service.js";
 import { getProjectById } from "../projects/projects.service.js";
+import { OPEN_PRODUCTION_ORDER_STATUSES } from "../dashboard/dashboard.queries.js";
 import { NotInThisCustomerError } from "./customer-consultation.errors.js";
 
 /**
@@ -66,7 +70,16 @@ export async function getConsultationSummary(
    * medir o tamanho de cada lista — traria o histórico inteiro do cliente
    * para contar cardinalidade.
    */
-  const [products, projects, orders, openOrders, billings, materialLots] = await Promise.all([
+  const [
+    products,
+    projects,
+    orders,
+    openOrders,
+    billings,
+    materialLots,
+    productionOrders,
+    openProductionOrders,
+  ] = await Promise.all([
     prisma.product.count({ where: { customerId } }),
     prisma.project.count({ where: { customerId } }),
     prisma.customerOrder.count({ where: { customerId } }),
@@ -75,11 +88,24 @@ export async function getConsultationSummary(
     }),
     prisma.billing.count({ where: { customerOrder: { customerId } } }),
     prisma.lot.count({ where: { ownerType: "CUSTOMER", ownerCustomerId: customerId } }),
+    prisma.productionOrder.count({ where: { customerId } }),
+    prisma.productionOrder.count({
+      where: { customerId, status: { in: [...OPEN_PRODUCTION_ORDER_STATUSES] } },
+    }),
   ]);
 
   return {
     customer,
-    counts: { products, projects, orders, openOrders, billings, materialLots },
+    counts: {
+      products,
+      projects,
+      orders,
+      openOrders,
+      billings,
+      materialLots,
+      productionOrders,
+      openProductionOrders,
+    },
   };
 }
 
@@ -219,4 +245,231 @@ export async function getCustomerFinishedGoods(
   });
 
   return { rows: slicePage(rows, pagination), ...pageMeta(pagination, rows.length) };
+}
+
+/**
+ * ORDENS DE PRODUÇÃO de um Cliente — a única lista com read model próprio,
+ * junto com Produto Acabado.
+ *
+ * As outras abas reusam o endpoint operacional, que já filtra por
+ * `customerId` e já pagina. Produção não cabe nesse padrão por duas razões
+ * medidas, não estimadas:
+ *
+ * 1. `GET /production-orders` não aceita `customerId` — filtra por busca,
+ *    situação e produto, e mais nada;
+ * 2. o DTO operacional dispara **548 consultas para uma página de 25**. Ele
+ *    monta necessidade de material, reserva, consumo e sugestão de lote —
+ *    a conta que decide se dá para LIBERAR a ordem, feita por requirement,
+ *    em `await` sequencial. A pergunta desta aba é outra, e responder a ela
+ *    com aquela conta tornaria a aba cara demais para existir.
+ *
+ * A forma abaixo custa **quatro consultas por página**, independente do
+ * tamanho dela: as ordens, a soma dos apontamentos, os lotes e o total.
+ *
+ * ## O filtro é `customerId` da própria ordem
+ *
+ * É FK real e indexada, resolvida na escrita por `resolveOrderCustomerId`,
+ * que recusa gravar quando o cliente do produto discorda do cliente do
+ * pedido. Os outros caminhos foram medidos e descartados: via Produto a
+ * cobertura é idêntica e não recupera uma linha sequer; via Pedido alcança
+ * um oitavo das ordens, deixando de fora toda a produção sem pedido.
+ *
+ * Ordem sem cliente não aparece aqui, e isso é a maioria delas hoje. É o
+ * comportamento correto — mostrar sob o cabeçalho de um Cliente uma ordem
+ * que não é dele seria pior que não mostrar nada.
+ */
+export async function getCustomerProductionOrders(
+  customerId: string,
+  pagination: Pagination,
+): Promise<CustomerProductionOrdersResponse> {
+  await requireCustomer(customerId);
+  const prisma = getPrisma();
+
+  const where = { customerId };
+  const skip = pagination === "ALL" ? undefined : (pagination.page - 1) * pagination.pageSize;
+  const take = pagination === "ALL" ? undefined : pagination.pageSize;
+
+  const [ordens, total] = await Promise.all([
+    prisma.productionOrder.findMany({
+      where,
+      // Um nível, e só o que a linha mostra. `include` do módulo operacional
+      // traz dez relações, entre elas reserva e consumo com item e lote.
+      include: {
+        product: { select: { id: true, code: true, name: true } },
+        customerOrder: { select: { id: true, code: true } },
+      },
+      // Mais recente primeiro: quem abre a aba quer saber o que está
+      // acontecendo agora, não o que aconteceu em março.
+      orderBy: { createdAt: "desc" },
+      ...(skip === undefined ? {} : { skip }),
+      ...(take === undefined ? {} : { take }),
+    }),
+    prisma.productionOrder.count({ where }),
+  ]);
+
+  const ids = ordens.map((ordem) => ordem.id);
+
+  /*
+   * Produzido é SOMA de apontamentos, nunca uma segunda coluna mantida à
+   * mão — o schema diz isso explicitamente. Um `groupBy` resolve a página
+   * inteira; somar por ordem daria uma consulta por linha, que é
+   * exatamente o padrão que esta aba existe para não repetir.
+   */
+  const [apontamentos, lotes] = await Promise.all([
+    ids.length > 0
+      ? prisma.productionOutput.groupBy({
+          by: ["productionOrderId"],
+          where: { productionOrderId: { in: ids } },
+          _sum: { quantity: true },
+        })
+      : [],
+    ids.length > 0
+      ? prisma.lot.findMany({
+          where: { productionOrderId: { in: ids } },
+          select: {
+            id: true,
+            code: true,
+            businessLotNumber: true,
+            status: true,
+            productionOrderId: true,
+          },
+          orderBy: { code: "asc" },
+        })
+      : [],
+  ]);
+
+  const produzidoPorOrdem = new Map(
+    apontamentos.map((linha) => [linha.productionOrderId, linha._sum.quantity]),
+  );
+
+  const rows: CustomerProductionOrderRowDTO[] = ordens.map((ordem) =>
+    montarLinha(ordem, produzidoPorOrdem.get(ordem.id) ?? null, lotes),
+  );
+
+  return { rows, ...pageMeta(pagination, total) };
+}
+
+/**
+ * A ordem como a consulta a lê: colunas próprias mais um nível de relação.
+ * Deriva do `include` para não haver duas descrições da mesma forma.
+ */
+type OrdemComRelacoes = Prisma.ProductionOrderGetPayload<{
+  include: {
+    product: { select: { id: true; code: true; name: true } };
+    customerOrder: { select: { id: true; code: true } };
+  };
+}>;
+
+type LoteDaOrdem = {
+  id: string;
+  code: string;
+  businessLotNumber: string | null;
+  status: LotStatus;
+  productionOrderId: string | null;
+};
+
+/** Uma linha do DTO consultivo. Fonte única para a lista e para o detalhe. */
+function montarLinha(
+  ordem: OrdemComRelacoes,
+  produzidoBruto: Prisma.Decimal | null,
+  lotes: LoteDaOrdem[],
+): CustomerProductionOrderRowDTO {
+  const zero = new Prisma.Decimal(0);
+  const produzido = produzidoBruto ?? zero;
+  // Saldo nunca negativo: apontar mais que o planejado é variação, não
+  // dívida — e um saldo negativo na tela leria como "falta produzir".
+  const saldo = Prisma.Decimal.max(ordem.plannedQuantity.minus(produzido), zero);
+
+  return {
+      id: ordem.id,
+      code: ordem.code,
+      status: ordem.status,
+      /*
+       * Snapshot primeiro, registro vivo como retorno. A ordem congela
+       * código e nome do produto ao ser planejada; rascunho ainda não
+       * congelou, e mostrar a linha sem produto seria pior que mostrar o
+       * nome de agora.
+       */
+      productId: ordem.productId,
+      productCode: ordem.productCode ?? ordem.product?.code ?? null,
+      productName: ordem.productName ?? ordem.product?.name ?? null,
+      finishedItemCode: ordem.finishedItemCode,
+      customerOrderId: ordem.customerOrderId,
+      customerOrderCode: ordem.customerOrder?.code ?? null,
+      plannedQuantity: ordem.plannedQuantity.toString(),
+      outputUnitCode: ordem.outputUnitCode,
+      producedQuantity: produzido.toString(),
+      remainingQuantity: saldo.toString(),
+      createdAt: ordem.createdAt.toISOString(),
+      plannedAt: ordem.plannedAt?.toISOString() ?? null,
+      releasedAt: ordem.releasedAt?.toISOString() ?? null,
+      startedAt: ordem.startedAt?.toISOString() ?? null,
+      completedAt: ordem.completedAt?.toISOString() ?? null,
+      finishedLots: lotes
+        .filter((lote) => lote.productionOrderId === ordem.id)
+        .map((lote) => ({
+          id: lote.id,
+          code: lote.code,
+          businessLotNumber: lote.businessLotNumber,
+          // `status` é a situação OPERACIONAL do lote — o material pode ser
+          // usado? Não é `coaStatus`, que é o documento: aprovar o laudo
+          // não libera o lote sozinho.
+          status: lote.status,
+        })),
+  };
+}
+
+/**
+ * Uma ordem de produção sob o cabeçalho de um Cliente.
+ *
+ * Mesma conferência dos outros detalhes consultivos, e mesmo 404 para
+ * inexistente e para "existe, mas é de outro Cliente" — responder coisas
+ * diferentes vazaria justamente o que o escopo protege.
+ */
+export async function getScopedProductionOrder(
+  customerId: string,
+  productionOrderId: string,
+): Promise<CustomerProductionOrderRowDTO> {
+  await requireCustomer(customerId);
+
+  const prisma = getPrisma();
+  /*
+   * Busca por id E cliente na mesma condição. Buscar por id e conferir o
+   * dono depois daria o mesmo resultado, mas passaria pela memória um
+   * registro de outro Cliente — e é justamente isso que o escopo existe
+   * para não fazer.
+   */
+  const ordem = await prisma.productionOrder.findFirst({
+    where: { id: productionOrderId, customerId },
+    include: {
+      product: { select: { id: true, code: true, name: true } },
+      customerOrder: { select: { id: true, code: true } },
+    },
+  });
+  if (!ordem) {
+    throw new NotInThisCustomerError("Ordem de produção", productionOrderId, customerId);
+  }
+
+  // Mesma montagem da lista: uma forma só do DTO, para as duas telas não
+  // divergirem no dia em que um campo mudar.
+  const [linhas, lotes] = await Promise.all([
+    prisma.productionOutput.groupBy({
+      by: ["productionOrderId"],
+      where: { productionOrderId: ordem.id },
+      _sum: { quantity: true },
+    }),
+    prisma.lot.findMany({
+      where: { productionOrderId: ordem.id },
+      select: {
+        id: true,
+        code: true,
+        businessLotNumber: true,
+        status: true,
+        productionOrderId: true,
+      },
+      orderBy: { code: "asc" },
+    }),
+  ]);
+
+  return montarLinha(ordem, linhas[0]?._sum.quantity ?? null, lotes);
 }

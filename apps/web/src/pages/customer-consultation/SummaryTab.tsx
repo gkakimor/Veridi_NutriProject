@@ -20,6 +20,14 @@ export function SummaryTab() {
     { label: "Projetos", value: counts.projects, segment: "projetos" },
     { label: "Pedidos", value: counts.orders, segment: "pedidos" },
     { label: "Pedidos em aberto", value: counts.openOrders, segment: "pedidos" },
+    /*
+     * "Em aberto" é o recorte que o domínio já tem
+     * (`OPEN_PRODUCTION_ORDER_STATUSES`), o mesmo do painel e dos
+     * relatórios — não um segundo agrupamento inventado aqui, que
+     * divergiria no dia em que um status novo aparecesse.
+     */
+    { label: "Produção", value: counts.productionOrders, segment: "producao" },
+    { label: "Produção em aberto", value: counts.openProductionOrders, segment: "producao" },
     { label: "Materiais do cliente", value: counts.materialLots, segment: "materiais" },
     { label: "Faturamentos", value: counts.billings, segment: "faturamentos" },
   ];

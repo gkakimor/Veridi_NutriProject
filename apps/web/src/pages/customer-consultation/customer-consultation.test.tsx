@@ -8,6 +8,7 @@ import type {
   CustomerDTO,
   CustomerMaterialRowDTO,
   CustomerOrderDTO,
+  CustomerProductionOrderRowDTO,
   ProductDTO,
   ProjectDTO,
 } from "@veridi/shared";
@@ -32,6 +33,8 @@ vi.mock("../../lib/customer-consultation-api", () => ({
   getConsultationBilling: vi.fn(),
   getConsultationProduct: vi.fn(),
   listConsultationFinishedGoods: vi.fn(),
+  listConsultationProductionOrders: vi.fn(),
+  getConsultationProductionOrder: vi.fn(),
 }));
 vi.mock("../../lib/products-api", () => ({ listProducts: vi.fn() }));
 vi.mock("../../lib/customers-api", () => ({ listCustomers: vi.fn() }));
@@ -44,9 +47,11 @@ import {
   getConsultationBilling,
   getConsultationOrder,
   getConsultationProduct,
+  getConsultationProductionOrder,
   getConsultationProject,
   getConsultationSummary,
   listConsultationFinishedGoods,
+  listConsultationProductionOrders,
 } from "../../lib/customer-consultation-api";
 import { listProducts } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
@@ -85,7 +90,16 @@ const customer: CustomerDTO = {
 
 const summary: CustomerConsultationSummaryDTO = {
   customer,
-  counts: { products: 3, projects: 2, orders: 1, openOrders: 1, billings: 1, materialLots: 1 },
+  counts: {
+    products: 3,
+    projects: 2,
+    orders: 1,
+    openOrders: 1,
+    billings: 1,
+    materialLots: 1,
+    productionOrders: 4,
+    openProductionOrders: 1,
+  },
 };
 
 /*
@@ -220,6 +234,41 @@ const ACABADO = {
   awaitingQualityLots: 1,
 };
 
+/*
+ * Ordem em produção, com pedido de origem, produto e um lote já gerado —
+ * o caso que exercita todas as colunas e todos os blocos do detalhe. Aqui
+ * o DTO é declarado por inteiro (`satisfies`), não recortado: ele é novo,
+ * e é justamente o contrato que estes testes precisam travar.
+ */
+const OP = {
+  id: "op-1",
+  code: "OP-000042",
+  status: "IN_PRODUCTION",
+  productId: "prod-1",
+  productCode: "PROD-000007",
+  productName: "Coenzima Q10 60 cápsulas",
+  finishedItemCode: "PA-000008",
+  customerOrderId: "ped-1",
+  customerOrderCode: "PED-000001",
+  plannedQuantity: "1000",
+  outputUnitCode: "un",
+  producedQuantity: "600",
+  remainingQuantity: "400",
+  createdAt: "2026-07-15T13:05:00.000Z",
+  plannedAt: "2026-07-16T09:00:00.000Z",
+  releasedAt: "2026-07-17T08:30:00.000Z",
+  startedAt: "2026-07-18T07:15:00.000Z",
+  completedAt: null,
+  finishedLots: [
+    {
+      id: "lot-op-1",
+      code: "LT-000123",
+      businessLotNumber: "L2607A",
+      status: "AWAITING_RELEASE",
+    },
+  ],
+} satisfies CustomerProductionOrderRowDTO;
+
 const material = {
   lotId: "lot-a",
   lotCode: "LT-CLIENTE-A",
@@ -313,6 +362,13 @@ beforeEach(() => {
     pageSize: 20,
     total: 1,
   });
+  vi.mocked(listConsultationProductionOrders).mockResolvedValue({
+    rows: [OP],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+  });
+  vi.mocked(getConsultationProductionOrder).mockResolvedValue(OP);
   vi.mocked(listCustomerMaterials).mockResolvedValue({
     rows: [material],
     page: 1,
@@ -356,7 +412,15 @@ describe("Consulta do Cliente — shell", () => {
     expect(within(head).getByText("CNPJ 11.222.333/0001-81")).toBeInTheDocument();
 
     const tabs = screen.getByRole("navigation", { name: "Seções da consulta" });
-    for (const label of ["Resumo", "Produtos", "Projetos", "Pedidos", "Estoque", "Faturamentos"]) {
+    for (const label of [
+      "Resumo",
+      "Produtos",
+      "Projetos",
+      "Pedidos",
+      "Produção",
+      "Estoque",
+      "Faturamentos",
+    ]) {
       expect(within(tabs).getByRole("link", { name: label })).toBeInTheDocument();
     }
     // Estado ativo identificável por quem não enxerga a cor.
@@ -611,5 +675,164 @@ describe("Consulta do Cliente — estoque", () => {
   it("o endereço antigo de materiais continua funcionando", async () => {
     renderAt(`/consultas/clientes/${CUSTOMER_ID}/materiais`);
     expect(await screen.findByText("LT-CLIENTE-A")).toBeInTheDocument();
+  });
+});
+
+describe("Consulta do Cliente — produção", () => {
+  /*
+   * Posição, não presença: Produção responde "o que está sendo feito" e só
+   * faz sentido depois do Pedido que a origina e antes do Estoque que ela
+   * abastece. Um teste que só procurasse o link deixaria a aba escorregar
+   * para o fim da fila sem ninguém notar.
+   */
+  it("a aba fica entre Pedidos e Estoque", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/resumo`);
+
+    const tabs = await screen.findByRole("navigation", { name: "Seções da consulta" });
+    expect(within(tabs).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Resumo",
+      "Produtos",
+      "Projetos",
+      "Pedidos",
+      "Produção",
+      "Estoque",
+      "Faturamentos",
+    ]);
+  });
+
+  it("o resumo conta as ordens e as em aberto, e leva à aba", async () => {
+    const user = userEvent.setup();
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/resumo`);
+
+    expect(await screen.findByRole("link", { name: "Produção em aberto: 1" })).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Produção: 4" }));
+
+    expect(await screen.findByText("OP-000042")).toBeInTheDocument();
+    await expectCustomerHeader();
+  });
+
+  it("a lista mostra as colunas da ordem, no escopo do cliente", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/producao`);
+
+    expect(await screen.findByText("OP-000042")).toBeInTheDocument();
+
+    expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["OP", "Produto", "Pedido", "Planejado", "Produzido", "Situação", "Criada em"]);
+
+    expect(screen.getByText("1000 un")).toBeInTheDocument();
+    expect(screen.getByText("600 un")).toBeInTheDocument();
+    // Rótulo do domínio, nunca o código cru do enum.
+    expect(screen.getByText("Em produção")).toBeInTheDocument();
+
+    // O recorte é do servidor: a tela nunca pede "todas as ordens".
+    await waitFor(() => {
+      expect(vi.mocked(listConsultationProductionOrders)).toHaveBeenCalledWith(
+        CUSTOMER_ID,
+        expect.objectContaining({ page: 1 }),
+      );
+    });
+  });
+
+  it("produto e pedido da lista mantêm o cliente na URL", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/producao`);
+
+    expect(await screen.findByRole("link", { name: /PROD-000007/ })).toHaveAttribute(
+      "href",
+      `/consultas/clientes/${CUSTOMER_ID}/produtos/prod-1`,
+    );
+    expect(screen.getByRole("link", { name: "PED-000001" })).toHaveAttribute(
+      "href",
+      `/consultas/clientes/${CUSTOMER_ID}/pedidos/ped-1`,
+    );
+  });
+
+  it("o detalhe mostra os fatos e não oferece nenhuma ação operacional", async () => {
+    const user = userEvent.setup();
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/producao`);
+
+    await user.click(await screen.findByText("OP-000042"));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "OP-000042" })).toBeInTheDocument();
+    await expectCustomerHeader();
+
+    // Identificação e quantidades — derivadas do domínio, não recalculadas aqui.
+    expect(screen.getByText("PA-000008")).toBeInTheDocument();
+    expect(screen.getByText("1000 un")).toBeInTheDocument();
+    expect(screen.getByText("600 un")).toBeInTheDocument();
+    expect(screen.getByText("400 un")).toBeInTheDocument();
+
+    // Execução: só os marcos que aconteceram. A ordem não concluiu.
+    expect(screen.getByText("Liberada em")).toBeInTheDocument();
+    expect(screen.getByText("Iniciada em")).toBeInTheDocument();
+    expect(screen.queryByText("Concluída em")).not.toBeInTheDocument();
+
+    // Lote de produto acabado com a situação que a Qualidade determina.
+    expect(screen.getByText("LT-000123")).toBeInTheDocument();
+    expect(screen.getByText("L2607A")).toBeInTheDocument();
+    expect(screen.getByText("Aguardando liberação")).toBeInTheDocument();
+
+    // Links contextuais continuam dentro da consulta deste cliente.
+    expect(screen.getByRole("link", { name: /PROD-000007/ })).toHaveAttribute(
+      "href",
+      `/consultas/clientes/${CUSTOMER_ID}/produtos/prod-1`,
+    );
+    expect(screen.getByRole("link", { name: "PED-000001" })).toHaveAttribute(
+      "href",
+      `/consultas/clientes/${CUSTOMER_ID}/pedidos/ped-1`,
+    );
+
+    /*
+     * A tela é consultiva: não libera, não aponta, não consome, não edita.
+     * A asserção é sobre a AUSÊNCIA de qualquer botão — o único da árvore é
+     * o do próprio teste —, e não sobre uma lista de nomes proibidos, que
+     * envelheceria no dia em que uma ação nova fosse acrescentada.
+     */
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "voltar-navegador",
+    ]);
+  });
+
+  it("a saída explícita leva à OP operacional", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/producao/op-1`);
+
+    expect(await screen.findByRole("link", { name: /Abrir OP completa/ })).toHaveAttribute(
+      "href",
+      "/producao/ordens/op-1",
+    );
+  });
+
+  /*
+   * O caso COMUM, não a exceção: 78 das 108 ordens do banco não têm cliente
+   * (todas de origem manual), então a maioria dos clientes abre esta aba e
+   * não vê nada — estando certa. O vazio precisa dizer isso, ou passa por
+   * defeito e alguém vai "consertar" o filtro.
+   */
+  it("aba vazia explica o recorte em vez de parecer defeito", async () => {
+    vi.mocked(listConsultationProductionOrders).mockResolvedValue({
+      rows: [],
+      page: 1,
+      pageSize: 20,
+      total: 0,
+    });
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/producao`);
+
+    expect(
+      await screen.findByText("Nenhuma ordem de produção encontrada para este cliente."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/produz\s+para o próprio estoque/)).toBeInTheDocument();
+    expect(screen.queryByText(/Falha ao carregar/)).not.toBeInTheDocument();
+  });
+
+  it("ordem de outro cliente não aparece sob este cabeçalho", async () => {
+    vi.mocked(getConsultationProductionOrder).mockRejectedValue(
+      new NotFoundApiError("Registro não encontrado."),
+    );
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/producao/op-de-outro-cliente`);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Ordem de produção não encontrada neste cliente",
+      }),
+    ).toBeInTheDocument();
+    await expectCustomerHeader();
   });
 });

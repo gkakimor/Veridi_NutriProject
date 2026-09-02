@@ -91,6 +91,7 @@ const TABS: { label: string; segment: string }[] = [
   { label: "Produtos", segment: "produtos" },
   { label: "Projetos", segment: "projetos" },
   { label: "Pedidos", segment: "pedidos" },
+  { label: "Produção", segment: "producao" },
   { label: "Estoque", segment: "estoque" },
   { label: "Faturamentos", segment: "faturamentos" },
 ];

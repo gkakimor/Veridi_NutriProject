@@ -28,13 +28,23 @@ export function ConsultationLoading({ listLabel, listTo }: { listLabel: string; 
  */
 export function ConsultationNotFound({
   noun,
+  feminine = false,
   listLabel,
   listTo,
 }: {
   noun: string;
+  /**
+   * Concordância do particípio: "Ordem de produção não encontradA".
+   *
+   * O texto é montado a partir do substantivo, então sem isto a tela de uma
+   * entidade feminina erra o português na única frase que a pessoa lê.
+   */
+  feminine?: boolean;
   listLabel: string;
   listTo: string;
 }) {
+  const notFound = feminine ? "não encontrada" : "não encontrado";
+
   return (
     <>
       <ConsultationTrail
@@ -42,7 +52,9 @@ export function ConsultationNotFound({
       />
       <div className="page__header">
         <div>
-          <h1 className="page__title">{noun} não encontrado neste cliente</h1>
+          <h1 className="page__title">
+            {noun} {notFound} neste cliente
+          </h1>
           <p className="page__subtitle">
             O registro não existe ou pertence a outro cliente.
           </p>

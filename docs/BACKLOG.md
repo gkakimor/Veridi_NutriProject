@@ -13,10 +13,13 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 |---|---|
 | CRITICAL | 0 |
 | HIGH | 0 |
-| MEDIUM | 0 |
-| LOW | 2 |
+| MEDIUM | 2 |
+| LOW | 3 |
 
-Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
+Dois MEDIUM abertos, os dois descobertos ao capturar as telas para o guia
+passo a passo: catálogo truncado em silêncio (12) e ativação de formulação que
+descarta o rascunho (13). Nenhum impede operar, mas os dois produzem dado
+errado sem avisar. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
 correções em [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md).
 
@@ -96,20 +99,38 @@ ser confiável. Se voltar a aparecer, anexar o log da execução aqui antes de
 mexer em `maxWorkers` ou em serializar os pacotes — a correção precisa de uma
 reprodução para ser verificável.
 
-### 4. Aba Produção na Consulta do Cliente — candidato para próxima FAST
+### 4. Aba Produção na Consulta do Cliente — resolvido
 
-A Consulta do Cliente entregou Resumo, Projetos, Pedidos, Materiais e
-Faturamentos. Produção ficou de fora: `GET /production-orders` não aceita
-`customerId` (a coluna existe e é snapshot, o filtro é que não) e
-`toProductionOrderDTO` faz três consultas extras por OP — vinte linhas
-custariam cerca de sessenta consultas. Uma aba honesta exige read model
-próprio, não um filtro colado no endpoint atual.
+Produção era a única peça operacional ausente da Consulta. Ficou de fora
+porque `GET /production-orders` não aceita `customerId` e o DTO operacional
+custa caro por linha.
 
-OPs geradas por um Pedido já aparecem no detalhe consultivo daquele Pedido,
-então a informação não está inacessível — falta o corte por Cliente.
+**A estimativa antiga estava otimista.** Medido agora com o log do Prisma:
+`toProductionOrderDTO` gasta **548 consultas para uma página de 25** — não as
+sessenta que este item supunha. Ele monta necessidade de material, reserva,
+consumo e sugestão de lote, por requirement, em `await` sequencial. É a conta
+que decide se dá para LIBERAR a ordem, e não é a pergunta da Consulta.
 
-**Decisão / próxima ação:** promover como rodada curta própria, se o
-acompanhamento por Cliente pedir Produção depois da validação com a Veridi.
+**Feito com read model próprio**, o segundo da Consulta depois de Produto
+Acabado: `GET /customers/:id/consultation/production-orders`, paginado no
+mesmo contrato das outras abas. Custo medido: **quatro consultas por página**,
+independente do tamanho dela — as ordens, um `groupBy` dos apontamentos, os
+lotes e o total. Teste de regressão conta as consultas pelo log do driver, para
+a volta ao DTO pesado não passar como lentidão inexplicada.
+
+**O filtro é `ProductionOrder.customerId`**, e os outros caminhos foram
+descartados por medição, não por preferência: via Produto a cobertura é
+idêntica e não recupera uma linha sequer; via Pedido alcança um oitavo das
+ordens, deixando de fora toda a produção sem pedido.
+
+**Fato do dado que a tela expõe:** 78 das 108 ordens do banco local não têm
+cliente — todas de origem manual. A aba aparece vazia para a maioria dos
+clientes **estando correta**, e o estado vazio diz isso em vez de fingir que
+não há nada. Nenhum dado foi alterado para melhorar o número.
+
+**Decisão / próxima ação:** nenhuma. Se a produção sem cliente precisar
+aparecer para alguém, a pergunta é de negócio — a quem pertence uma ordem
+manual sem pedido — e não de consulta.
 
 ### 5. Smoke autenticado em produção — resolvido
 
@@ -344,6 +365,64 @@ de virar faixa genérica; e salvar pelo acesso direto leva ao detalhe, que é
 onde a tarifa entra — recurso sem tarifa não serve a estrutura nenhuma.
 
 **Decisão / próxima ação:** nenhuma.
+
+### 12. Catálogo truncado em silêncio nas telas de escolher item — MEDIUM
+
+As telas que precisam de uma lista de itens carregam o catálogo inteiro com
+`pageSize` fixo e filtram no navegador. Acima do teto, o item **existe e não
+aparece na busca** — sem aviso, sem indicação de que a lista está cortada. E
+como o campo oferece "+ Novo item de estoque" logo no topo, o caminho natural
+de quem não acha é **cadastrar de novo o que já existe**.
+
+Medido no banco local (2026-09-02):
+
+| Tela | Teto | Existem | Invisíveis |
+|---|---|---|---|
+| `StockCountPage` (contagem física) | 1000 | 2.729 itens ativos | **1.729** |
+| `FormulationTemplateDetailPage` | 200 | 2.729 itens ativos | **2.529** |
+| `FormulationVersionPage` (matéria-prima) | 1000 | 1.211 ativas | **211** |
+| `PurchaseOrderPage` (matéria-prima) | 1000 | 1.211 ativas | **211** |
+
+Clientes (346 ativos), produtos (784 aprovados), fornecedores (300) e recursos
+industriais (132) estão abaixo do teto hoje — o mesmo padrão está lá, só ainda
+não estourou.
+
+**Por que é MEDIUM e não LOW:** não é lentidão nem estética. É dado correto
+que some da tela durante o lançamento, e o desfecho provável é duplicata no
+cadastro de itens — que depois aparece como duas matérias-primas iguais com
+saldos separados.
+
+**Decisão / próxima ação:** a busca precisa ir ao servidor em vez de filtrar
+uma lista pré-carregada, ou a lista precisa dizer que está truncada. O
+`SearchableEntitySelect` já tem o aviso de "+N resultados — refine a busca"
+para o que passa de 50 renderizados; o que falta é o mesmo para o que nunca
+chegou do servidor. Descoberto ao capturar as telas para o guia passo a passo.
+
+### 13. "Ativar versão" da formulação não salva o rascunho — MEDIUM
+
+Na tela da versão de formulação, editar a receita e clicar em **Ativar versão**
+sem antes clicar em **Salvar rascunho** ativa a versão **sem a alteração**, em
+silêncio. `handleActivate` chama a API de ativação direto, sem gravar o estado
+do formulário nem avisar que há edição pendente.
+
+O agravante é a regra: versão ativa é documento histórico e não se edita. Quem
+perceber depois não conserta — cria outra versão.
+
+**Decisão / próxima ação:** ou salvar antes de ativar, ou recusar a ativação
+com edição pendente dizendo o que falta. A segunda é mais honesta: gravar por
+conta própria decide pela pessoa o que ela talvez quisesse descartar.
+Descoberto ao capturar as telas para o guia passo a passo; está documentado no
+guia como aviso, e aviso em manual não é correção.
+
+### 14. Ativar estrutura de custos completa não pede confirmação — LOW
+
+Ativar uma estrutura de custos congela tarifas e torna a versão imutável. O
+diálogo de confirmação só aparece **quando há pendência** — estrutura completa
+ativa no primeiro clique. A formulação e o cálculo confirmam sempre; a
+estrutura, não.
+
+**Decisão / próxima ação:** confirmar sempre, dizendo o que se torna imutável,
+como fazem os outros dois documentos da mesma cadeia.
 
 ### Decisões de produto em aberto — não bloqueantes
 

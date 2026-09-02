@@ -3,6 +3,8 @@ import type {
   CustomerConsultationSummaryDTO,
   CustomerFinishedGoodsResponse,
   CustomerOrderDTO,
+  CustomerProductionOrderRowDTO,
+  CustomerProductionOrdersResponse,
   ProductDTO,
   ProjectDTO,
 } from "@veridi/shared";
@@ -79,4 +81,34 @@ export async function listConsultationFinishedGoods(
   query.set("pageSize", String(params.pageSize ?? 20));
   const response = await apiFetch(`${base(customerId)}/finished-goods?${query.toString()}`);
   return (await parseJsonOrThrow(response)) as CustomerFinishedGoodsResponse;
+}
+
+/**
+ * Ordens de produção do Cliente — paginadas como as demais listas.
+ *
+ * Endpoint próprio da Consulta, e não `GET /production-orders?customerId=`,
+ * porque a linha aqui é deliberadamente menor que a operacional: sem
+ * necessidade de material, sem reserva, sem sugestão de lote. É a diferença
+ * entre uma aba barata e uma que ninguém abriria duas vezes.
+ */
+export async function listConsultationProductionOrders(
+  customerId: string,
+  params: { page?: number; pageSize?: number } = {},
+): Promise<CustomerProductionOrdersResponse> {
+  const query = new URLSearchParams();
+  query.set("page", String(params.page ?? 1));
+  query.set("pageSize", String(params.pageSize ?? 20));
+  const response = await apiFetch(`${base(customerId)}/production-orders?${query.toString()}`);
+  return (await parseJsonOrThrow(response)) as CustomerProductionOrdersResponse;
+}
+
+/** Detalhe consultivo da ordem — a MESMA linha da lista, não um DTO à parte. */
+export async function getConsultationProductionOrder(
+  customerId: string,
+  productionOrderId: string,
+): Promise<CustomerProductionOrderRowDTO> {
+  const response = await apiFetch(
+    `${base(customerId)}/production-orders/${encodeURIComponent(productionOrderId)}`,
+  );
+  return (await parseJsonOrThrow(response)) as CustomerProductionOrderRowDTO;
 }

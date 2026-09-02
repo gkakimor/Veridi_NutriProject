@@ -6,6 +6,7 @@ import {
   customerScopeParamsSchema,
   finishedGoodsQuerySchema,
   productScopeParamsSchema,
+  productionOrderScopeParamsSchema,
   orderScopeParamsSchema,
   projectScopeParamsSchema,
 } from "./customer-consultation.schemas.js";
@@ -14,7 +15,9 @@ import {
   getCustomerFinishedGoods,
   getScopedBilling,
   getScopedCustomerOrder,
+  getCustomerProductionOrders,
   getScopedProduct,
+  getScopedProductionOrder,
   getScopedProject,
 } from "./customer-consultation.service.js";
 
@@ -89,6 +92,36 @@ export const customerConsultationRoutes: FastifyPluginAsync = async (app) => {
       getCustomerFinishedGoods(parsed.data.customerId, query.data),
     );
   });
+
+  /**
+   * Ordens de produção do Cliente.
+   *
+   * Read model próprio, e não `GET /production-orders` filtrado, por duas
+   * razões: aquele endpoint não aceita `customerId`, e o DTO dele dispara
+   * centenas de consultas por página para montar a necessidade de material —
+   * a conta que decide se dá para LIBERAR a ordem, que não é a pergunta
+   * desta aba.
+   */
+  app.get("/customers/:customerId/consultation/production-orders", async (request, reply) => {
+    const parsed = customerScopeParamsSchema.safeParse(request.params);
+    if (!parsed.success) return reply.status(400).send({ error: "validation_error" });
+    const query = finishedGoodsQuerySchema.safeParse(request.query);
+    if (!query.success) return reply.status(400).send({ error: "validation_error" });
+    return sendScoped(reply, () =>
+      getCustomerProductionOrders(parsed.data.customerId, query.data),
+    );
+  });
+
+  app.get(
+    "/customers/:customerId/consultation/production-orders/:productionOrderId",
+    async (request, reply) => {
+      const parsed = productionOrderScopeParamsSchema.safeParse(request.params);
+      if (!parsed.success) return reply.status(400).send({ error: "validation_error" });
+      return sendScoped(reply, () =>
+        getScopedProductionOrder(parsed.data.customerId, parsed.data.productionOrderId),
+      );
+    },
+  );
 
   app.get("/customers/:customerId/consultation/orders/:orderId", async (request, reply) => {
     const parsed = orderScopeParamsSchema.safeParse(request.params);
