@@ -14,7 +14,7 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 5 |
+| LOW | 7 |
 
 Nada operacional aberto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
@@ -118,6 +118,35 @@ uso é decisão de negócio, não de migração.
 quem pertencem os 348 — ou se eles ficam como estão, já que o histórico
 deles é anterior ao sistema. Os 54 itens órfãos são candidatos a inativação,
 não a exclusão.
+
+### 7. O schema Prisma não descreve as ações de delete reais — LOW
+
+Ao limpar o banco de produção, a ordem de remoção derivada do
+`schema.prisma` quebrou: várias relações aparecem como opcionais ali — o que
+sugeriria `SET NULL` —, mas as migrations criaram **`ON DELETE RESTRICT`** no
+banco. A limpeza só passou calculando a ordem por ordenação topológica sobre
+`pg_constraint`, que é a fonte da verdade.
+
+Não afeta operação: o comportamento correto é o do banco, e ele está certo.
+Afeta quem for escrever script de manutenção ou raciocinar sobre cascata
+lendo o schema.
+
+**Decisão / próxima ação:** nenhuma ação obrigatória. Se alguém for mexer em
+relação com deleção, conferir `pg_constraint` antes de confiar no schema.
+
+### 8. Bolha do InfoHint dentro de tabela rolável — LOW
+
+O `InfoHint` posiciona a bolha em `position: absolute`. Nos cabeçalhos da
+tabela de impacto de material do Plano de Atendimento, o ancestral
+`.table-container` tem `overflow-x: auto`, que também recorta o eixo Y — com
+poucas linhas na tabela a bolha pode aparecer cortada.
+
+Não reproduzido: os cinco ⓘ abriram corretamente na validação em 1280, 1366
+e 1600. Fica registrado porque a condição existe no CSS.
+
+**Decisão / próxima ação:** se aparecer, dar folga vertical ao container ou
+tratar `.info-hint__bubble` dentro de tabela. Verificar com tabela de uma
+linha só.
 
 ### Decisões de produto em aberto — não bloqueantes
 
