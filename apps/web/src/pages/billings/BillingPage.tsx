@@ -5,6 +5,8 @@ import { BILLING_STATUS_LABELS } from "@veridi/shared";
 import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../lib/billings-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
@@ -239,6 +241,11 @@ export function BillingPage() {
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
+
+        {/* "Faturamento" carrega a expectativa de Nota Fiscal e de Contas a
+            Receber, e nenhuma das duas acontece aqui. Dizer isso uma vez, no
+            topo, custa menos que desfazer a confusão depois de emitir. */}
+        <ContextHelp topic={helpTopics["faturamento.comoFunciona"]} />
 
         {billing.status === "CANCELLED" && (
           <FormSection title="Cancelamento">
