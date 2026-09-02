@@ -4,13 +4,17 @@ import { NotInThisCustomerError } from "./customer-consultation.errors.js";
 import {
   billingScopeParamsSchema,
   customerScopeParamsSchema,
+  finishedGoodsQuerySchema,
+  productScopeParamsSchema,
   orderScopeParamsSchema,
   projectScopeParamsSchema,
 } from "./customer-consultation.schemas.js";
 import {
   getConsultationSummary,
+  getCustomerFinishedGoods,
   getScopedBilling,
   getScopedCustomerOrder,
+  getScopedProduct,
   getScopedProject,
 } from "./customer-consultation.service.js";
 
@@ -60,6 +64,31 @@ export const customerConsultationRoutes: FastifyPluginAsync = async (app) => {
       );
     },
   );
+
+  app.get(
+    "/customers/:customerId/consultation/products/:productId",
+    async (request, reply) => {
+      const parsed = productScopeParamsSchema.safeParse(request.params);
+      if (!parsed.success) return reply.status(400).send({ error: "validation_error" });
+      return sendScoped(reply, () =>
+        getScopedProduct(parsed.data.customerId, parsed.data.productId),
+      );
+    },
+  );
+
+  /**
+   * Estoque de produto acabado do Cliente. Paginado como as demais listas —
+   * a Consulta nunca carrega o catálogo inteiro de uma vez.
+   */
+  app.get("/customers/:customerId/consultation/finished-goods", async (request, reply) => {
+    const parsed = customerScopeParamsSchema.safeParse(request.params);
+    if (!parsed.success) return reply.status(400).send({ error: "validation_error" });
+    const query = finishedGoodsQuerySchema.safeParse(request.query);
+    if (!query.success) return reply.status(400).send({ error: "validation_error" });
+    return sendScoped(reply, () =>
+      getCustomerFinishedGoods(parsed.data.customerId, query.data),
+    );
+  });
 
   app.get("/customers/:customerId/consultation/orders/:orderId", async (request, reply) => {
     const parsed = orderScopeParamsSchema.safeParse(request.params);
