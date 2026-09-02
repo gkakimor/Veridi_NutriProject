@@ -30,6 +30,8 @@ import { UseCostTemplateDialog } from "../cost-templates/UseCostTemplateDialog";
 import { applyCostTemplateToProduct } from "../../lib/cost-pricing-templates-api";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
 import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
@@ -371,6 +373,11 @@ export function IndustrialCostPage() {
           </div>
         )}
         {error && <p className="form-alert">{error}</p>}
+
+        {/* Materiais, recursos, energia e premissas são preenchidos aqui e só
+            viram número na tela de CMV. Mesmo painel das duas telas: é um
+            processo só, lido de pontos diferentes. */}
+        <ContextHelp topic={helpTopics["cmv.comoFunciona"]} />
 
         {!version && (
           <FormSection title="Estrutura de custos">

@@ -43,6 +43,8 @@ import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
 import { getItem } from "../../lib/items-api";
 import { ApiValidationError, LotMismatchApiError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { formatUnitCost } from "../../components/CostBreakdown";
 import { getProductionOrderCost } from "../../lib/cost-calculation-api";
 import { FlowContext } from "../../components/FlowContext";
@@ -630,6 +632,11 @@ export function ProductionOrderPage() {
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
+
+        {/* O ciclo inteiro atravessa esta tela — reserva, separação, consumo e
+            apontamento são seções diferentes. A explicação de como eles se
+            encadeiam fica no topo, e não repetida em cada uma. */}
+        <ContextHelp topic={helpTopics["ordemProducao.comoFunciona"]} />
 
         {productionOrder && productionOrder.status !== "DRAFT" && productionOrder.status !== "PLANNED" && (
           <FormSection

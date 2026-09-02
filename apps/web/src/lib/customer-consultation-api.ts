@@ -1,7 +1,9 @@
 import type {
   BillingDTO,
   CustomerConsultationSummaryDTO,
+  CustomerFinishedGoodsResponse,
   CustomerOrderDTO,
+  ProductDTO,
   ProjectDTO,
 } from "@veridi/shared";
 import { API_URL, apiFetch } from "./api";
@@ -55,4 +57,26 @@ export async function getConsultationBilling(
     `${base(customerId)}/billings/${encodeURIComponent(billingId)}`,
   );
   return (await parseJsonOrThrow(response)) as BillingDTO;
+}
+
+export async function getConsultationProduct(
+  customerId: string,
+  productId: string,
+): Promise<ProductDTO> {
+  const response = await apiFetch(
+    `${base(customerId)}/products/${encodeURIComponent(productId)}`,
+  );
+  return (await parseJsonOrThrow(response)) as ProductDTO;
+}
+
+/** Estoque de produto acabado do Cliente — paginado como as demais listas. */
+export async function listConsultationFinishedGoods(
+  customerId: string,
+  params: { page?: number; pageSize?: number } = {},
+): Promise<CustomerFinishedGoodsResponse> {
+  const query = new URLSearchParams();
+  query.set("page", String(params.page ?? 1));
+  query.set("pageSize", String(params.pageSize ?? 20));
+  const response = await apiFetch(`${base(customerId)}/finished-goods?${query.toString()}`);
+  return (await parseJsonOrThrow(response)) as CustomerFinishedGoodsResponse;
 }

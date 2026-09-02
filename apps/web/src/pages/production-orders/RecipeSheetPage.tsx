@@ -9,6 +9,7 @@ import {
 import { FormSection } from "../../components/FormSection";
 import { completePart, getRecipeSheet, registerWeighing } from "../../lib/recipe-api";
 import { EntityLink } from "../../components/EntityLink";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -164,9 +165,16 @@ export function RecipeSheetPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">
-            Produção / Ordens de Produção / {sheet.officialNumber ?? sheet.productionOrderCode}
-          </div>
+          <PageBreadcrumbs
+            items={[
+              { label: "Ordens de Produção", href: "/producao/ordens" },
+              {
+                label: sheet.officialNumber ?? sheet.productionOrderCode,
+                href: `/producao/ordens/${sheet.productionOrderId}`,
+              },
+              { label: "Folha de Receita" },
+            ]}
+          />
           <div className="doc-title">
             <h1>Folha de Receita</h1>
             <span className="badge badge--neutral">R.COQ.003</span>
@@ -179,13 +187,6 @@ export function RecipeSheetPage() {
             onClick={() => window.open(`/producao/ordens/${sheet.productionOrderId}/receita/imprimir`, "_blank")}
           >
             Imprimir Folha de Receita
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => navigate(`/producao/ordens/${sheet.productionOrderId}`)}
-          >
-            ← Voltar para a OP
           </button>
         </div>
       </div>

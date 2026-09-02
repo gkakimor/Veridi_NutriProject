@@ -8,6 +8,7 @@ import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { EntityLink } from "../../components/EntityLink";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDate } from "../../lib/dates";
 
 
@@ -86,7 +87,12 @@ export function ReceiptDetailPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Compras / Recebimentos / Detalhe</div>
+          <PageBreadcrumbs
+            items={[
+              { label: "Recebimentos", href: "/compras/recebimentos" },
+              { label: receipt.code },
+            ]}
+          />
           <div className="doc-title">
             <h1>{receipt.code}</h1>
             <span className="badge badge--active">Confirmado</span>
@@ -99,13 +105,6 @@ export function ReceiptDetailPage() {
             onClick={() => navigate(`/compras/recebimentos/${receipt.id}/imprimir`)}
           >
             Imprimir
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => navigate("/compras/recebimentos")}
-          >
-            ← Voltar
           </button>
         </div>
       </div>

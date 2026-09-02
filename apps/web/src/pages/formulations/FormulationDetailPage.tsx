@@ -12,6 +12,8 @@ import {
   listFormulationVersionsByProduct,
 } from "../../lib/formulations-api";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { UseTemplateDialog } from "../formulation-templates/UseTemplateDialog";
 import { applyTemplateToProduct } from "../../lib/formulation-templates-api";
 
@@ -164,6 +166,10 @@ export function FormulationDetailPage() {
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
+
+        {/* Esta é a tela onde se decide ativar uma versão — o passo que torna
+            a receita histórica. A explicação do ciclo fica aqui, fechada. */}
+        <ContextHelp topic={helpTopics["formulacao.comoFunciona"]} />
 
         <FormSection title="Item acabado">
           {product.finishedProductItem ? (

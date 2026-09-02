@@ -8,6 +8,7 @@ import type {
   CustomerDTO,
   CustomerMaterialRowDTO,
   CustomerOrderDTO,
+  ProductDTO,
   ProjectDTO,
 } from "@veridi/shared";
 
@@ -29,7 +30,10 @@ vi.mock("../../lib/customer-consultation-api", () => ({
   getConsultationProject: vi.fn(),
   getConsultationOrder: vi.fn(),
   getConsultationBilling: vi.fn(),
+  getConsultationProduct: vi.fn(),
+  listConsultationFinishedGoods: vi.fn(),
 }));
+vi.mock("../../lib/products-api", () => ({ listProducts: vi.fn() }));
 vi.mock("../../lib/customers-api", () => ({ listCustomers: vi.fn() }));
 vi.mock("../../lib/projects-api", () => ({ listProjects: vi.fn() }));
 vi.mock("../../lib/customer-orders-api", () => ({ listCustomerOrders: vi.fn() }));
@@ -39,9 +43,12 @@ vi.mock("../../lib/customer-materials-api", () => ({ listCustomerMaterials: vi.f
 import {
   getConsultationBilling,
   getConsultationOrder,
+  getConsultationProduct,
   getConsultationProject,
   getConsultationSummary,
+  listConsultationFinishedGoods,
 } from "../../lib/customer-consultation-api";
+import { listProducts } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
 import { listProjects } from "../../lib/projects-api";
 import { listCustomerOrders } from "../../lib/customer-orders-api";
@@ -78,7 +85,7 @@ const customer: CustomerDTO = {
 
 const summary: CustomerConsultationSummaryDTO = {
   customer,
-  counts: { projects: 2, orders: 1, openOrders: 1, billings: 1, materialLots: 1 },
+  counts: { products: 3, projects: 2, orders: 1, openOrders: 1, billings: 1, materialLots: 1 },
 };
 
 /*
@@ -175,6 +182,44 @@ const billing = {
   ],
 } as unknown as BillingDTO;
 
+const PRODUTO = {
+  id: "prod-1",
+  code: "PROD-000007",
+  name: "Coenzima Q10 60 cápsulas",
+  customerId: CUSTOMER_ID,
+  lifecycle: "APPROVED",
+  active: true,
+  presentationType: "POT",
+  dosageForm: "CAPSULE",
+  dosesPerPackage: 60,
+  externalCode: null,
+  finishedProductItem: { id: "item-1", code: "PA-000008", name: "Coenzima Q10 60 cápsulas" },
+} as unknown as ProductDTO;
+
+/* Item próprio: PA é 1:1 com o Produto, dois produtos nunca dividem o mesmo. */
+const PRODUTO_2 = {
+  ...PRODUTO,
+  id: "prod-2",
+  code: "PROD-000009",
+  name: "Biotina 30 cápsulas",
+  finishedProductItem: { id: "item-2", code: "PA-000009", name: "Biotina 30 cápsulas" },
+} as unknown as ProductDTO;
+
+const ACABADO = {
+  productId: "prod-1",
+  productCode: "PROD-000007",
+  productName: "Coenzima Q10 60 cápsulas",
+  itemId: "item-1",
+  itemCode: "PA-000008",
+  itemName: "Coenzima Q10 60 cápsulas",
+  unitCode: "un",
+  onHand: "500",
+  reserved: "120",
+  available: "380",
+  lotCount: 3,
+  awaitingQualityLots: 1,
+};
+
 const material = {
   lotId: "lot-a",
   lotCode: "LT-CLIENTE-A",
@@ -253,6 +298,21 @@ beforeEach(() => {
     pageSize: 20,
     total: 1,
   });
+  vi.mocked(listProducts).mockResolvedValue({
+    products: [PRODUTO, PRODUTO_2],
+    page: 1,
+    pageSize: 20,
+    total: 2,
+  });
+  vi.mocked(getConsultationProduct).mockImplementation(async (_c, id) =>
+    id === "prod-2" ? PRODUTO_2 : PRODUTO,
+  );
+  vi.mocked(listConsultationFinishedGoods).mockResolvedValue({
+    rows: [ACABADO],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+  });
   vi.mocked(listCustomerMaterials).mockResolvedValue({
     rows: [material],
     page: 1,
@@ -296,7 +356,7 @@ describe("Consulta do Cliente — shell", () => {
     expect(within(head).getByText("CNPJ 11.222.333/0001-81")).toBeInTheDocument();
 
     const tabs = screen.getByRole("navigation", { name: "Seções da consulta" });
-    for (const label of ["Resumo", "Projetos", "Pedidos", "Materiais do cliente", "Faturamentos"]) {
+    for (const label of ["Resumo", "Produtos", "Projetos", "Pedidos", "Estoque", "Faturamentos"]) {
       expect(within(tabs).getByRole("link", { name: label })).toBeInTheDocument();
     }
     // Estado ativo identificável por quem não enxerga a cor.
@@ -437,7 +497,7 @@ describe("Consulta do Cliente — pedidos, materiais e faturamentos", () => {
   });
 
   it("materiais pedem apenas os lotes daquele dono", async () => {
-    renderAt(`/consultas/clientes/${CUSTOMER_ID}/materiais`);
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/estoque/materiais`);
 
     expect(await screen.findByText("LT-CLIENTE-A")).toBeInTheDocument();
     // O escopo de dono é do read model existente, não um filtro paralelo.
@@ -455,7 +515,7 @@ describe("Consulta do Cliente — pedidos, materiais e faturamentos", () => {
       pageSize: 20,
       total: 0,
     });
-    renderAt(`/consultas/clientes/${CUSTOMER_ID}/materiais`);
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/estoque/materiais`);
 
     expect(
       await screen.findByText("Nenhum material deste cliente em estoque."),
@@ -481,5 +541,75 @@ describe("Consulta do Cliente — pedidos, materiais e faturamentos", () => {
       "href",
       `/consultas/clientes/${CUSTOMER_ID}/pedidos/ped-1`,
     );
+  });
+});
+
+describe("Consulta do Cliente — produtos", () => {
+  it("lista só os produtos daquele cliente", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/produtos`);
+
+    expect(await screen.findByText("PROD-000007")).toBeInTheDocument();
+    expect(screen.getByText("PA-000008")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(vi.mocked(listProducts)).toHaveBeenCalledWith(
+        expect.objectContaining({ customerId: CUSTOMER_ID }),
+      );
+    });
+  });
+
+  it("abre o detalhe sem perder o cliente e oferece a saída para o módulo", async () => {
+    const user = userEvent.setup();
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/produtos`);
+
+    await user.click(await screen.findByText("PROD-000007"));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /PROD-000007/ }),
+    ).toBeInTheDocument();
+    await expectCustomerHeader();
+    expect(screen.getByRole("link", { name: /Abrir produto completo/ })).toHaveAttribute(
+      "href",
+      "/cadastros/produtos?productId=prod-1",
+    );
+  });
+
+  it("produto de outro cliente não aparece sob este cabeçalho", async () => {
+    vi.mocked(getConsultationProduct).mockRejectedValue(
+      new NotFoundApiError("Registro não encontrado."),
+    );
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/produtos/prod-de-outro`);
+
+    expect(
+      await screen.findByRole("heading", { name: "Produto não encontrado neste cliente" }),
+    ).toBeInTheDocument();
+    await expectCustomerHeader();
+  });
+});
+
+describe("Consulta do Cliente — estoque", () => {
+  it("separa produto acabado de material do cliente em duas visões", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/estoque/acabados`);
+
+    const subnav = await screen.findByRole("navigation", { name: "Seções do estoque" });
+    expect(within(subnav).getByRole("link", { name: "Produtos acabados" })).toBeInTheDocument();
+    expect(
+      within(subnav).getByRole("link", { name: "Materiais do cliente" }),
+    ).toBeInTheDocument();
+  });
+
+  it("produtos acabados mostram físico, reservado e disponível", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/estoque/acabados`);
+
+    expect(await screen.findByText("PA-000008")).toBeInTheDocument();
+    expect(screen.getByText("500 un")).toBeInTheDocument();
+    expect(screen.getByText("120 un")).toBeInTheDocument();
+    expect(screen.getByText("380 un")).toBeInTheDocument();
+    // Lote sem liberação da Qualidade é fato operacional, não detalhe.
+    expect(screen.getByText(/aguardando liberação/)).toBeInTheDocument();
+  });
+
+  it("o endereço antigo de materiais continua funcionando", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/materiais`);
+    expect(await screen.findByText("LT-CLIENTE-A")).toBeInTheDocument();
   });
 });

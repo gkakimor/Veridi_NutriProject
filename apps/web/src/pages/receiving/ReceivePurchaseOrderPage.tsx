@@ -8,6 +8,7 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 
 interface LineDraft {
   purchaseOrderLineId: string;
@@ -164,14 +165,16 @@ export function ReceivePurchaseOrderPage() {
       <>
         <div className="doc-header">
           <div>
-            <div className="doc-crumb">Compras / Recebimentos / Nova</div>
+            <PageBreadcrumbs
+              items={[
+                { label: "Recebimentos", href: "/compras/recebimentos" },
+                { label: "Receber OC" },
+              ]}
+            />
             <div className="doc-title">
               <h1>Receber OC</h1>
             </div>
           </div>
-          <button type="button" className="btn btn--ghost" onClick={() => navigate("/compras/recebimentos")}>
-            ← Voltar
-          </button>
         </div>
 
         <div className="doc-body">
@@ -225,15 +228,17 @@ export function ReceivePurchaseOrderPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Compras / Recebimentos / Nova</div>
+          <PageBreadcrumbs
+            items={[
+              { label: "Recebimentos", href: "/compras/recebimentos" },
+              { label: "Receber OC" },
+            ]}
+          />
           <div className="doc-title">
             <h1>{po.code}</h1>
             <span className="field-readonly-value">{po.supplierName}</span>
           </div>
         </div>
-        <button type="button" className="btn btn--ghost" onClick={() => navigate("/compras/recebimentos")}>
-          ← Voltar
-        </button>
       </div>
 
       <div className="doc-body">

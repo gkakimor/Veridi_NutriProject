@@ -33,6 +33,8 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { FormulationTemplateOrigin } from "../formulation-templates/FormulationTemplateOrigin";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
@@ -452,6 +454,11 @@ export function FormulationVersionPage() {
 
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
+
+        {/* Mesma explicação do detalhe do produto, disponível também aqui:
+            quem chega direto na versão (link de OP, de custo ou de orçamento)
+            nunca passou pela outra tela. */}
+        <ContextHelp topic={helpTopics["formulacao.comoFunciona"]} />
 
         {/* Uma versão copiada de outra criada meses antes pode trazer item
             inativado, item que virou produto acabado ou unidade que deixou de

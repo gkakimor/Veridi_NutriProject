@@ -2934,3 +2934,41 @@ Havendo pedido, ordem de produção, orçamento ou origem em projeto, o
 Produto não migra para outro Cliente: isso reescreveria em silêncio de quem
 era aquele histórico. O caminho é cadastrar um Produto do outro Cliente.
 Produto ainda sem uso pode ser corrigido.
+
+
+---
+
+## §44 — Consulta do Cliente e navegação
+
+### A Consulta responde por produtos e por estoque, não só por documentos
+
+Além de projetos, pedidos e faturamentos, a Consulta do Cliente mostra os
+**Produtos** daquele Cliente e o **Estoque** ligado a ele, em duas visões que
+não se misturam:
+
+- **Produtos acabados** — estoque da Veridi produzido para aquele Cliente. É
+  da Veridi até ser expedido.
+- **Materiais do cliente** — material de propriedade DELE guardado aqui.
+
+Matéria-prima da Veridi não aparece em nenhuma das duas. Ela é da Veridi, e
+listá-la sob o cabeçalho de um Cliente afirmaria que pertence a ele. MP
+continua visível em formulação, ordem de produção e rastreabilidade, onde a
+pergunta é outra.
+
+Físico, reservado e disponível vêm do inventory ledger — as mesmas funções do
+resto do sistema. Um segundo cálculo seria um segundo número para a mesma
+pergunta.
+
+### Breadcrumb global é hierarquia, não histórico
+
+Fora da Consulta, o breadcrumb das telas mostra a **hierarquia lógica** do
+sistema — `Produtos > PROD-000001`, `Ordens de Compra > OC-000011` —, não por
+onde a pessoa passou. Pai só existe quando a rota realmente carrega esse
+contexto; inventar um pai falso ensina uma estrutura que o sistema não tem.
+
+### Dentro da Consulta, a raiz continua sendo o Cliente
+
+O Customer Shell é a exceção deliberada: ali a trilha é `Cliente › Produtos ›
+PROD-…`, contextual, e não a canônica `Produtos > PROD-…`. Trocar uma pela
+outra devolveria ao operador exatamente o problema que a Consulta existe para
+resolver — perder de vista de quem se está falando.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState , useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { PurchaseOrderDTO, PurchaseOrderStatus, SupplierItemDTO } from "@veridi/shared";
 import { PURCHASE_ORDER_STATUS_LABELS, SUPPLIER_ITEM_QUALIFICATION_LABELS } from "@veridi/shared";
 import {
@@ -452,7 +453,12 @@ export function PurchaseOrderPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Compras / Ordens de Compra / {isNew ? "Nova" : "Editar"}</div>
+          <PageBreadcrumbs
+            items={[
+              { label: "Ordens de Compra", href: "/compras/ordens" },
+              { label: isNew ? "Nova" : (purchaseOrder?.code ?? "Ordem de compra") },
+            ]}
+          />
           <div className="doc-title">
             <h1>{isNew ? "Nova ordem de compra" : purchaseOrder?.code}</h1>
             {purchaseOrder && (
@@ -470,9 +476,6 @@ export function PurchaseOrderPage() {
               Imprimir
             </button>
           )}
-          <button type="button" className="btn btn--ghost" onClick={() => navigate("/compras/ordens")}>
-            ← Voltar
-          </button>
         </div>
       </div>
 

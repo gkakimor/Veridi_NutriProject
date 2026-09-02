@@ -18,6 +18,8 @@ import {
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
@@ -342,6 +344,11 @@ export function ProductCmvPage() {
             {error}
           </p>
         )}
+
+        {/* O número desta tela é a soma de coisas decididas em outras (receita,
+            recursos, tarifas). Sem dizer de onde ele vem, "CMV indisponível"
+            parece defeito da tela em vez de custo que ninguém informou. */}
+        <ContextHelp topic={helpTopics["cmv.comoFunciona"]} />
 
         <FormSection
           title="Custo industrial de uma quantidade"

@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
-import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -246,7 +245,11 @@ async function buildScenario(app: App, label: string, projectCount: number): Pro
   const productResponse = await app.inject({
     method: "POST",
     url: "/products",
-    payload: { customerId: await fixtureCustomerId(),
+    payload: {
+      // O produto é DO cliente do cenário: é isso que a aba Produtos e o
+      // estoque de acabado recortam. Usar o cliente de fixture aqui faria
+      // os dois cenários compartilharem dono e o teste não provaria nada.
+      customerId: customer.id,
       name: `Produto Consulta ${label} ${marker()}`,
       finishedProductItemId: finishedItem.id,
     },
@@ -501,6 +504,108 @@ describe("Consulta do Cliente — escopo dos detalhes", () => {
     });
     expect(response.statusCode).toBe(404);
 
+    await app.close();
+  });
+});
+
+describe("Consulta do Cliente — produtos e estoque de acabado", () => {
+  it("conta e lista somente os produtos daquele cliente", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const resumo = (
+      await app.inject({
+        method: "GET",
+        url: `/customers/${customerA.customerId}/consultation/summary`,
+      })
+    ).json();
+    // A fixture cria um produto por cenário.
+    expect(resumo.counts.products).toBe(1);
+
+    const lista = (
+      await app.inject({
+        method: "GET",
+        url: `/products?customerId=${customerA.customerId}&pageSize=100`,
+      })
+    ).json();
+    expect(lista.products.every((p: { customerId: string }) => p.customerId === customerA.customerId)).toBe(true);
+
+    await app.close();
+  });
+
+  it("abre o produto do cliente e recusa o de outro", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const daCasa = (
+      await app.inject({
+        method: "GET",
+        url: `/products?customerId=${customerA.customerId}&pageSize=1`,
+      })
+    ).json().products[0];
+    const doOutro = (
+      await app.inject({
+        method: "GET",
+        url: `/products?customerId=${customerB.customerId}&pageSize=1`,
+      })
+    ).json().products[0];
+
+    const proprio = await app.inject({
+      method: "GET",
+      url: `/customers/${customerA.customerId}/consultation/products/${daCasa.id}`,
+    });
+    expect(proprio.statusCode).toBe(200);
+
+    // Existe, mas é de outro dono: mesmo 404 de inexistente.
+    const alheio = await app.inject({
+      method: "GET",
+      url: `/customers/${customerA.customerId}/consultation/products/${doOutro.id}`,
+    });
+    expect(alheio.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it("estoque de acabado traz só os itens dos produtos daquele cliente", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const doA = (
+      await app.inject({
+        method: "GET",
+        url: `/customers/${customerA.customerId}/consultation/finished-goods?pageSize=100`,
+      })
+    ).json();
+    const doB = (
+      await app.inject({
+        method: "GET",
+        url: `/customers/${customerB.customerId}/consultation/finished-goods?pageSize=100`,
+      })
+    ).json();
+
+    expect(doA.rows.length).toBeGreaterThan(0);
+    const itensDeA = doA.rows.map((r: { itemId: string }) => r.itemId);
+    const itensDeB = doB.rows.map((r: { itemId: string }) => r.itemId);
+    // Nenhum item aparece nos dois: PA é 1:1 com Produto, e Produto tem um dono.
+    expect(itensDeA.some((id: string) => itensDeB.includes(id))).toBe(false);
+
+    // As somas vêm do ledger — a fixture expediu, então há reserva/saída.
+    const linha = doA.rows[0];
+    expect(typeof linha.onHand).toBe("string");
+    expect(typeof linha.reserved).toBe("string");
+    expect(typeof linha.available).toBe("string");
+
+    await app.close();
+  });
+
+  it("cliente inexistente responde 404 também no estoque de acabado", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const response = await app.inject({
+      method: "GET",
+      url: "/customers/nao-existe/consultation/finished-goods",
+    });
+    expect(response.statusCode).toBe(404);
     await app.close();
   });
 });

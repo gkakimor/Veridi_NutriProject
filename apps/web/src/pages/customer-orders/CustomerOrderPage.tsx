@@ -46,6 +46,9 @@ import {
 } from "../../lib/shipments-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 import { AgreedPriceCell, CommercialOriginSection } from "./CommercialOriginSection";
 import { FlowContext } from "../../components/FlowContext";
 import type { FlowStep } from "../../components/FlowContext";
@@ -53,6 +56,18 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+
+/**
+ * Ícone de ajuda de uma coluna do Plano, lido do registro central.
+ *
+ * Existe para que o cabeçalho da tabela não carregue o texto: a explicação
+ * de "Disponível" é a mesma em qualquer tela, e quem a revisa mexe em
+ * `help-content`, não aqui.
+ */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 interface LineRow {
   key: string;
@@ -970,6 +985,8 @@ export function CustomerOrderPage() {
             title="Plano de Atendimento"
             subtitle="Análise/projeção — usa estoque disponível agora. Ao aplicar, tudo é recalculado de novo."
           >
+            <ContextHelp topic={helpTopics["planoAtendimento.comoFunciona"]} />
+
             {planLoading && <p className="field__hint">Calculando…</p>}
             {plan && (
               <>
@@ -1050,11 +1067,30 @@ export function CustomerOrderPage() {
                             <th>Material</th>
                             <th>Fornecimento</th>
                             <th className="is-numeric">Necessário</th>
-                            <th className="is-numeric">Físico</th>
-                            <th className="is-numeric">Reservado</th>
-                            <th className="is-numeric">Disponível</th>
-                            <th className="is-numeric">Em Compra</th>
-                            <th className="is-numeric">Falta</th>
+                            {/* Cinco palavras que decidem a ação e não querem
+                                dizer a mesma coisa. "Necessário" e
+                                "Fornecimento" já se explicam no contexto da
+                                linha; estas não. */}
+                            <th className="is-numeric">
+                              Físico
+                              <DicaDaColuna id="planoAtendimento.fisico" />
+                            </th>
+                            <th className="is-numeric">
+                              Reservado
+                              <DicaDaColuna id="planoAtendimento.reservado" />
+                            </th>
+                            <th className="is-numeric">
+                              Disponível
+                              <DicaDaColuna id="planoAtendimento.disponivel" />
+                            </th>
+                            <th className="is-numeric">
+                              Em Compra
+                              <DicaDaColuna id="planoAtendimento.emCompra" />
+                            </th>
+                            <th className="is-numeric">
+                              Falta
+                              <DicaDaColuna id="planoAtendimento.falta" />
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
