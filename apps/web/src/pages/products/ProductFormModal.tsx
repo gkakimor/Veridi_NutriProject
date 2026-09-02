@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { RelatedLinks } from "../../components/RelatedLinks";
+import { Link } from "react-router-dom";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { CustomerFormModal } from "../customers/CustomerFormModal";
+import { useAuth } from "../../app/AuthProvider";
 import type { FormEvent } from "react";
 import type {
   DosageForm,
@@ -11,7 +14,6 @@ import type {
 } from "@veridi/shared";
 import { createProduct, updateProduct } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
-import { listItems } from "../../lib/items-api";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
@@ -41,13 +43,8 @@ interface CustomerOption {
   code: string;
   legalName: string;
   tradeName: string | null;
-  active: boolean;
-}
-
-interface FinishedItemOption {
-  id: string;
-  code: string;
-  name: string;
+  /** Entra na busca do campo: quem não lembra o nome lembra o CNPJ. */
+  cnpj?: string | null;
   active: boolean;
 }
 
@@ -56,6 +53,8 @@ interface FormState {
   externalCode: string;
   customerId: string;
   finishedProductItemId: string;
+  /** Unidade do item de estoque criado junto com o produto (só na criação). */
+  finishedUnitCode: string;
   dosageForm: string;
   presentationType: string;
   capsulesPerDose: string;
@@ -81,6 +80,7 @@ function initialState(product: ProductDTO | null): FormState {
       externalCode: product.externalCode ?? "",
       customerId: product.customerId ?? "",
       finishedProductItemId: product.finishedProductItemId ?? "",
+      finishedUnitCode: product.finishedProductItem ? "" : "un",
       dosageForm: product.dosageForm ?? "",
       presentationType: product.presentationType ?? "",
       capsulesPerDose: numberField(product.capsulesPerDose),
@@ -99,6 +99,7 @@ function initialState(product: ProductDTO | null): FormState {
     externalCode: "",
     customerId: "",
     finishedProductItemId: "",
+    finishedUnitCode: "un",
     dosageForm: "",
     presentationType: "",
     capsulesPerDose: "",
@@ -119,7 +120,12 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const { user } = useAuth();
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
+  /** Cadastro de cliente aberto a partir do campo de busca. */
+  const [newCustomerName, setNewCustomerName] = useState<string | null>(null);
+  // CTA que termina em 403 é pior que CTA nenhum.
+  const canCreateCustomer = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
 
   useEffect(() => {
     // A dose pode ser em mg/g/ml — unidades vêm do cadastro existente.
@@ -129,15 +135,11 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
   }, []);
 
   const [activeCustomers, setActiveCustomers] = useState<CustomerOption[]>([]);
-  const [activeFinishedItems, setActiveFinishedItems] = useState<FinishedItemOption[]>([]);
 
   useEffect(() => {
     listCustomers({ active: true, pageSize: 1000 })
       .then((result) => setActiveCustomers(result.customers))
       .catch(() => setActiveCustomers([]));
-    listItems({ type: "FINISHED_PRODUCT", active: true, pageSize: 1000 })
-      .then((result) => setActiveFinishedItems(result.items))
-      .catch(() => setActiveFinishedItems([]));
   }, []);
 
   // Vinculo historico: se o cliente/item associado nao estiver mais na lista
@@ -149,15 +151,7 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
     return [...activeCustomers, { ...product.customer, active: false }];
   }, [activeCustomers, product]);
 
-  const finishedItemOptions: FinishedItemOption[] = useMemo(() => {
-    if (
-      !product?.finishedProductItem ||
-      activeFinishedItems.some((item) => item.id === product.finishedProductItem?.id)
-    ) {
-      return activeFinishedItems;
-    }
-    return [...activeFinishedItems, { ...product.finishedProductItem, active: false }];
-  }, [activeFinishedItems, product]);
+
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -216,6 +210,9 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
       ...(externalCode ? { externalCode: externalCode.value } : {}),
       ...(customerId ? { customerId: customerId.value } : {}),
       ...(finishedProductItemId ? { finishedProductItemId: finishedProductItemId.value } : {}),
+      // O item de estoque nasce com o produto: a unidade é a única coisa que
+      // a tela precisa dizer sobre ele.
+      ...(mode === "create" ? { finishedUnitCode: form.finishedUnitCode } : {}),
       ...(notes ? { notes: notes.value } : {}),
     };
 
@@ -290,6 +287,26 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
       <form id="product-form" onSubmit={handleSubmit}>
         {error && <p className="form-alert">{error}</p>}
 
+      {newCustomerName !== null && (
+        <CustomerFormModal
+          mode="create"
+          customer={null}
+          onClose={() => setNewCustomerName(null)}
+          onSaved={(created) => {
+            setNewCustomerName(null);
+            if (!created) return;
+            // Volta selecionado, e o resto do formulário do produto continua
+            // como estava: quem cadastrou o cliente queria ESTE cliente e não
+            // quer redigitar o que já preencheu.
+            setActiveCustomers((prev) => [
+              created,
+              ...prev.filter((row) => row.id !== created.id),
+            ]);
+            setForm((prev) => ({ ...prev, customerId: created.id }));
+          }}
+        />
+      )}
+
         {product && (
           <RelatedLinks
             links={[
@@ -313,6 +330,37 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
           subtitle="Definição comercial/industrial do produto fabricado pela Veridi."
         >
           <div className="field-grid-2">
+            <div className="field field--full">
+              <label htmlFor="product-customer">
+                Cliente <span className="req">*</span>
+              </label>
+              <SearchableEntitySelect
+                id="product-customer"
+                value={form.customerId}
+                onChange={(selectedId) => setForm((prev) => ({ ...prev, customerId: selectedId }))}
+                placeholder="Digite código, razão social, fantasia ou CNPJ…"
+                required
+                options={customerOptions.map((customer) => ({
+                  id: customer.id,
+                  code: customer.code,
+                  // Razão social assina contrato; nome fantasia é como o
+                  // cliente se chama no telefone. Quem procura usa o
+                  // segundo, e o CNPJ quando não lembra nenhum dos dois.
+                  name: customer.legalName,
+                  ...(customer.tradeName ? { hint: customer.tradeName } : {}),
+                  searchTerms: [customer.tradeName ?? "", customer.cnpj ?? ""]
+                    .filter(Boolean)
+                    .join(" "),
+                }))}
+                canCreate={canCreateCustomer}
+                createLabel="Cadastrar novo cliente"
+                onCreateNew={(typed) => setNewCustomerName(typed)}
+              />
+              {fieldErrors["customerId"] && (
+                <p className="field__error">{fieldErrors["customerId"]}</p>
+              )}
+            </div>
+
             <div className="field field--full">
               <label htmlFor="product-name">
                 Nome <span className="req">*</span>
@@ -344,49 +392,67 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
           </div>
         </FormSection>
 
+        {/*
+          O item de estoque deixou de ser um cadastro à parte que o usuário
+          precisava criar antes e escolher aqui. Na criação ele é gerado
+          junto; na edição, é mostrado como fato — trocar o item de um
+          produto que já tem lote e histórico não é operação de formulário.
+        */}
         <FormSection
-          title="Vínculos"
-          subtitle="Cliente e item de produto acabado associados — opcionais."
+          title="Produto acabado / estoque"
+          subtitle="Como este produto é identificado e controlado no estoque."
         >
-          <div className="field-grid-2">
-            <div className="field">
-              <label htmlFor="product-customer">Cliente</label>
-              <SearchableEntitySelect
-                id="product-customer"
-                value={form.customerId}
-                onChange={(selectedId) => setForm((prev) => ({ ...prev, customerId: selectedId }))}
-                placeholder="Nenhum — digite para buscar…"
-                options={customerOptions.map((customer) => ({
-                  id: customer.id,
-                  code: customer.code,
-                  name: customer.tradeName ?? customer.legalName,
-                  ...(customer.active ? {} : { hint: "inativo" }),
-                }))}
-              />
-              {fieldErrors["customerId"] && (
-                <p className="field__error">{fieldErrors["customerId"]}</p>
-              )}
-            </div>
-
-            <div className="field">
-              <label htmlFor="product-finished-item">Item de produto acabado</label>
-              <SearchableEntitySelect
-                id="product-finished-item"
-                value={form.finishedProductItemId}
-                onChange={(selectedId) => setForm((prev) => ({ ...prev, finishedProductItemId: selectedId }))}
-                placeholder="Nenhum — digite para buscar…"
-                options={finishedItemOptions.map((item) => ({
-                  id: item.id,
-                  code: item.code,
-                  name: item.name,
-                  ...(item.active ? {} : { hint: "inativo" }),
-                }))}
-              />
-              {fieldErrors["finishedProductItemId"] && (
-                <p className="field__error">{fieldErrors["finishedProductItemId"]}</p>
-              )}
-            </div>
-          </div>
+          {mode === "create" ? (
+            <>
+              <div className="field-grid-2">
+                <div className="field">
+                  <label htmlFor="product-finished-unit">
+                    Unidade de estoque <span className="req">*</span>
+                  </label>
+                  <select
+                    id="product-finished-unit"
+                    value={form.finishedUnitCode}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, finishedUnitCode: event.target.value }))
+                    }
+                  >
+                    {units.map((unit) => (
+                      <option key={unit.code} value={unit.code}>
+                        {unit.code} — {unit.label}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors["finishedUnitCode"] && (
+                    <p className="field__error">{fieldErrors["finishedUnitCode"]}</p>
+                  )}
+                </div>
+              </div>
+              <p className="field__hint">
+                O item de estoque será criado automaticamente ao salvar, com
+                código próprio (PA-000123), controle de lote, validade e
+                liberação da Qualidade.
+              </p>
+            </>
+          ) : product?.finishedProductItem ? (
+            <dl className="definition-list">
+              <dt>Item de produto acabado</dt>
+              <dd>
+                <span className="is-code">{product.finishedProductItem.code}</span>{" "}
+                {product.finishedProductItem.name}
+              </dd>
+              <dt>Estoque</dt>
+              <dd>
+                <Link to={`/estoque/${product.finishedProductItem.id}`}>
+                  Ver estoque e lotes
+                </Link>
+              </dd>
+            </dl>
+          ) : (
+            <p className="field__hint">
+              Este produto não tem item de produto acabado vinculado. Produtos
+              importados do legado podem estar nessa situação.
+            </p>
+          )}
         </FormSection>
 
         {/* Perfil industrial (capacidade 33): cadastro puro — nada aqui
