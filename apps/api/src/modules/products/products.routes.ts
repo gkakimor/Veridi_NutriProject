@@ -11,6 +11,8 @@ import {
 import {
   CustomerNotFoundError,
   DoseUomNotFoundError,
+  FinishedUnitNotFoundError,
+  ProductCustomerLockedError,
   DuplicateFinishedItemError,
   FinishedItemNotFoundError,
   InactiveCustomerError,
@@ -54,6 +56,12 @@ function mapDomainError(
   }
   if (error instanceof DuplicateFinishedItemError) {
     return { status: 400, body: { error: "duplicate_finished_item", message: error.message } };
+  }
+  if (error instanceof FinishedUnitNotFoundError) {
+    return { status: 400, body: { error: "finished_unit_not_found", message: error.message } };
+  }
+  if (error instanceof ProductCustomerLockedError) {
+    return { status: 409, body: { error: "product_customer_locked", message: error.message } };
   }
   return null;
 }

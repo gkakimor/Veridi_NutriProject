@@ -1,4 +1,4 @@
-import type { ItemType, PrismaClient } from "@prisma/client";
+import type { ItemType, Prisma, PrismaClient } from "@prisma/client";
 import { ITEM_TYPE_PREFIXES } from "@veridi/shared";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 
@@ -10,7 +10,7 @@ const ITEM_CODE_SEQUENCE: Record<ItemType, string> = {
 };
 
 export async function nextItemCode(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   type: ItemType,
 ): Promise<string> {
   return nextSequenceCode(

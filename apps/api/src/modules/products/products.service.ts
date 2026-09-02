@@ -6,10 +6,13 @@ import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { createFinishedItemForProduct } from "../items/finished-item-for-product.js";
 import {
   CustomerNotFoundError,
   DoseUomNotFoundError,
+  FinishedUnitNotFoundError,
   DuplicateFinishedItemError,
+  ProductCustomerLockedError,
   FinishedItemNotFoundError,
   InactiveCustomerError,
   InactiveFinishedItemError,
@@ -104,6 +107,16 @@ async function assertDoseUomExists(code: string): Promise<void> {
   if (!unit) throw new DoseUomNotFoundError(code);
 }
 
+/**
+ * Unidade do item de produto acabado criado junto com o produto. Conferida
+ * ANTES de abrir a transação: falhar dentro dela custaria um número da
+ * sequence de itens por um erro de digitação.
+ */
+async function assertUnitExists(code: string): Promise<void> {
+  const unit = await getPrisma().unitOfMeasure.findUnique({ where: { code } });
+  if (!unit) throw new FinishedUnitNotFoundError(code);
+}
+
 /** Vinculo NOVO a um Customer: precisa existir e estar ativo. */
 async function assertCustomerForNewAssociation(id: string): Promise<void> {
   const customer = await getPrisma().customer.findUnique({ where: { id } });
@@ -133,6 +146,38 @@ async function assertFinishedItemForNewAssociation(
     },
   });
   if (existing) throw new DuplicateFinishedItemError(id);
+}
+
+/**
+ * Um produto em uso não troca de Cliente.
+ *
+ * Pedido, ordem de produção e orçamento são o histórico de um Cliente
+ * específico; mover o produto para outro dono reescreveria esse histórico
+ * sem deixar rastro. Produto ainda sem uso continua livre — corrigir um
+ * cliente escolhido errado no cadastro é legítimo.
+ *
+ * O produto nascido de Projeto também fica preso ao Cliente do projeto: são
+ * a mesma decisão comercial.
+ */
+async function assertCustomerChangeAllowed(current: {
+  id: string;
+  code: string;
+  originProjectId: string | null;
+}): Promise<void> {
+  const prisma = getPrisma();
+  const [orderLines, productionOrders, quoteLines] = await Promise.all([
+    prisma.customerOrderLine.count({ where: { productId: current.id } }),
+    prisma.productionOrder.count({ where: { productId: current.id } }),
+    prisma.quoteLine.count({ where: { productId: current.id } }),
+  ]);
+
+  const reasons: string[] = [];
+  if (orderLines > 0) reasons.push("já existe pedido com este produto");
+  if (productionOrders > 0) reasons.push("já existe ordem de produção");
+  if (quoteLines > 0) reasons.push("já existe orçamento");
+  if (current.originProjectId) reasons.push("o produto nasceu de um projeto");
+
+  if (reasons.length > 0) throw new ProductCustomerLockedError(current.code, reasons);
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -227,32 +272,69 @@ function industrialData(input: CreateProductInput | UpdateProductInput) {
   };
 }
 
+/** Unidade de estoque padrão do item criado junto com o produto. */
+const DEFAULT_FINISHED_UNIT = "un";
+
+/**
+ * Produto + Item de produto acabado, numa transação só.
+ *
+ * O usuário não cadastra mais o item de estoque à mão antes de criar o
+ * produto: eram dois cadastros para uma coisa só, e a pergunta "preciso
+ * criar o produto acabado duas vezes?" era o sintoma. Agora o produto traz
+ * o próprio item.
+ *
+ * `finishedProductItemId` continua aceito — importação, migração e
+ * integrações precisam poder vincular um item específico — e quando vem
+ * preenchido é validado com rigor. O que mudou é que a tela normal não
+ * precisa mais mandá-lo.
+ *
+ * Tudo numa transação: sem ela, uma falha depois da criação do item
+ * deixaria um `PA-000123` órfão no cadastro, consumindo um número da
+ * sequence e aparecendo na lista de itens sem pertencer a produto nenhum.
+ */
 export async function createProduct(input: CreateProductInput): Promise<ProductDTO> {
-  if (input.customerId) await assertCustomerForNewAssociation(input.customerId);
+  await assertCustomerForNewAssociation(input.customerId);
   if (input.doseUomCode) await assertDoseUomExists(input.doseUomCode);
   if (input.finishedProductItemId) {
     await assertFinishedItemForNewAssociation(input.finishedProductItemId);
   }
 
   const prisma = getPrisma();
-  const code = await nextSequenceCode(prisma, CODE_SEQUENCE, PRODUCT_CODE_PREFIX);
+  const unitCode = input.finishedUnitCode ?? DEFAULT_FINISHED_UNIT;
+  if (!input.finishedProductItemId) await assertUnitExists(unitCode);
 
   try {
-    const product = await prisma.product.create({
-      data: {
-        code,
-        name: input.name,
-        ...(input.customerId !== undefined ? { customerId: input.customerId } : {}),
-        ...(input.finishedProductItemId !== undefined
-          ? { finishedProductItemId: input.finishedProductItemId }
-          : {}),
-        ...industrialData(input),
-        ...(input.externalCode !== undefined ? { externalCode: input.externalCode } : {}),
-        ...(input.notes !== undefined ? { notes: input.notes } : {}),
-      },
-      include: productInclude,
+    const created = await prisma.$transaction(async (tx) => {
+      const code = await nextSequenceCode(tx, CODE_SEQUENCE, PRODUCT_CODE_PREFIX);
+
+      // Sem item explícito, o produto cria o seu — mesma construção usada
+      // pelo produto nascido de Projeto.
+      const finishedProductItemId =
+        input.finishedProductItemId ??
+        (
+          await createFinishedItemForProduct(tx, {
+            // O item de estoque nasce com o nome do produto; os dois seguem
+            // independentes a partir daí — renomear o produto depois não
+            // reescreve o histórico do estoque.
+            name: input.name,
+            unitCode,
+          })
+        ).id;
+
+      return tx.product.create({
+        data: {
+          code,
+          name: input.name,
+          customerId: input.customerId,
+          finishedProductItemId,
+          ...industrialData(input),
+          ...(input.externalCode !== undefined ? { externalCode: input.externalCode } : {}),
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        },
+        include: productInclude,
+      });
     });
-    return toProductDTO(product);
+    return toProductDTO(created);
   } catch (error) {
     if (isUniqueConstraintError(error) && input.finishedProductItemId) {
       throw new DuplicateFinishedItemError(input.finishedProductItemId);
@@ -271,6 +353,7 @@ export async function updateProduct(
   // So valida novamente se a associacao esta MUDANDO — mantem vinculo
   // historico intacto mesmo se o Customer/Item ligado foi inativado depois.
   if (input.customerId !== undefined && input.customerId !== current.customerId) {
+    await assertCustomerChangeAllowed(current);
     if (input.customerId) await assertCustomerForNewAssociation(input.customerId);
   }
   if (
