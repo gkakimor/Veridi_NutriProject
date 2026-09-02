@@ -9,6 +9,15 @@ import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
+function DicaDoCampo({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 interface LineDraft {
   key: string;
@@ -142,6 +151,11 @@ export function ReceiveCustomerMaterialPage() {
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
 
+        {/* Recebimento sem fornecedor e sem OC parece cadastro incompleto
+            para quem chegou pelo caminho da compra. É o contrário: é o único
+            jeito de o material do cliente entrar sem virar estoque nosso. */}
+        <ContextHelp topic={helpTopics["compras.recebimentos"]} />
+
         <FormSection
           title="Origem"
           subtitle="Sem Ordem de Compra e sem fornecedor: o material continua sendo do cliente, só está fisicamente aqui."
@@ -149,6 +163,7 @@ export function ReceiveCustomerMaterialPage() {
           <div className="field field--narrow">
             <label htmlFor="customer-receipt-customer">
               Cliente proprietário <span className="req">*</span>
+              <DicaDoCampo id="estoque.proprietario" />
             </label>
             <SearchableEntitySelect
               id="customer-receipt-customer"
@@ -212,7 +227,10 @@ export function ReceiveCustomerMaterialPage() {
                 <tr>
                   <th>Item</th>
                   <th className="is-numeric">Quantidade</th>
-                  <th>Lote do fabricante</th>
+                  <th>
+                    Lote do fabricante
+                    <DicaDoCampo id="estoque.loteFornecedor" />
+                  </th>
                   <th>Validade</th>
                   <th>Localização</th>
                   <th aria-hidden="true" />

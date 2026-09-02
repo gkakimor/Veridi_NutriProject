@@ -2005,11 +2005,13 @@ input.is-invalid {
   color: var(--v-green-700);
 }
 
+/* `fixed`, não `absolute`: a bolha nasce em cabeçalho de tabela, e
+   `.table-container` tem `overflow-x: auto` — que recorta o eixo Y junto.
+   Ancorada ao viewport ela escapa de qualquer ancestral recortado. Quem
+   calcula `top`/`left` é o componente, porque só ele mede o gatilho. */
 .info-hint__bubble {
-  position: absolute;
+  position: fixed;
   z-index: 60;
-  top: calc(100% + var(--sp-1));
-  left: 0;
   display: block;
   /* Frase curta não deve virar coluna estreita, nem faixa de tela inteira. */
   width: max-content;
@@ -2031,11 +2033,10 @@ input.is-invalid {
   white-space: normal;
 }
 
-/* Perto da borda direita da janela a bolha vira para dentro. Quem mede é o
-   componente (`InfoHint`); aqui só mora a posição. */
-.info-hint__bubble--end {
-  left: auto;
-  right: 0;
+/* Enquanto não foi medida a bolha existe no DOM mas não aparece: sem isso
+   ela pisca no canto superior esquerdo antes de ir para o lugar. */
+.info-hint__bubble--medindo {
+  visibility: hidden;
 }
 
 /* ---------------- ContextHelp ---------------- */
@@ -2249,4 +2250,197 @@ input.is-invalid {
 /* O nível atual não é link — não pode ter cor de link e convidar o clique. */
 .page-crumbs [aria-current="page"] {
   color: var(--ink-3);
+}
+
+
+/* ---------------- Ajuda da tela (modal) ---------------- */
+
+/*
+ * A explicação de uma tela inteira é longa e cheia de listas. Numa coluna
+ * estreita cada item vira quatro linhas e o fluxo desenhado não cabe lado a
+ * lado — some justamente o que a ajuda tem de melhor. Ocupa a largura útil e
+ * para de crescer onde a leitura começaria a cansar.
+ */
+.confirm-dialog:has(.help-modal) {
+  max-width: min(1100px, 92vw);
+  width: min(1100px, 92vw);
+}
+
+.help-modal {
+  max-height: min(80vh, 900px);
+  overflow-y: auto;
+}
+
+.help-modal__title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+
+/* Sem teto de largura: o resumo são duas ou três frases, e limitá-lo a uma
+   coluna estreita deixava metade do modal vazia ao lado dele. */
+.help-modal__summary {
+  margin-top: var(--sp-2);
+  color: var(--ink-2);
+  line-height: var(--lh-base);
+}
+
+.help-modal__flow {
+  margin-top: var(--sp-5);
+}
+
+.help-modal__flow-name {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--v-green-700);
+}
+
+.help-modal__flow-when {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.help-modal__subtitle {
+  margin-top: var(--sp-5);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+
+/*
+ * Duas colunas quando há espaço: a lista numerada é o texto de apoio do
+ * desenho acima, e em coluna única ela empurra as observações para fora da
+ * tela.
+ */
+.help-modal__steps {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-5);
+  columns: 2;
+  column-gap: var(--sp-6);
+}
+
+.help-modal__steps > li {
+  break-inside: avoid;
+  margin-bottom: var(--sp-3);
+  line-height: var(--lh-base);
+}
+
+/* Sem isto o rótulo cola no texto: "Ativar a versãoSó uma versão fica…". */
+.help-modal__step-detail {
+  display: block;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+.help-modal__notes {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-5);
+  columns: 2;
+  column-gap: var(--sp-6);
+}
+
+.help-modal__notes > li {
+  break-inside: avoid;
+  margin-bottom: var(--sp-2);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+
+/*
+ * Glossário da tela. Duas colunas como as demais listas do modal — são
+ * termos curtos, e em uma coluna só o painel vira rolagem antes do fluxo.
+ * Cada par vive num `div` para o navegador ter o que não quebrar: `dt` e
+ * `dd` soltos se separam entre colunas.
+ */
+.help-modal__concepts {
+  margin: var(--sp-3) 0 0;
+  columns: 2;
+  column-gap: var(--sp-6);
+}
+
+.help-modal__concepts > div {
+  break-inside: avoid;
+  margin-bottom: var(--sp-3);
+}
+
+.help-modal__concepts dt {
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.help-modal__concepts dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+
+.help-modal__doc {
+  display: inline-block;
+  margin-top: var(--sp-4);
+  color: var(--v-green-700);
+}
+
+.help-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+
+/* Número da caixa do fluxo — é ele que liga o desenho ao passo a passo. */
+.help-flow__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: var(--sp-2);
+  border-radius: 999px;
+  background: var(--v-green-700);
+  color: var(--on-dark);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  flex: none;
+}
+
+/* O número entra ao lado do rótulo, então a caixa vira linha — a original
+   era coluna porque também mostrava o detalhe, que saiu daqui. */
+.help-flow__box {
+  flex-direction: row;
+  align-items: center;
+}
+
+
+/* Caixa do fluxo como botão: clicar destaca a explicação de mesmo número. */
+button.help-flow__box {
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+button.help-flow__box:hover {
+  border-color: var(--v-green-600);
+}
+
+button.help-flow__box:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.help-flow__box.is-selected {
+  border-color: var(--v-green-700);
+  background: var(--selected-bg);
+}
+
+/* O item correspondente no passo a passo — é o destino do clique na caixa. */
+.help-modal__steps > li.is-selected {
+  background: var(--selected-bg);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 var(--sp-2) var(--selected-bg);
 }

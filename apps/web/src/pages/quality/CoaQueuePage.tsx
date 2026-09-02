@@ -7,6 +7,14 @@ import { approveCoa, listQualityQueue, rejectCoa } from "../../lib/attachments-a
 import { useAuth } from "../../app/AuthProvider";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 const PAGE_SIZE = 20;
 
@@ -127,6 +135,11 @@ export function CoaQueuePage() {
         </div>
       </div>
 
+      {/* Aprovar o laudo e liberar o lote são a mesma coisa na cabeça de quem
+          chega — e são duas decisões, em duas telas. O subtítulo já diz;
+          o painel explica por quê, e o que rejeitar faz com o lote. */}
+      <ContextHelp topic={helpTopics["qualidadeDocumentos.comoFunciona"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="coa-search">
@@ -175,12 +188,24 @@ export function CoaQueuePage() {
             <tr>
               <th>Lote</th>
               <th>Item</th>
-              <th>Fornecedor / Proprietário</th>
+              <th>
+                Fornecedor / Proprietário
+                <DicaDaColuna id="qualidade.proprietario" />
+              </th>
               <th className="is-numeric">Recebido em</th>
               <th>Validade</th>
-              <th>CoA</th>
-              <th>Qualidade</th>
-              <th className="is-numeric">Físico</th>
+              <th>
+                CoA
+                <DicaDaColuna id="qualidade.coa" />
+              </th>
+              <th>
+                Qualidade
+                <DicaDaColuna id="qualidade.situacaoLote" />
+              </th>
+              <th className="is-numeric">
+                Físico
+                <DicaDaColuna id="qualidade.fisico" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

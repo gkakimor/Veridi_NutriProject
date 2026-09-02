@@ -9,6 +9,8 @@ import type { ProductionOrderDTO, ProductionOrderStatus } from "@veridi/shared";
 import { PRODUCTION_ORDER_STATUSES, PRODUCTION_ORDER_STATUS_LABELS } from "@veridi/shared";
 import { listProductionOrders } from "../../lib/production-orders-api";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 type ActiveFilter = ProductionOrderStatus | "all";
 
@@ -145,6 +147,8 @@ export function ProductionOrdersPage() {
         </button>
         <ExportCsvButton path="/production-orders/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
 </div>
+
+      <ContextHelp topic={helpTopics["ordemProducao.comoFunciona"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">

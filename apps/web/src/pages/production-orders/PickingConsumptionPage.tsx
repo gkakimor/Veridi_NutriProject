@@ -2,6 +2,22 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ProductionOrderDTO } from "@veridi/shared";
 import { listProductionOrders } from "../../lib/production-orders-api";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/**
+ * ⓘ de uma coluna, lido do registro central.
+ *
+ * "Picking" e "Consumo" são duas colunas de contagem que parecem medir a
+ * mesma coisa e medem coisas opostas: uma conta conferência, a outra conta
+ * baixa de estoque. O texto vive em `help-content` porque quem o revisa
+ * conhece a regra, não o JSX.
+ */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 function statusBadgeClass(status: ProductionOrderDTO["status"]): string {
   return status === "IN_PRODUCTION" ? "badge badge--warn" : "badge badge--active";
@@ -67,6 +83,8 @@ export function PickingConsumptionPage() {
         </div>
       </div>
 
+      <ContextHelp topic={helpTopics["producao.picking"]} />
+
       {error && <p className="form-alert">{error}</p>}
 
       <div className="table-container">
@@ -75,9 +93,18 @@ export function PickingConsumptionPage() {
             <tr>
               <th>OP</th>
               <th>Produto</th>
-              <th>Status</th>
-              <th>Picking</th>
-              <th>Consumo</th>
+              <th>
+                Status
+                <DicaDaColuna id="producao.picking.situacao" />
+              </th>
+              <th>
+                Picking
+                <DicaDaColuna id="producao.picking.conferencia" />
+              </th>
+              <th>
+                Consumo
+                <DicaDaColuna id="producao.picking.consumo" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

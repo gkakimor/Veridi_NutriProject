@@ -103,6 +103,23 @@ Na mesma rodada, **Fornecedor passou a usar os validadores compartilhados de
 e-mail e telefone** — antes texto livre. Nenhum dos 219 fornecedores tem esses
 campos preenchidos, então nenhum registro existente deixou de ser editável.
 
+**Ajuda contextual em todas as telas** (`fix/final-ux-readiness`). A ajuda da
+rodada anterior cobria cinco telas, ficava embutida na página e explicava
+onde a tela estava numa cadeia maior. Product Ownership reprovou o foco: a
+ajuda tem de dizer **o que a própria tela é**. Agora "Como funciona" abre um
+**modal** e a ordem é conceito › glossário da tela › fluxos numerados ›
+ressalvas; as caixas do fluxo são clicáveis e destacam a explicação de mesmo
+número. 35 tópicos e 98 dicas de campo cobrem os módulos comercial, produção,
+compras, estoque, cadastros, qualidade, gestão e administração. Sem migration.
+
+No mesmo passo, três correções no produto acabado: "Classificação industrial"
+(fonte, nutriente, pureza) some no item `FINISHED_PRODUCT`, porque descreve um
+item enquanto **componente** de receita e acabado nunca é componente; a tela
+do Produto passou a mostrar os controles de estoque do item como fato; e
+`Exige CoA / Laudo` virou campo da criação do Produto — o único dos quatro
+controles que varia por produto. Regras em
+[PRODUCT_RULES.md](PRODUCT_RULES.md) §45.
+
 ## Validação em produção
 
 As duas rodadas curtas subiram e respondem `/health` 200. O **smoke
@@ -115,8 +132,10 @@ Nenhum.
 
 ## Backlog aberto
 
-Duas passadas de nomenclatura de severidade LOW e uma instabilidade de
-infraestrutura da suíte, todas não bloqueantes. Ver [BACKLOG.md](BACKLOG.md).
+Uma instabilidade de infraestrutura da suíte (api e web juntos), o smoke
+autenticado em produção e duas pendências de dado legado — todas não
+bloqueantes. As duas passadas de nomenclatura e a bolha do `InfoHint` foram
+fechadas na rodada de ajuda contextual. Ver [BACKLOG.md](BACKLOG.md).
 
 ## Decisões de produto ainda em aberto (não bloqueantes)
 

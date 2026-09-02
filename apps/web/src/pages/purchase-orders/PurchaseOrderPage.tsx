@@ -23,6 +23,15 @@ import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
+function DicaDoCampo({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 interface SupplierOption {
   id: string;
@@ -480,6 +489,10 @@ export function PurchaseOrderPage() {
       </div>
 
       <div className="doc-body">
+        {/* Confirmar não é comprar de novo nem receber: é o ato que trava o
+            documento e joga o saldo em aberto para Em Compra. */}
+        <ContextHelp topic={helpTopics["compras.ordens"]} />
+
       {error && <p className="form-alert">{error}</p>}
 
       {purchaseOrder && purchaseOrder.origin === "CUSTOMER_ORDER" && (
@@ -594,7 +607,10 @@ export function PurchaseOrderPage() {
                 <th>Item</th>
                 <th className="is-numeric">Quantidade</th>
                 <th>Un.</th>
-                <th className="is-numeric">Preço unit.</th>
+                <th className="is-numeric">
+                  Preço unit.
+                  <DicaDoCampo id="compras.precoPrevisto" />
+                </th>
                 <th className="is-numeric">Total</th>
                 {isDraftEditable && <th aria-hidden="true" />}
               </tr>
@@ -676,6 +692,7 @@ export function PurchaseOrderPage() {
                               <br />
                               <span className="field__hint">
                                 Recebido: {line.receivedQuantity} · Aberto: {line.openQuantity}
+                                <DicaDoCampo id="compras.saldoAberto" />
                               </span>
                             </>
                           )}
@@ -811,7 +828,7 @@ export function PurchaseOrderPage() {
               disabled={saving}
               onClick={handleSaveForecastOnly}
             >
-              {saving ? "Salvando…" : "Salvar"}
+              {saving ? "Salvando…" : "Salvar previsão e observações"}
             </button>
           )}
           {isConfirmable && (

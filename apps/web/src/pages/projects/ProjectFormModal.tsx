@@ -149,7 +149,7 @@ export function ProjectFormModal({
             disabled={saving || !form.customerId || form.name.trim().length < 3}
             onClick={() => void handleSave()}
           >
-            {saving ? "Salvando…" : "Salvar"}
+            {saving ? "Salvando…" : project ? "Salvar alterações" : "Criar projeto"}
           </button>
         </>
       }

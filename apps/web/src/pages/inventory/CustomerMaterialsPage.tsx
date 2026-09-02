@@ -7,10 +7,19 @@ import { listCustomerMaterials } from "../../lib/customer-materials-api";
 import { listCustomers } from "../../lib/customers-api";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 
 type StatusFilter = LotStatus | "all";
 
 const PAGE_SIZE = 20;
+
+/** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 
 function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
@@ -116,6 +125,10 @@ export function CustomerMaterialsPage() {
         />
       </div>
 
+      {/* Material de terceiro dentro da fábrica: a pergunta que sempre vem é
+          "por que não posso usar isso na OP de outro cliente?". */}
+      <ContextHelp topic={helpTopics["estoque.materiaisCliente"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="customer-materials-search">
@@ -180,14 +193,32 @@ export function CustomerMaterialsPage() {
             <tr>
               <th>Cliente</th>
               <th>Item</th>
-              <th>Lote interno</th>
-              <th>Lote externo</th>
+              <th>
+                Lote interno
+                <DicaDaColuna id="estoque.loteInterno" />
+              </th>
+              <th>
+                Lote externo
+                <DicaDaColuna id="estoque.loteFornecedor" />
+              </th>
               <th>Validade</th>
               <th>Localização</th>
-              <th className="is-numeric">Físico</th>
-              <th className="is-numeric">Reservado</th>
-              <th className="is-numeric">Disponível</th>
-              <th>Qualidade</th>
+              <th className="is-numeric">
+                Físico
+                <DicaDaColuna id="estoque.fisico" />
+              </th>
+              <th className="is-numeric">
+                Reservado
+                <DicaDaColuna id="estoque.reservado" />
+              </th>
+              <th className="is-numeric">
+                Disponível
+                <DicaDaColuna id="estoque.disponivel" />
+              </th>
+              <th>
+                Qualidade
+                <DicaDaColuna id="estoque.situacaoLote" />
+              </th>
             </tr>
           </thead>
           <tbody>

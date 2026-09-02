@@ -11,6 +11,14 @@ import { ProductFormModal } from "./ProductFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { RowActions } from "../../components/RowActions";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 type LifecycleFilter = "all" | "APPROVED" | "DEVELOPMENT";
 type ActiveFilter = "all" | "active" | "inactive";
@@ -174,6 +182,11 @@ export function ProductsPage() {
         <ExportCsvButton path="/products/export.csv" filters={{ search, customerId: customerFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 
+      {/* Duas perguntas chegam junto com a tela: o que separa produto de item
+          de estoque, e por que um produto listado aqui é recusado num pedido.
+          As duas se respondem antes de qualquer filtro. */}
+      <ContextHelp topic={helpTopics["produto.comoFunciona"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="products-search">
@@ -254,14 +267,32 @@ export function ProductsPage() {
           <thead>
             <tr>
               <th>Código</th>
-              <th>Produto</th>
-              <th>Cliente</th>
+              <th>
+                Produto
+                <DicaDaColuna id="produto.cicloDeVida" />
+              </th>
+              <th>
+                Cliente
+                <DicaDaColuna id="produto.cliente" />
+              </th>
               <th>Forma</th>
               <th>Apresentação</th>
-              <th>Item acabado</th>
-              <th>Vida útil</th>
-              <th>Formulação</th>
-              <th>Status</th>
+              <th>
+                Item acabado
+                <DicaDaColuna id="produto.itemAcabado" />
+              </th>
+              <th>
+                Vida útil
+                <DicaDaColuna id="produto.vidaUtil" />
+              </th>
+              <th>
+                Formulação
+                <DicaDaColuna id="produto.formulacaoAtiva" />
+              </th>
+              <th>
+                Status
+                <DicaDaColuna id="produto.situacao" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

@@ -19,6 +19,7 @@ import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { ProductIndustrialCostSummary } from "./ProductIndustrialCostSummary";
 import { FormSection } from "../../components/FormSection";
+import { ToggleCard } from "../../components/ToggleCard";
 import {
   DOSAGE_FORMS,
   DOSAGE_FORM_LABELS,
@@ -55,6 +56,8 @@ interface FormState {
   finishedProductItemId: string;
   /** Unidade do item de estoque criado junto com o produto (só na criação). */
   finishedUnitCode: string;
+  /** Se os lotes deste produto exigem laudo aprovado (só na criação). */
+  finishedRequiresCoa: boolean;
   dosageForm: string;
   presentationType: string;
   capsulesPerDose: string;
@@ -81,6 +84,7 @@ function initialState(product: ProductDTO | null): FormState {
       customerId: product.customerId ?? "",
       finishedProductItemId: product.finishedProductItemId ?? "",
       finishedUnitCode: product.finishedProductItem ? "" : "un",
+      finishedRequiresCoa: product.finishedProductItem?.requiresCoa ?? false,
       dosageForm: product.dosageForm ?? "",
       presentationType: product.presentationType ?? "",
       capsulesPerDose: numberField(product.capsulesPerDose),
@@ -100,6 +104,7 @@ function initialState(product: ProductDTO | null): FormState {
     customerId: "",
     finishedProductItemId: "",
     finishedUnitCode: "un",
+    finishedRequiresCoa: false,
     dosageForm: "",
     presentationType: "",
     capsulesPerDose: "",
@@ -212,7 +217,12 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
       ...(finishedProductItemId ? { finishedProductItemId: finishedProductItemId.value } : {}),
       // O item de estoque nasce com o produto: a unidade é a única coisa que
       // a tela precisa dizer sobre ele.
-      ...(mode === "create" ? { finishedUnitCode: form.finishedUnitCode } : {}),
+      ...(mode === "create"
+        ? {
+            finishedUnitCode: form.finishedUnitCode,
+            finishedRequiresCoa: form.finishedRequiresCoa,
+          }
+        : {}),
       ...(notes ? { notes: notes.value } : {}),
     };
 
@@ -429,9 +439,27 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
               </div>
               <p className="field__hint">
                 O item de estoque será criado automaticamente ao salvar, com
-                código próprio (PA-000123), controle de lote, validade e
-                liberação da Qualidade.
+                código próprio (PA-000123). Ele já nasce controlando lote,
+                controlando validade e exigindo liberação da Qualidade — esses
+                três são padrão da casa e não se desligam aqui.
               </p>
+              {/*
+                O laudo é o único dos quatro controles que varia de produto
+                para produto, e por isso é o único que a tela pergunta.
+                Perguntar os outros três daria a impressão de que dá para
+                produzir um acabado sem lote, o que não é verdade.
+              */}
+              <div className="toggle-row">
+                <ToggleCard
+                  id="product-requires-coa"
+                  checked={form.finishedRequiresCoa}
+                  onChange={(checked) =>
+                    setForm((prev) => ({ ...prev, finishedRequiresCoa: checked }))
+                  }
+                  label="Exige CoA / Laudo"
+                  description="Lotes deste produto só são liberados com o laudo aprovado pela Qualidade."
+                />
+              </div>
             </>
           ) : product?.finishedProductItem ? (
             <dl className="definition-list">
@@ -439,6 +467,25 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
               <dd>
                 <span className="is-code">{product.finishedProductItem.code}</span>{" "}
                 {product.finishedProductItem.name}
+              </dd>
+              {/*
+                Fato, não campo: mudar o controle de um item que já tem lote
+                e histórico é operação do cadastro de Itens, com as travas
+                dele. Aqui só se responde "como o estoque deste produto é
+                controlado?" — pergunta que antes obrigava a sair da tela.
+              */}
+              <dt>Controles de estoque</dt>
+              <dd>
+                {[
+                  product.finishedProductItem.controlsLot ? "controla lote" : null,
+                  product.finishedProductItem.controlsExpiry ? "controla validade" : null,
+                  product.finishedProductItem.requiresQualityRelease
+                    ? "exige liberação da Qualidade"
+                    : null,
+                  product.finishedProductItem.requiresCoa ? "exige CoA / laudo" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Sem controles — lote e validade não são acompanhados."}
               </dd>
               <dt>Estoque</dt>
               <dd>

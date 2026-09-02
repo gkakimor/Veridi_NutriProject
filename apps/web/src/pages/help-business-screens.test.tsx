@@ -137,9 +137,15 @@ async function verificaPainel(tituloEsperado: string, regraEsperada: RegExp) {
   expect(screen.getByRole("heading", { name: tituloEsperado })).toBeInTheDocument();
   expect(screen.getByText(regraEsperada)).toBeInTheDocument();
 
-  await user.click(gatilho);
+  /*
+   * A ajuda virou modal: o gatilho fica atrás do overlay enquanto está
+   * aberta, então quem fecha é o botão do próprio diálogo — clicar no
+   * gatilho de novo não chega nele.
+   */
+  await user.click(screen.getByRole("button", { name: "Fechar" }));
 
   expect(gatilho).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("heading", { name: tituloEsperado })).toBeNull();
   expect(screen.queryByRole("heading", { name: tituloEsperado })).toBeNull();
 }
 
@@ -174,17 +180,42 @@ describe("Formulação", () => {
     );
   });
 
-  it("mostra o fluxo até a precificação, na ordem em que ele acontece", async () => {
+  it("mostra cada fluxo numerado, na ordem em que ele acontece", async () => {
     await abrir();
 
     await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
 
-    const fluxo = screen.getByRole("list", {
-      name: `Fluxo: ${helpTopics["formulacao.comoFunciona"].title}`,
-    });
+    // O rótulo acessível nomeia o FLUXO, não a tela: esta tela tem dois
+    // caminhos — montar a versão, e o que a versão ativa dispara depois.
+    // Cada caixa vem numerada, e é o número que casa com o passo a passo.
+    const fluxos = helpTopics["formulacao.comoFunciona"].flows ?? [];
+    expect(fluxos.length).toBeGreaterThan(1);
+
+    for (const fluxo of fluxos) {
+      const lista = screen.getByRole("list", { name: `Fluxo: ${fluxo.name}` });
+      expect(
+        Array.from(lista.querySelectorAll("li")).map((item) => item.textContent),
+      ).toEqual(fluxo.steps.map((etapa, i) => `${i + 1}${etapa.label}`));
+    }
+  });
+
+  it("explica o que a tela É antes de explicar o caminho", async () => {
+    await abrir();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+
+    // A queixa que originou isto: a ajuda desenhava a cadeia macro e não
+    // dizia o que uma formulação é. O glossário da tela vem antes do fluxo.
+    const conceitos = helpTopics["formulacao.comoFunciona"].concepts ?? [];
+    expect(conceitos.length).toBeGreaterThan(0);
+
+    // Busca dentro do glossário: "Versão ativa" também é caixa de fluxo, e
+    // uma busca solta acharia as duas.
+    const glossario = screen.getByRole("heading", { name: "Nesta tela" })
+      .nextElementSibling as HTMLElement;
     expect(
-      Array.from(fluxo.querySelectorAll("li")).map((item) => item.textContent),
-    ).toEqual(["Produto", "Formulação", "Versão ativa", "Estrutura de custos", "Cálculo", "Precificação"]);
+      Array.from(glossario.querySelectorAll("dt")).map((item) => item.textContent),
+    ).toEqual(conceitos.map((conceito) => conceito.term));
   });
 });
 

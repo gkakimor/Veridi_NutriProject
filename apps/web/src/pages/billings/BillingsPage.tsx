@@ -15,6 +15,8 @@ import {
 import { createBilling, listAwaitingBilling, listBillings } from "../../lib/billings-api";
 import { formatBRL } from "../../lib/currency";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 type ActiveFilter = BillingStatus | "all";
 
@@ -157,6 +159,8 @@ export function BillingsPage() {
             dateTo,
           }} />
 </div>
+
+      <ContextHelp topic={helpTopics["faturamento.comoFunciona"]} />
 
       {error && <p className="form-alert">{error}</p>}
 

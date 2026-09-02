@@ -12,6 +12,14 @@ import {
   useOpenRecord,
   useRecordContext,
 } from "../../components/RecordContext";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -123,6 +131,11 @@ export function SuppliersPage() {
         <ExportCsvButton path="/suppliers/export.csv" filters={{ search, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 
+      {/* A pergunta que traz alguém aqui costuma ser "onde cadastro o preço
+          deste fornecedor?" — e a resposta é outra tela. Melhor dizer isso
+          no topo do que deixar procurar um campo que não existe. */}
+      <ContextHelp topic={helpTopics["fornecedor.comoFunciona"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="suppliers-search">
@@ -167,11 +180,20 @@ export function SuppliersPage() {
           <thead>
             <tr>
               <th>Código</th>
-              <th>Razão Social / Nome</th>
+              <th>
+                Razão Social / Nome
+                <DicaDaColuna id="fornecedor.razaoSocial" />
+              </th>
               <th>Nome Fantasia</th>
-              <th>CNPJ</th>
+              <th>
+                CNPJ
+                <DicaDaColuna id="fornecedor.cnpj" />
+              </th>
               <th>Telefone</th>
-              <th>Status</th>
+              <th>
+                Status
+                <DicaDaColuna id="fornecedor.situacao" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

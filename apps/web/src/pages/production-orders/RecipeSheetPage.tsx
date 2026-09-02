@@ -10,6 +10,21 @@ import { FormSection } from "../../components/FormSection";
 import { completePart, getRecipeSheet, registerWeighing } from "../../lib/recipe-api";
 import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/**
+ * ⓘ de um conceito da folha, lido do registro central.
+ *
+ * "Pesado" parece um número de conferência e é uma baixa de estoque; a
+ * diferença entre ele e "Planejado" é o desvio que a Qualidade audita. As
+ * duas palavras precisam se explicar onde aparecem.
+ */
+function Dica({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -192,6 +207,11 @@ export function RecipeSheetPage() {
       </div>
 
       <div className="doc-body">
+        {/* A folha é documento de execução e de auditoria ao mesmo tempo:
+            confirmar a pesagem já baixa o material. A explicação disso fica
+            no topo, antes da primeira parte. */}
+        <ContextHelp topic={helpTopics["producao.folhaReceita"]} />
+
         {error && (
           <p className="form-alert" ref={alertRef} tabIndex={-1} role="alert">
             {error}
@@ -222,7 +242,10 @@ export function RecipeSheetPage() {
             <dd>
               {sheet.plannedQuantity} {sheet.outputUnitCode}
             </dd>
-            <dt>Produção fracionada</dt>
+            <dt>
+              Produção fracionada
+              <Dica id="producao.receita.fracionada" />
+            </dt>
             <dd>
               {sheet.numberOfParts > 1 ? `${sheet.numberOfParts} partes` : "Parte única"}
             </dd>
@@ -286,10 +309,22 @@ export function RecipeSheetPage() {
                   <tr>
                     <th>Material</th>
                     <th>Fornecimento</th>
-                    <th className="is-numeric">Planejado</th>
-                    <th>Pesado</th>
-                    <th>Diferença</th>
-                    <th>Lotes reservados</th>
+                    <th className="is-numeric">
+                      Planejado
+                      <Dica id="producao.receita.planejado" />
+                    </th>
+                    <th>
+                      Pesado
+                      <Dica id="producao.receita.pesado" />
+                    </th>
+                    <th>
+                      Diferença
+                      <Dica id="producao.receita.diferenca" />
+                    </th>
+                    <th>
+                      Lotes reservados
+                      <Dica id="producao.receita.lotesReservados" />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

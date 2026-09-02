@@ -17,8 +17,17 @@ import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filter
 import { SupplierItemFormModal } from "./SupplierItemFormModal";
 import { SupplierItemDetailModal } from "./SupplierItemDetailModal";
 import { EntityLink } from "../../components/EntityLink";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 
 const PAGE_SIZE = 20;
+
+/** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 const FILTER_SCOPE = "supplier-items";
 
 export function qualificationBadgeClass(status: SupplierItemQualificationStatus): string {
@@ -204,6 +213,10 @@ export function SupplierItemsPage() {
         />
       </div>
 
+      {/* Homologação é da Qualidade e preço é de Compras; a mesma linha
+          mostra as duas coisas, e "preferencial" não quer dizer barato. */}
+      <ContextHelp topic={helpTopics["compras.itemFornecedor"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="supplier-items-search">
@@ -315,10 +328,22 @@ export function SupplierItemsPage() {
               <th>Item</th>
               <th>Fornecedor</th>
               <th>Código no fornecedor</th>
-              <th>Homologação</th>
-              <th>Preferencial</th>
-              <th className="is-numeric">Preço</th>
-              <th>Pedido mínimo</th>
+              <th>
+                Homologação
+                <DicaDaColuna id="compras.homologacao" />
+              </th>
+              <th>
+                Preferencial
+                <DicaDaColuna id="compras.preferencial" />
+              </th>
+              <th className="is-numeric">
+                Preço
+                <DicaDaColuna id="compras.precoOferta" />
+              </th>
+              <th>
+                Pedido mínimo
+                <DicaDaColuna id="compras.pedidoMinimo" />
+              </th>
               <th>Referências</th>
               <th>Situação</th>
             </tr>

@@ -75,6 +75,13 @@ function toProductDTO(product: ProductWithRelations): ProductDTO {
           id: product.finishedProductItem.id,
           code: product.finishedProductItem.code,
           name: product.finishedProductItem.name,
+          // Os controles do item viajam com o resumo: a tela do produto
+          // precisa poder dizer como o estoque dele é controlado sem
+          // mandar quem cadastra abrir o cadastro de Itens para descobrir.
+          controlsLot: product.finishedProductItem.controlsLot,
+          controlsExpiry: product.finishedProductItem.controlsExpiry,
+          requiresQualityRelease: product.finishedProductItem.requiresQualityRelease,
+          requiresCoa: product.finishedProductItem.requiresCoa,
         }
       : null,
     dosageForm: product.dosageForm,
@@ -318,6 +325,9 @@ export async function createProduct(input: CreateProductInput): Promise<ProductD
             // reescreve o histórico do estoque.
             name: input.name,
             unitCode,
+            ...(input.finishedRequiresCoa !== undefined
+              ? { requiresCoa: input.finishedRequiresCoa }
+              : {}),
           })
         ).id;
 

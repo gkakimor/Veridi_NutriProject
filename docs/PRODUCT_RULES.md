@@ -2972,3 +2972,66 @@ O Customer Shell é a exceção deliberada: ali a trilha é `Cliente › Produto
 PROD-…`, contextual, e não a canônica `Produtos > PROD-…`. Trocar uma pela
 outra devolveria ao operador exatamente o problema que a Consulta existe para
 resolver — perder de vista de quem se está falando.
+
+---
+
+## §45 — Ajuda contextual e rótulos de ação
+
+### A ajuda de uma tela explica a própria tela
+
+Cada tela do ERP tem uma ajuda alcançável pelo botão "Como funciona", que
+abre um modal. Ela começa pelo **conceito** — o que a tela é, o que a
+entidade guarda, o que ela não é —, apresenta o **vocabulário próprio da
+tela** num glossário, e só então desenha o **caminho**.
+
+A ordem não é estética. Uma primeira versão explicava apenas onde a tela
+ficava numa cadeia maior ("Produto › Formulação › Custo › Preço") e foi
+reprovada: quem abre a ajuda não sabe o que a tela na frente dele faz, e o
+desenho da cadeia responde a outra pergunta. O fluxo continua, como terceira
+parte.
+
+Tela com mais de um caminho nomeia cada um e diz **quando** ele vale — "qual
+desses é o meu caso?" é a pergunta que vem antes de qualquer etapa.
+
+O conteúdo vive em `apps/web/src/help/content/`, um arquivo por módulo,
+nunca escrito na tela. Um teste de contrato garante que todo tópico tenha
+resumo, glossário e ao menos um fluxo.
+
+### `InfoHint` explica termo; `ContextHelp` explica tela
+
+O ⓘ pequeno ao lado de um rótulo ou cabeçalho de coluna explica **aquele
+termo** ("o que é overage", "o que é reservado"). O painel explica a tela. Os
+dois se complementam e não se substituem: hint sozinho nunca ensina a tela, e
+painel sozinho não responde à dúvida que nasce em cima de um campo.
+
+A bolha do ⓘ é ancorada ao viewport, não ao elemento: o lugar mais comum do
+ícone é o cabeçalho de uma tabela, e o container da tabela recorta o eixo Y.
+
+### Qual dos controles do item o Produto decide
+
+O item de produto acabado nasce controlando lote, controlando validade e
+exigindo liberação da Qualidade. Esses três são padrão da casa e a tela do
+Produto **não** os oferece como opção — oferecer sugeriria que dá para
+produzir acabado sem lote, o que o sistema não permite.
+
+`Exige CoA / Laudo` é o único que varia de produto para produto, e por isso é
+o único que a criação do Produto pergunta. Fica desligado por omissão: exigir
+laudo sem que ninguém tenha pedido travaria a liberação de todo lote
+produzido.
+
+Os quatro controles aparecem em leitura na tela do Produto. Alterá-los depois
+é operação do cadastro de Itens, com as travas dele — um item que já tem lote
+e histórico não muda de regime por formulário de produto.
+
+### Vocabulário de ação
+
+O botão que confirma diz o que ele faz, e diz igual em toda tela:
+`Criar <coisa>` para criar, `Salvar alterações` para editar, `Salvar <parte>`
+quando o botão grava um pedaço de um documento maior, `Salvar rascunho`
+quando o estado salvo é mesmo rascunho.
+
+Em diálogo de confirmação o botão carrega o **verbo curto** e o título
+carrega a pergunta. Repetir ali o rótulo inteiro do botão que abriu faz o
+confirmar parecer o mesmo botão de novo, e quem lê rápido não sabe se
+avançou. A exceção é o cancelamento: "Cancelar" sozinho é lido como
+"desistir", que é a ação oposta, então o objeto fica.

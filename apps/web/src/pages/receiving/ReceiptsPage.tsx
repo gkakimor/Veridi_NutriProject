@@ -5,6 +5,8 @@ import type { ReceiptDTO } from "@veridi/shared";
 import { RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
 import { listReceipts } from "../../lib/receiving-api";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 const PAGE_SIZE = 20;
 
@@ -79,6 +81,11 @@ export function ReceiptsPage() {
         </button>
         <ExportCsvButton path="/receipts/export.csv" filters={{ search }} />
 </div>
+
+      {/* Duas entradas muito diferentes moram na mesma lista — compra da
+          Veridi e remessa do cliente. Dizer isso antes da tabela evita a
+          pergunta "por que este recebimento não tem fornecedor?". */}
+      <ContextHelp topic={helpTopics["compras.recebimentos"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">

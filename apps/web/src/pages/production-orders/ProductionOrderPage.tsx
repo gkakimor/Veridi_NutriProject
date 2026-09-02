@@ -1826,7 +1826,7 @@ export function ProductionOrderPage() {
               disabled={saving || planning || releasing}
               onClick={handleSaveNotesOnly}
             >
-              {saving ? "Salvando…" : "Salvar"}
+              {saving ? "Salvando…" : "Salvar observações"}
             </button>
           )}
           {isPlannable && (
@@ -1881,7 +1881,7 @@ export function ProductionOrderPage() {
         open={releaseDialogOpen}
         title={`Liberar ${productionOrder?.code} para produção?`}
         message="Os materiais disponíveis serão reservados para esta OP usando a ordem FEFO/FIFO. O estoque físico ainda não será baixado."
-        confirmLabel="Liberar OP"
+        confirmLabel="Liberar"
         confirmTone="accent"
         onCancel={() => setReleaseDialogOpen(false)}
         onConfirm={handleRelease}

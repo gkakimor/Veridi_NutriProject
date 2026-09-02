@@ -9,6 +9,8 @@ import { listPurchaseOrders } from "../../lib/purchase-orders-api";
 import { listSuppliers } from "../../lib/suppliers-api";
 import { formatBRL } from "../../lib/currency";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 type ActiveFilter = PurchaseOrderStatus | "all";
 
@@ -106,6 +108,11 @@ export function PurchaseOrdersPage() {
         </button>
         <ExportCsvButton path="/purchase-orders/export.csv" filters={{ search, supplierId: supplierFilter, status: statusFilter === "all" ? undefined : statusFilter }} />
 </div>
+
+      {/* Rascunho, Confirmada e Parcialmente recebida são estados com
+          consequências diferentes no estoque — e só um deles conta como
+          Em Compra. */}
+      <ContextHelp topic={helpTopics["compras.ordens"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">

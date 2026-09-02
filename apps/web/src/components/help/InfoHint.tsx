@@ -11,10 +11,13 @@ import type { ReactNode } from "react";
  * Enter e Espaço abrem igual, e o hover fica como atalho de mouse.
  *
  * A bolha é irmã do botão no DOM, logo depois dele: assim o leitor de tela
- * encontra o texto no lugar em que ele foi anunciado. Ela flutua por
- * `position: absolute` — dentro de um ancestral com `overflow` recortado
- * (célula de tabela rolável) ela é cortada; nesse caso, prefira `ContextHelp`
- * acima da tabela.
+ * encontra o texto no lugar em que ele foi anunciado. Visualmente ela é
+ * `position: fixed` e recebe coordenadas medidas aqui — não `absolute`. O
+ * lugar mais comum do ⓘ é o cabeçalho de uma tabela, e `.table-container`
+ * tem `overflow-x: auto`, que recorta o eixo Y junto: com poucas linhas a
+ * bolha aparecia cortada pela borda da tabela. Ancorada ao viewport ela
+ * escapa de qualquer ancestral recortado, e vira para dentro quando não
+ * cabe à direita ou embaixo.
  */
 export function InfoHint({
   label,
@@ -39,22 +42,55 @@ export function InfoHint({
   const trigger = useRef<HTMLButtonElement>(null);
   const bubble = useRef<HTMLSpanElement>(null);
   /**
-   * Bolha ancorada pela direita.
+   * Coordenadas da bolha no viewport.
    *
-   * A última coluna de uma tabela larga fica colada na borda da janela; a
-   * bolha alinhada à esquerda do ícone saía da tela e levava rolagem
-   * horizontal junto. É a única medida que o CSS não consegue fazer sozinho.
+   * `null` enquanto não foi medida — a bolha existe no DOM (é preciso
+   * medi-la) mas fica invisível, senão pisca no canto antes de ir para o
+   * lugar. É a parte que o CSS não faz sozinho: só aqui se conhece onde o
+   * gatilho caiu e quanto espaço sobrou em volta.
    */
-  const [alignEnd, setAlignEnd] = useState(false);
+  const [posicao, setPosicao] = useState<{ top: number; left: number } | null>(null);
 
   useLayoutEffect(() => {
     if (!open) {
-      setAlignEnd(false);
+      setPosicao(null);
       return;
     }
-    const rect = bubble.current?.getBoundingClientRect();
-    if (!rect) return;
-    setAlignEnd(rect.right > window.innerWidth - 8);
+
+    function medir() {
+      const gatilho = trigger.current?.getBoundingClientRect();
+      const balao = bubble.current?.getBoundingClientRect();
+      if (!gatilho || !balao) return;
+
+      /** Folga mínima até a borda da janela. */
+      const MARGEM = 8;
+
+      // Abaixo e alinhada à esquerda do ícone é o padrão. A última coluna de
+      // uma tabela larga fica colada na borda: ali a bolha vira para dentro,
+      // ancorada pela direita do ícone.
+      let left = gatilho.left;
+      if (left + balao.width > window.innerWidth - MARGEM) {
+        left = Math.max(MARGEM, gatilho.right - balao.width);
+      }
+
+      // Cabeçalho no rodapé da janela: abre para cima em vez de sair da tela.
+      let top = gatilho.bottom + 4;
+      if (top + balao.height > window.innerHeight - MARGEM) {
+        top = Math.max(MARGEM, gatilho.top - balao.height - 4);
+      }
+
+      setPosicao({ top, left });
+    }
+
+    medir();
+    // Captura: a rolagem que importa costuma ser a do `.table-container`, não
+    // a da janela, e evento de rolagem de elemento não sobe por bubbling.
+    window.addEventListener("scroll", medir, true);
+    window.addEventListener("resize", medir);
+    return () => {
+      window.removeEventListener("scroll", medir, true);
+      window.removeEventListener("resize", medir);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -109,7 +145,10 @@ export function InfoHint({
         <span
           ref={bubble}
           id={bubbleId}
-          className={alignEnd ? "info-hint__bubble info-hint__bubble--end" : "info-hint__bubble"}
+          className={
+            posicao ? "info-hint__bubble" : "info-hint__bubble info-hint__bubble--medindo"
+          }
+          style={posicao ? { top: posicao.top, left: posicao.left } : undefined}
         >
           {children}
         </span>

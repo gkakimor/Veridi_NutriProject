@@ -561,7 +561,9 @@ export function SupplierItemDetailModal({
       <ConfirmDialog
         open={confirmarInativacao}
         title="Inativar esta relação?"
-        confirmLabel="Inativar relação"
+        /* O botão que abriu já diz "Inativar relação": o confirmar responde
+           com o verbo, senão parece o mesmo botão de novo. */
+        confirmLabel="Inativar"
         cancelLabel="Cancelar"
         confirmTone="danger"
         message={

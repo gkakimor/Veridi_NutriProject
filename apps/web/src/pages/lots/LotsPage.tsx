@@ -9,6 +9,15 @@ import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 type StatusFilter = LotStatus | "all";
 type OwnerFilter = InventoryOwnerType | "all";
@@ -148,6 +157,11 @@ export function LotsPage() {
         />
 </div>
 
+      {/* "Lote" aqui é duas identidades ao mesmo tempo, e a coluna Status
+          decide se o material pode ser usado. Nenhuma das duas coisas se
+          adivinha pelo cabeçalho. */}
+      <ContextHelp topic={helpTopics["estoque.lotes"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="lots-search">
@@ -217,16 +231,31 @@ export function LotsPage() {
         <table className="table table--clickable-rows table--sticky-actions">
           <thead>
             <tr>
-              <th>Lote Interno</th>
+              <th>
+                Lote Interno
+                <DicaDaColuna id="estoque.loteInterno" />
+              </th>
               <th>Item</th>
               {/* Status ao lado da identidade: era a última coluna antes das
                   ações e saía da tela junto com elas, justamente a informação
                   que decide se o lote pode ser usado. */}
-              <th>Status</th>
-              <th>Proprietário</th>
-              <th>Lote Fornecedor</th>
+              <th>
+                Status
+                <DicaDaColuna id="estoque.situacaoLote" />
+              </th>
+              <th>
+                Proprietário
+                <DicaDaColuna id="estoque.proprietario" />
+              </th>
+              <th>
+                Lote Fornecedor
+                <DicaDaColuna id="estoque.loteFornecedor" />
+              </th>
               <th>Fornecedor</th>
-              <th className="is-numeric">Recebido</th>
+              <th className="is-numeric">
+                Recebido
+                <DicaDaColuna id="estoque.recebido" />
+              </th>
               <th>Validade</th>
               <th>Localização</th>
               <th aria-hidden="true" />

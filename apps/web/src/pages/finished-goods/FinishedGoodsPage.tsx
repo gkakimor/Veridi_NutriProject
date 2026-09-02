@@ -8,6 +8,21 @@ import { listProducts } from "../../lib/products-api";
 import { formatBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+/**
+ * ⓘ de uma coluna, lido do registro central.
+ *
+ * A tabela põe lado a lado quatro quantidades do mesmo lote — produzido,
+ * físico, reservado e disponível — que quase nunca são iguais. Sem a
+ * explicação na própria coluna, "produzido" é lido como saldo.
+ */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 type StatusFilter = LotStatus | "all";
 
@@ -136,6 +151,8 @@ export function FinishedGoodsPage() {
           }} />
 </div>
 
+      <ContextHelp topic={helpTopics["producao.produtoAcabado"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="fg-search">
@@ -206,17 +223,43 @@ export function FinishedGoodsPage() {
             <tr>
               <th>Produto</th>
               <th>Item PA</th>
-              <th>Lote Veridi</th>
-              <th>Lote Interno</th>
+              <th>
+                Lote Veridi
+                <DicaDaColuna id="producao.pa.loteVeridi" />
+              </th>
+              <th>
+                Lote Interno
+                <DicaDaColuna id="producao.pa.loteInterno" />
+              </th>
               <th>OP</th>
               <th>Data produção</th>
-              <th className="is-numeric">Produzido</th>
-              <th className="is-numeric">Físico</th>
-              <th>Reservado</th>
-              <th>Disponível</th>
-              <th>Qualidade</th>
+              {/* Quatro quantidades do mesmo lote que não querem dizer a
+                  mesma coisa — é aqui que a leitura costuma errar. */}
+              <th className="is-numeric">
+                Produzido
+                <DicaDaColuna id="producao.pa.produzido" />
+              </th>
+              <th className="is-numeric">
+                Físico
+                <DicaDaColuna id="producao.pa.fisico" />
+              </th>
+              <th>
+                Reservado
+                <DicaDaColuna id="producao.pa.reservado" />
+              </th>
+              <th>
+                Disponível
+                <DicaDaColuna id="producao.pa.disponivel" />
+              </th>
+              <th>
+                Qualidade
+                <DicaDaColuna id="producao.pa.qualidade" />
+              </th>
               <th>Validade</th>
-              <th className="is-numeric">Custo Material Un.</th>
+              <th className="is-numeric">
+                Custo Material Un.
+                <DicaDaColuna id="producao.pa.custoMaterial" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>

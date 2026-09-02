@@ -10,6 +10,14 @@ import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useAuth } from "../../app/AuthProvider";
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
 import { IndustrialResourceFormModal } from "./IndustrialResourceFormModal";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 type ActiveFilter = "all" | "active" | "inactive";
 type TypeFilter = "all" | IndustrialResourceType;
@@ -102,6 +110,11 @@ export function IndustrialResourcesPage() {
         />
       </div>
 
+      {/* Recurso e uso do recurso vivem em telas diferentes, e a tarifa daqui
+          é histórico, não um campo a corrigir. Sem isso a primeira reação é
+          procurar onde se edita o valor antigo. */}
+      <ContextHelp topic={helpTopics["recursoIndustrial.comoFunciona"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="resources-search">
@@ -154,11 +167,26 @@ export function IndustrialResourcesPage() {
             <tr>
               <th>Código</th>
               <th>Recurso</th>
-              <th>Tipo</th>
-              <th>Potência (kW)</th>
-              <th>Tarifa vigente</th>
-              <th>Tarifas</th>
-              <th>Status</th>
+              <th>
+                Tipo
+                <DicaDaColuna id="recurso.tipo" />
+              </th>
+              <th>
+                Potência (kW)
+                <DicaDaColuna id="recurso.potencia" />
+              </th>
+              <th>
+                Tarifa vigente
+                <DicaDaColuna id="recurso.tarifaVigente" />
+              </th>
+              <th>
+                Tarifas
+                <DicaDaColuna id="recurso.tarifas" />
+              </th>
+              <th>
+                Status
+                <DicaDaColuna id="recurso.situacao" />
+              </th>
             </tr>
           </thead>
           <tbody>

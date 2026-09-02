@@ -341,8 +341,18 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
           </div>
         </FormSection>
 
-        {/* Classificação industrial (capacidade 33) — insumo das
-            capacidades de formulação e custeio. Tudo opcional. */}
+        {/*
+          Classificação industrial (capacidade 33) — insumo das capacidades
+          de formulação e custeio. Tudo opcional.
+
+          Some no produto acabado: fonte, nutriente declarado e pureza padrão
+          descrevem um item ENQUANTO COMPONENTE de uma receita — a pureza é o
+          que corrige a quantidade da linha. Produto acabado nunca é
+          componente de formulação nenhuma, então esses campos não teriam
+          onde ser lidos. Oferecê-los convida a preencher um dado que o
+          sistema inteiro ignora.
+        */}
+        {form.type !== "FINISHED_PRODUCT" && (
         <FormSection
           title="Classificação industrial"
           subtitle="Fonte, nutriente declarado e pureza padrão usados pela formulação."
@@ -434,6 +444,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
             )}
           </div>
         </FormSection>
+        )}
 
         <FormSection
           title="Controles de rastreabilidade"

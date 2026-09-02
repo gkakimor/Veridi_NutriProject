@@ -517,7 +517,7 @@ export function BillingPage() {
                 .map((line) => line.productCode)
                 .join(", ")}. O faturamento será emitido sem valor total e ficará somente para leitura — emitir não tem volta. Esta ação não emite Nota Fiscal.`
         }
-        confirmLabel="Emitir faturamento"
+        confirmLabel="Emitir"
         confirmTone="accent"
         onCancel={() => setIssueDialogOpen(false)}
         onConfirm={handleIssue}

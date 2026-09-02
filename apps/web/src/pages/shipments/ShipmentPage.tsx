@@ -24,9 +24,22 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+
+/**
+ * ⓘ de cabeçalho de coluna. O texto mora em `help-content`: “Reservado
+ * disponível” quer dizer a mesma coisa aqui e no Pedido, e quem revisa a
+ * explicação não deveria precisar abrir duas telas.
+ */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 function statusBadgeClass(status: ShipmentStatus): string {
   switch (status) {
@@ -119,12 +132,24 @@ function ProductGroup({
             <thead>
               <tr>
                 <th>Lote</th>
-                <th>Lote Veridi</th>
+                <th>
+                  Lote Veridi
+                  <DicaDaColuna id="comercial.expedicaoLoteVeridi" />
+                </th>
                 <th>Validade</th>
                 <th>Localização</th>
-                <th className="is-numeric">Reservado disponível</th>
-                <th className="is-numeric">{isDraft ? "Enviar agora" : "Expedido"}</th>
-                <th>Conferência</th>
+                <th className="is-numeric">
+                  Reservado disponível
+                  <DicaDaColuna id="comercial.expedicaoReservadoDisponivel" />
+                </th>
+                <th className="is-numeric">
+                  {isDraft ? "Enviar agora" : "Expedido"}
+                  {isDraft && <DicaDaColuna id="comercial.expedicaoEnviarAgora" />}
+                </th>
+                <th>
+                  Conferência
+                  <DicaDaColuna id="comercial.expedicaoConferencia" />
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -539,6 +564,10 @@ export function ShipmentPage() {
       <div className="doc-body">
         {error && <p className="form-alert">{error}</p>}
 
+        {/* Separar, conferir e expedir são três atos diferentes na mesma
+            tela, e só o último move estoque — sem volta. */}
+        <ContextHelp topic={helpTopics["comercial.expedicao"]} />
+
         {shipment.status === "CANCELLED" && (
           <FormSection title="Cancelamento">
             <div className="status-line">
@@ -784,7 +813,7 @@ export function ShipmentPage() {
           `Conferência: ${shipment.verification.lotsVerified}/${shipment.verification.lotsRequired} ✓. ` +
           "A confirmação registrará a saída física do estoque e não poderá ser cancelada depois."
         }
-        confirmLabel="Confirmar expedição"
+        confirmLabel="Confirmar"
         confirmTone="accent"
         onCancel={() => setConfirmDialogOpen(false)}
         onConfirm={handleConfirm}

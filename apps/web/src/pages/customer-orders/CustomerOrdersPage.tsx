@@ -14,6 +14,8 @@ import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 type ActiveFilter = CustomerOrderStatus | "all";
 
@@ -135,6 +137,8 @@ export function CustomerOrdersPage() {
         </button>
         <ExportCsvButton path="/customer-orders/export.csv" filters={{ search, customerId: customerFilter, status: statusFilter === "all" ? undefined : statusFilter }} />
 </div>
+
+      <ContextHelp topic={helpTopics["planoAtendimento.comoFunciona"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">

@@ -10,7 +10,15 @@ import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
 
+/** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 function lotStatusBadgeClass(status: string, isExpired: boolean): string {
   if (isExpired) return "badge badge--err";
@@ -120,6 +128,11 @@ export function InventoryItemDetailPage() {
       </div>
 
       <div className="doc-body">
+        {/* As duas ações desta página — ajustar e calcular a sugestão — são
+            as que mais se tentava fazer na planilha. Nenhuma delas edita
+            saldo, e é isso que precisa ficar claro antes do clique. */}
+        <ContextHelp topic={helpTopics["estoque.item"]} />
+
         {costReference && (
           <FormSection
             title="Referência de custo"
@@ -211,7 +224,10 @@ export function InventoryItemDetailPage() {
                     <th>Lote</th>
                     <th>Validade</th>
                     <th>Localização</th>
-                    <th>Status</th>
+                    <th>
+                      Status
+                      <DicaDaColuna id="estoque.situacaoLote" />
+                    </th>
                     <th className="is-numeric">Físico</th>
                     <th className="is-numeric">Reservado</th>
                     <th className="is-numeric">Disponível</th>

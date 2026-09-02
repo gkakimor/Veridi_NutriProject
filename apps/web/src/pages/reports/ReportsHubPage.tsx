@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import "./reports.css";
 
 interface ReportLink {
@@ -241,6 +243,10 @@ export function ReportsHubPage() {
           </p>
         </div>
       </div>
+
+      {/* Vinte relatórios com código e apelido: o painel explica como achar
+          o certo, e por que nenhum deles vale contra o documento. */}
+      <ContextHelp topic={helpTopics["relatorios.comoFunciona"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">

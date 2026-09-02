@@ -9,6 +9,8 @@ import { listPricingVersions } from "../../lib/pricing-api";
 import { EntityLink } from "../../components/EntityLink";
 import { RecordContextChip } from "../../components/RecordContext";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 const PAGE_SIZE = 20;
 
@@ -99,6 +101,8 @@ export function PricingListPage() {
           </p>
         </div>
       </div>
+
+      <ContextHelp topic={helpTopics["cmv.comoFunciona"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">

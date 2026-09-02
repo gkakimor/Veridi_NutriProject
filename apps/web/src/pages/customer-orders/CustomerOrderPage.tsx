@@ -1914,7 +1914,7 @@ export function CustomerOrderPage() {
           )}
           {!isDraft && status !== "CANCELLED" && !isNew && (
             <button type="button" className="btn btn--secondary" disabled={saving} onClick={handleSaveNotesOnly}>
-              {saving ? "Salvando…" : "Salvar"}
+              {saving ? "Salvando…" : "Salvar prazo e observações"}
             </button>
           )}
           {isConfirmable && (
@@ -1929,7 +1929,7 @@ export function CustomerOrderPage() {
         open={confirmDialogOpen}
         title={`Confirmar ${customerOrder?.code}?`}
         message="Produtos e quantidades do pedido serão congelados para planejamento operacional."
-        confirmLabel="Confirmar pedido"
+        confirmLabel="Confirmar"
         confirmTone="accent"
         onCancel={() => setConfirmDialogOpen(false)}
         onConfirm={handleConfirm}

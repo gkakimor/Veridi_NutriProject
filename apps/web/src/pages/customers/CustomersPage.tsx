@@ -11,6 +11,14 @@ import {
   useOpenRecord,
   useRecordContext,
 } from "../../components/RecordContext";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
+import type { HelpHintId } from "../../help/help-content";
+
+function DicaDaColuna({ id }: { id: HelpHintId }) {
+  const dica = helpHints[id];
+  return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
+}
 
 type ActiveFilter = "all" | "active" | "inactive";
 type ModalState =
@@ -125,6 +133,11 @@ export function CustomersPage() {
         <ExportCsvButton path="/customers/export.csv" filters={{ search, state: stateFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
 </div>
 
+      {/* O cadastro parece só uma agenda até alguém descobrir que ele decide
+          propriedade de material, identidade em documento impresso e o que
+          um cliente inativo passa a recusar. */}
+      <ContextHelp topic={helpTopics["cliente.comoFunciona"]} />
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="customers-search">
@@ -185,12 +198,21 @@ export function CustomersPage() {
           <thead>
             <tr>
               <th>Código</th>
-              <th>Razão Social / Nome</th>
+              <th>
+                Razão Social / Nome
+                <DicaDaColuna id="cliente.razaoSocial" />
+              </th>
               <th>Nome Fantasia</th>
-              <th>CNPJ</th>
+              <th>
+                CNPJ
+                <DicaDaColuna id="cliente.cnpj" />
+              </th>
               <th>Cidade/UF</th>
               <th>Telefone</th>
-              <th>Status</th>
+              <th>
+                Status
+                <DicaDaColuna id="cliente.situacao" />
+              </th>
               <th aria-hidden="true" />
             </tr>
           </thead>
