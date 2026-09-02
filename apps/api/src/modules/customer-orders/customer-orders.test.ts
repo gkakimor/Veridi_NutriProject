@@ -100,6 +100,21 @@ async function createProduct(
   const product = response.json();
   fixtureProductIds.push(product.id);
 
+  /*
+   * Produto SEM item de produto acabado não é mais construível pela API —
+   * todo produto novo nasce com o seu. O estado continua existindo na base
+   * (produtos importados do legado), então o teste o monta direto no banco,
+   * que é de onde ele realmente vem.
+   */
+  if (overrides.finishedItemId === null) {
+    await getPrisma().product.update({
+      where: { id: product.id },
+      data: { finishedProductItemId: null },
+    });
+    const semItem = await app.inject({ method: "GET", url: `/products/${product.id}` });
+    return semItem.json();
+  }
+
   if (overrides.active === false) {
     await app.inject({ method: "POST", url: `/products/${product.id}/deactivate` });
     const refreshed = await app.inject({ method: "GET", url: `/products/${product.id}` });
