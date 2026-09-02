@@ -292,9 +292,15 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
       {...(codeChip ? { codeChip } : {})}
       footer={footer}
     >
-      <form id="product-form" onSubmit={handleSubmit}>
-        {error && <p className="form-alert">{error}</p>}
-
+      {/*
+        FORA do `<form>` do produto, e isto não é organização de código.
+        `CustomerFormModal` tem `<form>` próprio, e `<form>` dentro de
+        `<form>` é marcação inválida: o navegador descarta o interno, o
+        "Criar cliente" virava submit nativo do formulário do PRODUTO, a
+        página navegava, e o cliente não chegava a ser criado — o rascunho
+        inteiro ia junto. Todos os outros cadastros no contexto já ficam
+        fora de qualquer `<form>`; este era o único aninhado.
+      */}
       {newCustomerName !== null && (
         <CustomerFormModal
           mode="create"
@@ -314,6 +320,9 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
           }}
         />
       )}
+
+      <form id="product-form" onSubmit={handleSubmit}>
+        {error && <p className="form-alert">{error}</p>}
 
         {product && (
           <RelatedLinks

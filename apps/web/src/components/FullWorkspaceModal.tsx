@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useInertBackground } from "./useInertBackground";
 import type { ReactNode } from "react";
 import { CodeChip } from "./CodeChip";
@@ -53,6 +53,13 @@ export function FullWorkspaceModal({
    * inteira junto, sem ter pedido.
    */
   const identidade = useRef({});
+  /*
+   * `id` fixo no título dava dois elementos com a mesma `id` quando um
+   * cadastro abria por cima de outro, e o `aria-labelledby` do de cima
+   * resolvia para o título do de baixo: quem usa leitor de tela abria
+   * "Novo item de estoque" e ouvia "Nova relação Item × Fornecedor".
+   */
+  const tituloId = useId();
 
   // `aria-modal` sozinho não esconde a tela de trás de quem navega por
   // elementos: o fundo precisa ficar inerte de verdade.
@@ -134,7 +141,7 @@ export function FullWorkspaceModal({
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="full-workspace-modal-title"
+        aria-labelledby={tituloId}
       >
         <div className="modal-fullscreen__head">
           <div>
@@ -142,7 +149,7 @@ export function FullWorkspaceModal({
               {crumb} / <b>{crumbActive}</b>
             </div>
             <div className="modal-fullscreen__title">
-              <h2 id="full-workspace-modal-title">{title}</h2>
+              <h2 id={tituloId}>{title}</h2>
               {codeChip && <CodeChip>{codeChip}</CodeChip>}
             </div>
           </div>

@@ -239,6 +239,31 @@ describe("Produto — item de produto acabado", () => {
 });
 
 describe("Produto — cadastrar cliente no contexto", () => {
+  /*
+   * O cadastro de cliente NÃO pode ficar dentro do `<form>` do produto.
+   *
+   * `CustomerFormModal` tem `<form>` próprio, e `<form>` dentro de `<form>`
+   * é marcação inválida: o navegador descarta o interno, "Criar cliente"
+   * virava submit nativo do formulário do PRODUTO, a página navegava para a
+   * listagem e o cliente nem chegava a ser criado — o rascunho ia junto.
+   *
+   * O teste olha a ESTRUTURA e não o comportamento porque o mock daqui
+   * renderiza um botão simples, sem `<form>`: foi exatamente por isso que a
+   * suíte passou verde enquanto a tela quebrava no navegador.
+   */
+  it("o cadastro de cliente fica fora do formulário do produto", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const campo = await screen.findByLabelText(/Cliente/);
+    await user.type(campo, "Cliente que ainda não existe");
+    await user.click(await screen.findByRole("option", { name: /Novo cliente/ }));
+
+    const cadastro = await screen.findByRole("button", { name: "simular-cadastro-de-cliente" });
+    expect(document.querySelector("#product-form")).toBeInTheDocument();
+    expect(document.querySelector("#product-form")?.contains(cadastro)).toBe(false);
+  });
+
   it("cliente criado volta selecionado sem perder o formulário", async () => {
     const user = userEvent.setup();
     renderModal();

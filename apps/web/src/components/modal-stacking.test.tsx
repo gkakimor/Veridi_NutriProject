@@ -78,6 +78,25 @@ describe("modal sobre modal", () => {
     expect(fecharExterno).toHaveBeenCalledTimes(1);
   });
 
+  /*
+   * Cada camada precisa do próprio `id` de título. Com `id` fixo havia dois
+   * elementos iguais no documento e o `aria-labelledby` do modal de cima
+   * resolvia para o título do de baixo: o leitor de tela anunciava o
+   * cadastro errado, que é pior do que não anunciar nada.
+   */
+  it("cada camada anuncia o próprio título", async () => {
+    const user = userEvent.setup();
+    render(<Empilhados fecharExterno={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: "Novo item de estoque" }));
+    await screen.findByText("Formulário do item");
+
+    const dialogos = screen.getAllByRole("dialog");
+    expect(dialogos).toHaveLength(2);
+    expect(dialogos[0]).toHaveAccessibleName("Nova relação");
+    expect(dialogos[1]).toHaveAccessibleName("Novo item de estoque");
+  });
+
   it("fechar a camada de cima não devolve a rolagem do fundo", async () => {
     const user = userEvent.setup();
     render(<Empilhados fecharExterno={() => {}} />);

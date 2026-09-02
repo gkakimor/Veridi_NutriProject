@@ -208,6 +208,18 @@
   box-shadow: inset 1px 0 0 var(--line);
 }
 
+/*
+ * Célula fixa com menu aberto sobe no empilhamento.
+ *
+ * `position: sticky` CRIA contexto de empilhamento, então nem o `z-index` do
+ * menu nem o `position: fixed` dele o tiram de dentro da célula: as células
+ * fixas das linhas seguintes, pintadas depois e com fundo próprio, cobriam o
+ * menu da linha de cima. Quem precisa vir à frente é a célula.
+ */
+.table--sticky-actions td:last-child:has(.row-actions__menu) {
+  z-index: 3;
+}
+
 .table--sticky-actions tbody tr:hover td:last-child {
   background: var(--canvas);
 }
