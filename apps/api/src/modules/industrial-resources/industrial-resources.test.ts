@@ -153,7 +153,9 @@ describe("Recursos industriais — cadastro e tarifas", () => {
 
     const labor = await createResource(app, "LABOR", { name: `Operador ${marker()}` });
     expect(labor.statusCode).toBe(201);
-    expect(labor.json().code.startsWith("REC-")).toBe(true);
+    // `RIN`, nao `REC`: o prefixo antigo era o mesmo do Recebimento, e
+    // `REC-000001` chegou a nomear as duas coisas ao mesmo tempo.
+    expect(labor.json().code.startsWith("RIN-")).toBe(true);
     // Mão de obra se mede em hora; energia em kWh.
     expect(labor.json().defaultUsageUom).toBe("HOUR");
     expect(labor.json().powerKw).toBeNull();

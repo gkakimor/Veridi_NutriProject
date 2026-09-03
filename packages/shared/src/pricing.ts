@@ -18,6 +18,15 @@
  *    faixa de 300 e a de 1000 viverem em realidades diferentes.
  */
 
+/**
+ * Versão de precificação.
+ *
+ * Mora aqui, com os demais, para que uma duplicata fique visível lado a
+ * lado. Cravado dentro do serviço foi assim que `REC` acabou nomeando
+ * Recebimento e Recurso Industrial ao mesmo tempo, por meses.
+ */
+export const PRICING_VERSION_CODE_PREFIX = "PREC";
+
 import type { IndustrialCostQuality, IndustrialCostWarningDTO } from "./industrial-cost-calculation.js";
 
 export type PricingVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE";

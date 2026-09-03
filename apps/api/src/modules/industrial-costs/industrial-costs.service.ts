@@ -10,6 +10,7 @@ import type {
   ProductIndustrialCostResponse,
 } from "@veridi/shared";
 import { MAX_INDUSTRIAL_COST_PERCENT, usageUomForResourceType } from "@veridi/shared";
+import { INDUSTRIAL_COST_VERSION_CODE_PREFIX } from "@veridi/shared";
 import { pickCurrentRate, toRateDTO } from "../industrial-resources/industrial-resources.service.js";
 import { getPrisma } from "../../db/prisma.js";
 import { missingFormulationContext } from "../../lib/formulation-math.js";
@@ -66,7 +67,9 @@ import type {
  */
 
 const CODE_SEQUENCE = "industrial_cost_code_seq";
-const CODE_PREFIX = "EC";
+/* O prefixo vive em `@veridi/shared`, com todos os outros: cravado aqui,
+   uma duplicata nao aparece lado a lado com os demais. */
+const CODE_PREFIX = INDUSTRIAL_COST_VERSION_CODE_PREFIX;
 
 const versionInclude = {
   energyResource: { select: { id: true, name: true } },

@@ -6,6 +6,15 @@
  * consolidado (CMV) é calculado em outra capacidade; nada aqui guarda total.
  */
 
+/**
+ * Estrutura de custo industrial (versão).
+ *
+ * Mora aqui, com os demais, para que uma duplicata fique visível lado a
+ * lado. Cravado dentro do serviço foi assim que `REC` acabou nomeando
+ * Recebimento e Recurso Industrial ao mesmo tempo, por meses.
+ */
+export const INDUSTRIAL_COST_VERSION_CODE_PREFIX = "EC";
+
 import type {
   EnergyCalculationMode,
   IndustrialCostResourceUsageDTO,

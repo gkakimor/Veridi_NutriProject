@@ -338,7 +338,7 @@ describe("Ordem de Produção — reconciliação de material", () => {
     await app.ready();
 
     const { order, materiais } = await createOrderWithMaterials(app, 2);
-    const naoConsumido = materiais[1];
+    const naoConsumido = materiais[1]!;
 
     await consumir(app, order, 1);
     await apontar(app, order.id, "10");
