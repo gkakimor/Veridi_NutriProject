@@ -205,7 +205,24 @@
   position: sticky;
   right: 0;
   background: var(--surface);
-  box-shadow: inset 1px 0 0 var(--line);
+  /*
+   * O fio à esquerda, e uma sombra PROJETADA para fora.
+   *
+   * A sombra existe porque esta coluna anula a pista do contêiner. A
+   * `.table-container` avisa que há conteúdo cortado com um gradiente na borda
+   * direita — e esta coluna, opaca e encostada em `right: 0`, pinta bem em cima
+   * dele. Medido: em 1440x900 a coluna fixa cobre 119px em Pedidos, 130 em
+   * Itens e 336 em Lotes, exatamente o quanto haveria para rolar, e a pessoa
+   * não recebia nenhum sinal de que a coluna de Status estava atrás dela.
+   *
+   * Dois mecanismos meus se anulando: a sombra de rolagem veio numa rodada, a
+   * coluna fixa na seguinte, e ninguém olhou a interação. Agora quem avisa é a
+   * própria coluna — ela projeta para a esquerda, que é de onde o conteúdo
+   * passa por baixo.
+   */
+  box-shadow:
+    inset 1px 0 0 var(--line),
+    -8px 0 8px -6px rgba(20, 40, 30, 0.32);
 }
 
 /*
