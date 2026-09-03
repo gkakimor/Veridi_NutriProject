@@ -61,12 +61,12 @@ Material preparado:
 Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive em
 [PRODUCT_RULES.md](PRODUCT_RULES.md); aqui fica só o que mudou de estado.
 
-- **Cadastro de Cliente** (`cab5bf3`) — e-mail, CNPJ (numérico e alfanumérico
-  da IN RFB 2.229/2024) e telefone validados na tela e na API, com validador
-  compartilhado que Fornecedor herdou; endereço por CEP; autoria. §41.
-- **Consulta do Cliente** (`7cd61f2`) — leitura em `/consultas/clientes/:id`,
-  reusando os endpoints operacionais já filtrados; o novo é o resumo e o
-  escopo, que recusa com 404 entidade de outro Cliente. §42.
+- **Cadastro de Cliente** (`cab5bf3`) — e-mail, CNPJ e telefone validados na
+  tela e na API, validador compartilhado que Fornecedor herdou, endereço por
+  CEP, autoria. §41.
+- **Consulta do Cliente** (`7cd61f2`) — leitura em `/consultas/clientes/:id`
+  reusando os endpoints já filtrados; o novo é o resumo e o escopo, que recusa
+  com 404 entidade de outro Cliente. §42.
 - **Produto + item de produto acabado** — o Produto cria o seu item na mesma
   transação; "Produto acabado" saiu da criação manual em Itens, e Cliente
   virou obrigatório. §43.
@@ -80,35 +80,25 @@ Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive e
   sem teto. Três classes de coluna e teto para a coluna de ações; Lotes caiu
   de 1356px para 537px, oito telas zeraram.
 
-**Telas oficiais de cadastro** (`feat/canonical-create-return`). Cliente,
-Produto, Item de estoque e Fornecedor ganharam página própria de criação —
-`/cadastros/<entidade>/novo`. Os campos vivem num módulo só por entidade,
-usado pela página e pelo modal, então não há dois cadastros a divergir; o
-botão de commit já usava `type="submit" form="…"`, que funciona igual nos
-dois, e por isso o rodapé precisa de uma coisa só do formulário.
-
-O que a página traz e o modal não tinha: **sobrevive a um F5**, vale como link
-e entra no histórico. O preço é guardar o rascunho da origem enquanto a pessoa
-está fora — `sessionStorage`, token de uso único na URL, validade de horas,
-com guarda contra retorno para fora do sistema. Cancelar e o botão Voltar do
-navegador também restauram. A trilha permanece canônica; a origem aparece como
-ação secundária. Fecha os itens 9 e 10 do [BACKLOG.md](BACKLOG.md). Sem
-migration. §46.
-
-**Recurso industrial** completou o conjunto na micro-rodada seguinte
-(`fix/industrial-resource-create-page`): mesma extração, rota
-`/gestao/recursos-industriais/novo`, campo da estrutura de custos navegando, e
-o modal removido — recurso não tem edição em modal, então ele só servia à
-criação. Restam **dois** LOW, nenhum bloqueante.
-
-**Produção na Consulta do Cliente** (`feat/customer-consultation-production`).
-Read model próprio, o segundo depois de Produto Acabado: o DTO operacional
-custa **548 consultas por página de 25** montando a necessidade de material —
-a conta de liberar a ordem, não a pergunta da Consulta. A forma nova custa
-**quatro por página**, com teste que conta consultas pelo log do driver.
-Filtro por `ProductionOrder.customerId`; os outros caminhos foram medidos e
-não recuperam uma linha. 78 das 108 ordens locais não têm cliente, então a aba
-fica vazia para a maioria estando correta, e o estado vazio diz isso. §47.
+- **Telas oficiais de cadastro** (`feat/canonical-create-return`) — Cliente,
+  Produto, Item, Fornecedor e Recurso ganharam página de criação em
+  `/cadastros/<entidade>/novo`, com os campos num módulo só por entidade,
+  usado pela página e pelo modal. O que a página traz: sobrevive a um F5, vale
+  como link, entra no histórico. O preço é guardar o rascunho da origem em
+  `sessionStorage`, por token de uso único na URL, com guarda contra retorno
+  para fora do sistema. Cancelar e o Voltar do navegador também restauram. §46.
+- **Produção na Consulta do Cliente** (`0657cd1`) — read model próprio: o DTO
+  operacional custa **548 consultas por página de 25** montando a necessidade
+  de material, que é a conta de liberar a ordem e não a pergunta da Consulta.
+  A forma nova custa **quatro**, com teste que conta consultas pelo log do
+  driver. 78 das 108 ordens locais não têm cliente, então a aba fica vazia
+  para a maioria estando correta, e o estado vazio diz isso. §47.
+- **Integridade de dado** (`fix/data-integrity-mediums`) — fecha os dois MEDIUM
+  do guia passo a passo, ambos de falha silenciosa. Ativar formulação passou a
+  gravar antes, com a gravação como condição: falhou, não ativa. E a busca de
+  item foi para o servidor em seis telas — filtrar lista pré-carregada
+  escondia 1.729 dos 2.729 itens ativos na Contagem Física, com "+ Novo"
+  convidando a duplicar. §48.
 
 ## Validação em produção
 
@@ -128,10 +118,10 @@ Nenhum.
 
 ## Backlog aberto
 
-Dois LOW: a instabilidade da suíte rodando api e web juntos, e o dado legado
-sem cliente. Nenhum bloqueia. As duas passadas de nomenclatura, a ordem real
-de delete, a bolha do `InfoHint` e o smoke autenticado foram fechados na
-rodada de ajuda contextual. Ver [BACKLOG.md](BACKLOG.md).
+Zero CRITICAL, HIGH e MEDIUM. Cinco LOW, nenhum bloqueante — os dois mais
+recentes (15 e 16) são o mesmo padrão de catálogo truncado em telas que ainda
+não estouraram o teto; produtos aprovados estão em 784 de 1000. Ver
+[BACKLOG.md](BACKLOG.md).
 
 ## Decisões de produto ainda em aberto (não bloqueantes)
 

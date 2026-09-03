@@ -24,6 +24,7 @@ import {
 import { getItem, listItems } from "../../lib/items-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { FormSection } from "../../components/FormSection";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { TemplateDiff } from "./TemplateDiff";
 import { formatDateTime } from "../../lib/dates";
@@ -48,6 +49,27 @@ function Dica({ id }: { id: HelpHintId }) {
 
 interface LinhaEditavel extends FormulationTemplateComponentInput {
   chave: string;
+}
+
+/**
+ * Primeira página do catálogo — o que a lista mostra antes de digitar.
+ *
+ * Era 200 sobre 2.729 itens: 2.529 existiam e não apareciam na busca, sem
+ * aviso. Quem busca agora pergunta ao servidor (`buscarItens`), que conhece
+ * o catálogo inteiro.
+ */
+const PRIMEIRA_PAGINA = 50;
+
+/** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
+function opcaoDoItem(item: ItemDTO): EntityOption {
+  return { id: item.id, code: item.code, name: item.name };
+}
+
+/** Mescla sem duplicar e sem trocar a referência à toa. */
+function mesclarItens(atual: ItemDTO[], novos: ItemDTO[]): ItemDTO[] {
+  const conhecidos = new Set(atual.map((item) => item.id));
+  const ineditos = novos.filter((item) => !conhecidos.has(item.id));
+  return ineditos.length === 0 ? atual : [...atual, ...ineditos];
 }
 
 /**
@@ -138,10 +160,54 @@ export function FormulationTemplateDetailPage() {
 
   useEffect(() => load(), [load]);
   useEffect(() => {
-    listItems({ pageSize: 200 })
+    listItems({ pageSize: PRIMEIRA_PAGINA })
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
   }, []);
+
+  /**
+   * Busca no servidor. A carga inicial desta tela não filtra nada — template
+   * compõe com qualquer item de estoque, ativo ou não —, então a busca
+   * também não filtra: quem não aparecia na lista passa a ser encontrável,
+   * e ninguém que já era elegível deixa de ser.
+   */
+  async function buscarItens(termo: string): Promise<EntityOption[]> {
+    const resposta = await listItems({ search: termo, pageSize: PRIMEIRA_PAGINA });
+    // O achado entra no catálogo da tela: o rótulo do item escolhido sai
+    // daqui, e uma linha com id sem rótulo lê como campo vazio.
+    setItems((atual) => mesclarItens(atual, resposta.items));
+    return resposta.items.map(opcaoDoItem);
+  }
+
+  /**
+   * Rótulo do que a matriz JÁ referencia.
+   *
+   * A linha do rascunho guarda só o `itemId`; o nome vem do catálogo. Com o
+   * catálogo paginado, componente de item fora da página aparecia como campo
+   * em branco — parecia linha por preencher, e o caminho natural era
+   * escolher outro item ou cadastrar de novo. Buscar pelos ids resolve
+   * exatamente os que faltam, uma vez cada.
+   */
+  const rotulosPedidos = useRef(new Set<string>());
+  useEffect(() => {
+    const faltando = [
+      ...new Set(
+        linhas
+          .map((linha) => linha.itemId)
+          .filter(
+            (itemId) =>
+              itemId &&
+              !items.some((item) => item.id === itemId) &&
+              !rotulosPedidos.current.has(itemId),
+          ),
+      ),
+    ];
+    if (faltando.length === 0) return;
+    for (const itemId of faltando) rotulosPedidos.current.add(itemId);
+    listItems({ ids: faltando, pageSize: faltando.length })
+      .then((resultado) => setItems((atual) => mesclarItens(atual, resultado.items)))
+      .catch(() => undefined);
+  }, [linhas, items]);
 
   /**
    * Cadastro de item na TELA OFICIAL, sem perder a matriz.
@@ -428,11 +494,8 @@ export function FormulationTemplateDetailPage() {
                              vizinhos: quem não edita trocava o item na tela e
                              só descobria a recusa ao salvar. */
                           disabled={!editavel}
-                          options={items.map((item) => ({
-                            id: item.id,
-                            code: item.code,
-                            name: item.name,
-                          }))}
+                          options={items.map(opcaoDoItem)}
+                          onSearch={buscarItens}
                           canCreate={editavel}
                           createLabel="Novo item de estoque"
                           onCreateNew={() =>

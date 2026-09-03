@@ -30,6 +30,16 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
 }
 const FILTER_SCOPE = "supplier-items";
 
+/**
+ * Primeira página do catálogo de itens que abastece o formulário de relação.
+ *
+ * Era 1000 sobre 2.729 itens ativos, e o formulário ainda filtrava tipo no
+ * navegador — o que passava do teto existia e não aparecia na busca. Quem
+ * digita agora pergunta ao servidor, dentro do próprio formulário; aqui só
+ * fica a página de abertura.
+ */
+const PRIMEIRA_PAGINA_DE_ITENS = 50;
+
 export function qualificationBadgeClass(status: SupplierItemQualificationStatus): string {
   switch (status) {
     case "APPROVED":
@@ -174,7 +184,7 @@ export function SupplierItemsPage() {
     listSuppliers({ active: true, pageSize: 1000 })
       .then((result) => setSuppliers(result.suppliers))
       .catch(() => setSuppliers([]));
-    listItems({ active: true, pageSize: 1000 })
+    listItems({ active: true, pageSize: PRIMEIRA_PAGINA_DE_ITENS })
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
   }, []);

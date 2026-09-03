@@ -49,6 +49,7 @@ export function SearchableEntitySelect({
   canCreate = false,
   createLabel = "Cadastrar novo",
   onCreateNew,
+  onSearch,
 }: {
   id: string;
   options: EntityOption[];
@@ -67,6 +68,22 @@ export function SearchableEntitySelect({
   canCreate?: boolean;
   createLabel?: string;
   onCreateNew?: (typed: string) => void;
+  /**
+   * Busca no SERVIDOR. Ausente, o campo filtra a lista de `options`.
+   *
+   * Existe porque filtrar no navegador só enxerga o que foi carregado, e
+   * quem carrega um catálogo com teto fixo passa a esconder tudo o que
+   * passou dele — sem aviso. Medido: a contagem física carregava mil itens
+   * de dois mil setecentos e vinte e nove, e os mil setecentos e vinte e
+   * nove restantes ficavam impossíveis de achar pela busca. Como o campo
+   * ainda oferece "+ Novo", o caminho natural de quem não achava era
+   * cadastrar de novo o que já existia.
+   *
+   * Com esta função o campo pergunta ao servidor, que conhece o catálogo
+   * inteiro. `options` continua servindo à abertura sem digitar e ao rótulo
+   * do registro já escolhido.
+   */
+  onSearch?: (termo: string) => Promise<EntityOption[]>;
 }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
@@ -84,6 +101,21 @@ export function SearchableEntitySelect({
    * `handleKeyDown`.
    */
   const navigated = useRef(true);
+  /**
+   * Resultado da busca no servidor. `null` = ainda não houve busca, e a
+   * lista mostra `options`.
+   */
+  const [remoto, setRemoto] = useState<EntityOption[] | null>(null);
+  const [buscando, setBuscando] = useState(false);
+  const [erroBusca, setErroBusca] = useState(false);
+  /**
+   * Geração da busca em curso.
+   *
+   * "caf" e "cafeína" saem quase juntos e voltam fora de ordem; sem isto a
+   * resposta velha sobrescreve a nova e a lista passa a mostrar o resultado
+   * de um texto que não está mais no campo.
+   */
+  const geracao = useRef(0);
   const [anchor, setAnchor] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
 
   /** Espaço de leitura: ~10 resultados, sem passar do que a janela oferece. */
@@ -142,7 +174,58 @@ export function SearchableEntitySelect({
   /** Só letras e dígitos: "35.301.394/0001-00" e "35301394" viram o mesmo. */
   const compact = (text: string) => text.replace(/[^a-z0-9]/g, "");
 
+  /*
+   * Busca no servidor, com espera curta.
+   *
+   * 200ms é o suficiente para não disparar uma consulta por tecla e curto o
+   * bastante para a lista parecer imediata a quem digita devagar.
+   */
+  useEffect(() => {
+    if (!onSearch) return;
+    const termo = query.trim();
+
+    if (termo.length === 0) {
+      // Campo vazio volta a mostrar a primeira página que já veio pronta —
+      // pedir "tudo" ao servidor traria o catálogo inteiro de novo.
+      geracao.current += 1;
+      setRemoto(null);
+      setBuscando(false);
+      setErroBusca(false);
+      return;
+    }
+
+    const minha = (geracao.current += 1);
+    setBuscando(true);
+    setErroBusca(false);
+
+    const timer = setTimeout(() => {
+      onSearch(termo)
+        .then((resultados) => {
+          // Chegou tarde: outra busca já saiu depois desta.
+          if (minha !== geracao.current) return;
+          setRemoto(resultados);
+          setBuscando(false);
+        })
+        .catch(() => {
+          if (minha !== geracao.current) return;
+          setRemoto([]);
+          setErroBusca(true);
+          setBuscando(false);
+        });
+    }, 200);
+
+    return () => clearTimeout(timer);
+    // `onSearch` fica fora das dependências de propósito: a maioria dos
+    // chamadores define a função no corpo do render, e incluí-la refaria a
+    // busca a cada tecla digitada em QUALQUER campo da tela.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
   const filtered = useMemo(() => {
+    // Havendo busca no servidor, ela é a resposta: refiltrar no navegador
+    // descartaria resultado que o servidor achou por critério próprio.
+    if (onSearch && remoto !== null) return remoto;
+
     const words = normalize(query.trim()).split(/\s+/).filter(Boolean);
     if (words.length === 0) return options;
     return options.filter((option) => {
@@ -158,7 +241,7 @@ export function SearchableEntitySelect({
         return palavraCompacta.length > 0 && haystackCompacto.includes(palavraCompacta);
       });
     });
-  }, [options, query]);
+  }, [options, query, onSearch, remoto]);
 
   useEffect(() => {
     if (!open) return;
@@ -423,12 +506,28 @@ export function SearchableEntitySelect({
                 senão o leitor de tela conta aviso e ação como resultado. */}
             {criarPrimeiro && itemCadastrar}
 
-            {options.length === 0 && !canCreate && (
+            {/*
+              Três estados diferentes, três frases diferentes. Dizer "nenhum
+              resultado" enquanto a busca ainda está no ar faz a pessoa parar
+              de digitar e concluir que o registro não existe — que é
+              exatamente o engano que leva a cadastrar duplicata.
+            */}
+            {buscando && (
+              <li role="presentation" className="entity-select__empty">
+                Procurando…
+              </li>
+            )}
+            {!buscando && erroBusca && (
+              <li role="presentation" className="entity-select__empty">
+                Não foi possível buscar agora. Tente de novo.
+              </li>
+            )}
+            {!buscando && !erroBusca && options.length === 0 && filtered.length === 0 && !canCreate && (
               <li role="presentation" className="entity-select__empty">
                 Nada disponível para escolher.
               </li>
             )}
-            {options.length > 0 && filtered.length === 0 && (
+            {!buscando && !erroBusca && filtered.length === 0 && options.length > 0 && (
               <li role="presentation" className="entity-select__empty">
                 {emptyMessage}
               </li>
@@ -458,6 +557,16 @@ export function SearchableEntitySelect({
             {filtered.length > 50 && (
               <li role="presentation" className="entity-select__empty">
                 +{filtered.length - 50} resultados — refine a busca.
+              </li>
+            )}
+            {/*
+              Sem digitar, a lista é só a primeira página do catálogo. Quem
+              não vê o que procura precisa saber que o resto existe e é
+              alcançável — sem isso a lista curta parece o catálogo inteiro.
+            */}
+            {onSearch && query.trim().length === 0 && !buscando && (
+              <li role="presentation" className="entity-select__empty">
+                Digite para buscar em todo o catálogo.
               </li>
             )}
           </ul>,
