@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { BrandLogo } from "../components/BrandLogo";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -37,6 +37,21 @@ function startsCollapsed(): boolean {
 export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
+  const navRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * Entrar direto numa rota cujo item de menu esta abaixo da dobra deixava a
+   * navegacao mostrando um trecho do menu onde nada esta marcado como atual —
+   * a pessoa via uma tela de Gestao com o menu parado em Cadastros.
+   *
+   * `block: "nearest"` nao mexe em nada quando o item ja esta visivel, e rola
+   * apenas o proprio miolo da navegacao: a pagina principal fica onde estava.
+   */
+  useEffect(() => {
+    navRef.current?.querySelector<HTMLElement>(".sidebar__link.is-active")?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [location.pathname]);
   const { user, signOut } = useAuth();
   const [navCollapsed, setNavCollapsed] = useState(startsCollapsed);
 
@@ -170,6 +185,8 @@ export function AppShell() {
       </header>
 
       <nav className="sidebar" aria-label="Navegação principal">
+        <div className="sidebar__header" />
+        <div className="sidebar__nav" ref={navRef}>
         {navigation.map((group, index) => (
           <div className="sidebar__group" key={group.title ?? `grupo-${index}`}>
             {group.title !== null && (
@@ -195,6 +212,8 @@ export function AppShell() {
             ))}
           </div>
         ))}
+        </div>
+        <div className="sidebar__footer" />
       </nav>
 
       {!navCollapsed && (
