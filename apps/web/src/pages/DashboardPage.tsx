@@ -1,3 +1,4 @@
+import { formatQuantity } from "../lib/quantity";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type {
@@ -380,7 +381,7 @@ export function DashboardPage() {
         </div>
       </section>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
       {loading && !data && <p className="muted">Carregando…</p>}
 
       {data && period && state && (
@@ -596,7 +597,7 @@ export function DashboardPage() {
                         <td className="is-code">{movement.lotCode ?? "—"}</td>
                         {/* Cada linha traz a própria unidade — nada é somado entre linhas. */}
                         <td className="is-numeric">
-                          {movement.quantity} {movement.unitCode}
+                          {formatQuantity(movement.quantity)} {movement.unitCode}
                         </td>
                         <td>
                           {movement.sourceCode && path ? (

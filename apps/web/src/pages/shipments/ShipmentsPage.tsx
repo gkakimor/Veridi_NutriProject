@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -144,7 +145,7 @@ export function ShipmentsPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table table--sticky-actions table--clickable-rows">
@@ -175,13 +176,21 @@ export function ShipmentsPage() {
                   if (event.key === "Enter") navigate(`/comercial/expedicoes/${shipment.id}`);
                 }}
               >
-                <td className="is-code col-tight">{shipment.code}</td>
-                <td className="is-code col-tight">{shipment.customerOrderCode}</td>
+                <td className="is-code col-tight">
+                  <EntityLink kind="shipment" id={shipment.id} code={shipment.code} />
+                </td>
+                <td className="is-code col-tight">
+                  <EntityLink
+                    kind="customerOrder"
+                    id={shipment.customerOrderId}
+                    code={shipment.customerOrderCode}
+                  />
+                </td>
                 <td className="col-flex">
                   <EntityLink kind="customer" id={shipment.customerId} code={shipment.customerName} />
                 </td>
                 <td className="col-tight">{formatDate(shipment.shipmentDate)}</td>
-                <td className="is-numeric col-tight">{shipment.totalQuantity}</td>
+                <td className="is-numeric col-tight">{formatQuantity(shipment.totalQuantity)}</td>
                 <td className="col-tight">
                   <span className={statusBadgeClass(shipment.status)}>
                     {SHIPMENT_STATUS_LABELS[shipment.status]}
@@ -189,13 +198,12 @@ export function ShipmentsPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/comercial/expedicoes/${shipment.id}`)}
+                      to={`/comercial/expedicoes/${shipment.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>

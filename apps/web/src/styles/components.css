@@ -173,8 +173,8 @@
   background-image:
     linear-gradient(to right, var(--surface), rgba(255, 255, 255, 0)),
     linear-gradient(to left, var(--surface), rgba(255, 255, 255, 0)),
-    linear-gradient(to right, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0)),
-    linear-gradient(to left, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0));
+    linear-gradient(to right, rgba(20, 40, 30, 0.5), rgba(20, 40, 30, 0)),
+    linear-gradient(to left, rgba(20, 40, 30, 0.5), rgba(20, 40, 30, 0));
   background-position:
     0 0,
     100% 0,
@@ -184,7 +184,11 @@
   /* A sombra é a ÚNICA pista de que há coluna fora da tela. Medida a 12px
      e 0,16 de opacidade ela passava despercebida numa lista onde metade das
      colunas está cortada — o público do sistema não é de gente que sai
-     arrastando tabela para conferir. */
+     arrastando tabela para conferir.
+
+     A 0,3 ela ainda media 1,88:1 contra `--surface`, abaixo do limiar de 3:1
+     que vale para objeto gráfico: existia e não cumpria função. A 0,5 mede
+     3,13:1. Aumentar sem medir foi o erro da vez anterior. */
   background-size:
     32px 100%,
     32px 100%,
@@ -205,7 +209,29 @@
   position: sticky;
   right: 0;
   background: var(--surface);
-  box-shadow: inset 1px 0 0 var(--line);
+  /*
+   * O fio à esquerda, e uma sombra PROJETADA para fora.
+   *
+   * A sombra existe porque esta coluna anula a pista do contêiner. A
+   * `.table-container` avisa que há conteúdo cortado com um gradiente na borda
+   * direita — e esta coluna, opaca e encostada em `right: 0`, pinta bem em cima
+   * dele. Medido: em 1440x900 a coluna fixa cobre 119px em Pedidos, 130 em
+   * Itens e 336 em Lotes, exatamente o quanto haveria para rolar, e a pessoa
+   * não recebia nenhum sinal de que a coluna de Status estava atrás dela.
+   *
+   * Dois mecanismos meus se anulando: a sombra de rolagem veio numa rodada, a
+   * coluna fixa na seguinte, e ninguém olhou a interação. Agora quem avisa é a
+   * própria coluna — ela projeta para a esquerda, que é de onde o conteúdo
+   * passa por baixo.
+   *
+   * A opacidade é 0,5 porque foi MEDIDA: 3,13:1 contra `--surface`, o limiar
+   * de contraste para objeto gráfico. A primeira versão saiu com 0,32 e mediu
+   * 1,97:1 — acrescentei a pista sem conferir se ela cumpria função, que é o
+   * mesmo erro que já tinha cometido na pista do menu lateral.
+   */
+  box-shadow:
+    inset 1px 0 0 var(--line),
+    -8px 0 8px -6px rgba(20, 40, 30, 0.5);
 }
 
 /*
@@ -1044,12 +1070,6 @@
   white-space: nowrap;
 }
 
-.doc-crumb {
-  font-size: 12.5px;
-  color: var(--ink-3);
-  margin-bottom: var(--sp-1);
-}
-
 .doc-title {
   display: flex;
   align-items: center;
@@ -1238,9 +1258,29 @@
 }
 
 .row-actions__toggle {
+  /*
+   * Precisa da propria: o pai `.row-actions` tambem e `relative`, e sem isto o
+   * `::after` ancoraria no contêiner inteiro em vez de no botao.
+   */
+  position: relative;
   min-width: 28px;
   padding: 0 var(--sp-2);
   line-height: 1;
+}
+
+/*
+ * Area de clique de 36px sem engordar o icone.
+ *
+ * O botao visivel tem 28px, que e pequeno demais para acertar de primeira e se
+ * repete em nove telas de listagem. Aumentar o icone estragaria a densidade da
+ * tabela; aumentar so o ALVO nao custa nada, porque a linha ja tem cerca de
+ * 44px de altura e sobra folga em volta. A tecnica ja e usada no gatilho da
+ * dica de campo, que vai de 16px para 24px do mesmo jeito.
+ */
+.row-actions__toggle::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--sp-1) * -1);
 }
 
 /*
@@ -1397,6 +1437,24 @@ td .entity-select {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-1);
+  /*
+   * A lista para em cerca de dez resultados e rola. Rolava sem nenhuma pista:
+   * a barra do sistema so aparece em uso, entao quem procurava um item alem do
+   * decimo concluia que ele nao existia — e o campo oferece "+ Novo" logo
+   * acima, entao o caminho natural era cadastrar de novo o que ja existia.
+   *
+   * Mesma sombra de quatro camadas de `.table-container`, na vertical.
+   */
+  scrollbar-width: thin;
+  background-image:
+    linear-gradient(to bottom, var(--surface), rgba(255, 255, 255, 0)),
+    linear-gradient(to top, var(--surface), rgba(255, 255, 255, 0)),
+    linear-gradient(to bottom, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0)),
+    linear-gradient(to top, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0));
+  background-position: 0 0, 0 100%, 0 0, 0 100%;
+  background-repeat: no-repeat;
+  background-size: 100% 24px, 100% 24px, 100% 14px, 100% 14px;
+  background-attachment: local, local, scroll, scroll;
 }
 
 .entity-select__option {
@@ -2224,7 +2282,7 @@ input.is-invalid {
    da Consulta de Cliente vive dentro do contexto de UM cliente e pode
    divergir daqui sem arrastar todas as outras telas junto.
 
-   Substitui o `.doc-crumb`, que era texto morto: parecia trilha, mas não
+   Substituiu o `.doc-crumb`, que era texto morto: parecia trilha, mas não
    levava a lugar nenhum. */
 .page-crumbs {
   margin-bottom: var(--sp-1);

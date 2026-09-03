@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
+import { ContextHelp } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import { helpTopics } from "../../help/help-content";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import type { ReportFilters } from "../../lib/reports-api";
 import "./reports.css";
@@ -58,7 +61,7 @@ export function ReportPage({
     <>
       <div className="page__header">
         <div>
-          <div className="doc-crumb">Gestão / Relatórios</div>
+          <PageBreadcrumbs items={[{ label: "Relatórios", href: "/relatorios" }, { label: "Relatório" }]} />
           <h1 className="page__title">{title}</h1>
           <p className="page__subtitle">{subtitle}</p>
         </div>
@@ -80,6 +83,12 @@ export function ReportPage({
           </button>
         </div>
       </div>
+
+      {/* A explicação é do FORMATO relatório, não de cada assunto: filtro
+          define o recorte, página só mostra um pedaço, e o documento vence o
+          relatório quando os dois discordam. Vale igual nos vinte, e é por
+          isso que mora no esqueleto em vez de repetida em cada um. */}
+      <ContextHelp topic={helpTopics["relatorio.comoFunciona"]} />
 
       {/* Cabeçalho do papel: identidade, relatório, filtros aplicados e data.
           Aparece só na impressão. */}
@@ -111,7 +120,7 @@ export function ReportPage({
 
       <div className="toolbar report-filters">{filters}</div>
 
-      {error && <p className="form-alert">Não foi possível carregar o relatório: {error}</p>}
+      {error && <p className="form-alert" role="alert">Não foi possível carregar o relatório: {error}</p>}
       {loading && <p className="muted">Carregando…</p>}
 
       {summary && <div className="report-summary">{summary}</div>}

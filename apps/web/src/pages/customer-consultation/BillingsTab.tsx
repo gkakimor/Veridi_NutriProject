@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import type { BillingDTO } from "@veridi/shared";
@@ -41,7 +42,7 @@ export function BillingsTab() {
     <>
       <ConsultationTrail steps={[{ label: "Faturamentos" }]} />
 
-      {list.error && <p className="form-alert">{list.error}</p>}
+      {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
       <div className="table-container">
         <table className="table table--clickable-rows">
@@ -89,7 +90,7 @@ export function BillingsTab() {
                     {BILLING_STATUS_LABELS[billing.status]}
                   </span>
                 </td>
-                <td className="col-tight">{billing.totalQuantity}</td>
+                <td className="col-tight">{formatQuantity(billing.totalQuantity)}</td>
                 <td className="col-tight">
                   {billing.hasCompletePricing ? (
                     formatBRL(billing.totalAmount)

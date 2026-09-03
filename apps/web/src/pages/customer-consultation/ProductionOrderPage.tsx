@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { Fragment, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { CustomerProductionOrderRowDTO } from "@veridi/shared";
@@ -136,15 +137,15 @@ export function ProductionOrderPage() {
         <dl className="definition-list">
           <dt>Planejada</dt>
           <dd>
-            {order.plannedQuantity} {order.outputUnitCode}
+            {formatQuantity(order.plannedQuantity)} {order.outputUnitCode}
           </dd>
           <dt>Produzida</dt>
           <dd>
-            {order.producedQuantity} {order.outputUnitCode}
+            {formatQuantity(order.producedQuantity)} {order.outputUnitCode}
           </dd>
           <dt>Saldo</dt>
           <dd>
-            {order.remainingQuantity} {order.outputUnitCode}
+            {formatQuantity(order.remainingQuantity)} {order.outputUnitCode}
           </dd>
         </dl>
       </section>

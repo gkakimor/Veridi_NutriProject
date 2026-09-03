@@ -124,9 +124,19 @@ function renderRota(path: string, url: string, element: React.ReactElement) {
  * mas não em silêncio: a regra é o motivo pelo qual a ajuda existe, e quem
  * mexer nela precisa passar por aqui.
  */
-async function verificaPainel(tituloEsperado: string, regraEsperada: RegExp) {
+async function verificaPainel(
+  tituloEsperado: string,
+  regraEsperada: RegExp,
+  /*
+   * Qual gatilho. O Pedido tem DOIS: a ajuda do documento e a do Plano de
+   * Atendimento, que sao telas diferentes e por isso tem conteudo proprio —
+   * era exatamente confundi-las que fazia a lista de Pedidos abrir a
+   * explicacao de uma tela que a pessoa ainda nao tinha visto.
+   */
+  nomeDoGatilho: RegExp = /^Como funciona$/,
+) {
   const user = userEvent.setup();
-  const gatilho = screen.getByRole("button", { name: /Como funciona/ });
+  const gatilho = screen.getByRole("button", { name: nomeDoGatilho });
 
   expect(gatilho).toHaveAttribute("aria-expanded", "false");
   expect(screen.queryByRole("heading", { name: tituloEsperado })).toBeNull();
@@ -285,6 +295,18 @@ describe("Plano de Atendimento", () => {
     await verificaPainel(
       helpTopics["planoAtendimento.comoFunciona"].title,
       /Abrir o Plano não reserva nada/,
+      /Como funciona o Plano/,
+    );
+  });
+
+  it("o documento tem ajuda própria, e ela não é a do Plano", async () => {
+    await abrir();
+
+    // O defeito original: a ajuda do Pedido descrevia o Plano de Atendimento,
+    // e sumia justamente em "Em atendimento", quando a tela fica mais dificil.
+    await verificaPainel(
+      helpTopics["comercial.pedido"].title,
+      /Não há marcar como expedido/,
     );
   });
 

@@ -46,6 +46,10 @@ export function ProductRelatedLinks({
   return (
     <RelatedLinks
       title={title}
+      // Estas entradas trocam de tela do MESMO produto — são referência, não
+      // ação sobre a tela atual. Como botão fantasma a barra virava texto
+      // cinza e ninguém percebia que dava para clicar.
+      variant="link"
       links={all.filter((link) => link.key !== current).map(({ label, to }) => ({ label, to }))}
     />
   );

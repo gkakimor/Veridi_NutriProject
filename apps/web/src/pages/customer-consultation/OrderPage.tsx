@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { CustomerOrderDTO } from "@veridi/shared";
@@ -136,16 +137,16 @@ export function OrderPage() {
                     <span className="is-code">{line.productCode}</span> {line.productName}
                   </td>
                   <td>
-                    {line.orderedQuantity} {line.unitCode}
+                    {formatQuantity(line.orderedQuantity)} {line.unitCode}
                   </td>
                   <td>
-                    {line.shippedQuantity} {line.unitCode}
+                    {formatQuantity(line.shippedQuantity)} {line.unitCode}
                   </td>
                   <td>
-                    {line.outstandingQuantity} {line.unitCode}
+                    {formatQuantity(line.outstandingQuantity)} {line.unitCode}
                   </td>
                   <td>
-                    {line.billedQuantity} {line.unitCode}
+                    {formatQuantity(line.billedQuantity)} {line.unitCode}
                   </td>
                   <td>{formatBRL(line.agreedPrice?.unitPrice ?? null)}</td>
                   <td>{formatBRL(line.agreedPrice?.lineTotal ?? null)}</td>
@@ -186,10 +187,10 @@ export function OrderPage() {
                     <td className="is-code">{po.code}</td>
                     <td>{po.productName}</td>
                     <td>
-                      {po.plannedQuantity} {po.outputUnitCode}
+                      {formatQuantity(po.plannedQuantity)} {po.outputUnitCode}
                     </td>
                     <td>
-                      {po.producedQuantity} {po.outputUnitCode}
+                      {formatQuantity(po.producedQuantity)} {po.outputUnitCode}
                     </td>
                     <td>{PRODUCTION_ORDER_STATUS_LABELS[po.status]}</td>
                   </tr>
@@ -220,7 +221,7 @@ export function OrderPage() {
                   <tr key={shipment.id}>
                     <td className="is-code">{shipment.code}</td>
                     <td>{formatDate(shipment.shipmentDate)}</td>
-                    <td>{shipment.totalQuantity}</td>
+                    <td>{formatQuantity(shipment.totalQuantity)}</td>
                     <td>{label(SHIPMENT_STATUS_LABELS, shipment.status)}</td>
                   </tr>
                 ))}
@@ -255,7 +256,7 @@ export function OrderPage() {
                       </Link>
                     </td>
                     <td>{formatDate(billing.issuedAt)}</td>
-                    <td>{billing.totalQuantity}</td>
+                    <td>{formatQuantity(billing.totalQuantity)}</td>
                     <td>{formatBRL(billing.totalAmount)}</td>
                   </tr>
                 ))}

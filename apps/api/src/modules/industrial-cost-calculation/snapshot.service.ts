@@ -5,6 +5,7 @@ import type {
   IndustrialCostCalculationSnapshotDTO,
   IndustrialCostCalculationSummaryDTO,
 } from "@veridi/shared";
+import { INDUSTRIAL_COST_CALCULATION_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { calculateIndustrialCost } from "./calculation.service.js";
@@ -15,7 +16,9 @@ import {
 } from "./calculation.errors.js";
 
 const CODE_SEQUENCE = "industrial_cost_calculation_code_seq";
-const CODE_PREFIX = "CALC";
+/* O prefixo vive em `@veridi/shared`, com todos os outros: cravado aqui,
+   uma duplicata nao aparece lado a lado com os demais. */
+const CODE_PREFIX = INDUSTRIAL_COST_CALCULATION_CODE_PREFIX;
 
 /**
  * Congela um cálculo.

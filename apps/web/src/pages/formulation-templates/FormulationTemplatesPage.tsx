@@ -1,5 +1,6 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { FormulationTemplateSummaryDTO } from "@veridi/shared";
 import { FORMULATION_CALCULATION_MODE_LABELS } from "@veridi/shared";
 import { createFormulationTemplate, listFormulationTemplates } from "../../lib/formulation-templates-api";
@@ -166,7 +167,7 @@ export function FormulationTemplatesPage() {
         </label>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">
@@ -209,7 +210,7 @@ export function FormulationTemplatesPage() {
                 </td>
                 <td className="is-numeric">
                   {template.basisQuantity
-                    ? `${template.basisQuantity} ${template.outputUnitCode ?? ""}`.trim()
+                    ? `${formatQuantity(template.basisQuantity)} ${template.outputUnitCode ?? ""}`.trim()
                     : "—"}
                   {template.calculationMode && (
                     <span className="cell-sub">
@@ -221,13 +222,12 @@ export function FormulationTemplatesPage() {
                 <td>{formatDate(template.updatedAt)}</td>
                 <td>{situacao(template)}</td>
                 <td>
-                  <button
-                    type="button"
+                  <Link
                     className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/producao/templates-formulacao/${template.id}`)}
+                    to={`/producao/templates-formulacao/${template.id}`}
                   >
                     Abrir
-                  </button>
+                  </Link>
                 </td>
               </tr>
             ))}

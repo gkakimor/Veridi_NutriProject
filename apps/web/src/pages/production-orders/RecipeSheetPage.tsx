@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState , useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { RecipeSheetDTO, RecipeSheetPartDTO, RecipeSheetRequirementDTO } from "@veridi/shared";
 import {
   PRODUCTION_PART_STATUS_LABELS,
@@ -8,11 +8,14 @@ import {
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { completePart, getRecipeSheet, registerWeighing } from "../../lib/recipe-api";
+import { exigirDecimal } from "../../lib/decimal-field";
+import { apiErrorMessage } from "../../lib/api-errors";
 import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { formatQuantity } from "../../lib/quantity";
 
 /**
  * ⓘ de um conceito da folha, lido do registro central.
@@ -50,7 +53,6 @@ function partBadgeClass(status: RecipeSheetPartDTO["status"]): string {
  * sempre da sessão (a tela nunca escolhe quem executou).
  */
 export function RecipeSheetPage() {
-  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
   const [sheet, setSheet] = useState<RecipeSheetDTO | null>(null);
@@ -64,7 +66,7 @@ export function RecipeSheetPage() {
    * pesada, a ação parecia não ter efeito. Traz o alerta para a vista.
    */
   function reportError(err: unknown, fallback: string) {
-    const raw = err instanceof Error ? err.message : fallback;
+    const raw = apiErrorMessage(err, fallback);
     // "restam 0" sozinho não explica a causa: o saldo reservado desta linha
     // costuma ter sido baixado pelo Consumo Real da própria OP.
     const translated = /restam 0\b/.test(raw)
@@ -122,7 +124,7 @@ export function RecipeSheetPage() {
       const updated = await registerWeighing(id, activePart, {
         requirementId,
         lotCode: lotCode.trim(),
-        actualQuantity: actualQuantity.trim(),
+        actualQuantity: exigirDecimal(actualQuantity, "Quantidade pesada"),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
       setSheet(updated);
@@ -165,7 +167,7 @@ export function RecipeSheetPage() {
       <div className="page__header">
         <div>
           <h1 className="page__title">Folha de Receita indisponível</h1>
-          {error && <p className="form-alert">{error}</p>}
+          {error && <p className="form-alert" role="alert">{error}</p>}
         </div>
       </div>
     );
@@ -240,7 +242,7 @@ export function RecipeSheetPage() {
             <dd>{sheet.formulationVersionLabel ?? "—"}</dd>
             <dt>Quantidade planejada</dt>
             <dd>
-              {sheet.plannedQuantity} {sheet.outputUnitCode}
+              {formatQuantity(sheet.plannedQuantity)} {sheet.outputUnitCode}
             </dd>
             <dt>
               Produção fracionada
@@ -343,7 +345,7 @@ export function RecipeSheetPage() {
                         )}
                       </td>
                       <td className="is-numeric">
-                        {requirement.plannedQuantity} {requirement.unitCode}
+                        {formatQuantity(requirement.plannedQuantity)} {requirement.unitCode}
                       </td>
                       {/*
                         Material baixado pelo Consumo Real não foi pesado
@@ -356,7 +358,7 @@ export function RecipeSheetPage() {
                         <>
                           <td className="is-numeric">
                             <span className="field__hint">
-                              {requirement.consumedQuantity} {requirement.unitCode} via Consumo Real
+                              {formatQuantity(requirement.consumedQuantity)} {requirement.unitCode} via Consumo Real
                             </span>
                           </td>
                           <td>
@@ -365,7 +367,7 @@ export function RecipeSheetPage() {
                         </>
                       ) : (
                         <>
-                          <td className="is-numeric">{requirement.weighedQuantity}</td>
+                          <td className="is-numeric">{formatQuantity(requirement.weighedQuantity)}</td>
                           <td>
                             <span
                               className={
@@ -374,7 +376,7 @@ export function RecipeSheetPage() {
                                   : "badge badge--warn"
                               }
                             >
-                              {requirement.differenceQuantity}
+                              {formatQuantity(requirement.differenceQuantity)}
                             </span>
                           </td>
                         </>
@@ -435,13 +437,12 @@ export function RecipeSheetPage() {
                       O saldo reservado desta linha já foi consumido pelo apontamento de Consumo
                       Real. Registrar a pesagem novamente criaria uma duplicidade de consumo.
                     </p>
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/producao/ordens/${sheet.productionOrderId}`)}
+                      to={`/producao/ordens/${sheet.productionOrderId}`}
                     >
                       Ver Consumo Real da OP
-                    </button>
+                    </Link>
                   </div>
                 )}
 
@@ -521,9 +522,9 @@ export function RecipeSheetPage() {
                       </td>
                       <td className="is-code">{weighing.lotCode ?? "—"}</td>
                       <td>{ownerLabel(weighing.ownerType, null)}</td>
-                      <td className="is-numeric">{weighing.plannedQuantity}</td>
+                      <td className="is-numeric">{formatQuantity(weighing.plannedQuantity)}</td>
                       <td>
-                        {weighing.actualQuantity} {weighing.uomCode}
+                        {formatQuantity(weighing.actualQuantity)} {weighing.uomCode}
                       </td>
                       <td>{weighing.executedByName}</td>
                       <td>{formatDateTime(weighing.executedAt)}</td>
@@ -566,7 +567,7 @@ export function RecipeSheetPage() {
                       </td>
                       <td>{SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}</td>
                       <td className="is-numeric">
-                        {row.totalQuantity} {row.unitCode}
+                        {formatQuantity(row.totalQuantity)} {row.unitCode}
                       </td>
                     </tr>
                   ))}

@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import type {
@@ -59,7 +60,7 @@ export function IndustrialCostPrintPage() {
     return (
       <div className="print-screen">
         <article className="print-doc">
-          <p className="form-alert">{error}</p>
+          <p className="form-alert" role="alert">{error}</p>
         </article>
       </div>
     );
@@ -84,7 +85,7 @@ export function IndustrialCostPrintPage() {
         { label: "Formulação", value: `V${version.formulationVersionNumber}` },
         {
           label: "Base de referência",
-          value: `${version.referenceOutputQuantity} ${version.referenceOutputUomCode}`,
+          value: `${formatQuantity(version.referenceOutputQuantity)} ${version.referenceOutputUomCode}`,
         },
         { label: "Unidades por caixa", value: version.unitsPerShippingBox ?? "—" },
         { label: "Situação", value: version.complete ? "Completa" : "Com pendências" },
@@ -113,7 +114,7 @@ export function IndustrialCostPrintPage() {
               <td>
                 {material.itemCode} — {material.itemName}
               </td>
-              <td className="is-number">{material.quantity}</td>
+              <td className="is-number">{formatQuantity(material.quantity)}</td>
               <td>{material.unitCode}</td>
               <td>{material.basis}</td>
               <td>{material.purityPercentApplied ?? "—"}</td>
@@ -173,7 +174,7 @@ export function IndustrialCostPrintPage() {
               </td>
               <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[usage.resourceType]}</td>
               <td className="is-number">
-                {usage.usageQuantity} {INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}
+                {formatQuantity(usage.usageQuantity)} {INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}
               </td>
               <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
               <td className="is-number">{printRate(usage, version.status)}</td>

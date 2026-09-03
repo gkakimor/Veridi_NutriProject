@@ -102,7 +102,7 @@ export function PricingListPage() {
         </div>
       </div>
 
-      <ContextHelp topic={helpTopics["cmv.comoFunciona"]} />
+      <ContextHelp topic={helpTopics["precificacao.comoFunciona"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">
@@ -148,7 +148,7 @@ export function PricingListPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextProductId && (
         <RecordContextChip
@@ -185,7 +185,9 @@ export function PricingListPage() {
                   if (event.key === "Enter") navigate(`/gestao/precificacao/${row.id}`);
                 }}
               >
-                <td className="is-code">{row.label}</td>
+                <td className="is-code">
+                  <EntityLink kind="pricingVersion" id={row.id} code={row.label} />
+                </td>
                 <td>
                   <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
                 </td>

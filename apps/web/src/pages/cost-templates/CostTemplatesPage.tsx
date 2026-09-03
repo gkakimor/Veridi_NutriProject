@@ -1,9 +1,12 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { CostTemplateSummaryDTO } from "@veridi/shared";
 import { createCostTemplate, listCostTemplates } from "../../lib/cost-pricing-templates-api";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { LibraryPagination, LibraryStatus, LibraryToolbar } from "./TemplateLibraryTable";
 
 /**
@@ -87,6 +90,8 @@ export function CostTemplatesPage() {
         )}
       </div>
 
+      <ContextHelp topic={helpTopics["templateCusto.comoFunciona"]} />
+
       {creating && (
         <div className="inline-form">
           <label htmlFor="cost-template-name">Nome do template</label>
@@ -130,7 +135,7 @@ export function CostTemplatesPage() {
         onToggleArchived={setShowArchived}
       />
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">
@@ -164,7 +169,7 @@ export function CostTemplatesPage() {
                 </td>
                 <td className="is-numeric">
                   {template.referenceOutputQuantity
-                    ? `${template.referenceOutputQuantity} ${template.referenceOutputUomCode ?? ""}`.trim()
+                    ? `${formatQuantity(template.referenceOutputQuantity)} ${template.referenceOutputUomCode ?? ""}`.trim()
                     : "—"}
                 </td>
                 <td className="is-numeric">
@@ -184,13 +189,12 @@ export function CostTemplatesPage() {
                   />
                 </td>
                 <td>
-                  <button
-                    type="button"
+                  <Link
                     className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/gestao/templates-estrutura/${template.id}`)}
+                    to={`/gestao/templates-estrutura/${template.id}`}
                   >
                     Abrir
-                  </button>
+                  </Link>
                 </td>
               </tr>
             ))}

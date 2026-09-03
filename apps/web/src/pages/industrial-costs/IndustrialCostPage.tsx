@@ -1,7 +1,8 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import type {
   EnergyCalculationMode,
@@ -36,6 +37,8 @@ import { helpTopics } from "../../help/help-content";
 import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
 import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import {
   activateIndustrialCostVersion,
   createIndustrialCostLine,
@@ -50,6 +53,8 @@ import {
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
@@ -228,11 +233,34 @@ export function IndustrialCostPage() {
   useEffect(() => {
     // Só recursos ativos entram numa estrutura nova; os inativos que já
     // estão em versões antigas continuam listados pela própria versão.
-    listIndustrialResources({ active: true, pageSize: 1000 })
+    listIndustrialResources({ active: true, pageSize: 50 })
       .then((result) => setResources(result.resources))
       .catch(() => setResources([]));
   }, []);
 
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarRecursos(termo: string): Promise<EntityOption[]> {
+    const resultado = await listIndustrialResources({ active: true, search: termo, pageSize: 50 });
+    const novos = resultado.resources;
+    setResources((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((r) => ({ id: r.id, code: r.code, name: r.name }));
+  }
+
+  /*
+   * O funil único da tela. A ação pode recusar antes de chamar a API — é o
+   * que um valor decimal ilegível faz —, e a recusa chega aqui como
+   * qualquer outra falha, sem que a requisição saia.
+   */
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
@@ -240,13 +268,13 @@ export function IndustrialCostPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
   }
 
-  if (error && !data) return <p className="form-alert">{error}</p>;
+  if (error && !data) return <p className="form-alert" role="alert">{error}</p>;
   if (!data || !productId) return <p>Carregando…</p>;
 
   // A versão em edição é o rascunho; sem rascunho, mostra-se a vigente.
@@ -293,7 +321,7 @@ export function IndustrialCostPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Cadastros / Produtos / Custos industriais</div>
+          <PageBreadcrumbs items={[{ label: "Produtos", href: "/cadastros/produtos" }, { label: "Custos industriais" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={productId} code={data.productCode} /> ·{" "}
@@ -364,14 +392,13 @@ export function IndustrialCostPage() {
                 // Criar versão grava documento com código, autor e data. Sem
                 // confirmação, quem só queria olhar saía com uma V2 no banco.
                 if (data.versions.length === 0) {
-                  void run(() =>
-                    createIndustrialCostVersion(
+                  void run(() => {
+                    const base = exigirDecimalOpcional(referenceQuantity, "Base de produção");
+                    return createIndustrialCostVersion(
                       productId,
-                      referenceQuantity.trim()
-                        ? { referenceOutputQuantity: referenceQuantity.trim() }
-                        : {},
-                    ),
-                  );
+                      base ? { referenceOutputQuantity: base } : {},
+                    );
+                  });
                   return;
                 }
                 setNewVersionConfirm(true);
@@ -401,13 +428,12 @@ export function IndustrialCostPage() {
           {canEdit && missingActiveFormulation && (
             <p className="form-alert" role="status">
               Este produto ainda não tem formulação ativa, e a estrutura de custos parte dela.{" "}
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/producao/formulacoes/${data.productId}`)}
+                to={`/producao/formulacoes/${data.productId}`}
               >
                 Abrir formulação
-              </button>
+              </Link>
             </p>
           )}
           {version && (
@@ -452,7 +478,7 @@ export function IndustrialCostPage() {
             </button>
           </div>
         )}
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Materiais, recursos, energia e premissas são preenchidos aqui e só
             viram número na tela de CMV. Mesmo painel das duas telas: é um
@@ -495,7 +521,7 @@ export function IndustrialCostPage() {
                 </dd>
                 <dt>Base de referência</dt>
                 <dd>
-                  {version.referenceOutputQuantity} {version.referenceOutputUomCode}
+                  {formatQuantity(version.referenceOutputQuantity)} {version.referenceOutputUomCode}
                 </dd>
                 <dt>Unidades por caixa</dt>
                 <dd>{version.unitsPerShippingBox ?? "—"}</dd>
@@ -550,7 +576,10 @@ export function IndustrialCostPage() {
                       onClick={() =>
                         void run(() =>
                           updateIndustrialCostVersion(version.id, {
-                            referenceOutputQuantity: referenceQuantity.trim(),
+                            referenceOutputQuantity: exigirDecimal(
+                              referenceQuantity,
+                              "Base de produção",
+                            ),
                           }),
                         )
                       }
@@ -623,7 +652,7 @@ export function IndustrialCostPage() {
                         <td>
                           <EntityLink kind="item" id={material.itemId} code={material.itemCode} name={material.itemName} />
                         </td>
-                        <td className="is-numeric">{material.quantity}</td>
+                        <td className="is-numeric">{formatQuantity(material.quantity)}</td>
                         <td>{material.unitCode}</td>
                         {/* A base do componente é enum no banco; na tela é
                             frase em português, como no editor de formulação. */}
@@ -689,6 +718,7 @@ export function IndustrialCostPage() {
                         {editable && (
                           <td onClick={(event) => event.stopPropagation()}>
                             <RowActions
+                              label={`Mais ações de ${line.description}`}
                               actions={[
                                 {
                                   label: "Remover premissa",
@@ -786,11 +816,13 @@ export function IndustrialCostPage() {
                       disabled={saving || !description.trim()}
                       onClick={() =>
                         void run(async () => {
+                          // Vazio segue sendo "não informado" — nunca zero.
+                          const valor = exigirDecimalOpcional(rateValue, "Valor");
                           await createIndustrialCostLine(version.id, {
                             category,
                             description: description.trim(),
                             calculationBasis: basis,
-                            ...(rateValue.trim() ? { rateValue: rateValue.trim() } : {}),
+                            ...(valor ? { rateValue: valor } : {}),
                           });
                           setDescription("");
                           setRateValue("");
@@ -842,7 +874,7 @@ export function IndustrialCostPage() {
                         </td>
                         <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[usage.resourceType]}</td>
                         <td>
-                          {usage.usageQuantity} {INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}
+                          {formatQuantity(usage.usageQuantity)} {INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}
                         </td>
                         <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
                         <td>{describeRate(usage, version.status)}</td>
@@ -853,6 +885,7 @@ export function IndustrialCostPage() {
                         {editable && (
                           <td onClick={(event) => event.stopPropagation()}>
                             <RowActions
+                              label={`Mais ações de ${usage.resourceCode}`}
                               actions={[
                                 {
                                   label: "Remover recurso",
@@ -886,7 +919,8 @@ export function IndustrialCostPage() {
                         value={usageResourceId}
                         onChange={(selectedId) => setUsageResourceId(selectedId)}
                         placeholder="Digite código ou nome do recurso…"
-                        options={selectableResources.map((resource) => ({
+                        onSearch={buscarRecursos}
+options={selectableResources.map((resource) => ({
                           id: resource.id,
                           code: resource.code,
                           name: resource.name,
@@ -938,7 +972,10 @@ export function IndustrialCostPage() {
                         void run(async () => {
                           await createResourceUsage(version.id, {
                             resourceId: usageResourceId,
-                            usageQuantity: usageQuantity.trim(),
+                            usageQuantity: exigirDecimal(
+                              usageQuantity,
+                              "Consumo por lote de referência",
+                            ),
                           });
                           setUsageResourceId("");
                           setUsageQuantity("");
@@ -1072,7 +1109,7 @@ export function IndustrialCostPage() {
                     </td>
                     <td>V{row.formulationVersionNumber}</td>
                     <td>
-                      {row.referenceOutputQuantity} {row.referenceOutputUomCode}
+                      {formatQuantity(row.referenceOutputQuantity)} {row.referenceOutputUomCode}
                     </td>
                     <td>{row.complete ? "Completa" : "Com pendências"}</td>
                     <td>{formatDateTime(row.activatedAt)}</td>
@@ -1147,7 +1184,10 @@ export function IndustrialCostPage() {
         <ConfirmDialog
           open={activateConfirm}
           title="Ativar estrutura com pendências?"
-          confirmLabel="Ativar"
+          /* O rótulo repete a consequência. "Ativar" sozinho, num diálogo que
+             a pessoa pode ter aberto sem ler, não distingue esta ativação da
+             ativação normal — e as duas produzem custos muito diferentes. */
+          confirmLabel="Ativar mesmo com pendências"
           confirmTone="accent"
           message={
             <>

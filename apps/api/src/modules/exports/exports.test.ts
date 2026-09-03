@@ -292,12 +292,20 @@ describe("Exportação CSV — listagens", () => {
     await app.ready();
 
     const code = `CLI-EXP-CODE-${marker()}`;
-    const customer = await createCustomer({ code, cnpj: "11222333000181", legalName: `Cod ${code}` });
+    /*
+     * CNPJ unico por execucao. Cravar um valor fixo num campo com restricao de
+     * unicidade faz o teste depender do banco de desenvolvimento estar vazio
+     * daquele numero — e ele quebrou exatamente assim quando a validacao por
+     * interface cadastrou um cliente com o mesmo CNPJ. O que este teste mede e
+     * o CSV preservar o numero como TEXTO, e isso independe de qual numero e.
+     */
+    const cnpj = `11${String(Date.now()).slice(-12)}`;
+    const customer = await createCustomer({ code, cnpj, legalName: `Cod ${code}` });
 
     const csv = await downloadCsv(app, "/customers/export.csv", { search: code });
     const lines = csvLines(csv.body);
     expect(lines[1]).toContain(code);
-    expect(lines[1]).toContain("11222333000181");
+    expect(lines[1]).toContain(cnpj);
     expect(lines[1]).not.toContain(customer.id);
 
     await app.close();

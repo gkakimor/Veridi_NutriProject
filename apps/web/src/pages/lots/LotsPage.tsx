@@ -1,6 +1,7 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate , useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { InventoryOwnerType, LotDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { listLots } from "../../lib/lots-api";
@@ -24,6 +25,19 @@ type StatusFilter = LotStatus | "all";
 type OwnerFilter = InventoryOwnerType | "all";
 
 const PAGE_SIZE = 20;
+
+/**
+ * Traduz o `?status=` da URL, recusando o que não for um status conhecido.
+ *
+ * `null` significa "sem contexto na URL", que é o que faz o filtro guardado da
+ * sessão continuar valendo. Aceitar texto arbitrário aqui produziria uma tela
+ * filtrada por um status que não existe, e portanto vazia sem explicação.
+ */
+function statusDaUrl(valor: string): StatusFilter | null {
+  if (valor === "") return null;
+  if (valor === "all") return "all";
+  return (LOT_STATUSES as readonly string[]).includes(valor) ? (valor as LotStatus) : null;
+}
 
 function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
   if (isExpired) return "badge badge--err";
@@ -71,6 +85,18 @@ export function LotsPage() {
     FILTER_SCOPE,
     "status",
     "all",
+    /*
+     * O parâmetro da URL vence o filtro guardado da sessão — o campo de busca
+     * ao lado já fazia isso e este não fazia.
+     *
+     * O Dashboard aponta para `?status=AWAITING_RELEASE` no atalho de "Lotes
+     * aguardando liberação", e a tela abria em "Todos os status": a pessoa
+     * clicava no caminho mais visível para a tarefa mais sensível e recebia a
+     * lista inteira, com o lote que aguarda Qualidade perdido no meio. Link
+     * que carrega contexto e a tela ignora é pior que link nenhum, porque
+     * ensina a confiar num filtro que não foi aplicado.
+     */
+    statusDaUrl(urlFilter("status")),
   );
   const [ownerFilter, setOwnerFilter] = usePersistentFilter<OwnerFilter>(
     user?.id ?? null,
@@ -213,7 +239,7 @@ export function LotsPage() {
         )}
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextParam && (
         <p className="context-chip">
@@ -291,7 +317,7 @@ export function LotsPage() {
                   <EntityLink kind="supplier" id={lot.supplierId} code={lot.supplierCode} name={lot.supplierName} />
                 </td>
                 <td className="col-tight is-numeric">
-                  {lot.initialReceivedQuantity} {lot.unitCode}
+                  {formatQuantity(lot.initialReceivedQuantity)} {lot.unitCode}
                 </td>
                 <td className="col-tight">{formatDate(lot.expiryDate)}</td>
                 <td className="col-tight">{lot.location ?? "—"}</td>
@@ -303,6 +329,7 @@ export function LotsPage() {
                     LISTA ela custava mais largura que seis colunas de negócio.
                   */}
                   <RowActions
+                    label={`Mais ações de ${lot.code}`}
                     actions={[
                       {
                         label: "Imprimir etiqueta (QR)",
@@ -310,13 +337,12 @@ export function LotsPage() {
                       },
                     ]}
                   >
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/estoque/lotes/${lot.id}`)}
+                      to={`/estoque/lotes/${lot.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </RowActions>
                 </td>
               </tr>

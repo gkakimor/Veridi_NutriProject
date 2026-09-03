@@ -15,7 +15,10 @@ import {
   updateIndustrialResource,
 } from "../../lib/industrial-resources-api";
 import { formatDate } from "../../lib/dates";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { ContextHelp } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpTopics } from "../../help/help-content";
 
 /**
@@ -56,6 +59,13 @@ export function IndustrialResourceDetailPage() {
     load();
   }, [load]);
 
+  /*
+   * O funil único da tela: executa, recarrega, e mostra a falha na faixa.
+   *
+   * A ação pode recusar antes de chamar a API — é o que um valor decimal
+   * ilegível faz. Lançar dali chega aqui como qualquer outra falha, e a
+   * requisição nunca sai.
+   */
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
@@ -63,13 +73,13 @@ export function IndustrialResourceDetailPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
   }
 
-  if (error && !resource) return <p className="form-alert">{error}</p>;
+  if (error && !resource) return <p className="form-alert" role="alert">{error}</p>;
   if (!resource) return <p>Carregando…</p>;
 
   const rateUomLabel = INDUSTRIAL_RATE_UOM_LABELS[resource.defaultUsageUom];
@@ -78,7 +88,7 @@ export function IndustrialResourceDetailPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Gestão / Recursos industriais</div>
+          <PageBreadcrumbs items={[{ label: "Recursos industriais", href: "/gestao/recursos-industriais" }, { label: "Detalhe" }]} />
           <div className="doc-title">
             <h1>{resource.name}</h1>
             <span className="code">{resource.code}</span>
@@ -125,7 +135,7 @@ export function IndustrialResourceDetailPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Mesma explicação da lista, repetida aqui porque é nesta tela que a
             tarifa é cadastrada — e é aqui que a ausência de "editar tarifa"
@@ -186,8 +196,10 @@ export function IndustrialResourceDetailPage() {
                   disabled={saving}
                   onClick={() =>
                     void run(() =>
+                      // Vazio continua sendo "não sei" e limpa o campo; só o
+                      // que foi digitado precisa ser legível.
                       updateIndustrialResource(resource.id, {
-                        powerKw: powerKw.trim() ? powerKw.trim() : null,
+                        powerKw: exigirDecimalOpcional(powerKw, "Potência (kW)"),
                       }),
                     )
                   }
@@ -280,7 +292,7 @@ export function IndustrialResourceDetailPage() {
                   onClick={() =>
                     void run(async () => {
                       await createIndustrialResourceRate(resource.id, {
-                        rateValue: rateValue.trim(),
+                        rateValue: exigirDecimal(rateValue, "Valor"),
                         ...(effectiveAt ? { effectiveAt } : {}),
                       });
                       setRateValue("");

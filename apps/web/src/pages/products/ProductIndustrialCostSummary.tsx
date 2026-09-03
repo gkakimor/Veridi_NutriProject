@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type {
@@ -93,7 +94,7 @@ export function ProductIndustrialCostSummary({ productId }: { productId: string 
           <dd className="is-code">{current.label}</dd>
           <dt>Base de referência</dt>
           <dd>
-            {current.referenceOutputQuantity} {current.referenceOutputUomCode}
+            {formatQuantity(current.referenceOutputQuantity)} {current.referenceOutputUomCode}
           </dd>
           <dt>CMV de referência</dt>
           <dd>

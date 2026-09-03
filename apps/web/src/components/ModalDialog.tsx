@@ -19,6 +19,7 @@ export function ModalDialog({
   labelledBy,
   onClose,
   role = "alertdialog",
+  dismissOnBackdrop = false,
   children,
 }: {
   /** `id` do título dentro do diálogo — o rótulo acessível. */
@@ -36,13 +37,25 @@ export function ModalDialog({
    */
   role?: "alertdialog" | "dialog";
   children: ReactNode;
+  /**
+   * Clicar no fundo escurecido fecha.
+   *
+   * `false` por padrão, e é o certo para confirmação: fechar sem querer uma
+   * pergunta sobre ação irreversível é o tipo de acidente que a casca existe
+   * para evitar. O painel de ajuda é o oposto — quem abriu pediu para ler, e
+   * ter que caçar o botão de fechar é atrito puro sem nenhum ganho.
+   */
+  dismissOnBackdrop?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useModalDialog(true, ref, onClose);
 
   return (
     <>
-      <div className="confirm-overlay" />
+      <div
+        className="confirm-overlay"
+        {...(dismissOnBackdrop ? { onClick: onClose } : {})}
+      />
       <div
         ref={ref}
         className="confirm-dialog"

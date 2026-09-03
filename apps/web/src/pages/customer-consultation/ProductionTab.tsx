@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { CustomerProductionOrderRowDTO, ProductionOrderStatus } from "@veridi/shared";
@@ -57,7 +58,7 @@ export function ProductionTab() {
     <>
       <ConsultationTrail steps={[{ label: "Produção" }]} />
 
-      {list.error && <p className="form-alert">{list.error}</p>}
+      {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
       <div className="table-container">
         <table className="table table--clickable-rows">
@@ -123,10 +124,10 @@ export function ProductionTab() {
                   )}
                 </td>
                 <td className="col-tight">
-                  {row.plannedQuantity} {row.outputUnitCode}
+                  {formatQuantity(row.plannedQuantity)} {row.outputUnitCode}
                 </td>
                 <td className="col-tight">
-                  {row.producedQuantity} {row.outputUnitCode}
+                  {formatQuantity(row.producedQuantity)} {row.outputUnitCode}
                 </td>
                 <td className="col-tight">
                   <span className={productionStatusBadgeClass(row.status)}>

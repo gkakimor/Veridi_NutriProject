@@ -2,7 +2,11 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { requireCurrentUser } from "../../lib/current-user.js";
 import { InvalidTransitionError, MissingFinishedItemError, ProductionOrderNotFoundError } from "./production-orders.errors.js";
-import { completeProductionOrder, registerProductionOutput } from "./production.service.js";
+import {
+  acceptMaterialVariance,
+  completeProductionOrder,
+  registerProductionOutput,
+} from "./production.service.js";
 import {
   ExpiryBeforeProducedAtError,
   FinishedLotNotEligibleError,
@@ -13,10 +17,17 @@ import {
   MissingBusinessLotNumberError,
   MissingCompletionReasonError,
   MissingFinishedExpiryDateError,
+  NoMaterialVarianceError,
   NoProductionOutputsError,
   OutputExceedsPlannedError,
+  RequirementNotFoundError,
+  UnreconciledMaterialsError,
 } from "./production.errors.js";
-import { completeProductionOrderSchema, registerProductionOutputSchema } from "./production.schemas.js";
+import {
+  acceptMaterialVarianceSchema,
+  completeProductionOrderSchema,
+  registerProductionOutputSchema,
+} from "./production.schemas.js";
 
 function formatZodError(error: ZodError) {
   return error.issues.map((issue) => ({
@@ -25,7 +36,9 @@ function formatZodError(error: ZodError) {
   }));
 }
 
-function mapDomainError(error: unknown): { status: number; body: { error: string; message: string } } | null {
+function mapDomainError(
+  error: unknown,
+): { status: number; body: { error: string; message: string; materials?: unknown } } | null {
   if (error instanceof ProductionOrderNotFoundError) {
     return { status: 404, body: { error: "not_found", message: error.message } };
   }
@@ -68,6 +81,24 @@ function mapDomainError(error: unknown): { status: number; body: { error: string
   if (error instanceof MissingCompletionReasonError) {
     return { status: 400, body: { error: "missing_completion_reason", message: error.message } };
   }
+  if (error instanceof UnreconciledMaterialsError) {
+    // A lista viaja junto: a tela precisa dizer QUAIS materiais faltam, e nao
+    // so que faltam. Reparsear a frase para recuperar os nomes seria fragil.
+    return {
+      status: 400,
+      body: {
+        error: "unreconciled_materials",
+        message: error.message,
+        materials: error.materials,
+      },
+    };
+  }
+  if (error instanceof NoMaterialVarianceError) {
+    return { status: 400, body: { error: "no_material_variance", message: error.message } };
+  }
+  if (error instanceof RequirementNotFoundError) {
+    return { status: 404, body: { error: "requirement_not_found", message: error.message } };
+  }
   return null;
 }
 
@@ -104,6 +135,32 @@ export const productionRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const order = await completeProductionOrder(id, parsed.data, requireCurrentUser(request));
+      return reply.send(order);
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+  /*
+   * Justificar a diferenca de um material. Fica no requisito, nao na OP: a
+   * pergunta e por material, e uma justificativa por ordem obrigaria a
+   * explicar seis diferencas numa frase so.
+   */
+  app.post("/production-orders/:id/requirements/:requirementId/variance", async (request, reply) => {
+    const { id, requirementId } = request.params as { id: string; requirementId: string };
+    const parsed = acceptMaterialVarianceSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "validation_error", issues: formatZodError(parsed.error) });
+    }
+
+    try {
+      const order = await acceptMaterialVariance(
+        id,
+        requirementId,
+        parsed.data.reason,
+        requireCurrentUser(request),
+      );
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);

@@ -214,7 +214,7 @@ export function ItemsPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextIds && (
         <RecordContextChip
@@ -315,6 +315,7 @@ export function ItemsPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
+                    label={`Mais ações de ${item.code}`}
                     actions={[
                       {
                         label: item.active ? "Inativar" : "Reativar",

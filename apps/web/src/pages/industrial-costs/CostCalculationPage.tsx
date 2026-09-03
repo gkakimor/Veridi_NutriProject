@@ -1,10 +1,14 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { IndustrialCostCalculationSnapshotDTO } from "@veridi/shared";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { EntityLink } from "../../components/EntityLink";
 import { CostBreakdown, CostQualityBadge } from "../../components/CostBreakdown";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { FormSection } from "../../components/FormSection";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { getIndustrialCostCalculation } from "../../lib/cost-calculation-api";
 import { formatDate } from "../../lib/dates";
 
@@ -30,14 +34,14 @@ export function CostCalculationPage() {
       );
   }, [id]);
 
-  if (error) return <p className="form-alert">{error}</p>;
+  if (error) return <p className="form-alert" role="alert">{error}</p>;
   if (!calculation) return <p>Carregando…</p>;
 
   return (
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Cadastros / Produtos / Custos industriais / Cálculo</div>
+          <PageBreadcrumbs items={[{ label: "Produtos", href: "/cadastros/produtos" }, { label: "Cálculo de custo" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={calculation.productId} code={calculation.productCode} />{" "}
@@ -69,18 +73,23 @@ export function CostCalculationPage() {
           >
             Imprimir / Salvar PDF
           </button>
-          <button
-            type="button"
+          <Link
             className="btn btn--ghost"
-            onClick={() => navigate(`/produtos/${calculation.productId}/custos`)}
+            to={`/produtos/${calculation.productId}/custos`}
           >
             ← Voltar
-          </button>
+          </Link>
         </div>
       </div>
 
       <div className="doc-body">
       <ProductRelatedLinks productId={calculation.productId} current="calculation" />
+
+        {/* A tela do CMV explica como o custo de uma quantidade é somado.
+            Aqui a pergunta é outra: por que este documento não muda mais, e o
+            que a precificação está citando quando aponta para ele. */}
+        <ContextHelp topic={helpTopics["calculo.comoFunciona"]} />
+
         <FormSection title="Contexto do cálculo">
           <dl className="definition-list">
             <dt>Cliente</dt>
@@ -91,7 +100,7 @@ export function CostCalculationPage() {
             <dd>V{calculation.formulationVersionNumber}</dd>
             <dt>Base de referência</dt>
             <dd>
-              {calculation.referenceOutputQuantity} {calculation.referenceOutputUomCode}
+              {formatQuantity(calculation.referenceOutputQuantity)} {calculation.referenceOutputUomCode}
             </dd>
             <dt>Data de referência de custo</dt>
             <dd>{formatDate(calculation.costReferenceDate)}</dd>

@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import type { CustomerMaterialRowDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS } from "@veridi/shared";
@@ -185,7 +186,7 @@ export function CustomerMaterialsPage() {
         </label>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">
@@ -235,10 +236,10 @@ export function CustomerMaterialsPage() {
                 <td className="col-tight">{formatDate(row.expiryDate)}</td>
                 <td className="col-tight">{row.location ?? "—"}</td>
                 <td className="col-tight is-numeric">
-                  {row.onHand} {row.unitCode}
+                  {formatQuantity(row.onHand)} {row.unitCode}
                 </td>
-                <td className="col-tight is-numeric">{row.reserved}</td>
-                <td className="col-tight is-numeric">{row.available}</td>
+                <td className="col-tight is-numeric">{formatQuantity(row.reserved)}</td>
+                <td className="col-tight is-numeric">{formatQuantity(row.available)}</td>
                 <td className="col-tight">
                   <span className={statusBadgeClass(row.status, row.isExpired)}>
                     {row.isExpired ? "Vencido" : LOT_STATUS_LABELS[row.status]}

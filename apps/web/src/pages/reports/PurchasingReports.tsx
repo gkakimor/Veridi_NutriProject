@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type { PurchaseOrderStatus, SupplierDTO } from "@veridi/shared";
 import { PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
@@ -283,7 +284,7 @@ export function ReceiptsReportPage() {
             </td>
             <td>{row.supplierLot ?? "—"}</td>
             <td className="is-number">
-              {row.receivedQuantity} {row.unitCode}
+              {formatQuantity(row.receivedQuantity)} {row.unitCode}
             </td>
             <td className="is-number">{row.orderedUnitPrice ? formatBRL(row.orderedUnitPrice) : "—"}</td>
             <td className="is-number">
@@ -359,10 +360,10 @@ export function OnOrderReportPage() {
               <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td className="is-number">
-              {row.orderedQuantity} {row.unitCode}
+              {formatQuantity(row.orderedQuantity)} {row.unitCode}
             </td>
-            <td className="is-number">{row.receivedQuantity}</td>
-            <td className="is-number">{row.openQuantity}</td>
+            <td className="is-number">{formatQuantity(row.receivedQuantity)}</td>
+            <td className="is-number">{formatQuantity(row.openQuantity)}</td>
             <td>{formatDate(row.expectedDeliveryDate)}</td>
             <td>{PURCHASE_ORDER_STATUS_LABELS[row.status]}</td>
             <td>
@@ -424,7 +425,7 @@ export function LatePurchaseOrdersReportPage() {
               <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td className="is-number">
-              {row.openQuantity} {row.unitCode}
+              {formatQuantity(row.openQuantity)} {row.unitCode}
             </td>
             <td>{formatDate(row.expectedDeliveryDate)}</td>
             <td className="is-number">{row.daysLate} dias</td>

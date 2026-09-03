@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import type { CustomerFinishedGoodsRowDTO } from "@veridi/shared";
@@ -79,7 +80,7 @@ export function FinishedGoodsTab() {
         ]}
       />
 
-      {list.error && <p className="form-alert">{list.error}</p>}
+      {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
       <div className="table-container">
         <table className="table">
@@ -102,13 +103,13 @@ export function FinishedGoodsTab() {
                 </td>
                 <td className="is-code col-tight">{row.itemCode}</td>
                 <td className="col-tight">
-                  {row.onHand} {row.unitCode}
+                  {formatQuantity(row.onHand)} {row.unitCode}
                 </td>
                 <td className="col-tight">
-                  {row.reserved} {row.unitCode}
+                  {formatQuantity(row.reserved)} {row.unitCode}
                 </td>
                 <td className="col-tight">
-                  {row.available} {row.unitCode}
+                  {formatQuantity(row.available)} {row.unitCode}
                 </td>
                 <td className="col-tight">{row.lotCount}</td>
                 <td className="col-tight">

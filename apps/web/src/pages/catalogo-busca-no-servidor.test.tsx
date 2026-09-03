@@ -381,12 +381,20 @@ describe("Formulação — busca de matéria-prima no servidor", () => {
       expect((campo as HTMLInputElement).value).toBe("MP-002500 · Beta-Alanina"),
     );
 
+    // A linha precisa de quantidade para ser gravavel — o formulario agora
+    // barra decimal invalido ANTES de chamar a API, e campo vazio e um deles.
+    fireEvent.change(screen.getByLabelText(/Quantidade de MP-002500/), {
+      target: { value: "1,5" },
+    });
+
     fireEvent.click(screen.getByRole("button", { name: /Salvar rascunho/ }));
     await waitFor(() => expect(updateFormulationVersion).toHaveBeenCalled());
     const enviado = updateFormulationVersion.mock.calls.at(-1)![1] as {
-      components: Array<{ itemId: string }>;
+      components: Array<{ itemId: string; quantity: string }>;
     };
     expect(enviado.components.map((linha) => linha.itemId)).toContain("it-beta");
+    // E a virgula digitada chega ao contrato como ponto.
+    expect(enviado.components.find((linha) => linha.itemId === "it-beta")?.quantity).toBe("1.5");
   });
 
   it("inelegível continua inelegível: inativo, acabado e item de outra linha ficam fora", async () => {

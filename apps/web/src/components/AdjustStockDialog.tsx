@@ -2,7 +2,9 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { InventoryLotBreakdownDTO } from "@veridi/shared";
 import { createInventoryAdjustment } from "../lib/inventory-api";
+import { exigirDecimal } from "../lib/decimal-field";
 import { ModalDialog } from "./ModalDialog";
+import { formatQuantity } from "../lib/quantity";
 
 interface AdjustStockDialogProps {
   itemId: string;
@@ -49,7 +51,9 @@ export function AdjustStockDialog({
         itemId,
         ...(controlsLot ? { lotId } : {}),
         type,
-        quantity,
+        // `0,85` é o que a pessoa digita; a recusa acontece aqui, com o nome
+        // do campo, e nenhum movimento é criado.
+        quantity: exigirDecimal(quantity, `Quantidade (${unitCode})`),
         reason: reason.trim(),
       });
       onAdjusted();
@@ -79,7 +83,7 @@ export function AdjustStockDialog({
                 {lots.length === 0 && <option value="">Nenhum lote disponível</option>}
                 {lots.map((lot) => (
                   <option key={lot.lotId} value={lot.lotId}>
-                    {lot.lotCode} — físico {lot.onHand} {unitCode}
+                    {lot.lotCode} — físico {formatQuantity(lot.onHand)} {unitCode}
                   </option>
                 ))}
               </select>
@@ -130,7 +134,7 @@ export function AdjustStockDialog({
           </div>
         </form>
 
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         <div className="confirm-dialog__actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>

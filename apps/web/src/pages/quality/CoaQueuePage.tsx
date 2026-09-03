@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { RejectCoaDialog } from "../../components/RejectCoaDialog";
 import { useNavigate, Link } from "react-router-dom";
@@ -180,7 +181,7 @@ export function CoaQueuePage() {
         </label>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table table--sticky-actions">
@@ -239,17 +240,16 @@ export function CoaQueuePage() {
                   </span>
                 </td>
                 <td className="col-tight is-numeric">
-                  {row.onHand} {row.unitCode}
+                  {formatQuantity(row.onHand)} {row.unitCode}
                 </td>
                 <td>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/estoque/lotes/${row.lotId}`)}
+                      to={`/estoque/lotes/${row.lotId}`}
                     >
                       Abrir lote
-                    </button>
+                    </Link>
                     {canReview && row.requiresCoa && row.coaStatus === "RECEIVED" && (
                       <>
                         <button

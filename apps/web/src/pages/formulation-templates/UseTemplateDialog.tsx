@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type {
   FormulationTemplateDTO,
@@ -98,7 +99,7 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
       }
     >
       <div>
-          {erro && <p className="form-alert">{erro}</p>}
+          {erro && <p className="form-alert" role="alert">{erro}</p>}
 
           {!selecionado ? (
             <>
@@ -186,7 +187,7 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
                 )}
                 <dt>Base</dt>
                 <dd>
-                  {versaoAtiva.basisQuantity} {versaoAtiva.outputUnitCode}
+                  {formatQuantity(versaoAtiva.basisQuantity)} {versaoAtiva.outputUnitCode}
                 </dd>
                 <dt>Modo de cálculo</dt>
                 <dd>{FORMULATION_CALCULATION_MODE_LABELS[versaoAtiva.calculationMode]}</dd>
@@ -216,7 +217,7 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
                         <td>
                           {component.itemCode} — {component.itemName}
                         </td>
-                        <td className="is-numeric">{component.quantity}</td>
+                        <td className="is-numeric">{formatQuantity(component.quantity)}</td>
                         <td>{component.unitCode}</td>
                         <td>{SUPPLY_RESPONSIBILITY_LABELS[component.supplyResponsibility]}</td>
                       </tr>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { BrandLogo } from "../components/BrandLogo";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -37,6 +37,67 @@ function startsCollapsed(): boolean {
 export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
+  const navRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * Entrar direto numa rota cujo item de menu esta abaixo da dobra deixava a
+   * navegacao mostrando um trecho do menu onde nada esta marcado como atual —
+   * a pessoa via uma tela de Gestao com o menu parado em Cadastros.
+   *
+   * `block: "nearest"` nao mexe em nada quando o item ja esta visivel, e rola
+   * apenas o proprio miolo da navegacao: a pagina principal fica onde estava.
+   */
+  useEffect(() => {
+    const nav = navRef.current;
+    const ativo = nav?.querySelector<HTMLElement>(".sidebar__link.is-active");
+    if (!nav || !ativo) return;
+
+    /*
+     * ROLAR SEM TOCAR NO FOCO.
+     *
+     * `scrollIntoView` parecia inofensivo e não era: ele move o "ponto de
+     * partida sequencial" do navegador para o elemento revelado. O primeiro
+     * Tab depois de carregar qualquer rota passava a pular tudo o que vem
+     * antes do item ativo — inclusive o skip-link, que existe justamente para
+     * quem navega por teclado não precisar atravessar trinta e dois links.
+     * Na última entrada do menu era pior: não havendo próximo, o Tab pulava a
+     * navegação inteira.
+     *
+     * Consertar a descoberta com o mouse não pode custar a descoberta com o
+     * teclado. Ajustar `scrollTop` à mão rola igual e não mexe em foco nenhum.
+     */
+    const caixaNav = nav.getBoundingClientRect();
+    const caixaItem = ativo.getBoundingClientRect();
+    if (caixaItem.top < caixaNav.top) {
+      nav.scrollTop -= caixaNav.top - caixaItem.top;
+    } else if (caixaItem.bottom > caixaNav.bottom) {
+      nav.scrollTop += caixaItem.bottom - caixaNav.bottom;
+    }
+  }, [location.pathname]);
+
+  /*
+   * Titulo da aba por tela.
+   *
+   * Era "Veridi Nutrition" em todas, entao quem trabalha com varias abas —
+   * que e o normal aqui: pedido numa, estoque noutra, ordem numa terceira —
+   * so descobria qual era qual clicando. O nome do item de menu ja e o nome
+   * que a pessoa usa para a tela; nao ha por que inventar outro.
+   *
+   * A rota mais especifica ganha: `/estoque/lotes` e Lotes, nao Posicao de
+   * Estoque.
+   */
+  useEffect(() => {
+    const atual = [...navItems]
+      .filter((item) =>
+        item.path === "/"
+          ? location.pathname === "/"
+          : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
+      )
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    document.title = atual && atual.path !== "/"
+      ? `${atual.label} · Veridi Nutrition`
+      : "Veridi Nutrition";
+  }, [location.pathname]);
   const { user, signOut } = useAuth();
   const [navCollapsed, setNavCollapsed] = useState(startsCollapsed);
 
@@ -170,6 +231,8 @@ export function AppShell() {
       </header>
 
       <nav className="sidebar" aria-label="Navegação principal">
+        <div className="sidebar__header" />
+        <div className="sidebar__nav" ref={navRef}>
         {navigation.map((group, index) => (
           <div className="sidebar__group" key={group.title ?? `grupo-${index}`}>
             {group.title !== null && (
@@ -195,6 +258,8 @@ export function AppShell() {
             ))}
           </div>
         ))}
+        </div>
+        <div className="sidebar__footer" />
       </nav>
 
       {!navCollapsed && (

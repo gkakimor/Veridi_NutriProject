@@ -1,3 +1,4 @@
+import { formatQuantity } from "../lib/quantity";
 import type { IndustrialCostCalculationDTO } from "@veridi/shared";
 import {
   INDUSTRIAL_COST_BASIS_LABELS,
@@ -91,7 +92,7 @@ export function CostBreakdown({
                   />
                 </td>
                 <td className="is-numeric">
-                  {material.requiredQuantity} {material.unitCode}
+                  {formatQuantity(material.requiredQuantity)} {material.unitCode}
                 </td>
                 <td className="is-numeric">{formatUnitCost(material.unitCost)}</td>
                 <td>
@@ -139,7 +140,7 @@ export function CostBreakdown({
                   </td>
                   <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.resourceType]}</td>
                   <td className="is-numeric">
-                    {resource.quantity} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
+                    {formatQuantity(resource.quantity)} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
                   </td>
                   <td>
                     {resource.rateValue === null ? "—" : formatBRL(resource.rateValue)}
@@ -230,7 +231,7 @@ export function CostBreakdown({
           Materiais fornecidos pelo cliente ({result.customerSuppliedMaterials.length}) fazem parte
           da estrutura física e não têm valor econômico atribuído aqui:{" "}
           {result.customerSuppliedMaterials
-            .map((material) => `${material.itemCode} (${material.requiredQuantity} ${material.unitCode})`)
+            .map((material) => `${material.itemCode} (${formatQuantity(material.requiredQuantity)} ${material.unitCode})`)
             .join(", ")}
           .
         </p>

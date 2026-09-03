@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ItemDTO, SupplierDTO, SupplierItemDTO, SupplierItemQualificationStatus } from "@veridi/shared";
@@ -342,7 +343,7 @@ export function SupplierItemsPage() {
         )}
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextParam && (
         <p className="context-chip">
@@ -410,7 +411,7 @@ export function SupplierItemsPage() {
                 </td>
                 <td className="col-tight">
                   {row.currentOffer?.minimumOrderQuantity
-                    ? `${row.currentOffer.minimumOrderQuantity} ${row.currentOffer.minimumOrderUomCode ?? ""}`
+                    ? `${formatQuantity(row.currentOffer.minimumOrderQuantity)} ${row.currentOffer.minimumOrderUomCode ?? ""}`
                     : (row.latestLegacyOffer?.minimumOrderQuantity ?? "—") +
                       (row.latestLegacyOffer?.minimumOrderQuantity
                         ? ` ${row.latestLegacyOffer.minimumOrderUomCode ?? ""}`

@@ -226,7 +226,7 @@ export function ProjectDetailPage() {
       />
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* A ficha reúne quatro assuntos que a pessoa costuma tratar como
             telas diferentes — produto, custo, proposta e amostra. Dizer o
@@ -382,7 +382,9 @@ export function ProjectDetailPage() {
                       if (event.key === "Enter") navigate(`/comercial/amostras/${sample.id}`);
                     }}
                   >
-                    <td className="is-code">{sample.code}</td>
+                    <td className="is-code">
+                      <EntityLink kind="sample" id={sample.id} code={sample.code} />
+                    </td>
                     <td className="is-code">{sample.testLabel}</td>
                     <td>{sample.description ?? "—"}</td>
                     <td>{PROJECT_SAMPLE_STATUS_LABELS[sample.status]}</td>

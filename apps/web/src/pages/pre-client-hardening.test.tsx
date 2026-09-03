@@ -559,7 +559,7 @@ describe("Consumo extra — auditoria visível", () => {
     // olha o conteúdo renderizado, não um elemento único.
     await waitFor(() => expect(screen.getAllByText("Consumo extra").length).toBeGreaterThan(0));
     expect(document.body.textContent).toContain("Ajuste operacional durante produção — VAL-LEG-02");
-    expect(document.body.textContent).toContain("+0.005 kg");
+    expect(document.body.textContent).toContain("+0,005 kg");
     expect(document.body.textContent).toContain("Admin (demo)");
   });
 

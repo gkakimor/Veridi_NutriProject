@@ -332,7 +332,6 @@ export function CustomerFormFields({
   form,
   setField,
   error,
-  fieldErrors,
   cepStatus,
   setCepStatus,
   handleBlur,
@@ -364,7 +363,7 @@ export function CustomerFormFields({
 
   return (
     <form id={CUSTOMER_FORM_ID} onSubmit={handleSubmit}>
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {customer && (
         <RelatedLinks
@@ -400,16 +399,19 @@ export function CustomerFormFields({
             <label htmlFor="customer-legal-name">
               Razão Social / Nome <span className="req">*</span>
             </label>
+            {/* Usa o helper do próprio arquivo: o servidor recusa nome
+                duplicado ou vazio, e sem isto a recusa aparecia na tela e não
+                era ligada ao campo para quem usa leitor de tela — no campo
+                obrigatório do formulário que é referência dos outros. */}
             <input
               id="customer-legal-name"
               type="text"
               required
               value={form.legalName}
               onChange={(event) => setField("legalName", event.target.value)}
+              {...fieldProps("legalName")}
             />
-            {fieldErrors["legalName"] && (
-              <p className="field__error">{fieldErrors["legalName"]}</p>
-            )}
+            {fieldError("legalName")}
           </div>
 
           <div className="field">
@@ -569,6 +571,7 @@ export function CustomerFormFields({
               id="customer-state"
               value={form.state}
               onChange={(event) => setField("state", event.target.value)}
+              {...fieldProps("state")}
             >
               <option value="">Selecione…</option>
               {BR_STATE_CODES.map((uf) => (
@@ -577,9 +580,7 @@ export function CustomerFormFields({
                 </option>
               ))}
             </select>
-            {fieldErrors["state"] && (
-              <p className="field__error">{fieldErrors["state"]}</p>
-            )}
+            {fieldError("state")}
           </div>
         </div>
       </FormSection>

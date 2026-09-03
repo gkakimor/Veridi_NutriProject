@@ -1,3 +1,4 @@
+import { formatQuantity } from "../lib/quantity";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { SupplierItemDTO } from "@veridi/shared";
@@ -39,7 +40,7 @@ export function SupplierItemsSection({
       title={isItemScope ? "Fornecedores" : "Itens fornecidos"}
       subtitle="Homologação é por item. Preço é referência comercial do fornecedor — o custo real vem do recebimento."
     >
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">
@@ -84,7 +85,7 @@ export function SupplierItemsSection({
                   </td>
                   <td>
                     {offer?.minimumOrderQuantity
-                      ? `${offer.minimumOrderQuantity} ${offer.minimumOrderUomCode ?? ""}`
+                      ? `${formatQuantity(offer.minimumOrderQuantity)} ${offer.minimumOrderUomCode ?? ""}`
                       : "—"}
                   </td>
                 </tr>

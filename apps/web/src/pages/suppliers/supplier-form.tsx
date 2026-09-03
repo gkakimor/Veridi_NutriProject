@@ -135,7 +135,7 @@ export function SupplierFormFields({
 }: SupplierFormController) {
   return (
     <form id={SUPPLIER_FORM_ID} onSubmit={handleSubmit}>
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {supplier && (
         <RelatedLinks

@@ -39,7 +39,7 @@ export function ProductsTab() {
     <>
       <ConsultationTrail steps={[{ label: "Produtos" }]} />
 
-      {list.error && <p className="form-alert">{list.error}</p>}
+      {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
       <div className="table-container">
         <table className="table table--clickable-rows">

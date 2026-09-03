@@ -244,7 +244,7 @@ export function ProductsPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextProductId && (
         <p className="context-chip">
@@ -351,6 +351,7 @@ export function ProductsPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
+                    label={`Mais ações de ${product.code}`}
                     actions={[
                       {
                         // Pergunta de negócio antes do documento: quanto custa

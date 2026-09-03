@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
@@ -44,7 +45,9 @@ import {
   reallocateReservationLine,
   reserveAvailable,
 } from "../../lib/shipments-api";
-import { ApiValidationError } from "../../lib/api-errors";
+import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -56,6 +59,8 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 
 /**
@@ -165,6 +170,35 @@ function lineFromDTO(line: CustomerOrderDTO["lines"][number]): LineRow {
     unitCode: line.unitCode,
     orderedQuantity: line.orderedQuantity,
   };
+}
+
+/**
+ * Um valor digitado que ainda vale a pena enviar.
+ *
+ * Branco e zero não valem. **Ilegível vale**: o botão precisa continuar
+ * clicável para que a mensagem que cita o separador chegue à pessoa.
+ * Enquanto isto era `Number(texto) > 0`, `2,5` virava `NaN`, `NaN > 0` era
+ * falso na hora de montar o payload e verdadeiro na hora de habilitar o
+ * botão — clicar em "Reservar disponível" não fazia nada, em silêncio.
+ */
+function temValorParaEnviar(texto: string | undefined): boolean {
+  const limpo = (texto ?? "").trim();
+  if (limpo === "") return false;
+  const valor = parseDecimalInput(limpo);
+  return valor === null || Number(valor) > 0;
+}
+
+/**
+ * O complemento de uma linha do Plano: o que não é reservado é produzido.
+ *
+ * Campo em branco continua valendo zero — o complemento vira o pedido
+ * inteiro, como sempre foi. O que muda é `2,5`: era `NaN` e apagava o outro
+ * campo sem explicar; agora é dois e meio.
+ */
+function complementoDaLinha(pedido: string, digitado: string): string {
+  const valor = digitado.trim() === "" ? "0" : parseDecimalInput(digitado);
+  if (valor === null) return "";
+  return Math.max(Number(pedido) - Number(valor), 0).toString();
 }
 
 function situationLabel(situation: string): string {
@@ -302,14 +336,49 @@ export function CustomerOrderPage() {
   }, [id, isNew, syncFormFromServer]);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
+    listCustomers({ active: true, pageSize: 50 })
       .then((result) => setActiveCustomers(result.customers))
       .catch(() => setActiveCustomers([]));
     // Produto técnico de projeto não é opção operacional.
-    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 1000 })
+    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 50 })
       .then((result) => setActiveProducts(result.products))
       .catch(() => setActiveProducts([]));
   }, []);
+
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarClientes(termo: string): Promise<EntityOption[]> {
+    const resultado = await listCustomers({ active: true, search: termo, pageSize: 50 });
+    const novos = resultado.customers;
+    setActiveCustomers((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((c) => ({ id: c.id, code: c.code, name: c.tradeName ?? c.legalName }));
+  }
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarProdutos(termo: string): Promise<EntityOption[]> {
+    const resultado = await listProducts({ active: true, lifecycle: "APPROVED", search: termo, pageSize: 50 });
+    const novos = resultado.products;
+    setActiveProducts((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((p) => ({ id: p.id, code: p.code, name: p.name }));
+  }
 
   const status: CustomerOrderStatus = customerOrder?.status ?? "DRAFT";
   const isDraft = isNew || status === "DRAFT";
@@ -331,6 +400,26 @@ export function CustomerOrderPage() {
   const linhasEditaveis = isDraft && origemComercial === null;
   const isCancellable = !isNew && (status === "DRAFT" || status === "CONFIRMED");
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
+  /*
+   * Quem grava a "Entrega prevista".
+   *
+   * O campo mora no topo e o botão que o grava fica no fim da página, mais
+   * de mil pixels abaixo: quem mudava a data não tinha como saber que ela
+   * ainda não estava no pedido. O rótulo aqui é o MESMO texto do botão do
+   * rodapé — e é aquele botão que salva; nenhum caminho novo de gravação
+   * nasce ao lado do campo.
+   */
+  const rotuloDeSalvar = isDraft ? "Salvar rascunho" : "Salvar prazo e observações";
+  /**
+   * Existe botão de salvar no rodapé? Pedido cancelado não tem, e apontar
+   * para um botão que não está na tela é pior que não dizer nada.
+   */
+  const temBotaoDeSalvar = isDraft || status !== "CANCELLED";
+  /** Data no campo diferente da data que está no pedido salvo. */
+  const prazoNaoSalvo =
+    !isNew &&
+    customerOrder !== null &&
+    requestedDeliveryDate !== toDateInputValue(customerOrder.requestedDeliveryDate);
   const showPlan = !isNew && status === "CONFIRMED";
   const showPurchaseSuggestion = !isNew && status === "IN_FULFILLMENT";
 
@@ -361,7 +450,7 @@ export function CustomerOrderPage() {
     try {
       setCustomerOrder(await createRemainderProductionOrder(id, { customerOrderLineId: lineId }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao gerar OP para o saldo restante");
+      setError(apiErrorMessage(err, "Falha ao gerar OP para o saldo restante"));
     } finally {
       setGerandoSaldoLineId(null);
     }
@@ -388,7 +477,7 @@ export function CustomerOrderPage() {
         }
         setPlanAdjustments(initial);
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Falha ao carregar plano de atendimento"))
+      .catch((err: unknown) => setError(apiErrorMessage(err, "Falha ao carregar plano de atendimento")))
       .finally(() => setPlanLoading(false));
   }, [showPlan, id]);
 
@@ -398,7 +487,7 @@ export function CustomerOrderPage() {
     getPlanPurchaseSourcing(id)
       .then(setSourcing)
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar sugestão de compra"),
+        setError(apiErrorMessage(err, "Falha ao carregar sugestão de compra")),
       )
       .finally(() => setSourcingLoading(false));
   }, [id]);
@@ -426,7 +515,7 @@ export function CustomerOrderPage() {
           return next;
         });
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Falha ao carregar sugestão de compra"))
+      .catch((err: unknown) => setError(apiErrorMessage(err, "Falha ao carregar sugestão de compra")))
       .finally(() => setSuggestionLoading(false));
   }, [id]);
 
@@ -633,20 +722,28 @@ export function CustomerOrderPage() {
     setError(null);
     setFieldErrors({});
 
-    const linesPayload = lines
-      .filter((line) => line.productId)
-      .map((line) => ({ productId: line.productId, orderedQuantity: line.orderedQuantity.trim() }));
-
-    const requestedIso = toIsoOrEmpty(requestedDeliveryDate);
-
-    const payload = {
-      customerId,
-      notes: notes.trim(),
-      lines: linesPayload,
-      ...(requestedIso ? { requestedDeliveryDate: requestedIso } : {}),
-    };
-
     try {
+      // A conversão acontece dentro do funil: uma quantidade ilegível
+      // interrompe aqui, com o produto nomeado, e a requisição não sai.
+      const linesPayload = lines
+        .filter((line) => line.productId)
+        .map((line) => ({
+          productId: line.productId,
+          orderedQuantity: exigirDecimal(
+            line.orderedQuantity,
+            `Quantidade de ${line.productCode || "produto"}`,
+          ),
+        }));
+
+      const requestedIso = toIsoOrEmpty(requestedDeliveryDate);
+
+      const payload = {
+        customerId,
+        notes: notes.trim(),
+        lines: linesPayload,
+        ...(requestedIso ? { requestedDeliveryDate: requestedIso } : {}),
+      };
+
       if (isNew) {
         const created = await createCustomerOrder(payload);
         navigate(`/comercial/pedidos/${created.id}`, { replace: true });
@@ -664,7 +761,7 @@ export function CustomerOrderPage() {
         setFieldErrors(nextFieldErrors);
         setError("Corrija os campos destacados.");
       } else {
-        setError(err instanceof Error ? err.message : "Falha ao salvar pedido");
+        setError(apiErrorMessage(err, "Falha ao salvar pedido"));
       }
     } finally {
       setSaving(false);
@@ -684,7 +781,7 @@ export function CustomerOrderPage() {
       setCustomerOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao salvar");
+      setError(apiErrorMessage(err, "Falha ao salvar"));
     } finally {
       setSaving(false);
     }
@@ -700,7 +797,7 @@ export function CustomerOrderPage() {
       setCustomerOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao confirmar pedido");
+      setError(apiErrorMessage(err, "Falha ao confirmar pedido"));
     } finally {
       setSaving(false);
     }
@@ -717,24 +814,24 @@ export function CustomerOrderPage() {
       setCustomerOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao cancelar pedido");
+      setError(apiErrorMessage(err, "Falha ao cancelar pedido"));
     } finally {
       setSaving(false);
     }
   }
 
   function handleAdjustReserve(lineId: string, ordered: string, reserve: string) {
-    const orderedNum = Number(ordered);
-    const reserveNum = Number(reserve);
-    const produce = Number.isNaN(reserveNum) ? "" : Math.max(orderedNum - reserveNum, 0).toString();
-    setPlanAdjustments((prev) => ({ ...prev, [lineId]: { reserve, produce } }));
+    setPlanAdjustments((prev) => ({
+      ...prev,
+      [lineId]: { reserve, produce: complementoDaLinha(ordered, reserve) },
+    }));
   }
 
   function handleAdjustProduce(lineId: string, ordered: string, produce: string) {
-    const orderedNum = Number(ordered);
-    const produceNum = Number(produce);
-    const reserve = Number.isNaN(produceNum) ? "" : Math.max(orderedNum - produceNum, 0).toString();
-    setPlanAdjustments((prev) => ({ ...prev, [lineId]: { reserve, produce } }));
+    setPlanAdjustments((prev) => ({
+      ...prev,
+      [lineId]: { reserve: complementoDaLinha(ordered, produce), produce },
+    }));
   }
 
   const planCoversEverything = useMemo(() => {
@@ -742,8 +839,30 @@ export function CustomerOrderPage() {
     return plan.lines.every((line) => {
       const adjustment = planAdjustments[line.customerOrderLineId];
       if (!adjustment) return false;
-      const sum = Number(adjustment.reserve || "0") + Number(adjustment.produce || "0");
+      // Vazio é zero; ilegível não vira conta — sem isto a soma dava `NaN`
+      // e a comparação recusava um plano que fecha, dizendo que não fecha.
+      const reservado = parseDecimalInput(adjustment.reserve.trim() || "0");
+      const produzido = parseDecimalInput(adjustment.produce.trim() || "0");
+      if (reservado === null || produzido === null) return false;
+      const sum = Number(reservado) + Number(produzido);
       return Math.abs(sum - Number(line.orderedQuantity)) < 1e-6;
+    });
+  }, [plan, planAdjustments]);
+
+  /*
+   * Um ajuste que nem o parser lê. O aviso de "precisa somar" está certo
+   * para quem digitou 3 onde cabia 5, e completamente errado para quem
+   * digitou `1.234,56` — nesse caso a soma nem existe.
+   */
+  const ajustePlanoIlegivel = useMemo(() => {
+    if (!plan) return false;
+    return plan.lines.some((line) => {
+      const adjustment = planAdjustments[line.customerOrderLineId];
+      if (!adjustment) return false;
+      return (
+        (adjustment.reserve.trim() !== "" && parseDecimalInput(adjustment.reserve) === null) ||
+        (adjustment.produce.trim() !== "" && parseDecimalInput(adjustment.produce) === null)
+      );
     });
   }, [plan, planAdjustments]);
 
@@ -758,8 +877,10 @@ export function CustomerOrderPage() {
           const adjustment = planAdjustments[line.customerOrderLineId]!;
           return {
             customerOrderLineId: line.customerOrderLineId,
-            reserveQuantity: adjustment.reserve || "0",
-            produceQuantity: adjustment.produce || "0",
+            reserveQuantity:
+              exigirDecimalOpcional(adjustment.reserve, `Reservar de ${line.productCode}`) ?? "0",
+            produceQuantity:
+              exigirDecimalOpcional(adjustment.produce, `Produzir de ${line.productCode}`) ?? "0",
           };
         }),
       });
@@ -767,7 +888,7 @@ export function CustomerOrderPage() {
       syncFormFromServer(updated);
       setPlan(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao aplicar plano de atendimento");
+      setError(apiErrorMessage(err, "Falha ao aplicar plano de atendimento"));
     } finally {
       setApplying(false);
     }
@@ -775,7 +896,7 @@ export function CustomerOrderPage() {
 
   const draftLinesToGenerate = useMemo(() => {
     return Object.entries(draftInputs)
-      .filter(([, value]) => Number(value.quantity || "0") > 0)
+      .filter(([, value]) => temValorParaEnviar(value.quantity))
       .map(([itemId, value]) => ({ itemId, quantity: value.quantity, supplierId: value.supplierId }));
   }, [draftInputs]);
 
@@ -809,12 +930,21 @@ export function CustomerOrderPage() {
     setGenerating(true);
     setError(null);
     try {
-      const updated = await generatePurchaseDrafts(id, { lines: draftLinesToGenerate });
+      const updated = await generatePurchaseDrafts(id, {
+        lines: draftLinesToGenerate.map((line) => {
+          const codigo =
+            suggestion?.rows.find((row) => row.itemId === line.itemId)?.itemCode ?? "material";
+          return {
+            ...line,
+            quantity: exigirDecimal(line.quantity, `Comprar de ${codigo}`),
+          };
+        }),
+      });
       setCustomerOrder(updated);
       syncFormFromServer(updated);
       reloadSuggestion();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao gerar Ordens de Compra");
+      setError(apiErrorMessage(err, "Falha ao gerar Ordens de Compra"));
     } finally {
       setGenerating(false);
     }
@@ -822,24 +952,32 @@ export function CustomerOrderPage() {
 
   async function handleReserveAvailable() {
     if (!id || !reservationStatus) return;
-    const lines = reservationStatus.lines
-      .map((line) => ({
-        customerOrderLineId: line.customerOrderLineId,
-        quantity: (reserveInputs[line.customerOrderLineId] ?? "0").trim() || "0",
-      }))
-      .filter((line) => Number(line.quantity) > 0);
-    if (lines.length === 0) return;
 
     setReserving(true);
     setError(null);
     try {
+      // Dentro do funil: linha em branco é zero e some no filtro; linha
+      // ilegível interrompe nomeando o produto, em vez de sumir junto e
+      // deixar o clique sem efeito nenhum.
+      const lines = reservationStatus.lines
+        .map((line) => ({
+          customerOrderLineId: line.customerOrderLineId,
+          quantity:
+            exigirDecimalOpcional(
+              reserveInputs[line.customerOrderLineId] ?? "",
+              `Reservar de ${line.productCode}`,
+            ) ?? "0",
+        }))
+        .filter((line) => Number(line.quantity) > 0);
+      if (lines.length === 0) return;
+
       const updated = await reserveAvailable(id, { lines });
       setCustomerOrder(updated);
       syncFormFromServer(updated);
       setReserveInputs({});
       reloadReservationStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao reservar produto acabado");
+      setError(apiErrorMessage(err, "Falha ao reservar produto acabado"));
     } finally {
       setReserving(false);
     }
@@ -857,7 +995,7 @@ export function CustomerOrderPage() {
       syncFormFromServer(updated);
       reloadReservationStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao realocar reserva");
+      setError(apiErrorMessage(err, "Falha ao realocar reserva"));
     } finally {
       setReallocatingLineId(null);
     }
@@ -871,7 +1009,7 @@ export function CustomerOrderPage() {
       const shipment = await createShipmentDraft(id);
       navigate(`/comercial/expedicoes/${shipment.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao preparar expedição");
+      setError(apiErrorMessage(err, "Falha ao preparar expedição"));
     } finally {
       setPreparingShipment(false);
     }
@@ -905,7 +1043,7 @@ export function CustomerOrderPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Comercial / Pedidos / {isNew ? "Novo" : "Editar"}</div>
+          <PageBreadcrumbs items={[{ label: "Pedidos", href: "/comercial/pedidos" }, { label: isNew ? "Novo" : (customerOrder?.code ?? "Editar") }]} />
           <div className="doc-title">
             <h1>{isNew ? "Novo pedido" : customerOrder?.code}</h1>
             {customerOrder && (
@@ -932,7 +1070,15 @@ export function CustomerOrderPage() {
       {customerOrder && <FlowContext steps={orderFlowSteps(customerOrder)} />}
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {/*
+          A ajuda do DOCUMENTO fica aqui, fora de qualquer condicao de status.
+          Ela vivia so dentro da secao do Plano, que so aparece com o pedido
+          confirmado — entao sumia justamente em "Em atendimento", quando
+          reserva, ordens e saldo a expedir passam a existir e a tela fica mais
+          dificil, nao mais facil.
+        */}
+        <ContextHelp topic={helpTopics["comercial.pedido"]} />
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {customerOrder?.status === "CANCELLED" && (
           <FormSection title="Cancelamento">
@@ -967,7 +1113,8 @@ export function CustomerOrderPage() {
                   value={customerId}
                   onChange={(selectedId) => setCustomerId(selectedId)}
                   placeholder="Digite código ou nome do cliente…"
-                  options={customerOptions.map((customer) => ({
+                  onSearch={buscarClientes}
+options={customerOptions.map((customer) => ({
                     id: customer.id,
                     code: customer.code,
                     name: customer.tradeName ?? customer.legalName,
@@ -982,13 +1129,24 @@ export function CustomerOrderPage() {
                       entityType: "customer",
                     })
                   }
+                  /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
+                  {...(fieldErrors["customerId"]
+                    ? {
+                        "aria-invalid": true as const,
+                        "aria-describedby": "co-customerId-error",
+                      }
+                    : {})}
                 />
               ) : (
                 <p className="field-readonly-value">
                   {customerOrder?.customerCode} — {customerOrder?.customerName}
                 </p>
               )}
-              {fieldErrors["customerId"] && <p className="field__error">{fieldErrors["customerId"]}</p>}
+              {fieldErrors["customerId"] && (
+                <p className="field__error" id="co-customerId-error">
+                  {fieldErrors["customerId"]}
+                </p>
+              )}
             </div>
 
             <div className="field">
@@ -998,7 +1156,22 @@ export function CustomerOrderPage() {
                 type="date"
                 value={requestedDeliveryDate}
                 onChange={(event) => setRequestedDeliveryDate(event.target.value)}
+                {...(temBotaoDeSalvar ? { "aria-describedby": "co-delivery-date-hint" } : {})}
               />
+              {/* `role="status"` para que quem usa leitor de tela ouça a
+                  mudança de "onde se salva" para "ainda não salvo". */}
+              {temBotaoDeSalvar && (
+                <p className="field__hint" id="co-delivery-date-hint" role="status">
+                  {prazoNaoSalvo ? (
+                    <>
+                      <span className="badge badge--warn">Data ainda não salva</span> A nova
+                      data entra no pedido com “{rotuloDeSalvar}”, no fim desta página.
+                    </>
+                  ) : (
+                    <>Mudar a data aqui não grava sozinho: use “{rotuloDeSalvar}”, no fim desta página.</>
+                  )}
+                </p>
+              )}
             </div>
           </div>
         </FormSection>
@@ -1036,7 +1209,8 @@ export function CustomerOrderPage() {
                           value={line.productId}
                           onChange={(productId) => handleLineProductChange(line.key, productId)}
                           placeholder="Digite código ou nome do produto…"
-                          options={optionsForRow(line).map((product) => ({
+                          onSearch={buscarProdutos}
+options={optionsForRow(line).map((product) => ({
                             id: product.id,
                             code: product.code,
                             name: product.name,
@@ -1064,6 +1238,10 @@ export function CustomerOrderPage() {
                           type="text"
                           inputMode="decimal"
                           placeholder="Quantidade"
+                          // Placeholder some ao digitar e nenhum leitor de tela
+                          // o usa como nome: sem isto, o campo que decide a
+                          // quantidade do pedido era só "editar texto".
+                          aria-label={`Quantidade de ${line.productCode || "produto"}`}
                           value={line.orderedQuantity}
                           onChange={(event) => handleLineQuantityChange(line.key, event.target.value)}
                         />
@@ -1133,7 +1311,10 @@ export function CustomerOrderPage() {
             title="Plano de Atendimento"
             subtitle="Análise/projeção — usa estoque disponível agora. Ao aplicar, tudo é recalculado de novo."
           >
-            <ContextHelp topic={helpTopics["planoAtendimento.comoFunciona"]} />
+            <ContextHelp
+              topic={helpTopics["planoAtendimento.comoFunciona"]}
+              triggerLabel="Como funciona o Plano"
+            />
 
             {planLoading && <p className="field__hint">Calculando…</p>}
             {plan && (
@@ -1159,7 +1340,7 @@ export function CustomerOrderPage() {
                               <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                             </td>
                             <td>
-                              {line.orderedQuantity} {line.unitCode}
+                              {formatQuantity(line.orderedQuantity)} {line.unitCode}
                             </td>
                             <td className="is-numeric">{line.finishedGoodsAvailable}</td>
                             <td>
@@ -1202,8 +1383,12 @@ export function CustomerOrderPage() {
                     </tbody>
                   </table>
                 </div>
-                {!planCoversEverything && (
-                  <p className="field__hint">Reservar + Produzir precisa somar exatamente a quantidade pedida em cada linha.</p>
+                {ajustePlanoIlegivel ? (
+                  <p className="field__hint">{mensagemDecimalInvalido("Reservar/Produzir")}</p>
+                ) : (
+                  !planCoversEverything && (
+                    <p className="field__hint">Reservar + Produzir precisa somar exatamente a quantidade pedida em cada linha.</p>
+                  )
                 )}
 
                 {plan.materialImpact.length > 0 && (
@@ -1263,17 +1448,17 @@ export function CustomerOrderPage() {
                                 )}
                               </td>
                               <td className="is-numeric">
-                                {row.requiredQuantity} {row.unitCode}
+                                {formatQuantity(row.requiredQuantity)} {row.unitCode}
                               </td>
-                              <td className="is-numeric">{row.onHand}</td>
-                              <td className="is-numeric">{row.reserved}</td>
-                              <td className="is-numeric">{row.available}</td>
+                              <td className="is-numeric">{formatQuantity(row.onHand)}</td>
+                              <td className="is-numeric">{formatQuantity(row.reserved)}</td>
+                              <td className="is-numeric">{formatQuantity(row.available)}</td>
                               <td className="is-numeric">
                                 {row.supplyResponsibility === "CUSTOMER" ? "—" : row.onOrder}
                               </td>
                               <td className="is-numeric">
                                 <span className={Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"}>
-                                  {row.shortage}
+                                  {formatQuantity(row.shortage)}
                                 </span>
                               </td>
                             </tr>
@@ -1319,7 +1504,7 @@ export function CustomerOrderPage() {
                         <ul>
                           {faltaCliente.map((row) => (
                             <li key={row.itemId}>
-                              {row.itemCode} — {row.itemName}: faltam {row.shortage} {row.unitCode}
+                              {row.itemCode} — {row.itemName}: faltam {formatQuantity(row.shortage)} {row.unitCode}
                               {row.ownerCustomerName ? " (" + row.ownerCustomerName + ")" : ""}
                             </li>
                           ))}
@@ -1345,9 +1530,9 @@ export function CustomerOrderPage() {
                                   <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                                 </td>
                                 <td className="is-numeric">
-                                  {row.shortage} {row.unitCode}
+                                  {formatQuantity(row.shortage)} {row.unitCode}
                                 </td>
-                                <td className="is-numeric">{row.onOrder}</td>
+                                <td className="is-numeric">{formatQuantity(row.onOrder)}</td>
                                 <td>
                                   {row.supplierCandidates.length === 0 ? (
                                     <span className="field__hint">
@@ -1472,7 +1657,7 @@ export function CustomerOrderPage() {
                                       {candidate.minimumOrderQuantity && (
                                         <span className="field__hint">
                                           {" "}
-                                          · mínimo {candidate.minimumOrderQuantity}{" "}
+                                          · mínimo {formatQuantity(candidate.minimumOrderQuantity)}{" "}
                                           {candidate.minimumOrderUomCode}
                                           {candidate.moqRaisedQuantity && " (eleva a quantidade)"}
                                         </span>
@@ -1492,15 +1677,16 @@ export function CustomerOrderPage() {
                               {row.remainingRequired} {row.unitCode}
                             </td>
                             <td>{row.ownReserved}</td>
-                            <td className="is-numeric">{row.available}</td>
-                            <td className="is-numeric">{row.onOrder}</td>
+                            <td className="is-numeric">{formatQuantity(row.available)}</td>
+                            <td className="is-numeric">{formatQuantity(row.onOrder)}</td>
                             <td>{row.operationalShortage}</td>
-                            <td>{row.draftPurchaseQuantity}</td>
+                            <td>{formatQuantity(row.draftPurchaseQuantity)}</td>
                             <td>{row.newSuggestedPurchase}</td>
                             <td>
                               <input
                                 type="text"
                                 inputMode="decimal"
+                                aria-label={`Comprar de ${row.itemCode}`}
                                 value={input.quantity}
                                 onChange={(event) => handleDraftQuantityChange(row.itemId, event.target.value)}
                               />
@@ -1600,14 +1786,14 @@ export function CustomerOrderPage() {
                           <td className="is-numeric">
                             {row.remainingRequired} {row.unitCode}
                           </td>
-                          <td>{row.available}</td>
+                          <td>{formatQuantity(row.available)}</td>
                           <td className="is-numeric">
                             <span
                               className={
                                 Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"
                               }
                             >
-                              {row.shortage}
+                              {formatQuantity(row.shortage)}
                             </span>
                           </td>
                         </tr>
@@ -1622,7 +1808,11 @@ export function CustomerOrderPage() {
 
         {isOperational && reservationStatus && (
           <FormSection
-            title="Reserva de Produto Acabado"
+            /* Duas seções quase homônimas separavam mil e duzentos pixels de
+               rolagem: esta AGE (separa produto para o pedido), a de baixo
+               REGISTRA (mostra o que já foi separado, lote a lote). O título
+               agora diz qual é qual. */
+            title="Reservar Produto Acabado"
             subtitle="Produto produzido depois do Plano precisa ser explicitamente reservado antes de poder ser expedido."
           >
             <div className="table-container">
@@ -1645,9 +1835,9 @@ export function CustomerOrderPage() {
                         <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                       </td>
                       <td>
-                        {line.orderedQuantity} {line.unitCode}
+                        {formatQuantity(line.orderedQuantity)} {line.unitCode}
                       </td>
-                      <td className="is-numeric">{line.shippedQuantity}</td>
+                      <td className="is-numeric">{formatQuantity(line.shippedQuantity)}</td>
                       <td className="is-numeric">{line.reservedRemaining}</td>
                       <td className="is-numeric">{line.stillToReserve}</td>
                       <td className="is-numeric">{line.currentAvailable}</td>
@@ -1679,7 +1869,7 @@ export function CustomerOrderPage() {
                 disabled={
                   reserving ||
                   reservationStatus.lines.every(
-                    (line) => Number(reserveInputs[line.customerOrderLineId] ?? "0") <= 0,
+                    (line) => !temValorParaEnviar(reserveInputs[line.customerOrderLineId]),
                   )
                 }
                 onClick={handleReserveAvailable}
@@ -1717,25 +1907,24 @@ export function CustomerOrderPage() {
                       key={shipment.id}
                       tabIndex={0}
                       onClick={() => navigate(`/comercial/expedicoes/${shipment.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") navigate(`/comercial/expedicoes/${shipment.id}`);
+                      }}
                     >
                       <td className="is-code">{shipment.code}</td>
                       <td>
                         {formatDate(shipment.shipmentDate)}
                       </td>
-                      <td className="is-numeric">{shipment.totalQuantity}</td>
+                      <td className="is-numeric">{formatQuantity(shipment.totalQuantity)}</td>
                       <td>
                         <span className="badge badge--neutral">
                           {SHIPMENT_STATUS_LABELS[shipment.status as ShipmentStatus] ?? shipment.status}
                         </span>
                       </td>
                       <td onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/comercial/expedicoes/${shipment.id}`)}
-                        >
+                        <Link className="btn btn--ghost btn--sm" to={`/comercial/expedicoes/${shipment.id}`}>
                           Abrir
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -1798,10 +1987,13 @@ export function CustomerOrderPage() {
                         key={billing.id}
                         tabIndex={0}
                         onClick={() => navigate(`/comercial/faturamento/${billing.id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") navigate(`/comercial/faturamento/${billing.id}`);
+                        }}
                       >
                         <td className="is-code">{billing.code}</td>
                         <td className="is-code">{billing.shipmentCode}</td>
-                        <td className="is-numeric">{billing.totalQuantity}</td>
+                        <td className="is-numeric">{formatQuantity(billing.totalQuantity)}</td>
                         <td className="is-numeric">{billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}</td>
                         <td>
                           <span className="badge badge--neutral">
@@ -1811,13 +2003,9 @@ export function CustomerOrderPage() {
                           </span>
                         </td>
                         <td onClick={(event) => event.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
-                            onClick={() => navigate(`/comercial/faturamento/${billing.id}`)}
-                          >
+                          <Link className="btn btn--ghost btn--sm" to={`/comercial/faturamento/${billing.id}`}>
                             Abrir
-                          </button>
+                          </Link>
                         </td>
                       </tr>
                     ))}
@@ -1844,7 +2032,14 @@ export function CustomerOrderPage() {
                 </thead>
                 <tbody>
                   {customerOrder.linkedPurchaseOrders.map((po) => (
-                    <tr key={po.id} tabIndex={0} onClick={() => navigate(`/compras/ordens/${po.id}`)}>
+                    <tr
+                      key={po.id}
+                      tabIndex={0}
+                      onClick={() => navigate(`/compras/ordens/${po.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") navigate(`/compras/ordens/${po.id}`);
+                      }}
+                    >
                       <td className="is-code">{po.code}</td>
                       <td>{po.supplierName}</td>
                       <td className="is-numeric">{po.lineCount}</td>
@@ -1855,13 +2050,9 @@ export function CustomerOrderPage() {
                       </td>
                       <td className="is-numeric">{po.orderTotal ?? "—"}</td>
                       <td onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/compras/ordens/${po.id}`)}
-                        >
+                        <Link className="btn btn--ghost btn--sm" to={`/compras/ordens/${po.id}`}>
                           Abrir
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -1875,8 +2066,8 @@ export function CustomerOrderPage() {
           <>
             {customerOrder?.reservation && (
               <FormSection
-                title="Reservas de Produto Acabado"
-                subtitle="Lote inelegível (vencido/bloqueado) pode ser realocado — o já expedido continua no lote original."
+                title="Produto Acabado já reservado — por lote"
+                subtitle="Registro do que já foi separado para este pedido. Lote inelegível (vencido/bloqueado) pode ser realocado — o já expedido continua no lote original."
               >
                 <div className="table-container">
                   <table className="table">
@@ -1920,9 +2111,9 @@ export function CustomerOrderPage() {
                               )}
                             </td>
                             <td className="is-numeric">
-                              {line.quantity} {line.unitCode}
+                              {formatQuantity(line.quantity)} {line.unitCode}
                             </td>
-                            <td>{line.shippedQuantity}</td>
+                            <td>{formatQuantity(line.shippedQuantity)}</td>
                             <td>{line.reservedRemaining}</td>
                             <td>
                               {isReleased ? (
@@ -1975,7 +2166,7 @@ export function CustomerOrderPage() {
                       {linhasComSaldoPendente
                         .map(
                           (line) =>
-                            `${line.productCode}: faltam ${line.pendingProductionQuantity} ${line.unitCode}`,
+                            `${line.productCode}: faltam ${formatQuantity(line.pendingProductionQuantity)} ${line.unitCode}`,
                         )
                         .join(" · ")}
                     </p>
@@ -2011,7 +2202,14 @@ export function CustomerOrderPage() {
                     </thead>
                     <tbody>
                       {customerOrder.generatedProductionOrders.map((op) => (
-                        <tr key={op.id} tabIndex={0} onClick={() => navigate(`/producao/ordens/${op.id}`)}>
+                        <tr
+                      key={op.id}
+                      tabIndex={0}
+                      onClick={() => navigate(`/producao/ordens/${op.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") navigate(`/producao/ordens/${op.id}`);
+                      }}
+                    >
                           <td className="is-code">
                             <EntityLink kind="productionOrder" id={op.id} code={op.code} />
                           </td>
@@ -2019,10 +2217,10 @@ export function CustomerOrderPage() {
                             <EntityLink kind="product" id={op.productId} code={op.productCode} name={op.productName} />
                           </td>
                           <td className="is-numeric">
-                            {op.plannedQuantity} {op.outputUnitCode}
+                            {formatQuantity(op.plannedQuantity)} {op.outputUnitCode}
                           </td>
                           <td className="is-numeric">
-                            {op.producedQuantity} {op.outputUnitCode}
+                            {formatQuantity(op.producedQuantity)} {op.outputUnitCode}
                           </td>
                           <td>
                             <span className="badge badge--neutral">
@@ -2089,7 +2287,7 @@ export function CustomerOrderPage() {
         message={(() => {
           const linha = linhasComSaldoPendente.find((row) => row.id === saldoDialogLineId);
           return linha
-            ? `Será criada uma Ordem de Produção em rascunho de ${linha.pendingProductionQuantity} ${linha.unitCode} de ${linha.productCode}, vinculada a este pedido. Nada é liberado nem reservado automaticamente.`
+            ? `Será criada uma Ordem de Produção em rascunho de ${formatQuantity(linha.pendingProductionQuantity)} ${linha.unitCode} de ${linha.productCode}, vinculada a este pedido. Nada é liberado nem reservado automaticamente.`
             : "";
         })()}
         confirmLabel="Gerar OP"

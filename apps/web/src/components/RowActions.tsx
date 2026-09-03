@@ -28,6 +28,14 @@ export function RowActions({
   children,
 }: {
   actions: RowAction[];
+  /**
+   * Nome do botão "⋯" para leitor de tela — sempre com o identificador da
+   * linha ("Mais ações de MP-000001").
+   *
+   * Sem ele toda linha da tabela anuncia o mesmo nome, e quem ouve a tela
+   * abre o menu sem saber de qual registro ele é. O padrão existe só para
+   * não deixar o botão mudo.
+   */
   label?: string;
   /** Ação principal, renderizada fora do menu. */
   children?: ReactNode;
@@ -98,11 +106,30 @@ export function RowActions({
       toggle.current?.focus();
     }
 
+    /*
+     * Sair com Tab tambem fecha. Havia fechamento por clique fora e por
+     * Escape, e nenhum por foco: quem abria o menu com Enter e seguia
+     * tabulando deixava o menu flutuando aberto sobre a proxima linha, ancorado
+     * numa acao que nao era mais a que estava em foco.
+     *
+     * `focusout` sobe, entao o alvo do foco novo chega em `relatedTarget`.
+     * `null` significa que o foco saiu da janela — a pessoa pode voltar, e
+     * fechar ali seria perder o menu por trocar de aba.
+     */
+    function handleFocusOut(event: FocusEvent) {
+      const proximo = event.relatedTarget as Node | null;
+      if (!proximo) return;
+      if (!container.current?.contains(proximo)) setOpen(false);
+    }
+
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    container.current?.addEventListener("focusout", handleFocusOut);
+    const atual = container.current;
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      atual?.removeEventListener("focusout", handleFocusOut);
     };
   }, [open]);
 
@@ -207,6 +234,17 @@ export function RowActions({
                   onClick={(event) => {
                     event.stopPropagation();
                     setOpen(false);
+                    /*
+                     * O foco volta para o gatilho ANTES da ação abrir qualquer
+                     * coisa. O item de menu que estava em foco é desmontado
+                     * junto com o menu, e um diálogo que abra em seguida
+                     * guarda "para onde devolver o foco" lendo quem estava em
+                     * foco naquele instante — se fosse o item desmontado, ao
+                     * fechar o diálogo o foco caía no `body`, jogando quem usa
+                     * teclado de volta ao topo da página, dezenas de Tab longe
+                     * da linha onde estava. O gatilho continua montado.
+                     */
+                    toggle.current?.focus();
                     action.onSelect();
                   }}
                 >

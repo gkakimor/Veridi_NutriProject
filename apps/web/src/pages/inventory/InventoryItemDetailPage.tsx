@@ -1,16 +1,19 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type { AllocationSuggestionDTO, CostReferenceDTO, InventoryItemDetailDTO } from "@veridi/shared";
 import { COST_SOURCE_LABELS, ITEM_TYPE_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
 import { getAllocationSuggestion, getInventoryItem } from "../../lib/inventory-api";
 import { getItemCostReference } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp, InfoHint } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
@@ -77,7 +80,10 @@ export function InventoryItemDetailPage() {
     setSuggestionError(null);
     setSuggestion(null);
     try {
-      const result = await getAllocationSuggestion(itemId, requiredQuantity.trim());
+      const result = await getAllocationSuggestion(
+        itemId,
+        exigirDecimal(requiredQuantity, "Quantidade necessária"),
+      );
       setSuggestion(result);
     } catch (err) {
       setSuggestionError(err instanceof Error ? err.message : "Falha ao calcular sugestão");
@@ -114,7 +120,7 @@ export function InventoryItemDetailPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Estoque / Visão Geral / Detalhe</div>
+          <PageBreadcrumbs items={[{ label: "Posição de Estoque", href: "/estoque" }, { label: "Detalhe" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="item" id={detail.itemId} code={detail.itemCode} name={detail.itemName} />
@@ -166,12 +172,12 @@ export function InventoryItemDetailPage() {
           <dl className="definition-list">
             <dt>Físico</dt>
             <dd>
-              {detail.onHand} {detail.unitCode}
+              {formatQuantity(detail.onHand)} {detail.unitCode}
               <span className="field__hint"> — existe no depósito agora, somando os lotes.</span>
             </dd>
             <dt>Reservado</dt>
             <dd>
-              {detail.reserved} {detail.unitCode}
+              {formatQuantity(detail.reserved)} {detail.unitCode}
               <span className="field__hint">
                 {" "}
                 — parte do físico já comprometida com produção ou pedido.
@@ -179,7 +185,7 @@ export function InventoryItemDetailPage() {
             </dd>
             <dt>Disponível</dt>
             <dd>
-              {detail.available} {detail.unitCode}
+              {formatQuantity(detail.available)} {detail.unitCode}
               <span className="field__hint">
                 {" "}
                 — físico menos reservado, só lote liberado e não vencido.
@@ -187,7 +193,7 @@ export function InventoryItemDetailPage() {
             </dd>
             <dt>Em Compra</dt>
             <dd>
-              {detail.onOrder} {detail.unitCode}
+              {formatQuantity(detail.onOrder)} {detail.unitCode}
               <span className="field__hint"> — saldo de ordens de compra que ainda não chegou.</span>
             </dd>
           </dl>
@@ -201,13 +207,12 @@ export function InventoryItemDetailPage() {
               >
                 Ajustar estoque
               </button>
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/estoque/movimentacoes?itemId=${detail.itemId}`)}
+                to={`/estoque/movimentacoes?itemId=${detail.itemId}`}
               >
                 Ver movimentações
-              </button>
+              </Link>
             </div>
           </div>
         </FormSection>
@@ -246,22 +251,21 @@ export function InventoryItemDetailPage() {
                         </span>
                       </td>
                       <td className="is-numeric">
-                        {lot.onHand} {detail.unitCode}
+                        {formatQuantity(lot.onHand)} {detail.unitCode}
                       </td>
                       <td className="is-numeric">
-                        {lot.reserved} {detail.unitCode}
+                        {formatQuantity(lot.reserved)} {detail.unitCode}
                       </td>
                       <td className="is-numeric">
-                        {lot.available} {detail.unitCode}
+                        {formatQuantity(lot.available)} {detail.unitCode}
                       </td>
                       <td>
-                        <button
-                          type="button"
+                        <Link
                           className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/estoque/lotes/${lot.lotId}`)}
+                          to={`/estoque/lotes/${lot.lotId}`}
                         >
                           Ver lote
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -309,7 +313,7 @@ export function InventoryItemDetailPage() {
             </div>
           </form>
 
-          {suggestionError && <p className="form-alert">{suggestionError}</p>}
+          {suggestionError && <p className="form-alert" role="alert">{suggestionError}</p>}
 
           {suggestion && (
             <div className="line-actions">
@@ -318,17 +322,17 @@ export function InventoryItemDetailPage() {
                 <dd>{suggestion.strategy}</dd>
                 <dt>Necessário</dt>
                 <dd>
-                  {suggestion.requiredQuantity} {detail.unitCode}
+                  {formatQuantity(suggestion.requiredQuantity)} {detail.unitCode}
                 </dd>
                 <dt>Disponível</dt>
                 <dd>
-                  {suggestion.availableQuantity} {detail.unitCode}
+                  {formatQuantity(suggestion.availableQuantity)} {detail.unitCode}
                 </dd>
                 <dt>Falta</dt>
                 <dd>
                   {Number(suggestion.shortageQuantity) > 0 ? (
                     <span className="badge badge--err">
-                      Falta: {suggestion.shortageQuantity} {detail.unitCode}
+                      Falta: {formatQuantity(suggestion.shortageQuantity)} {detail.unitCode}
                     </span>
                   ) : (
                     <span className="badge badge--active">Sem falta</span>
@@ -354,13 +358,12 @@ export function InventoryItemDetailPage() {
                         <tr key={allocation.lotId}>
                           <td>{index + 1}</td>
                           <td>
-                            <button
-                              type="button"
+                            <Link
                               className="btn btn--ghost btn--sm"
-                              onClick={() => navigate(`/estoque/lotes/${allocation.lotId}`)}
+                              to={`/estoque/lotes/${allocation.lotId}`}
                             >
                               <span className="code">{allocation.lotCode}</span>
-                            </button>
+                            </Link>
                             {index === 0 && (
                               <div className="field__hint">
                                 {suggestion.strategy === "FIFO"
@@ -372,10 +375,10 @@ export function InventoryItemDetailPage() {
                           <td>{formatDate(allocation.expiryDate)}</td>
                           <td>{allocation.location ?? "—"}</td>
                           <td className="is-numeric">
-                            {allocation.availableQuantity} {detail.unitCode}
+                            {formatQuantity(allocation.availableQuantity)} {detail.unitCode}
                           </td>
                           <td>
-                            {allocation.suggestedQuantity} {detail.unitCode}
+                            {formatQuantity(allocation.suggestedQuantity)} {detail.unitCode}
                           </td>
                         </tr>
                       ))}

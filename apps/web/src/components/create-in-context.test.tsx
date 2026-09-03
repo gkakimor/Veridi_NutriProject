@@ -211,6 +211,75 @@ describe("Criação no contexto — o seletor", () => {
     }
   });
 
+  /**
+   * O registro que a pessoa digitou vem ANTES do convite a criar outro
+   * igual.
+   *
+   * Digitando o nome exato de um cliente que já existe, a primeira linha da
+   * lista era "+ Novo cliente: …" e o cadastro existente vinha embaixo — a
+   * lista oferecia a duplicata antes do original.
+   */
+  it("põe o registro exato antes da opção de criar", () => {
+    montar();
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Vida Saudável" } });
+
+    const lista = opcoes();
+    expect(lista).toHaveLength(2);
+    expect(lista[0]!.textContent).toContain("Vida Saudável");
+    expect(lista[1]!.textContent).toContain("Novo cliente");
+  });
+
+  it("reconhece o registro exato sem acento e pelo código", () => {
+    montar();
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+
+    // Quem digita rápido não acentua.
+    fireEvent.change(input, { target: { value: "vida saudavel" } });
+    expect(opcoes()[0]!.textContent).toContain("Vida Saudável");
+
+    fireEvent.change(input, { target: { value: "CLI-000001" } });
+    const porCodigo = opcoes();
+    expect(porCodigo[0]!.textContent).toContain("CLI-000001");
+    expect(porCodigo[1]!.textContent).toContain("Novo cliente");
+  });
+
+  it("nome apenas parecido não desce a ação de cadastrar", () => {
+    // "Vida" não é "Vida Saudável": quem procura um nome parecido pode
+    // precisar cadastrar outro registro, e a ação continua à vista.
+    montar();
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Vida" } });
+
+    expect(opcoes()[0]!.textContent).toContain("Novo cliente");
+  });
+
+  it("com o registro exato na lista, Enter escolhe e a seta ainda alcança o cadastro", () => {
+    const onCreateNew = vi.fn();
+    const onChange = vi.fn();
+    montar({ onCreateNew, onChange });
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Vida Saudável" } });
+
+    // O índice ativo continua nascendo no resultado, agora no topo da lista.
+    expect(input.getAttribute("aria-activedescendant")).toBe(opcoes()[0]!.getAttribute("id"));
+
+    // Primeira seta só confirma o item ativo; a segunda anda até o cadastro,
+    // que agora fica ABAIXO do resultado.
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const acao = opcoes()[1]!;
+    expect(input.getAttribute("aria-activedescendant")).toBe(acao.getAttribute("id"));
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onCreateNew).toHaveBeenCalledWith("Vida Saudável");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("não oferece cadastrar onde o gate é real dos dois lados", () => {
     // Recurso industrial exige ADMIN no front E na API. CTA que termina em
     // 403 é pior que CTA nenhum.

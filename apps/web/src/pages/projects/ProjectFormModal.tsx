@@ -11,7 +11,9 @@ import {
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
-import { ApiValidationError } from "../../lib/api-errors";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
+import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { listCustomers } from "../../lib/customers-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { createProject, getProjectVocabulary, updateProject } from "../../lib/projects-api";
@@ -93,7 +95,7 @@ export function ProjectFormModal({
   });
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
+    listCustomers({ active: true, pageSize: 50 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
     getProjectVocabulary()
@@ -103,6 +105,24 @@ export function ProjectFormModal({
       })
       .catch(() => undefined);
   }, []);
+
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarClientes(termo: string): Promise<EntityOption[]> {
+    const resultado = await listCustomers({ active: true, search: termo, pageSize: 50 });
+    const novos = resultado.customers;
+    setCustomers((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((c) => ({ id: c.id, code: c.code, name: c.tradeName ?? c.legalName }));
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -121,7 +141,10 @@ export function ProjectFormModal({
         doseAmount: form.doseAmount.trim() || null,
         dosesPerPackage: form.dosesPerPackage.trim() ? Number(form.dosesPerPackage) : null,
         targetAgeGroup: (form.targetAgeGroup || null) as never,
-        minimumBatchQuantity: form.minimumBatchQuantity.trim() || null,
+        // Único decimal do formulário. `dosesPerPackage` e `shelfLifeMonths`
+        // são contagens inteiras — doses e meses não têm casa decimal — e
+        // continuam como estão.
+        minimumBatchQuantity: exigirDecimalOpcional(form.minimumBatchQuantity, "Lote mínimo"),
         shelfLifeMonths: form.shelfLifeMonths.trim() ? Number(form.shelfLifeMonths) : null,
       };
 
@@ -133,7 +156,7 @@ export function ProjectFormModal({
       if (err instanceof ApiValidationError) {
         setError(err.issues.map((issue) => issue.message).join("; "));
       } else {
-        setError(err instanceof Error ? err.message : "Falha ao salvar projeto");
+        setError(apiErrorMessage(err, "Falha ao salvar projeto"));
       }
     } finally {
       setSaving(false);
@@ -164,7 +187,7 @@ export function ProjectFormModal({
         </>
       }
     >
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <FormSection title="Projeto" subtitle="Projeto private label sempre pertence a um cliente.">
         <div className="field">
@@ -176,7 +199,8 @@ export function ProjectFormModal({
             value={form.customerId}
             onChange={(selectedId) => setForm((prev) => ({ ...prev, customerId: selectedId }))}
             placeholder="Digite código ou nome do cliente…"
-            options={customers.map((customer) => ({
+            onSearch={buscarClientes}
+options={customers.map((customer) => ({
               id: customer.id,
               code: customer.code,
               name: customer.legalName,

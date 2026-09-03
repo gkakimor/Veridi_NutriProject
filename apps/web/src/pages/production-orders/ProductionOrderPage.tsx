@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -5,6 +6,7 @@ import type {
   ItemDTO,
   ProductDTO,
   ProductionOrderDTO,
+  ProductionOrderRequirementDTO,
   ProductionOrderStatus,
   ProductionOutputDestination,
 } from "@veridi/shared";
@@ -25,6 +27,7 @@ import {
 import { getProductionOrderMaterialCost } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import {
+  acceptMaterialVariance,
   cancelProductionOrder,
   completeProductionOrder,
   confirmPicking,
@@ -38,6 +41,8 @@ import {
   updateProductionOrder,
 } from "../../lib/production-orders-api";
 import { ExtraConsumptionDialog } from "../../components/ExtraConsumptionDialog";
+import { exigirDecimal } from "../../lib/decimal-field";
+import { parseDecimalInput } from "../../lib/decimal-input";
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
 import { getItem } from "../../lib/items-api";
@@ -54,6 +59,8 @@ import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 
 interface FormulationVersionOption {
   id: string;
@@ -77,6 +84,62 @@ function statusBadgeClass(status: ProductionOrderStatus): string {
     case "CANCELLED":
       return "badge badge--err";
   }
+}
+
+/**
+ * Situação da reconciliação de um material, com o motivo à vista quando houver.
+ *
+ * O vocabulário de cor segue o que a própria tela já usa: verde para resolvido,
+ * neutro para o que ainda é normal, âmbar só quando exige ato. Pendência
+ * durante a produção é neutra de propósito — material por consumir no meio da
+ * produção é o curso normal das coisas, e pintar de alerta ensinaria a ignorar
+ * o alerta.
+ */
+function SituacaoReconciliacao({
+  requirement,
+  onJustificar,
+}: {
+  requirement: ProductionOrderRequirementDTO;
+  onJustificar?: ((requirement: ProductionOrderRequirementDTO) => void) | undefined;
+}) {
+  if (requirement.reconciliationStatus === "RECONCILED") {
+    return <span className="badge badge--active">Reconciliado</span>;
+  }
+  if (requirement.reconciliationStatus === "VARIANCE_ACCEPTED") {
+    return (
+      <>
+        <span className="badge badge--neutral">Divergência justificada</span>
+        <br />
+        <span className="field__hint">
+          {requirement.varianceReason}
+          {requirement.varianceAcceptedBy ? ` — ${requirement.varianceAcceptedBy}` : ""}
+        </span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="badge badge--warn">
+        {requirement.reconciliationStatus === "PENDING_NONE" ? "Sem consumo" : "Consumo parcial"}
+      </span>
+      <br />
+      <span className="field__hint">
+        Faltam {formatQuantity(requirement.unreconciledQuantity)} {requirement.stockUnitCode}
+      </span>
+      {onJustificar && (
+        <>
+          <br />
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => onJustificar(requirement)}
+          >
+            Justificar diferença
+          </button>
+        </>
+      )}
+    </>
+  );
 }
 
 function formatDateTime(iso: string | null): string {
@@ -174,8 +237,35 @@ export function ProductionOrderPage() {
   const [industrialCost, setIndustrialCost] = useState<ProductionOrderCostDTO | null>(null);
 
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [justificando, setJustificando] = useState<ProductionOrderRequirementDTO | null>(null);
+  const [motivoDivergencia, setMotivoDivergencia] = useState("");
   const [completionReason, setCompletionReason] = useState("");
   const [completing, setCompleting] = useState(false);
+
+  function fecharJustificativa() {
+    setJustificando(null);
+    setMotivoDivergencia("");
+    setError(null);
+  }
+
+  async function confirmarJustificativa() {
+    if (!productionOrder || !justificando) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const atualizada = await acceptMaterialVariance(
+        productionOrder.id,
+        justificando.id,
+        motivoDivergencia.trim(),
+      );
+      setProductionOrder(atualizada);
+      fecharJustificativa();
+    } catch (erro) {
+      setError(erro instanceof Error ? erro.message : "Falha ao registrar a justificativa");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const syncFormFromServer = useCallback((order: ProductionOrderDTO) => {
     setProductId(order.productId);
@@ -201,10 +291,28 @@ export function ProductionOrderPage() {
 
   useEffect(() => {
     // Produto técnico de projeto não é opção operacional.
-    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 1000 })
+    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 50 })
       .then((result) => setActiveProducts(result.products))
       .catch(() => setActiveProducts([]));
   }, []);
+
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarProdutos(termo: string): Promise<EntityOption[]> {
+    const resultado = await listProducts({ active: true, lifecycle: "APPROVED", search: termo, pageSize: 50 });
+    const novos = resultado.products;
+    setActiveProducts((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((p) => ({ id: p.id, code: p.code, name: p.name }));
+  }
 
   // Custo industrial: materiais realizados + custos padrão aplicados. Depois
   // de concluída a OP, o backend devolve o snapshot congelado — a tela nunca
@@ -281,6 +389,18 @@ export function ProductionOrderPage() {
     isDraft && productId.length > 0 && !formulationOptions.some((version) => version.status === "ACTIVE");
 
   const isReleasedOrInProduction = status === "RELEASED" || status === "IN_PRODUCTION";
+  /*
+   * A partir daqui a pergunta da tela deixa de ser "dá para liberar?" e passa
+   * a ser "o que falta reconciliar?". Em RELEASED nada foi consumido ainda, e
+   * uma coluna dizendo "0 consumido, pendente" para tudo seria alarme falso.
+   */
+  const reconciliando = status === "IN_PRODUCTION" || status === "COMPLETED";
+  const reconciliacao = productionOrder?.materialReconciliation ?? null;
+  const materiaisPendentes = (productionOrder?.requirements ?? []).filter(
+    (requirement) =>
+      requirement.reconciliationStatus === "PENDING_NONE" ||
+      requirement.reconciliationStatus === "PENDING_PARTIAL",
+  );
   // Linhas ativas (nao substituidas) de todos os Requirements — base do
   // Picking e do Consumo Real. Linhas substituidas (releasedAt != null)
   // ficam so no historico dentro de "Materiais Reservados".
@@ -294,9 +414,9 @@ export function ProductionOrderPage() {
   function excedeReserva(line: MaterialReservationLineDTO): boolean {
     const pedido = (consumeQuantities[line.id] ?? "").trim();
     if (pedido === "") return false;
-    const valor = Number(pedido.replace(",", "."));
-    if (!Number.isFinite(valor)) return false;
-    return valor > Number(line.remainingQuantity);
+    const normalizado = parseDecimalInput(pedido);
+    if (normalizado === null) return false;
+    return Number(normalizado) > Number(line.remainingQuantity);
   }
 
   /* Quanto ainda cabe apontar nesta ordem. O servidor sempre recusou o
@@ -308,8 +428,8 @@ export function ProductionOrderPage() {
   const producaoAcimaDoPlanejado = (() => {
     const digitado = outputQuantity.trim();
     if (digitado === "") return false;
-    const valor = Number(digitado.replace(",", "."));
-    return Number.isFinite(valor) && valor > restanteParaProduzir;
+    const normalizado = parseDecimalInput(digitado);
+    return normalizado !== null && Number(normalizado) > restanteParaProduzir;
   })();
 
   function handleProductChange(nextProductId: string) {
@@ -499,7 +619,9 @@ export function ProductionOrderPage() {
     setConsumingLineId(lineId);
     setError(null);
     try {
-      const updated = await recordConsumption(id, [{ reservationLineId: lineId, quantity }]);
+      const updated = await recordConsumption(id, [
+        { reservationLineId: lineId, quantity: exigirDecimal(quantity, "Consumir agora") },
+      ]);
       setProductionOrder(updated);
       setConsumeQuantities((prev) => ({ ...prev, [lineId]: "" }));
     } catch (err) {
@@ -519,7 +641,7 @@ export function ProductionOrderPage() {
     setFieldErrors({});
     try {
       const updated = await registerProductionOutput(id, {
-        quantity,
+        quantity: exigirDecimal(quantity, "Quantidade produzida"),
         destination: outputDestination,
         ...(outputDestination === "EXISTING_LOT" ? { lotId: outputLotId } : {}),
         ...(outputDestination === "NEW_LOT" ? { businessLotNumber: outputBusinessLotNumber.trim() } : {}),
@@ -595,7 +717,7 @@ export function ProductionOrderPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Produção / Ordens de Produção / {isNew ? "Nova" : "Editar"}</div>
+          <PageBreadcrumbs items={[{ label: "Ordens de Produção", href: "/producao/ordens" }, { label: isNew ? "Nova" : (productionOrder?.code ?? "Editar") }]} />
           <div className="doc-title">
             <h1>{isNew ? "Nova ordem de produção" : productionOrder?.code}</h1>
             {productionOrder && (
@@ -631,7 +753,7 @@ export function ProductionOrderPage() {
       {productionOrder && <FlowContext steps={productionOrderFlowSteps(productionOrder)} />}
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* O ciclo inteiro atravessa esta tela — reserva, separação, consumo e
             apontamento são seções diferentes. A explicação de como eles se
@@ -648,13 +770,12 @@ export function ProductionOrderPage() {
             }
           >
             <div className="line-actions">
-              <button
-                type="button"
+              <Link
                 className="btn btn--primary"
-                onClick={() => navigate(`/producao/ordens/${productionOrder.id}/receita`)}
+                to={`/producao/ordens/${productionOrder.id}/receita`}
               >
                 Folha de Receita
-              </button>
+              </Link>
             </div>
           </FormSection>
         )}
@@ -762,7 +883,8 @@ export function ProductionOrderPage() {
                   value={productId}
                   onChange={(selectedId) => handleProductChange(selectedId)}
                   placeholder="Digite código ou nome do produto…"
-                  options={activeProducts.map((product) => ({
+                  onSearch={buscarProdutos}
+options={activeProducts.map((product) => ({
                     id: product.id,
                     code: product.code,
                     name: product.name,
@@ -818,7 +940,7 @@ export function ProductionOrderPage() {
                   onChange={(event) => setPlannedQuantity(event.target.value)}
                 />
               ) : (
-                <p className="field-readonly-value">{productionOrder?.plannedQuantity}</p>
+                <p className="field-readonly-value">{formatQuantity(productionOrder?.plannedQuantity)}</p>
               )}
               {fieldErrors["plannedQuantity"] && (
                 <p className="field__error">{fieldErrors["plannedQuantity"]}</p>
@@ -895,15 +1017,35 @@ export function ProductionOrderPage() {
             <div className="table-container">
               <table className="table">
                 <thead>
+                  {/*
+                    As colunas mudam com o estágio porque a PERGUNTA muda.
+                    Antes da produção a pergunta é "dá para liberar?", e Físico,
+                    Disponível e Em Compra respondem. Com a alocação feita, a
+                    pergunta vira "o que falta reconciliar?", e aquelas três
+                    param de importar enquanto Consumido e Diferença passam a
+                    decidir se a ordem fecha. Trocar em vez de acrescentar
+                    mantém a largura já estabilizada.
+                  */}
                   <tr>
                     <th>Item</th>
                     <th>Fornecimento</th>
                     <th className="is-numeric">Necessário</th>
-                    <th className="is-numeric">Físico</th>
-                    <th className="is-numeric">Reservado</th>
-                    <th className="is-numeric">Disponível</th>
-                    <th className="is-numeric">Em Compra</th>
-                    <th className="is-numeric">Falta</th>
+                    {reconciliando ? (
+                      <>
+                        <th className="is-numeric">Reservado</th>
+                        <th className="is-numeric">Consumido</th>
+                        <th className="is-numeric">Diferença</th>
+                        <th>Situação</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="is-numeric">Físico</th>
+                        <th className="is-numeric">Reservado</th>
+                        <th className="is-numeric">Disponível</th>
+                        <th className="is-numeric">Em Compra</th>
+                        <th className="is-numeric">Falta</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -917,7 +1059,7 @@ export function ProductionOrderPage() {
                             <span className="field__hint">
                               Sugestão FEFO/FIFO:{" "}
                               {requirement.suggestedAllocations
-                                .map((allocation) => `${allocation.lotCode}→${allocation.suggestedQuantity}`)
+                                .map((allocation) => `${allocation.lotCode}→${formatQuantity(allocation.suggestedQuantity)}`)
                                 .join(", ")}
                             </span>
                           </>
@@ -935,12 +1077,28 @@ export function ProductionOrderPage() {
                         )}
                       </td>
                       <td className="is-numeric">
-                        {requirement.requiredQuantity} {requirement.stockUnitCode}
+                        {formatQuantity(requirement.requiredQuantity)} {requirement.stockUnitCode}
                       </td>
-                      <td className="is-numeric">{requirement.onHand}</td>
-                      <td className="is-numeric">{requirement.reserved}</td>
-                      <td className="is-numeric">{requirement.available}</td>
-                      <td className="is-numeric">{requirement.onOrder}</td>
+                      {reconciliando ? (
+                        <>
+                          <td className="is-numeric">{formatQuantity(requirement.allocatedQuantity)}</td>
+                          <td className="is-numeric">{formatQuantity(requirement.consumedQuantity)}</td>
+                          <td className="is-numeric">{formatQuantity(requirement.unreconciledQuantity)}</td>
+                          <td>
+                            <SituacaoReconciliacao
+                              requirement={requirement}
+                              onJustificar={
+                                status === "IN_PRODUCTION" ? setJustificando : undefined
+                              }
+                            />
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                      <td className="is-numeric">{formatQuantity(requirement.onHand)}</td>
+                      <td className="is-numeric">{formatQuantity(requirement.reserved)}</td>
+                      <td className="is-numeric">{formatQuantity(requirement.available)}</td>
+                      <td className="is-numeric">{formatQuantity(requirement.onOrder)}</td>
                       <td className="is-numeric">
                         {/* OP encerrada: a falta é recálculo contra o estoque
                             de HOJE, não pendência da ordem. Mostrar como
@@ -955,7 +1113,7 @@ export function ProductionOrderPage() {
                                 : "badge badge--warn"
                           }
                         >
-                          {requirement.shortage}
+                          {formatQuantity(requirement.shortage)}
                         </span>
                         {ordemEncerrada && Number(requirement.shortage) > 0 && (
                           <>
@@ -1024,7 +1182,7 @@ export function ProductionOrderPage() {
                                       : // Leva o item e o que falta: o atalho tem
                                         // que chegar com o contexto que a tela
                                         // acabou de calcular.
-                                        `/compras/ordens/nova?itemId=${requirement.itemId}&quantidade=${requirement.shortage}`,
+                                        `/compras/ordens/nova?itemId=${requirement.itemId}&quantidade=${formatQuantity(requirement.shortage)}`,
                                   )
                                 }
                               >
@@ -1035,12 +1193,14 @@ export function ProductionOrderPage() {
                             </>
                           )}
                       </td>
+                        </>
+                      )}
                     </tr>
                   ))}
 
                   {productionOrder.requirements.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="table__empty">
+                      <td colSpan={reconciliando ? 7 : 8} className="table__empty">
                         Nenhuma necessidade calculada — selecione uma formulação com componentes.
                       </td>
                     </tr>
@@ -1087,7 +1247,7 @@ export function ProductionOrderPage() {
                           <div className="line-audit">
                             <span className="badge badge--info">Consumo extra</span>
                             <div className="field__hint">
-                              +{line.quantity} {line.unitCode} · {line.extraReason}
+                              +{formatQuantity(line.quantity)} {line.unitCode} · {line.extraReason}
                             </div>
                             <div className="field__hint">
                               {line.extraRequestedBy ?? "—"}
@@ -1101,7 +1261,7 @@ export function ProductionOrderPage() {
                         {formatDate(line.expiryDate)}
                       </td>
                       <td className="is-numeric">
-                        {line.quantity} {line.unitCode}
+                        {formatQuantity(line.quantity)} {line.unitCode}
                       </td>
                       <td>{line.location ?? "—"}</td>
                     </tr>
@@ -1155,7 +1315,7 @@ export function ProductionOrderPage() {
                         </td>
                         <td>{line.location ?? "—"}</td>
                         <td className="is-numeric">
-                          {line.quantity} {line.unitCode}
+                          {formatQuantity(line.quantity)} {line.unitCode}
                         </td>
                         <td>
                           <span
@@ -1227,7 +1387,11 @@ export function ProductionOrderPage() {
         {productionOrder && isReleasedOrInProduction && (
           <FormSection
             title="Consumo Real"
-            subtitle="Registra quanto efetivamente entrou na produção — baixa o estoque físico e reduz a reserva remanescente."
+            subtitle={
+              reconciliacao && reconciliacao.totalRequirements > 0
+                ? `Registra quanto efetivamente entrou na produção — baixa o estoque físico e reduz a reserva remanescente. ${reconciliacao.reconciledRequirements} de ${reconciliacao.totalRequirements} ${reconciliacao.totalRequirements === 1 ? "material reconciliado" : "materiais reconciliados"}.`
+                : "Registra quanto efetivamente entrou na produção — baixa o estoque físico e reduz a reserva remanescente."
+            }
           >
             <div className="table-container">
               <table className="table">
@@ -1255,7 +1419,7 @@ export function ProductionOrderPage() {
                           <div className="line-audit">
                             <span className="badge badge--info">Consumo extra</span>
                             <div className="field__hint">
-                              +{line.quantity} {line.unitCode} · {line.extraReason}
+                              +{formatQuantity(line.quantity)} {line.unitCode} · {line.extraReason}
                             </div>
                             <div className="field__hint">
                               {line.extraRequestedBy ?? "—"}
@@ -1266,10 +1430,10 @@ export function ProductionOrderPage() {
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
                       <td className="is-numeric">
-                        {line.quantity} {line.unitCode}
+                        {formatQuantity(line.quantity)} {line.unitCode}
                       </td>
-                      <td className="is-numeric">{line.consumedQuantity}</td>
-                      <td>{line.remainingQuantity}</td>
+                      <td className="is-numeric">{formatQuantity(line.consumedQuantity)}</td>
+                      <td>{formatQuantity(line.remainingQuantity)}</td>
                       <td>
                         <input
                           type="text"
@@ -1287,7 +1451,7 @@ export function ProductionOrderPage() {
                             operador descobrir pelo erro. */}
                         {excedeReserva(line) && (
                           <p className="field__hint field__hint--error">
-                            Máximo disponível nesta reserva: {line.remainingQuantity} {line.unitCode}. Para
+                            Máximo disponível nesta reserva: {formatQuantity(line.remainingQuantity)} {line.unitCode}. Para
                             consumir acima disso, use “Adicionar consumo extra”.
                           </p>
                         )}
@@ -1356,7 +1520,7 @@ export function ProductionOrderPage() {
                         </td>
                         <td>{consumption.lotCode ?? "—"}</td>
                         <td className="is-numeric">
-                          {consumption.quantity} {consumption.unitCode}
+                          {formatQuantity(consumption.quantity)} {consumption.unitCode}
                         </td>
                         <td>{consumption.consumedBy ?? "—"}</td>
                       </tr>
@@ -1376,20 +1540,20 @@ export function ProductionOrderPage() {
             <dl className="definition-list">
               <dt>Planejado</dt>
               <dd>
-                {productionOrder.plannedQuantity} {productionOrder.outputUnitCode}
+                {formatQuantity(productionOrder.plannedQuantity)} {productionOrder.outputUnitCode}
               </dd>
               <dt>Produzido</dt>
               <dd>
-                {productionOrder.producedQuantity} {productionOrder.outputUnitCode}
+                {formatQuantity(productionOrder.producedQuantity)} {productionOrder.outputUnitCode}
               </dd>
               <dt>{status === "COMPLETED" ? "Variação" : "Restante"}</dt>
               <dd>
-                {productionOrder.remainingQuantity} {productionOrder.outputUnitCode}
+                {formatQuantity(productionOrder.remainingQuantity)} {productionOrder.outputUnitCode}
               </dd>
             </dl>
 
             {status === "IN_PRODUCTION" && finishedItem && !finishedItem.controlsLot && (
-              <p className="form-alert">
+              <p className="form-alert" role="status">
                 Item de produto acabado não controla lote — não é possível registrar produção.
               </p>
             )}
@@ -1495,7 +1659,7 @@ export function ProductionOrderPage() {
                           <option key={lot.id} value={lot.id}>
                             {lot.code}
                             {lot.businessLotNumber ? ` — ${lot.businessLotNumber}` : ""} (produzido:{" "}
-                            {lot.producedQuantity})
+                            {formatQuantity(lot.producedQuantity)})
                           </option>
                         ))}
                       </select>
@@ -1550,7 +1714,7 @@ export function ProductionOrderPage() {
                       <tr key={output.id}>
                         <td>{formatDateTime(output.producedAt)}</td>
                         <td className="is-numeric">
-                          {output.quantity} {productionOrder.outputUnitCode}
+                          {formatQuantity(output.quantity)} {productionOrder.outputUnitCode}
                         </td>
                         <td>{output.lotCode ?? "—"}</td>
                         <td>{output.businessLotNumber ?? "—"}</td>
@@ -1611,7 +1775,7 @@ export function ProductionOrderPage() {
               </dd>
               <dt>Produzido</dt>
               <dd>
-                {industrialCost.producedQuantity} {industrialCost.outputUnitCode}
+                {formatQuantity(industrialCost.producedQuantity)} {industrialCost.outputUnitCode}
               </dd>
               <dt>Materiais realizados</dt>
               <dd>{formatBRL(industrialCost.actualMaterialCostKnown)}</dd>
@@ -1687,7 +1851,7 @@ export function ProductionOrderPage() {
               </dd>
               <dt>Produzido</dt>
               <dd>
-                {materialCost.producedQuantity} {materialCost.outputUnitCode}
+                {formatQuantity(materialCost.producedQuantity)} {materialCost.outputUnitCode}
               </dd>
               <dt>Custo material / unidade</dt>
               <dd>
@@ -1744,7 +1908,7 @@ export function ProductionOrderPage() {
                       </td>
                       <td>{consumption.lotCode ?? "—"}</td>
                       <td className="is-numeric">
-                        {consumption.quantity} {consumption.unitCode}
+                        {formatQuantity(consumption.quantity)} {consumption.unitCode}
                       </td>
                       <td className="is-numeric">{formatBRL(consumption.unitCost)}</td>
                       <td>
@@ -1852,10 +2016,29 @@ export function ProductionOrderPage() {
               {(productionOrder?.outputs.length ?? 0) === 0 && (
                 <p className="field__hint">Registre ao menos um apontamento de produção para concluir.</p>
               )}
+              {/*
+                O impedimento aparece ANTES do clique, com os nomes. Dizer
+                "existem materiais sem consumo" manda procurar; dizer quais
+                manda resolver. O servidor recusa igual — isto é a mesma
+                decisão, adiantada para quem está olhando.
+              */}
+              {materiaisPendentes.length > 0 && (
+                <p className="form-alert" role="status">
+                  Falta reconciliar {materiaisPendentes.length}{" "}
+                  {materiaisPendentes.length === 1 ? "material" : "materiais"}:{" "}
+                  {materiaisPendentes.map((requirement) => requirement.itemCode).join(", ")}.
+                  Registre o consumo real na tabela abaixo ou justifique a diferença em
+                  Necessidade de Materiais.
+                </p>
+              )}
               <button
                 type="button"
                 className="btn btn--accent"
-                disabled={completing || (productionOrder?.outputs.length ?? 0) === 0}
+                disabled={
+                  completing ||
+                  (productionOrder?.outputs.length ?? 0) === 0 ||
+                  materiaisPendentes.length > 0
+                }
                 onClick={() => setCompleteDialogOpen(true)}
               >
                 Concluir OP
@@ -1875,6 +2058,56 @@ export function ProductionOrderPage() {
             setProductionOrder(atualizada);
           }}
         />
+      )}
+
+      {/*
+        Justificar a diferença de UM material.
+        Deliberadamente separado do "Motivo da variação" da conclusão: aquele
+        explica ter produzido menos que o planejado, este explica ter gasto
+        menos material do que a fórmula pedia. Misturar os dois numa textarea
+        só produziria um texto que não responde nenhuma das duas perguntas.
+      */}
+      {justificando && productionOrder && (
+        <ModalDialog labelledBy="variance-title" onClose={fecharJustificativa} role="dialog">
+          <h2 id="variance-title" className="modal__title">
+            Justificar diferença em {justificando.itemCode}
+          </h2>
+          <p className="modal__message">
+            A fórmula pede {formatQuantity(justificando.requiredQuantity)} {justificando.stockUnitCode} e o consumo
+            registrado é {formatQuantity(justificando.consumedQuantity)}. Faltam{" "}
+            {formatQuantity(justificando.unreconciledQuantity)} {justificando.stockUnitCode}.
+          </p>
+          <div className="field">
+            <label className="field__label" htmlFor="variance-reason">
+              Motivo da diferença *
+            </label>
+            <textarea
+              id="variance-reason"
+              className="field__control"
+              rows={3}
+              value={motivoDivergencia}
+              onChange={(event) => setMotivoDivergencia(event.target.value)}
+              placeholder="Ex.: sobra devolvida ao lote de origem; perda no processo; material substituído"
+            />
+            <span className="field__hint">
+              Fica no documento com seu nome e a data — é o que explica a composição do lote depois.
+            </span>
+          </div>
+          {error && <p className="form-error">{error}</p>}
+          <div className="modal__actions">
+            <button type="button" className="btn btn--ghost" onClick={fecharJustificativa}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--accent"
+              disabled={saving || motivoDivergencia.trim().length === 0}
+              onClick={confirmarJustificativa}
+            >
+              Registrar justificativa
+            </button>
+          </div>
+        </ModalDialog>
       )}
 
       <ConfirmDialog
@@ -1930,9 +2163,10 @@ export function ProductionOrderPage() {
           <ModalDialog labelledBy="complete-op-title" onClose={() => setCompleteDialogOpen(false)}>
             <h2 id="complete-op-title">Concluir ordem de produção?</h2>
             <p>
-              Produzido: {productionOrder.producedQuantity} de {productionOrder.plannedQuantity}{" "}
-              {productionOrder.outputUnitCode}. Qualquer reserva de material ainda não consumida será
-              liberada. Após concluída, a OP fica somente histórico.
+              Produzido: {formatQuantity(productionOrder.producedQuantity)} de {formatQuantity(productionOrder.plannedQuantity)}{" "}
+              {productionOrder.outputUnitCode}. Todos os materiais estão reconciliados; a reserva
+              remanescente será liberada sem baixar estoque. Após concluída, a OP fica somente
+              histórico.
             </p>
             {Number(productionOrder.remainingQuantity) > 0 && (
               <div className="field">
@@ -1947,11 +2181,24 @@ export function ProductionOrderPage() {
                 />
               </div>
             )}
+            {/*
+              O erro mora DENTRO do diálogo. Ele já foi para o estado de página
+              uma vez, e a mensagem renderizava atrás do modal que continuava
+              aberto: quem clicou em "Concluir" via o botão não fazer nada.
+            */}
+            {error && (
+              <p className="form-alert" role="alert">
+                {error}
+              </p>
+            )}
             <div className="confirm-dialog__actions">
               <button
                 type="button"
                 className="btn btn--ghost"
-                onClick={() => setCompleteDialogOpen(false)}
+                onClick={() => {
+                  setCompleteDialogOpen(false);
+                  setError(null);
+                }}
               >
                 Voltar
               </button>

@@ -681,3 +681,60 @@ record*, which is most of the work in an ERP.
 
 If a local Veridi logo asset exists, use it.
 Otherwise use a simple temporary text/initials brand treatment.
+
+---
+
+## Navegação que se deixa encontrar
+
+**A sidebar é uma coluna, não um bloco rolável.** Cabeçalho fixo, navegação
+rolável, rodapé fixo. A coluna inteira não rola; só o miolo. Sem isso o menu
+cresce e empurra item para fora da tela sem que nada indique que ele existe —
+foi como 41% do menu passou a viver abaixo da dobra.
+
+**Área que rola precisa dizer que rola.** A barra do sistema some quando não
+está em uso, então ela não serve de aviso. O padrão é a sombra de quatro
+camadas de `.table-container`: duas camadas da cor do fundo rolando com o
+conteúdo, duas de sombra fixa que só aparecem quando há conteúdo cortado. Vale
+para o menu, para a lista de busca de entidade e para qualquer contêiner novo
+que role. **Nunca resolver com `body { overflow: hidden }`** — isso esconde o
+problema em vez de resolvê-lo.
+
+**Entrar direto numa rota revela o item ativo.** `scrollIntoView` com
+`block: "nearest"` rola apenas a navegação e não mexe na página; se o item já
+está visível, não faz nada.
+
+**O título da aba diz qual tela é.** O nome do item de menu, que já é como a
+pessoa chama a tela. Quem trabalha com várias abas — aqui, o normal — não deve
+precisar clicar para descobrir qual é qual.
+
+## Trilha, alvo e voz
+
+**Se parece trilha, os níveis anteriores são links de verdade.** Existe um
+componente só, `PageBreadcrumbs`, com `<Link>` e `aria-current`. Texto que
+imita trilha sem levar a lugar nenhum é pior que trilha nenhuma: promete
+navegação e não entrega. O nível final mostra o código do documento quando há
+um — `OP-000012` diz mais que "Editar".
+
+**Alvo de clique de ação compacta: 36px.** Sem engordar o ícone — cresce a área
+com `::after` e `inset` negativo. A linha de tabela tem folga de sobra, e 28px
+é pequeno demais para acertar de primeira numa tela usada o dia inteiro.
+
+**Todo campo tem nome acessível, e o nome identifica a LINHA.** Placeholder não
+é rótulo. Num campo dentro de tabela, "Quantidade" repetido em seis linhas não
+diz em qual linha a pessoa está: o rótulo nomeia o item — "Quantidade de
+MP-000001".
+
+**Mensagem de erro carrega `role="alert"`; condição persistente carrega
+`role="status"`.** Erro visível e mudo é erro que não chegou. E `alert` para o
+que fica parado na tela ensina a ignorar o alerta seguinte.
+
+**Diálogo de confirmação não fecha clicando fora; painel de ajuda fecha.** Quem
+abriu a ajuda pediu para ler e pode sair quando quiser; quem está diante de uma
+pergunta sobre ação irreversível não deve perdê-la por um clique torto.
+
+## Ajuda contextual pertence à tela que explica
+
+Cada tela tem tópico próprio. Emprestar o tópico de uma tela vizinha porque "é
+parecido" produz ajuda que descreve algo que a pessoa ainda não viu — e some
+justamente quando a tela fica mais difícil. Um teste de contrato liga página a
+tópico.

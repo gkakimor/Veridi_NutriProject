@@ -1,7 +1,8 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate , useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../app/AuthProvider";
 import { useInitialFilters } from "../../lib/filter-params";
 import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
@@ -187,7 +188,7 @@ export function ProductionOrdersPage() {
         )}
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextParam && (
         <p className="context-chip">
@@ -228,7 +229,7 @@ export function ProductionOrdersPage() {
                 }}
               >
                 <td className="col-tight is-code">
-                  {op.code}
+                  <EntityLink kind="productionOrder" id={op.id} code={op.code} />
                   {op.customerOrderId && (
                     <span className="cell-sub">
                       <EntityLink
@@ -257,7 +258,7 @@ export function ProductionOrdersPage() {
                 </td>
                 <td className="col-tight">{op.formulationVersionLabel ?? "—"}</td>
                 <td className="col-tight is-numeric">
-                  {op.plannedQuantity} {op.outputUnitCode}
+                  {formatQuantity(op.plannedQuantity)} {op.outputUnitCode}
                 </td>
                 <td className="col-tight">
                   <span className={materialsBadgeClass(op)}>{materialsLabel(op)}</span>
@@ -270,13 +271,12 @@ export function ProductionOrdersPage() {
                 <td className="col-tight">{formatDate(op.createdAt)}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/producao/ordens/${op.id}`)}
+                      to={`/producao/ordens/${op.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>

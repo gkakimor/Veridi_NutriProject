@@ -4,7 +4,9 @@ import type { PurchaseOrderDTO } from "@veridi/shared";
 import { getPurchaseOrder, listPurchaseOrders } from "../../lib/purchase-orders-api";
 import { getItem } from "../../lib/items-api";
 import { createReceipt } from "../../lib/receiving-api";
-import { ApiValidationError } from "../../lib/api-errors";
+import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
+import { parseDecimalInput } from "../../lib/decimal-input";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -12,6 +14,7 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { formatQuantity } from "../../lib/quantity";
 
 /** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
 function DicaDoCampo({ id }: { id: HelpHintId }) {
@@ -98,7 +101,7 @@ export function ReceivePurchaseOrderPage() {
         })),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao carregar ordem de compra");
+      setError(apiErrorMessage(err, "Falha ao carregar ordem de compra"));
     } finally {
       setLoadingPo(false);
     }
@@ -126,7 +129,20 @@ export function ReceivePurchaseOrderPage() {
     );
   }
 
-  const linesToSubmit = lines.filter((line) => line.receiveNow.trim() && Number(line.receiveNow) > 0);
+  /*
+   * A linha entra na remessa quando tem algo digitado — inclusive ilegível.
+   *
+   * Era `Number(line.receiveNow) > 0`, e `2,5` virava `NaN`: a linha sumia
+   * da contagem, o rodapé continuava pedindo "informe a quantidade recebida"
+   * e o botão ficava desabilitado. A pessoa não tinha como descobrir que o
+   * problema era a vírgula. Ilegível agora conta, e o clique explica.
+   */
+  const linesToSubmit = lines.filter((line) => {
+    const digitado = line.receiveNow.trim();
+    if (digitado === "") return false;
+    const valor = parseDecimalInput(digitado);
+    return valor === null || Number(valor) > 0;
+  });
 
   async function handleConfirmReceipt() {
     if (!po) return;
@@ -135,22 +151,30 @@ export function ReceivePurchaseOrderPage() {
     setError(null);
     setFieldErrors({});
 
-    const payload = {
-      receivedAt: new Date(receivedAt).toISOString(),
-      ...(invoiceNumber.trim() ? { invoiceNumber: invoiceNumber.trim() } : {}),
-      ...(documentReference.trim() ? { documentReference: documentReference.trim() } : {}),
-      ...(notes.trim() ? { notes: notes.trim() } : {}),
-      lines: linesToSubmit.map((line) => ({
-        purchaseOrderLineId: line.purchaseOrderLineId,
-        receivedQuantity: line.receiveNow.trim(),
-        ...(line.supplierLot.trim() ? { supplierLot: line.supplierLot.trim() } : {}),
-        ...(line.expiryDate ? { expiryDate: new Date(line.expiryDate).toISOString() } : {}),
-        ...(line.location.trim() ? { location: line.location.trim() } : {}),
-        ...(line.actualUnitCost.trim() ? { actualUnitCost: line.actualUnitCost.trim() } : {}),
-      })),
-    };
-
     try {
+      // Montado dentro do funil: uma quantidade ou um custo ilegível
+      // interrompe aqui, nomeando o item, e o recebimento não é criado.
+      const payload = {
+        receivedAt: new Date(receivedAt).toISOString(),
+        ...(invoiceNumber.trim() ? { invoiceNumber: invoiceNumber.trim() } : {}),
+        ...(documentReference.trim() ? { documentReference: documentReference.trim() } : {}),
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
+        lines: linesToSubmit.map((line) => {
+          const custo = exigirDecimalOpcional(
+            line.actualUnitCost,
+            `Custo efetivo de aquisição de ${line.itemCode}`,
+          );
+          return {
+            purchaseOrderLineId: line.purchaseOrderLineId,
+            receivedQuantity: exigirDecimal(line.receiveNow, `Receber agora de ${line.itemCode}`),
+            ...(line.supplierLot.trim() ? { supplierLot: line.supplierLot.trim() } : {}),
+            ...(line.expiryDate ? { expiryDate: new Date(line.expiryDate).toISOString() } : {}),
+            ...(line.location.trim() ? { location: line.location.trim() } : {}),
+            ...(custo ? { actualUnitCost: custo } : {}),
+          };
+        }),
+      };
+
       const receipt = await createReceipt(po.id, payload);
       navigate(`/compras/recebimentos/${receipt.id}`, { replace: true });
     } catch (err) {
@@ -162,7 +186,7 @@ export function ReceivePurchaseOrderPage() {
         setFieldErrors(nextFieldErrors);
         setError("Corrija os campos destacados.");
       } else {
-        setError(err instanceof Error ? err.message : "Falha ao confirmar recebimento");
+        setError(apiErrorMessage(err, "Falha ao confirmar recebimento"));
       }
     } finally {
       setSaving(false);
@@ -253,7 +277,7 @@ export function ReceivePurchaseOrderPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Confirmar aqui é irreversível: cria lote e entrada de estoque, e
             não existe edição depois. Vale dizer isso antes, não no erro. */}
@@ -303,7 +327,7 @@ export function ReceivePurchaseOrderPage() {
             <FormSection
               key={line.purchaseOrderLineId}
               title={`${line.itemCode} — ${line.itemName}`}
-              subtitle={`Pedido: ${line.orderedQuantity} ${line.unitCode}  ·  Recebido: ${line.receivedQuantity} ${line.unitCode}  ·  Aberto: ${line.openQuantity} ${line.unitCode}`}
+              subtitle={`Pedido: ${formatQuantity(line.orderedQuantity)} ${line.unitCode}  ·  Recebido: ${formatQuantity(line.receivedQuantity)} ${line.unitCode}  ·  Aberto: ${formatQuantity(line.openQuantity)} ${line.unitCode}`}
             >
               <div className="field-grid-2">
                 <div className="field">
@@ -319,9 +343,19 @@ export function ReceivePurchaseOrderPage() {
                     onChange={(event) =>
                       handleLineChange(line.purchaseOrderLineId, "receiveNow", event.target.value)
                     }
+                    /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
+                    {...(fieldErrors[`lines.${lines.indexOf(line)}.receivedQuantity`]
+                      ? {
+                          "aria-invalid": true as const,
+                          "aria-describedby": `receive-now-${line.purchaseOrderLineId}-error`,
+                        }
+                      : {})}
                   />
                   {fieldErrors[`lines.${lines.indexOf(line)}.receivedQuantity`] && (
-                    <p className="field__error">
+                    <p
+                      className="field__error"
+                      id={`receive-now-${line.purchaseOrderLineId}-error`}
+                    >
                       {fieldErrors[`lines.${lines.indexOf(line)}.receivedQuantity`]}
                     </p>
                   )}

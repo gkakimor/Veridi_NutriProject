@@ -3,6 +3,9 @@ import type { FormEvent } from "react";
 import type { BillingDTO, BillingLineDTO } from "@veridi/shared";
 import { ModalDialog } from "../../components/ModalDialog";
 import { overrideBillingPrice } from "../../lib/billings-api";
+import { exigirDecimal } from "../../lib/decimal-field";
+import { parseDecimalInput } from "../../lib/decimal-input";
+import { formatQuantity } from "../../lib/quantity";
 
 interface PriceOverrideDialogProps {
   billingId: string;
@@ -38,7 +41,9 @@ export function PriceOverrideDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const novo = Number(unitPrice.replace(",", "."));
+  // Mesma leitura da vírgula em toda a web; `null` é "ainda não é número".
+  const digitado = parseDecimalInput(unitPrice);
+  const novo = digitado === null ? Number.NaN : Number(digitado);
   const igualAoAcordado = line.agreedUnitPrice !== null && novo === Number(line.agreedUnitPrice);
 
   async function handleSubmit(event: FormEvent) {
@@ -47,7 +52,7 @@ export function PriceOverrideDialog({
     setError(null);
     try {
       const atualizado = await overrideBillingPrice(billingId, line.id, {
-        unitPrice: unitPrice.trim().replace(",", "."),
+        unitPrice: exigirDecimal(unitPrice, "Preço faturado"),
         reason: reason.trim(),
       });
       onOverridden(atualizado);
@@ -80,7 +85,7 @@ export function PriceOverrideDialog({
         </dd>
         <dt>Quantidade</dt>
         <dd>
-          {line.quantity} {line.unitCode}
+          {formatQuantity(line.quantity)} {line.unitCode}
         </dd>
         <dt>Preço acordado</dt>
         <dd>{formatBRL(line.agreedUnitPrice)}</dd>
@@ -120,7 +125,7 @@ export function PriceOverrideDialog({
         </div>
       </form>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="confirm-dialog__actions">
         <button type="button" className="btn btn--ghost" onClick={onClose}>

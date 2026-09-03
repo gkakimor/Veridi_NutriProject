@@ -413,6 +413,146 @@ export const comercialTopics = {
     ],
   },
 
+  "comercial.pedidos": {
+    module: "comercial",
+    title: "O que é um Pedido do Cliente e o que ele decide",
+    summary:
+      "Pedido do Cliente é a demanda comercial: quem pediu, o que pediu e quanto. Ele não é estoque, não é produção e não reserva nada sozinho — é o documento que autoriza o resto a acontecer. Esta lista mostra todos os pedidos e em que ponto do atendimento cada um está.",
+    concepts: [
+      {
+        term: "Pedido do Cliente",
+        text: "A demanda comercial registrada: cliente, produtos, quantidades e datas. Nunca é fonte de verdade de saldo — o que existe fisicamente está no estoque, não aqui.",
+      },
+      {
+        term: "Rascunho",
+        text: "Editável à vontade. Nada foi prometido a ninguém e nada foi reservado.",
+      },
+      {
+        term: "Confirmado",
+        text: "Cliente, produtos e quantidades são congelados num retrato histórico. É o único status a partir do qual o Plano de Atendimento fica disponível.",
+      },
+      {
+        term: "Em atendimento",
+        text: "Acontece só quando um Plano é aplicado. A partir daqui existem reserva e ordens de produção amarradas a este pedido.",
+      },
+      {
+        term: "Parcialmente expedido",
+        text: "Parte já saiu fisicamente. O pedido continua vivo e recebe outras expedições.",
+      },
+      {
+        term: "Expedido",
+        text: "Tudo o que foi pedido saiu. O status é consequência do que foi confirmado na expedição, nunca uma marcação manual.",
+      },
+    ],
+    flow: [
+      {
+        label: "Rascunho",
+        detail:
+          "Registre cliente, produtos e quantidades. Enquanto está aqui, tudo se edita e nada é prometido.",
+      },
+      {
+        label: "Confirmado",
+        detail:
+          "Congela o retrato do pedido. Mudar preço de tabela ou cadastro do cliente depois disto não reescreve o que foi acordado.",
+      },
+      {
+        label: "Plano de Atendimento",
+        tone: "accent",
+        detail:
+          "A conta de como atender: quanto sai do estoque pronto e quanto precisa ser produzido. Ler o plano não muda nada; aplicá-lo é que cria reserva e ordens.",
+      },
+      {
+        label: "Em atendimento",
+        detail:
+          "Com o plano aplicado, existe reserva de produto acabado e, quando houve déficit, ordens de produção ligadas a este pedido.",
+      },
+      {
+        label: "Expedição",
+        detail:
+          "A saída física sai daqui, e só pode usar o que está reservado PARA ESTE pedido. Estoque livre e reserva de outro pedido ficam de fora.",
+      },
+      {
+        label: "Faturamento",
+        detail:
+          "Preparado sobre o que realmente saiu — nunca sobre o que foi pedido, reservado ou produzido.",
+      },
+    ],
+    notes: [
+      "Pedido não movimenta estoque em momento nenhum. Quem movimenta é reserva, produção e expedição.",
+      "Não existe mudar status à mão: cada um é consequência de um ato — confirmar, aplicar o plano, confirmar uma expedição.",
+      "O Plano de Atendimento é projeção, não segunda verdade sobre saldo. Ele é recalculado e revalidado no momento em que você aplica.",
+      "Cancelar pedido em atendimento não desfaz sozinho reserva e ordem já criadas — elas são fatos operacionais com vida própria.",
+    ],
+  },
+
+  "comercial.pedido": {
+    module: "comercial",
+    title: "Este pedido: onde ele está e o que falta",
+    summary:
+      "Esta tela é o pedido inteiro: o que o cliente pediu, como será atendido, o que já foi reservado, o que está sendo produzido e o que já saiu. O que aparece muda conforme o status — em Rascunho há edição, em Confirmado aparece o Plano de Atendimento, e em atendimento aparecem reserva, ordens e saldo a expedir.",
+    concepts: [
+      {
+        term: "Linha do pedido",
+        text: "Um produto e a quantidade pedida. Depois de confirmado, a linha é um retrato histórico e não acompanha mudança de cadastro.",
+      },
+      {
+        term: "Reserva",
+        text: "Produto acabado comprometido com ESTE pedido. Sai da disponibilidade dos outros e é a única origem possível da expedição.",
+      },
+      {
+        term: "Produzir",
+        text: "O déficit: o que o estoque pronto não cobre. Vira ordem de produção em rascunho, ligada a este pedido, que ninguém libera automaticamente.",
+      },
+      {
+        term: "Saldo a expedir",
+        text: "O que foi reservado ou produzido e ainda não saiu. É ele que diz se o pedido acabou.",
+      },
+      {
+        term: "Preço acordado",
+        text: "O valor congelado na confirmação. O faturamento herda daqui, não da tabela de preço de hoje.",
+      },
+    ],
+    flow: [
+      {
+        label: "Confirmar",
+        detail:
+          "Congela cliente, produtos, quantidades e preço. Sem isto o Plano de Atendimento não aparece.",
+      },
+      {
+        label: "Ler o plano",
+        detail:
+          "Mostra, por produto: pedido, disponível, quanto reservar e quanto produzir. Ler não persiste nada — dá para reequilibrar reserva e produção antes de aplicar.",
+      },
+      {
+        label: "Aplicar o plano",
+        tone: "accent",
+        detail:
+          "Revalida a disponibilidade naquele instante e cria reserva e ordens numa transação só. Ou tudo acontece, ou nada acontece.",
+      },
+      {
+        label: "Produzir",
+        detail:
+          "As ordens nascem em rascunho. Liberar, produzir e concluir seguem o fluxo normal de produção, com o consumo de material reconciliado.",
+      },
+      {
+        label: "Expedir",
+        detail:
+          "Prepare a expedição daqui. Só o que está reservado para este pedido pode sair, e só a expedição confirmada baixa estoque.",
+      },
+      {
+        label: "Faturar",
+        detail:
+          "Sobre o que saiu de fato, com o preço acordado na confirmação.",
+      },
+    ],
+    notes: [
+      "Reserva e produção somadas precisam cobrir exatamente a quantidade pedida — não existe plano parcial.",
+      "Aplicar o plano nunca confia no número que a tela mostrou: a disponibilidade é conferida de novo, sob trava, no instante da aplicação.",
+      "Produto produzido depois não entra sozinho na expedição: precisa ser reservado a este pedido explicitamente.",
+      "O pedido fica expedido por consequência das expedições confirmadas. Não há marcar como expedido.",
+    ],
+  },
+
   "comercial.expedicoes": {
     module: "comercial",
     title: "O que é uma expedição e por que ela nasce do pedido",

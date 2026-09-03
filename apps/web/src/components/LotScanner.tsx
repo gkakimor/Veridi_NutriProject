@@ -84,7 +84,7 @@ export function LotScanner({ onDetect }: LotScannerProps) {
         </button>
       )}
 
-      {cameraError && <p className="form-alert">{cameraError}</p>}
+      {cameraError && <p className="form-alert" role="alert">{cameraError}</p>}
 
       {cameraActive && (
         <div className="lot-scanner__preview">

@@ -1,5 +1,6 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import type { PricingVersionDTO, QuoteVersionDTO } from "@veridi/shared";
 import {
   INDUSTRIAL_COST_QUALITY_LABELS,
@@ -33,7 +34,6 @@ export function QuotePricingSection({
   canEdit: boolean;
   onChanged: () => void;
 }) {
-  const navigate = useNavigate();
   const [pricing, setPricing] = useState<PricingVersionDTO | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,27 +72,26 @@ export function QuotePricingSection({
         não mostra custo, margem nem comissão.
       </p>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {provenance && (
         <dl className="definition-list">
           <dt>Precificação</dt>
           <dd>
             {provenance.pricingVersionId ? (
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/gestao/precificacao/${provenance.pricingVersionId}`)}
+                to={`/gestao/precificacao/${provenance.pricingVersionId}`}
               >
                 {provenance.pricingCode} · V{provenance.pricingVersionNumber}
-              </button>
+              </Link>
             ) : (
               "—"
             )}
           </dd>
           <dt>Faixa</dt>
           <dd>
-            {provenance.tierQuantity} {provenance.tierUomCode}
+            {formatQuantity(provenance.tierQuantity)} {provenance.tierUomCode}
           </dd>
           <dt>Cálculo de custo</dt>
           <dd>{provenance.calculationCode ?? "—"}</dd>
@@ -167,7 +166,7 @@ export function QuotePricingSection({
                     return (
                       <tr key={tier.id}>
                         <td className="is-numeric">
-                          {tier.quantity} {tier.uomCode}
+                          {formatQuantity(tier.quantity)} {tier.uomCode}
                         </td>
                         <td className="is-numeric">{formatUnitCost(tier.industrialCostPerUnit)}</td>
                         <td>{INDUSTRIAL_COST_QUALITY_LABELS[tier.costQuality]}</td>

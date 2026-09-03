@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type {
   ProductionOrderDTO,
@@ -115,12 +116,12 @@ export function RequirementsReportPage() {
               <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
             </td>
             <td className="is-number">
-              {row.requiredQuantity} {row.unitCode}
+              {formatQuantity(row.requiredQuantity)} {row.unitCode}
             </td>
-            <td className="is-number">{row.reserved}</td>
-            <td className="is-number">{row.available}</td>
-            <td className="is-number">{row.onOrder}</td>
-            <td className="is-number">{row.shortage}</td>
+            <td className="is-number">{formatQuantity(row.reserved)}</td>
+            <td className="is-number">{formatQuantity(row.available)}</td>
+            <td className="is-number">{formatQuantity(row.onOrder)}</td>
+            <td className="is-number">{formatQuantity(row.shortage)}</td>
           </tr>
         ))}
       />
@@ -237,9 +238,9 @@ export function PlannedActualReportPage() {
             </td>
             <td>{row.formulationVersionNumber ? `v${row.formulationVersionNumber}` : "—"}</td>
             <td className="is-number">
-              {row.plannedQuantity} {row.unitCode}
+              {formatQuantity(row.plannedQuantity)} {row.unitCode}
             </td>
-            <td className="is-number">{row.producedQuantity}</td>
+            <td className="is-number">{formatQuantity(row.producedQuantity)}</td>
             <td className="is-number">{row.variance}</td>
             <td className="is-number">{row.yieldPercent ? `${row.yieldPercent}%` : "—"}</td>
             <td>{formatDate(row.startedAt)}</td>
@@ -316,7 +317,7 @@ export function ProductionTraceabilityReportPage() {
               </dd>
               <dt>Planejado / Produzido</dt>
               <dd>
-                {data.plannedQuantity} / {data.producedQuantity} {data.unitCode}
+                {formatQuantity(data.plannedQuantity)} / {formatQuantity(data.producedQuantity)} {data.unitCode}
               </dd>
               <dt>Conclusão</dt>
               <dd>{formatDate(data.completedAt)}</dd>
@@ -339,7 +340,7 @@ export function ProductionTraceabilityReportPage() {
                   <td>{row.supplierLot ?? "—"}</td>
                   <td>{row.supplierName ?? "—"}</td>
                   <td className="is-number">
-                    {row.quantity} {row.unitCode}
+                    {formatQuantity(row.quantity)} {row.unitCode}
                   </td>
                 </tr>
               ))}
@@ -358,7 +359,7 @@ export function ProductionTraceabilityReportPage() {
                   </td>
                   <td>{row.businessLotNumber ?? "—"}</td>
                   <td className="is-number">
-                    {row.quantity} {row.unitCode}
+                    {formatQuantity(row.quantity)} {row.unitCode}
                   </td>
                   <td>{formatDate(row.expiryDate)}</td>
                   <td>{row.isExpired ? "Vencido" : row.status}</td>
@@ -450,7 +451,7 @@ export function ConsumptionReportPage() {
               <DocLink code={row.productionOrderCode} to={`/producao/ordens/${row.productionOrderId}`} />
             </td>
             <td className="is-number">
-              {row.quantity} {row.unitCode}
+              {formatQuantity(row.quantity)} {row.unitCode}
             </td>
             {/* Custo desconhecido aparece como "Sem custo", nunca como zero. */}
             <td className="is-number">{row.unitCost ? formatBRL(row.unitCost) : "Sem custo"}</td>

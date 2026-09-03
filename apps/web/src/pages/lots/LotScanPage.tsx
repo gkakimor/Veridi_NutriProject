@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { LotDTO } from "@veridi/shared";
 import { LOT_STATUS_LABELS } from "@veridi/shared";
 import { lookupLot } from "../../lib/lots-api";
 import { FormSection } from "../../components/FormSection";
 import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDate } from "../../lib/dates";
 
 
@@ -55,8 +56,12 @@ export function LotScanPage() {
     <>
       <div className="page__header">
         <div>
+          {/* Era um subtitulo com cara de trilha: "Estoque / Lotes / Escanear"
+              em texto puro, imitando navegacao sem navegar — e nesta tela, que
+              e a pensada para o operador de chao de fabrica com a mao ocupada,
+              tentar voltar por ali e o gesto natural. */}
+          <PageBreadcrumbs items={[{ label: "Lotes", href: "/estoque/lotes" }, { label: "Escanear" }]} />
           <h1 className="page__title">Escanear lote</h1>
-          <p className="page__subtitle">Estoque / Lotes / Escanear</p>
         </div>
         <button type="button" className="btn btn--ghost" onClick={() => navigate("/estoque/lotes")}>
           ← Voltar
@@ -67,7 +72,7 @@ export function LotScanPage() {
         <FormSection title="Ler QR ou digitar lote">
           <LotScanner onDetect={handleDetect} />
           {loading && <p className="field__hint">Consultando…</p>}
-          {error && <p className="form-alert">{error}</p>}
+          {error && <p className="form-alert" role="alert">{error}</p>}
         </FormSection>
       )}
 
@@ -97,13 +102,12 @@ export function LotScanPage() {
               >
                 Escanear outro
               </button>
-              <button
-                type="button"
+              <Link
                 className="btn btn--primary btn--sm"
-                onClick={() => navigate(`/estoque/lotes/${result.id}`)}
+                to={`/estoque/lotes/${result.id}`}
               >
                 Ver detalhes
-              </button>
+              </Link>
             </div>
           </div>
         </FormSection>

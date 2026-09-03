@@ -83,7 +83,7 @@ export function FormulationTemplateOrigin({ version, canEdit, onChanged }: Props
 
   return (
     <div className="template-origin">
-      {erro && <p className="form-alert">{erro}</p>}
+      {erro && <p className="form-alert" role="alert">{erro}</p>}
 
       {version.originTemplateCode && (
         <p className="template-origin__line">

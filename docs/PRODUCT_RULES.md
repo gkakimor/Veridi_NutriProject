@@ -3179,3 +3179,96 @@ Achar não é o mesmo que poder usar. A busca torna encontrável quem já era
 elegível; ela não altera regra de elegibilidade nenhuma — tipo, situação,
 proprietário e saldo continuam decidindo o que o campo aceita, e continuam
 decidindo no servidor.
+
+---
+
+## §49 — Reconciliação de material e identidade de documento
+
+### Ordem de Produção não conclui com material por reconciliar
+
+Concluir uma OP passou a exigir que **todo requisito tenha resposta**. Cada
+material planejado precisa estar numa de duas situações:
+
+- **consumo real registrado** que cobre a necessidade; ou
+- **diferença justificada** — alguém declarou explicitamente por que se gastou
+  menos do que a fórmula pedia, e a justificativa fica no documento com autor e
+  data.
+
+Antes disso a ordem olhava só para o que SAIU — exigia um apontamento de
+produção, e motivo quando se produzia menos que o planejado — e nunca para o
+que ENTROU. Uma OP com seis requisitos e um consumo concluía normalmente.
+
+O custo disso não é só rastreabilidade. São três coisas ao mesmo tempo: o lote
+de produto acabado nasce declarando seis componentes com registro de um; os
+cinco materiais nunca baixam do estoque, então o saldo em livro passa a
+divergir do chão **sem nenhum ajuste que registre a diferença**; e o snapshot
+de custo congela uma produção que, no papel, quase não consumiu nada.
+
+**"Ninguém clicou em confirmar" e "o material não foi consumido" produziam o
+mesmo registro: nenhum.** A regra existe para separar as duas coisas.
+
+### Não há tolerância, e isso é decisão
+
+Consumo abaixo da necessidade exige resposta, qualquer que seja a diferença.
+Uma folga percentual sumiria com a diferença pequena, que é como a grande
+começa — e o domínio já tomou posição contrária em `RecipeWeighing`:
+*diferença é registrada, nunca escondida*.
+
+Consumo **acima** da necessidade não pede nada: sobra explicada não é problema,
+e ampliar a reserva já tem caminho próprio com justificativa.
+
+### Motivo de material não é motivo de produção
+
+São perguntas diferentes e as respostas não se substituem. O motivo da
+conclusão explica ter **produzido menos que o planejado**; o motivo da
+diferença de material explica ter **gasto menos material do que a fórmula
+pedia**. Uma OP pode fechar 100% do planejado com falta de material, e
+vice-versa. Nunca compartilham campo.
+
+### O portão é do servidor
+
+A tela repete a decisão antes do clique — lendo o mesmo dado que o servidor
+usa, para nunca oferecer um botão que o servidor recusa —, mas quem decide é o
+servidor. Integridade que depende de quem chamou não é integridade.
+
+### Documento histórico não é reconciliado retroativamente
+
+A regra vale para **concluir**, não para reescrever o que já fechou.
+Reconciliar uma OP concluída inventaria uma justificativa que ninguém deu.
+
+### Prefixo de código identifica uma entidade só
+
+O código é o identificador humano: o que se fala, o que se escreve no papel, o
+que se digita na busca. Dois tipos de documento com o mesmo prefixo e sequences
+separadas produzem códigos idênticos para coisas diferentes — e "confere o
+REC-000002" vira uma frase ambígua.
+
+Todo prefixo canônico mora no pacote compartilhado, nunca dentro de um serviço.
+Não é organização: foi por estar fora do lugar onde a comparação acontece que
+`REC` acabou nomeando Recebimento e Recurso Industrial ao mesmo tempo, por
+meses. Um teste de contrato garante as duas coisas — unicidade e localização.
+
+### Entrada decimal em português
+
+O sistema é em português e a pessoa digita `0,85`. Campo decimal aceita vírgula
+e ponto; **separador de milhar é recusado**, porque `1.234` é ambíguo e
+adivinhar erra por um fator de mil em silêncio, num campo que costuma ser preço
+ou peso. Um separador só, seja qual for, é sempre a casa decimal.
+
+A tela normaliza antes de enviar e o servidor valida com autoridade — as duas
+coisas, não uma. E a recusa **diz qual é o formato aceito**: "Erro de
+validação" foi exatamente o que fez a pessoa redigitar o mesmo valor esperando
+outro resultado.
+
+Conta feita no navegador sobre texto digitado passa pelo mesmo tradutor. O pior
+caso encontrado não recusava nada: `Number("12,50")` virava `NaN`, a linha
+sumia da soma, e o total da Ordem de Compra aparecia **menor do que a ordem
+vale** — sem nenhum sinal de linha faltando.
+
+### Mensagem de erro precisa ser ouvida
+
+Erro visível e mudo é erro que não chegou. Toda mensagem de falha carrega
+`role="alert"`; condição persistente que explica por que uma ação está
+indisponível carrega `role="status"`. A distinção não é decorativa: usar
+`alert` para o que fica parado na tela ensina a ignorar o alerta seguinte, que
+pode ser de verdade.

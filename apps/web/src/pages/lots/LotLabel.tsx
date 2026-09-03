@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import type { LotDTO } from "@veridi/shared";
 import { ownerLabel } from "@veridi/shared";
 import { QrCode } from "../../components/QrCode";
@@ -60,7 +61,7 @@ export function LotLabel({ lot }: { lot: LotDTO }) {
               </dd>
               <dt>Quantidade recebida</dt>
               <dd>
-                {lot.initialReceivedQuantity} {lot.unitCode}
+                {formatQuantity(lot.initialReceivedQuantity)} {lot.unitCode}
               </dd>
               <dt>Localização</dt>
               <dd>{lot.location ?? "—"}</dd>

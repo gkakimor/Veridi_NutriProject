@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -176,7 +177,7 @@ export function PricingByProductReportPage() {
         emptyMessage="Nenhuma precificação ativa."
         rows={data?.rows.map((row) => (
           <tr
-            key={`${row.pricingVersionId}-${row.quantity}`}
+            key={`${row.pricingVersionId}-${formatQuantity(row.quantity)}`}
             tabIndex={0}
             onClick={() => navigate(`/gestao/precificacao/${row.pricingVersionId}`)}
             onKeyDown={(event) => {
@@ -189,7 +190,7 @@ export function PricingByProductReportPage() {
             <td>{row.customerName ?? "—"}</td>
             <td className="is-code">{row.pricingLabel}</td>
             <td>
-              {row.quantity} {row.uomCode}
+              {formatQuantity(row.quantity)} {row.uomCode}
               <span className="field__hint"> {PRICE_MODE_LABELS[row.priceMode]}</span>
             </td>
             <td className="is-code">{row.calculationCode}</td>

@@ -31,6 +31,7 @@ import {
 import { getItem, listItems } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
@@ -41,10 +42,12 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
 import { useAuth } from "../../app/AuthProvider";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
+import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 
 interface ItemOption {
   id: string;
@@ -430,6 +433,15 @@ export function FormulationVersionPage() {
   const dosesInformadas = Number(dosesPerPackage.trim()) > 0;
   const mostrarDoses = dosesObrigatorias || dosesPerPackage.trim() !== "";
 
+  /*
+   * O campo de doses tem duas mensagens de erro independentes e elas podem
+   * aparecer juntas — a descrição soma os dois ids em vez de escolher um.
+   */
+  const dosesErrorIds = [
+    ...(dosesObrigatorias && !dosesInformadas ? ["version-doses-required-error"] : []),
+    ...(fieldErrors["dosesPerPackage"] ? ["version-dosesPerPackage-error"] : []),
+  ];
+
   function optionsForRow(row: ComponentRow): ItemOption[] {
     const usedByOtherRows = new Set(components.filter((c) => c.key !== row.key).map((c) => c.itemId));
     const base = activeItems.filter((item) => !usedByOtherRows.has(item.id));
@@ -535,21 +547,22 @@ export function FormulationVersionPage() {
    */
   function montarRascunho() {
     return {
-      basisQuantity: basisQuantity.trim(),
+      basisQuantity: exigirDecimal(basisQuantity, "Base da formulação"),
       calculationMode,
+      // Doses por embalagem é inteiro: segue como está.
       dosesPerPackage: dosesPerPackage.trim() || null,
       notes: notes.trim(),
       components: components
         .filter((row) => row.itemId)
         .map((row) => ({
           itemId: row.itemId,
-          quantity: row.quantity.trim(),
+          quantity: exigirDecimal(row.quantity, "Quantidade"),
           unitCode: row.unitCode,
           basis: row.basis,
           supplyResponsibility: row.supplyResponsibility,
           // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
-          purityPercentApplied: row.purityPercentApplied.trim() || null,
-          overagePercent: row.overagePercent.trim() || null,
+          purityPercentApplied: exigirDecimalOpcional(row.purityPercentApplied, "Pureza %"),
+          overagePercent: exigirDecimalOpcional(row.overagePercent, "Overage %"),
           ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
         })),
     };
@@ -677,13 +690,12 @@ export function FormulationVersionPage() {
       <div className="page__header">
         <div>
           <h1 className="page__title">Versão não encontrada</h1>
-          <button
-            type="button"
+          <Link
             className="btn btn--ghost"
-            onClick={() => navigate(`/producao/formulacoes/${productId ?? ""}`)}
+            to={`/producao/formulacoes/${productId ?? ""}`}
           >
             ← Voltar
-          </button>
+          </Link>
         </div>
       </div>
     );
@@ -693,7 +705,7 @@ export function FormulationVersionPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Produção / Formulações / {version.productName}</div>
+          <PageBreadcrumbs items={[{ label: "Formulações", href: "/producao/formulacoes" }, { label: version.productName }]} />
           <div className="doc-title">
             <h1>Formulação {version.versionLabel}</h1>
             <span className={statusBadgeClass(version.status)}>
@@ -703,20 +715,19 @@ export function FormulationVersionPage() {
         </div>
         <div className="table__actions">
           <ProjectOriginLink productId={productId} />
-          <button
-            type="button"
+          <Link
             className="btn btn--ghost"
-            onClick={() => navigate(`/producao/formulacoes/${productId}`)}
+            to={`/producao/formulacoes/${productId}`}
           >
             ← Voltar
-          </button>
+          </Link>
         </div>
       </div>
 
       <ProductRelatedLinks productId={productId} current="formulation" />
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Mesma explicação do detalhe do produto, disponível também aqui:
             quem chega direto na versão (link de OP, de custo ou de orçamento)
@@ -800,14 +811,23 @@ export function FormulationVersionPage() {
                 inputMode="decimal"
                 value={basisQuantity}
                 onChange={(event) => setBasisQuantity(event.target.value)}
+                /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
+                {...(fieldErrors["basisQuantity"]
+                  ? {
+                      "aria-invalid": true as const,
+                      "aria-describedby": "version-basisQuantity-error",
+                    }
+                  : {})}
               />
             ) : (
               <p className="field-readonly-value">
-                {version.basisQuantity} {version.outputUnitCode}
+                {formatQuantity(version.basisQuantity)} {version.outputUnitCode}
               </p>
             )}
             {fieldErrors["basisQuantity"] && (
-              <p className="field__error">{fieldErrors["basisQuantity"]}</p>
+              <p className="field__error" id="version-basisQuantity-error">
+                {fieldErrors["basisQuantity"]}
+              </p>
             )}
           </div>
 
@@ -860,6 +880,13 @@ export function FormulationVersionPage() {
                   inputMode="numeric"
                   value={dosesPerPackage}
                   onChange={(event) => setDosesPerPackage(event.target.value)}
+                  /* Liga campo, `aria-invalid` e as mensagens, para leitor de tela também. */
+                  {...(dosesErrorIds.length > 0
+                    ? {
+                        "aria-invalid": true as const,
+                        "aria-describedby": dosesErrorIds.join(" "),
+                      }
+                    : {})}
                 />
               ) : (
                 <p className="field-readonly-value">{version.dosesPerPackage ?? "—"}</p>
@@ -868,13 +895,15 @@ export function FormulationVersionPage() {
                 Usado para calcular a quantidade total de componentes definidos por dose.
               </p>
               {dosesObrigatorias && !dosesInformadas && (
-                <p className="field__error">
+                <p className="field__error" id="version-doses-required-error">
                   Há componentes calculados por dose. Sem este número a formulação não pode ser
                   ativada — e a quantidade de material não existe.
                 </p>
               )}
               {fieldErrors["dosesPerPackage"] && (
-                <p className="field__error">{fieldErrors["dosesPerPackage"]}</p>
+                <p className="field__error" id="version-dosesPerPackage-error">
+                  {fieldErrors["dosesPerPackage"]}
+                </p>
               )}
             </div>
           )}
@@ -998,6 +1027,10 @@ export function FormulationVersionPage() {
                           type="text"
                           inputMode="decimal"
                           placeholder="0"
+                          /* O campo vive numa celula de tabela e nao tem
+                             <label> proprio: sem isto o unico nome acessivel
+                             seria o placeholder "0", que nao diz nada. */
+                          aria-label={`Quantidade de ${row.itemCode || "componente"}`}
                           value={row.quantity}
                           onChange={(event) =>
                             handleComponentFieldChange(row.key, "quantity", event.target.value)
@@ -1063,10 +1096,10 @@ export function FormulationVersionPage() {
                       )}
                     </td>
                     <td>
-                      {row.stockEquivalentQuantity} {row.stockUnitCode}
+                      {formatQuantity(row.stockEquivalentQuantity)} {row.stockUnitCode}
                     </td>
                     <td>
-                      {row.physicalPerUnit ? `${row.physicalPerUnit} ${row.stockUnitCode}` : "—"}
+                      {formatQuantityWithUnit(row.physicalPerUnit, row.stockUnitCode)}
                     </td>
                     {isDraft && (
                       <td>
@@ -1126,10 +1159,10 @@ export function FormulationVersionPage() {
                         <EntityLink kind="item" id={component.itemId} code={component.itemCode} name={component.itemName} />
                       </td>
                       <td className="is-numeric">
-                        {component.normalizedQuantity} {component.stockUnitCode}
+                        {formatQuantity(component.normalizedQuantity)} {component.stockUnitCode}
                         <br />
                         <span className="field__hint">
-                          {component.formulaQuantity} {component.formulaUnitCode}
+                          {formatQuantity(component.formulaQuantity)} {component.formulaUnitCode}
                         </span>
                       </td>
                       <td>{formatBRL(component.unitCost)}</td>
@@ -1150,7 +1183,7 @@ export function FormulationVersionPage() {
             </div>
 
             <dl className="definition-list">
-              <dt>Custo estimado da base ({costEstimate.basisQuantity} {costEstimate.outputUnitCode})</dt>
+              <dt>Custo estimado da base ({formatQuantity(costEstimate.basisQuantity)} {costEstimate.outputUnitCode})</dt>
               <dd>
                 {costEstimate.estimatedMaterialCost
                   ? formatBRL(costEstimate.estimatedMaterialCost)

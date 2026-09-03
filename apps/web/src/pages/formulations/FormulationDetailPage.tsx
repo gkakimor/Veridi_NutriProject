@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { EntityLink } from "../../components/EntityLink";
@@ -13,6 +14,7 @@ import {
 } from "../../lib/formulations-api";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpTopics } from "../../help/help-content";
 import { UseTemplateDialog } from "../formulation-templates/UseTemplateDialog";
 import { applyTemplateToProduct } from "../../lib/formulation-templates-api";
@@ -143,7 +145,7 @@ export function FormulationDetailPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Produção / Formulações / Detalhe</div>
+          <PageBreadcrumbs items={[{ label: "Formulações", href: "/producao/formulacoes" }, { label: "Detalhe" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={product.id} code={product.code} /> {product.name}
@@ -165,7 +167,7 @@ export function FormulationDetailPage() {
       <ProductRelatedLinks productId={productId} current="formulation" />
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Esta é a tela onde se decide ativar uma versão — o passo que torna
             a receita histórica. A explicação do ciclo fica aqui, fechada. */}
@@ -294,7 +296,7 @@ export function FormulationDetailPage() {
                         : "—"}
                     </td>
                     <td>
-                      {version.basisQuantity} {version.outputUnitCode}
+                      {formatQuantity(version.basisQuantity)} {version.outputUnitCode}
                     </td>
                     <td>{formatDateTime(version.createdAt)}</td>
                     <td>{formatDateTime(version.activatedAt)}</td>

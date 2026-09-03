@@ -14,6 +14,28 @@ export class ApiValidationError extends Error {
   }
 }
 
+/**
+ * O texto que a tela deve mostrar para um erro qualquer da API.
+ *
+ * `ApiValidationError.message` é a string fixa "Erro de validação" — o que a
+ * pessoa precisa ler está em `issues[]`. Telas com formulário mapeiam essas
+ * issues campo a campo; telas com uma faixa de erro só não têm onde pousar
+ * cada uma, e faziam `err.message`, entregando justamente a frase que não
+ * ensina nada. Quem viu "Erro de validação" redigitou o mesmo valor.
+ *
+ * Aqui as issues viram o texto da faixa. Não é substituto do mapa campo a
+ * campo: é o piso, para que nenhuma recusa de validação chegue muda.
+ */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiValidationError) {
+    const detalhes = err.issues
+      .map((issue) => issue.message.trim())
+      .filter((message) => message.length > 0);
+    if (detalhes.length > 0) return detalhes.join(" ");
+  }
+  return err instanceof Error ? err.message : fallback;
+}
+
 /** Erro 409 de mismatch de lote no Picking — carrega os dois códigos para a UI mostrar lado a lado. */
 export class LotMismatchApiError extends Error {
   expectedLotCode: string;

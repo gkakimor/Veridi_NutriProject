@@ -14,6 +14,15 @@
  * aquisição, e o que foi efetivamente pago é domínio financeiro futuro.
  */
 
+/**
+ * Cálculo de custo industrial congelado.
+ *
+ * Mora aqui, com os demais, para que uma duplicata fique visível lado a
+ * lado. Cravado dentro do serviço foi assim que `REC` acabou nomeando
+ * Recebimento e Recurso Industrial ao mesmo tempo, por meses.
+ */
+export const INDUSTRIAL_COST_CALCULATION_CODE_PREFIX = "CALC";
+
 import type { IndustrialCostBasis, IndustrialCostCategory } from "./industrial-costs.js";
 import type { EnergyCalculationMode, IndustrialResourceType } from "./industrial-resources.js";
 

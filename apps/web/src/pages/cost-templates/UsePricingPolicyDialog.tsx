@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type { PricingPolicyPreviewDTO, PricingPolicySummaryDTO } from "@veridi/shared";
 import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
@@ -117,7 +118,7 @@ export function UsePricingPolicyDialog({
       }
     >
       <div>
-        {erro && <p className="form-alert">{erro}</p>}
+        {erro && <p className="form-alert" role="alert">{erro}</p>}
 
         {!escolhida ? (
           <>
@@ -217,7 +218,7 @@ export function UsePricingPolicyDialog({
                 <tbody>
                   {preview.tiers.map((tier) => (
                     <tr key={`${tier.quantity}-${tier.uomCode}`}>
-                      <td className="is-numeric">{tier.quantity}</td>
+                      <td className="is-numeric">{formatQuantity(tier.quantity)}</td>
                       <td>{tier.uomCode}</td>
                       <td className="is-numeric">
                         {formatPercent(tier.targetContributionMarginPercent)}
@@ -240,7 +241,7 @@ export function UsePricingPolicyDialog({
             </div>
 
             {semPreco && (
-              <p className="form-alert">
+              <p className="form-alert" role="status">
                 Alguma faixa não produziu preço porque o custo deste cálculo está incompleto. A
                 precificação nasce mesmo assim, mas a faixa fica sem preço até o custo fechar.
               </p>

@@ -17,9 +17,13 @@ import {
   MissingBusinessLotNumberError,
   MissingCompletionReasonError,
   MissingFinishedExpiryDateError,
+  NoMaterialVarianceError,
   NoProductionOutputsError,
   OutputExceedsPlannedError,
+  RequirementNotFoundError,
+  UnreconciledMaterialsError,
 } from "./production.errors.js";
+import { isPending, reconciliationStatus, unreconciledQuantity } from "./reconciliation.js";
 import type { CompleteProductionOrderSchema, RegisterProductionOutputSchema } from "./production.schemas.js";
 
 /** Sem autenticacao/Usuarios no MVP ainda — mesma string ja usada na topbar. */
@@ -160,6 +164,114 @@ export async function registerProductionOutput(
 }
 
 /**
+ * Os requisitos desta OP que ainda nao foram reconciliados.
+ *
+ * Uma consulta so, agregando o consumo por requisito no banco — a alternativa
+ * seria carregar consumo por consumo e somar em memoria, que custa uma query
+ * por material e da o mesmo numero.
+ */
+async function unreconciledRequirements(
+  tx: Prisma.TransactionClient,
+  productionOrderId: string,
+): Promise<{ itemCode: string; itemName: string; missing: string; unitCode: string }[]> {
+  const requirements = await tx.productionOrderRequirement.findMany({
+    where: { productionOrderId },
+    include: { item: { select: { unitCode: true } } },
+    orderBy: { position: "asc" },
+  });
+  const consumos = await tx.productionConsumption.groupBy({
+    by: ["productionOrderRequirementId"],
+    where: { productionOrderId },
+    _sum: { quantity: true },
+  });
+  const consumidoPorRequisito = new Map(
+    consumos.map((linha) => [
+      linha.productionOrderRequirementId,
+      linha._sum.quantity ?? new Prisma.Decimal(0),
+    ]),
+  );
+
+  const pendentes = [];
+  for (const requirement of requirements) {
+    const entrada = {
+      requiredQuantity: requirement.requiredQuantity,
+      consumedQuantity: consumidoPorRequisito.get(requirement.id) ?? new Prisma.Decimal(0),
+      varianceReason: requirement.varianceReason,
+    };
+    if (!isPending(reconciliationStatus(entrada))) continue;
+    pendentes.push({
+      itemCode: requirement.itemCode,
+      itemName: requirement.itemName,
+      missing: unreconciledQuantity(entrada).toString(),
+      unitCode: requirement.stockUnitCode || requirement.item.unitCode,
+    });
+  }
+  return pendentes;
+}
+
+/**
+ * Aceita a diferenca entre a necessidade de um material e o consumo real,
+ * com justificativa.
+ *
+ * A saida B da regra de reconciliacao: nem todo material gasto a menos e erro.
+ * Pode ter havido perda, sobra devolvida, substituicao ou producao menor. O
+ * que nao pode e a diferenca existir sem ninguem ter dito nada.
+ *
+ * Motivo, autor e carimbo juntos — justificativa sem autor nao e auditavel, e
+ * o padrao ja e o do resto do schema (`cancelReason`, `extraReason`,
+ * `releaseReason`).
+ */
+export async function acceptMaterialVariance(
+  productionOrderId: string,
+  requirementId: string,
+  reason: string,
+  actor?: { id: string; name: string },
+): Promise<ProductionOrderDTO> {
+  await getPrisma().$transaction(async (tx) => {
+    const order = await tx.productionOrder.findUnique({ where: { id: productionOrderId } });
+    if (!order) throw new ProductionOrderNotFoundError(productionOrderId);
+    // Documento historico nao se reescreve: OP concluida ou cancelada nao
+    // recebe justificativa nova.
+    if (order.status !== "IN_PRODUCTION" && order.status !== "RELEASED") {
+      throw new InvalidTransitionError(
+        "Só é possível justificar diferença de material em ordem liberada ou em produção.",
+      );
+    }
+
+    const requirement = await tx.productionOrderRequirement.findFirst({
+      where: { id: requirementId, productionOrderId },
+    });
+    if (!requirement) throw new RequirementNotFoundError(requirementId);
+
+    const consumido = await tx.productionConsumption.aggregate({
+      where: { productionOrderRequirementId: requirementId },
+      _sum: { quantity: true },
+    });
+    const entrada = {
+      requiredQuantity: requirement.requiredQuantity,
+      consumedQuantity: consumido._sum.quantity ?? new Prisma.Decimal(0),
+      varianceReason: null,
+    };
+    // Justificar onde nao ha o que justificar deixaria no documento uma
+    // explicacao para uma diferenca inexistente.
+    if (unreconciledQuantity(entrada).lessThanOrEqualTo(0)) {
+      throw new NoMaterialVarianceError(requirement.itemCode);
+    }
+
+    await tx.productionOrderRequirement.update({
+      where: { id: requirementId },
+      data: {
+        varianceReason: reason.trim(),
+        varianceAcceptedBy: actor?.name ?? SYSTEM_ACTOR,
+        varianceAcceptedAt: new Date(),
+      },
+    });
+  });
+
+  return (await getProductionOrderById(productionOrderId))!;
+}
+
+/**
  * Conclui a OP (IN_PRODUCTION -> COMPLETED). Exige ao menos um
  * ProductionOutput. Nao exige producedQuantity == plannedQuantity
  * (conclusao parcial permitida) — quando ha variacao, exige
@@ -194,6 +306,19 @@ export async function completeProductionOrder(
     if (variance.greaterThan(0) && !completionReason) {
       throw new MissingCompletionReasonError();
     }
+
+    /*
+     * MATERIAL POR RECONCILIAR — o portão que faltava.
+     *
+     * Antes daqui a OP olhava só para o que SAIU (apontamento de produção) e
+     * nunca para o que ENTROU. Concluía com requisito intocado, o material não
+     * baixava do estoque e o lote nascia com rastreabilidade incompleta.
+     *
+     * O portão vive no servidor, não na tela: a tela some numa chamada direta
+     * ao endpoint, e a integridade não pode depender de quem chamou.
+     */
+    const pendentes = await unreconciledRequirements(tx, productionOrderId);
+    if (pendentes.length > 0) throw new UnreconciledMaterialsError(pendentes);
 
     // Libera a reserva ainda ativa na MESMA transacao — nunca deleta,
     // nunca mexe em On Hand (fisicamente nada muda, so deixa de estar

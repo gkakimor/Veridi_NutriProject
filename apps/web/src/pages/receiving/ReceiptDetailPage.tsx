@@ -1,9 +1,12 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ReceiptDTO } from "@veridi/shared";
 import { COA_STATUS_LABELS, RECEIPT_ATTACHMENT_TYPES, RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
 import { getReceipt } from "../../lib/receiving-api";
 import { setAcquisitionCost } from "../../lib/costs-api";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
@@ -43,12 +46,17 @@ export function ReceiptDetailPage() {
     setSavingCost(true);
     setError(null);
     try {
-      const updated = await setAcquisitionCost(lineId, { unitCost: costDraft.trim() });
+      // Campo em branco continua limpando o custo (volta a desconhecido) —
+      // é o contrato da API e a razão do placeholder. Só o que foi digitado
+      // passa pelo parser.
+      const updated = await setAcquisitionCost(lineId, {
+        unitCost: exigirDecimalOpcional(costDraft, "Custo efetivo de aquisição") ?? "",
+      });
       setReceipt(updated);
       setEditingLineId(null);
       setCostDraft("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao salvar custo de aquisição");
+      setError(apiErrorMessage(err, "Falha ao salvar custo de aquisição"));
     } finally {
       setSavingCost(false);
     }
@@ -119,7 +127,7 @@ export function ReceiptDetailPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* "Confirmado" no cabeçalho é lido como "ainda dá para editar". Aqui
             não dá: o recebimento é histórico, e a correção mora no estoque. */}
@@ -220,7 +228,7 @@ export function ReceiptDetailPage() {
                     <td>
                       <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
                     </td>
-                    <td className="is-numeric">{line.receivedQuantity}</td>
+                    <td className="is-numeric">{formatQuantity(line.receivedQuantity)}</td>
                     <td>{line.unitCode}</td>
                     <td>{line.supplierLot ?? "—"}</td>
                     <td>{formatDate(line.expiryDate)}</td>
@@ -251,6 +259,10 @@ export function ReceiptDetailPage() {
                           type="text"
                           inputMode="decimal"
                           placeholder="Vazio = desconhecido"
+                          // O placeholder explica a regra, não nomeia o campo:
+                          // sem isto, o único campo editável do documento era
+                          // anunciado como "editar texto".
+                          aria-label={`Custo efetivo de aquisição de ${line.itemCode}`}
                           value={costDraft}
                           onChange={(event) => setCostDraft(event.target.value)}
                         />

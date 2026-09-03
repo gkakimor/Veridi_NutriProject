@@ -22,10 +22,12 @@ import { SearchableEntitySelect } from "../../components/SearchableEntitySelect"
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
 import { ToggleCard } from "../../components/ToggleCard";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { createProduct, updateProduct } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
 import { listUnits } from "../../lib/units-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { ProductIndustrialCostSummary } from "./ProductIndustrialCostSummary";
 
 /**
@@ -220,10 +222,28 @@ export function useProductForm({
   }, []);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
+    listCustomers({ active: true, pageSize: 50 })
       .then((result) => setActiveCustomers(result.customers))
       .catch(() => setActiveCustomers([]));
   }, []);
+
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarClientes(termo: string): Promise<EntityOption[]> {
+    const resultado = await listCustomers({ active: true, search: termo, pageSize: 50 });
+    const novos = resultado.customers;
+    setActiveCustomers((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((c) => ({ id: c.id, code: c.code, name: c.tradeName ?? c.legalName }));
+  }
 
   // Vinculo historico: se o cliente associado nao estiver mais na lista de
   // ativos (foi inativado depois), ele continua aparecendo no select.
@@ -281,10 +301,19 @@ export function useProductForm({
     const finishedProductItemId = optionalField(form.finishedProductItemId);
     const notes = optionalField(form.notes);
 
-    // Campo numérico: no edit sempre envia (vazio limpa), no create só
-    // quando preenchido. Vírgula decimal do usuário vira ponto.
-    const numeric = (value: string) => {
-      const trimmed = value.trim().replace(",", ".");
+    /*
+     * Campo numérico: no edit sempre envia (vazio limpa), no create só
+     * quando preenchido. A vírgula do usuário passa pelo parser central —
+     * mesma leitura da web inteira — e o que ele não consegue ler para no
+     * próprio campo, com o nome do campo, em vez de seguir para a API.
+     */
+    const ilegiveis: Record<string, string> = {};
+    const numeric = (campo: string, rotulo: string, value: string) => {
+      const trimmed = value.trim() === "" ? "" : parseDecimalInput(value);
+      if (trimmed === null) {
+        ilegiveis[campo] = mensagemDecimalInvalido(rotulo);
+        return null;
+      }
       if (mode === "edit") return { value: trimmed };
       return trimmed ? { value: trimmed } : null;
     };
@@ -295,12 +324,28 @@ export function useProductForm({
     const presentationType = enumField(form.presentationType);
     const targetAgeGroup = enumField(form.targetAgeGroup);
     const doseUomCode = enumField(form.doseUomCode);
-    const capsulesPerDose = numeric(form.capsulesPerDose);
-    const doseAmount = numeric(form.doseAmount);
-    const dosesPerPackage = numeric(form.dosesPerPackage);
-    const unitsPerShippingBox = numeric(form.unitsPerShippingBox);
-    const shelfLifeMonths = numeric(form.shelfLifeMonths);
-    const minimumBatchQuantity = numeric(form.minimumBatchQuantity);
+    const capsulesPerDose = numeric("capsulesPerDose", "Cápsulas por dose", form.capsulesPerDose);
+    const doseAmount = numeric("doseAmount", "Dose", form.doseAmount);
+    const dosesPerPackage = numeric("dosesPerPackage", "Doses por embalagem", form.dosesPerPackage);
+    const unitsPerShippingBox = numeric(
+      "unitsPerShippingBox",
+      "Unidades por caixa",
+      form.unitsPerShippingBox,
+    );
+    const shelfLifeMonths = numeric("shelfLifeMonths", "Vida útil (meses)", form.shelfLifeMonths);
+    const minimumBatchQuantity = numeric(
+      "minimumBatchQuantity",
+      "Lote mínimo",
+      form.minimumBatchQuantity,
+    );
+
+    // Nada sai daqui com um número ilegível: o erro pousa no campo.
+    if (Object.keys(ilegiveis).length > 0) {
+      setFieldErrors(ilegiveis);
+      setError("Corrija os campos destacados.");
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       name: form.name.trim(),
@@ -367,6 +412,7 @@ export function useProductForm({
     product,
     units,
     customerOptions,
+    buscarClientes,
     selectCustomer,
     onCreateCustomer,
     lockedCustomer,
@@ -387,16 +433,44 @@ export function ProductFormFields({
   customerOptions,
   onCreateCustomer,
   lockedCustomer,
+  buscarClientes,
 }: ProductFormController) {
+  /** Liga input, `aria-invalid` e a mensagem, para leitor de tela também. */
+  function fieldProps(field: string) {
+    const message = fieldErrors[field];
+    return {
+      ...(message ? { "aria-invalid": true as const } : {}),
+      ...(message ? { "aria-describedby": `product-${field}-error` } : {}),
+    };
+  }
+
+  function fieldError(field: string) {
+    const message = fieldErrors[field];
+    if (!message) return null;
+    return (
+      <p className="field__error" id={`product-${field}-error`}>
+        {message}
+      </p>
+    );
+  }
+
   return (
     <form id={PRODUCT_FORM_ID} onSubmit={handleSubmit}>
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {product && (
         <RelatedLinks
+          /* A cadeia INTEIRA, na ordem de dependência, com os mesmos rótulos
+             das cinco telas irmãs. Faltavam CMV e Precificação: quem abria o
+             produto para ver o CMV não achava link nenhum aqui e precisava
+             rolar o formulário inteiro até o resumo de custo lá embaixo. E
+             "Custos" era o único lugar do sistema que chamava a estrutura de
+             custo industrial por outro nome. */
           links={[
             { label: "Formulação", to: `/producao/formulacoes/${product.id}` },
-            { label: "Custos", to: `/produtos/${product.id}/custos` },
+            { label: "Custos industriais", to: `/produtos/${product.id}/custos` },
+            { label: "CMV", to: `/produtos/${product.id}/cmv` },
+            { label: "Precificação", to: `/gestao/precificacao?productId=${product.id}` },
             { label: "Ordens de produção", to: `/producao/ordens?productId=${product.id}` },
             ...(product.originProjectId
               ? [
@@ -444,9 +518,7 @@ export function ProductFormFields({
                 campos destacados" sem nenhum campo destacado — e o campo
                 recusado é justamente o que a tela não deixa editar.
               */}
-              {fieldErrors["customerId"] && (
-                <p className="field__error">{fieldErrors["customerId"]}</p>
-              )}
+              {fieldError("customerId")}
             </div>
           ) : (
             <div className="field field--full">
@@ -459,7 +531,8 @@ export function ProductFormFields({
                 onChange={(selectedId) => setForm((prev) => ({ ...prev, customerId: selectedId }))}
                 placeholder="Digite código, razão social, fantasia ou CNPJ…"
                 required
-                options={customerOptions.map((customer) => ({
+                onSearch={buscarClientes}
+options={customerOptions.map((customer) => ({
                   id: customer.id,
                   code: customer.code,
                   // Razão social assina contrato; nome fantasia é como o
@@ -474,10 +547,9 @@ export function ProductFormFields({
                 canCreate={Boolean(onCreateCustomer)}
                 createLabel="Novo cliente"
                 {...(onCreateCustomer ? { onCreateNew: onCreateCustomer } : {})}
+                {...fieldProps("customerId")}
               />
-              {fieldErrors["customerId"] && (
-                <p className="field__error">{fieldErrors["customerId"]}</p>
-              )}
+              {fieldError("customerId")}
             </div>
           )}
 
@@ -491,8 +563,9 @@ export function ProductFormFields({
               required
               value={form.name}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              {...fieldProps("name")}
             />
-            {fieldErrors["name"] && <p className="field__error">{fieldErrors["name"]}</p>}
+            {fieldError("name")}
           </div>
 
           <div className="field field--full">
@@ -533,6 +606,7 @@ export function ProductFormFields({
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, finishedUnitCode: event.target.value }))
                   }
+                  {...fieldProps("finishedUnitCode")}
                 >
                   {units.map((unit) => (
                     <option key={unit.code} value={unit.code}>
@@ -540,9 +614,7 @@ export function ProductFormFields({
                     </option>
                   ))}
                 </select>
-                {fieldErrors["finishedUnitCode"] && (
-                  <p className="field__error">{fieldErrors["finishedUnitCode"]}</p>
-                )}
+                {fieldError("finishedUnitCode")}
               </div>
             </div>
             <p className="field__hint">
@@ -668,10 +740,9 @@ export function ProductFormFields({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, capsulesPerDose: event.target.value }))
               }
+              {...fieldProps("capsulesPerDose")}
             />
-            {fieldErrors["capsulesPerDose"] && (
-              <p className="field__error">{fieldErrors["capsulesPerDose"]}</p>
-            )}
+            {fieldError("capsulesPerDose")}
           </div>
 
           <div className="field field--narrow">
@@ -685,10 +756,9 @@ export function ProductFormFields({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, doseAmount: event.target.value }))
               }
+              {...fieldProps("doseAmount")}
             />
-            {fieldErrors["doseAmount"] && (
-              <p className="field__error">{fieldErrors["doseAmount"]}</p>
-            )}
+            {fieldError("doseAmount")}
           </div>
 
           <div className="field field--narrow">
@@ -719,10 +789,9 @@ export function ProductFormFields({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, dosesPerPackage: event.target.value }))
               }
+              {...fieldProps("dosesPerPackage")}
             />
-            {fieldErrors["dosesPerPackage"] && (
-              <p className="field__error">{fieldErrors["dosesPerPackage"]}</p>
-            )}
+            {fieldError("dosesPerPackage")}
           </div>
 
           <div className="field field--narrow">
@@ -735,10 +804,9 @@ export function ProductFormFields({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, unitsPerShippingBox: event.target.value }))
               }
+              {...fieldProps("unitsPerShippingBox")}
             />
-            {fieldErrors["unitsPerShippingBox"] && (
-              <p className="field__error">{fieldErrors["unitsPerShippingBox"]}</p>
-            )}
+            {fieldError("unitsPerShippingBox")}
           </div>
         </div>
       </FormSection>
@@ -778,10 +846,9 @@ export function ProductFormFields({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, shelfLifeMonths: event.target.value }))
               }
+              {...fieldProps("shelfLifeMonths")}
             />
-            {fieldErrors["shelfLifeMonths"] && (
-              <p className="field__error">{fieldErrors["shelfLifeMonths"]}</p>
-            )}
+            {fieldError("shelfLifeMonths")}
           </div>
 
           <div className="field field--narrow">
@@ -794,12 +861,11 @@ export function ProductFormFields({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, minimumBatchQuantity: event.target.value }))
               }
+              {...fieldProps("minimumBatchQuantity")}
             />
             {/* Na unidade do item de produto acabado — sem UOM duplicada. */}
             <p className="field__hint">Na unidade do item de produto acabado.</p>
-            {fieldErrors["minimumBatchQuantity"] && (
-              <p className="field__error">{fieldErrors["minimumBatchQuantity"]}</p>
-            )}
+            {fieldError("minimumBatchQuantity")}
           </div>
         </div>
       </FormSection>

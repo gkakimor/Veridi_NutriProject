@@ -76,3 +76,42 @@ export class MissingCompletionReasonError extends Error {
     this.name = "MissingCompletionReasonError";
   }
 }
+
+/**
+ * Concluir a OP com material por reconciliar.
+ *
+ * Carrega a lista, e nao so a contagem: "existem materiais sem consumo" manda
+ * o operador procurar; "Celulose 102 e Estearato de magnesio" manda ele
+ * resolver. A mensagem tambem diz as DUAS saidas — registrar o consumo ou
+ * justificar a diferenca —, porque o defeito que este erro fecha nasceu de
+ * gente achando que so havia uma.
+ */
+export class UnreconciledMaterialsError extends Error {
+  readonly materials: { itemCode: string; itemName: string; missing: string; unitCode: string }[];
+
+  constructor(materials: { itemCode: string; itemName: string; missing: string; unitCode: string }[]) {
+    const nomes = materials.map((material) => `${material.itemCode} ${material.itemName}`).join(", ");
+    super(
+      `Existem materiais sem consumo confirmado: ${nomes}. ` +
+        `Registre o consumo real ou justifique a diferença antes de concluir a ordem.`,
+    );
+    this.name = "UnreconciledMaterialsError";
+    this.materials = materials;
+  }
+}
+
+/** Justificar diferenca onde nao ha diferenca — o consumo ja cobre a necessidade. */
+export class NoMaterialVarianceError extends Error {
+  constructor(itemCode: string) {
+    super(`O material ${itemCode} já tem consumo suficiente: não há diferença a justificar.`);
+    this.name = "NoMaterialVarianceError";
+  }
+}
+
+/** Requirement inexistente ou de outra OP — nunca revela qual das duas coisas. */
+export class RequirementNotFoundError extends Error {
+  constructor(requirementId: string) {
+    super(`Material ${requirementId} não encontrado nesta ordem de produção.`);
+    this.name = "RequirementNotFoundError";
+  }
+}

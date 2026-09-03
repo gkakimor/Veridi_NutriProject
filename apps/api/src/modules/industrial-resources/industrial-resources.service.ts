@@ -8,6 +8,7 @@ import type {
 } from "@veridi/shared";
 import {
   DEFAULT_RESOURCE_RATE_CURRENCY,
+  INDUSTRIAL_RESOURCE_CODE_PREFIX,
   isValidCurrencyCode,
   normalizeCurrencyCode,
   usageUomForResourceType,
@@ -43,7 +44,11 @@ import type {
  */
 
 const CODE_SEQUENCE = "industrial_resource_code_seq";
-const CODE_PREFIX = "REC";
+/*
+ * O prefixo vive em `@veridi/shared`, com todos os outros. Cravado aqui, ele
+ * colidiu com o do Recebimento sem ninguem notar por meses.
+ */
+const CODE_PREFIX = INDUSTRIAL_RESOURCE_CODE_PREFIX;
 
 const resourceInclude = {
   rates: {

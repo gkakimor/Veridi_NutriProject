@@ -109,7 +109,7 @@ export function ControlledDocumentsPage() {
           se edita — corrigir é criar outra. */}
       <ContextHelp topic={helpTopics["documentoControlado.comoFunciona"]} />
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">
@@ -193,7 +193,7 @@ export function ControlledDocumentsPage() {
             </>
           }
         >
-          {formError && <p className="form-alert">{formError}</p>}
+          {formError && <p className="form-alert" role="alert">{formError}</p>}
 
           <FormSection
             title="Documento"

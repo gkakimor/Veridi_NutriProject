@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import type { BillingDTO, ProductionOrderDTO, ProductionOrderMaterialCostDTO } from "@veridi/shared";
+import type {
+  BillingDTO,
+  CustomerOrderDTO,
+  ProductionOrderDTO,
+  ProductionOrderMaterialCostDTO,
+} from "@veridi/shared";
 import { BILLING_NON_FISCAL_NOTICE } from "@veridi/shared";
-import { BillingPrintDocument, ProductionOrderPrintDocument } from "./documents";
+import {
+  BillingPrintDocument,
+  CustomerOrderPrintDocument,
+  ProductionOrderPrintDocument,
+} from "./documents";
 
 const billingBase: BillingDTO = {
   id: "bil-1",
@@ -116,6 +125,12 @@ const productionOrderBase = {
   origin: "MANUAL",
   materialsStatus: "MATERIALS_AVAILABLE",
   shortageItemCount: 0,
+  materialReconciliation: {
+    totalRequirements: 0,
+    reconciledRequirements: 0,
+    pendingRequirements: 0,
+    canComplete: true,
+  },
   notes: null,
   customerId: null,
   customerTradeName: null,
@@ -188,5 +203,79 @@ describe("Ordem de Produção impressa", () => {
     // O subtotal conhecido aparece rotulado como subtotal, nunca como total.
     expect(total).toHaveTextContent("subtotal conhecido");
     expect(screen.getByText(/Custo por unidade produzida:/).closest("p")).toHaveTextContent("—");
+  });
+});
+
+const customerOrderBase = {
+  id: "ord-1",
+  code: "PED-000045",
+  customerId: "cus-1",
+  customerCode: "CLI-000007",
+  customerName: "Cliente Snapshot Ltda",
+  customerTradeName: null,
+  customerCnpj: "11222333000181",
+  customerAddress: null,
+  orderDate: "2026-08-01T10:00:00.000Z",
+  requestedDeliveryDate: "2026-08-20T10:00:00.000Z",
+  status: "IN_FULFILLMENT",
+  notes: null,
+  lines: [
+    {
+      id: "col-1",
+      productId: "prd-1",
+      productCode: "PRD-001",
+      productName: "Magnésio",
+      finishedItemId: "item-1",
+      finishedItemCode: "PA-000010",
+      finishedItemName: "Magnésio 60 caps",
+      orderedQuantity: "100",
+      unitCode: "un",
+      position: 0,
+      shippedQuantity: "40",
+      outstandingQuantity: "60",
+      pendingProductionQuantity: "60",
+      billedQuantity: "40",
+      unbilledShippedQuantity: "0",
+      sourceQuoteLineId: null,
+      agreedPrice: null,
+    },
+  ],
+  commercialOrigin: null,
+  reservation: null,
+  generatedProductionOrders: [],
+  linkedPurchaseOrders: [],
+  shipments: [],
+  billings: [],
+  billingStatus: "PARTIALLY_BILLED",
+  confirmedAt: "2026-08-02T10:00:00.000Z",
+  confirmedBy: "Ambiente local",
+  cancelledAt: null,
+  cancelledBy: null,
+  cancelReason: null,
+  createdAt: "2026-08-01T09:00:00.000Z",
+  createdBy: "Ambiente local",
+  updatedAt: "2026-08-05T10:00:00.000Z",
+} as unknown as CustomerOrderDTO;
+
+describe("Pedido do Cliente impresso", () => {
+  /**
+   * A folha mostra reservado, faturado e falta expedir — posição de
+   * atendimento, assunto de dentro da fábrica. Os três documentos irmãos que
+   * vão ao cliente já se declaram; este saía mudo e podia ser entregue no
+   * balcão como se fosse confirmação de pedido.
+   */
+  it("declara que é documento interno", () => {
+    const { container } = render(<CustomerOrderPrintDocument order={customerOrderBase} />);
+
+    const aviso = container.querySelector(".print-doc__notice");
+    expect(aviso).toBeTruthy();
+    expect(aviso?.textContent).toMatch(/interno/i);
+    expect(aviso?.textContent).toMatch(/não é documento fiscal/i);
+  });
+
+  it("continua trazendo as colunas internas que motivam o aviso", () => {
+    render(<CustomerOrderPrintDocument order={customerOrderBase} />);
+    expect(screen.getByText("Faturado")).toBeInTheDocument();
+    expect(screen.getByText("Falta expedir")).toBeInTheDocument();
   });
 });

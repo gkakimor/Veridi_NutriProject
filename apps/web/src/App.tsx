@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppShell } from "./app/AppShell";
 import { AuthProvider, useAuth } from "./app/AuthProvider";
 import { LoginPage } from "./pages/LoginPage";
@@ -8,6 +8,7 @@ import { RecipeSheetPage } from "./pages/production-orders/RecipeSheetPage";
 import { navItems } from "./app/navigation";
 import { DashboardPage } from "./pages/DashboardPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 import { ItemsPage } from "./pages/items/ItemsPage";
 import { ItemCreatePage } from "./pages/items/ItemCreatePage";
 import { SuppliersPage } from "./pages/suppliers/SuppliersPage";
@@ -335,7 +336,10 @@ function AuthenticatedApp() {
               />
             ))}
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Endereço desconhecido não vira Dashboard em silêncio: redirecionar
+              escondia o erro e, com `replace`, apagava do histórico o endereço
+              que a pessoa realmente pediu. */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

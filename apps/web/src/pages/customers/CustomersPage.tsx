@@ -42,6 +42,21 @@ export function CustomersPage() {
   const [stateFilter, setStateFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
+  /*
+   * "Nada para estes filtros" e "nada cadastrado" sao frases diferentes, e a
+   * lista dizia so a segunda. Quem filtrou por UF e nao achou concluia que o
+   * cliente nao existia — sem nenhum caminho de volta na tela.
+   */
+  const hasFilters =
+    searchInput !== "" || search !== "" || stateFilter !== "" || activeFilter !== "all";
+
+  function clearFilters() {
+    setSearchInput("");
+    setSearch("");
+    setStateFilter("");
+    setActiveFilter("all");
+  }
+
   // Chegada por link contextual: `ids` reduz a lista, `open` abre o registro.
   const { contextIds, openId, clear: clearContext, contextKey } = useRecordContext(
     "/cadastros/clientes",
@@ -182,7 +197,7 @@ export function CustomersPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextIds && (
         <RecordContextChip
@@ -251,6 +266,7 @@ export function CustomersPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
+                    label={`Mais ações de ${customer.code}`}
                     actions={[
                       {
                         label: customer.active ? "Inativar" : "Reativar",
@@ -274,7 +290,20 @@ export function CustomersPage() {
             {!loading && customers.length === 0 && (
               <tr>
                 <td colSpan={8} className="table__empty">
-                  Nenhum cliente encontrado.
+                  {hasFilters ? (
+                    <>
+                      Nenhum cliente encontrado para os filtros atuais.{" "}
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={clearFilters}
+                      >
+                        Limpar filtros
+                      </button>
+                    </>
+                  ) : (
+                    "Nenhum cliente cadastrado ainda. O cliente é a raiz de projeto, pedido e produto — comece por ele."
+                  )}
                 </td>
               </tr>
             )}

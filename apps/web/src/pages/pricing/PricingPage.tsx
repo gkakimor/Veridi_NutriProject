@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
@@ -14,8 +15,11 @@ import {
 } from "@veridi/shared";
 import { CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { FormSection } from "../../components/FormSection";
 import { RowActions } from "../../components/RowActions";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useAuth } from "../../app/AuthProvider";
 import { formatBRL } from "../../lib/currency";
 import {
@@ -28,6 +32,8 @@ import {
 } from "../../lib/pricing-api";
 import { formatDate } from "../../lib/dates";
 import { formatPercent } from "../../lib/percent";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { PricingPolicyOrigin } from "../cost-templates/PricingPolicyOrigin";
 
 function statusBadgeClass(status: string): string {
@@ -87,6 +93,11 @@ export function PricingPage() {
     load();
   }, [load]);
 
+  /*
+   * O funil único da tela. A ação pode recusar antes de chamar a API — é o
+   * que um valor decimal ilegível faz —, e a recusa chega aqui como
+   * qualquer outra falha, sem que a requisição saia.
+   */
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
@@ -94,13 +105,13 @@ export function PricingPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
   }
 
-  if (error && !pricing) return <p className="form-alert">{error}</p>;
+  if (error && !pricing) return <p className="form-alert" role="alert">{error}</p>;
   if (!pricing) return <p>Carregando…</p>;
 
   const editable = canEdit && pricing.status === "DRAFT";
@@ -112,7 +123,7 @@ export function PricingPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Gestão / Precificação</div>
+          <PageBreadcrumbs items={[{ label: "Precificação", href: "/gestao/precificacao" }, { label: "Detalhe" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={pricing.productId} code={pricing.productCode} /> ·{" "}
@@ -134,19 +145,24 @@ export function PricingPage() {
             Imprimir / Salvar PDF
           </button>
           <ProjectOriginLink productId={pricing.productId} />
-          <button
-            type="button"
+          <Link
             className="btn btn--ghost"
-            onClick={() => navigate(`/produtos/${pricing.productId}/custos`)}
+            to={`/produtos/${pricing.productId}/custos`}
           >
             ← Custos do produto
-          </button>
+          </Link>
         </div>
       </div>
 
       <div className="doc-body">
       <ProductRelatedLinks productId={pricing.productId} current="pricing" />
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
+
+        {/* Preço tem tela própria e regra própria. Durante um tempo o painel
+            daqui descrevia como o CMV de uma quantidade é montado — assunto
+            vizinho, tela errada: quem abria queria saber o que a ATIVAÇÃO
+            congela, não como o custo é somado. */}
+        <ContextHelp topic={helpTopics["precificacao.comoFunciona"]} />
 
         <FormSection
           title="Base de custo"
@@ -161,13 +177,12 @@ export function PricingPage() {
             <dd>{pricing.customerName ?? "—"}</dd>
             <dt>Cálculo de custo</dt>
             <dd>
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/calculos-custo/${pricing.industrialCostCalculationId}`)}
+                to={`/calculos-custo/${pricing.industrialCostCalculationId}`}
               >
                 {pricing.calculationCode}
-              </button>
+              </Link>
             </dd>
             <dt>Estrutura de custos</dt>
             <dd>{pricing.industrialCostVersionLabel}</dd>
@@ -179,7 +194,7 @@ export function PricingPage() {
             <dd>{INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality]}</dd>
             <dt>Base de produção da estrutura</dt>
             <dd>
-              {pricing.referenceOutputQuantity} {pricing.referenceOutputUomCode}
+              {formatQuantity(pricing.referenceOutputQuantity)} {pricing.referenceOutputUomCode}
             </dd>
             <dt>Lote mínimo do produto</dt>
             <dd>{pricing.minimumBatchQuantity ?? "—"}</dd>
@@ -281,7 +296,7 @@ export function PricingPage() {
                 {pricing.tiers.map((tier) => (
                   <tr key={tier.id}>
                     <td className="is-numeric">
-                      {tier.quantity} {tier.uomCode}
+                      {formatQuantity(tier.quantity)} {tier.uomCode}
                     </td>
                     <td>{tier.batchCount}</td>
                     <td className="is-numeric">
@@ -306,6 +321,7 @@ export function PricingPage() {
                     {editable && (
                       <td onClick={(event) => event.stopPropagation()}>
                         <RowActions
+                          label={`Mais ações da faixa de ${formatQuantity(tier.quantity)} ${tier.uomCode}`}
                           actions={[
                             {
                               label: "Remover faixa",
@@ -337,7 +353,7 @@ export function PricingPage() {
                 // posição entra na chave — sem ela o React descarta avisos.
                 tier.warnings.map((warning, index) => (
                   <li key={`${tier.id}-${index}-${warning.code}`} className="field__hint">
-                    {tier.quantity} {tier.uomCode}: {warning.message}
+                    {formatQuantity(tier.quantity)} {tier.uomCode}: {warning.message}
                   </li>
                 )),
               )}
@@ -428,13 +444,25 @@ export function PricingPage() {
                   }
                   onClick={() =>
                     void run(async () => {
+                      const quantidade = exigirDecimal(quantity, "Quantidade");
+                      // Comissão vazia é zero — só o que foi digitado é lido.
+                      const comissao = commission.trim()
+                        ? exigirDecimal(commission, "Comissão (%)")
+                        : "0";
+                      const precoOuMargem =
+                        priceMode === "TARGET_MARGIN"
+                          ? {
+                              targetContributionMarginPercent: exigirDecimal(
+                                targetMargin,
+                                "Margem de contribuição desejada (%)",
+                              ),
+                            }
+                          : { manualUnitPrice: exigirDecimal(manualPrice, "Preço unitário") };
                       await createPricingTier(pricing.id, {
-                        quantity: quantity.trim(),
+                        quantity: quantidade,
                         priceMode,
-                        commissionPercent: commission.trim() || "0",
-                        ...(priceMode === "TARGET_MARGIN"
-                          ? { targetContributionMarginPercent: targetMargin.trim() }
-                          : { manualUnitPrice: manualPrice.trim() }),
+                        commissionPercent: comissao,
+                        ...precoOuMargem,
                       });
                       setQuantity("");
                       setManualPrice("");
@@ -530,7 +558,7 @@ export function PricingPage() {
                 <ul className="confirm-dialog__list">
                   {rebase.tiers.map((tier) => (
                     <li key={tier.quantity}>
-                      {tier.quantity} {tier.uomCode}:{" "}
+                      {formatQuantity(tier.quantity)} {tier.uomCode}:{" "}
                       {tier.costPerUnitFrom ? formatUnitCost(tier.costPerUnitFrom) : "—"} →{" "}
                       {tier.costPerUnitTo ? formatUnitCost(tier.costPerUnitTo) : "—"}
                       {tier.unitPrice ? ` (preço acordado ${formatBRL(tier.unitPrice)})` : ""}

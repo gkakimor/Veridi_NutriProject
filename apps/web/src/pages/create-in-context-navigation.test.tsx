@@ -429,7 +429,7 @@ describe("Campo que navega — Cliente proprietário (material do cliente)", () 
 
     const documento = await screen.findByLabelText(/Documento de remessa/);
     await user.type(documento, "REM-2026-0031");
-    await user.type(screen.getByLabelText("Quantidade recebida"), "120");
+    await user.type(screen.getByLabelText(/^Quantidade recebida/), "120");
 
     // O termo digitado não é o nome de ninguém: é isso que separa
     // "selecionou pelo id" de "ecoou o texto digitado".
@@ -476,7 +476,7 @@ describe("Campo que navega — Cliente proprietário (material do cliente)", () 
 
     expect(await screen.findByDisplayValue("REM-2026-0031")).toBeInTheDocument();
     expect(screen.getByDisplayValue("conferido na doca")).toBeInTheDocument();
-    expect(screen.getByLabelText("Quantidade recebida")).toHaveValue("120");
+    expect(screen.getByLabelText(/^Quantidade recebida/)).toHaveValue("120");
     expect(screen.getByLabelText("Lote do fabricante")).toHaveValue("L-9911");
 
     // Pelo id: o campo mostra o registro criado, não o texto digitado.
@@ -502,7 +502,7 @@ describe("Campo que navega — Cliente proprietário (material do cliente)", () 
     renderPage(`${ROTA_RECEBIMENTO}?${PARAM_RETOMAR}=${token}`);
 
     expect(await screen.findByDisplayValue("REM-2026-0031")).toBeInTheDocument();
-    expect(screen.getByLabelText("Quantidade recebida")).toHaveValue("120");
+    expect(screen.getByLabelText(/^Quantidade recebida/)).toHaveValue("120");
     /*
      * Nada escolhido, e o campo continua VAZIO. A prova é dupla: o
      * "Limpar seleção" só existe com opção escolhida, e o recebimento segue

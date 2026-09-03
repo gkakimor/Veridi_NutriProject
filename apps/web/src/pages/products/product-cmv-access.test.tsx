@@ -182,7 +182,9 @@ describe("Acesso ao CMV pela lista de produtos", () => {
     );
 
     await screen.findByText("PROD-000003");
-    fireEvent.click(screen.getByRole("button", { name: "Mais ações" }));
+    // O menu de cada linha leva o código do produto no nome — sem isso a
+    // tabela inteira anuncia o mesmo botão.
+    fireEvent.click(screen.getByRole("button", { name: "Mais ações de PROD-000003" }));
     await waitFor(() =>
       expect(screen.getByRole("menuitem", { name: "CMV" })).toBeInTheDocument(),
     );

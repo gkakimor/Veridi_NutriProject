@@ -782,12 +782,18 @@ describe("Consulta do Cliente — produção", () => {
 
     /*
      * A tela é consultiva: não libera, não aponta, não consome, não edita.
-     * A asserção é sobre a AUSÊNCIA de qualquer botão — o único da árvore é
-     * o do próprio teste —, e não sobre uma lista de nomes proibidos, que
-     * envelheceria no dia em que uma ação nova fosse acrescentada.
+     * A asserção é sobre a AUSÊNCIA de qualquer botão de AÇÃO, e não sobre
+     * uma lista de nomes proibidos, que envelheceria no dia em que uma ação
+     * nova fosse acrescentada.
+     *
+     * Os dois botões que sobram não operam nada: um é o do próprio teste, o
+     * outro é o "Como funciona" do cabeçalho da consulta — explicação, não
+     * operação. Ele abre um painel de leitura e fecha; se um dia esta lista
+     * crescer com qualquer outra coisa, é ação e não deveria estar aqui.
      */
     expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
       "voltar-navegador",
+      "ⓘComo funciona",
     ]);
   });
 

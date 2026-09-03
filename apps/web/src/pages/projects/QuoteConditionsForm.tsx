@@ -9,6 +9,7 @@ import { QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
 import { formatBRL } from "../../lib/currency";
 import { formatPercent } from "../../lib/percent";
 import { previewQuotePaymentSchedule } from "../../lib/projects-api";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 
 /**
  * Condições comerciais da proposta.
@@ -61,19 +62,34 @@ function camposDe(quote: QuoteVersionDTO): Campos {
   };
 }
 
+/** Os três percentuais desta tela — o que a leitura da vírgula alcança. */
+const PERCENTUAIS: { chave: keyof Campos; rotulo: string }[] = [
+  { chave: "discountPercent", rotulo: "Desconto (%)" },
+  { chave: "downPaymentPercent", rotulo: "Entrada (%)" },
+  { chave: "monthlyInterestPercent", rotulo: "Juros ao mês (%)" },
+];
+
 function paraEnvio(campos: Campos): UpdateQuoteVersionInput {
   const texto = (value: string) => (value.trim() === "" ? null : value.trim());
   const inteiro = (value: string) => (value.trim() === "" ? null : Number(value));
+  /*
+   * Percentual passa pelo parser central. O `?? value.trim()` só existe para
+   * o caso impossível: os botões ficam desabilitados enquanto algum
+   * percentual for ilegível, e mandar `null` no lugar apagaria o desconto
+   * em silêncio — pior do que deixar o servidor recusar.
+   */
+  const percentual = (value: string) =>
+    value.trim() === "" ? null : (parseDecimalInput(value) ?? value.trim());
   return {
     validUntil: texto(campos.validUntil),
     leadTimeDays: inteiro(campos.leadTimeDays),
     commercialNotes: texto(campos.commercialNotes),
-    discountPercent: texto(campos.discountPercent),
+    discountPercent: percentual(campos.discountPercent),
     paymentMethod: campos.paymentMethod,
-    downPaymentPercent: texto(campos.downPaymentPercent),
+    downPaymentPercent: percentual(campos.downPaymentPercent),
     installmentCount: inteiro(campos.installmentCount),
     installmentIntervalDays: inteiro(campos.installmentIntervalDays),
-    monthlyInterestPercent: texto(campos.monthlyInterestPercent),
+    monthlyInterestPercent: percentual(campos.monthlyInterestPercent),
   };
 }
 
@@ -104,6 +120,19 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
     [original, campos],
   );
   const parcelado = campos.paymentMethod === "INSTALLMENTS";
+  /*
+   * Percentual que a tela não consegue ler trava simular e salvar. Antes,
+   * `0,85` seguia como texto e voltava "Erro de validação" sem dizer onde.
+   */
+  const erroDoPercentual = (chave: keyof Campos): string | null => {
+    const rotulo = PERCENTUAIS.find((campo) => campo.chave === chave)?.rotulo;
+    const valor = campos[chave];
+    if (!rotulo || valor.trim() === "" || parseDecimalInput(valor) !== null) return null;
+    return mensagemDecimalInvalido(rotulo);
+  };
+  const temPercentualIlegivel = PERCENTUAIS.some(
+    ({ chave }) => erroDoPercentual(chave) !== null,
+  );
   const plano = quote.paymentSchedule;
 
   function set<K extends keyof Campos>(chave: K, valor: Campos[K]) {
@@ -164,7 +193,11 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
             disabled={!editable}
             value={campos.discountPercent}
             onChange={(event) => set("discountPercent", event.target.value)}
+            aria-invalid={erroDoPercentual("discountPercent") !== null || undefined}
           />
+          {erroDoPercentual("discountPercent") && (
+            <p className="field__error">{erroDoPercentual("discountPercent")}</p>
+          )}
           <p className="field__hint">Sobre o subtotal das linhas.</p>
         </div>
         <div className="field field--narrow">
@@ -194,7 +227,11 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
                 disabled={!editable}
                 value={campos.downPaymentPercent}
                 onChange={(event) => set("downPaymentPercent", event.target.value)}
+                aria-invalid={erroDoPercentual("downPaymentPercent") !== null || undefined}
               />
+              {erroDoPercentual("downPaymentPercent") && (
+                <p className="field__error">{erroDoPercentual("downPaymentPercent")}</p>
+              )}
               <p className="field__hint">Vazio = sem entrada.</p>
             </div>
             <div className="field field--narrow">
@@ -229,7 +266,11 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
                 disabled={!editable}
                 value={campos.monthlyInterestPercent}
                 onChange={(event) => set("monthlyInterestPercent", event.target.value)}
+                aria-invalid={erroDoPercentual("monthlyInterestPercent") !== null || undefined}
               />
+              {erroDoPercentual("monthlyInterestPercent") && (
+                <p className="field__error">{erroDoPercentual("monthlyInterestPercent")}</p>
+              )}
               <p className="field__hint">Vazio ou 0 = sem juros.</p>
             </div>
           </>
@@ -254,7 +295,7 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={simulando}
+              disabled={simulando || temPercentualIlegivel}
               onClick={() => void simular()}
             >
               {simulando ? "Simulando…" : "Simular"}
@@ -263,7 +304,7 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
           <button
             type="button"
             className="btn btn--secondary"
-            disabled={saving || !sujo}
+            disabled={saving || !sujo || temPercentualIlegivel}
             onClick={() => onSave(paraEnvio(campos))}
           >
             Salvar condições
@@ -283,7 +324,7 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
         </div>
       )}
 
-      {erroSimulacao && <p className="form-alert">{erroSimulacao}</p>}
+      {erroSimulacao && <p className="form-alert" role="alert">{erroSimulacao}</p>}
 
       {/* Sem simular, o bloco descreve o que ESTÁ GRAVADO, e diz isso quando
           há alteração pendente: um plano que se apresentasse como o atual

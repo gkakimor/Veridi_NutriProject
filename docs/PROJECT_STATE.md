@@ -61,44 +61,30 @@ Material preparado:
 Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive em
 [PRODUCT_RULES.md](PRODUCT_RULES.md); aqui fica só o que mudou de estado.
 
-- **Cadastro de Cliente** (`cab5bf3`) — e-mail, CNPJ e telefone validados na
-  tela e na API, validador compartilhado que Fornecedor herdou, endereço por
-  CEP, autoria. §41.
-- **Consulta do Cliente** (`7cd61f2`) — leitura em `/consultas/clientes/:id`
-  reusando os endpoints já filtrados; o novo é o resumo e o escopo, que recusa
-  com 404 entidade de outro Cliente. §42.
+- **Cadastro e Consulta do Cliente** (`cab5bf3`, `7cd61f2`) — validação na tela
+  e na API, endereço por CEP, autoria; leitura escopada que recusa com 404
+  entidade de outro Cliente. §41, §42.
 - **Produto + item de produto acabado** — o Produto cria o seu item na mesma
-  transação; "Produto acabado" saiu da criação manual em Itens, e Cliente
-  virou obrigatório. §43.
-- **Prontidão para o cliente** (`cdcb235`) — Produtos e Estoque na Consulta,
-  breadcrumb canônico. §44.
-- **Ajuda contextual em todas as telas** (`344d00e`) — "Como funciona" abre
-  modal: conceito › glossário da tela › fluxos numerados › ressalvas. 35
-  tópicos, 98 dicas de campo, 37 telas. §45.
-- **Tabelas** (`f6f93c0`) — não havia estouro global em nenhuma das 24 telas;
-  havia rolagem local em 18 listagens, por `nowrap` sob `table-layout: auto`
-  sem teto. Três classes de coluna e teto para a coluna de ações; Lotes caiu
-  de 1356px para 537px, oito telas zeraram.
-
-- **Telas oficiais de cadastro** (`feat/canonical-create-return`) — Cliente,
-  Produto, Item, Fornecedor e Recurso ganharam página de criação em
-  `/cadastros/<entidade>/novo`, com os campos num módulo só por entidade,
-  usado pela página e pelo modal. O que a página traz: sobrevive a um F5, vale
-  como link, entra no histórico. O preço é guardar o rascunho da origem em
-  `sessionStorage`, por token de uso único na URL, com guarda contra retorno
-  para fora do sistema. Cancelar e o Voltar do navegador também restauram. §46.
-- **Produção na Consulta do Cliente** (`0657cd1`) — read model próprio: o DTO
-  operacional custa **548 consultas por página de 25** montando a necessidade
-  de material, que é a conta de liberar a ordem e não a pergunta da Consulta.
-  A forma nova custa **quatro**, com teste que conta consultas pelo log do
-  driver. 78 das 108 ordens locais não têm cliente, então a aba fica vazia
-  para a maioria estando correta, e o estado vazio diz isso. §47.
-- **Integridade de dado** (`fix/data-integrity-mediums`) — fecha os dois MEDIUM
-  do guia passo a passo, ambos de falha silenciosa. Ativar formulação passou a
-  gravar antes, com a gravação como condição: falhou, não ativa. E a busca de
-  item foi para o servidor em seis telas — filtrar lista pré-carregada
-  escondia 1.729 dos 2.729 itens ativos na Contagem Física, com "+ Novo"
-  convidando a duplicar. §48.
+  transação; Cliente virou obrigatório. §43, §44.
+- **Ajuda contextual** (`344d00e`) — "Como funciona" em modal: conceito,
+  glossário, fluxos numerados, ressalvas. §45.
+- **Tabelas** (`f6f93c0`) — não havia estouro global; havia rolagem local em 18
+  listagens. Três classes de coluna e teto para a coluna de ações.
+- **Telas oficiais de cadastro** (`feat/canonical-create-return`) — criação em
+  `/cadastros/<entidade>/novo`: sobrevive a F5, vale como link, entra no
+  histórico, e guarda o rascunho da origem. §46.
+- **Produção na Consulta** (`0657cd1`) — read model próprio: o DTO operacional
+  custava 548 consultas por página de 25; a forma nova custa quatro. §47.
+- **Integridade de dado** (`7be63c3`) — ativar formulação passou a gravar
+  antes, com a gravação como condição, e a busca de item foi para o servidor
+  em seis telas. §48.
+- **Validação por interface + hardening** (`fix/release-hardening-e2e-ux`) —
+  três E2E com todo dado nascendo pela tela, corrigidos e reexecutados. OP não
+  conclui com material por reconciliar, vírgula decimal em português, prefixo
+  `RIN`, quantidade sem precisão inventada, coluna fixa que avisa o que
+  esconde, referência a documento como link real, 125 mensagens de erro com
+  `role`. Baseline UX 7,1. §49. Ver
+  [VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md).
 
 ## Validação em produção
 
@@ -118,10 +104,9 @@ Nenhum.
 
 ## Backlog aberto
 
-Zero CRITICAL, HIGH e MEDIUM. Cinco LOW, nenhum bloqueante — os dois mais
-recentes (15 e 16) são o mesmo padrão de catálogo truncado em telas que ainda
-não estouraram o teto; produtos aprovados estão em 784 de 1000. Ver
-[BACKLOG.md](BACKLOG.md).
+Zero CRITICAL, HIGH e MEDIUM. Cinco LOW, nenhum bloqueante — flake do runner,
+legado sem cliente, `select` nativo na entrada de material do cliente, rota
+inválida sem página própria e Projeto sem rota de criação. Ver [BACKLOG.md](BACKLOG.md).
 
 ## Decisões de produto ainda em aberto (não bloqueantes)
 

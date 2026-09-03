@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
@@ -28,8 +29,11 @@ import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { TemplateDiff } from "./TemplateDiff";
 import { formatDateTime } from "../../lib/dates";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { useAuth } from "../../app/AuthProvider";
 import { ContextHelp, InfoHint } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
@@ -263,7 +267,7 @@ export function FormulationTemplateDetailPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
@@ -272,7 +276,7 @@ export function FormulationTemplateDetailPage() {
   if (!template) {
     return (
       <div className="doc-body">
-        {error ? <p className="form-alert">{error}</p> : <p>Carregando…</p>}
+        {error ? <p className="form-alert" role="alert">{error}</p> : <p>Carregando…</p>}
       </div>
     );
   }
@@ -301,7 +305,7 @@ export function FormulationTemplateDetailPage() {
               <td>
                 {component.itemCode} — {component.itemName}
               </td>
-              <td className="is-numeric">{component.quantity}</td>
+              <td className="is-numeric">{formatQuantity(component.quantity)}</td>
               <td>{component.unitCode}</td>
               <td>{SUPPLY_RESPONSIBILITY_LABELS[component.supplyResponsibility]}</td>
             </tr>
@@ -322,7 +326,7 @@ export function FormulationTemplateDetailPage() {
     <div className="doc-page">
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Produção / Templates de Formulação</div>
+          <PageBreadcrumbs items={[{ label: "Templates de Formulação", href: "/producao/templates-formulacao" }, { label: "Detalhe" }]} />
           <h1 className="doc-title">
             <code>{template.code}</code> {template.name}
             {template.archived && <span className="badge badge--neutral">Arquivado</span>}
@@ -346,7 +350,7 @@ export function FormulationTemplateDetailPage() {
             antes da primeira seção. */}
         <ContextHelp topic={helpTopics["producao.templateDetalhe"]} />
 
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         <FormSection
           title="Identificação"
@@ -408,7 +412,7 @@ export function FormulationTemplateDetailPage() {
         {ativa && (
           <FormSection
             title={`Versão ativa — ${ativa.versionLabel}`}
-            subtitle={`Base ${ativa.basisQuantity} ${ativa.outputUnitCode} · ${FORMULATION_CALCULATION_MODE_LABELS[ativa.calculationMode]} · ${ativa.components.length} componentes. Versão ativa é histórica: para alterar, crie uma nova versão.`}
+            subtitle={`Base ${formatQuantity(ativa.basisQuantity)} ${ativa.outputUnitCode} · ${FORMULATION_CALCULATION_MODE_LABELS[ativa.calculationMode]} · ${ativa.components.length} componentes. Versão ativa é histórica: para alterar, crie uma nova versão.`}
           >
             {composicaoDaVersao(ativa)}
             {ativa.usageCount > 0 && (
@@ -614,11 +618,14 @@ export function FormulationTemplateDetailPage() {
                   onClick={() =>
                     void run(() =>
                       updateFormulationTemplateVersion(rascunho.id, {
-                        basisQuantity: base,
+                        basisQuantity: exigirDecimal(base, "Base da formulação"),
                         outputUnitCode: unidade,
                         components: linhas
                           .filter((linha) => linha.itemId && linha.quantity)
-                          .map(({ chave: _chave, ...resto }) => resto),
+                          .map(({ chave: _chave, ...resto }) => ({
+                            ...resto,
+                            quantity: exigirDecimal(resto.quantity, "Quantidade"),
+                          })),
                       }),
                     )
                   }

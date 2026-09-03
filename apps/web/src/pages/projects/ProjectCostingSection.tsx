@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import type { ProjectDTO } from "@veridi/shared";
 import {
   INDUSTRIAL_COST_QUALITY_LABELS,
@@ -28,7 +28,6 @@ export function ProjectCostingSection({
   canEdit: boolean;
   onChanged: () => void;
 }) {
-  const navigate = useNavigate();
   const [unitCode, setUnitCode] = useState("un");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +61,7 @@ export function ProjectCostingSection({
       title="Custo e precificação"
       subtitle="Formulação, estrutura de custos, cálculo e preço vivem no produto — o projeto acompanha a cadeia."
     >
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {!costing && !semProduto ? (
         // Projeto multiproduto: a cadeia técnica vive em cada produto, e a
@@ -151,47 +150,35 @@ export function ProjectCostingSection({
           </dl>
 
           <div className="line-actions">
-            <button
-              type="button"
+            {/* Identidade, não texto: busca aproximada podia trazer mais de
+                um produto ou esbarrar no filtro da visita anterior. */}
+            <Link
               className="btn btn--ghost btn--sm"
-              onClick={() =>
-                // Identidade, não texto: busca aproximada podia trazer mais de
-                // um produto ou esbarrar no filtro da visita anterior.
-                navigate(
-                  `/cadastros/produtos?productId=${costing.productId}&open=${costing.productId}`,
-                )
-              }
+              to={`/cadastros/produtos?productId=${costing.productId}&open=${costing.productId}`}
             >
               Abrir produto
-            </button>
+            </Link>
             {costing.formulationVersionId && (
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() =>
-                  navigate(
-                    `/producao/formulacoes/${costing.productId}/versoes/${costing.formulationVersionId}`,
-                  )
-                }
+                to={`/producao/formulacoes/${costing.productId}/versoes/${costing.formulationVersionId}`}
               >
                 Abrir formulação
-              </button>
+              </Link>
             )}
-            <button
-              type="button"
+            <Link
               className="btn btn--ghost btn--sm"
-              onClick={() => navigate(`/produtos/${costing.productId}/custos`)}
+              to={`/produtos/${costing.productId}/custos`}
             >
               Abrir custos
-            </button>
+            </Link>
             {costing.pricingVersionId && (
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/gestao/precificacao/${costing.pricingVersionId}`)}
+                to={`/gestao/precificacao/${costing.pricingVersionId}`}
               >
                 Abrir precificação
-              </button>
+              </Link>
             )}
           </div>
 

@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
@@ -13,6 +14,8 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { useAuth } from "../../app/AuthProvider";
 import { getInventoryItem } from "../../lib/inventory-api";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { listItems } from "../../lib/items-api";
@@ -176,13 +179,13 @@ export function SampleDetailPage() {
       setSample(await action());
       onDone?.();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setActionError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
   }
 
-  if (error) return <p className="form-alert">{error}</p>;
+  if (error) return <p className="form-alert" role="alert">{error}</p>;
   if (!sample || !id) return <p>Carregando…</p>;
 
   const sampleId = id;
@@ -190,7 +193,7 @@ export function SampleDetailPage() {
   function doProduce(withoutConsumption: boolean) {
     void run(() =>
       produceSample(sampleId, {
-        outputQuantity,
+        outputQuantity: exigirDecimal(outputQuantity, "Quantidade produzida"),
         outputUomCode,
         ...(productionNotes.trim() ? { productionNotes: productionNotes.trim() } : {}),
         ...(withoutConsumption ? { confirmWithoutConsumption: true } : {}),
@@ -260,7 +263,7 @@ export function SampleDetailPage() {
         </p>
       )}
 
-      {actionError && <p className="form-alert">{actionError}</p>}
+      {actionError && <p className="form-alert" role="alert">{actionError}</p>}
 
       <div className="doc-body">
         {/* Consumo aqui é baixa de estoque na hora, e reprovar não estorna.
@@ -315,7 +318,7 @@ export function SampleDetailPage() {
             </dt>
             <dd>
               {sample.outputQuantity
-                ? `${sample.outputQuantity} ${sample.outputUomCode ?? ""}`
+                ? `${formatQuantity(sample.outputQuantity)} ${sample.outputUomCode ?? ""}`
                 : "—"}
             </dd>
             <dt>Observações de produção</dt>
@@ -394,7 +397,7 @@ export function SampleDetailPage() {
                     <td className="is-code">{consumption.lotCode ?? "—"}</td>
                     <td>{ownerLabel(consumption.ownerType, consumption.ownerCustomerName)}</td>
                     <td className="is-numeric">
-                      {consumption.quantity} {consumption.uomCode}
+                      {formatQuantity(consumption.quantity)} {consumption.uomCode}
                     </td>
                     <td>{formatDateTime(consumption.executedAt)}</td>
                     <td>{consumption.executedByName}</td>
@@ -431,7 +434,7 @@ export function SampleDetailPage() {
                     registerSampleConsumption(id, {
                       itemId,
                       ...(lotCode ? { lotCode } : {}),
-                      quantity,
+                      quantity: exigirDecimal(quantity, "Quantidade"),
                       ...(consumptionNotes.trim() ? { notes: consumptionNotes.trim() } : {}),
                     }),
                   () => {
@@ -470,7 +473,7 @@ export function SampleDetailPage() {
                     </option>
                     {lots.map((lot) => (
                       <option key={lot.lotId} value={lot.lotCode}>
-                        {lot.lotCode} — disponível {lot.available}
+                        {lot.lotCode} — disponível {formatQuantity(lot.available)}
                       </option>
                     ))}
                   </select>

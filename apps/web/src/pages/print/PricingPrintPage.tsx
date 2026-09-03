@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { PricingVersionDTO } from "@veridi/shared";
@@ -40,7 +41,7 @@ export function PricingPrintPage() {
     return (
       <div className="print-screen">
         <article className="print-doc">
-          <p className="form-alert">{error}</p>
+          <p className="form-alert" role="alert">{error}</p>
         </article>
       </div>
     );
@@ -105,7 +106,7 @@ export function PricingPrintPage() {
           {pricing.tiers.map((tier) => (
             <tr key={tier.id}>
               <td className="is-number">
-                {tier.quantity} {tier.uomCode}
+                {formatQuantity(tier.quantity)} {tier.uomCode}
               </td>
               <td className="is-number">
                 {tier.industrialCostPerUnit === null
@@ -142,7 +143,7 @@ export function PricingPrintPage() {
           {pricing.tiers.map((tier) => (
             <tr key={tier.id}>
               <td className="is-number">
-                {tier.quantity} {tier.uomCode}
+                {formatQuantity(tier.quantity)} {tier.uomCode}
               </td>
               <td className="is-number">{tier.batchCount}</td>
               <td className="is-number">
@@ -173,7 +174,7 @@ export function PricingPrintPage() {
                 tier.warnings.map((warning, index) => (
                   <tr key={`${tier.id}-${index}-${warning.code}`}>
                     <td>
-                      {tier.quantity} {tier.uomCode}
+                      {formatQuantity(tier.quantity)} {tier.uomCode}
                     </td>
                     <td>{warning.message}</td>
                   </tr>

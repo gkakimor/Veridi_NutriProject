@@ -1,6 +1,7 @@
 import { baseHints, baseTopics } from "./content/base";
 import { cadastrosHints, cadastrosTopics } from "./content/cadastros";
 import { comercialHints, comercialTopics } from "./content/comercial";
+import { gestaoTopics } from "./content/gestao";
 import { producaoHints, producaoTopics } from "./content/producao";
 import { suprimentosHints, suprimentosTopics } from "./content/suprimentos";
 
@@ -132,6 +133,7 @@ export const helpTopics = {
   ...producaoTopics,
   ...suprimentosTopics,
   ...cadastrosTopics,
+  ...gestaoTopics,
 };
 
 export type HelpTopicId = keyof typeof helpTopics;

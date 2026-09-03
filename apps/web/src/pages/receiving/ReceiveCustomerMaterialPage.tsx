@@ -5,12 +5,14 @@ import type { CustomerDTO, ItemDTO } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
 import { listItems } from "../../lib/items-api";
 import { createCustomerSuppliedReceipt } from "../../lib/receiving-api";
-import { ApiValidationError } from "../../lib/api-errors";
+import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { ContextHelp, InfoHint } from "../../components/help";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
@@ -131,7 +133,7 @@ export function ReceiveCustomerMaterialPage() {
   });
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
+    listCustomers({ active: true, pageSize: 50 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
 
@@ -143,6 +145,24 @@ export function ReceiveCustomerMaterialPage() {
       .then(([raw, packaging]) => setItems([...raw.items, ...packaging.items]))
       .catch(() => setItems([]));
   }, []);
+
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarClientes(termo: string): Promise<EntityOption[]> {
+    const resultado = await listCustomers({ active: true, search: termo, pageSize: 50 });
+    const novos = resultado.customers;
+    setCustomers((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((c) => ({ id: c.id, code: c.code, name: c.tradeName ?? c.legalName }));
+  }
 
   function updateLine(key: string, field: keyof Omit<LineDraft, "key">, value: string) {
     setLines((prev) => prev.map((line) => (line.key === key ? { ...line, [field]: value } : line)));
@@ -168,7 +188,12 @@ export function ReceiveCustomerMaterialPage() {
           .filter((line) => line.itemId && line.receivedQuantity.trim())
           .map((line) => ({
             itemId: line.itemId,
-            receivedQuantity: line.receivedQuantity.trim(),
+            // Nomeia o item na recusa: a tabela tem várias linhas, e
+            // "informe um valor numérico válido" sem dizer onde não ajuda.
+            receivedQuantity: exigirDecimal(
+              line.receivedQuantity,
+              `Quantidade recebida de ${selectedItem(line.itemId)?.code ?? "item"}`,
+            ),
             ...(line.supplierLot.trim() ? { supplierLot: line.supplierLot.trim() } : {}),
             ...(line.expiryDate
               ? { expiryDate: new Date(`${line.expiryDate}T12:00:00`).toISOString() }
@@ -184,7 +209,7 @@ export function ReceiveCustomerMaterialPage() {
         setFieldErrors(nextFieldErrors);
         setError("Corrija os campos destacados.");
       } else {
-        setError(err instanceof Error ? err.message : "Falha ao registrar recebimento");
+        setError(apiErrorMessage(err, "Falha ao registrar recebimento"));
       }
     } finally {
       setSaving(false);
@@ -211,7 +236,7 @@ export function ReceiveCustomerMaterialPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Recebimento sem fornecedor e sem OC parece cadastro incompleto
             para quem chegou pelo caminho da compra. É o contrário: é o único
@@ -232,7 +257,8 @@ export function ReceiveCustomerMaterialPage() {
               value={customerId}
               onChange={(selectedId) => setCustomerId(selectedId)}
               placeholder="Digite código ou nome do cliente…"
-              options={customers.map((customer) => ({
+              onSearch={buscarClientes}
+options={customers.map((customer) => ({
                 id: customer.id,
                 code: customer.code,
                 name: customer.legalName,
@@ -340,7 +366,15 @@ export function ReceiveCustomerMaterialPage() {
                         <input
                           type="text"
                           inputMode="decimal"
-                          aria-label="Quantidade recebida"
+                          /* Nomeia a LINHA, nao a coluna: com o rotulo fixo,
+                             todas as linhas tinham o mesmo nome acessivel e
+                             quem navega por leitor de tela nao sabia em qual
+                             estava. */
+                          aria-label={
+                            line.itemId
+                              ? `Quantidade recebida de ${items.find((option) => option.id === line.itemId)?.code ?? "item"}`
+                              : "Quantidade recebida"
+                          }
                           placeholder="0"
                           value={line.receivedQuantity}
                           onChange={(event) =>

@@ -1,5 +1,6 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type { CustomerDTO } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
 import { EntityLink } from "../../components/EntityLink";
@@ -162,7 +163,7 @@ export function BillingsPage() {
 
       <ContextHelp topic={helpTopics["faturamento.comoFunciona"]} />
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">
@@ -185,13 +186,21 @@ export function BillingsPage() {
           <tbody>
             {awaiting.map((row) => (
               <tr key={row.shipmentId}>
-                <td className="is-code col-tight">{row.shipmentCode}</td>
-                <td className="is-code col-tight">{row.customerOrderCode}</td>
+                <td className="is-code col-tight">
+                  <EntityLink kind="shipment" id={row.shipmentId} code={row.shipmentCode} />
+                </td>
+                <td className="is-code col-tight">
+                  <EntityLink
+                    kind="customerOrder"
+                    id={row.customerOrderId}
+                    code={row.customerOrderCode}
+                  />
+                </td>
                 <td className="col-flex">
                   <EntityLink kind="customer" id={row.customerId} code={row.customerName} />
                 </td>
                 <td className="col-tight">{formatDate(row.shipmentDate)}</td>
-                <td className="col-tight">{row.totalQuantity}</td>
+                <td className="col-tight">{formatQuantity(row.totalQuantity)}</td>
                 <td className="col-tight">
                   <span
                     className={row.billingStatus === "DRAFT" ? "badge badge--warn" : "badge badge--neutral"}
@@ -340,13 +349,25 @@ export function BillingsPage() {
                   if (event.key === "Enter") navigate(`/comercial/faturamento/${billing.id}`);
                 }}
               >
-                <td className="is-code col-tight">{billing.code}</td>
-                <td className="is-code col-tight">{billing.shipmentCode}</td>
-                <td className="is-code col-tight">{billing.customerOrderCode}</td>
+                {/* O código identifica o documento da linha: é ele que a
+                    pessoa mira para abrir o faturamento. */}
+                <td className="is-code col-tight">
+                  <EntityLink kind="billing" id={billing.id} code={billing.code} />
+                </td>
+                <td className="is-code col-tight">
+                  <EntityLink kind="shipment" id={billing.shipmentId} code={billing.shipmentCode} />
+                </td>
+                <td className="is-code col-tight">
+                  <EntityLink
+                    kind="customerOrder"
+                    id={billing.customerOrderId}
+                    code={billing.customerOrderCode}
+                  />
+                </td>
                 <td className="col-flex">
                   <EntityLink kind="customer" id={billing.customerId} code={billing.customerName} />
                 </td>
-                <td className="col-tight">{billing.totalQuantity}</td>
+                <td className="col-tight">{formatQuantity(billing.totalQuantity)}</td>
                 <td className="col-tight">
                   {billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}
                 </td>
@@ -358,13 +379,12 @@ export function BillingsPage() {
                 <td className="col-tight">{formatDate(billing.issuedAt)}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/comercial/faturamento/${billing.id}`)}
+                      to={`/comercial/faturamento/${billing.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>

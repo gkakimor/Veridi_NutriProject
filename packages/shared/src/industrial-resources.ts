@@ -6,6 +6,23 @@
  * capacidade seguinte multiplica um pelo outro; aqui nada é calculado.
  */
 
+/**
+ * Prefixo do código do Recurso Industrial.
+ *
+ * Era `REC`, o MESMO do Recebimento, com sequences separadas — então
+ * `REC-000001` nomeava duas entidades diferentes ao mesmo tempo. O código é o
+ * identificador humano: o que se fala, se escreve no papel e se digita na
+ * busca. Duplicá-lo torna "confere o REC-000002" uma frase ambígua.
+ *
+ * `RIN` de Recurso INdustrial. O Recebimento fica com `REC`, que é o mais
+ * antigo e o mais falado no chão de fábrica.
+ *
+ * Mora aqui, e não no serviço, porque foi exatamente por estar cravado lá que
+ * a colisão passou despercebida: todo prefixo do sistema vive neste pacote, e
+ * um teste de contrato agora garante que nenhum se repita.
+ */
+export const INDUSTRIAL_RESOURCE_CODE_PREFIX = "RIN";
+
 export type IndustrialResourceType = "LABOR" | "EQUIPMENT" | "ENERGY";
 
 export const INDUSTRIAL_RESOURCE_TYPES: readonly IndustrialResourceType[] = [

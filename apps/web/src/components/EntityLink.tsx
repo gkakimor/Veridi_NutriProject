@@ -37,6 +37,7 @@ export type EntityKind =
   | "billing"
   | "formulation"
   | "costCalculation"
+  | "pricingVersion"
   | "industrialResource";
 
 /**
@@ -77,6 +78,8 @@ export function entityHref(kind: EntityKind, id: string): string {
       return `/producao/formulacoes/${id}`;
     case "costCalculation":
       return `/calculos-custo/${id}`;
+    case "pricingVersion":
+      return `/gestao/precificacao/${id}`;
     case "industrialResource":
       return `/gestao/recursos-industriais/${id}`;
   }
@@ -98,6 +101,7 @@ const KIND_LABEL: Record<EntityKind, string> = {
   billing: "faturamento",
   formulation: "formulação",
   costCalculation: "cálculo de custo",
+  pricingVersion: "precificação",
   industrialResource: "recurso industrial",
 };
 

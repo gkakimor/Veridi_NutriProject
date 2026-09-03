@@ -12,6 +12,7 @@ import { PrintSheet } from "../../print/PrintSheet";
 import { formatUnitCost } from "../../components/CostBreakdown";
 import { formatBRL } from "../../lib/currency";
 import { getProductionOrderCost } from "../../lib/cost-calculation-api";
+import { formatQuantity } from "../../lib/quantity";
 
 /**
  * Custo industrial de uma produção, em documento SEPARADO.
@@ -39,7 +40,7 @@ export function ProductionCostPrintPage() {
     return (
       <div className="print-screen">
         <article className="print-doc">
-          <p className="form-alert">{error}</p>
+          <p className="form-alert" role="alert">{error}</p>
         </article>
       </div>
     );
@@ -63,7 +64,7 @@ export function ProductionCostPrintPage() {
         { label: "Estrutura de custos", value: cost.industrialCostVersionLabel ?? "—" },
         {
           label: "Produzido",
-          value: `${cost.producedQuantity} ${cost.outputUnitCode}`,
+          value: `${formatQuantity(cost.producedQuantity)} ${cost.outputUnitCode}`,
         },
         { label: "Proporção aplicada", value: cost.allocationFactor ?? "—" },
         {
@@ -97,7 +98,7 @@ export function ProductionCostPrintPage() {
               </td>
               <td>{material.lotCode ?? "—"}</td>
               <td className="is-number">
-                {material.quantity} {material.unitCode}
+                {formatQuantity(material.quantity)} {material.unitCode}
               </td>
               <td>{formatPrintDateTime(material.consumedAt)}</td>
               <td className="is-number">
@@ -125,7 +126,7 @@ export function ProductionCostPrintPage() {
                 </td>
                 <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.resourceType]}</td>
                 <td className="is-number">
-                  {resource.quantity} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
+                  {formatQuantity(resource.quantity)} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
                 </td>
                 <td className="is-number">
                   {resource.rateValue === null ? "—" : formatBRL(resource.rateValue)}

@@ -79,7 +79,7 @@ export function ConsultationError({
   return (
     <>
       <ConsultationTrail steps={[{ label: listLabel, to: listTo }, { label: "Erro" }]} />
-      <p className="form-alert">{message}</p>
+      <p className="form-alert" role="alert">{message}</p>
       <Link className="btn btn--secondary" to={listTo}>
         ← Voltar para {listLabel}
       </Link>

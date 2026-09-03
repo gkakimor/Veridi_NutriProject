@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { EntityLink } from "../../components/EntityLink";
 import type {
   IndustrialCostCalculationDTO,
   IndustrialCostCalculationSummaryDTO,
@@ -186,7 +187,7 @@ export function CostCalculationSection({
           )}
         </div>
 
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {result && (
           <>
@@ -241,7 +242,9 @@ export function CostCalculationSection({
                     if (event.key === "Enter") navigate(`/calculos-custo/${row.id}`);
                   }}
                 >
-                  <td className="is-code">{row.code}</td>
+                  <td className="is-code">
+                    <EntityLink kind="costCalculation" id={row.id} code={row.code} />
+                  </td>
                   <td>{row.industrialCostVersionLabel}</td>
                   <td>{formatDate(row.costReferenceDate)}</td>
                   <td>{formatDateTime(row.calculatedAt)}</td>

@@ -50,6 +50,8 @@ export function SearchableEntitySelect({
   createLabel = "Cadastrar novo",
   onCreateNew,
   onSearch,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
 }: {
   id: string;
   options: EntityOption[];
@@ -84,6 +86,13 @@ export function SearchableEntitySelect({
    * do registro já escolhido.
    */
   onSearch?: (termo: string) => Promise<EntityOption[]>;
+  /**
+   * Repassados ao `combobox` interno para que o formulário ligue erro e
+   * campo — mesmo par `aria-invalid` / `aria-describedby` que um `<input>`
+   * nativo receberia.
+   */
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
@@ -266,28 +275,38 @@ export function SearchableEntitySelect({
     input.current?.focus();
   }
 
-  /**
-   * "Cadastrar novo" é a PRIMEIRA parada da lista.
-   *
-   * Ficava no fim, e com 539 itens no catálogo isso quer dizer rolar até o
-   * fundo para cadastrar o que ainda não existe — a ação some justamente
-   * quando a lista é grande, que é quando ela mais faz falta.
-   *
-   * No topo ela é vista sem rolagem, e a ordem visual, a do DOM e a do
-   * teclado continuam sendo a mesma — nada de item pregado que o leitor de
-   * tela anuncia fora de lugar.
-   *
-   * O que NÃO muda: quem digita e aperta Enter continua escolhendo o
-   * primeiro RESULTADO, nunca criando. O índice ativo nasce no primeiro
-   * item real; chegar ao cadastro exige subir com a seta ou clicar.
-   */
   // A lista renderiza no máximo 50 resultados; navegar por teclado além
   // disso apontaria `aria-activedescendant` para um item que não existe no
   // DOM — e o leitor de tela ficaria mudo no meio da lista.
   const visible = useMemo(() => filtered.slice(0, 50), [filtered]);
   const canOfferCreate = canCreate && Boolean(onCreateNew);
+  /**
+   * O texto digitado é o nome ou o código de um registro que já está na
+   * lista?
+   *
+   * Sem acento, sem caixa e, para o código, sem pontuação — "35.301.394" e
+   * "35301394" são o mesmo código.
+   */
+  const casaExato = useMemo(() => {
+    const termo = normalize(query.trim());
+    if (!termo) return false;
+    const termoCompacto = compact(termo);
+    return visible.some((option) => {
+      const code = normalize(option.code);
+      const name = normalize(option.name);
+      if (termo === code || termo === name || termo === `${code} ${name}`) return true;
+      return termoCompacto.length > 0 && termoCompacto === compact(code);
+    });
+    // `normalize` e `compact` são funções puras redeclaradas a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, query]);
   /*
-   * "+ Novo X" encabeça a lista SEMPRE, com ou sem resultado.
+   * "+ Novo X" encabeça a lista — menos quando o registro digitado já
+   * existe.
+   *
+   * A ordem visual, a do DOM e a do teclado são sempre a mesma, esteja o
+   * cadastro no topo ou no fim — nada de item pregado que o leitor de tela
+   * anuncia fora de lugar.
    *
    * Ele já morou no fim quando havia correspondência, para que a ação mais
    * destrutiva do formulário — criar um duplicado — não fosse a mais fácil
@@ -295,14 +314,19 @@ export function SearchableEntitySelect({
    * ação ficava abaixo da dobra da lista, e quem não encontrava o registro
    * concluía que não dava para criar.
    *
-   * A proteção contra o duplicado mudou de lugar em vez de sumir: o índice
-   * ativo continua nascendo no primeiro RESULTADO, então quem digita e
-   * aperta Enter escolhe — nunca cria. Chegar ao cadastro exige subir com a
-   * seta ou clicar, que são atos deliberados.
+   * Nome parecido não prova nada, e nesse caso o cadastro continua no topo.
+   * Mas quando o que foi digitado é exatamente o código ou o nome de um
+   * registro da lista, o convite a duplicar não pode vir antes do próprio
+   * registro: ali o cadastro desce para depois dos resultados.
+   *
+   * A proteção contra o duplicado também não mudou: o índice ativo nasce no
+   * primeiro RESULTADO, então quem digita e aperta Enter escolhe — nunca
+   * cria. Chegar ao cadastro exige seta ou clique, que são atos
+   * deliberados.
    */
-  const criarPrimeiro = canOfferCreate;
-  const createIndex = canOfferCreate ? 0 : -1;
-  /** Deslocamento dos resultados: o cadastro ocupa o índice 0. */
+  const criarPrimeiro = canOfferCreate && !casaExato;
+  const createIndex = canOfferCreate ? (criarPrimeiro ? 0 : visible.length) : -1;
+  /** Deslocamento dos resultados: encabeçando, o cadastro ocupa o índice 0. */
   const primeiroResultado = criarPrimeiro ? 1 : 0;
   const navigableCount = visible.length + (canOfferCreate ? 1 : 0);
   /** Opção sob o índice navegável — `null` quando o índice é o cadastro. */
@@ -445,6 +469,8 @@ export function SearchableEntitySelect({
         aria-controls={listId}
         aria-autocomplete="list"
         {...(activeId ? { "aria-activedescendant": activeId } : {})}
+        {...(ariaInvalid ? { "aria-invalid": true as const } : {})}
+        {...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {})}
         {...(required ? { required: !selected } : {})}
         disabled={disabled ?? false}
         placeholder={selected ? `${selected.code} · ${selected.name}` : placeholder}
@@ -554,6 +580,12 @@ export function SearchableEntitySelect({
                 {option.hint && <span className="entity-select__hint">{option.hint}</span>}
               </li>
             ))}
+
+            {/* O que foi digitado já existe na lista: o registro vem antes do
+                convite a criar outro igual. Ordem visual, ordem do DOM e ordem
+                do teclado continuam sendo a mesma. */}
+            {!criarPrimeiro && itemCadastrar}
+
             {filtered.length > 50 && (
               <li role="presentation" className="entity-select__empty">
                 +{filtered.length - 50} resultados — refine a busca.

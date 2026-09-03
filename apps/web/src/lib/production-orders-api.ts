@@ -139,6 +139,28 @@ export async function registerProductionOutput(
   return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
 }
 
+/**
+ * Justifica a diferença entre a necessidade de um material e o consumo real.
+ *
+ * Por requisito, nunca por ordem: a pergunta é sobre um material específico, e
+ * uma justificativa por ordem obrigaria a explicar seis diferenças numa frase.
+ */
+export async function acceptMaterialVariance(
+  productionOrderId: string,
+  requirementId: string,
+  reason: string,
+): Promise<ProductionOrderDTO> {
+  const response = await apiFetch(
+    `${API_URL}/production-orders/${productionOrderId}/requirements/${requirementId}/variance`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    },
+  );
+  return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}
+
 export async function completeProductionOrder(
   productionOrderId: string,
   input: CompleteProductionOrderInput,

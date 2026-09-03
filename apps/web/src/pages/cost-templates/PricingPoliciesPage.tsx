@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { PricingPolicySummaryDTO } from "@veridi/shared";
 import { createPricingPolicy, listPricingPolicies } from "../../lib/cost-pricing-templates-api";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { LibraryPagination, LibraryStatus, LibraryToolbar } from "./TemplateLibraryTable";
 
 /**
@@ -87,6 +89,8 @@ export function PricingPoliciesPage() {
         )}
       </div>
 
+      <ContextHelp topic={helpTopics["politicaPreco.comoFunciona"]} />
+
       {creating && (
         <div className="inline-form">
           <label htmlFor="policy-name">Nome da política</label>
@@ -130,7 +134,7 @@ export function PricingPoliciesPage() {
         onToggleArchived={setShowArchived}
       />
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">
@@ -172,13 +176,12 @@ export function PricingPoliciesPage() {
                   />
                 </td>
                 <td>
-                  <button
-                    type="button"
+                  <Link
                     className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/gestao/politicas-precificacao/${policy.id}`)}
+                    to={`/gestao/politicas-precificacao/${policy.id}`}
                   >
                     Abrir
-                  </button>
+                  </Link>
                 </td>
               </tr>
             ))}

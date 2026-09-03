@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { formatQuantity } from "../../lib/quantity";
+import { Fragment, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   CostReferenceDTO,
   LotDTO,
@@ -31,6 +32,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 import { ContextHelp, InfoHint } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
@@ -271,7 +273,7 @@ export function LotDetailPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Estoque / Lotes / Detalhe</div>
+          <PageBreadcrumbs items={[{ label: "Lotes", href: "/estoque/lotes" }, { label: lot.code }]} />
           <div className="doc-title">
             <h1>{lot.code}</h1>
             <span className={statusBadgeClass(lot.status, lot.isExpired)}>
@@ -317,13 +319,12 @@ export function LotDetailPage() {
               <dt>Produzido por</dt>
               <dd>
                 {lot.productionOrderId ? (
-                  <button
-                    type="button"
+                  <Link
                     className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/producao/ordens/${lot.productionOrderId}`)}
+                    to={`/producao/ordens/${lot.productionOrderId}`}
                   >
                     {lot.productionOrderCode}
-                  </button>
+                  </Link>
                 ) : (
                   "—"
                 )}
@@ -365,14 +366,11 @@ export function LotDetailPage() {
               <dd>{lot.supplierLot ?? "—"}</dd>
               <dt>Origem — Recebimento</dt>
               <dd>
+                {/* `Link`, nao botao com `navigate`: referencia a outro
+                    registro precisa abrir em nova aba, aceitar clique do meio e
+                    ter endereco copiavel. Botao imita link e tira as tres. */}
                 {lot.receiptId ? (
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/compras/recebimentos/${lot.receiptId}`)}
-                  >
-                    {lot.receiptCode}
-                  </button>
+                  <Link to={`/compras/recebimentos/${lot.receiptId}`}>{lot.receiptCode}</Link>
                 ) : (
                   "—"
                 )}
@@ -380,13 +378,7 @@ export function LotDetailPage() {
               <dt>Origem — Ordem de Compra</dt>
               <dd>
                 {lot.purchaseOrderId ? (
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/compras/ordens/${lot.purchaseOrderId}`)}
-                  >
-                    {lot.purchaseOrderCode}
-                  </button>
+                  <Link to={`/compras/ordens/${lot.purchaseOrderId}`}>{lot.purchaseOrderCode}</Link>
                 ) : (
                   "—"
                 )}
@@ -426,21 +418,21 @@ export function LotDetailPage() {
               <DicaDoCampo id="estoque.fisico" />
             </dt>
             <dd>
-              {lot.onHand} {lot.unitCode}
+              {formatQuantity(lot.onHand)} {lot.unitCode}
             </dd>
             <dt>
               Reservado
               <DicaDoCampo id="estoque.reservado" />
             </dt>
             <dd>
-              {lot.reserved} {lot.unitCode}
+              {formatQuantity(lot.reserved)} {lot.unitCode}
             </dd>
             <dt>
               Disponível
               <DicaDoCampo id="estoque.disponivel" />
             </dt>
             <dd>
-              {lot.available} {lot.unitCode}
+              {formatQuantity(lot.available)} {lot.unitCode}
             </dd>
           </dl>
         </FormSection>
@@ -464,7 +456,7 @@ export function LotDetailPage() {
                 </thead>
                 <tbody>
                   {lot.shipments.map((shipment) => (
-                    <tr key={`${shipment.id}-${shipment.quantity}`}>
+                    <tr key={`${shipment.id}-${formatQuantity(shipment.quantity)}`}>
                       <td className="is-code">
                         <EntityLink kind="shipment" id={shipment.id} code={shipment.code} />
                       </td>
@@ -483,7 +475,7 @@ export function LotDetailPage() {
                         />
                       </td>
                       <td className="is-numeric">
-                        {shipment.quantity} {shipment.unitCode}
+                        {formatQuantity(shipment.quantity)} {shipment.unitCode}
                       </td>
                       <td>
                         <span className="badge badge--neutral">
@@ -766,13 +758,12 @@ export function LotDetailPage() {
             <dl className="definition-list">
               <dt>Produzido por</dt>
               <dd>
-                <button
-                  type="button"
+                <Link
                   className="btn btn--ghost btn--sm"
-                  onClick={() => navigate(`/producao/ordens/${traceability.productionOrderId}`)}
+                  to={`/producao/ordens/${traceability.productionOrderId}`}
                 >
                   {traceability.productionOrderCode}
-                </button>
+                </Link>
               </dd>
               <dt>Produto</dt>
               <dd>
@@ -780,7 +771,7 @@ export function LotDetailPage() {
               </dd>
               <dt>Quantidade produzida neste lote</dt>
               <dd>
-                {traceability.producedQuantity} {traceability.unitCode}
+                {formatQuantity(traceability.producedQuantity)} {traceability.unitCode}
               </dd>
             </dl>
 
@@ -801,10 +792,23 @@ export function LotDetailPage() {
                       <td>
                         <EntityLink kind="item" id={material.itemId} code={material.itemCode} name={material.itemName} />
                       </td>
-                      <td>{material.lotCode ?? "—"}</td>
+                      <td>
+                        {/* O lote consumido leva ao lote consumido. Era texto
+                            puro ao lado de uma coluna Item que já era link, na
+                            mesma linha — e ir de um lote de produto acabado até
+                            a matéria-prima que o originou é exatamente a
+                            pergunta que esta tabela existe para responder. O
+                            `lotId` sempre esteve no DTO. */}
+                        <EntityLink
+                          kind="lot"
+                          id={material.lotId}
+                          code={material.lotCode}
+                          name={material.supplierLot}
+                        />
+                      </td>
                       <td>{material.supplierLot ?? "—"}</td>
                       <td className="is-numeric">
-                        {material.quantity} {material.unitCode}
+                        {formatQuantity(material.quantity)} {material.unitCode}
                       </td>
                       {/* Material do cliente não é fornecedor: dizer "—" aqui
                           lia como fornecedor desconhecido. */}
@@ -897,7 +901,7 @@ export function LotDetailPage() {
                         </td>
                         <td>{formatDate(shipment.shipmentDate)}</td>
                         <td className="is-numeric">
-                          {shipment.quantity} {traceability.unitCode}
+                          {formatQuantity(shipment.quantity)} {traceability.unitCode}
                         </td>
                       </tr>
                     ))}
@@ -943,14 +947,24 @@ export function LotDetailPage() {
                         <EntityLink kind="product" id={usage.productId} code={usage.productCode} name={usage.productName} />
                       </td>
                       <td className="is-numeric">
-                        {usage.consumedQuantity} {usage.unitCode}
+                        {formatQuantity(usage.consumedQuantity)} {usage.unitCode}
                       </td>
                       <td>
+                        {/* Mesma coisa no sentido inverso: da matéria-prima
+                            para os lotes de produto acabado que ela gerou. */}
                         {usage.finishedLots.length === 0
                           ? "—"
-                          : usage.finishedLots
-                              .map((finished) => finished.businessLotNumber ?? finished.lotCode)
-                              .join(", ")}
+                          : usage.finishedLots.map((finished, indice) => (
+                              <Fragment key={finished.lotId}>
+                                {indice > 0 ? ", " : ""}
+                                <EntityLink
+                                  kind="lot"
+                                  id={finished.lotId}
+                                  code={finished.businessLotNumber ?? finished.lotCode}
+                                  name={finished.businessLotNumber ? finished.lotCode : null}
+                                />
+                              </Fragment>
+                            ))}
                       </td>
                     </tr>
                   ))}
@@ -981,13 +995,12 @@ export function LotDetailPage() {
                   {traceability.usedInSamples.map((usage) => (
                     <tr key={usage.sampleId}>
                       <td>
-                        <button
-                          type="button"
+                        <Link
                           className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/comercial/amostras/${usage.sampleId}`)}
+                          to={`/comercial/amostras/${usage.sampleId}`}
                         >
                           {usage.sampleCode}
-                        </button>
+                        </Link>
                       </td>
                       <td className="is-code">{usage.testLabel}</td>
                       <td>
@@ -995,7 +1008,7 @@ export function LotDetailPage() {
                       </td>
                       <td>{usage.customerName}</td>
                       <td className="is-numeric">
-                        {usage.consumedQuantity} {usage.unitCode}
+                        {formatQuantity(usage.consumedQuantity)} {usage.unitCode}
                       </td>
                       <td>{new Date(usage.consumedAt).toLocaleString("pt-BR")}</td>
                     </tr>

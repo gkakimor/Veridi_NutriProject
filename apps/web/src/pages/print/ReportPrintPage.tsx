@@ -279,7 +279,7 @@ export function ReportPrintPage() {
     return (
       <div className="print-screen">
         <article className="print-doc">
-          <p className="form-alert">Relatório desconhecido: {reportCode}</p>
+          <p className="form-alert" role="alert">Relatório desconhecido: {reportCode}</p>
         </article>
       </div>
     );
@@ -289,7 +289,7 @@ export function ReportPrintPage() {
     return (
       <div className="print-screen">
         <article className="print-doc">
-          <p className="form-alert">{error}</p>
+          <p className="form-alert" role="alert">{error}</p>
         </article>
       </div>
     );

@@ -2872,6 +2872,27 @@ model ProductionOrderRequirement {
   /// Ordem de exibicao estavel.
   position Int
 
+  /// RECONCILIACAO DE MATERIAL — preenchidos quando o operador declara que a
+  /// diferenca entre `requiredQuantity` e o consumo real desta linha e
+  /// conhecida e aceita.
+  ///
+  /// Existem para separar duas coisas que o sistema antes confundia: material
+  /// que NAO foi consumido, e material que foi consumido sem ninguem clicar.
+  /// Sem esse registro a OP fechava com requisito intocado, o material nunca
+  /// baixava do estoque e o lote nascia com rastreabilidade incompleta.
+  ///
+  /// Nunca preenchidos automaticamente, e nunca reaproveitados de
+  /// `ProductionOrder.completionReason`: aquele explica ter produzido menos
+  /// do que o planejado, este explica ter gasto menos material do que a
+  /// formula pedia. Sao perguntas diferentes e as respostas nao se substituem.
+  ///
+  /// Consumo maior ou igual a necessidade nao precisa deles — nao ha material
+  /// por explicar. Consumo a mais ja tem caminho proprio, com justificativa,
+  /// em `MaterialReservationLine.extraReason`.
+  varianceReason     String?
+  varianceAcceptedBy String?
+  varianceAcceptedAt DateTime?
+
   createdAt DateTime @default(now())
 
   reservationLines MaterialReservationLine[]

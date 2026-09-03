@@ -1,7 +1,9 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import type {
   InventoryPositionRowDTO,
+  LotStatus,
   ProductionOrderDTO,
   QualityQueueRowDTO,
   ShipmentDTO,
@@ -51,11 +53,23 @@ function useSheetData<T>(load: () => Promise<T>): { data: T | null; error: strin
   return { data, error };
 }
 
+/**
+ * Situação do lote no papel.
+ *
+ * Vencimento manda sobre o estado gravado: um lote ainda marcado como
+ * disponível, mas fora da validade, não pode aparecer no papel como
+ * disponível.
+ */
+function situacaoDoLote(status: LotStatus | null, isExpired: boolean): string {
+  if (isExpired) return LOT_STATUS_LABELS.EXPIRED;
+  return status ? LOT_STATUS_LABELS[status] : "—";
+}
+
 function SheetError({ message }: { message: string }) {
   return (
     <div className="print-screen">
       <article className="print-doc">
-        <p className="form-alert">Não foi possível carregar o documento: {message}</p>
+        <p className="form-alert" role="alert">Não foi possível carregar o documento: {message}</p>
       </article>
     </div>
   );
@@ -136,7 +150,7 @@ export function InventoryCountSheetPage() {
             <td>{formatPrintDate(row.expiryDate)}</td>
             <td>{printOrDash(row.location)}</td>
             <td>{row.unitCode}</td>
-            {!blind && <td className="is-number">{row.onHand}</td>}
+            {!blind && <td className="is-number">{formatQuantity(row.onHand)}</td>}
             <PrintWriteCell />
             <PrintWriteCell />
             <PrintWriteCell width="120px" />
@@ -176,6 +190,21 @@ export function InventoryPositionSheetPage() {
         { label: "Linhas", value: String(rows.length) },
       ]}
     >
+      {/*
+        Por que Disponível pode ser zero com Físico cheio.
+
+        Lote aguardando liberação da Qualidade, bloqueado ou vencido continua
+        no Físico e não entra no Disponível. Sem a coluna e sem esta linha, a
+        folha mostrava Físico 500 e Disponível 0 e quem estava no estoque com
+        o papel na mão não tinha como saber o motivo.
+      */}
+      <p className="print-doc__notice">
+        Disponível = Físico − Reservado, e só conta lote com situação
+        “{LOT_STATUS_LABELS.AVAILABLE}”. Lote “{LOT_STATUS_LABELS.AWAITING_RELEASE}”,
+        “{LOT_STATUS_LABELS.BLOCKED}” ou “{LOT_STATUS_LABELS.EXPIRED}” continua no
+        estoque físico e conta zero no disponível.
+      </p>
+
       <PrintTable
         columns={[
           "Código",
@@ -184,6 +213,7 @@ export function InventoryPositionSheetPage() {
           "Fornecedor / proprietário",
           "Validade",
           "Localização",
+          "Situação do lote",
           "Físico",
           "Reservado",
           "Disponível",
@@ -204,9 +234,10 @@ export function InventoryPositionSheetPage() {
             </td>
             <td>{formatPrintDate(row.expiryDate)}</td>
             <td>{printOrDash(row.location)}</td>
-            <td className="is-number">{row.onHand}</td>
-            <td className="is-number">{row.reserved}</td>
-            <td className="is-number">{row.available}</td>
+            <td>{situacaoDoLote(row.status, row.isExpired)}</td>
+            <td className="is-number">{formatQuantity(row.onHand)}</td>
+            <td className="is-number">{formatQuantity(row.reserved)}</td>
+            <td className="is-number">{formatQuantity(row.available)}</td>
             <td>{row.unitCode}</td>
           </tr>
         ))}
@@ -310,7 +341,7 @@ export function ProductionPickingSheetPage() {
         { label: "OP interna", value: data.code },
         { label: "Produto", value: `${data.productCode} — ${data.productName}` },
         { label: "Cliente", value: data.customerName ?? "—" },
-        { label: "Quantidade planejada", value: `${data.plannedQuantity} ${data.outputUnitCode}` },
+        { label: "Quantidade planejada", value: `${formatQuantity(data.plannedQuantity)} ${data.outputUnitCode}` },
         { label: "Situação", value: PRODUCTION_ORDER_STATUS_LABELS[data.status] },
       ]}
     >
@@ -343,13 +374,13 @@ export function ProductionPickingSheetPage() {
                 : "Veridi"}
             </td>
             <td className="is-number">
-              {requirement.requiredQuantity} {requirement.stockUnitCode}
+              {formatQuantity(requirement.requiredQuantity)} {requirement.stockUnitCode}
             </td>
             <td>{printOrDash(line.lotCode)}</td>
             <td>{formatPrintDate(line.expiryDate)}</td>
             <td>{printOrDash(line.location)}</td>
             <td className="is-number">
-              {line.quantity} {requirement.stockUnitCode}
+              {formatQuantity(line.quantity)} {requirement.stockUnitCode}
             </td>
             <PrintCheckCell />
             <td>
@@ -412,7 +443,7 @@ export function ShipmentPickingSheetPage() {
               {line.productCode} — {line.productName}
             </td>
             <td className="is-number">
-              {line.quantity} {line.unitCode}
+              {formatQuantity(line.quantity)} {line.unitCode}
             </td>
             <td>{line.lotCode}</td>
             <td>{formatPrintDate(line.expiryDate)}</td>

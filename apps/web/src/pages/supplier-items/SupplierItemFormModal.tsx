@@ -12,6 +12,8 @@ import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { getItem, listItems } from "../../lib/items-api";
 import { createSupplierItem } from "../../lib/supplier-items-api";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { listUnits } from "../../lib/units-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 
@@ -249,11 +251,14 @@ export function SupplierItemFormModal({
         ...(preencheuOferta
           ? {
               initialOffer: {
-                unitPrice: unitPrice.trim(),
+                unitPrice: exigirDecimal(unitPrice, "Preço"),
                 priceUomCode: priceUomCode || selectedItem?.unitCode || "",
                 ...(minimumOrderQuantity.trim()
                   ? {
-                      minimumOrderQuantity: minimumOrderQuantity.trim(),
+                      minimumOrderQuantity: exigirDecimal(
+                        minimumOrderQuantity,
+                        "Pedido mínimo",
+                      ),
                       minimumOrderUomCode: minimumOrderUomCode || selectedItem?.unitCode || "",
                     }
                   : {}),
@@ -266,7 +271,7 @@ export function SupplierItemFormModal({
       });
       onSaved(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao criar a relação");
+      setError(apiErrorMessage(err, "Falha ao criar a relação"));
     } finally {
       setSaving(false);
     }
@@ -304,7 +309,7 @@ export function SupplierItemFormModal({
       }
     >
       <form id="supplier-item-form" onSubmit={handleSubmit}>
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         <FormSection title="Relação">
           <div className="field-grid-2">

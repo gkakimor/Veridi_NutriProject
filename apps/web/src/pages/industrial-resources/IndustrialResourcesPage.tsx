@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { EntityLink } from "../../components/EntityLink";
 import type { IndustrialResourceDTO, IndustrialResourceType } from "@veridi/shared";
 import {
   INDUSTRIAL_RATE_UOM_LABELS,
@@ -160,7 +161,7 @@ export function IndustrialResourcesPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table table--clickable-rows">
@@ -202,7 +203,9 @@ export function IndustrialResourcesPage() {
                   }
                 }}
               >
-                <td className="col-tight is-code">{resource.code}</td>
+                <td className="col-tight is-code">
+                  <EntityLink kind="industrialResource" id={resource.id} code={resource.code} />
+                </td>
                 <td className="col-flex">{resource.name}</td>
                 <td className="col-tight">{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.type]}</td>
                 {/* Potência desconhecida fica em branco — não vira zero. */}
