@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import type { BillingDTO, BillingLineDTO } from "@veridi/shared";
 import { ModalDialog } from "../../components/ModalDialog";
 import { overrideBillingPrice } from "../../lib/billings-api";
+import { formatUnitPriceBRL } from "../../lib/currency";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { parseDecimalInput } from "../../lib/decimal-input";
 import { formatQuantity } from "../../lib/quantity";
@@ -12,14 +13,6 @@ interface PriceOverrideDialogProps {
   line: BillingLineDTO;
   onClose: () => void;
   onOverridden: (billing: BillingDTO) => void;
-}
-
-function formatBRL(value: string | null): string {
-  if (!value) return "—";
-  return `R$ ${Number(value).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
 
 /**
@@ -88,7 +81,7 @@ export function PriceOverrideDialog({
           {formatQuantity(line.quantity)} {line.unitCode}
         </dd>
         <dt>Preço acordado</dt>
-        <dd>{formatBRL(line.agreedUnitPrice)}</dd>
+        <dd>{formatUnitPriceBRL(line.agreedUnitPrice)}</dd>
       </dl>
 
       <form id="price-override-form" onSubmit={handleSubmit} className="field-grid-2">

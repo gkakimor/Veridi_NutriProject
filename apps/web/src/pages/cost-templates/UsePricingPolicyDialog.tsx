@@ -4,7 +4,7 @@ import type { PricingPolicyPreviewDTO, PricingPolicySummaryDTO } from "@veridi/s
 import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
 import { listPricingPolicies, previewPricingPolicy } from "../../lib/cost-pricing-templates-api";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { formatPercent } from "../../lib/percent";
 import { formatDate } from "../../lib/dates";
 
@@ -231,7 +231,7 @@ export function UsePricingPolicyDialog({
                         {tier.suggestedUnitPrice === null ? (
                           <span className="badge badge--warn">{tier.warning ?? "Sem preço"}</span>
                         ) : (
-                          formatBRL(tier.suggestedUnitPrice)
+                          formatUnitPriceBRL(tier.suggestedUnitPrice)
                         )}
                       </td>
                     </tr>

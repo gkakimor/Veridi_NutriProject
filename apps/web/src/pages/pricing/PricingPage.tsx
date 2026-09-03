@@ -21,7 +21,7 @@ import { FormSection } from "../../components/FormSection";
 import { RowActions } from "../../components/RowActions";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useAuth } from "../../app/AuthProvider";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import {
   activatePricingVersion,
   createPricingTier,
@@ -561,7 +561,7 @@ export function PricingPage() {
                       {formatQuantity(tier.quantity)} {tier.uomCode}:{" "}
                       {tier.costPerUnitFrom ? formatUnitCost(tier.costPerUnitFrom) : "—"} →{" "}
                       {tier.costPerUnitTo ? formatUnitCost(tier.costPerUnitTo) : "—"}
-                      {tier.unitPrice ? ` (preço acordado ${formatBRL(tier.unitPrice)})` : ""}
+                      {tier.unitPrice ? ` (preço acordado ${formatUnitPriceBRL(tier.unitPrice)})` : ""}
                     </li>
                   ))}
                 </ul>

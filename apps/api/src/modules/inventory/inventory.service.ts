@@ -42,7 +42,16 @@ import type {
   StockCountInput,
 } from "./inventory.schemas.js";
 
-/** Sem autenticacao/Usuarios no MVP ainda — mesma string ja usada na topbar. */
+/**
+ * Ultimo recurso quando nao ha ator — chamada interna, migracao, script.
+ *
+ * Nao e mais o padrao: ha autenticacao, e ajuste e contagem passaram a
+ * gravar o usuario real. Enquanto gravavam esta constante, o historico de
+ * estoque dizia "Ambiente local" no unico movimento que nasce de uma decisao
+ * humana direta, enquanto recebimento, consumo, producao e expedicao ja
+ * gravavam o nome de quem operou. `CLAUDE.md` e explicito: o historico de
+ * estoque e auditavel.
+ */
 const SYSTEM_ACTOR = "Ambiente local";
 
 /** Recebimento de material do cliente nao tem OC — a cadeia para no Receipt. */
@@ -350,6 +359,7 @@ async function lockStockScope(
 
 export async function createInventoryAdjustment(
   input: CreateInventoryAdjustmentInput,
+  actorName?: string,
 ): Promise<InventoryMovementDTO> {
   const { item, lot } = await resolveItemAndLot(input.itemId, input.lotId);
 
@@ -381,7 +391,7 @@ export async function createInventoryAdjustment(
         occurredAt: new Date(),
         sourceType,
         reason: input.reason,
-        createdBy: SYSTEM_ACTOR,
+        createdBy: actorName ?? SYSTEM_ACTOR,
       },
     });
 
@@ -391,7 +401,10 @@ export async function createInventoryAdjustment(
   return (await getMovementById(movementId))!;
 }
 
-export async function createStockCount(input: StockCountInput): Promise<StockCountResultDTO> {
+export async function createStockCount(
+  input: StockCountInput,
+  actorName?: string,
+): Promise<StockCountResultDTO> {
   const { item, lot } = await resolveItemAndLot(input.itemId, input.lotId);
   const countedQuantity = new Prisma.Decimal(input.countedQuantity);
 
@@ -426,7 +439,7 @@ export async function createStockCount(input: StockCountInput): Promise<StockCou
         occurredAt: new Date(),
         sourceType: "STOCK_COUNT",
         reason: input.reason,
-        createdBy: SYSTEM_ACTOR,
+        createdBy: actorName ?? SYSTEM_ACTOR,
       },
     });
 

@@ -850,6 +850,29 @@ export function CustomerOrderPage() {
   }, [plan, planAdjustments]);
 
   /*
+   * Reservar mais do que existe.
+   *
+   * O plano só conferia se `Reservar + Produzir` fecha com o pedido, e nunca
+   * comparava a reserva com o disponível — que está renderizado na coluna ao
+   * lado do campo. O servidor recusava com 400 e o preenchimento de TODAS as
+   * linhas era descartado: o operador refazia o plano inteiro por causa de
+   * um número que a tela já tinha condição de recusar antes.
+   *
+   * A Ordem de Produção faz o oposto no Consumo Real, onde o campo diz
+   * "Máximo disponível nesta reserva" e desabilita antes do envio.
+   */
+  const linhasComReservaAcimaDoDisponivel = useMemo(() => {
+    if (!plan) return [];
+    return plan.lines.filter((line) => {
+      const ajuste = planAdjustments[line.customerOrderLineId];
+      if (!ajuste) return false;
+      const reservado = parseDecimalInput(ajuste.reserve.trim() || "0");
+      if (reservado === null) return false;
+      return Number(reservado) > Number(line.finishedGoodsAvailable) + 1e-6;
+    });
+  }, [plan, planAdjustments]);
+
+  /*
    * Um ajuste que nem o parser lê. O aviso de "precisa somar" está certo
    * para quem digitou 3 onde cabia 5, e completamente errado para quem
    * digitou `1.234,56` — nesse caso a soma nem existe.
@@ -1385,6 +1408,16 @@ options={optionsForRow(line).map((product) => ({
                 </div>
                 {ajustePlanoIlegivel ? (
                   <p className="field__hint">{mensagemDecimalInvalido("Reservar/Produzir")}</p>
+                ) : linhasComReservaAcimaDoDisponivel.length > 0 ? (
+                  <p className="form-alert" role="alert">
+                    {linhasComReservaAcimaDoDisponivel
+                      .map(
+                        (line) =>
+                          `${line.productCode}: reservar até ${formatQuantity(line.finishedGoodsAvailable)} ${line.unitCode}`,
+                      )
+                      .join(" · ")}
+                    . O que passar disso precisa entrar em "Produzir".
+                  </p>
                 ) : (
                   !planCoversEverything && (
                     <p className="field__hint">Reservar + Produzir precisa somar exatamente a quantidade pedida em cada linha.</p>
@@ -1576,7 +1609,9 @@ options={optionsForRow(line).map((product) => ({
                   <button
                     type="button"
                     className="btn btn--accent btn--sm"
-                    disabled={!planCoversEverything || applying}
+                    disabled={
+                      !planCoversEverything || linhasComReservaAcimaDoDisponivel.length > 0 || applying
+                    }
                     onClick={() => setApplyDialogOpen(true)}
                   >
                     {applying ? "Aplicando…" : "Aplicar Plano de Atendimento"}
@@ -1806,7 +1841,11 @@ options={optionsForRow(line).map((product) => ({
           </FormSection>
         )}
 
-        {isOperational && reservationStatus && (
+        {isOperational && reservationStatus && (() => {
+          const temAlgoReservado = reservationStatus.lines.some(
+            (line) => Number(line.reservedRemaining) > 0,
+          );
+          return (
           <FormSection
             /* Duas seções quase homônimas separavam mil e duzentos pixels de
                rolagem: esta AGE (separa produto para o pedido), a de baixo
@@ -1876,17 +1915,29 @@ options={optionsForRow(line).map((product) => ({
               >
                 {reserving ? "Reservando…" : "Reservar disponível"}
               </button>
+              {/*
+                Sem nada reservado não há o que expedir: o rascunho nasceria
+                vazio. O botão irmão ao lado já desabilita nesse mesmo estado,
+                e a diferença entre os dois lia como se preparar a expedição
+                fizesse sentido ali.
+              */}
               <button
                 type="button"
                 className="btn btn--accent btn--sm"
-                disabled={preparingShipment}
+                disabled={preparingShipment || !temAlgoReservado}
+                title={
+                  temAlgoReservado
+                    ? undefined
+                    : "Reserve ao menos uma linha antes de preparar a expedição."
+                }
                 onClick={handlePrepareShipment}
               >
                 {preparingShipment ? "Preparando…" : "Preparar Expedição"}
               </button>
             </div>
           </FormSection>
-        )}
+          );
+        })()}
 
         {customerOrder && customerOrder.shipments.length > 0 && (
           <FormSection title="Expedições" subtitle="Somente uma expedição confirmada altera o estoque.">

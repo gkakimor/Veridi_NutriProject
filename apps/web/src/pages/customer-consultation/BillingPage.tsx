@@ -5,7 +5,7 @@ import type { BillingDTO } from "@veridi/shared";
 import { BILLING_NON_FISCAL_NOTICE, BILLING_STATUS_LABELS } from "@veridi/shared";
 import { getConsultationBilling } from "../../lib/customer-consultation-api";
 import { formatDate } from "../../lib/dates";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationError, ConsultationLoading, ConsultationNotFound } from "./DetailStates";
 import { useScopedDetail } from "./useScopedDetail";
@@ -126,9 +126,9 @@ export function BillingPage() {
                   <td>
                     {formatQuantity(line.quantity)} {line.unitCode}
                   </td>
-                  <td>{formatBRL(line.agreedUnitPrice)}</td>
+                  <td>{formatUnitPriceBRL(line.agreedUnitPrice)}</td>
                   <td>
-                    {formatBRL(line.unitPrice)}
+                    {formatUnitPriceBRL(line.unitPrice)}
                     {line.priceOverridden && (
                       <span className="badge badge--info">Preço alterado</span>
                     )}

@@ -309,6 +309,25 @@
 }
 
 /*
+ * Coluna de RÓTULO — situação, status, estado derivado.
+ *
+ * `col-tight` existe para o que não pode quebrar: código, data, número. Um
+ * rótulo de estado é outra coisa: "Parcialmente expedido" e "Aguardando
+ * faturamento" ocupam quase 170px cada, e três colunas dessas em `nowrap`
+ * empurravam a tabela de Pedidos para 1296px dentro de um container de
+ * 1138px a 1440px de largura. Os ~158px cortados levavam junto a coluna
+ * Status — quem não rolasse para o lado não via o estado do pedido.
+ *
+ * Quebrar em duas linhas custa altura; esconder o status custa a informação
+ * principal da linha.
+ */
+.table .col-label {
+  width: 1%;
+  white-space: normal;
+  min-width: 6rem;
+}
+
+/*
  * Variante para texto que não deve ocupar três linhas — observação, endereço,
  * lista de recursos. Trunca com reticências; quem precisa do texto inteiro
  * tem o `title` na própria célula.

@@ -229,8 +229,8 @@ describe("Faturamento herda o preço acordado", () => {
 
     const linha = faturamento.lines[0];
     // Nenhuma digitação: o preço já está lá, e é o do Pedido.
-    expect(linha.agreedUnitPrice).toBe("9.48");
-    expect(linha.unitPrice).toBe("9.48");
+    expect(linha.agreedUnitPrice).toBe("9.4800");
+    expect(linha.unitPrice).toBe("9.4800");
     expect(linha.priceOverridden).toBe(false);
     expect(linha.quantity).toBe("98");
     expect(linha.lineTotal).toBe("929.04");
@@ -250,7 +250,7 @@ describe("Faturamento herda o preço acordado", () => {
       await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
     ).json();
 
-    expect(faturamento.lines[0].unitPrice).toBe("12.50");
+    expect(faturamento.lines[0].unitPrice).toBe("12.5000");
     expect(faturamento.lines[0].quantity).toBe("4");
     expect(faturamento.totalAmount).toBe("50.00");
 
@@ -279,10 +279,17 @@ describe("Faturamento herda o preço acordado", () => {
 
 describe("Precisão do preço acordado", () => {
   /*
-   * O preço acordado guarda 4 casas; a tela mostra 2. Somar pelo valor
-   * EXIBIDO dava outro total — a linha dizia R$ 1.677,27 e o rodapé do
-   * rascunho R$ 1.677,00. Estes casos prendem o servidor como fonte: quem
-   * exibe pode arredondar, quem calcula não.
+   * O preço acordado guarda 4 casas. Somar pelo valor EXIBIDO dava outro
+   * total — a linha dizia R$ 1.677,27 e o rodapé do rascunho R$ 1.677,00.
+   * Estes casos prendem o servidor como fonte do cálculo.
+   *
+   * O que estava escrito aqui antes — "quem exibe pode arredondar, quem
+   * calcula não" — é metade da regra, e a metade que falta custou um HIGH.
+   * A rodada adversarial mostrou o outro lado: com o preço exibido em 2
+   * casas ao lado de um total calculado com 4, o operador confere
+   * `R$ 4,05 × 123` e chega a R$ 498,15 num documento que diz R$ 498,53. O
+   * cálculo estava certo o tempo todo; o documento é que não se sustentava.
+   * Quem exibe NÃO pode arredondar preço unitário — ver o bloco seguinte.
    */
   it("os dois casos das auditorias: 9,7203 × 147 e 5,5909 × 300", async () => {
     const app = buildTestApp();
@@ -328,6 +335,195 @@ describe("Precisão do preço acordado", () => {
     await app.close();
   });
 
+  /*
+   * O documento tem de fechar na mão de quem confere.
+   *
+   * Caso da rodada adversarial: `PED-000491`, 123 un a R$ 4,0531. A API
+   * devolvia `unitPrice: "4.05"` e `lineTotal: "498.53"`. Nenhuma conta
+   * possível com os números impressos chegava a 498,53 — 4,05 × 123 dá
+   * 498,15, e os R$ 0,38 de diferença não tinham origem no papel.
+   *
+   * Arredondar o preço no banco resolveria a aparência e falsificaria o
+   * acordo: o pedido foi fechado a 4,0531. A saída é entregar o preço com a
+   * precisão que ele tem.
+   */
+  it("o caso adversarial: 4,0531 × 123 sai com o preço inteiro, e o total fecha", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { orderId } = await pedidoComPrecoAcordado(app, { quantidade: "123", preco: "4.0531" });
+    const expedicao = await expedir(app, orderId);
+    const fatura = (
+      await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
+    ).json();
+
+    const linha = fatura.lines[0];
+    expect(linha.agreedUnitPrice).toBe("4.0531");
+    expect(linha.unitPrice).toBe("4.0531");
+    expect(linha.lineTotal).toBe("498.53");
+    expect(fatura.totalAmount).toBe("498.53");
+
+    // A conta que o operador faz com o que está impresso tem de bater com o
+    // total do documento. Era exatamente isto que falhava.
+    expect(Number(linha.unitPrice) * Number(linha.quantity)).toBeCloseTo(Number(linha.lineTotal), 2);
+
+    await app.close();
+  });
+
+  it("preço redondo não ganha zeros: 4,05 continua 4,05 na conta", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { orderId } = await pedidoComPrecoAcordado(app, { quantidade: "123", preco: "4.05" });
+    const expedicao = await expedir(app, orderId);
+    const fatura = (
+      await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
+    ).json();
+
+    const linha = fatura.lines[0];
+    expect(Number(linha.unitPrice)).toBe(4.05);
+    expect(linha.lineTotal).toBe("498.15");
+    expect(Number(linha.unitPrice) * Number(linha.quantity)).toBeCloseTo(Number(linha.lineTotal), 2);
+
+    await app.close();
+  });
+
+  /*
+   * Invariante, não caso: para toda linha faturada, o total exibido é o
+   * produto do preço exibido pela quantidade exibida, arredondado a 2 casas.
+   * Enquanto o preço saía cortado, esta afirmação era falsa e ninguém a
+   * tinha escrito.
+   */
+  it("invariante: lineTotal é sempre round(unitPrice × quantity, 2) com o preço que a API entrega", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    for (const [quantidade, preco] of [
+      ["123", "4.0531"],
+      ["147", "9.7203"],
+      ["300", "5.5909"],
+      ["100", "4.05"],
+    ] as const) {
+      const { orderId } = await pedidoComPrecoAcordado(app, { quantidade, preco });
+      const expedicao = await expedir(app, orderId);
+      const fatura = (
+        await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
+      ).json();
+
+      for (const linha of fatura.lines) {
+        const esperado = (Number(linha.unitPrice) * Number(linha.quantity)).toFixed(2);
+        expect(`${linha.lineTotal} (${quantidade} × ${preco})`).toBe(`${esperado} (${quantidade} × ${preco})`);
+      }
+    }
+
+    await app.close();
+  });
+
+  /*
+   * Drift de somatório entre linhas — a hipótese que a rodada adversarial
+   * NÃO conseguiu exercitar pela interface.
+   *
+   * Um faturamento tem uma linha por linha de expedição, que vem de uma
+   * linha de reserva, e um orçamento aceita cada produto uma única vez; com
+   * um lote livre no substrato não havia caminho de tela para montar duas
+   * linhas no mesmo documento. Não ter caminho pela tela não é prova de que
+   * o modelo está certo, então fica provado aqui.
+   *
+   * O risco real é `Σ round(linha)` ≠ `round(Σ linha)`: o total do documento
+   * soma os produtos não arredondados e arredonda uma vez no fim, enquanto
+   * cada linha impressa já vem arredondada. Com preços de quatro casas em
+   * várias linhas, a diferença pode chegar a um centavo por linha.
+   */
+  it("com duas linhas de preço quebrado, o total do documento fecha com as linhas", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const primeiro = await criarItemAcabadoComEstoque("123");
+    const segundo = await criarItemAcabadoComEstoque("147");
+    const customer = await criarCliente();
+
+    const produtos = [];
+    for (const [item, sufixo] of [
+      [primeiro, "A"],
+      [segundo, "B"],
+    ] as const) {
+      const product = (
+        await app.inject({
+          method: "POST",
+          url: "/products",
+          payload: {
+            customerId: customer.id,
+            name: `Produto Multi ${sufixo} ${marca()}`,
+            finishedProductItemId: item.id,
+          },
+        })
+      ).json();
+      fixtureProductIds.push(product.id);
+      produtos.push(product);
+    }
+
+    const criado = (
+      await app.inject({
+        method: "POST",
+        url: "/customer-orders",
+        payload: {
+          customerId: customer.id,
+          lines: [
+            { productId: produtos[0].id, orderedQuantity: "123" },
+            { productId: produtos[1].id, orderedQuantity: "147" },
+          ],
+        },
+      })
+    ).json();
+    fixtureCustomerOrderIds.push(criado.id);
+
+    const confirmado = (
+      await app.inject({ method: "POST", url: `/customer-orders/${criado.id}/confirm` })
+    ).json();
+
+    // Dois preços de quatro casas diferentes: é a combinação que produz
+    // fração de centavo em ambas as linhas ao mesmo tempo.
+    const precos = ["4.0531", "9.7203"] as const;
+    for (const [indice, linha] of confirmado.lines.entries()) {
+      await getPrisma().customerOrderLine.update({
+        where: { id: linha.id },
+        data: {
+          agreedUnitPrice: precos[indice % precos.length]!,
+          agreedPriceSource: "PRICING_TIER",
+        },
+      });
+    }
+
+    await app.inject({
+      method: "POST",
+      url: `/customer-orders/${criado.id}/apply-fulfillment-plan`,
+      payload: {
+        lines: confirmado.lines.map((linha: { id: string; orderedQuantity: string }) => ({
+          customerOrderLineId: linha.id,
+          reserveQuantity: linha.orderedQuantity,
+          produceQuantity: "0",
+        })),
+      },
+    });
+
+    const expedicao = await expedir(app, criado.id);
+    const fatura = (
+      await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
+    ).json();
+
+    expect(fatura.lines.length).toBe(2);
+
+    const somaDasLinhasImpressas = fatura.lines
+      .reduce((soma: number, linha: { lineTotal: string }) => soma + Number(linha.lineTotal), 0)
+      .toFixed(2);
+
+    // Se divergirem, o documento impresso não fecha com o próprio rodapé —
+    // que é a forma multilinha do mesmo defeito já corrigido na linha.
+    expect(fatura.totalAmount).toBe(somaDasLinhasImpressas);
+
+    await app.close();
+  });
+
   it("emitir não recalcula: o total emitido é o mesmo do rascunho", async () => {
     const app = buildTestApp();
     await app.ready();
@@ -358,7 +554,7 @@ describe("O acordo não é reescrito pelo presente", () => {
     const faturamento = (
       await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
     ).json();
-    expect(faturamento.lines[0].agreedUnitPrice).toBe("9.48");
+    expect(faturamento.lines[0].agreedUnitPrice).toBe("9.4800");
 
     // Uma renegociação futura — ou uma PREC nova a R$ 99 refletida no
     // Pedido — não atravessa para um faturamento já criado.
@@ -368,8 +564,8 @@ describe("O acordo não é reescrito pelo presente", () => {
     });
 
     const relido = (await app.inject({ method: "GET", url: `/billings/${faturamento.id}` })).json();
-    expect(relido.lines[0].agreedUnitPrice).toBe("9.48");
-    expect(relido.lines[0].unitPrice).toBe("9.48");
+    expect(relido.lines[0].agreedUnitPrice).toBe("9.4800");
+    expect(relido.lines[0].unitPrice).toBe("9.4800");
 
     await app.close();
   });
@@ -411,7 +607,7 @@ describe("O acordo não é reescrito pelo presente", () => {
       payload: { lines: [{ billingLineId: faturamento.lines[0].id, unitPrice: "7.5" }] },
     });
     expect(resposta.statusCode).toBe(200);
-    expect(resposta.json().lines[0].unitPrice).toBe("7.50");
+    expect(resposta.json().lines[0].unitPrice).toBe("7.5000");
 
     await app.close();
   });
@@ -440,8 +636,8 @@ describe("Alterar o preço de faturamento", () => {
     expect(resposta.statusCode).toBe(200);
 
     const linha = resposta.json().lines[0];
-    expect(linha.agreedUnitPrice).toBe("9.48");
-    expect(linha.unitPrice).toBe("9.20");
+    expect(linha.agreedUnitPrice).toBe("9.4800");
+    expect(linha.unitPrice).toBe("9.2000");
     expect(linha.priceOverridden).toBe(true);
     expect(linha.overrideReason).toBe("Desconto comercial autorizado nesta remessa");
     expect(linha.overriddenBy).toBeTruthy();
@@ -485,7 +681,7 @@ describe("Alterar o preço de faturamento", () => {
     });
 
     const linha = voltou.json().lines[0];
-    expect(linha.unitPrice).toBe("9.48");
+    expect(linha.unitPrice).toBe("9.4800");
     // Faturar exatamente o acordado não é divergir dele.
     expect(linha.priceOverridden).toBe(false);
     expect(linha.overrideReason).toBeNull();

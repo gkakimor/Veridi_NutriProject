@@ -1,23 +1,18 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
+import { optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
 
 const statusEnum = z.enum(["WAITING", "SAMPLE", "APPROVED", "CANCELLED", "STAND_BY"]);
 const cancelReasonEnum = z.enum(["PRICE", "COMPETITOR", "PROJECT_CHANGED", "NOT_MET", "OTHER"]);
 
-/** Decimal opcional que aceita `null` explícito (limpar o campo). */
-const optionalDecimal = z
-  .union([z.string(), z.number(), z.null()])
-  .optional()
-  .transform((value) => {
-    if (value === undefined) return undefined;
-    if (value === null) return null;
-    const text = String(value).trim();
-    return text === "" ? null : text;
-  })
-  .refine((value) => value === undefined || value === null || /^\d+(\.\d+)?$/.test(value), {
-    message: "Valor inválido (não pode ser negativo)",
-  });
+/**
+ * Decimal opcional — a implementação compartilhada, não uma cópia local.
+ *
+ * A versão que morava aqui não aceitava vírgula e recusava com "Valor
+ * inválido (não pode ser negativo)", mensagem que descreve outro defeito.
+ */
+const optionalDecimal = optionalDecimalStringSchema();
 
 const optionalPositiveInt = z
   .union([z.string(), z.number(), z.null()])

@@ -19,11 +19,21 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 A rodada de hardening pós-validação fechou tudo o que os três E2E e as duas
 auditorias de UX levantaram como defeito de produto, e mais o que a
 reauditoria achou nas próprias correções — ver
-[VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md). Os LOW que restam são os dois que não são
-defeito do produto atual: o flake histórico do runner (3) e o legado local sem
-cliente (6). Todo o resto foi fechado com correção, teste e revalidação. As três auditorias profundas (VAL-LEG-01, 02, 03), o
-hardening pré-cliente e o polimento visual estão fechados — findings e
-correções em [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md).
+[VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md). As três auditorias profundas
+(VAL-LEG-01, 02, 03), o hardening pré-cliente e o polimento visual estão
+fechados — findings e correções em
+[archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md).
+
+A **rodada adversarial** posterior atacou o núcleo operacional procurando o que
+o sistema aceita em silêncio e levantou onze achados reproduzíveis — ver
+[VALIDACAO_E2E_ADVERSARIAL_CORE.md](VALIDACAO_E2E_ADVERSARIAL_CORE.md). Nenhum
+era corrupção de dado. **Os onze foram fechados**, mais um décimo segundo que
+só apareceu durante a própria correção: o drift de centavo entre a soma das
+linhas e o total do documento, que a interface não conseguia montar e o modelo
+produzia (itens 19 a 23).
+
+Os dois LOW que restam são os herdados — o flake do runner (3) e o legado local
+sem cliente (6) — e seguem não sendo defeito do produto atual.
 
 ---
 
@@ -534,6 +544,195 @@ texto cinza, só o cursor mudava. Passaram a usar a mesma classe de link que
 Cliente e Produto já usam na mesma tela. A rota canônica do Projeto continua
 sendo a única.
 
+### 19. Rastreabilidade nega expedição de lote que saiu por outro pedido — resolvido
+
+`apps/api/src/modules/lots/traceability.service.ts:90` filtra as expedições do
+lote por `customerOrderId` do Pedido **da Ordem de Produção**. O predicado
+`lines: { some: { lotId } }`, que já está na mesma consulta, é o correto e
+suficiente.
+
+Estoque é fungível: um lote produzido para um pedido pode legitimamente atender
+outro. Quando isso acontece, "Destino comercial" na tela do lote diz **"Este
+lote ainda não foi expedido."** Medido: `LT-20260903-000803` saiu em
+`EXP-000235` (`PED-000485`, 400 un), físico caiu de 800 para 400, e a tela
+mostra zero expedições.
+
+O dado está certo; a consulta é que erra. Pesa porque "por onde este lote saiu"
+é a pergunta de recall.
+
+**Corrigido.** O `where` passou a usar só `lines: { some: { lotId } }`, que já
+estava na mesma consulta e sempre foi o predicado certo. A seção separou as duas
+perguntas que estavam misturadas: **Pedido de origem** é por que o lote foi
+produzido — e pode não existir, numa OP para estoque —, enquanto a tabela de
+saídas mostra, por expedição, o pedido REALMENTE atendido, o cliente, a data e a
+quantidade.
+
+Verificado na própria evidência: a tela do lote `LT-20260903-000803` passou de
+"Este lote ainda não foi expedido" para `EXP-000235 → PED-000485 · 400 un`.
+
+**Decisão / próxima ação:** nenhuma.
+
+### 20. Documento de faturamento não fecha com os números que exibe — resolvido
+
+O preço unitário sai com duas casas (`billings.service.ts:50`,
+`formatMoney = value.toFixed(2)`) e o total da linha é calculado sobre o valor
+cheio de quatro (`billings.service.ts:55`). Em `FAT-000152`: preço exibido
+`R$ 4,05`, quantidade 123, total `R$ 498,53`. Quem confere faz
+`4,05 × 123 = 498,15`. Diferença de R$ 0,38 sem explicação no papel.
+
+A ordem de arredondamento está correta — somar e arredondar no fim. O defeito é
+exibir menos casas do que o cálculo usa. Não é decisão de projeto: preço
+unitário sai com quatro casas em `customer-orders`, `pricing`, `product-cmv` e
+`quotes`; só `billings` e `purchase-orders` aplicam o formatador de dinheiro a
+um preço unitário.
+
+**Corrigido, com a regra escrita.** Preço unitário: de 2 a 4 casas, conforme o
+preço. Total de linha e de documento: sempre 2. O preço nunca é arredondado
+antes da aritmética, e o acordo no banco não foi tocado — `4,0531` continua
+sendo `4,0531`.
+
+`formatUnitPriceBRL` (web) e `csvUnitPrice` (exportação) concentram a regra em
+um lugar cada, aplicados a 24 pontos de exibição em 16 telas, incluindo os
+documentos impressos. Na API, `formatMoney` passou a valer só para valor já
+somado.
+
+Compras entrou na mesma correção: a precisão foi medida no banco, não suposta —
+`purchase_order_lines.unitPrice` também é `Decimal(14,4)`.
+
+Verificado na evidência: `FAT-000152` mostra `R$ 4,0531 × 123` e o documento diz
+`R$ 498,53`; a conferência manual fecha.
+
+**Decisão / próxima ação:** nenhuma.
+
+### 21. Ajuste de estoque não registra quem fez, e não exige papel — resolvido
+
+Ajustes gravam `createdBy = "Ambiente local"` (constante de sistema) enquanto
+recebimento, consumo, produção e expedição gravam o usuário real.
+`POST /inventory-adjustments` e `POST /stock-counts` não têm `requireRole`,
+enquanto bloquear e liberar lote exigem QUALITY ou ADMIN.
+
+Contraria `CLAUDE.md`: "Inventory history is auditable."
+
+**Corrigido.** Ajuste e contagem gravam o usuário real; `SYSTEM_ACTOR` virou
+último recurso para chamada sem ator (script, migração), com o comentário
+dizendo isso. As duas rotas passaram a exigir papel — `ADMIN`, `PRODUCTION` ou
+`QUALITY` — e `ForbiddenError` passou a mapear 403 no módulo, que era o motivo
+de um gate novo responder 500.
+
+**PURCHASING ficou de fora** porque compra e recebe, e o recebimento tem rota
+própria; `VIEWER` é leitura por definição.
+
+**Decisão / próxima ação:** a matriz fina por papel continua pauta de produto.
+Este conjunto é o menor gate defensável, não a palavra final — se a Veridi disser
+que a contagem é de outro papel, a mudança é uma linha em `STOCK_WRITE_ROLES`.
+
+### 22. Filtros oferecem opções que a API recusa — resolvido
+
+Dois filtros renderizam o enum inteiro do domínio enquanto o schema de consulta
+lista um subconjunto à mão. A tela responde `400`, mostra "Erro de validação" e
+**mantém a tabela anterior com o contador intacto** — o operador lê um resultado
+que não corresponde ao filtro escolhido.
+
+- **HIGH · Pedidos** (`customer-orders.schemas.ts`): tela oferece 6 status, API
+  aceita 4. `PARTIALLY_SHIPPED` e `SHIPPED` falham. Verificado por HTTP:
+  200/200/200/400/400/200.
+- **MEDIUM · Movimentações** (`inventory.schemas.ts:16`): tela oferece 9 tipos,
+  API aceita 4. Falham `PRODUCTION_CONSUMPTION`, `SAMPLE_CONSUMPTION`,
+  `OPENING_BALANCE`, `FINISHED_GOOD_PRODUCTION` e `SHIPMENT_OUT` — as consultas
+  centrais de auditoria de estoque.
+
+Não é classe do app: varridos os 32 mapas de rótulo contra os 18 enums de
+filtro, o resto fecha. `reports` lista os 6 status completos e
+`ProductionReports.tsx` escreve à mão o mesmo subconjunto que o schema aceita.
+São dois desvios, não um padrão.
+
+**Corrigido como a causa, não como os dois casos.** Os dois schemas passaram a
+derivar de `INVENTORY_MOVEMENT_TYPES` e `CUSTOMER_ORDER_STATUSES`, que já
+existiam em `packages/shared`.
+
+A regressão é escrita sobre os MAPAS DE RÓTULO, que é de onde a tela monta o
+`<select>`: se alguém acrescentar um estado ao domínio sem acrescentá-lo ao
+schema, o teste falha antes de o filtro quebrar na mão do operador. Valor
+inventado continua sendo recusado — aceitar tudo seria a correção preguiçosa,
+que troca um erro visível por uma lista silenciosamente errada.
+
+O schema de CRIAÇÃO de ajuste segue restrito a ajuste e perda, agora com o
+motivo escrito no código: consultar todos os tipos é auditoria, criar qualquer
+tipo é falsificação.
+
+**Decisão / próxima ação:** nenhuma.
+
+### 23. Achados MEDIUM e LOW da rodada adversarial — resolvidos
+
+- **MEDIUM · Badge de Status fora da área visível** na lista de Pedidos
+  (`scrollWidth` 1296 contra `clientWidth` 1138).
+- **MEDIUM · "Preparar Expedição" habilitado sem nada reservado** — o botão
+  convida a uma ação que o servidor recusa.
+- **LOW · Liberar e bloquear lote sem entrada própria no menu** — ação existe,
+  descoberta só por dentro da tela do lote.
+- **LOW · Qualidade libera lote vencido** sem aviso.
+- **LOW · Plano de Atendimento aceita digitar reserva acima do disponível** —
+  só o servidor recusa.
+- **LOW · Dois parsers decimais na API.** `projects.schemas.ts:9` não aceita
+  vírgula e responde "Valor inválido (não pode ser negativo)" — mensagem que
+  descreve outro defeito. Hoje não chega ao usuário: a tela converte antes.
+  Latente.
+
+**Todos corrigidos.**
+
+- **Badge de Status** — a causa era `white-space: nowrap` em três colunas de
+  rótulo longo ("Parcialmente expedido", "Aguardando faturamento"). Nasceu
+  `.col-label`, que permite quebra onde `col-tight` não permitia. Medido:
+  1296px → 1138px, zero cortado, Status dentro da área visível.
+- **"Preparar Expedição"** desabilita sem nada reservado, como o botão irmão ao
+  lado já fazia.
+- **Liberação de lotes** ganhou entrada em Qualidade, apontando para a lista já
+  filtrada. O realce do menu passou a considerar a query, senão dois itens
+  acenderiam para a mesma tela.
+- **Lote vencido** não é mais liberável: o status ia para Disponível e a
+  listagem imprimia "Vencido" por cima, com disponível zero. Mesmo princípio do
+  CoA — liberar afirma que o lote pode ser usado.
+- **Plano de Atendimento** compara a reserva com o disponível que está na coluna
+  ao lado, diz o máximo por produto e desabilita antes do envio. Antes, o
+  servidor recusava com 400 e o preenchimento de TODAS as linhas era descartado.
+- **Parser decimal** duplicado eliminado: Projetos usa a implementação
+  compartilhada, que aceita vírgula e cuja mensagem descreve o defeito real.
+
+**Decisão / próxima ação:** nenhuma.
+
+### 24. Drift de centavo entre a soma das linhas e o total do documento — resolvido
+
+Achado **novo**, encontrado durante a própria rodada de correção, e o mais
+instrutivo dela.
+
+A rodada adversarial não conseguiu montar um faturamento de duas linhas pela
+interface — um faturamento tem uma linha por linha de expedição, que vem de uma
+linha de reserva, e um orçamento aceita cada produto uma única vez. Ficou
+registrado como **em aberto, não refutado**, e o handoff de correção mandou
+escrever o teste de serviço mesmo assim, dizendo que era para registrar como
+refutado se passasse.
+
+Não passou:
+
+```
+123 × 4,0531 = 498,5313  →  linha impressa  R$   498,53
+147 × 9,7203 = 1428,8841 →  linha impressa  R$ 1.428,88
+                            soma das linhas R$ 1.927,41
+                            total do rodapé R$ 1.927,42
+```
+
+O total somava os produtos não arredondados e arredondava uma vez no fim.
+`Σ round(linha)` ≠ `round(Σ linha)`: um centavo por linha, num documento em que
+o que o cliente confere são as linhas.
+
+**Corrigido** para a ordem que a nota fiscal usa: cada linha fecha em dois
+decimais, e o documento é a soma dessas linhas. Regressão no teste que o
+encontrou.
+
+**Decisão / próxima ação:** nenhuma. Fica a nota de método: "não consegui
+reproduzir pela tela" não é o mesmo que "não acontece", e a distância entre as
+duas frases era um centavo por linha em todo documento de mais de uma linha.
+
 ### Não reproduzido — registrado para não reabrir
 
 - **CEP inexistente "some sem erro".** Medido ao vivo: "CEP não encontrado.
@@ -565,10 +764,17 @@ depende da prática real da casa, não de escolha técnica.
 e o feedback ser classificado. Roteiro da sessão e grade de classificação em
 [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md).
 
-Os dois LOW ainda abertos — instabilidade da suíte (3) e o dado legado sem
-cliente (6), este restrito ao banco local — não bloqueiam a validação e não
-devem ser corrigidos durante a reunião. A matriz de permissão por papel é boa
-pauta PARA a reunião.
+Os dois LOW herdados — instabilidade da suíte (3) e o dado legado sem cliente
+(6), este restrito ao banco local — não bloqueiam a validação e não devem ser
+corrigidos durante a reunião. A matriz de permissão por papel é boa pauta PARA a
+reunião.
+
+Os quatro HIGH da rodada adversarial (19 a 22) são posteriores a este gate e
+mudam a leitura dele. Nenhum corrompe dado, e nenhum aparece no caminho feliz da
+demonstração — mas dois tocam o que a Veridi mais vai olhar: o documento de
+faturamento (20) e a resposta de rastreabilidade de um lote (19). Decidir se
+corrigir antes da reunião ou apresentar com a ressalva é chamada de Product
+Ownership, não técnica.
 
 ---
 

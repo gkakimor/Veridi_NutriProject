@@ -85,6 +85,17 @@ Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive e
   esconde, referência a documento como link real, 125 mensagens de erro com
   `role`. Baseline UX 7,1. §49. Ver
   [VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md).
+- **Rodada adversarial + correção** (`fix/adversarial-core-findings`) — 45
+  marcos e 352 verificações procurando o que o sistema aceita em silêncio no
+  núcleo operacional. Zero CRITICAL, nada de corrupção: todos os achados em
+  consulta, apresentação e controle de acesso. Doze corrigidos. Regras que
+  passaram a valer: preço unitário exibe de 2 a 4 casas e nunca é arredondado
+  antes da aritmética, enquanto totais ficam em 2 e o total do documento é a
+  soma das linhas impressas; rastreabilidade de lote é física, pela
+  `ShipmentLine.lotId`, nunca pelo pedido da OP que o produziu; filtro de lista
+  deriva da lista canônica do domínio; ajuste e contagem de estoque gravam o
+  usuário real e exigem papel. §50. Ver
+  [VALIDACAO_E2E_ADVERSARIAL_CORE.md](VALIDACAO_E2E_ADVERSARIAL_CORE.md).
 
 ## Validação em produção
 

@@ -84,11 +84,32 @@ export function csvDecimal(
   return decimal.toString().replace(".", ",");
 }
 
-/** Dinheiro: mesma regra do decimal, com duas casas. Desconhecido = vazio. */
+/**
+ * TOTAL em dinheiro: mesma regra do decimal, com duas casas. Desconhecido =
+ * vazio. Só para valor já somado — para preço unitário use `csvUnitPrice`.
+ */
 export function csvMoney(value: string | Prisma.Decimal | null | undefined): string {
   if (value === null || value === undefined || value === "") return "";
   const decimal = value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value);
   return decimal.toFixed(2).replace(".", ",");
+}
+
+/**
+ * PREÇO UNITÁRIO: de 2 a 4 casas, conforme o preço.
+ *
+ * As colunas de preço unitário são `Decimal(14,4)`. Exportá-las por
+ * `csvMoney` transformava `4,0531` em `4,05` sem aviso — a planilha do
+ * operador passava a discordar do documento, e a diferença aparecia como
+ * erro de conta em vez de perda de precisão na exportação.
+ *
+ * Duas casas continuam sendo o piso, para que a coluna leia como dinheiro no
+ * caso comum; as casas extras só aparecem quando existem de fato.
+ */
+export function csvUnitPrice(value: string | Prisma.Decimal | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "";
+  const decimal = value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value);
+  const quatroCasas = decimal.toFixed(4).replace(/(\.\d\d)0+$/, "$1");
+  return quatroCasas.replace(".", ",");
 }
 
 export function csvBoolean(value: boolean | null | undefined): string {

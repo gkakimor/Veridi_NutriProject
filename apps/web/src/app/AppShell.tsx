@@ -19,7 +19,36 @@ import "./shell.css";
  */
 function needsExactMatch(path: string): boolean {
   if (path === "/") return true;
-  return navItems.some((other) => other.path !== path && other.path.startsWith(`${path}/`));
+  const semQuery = path.split("?")[0] ?? path;
+  return navItems.some((other) => {
+    const outro = other.path.split("?")[0] ?? other.path;
+    return other.path !== path && outro.startsWith(`${semQuery}/`);
+  });
+}
+
+/**
+ * `isActive` do NavLink compara so o pathname.
+ *
+ * Dois itens podem apontar para a MESMA tela com filtros diferentes —
+ * "Lotes" e, sob Qualidade, "Liberação de lotes"
+ * (`/estoque/lotes?status=AWAITING_RELEASE`). Sem olhar a query, os dois
+ * acendem juntos e o menu passa a indicar dois lugares para uma navegacao
+ * so.
+ *
+ * Item COM query so fica ativo quando a query da URL bate. Item SEM query
+ * cede a vez quando outro item aponta para o mesmo pathname com uma query
+ * que casa — senao "Lotes" continuaria aceso enquanto o operador esta na
+ * lista filtrada que veio da Qualidade.
+ */
+function itemAtivo(path: string, isActive: boolean, search: string): boolean {
+  if (!isActive) return false;
+  const [pathname = path, query] = path.split("?");
+  if (query) return `?${query}` === search;
+  const outroCasaComQuery = navItems.some((other) => {
+    const [outroPath = other.path, outraQuery] = other.path.split("?");
+    return other.path !== path && outroPath === pathname && outraQuery && `?${outraQuery}` === search;
+  });
+  return !outroCasaComQuery;
 }
 
 /**
@@ -244,7 +273,9 @@ export function AppShell() {
                 to={item.path}
                 end={needsExactMatch(item.path)}
                 className={({ isActive }) =>
-                  isActive ? "sidebar__link is-active" : "sidebar__link"
+                  itemAtivo(item.path, isActive, location.search)
+                    ? "sidebar__link is-active"
+                    : "sidebar__link"
                 }
                 onClick={() => {
                   if (window.matchMedia("(max-width: 640px)").matches) setNavCollapsed(true);

@@ -34,7 +34,7 @@ import {
   formatPrintDateTime,
   printOrDash,
 } from "./PrintLayout";
-import { formatBRL } from "../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../lib/currency";
 import { formatPercent } from "../lib/percent";
 
 /**
@@ -953,7 +953,7 @@ export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
               <td className="is-number">{printOrDash(line.quotedQuantity)}</td>
               <td>{printOrDash(line.uomCode)}</td>
               {/* Preço ausente é "não precificado" — nunca zero. */}
-              <td className="is-number">{line.unitPrice ? formatBRL(line.unitPrice) : "—"}</td>
+              <td className="is-number">{line.unitPrice ? formatUnitPriceBRL(line.unitPrice) : "—"}</td>
               <td>{quote.currencyCode}</td>
               <td className="is-number">{line.total ? formatBRL(line.total) : "—"}</td>
             </tr>

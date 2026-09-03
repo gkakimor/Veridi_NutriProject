@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import type { CustomerOrderDTO, CustomerOrderLineDTO } from "@veridi/shared";
 import { QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
 import { entityHref } from "../../components/EntityLink";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { formatPercent } from "../../lib/percent";
 import { FormSection } from "../../components/FormSection";
 
@@ -164,7 +164,7 @@ export function AgreedPriceCell({
       : "Preço manual";
   return (
     <>
-      {formatBRL(price.unitPrice)}
+      {formatUnitPriceBRL(price.unitPrice)}
       <span className="field__hint">{origem}</span>
     </>
   );

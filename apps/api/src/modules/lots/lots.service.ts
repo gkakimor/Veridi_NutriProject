@@ -283,6 +283,20 @@ export async function releaseLot(id: string, actorName?: string): Promise<LotDTO
   if (lot.requiresCoaSnapshot && lot.coaStatus !== "APPROVED") {
     throw new CoaNotApprovedError();
   }
+  /*
+   * Liberar lote vencido é ação sem efeito, e por isso não deve ser aceita.
+   *
+   * O status ia para AVAILABLE e a listagem imprimia "Vencido" por cima; o
+   * disponível continuava zero, porque a validade já barra o consumo. Ou
+   * seja: a Qualidade registrava uma liberação, via a confirmação, e o
+   * material seguia inutilizável. Recusar aqui é o mesmo princípio do CoA —
+   * a liberação afirma que o lote pode ser usado, e um lote vencido não pode.
+   */
+  if (lot.expiryDate && lot.expiryDate.getTime() < Date.now()) {
+    throw new InvalidLotTransitionError(
+      "Lote vencido não pode ser liberado — a validade já impede o uso. Bloqueie o lote ou registre a perda no estoque.",
+    );
+  }
 
   await getPrisma().lot.update({
     where: { id },

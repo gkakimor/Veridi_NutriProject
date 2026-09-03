@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CUSTOMER_ORDER_STATUSES } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { decimalStringSchema } from "../../lib/decimal-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
@@ -34,7 +35,14 @@ export const cancelCustomerOrderSchema = z.object({
 export const listCustomerOrdersQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   customerId: z.string().trim().min(1).optional(),
-  status: z.enum(["DRAFT", "CONFIRMED", "IN_FULFILLMENT", "CANCELLED"]).optional(),
+  /**
+   * Lista canonica do dominio, nunca uma copia. A tela de Pedidos oferece os
+   * seis status de `CUSTOMER_ORDER_STATUS_LABELS`; enquanto este schema
+   * listava quatro, `PARTIALLY_SHIPPED` e `SHIPPED` devolviam `400` e a
+   * tabela anterior continuava na tela com o contador intacto — o operador
+   * lia um resultado que nao correspondia ao filtro escolhido.
+   */
+  status: z.enum(CUSTOMER_ORDER_STATUSES as unknown as [string, ...string[]]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

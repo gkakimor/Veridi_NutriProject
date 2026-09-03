@@ -10,7 +10,7 @@ import {
 } from "@veridi/shared";
 import { PrintSection, PrintTable, formatPrintDate } from "../../print/PrintLayout";
 import { PrintSheet } from "../../print/PrintSheet";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { getProductCmv } from "../../lib/product-cmv-api";
 
 /**
@@ -229,7 +229,7 @@ export function CmvPrintPage() {
             <tr>
               <td>Preço unitário</td>
               <td className="is-number">
-                {data.pricing.unitPrice ? formatBRL(data.pricing.unitPrice) : "—"}
+                {data.pricing.unitPrice ? formatUnitPriceBRL(data.pricing.unitPrice) : "—"}
               </td>
             </tr>
           </PrintTable>

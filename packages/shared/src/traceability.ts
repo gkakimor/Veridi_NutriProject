@@ -61,16 +61,33 @@ export interface FinishedLotTraceabilityDTO {
   commercialDestination: TraceabilityCommercialDestinationDTO | null;
 }
 
+/**
+ * Origem comercial e destino físico são duas perguntas diferentes.
+ *
+ * **Origem** é por que o lote foi produzido: o Pedido que motivou a OP. Pode
+ * não existir — uma OP para estoque não tem pedido.
+ *
+ * **Destino** é para onde o lote de fato saiu, e é a pergunta de recall.
+ * Estoque acabado é fungível: um lote produzido para um pedido pode
+ * legitimamente atender outro, e isso não é anomalia. Enquanto as expedições
+ * eram buscadas pelo pedido da OP, um lote expedido por outro pedido era
+ * reportado como **não expedido** — negativa falsa na única pergunta que
+ * precisa ser respondida quando um lote é recolhido do mercado.
+ */
 export interface TraceabilityCommercialDestinationDTO {
-  customerOrderId: string;
-  customerOrderCode: string;
-  customerId: string;
-  customerCode: string;
-  customerName: string;
+  /** Pedido que motivou a produção. `null` quando a OP foi para estoque. */
+  customerOrderId: string | null;
+  customerOrderCode: string | null;
+  customerId: string | null;
+  customerCode: string | null;
+  customerName: string | null;
   projectId: string | null;
   projectCode: string | null;
   projectName: string | null;
-  /** Só expedições CONFIRMED que levaram **este** lote. */
+  /**
+   * Saídas físicas: expedições CONFIRMED cujas linhas apontam para **este**
+   * lote, qualquer que seja o pedido atendido.
+   */
   shipments: TraceabilityShipmentDTO[];
 }
 
@@ -79,6 +96,12 @@ export interface TraceabilityShipmentDTO {
   shipmentCode: string;
   shipmentDate: string | null;
   quantity: string;
+  /** O pedido REALMENTE atendido por esta saída — nem sempre o da OP. */
+  customerOrderId: string;
+  customerOrderCode: string;
+  customerId: string;
+  customerCode: string;
+  customerName: string;
 }
 
 export interface RawMaterialUsageFinishedLotDTO {

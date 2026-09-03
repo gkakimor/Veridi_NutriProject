@@ -1,5 +1,24 @@
 import { z } from "zod";
+import { INVENTORY_MOVEMENT_TYPES } from "@veridi/shared";
 import { decimalStringSchema } from "../../lib/decimal-schema.js";
+
+/**
+ * Filtro de tipo de movimento: a lista canônica do domínio, nunca uma cópia.
+ *
+ * Enquanto este schema listava quatro tipos à mão, a tela de Movimentações
+ * oferecia os nove de `INVENTORY_MOVEMENT_TYPE_LABELS` e cinco deles
+ * devolviam `400` — `PRODUCTION_CONSUMPTION`, `SAMPLE_CONSUMPTION`,
+ * `OPENING_BALANCE`, `FINISHED_GOOD_PRODUCTION` e `SHIPMENT_OUT`. São
+ * exatamente os eventos que se consulta numa auditoria de estoque, e a tela
+ * mantinha a tabela anterior com o contador intacto, então o operador lia um
+ * resultado que não correspondia ao filtro escolhido.
+ *
+ * Derivar da lista compartilhada faz um tipo novo do domínio nascer
+ * consultável em vez de nascer quebrando o filtro.
+ */
+const inventoryMovementTypeSchema = z.enum(
+  INVENTORY_MOVEMENT_TYPES as unknown as [string, ...string[]],
+);
 
 export const listInventoryQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
@@ -13,7 +32,7 @@ export const listInventoryMovementsQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   itemId: z.string().trim().min(1).optional(),
   lotId: z.string().trim().min(1).optional(),
-  type: z.enum(["RECEIPT_IN", "ADJUSTMENT_IN", "ADJUSTMENT_OUT", "LOSS"]).optional(),
+  type: inventoryMovementTypeSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -21,6 +40,13 @@ export const listInventoryMovementsQuerySchema = z.object({
 export const createInventoryAdjustmentSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
   lotId: z.string().trim().min(1).optional(),
+  /**
+   * Restrição deliberada, e por isso NÃO deriva da lista canônica: ajuste
+   * cria apenas ajuste e perda. `PRODUCTION_CONSUMPTION`, `SHIPMENT_OUT` e
+   * os demais nascem do documento que os origina — permitir criá-los por
+   * aqui seria fabricar um movimento sem operação por trás. Consultar todos
+   * os tipos é auditoria; criar qualquer tipo é falsificação.
+   */
   type: z.enum(["ADJUSTMENT_IN", "ADJUSTMENT_OUT", "LOSS"]),
   quantity: decimalStringSchema(),
   reason: z.string().trim().min(3, "Motivo é obrigatório"),

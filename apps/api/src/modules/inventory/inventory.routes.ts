@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { getPrisma } from "../../db/prisma.js";
+import { requireRole } from "../../lib/current-user.js";
+import { ForbiddenError } from "../auth/auth.errors.js";
 import { getAllocationSuggestion } from "./allocation.service.js";
 import { listCustomerMaterials } from "./customer-materials.service.js";
 import {
@@ -39,6 +41,9 @@ function formatZodError(error: ZodError) {
 function mapDomainError(
   error: unknown,
 ): { status: number; body: { error: string; message: string } } | null {
+  if (error instanceof ForbiddenError) {
+    return { status: 403, body: { error: "forbidden", message: error.message } };
+  }
   if (error instanceof ItemNotFoundError) {
     return { status: 400, body: { error: "item_not_found", message: error.message } };
   }
@@ -65,6 +70,23 @@ function mapDomainError(
   }
   return null;
 }
+
+/**
+ * Quem pode mexer na quantidade em estoque por decisao direta.
+ *
+ * Ajuste e contagem nao tinham gate nenhum, enquanto bloquear e liberar lote
+ * ja exigiam QUALITY ou ADMIN — a operacao que MUDA a quantidade estava mais
+ * aberta que a que muda o status do lote.
+ *
+ * `PRODUCTION` opera o estoque no chao de fabrica e faz a contagem;
+ * `QUALITY` registra perda e quarentena; `ADMIN` corrige. `PURCHASING` fica
+ * de fora porque compra e recebe — o recebimento tem rota propria — e
+ * `VIEWER` e leitura por definicao.
+ *
+ * A matriz fina de permissao por papel continua sendo pauta de produto; este
+ * conjunto e o menor gate defensavel, nao a palavra final.
+ */
+const STOCK_WRITE_ROLES = ["ADMIN", "PRODUCTION", "QUALITY"] as const;
 
 /**
  * `GET /inventory`, `GET /inventory/:itemId`, `GET /inventory-movements`,
@@ -139,15 +161,16 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/inventory-adjustments", async (request, reply) => {
-    const parsed = createInventoryAdjustmentSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .status(400)
-        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
-    }
-
     try {
-      const movement = await createInventoryAdjustment(parsed.data);
+      const actor = requireRole(request, ...STOCK_WRITE_ROLES);
+      const parsed = createInventoryAdjustmentSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+
+      const movement = await createInventoryAdjustment(parsed.data, actor.name);
       return reply.status(201).send(movement);
     } catch (error) {
       const mapped = mapDomainError(error);
@@ -157,15 +180,16 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/stock-counts", async (request, reply) => {
-    const parsed = stockCountSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply
-        .status(400)
-        .send({ error: "validation_error", issues: formatZodError(parsed.error) });
-    }
-
     try {
-      const result = await createStockCount(parsed.data);
+      const actor = requireRole(request, ...STOCK_WRITE_ROLES);
+      const parsed = stockCountSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+
+      const result = await createStockCount(parsed.data, actor.name);
       return reply.status(201).send(result);
     } catch (error) {
       const mapped = mapDomainError(error);
