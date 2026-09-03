@@ -61,6 +61,40 @@ export interface SuggestedLotAllocationDTO {
   suggestedQuantity: string;
 }
 
+/**
+ * Situação de RECONCILIAÇÃO de um material da OP — a pergunta "o que a fórmula
+ * pediu foi mesmo gasto, e se não foi, por quê?".
+ *
+ * Existe porque "ninguém clicou em confirmar consumo" e "o material não foi
+ * consumido" produziam exatamente o mesmo registro: nenhum. A OP fechava com o
+ * requisito intocado, o material nunca baixava do estoque e o lote de produto
+ * acabado nascia declarando seis componentes com registro de um.
+ *
+ * - `RECONCILED` — consumo real cobre a necessidade. Nada a explicar.
+ * - `VARIANCE_ACCEPTED` — gastou-se menos, e alguém disse por quê. Auditável.
+ * - `PENDING_PARTIAL` — gastou-se menos e ninguém explicou.
+ * - `PENDING_NONE` — não há consumo nenhum registrado.
+ *
+ * Os dois `PENDING_` impedem concluir a OP. A distinção entre eles não é
+ * decorativa: material sem consumo nenhum costuma ser esquecimento de registro,
+ * e material parcial costuma ser sobra ou perda real — a tela fala diferente
+ * com cada um.
+ */
+export type MaterialReconciliationStatus =
+  | "RECONCILED"
+  | "VARIANCE_ACCEPTED"
+  | "PENDING_PARTIAL"
+  | "PENDING_NONE";
+
+/** Progresso da reconciliação de materiais da OP — "3 de 6 materiais". */
+export interface MaterialReconciliationSummaryDTO {
+  totalRequirements: number;
+  reconciledRequirements: number;
+  pendingRequirements: number;
+  /** `false` enquanto houver requisito pendente — o mesmo veredito que o servidor aplica ao concluir. */
+  canComplete: boolean;
+}
+
 export interface ProductionOrderRequirementDTO {
   id: string;
   itemId: string;
@@ -104,6 +138,21 @@ export interface ProductionOrderRequirementDTO {
   remainingReservedQuantity: string;
   /** Linhas de reserva (Picking/Consumo) deste Requirement — inclui linhas substituídas (histórico, `releasedAt` preenchido). */
   reservationLines: MaterialReservationLineDTO[];
+  /** Situação da reconciliação deste material — decide se a OP pode concluir. */
+  reconciliationStatus: MaterialReconciliationStatus;
+  /** `max(requiredQuantity - consumedQuantity, 0)` — o que a fórmula pediu e não foi gasto. */
+  unreconciledQuantity: string;
+  /**
+   * Justificativa da diferença, quando alguém a aceitou explicitamente.
+   *
+   * Nunca herda `ProductionOrder.completionReason`: aquele explica ter
+   * produzido menos do que o planejado, este explica ter gasto menos material
+   * do que a fórmula pedia. Perguntas diferentes, respostas que não se
+   * substituem.
+   */
+  varianceReason: string | null;
+  varianceAcceptedBy: string | null;
+  varianceAcceptedAt: string | null;
 }
 
 /** ACTIVE conta em Reserved; RELEASED (reserva liberada, ex.: cancelamento de OP RELEASED) não conta mais. */
@@ -207,6 +256,8 @@ export interface ProductionOrderDTO {
   materialsStatus: ProductionOrderMaterialsStatus;
   /** Quantos Requirements estão em SHORTAGE — para a coluna "Falta em N materiais" da listagem. */
   shortageItemCount: number;
+  /** Progresso da reconciliação de materiais — o que separa a OP de poder concluir. */
+  materialReconciliation: MaterialReconciliationSummaryDTO;
   notes: string | null;
   /** Cliente da OP — obrigatório para liberar OP com material do cliente. */
   customerId: string | null;

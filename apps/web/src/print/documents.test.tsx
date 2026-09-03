@@ -116,6 +116,12 @@ const productionOrderBase = {
   origin: "MANUAL",
   materialsStatus: "MATERIALS_AVAILABLE",
   shortageItemCount: 0,
+  materialReconciliation: {
+    totalRequirements: 0,
+    reconciledRequirements: 0,
+    pendingRequirements: 0,
+    canComplete: true,
+  },
   notes: null,
   customerId: null,
   customerTradeName: null,

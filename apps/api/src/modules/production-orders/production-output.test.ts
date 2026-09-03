@@ -837,6 +837,24 @@ describe("ProductionOrder — conclusão (COMPLETED)", () => {
       url: `/production-orders/${order.id}/outputs`,
       payload: { quantity: "1", destination: "NEW_LOT", businessLotNumber: "VD-1" },
     });
+    // Os 2 que sobraram sao diferenca REAL de material e agora exigem
+    // justificativa — sem ela a OP nao conclui. O assunto deste teste continua
+    // sendo a matematica da liberacao de reserva; a reconciliacao e o pedagio
+    // que se paga para chegar la.
+    const semJustificar = await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/complete`,
+      payload: {},
+    });
+    expect(semJustificar.statusCode).toBe(400);
+    expect(semJustificar.json().error).toBe("unreconciled_materials");
+
+    await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/requirements/${order.requirements[0].id}/variance`,
+      payload: { reason: "Sobra de 2 devolvida ao lote de origem" },
+    });
+
     const completed = await app.inject({ method: "POST", url: `/production-orders/${order.id}/complete`, payload: {} });
     expect(completed.statusCode).toBe(200);
     expect(completed.json().status).toBe("COMPLETED");

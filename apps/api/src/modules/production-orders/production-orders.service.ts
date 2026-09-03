@@ -28,6 +28,7 @@ import type {
 } from "@veridi/shared";
 import { PRODUCTION_ORDER_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { isPending, reconciliationStatus, unreconciledQuantity } from "./reconciliation.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -399,6 +400,16 @@ async function attachRequirementAvailability(
         )
       : null;
 
+    const consumedQuantity =
+      linesForRequirement.length > 0
+        ? lineConsumedQuantity
+        : (consumidoPorItem.get(requirement.itemId) ?? new Prisma.Decimal(0));
+    const entradaReconciliacao = {
+      requiredQuantity: requirement.requiredQuantity,
+      consumedQuantity,
+      varianceReason: requirement.varianceReason,
+    };
+
     results.push({
       id: requirement.id,
       itemId: requirement.itemId,
@@ -432,14 +443,21 @@ async function attachRequirementAvailability(
       allocatedQuantity: allocatedQuantity.toString(),
       // Reserva ativa: o consumo desta OP para este item. Reserva liberada
       // (ordem encerrada): o consumo registrado, que continua valendo.
-      consumedQuantity: (linesForRequirement.length > 0
-        ? lineConsumedQuantity
-        : (consumidoPorItem.get(requirement.itemId) ?? new Prisma.Decimal(0))
-      ).toString(),
+      consumedQuantity: consumedQuantity.toString(),
       remainingReservedQuantity: remainingReservedQuantity.toString(),
       reservationLines: linesForRequirement.map((line) =>
         toReservationLineDTO(line, consumedByLine, freeByLot),
       ),
+      // Reconciliacao: mesma entrada que o servidor usa para decidir se a OP
+      // pode concluir. Tela e portao lendo do mesmo lugar — se divergissem, a
+      // tela liberaria um botao que o servidor recusa.
+      reconciliationStatus: reconciliationStatus(entradaReconciliacao),
+      unreconciledQuantity: unreconciledQuantity(entradaReconciliacao).toString(),
+      varianceReason: requirement.varianceReason,
+      varianceAcceptedBy: requirement.varianceAcceptedBy,
+      varianceAcceptedAt: requirement.varianceAcceptedAt
+        ? requirement.varianceAcceptedAt.toISOString()
+        : null,
     });
   }
   return results;
@@ -512,6 +530,9 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     freeByLot,
   );
   const shortageItemCount = requirements.filter((r) => r.availabilityStatus === "SHORTAGE").length;
+  // Progresso da reconciliacao — derivado das MESMAS linhas que o portao do
+  // servidor le, nunca de uma contagem paralela.
+  const pendingRequirements = requirements.filter((r) => isPending(r.reconciliationStatus)).length;
   const materialsStatus: ProductionOrderMaterialsStatus =
     shortageItemCount > 0 ? "MATERIAL_SHORTAGE" : "MATERIALS_AVAILABLE";
 
@@ -581,6 +602,12 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
     origin: order.origin,
     materialsStatus,
     shortageItemCount,
+    materialReconciliation: {
+      totalRequirements: requirements.length,
+      reconciledRequirements: requirements.length - pendingRequirements,
+      pendingRequirements,
+      canComplete: pendingRequirements === 0,
+    },
     notes: order.notes,
     customerId: order.customerId ?? orderCustomer?.id ?? null,
     hasCustomerSuppliedRequirements: order.requirements.some(

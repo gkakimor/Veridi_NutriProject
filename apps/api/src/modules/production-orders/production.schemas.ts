@@ -22,5 +22,17 @@ export const completeProductionOrderSchema = z.object({
   completionReason: z.string().trim().min(1).optional(),
 });
 
+/**
+ * Justificativa da diferenca de MATERIAL — nunca opcional.
+ *
+ * `completionReason` explica ter produzido menos que o planejado e e opcional
+ * quando nao houve variacao. Aqui a chamada so existe porque ha diferenca, e
+ * uma justificativa vazia devolveria o problema original com carimbo.
+ */
+export const acceptMaterialVarianceSchema = z.object({
+  reason: z.string().trim().min(1, "Descreva o motivo da diferença de material"),
+});
+
 export type RegisterProductionOutputSchema = z.infer<typeof registerProductionOutputSchema>;
 export type CompleteProductionOrderSchema = z.infer<typeof completeProductionOrderSchema>;
+export type AcceptMaterialVarianceSchema = z.infer<typeof acceptMaterialVarianceSchema>;

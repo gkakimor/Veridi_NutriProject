@@ -5,6 +5,7 @@ import type {
   ItemDTO,
   ProductDTO,
   ProductionOrderDTO,
+  ProductionOrderRequirementDTO,
   ProductionOrderStatus,
   ProductionOutputDestination,
 } from "@veridi/shared";
@@ -25,6 +26,7 @@ import {
 import { getProductionOrderMaterialCost } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import {
+  acceptMaterialVariance,
   cancelProductionOrder,
   completeProductionOrder,
   confirmPicking,
@@ -77,6 +79,62 @@ function statusBadgeClass(status: ProductionOrderStatus): string {
     case "CANCELLED":
       return "badge badge--err";
   }
+}
+
+/**
+ * Situação da reconciliação de um material, com o motivo à vista quando houver.
+ *
+ * O vocabulário de cor segue o que a própria tela já usa: verde para resolvido,
+ * neutro para o que ainda é normal, âmbar só quando exige ato. Pendência
+ * durante a produção é neutra de propósito — material por consumir no meio da
+ * produção é o curso normal das coisas, e pintar de alerta ensinaria a ignorar
+ * o alerta.
+ */
+function SituacaoReconciliacao({
+  requirement,
+  onJustificar,
+}: {
+  requirement: ProductionOrderRequirementDTO;
+  onJustificar?: ((requirement: ProductionOrderRequirementDTO) => void) | undefined;
+}) {
+  if (requirement.reconciliationStatus === "RECONCILED") {
+    return <span className="badge badge--active">Reconciliado</span>;
+  }
+  if (requirement.reconciliationStatus === "VARIANCE_ACCEPTED") {
+    return (
+      <>
+        <span className="badge badge--neutral">Divergência justificada</span>
+        <br />
+        <span className="field__hint">
+          {requirement.varianceReason}
+          {requirement.varianceAcceptedBy ? ` — ${requirement.varianceAcceptedBy}` : ""}
+        </span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="badge badge--warn">
+        {requirement.reconciliationStatus === "PENDING_NONE" ? "Sem consumo" : "Consumo parcial"}
+      </span>
+      <br />
+      <span className="field__hint">
+        Faltam {requirement.unreconciledQuantity} {requirement.stockUnitCode}
+      </span>
+      {onJustificar && (
+        <>
+          <br />
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => onJustificar(requirement)}
+          >
+            Justificar diferença
+          </button>
+        </>
+      )}
+    </>
+  );
 }
 
 function formatDateTime(iso: string | null): string {
@@ -174,8 +232,35 @@ export function ProductionOrderPage() {
   const [industrialCost, setIndustrialCost] = useState<ProductionOrderCostDTO | null>(null);
 
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [justificando, setJustificando] = useState<ProductionOrderRequirementDTO | null>(null);
+  const [motivoDivergencia, setMotivoDivergencia] = useState("");
   const [completionReason, setCompletionReason] = useState("");
   const [completing, setCompleting] = useState(false);
+
+  function fecharJustificativa() {
+    setJustificando(null);
+    setMotivoDivergencia("");
+    setError(null);
+  }
+
+  async function confirmarJustificativa() {
+    if (!productionOrder || !justificando) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const atualizada = await acceptMaterialVariance(
+        productionOrder.id,
+        justificando.id,
+        motivoDivergencia.trim(),
+      );
+      setProductionOrder(atualizada);
+      fecharJustificativa();
+    } catch (erro) {
+      setError(erro instanceof Error ? erro.message : "Falha ao registrar a justificativa");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const syncFormFromServer = useCallback((order: ProductionOrderDTO) => {
     setProductId(order.productId);
@@ -281,6 +366,18 @@ export function ProductionOrderPage() {
     isDraft && productId.length > 0 && !formulationOptions.some((version) => version.status === "ACTIVE");
 
   const isReleasedOrInProduction = status === "RELEASED" || status === "IN_PRODUCTION";
+  /*
+   * A partir daqui a pergunta da tela deixa de ser "dá para liberar?" e passa
+   * a ser "o que falta reconciliar?". Em RELEASED nada foi consumido ainda, e
+   * uma coluna dizendo "0 consumido, pendente" para tudo seria alarme falso.
+   */
+  const reconciliando = status === "IN_PRODUCTION" || status === "COMPLETED";
+  const reconciliacao = productionOrder?.materialReconciliation ?? null;
+  const materiaisPendentes = (productionOrder?.requirements ?? []).filter(
+    (requirement) =>
+      requirement.reconciliationStatus === "PENDING_NONE" ||
+      requirement.reconciliationStatus === "PENDING_PARTIAL",
+  );
   // Linhas ativas (nao substituidas) de todos os Requirements — base do
   // Picking e do Consumo Real. Linhas substituidas (releasedAt != null)
   // ficam so no historico dentro de "Materiais Reservados".
@@ -895,15 +992,35 @@ export function ProductionOrderPage() {
             <div className="table-container">
               <table className="table">
                 <thead>
+                  {/*
+                    As colunas mudam com o estágio porque a PERGUNTA muda.
+                    Antes da produção a pergunta é "dá para liberar?", e Físico,
+                    Disponível e Em Compra respondem. Com a alocação feita, a
+                    pergunta vira "o que falta reconciliar?", e aquelas três
+                    param de importar enquanto Consumido e Diferença passam a
+                    decidir se a ordem fecha. Trocar em vez de acrescentar
+                    mantém a largura já estabilizada.
+                  */}
                   <tr>
                     <th>Item</th>
                     <th>Fornecimento</th>
                     <th className="is-numeric">Necessário</th>
-                    <th className="is-numeric">Físico</th>
-                    <th className="is-numeric">Reservado</th>
-                    <th className="is-numeric">Disponível</th>
-                    <th className="is-numeric">Em Compra</th>
-                    <th className="is-numeric">Falta</th>
+                    {reconciliando ? (
+                      <>
+                        <th className="is-numeric">Reservado</th>
+                        <th className="is-numeric">Consumido</th>
+                        <th className="is-numeric">Diferença</th>
+                        <th>Situação</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="is-numeric">Físico</th>
+                        <th className="is-numeric">Reservado</th>
+                        <th className="is-numeric">Disponível</th>
+                        <th className="is-numeric">Em Compra</th>
+                        <th className="is-numeric">Falta</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -937,6 +1054,22 @@ export function ProductionOrderPage() {
                       <td className="is-numeric">
                         {requirement.requiredQuantity} {requirement.stockUnitCode}
                       </td>
+                      {reconciliando ? (
+                        <>
+                          <td className="is-numeric">{requirement.allocatedQuantity}</td>
+                          <td className="is-numeric">{requirement.consumedQuantity}</td>
+                          <td className="is-numeric">{requirement.unreconciledQuantity}</td>
+                          <td>
+                            <SituacaoReconciliacao
+                              requirement={requirement}
+                              onJustificar={
+                                status === "IN_PRODUCTION" ? setJustificando : undefined
+                              }
+                            />
+                          </td>
+                        </>
+                      ) : (
+                        <>
                       <td className="is-numeric">{requirement.onHand}</td>
                       <td className="is-numeric">{requirement.reserved}</td>
                       <td className="is-numeric">{requirement.available}</td>
@@ -1035,12 +1168,14 @@ export function ProductionOrderPage() {
                             </>
                           )}
                       </td>
+                        </>
+                      )}
                     </tr>
                   ))}
 
                   {productionOrder.requirements.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="table__empty">
+                      <td colSpan={reconciliando ? 7 : 8} className="table__empty">
                         Nenhuma necessidade calculada — selecione uma formulação com componentes.
                       </td>
                     </tr>
@@ -1227,7 +1362,11 @@ export function ProductionOrderPage() {
         {productionOrder && isReleasedOrInProduction && (
           <FormSection
             title="Consumo Real"
-            subtitle="Registra quanto efetivamente entrou na produção — baixa o estoque físico e reduz a reserva remanescente."
+            subtitle={
+              reconciliacao && reconciliacao.totalRequirements > 0
+                ? `Registra quanto efetivamente entrou na produção — baixa o estoque físico e reduz a reserva remanescente. ${reconciliacao.reconciledRequirements} de ${reconciliacao.totalRequirements} ${reconciliacao.totalRequirements === 1 ? "material reconciliado" : "materiais reconciliados"}.`
+                : "Registra quanto efetivamente entrou na produção — baixa o estoque físico e reduz a reserva remanescente."
+            }
           >
             <div className="table-container">
               <table className="table">
@@ -1852,10 +1991,29 @@ export function ProductionOrderPage() {
               {(productionOrder?.outputs.length ?? 0) === 0 && (
                 <p className="field__hint">Registre ao menos um apontamento de produção para concluir.</p>
               )}
+              {/*
+                O impedimento aparece ANTES do clique, com os nomes. Dizer
+                "existem materiais sem consumo" manda procurar; dizer quais
+                manda resolver. O servidor recusa igual — isto é a mesma
+                decisão, adiantada para quem está olhando.
+              */}
+              {materiaisPendentes.length > 0 && (
+                <p className="form-alert" role="status">
+                  Falta reconciliar {materiaisPendentes.length}{" "}
+                  {materiaisPendentes.length === 1 ? "material" : "materiais"}:{" "}
+                  {materiaisPendentes.map((requirement) => requirement.itemCode).join(", ")}.
+                  Registre o consumo real na tabela abaixo ou justifique a diferença em
+                  Necessidade de Materiais.
+                </p>
+              )}
               <button
                 type="button"
                 className="btn btn--accent"
-                disabled={completing || (productionOrder?.outputs.length ?? 0) === 0}
+                disabled={
+                  completing ||
+                  (productionOrder?.outputs.length ?? 0) === 0 ||
+                  materiaisPendentes.length > 0
+                }
                 onClick={() => setCompleteDialogOpen(true)}
               >
                 Concluir OP
@@ -1875,6 +2033,56 @@ export function ProductionOrderPage() {
             setProductionOrder(atualizada);
           }}
         />
+      )}
+
+      {/*
+        Justificar a diferença de UM material.
+        Deliberadamente separado do "Motivo da variação" da conclusão: aquele
+        explica ter produzido menos que o planejado, este explica ter gasto
+        menos material do que a fórmula pedia. Misturar os dois numa textarea
+        só produziria um texto que não responde nenhuma das duas perguntas.
+      */}
+      {justificando && productionOrder && (
+        <ModalDialog labelledBy="variance-title" onClose={fecharJustificativa} role="dialog">
+          <h2 id="variance-title" className="modal__title">
+            Justificar diferença em {justificando.itemCode}
+          </h2>
+          <p className="modal__message">
+            A fórmula pede {justificando.requiredQuantity} {justificando.stockUnitCode} e o consumo
+            registrado é {justificando.consumedQuantity}. Faltam{" "}
+            {justificando.unreconciledQuantity} {justificando.stockUnitCode}.
+          </p>
+          <div className="field">
+            <label className="field__label" htmlFor="variance-reason">
+              Motivo da diferença *
+            </label>
+            <textarea
+              id="variance-reason"
+              className="field__control"
+              rows={3}
+              value={motivoDivergencia}
+              onChange={(event) => setMotivoDivergencia(event.target.value)}
+              placeholder="Ex.: sobra devolvida ao lote de origem; perda no processo; material substituído"
+            />
+            <span className="field__hint">
+              Fica no documento com seu nome e a data — é o que explica a composição do lote depois.
+            </span>
+          </div>
+          {error && <p className="form-error">{error}</p>}
+          <div className="modal__actions">
+            <button type="button" className="btn btn--ghost" onClick={fecharJustificativa}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--accent"
+              disabled={saving || motivoDivergencia.trim().length === 0}
+              onClick={confirmarJustificativa}
+            >
+              Registrar justificativa
+            </button>
+          </div>
+        </ModalDialog>
       )}
 
       <ConfirmDialog
@@ -1931,8 +2139,9 @@ export function ProductionOrderPage() {
             <h2 id="complete-op-title">Concluir ordem de produção?</h2>
             <p>
               Produzido: {productionOrder.producedQuantity} de {productionOrder.plannedQuantity}{" "}
-              {productionOrder.outputUnitCode}. Qualquer reserva de material ainda não consumida será
-              liberada. Após concluída, a OP fica somente histórico.
+              {productionOrder.outputUnitCode}. Todos os materiais estão reconciliados; a reserva
+              remanescente será liberada sem baixar estoque. Após concluída, a OP fica somente
+              histórico.
             </p>
             {Number(productionOrder.remainingQuantity) > 0 && (
               <div className="field">
@@ -1947,11 +2156,24 @@ export function ProductionOrderPage() {
                 />
               </div>
             )}
+            {/*
+              O erro mora DENTRO do diálogo. Ele já foi para o estado de página
+              uma vez, e a mensagem renderizava atrás do modal que continuava
+              aberto: quem clicou em "Concluir" via o botão não fazer nada.
+            */}
+            {error && (
+              <p className="form-alert" role="alert">
+                {error}
+              </p>
+            )}
             <div className="confirm-dialog__actions">
               <button
                 type="button"
                 className="btn btn--ghost"
-                onClick={() => setCompleteDialogOpen(false)}
+                onClick={() => {
+                  setCompleteDialogOpen(false);
+                  setError(null);
+                }}
               >
                 Voltar
               </button>
