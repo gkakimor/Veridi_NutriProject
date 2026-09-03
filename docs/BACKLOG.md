@@ -14,14 +14,15 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 4 |
+| LOW | 5 |
 
 A rodada de hardening pós-validação fechou tudo o que os três E2E e as duas
 auditorias de UX levantaram como defeito de produto, e mais o que a
 reauditoria achou nas próprias correções — ver
 [VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md). Os LOW que restam são o flake
-histórico do runner (3), o legado sem cliente (6), e dois registrados abaixo
-(17, 18) por serem decisão de produto, não conserto pendente. As três auditorias profundas (VAL-LEG-01, 02, 03), o
+histórico do runner (3), o legado sem cliente (6), o `select` nativo do item na
+entrada de material do cliente (16), e dois registrados abaixo (17, 18) por
+serem decisão de produto, não conserto pendente. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
 correções em [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md).
 
@@ -463,7 +464,7 @@ estrutura, não.
 **Decisão / próxima ação:** confirmar sempre, dizendo o que se torna imutável,
 como fazem os outros dois documentos da mesma cadeia.
 
-### 15. Catálogos que ainda cabem no teto — resolvido
+### 15. Catálogos que ainda cabem no teto — resolvido nos campos de formulário
 
 O conserto do item 12 levou busca no servidor às telas de ITEM, onde o
 catálogo já tinha estourado. O mesmo padrão continua nas telas que carregam
@@ -483,12 +484,20 @@ Medido em 2026-09-02, contra o teto de 1000:
 de Produção do mesmo defeito silencioso: produto que existe e não aparece na
 busca, com "+ Novo produto" convidando a duplicar.
 
+**Feito no hardening:** busca no servidor nos campos de FORMULÁRIO de
+cliente (Produto, Projeto, Pedido, entrada de material do cliente), produto
+(Ordem de Produção, Pedido), fornecedor (Ordem de Compra) e recurso (Estrutura
+de Custos) — onze campos em sete telas, cada um repetindo os filtros de
+elegibilidade da carga inicial. Ficaram de fora, por serem filtro de LISTAGEM
+e não campo com "+ Novo": os `select` de filtro em Clientes, Projetos,
+Faturamentos, Item × Fornecedor e relatórios.
+
 **Decisão / próxima ação:** a ferramenta já existe — `SearchableEntitySelect`
 aceita `onSearch`, e ligá-la é uma função por tela. Fazer quando o catálogo de
 produtos passar de ~800, ou antes se a Veridi trouxer base maior na migração.
 Não fazer agora seria escolha diferente se algum desses números fosse outro.
 
-### 16. Item na entrada de material do cliente — resolvido
+### 16. Item na entrada de material do cliente ainda é `<select>` nativo — LOW
 
 `ReceiveCustomerMaterialPage` carrega matéria-prima e embalagem com
 `pageSize: 1000` — os mesmos 211 invisíveis das outras telas de item —, mas o
@@ -496,8 +505,10 @@ campo é um `<select>` nativo, não o `SearchableEntitySelect`. Não há onde
 pendurar a busca no servidor sem antes trocar o componente.
 
 **Decisão / próxima ação:** trocar pelo seletor pesquisável quando a tela for
-mexida por outro motivo. É mudança de componente, não a mesma correção — e
-fazer só por causa disto seria refatorar uma tela que hoje funciona.
+mexida por outro motivo. É mudança de componente com semântica de lote e
+proprietário no meio — não a mesma correção do 15, e não foi feita no
+hardening de propósito: o campo de cliente da mesma tela ganhou busca no
+servidor; o de item ficou como está até haver rodada que o toque.
 
 
 ### 17. Rota inválida redireciona em silêncio para o Dashboard — LOW

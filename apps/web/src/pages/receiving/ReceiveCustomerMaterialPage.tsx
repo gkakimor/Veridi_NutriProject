@@ -12,6 +12,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { ContextHelp, InfoHint } from "../../components/help";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
@@ -132,7 +133,7 @@ export function ReceiveCustomerMaterialPage() {
   });
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
+    listCustomers({ active: true, pageSize: 50 })
       .then((result) => setCustomers(result.customers))
       .catch(() => setCustomers([]));
 
@@ -144,6 +145,24 @@ export function ReceiveCustomerMaterialPage() {
       .then(([raw, packaging]) => setItems([...raw.items, ...packaging.items]))
       .catch(() => setItems([]));
   }, []);
+
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarClientes(termo: string): Promise<EntityOption[]> {
+    const resultado = await listCustomers({ active: true, search: termo, pageSize: 50 });
+    const novos = resultado.customers;
+    setCustomers((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((c) => ({ id: c.id, code: c.code, name: c.tradeName ?? c.legalName }));
+  }
 
   function updateLine(key: string, field: keyof Omit<LineDraft, "key">, value: string) {
     setLines((prev) => prev.map((line) => (line.key === key ? { ...line, [field]: value } : line)));
@@ -238,7 +257,8 @@ export function ReceiveCustomerMaterialPage() {
               value={customerId}
               onChange={(selectedId) => setCustomerId(selectedId)}
               placeholder="Digite código ou nome do cliente…"
-              options={customers.map((customer) => ({
+              onSearch={buscarClientes}
+options={customers.map((customer) => ({
                 id: customer.id,
                 code: customer.code,
                 name: customer.legalName,

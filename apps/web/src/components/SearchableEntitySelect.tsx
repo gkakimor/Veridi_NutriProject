@@ -50,6 +50,8 @@ export function SearchableEntitySelect({
   createLabel = "Cadastrar novo",
   onCreateNew,
   onSearch,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
 }: {
   id: string;
   options: EntityOption[];
@@ -84,6 +86,13 @@ export function SearchableEntitySelect({
    * do registro já escolhido.
    */
   onSearch?: (termo: string) => Promise<EntityOption[]>;
+  /**
+   * Repassados ao `combobox` interno para que o formulário ligue erro e
+   * campo — mesmo par `aria-invalid` / `aria-describedby` que um `<input>`
+   * nativo receberia.
+   */
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
@@ -445,6 +454,8 @@ export function SearchableEntitySelect({
         aria-controls={listId}
         aria-autocomplete="list"
         {...(activeId ? { "aria-activedescendant": activeId } : {})}
+        {...(ariaInvalid ? { "aria-invalid": true as const } : {})}
+        {...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {})}
         {...(required ? { required: !selected } : {})}
         disabled={disabled ?? false}
         placeholder={selected ? `${selected.code} · ${selected.name}` : placeholder}

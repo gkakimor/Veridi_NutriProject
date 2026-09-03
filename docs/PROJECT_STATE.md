@@ -126,9 +126,9 @@ Nenhum.
 
 ## Backlog aberto
 
-Zero CRITICAL, HIGH e MEDIUM. Quatro LOW, nenhum bloqueante — flake do runner,
-legado sem cliente, rota inválida sem página própria e Projeto sem rota de
-criação. Ver [BACKLOG.md](BACKLOG.md).
+Zero CRITICAL, HIGH e MEDIUM. Cinco LOW, nenhum bloqueante — flake do runner,
+legado sem cliente, `select` nativo na entrada de material do cliente, rota
+inválida sem página própria e Projeto sem rota de criação. Ver [BACKLOG.md](BACKLOG.md).
 
 ## Decisões de produto ainda em aberto (não bloqueantes)
 

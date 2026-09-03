@@ -266,7 +266,7 @@ export function PurchaseOrderPage() {
   }, [id, isNew, syncFormFromServer]);
 
   useEffect(() => {
-    listSuppliers({ active: true, pageSize: 1000 })
+    listSuppliers({ active: true, pageSize: 50 })
       .then((result) => setActiveSuppliers(result.suppliers))
       .catch(() => setActiveSuppliers([]));
     Promise.all([
@@ -278,6 +278,24 @@ export function PurchaseOrderPage() {
       )
       .catch(() => setActiveItems([]));
   }, []);
+
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarFornecedores(termo: string): Promise<EntityOption[]> {
+    const resultado = await listSuppliers({ active: true, search: termo, pageSize: 50 });
+    const novos = resultado.suppliers;
+    setActiveSuppliers((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((f) => ({ id: f.id, code: f.code, name: f.tradeName ?? f.legalName }));
+  }
 
   /**
    * Busca no servidor, com os MESMOS filtros de negócio da carga inicial:
@@ -761,7 +779,8 @@ export function PurchaseOrderPage() {
                 value={supplierId}
                 onChange={setSupplierId}
                 placeholder="Digite código ou nome do fornecedor…"
-                options={supplierOptions.map((supplier) => ({
+                onSearch={buscarFornecedores}
+options={supplierOptions.map((supplier) => ({
                   id: supplier.id,
                   code: supplier.code,
                   name: supplier.tradeName ?? supplier.legalName,

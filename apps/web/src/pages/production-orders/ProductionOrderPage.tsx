@@ -59,6 +59,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 
 interface FormulationVersionOption {
   id: string;
@@ -289,10 +290,28 @@ export function ProductionOrderPage() {
 
   useEffect(() => {
     // Produto técnico de projeto não é opção operacional.
-    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 1000 })
+    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 50 })
       .then((result) => setActiveProducts(result.products))
       .catch(() => setActiveProducts([]));
   }, []);
+
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarProdutos(termo: string): Promise<EntityOption[]> {
+    const resultado = await listProducts({ active: true, lifecycle: "APPROVED", search: termo, pageSize: 50 });
+    const novos = resultado.products;
+    setActiveProducts((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((p) => ({ id: p.id, code: p.code, name: p.name }));
+  }
 
   // Custo industrial: materiais realizados + custos padrão aplicados. Depois
   // de concluída a OP, o backend devolve o snapshot congelado — a tela nunca
@@ -864,7 +883,8 @@ export function ProductionOrderPage() {
                   value={productId}
                   onChange={(selectedId) => handleProductChange(selectedId)}
                   placeholder="Digite código ou nome do produto…"
-                  options={activeProducts.map((product) => ({
+                  onSearch={buscarProdutos}
+options={activeProducts.map((product) => ({
                     id: product.id,
                     code: product.code,
                     name: product.name,

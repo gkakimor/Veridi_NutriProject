@@ -22,6 +22,7 @@ import { SearchableEntitySelect } from "../../components/SearchableEntitySelect"
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
 import { ToggleCard } from "../../components/ToggleCard";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { createProduct, updateProduct } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
 import { listUnits } from "../../lib/units-api";
@@ -221,10 +222,28 @@ export function useProductForm({
   }, []);
 
   useEffect(() => {
-    listCustomers({ active: true, pageSize: 1000 })
+    listCustomers({ active: true, pageSize: 50 })
       .then((result) => setActiveCustomers(result.customers))
       .catch(() => setActiveCustomers([]));
   }, []);
+
+  /*
+   * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
+   * mesmo que poder usar, e a busca torna encontravel quem ja era elegivel,
+   * nunca quem nao era. O achado entra no estado de onde as opcoes derivam,
+   * porque a escolha e resolvida por ele. A carga inicial passou a servir so
+   * a abertura do campo — acima do teto o registro existia e nao aparecia,
+   * com "+ Novo" logo acima convidando a duplicar.
+   */
+  async function buscarClientes(termo: string): Promise<EntityOption[]> {
+    const resultado = await listCustomers({ active: true, search: termo, pageSize: 50 });
+    const novos = resultado.customers;
+    setActiveCustomers((atual) => {
+      const conhecidos = new Set(atual.map((x) => x.id));
+      return [...atual, ...novos.filter((x) => !conhecidos.has(x.id))];
+    });
+    return novos.map((c) => ({ id: c.id, code: c.code, name: c.tradeName ?? c.legalName }));
+  }
 
   // Vinculo historico: se o cliente associado nao estiver mais na lista de
   // ativos (foi inativado depois), ele continua aparecendo no select.
@@ -393,6 +412,7 @@ export function useProductForm({
     product,
     units,
     customerOptions,
+    buscarClientes,
     selectCustomer,
     onCreateCustomer,
     lockedCustomer,
@@ -413,6 +433,7 @@ export function ProductFormFields({
   customerOptions,
   onCreateCustomer,
   lockedCustomer,
+  buscarClientes,
 }: ProductFormController) {
   /** Liga input, `aria-invalid` e a mensagem, para leitor de tela também. */
   function fieldProps(field: string) {
@@ -510,7 +531,8 @@ export function ProductFormFields({
                 onChange={(selectedId) => setForm((prev) => ({ ...prev, customerId: selectedId }))}
                 placeholder="Digite código, razão social, fantasia ou CNPJ…"
                 required
-                options={customerOptions.map((customer) => ({
+                onSearch={buscarClientes}
+options={customerOptions.map((customer) => ({
                   id: customer.id,
                   code: customer.code,
                   // Razão social assina contrato; nome fantasia é como o
