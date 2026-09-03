@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useMemo, useState } from "react";
 import type { LotStatus } from "@veridi/shared";
 import {
@@ -140,10 +141,10 @@ export function InventoryPositionReportPage() {
             <td>{row.location ?? "—"}</td>
             {/* Cada linha com a própria unidade — nunca somadas entre si. */}
             <td className="is-number">
-              {row.onHand} {row.unitCode}
+              {formatQuantity(row.onHand)} {row.unitCode}
             </td>
-            <td className="is-number">{row.reserved}</td>
-            <td className="is-number">{row.available}</td>
+            <td className="is-number">{formatQuantity(row.reserved)}</td>
+            <td className="is-number">{formatQuantity(row.available)}</td>
             <td>{lotStatusLabel(row.status, row.isExpired)}</td>
           </tr>
         ))}
@@ -263,10 +264,10 @@ export function ExpiryReportPage() {
                 : `Vence em ${row.daysToExpiry} dias`}
             </td>
             <td className="is-number">
-              {row.onHand} {row.unitCode}
+              {formatQuantity(row.onHand)} {row.unitCode}
             </td>
-            <td className="is-number">{row.reserved}</td>
-            <td className="is-number">{row.available}</td>
+            <td className="is-number">{formatQuantity(row.reserved)}</td>
+            <td className="is-number">{formatQuantity(row.available)}</td>
             <td>{lotStatusLabel(row.status, row.isExpired)}</td>
             <td>{row.location ?? "—"}</td>
           </tr>
@@ -366,7 +367,7 @@ export function MovementsReportPage() {
               <DocLink code={row.lotCode} to={row.lotId ? `/estoque/lotes/${row.lotId}` : null} />
             </td>
             <td className="is-number">
-              {row.quantity} {row.unitCode}
+              {formatQuantity(row.quantity)} {row.unitCode}
             </td>
             <td>
               <DocLink

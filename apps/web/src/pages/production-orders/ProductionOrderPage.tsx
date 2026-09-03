@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -123,7 +124,7 @@ function SituacaoReconciliacao({
       </span>
       <br />
       <span className="field__hint">
-        Faltam {requirement.unreconciledQuantity} {requirement.stockUnitCode}
+        Faltam {formatQuantity(requirement.unreconciledQuantity)} {requirement.stockUnitCode}
       </span>
       {onJustificar && (
         <>
@@ -940,7 +941,7 @@ options={activeProducts.map((product) => ({
                   onChange={(event) => setPlannedQuantity(event.target.value)}
                 />
               ) : (
-                <p className="field-readonly-value">{productionOrder?.plannedQuantity}</p>
+                <p className="field-readonly-value">{formatQuantity(productionOrder?.plannedQuantity)}</p>
               )}
               {fieldErrors["plannedQuantity"] && (
                 <p className="field__error">{fieldErrors["plannedQuantity"]}</p>
@@ -1059,7 +1060,7 @@ options={activeProducts.map((product) => ({
                             <span className="field__hint">
                               Sugestão FEFO/FIFO:{" "}
                               {requirement.suggestedAllocations
-                                .map((allocation) => `${allocation.lotCode}→${allocation.suggestedQuantity}`)
+                                .map((allocation) => `${allocation.lotCode}→${formatQuantity(allocation.suggestedQuantity)}`)
                                 .join(", ")}
                             </span>
                           </>
@@ -1077,13 +1078,13 @@ options={activeProducts.map((product) => ({
                         )}
                       </td>
                       <td className="is-numeric">
-                        {requirement.requiredQuantity} {requirement.stockUnitCode}
+                        {formatQuantity(requirement.requiredQuantity)} {requirement.stockUnitCode}
                       </td>
                       {reconciliando ? (
                         <>
-                          <td className="is-numeric">{requirement.allocatedQuantity}</td>
-                          <td className="is-numeric">{requirement.consumedQuantity}</td>
-                          <td className="is-numeric">{requirement.unreconciledQuantity}</td>
+                          <td className="is-numeric">{formatQuantity(requirement.allocatedQuantity)}</td>
+                          <td className="is-numeric">{formatQuantity(requirement.consumedQuantity)}</td>
+                          <td className="is-numeric">{formatQuantity(requirement.unreconciledQuantity)}</td>
                           <td>
                             <SituacaoReconciliacao
                               requirement={requirement}
@@ -1095,10 +1096,10 @@ options={activeProducts.map((product) => ({
                         </>
                       ) : (
                         <>
-                      <td className="is-numeric">{requirement.onHand}</td>
-                      <td className="is-numeric">{requirement.reserved}</td>
-                      <td className="is-numeric">{requirement.available}</td>
-                      <td className="is-numeric">{requirement.onOrder}</td>
+                      <td className="is-numeric">{formatQuantity(requirement.onHand)}</td>
+                      <td className="is-numeric">{formatQuantity(requirement.reserved)}</td>
+                      <td className="is-numeric">{formatQuantity(requirement.available)}</td>
+                      <td className="is-numeric">{formatQuantity(requirement.onOrder)}</td>
                       <td className="is-numeric">
                         {/* OP encerrada: a falta é recálculo contra o estoque
                             de HOJE, não pendência da ordem. Mostrar como
@@ -1113,7 +1114,7 @@ options={activeProducts.map((product) => ({
                                 : "badge badge--warn"
                           }
                         >
-                          {requirement.shortage}
+                          {formatQuantity(requirement.shortage)}
                         </span>
                         {ordemEncerrada && Number(requirement.shortage) > 0 && (
                           <>
@@ -1182,7 +1183,7 @@ options={activeProducts.map((product) => ({
                                       : // Leva o item e o que falta: o atalho tem
                                         // que chegar com o contexto que a tela
                                         // acabou de calcular.
-                                        `/compras/ordens/nova?itemId=${requirement.itemId}&quantidade=${requirement.shortage}`,
+                                        `/compras/ordens/nova?itemId=${requirement.itemId}&quantidade=${formatQuantity(requirement.shortage)}`,
                                   )
                                 }
                               >
@@ -1247,7 +1248,7 @@ options={activeProducts.map((product) => ({
                           <div className="line-audit">
                             <span className="badge badge--info">Consumo extra</span>
                             <div className="field__hint">
-                              +{line.quantity} {line.unitCode} · {line.extraReason}
+                              +{formatQuantity(line.quantity)} {line.unitCode} · {line.extraReason}
                             </div>
                             <div className="field__hint">
                               {line.extraRequestedBy ?? "—"}
@@ -1261,7 +1262,7 @@ options={activeProducts.map((product) => ({
                         {formatDate(line.expiryDate)}
                       </td>
                       <td className="is-numeric">
-                        {line.quantity} {line.unitCode}
+                        {formatQuantity(line.quantity)} {line.unitCode}
                       </td>
                       <td>{line.location ?? "—"}</td>
                     </tr>
@@ -1315,7 +1316,7 @@ options={activeProducts.map((product) => ({
                         </td>
                         <td>{line.location ?? "—"}</td>
                         <td className="is-numeric">
-                          {line.quantity} {line.unitCode}
+                          {formatQuantity(line.quantity)} {line.unitCode}
                         </td>
                         <td>
                           <span
@@ -1419,7 +1420,7 @@ options={activeProducts.map((product) => ({
                           <div className="line-audit">
                             <span className="badge badge--info">Consumo extra</span>
                             <div className="field__hint">
-                              +{line.quantity} {line.unitCode} · {line.extraReason}
+                              +{formatQuantity(line.quantity)} {line.unitCode} · {line.extraReason}
                             </div>
                             <div className="field__hint">
                               {line.extraRequestedBy ?? "—"}
@@ -1430,10 +1431,10 @@ options={activeProducts.map((product) => ({
                       </td>
                       <td>{line.lotCode ?? "—"}</td>
                       <td className="is-numeric">
-                        {line.quantity} {line.unitCode}
+                        {formatQuantity(line.quantity)} {line.unitCode}
                       </td>
-                      <td className="is-numeric">{line.consumedQuantity}</td>
-                      <td>{line.remainingQuantity}</td>
+                      <td className="is-numeric">{formatQuantity(line.consumedQuantity)}</td>
+                      <td>{formatQuantity(line.remainingQuantity)}</td>
                       <td>
                         <input
                           type="text"
@@ -1451,7 +1452,7 @@ options={activeProducts.map((product) => ({
                             operador descobrir pelo erro. */}
                         {excedeReserva(line) && (
                           <p className="field__hint field__hint--error">
-                            Máximo disponível nesta reserva: {line.remainingQuantity} {line.unitCode}. Para
+                            Máximo disponível nesta reserva: {formatQuantity(line.remainingQuantity)} {line.unitCode}. Para
                             consumir acima disso, use “Adicionar consumo extra”.
                           </p>
                         )}
@@ -1520,7 +1521,7 @@ options={activeProducts.map((product) => ({
                         </td>
                         <td>{consumption.lotCode ?? "—"}</td>
                         <td className="is-numeric">
-                          {consumption.quantity} {consumption.unitCode}
+                          {formatQuantity(consumption.quantity)} {consumption.unitCode}
                         </td>
                         <td>{consumption.consumedBy ?? "—"}</td>
                       </tr>
@@ -1540,15 +1541,15 @@ options={activeProducts.map((product) => ({
             <dl className="definition-list">
               <dt>Planejado</dt>
               <dd>
-                {productionOrder.plannedQuantity} {productionOrder.outputUnitCode}
+                {formatQuantity(productionOrder.plannedQuantity)} {productionOrder.outputUnitCode}
               </dd>
               <dt>Produzido</dt>
               <dd>
-                {productionOrder.producedQuantity} {productionOrder.outputUnitCode}
+                {formatQuantity(productionOrder.producedQuantity)} {productionOrder.outputUnitCode}
               </dd>
               <dt>{status === "COMPLETED" ? "Variação" : "Restante"}</dt>
               <dd>
-                {productionOrder.remainingQuantity} {productionOrder.outputUnitCode}
+                {formatQuantity(productionOrder.remainingQuantity)} {productionOrder.outputUnitCode}
               </dd>
             </dl>
 
@@ -1659,7 +1660,7 @@ options={activeProducts.map((product) => ({
                           <option key={lot.id} value={lot.id}>
                             {lot.code}
                             {lot.businessLotNumber ? ` — ${lot.businessLotNumber}` : ""} (produzido:{" "}
-                            {lot.producedQuantity})
+                            {formatQuantity(lot.producedQuantity)})
                           </option>
                         ))}
                       </select>
@@ -1714,7 +1715,7 @@ options={activeProducts.map((product) => ({
                       <tr key={output.id}>
                         <td>{formatDateTime(output.producedAt)}</td>
                         <td className="is-numeric">
-                          {output.quantity} {productionOrder.outputUnitCode}
+                          {formatQuantity(output.quantity)} {productionOrder.outputUnitCode}
                         </td>
                         <td>{output.lotCode ?? "—"}</td>
                         <td>{output.businessLotNumber ?? "—"}</td>
@@ -1775,7 +1776,7 @@ options={activeProducts.map((product) => ({
               </dd>
               <dt>Produzido</dt>
               <dd>
-                {industrialCost.producedQuantity} {industrialCost.outputUnitCode}
+                {formatQuantity(industrialCost.producedQuantity)} {industrialCost.outputUnitCode}
               </dd>
               <dt>Materiais realizados</dt>
               <dd>{formatBRL(industrialCost.actualMaterialCostKnown)}</dd>
@@ -1851,7 +1852,7 @@ options={activeProducts.map((product) => ({
               </dd>
               <dt>Produzido</dt>
               <dd>
-                {materialCost.producedQuantity} {materialCost.outputUnitCode}
+                {formatQuantity(materialCost.producedQuantity)} {materialCost.outputUnitCode}
               </dd>
               <dt>Custo material / unidade</dt>
               <dd>
@@ -1908,7 +1909,7 @@ options={activeProducts.map((product) => ({
                       </td>
                       <td>{consumption.lotCode ?? "—"}</td>
                       <td className="is-numeric">
-                        {consumption.quantity} {consumption.unitCode}
+                        {formatQuantity(consumption.quantity)} {consumption.unitCode}
                       </td>
                       <td className="is-numeric">{formatBRL(consumption.unitCost)}</td>
                       <td>
@@ -2073,9 +2074,9 @@ options={activeProducts.map((product) => ({
             Justificar diferença em {justificando.itemCode}
           </h2>
           <p className="modal__message">
-            A fórmula pede {justificando.requiredQuantity} {justificando.stockUnitCode} e o consumo
-            registrado é {justificando.consumedQuantity}. Faltam{" "}
-            {justificando.unreconciledQuantity} {justificando.stockUnitCode}.
+            A fórmula pede {formatQuantity(justificando.requiredQuantity)} {justificando.stockUnitCode} e o consumo
+            registrado é {formatQuantity(justificando.consumedQuantity)}. Faltam{" "}
+            {formatQuantity(justificando.unreconciledQuantity)} {justificando.stockUnitCode}.
           </p>
           <div className="field">
             <label className="field__label" htmlFor="variance-reason">
@@ -2163,7 +2164,7 @@ options={activeProducts.map((product) => ({
           <ModalDialog labelledBy="complete-op-title" onClose={() => setCompleteDialogOpen(false)}>
             <h2 id="complete-op-title">Concluir ordem de produção?</h2>
             <p>
-              Produzido: {productionOrder.producedQuantity} de {productionOrder.plannedQuantity}{" "}
+              Produzido: {formatQuantity(productionOrder.producedQuantity)} de {formatQuantity(productionOrder.plannedQuantity)}{" "}
               {productionOrder.outputUnitCode}. Todos os materiais estão reconciliados; a reserva
               remanescente será liberada sem baixar estoque. Após concluída, a OP fica somente
               histórico.

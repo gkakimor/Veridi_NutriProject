@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { BillingDTO } from "@veridi/shared";
@@ -123,7 +124,7 @@ export function BillingPage() {
                   </td>
                   <td className="is-code">{line.lotCode ?? "—"}</td>
                   <td>
-                    {line.quantity} {line.unitCode}
+                    {formatQuantity(line.quantity)} {line.unitCode}
                   </td>
                   <td>{formatBRL(line.agreedUnitPrice)}</td>
                   <td>

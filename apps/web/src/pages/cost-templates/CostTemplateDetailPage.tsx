@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
@@ -133,7 +134,7 @@ export function CostTemplateDetailPage() {
       <dl className="definition-list">
         <dt>Base de produção sugerida</dt>
         <dd>
-          {version.referenceOutputQuantity} {version.referenceOutputUomCode}
+          {formatQuantity(version.referenceOutputQuantity)} {version.referenceOutputUomCode}
         </dd>
         <dt>Energia</dt>
         <dd>
@@ -156,7 +157,7 @@ export function CostTemplateDetailPage() {
             {version.resourceUsages.map((usage) => (
               <tr key={usage.id}>
                 <td>{usage.resourceName}</td>
-                <td className="is-numeric">{usage.usageQuantity}</td>
+                <td className="is-numeric">{formatQuantity(usage.usageQuantity)}</td>
                 <td>{INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}</td>
                 <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
               </tr>

@@ -5,6 +5,7 @@ import { ModalDialog } from "../../components/ModalDialog";
 import { overrideBillingPrice } from "../../lib/billings-api";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { parseDecimalInput } from "../../lib/decimal-input";
+import { formatQuantity } from "../../lib/quantity";
 
 interface PriceOverrideDialogProps {
   billingId: string;
@@ -84,7 +85,7 @@ export function PriceOverrideDialog({
         </dd>
         <dt>Quantidade</dt>
         <dd>
-          {line.quantity} {line.unitCode}
+          {formatQuantity(line.quantity)} {line.unitCode}
         </dd>
         <dt>Preço acordado</dt>
         <dd>{formatBRL(line.agreedUnitPrice)}</dd>

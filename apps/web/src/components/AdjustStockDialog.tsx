@@ -4,6 +4,7 @@ import type { InventoryLotBreakdownDTO } from "@veridi/shared";
 import { createInventoryAdjustment } from "../lib/inventory-api";
 import { exigirDecimal } from "../lib/decimal-field";
 import { ModalDialog } from "./ModalDialog";
+import { formatQuantity } from "../lib/quantity";
 
 interface AdjustStockDialogProps {
   itemId: string;
@@ -82,7 +83,7 @@ export function AdjustStockDialog({
                 {lots.length === 0 && <option value="">Nenhum lote disponível</option>}
                 {lots.map((lot) => (
                   <option key={lot.lotId} value={lot.lotId}>
-                    {lot.lotCode} — físico {lot.onHand} {unitCode}
+                    {lot.lotCode} — físico {formatQuantity(lot.onHand)} {unitCode}
                   </option>
                 ))}
               </select>

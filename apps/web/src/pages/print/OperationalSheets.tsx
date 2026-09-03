@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import type {
@@ -136,7 +137,7 @@ export function InventoryCountSheetPage() {
             <td>{formatPrintDate(row.expiryDate)}</td>
             <td>{printOrDash(row.location)}</td>
             <td>{row.unitCode}</td>
-            {!blind && <td className="is-number">{row.onHand}</td>}
+            {!blind && <td className="is-number">{formatQuantity(row.onHand)}</td>}
             <PrintWriteCell />
             <PrintWriteCell />
             <PrintWriteCell width="120px" />
@@ -204,9 +205,9 @@ export function InventoryPositionSheetPage() {
             </td>
             <td>{formatPrintDate(row.expiryDate)}</td>
             <td>{printOrDash(row.location)}</td>
-            <td className="is-number">{row.onHand}</td>
-            <td className="is-number">{row.reserved}</td>
-            <td className="is-number">{row.available}</td>
+            <td className="is-number">{formatQuantity(row.onHand)}</td>
+            <td className="is-number">{formatQuantity(row.reserved)}</td>
+            <td className="is-number">{formatQuantity(row.available)}</td>
             <td>{row.unitCode}</td>
           </tr>
         ))}
@@ -310,7 +311,7 @@ export function ProductionPickingSheetPage() {
         { label: "OP interna", value: data.code },
         { label: "Produto", value: `${data.productCode} — ${data.productName}` },
         { label: "Cliente", value: data.customerName ?? "—" },
-        { label: "Quantidade planejada", value: `${data.plannedQuantity} ${data.outputUnitCode}` },
+        { label: "Quantidade planejada", value: `${formatQuantity(data.plannedQuantity)} ${data.outputUnitCode}` },
         { label: "Situação", value: PRODUCTION_ORDER_STATUS_LABELS[data.status] },
       ]}
     >
@@ -343,13 +344,13 @@ export function ProductionPickingSheetPage() {
                 : "Veridi"}
             </td>
             <td className="is-number">
-              {requirement.requiredQuantity} {requirement.stockUnitCode}
+              {formatQuantity(requirement.requiredQuantity)} {requirement.stockUnitCode}
             </td>
             <td>{printOrDash(line.lotCode)}</td>
             <td>{formatPrintDate(line.expiryDate)}</td>
             <td>{printOrDash(line.location)}</td>
             <td className="is-number">
-              {line.quantity} {requirement.stockUnitCode}
+              {formatQuantity(line.quantity)} {requirement.stockUnitCode}
             </td>
             <PrintCheckCell />
             <td>
@@ -412,7 +413,7 @@ export function ShipmentPickingSheetPage() {
               {line.productCode} — {line.productName}
             </td>
             <td className="is-number">
-              {line.quantity} {line.unitCode}
+              {formatQuantity(line.quantity)} {line.unitCode}
             </td>
             <td>{line.lotCode}</td>
             <td>{formatPrintDate(line.expiryDate)}</td>

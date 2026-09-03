@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { BillingDTO, BillingLineDTO, BillingStatus } from "@veridi/shared";
@@ -357,7 +358,7 @@ export function BillingPage() {
                         {line.lotCode ?? "—"}
                         {line.businessLotNumber ? ` — ${line.businessLotNumber}` : ""}
                       </td>
-                      <td className="is-numeric">{line.quantity}</td>
+                      <td className="is-numeric">{formatQuantity(line.quantity)}</td>
                       <td>{line.unitCode}</td>
                       <td className="is-numeric">
                         {/* Veio do Pedido e não se redigita. Deixá-lo
@@ -423,7 +424,7 @@ export function BillingPage() {
               </tbody>
             </table>
             <div className="table-foot">
-              Quantidade total: {billing.totalQuantity} · Valor total:{" "}
+              Quantidade total: {formatQuantity(billing.totalQuantity)} · Valor total:{" "}
               {displayTotal ? formatBRL(displayTotal) : "Valores incompletos"}
             </div>
             {/* O acordado não é substituído: quem auditar vê os dois

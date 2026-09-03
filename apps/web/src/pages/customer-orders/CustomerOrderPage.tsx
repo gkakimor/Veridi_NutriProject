@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
@@ -1304,7 +1305,7 @@ options={optionsForRow(line).map((product) => ({
                               <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                             </td>
                             <td>
-                              {line.orderedQuantity} {line.unitCode}
+                              {formatQuantity(line.orderedQuantity)} {line.unitCode}
                             </td>
                             <td className="is-numeric">{line.finishedGoodsAvailable}</td>
                             <td>
@@ -1412,17 +1413,17 @@ options={optionsForRow(line).map((product) => ({
                                 )}
                               </td>
                               <td className="is-numeric">
-                                {row.requiredQuantity} {row.unitCode}
+                                {formatQuantity(row.requiredQuantity)} {row.unitCode}
                               </td>
-                              <td className="is-numeric">{row.onHand}</td>
-                              <td className="is-numeric">{row.reserved}</td>
-                              <td className="is-numeric">{row.available}</td>
+                              <td className="is-numeric">{formatQuantity(row.onHand)}</td>
+                              <td className="is-numeric">{formatQuantity(row.reserved)}</td>
+                              <td className="is-numeric">{formatQuantity(row.available)}</td>
                               <td className="is-numeric">
                                 {row.supplyResponsibility === "CUSTOMER" ? "—" : row.onOrder}
                               </td>
                               <td className="is-numeric">
                                 <span className={Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"}>
-                                  {row.shortage}
+                                  {formatQuantity(row.shortage)}
                                 </span>
                               </td>
                             </tr>
@@ -1468,7 +1469,7 @@ options={optionsForRow(line).map((product) => ({
                         <ul>
                           {faltaCliente.map((row) => (
                             <li key={row.itemId}>
-                              {row.itemCode} — {row.itemName}: faltam {row.shortage} {row.unitCode}
+                              {row.itemCode} — {row.itemName}: faltam {formatQuantity(row.shortage)} {row.unitCode}
                               {row.ownerCustomerName ? " (" + row.ownerCustomerName + ")" : ""}
                             </li>
                           ))}
@@ -1494,9 +1495,9 @@ options={optionsForRow(line).map((product) => ({
                                   <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                                 </td>
                                 <td className="is-numeric">
-                                  {row.shortage} {row.unitCode}
+                                  {formatQuantity(row.shortage)} {row.unitCode}
                                 </td>
-                                <td className="is-numeric">{row.onOrder}</td>
+                                <td className="is-numeric">{formatQuantity(row.onOrder)}</td>
                                 <td>
                                   {row.supplierCandidates.length === 0 ? (
                                     <span className="field__hint">
@@ -1621,7 +1622,7 @@ options={optionsForRow(line).map((product) => ({
                                       {candidate.minimumOrderQuantity && (
                                         <span className="field__hint">
                                           {" "}
-                                          · mínimo {candidate.minimumOrderQuantity}{" "}
+                                          · mínimo {formatQuantity(candidate.minimumOrderQuantity)}{" "}
                                           {candidate.minimumOrderUomCode}
                                           {candidate.moqRaisedQuantity && " (eleva a quantidade)"}
                                         </span>
@@ -1641,10 +1642,10 @@ options={optionsForRow(line).map((product) => ({
                               {row.remainingRequired} {row.unitCode}
                             </td>
                             <td>{row.ownReserved}</td>
-                            <td className="is-numeric">{row.available}</td>
-                            <td className="is-numeric">{row.onOrder}</td>
+                            <td className="is-numeric">{formatQuantity(row.available)}</td>
+                            <td className="is-numeric">{formatQuantity(row.onOrder)}</td>
                             <td>{row.operationalShortage}</td>
-                            <td>{row.draftPurchaseQuantity}</td>
+                            <td>{formatQuantity(row.draftPurchaseQuantity)}</td>
                             <td>{row.newSuggestedPurchase}</td>
                             <td>
                               <input
@@ -1750,14 +1751,14 @@ options={optionsForRow(line).map((product) => ({
                           <td className="is-numeric">
                             {row.remainingRequired} {row.unitCode}
                           </td>
-                          <td>{row.available}</td>
+                          <td>{formatQuantity(row.available)}</td>
                           <td className="is-numeric">
                             <span
                               className={
                                 Number(row.shortage) > 0 ? "badge badge--warn" : "badge badge--active"
                               }
                             >
-                              {row.shortage}
+                              {formatQuantity(row.shortage)}
                             </span>
                           </td>
                         </tr>
@@ -1795,9 +1796,9 @@ options={optionsForRow(line).map((product) => ({
                         <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                       </td>
                       <td>
-                        {line.orderedQuantity} {line.unitCode}
+                        {formatQuantity(line.orderedQuantity)} {line.unitCode}
                       </td>
-                      <td className="is-numeric">{line.shippedQuantity}</td>
+                      <td className="is-numeric">{formatQuantity(line.shippedQuantity)}</td>
                       <td className="is-numeric">{line.reservedRemaining}</td>
                       <td className="is-numeric">{line.stillToReserve}</td>
                       <td className="is-numeric">{line.currentAvailable}</td>
@@ -1872,7 +1873,7 @@ options={optionsForRow(line).map((product) => ({
                       <td>
                         {formatDate(shipment.shipmentDate)}
                       </td>
-                      <td className="is-numeric">{shipment.totalQuantity}</td>
+                      <td className="is-numeric">{formatQuantity(shipment.totalQuantity)}</td>
                       <td>
                         <span className="badge badge--neutral">
                           {SHIPMENT_STATUS_LABELS[shipment.status as ShipmentStatus] ?? shipment.status}
@@ -1951,7 +1952,7 @@ options={optionsForRow(line).map((product) => ({
                       >
                         <td className="is-code">{billing.code}</td>
                         <td className="is-code">{billing.shipmentCode}</td>
-                        <td className="is-numeric">{billing.totalQuantity}</td>
+                        <td className="is-numeric">{formatQuantity(billing.totalQuantity)}</td>
                         <td className="is-numeric">{billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}</td>
                         <td>
                           <span className="badge badge--neutral">
@@ -2070,9 +2071,9 @@ options={optionsForRow(line).map((product) => ({
                               )}
                             </td>
                             <td className="is-numeric">
-                              {line.quantity} {line.unitCode}
+                              {formatQuantity(line.quantity)} {line.unitCode}
                             </td>
-                            <td>{line.shippedQuantity}</td>
+                            <td>{formatQuantity(line.shippedQuantity)}</td>
                             <td>{line.reservedRemaining}</td>
                             <td>
                               {isReleased ? (
@@ -2125,7 +2126,7 @@ options={optionsForRow(line).map((product) => ({
                       {linhasComSaldoPendente
                         .map(
                           (line) =>
-                            `${line.productCode}: faltam ${line.pendingProductionQuantity} ${line.unitCode}`,
+                            `${line.productCode}: faltam ${formatQuantity(line.pendingProductionQuantity)} ${line.unitCode}`,
                         )
                         .join(" · ")}
                     </p>
@@ -2169,10 +2170,10 @@ options={optionsForRow(line).map((product) => ({
                             <EntityLink kind="product" id={op.productId} code={op.productCode} name={op.productName} />
                           </td>
                           <td className="is-numeric">
-                            {op.plannedQuantity} {op.outputUnitCode}
+                            {formatQuantity(op.plannedQuantity)} {op.outputUnitCode}
                           </td>
                           <td className="is-numeric">
-                            {op.producedQuantity} {op.outputUnitCode}
+                            {formatQuantity(op.producedQuantity)} {op.outputUnitCode}
                           </td>
                           <td>
                             <span className="badge badge--neutral">
@@ -2239,7 +2240,7 @@ options={optionsForRow(line).map((product) => ({
         message={(() => {
           const linha = linhasComSaldoPendente.find((row) => row.id === saldoDialogLineId);
           return linha
-            ? `Será criada uma Ordem de Produção em rascunho de ${linha.pendingProductionQuantity} ${linha.unitCode} de ${linha.productCode}, vinculada a este pedido. Nada é liberado nem reservado automaticamente.`
+            ? `Será criada uma Ordem de Produção em rascunho de ${formatQuantity(linha.pendingProductionQuantity)} ${linha.unitCode} de ${linha.productCode}, vinculada a este pedido. Nada é liberado nem reservado automaticamente.`
             : "";
         })()}
         confirmLabel="Gerar OP"

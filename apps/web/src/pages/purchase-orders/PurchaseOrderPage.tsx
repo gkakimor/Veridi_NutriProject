@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useState , useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
@@ -927,7 +928,7 @@ options={supplierOptions.map((supplier) => ({
                                 ? " · só referência histórica de preço"
                                 : ""}
                             {offer?.minimumOrderQuantity
-                              ? ` · mínimo ${offer.minimumOrderQuantity} ${offer.minimumOrderUomCode ?? ""}`
+                              ? ` · mínimo ${formatQuantity(offer.minimumOrderQuantity)} ${offer.minimumOrderUomCode ?? ""}`
                               : ""}
                           </div>
                         );
@@ -950,12 +951,12 @@ options={supplierOptions.map((supplier) => ({
                         />
                       ) : (
                         <>
-                          {line.orderedQuantity}
+                          {formatQuantity(line.orderedQuantity)}
                           {status !== "CANCELLED" && (
                             <>
                               <br />
                               <span className="field__hint">
-                                Recebido: {line.receivedQuantity} · Aberto: {line.openQuantity}
+                                Recebido: {formatQuantity(line.receivedQuantity)} · Aberto: {formatQuantity(line.openQuantity)}
                                 <DicaDoCampo id="compras.saldoAberto" />
                               </span>
                             </>
@@ -1044,7 +1045,7 @@ options={supplierOptions.map((supplier) => ({
                     <td>{formatDate(receipt.receivedAt)}</td>
                     <td>{receipt.invoiceNumber ?? "—"}</td>
                     <td className="is-numeric">{receipt.lineCount}</td>
-                    <td className="is-numeric">{receipt.receivedQuantity}</td>
+                    <td className="is-numeric">{formatQuantity(receipt.receivedQuantity)}</td>
                     <td className="is-numeric">{receipt.lotCount}</td>
                   </tr>
                 ))}

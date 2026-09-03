@@ -22,6 +22,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
+import { formatQuantity } from "../../lib/quantity";
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
@@ -393,7 +394,7 @@ export function SupplierItemDetailModal({
                   <td className="is-code">{offer.priceUomCode}</td>
                   <td>
                     {offer.minimumOrderQuantity
-                      ? `${offer.minimumOrderQuantity} ${offer.minimumOrderUomCode ?? ""}`
+                      ? `${formatQuantity(offer.minimumOrderQuantity)} ${offer.minimumOrderUomCode ?? ""}`
                       : "—"}
                   </td>
                   <td>{formatDate(offer.effectiveAt)}</td>

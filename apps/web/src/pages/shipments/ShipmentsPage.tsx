@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -181,7 +182,7 @@ export function ShipmentsPage() {
                   <EntityLink kind="customer" id={shipment.customerId} code={shipment.customerName} />
                 </td>
                 <td className="col-tight">{formatDate(shipment.shipmentDate)}</td>
-                <td className="is-numeric col-tight">{shipment.totalQuantity}</td>
+                <td className="is-numeric col-tight">{formatQuantity(shipment.totalQuantity)}</td>
                 <td className="col-tight">
                   <span className={statusBadgeClass(shipment.status)}>
                     {SHIPMENT_STATUS_LABELS[shipment.status]}

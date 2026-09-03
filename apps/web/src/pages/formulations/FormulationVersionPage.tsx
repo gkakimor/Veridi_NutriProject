@@ -42,7 +42,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
 import { useAuth } from "../../app/AuthProvider";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
-import { formatQuantityWithUnit } from "../../lib/quantity";
+import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
@@ -823,7 +823,7 @@ export function FormulationVersionPage() {
               />
             ) : (
               <p className="field-readonly-value">
-                {version.basisQuantity} {version.outputUnitCode}
+                {formatQuantity(version.basisQuantity)} {version.outputUnitCode}
               </p>
             )}
             {fieldErrors["basisQuantity"] && (
@@ -1098,7 +1098,7 @@ export function FormulationVersionPage() {
                       )}
                     </td>
                     <td>
-                      {row.stockEquivalentQuantity} {row.stockUnitCode}
+                      {formatQuantity(row.stockEquivalentQuantity)} {row.stockUnitCode}
                     </td>
                     <td>
                       {formatQuantityWithUnit(row.physicalPerUnit, row.stockUnitCode)}
@@ -1161,10 +1161,10 @@ export function FormulationVersionPage() {
                         <EntityLink kind="item" id={component.itemId} code={component.itemCode} name={component.itemName} />
                       </td>
                       <td className="is-numeric">
-                        {component.normalizedQuantity} {component.stockUnitCode}
+                        {formatQuantity(component.normalizedQuantity)} {component.stockUnitCode}
                         <br />
                         <span className="field__hint">
-                          {component.formulaQuantity} {component.formulaUnitCode}
+                          {formatQuantity(component.formulaQuantity)} {component.formulaUnitCode}
                         </span>
                       </td>
                       <td>{formatBRL(component.unitCost)}</td>
@@ -1185,7 +1185,7 @@ export function FormulationVersionPage() {
             </div>
 
             <dl className="definition-list">
-              <dt>Custo estimado da base ({costEstimate.basisQuantity} {costEstimate.outputUnitCode})</dt>
+              <dt>Custo estimado da base ({formatQuantity(costEstimate.basisQuantity)} {costEstimate.outputUnitCode})</dt>
               <dd>
                 {costEstimate.estimatedMaterialCost
                   ? formatBRL(costEstimate.estimatedMaterialCost)

@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CustomerDTO } from "@veridi/shared";
@@ -191,7 +192,7 @@ export function BillingsPage() {
                   <EntityLink kind="customer" id={row.customerId} code={row.customerName} />
                 </td>
                 <td className="col-tight">{formatDate(row.shipmentDate)}</td>
-                <td className="col-tight">{row.totalQuantity}</td>
+                <td className="col-tight">{formatQuantity(row.totalQuantity)}</td>
                 <td className="col-tight">
                   <span
                     className={row.billingStatus === "DRAFT" ? "badge badge--warn" : "badge badge--neutral"}
@@ -346,7 +347,7 @@ export function BillingsPage() {
                 <td className="col-flex">
                   <EntityLink kind="customer" id={billing.customerId} code={billing.customerName} />
                 </td>
-                <td className="col-tight">{billing.totalQuantity}</td>
+                <td className="col-tight">{formatQuantity(billing.totalQuantity)}</td>
                 <td className="col-tight">
                   {billing.totalAmount ? formatBRL(billing.totalAmount) : "Não informado"}
                 </td>

@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
@@ -276,16 +277,16 @@ export function FinishedGoodsPage() {
                 <td>{formatDate(row.producedAt)}</td>
                 {/* Cada linha carrega a própria unidade: nunca se soma unidades diferentes. */}
                 <td className="is-numeric">
-                  {row.producedQuantity} {row.unitCode}
+                  {formatQuantity(row.producedQuantity)} {row.unitCode}
                 </td>
                 <td className="is-numeric">
-                  {row.onHand} {row.unitCode}
+                  {formatQuantity(row.onHand)} {row.unitCode}
                 </td>
                 <td>
-                  {row.reserved} {row.unitCode}
+                  {formatQuantity(row.reserved)} {row.unitCode}
                 </td>
                 <td>
-                  {row.available} {row.unitCode}
+                  {formatQuantity(row.available)} {row.unitCode}
                 </td>
                 <td>
                   <span className={statusBadgeClass(row.status, row.isExpired)}>

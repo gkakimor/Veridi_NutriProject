@@ -326,13 +326,13 @@ export function StockCountPage() {
             <dt>Saldo sistema</dt>
             <dd>{formatQuantity(result.systemQuantity)}</dd>
             <dt>Contagem física</dt>
-            <dd>{result.countedQuantity}</dd>
+            <dd>{formatQuantity(result.countedQuantity)}</dd>
             <dt>Diferença</dt>
             <dd>{formatQuantity(result.difference)}</dd>
             <dt>Ajuste gerado</dt>
             <dd>
               {result.movementCreated
-                ? `${result.movementCreated.type === "ADJUSTMENT_IN" ? "Ajuste de entrada" : "Ajuste de saída"} — ${result.movementCreated.quantity}`
+                ? `${result.movementCreated.type === "ADJUSTMENT_IN" ? "Ajuste de entrada" : "Ajuste de saída"} — ${formatQuantity(result.movementCreated.quantity)}`
                 : "Nenhum — contagem confere com o sistema"}
             </dd>
           </dl>

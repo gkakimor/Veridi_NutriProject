@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
@@ -120,7 +121,7 @@ export function PricingPolicyDetailPage() {
         <tbody>
           {version.tiers.map((tier) => (
             <tr key={tier.id}>
-              <td className="is-numeric">{tier.quantity}</td>
+              <td className="is-numeric">{formatQuantity(tier.quantity)}</td>
               <td>{tier.uomCode}</td>
               <td className="is-numeric">
                 {formatPercent(tier.targetContributionMarginPercent)}

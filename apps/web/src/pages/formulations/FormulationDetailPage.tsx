@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { EntityLink } from "../../components/EntityLink";
@@ -295,7 +296,7 @@ export function FormulationDetailPage() {
                         : "—"}
                     </td>
                     <td>
-                      {version.basisQuantity} {version.outputUnitCode}
+                      {formatQuantity(version.basisQuantity)} {version.outputUnitCode}
                     </td>
                     <td>{formatDateTime(version.createdAt)}</td>
                     <td>{formatDateTime(version.activatedAt)}</td>

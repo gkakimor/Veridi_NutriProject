@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
@@ -304,7 +305,7 @@ export function FormulationTemplateDetailPage() {
               <td>
                 {component.itemCode} — {component.itemName}
               </td>
-              <td className="is-numeric">{component.quantity}</td>
+              <td className="is-numeric">{formatQuantity(component.quantity)}</td>
               <td>{component.unitCode}</td>
               <td>{SUPPLY_RESPONSIBILITY_LABELS[component.supplyResponsibility]}</td>
             </tr>
@@ -411,7 +412,7 @@ export function FormulationTemplateDetailPage() {
         {ativa && (
           <FormSection
             title={`Versão ativa — ${ativa.versionLabel}`}
-            subtitle={`Base ${ativa.basisQuantity} ${ativa.outputUnitCode} · ${FORMULATION_CALCULATION_MODE_LABELS[ativa.calculationMode]} · ${ativa.components.length} componentes. Versão ativa é histórica: para alterar, crie uma nova versão.`}
+            subtitle={`Base ${formatQuantity(ativa.basisQuantity)} ${ativa.outputUnitCode} · ${FORMULATION_CALCULATION_MODE_LABELS[ativa.calculationMode]} · ${ativa.components.length} componentes. Versão ativa é histórica: para alterar, crie uma nova versão.`}
           >
             {composicaoDaVersao(ativa)}
             {ativa.usageCount > 0 && (

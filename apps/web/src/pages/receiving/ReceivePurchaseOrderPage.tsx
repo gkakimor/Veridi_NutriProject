@@ -14,6 +14,7 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { formatQuantity } from "../../lib/quantity";
 
 /** ⓘ de um campo, lido do registro central — o texto nunca mora no JSX. */
 function DicaDoCampo({ id }: { id: HelpHintId }) {
@@ -326,7 +327,7 @@ export function ReceivePurchaseOrderPage() {
             <FormSection
               key={line.purchaseOrderLineId}
               title={`${line.itemCode} — ${line.itemName}`}
-              subtitle={`Pedido: ${line.orderedQuantity} ${line.unitCode}  ·  Recebido: ${line.receivedQuantity} ${line.unitCode}  ·  Aberto: ${line.openQuantity} ${line.unitCode}`}
+              subtitle={`Pedido: ${formatQuantity(line.orderedQuantity)} ${line.unitCode}  ·  Recebido: ${formatQuantity(line.receivedQuantity)} ${line.unitCode}  ·  Aberto: ${formatQuantity(line.openQuantity)} ${line.unitCode}`}
             >
               <div className="field-grid-2">
                 <div className="field">

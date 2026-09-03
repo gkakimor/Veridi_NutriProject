@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -183,7 +184,7 @@ export function InventoryMovementsPage() {
                     {INVENTORY_MOVEMENT_DIRECTION[movement.type] > 0 ? "Entrada" : "Saída"}
                   </span>
                 </td>
-                <td className="col-tight is-numeric">{movement.quantity}</td>
+                <td className="col-tight is-numeric">{formatQuantity(movement.quantity)}</td>
                 {/* Todo movimento tem um documento que o causou; o extrato só
                     conhecia recebimento e expedição, e as saídas de produção
                     — as maiores do ledger — apareciam sem origem nenhuma. */}

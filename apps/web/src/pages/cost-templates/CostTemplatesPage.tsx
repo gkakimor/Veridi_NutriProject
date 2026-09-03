@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CostTemplateSummaryDTO } from "@veridi/shared";
@@ -168,7 +169,7 @@ export function CostTemplatesPage() {
                 </td>
                 <td className="is-numeric">
                   {template.referenceOutputQuantity
-                    ? `${template.referenceOutputQuantity} ${template.referenceOutputUomCode ?? ""}`.trim()
+                    ? `${formatQuantity(template.referenceOutputQuantity)} ${template.referenceOutputUomCode ?? ""}`.trim()
                     : "—"}
                 </td>
                 <td className="is-numeric">

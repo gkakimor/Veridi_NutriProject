@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import type { CmvGroup, ProductCmvResponse } from "@veridi/shared";
@@ -101,7 +102,7 @@ export function CmvPrintPage() {
         {
           label: "Base de produção",
           value: data.referenceOutputQuantity
-            ? `${data.referenceOutputQuantity} ${data.referenceOutputUomCode ?? ""}`
+            ? `${formatQuantity(data.referenceOutputQuantity)} ${data.referenceOutputUomCode ?? ""}`
             : "—",
         },
         {
@@ -158,7 +159,7 @@ export function CmvPrintPage() {
                     </td>
                     <td className="is-number">
                       {component.requiredQuantity
-                        ? `${component.requiredQuantity} ${describeUnit(component.unitCode)}`
+                        ? `${formatQuantity(component.requiredQuantity)} ${describeUnit(component.unitCode)}`
                         : "—"}
                     </td>
                     <td>{describeOrigin(component.costSource, component.customerSupplied)}</td>
@@ -181,7 +182,7 @@ export function CmvPrintPage() {
             <tr>
               <td>Quantidade simulada</td>
               <td className="is-number">
-                {simulation.quantity} {simulation.uomCode}
+                {formatQuantity(simulation.quantity)} {simulation.uomCode}
               </td>
             </tr>
             <tr>

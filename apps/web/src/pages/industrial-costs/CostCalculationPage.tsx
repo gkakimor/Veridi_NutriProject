@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { IndustrialCostCalculationSnapshotDTO } from "@veridi/shared";
@@ -100,7 +101,7 @@ export function CostCalculationPage() {
             <dd>V{calculation.formulationVersionNumber}</dd>
             <dt>Base de referência</dt>
             <dd>
-              {calculation.referenceOutputQuantity} {calculation.referenceOutputUomCode}
+              {formatQuantity(calculation.referenceOutputQuantity)} {calculation.referenceOutputUomCode}
             </dd>
             <dt>Data de referência de custo</dt>
             <dd>{formatDate(calculation.costReferenceDate)}</dd>

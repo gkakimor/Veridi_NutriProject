@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type { CustomerDTO, CustomerOrderStatus } from "@veridi/shared";
 import {
@@ -351,12 +352,12 @@ export function OrderDeliveredBilledReportPage() {
               <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
             </td>
             <td className="is-number">
-              {row.orderedQuantity} {row.unitCode}
+              {formatQuantity(row.orderedQuantity)} {row.unitCode}
             </td>
-            <td className="is-number">{row.shippedQuantity}</td>
-            <td className="is-number">{row.billedQuantity}</td>
-            <td className="is-number">{row.unbilledShippedQuantity}</td>
-            <td className="is-number">{row.outstandingDeliveryQuantity}</td>
+            <td className="is-number">{formatQuantity(row.shippedQuantity)}</td>
+            <td className="is-number">{formatQuantity(row.billedQuantity)}</td>
+            <td className="is-number">{formatQuantity(row.unbilledShippedQuantity)}</td>
+            <td className="is-number">{formatQuantity(row.outstandingDeliveryQuantity)}</td>
             <td>{CUSTOMER_ORDER_STATUS_LABELS[row.status]}</td>
             <td>{CUSTOMER_ORDER_BILLING_STATUS_LABELS[row.billingStatus]}</td>
           </tr>

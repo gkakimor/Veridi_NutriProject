@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
@@ -195,7 +196,7 @@ export function PricingPage() {
             <dd>{INDUSTRIAL_COST_QUALITY_LABELS[pricing.costQuality]}</dd>
             <dt>Base de produção da estrutura</dt>
             <dd>
-              {pricing.referenceOutputQuantity} {pricing.referenceOutputUomCode}
+              {formatQuantity(pricing.referenceOutputQuantity)} {pricing.referenceOutputUomCode}
             </dd>
             <dt>Lote mínimo do produto</dt>
             <dd>{pricing.minimumBatchQuantity ?? "—"}</dd>
@@ -297,7 +298,7 @@ export function PricingPage() {
                 {pricing.tiers.map((tier) => (
                   <tr key={tier.id}>
                     <td className="is-numeric">
-                      {tier.quantity} {tier.uomCode}
+                      {formatQuantity(tier.quantity)} {tier.uomCode}
                     </td>
                     <td>{tier.batchCount}</td>
                     <td className="is-numeric">
@@ -353,7 +354,7 @@ export function PricingPage() {
                 // posição entra na chave — sem ela o React descarta avisos.
                 tier.warnings.map((warning, index) => (
                   <li key={`${tier.id}-${index}-${warning.code}`} className="field__hint">
-                    {tier.quantity} {tier.uomCode}: {warning.message}
+                    {formatQuantity(tier.quantity)} {tier.uomCode}: {warning.message}
                   </li>
                 )),
               )}
@@ -558,7 +559,7 @@ export function PricingPage() {
                 <ul className="confirm-dialog__list">
                   {rebase.tiers.map((tier) => (
                     <li key={tier.quantity}>
-                      {tier.quantity} {tier.uomCode}:{" "}
+                      {formatQuantity(tier.quantity)} {tier.uomCode}:{" "}
                       {tier.costPerUnitFrom ? formatUnitCost(tier.costPerUnitFrom) : "—"} →{" "}
                       {tier.costPerUnitTo ? formatUnitCost(tier.costPerUnitTo) : "—"}
                       {tier.unitPrice ? ` (preço acordado ${formatBRL(tier.unitPrice)})` : ""}

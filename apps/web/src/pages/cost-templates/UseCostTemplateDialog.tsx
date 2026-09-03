@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type { CostTemplateDTO, CostTemplateSummaryDTO } from "@veridi/shared";
 import {
@@ -123,7 +124,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
                       <td>{template.name}</td>
                       <td>V{template.activeVersionNumber}</td>
                       <td className="is-numeric">
-                        {template.referenceOutputQuantity} {template.referenceOutputUomCode}
+                        {formatQuantity(template.referenceOutputQuantity)} {template.referenceOutputUomCode}
                       </td>
                       <td className="is-numeric">{template.resourceCount}</td>
                       <td>
@@ -167,7 +168,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
               <dd>{selecionado.name}</dd>
               <dt>Base de produção do template</dt>
               <dd>
-                {versao.referenceOutputQuantity} {versao.referenceOutputUomCode}
+                {formatQuantity(versao.referenceOutputQuantity)} {versao.referenceOutputUomCode}
               </dd>
               <dt>Energia</dt>
               <dd>
@@ -192,7 +193,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
                       <td>
                         {usage.resourceCode} — {usage.resourceName}
                       </td>
-                      <td className="is-numeric">{usage.usageQuantity}</td>
+                      <td className="is-numeric">{formatQuantity(usage.usageQuantity)}</td>
                       <td>{INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}</td>
                       <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
                     </tr>
@@ -234,7 +235,7 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
                 por quê. A regra continua a mesma — o template manda —, o que
                 muda é dizê-la antes. */}
             <p className="field__hint">
-              A estrutura será criada com a base do template ({versao.referenceOutputQuantity}{" "}
+              A estrutura será criada com a base do template ({formatQuantity(versao.referenceOutputQuantity)}{" "}
               {versao.referenceOutputUomCode}). Você pode ajustá-la no rascunho antes de ativar.
             </p>
           </>

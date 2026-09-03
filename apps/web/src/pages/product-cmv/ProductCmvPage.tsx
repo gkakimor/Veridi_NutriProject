@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type {
@@ -414,7 +415,7 @@ export function ProductCmvPage() {
                 <div className="cmv-card">
                   <div className="cmv-card__label">Quantidade simulada</div>
                   <div className="cmv-card__value">
-                    {simulation.quantity} {simulation.uomCode}
+                    {formatQuantity(simulation.quantity)} {simulation.uomCode}
                   </div>
                   <div className="cmv-card__note">
                     {simulation.batchCount}{" "}
@@ -466,7 +467,7 @@ export function ProductCmvPage() {
                     <div className="cmv-card__label">Preço vigente</div>
                     <div className="cmv-card__value">{formatBRL(data.pricing.unitPrice)}</div>
                     <div className="cmv-card__note">
-                      Faixa de {data.pricing.tierQuantity} {simulation.uomCode}
+                      Faixa de {formatQuantity(data.pricing.tierQuantity)} {simulation.uomCode}
                     </div>
                   </div>
                 )}
@@ -502,7 +503,7 @@ export function ProductCmvPage() {
                 <dl className="definition-list cmv-defs">
                   <dt>Faixa</dt>
                   <dd>
-                    {data.pricing.tierQuantity} {data.outputUomCode}
+                    {formatQuantity(data.pricing.tierQuantity)} {data.outputUomCode}
                   </dd>
                   <dt>Preço</dt>
                   <dd>
@@ -792,7 +793,7 @@ export function ProductCmvPage() {
             <dt>Base de produção</dt>
             <dd>
               {data?.referenceOutputQuantity
-                ? `${data.referenceOutputQuantity} ${data.referenceOutputUomCode ?? ""}`
+                ? `${formatQuantity(data.referenceOutputQuantity)} ${data.referenceOutputUomCode ?? ""}`
                 : "—"}
             </dd>
             <dt>Cálculo de referência</dt>

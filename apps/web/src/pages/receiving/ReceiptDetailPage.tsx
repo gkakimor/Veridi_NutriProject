@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { ReceiptDTO } from "@veridi/shared";
@@ -227,7 +228,7 @@ export function ReceiptDetailPage() {
                     <td>
                       <EntityLink kind="item" id={line.itemId} code={line.itemCode} name={line.itemName} />
                     </td>
-                    <td className="is-numeric">{line.receivedQuantity}</td>
+                    <td className="is-numeric">{formatQuantity(line.receivedQuantity)}</td>
                     <td>{line.unitCode}</td>
                     <td>{line.supplierLot ?? "—"}</td>
                     <td>{formatDate(line.expiryDate)}</td>

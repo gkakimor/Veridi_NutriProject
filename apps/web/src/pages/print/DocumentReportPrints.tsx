@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { OrderOperationDTO, ProductionTraceabilityDTO } from "@veridi/shared";
@@ -77,7 +78,7 @@ export function ProductionTraceabilityPrintPage() {
         { label: "Situação", value: PRODUCTION_ORDER_STATUS_LABELS[data.status] },
         {
           label: "Planejado × produzido",
-          value: `${data.plannedQuantity} / ${data.producedQuantity} ${data.unitCode}`,
+          value: `${formatQuantity(data.plannedQuantity)} / ${formatQuantity(data.producedQuantity)} ${data.unitCode}`,
         },
         { label: "Concluída em", value: formatPrintDate(data.completedAt) },
       ]}
@@ -96,7 +97,7 @@ export function ProductionTraceabilityPrintPage() {
               <td>{printOrDash(row.lotCode)}</td>
               <td>{printOrDash(row.supplierLot)}</td>
               <td>{printOrDash(row.supplierName)}</td>
-              <td className="is-number">{row.quantity}</td>
+              <td className="is-number">{formatQuantity(row.quantity)}</td>
               <td>{row.unitCode}</td>
             </tr>
           ))}
@@ -113,7 +114,7 @@ export function ProductionTraceabilityPrintPage() {
             <tr key={row.lotId}>
               <td>{row.lotCode}</td>
               <td>{printOrDash(row.businessLotNumber)}</td>
-              <td className="is-number">{row.quantity}</td>
+              <td className="is-number">{formatQuantity(row.quantity)}</td>
               <td>{row.unitCode}</td>
               <td>{formatPrintDate(row.expiryDate)}</td>
               <td>
@@ -169,7 +170,7 @@ export function OrderOperationPrintPage() {
               <td>
                 {line.productCode} — {line.productName}
               </td>
-              <td className="is-number">{line.orderedQuantity}</td>
+              <td className="is-number">{formatQuantity(line.orderedQuantity)}</td>
               <td>{line.unitCode}</td>
             </tr>
           ))}
@@ -187,8 +188,8 @@ export function OrderOperationPrintPage() {
               <td>{order.code}</td>
               <td>{order.productCode}</td>
               <td>{PRODUCTION_ORDER_STATUS_LABELS[order.status]}</td>
-              <td className="is-number">{order.plannedQuantity}</td>
-              <td className="is-number">{order.producedQuantity}</td>
+              <td className="is-number">{formatQuantity(order.plannedQuantity)}</td>
+              <td className="is-number">{formatQuantity(order.producedQuantity)}</td>
             </tr>
           ))}
         </PrintTable>

@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { FormulationTemplateSummaryDTO } from "@veridi/shared";
@@ -209,7 +210,7 @@ export function FormulationTemplatesPage() {
                 </td>
                 <td className="is-numeric">
                   {template.basisQuantity
-                    ? `${template.basisQuantity} ${template.outputUnitCode ?? ""}`.trim()
+                    ? `${formatQuantity(template.basisQuantity)} ${template.outputUnitCode ?? ""}`.trim()
                     : "—"}
                   {template.calculationMode && (
                     <span className="cell-sub">

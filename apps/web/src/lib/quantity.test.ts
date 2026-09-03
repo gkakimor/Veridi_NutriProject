@@ -19,8 +19,12 @@ describe("quantidade para leitura humana", () => {
     expect(formatQuantity("10.000000")).toBe("10");
   });
 
-  it("usa vírgula, como o resto do sistema", () => {
-    expect(formatQuantity("1234.5")).toBe("1.234,5");
+  it("usa vírgula, e NÃO agrupa milhar", () => {
+    // Agrupar seria o português correto de ler e o veneno de copiar: o campo
+    // decimal trata um separador único como casa decimal, então "1.234,5"
+    // colado de volta viraria outro número.
+    expect(formatQuantity("1234.5")).toBe("1234,5");
+    expect(formatQuantity("1000")).toBe("1000");
   });
 
   it("valor abaixo da precisão vira aproximação, nunca zero", () => {

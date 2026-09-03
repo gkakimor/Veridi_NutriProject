@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback } from "react";
 import type { CustomerMaterialRowDTO } from "@veridi/shared";
 import { COA_STATUS_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
@@ -65,13 +66,13 @@ export function MaterialsTab() {
                 </td>
                 <td className="is-code col-tight">{row.lotCode}</td>
                 <td className="col-tight">
-                  {row.onHand} {row.unitCode}
+                  {formatQuantity(row.onHand)} {row.unitCode}
                 </td>
                 <td className="col-tight">
-                  {row.reserved} {row.unitCode}
+                  {formatQuantity(row.reserved)} {row.unitCode}
                 </td>
                 <td className="col-tight">
-                  {row.available} {row.unitCode}
+                  {formatQuantity(row.available)} {row.unitCode}
                 </td>
                 <td className="col-tight">
                   {formatDate(row.expiryDate)}

@@ -1,3 +1,4 @@
+import { formatQuantity } from "../lib/quantity";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { MaterialReservationLineDTO, ProductionOrderDTO } from "@veridi/shared";
@@ -94,19 +95,19 @@ export function ExtraConsumptionDialog({
         <div>
           <dt>Reservado</dt>
           <dd>
-            {line.quantity} {line.unitCode}
+            {formatQuantity(line.quantity)} {line.unitCode}
           </dd>
         </div>
         <div>
           <dt>Já consumido</dt>
           <dd>
-            {line.consumedQuantity} {line.unitCode}
+            {formatQuantity(line.consumedQuantity)} {line.unitCode}
           </dd>
         </div>
         <div>
           <dt>Saldo reservado</dt>
           <dd>
-            {line.remainingQuantity} {line.unitCode}
+            {formatQuantity(line.remainingQuantity)} {line.unitCode}
           </dd>
         </div>
         <div>
@@ -137,7 +138,7 @@ export function ExtraConsumptionDialog({
           />
           {excede && (
             <p className="field__error" id="extra-quantity-error">
-              Acima do saldo livre deste lote ({line.lotFreeQuantity} {line.unitCode}). Estoque
+              Acima do saldo livre deste lote ({formatQuantity(line.lotFreeQuantity)} {line.unitCode}). Estoque
               reservado por outra operação nunca é usado aqui.
             </p>
           )}

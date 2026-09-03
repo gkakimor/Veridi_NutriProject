@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate , useSearchParams } from "react-router-dom";
@@ -316,7 +317,7 @@ export function LotsPage() {
                   <EntityLink kind="supplier" id={lot.supplierId} code={lot.supplierCode} name={lot.supplierName} />
                 </td>
                 <td className="col-tight is-numeric">
-                  {lot.initialReceivedQuantity} {lot.unitCode}
+                  {formatQuantity(lot.initialReceivedQuantity)} {lot.unitCode}
                 </td>
                 <td className="col-tight">{formatDate(lot.expiryDate)}</td>
                 <td className="col-tight">{lot.location ?? "—"}</td>

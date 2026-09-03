@@ -1,3 +1,4 @@
+import { formatQuantity } from "../lib/quantity";
 import type {
   BillingDTO,
   CustomerOrderDTO,
@@ -89,10 +90,10 @@ export function CustomerOrderPrintDocument({ order }: { order: CustomerOrderDTO 
               <td>
                 {line.productCode} — {line.productName}
               </td>
-              <td className="is-number">{line.orderedQuantity}</td>
-              <td className="is-number">{line.shippedQuantity}</td>
-              <td className="is-number">{line.billedQuantity}</td>
-              <td className="is-number">{line.outstandingQuantity}</td>
+              <td className="is-number">{formatQuantity(line.orderedQuantity)}</td>
+              <td className="is-number">{formatQuantity(line.shippedQuantity)}</td>
+              <td className="is-number">{formatQuantity(line.billedQuantity)}</td>
+              <td className="is-number">{formatQuantity(line.outstandingQuantity)}</td>
               <td>{line.unitCode}</td>
             </tr>
           ))}
@@ -139,12 +140,12 @@ export function PurchaseOrderPrintDocument({ order }: { order: PurchaseOrderDTO 
               <td>
                 {line.itemCode} — {line.itemName}
               </td>
-              <td className="is-number">{line.orderedQuantity}</td>
+              <td className="is-number">{formatQuantity(line.orderedQuantity)}</td>
               <td>{line.unitCode}</td>
               <td className="is-number">{money(line.unitPrice)}</td>
               <td className="is-number">{money(line.lineTotal)}</td>
-              <td className="is-number">{line.receivedQuantity}</td>
-              <td className="is-number">{line.openQuantity}</td>
+              <td className="is-number">{formatQuantity(line.receivedQuantity)}</td>
+              <td className="is-number">{formatQuantity(line.openQuantity)}</td>
             </tr>
           ))}
         </PrintTable>
@@ -200,7 +201,7 @@ export function ReceiptPrintDocument({ receipt }: { receipt: ReceiptDTO }) {
               <td>
                 {line.itemCode} — {line.itemName}
               </td>
-              <td className="is-number">{line.receivedQuantity}</td>
+              <td className="is-number">{formatQuantity(line.receivedQuantity)}</td>
               <td>{line.unitCode}</td>
               <td>{printOrDash(line.lotCode)}</td>
               <td>{printOrDash(line.supplierLot)}</td>
@@ -243,8 +244,8 @@ export function ProductionOrderPrintDocument({
         { label: "OP interna", value: order.code },
         { label: "Produto", value: `${order.productCode} — ${order.productName}` },
         { label: "Formulação", value: printOrDash(order.formulationVersionLabel) },
-        { label: "Planejado", value: `${order.plannedQuantity} ${order.outputUnitCode}` },
-        { label: "Produzido", value: `${order.producedQuantity} ${order.outputUnitCode}` },
+        { label: "Planejado", value: `${formatQuantity(order.plannedQuantity)} ${order.outputUnitCode}` },
+        { label: "Produzido", value: `${formatQuantity(order.producedQuantity)} ${order.outputUnitCode}` },
         {
           label: "Partes",
           value: order.numberOfParts > 1 ? `${order.numberOfParts} partes` : "Parte única",
@@ -316,7 +317,7 @@ export function ProductionOrderPrintDocument({
                 <td>
                   {requirement.itemCode} — {requirement.itemName}
                 </td>
-                <td className="is-number">{requirement.requiredQuantity}</td>
+                <td className="is-number">{formatQuantity(requirement.requiredQuantity)}</td>
                 <td>{requirement.stockUnitCode}</td>
                 <td>{SUPPLY_RESPONSIBILITY_LABELS[requirement.supplyResponsibility]}</td>
                 <td>{printOrDash(requirement.eligibleOwnerCustomerName)}</td>
@@ -343,7 +344,7 @@ export function ProductionOrderPrintDocument({
                 <td>
                   {requirement.itemCode} — {requirement.itemName}
                 </td>
-                <td className="is-number">{requirement.requiredQuantity}</td>
+                <td className="is-number">{formatQuantity(requirement.requiredQuantity)}</td>
                 <td>{requirement.stockUnitCode}</td>
                 <td>{SUPPLY_RESPONSIBILITY_LABELS[requirement.supplyResponsibility]}</td>
                 <td>{printOrDash(requirement.eligibleOwnerCustomerName)}</td>
@@ -380,10 +381,10 @@ export function ProductionOrderPrintDocument({
               <td>
                 {requirement.itemCode} — {requirement.itemName}
               </td>
-              <td className="is-number">{requirement.requiredQuantity}</td>
-              <td className="is-number">{requirement.reserved}</td>
-              <td className="is-number">{requirement.available}</td>
-              <td className="is-number">{requirement.shortage}</td>
+              <td className="is-number">{formatQuantity(requirement.requiredQuantity)}</td>
+              <td className="is-number">{formatQuantity(requirement.reserved)}</td>
+              <td className="is-number">{formatQuantity(requirement.available)}</td>
+              <td className="is-number">{formatQuantity(requirement.shortage)}</td>
               <td>{requirement.stockUnitCode}</td>
             </tr>
           ))}
@@ -402,7 +403,7 @@ export function ProductionOrderPrintDocument({
                 {consumption.itemCode} — {consumption.itemName}
               </td>
               <td>{printOrDash(consumption.lotCode)}</td>
-              <td className="is-number">{consumption.quantity}</td>
+              <td className="is-number">{formatQuantity(consumption.quantity)}</td>
               <td>{consumption.unitCode}</td>
               <td>{formatPrintDateTime(consumption.consumedAt)}</td>
               <td>{printOrDash(consumption.consumedBy)}</td>
@@ -428,7 +429,7 @@ export function ProductionOrderPrintDocument({
                 </td>
                 <td>{printOrDash(linha.lotCode)}</td>
                 <td className="is-number">
-                  {linha.quantity} {linha.unitCode}
+                  {formatQuantity(linha.quantity)} {linha.unitCode}
                 </td>
                 <td>{printOrDash(linha.extraReason)}</td>
                 <td>{printOrDash(linha.extraRequestedBy)}</td>
@@ -449,14 +450,14 @@ export function ProductionOrderPrintDocument({
             <tr key={output.id}>
               <td>{printOrDash(output.lotCode)}</td>
               <td>{printOrDash(output.businessLotNumber)}</td>
-              <td className="is-number">{output.quantity}</td>
+              <td className="is-number">{formatQuantity(output.quantity)}</td>
               <td>{formatPrintDateTime(output.producedAt)}</td>
               <td>{printOrDash(output.producedBy)}</td>
             </tr>
           ))}
         </PrintTable>
         <p>
-          <strong>Planejado × realizado:</strong> {order.plannedQuantity} / {order.producedQuantity}{" "}
+          <strong>Planejado × realizado:</strong> {formatQuantity(order.plannedQuantity)} / {formatQuantity(order.producedQuantity)}{" "}
           {order.outputUnitCode}
         </p>
       </PrintSection>
@@ -516,7 +517,7 @@ export function ShipmentPrintDocument({ shipment }: { shipment: ShipmentDTO }) {
               </td>
               <td>{printOrDash(line.lotCode)}</td>
               <td>{printOrDash(line.businessLotNumber)}</td>
-              <td className="is-number">{line.quantity}</td>
+              <td className="is-number">{formatQuantity(line.quantity)}</td>
               <td>{line.unitCode}</td>
               <td>{formatPrintDateTime(line.verifiedAt)}</td>
               <td>{printOrDash(line.verifiedBy)}</td>
@@ -560,7 +561,7 @@ export function BillingPrintDocument({ billing }: { billing: BillingDTO }) {
               </td>
               <td>{printOrDash(line.lotCode)}</td>
               <td>{printOrDash(line.businessLotNumber)}</td>
-              <td className="is-number">{line.quantity}</td>
+              <td className="is-number">{formatQuantity(line.quantity)}</td>
               <td>{line.unitCode}</td>
               <td className="is-number">{money(line.unitPrice)}</td>
               <td className="is-number">{money(line.lineTotal)}</td>
@@ -617,7 +618,7 @@ export function LotTraceabilityPrintDocument({
               <div>
                 <dt>Quantidade produzida</dt>
                 <dd>
-                  {traceability.producedQuantity} {traceability.unitCode}
+                  {formatQuantity(traceability.producedQuantity)} {traceability.unitCode}
                 </dd>
               </div>
             </dl>
@@ -641,7 +642,7 @@ export function LotTraceabilityPrintDocument({
                       ? `Material do cliente — ${material.ownerCustomerName ?? "cliente não identificado"}`
                       : printOrDash(material.supplierName)}
                   </td>
-                  <td className="is-number">{material.quantity}</td>
+                  <td className="is-number">{formatQuantity(material.quantity)}</td>
                   <td>{material.unitCode}</td>
                 </tr>
               ))}
@@ -684,7 +685,7 @@ export function LotTraceabilityPrintDocument({
                     <td>{shipment.shipmentCode}</td>
                     <td>{formatPrintDate(shipment.shipmentDate)}</td>
                     <td className="is-number">
-                      {shipment.quantity} {traceability.unitCode}
+                      {formatQuantity(shipment.quantity)} {traceability.unitCode}
                     </td>
                   </tr>
                 ))}
@@ -705,11 +706,11 @@ export function LotTraceabilityPrintDocument({
                 <td>
                   {usage.productCode} — {usage.productName}
                 </td>
-                <td className="is-number">{usage.consumedQuantity}</td>
+                <td className="is-number">{formatQuantity(usage.consumedQuantity)}</td>
                 <td>{usage.unitCode}</td>
                 <td>
                   {usage.finishedLots
-                    .map((finished) => `${finished.lotCode} (${finished.producedQuantity})`)
+                    .map((finished) => `${finished.lotCode} (${formatQuantity(finished.producedQuantity)})`)
                     .join(", ") || "—"}
                 </td>
               </tr>
@@ -729,7 +730,7 @@ export function LotTraceabilityPrintDocument({
                   {usage.projectCode} — {usage.projectName}
                 </td>
                 <td>{usage.customerName}</td>
-                <td className="is-number">{usage.consumedQuantity}</td>
+                <td className="is-number">{formatQuantity(usage.consumedQuantity)}</td>
                 <td>{usage.unitCode}</td>
               </tr>
             ))}
@@ -758,7 +759,7 @@ export function RecipeSheetPrintDocument({ sheet }: { sheet: RecipeSheetDTO }) {
         { label: "Produto", value: `${sheet.productCode} — ${sheet.productName}` },
         { label: "Cliente", value: printOrDash(sheet.customerName) },
         { label: "Formulação", value: printOrDash(sheet.formulationVersionLabel) },
-        { label: "Planejado", value: `${sheet.plannedQuantity} ${sheet.outputUnitCode}` },
+        { label: "Planejado", value: `${formatQuantity(sheet.plannedQuantity)} ${sheet.outputUnitCode}` },
         { label: "Partes", value: String(sheet.numberOfParts) },
       ]}
     >
@@ -800,8 +801,8 @@ export function RecipeSheetPrintDocument({ sheet }: { sheet: RecipeSheetDTO }) {
                 <td>{printOrDash(weighing.lotCode)}</td>
                 <td>{printOrDash(weighing.supplierLot)}</td>
                 <td>{weighing.ownerType === "CUSTOMER" ? "Cliente" : "Veridi"}</td>
-                <td className="is-number">{weighing.plannedQuantity}</td>
-                <td className="is-number">{weighing.actualQuantity}</td>
+                <td className="is-number">{formatQuantity(weighing.plannedQuantity)}</td>
+                <td className="is-number">{formatQuantity(weighing.actualQuantity)}</td>
                 <td>{weighing.uomCode}</td>
                 <td>{formatPrintDateTime(weighing.executedAt)}</td>
                 <td>{weighing.executedByName}</td>
@@ -855,7 +856,7 @@ export function RecipeSheetPrintDocument({ sheet }: { sheet: RecipeSheetDTO }) {
                   {row.itemCode} — {row.itemName}
                 </td>
                 <td>{SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}</td>
-                <td className="is-number">{row.totalQuantity}</td>
+                <td className="is-number">{formatQuantity(row.totalQuantity)}</td>
                 <td>{row.unitCode}</td>
               </tr>
             ))}

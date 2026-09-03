@@ -5,6 +5,7 @@ import { PROJECT_SAMPLE_STATUS_LABELS } from "@veridi/shared";
 import { QrCode } from "../../components/QrCode";
 import { getSample } from "../../lib/samples-api";
 import "./sample-label-print.css";
+import { formatQuantity } from "../../lib/quantity";
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
@@ -50,7 +51,7 @@ export function SampleLabel({ sample }: { sample: ProjectSampleDTO }) {
         <dd>{sample.description ?? "—"}</dd>
         <dt>Quantidade</dt>
         <dd>
-          {sample.outputQuantity ? `${sample.outputQuantity} ${sample.outputUomCode ?? ""}` : "—"}
+          {sample.outputQuantity ? `${formatQuantity(sample.outputQuantity)} ${sample.outputUomCode ?? ""}` : "—"}
         </dd>
         <dt>Produzida em</dt>
         <dd>{formatDateTime(sample.producedAt)}</dd>

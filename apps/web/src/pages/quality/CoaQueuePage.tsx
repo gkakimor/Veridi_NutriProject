@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { RejectCoaDialog } from "../../components/RejectCoaDialog";
 import { useNavigate, Link } from "react-router-dom";
@@ -239,7 +240,7 @@ export function CoaQueuePage() {
                   </span>
                 </td>
                 <td className="col-tight is-numeric">
-                  {row.onHand} {row.unitCode}
+                  {formatQuantity(row.onHand)} {row.unitCode}
                 </td>
                 <td>
                   <div className="table__actions">

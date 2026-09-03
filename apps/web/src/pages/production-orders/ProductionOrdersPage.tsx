@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
@@ -257,7 +258,7 @@ export function ProductionOrdersPage() {
                 </td>
                 <td className="col-tight">{op.formulationVersionLabel ?? "—"}</td>
                 <td className="col-tight is-numeric">
-                  {op.plannedQuantity} {op.outputUnitCode}
+                  {formatQuantity(op.plannedQuantity)} {op.outputUnitCode}
                 </td>
                 <td className="col-tight">
                   <span className={materialsBadgeClass(op)}>{materialsLabel(op)}</span>

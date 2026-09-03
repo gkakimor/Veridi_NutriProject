@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type { PricingPolicyPreviewDTO, PricingPolicySummaryDTO } from "@veridi/shared";
 import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
@@ -217,7 +218,7 @@ export function UsePricingPolicyDialog({
                 <tbody>
                   {preview.tiers.map((tier) => (
                     <tr key={`${tier.quantity}-${tier.uomCode}`}>
-                      <td className="is-numeric">{tier.quantity}</td>
+                      <td className="is-numeric">{formatQuantity(tier.quantity)}</td>
                       <td>{tier.uomCode}</td>
                       <td className="is-numeric">
                         {formatPercent(tier.targetContributionMarginPercent)}

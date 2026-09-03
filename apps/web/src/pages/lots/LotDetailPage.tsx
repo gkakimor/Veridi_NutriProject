@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
@@ -418,21 +419,21 @@ export function LotDetailPage() {
               <DicaDoCampo id="estoque.fisico" />
             </dt>
             <dd>
-              {lot.onHand} {lot.unitCode}
+              {formatQuantity(lot.onHand)} {lot.unitCode}
             </dd>
             <dt>
               Reservado
               <DicaDoCampo id="estoque.reservado" />
             </dt>
             <dd>
-              {lot.reserved} {lot.unitCode}
+              {formatQuantity(lot.reserved)} {lot.unitCode}
             </dd>
             <dt>
               Disponível
               <DicaDoCampo id="estoque.disponivel" />
             </dt>
             <dd>
-              {lot.available} {lot.unitCode}
+              {formatQuantity(lot.available)} {lot.unitCode}
             </dd>
           </dl>
         </FormSection>
@@ -456,7 +457,7 @@ export function LotDetailPage() {
                 </thead>
                 <tbody>
                   {lot.shipments.map((shipment) => (
-                    <tr key={`${shipment.id}-${shipment.quantity}`}>
+                    <tr key={`${shipment.id}-${formatQuantity(shipment.quantity)}`}>
                       <td className="is-code">
                         <EntityLink kind="shipment" id={shipment.id} code={shipment.code} />
                       </td>
@@ -475,7 +476,7 @@ export function LotDetailPage() {
                         />
                       </td>
                       <td className="is-numeric">
-                        {shipment.quantity} {shipment.unitCode}
+                        {formatQuantity(shipment.quantity)} {shipment.unitCode}
                       </td>
                       <td>
                         <span className="badge badge--neutral">
@@ -772,7 +773,7 @@ export function LotDetailPage() {
               </dd>
               <dt>Quantidade produzida neste lote</dt>
               <dd>
-                {traceability.producedQuantity} {traceability.unitCode}
+                {formatQuantity(traceability.producedQuantity)} {traceability.unitCode}
               </dd>
             </dl>
 
@@ -809,7 +810,7 @@ export function LotDetailPage() {
                       </td>
                       <td>{material.supplierLot ?? "—"}</td>
                       <td className="is-numeric">
-                        {material.quantity} {material.unitCode}
+                        {formatQuantity(material.quantity)} {material.unitCode}
                       </td>
                       {/* Material do cliente não é fornecedor: dizer "—" aqui
                           lia como fornecedor desconhecido. */}
@@ -902,7 +903,7 @@ export function LotDetailPage() {
                         </td>
                         <td>{formatDate(shipment.shipmentDate)}</td>
                         <td className="is-numeric">
-                          {shipment.quantity} {traceability.unitCode}
+                          {formatQuantity(shipment.quantity)} {traceability.unitCode}
                         </td>
                       </tr>
                     ))}
@@ -948,7 +949,7 @@ export function LotDetailPage() {
                         <EntityLink kind="product" id={usage.productId} code={usage.productCode} name={usage.productName} />
                       </td>
                       <td className="is-numeric">
-                        {usage.consumedQuantity} {usage.unitCode}
+                        {formatQuantity(usage.consumedQuantity)} {usage.unitCode}
                       </td>
                       <td>
                         {/* Mesma coisa no sentido inverso: da matéria-prima
@@ -1010,7 +1011,7 @@ export function LotDetailPage() {
                       </td>
                       <td>{usage.customerName}</td>
                       <td className="is-numeric">
-                        {usage.consumedQuantity} {usage.unitCode}
+                        {formatQuantity(usage.consumedQuantity)} {usage.unitCode}
                       </td>
                       <td>{new Date(usage.consumedAt).toLocaleString("pt-BR")}</td>
                     </tr>

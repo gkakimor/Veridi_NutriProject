@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -171,12 +172,12 @@ export function InventoryItemDetailPage() {
           <dl className="definition-list">
             <dt>Físico</dt>
             <dd>
-              {detail.onHand} {detail.unitCode}
+              {formatQuantity(detail.onHand)} {detail.unitCode}
               <span className="field__hint"> — existe no depósito agora, somando os lotes.</span>
             </dd>
             <dt>Reservado</dt>
             <dd>
-              {detail.reserved} {detail.unitCode}
+              {formatQuantity(detail.reserved)} {detail.unitCode}
               <span className="field__hint">
                 {" "}
                 — parte do físico já comprometida com produção ou pedido.
@@ -184,7 +185,7 @@ export function InventoryItemDetailPage() {
             </dd>
             <dt>Disponível</dt>
             <dd>
-              {detail.available} {detail.unitCode}
+              {formatQuantity(detail.available)} {detail.unitCode}
               <span className="field__hint">
                 {" "}
                 — físico menos reservado, só lote liberado e não vencido.
@@ -192,7 +193,7 @@ export function InventoryItemDetailPage() {
             </dd>
             <dt>Em Compra</dt>
             <dd>
-              {detail.onOrder} {detail.unitCode}
+              {formatQuantity(detail.onOrder)} {detail.unitCode}
               <span className="field__hint"> — saldo de ordens de compra que ainda não chegou.</span>
             </dd>
           </dl>
@@ -251,13 +252,13 @@ export function InventoryItemDetailPage() {
                         </span>
                       </td>
                       <td className="is-numeric">
-                        {lot.onHand} {detail.unitCode}
+                        {formatQuantity(lot.onHand)} {detail.unitCode}
                       </td>
                       <td className="is-numeric">
-                        {lot.reserved} {detail.unitCode}
+                        {formatQuantity(lot.reserved)} {detail.unitCode}
                       </td>
                       <td className="is-numeric">
-                        {lot.available} {detail.unitCode}
+                        {formatQuantity(lot.available)} {detail.unitCode}
                       </td>
                       <td>
                         <button
@@ -323,17 +324,17 @@ export function InventoryItemDetailPage() {
                 <dd>{suggestion.strategy}</dd>
                 <dt>Necessário</dt>
                 <dd>
-                  {suggestion.requiredQuantity} {detail.unitCode}
+                  {formatQuantity(suggestion.requiredQuantity)} {detail.unitCode}
                 </dd>
                 <dt>Disponível</dt>
                 <dd>
-                  {suggestion.availableQuantity} {detail.unitCode}
+                  {formatQuantity(suggestion.availableQuantity)} {detail.unitCode}
                 </dd>
                 <dt>Falta</dt>
                 <dd>
                   {Number(suggestion.shortageQuantity) > 0 ? (
                     <span className="badge badge--err">
-                      Falta: {suggestion.shortageQuantity} {detail.unitCode}
+                      Falta: {formatQuantity(suggestion.shortageQuantity)} {detail.unitCode}
                     </span>
                   ) : (
                     <span className="badge badge--active">Sem falta</span>
@@ -377,10 +378,10 @@ export function InventoryItemDetailPage() {
                           <td>{formatDate(allocation.expiryDate)}</td>
                           <td>{allocation.location ?? "—"}</td>
                           <td className="is-numeric">
-                            {allocation.availableQuantity} {detail.unitCode}
+                            {formatQuantity(allocation.availableQuantity)} {detail.unitCode}
                           </td>
                           <td>
-                            {allocation.suggestedQuantity} {detail.unitCode}
+                            {formatQuantity(allocation.suggestedQuantity)} {detail.unitCode}
                           </td>
                         </tr>
                       ))}

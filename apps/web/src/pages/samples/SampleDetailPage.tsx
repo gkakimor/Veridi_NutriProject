@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
@@ -317,7 +318,7 @@ export function SampleDetailPage() {
             </dt>
             <dd>
               {sample.outputQuantity
-                ? `${sample.outputQuantity} ${sample.outputUomCode ?? ""}`
+                ? `${formatQuantity(sample.outputQuantity)} ${sample.outputUomCode ?? ""}`
                 : "—"}
             </dd>
             <dt>Observações de produção</dt>
@@ -396,7 +397,7 @@ export function SampleDetailPage() {
                     <td className="is-code">{consumption.lotCode ?? "—"}</td>
                     <td>{ownerLabel(consumption.ownerType, consumption.ownerCustomerName)}</td>
                     <td className="is-numeric">
-                      {consumption.quantity} {consumption.uomCode}
+                      {formatQuantity(consumption.quantity)} {consumption.uomCode}
                     </td>
                     <td>{formatDateTime(consumption.executedAt)}</td>
                     <td>{consumption.executedByName}</td>
@@ -472,7 +473,7 @@ export function SampleDetailPage() {
                     </option>
                     {lots.map((lot) => (
                       <option key={lot.lotId} value={lot.lotCode}>
-                        {lot.lotCode} — disponível {lot.available}
+                        {lot.lotCode} — disponível {formatQuantity(lot.available)}
                       </option>
                     ))}
                   </select>

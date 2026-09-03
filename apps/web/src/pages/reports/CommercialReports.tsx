@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
 import type { CustomerDTO, CustomerOrderDTO, CustomerOrderStatus } from "@veridi/shared";
 import {
@@ -262,14 +263,14 @@ export function FulfillmentReportPage() {
               <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
             </td>
             <td className="is-number">
-              {row.orderedQuantity} {row.unitCode}
+              {formatQuantity(row.orderedQuantity)} {row.unitCode}
             </td>
             <td className="is-number">{row.reservedRemaining}</td>
-            <td className="is-number">{row.producedQuantity}</td>
+            <td className="is-number">{formatQuantity(row.producedQuantity)}</td>
             <td className="is-number">{row.productionOrderCount}</td>
-            <td className="is-number">{row.shippedQuantity}</td>
-            <td className="is-number">{row.billedQuantity}</td>
-            <td className="is-number">{row.outstandingQuantity}</td>
+            <td className="is-number">{formatQuantity(row.shippedQuantity)}</td>
+            <td className="is-number">{formatQuantity(row.billedQuantity)}</td>
+            <td className="is-number">{formatQuantity(row.outstandingQuantity)}</td>
             <td>{CUSTOMER_ORDER_STATUS_LABELS[row.status]}</td>
             <td>{CUSTOMER_ORDER_BILLING_STATUS_LABELS[row.billingStatus]}</td>
           </tr>
@@ -353,7 +354,7 @@ export function OrderOperationReportPage() {
                     <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                   </td>
                   <td className="is-number">
-                    {line.orderedQuantity} {line.unitCode}
+                    {formatQuantity(line.orderedQuantity)} {line.unitCode}
                   </td>
                 </tr>
               ))}
@@ -374,10 +375,10 @@ export function OrderOperationReportPage() {
                     <DocLink code={row.lotCode} to={row.lotId ? `/estoque/lotes/${row.lotId}` : null} />
                   </td>
                   <td className="is-number">
-                    {row.reservedQuantity} {row.unitCode}
+                    {formatQuantity(row.reservedQuantity)} {row.unitCode}
                   </td>
-                  <td className="is-number">{row.shippedQuantity}</td>
-                  <td className="is-number">{row.remainingQuantity}</td>
+                  <td className="is-number">{formatQuantity(row.shippedQuantity)}</td>
+                  <td className="is-number">{formatQuantity(row.remainingQuantity)}</td>
                   <td>{row.releasedAt ? "Liberada" : "Ativa"}</td>
                 </tr>
               ))}
@@ -398,9 +399,9 @@ export function OrderOperationReportPage() {
                     <EntityLink kind="product" id={row.productId} code={row.productCode} name={row.productName} />
                   </td>
                   <td className="is-number">
-                    {row.plannedQuantity} {row.unitCode}
+                    {formatQuantity(row.plannedQuantity)} {row.unitCode}
                   </td>
-                  <td className="is-number">{row.producedQuantity}</td>
+                  <td className="is-number">{formatQuantity(row.producedQuantity)}</td>
                   <td>{PRODUCTION_ORDER_STATUS_LABELS[row.status]}</td>
                 </tr>
               ))}
@@ -440,7 +441,7 @@ export function OrderOperationReportPage() {
                   <td>{row.status}</td>
                   <td>
                     {row.lines
-                      .map((line) => `${line.productCode} ${line.quantity} ${line.unitCode}`)
+                      .map((line) => `${line.productCode} ${formatQuantity(line.quantity)} ${line.unitCode}`)
                       .join(" · ")}
                   </td>
                 </tr>

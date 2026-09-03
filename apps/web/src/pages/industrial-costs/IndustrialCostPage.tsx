@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
@@ -521,7 +522,7 @@ export function IndustrialCostPage() {
                 </dd>
                 <dt>Base de referência</dt>
                 <dd>
-                  {version.referenceOutputQuantity} {version.referenceOutputUomCode}
+                  {formatQuantity(version.referenceOutputQuantity)} {version.referenceOutputUomCode}
                 </dd>
                 <dt>Unidades por caixa</dt>
                 <dd>{version.unitsPerShippingBox ?? "—"}</dd>
@@ -652,7 +653,7 @@ export function IndustrialCostPage() {
                         <td>
                           <EntityLink kind="item" id={material.itemId} code={material.itemCode} name={material.itemName} />
                         </td>
-                        <td className="is-numeric">{material.quantity}</td>
+                        <td className="is-numeric">{formatQuantity(material.quantity)}</td>
                         <td>{material.unitCode}</td>
                         {/* A base do componente é enum no banco; na tela é
                             frase em português, como no editor de formulação. */}
@@ -873,7 +874,7 @@ export function IndustrialCostPage() {
                         </td>
                         <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[usage.resourceType]}</td>
                         <td>
-                          {usage.usageQuantity} {INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}
+                          {formatQuantity(usage.usageQuantity)} {INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}
                         </td>
                         <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
                         <td>{describeRate(usage, version.status)}</td>
@@ -1107,7 +1108,7 @@ options={selectableResources.map((resource) => ({
                     </td>
                     <td>V{row.formulationVersionNumber}</td>
                     <td>
-                      {row.referenceOutputQuantity} {row.referenceOutputUomCode}
+                      {formatQuantity(row.referenceOutputQuantity)} {row.referenceOutputUomCode}
                     </td>
                     <td>{row.complete ? "Completa" : "Com pendências"}</td>
                     <td>{formatDateTime(row.activatedAt)}</td>

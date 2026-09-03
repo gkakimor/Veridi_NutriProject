@@ -32,6 +32,7 @@ import { formatDate } from "../../lib/dates";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { ModalDialog } from "../../components/ModalDialog";
+import { formatQuantity } from "../../lib/quantity";
 
 /**
  * ⓘ de cabeçalho de coluna. O texto mora em `help-content`: “Reservado
@@ -120,8 +121,8 @@ function ProductGroup({
 
       {/* Cada número com a própria unidade — nada é somado entre produtos. */}
       <p className="shipment-product__meta">
-        Pedido: {group.orderedQuantity} {group.unitCode} · Já expedido: {group.shippedQuantity} ·
-        Falta expedir: {group.outstandingQuantity} · Reservado disponível: {group.reservedRemaining} ·
+        Pedido: {formatQuantity(group.orderedQuantity)} {group.unitCode} · Já expedido: {formatQuantity(group.shippedQuantity)} ·
+        Falta expedir: {formatQuantity(group.outstandingQuantity)} · Reservado disponível: {group.reservedRemaining} ·
         Expedindo agora: {group.shippingNow} · Lotes conferidos: {group.lotsVerified}/
         {group.lotsRequired}
       </p>
@@ -207,7 +208,7 @@ function ProductGroup({
                         );
                       })()
                     ) : (
-                      `${line.quantity} ${line.unitCode}`
+                      `${formatQuantity(line.quantity)} ${line.unitCode}`
                     )}
                   </td>
                   <td>
@@ -777,7 +778,7 @@ export function ShipmentPage() {
                       <td className="is-code">{line.lotCode ?? "—"}</td>
                       <td>{line.businessLotNumber ?? "—"}</td>
                       <td className="is-numeric">
-                        {line.quantity} {line.unitCode}
+                        {formatQuantity(line.quantity)} {line.unitCode}
                       </td>
                       <td>{formatDateTime(line.verifiedAt)}</td>
                       <td>{line.verifiedBy ?? "—"}</td>

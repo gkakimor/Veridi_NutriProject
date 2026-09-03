@@ -1,3 +1,4 @@
+import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { useNavigate } from "react-router-dom";
@@ -14,7 +15,7 @@ type TypeFilter = ItemType | "all";
 /** "3 kg aguardando liberação da Qualidade · 2 kg reservado" */
 function explicarIndisponibilidade(item: InventoryItemSummaryDTO): string {
   return item.unavailable
-    .map((linha) => `${linha.quantity} ${item.unitCode} ${INVENTORY_UNAVAILABLE_REASON_LABELS[linha.reason]}`)
+    .map((linha) => `${formatQuantity(linha.quantity)} ${item.unitCode} ${INVENTORY_UNAVAILABLE_REASON_LABELS[linha.reason]}`)
     .join(" · ");
 }
 
@@ -215,10 +216,10 @@ export function InventoryOverviewPage() {
                 <td className="col-flex">{item.itemName}</td>
                 <td className="col-tight">{ITEM_TYPE_LABELS[item.itemType]}</td>
                 <td className="col-tight">{item.unitCode}</td>
-                <td className="col-tight is-numeric">{item.onHand}</td>
-                <td className="col-tight is-numeric">{item.reserved}</td>
+                <td className="col-tight is-numeric">{formatQuantity(item.onHand)}</td>
+                <td className="col-tight is-numeric">{formatQuantity(item.reserved)}</td>
                 <td className="is-numeric">
-                  {item.available}
+                  {formatQuantity(item.available)}
                   {/*
                       A linha que destoa é a única que alguém pergunta.
                       Físico 5 e Disponível 0 sem explicação obriga o
@@ -231,7 +232,7 @@ export function InventoryOverviewPage() {
                     </span>
                   )}
                 </td>
-                <td className="col-tight is-numeric">{item.onOrder}</td>
+                <td className="col-tight is-numeric">{formatQuantity(item.onOrder)}</td>
               </tr>
             ))}
 

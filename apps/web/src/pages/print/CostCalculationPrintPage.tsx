@@ -14,6 +14,7 @@ import { PrintSheet } from "../../print/PrintSheet";
 import { formatUnitCost } from "../../components/CostBreakdown";
 import { formatBRL } from "../../lib/currency";
 import { getIndustrialCostCalculation } from "../../lib/cost-calculation-api";
+import { formatQuantity } from "../../lib/quantity";
 
 /**
  * Cálculo de custo industrial impresso.
@@ -63,7 +64,7 @@ export function CostCalculationPrintPage() {
         { label: "Formulação", value: `V${calculation.formulationVersionNumber}` },
         {
           label: "Base de referência",
-          value: `${calculation.referenceOutputQuantity} ${calculation.referenceOutputUomCode}`,
+          value: `${formatQuantity(calculation.referenceOutputQuantity)} ${calculation.referenceOutputUomCode}`,
         },
         {
           label: "Data de referência de custo",
@@ -99,7 +100,7 @@ export function CostCalculationPrintPage() {
                 {material.itemCode} — {material.itemName}
               </td>
               <td className="is-number">
-                {material.requiredQuantity} {material.unitCode}
+                {formatQuantity(material.requiredQuantity)} {material.unitCode}
               </td>
               <td className="is-number">{formatUnitCost(material.unitCost)}</td>
               <td>{INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[material.costSource]}</td>
@@ -124,7 +125,7 @@ export function CostCalculationPrintPage() {
               </td>
               <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.resourceType]}</td>
               <td className="is-number">
-                {resource.quantity} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
+                {formatQuantity(resource.quantity)} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
               </td>
               <td className="is-number">
                 {resource.rateValue === null ? "—" : formatBRL(resource.rateValue)}
@@ -242,7 +243,7 @@ export function CostCalculationPrintPage() {
                   {material.itemCode} — {material.itemName}
                 </td>
                 <td className="is-number">
-                  {material.requiredQuantity} {material.unitCode}
+                  {formatQuantity(material.requiredQuantity)} {material.unitCode}
                 </td>
               </tr>
             ))}

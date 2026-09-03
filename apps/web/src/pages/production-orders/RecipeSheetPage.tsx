@@ -15,6 +15,7 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { formatQuantity } from "../../lib/quantity";
 
 /**
  * ⓘ de um conceito da folha, lido do registro central.
@@ -242,7 +243,7 @@ export function RecipeSheetPage() {
             <dd>{sheet.formulationVersionLabel ?? "—"}</dd>
             <dt>Quantidade planejada</dt>
             <dd>
-              {sheet.plannedQuantity} {sheet.outputUnitCode}
+              {formatQuantity(sheet.plannedQuantity)} {sheet.outputUnitCode}
             </dd>
             <dt>
               Produção fracionada
@@ -345,7 +346,7 @@ export function RecipeSheetPage() {
                         )}
                       </td>
                       <td className="is-numeric">
-                        {requirement.plannedQuantity} {requirement.unitCode}
+                        {formatQuantity(requirement.plannedQuantity)} {requirement.unitCode}
                       </td>
                       {/*
                         Material baixado pelo Consumo Real não foi pesado
@@ -358,7 +359,7 @@ export function RecipeSheetPage() {
                         <>
                           <td className="is-numeric">
                             <span className="field__hint">
-                              {requirement.consumedQuantity} {requirement.unitCode} via Consumo Real
+                              {formatQuantity(requirement.consumedQuantity)} {requirement.unitCode} via Consumo Real
                             </span>
                           </td>
                           <td>
@@ -367,7 +368,7 @@ export function RecipeSheetPage() {
                         </>
                       ) : (
                         <>
-                          <td className="is-numeric">{requirement.weighedQuantity}</td>
+                          <td className="is-numeric">{formatQuantity(requirement.weighedQuantity)}</td>
                           <td>
                             <span
                               className={
@@ -376,7 +377,7 @@ export function RecipeSheetPage() {
                                   : "badge badge--warn"
                               }
                             >
-                              {requirement.differenceQuantity}
+                              {formatQuantity(requirement.differenceQuantity)}
                             </span>
                           </td>
                         </>
@@ -523,9 +524,9 @@ export function RecipeSheetPage() {
                       </td>
                       <td className="is-code">{weighing.lotCode ?? "—"}</td>
                       <td>{ownerLabel(weighing.ownerType, null)}</td>
-                      <td className="is-numeric">{weighing.plannedQuantity}</td>
+                      <td className="is-numeric">{formatQuantity(weighing.plannedQuantity)}</td>
                       <td>
-                        {weighing.actualQuantity} {weighing.uomCode}
+                        {formatQuantity(weighing.actualQuantity)} {weighing.uomCode}
                       </td>
                       <td>{weighing.executedByName}</td>
                       <td>{formatDateTime(weighing.executedAt)}</td>
@@ -568,7 +569,7 @@ export function RecipeSheetPage() {
                       </td>
                       <td>{SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]}</td>
                       <td className="is-numeric">
-                        {row.totalQuantity} {row.unitCode}
+                        {formatQuantity(row.totalQuantity)} {row.unitCode}
                       </td>
                     </tr>
                   ))}
