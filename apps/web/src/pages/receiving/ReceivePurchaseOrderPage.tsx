@@ -342,9 +342,19 @@ export function ReceivePurchaseOrderPage() {
                     onChange={(event) =>
                       handleLineChange(line.purchaseOrderLineId, "receiveNow", event.target.value)
                     }
+                    /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
+                    {...(fieldErrors[`lines.${lines.indexOf(line)}.receivedQuantity`]
+                      ? {
+                          "aria-invalid": true as const,
+                          "aria-describedby": `receive-now-${line.purchaseOrderLineId}-error`,
+                        }
+                      : {})}
                   />
                   {fieldErrors[`lines.${lines.indexOf(line)}.receivedQuantity`] && (
-                    <p className="field__error">
+                    <p
+                      className="field__error"
+                      id={`receive-now-${line.purchaseOrderLineId}-error`}
+                    >
                       {fieldErrors[`lines.${lines.indexOf(line)}.receivedQuantity`]}
                     </p>
                   )}

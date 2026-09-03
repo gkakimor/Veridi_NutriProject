@@ -1071,13 +1071,24 @@ export function CustomerOrderPage() {
                       entityType: "customer",
                     })
                   }
+                  /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
+                  {...(fieldErrors["customerId"]
+                    ? {
+                        "aria-invalid": true as const,
+                        "aria-describedby": "co-customerId-error",
+                      }
+                    : {})}
                 />
               ) : (
                 <p className="field-readonly-value">
                   {customerOrder?.customerCode} — {customerOrder?.customerName}
                 </p>
               )}
-              {fieldErrors["customerId"] && <p className="field__error">{fieldErrors["customerId"]}</p>}
+              {fieldErrors["customerId"] && (
+                <p className="field__error" id="co-customerId-error">
+                  {fieldErrors["customerId"]}
+                </p>
+              )}
             </div>
 
             <div className="field">

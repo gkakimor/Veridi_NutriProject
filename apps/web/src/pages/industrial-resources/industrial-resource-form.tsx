@@ -94,6 +94,25 @@ export function IndustrialResourceFormFields({
   fieldErrors,
   handleSubmit,
 }: IndustrialResourceFormController) {
+  /** Liga input, `aria-invalid` e a mensagem, para leitor de tela também. */
+  function fieldProps(field: string) {
+    const message = fieldErrors[field];
+    return {
+      ...(message ? { "aria-invalid": true as const } : {}),
+      ...(message ? { "aria-describedby": `resource-${field}-error` } : {}),
+    };
+  }
+
+  function fieldError(field: string) {
+    const message = fieldErrors[field];
+    if (!message) return null;
+    return (
+      <p className="field__error" id={`resource-${field}-error`}>
+        {message}
+      </p>
+    );
+  }
+
   return (
     <form id={INDUSTRIAL_RESOURCE_FORM_ID} onSubmit={handleSubmit}>
       {error && <p className="form-alert" role="alert">{error}</p>}
@@ -114,8 +133,9 @@ export function IndustrialResourceFormFields({
               value={form.name}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
               placeholder="Ex.: Operador de produção"
+              {...fieldProps("name")}
             />
-            {fieldErrors["name"] && <p className="field__error">{fieldErrors["name"]}</p>}
+            {fieldError("name")}
           </div>
 
           <div className="field">
@@ -165,13 +185,12 @@ export function IndustrialResourceFormFields({
                   setForm((prev) => ({ ...prev, powerKw: event.target.value }))
                 }
                 placeholder="Deixe vazio se não souber"
+                {...fieldProps("powerKw")}
               />
               <span className="field__hint">
                 Usada só para derivar energia. Vazio significa desconhecida — nunca zero.
               </span>
-              {fieldErrors["powerKw"] && (
-                <p className="field__error">{fieldErrors["powerKw"]}</p>
-              )}
+              {fieldError("powerKw")}
             </div>
           )}
         </div>

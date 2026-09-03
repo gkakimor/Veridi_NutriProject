@@ -284,6 +284,25 @@ export function ItemFormFields({
   item,
   units,
 }: ItemFormController) {
+  /** Liga input, `aria-invalid` e a mensagem, para leitor de tela também. */
+  function fieldProps(field: string) {
+    const message = fieldErrors[field];
+    return {
+      ...(message ? { "aria-invalid": true as const } : {}),
+      ...(message ? { "aria-describedby": `item-${field}-error` } : {}),
+    };
+  }
+
+  function fieldError(field: string) {
+    const message = fieldErrors[field];
+    if (!message) return null;
+    return (
+      <p className="field__error" id={`item-${field}-error`}>
+        {message}
+      </p>
+    );
+  }
+
   return (
     <form id={ITEM_FORM_ID} onSubmit={handleSubmit}>
       {error && <p className="form-alert" role="alert">{error}</p>}
@@ -316,6 +335,7 @@ export function ItemFormFields({
               disabled={structuralLocked}
               value={form.type}
               onChange={(event) => handleTypeChange(event.target.value as ItemType)}
+              {...fieldProps("type")}
             >
               <option value="" disabled>
                 Selecione…
@@ -337,9 +357,7 @@ export function ItemFormFields({
                 de Produtos.
               </p>
             )}
-            {fieldErrors["type"] && (
-              <p className="field__error">{fieldErrors["type"]}</p>
-            )}
+            {fieldError("type")}
             {structuralLocked && <p className="field__hint">{structuralLockHint}</p>}
           </div>
 
@@ -355,6 +373,7 @@ export function ItemFormFields({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, unitCode: event.target.value }))
               }
+              {...fieldProps("unitCode")}
             >
               <option value="" disabled>
                 Selecione…
@@ -365,9 +384,7 @@ export function ItemFormFields({
                 </option>
               ))}
             </select>
-            {fieldErrors["unitCode"] && (
-              <p className="field__error">{fieldErrors["unitCode"]}</p>
-            )}
+            {fieldError("unitCode")}
             {structuralLocked && <p className="field__hint">{structuralLockHint}</p>}
           </div>
 
@@ -383,10 +400,9 @@ export function ItemFormFields({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, name: event.target.value }))
               }
+              {...fieldProps("name")}
             />
-            {fieldErrors["name"] && (
-              <p className="field__error">{fieldErrors["name"]}</p>
-            )}
+            {fieldError("name")}
           </div>
         </div>
       </FormSection>
@@ -463,14 +479,13 @@ export function ItemFormFields({
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, defaultPurityPercent: event.target.value }))
                 }
+                {...fieldProps("defaultPurityPercent")}
               />
               {/* Vazio = desconhecida. Nunca é assumida como 100%. */}
               <p className="field__hint">
                 Em branco significa pureza desconhecida — nunca 100%.
               </p>
-              {fieldErrors["defaultPurityPercent"] && (
-                <p className="field__error">{fieldErrors["defaultPurityPercent"]}</p>
-              )}
+              {fieldError("defaultPurityPercent")}
             </div>
 
             {form.type === "PACKAGING" && (

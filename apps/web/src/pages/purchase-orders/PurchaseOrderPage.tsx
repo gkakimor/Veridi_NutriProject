@@ -776,13 +776,24 @@ export function PurchaseOrderPage() {
                     entityType: "supplier",
                   })
                 }
+                /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
+                {...(fieldErrors["supplierId"]
+                  ? {
+                      "aria-invalid": true as const,
+                      "aria-describedby": "po-supplierId-error",
+                    }
+                  : {})}
               />
             ) : (
               <p className="field-readonly-value">
                 {purchaseOrder?.supplierCode} — {purchaseOrder?.supplierName}
               </p>
             )}
-            {fieldErrors["supplierId"] && <p className="field__error">{fieldErrors["supplierId"]}</p>}
+            {fieldErrors["supplierId"] && (
+              <p className="field__error" id="po-supplierId-error">
+                {fieldErrors["supplierId"]}
+              </p>
+            )}
           </div>
 
           <div className="field">

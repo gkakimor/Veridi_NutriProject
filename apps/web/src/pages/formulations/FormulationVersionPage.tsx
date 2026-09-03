@@ -433,6 +433,15 @@ export function FormulationVersionPage() {
   const dosesInformadas = Number(dosesPerPackage.trim()) > 0;
   const mostrarDoses = dosesObrigatorias || dosesPerPackage.trim() !== "";
 
+  /*
+   * O campo de doses tem duas mensagens de erro independentes e elas podem
+   * aparecer juntas — a descrição soma os dois ids em vez de escolher um.
+   */
+  const dosesErrorIds = [
+    ...(dosesObrigatorias && !dosesInformadas ? ["version-doses-required-error"] : []),
+    ...(fieldErrors["dosesPerPackage"] ? ["version-dosesPerPackage-error"] : []),
+  ];
+
   function optionsForRow(row: ComponentRow): ItemOption[] {
     const usedByOtherRows = new Set(components.filter((c) => c.key !== row.key).map((c) => c.itemId));
     const base = activeItems.filter((item) => !usedByOtherRows.has(item.id));
@@ -804,6 +813,13 @@ export function FormulationVersionPage() {
                 inputMode="decimal"
                 value={basisQuantity}
                 onChange={(event) => setBasisQuantity(event.target.value)}
+                /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
+                {...(fieldErrors["basisQuantity"]
+                  ? {
+                      "aria-invalid": true as const,
+                      "aria-describedby": "version-basisQuantity-error",
+                    }
+                  : {})}
               />
             ) : (
               <p className="field-readonly-value">
@@ -811,7 +827,9 @@ export function FormulationVersionPage() {
               </p>
             )}
             {fieldErrors["basisQuantity"] && (
-              <p className="field__error">{fieldErrors["basisQuantity"]}</p>
+              <p className="field__error" id="version-basisQuantity-error">
+                {fieldErrors["basisQuantity"]}
+              </p>
             )}
           </div>
 
@@ -864,6 +882,13 @@ export function FormulationVersionPage() {
                   inputMode="numeric"
                   value={dosesPerPackage}
                   onChange={(event) => setDosesPerPackage(event.target.value)}
+                  /* Liga campo, `aria-invalid` e as mensagens, para leitor de tela também. */
+                  {...(dosesErrorIds.length > 0
+                    ? {
+                        "aria-invalid": true as const,
+                        "aria-describedby": dosesErrorIds.join(" "),
+                      }
+                    : {})}
                 />
               ) : (
                 <p className="field-readonly-value">{version.dosesPerPackage ?? "—"}</p>
@@ -872,13 +897,15 @@ export function FormulationVersionPage() {
                 Usado para calcular a quantidade total de componentes definidos por dose.
               </p>
               {dosesObrigatorias && !dosesInformadas && (
-                <p className="field__error">
+                <p className="field__error" id="version-doses-required-error">
                   Há componentes calculados por dose. Sem este número a formulação não pode ser
                   ativada — e a quantidade de material não existe.
                 </p>
               )}
               {fieldErrors["dosesPerPackage"] && (
-                <p className="field__error">{fieldErrors["dosesPerPackage"]}</p>
+                <p className="field__error" id="version-dosesPerPackage-error">
+                  {fieldErrors["dosesPerPackage"]}
+                </p>
               )}
             </div>
           )}

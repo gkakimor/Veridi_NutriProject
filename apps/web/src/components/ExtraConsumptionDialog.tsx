@@ -129,9 +129,14 @@ export function ExtraConsumptionDialog({
             placeholder="0"
             value={quantity}
             onChange={(event) => setQuantity(event.target.value)}
+            /* Liga o erro ao campo: sem isto a mensagem aparece na tela e nao
+               chega a quem le por leitor de tela. Mesmo desenho de
+               `customer-form`. */
+            {...(excede ? { "aria-invalid": true as const } : {})}
+            {...(excede ? { "aria-describedby": "extra-quantity-error" } : {})}
           />
           {excede && (
-            <p className="field__error">
+            <p className="field__error" id="extra-quantity-error">
               Acima do saldo livre deste lote ({line.lotFreeQuantity} {line.unitCode}). Estoque
               reservado por outra operação nunca é usado aqui.
             </p>
