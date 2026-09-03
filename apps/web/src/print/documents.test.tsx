@@ -84,6 +84,48 @@ describe("Faturamento impresso", () => {
     expect(screen.getByText(/Valor total:/).closest("p")).toHaveTextContent("1.000,00");
   });
 
+  /*
+   * O papel tem de fechar na conferência.
+   *
+   * Este é o lugar onde mais pesa: na tela ainda dá para clicar e ver o número
+   * inteiro; no papel, não. O documento imprimia `R$ 4,05` ao lado de um total
+   * de `R$ 498,53` calculado sobre `4,0531`, e quem conferisse com a
+   * calculadora chegava a R$ 498,15.
+   *
+   * A correção da tela passou por aqui sem pegar: os documentos usavam um
+   * helper `money` próprio, e a varredura estava ancorada em `formatBRL`. Um
+   * teste no papel é o que impede a próxima passada de repetir isso.
+   */
+  it("preço unitário de quatro casas chega inteiro ao papel, e o total fecha", () => {
+    const quebrado: BillingDTO = {
+      ...billingBase,
+      lines: [
+        {
+          ...billingBase.lines[0]!,
+          quantity: "123",
+          agreedUnitPrice: "4.0531",
+          unitPrice: "4.0531",
+          lineTotal: "498.53",
+        },
+      ],
+      totalQuantity: "123",
+      totalAmount: "498.53",
+    };
+    render(<BillingPrintDocument billing={quebrado} />);
+
+    expect(screen.getByText(/4,0531/)).toBeInTheDocument();
+    // Aparece na linha e no rodape — as duas ocorrencias sao o ponto.
+    expect(screen.getAllByText(/498,53/).length).toBeGreaterThanOrEqual(2);
+    // A conta que o operador faz com o que está impresso.
+    expect((4.0531 * 123).toFixed(2)).toBe("498.53");
+  });
+
+  it("total de linha continua em duas casas — não é preço", () => {
+    render(<BillingPrintDocument billing={billingBase} />);
+    expect(screen.getByText(/Valor total:/).closest("p")).toHaveTextContent("1.000,00");
+    expect(screen.queryByText(/1\.000,0000/)).not.toBeInTheDocument();
+  });
+
   it("com preço incompleto não apresenta total parcial como total", () => {
     const incomplete: BillingDTO = {
       ...billingBase,

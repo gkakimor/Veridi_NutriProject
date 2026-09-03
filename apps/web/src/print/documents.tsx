@@ -51,6 +51,21 @@ function money(value: string | null): string {
 }
 
 /**
+ * PREÇO UNITÁRIO no papel — de 2 a 4 casas, conforme o preço.
+ *
+ * `money` vale para valor já somado. Um preço unitário passado por ele saía
+ * com duas casas ao lado de um total calculado com quatro, e o documento
+ * impresso deixava de fechar na conferência: `R$ 4,05 × 123` dá R$ 498,15 num
+ * papel que diz R$ 498,53.
+ *
+ * O papel é onde isso mais pesa, porque é onde não há como clicar para ver o
+ * número inteiro.
+ */
+function unitPrice(value: string | null): string {
+  return value === null ? "—" : formatUnitPriceBRL(value);
+}
+
+/**
  * Aviso do Pedido do Cliente impresso.
  *
  * A folha mostra reservado, faturado e falta expedir — posição de
@@ -154,7 +169,7 @@ export function PurchaseOrderPrintDocument({ order }: { order: PurchaseOrderDTO 
               </td>
               <td className="is-number">{formatQuantity(line.orderedQuantity)}</td>
               <td>{line.unitCode}</td>
-              <td className="is-number">{money(line.unitPrice)}</td>
+              <td className="is-number">{unitPrice(line.unitPrice)}</td>
               <td className="is-number">{money(line.lineTotal)}</td>
               <td className="is-number">{formatQuantity(line.receivedQuantity)}</td>
               <td className="is-number">{formatQuantity(line.openQuantity)}</td>
@@ -219,7 +234,7 @@ export function ReceiptPrintDocument({ receipt }: { receipt: ReceiptDTO }) {
               <td>{printOrDash(line.supplierLot)}</td>
               <td>{formatPrintDate(line.expiryDate)}</td>
               <td>{printOrDash(line.location)}</td>
-              <td className="is-number">{money(line.purchaseUnitPrice)}</td>
+              <td className="is-number">{unitPrice(line.purchaseUnitPrice)}</td>
               {/* Sem custo informado fica "—" e nunca zero. */}
               <td className="is-number">{money(line.actualUnitCost)}</td>
             </tr>
@@ -575,7 +590,7 @@ export function BillingPrintDocument({ billing }: { billing: BillingDTO }) {
               <td>{printOrDash(line.businessLotNumber)}</td>
               <td className="is-number">{formatQuantity(line.quantity)}</td>
               <td>{line.unitCode}</td>
-              <td className="is-number">{money(line.unitPrice)}</td>
+              <td className="is-number">{unitPrice(line.unitPrice)}</td>
               <td className="is-number">{money(line.lineTotal)}</td>
             </tr>
           ))}
