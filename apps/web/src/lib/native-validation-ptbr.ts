@@ -52,9 +52,21 @@ export function instalarMensagensObrigatorias(): () => void {
     // Só campo vazio: formato e faixa têm mensagem própria do navegador.
     if (!campo.validity.valueMissing) return;
     campo.setCustomValidity(mensagemDe(campo));
-    // O balão lê a mensagem no momento em que aparece; reapresentar aqui
-    // garante o texto certo já na primeira tentativa.
-    campo.reportValidity();
+    /*
+     * NÃO chamar `reportValidity()` aqui.
+     *
+     * Havia uma chamada nesta linha, na suposição de que o balão precisava ser
+     * reapresentado para exibir a mensagem recém-definida. A suposição estava
+     * errada, e o preço era caro: a validação interativa dispara `invalid` em
+     * TODOS os campos inválidos e só então mostra o balão do primeiro, então a
+     * mensagem definida aqui já é a que aparece. Reapresentar era redundante —
+     * e `reportValidity()` revalida o campo, o que dispara `invalid` de novo,
+     * que cai neste mesmo handler: recursão até `RangeError: Maximum call
+     * stack size exceeded`, uma série por submissão.
+     *
+     * Guarda de reentrância resolveria o sintoma e manteria a chamada inútil.
+     * Some com a causa.
+     */
   }
 
   function aoEditar(event: Event) {
