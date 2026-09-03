@@ -27,6 +27,40 @@ afterEach(() => {
 });
 
 describe("Ações de linha", () => {
+  it("fecha o menu quando o foco sai por Tab", () => {
+    render(
+      <>
+        <RowActions actions={[{ label: "Inativar", destructive: true, onSelect: vi.fn() }]}>
+          <button type="button">Editar</button>
+        </RowActions>
+        <button type="button">Fora do menu</button>
+      </>,
+    );
+
+    fireEvent.click(screen.getByLabelText("Mais ações"));
+    expect(screen.getByText("Inativar")).toBeTruthy();
+
+    // Tabular para fora deixava o menu flutuando aberto sobre a próxima
+    // linha, ancorado numa ação que já não era a do foco.
+    const fora = screen.getByText("Fora do menu");
+    fireEvent.focusOut(screen.getByLabelText("Mais ações"), { relatedTarget: fora });
+    expect(screen.queryByText("Inativar")).toBeNull();
+  });
+
+  it("não fecha o menu quando o foco sai da janela inteira", () => {
+    render(
+      <RowActions actions={[{ label: "Inativar", destructive: true, onSelect: vi.fn() }]}>
+        <button type="button">Editar</button>
+      </RowActions>,
+    );
+
+    fireEvent.click(screen.getByLabelText("Mais ações"));
+    // `relatedTarget` nulo é troca de aba ou janela: a pessoa pode voltar, e
+    // fechar aqui seria perder o menu por um motivo que não é dela.
+    fireEvent.focusOut(screen.getByLabelText("Mais ações"), { relatedTarget: null });
+    expect(screen.getByText("Inativar")).toBeTruthy();
+  });
+
   it("mantém a ação principal visível e a destrutiva no menu", () => {
     const inactivate = vi.fn();
     render(

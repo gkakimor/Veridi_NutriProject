@@ -1238,9 +1238,29 @@
 }
 
 .row-actions__toggle {
+  /*
+   * Precisa da propria: o pai `.row-actions` tambem e `relative`, e sem isto o
+   * `::after` ancoraria no contêiner inteiro em vez de no botao.
+   */
+  position: relative;
   min-width: 28px;
   padding: 0 var(--sp-2);
   line-height: 1;
+}
+
+/*
+ * Area de clique de 36px sem engordar o icone.
+ *
+ * O botao visivel tem 28px, que e pequeno demais para acertar de primeira e se
+ * repete em nove telas de listagem. Aumentar o icone estragaria a densidade da
+ * tabela; aumentar so o ALVO nao custa nada, porque a linha ja tem cerca de
+ * 44px de altura e sobra folga em volta. A tecnica ja e usada no gatilho da
+ * dica de campo, que vai de 16px para 24px do mesmo jeito.
+ */
+.row-actions__toggle::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--sp-1) * -1);
 }
 
 /*
@@ -1397,6 +1417,24 @@ td .entity-select {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-1);
+  /*
+   * A lista para em cerca de dez resultados e rola. Rolava sem nenhuma pista:
+   * a barra do sistema so aparece em uso, entao quem procurava um item alem do
+   * decimo concluia que ele nao existia — e o campo oferece "+ Novo" logo
+   * acima, entao o caminho natural era cadastrar de novo o que ja existia.
+   *
+   * Mesma sombra de quatro camadas de `.table-container`, na vertical.
+   */
+  scrollbar-width: thin;
+  background-image:
+    linear-gradient(to bottom, var(--surface), rgba(255, 255, 255, 0)),
+    linear-gradient(to top, var(--surface), rgba(255, 255, 255, 0)),
+    linear-gradient(to bottom, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0)),
+    linear-gradient(to top, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0));
+  background-position: 0 0, 0 100%, 0 0, 0 100%;
+  background-repeat: no-repeat;
+  background-size: 100% 24px, 100% 24px, 100% 14px, 100% 14px;
+  background-attachment: local, local, scroll, scroll;
 }
 
 .entity-select__option {

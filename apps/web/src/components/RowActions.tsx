@@ -98,11 +98,30 @@ export function RowActions({
       toggle.current?.focus();
     }
 
+    /*
+     * Sair com Tab tambem fecha. Havia fechamento por clique fora e por
+     * Escape, e nenhum por foco: quem abria o menu com Enter e seguia
+     * tabulando deixava o menu flutuando aberto sobre a proxima linha, ancorado
+     * numa acao que nao era mais a que estava em foco.
+     *
+     * `focusout` sobe, entao o alvo do foco novo chega em `relatedTarget`.
+     * `null` significa que o foco saiu da janela — a pessoa pode voltar, e
+     * fechar ali seria perder o menu por trocar de aba.
+     */
+    function handleFocusOut(event: FocusEvent) {
+      const proximo = event.relatedTarget as Node | null;
+      if (!proximo) return;
+      if (!container.current?.contains(proximo)) setOpen(false);
+    }
+
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    container.current?.addEventListener("focusout", handleFocusOut);
+    const atual = container.current;
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      atual?.removeEventListener("focusout", handleFocusOut);
     };
   }, [open]);
 
