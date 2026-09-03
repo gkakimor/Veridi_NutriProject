@@ -144,7 +144,7 @@ export function ShipmentsPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table table--sticky-actions table--clickable-rows">

@@ -275,7 +275,7 @@ export function FormulationTemplateDetailPage() {
   if (!template) {
     return (
       <div className="doc-body">
-        {error ? <p className="form-alert">{error}</p> : <p>Carregando…</p>}
+        {error ? <p className="form-alert" role="alert">{error}</p> : <p>Carregando…</p>}
       </div>
     );
   }
@@ -349,7 +349,7 @@ export function FormulationTemplateDetailPage() {
             antes da primeira seção. */}
         <ContextHelp topic={helpTopics["producao.templateDetalhe"]} />
 
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         <FormSection
           title="Identificação"

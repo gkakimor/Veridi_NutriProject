@@ -92,7 +92,7 @@ export function PricingPolicyOrigin({ version, canEdit, onChanged }: Props) {
 
   return (
     <div className="template-origin">
-      {erro && <p className="form-alert">{erro}</p>}
+      {erro && <p className="form-alert" role="alert">{erro}</p>}
 
       {criada && (
         <p className="field__hint" role="status">

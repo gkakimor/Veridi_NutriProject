@@ -102,7 +102,7 @@ export function PricingListPage() {
         </div>
       </div>
 
-      <ContextHelp topic={helpTopics["cmv.comoFunciona"]} />
+      <ContextHelp topic={helpTopics["precificacao.comoFunciona"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">
@@ -148,7 +148,7 @@ export function PricingListPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextProductId && (
         <RecordContextChip

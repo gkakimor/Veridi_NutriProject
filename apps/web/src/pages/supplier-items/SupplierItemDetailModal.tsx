@@ -20,6 +20,8 @@ import {
 import { qualificationBadgeClass } from "./SupplierItemsPage";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
@@ -91,7 +93,7 @@ export function SupplierItemDetailModal({
       setSupplierItem(updated);
       onDone?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
@@ -107,7 +109,7 @@ export function SupplierItemDetailModal({
         title="Carregando…"
         footer={null}
       >
-        {error ? <p className="form-alert">{error}</p> : <p>Carregando…</p>}
+        {error ? <p className="form-alert" role="alert">{error}</p> : <p>Carregando…</p>}
       </FullWorkspaceModal>
     );
   }
@@ -129,7 +131,7 @@ export function SupplierItemDetailModal({
         </>
       }
     >
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <FormSection title="Relação">
         <dl className="definition-list">
@@ -527,11 +529,14 @@ export function SupplierItemDetailModal({
                   void run(
                     () =>
                       createSupplierItemOffer(supplierItem.id, {
-                        unitPrice: price.trim(),
+                        unitPrice: exigirDecimal(price, "Preço"),
                         currencyCode: currencyCode.trim() || DEFAULT_OFFER_CURRENCY,
                         priceUomCode,
                         ...(moq.trim()
-                          ? { minimumOrderQuantity: moq.trim(), minimumOrderUomCode: moqUomCode }
+                          ? {
+                              minimumOrderQuantity: exigirDecimal(moq, "Pedido mínimo"),
+                              minimumOrderUomCode: moqUomCode,
+                            }
                           : {}),
                         ...(effectiveAt
                           ? { effectiveAt: new Date(`${effectiveAt}T12:00:00`).toISOString() }

@@ -4,6 +4,8 @@ import type { CostTemplateSummaryDTO } from "@veridi/shared";
 import { createCostTemplate, listCostTemplates } from "../../lib/cost-pricing-templates-api";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { LibraryPagination, LibraryStatus, LibraryToolbar } from "./TemplateLibraryTable";
 
 /**
@@ -87,6 +89,8 @@ export function CostTemplatesPage() {
         )}
       </div>
 
+      <ContextHelp topic={helpTopics["templateCusto.comoFunciona"]} />
+
       {creating && (
         <div className="inline-form">
           <label htmlFor="cost-template-name">Nome do template</label>
@@ -130,7 +134,7 @@ export function CostTemplatesPage() {
         onToggleArchived={setShowArchived}
       />
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">

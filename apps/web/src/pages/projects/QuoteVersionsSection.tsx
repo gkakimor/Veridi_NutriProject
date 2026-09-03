@@ -21,7 +21,8 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
 import { QuoteClosingSection } from "./QuoteClosingSection";
 import { FormSection } from "../../components/FormSection";
-import { IncompleteCostApiError } from "../../lib/api-errors";
+import { IncompleteCostApiError, apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { formatBRL } from "../../lib/currency";
 import { QuoteConditionsForm } from "./QuoteConditionsForm";
 
@@ -176,7 +177,7 @@ export function QuoteVersionsSection({
       await action();
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha na operação");
+      setError(apiErrorMessage(err, "Falha na operação"));
     } finally {
       setSaving(false);
     }
@@ -227,7 +228,7 @@ export function QuoteVersionsSection({
         setSendConfirm({ quote: target.quote, lines: [], incompleteCost: true });
         return;
       }
-      setError(err instanceof Error ? err.message : "Falha na operação");
+      setError(apiErrorMessage(err, "Falha na operação"));
     } finally {
       setSaving(false);
     }
@@ -256,7 +257,7 @@ export function QuoteVersionsSection({
       title="Orçamentos"
       subtitle="Cada negociação é uma versão. Enviado congela o snapshot e vira histórico — que continua acessível."
     >
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table table--clickable-rows">
@@ -409,7 +410,13 @@ export function QuoteVersionsSection({
                           onBlur={(event) =>
                             void run(() =>
                               updateQuoteLine(line.id, {
-                                quotedQuantity: event.target.value.trim() || null,
+                                // Campo em branco apaga a quantidade — ausência
+                                // é resposta legítima. Só o que foi digitado
+                                // precisa ser legível.
+                                quotedQuantity: exigirDecimalOpcional(
+                                  event.target.value,
+                                  `Quantidade de ${line.productCode}`,
+                                ),
                               }),
                             )
                           }
@@ -457,7 +464,10 @@ export function QuoteVersionsSection({
                           onBlur={(event) =>
                             void run(() =>
                               updateQuoteLine(line.id, {
-                                unitPrice: event.target.value.trim() || null,
+                                unitPrice: exigirDecimalOpcional(
+                                  event.target.value,
+                                  `Preço unitário de ${line.productCode}`,
+                                ),
                               }),
                             )
                           }

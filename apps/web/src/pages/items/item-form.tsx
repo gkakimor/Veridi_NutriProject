@@ -12,6 +12,7 @@ import {
 } from "@veridi/shared";
 import { createItem, updateItem } from "../../lib/items-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { RelatedLinks } from "../../components/RelatedLinks";
 import { FormSection } from "../../components/FormSection";
 import { ToggleCard } from "../../components/ToggleCard";
@@ -179,6 +180,22 @@ export function useItemForm({
     setError(null);
     setFieldErrors({});
 
+    /*
+     * Pureza passa pelo parser central — mesma leitura da vírgula em toda a
+     * web. Vazio continua sendo vazio (no edit é o que limpa o campo); o que
+     * o parser não consegue ler para aqui, com o nome do campo.
+     */
+    const purezaNormalizada =
+      form.defaultPurityPercent.trim() === ""
+        ? ""
+        : parseDecimalInput(form.defaultPurityPercent);
+    if (purezaNormalizada === null) {
+      setFieldErrors({ defaultPurityPercent: mensagemDecimalInvalido("Pureza padrão (%)") });
+      setError("Corrija os campos destacados.");
+      setSaving(false);
+      return;
+    }
+
     const trimmedBarcode = form.externalBarcode.trim();
     const payload = {
       type: form.type,
@@ -198,7 +215,7 @@ export function useItemForm({
         : {}),
       ...(mode === "edit" || form.family ? { family: form.family } : {}),
       ...(mode === "edit" || form.defaultPurityPercent.trim()
-        ? { defaultPurityPercent: form.defaultPurityPercent.trim().replace(",", ".") }
+        ? { defaultPurityPercent: purezaNormalizada }
         : {}),
       ...(mode === "edit" || form.packagingSubtype
         ? { packagingSubtype: form.type === "PACKAGING" ? form.packagingSubtype : "" }
@@ -269,7 +286,7 @@ export function ItemFormFields({
 }: ItemFormController) {
   return (
     <form id={ITEM_FORM_ID} onSubmit={handleSubmit}>
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {item && (
         <RelatedLinks

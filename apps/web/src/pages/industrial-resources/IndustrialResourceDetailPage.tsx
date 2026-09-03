@@ -79,7 +79,7 @@ export function IndustrialResourceDetailPage() {
     }
   }
 
-  if (error && !resource) return <p className="form-alert">{error}</p>;
+  if (error && !resource) return <p className="form-alert" role="alert">{error}</p>;
   if (!resource) return <p>Carregando…</p>;
 
   const rateUomLabel = INDUSTRIAL_RATE_UOM_LABELS[resource.defaultUsageUom];
@@ -135,7 +135,7 @@ export function IndustrialResourceDetailPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Mesma explicação da lista, repetida aqui porque é nesta tela que a
             tarifa é cadastrada — e é aqui que a ausência de "editar tarifa"

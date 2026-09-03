@@ -226,7 +226,7 @@ export function ProjectDetailPage() {
       />
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* A ficha reúne quatro assuntos que a pessoa costuma tratar como
             telas diferentes — produto, custo, proposta e amostra. Dizer o

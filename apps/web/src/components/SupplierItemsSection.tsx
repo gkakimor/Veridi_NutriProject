@@ -39,7 +39,7 @@ export function SupplierItemsSection({
       title={isItemScope ? "Fornecedores" : "Itens fornecidos"}
       subtitle="Homologação é por item. Preço é referência comercial do fornecedor — o custo real vem do recebimento."
     >
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">

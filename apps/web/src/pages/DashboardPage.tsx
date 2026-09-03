@@ -380,7 +380,7 @@ export function DashboardPage() {
         </div>
       </section>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
       {loading && !data && <p className="muted">Carregando…</p>}
 
       {data && period && state && (

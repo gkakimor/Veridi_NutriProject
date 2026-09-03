@@ -733,7 +733,7 @@ export function ProductionOrderPage() {
       {productionOrder && <FlowContext steps={productionOrderFlowSteps(productionOrder)} />}
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* O ciclo inteiro atravessa esta tela — reserva, separação, consumo e
             apontamento são seções diferentes. A explicação de como eles se
@@ -1533,7 +1533,7 @@ export function ProductionOrderPage() {
             </dl>
 
             {status === "IN_PRODUCTION" && finishedItem && !finishedItem.controlsLot && (
-              <p className="form-alert">
+              <p className="form-alert" role="status">
                 Item de produto acabado não controla lote — não é possível registrar produção.
               </p>
             )}

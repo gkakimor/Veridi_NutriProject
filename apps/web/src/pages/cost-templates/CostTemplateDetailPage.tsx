@@ -26,8 +26,12 @@ import {
 } from "../../lib/cost-pricing-templates-api";
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { TemplateDiffTable } from "../../components/TemplateDiffTable";
 import { formatDateTime } from "../../lib/dates";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { useAuth } from "../../app/AuthProvider";
 
 /**
@@ -105,7 +109,7 @@ export function CostTemplateDetailPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
@@ -114,7 +118,7 @@ export function CostTemplateDetailPage() {
   if (!template) {
     return (
       <div className="doc-body">
-        {error ? <p className="form-alert">{error}</p> : <p>Carregando…</p>}
+        {error ? <p className="form-alert" role="alert">{error}</p> : <p>Carregando…</p>}
       </div>
     );
   }
@@ -216,7 +220,12 @@ export function CostTemplateDetailPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
+
+        {/* Versão ativa, rascunho, aplicar, arquivar — quatro palavras que só
+            fazem sentido depois de a pessoa saber que o template é CÓPIA e
+            que ele não carrega tarifa nenhuma. */}
+        <ContextHelp topic={helpTopics["templateCusto.comoFunciona"]} />
 
         <FormSection
           title="Identificação"
@@ -488,13 +497,16 @@ export function CostTemplateDetailPage() {
                   onClick={() =>
                     void run(() =>
                       updateCostTemplateVersion(rascunho.id, {
-                        referenceOutputQuantity: base,
+                        referenceOutputQuantity: exigirDecimal(base, "Base de produção"),
                         referenceOutputUomCode: unidade,
                         energyCalculationMode: modoEnergia,
                         energyResourceId: modoEnergia === "FROM_EQUIPMENT" ? recursoEnergia : null,
                         resourceUsages: linhas
                           .filter((linha) => linha.industrialResourceId && linha.usageQuantity)
-                          .map(({ chave: _chave, ...resto }) => resto),
+                          .map(({ chave: _chave, ...resto }) => ({
+                            ...resto,
+                            usageQuantity: exigirDecimal(resto.usageQuantity, "Uso por lote"),
+                          })),
                       }),
                     )
                   }

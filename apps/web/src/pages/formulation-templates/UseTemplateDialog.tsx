@@ -98,7 +98,7 @@ export function UseTemplateDialog({ onCancel, onApply, saving }: Props) {
       }
     >
       <div>
-          {erro && <p className="form-alert">{erro}</p>}
+          {erro && <p className="form-alert" role="alert">{erro}</p>}
 
           {!selecionado ? (
             <>

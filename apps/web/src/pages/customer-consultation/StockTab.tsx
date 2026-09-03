@@ -79,7 +79,7 @@ export function FinishedGoodsTab() {
         ]}
       />
 
-      {list.error && <p className="form-alert">{list.error}</p>}
+      {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
       <div className="table-container">
         <table className="table">

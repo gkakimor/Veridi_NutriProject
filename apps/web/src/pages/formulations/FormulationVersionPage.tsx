@@ -719,7 +719,7 @@ export function FormulationVersionPage() {
       <ProductRelatedLinks productId={productId} current="formulation" />
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Mesma explicação do detalhe do produto, disponível também aqui:
             quem chega direto na versão (link de OP, de custo ou de orçamento)

@@ -113,7 +113,7 @@ export function UsersPage() {
           tabela de cinco colunas. */}
       <ContextHelp topic={helpTopics["usuario.comoFunciona"]} />
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">
@@ -204,7 +204,7 @@ export function UsersPage() {
             </>
           }
         >
-          {formError && <p className="form-alert">{formError}</p>}
+          {formError && <p className="form-alert" role="alert">{formError}</p>}
 
           <FormSection title="Identificação">
             <div className="field">

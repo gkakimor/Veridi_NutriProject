@@ -13,6 +13,8 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { useAuth } from "../../app/AuthProvider";
 import { getInventoryItem } from "../../lib/inventory-api";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { listItems } from "../../lib/items-api";
@@ -176,13 +178,13 @@ export function SampleDetailPage() {
       setSample(await action());
       onDone?.();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setActionError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
   }
 
-  if (error) return <p className="form-alert">{error}</p>;
+  if (error) return <p className="form-alert" role="alert">{error}</p>;
   if (!sample || !id) return <p>Carregando…</p>;
 
   const sampleId = id;
@@ -190,7 +192,7 @@ export function SampleDetailPage() {
   function doProduce(withoutConsumption: boolean) {
     void run(() =>
       produceSample(sampleId, {
-        outputQuantity,
+        outputQuantity: exigirDecimal(outputQuantity, "Quantidade produzida"),
         outputUomCode,
         ...(productionNotes.trim() ? { productionNotes: productionNotes.trim() } : {}),
         ...(withoutConsumption ? { confirmWithoutConsumption: true } : {}),
@@ -260,7 +262,7 @@ export function SampleDetailPage() {
         </p>
       )}
 
-      {actionError && <p className="form-alert">{actionError}</p>}
+      {actionError && <p className="form-alert" role="alert">{actionError}</p>}
 
       <div className="doc-body">
         {/* Consumo aqui é baixa de estoque na hora, e reprovar não estorna.
@@ -431,7 +433,7 @@ export function SampleDetailPage() {
                     registerSampleConsumption(id, {
                       itemId,
                       ...(lotCode ? { lotCode } : {}),
-                      quantity,
+                      quantity: exigirDecimal(quantity, "Quantidade"),
                       ...(consumptionNotes.trim() ? { notes: consumptionNotes.trim() } : {}),
                     }),
                   () => {

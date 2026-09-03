@@ -26,6 +26,7 @@ import { createProduct, updateProduct } from "../../lib/products-api";
 import { listCustomers } from "../../lib/customers-api";
 import { listUnits } from "../../lib/units-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { ProductIndustrialCostSummary } from "./ProductIndustrialCostSummary";
 
 /**
@@ -281,10 +282,19 @@ export function useProductForm({
     const finishedProductItemId = optionalField(form.finishedProductItemId);
     const notes = optionalField(form.notes);
 
-    // Campo numérico: no edit sempre envia (vazio limpa), no create só
-    // quando preenchido. Vírgula decimal do usuário vira ponto.
-    const numeric = (value: string) => {
-      const trimmed = value.trim().replace(",", ".");
+    /*
+     * Campo numérico: no edit sempre envia (vazio limpa), no create só
+     * quando preenchido. A vírgula do usuário passa pelo parser central —
+     * mesma leitura da web inteira — e o que ele não consegue ler para no
+     * próprio campo, com o nome do campo, em vez de seguir para a API.
+     */
+    const ilegiveis: Record<string, string> = {};
+    const numeric = (campo: string, rotulo: string, value: string) => {
+      const trimmed = value.trim() === "" ? "" : parseDecimalInput(value);
+      if (trimmed === null) {
+        ilegiveis[campo] = mensagemDecimalInvalido(rotulo);
+        return null;
+      }
       if (mode === "edit") return { value: trimmed };
       return trimmed ? { value: trimmed } : null;
     };
@@ -295,12 +305,28 @@ export function useProductForm({
     const presentationType = enumField(form.presentationType);
     const targetAgeGroup = enumField(form.targetAgeGroup);
     const doseUomCode = enumField(form.doseUomCode);
-    const capsulesPerDose = numeric(form.capsulesPerDose);
-    const doseAmount = numeric(form.doseAmount);
-    const dosesPerPackage = numeric(form.dosesPerPackage);
-    const unitsPerShippingBox = numeric(form.unitsPerShippingBox);
-    const shelfLifeMonths = numeric(form.shelfLifeMonths);
-    const minimumBatchQuantity = numeric(form.minimumBatchQuantity);
+    const capsulesPerDose = numeric("capsulesPerDose", "Cápsulas por dose", form.capsulesPerDose);
+    const doseAmount = numeric("doseAmount", "Dose", form.doseAmount);
+    const dosesPerPackage = numeric("dosesPerPackage", "Doses por embalagem", form.dosesPerPackage);
+    const unitsPerShippingBox = numeric(
+      "unitsPerShippingBox",
+      "Unidades por caixa",
+      form.unitsPerShippingBox,
+    );
+    const shelfLifeMonths = numeric("shelfLifeMonths", "Vida útil (meses)", form.shelfLifeMonths);
+    const minimumBatchQuantity = numeric(
+      "minimumBatchQuantity",
+      "Lote mínimo",
+      form.minimumBatchQuantity,
+    );
+
+    // Nada sai daqui com um número ilegível: o erro pousa no campo.
+    if (Object.keys(ilegiveis).length > 0) {
+      setFieldErrors(ilegiveis);
+      setError("Corrija os campos destacados.");
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       name: form.name.trim(),
@@ -390,13 +416,21 @@ export function ProductFormFields({
 }: ProductFormController) {
   return (
     <form id={PRODUCT_FORM_ID} onSubmit={handleSubmit}>
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {product && (
         <RelatedLinks
+          /* A cadeia INTEIRA, na ordem de dependência, com os mesmos rótulos
+             das cinco telas irmãs. Faltavam CMV e Precificação: quem abria o
+             produto para ver o CMV não achava link nenhum aqui e precisava
+             rolar o formulário inteiro até o resumo de custo lá embaixo. E
+             "Custos" era o único lugar do sistema que chamava a estrutura de
+             custo industrial por outro nome. */
           links={[
             { label: "Formulação", to: `/producao/formulacoes/${product.id}` },
-            { label: "Custos", to: `/produtos/${product.id}/custos` },
+            { label: "Custos industriais", to: `/produtos/${product.id}/custos` },
+            { label: "CMV", to: `/produtos/${product.id}/cmv` },
+            { label: "Precificação", to: `/gestao/precificacao?productId=${product.id}` },
             { label: "Ordens de produção", to: `/producao/ordens?productId=${product.id}` },
             ...(product.originProjectId
               ? [

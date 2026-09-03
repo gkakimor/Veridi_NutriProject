@@ -4,6 +4,8 @@ import type { IndustrialCostCalculationSnapshotDTO } from "@veridi/shared";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { EntityLink } from "../../components/EntityLink";
 import { CostBreakdown, CostQualityBadge } from "../../components/CostBreakdown";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { FormSection } from "../../components/FormSection";
 import { getIndustrialCostCalculation } from "../../lib/cost-calculation-api";
 import { formatDate } from "../../lib/dates";
@@ -30,7 +32,7 @@ export function CostCalculationPage() {
       );
   }, [id]);
 
-  if (error) return <p className="form-alert">{error}</p>;
+  if (error) return <p className="form-alert" role="alert">{error}</p>;
   if (!calculation) return <p>Carregando…</p>;
 
   return (
@@ -81,6 +83,12 @@ export function CostCalculationPage() {
 
       <div className="doc-body">
       <ProductRelatedLinks productId={calculation.productId} current="calculation" />
+
+        {/* A tela do CMV explica como o custo de uma quantidade é somado.
+            Aqui a pergunta é outra: por que este documento não muda mais, e o
+            que a precificação está citando quando aponta para ele. */}
+        <ContextHelp topic={helpTopics["calculo.comoFunciona"]} />
+
         <FormSection title="Contexto do cálculo">
           <dl className="definition-list">
             <dt>Cliente</dt>

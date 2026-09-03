@@ -29,6 +29,8 @@ import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDate } from "../../lib/dates";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { ModalDialog } from "../../components/ModalDialog";
 
 /**
@@ -172,17 +174,18 @@ function ProductGroup({
                         const digitado = (
                           quantities[line.customerOrderReservationLineId] ?? ""
                         ).trim();
-                        const valor = Number(digitado.replace(",", "."));
+                        const legivel = parseDecimalInput(digitado);
+                        const ilegivel = digitado !== "" && legivel === null;
                         const teto = Number(line.reservedRemaining);
-                        const excede = digitado !== "" && Number.isFinite(valor) && valor > teto;
+                        const excede = legivel !== null && Number(legivel) > teto;
                         return (
                           <>
                             <input
                               type="text"
                               inputMode="decimal"
                               aria-label={`Quantidade do lote ${line.lotCode ?? ""}`}
-                              aria-invalid={excede || undefined}
-                              className={excede ? "is-invalid" : undefined}
+                              aria-invalid={excede || ilegivel || undefined}
+                              className={excede || ilegivel ? "is-invalid" : undefined}
                               value={quantities[line.customerOrderReservationLineId] ?? ""}
                               onChange={(event) =>
                                 onQuantityChange(
@@ -191,6 +194,9 @@ function ProductGroup({
                                 )
                               }
                             />
+                            {ilegivel && (
+                              <p className="field__error">{mensagemDecimalInvalido("Quantidade")}</p>
+                            )}
                             {excede && (
                               <p className="field__error">
                                 Máximo {line.reservedRemaining} {line.unitCode} — é o que está
@@ -338,7 +344,11 @@ export function ShipmentPage() {
         notes: notes.trim(),
         lines: shipment.lines.map((line) => ({
           customerOrderReservationLineId: line.customerOrderReservationLineId,
-          quantity: (quantities[line.customerOrderReservationLineId] ?? "0").trim() || "0",
+          quantity:
+            exigirDecimalOpcional(
+              quantities[line.customerOrderReservationLineId] ?? "0",
+              "Quantidade",
+            ) ?? "0",
         })),
       });
       syncFromServer(updated);
@@ -361,7 +371,11 @@ export function ShipmentPage() {
           notes: notes.trim(),
           lines: shipment.lines.map((line) => ({
             customerOrderReservationLineId: line.customerOrderReservationLineId,
-            quantity: (quantities[line.customerOrderReservationLineId] ?? "0").trim() || "0",
+            quantity:
+              exigirDecimalOpcional(
+                quantities[line.customerOrderReservationLineId] ?? "0",
+                "Quantidade",
+              ) ?? "0",
           })),
         });
       }
@@ -491,18 +505,32 @@ export function ShipmentPage() {
     );
   }
 
-  const totalToShip = shipment.lines.reduce(
-    (sum, line) => sum + Number(quantities[line.customerOrderReservationLineId] ?? "0"),
-    0,
-  );
+  /*
+   * O total lê a vírgula como o resto da tela lê.
+   *
+   * Sem isso, uma quantidade digitada com vírgula virava `NaN`, o total
+   * inteiro virava `NaN`, e a guarda `totalToShip <= 0` — a que impede
+   * confirmar uma expedição vazia — parava de valer sem dizer nada.
+   */
+  const totalToShip = shipment.lines.reduce((sum, line) => {
+    const legivel = parseDecimalInput(quantities[line.customerOrderReservationLineId] ?? "0");
+    return sum + (legivel === null ? 0 : Number(legivel));
+  }, 0);
+
+  /* Quantidade que a tela não consegue ler não vira zero em silêncio. */
+  const linhasIlegiveis = shipment.lines.filter((line) => {
+    const digitado = (quantities[line.customerOrderReservationLineId] ?? "").trim();
+    return digitado !== "" && parseDecimalInput(digitado) === null;
+  });
 
   /* Confirmar não corrige silenciosamente para o teto: enquanto houver
      linha acima do reservado, a ação fica bloqueada e a linha diz por quê. */
   const linhasAcimaDoReservado = shipment.lines.filter((line) => {
     const digitado = (quantities[line.customerOrderReservationLineId] ?? "").trim();
     if (digitado === "") return false;
-    const valor = Number(digitado.replace(",", "."));
-    return Number.isFinite(valor) && valor > Number(line.reservedRemaining);
+    const legivel = parseDecimalInput(digitado);
+    if (legivel === null) return false;
+    return Number(legivel) > Number(line.reservedRemaining);
   });
 
   return (
@@ -562,7 +590,7 @@ export function ShipmentPage() {
       />
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Separar, conferir e expedir são três atos diferentes na mesma
             tela, e só o último move estoque — sem volta. */}
@@ -787,15 +815,18 @@ export function ShipmentPage() {
                   saving ||
                   totalToShip <= 0 ||
                   linhasAcimaDoReservado.length > 0 ||
+                  linhasIlegiveis.length > 0 ||
                   !shipment.verification.allLotsVerified
                 }
                 onClick={() => setConfirmDialogOpen(true)}
                 title={
-                  linhasAcimaDoReservado.length > 0
-                    ? "Há quantidade acima do reservado — corrija antes de confirmar."
-                    : shipment.verification.allLotsVerified
-                      ? undefined
-                      : "Existem lotes ainda não conferidos nesta expedição."
+                  linhasIlegiveis.length > 0
+                    ? mensagemDecimalInvalido("Quantidade")
+                    : linhasAcimaDoReservado.length > 0
+                      ? "Há quantidade acima do reservado — corrija antes de confirmar."
+                      : shipment.verification.allLotsVerified
+                        ? undefined
+                        : "Existem lotes ainda não conferidos nesta expedição."
                 }
               >
                 Confirmar expedição

@@ -75,7 +75,7 @@ function PrintScreen<T>({
   if (error) {
     return (
       <div className="print-doc">
-        <p className="form-alert">Não foi possível carregar o documento: {error}</p>
+        <p className="form-alert" role="alert">Não foi possível carregar o documento: {error}</p>
       </div>
     );
   }

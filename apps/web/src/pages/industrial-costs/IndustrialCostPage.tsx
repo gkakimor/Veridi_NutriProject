@@ -254,7 +254,7 @@ export function IndustrialCostPage() {
     }
   }
 
-  if (error && !data) return <p className="form-alert">{error}</p>;
+  if (error && !data) return <p className="form-alert" role="alert">{error}</p>;
   if (!data || !productId) return <p>Carregando…</p>;
 
   // A versão em edição é o rascunho; sem rascunho, mostra-se a vigente.
@@ -459,7 +459,7 @@ export function IndustrialCostPage() {
             </button>
           </div>
         )}
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Materiais, recursos, energia e premissas são preenchidos aqui e só
             viram número na tela de CMV. Mesmo painel das duas telas: é um
@@ -1162,7 +1162,10 @@ export function IndustrialCostPage() {
         <ConfirmDialog
           open={activateConfirm}
           title="Ativar estrutura com pendências?"
-          confirmLabel="Ativar"
+          /* O rótulo repete a consequência. "Ativar" sozinho, num diálogo que
+             a pessoa pode ter aberto sem ler, não distingue esta ativação da
+             ativação normal — e as duas produzem custos muito diferentes. */
+          confirmLabel="Ativar mesmo com pendências"
           confirmTone="accent"
           message={
             <>

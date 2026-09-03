@@ -364,7 +364,7 @@ export function CustomerFormFields({
 
   return (
     <form id={CUSTOMER_FORM_ID} onSubmit={handleSubmit}>
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {customer && (
         <RelatedLinks

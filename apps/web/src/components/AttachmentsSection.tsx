@@ -93,7 +93,7 @@ export function AttachmentsSection({
 
   return (
     <FormSection title={title} {...(subtitle ? { subtitle } : {})}>
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {canUpload && (
         <div className="toolbar">

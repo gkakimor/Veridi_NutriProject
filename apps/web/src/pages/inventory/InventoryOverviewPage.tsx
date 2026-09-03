@@ -147,7 +147,7 @@ export function InventoryOverviewPage() {
         </label>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {/* Quem vem de planilha não tem por que adivinhar o que cada coluna
           significa — a definição fica ao lado da tabela, não escondida em

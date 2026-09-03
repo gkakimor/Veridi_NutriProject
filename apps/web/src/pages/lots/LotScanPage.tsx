@@ -67,7 +67,7 @@ export function LotScanPage() {
         <FormSection title="Ler QR ou digitar lote">
           <LotScanner onDetect={handleDetect} />
           {loading && <p className="field__hint">Consultando…</p>}
-          {error && <p className="form-alert">{error}</p>}
+          {error && <p className="form-alert" role="alert">{error}</p>}
         </FormSection>
       )}
 

@@ -55,7 +55,7 @@ function SheetError({ message }: { message: string }) {
   return (
     <div className="print-screen">
       <article className="print-doc">
-        <p className="form-alert">Não foi possível carregar o documento: {message}</p>
+        <p className="form-alert" role="alert">Não foi possível carregar o documento: {message}</p>
       </article>
     </div>
   );

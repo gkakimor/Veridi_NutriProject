@@ -213,7 +213,7 @@ export function ProductCmvPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [simular]);
 
-  if (!productId) return <p className="form-alert">Produto não informado.</p>;
+  if (!productId) return <p className="form-alert" role="alert">Produto não informado.</p>;
 
   const simulation = data?.simulation ?? null;
   const componentsByGroup = (group: CmvGroup): CmvComponentDTO[] =>

@@ -22,7 +22,9 @@ import { listSupplierItems } from "../../lib/supplier-items-api";
 import { getItem, listItems } from "../../lib/items-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { formatBRL } from "../../lib/currency";
-import { ApiValidationError } from "../../lib/api-errors";
+import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
+import { parseDecimalInput } from "../../lib/decimal-input";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -507,13 +509,20 @@ export function PurchaseOrderPage() {
     setLines((prev) => prev.map((line) => (line.key === key ? { ...line, [field]: value } : line)));
   }
 
+  /*
+   * Total previsto da OC, somado sobre o que foi digitado.
+   *
+   * Era `Number(line.unitPrice)` direto, e `12,50` virava `NaN`: a linha
+   * era pulada e o total aparecia menor do que a OC realmente vale, sem
+   * nenhum sinal de que faltava uma linha na conta.
+   */
   const previewTotal = useMemo(() => {
     let total: number | null = null;
     for (const line of lines) {
-      const price = Number(line.unitPrice);
-      const qty = Number(line.orderedQuantity);
-      if (!line.unitPrice.trim() || Number.isNaN(price) || Number.isNaN(qty)) continue;
-      total = (total ?? 0) + qty * price;
+      const price = parseDecimalInput(line.unitPrice);
+      const qty = parseDecimalInput(line.orderedQuantity);
+      if (price === null || qty === null) continue;
+      total = (total ?? 0) + Number(qty) * Number(price);
     }
     return total;
   }, [lines]);
@@ -534,25 +543,36 @@ export function PurchaseOrderPage() {
     setError(null);
     setFieldErrors({});
 
-    const linesPayload = lines
-      .filter((line) => line.itemId)
-      .map((line) => ({
-        itemId: line.itemId,
-        orderedQuantity: line.orderedQuantity.trim(),
-        ...(line.unitPrice.trim() ? { unitPrice: line.unitPrice.trim() } : {}),
-      }));
-
-    const expectedIso = toIsoOrEmpty(expectedDeliveryDate);
-
-    const payload = {
-      supplierId,
-      orderDate: toIsoOrEmpty(orderDate),
-      notes: notes.trim(),
-      lines: linesPayload,
-      ...(isNew ? (expectedIso ? { expectedDeliveryDate: expectedIso } : {}) : { expectedDeliveryDate: expectedIso }),
-    };
-
     try {
+      // Dentro do funil: quantidade ou preço ilegível interrompe aqui,
+      // nomeando o item, e a OC não é criada nem alterada.
+      const linesPayload = lines
+        .filter((line) => line.itemId)
+        .map((line) => {
+          const preco = exigirDecimalOpcional(
+            line.unitPrice,
+            `Preço unitário de ${line.itemCode || "item"}`,
+          );
+          return {
+            itemId: line.itemId,
+            orderedQuantity: exigirDecimal(
+              line.orderedQuantity,
+              `Quantidade de ${line.itemCode || "item"}`,
+            ),
+            ...(preco ? { unitPrice: preco } : {}),
+          };
+        });
+
+      const expectedIso = toIsoOrEmpty(expectedDeliveryDate);
+
+      const payload = {
+        supplierId,
+        orderDate: toIsoOrEmpty(orderDate),
+        notes: notes.trim(),
+        lines: linesPayload,
+        ...(isNew ? (expectedIso ? { expectedDeliveryDate: expectedIso } : {}) : { expectedDeliveryDate: expectedIso }),
+      };
+
       if (isNew) {
         const created = await createPurchaseOrder(payload);
         navigate(`/compras/ordens/${created.id}`, { replace: true });
@@ -570,7 +590,7 @@ export function PurchaseOrderPage() {
         setFieldErrors(nextFieldErrors);
         setError("Corrija os campos destacados.");
       } else {
-        setError(err instanceof Error ? err.message : "Falha ao salvar ordem de compra");
+        setError(apiErrorMessage(err, "Falha ao salvar ordem de compra"));
       }
     } finally {
       setSaving(false);
@@ -589,7 +609,7 @@ export function PurchaseOrderPage() {
       setPurchaseOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao salvar");
+      setError(apiErrorMessage(err, "Falha ao salvar"));
     } finally {
       setSaving(false);
     }
@@ -605,7 +625,7 @@ export function PurchaseOrderPage() {
       setPurchaseOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao confirmar pedido");
+      setError(apiErrorMessage(err, "Falha ao confirmar pedido"));
     } finally {
       setSaving(false);
     }
@@ -622,7 +642,7 @@ export function PurchaseOrderPage() {
       setPurchaseOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao cancelar ordem de compra");
+      setError(apiErrorMessage(err, "Falha ao cancelar ordem de compra"));
     } finally {
       setSaving(false);
     }
@@ -687,7 +707,7 @@ export function PurchaseOrderPage() {
             documento e joga o saldo em aberto para Em Compra. */}
         <ContextHelp topic={helpTopics["compras.ordens"]} />
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {purchaseOrder && purchaseOrder.origin === "CUSTOMER_ORDER" && (
         <FormSection title="Origem">
@@ -817,11 +837,14 @@ export function PurchaseOrderPage() {
             </thead>
             <tbody>
               {lines.map((line) => {
+                // Mesma leitura do total previsto: `12,50` é doze e cinquenta,
+                // não `NaN` — antes a coluna Total virava "—" no exato momento
+                // em que a pessoa terminava de digitar o preço.
+                const precoDigitado = parseDecimalInput(line.unitPrice);
+                const qtdDigitada = parseDecimalInput(line.orderedQuantity);
                 const lineTotal =
-                  line.unitPrice.trim() &&
-                  !Number.isNaN(Number(line.unitPrice)) &&
-                  !Number.isNaN(Number(line.orderedQuantity))
-                    ? (Number(line.orderedQuantity) * Number(line.unitPrice)).toFixed(2)
+                  precoDigitado !== null && qtdDigitada !== null
+                    ? (Number(qtdDigitada) * Number(precoDigitado)).toFixed(2)
                     : null;
 
                 return (
@@ -886,6 +909,10 @@ export function PurchaseOrderPage() {
                           type="text"
                           inputMode="decimal"
                           placeholder="0"
+                          // "0" e "Opcional" não nomeiam campo nenhum: sem
+                          // isto, quantidade e preço da mesma linha soavam
+                          // idênticos para um leitor de tela.
+                          aria-label={`Quantidade de ${line.itemCode || "item"}`}
                           value={line.orderedQuantity}
                           onChange={(event) =>
                             handleLineFieldChange(line.key, "orderedQuantity", event.target.value)
@@ -913,6 +940,7 @@ export function PurchaseOrderPage() {
                           type="text"
                           inputMode="decimal"
                           placeholder="Opcional"
+                          aria-label={`Preço unitário de ${line.itemCode || "item"}`}
                           value={line.unitPrice}
                           onChange={(event) =>
                             handleLineFieldChange(line.key, "unitPrice", event.target.value)

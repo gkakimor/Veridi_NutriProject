@@ -17,9 +17,13 @@ import {
   updatePricingPolicyVersion,
 } from "../../lib/cost-pricing-templates-api";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { TemplateDiffTable } from "../../components/TemplateDiffTable";
 import { formatPercent } from "../../lib/percent";
 import { formatDateTime } from "../../lib/dates";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { useAuth } from "../../app/AuthProvider";
 
 /**
@@ -83,7 +87,7 @@ export function PricingPolicyDetailPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
@@ -92,7 +96,7 @@ export function PricingPolicyDetailPage() {
   if (!policy) {
     return (
       <div className="doc-body">
-        {error ? <p className="form-alert">{error}</p> : <p>Carregando…</p>}
+        {error ? <p className="form-alert" role="alert">{error}</p> : <p>Carregando…</p>}
       </div>
     );
   }
@@ -157,7 +161,12 @@ export function PricingPolicyDetailPage() {
       </div>
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
+
+        {/* A tela mostra faixa, margem e comissão, e nenhum preço. Sem dizer
+            por que, a ausência parece falta de cadastro — quando é a regra:
+            o preço nasce do custo do produto, não da política. */}
+        <ContextHelp topic={helpTopics["politicaPreco.comoFunciona"]} />
 
         <FormSection
           title="Identificação"
@@ -368,7 +377,23 @@ export function PricingPolicyDetailPage() {
                           .filter(
                             (linha) => linha.quantity && linha.targetContributionMarginPercent,
                           )
-                          .map(({ chave: _chave, ...resto }) => resto),
+                          .map(({ chave: _chave, ...resto }) => {
+                            // Comissão em branco continua em branco — só o
+                            // que foi digitado precisa ser legível.
+                            const comissao = exigirDecimalOpcional(
+                              resto.commissionPercent ?? "",
+                              "Comissão (%)",
+                            );
+                            return {
+                              ...resto,
+                              quantity: exigirDecimal(resto.quantity, "Quantidade"),
+                              targetContributionMarginPercent: exigirDecimal(
+                                resto.targetContributionMarginPercent,
+                                "Margem alvo (%)",
+                              ),
+                              ...(comissao === null ? {} : { commissionPercent: comissao }),
+                            };
+                          }),
                       }),
                     )
                   }

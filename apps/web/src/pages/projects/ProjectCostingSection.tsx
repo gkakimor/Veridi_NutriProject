@@ -62,7 +62,7 @@ export function ProjectCostingSection({
       title="Custo e precificação"
       subtitle="Formulação, estrutura de custos, cálculo e preço vivem no produto — o projeto acompanha a cadeia."
     >
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {!costing && !semProduto ? (
         // Projeto multiproduto: a cadeia técnica vive em cada produto, e a

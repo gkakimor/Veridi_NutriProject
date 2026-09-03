@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { MaterialReservationLineDTO, ProductionOrderDTO } from "@veridi/shared";
 import { addExtraReservation } from "../lib/production-orders-api";
+import { exigirDecimal } from "../lib/decimal-field";
+import { parseDecimalInput } from "../lib/decimal-input";
 import { ModalDialog } from "./ModalDialog";
 
 interface ExtraConsumptionDialogProps {
@@ -37,7 +39,10 @@ export function ExtraConsumptionDialog({
   const [error, setError] = useState<string | null>(null);
 
   const livre = Number(line.lotFreeQuantity ?? "0");
-  const pedido = Number(quantity.replace(",", "."));
+  // Mesma leitura da vírgula em toda a web: um separador é casa decimal,
+  // dois não se adivinha. `null` aqui é "ainda não dá para comparar".
+  const digitado = parseDecimalInput(quantity);
+  const pedido = digitado === null ? Number.NaN : Number(digitado);
   /* Só vale como excesso quando o lote é o mesmo — em outro lote o teto é
      o saldo de lá, que esta tela ainda não conhece. */
   const excede = !outroLote && quantity.trim().length > 0 && Number.isFinite(pedido) && pedido > livre;
@@ -48,7 +53,7 @@ export function ExtraConsumptionDialog({
     setError(null);
     try {
       const atualizada = await addExtraReservation(productionOrderId, line.id, {
-        quantity: quantity.trim().replace(",", "."),
+        quantity: exigirDecimal(quantity, `Quantidade adicional (${line.unitCode})`),
         reason: reason.trim(),
         ...(outroLote && lotCode.trim() ? { lotCode: lotCode.trim() } : {}),
       });
@@ -173,7 +178,7 @@ export function ExtraConsumptionDialog({
         </div>
       </form>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="confirm-dialog__actions">
         <button type="button" className="btn btn--ghost" onClick={onClose}>

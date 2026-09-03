@@ -11,7 +11,8 @@ import {
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
-import { ApiValidationError } from "../../lib/api-errors";
+import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { listCustomers } from "../../lib/customers-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { createProject, getProjectVocabulary, updateProject } from "../../lib/projects-api";
@@ -121,7 +122,10 @@ export function ProjectFormModal({
         doseAmount: form.doseAmount.trim() || null,
         dosesPerPackage: form.dosesPerPackage.trim() ? Number(form.dosesPerPackage) : null,
         targetAgeGroup: (form.targetAgeGroup || null) as never,
-        minimumBatchQuantity: form.minimumBatchQuantity.trim() || null,
+        // Único decimal do formulário. `dosesPerPackage` e `shelfLifeMonths`
+        // são contagens inteiras — doses e meses não têm casa decimal — e
+        // continuam como estão.
+        minimumBatchQuantity: exigirDecimalOpcional(form.minimumBatchQuantity, "Lote mínimo"),
         shelfLifeMonths: form.shelfLifeMonths.trim() ? Number(form.shelfLifeMonths) : null,
       };
 
@@ -133,7 +137,7 @@ export function ProjectFormModal({
       if (err instanceof ApiValidationError) {
         setError(err.issues.map((issue) => issue.message).join("; "));
       } else {
-        setError(err instanceof Error ? err.message : "Falha ao salvar projeto");
+        setError(apiErrorMessage(err, "Falha ao salvar projeto"));
       }
     } finally {
       setSaving(false);
@@ -164,7 +168,7 @@ export function ProjectFormModal({
         </>
       }
     >
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <FormSection title="Projeto" subtitle="Projeto private label sempre pertence a um cliente.">
         <div className="field">

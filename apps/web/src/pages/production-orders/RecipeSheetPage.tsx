@@ -8,6 +8,8 @@ import {
 } from "@veridi/shared";
 import { FormSection } from "../../components/FormSection";
 import { completePart, getRecipeSheet, registerWeighing } from "../../lib/recipe-api";
+import { exigirDecimal } from "../../lib/decimal-field";
+import { apiErrorMessage } from "../../lib/api-errors";
 import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -64,7 +66,7 @@ export function RecipeSheetPage() {
    * pesada, a ação parecia não ter efeito. Traz o alerta para a vista.
    */
   function reportError(err: unknown, fallback: string) {
-    const raw = err instanceof Error ? err.message : fallback;
+    const raw = apiErrorMessage(err, fallback);
     // "restam 0" sozinho não explica a causa: o saldo reservado desta linha
     // costuma ter sido baixado pelo Consumo Real da própria OP.
     const translated = /restam 0\b/.test(raw)
@@ -122,7 +124,7 @@ export function RecipeSheetPage() {
       const updated = await registerWeighing(id, activePart, {
         requirementId,
         lotCode: lotCode.trim(),
-        actualQuantity: actualQuantity.trim(),
+        actualQuantity: exigirDecimal(actualQuantity, "Quantidade pesada"),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       });
       setSheet(updated);
@@ -165,7 +167,7 @@ export function RecipeSheetPage() {
       <div className="page__header">
         <div>
           <h1 className="page__title">Folha de Receita indisponível</h1>
-          {error && <p className="form-alert">{error}</p>}
+          {error && <p className="form-alert" role="alert">{error}</p>}
         </div>
       </div>
     );

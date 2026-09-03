@@ -72,7 +72,7 @@ export function QuotePricingSection({
         não mostra custo, margem nem comissão.
       </p>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {provenance && (
         <dl className="definition-list">

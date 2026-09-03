@@ -255,7 +255,7 @@ export function BillingPage() {
       />
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* "Faturamento" carrega a expectativa de Nota Fiscal e de Contas a
             Receber, e nenhuma das duas acontece aqui. Dizer isso uma vez, no

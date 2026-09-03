@@ -57,7 +57,7 @@ export function ProductionTab() {
     <>
       <ConsultationTrail steps={[{ label: "Produção" }]} />
 
-      {list.error && <p className="form-alert">{list.error}</p>}
+      {list.error && <p className="form-alert" role="alert">{list.error}</p>}
 
       <div className="table-container">
         <table className="table table--clickable-rows">

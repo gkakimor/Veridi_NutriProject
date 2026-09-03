@@ -69,7 +69,7 @@ export function CmvPrintPage() {
     return (
       <div className="print-screen">
         <article className="print-doc">
-          <p className="form-alert">{error}</p>
+          <p className="form-alert" role="alert">{error}</p>
         </article>
       </div>
     );

@@ -166,7 +166,7 @@ export function FormulationDetailPage() {
       <ProductRelatedLinks productId={productId} current="formulation" />
 
       <div className="doc-body">
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {/* Esta é a tela onde se decide ativar uma versão — o passo que torna
             a receita histórica. A explicação do ciclo fica aqui, fechada. */}

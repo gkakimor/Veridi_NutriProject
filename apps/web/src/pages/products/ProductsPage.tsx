@@ -244,7 +244,7 @@ export function ProductsPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextProductId && (
         <p className="context-chip">

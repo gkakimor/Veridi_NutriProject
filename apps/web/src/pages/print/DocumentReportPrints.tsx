@@ -44,7 +44,7 @@ function MissingParameter({ message }: { message: string }) {
   return (
     <div className="print-screen">
       <article className="print-doc">
-        <p className="form-alert">{message}</p>
+        <p className="form-alert" role="alert">{message}</p>
       </article>
     </div>
   );

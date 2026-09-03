@@ -164,7 +164,7 @@ export function SuppliersPage() {
         </select>
       </div>
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       {contextIds && (
         <RecordContextChip

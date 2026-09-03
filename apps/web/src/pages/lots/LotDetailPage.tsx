@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   CostReferenceDTO,
   LotDTO,
@@ -366,14 +366,11 @@ export function LotDetailPage() {
               <dd>{lot.supplierLot ?? "—"}</dd>
               <dt>Origem — Recebimento</dt>
               <dd>
+                {/* `Link`, nao botao com `navigate`: referencia a outro
+                    registro precisa abrir em nova aba, aceitar clique do meio e
+                    ter endereco copiavel. Botao imita link e tira as tres. */}
                 {lot.receiptId ? (
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/compras/recebimentos/${lot.receiptId}`)}
-                  >
-                    {lot.receiptCode}
-                  </button>
+                  <Link to={`/compras/recebimentos/${lot.receiptId}`}>{lot.receiptCode}</Link>
                 ) : (
                   "—"
                 )}
@@ -381,13 +378,7 @@ export function LotDetailPage() {
               <dt>Origem — Ordem de Compra</dt>
               <dd>
                 {lot.purchaseOrderId ? (
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/compras/ordens/${lot.purchaseOrderId}`)}
-                  >
-                    {lot.purchaseOrderCode}
-                  </button>
+                  <Link to={`/compras/ordens/${lot.purchaseOrderId}`}>{lot.purchaseOrderCode}</Link>
                 ) : (
                   "—"
                 )}

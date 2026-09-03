@@ -4,6 +4,8 @@ import type { CustomerConsultationSummaryDTO } from "@veridi/shared";
 import { formatBrPhone, formatCnpj } from "@veridi/shared";
 import { getConsultationSummary } from "../../lib/customer-consultation-api";
 import { NotFoundApiError } from "../../lib/api-errors";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 /**
  * CONSULTA DO CLIENTE — o shell.
@@ -153,7 +155,7 @@ export function ConsultationShell() {
       <div className="page__header">
         <div>
           <h1 className="page__title">Consulta de Cliente</h1>
-          <p className="form-alert">{error}</p>
+          <p className="form-alert" role="alert">{error}</p>
           <button type="button" className="btn btn--secondary" onClick={reload}>
             Tentar novamente
           </button>
@@ -195,6 +197,10 @@ export function ConsultationShell() {
         </div>
 
         <div className="table__actions">
+          {/* A regra da capacidade — cliente é a raiz, só se sai por ação
+              explícita — estava só no comentário deste arquivo, onde nenhum
+              operador leria. */}
+          <ContextHelp topic={helpTopics["consultaCliente.comoFunciona"]} />
           <Link className="btn btn--secondary btn--sm" to={CONSULTATION_ROOT}>
             Trocar cliente
           </Link>

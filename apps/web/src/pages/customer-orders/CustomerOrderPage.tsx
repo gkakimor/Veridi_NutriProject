@@ -1020,7 +1020,7 @@ export function CustomerOrderPage() {
           dificil, nao mais facil.
         */}
         <ContextHelp topic={helpTopics["comercial.pedido"]} />
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         {customerOrder?.status === "CANCELLED" && (
           <FormSection title="Cancelamento">

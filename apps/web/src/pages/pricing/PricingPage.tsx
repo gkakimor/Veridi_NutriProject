@@ -14,6 +14,8 @@ import {
 } from "@veridi/shared";
 import { CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { FormSection } from "../../components/FormSection";
 import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
@@ -28,6 +30,8 @@ import {
 } from "../../lib/pricing-api";
 import { formatDate } from "../../lib/dates";
 import { formatPercent } from "../../lib/percent";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { PricingPolicyOrigin } from "../cost-templates/PricingPolicyOrigin";
 
 function statusBadgeClass(status: string): string {
@@ -87,6 +91,11 @@ export function PricingPage() {
     load();
   }, [load]);
 
+  /*
+   * O funil único da tela. A ação pode recusar antes de chamar a API — é o
+   * que um valor decimal ilegível faz —, e a recusa chega aqui como
+   * qualquer outra falha, sem que a requisição saia.
+   */
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
@@ -94,13 +103,13 @@ export function PricingPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
   }
 
-  if (error && !pricing) return <p className="form-alert">{error}</p>;
+  if (error && !pricing) return <p className="form-alert" role="alert">{error}</p>;
   if (!pricing) return <p>Carregando…</p>;
 
   const editable = canEdit && pricing.status === "DRAFT";
@@ -146,7 +155,13 @@ export function PricingPage() {
 
       <div className="doc-body">
       <ProductRelatedLinks productId={pricing.productId} current="pricing" />
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
+
+        {/* Preço tem tela própria e regra própria. Durante um tempo o painel
+            daqui descrevia como o CMV de uma quantidade é montado — assunto
+            vizinho, tela errada: quem abria queria saber o que a ATIVAÇÃO
+            congela, não como o custo é somado. */}
+        <ContextHelp topic={helpTopics["precificacao.comoFunciona"]} />
 
         <FormSection
           title="Base de custo"
@@ -428,13 +443,25 @@ export function PricingPage() {
                   }
                   onClick={() =>
                     void run(async () => {
+                      const quantidade = exigirDecimal(quantity, "Quantidade");
+                      // Comissão vazia é zero — só o que foi digitado é lido.
+                      const comissao = commission.trim()
+                        ? exigirDecimal(commission, "Comissão (%)")
+                        : "0";
+                      const precoOuMargem =
+                        priceMode === "TARGET_MARGIN"
+                          ? {
+                              targetContributionMarginPercent: exigirDecimal(
+                                targetMargin,
+                                "Margem de contribuição desejada (%)",
+                              ),
+                            }
+                          : { manualUnitPrice: exigirDecimal(manualPrice, "Preço unitário") };
                       await createPricingTier(pricing.id, {
-                        quantity: quantity.trim(),
+                        quantity: quantidade,
                         priceMode,
-                        commissionPercent: commission.trim() || "0",
-                        ...(priceMode === "TARGET_MARGIN"
-                          ? { targetContributionMarginPercent: targetMargin.trim() }
-                          : { manualUnitPrice: manualPrice.trim() }),
+                        commissionPercent: comissao,
+                        ...precoOuMargem,
                       });
                       setQuantity("");
                       setManualPrice("");

@@ -148,17 +148,23 @@ export function ProjectProductsSection({
                     >
                       Formulação
                     </Link>
+                    {/* Custos ANTES do CMV: o CMV lê a estrutura de custo
+                        ativa, então não existe CMV sem ela existir primeiro.
+                        A ordem estava invertida e contradizia o próprio
+                        cabeçalho desta coluna, que promete "a ordem em que a
+                        cadeia é percorrida". Mesmos rótulos e mesma sequência
+                        de `ProductRelatedLinks`, usado nas cinco telas irmãs. */}
+                    <Link
+                      className="btn btn--ghost btn--sm"
+                      to={`/produtos/${link.productId}/custos`}
+                    >
+                      Custos industriais
+                    </Link>
                     <Link
                       className="btn btn--ghost btn--sm"
                       to={`/produtos/${link.productId}/cmv?projectId=${projectId}`}
                     >
                       CMV
-                    </Link>
-                    <Link
-                      className="btn btn--ghost btn--sm"
-                      to={`/produtos/${link.productId}/custos`}
-                    >
-                      Custos
                     </Link>
                     <Link
                       className="btn btn--ghost btn--sm"

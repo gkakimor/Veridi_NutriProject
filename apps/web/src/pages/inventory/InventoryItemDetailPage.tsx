@@ -314,7 +314,7 @@ export function InventoryItemDetailPage() {
             </div>
           </form>
 
-          {suggestionError && <p className="form-alert">{suggestionError}</p>}
+          {suggestionError && <p className="form-alert" role="alert">{suggestionError}</p>}
 
           {suggestion && (
             <div className="line-actions">

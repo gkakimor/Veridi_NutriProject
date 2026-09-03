@@ -117,7 +117,7 @@ export function UsePricingPolicyDialog({
       }
     >
       <div>
-        {erro && <p className="form-alert">{erro}</p>}
+        {erro && <p className="form-alert" role="alert">{erro}</p>}
 
         {!escolhida ? (
           <>
@@ -240,7 +240,7 @@ export function UsePricingPolicyDialog({
             </div>
 
             {semPreco && (
-              <p className="form-alert">
+              <p className="form-alert" role="status">
                 Alguma faixa não produziu preço porque o custo deste cálculo está incompleto. A
                 precificação nasce mesmo assim, mas a faixa fica sem preço até o custo fechar.
               </p>

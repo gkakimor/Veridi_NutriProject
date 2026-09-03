@@ -6,6 +6,7 @@ import type { ItemDTO, StockCountResultDTO } from "@veridi/shared";
 import { listItems } from "../../lib/items-api";
 import { getInventoryItem, createStockCount } from "../../lib/inventory-api";
 import { FormSection } from "../../components/FormSection";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
@@ -127,21 +128,36 @@ export function StockCountPage() {
     setSystemQuantity(lot ? lot.onHand : null);
   }, [lotId, lots, selectedItem]);
 
+  /*
+   * A contagem passa pelo parser antes de virar conta.
+   *
+   * `Number("12,5")` é `NaN`, e numa tela cujo trabalho é achar divergência
+   * de estoque isso era pior do que falhar: a "Diferença" aparecia como
+   * `NaN`, `hasDifference` virava falso, e o campo Motivo — obrigatório
+   * justamente quando há divergência — nem chegava a existir. A contagem
+   * seguia como se batesse com o sistema.
+   */
+  const contagem = parseDecimalInput(countedQuantity);
+  const contagemIlegivel = countedQuantity.trim() !== "" && contagem === null;
   const difference =
-    systemQuantity !== null && countedQuantity.trim()
-      ? (Number(countedQuantity) - Number(systemQuantity)).toString()
+    systemQuantity !== null && contagem !== null
+      ? (Number(contagem) - Number(systemQuantity)).toString()
       : null;
   const hasDifference = difference !== null && Number(difference) !== 0;
 
   async function handleConfirm() {
     if (!itemId || systemQuantity === null) return;
+    if (contagem === null) {
+      setError(mensagemDecimalInvalido("Contagem física"));
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const response = await createStockCount({
         itemId,
         ...(selectedItem?.controlsLot ? { lotId } : {}),
-        countedQuantity,
+        countedQuantity: contagem,
         ...(hasDifference ? { reason: reason.trim() } : {}),
       });
       setResult(response);
@@ -162,7 +178,7 @@ export function StockCountPage() {
   const canConfirm =
     itemId &&
     systemQuantity !== null &&
-    countedQuantity.trim().length > 0 &&
+    contagem !== null &&
     (!selectedItem?.controlsLot || lotId) &&
     (!hasDifference || reason.trim().length >= 3);
 
@@ -257,7 +273,11 @@ export function StockCountPage() {
               value={countedQuantity}
               onChange={(event) => setCountedQuantity(event.target.value)}
               disabled={systemQuantity === null}
+              aria-invalid={contagemIlegivel || undefined}
             />
+            {contagemIlegivel && (
+              <p className="field__error">{mensagemDecimalInvalido("Contagem física")}</p>
+            )}
           </div>
 
           <div className="field">
@@ -285,7 +305,7 @@ export function StockCountPage() {
           )}
         </div>
 
-        {error && <p className="form-alert">{error}</p>}
+        {error && <p className="form-alert" role="alert">{error}</p>}
 
         <div className="line-actions">
           <button

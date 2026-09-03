@@ -4,6 +4,8 @@ import type { PricingPolicySummaryDTO } from "@veridi/shared";
 import { createPricingPolicy, listPricingPolicies } from "../../lib/cost-pricing-templates-api";
 import { formatDate } from "../../lib/dates";
 import { useAuth } from "../../app/AuthProvider";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { LibraryPagination, LibraryStatus, LibraryToolbar } from "./TemplateLibraryTable";
 
 /**
@@ -87,6 +89,8 @@ export function PricingPoliciesPage() {
         )}
       </div>
 
+      <ContextHelp topic={helpTopics["politicaPreco.comoFunciona"]} />
+
       {creating && (
         <div className="inline-form">
           <label htmlFor="policy-name">Nome da política</label>
@@ -130,7 +134,7 @@ export function PricingPoliciesPage() {
         onToggleArchived={setShowArchived}
       />
 
-      {error && <p className="form-alert">{error}</p>}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table">
