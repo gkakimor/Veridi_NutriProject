@@ -7,6 +7,7 @@ import type { HelpFlow, HelpTopic } from "../../help/help-content";
 import { baseTopics } from "../../help/content/base";
 import { cadastrosTopics } from "../../help/content/cadastros";
 import { comercialTopics } from "../../help/content/comercial";
+import { gestaoTopics } from "../../help/content/gestao";
 import { producaoTopics } from "../../help/content/producao";
 import { suprimentosTopics } from "../../help/content/suprimentos";
 
@@ -313,6 +314,7 @@ describe("conteúdo centralizado", () => {
       ["producao", producaoTopics],
       ["suprimentos", suprimentosTopics],
       ["cadastros", cadastrosTopics],
+      ["gestao", gestaoTopics],
     ] as const;
 
     const arquivosPorChave = new Map<string, string[]>();
