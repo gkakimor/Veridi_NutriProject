@@ -31,6 +31,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 import { ContextHelp, InfoHint } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
@@ -271,7 +272,7 @@ export function LotDetailPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Estoque / Lotes / Detalhe</div>
+          <PageBreadcrumbs items={[{ label: "Lotes", href: "/estoque/lotes" }, { label: lot.code }]} />
           <div className="doc-title">
             <h1>{lot.code}</h1>
             <span className={statusBadgeClass(lot.status, lot.isExpired)}>

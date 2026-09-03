@@ -25,6 +25,7 @@ import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
 import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
 import { CostWarnings } from "../../components/CostWarnings";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { getProductCmv } from "../../lib/product-cmv-api";
 import { getProductIndustrialCosts } from "../../lib/industrial-costs-api";
 import {
@@ -33,6 +34,7 @@ import {
 } from "../../lib/cost-calculation-api";
 import { getProductPricing } from "../../lib/pricing-api";
 import { formatBRL } from "../../lib/currency";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { formatPercent } from "../../lib/percent";
 import { formatDate } from "../../lib/dates";
 import "./cmv.css";
@@ -169,7 +171,10 @@ export function ProductCmvPage() {
       setError(null);
       try {
         const result = await getProductCmv(productId, {
-          quantity: quantidade,
+          // A simulação é sempre disparada com o que está no campo: a
+          // vírgula é lida aqui, e o que não dá para ler nomeia o campo em
+          // vez de virar "Falha ao calcular o CMV".
+          quantity: exigirDecimal(quantidade, "Quantidade a simular"),
           referenceDate: data_,
         });
         setData(result);
@@ -275,7 +280,7 @@ export function ProductCmvPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Cadastros / Produtos / CMV</div>
+          <PageBreadcrumbs items={[{ label: "Produtos", href: "/cadastros/produtos" }, { label: "CMV" }]} />
           <div className="doc-title">
             <h1>
               CMV ·{" "}

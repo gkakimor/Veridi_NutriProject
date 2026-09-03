@@ -40,6 +40,8 @@ import {
   updateProductionOrder,
 } from "../../lib/production-orders-api";
 import { ExtraConsumptionDialog } from "../../components/ExtraConsumptionDialog";
+import { exigirDecimal } from "../../lib/decimal-field";
+import { parseDecimalInput } from "../../lib/decimal-input";
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
 import { getItem } from "../../lib/items-api";
@@ -56,6 +58,7 @@ import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 
 interface FormulationVersionOption {
   id: string;
@@ -391,9 +394,9 @@ export function ProductionOrderPage() {
   function excedeReserva(line: MaterialReservationLineDTO): boolean {
     const pedido = (consumeQuantities[line.id] ?? "").trim();
     if (pedido === "") return false;
-    const valor = Number(pedido.replace(",", "."));
-    if (!Number.isFinite(valor)) return false;
-    return valor > Number(line.remainingQuantity);
+    const normalizado = parseDecimalInput(pedido);
+    if (normalizado === null) return false;
+    return Number(normalizado) > Number(line.remainingQuantity);
   }
 
   /* Quanto ainda cabe apontar nesta ordem. O servidor sempre recusou o
@@ -405,8 +408,8 @@ export function ProductionOrderPage() {
   const producaoAcimaDoPlanejado = (() => {
     const digitado = outputQuantity.trim();
     if (digitado === "") return false;
-    const valor = Number(digitado.replace(",", "."));
-    return Number.isFinite(valor) && valor > restanteParaProduzir;
+    const normalizado = parseDecimalInput(digitado);
+    return normalizado !== null && Number(normalizado) > restanteParaProduzir;
   })();
 
   function handleProductChange(nextProductId: string) {
@@ -596,7 +599,9 @@ export function ProductionOrderPage() {
     setConsumingLineId(lineId);
     setError(null);
     try {
-      const updated = await recordConsumption(id, [{ reservationLineId: lineId, quantity }]);
+      const updated = await recordConsumption(id, [
+        { reservationLineId: lineId, quantity: exigirDecimal(quantity, "Consumir agora") },
+      ]);
       setProductionOrder(updated);
       setConsumeQuantities((prev) => ({ ...prev, [lineId]: "" }));
     } catch (err) {
@@ -616,7 +621,7 @@ export function ProductionOrderPage() {
     setFieldErrors({});
     try {
       const updated = await registerProductionOutput(id, {
-        quantity,
+        quantity: exigirDecimal(quantity, "Quantidade produzida"),
         destination: outputDestination,
         ...(outputDestination === "EXISTING_LOT" ? { lotId: outputLotId } : {}),
         ...(outputDestination === "NEW_LOT" ? { businessLotNumber: outputBusinessLotNumber.trim() } : {}),
@@ -692,7 +697,7 @@ export function ProductionOrderPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Produção / Ordens de Produção / {isNew ? "Nova" : "Editar"}</div>
+          <PageBreadcrumbs items={[{ label: "Ordens de Produção", href: "/producao/ordens" }, { label: isNew ? "Nova" : (productionOrder?.code ?? "Editar") }]} />
           <div className="doc-title">
             <h1>{isNew ? "Nova ordem de produção" : productionOrder?.code}</h1>
             {productionOrder && (

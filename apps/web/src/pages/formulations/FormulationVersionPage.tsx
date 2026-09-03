@@ -31,6 +31,7 @@ import {
 import { getItem, listItems } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
 import { ApiValidationError } from "../../lib/api-errors";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { getFormulationCostEstimate } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
@@ -45,6 +46,7 @@ import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 
 interface ItemOption {
   id: string;
@@ -535,21 +537,22 @@ export function FormulationVersionPage() {
    */
   function montarRascunho() {
     return {
-      basisQuantity: basisQuantity.trim(),
+      basisQuantity: exigirDecimal(basisQuantity, "Base da formulação"),
       calculationMode,
+      // Doses por embalagem é inteiro: segue como está.
       dosesPerPackage: dosesPerPackage.trim() || null,
       notes: notes.trim(),
       components: components
         .filter((row) => row.itemId)
         .map((row) => ({
           itemId: row.itemId,
-          quantity: row.quantity.trim(),
+          quantity: exigirDecimal(row.quantity, "Quantidade"),
           unitCode: row.unitCode,
           basis: row.basis,
           supplyResponsibility: row.supplyResponsibility,
           // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
-          purityPercentApplied: row.purityPercentApplied.trim() || null,
-          overagePercent: row.overagePercent.trim() || null,
+          purityPercentApplied: exigirDecimalOpcional(row.purityPercentApplied, "Pureza %"),
+          overagePercent: exigirDecimalOpcional(row.overagePercent, "Overage %"),
           ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
         })),
     };
@@ -693,7 +696,7 @@ export function FormulationVersionPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Produção / Formulações / {version.productName}</div>
+          <PageBreadcrumbs items={[{ label: "Formulações", href: "/producao/formulacoes" }, { label: version.productName }]} />
           <div className="doc-title">
             <h1>Formulação {version.versionLabel}</h1>
             <span className={statusBadgeClass(version.status)}>
@@ -998,6 +1001,10 @@ export function FormulationVersionPage() {
                           type="text"
                           inputMode="decimal"
                           placeholder="0"
+                          /* O campo vive numa celula de tabela e nao tem
+                             <label> proprio: sem isto o unico nome acessivel
+                             seria o placeholder "0", que nao diz nada. */
+                          aria-label={`Quantidade de ${row.itemCode || "componente"}`}
                           value={row.quantity}
                           onChange={(event) =>
                             handleComponentFieldChange(row.key, "quantity", event.target.value)

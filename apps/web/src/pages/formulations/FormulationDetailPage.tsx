@@ -13,6 +13,7 @@ import {
 } from "../../lib/formulations-api";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpTopics } from "../../help/help-content";
 import { UseTemplateDialog } from "../formulation-templates/UseTemplateDialog";
 import { applyTemplateToProduct } from "../../lib/formulation-templates-api";
@@ -143,7 +144,7 @@ export function FormulationDetailPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Produção / Formulações / Detalhe</div>
+          <PageBreadcrumbs items={[{ label: "Formulações", href: "/producao/formulacoes" }, { label: "Detalhe" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={product.id} code={product.code} /> {product.name}

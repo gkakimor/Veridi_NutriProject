@@ -44,7 +44,9 @@ import {
   reallocateReservationLine,
   reserveAvailable,
 } from "../../lib/shipments-api";
-import { ApiValidationError } from "../../lib/api-errors";
+import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -165,6 +167,35 @@ function lineFromDTO(line: CustomerOrderDTO["lines"][number]): LineRow {
     unitCode: line.unitCode,
     orderedQuantity: line.orderedQuantity,
   };
+}
+
+/**
+ * Um valor digitado que ainda vale a pena enviar.
+ *
+ * Branco e zero não valem. **Ilegível vale**: o botão precisa continuar
+ * clicável para que a mensagem que cita o separador chegue à pessoa.
+ * Enquanto isto era `Number(texto) > 0`, `2,5` virava `NaN`, `NaN > 0` era
+ * falso na hora de montar o payload e verdadeiro na hora de habilitar o
+ * botão — clicar em "Reservar disponível" não fazia nada, em silêncio.
+ */
+function temValorParaEnviar(texto: string | undefined): boolean {
+  const limpo = (texto ?? "").trim();
+  if (limpo === "") return false;
+  const valor = parseDecimalInput(limpo);
+  return valor === null || Number(valor) > 0;
+}
+
+/**
+ * O complemento de uma linha do Plano: o que não é reservado é produzido.
+ *
+ * Campo em branco continua valendo zero — o complemento vira o pedido
+ * inteiro, como sempre foi. O que muda é `2,5`: era `NaN` e apagava o outro
+ * campo sem explicar; agora é dois e meio.
+ */
+function complementoDaLinha(pedido: string, digitado: string): string {
+  const valor = digitado.trim() === "" ? "0" : parseDecimalInput(digitado);
+  if (valor === null) return "";
+  return Math.max(Number(pedido) - Number(valor), 0).toString();
 }
 
 function situationLabel(situation: string): string {
@@ -361,7 +392,7 @@ export function CustomerOrderPage() {
     try {
       setCustomerOrder(await createRemainderProductionOrder(id, { customerOrderLineId: lineId }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao gerar OP para o saldo restante");
+      setError(apiErrorMessage(err, "Falha ao gerar OP para o saldo restante"));
     } finally {
       setGerandoSaldoLineId(null);
     }
@@ -388,7 +419,7 @@ export function CustomerOrderPage() {
         }
         setPlanAdjustments(initial);
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Falha ao carregar plano de atendimento"))
+      .catch((err: unknown) => setError(apiErrorMessage(err, "Falha ao carregar plano de atendimento")))
       .finally(() => setPlanLoading(false));
   }, [showPlan, id]);
 
@@ -398,7 +429,7 @@ export function CustomerOrderPage() {
     getPlanPurchaseSourcing(id)
       .then(setSourcing)
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar sugestão de compra"),
+        setError(apiErrorMessage(err, "Falha ao carregar sugestão de compra")),
       )
       .finally(() => setSourcingLoading(false));
   }, [id]);
@@ -426,7 +457,7 @@ export function CustomerOrderPage() {
           return next;
         });
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Falha ao carregar sugestão de compra"))
+      .catch((err: unknown) => setError(apiErrorMessage(err, "Falha ao carregar sugestão de compra")))
       .finally(() => setSuggestionLoading(false));
   }, [id]);
 
@@ -633,20 +664,28 @@ export function CustomerOrderPage() {
     setError(null);
     setFieldErrors({});
 
-    const linesPayload = lines
-      .filter((line) => line.productId)
-      .map((line) => ({ productId: line.productId, orderedQuantity: line.orderedQuantity.trim() }));
-
-    const requestedIso = toIsoOrEmpty(requestedDeliveryDate);
-
-    const payload = {
-      customerId,
-      notes: notes.trim(),
-      lines: linesPayload,
-      ...(requestedIso ? { requestedDeliveryDate: requestedIso } : {}),
-    };
-
     try {
+      // A conversão acontece dentro do funil: uma quantidade ilegível
+      // interrompe aqui, com o produto nomeado, e a requisição não sai.
+      const linesPayload = lines
+        .filter((line) => line.productId)
+        .map((line) => ({
+          productId: line.productId,
+          orderedQuantity: exigirDecimal(
+            line.orderedQuantity,
+            `Quantidade de ${line.productCode || "produto"}`,
+          ),
+        }));
+
+      const requestedIso = toIsoOrEmpty(requestedDeliveryDate);
+
+      const payload = {
+        customerId,
+        notes: notes.trim(),
+        lines: linesPayload,
+        ...(requestedIso ? { requestedDeliveryDate: requestedIso } : {}),
+      };
+
       if (isNew) {
         const created = await createCustomerOrder(payload);
         navigate(`/comercial/pedidos/${created.id}`, { replace: true });
@@ -664,7 +703,7 @@ export function CustomerOrderPage() {
         setFieldErrors(nextFieldErrors);
         setError("Corrija os campos destacados.");
       } else {
-        setError(err instanceof Error ? err.message : "Falha ao salvar pedido");
+        setError(apiErrorMessage(err, "Falha ao salvar pedido"));
       }
     } finally {
       setSaving(false);
@@ -684,7 +723,7 @@ export function CustomerOrderPage() {
       setCustomerOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao salvar");
+      setError(apiErrorMessage(err, "Falha ao salvar"));
     } finally {
       setSaving(false);
     }
@@ -700,7 +739,7 @@ export function CustomerOrderPage() {
       setCustomerOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao confirmar pedido");
+      setError(apiErrorMessage(err, "Falha ao confirmar pedido"));
     } finally {
       setSaving(false);
     }
@@ -717,24 +756,24 @@ export function CustomerOrderPage() {
       setCustomerOrder(updated);
       syncFormFromServer(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao cancelar pedido");
+      setError(apiErrorMessage(err, "Falha ao cancelar pedido"));
     } finally {
       setSaving(false);
     }
   }
 
   function handleAdjustReserve(lineId: string, ordered: string, reserve: string) {
-    const orderedNum = Number(ordered);
-    const reserveNum = Number(reserve);
-    const produce = Number.isNaN(reserveNum) ? "" : Math.max(orderedNum - reserveNum, 0).toString();
-    setPlanAdjustments((prev) => ({ ...prev, [lineId]: { reserve, produce } }));
+    setPlanAdjustments((prev) => ({
+      ...prev,
+      [lineId]: { reserve, produce: complementoDaLinha(ordered, reserve) },
+    }));
   }
 
   function handleAdjustProduce(lineId: string, ordered: string, produce: string) {
-    const orderedNum = Number(ordered);
-    const produceNum = Number(produce);
-    const reserve = Number.isNaN(produceNum) ? "" : Math.max(orderedNum - produceNum, 0).toString();
-    setPlanAdjustments((prev) => ({ ...prev, [lineId]: { reserve, produce } }));
+    setPlanAdjustments((prev) => ({
+      ...prev,
+      [lineId]: { reserve: complementoDaLinha(ordered, produce), produce },
+    }));
   }
 
   const planCoversEverything = useMemo(() => {
@@ -742,8 +781,30 @@ export function CustomerOrderPage() {
     return plan.lines.every((line) => {
       const adjustment = planAdjustments[line.customerOrderLineId];
       if (!adjustment) return false;
-      const sum = Number(adjustment.reserve || "0") + Number(adjustment.produce || "0");
+      // Vazio é zero; ilegível não vira conta — sem isto a soma dava `NaN`
+      // e a comparação recusava um plano que fecha, dizendo que não fecha.
+      const reservado = parseDecimalInput(adjustment.reserve.trim() || "0");
+      const produzido = parseDecimalInput(adjustment.produce.trim() || "0");
+      if (reservado === null || produzido === null) return false;
+      const sum = Number(reservado) + Number(produzido);
       return Math.abs(sum - Number(line.orderedQuantity)) < 1e-6;
+    });
+  }, [plan, planAdjustments]);
+
+  /*
+   * Um ajuste que nem o parser lê. O aviso de "precisa somar" está certo
+   * para quem digitou 3 onde cabia 5, e completamente errado para quem
+   * digitou `1.234,56` — nesse caso a soma nem existe.
+   */
+  const ajustePlanoIlegivel = useMemo(() => {
+    if (!plan) return false;
+    return plan.lines.some((line) => {
+      const adjustment = planAdjustments[line.customerOrderLineId];
+      if (!adjustment) return false;
+      return (
+        (adjustment.reserve.trim() !== "" && parseDecimalInput(adjustment.reserve) === null) ||
+        (adjustment.produce.trim() !== "" && parseDecimalInput(adjustment.produce) === null)
+      );
     });
   }, [plan, planAdjustments]);
 
@@ -758,8 +819,10 @@ export function CustomerOrderPage() {
           const adjustment = planAdjustments[line.customerOrderLineId]!;
           return {
             customerOrderLineId: line.customerOrderLineId,
-            reserveQuantity: adjustment.reserve || "0",
-            produceQuantity: adjustment.produce || "0",
+            reserveQuantity:
+              exigirDecimalOpcional(adjustment.reserve, `Reservar de ${line.productCode}`) ?? "0",
+            produceQuantity:
+              exigirDecimalOpcional(adjustment.produce, `Produzir de ${line.productCode}`) ?? "0",
           };
         }),
       });
@@ -767,7 +830,7 @@ export function CustomerOrderPage() {
       syncFormFromServer(updated);
       setPlan(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao aplicar plano de atendimento");
+      setError(apiErrorMessage(err, "Falha ao aplicar plano de atendimento"));
     } finally {
       setApplying(false);
     }
@@ -775,7 +838,7 @@ export function CustomerOrderPage() {
 
   const draftLinesToGenerate = useMemo(() => {
     return Object.entries(draftInputs)
-      .filter(([, value]) => Number(value.quantity || "0") > 0)
+      .filter(([, value]) => temValorParaEnviar(value.quantity))
       .map(([itemId, value]) => ({ itemId, quantity: value.quantity, supplierId: value.supplierId }));
   }, [draftInputs]);
 
@@ -809,12 +872,21 @@ export function CustomerOrderPage() {
     setGenerating(true);
     setError(null);
     try {
-      const updated = await generatePurchaseDrafts(id, { lines: draftLinesToGenerate });
+      const updated = await generatePurchaseDrafts(id, {
+        lines: draftLinesToGenerate.map((line) => {
+          const codigo =
+            suggestion?.rows.find((row) => row.itemId === line.itemId)?.itemCode ?? "material";
+          return {
+            ...line,
+            quantity: exigirDecimal(line.quantity, `Comprar de ${codigo}`),
+          };
+        }),
+      });
       setCustomerOrder(updated);
       syncFormFromServer(updated);
       reloadSuggestion();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao gerar Ordens de Compra");
+      setError(apiErrorMessage(err, "Falha ao gerar Ordens de Compra"));
     } finally {
       setGenerating(false);
     }
@@ -822,24 +894,32 @@ export function CustomerOrderPage() {
 
   async function handleReserveAvailable() {
     if (!id || !reservationStatus) return;
-    const lines = reservationStatus.lines
-      .map((line) => ({
-        customerOrderLineId: line.customerOrderLineId,
-        quantity: (reserveInputs[line.customerOrderLineId] ?? "0").trim() || "0",
-      }))
-      .filter((line) => Number(line.quantity) > 0);
-    if (lines.length === 0) return;
 
     setReserving(true);
     setError(null);
     try {
+      // Dentro do funil: linha em branco é zero e some no filtro; linha
+      // ilegível interrompe nomeando o produto, em vez de sumir junto e
+      // deixar o clique sem efeito nenhum.
+      const lines = reservationStatus.lines
+        .map((line) => ({
+          customerOrderLineId: line.customerOrderLineId,
+          quantity:
+            exigirDecimalOpcional(
+              reserveInputs[line.customerOrderLineId] ?? "",
+              `Reservar de ${line.productCode}`,
+            ) ?? "0",
+        }))
+        .filter((line) => Number(line.quantity) > 0);
+      if (lines.length === 0) return;
+
       const updated = await reserveAvailable(id, { lines });
       setCustomerOrder(updated);
       syncFormFromServer(updated);
       setReserveInputs({});
       reloadReservationStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao reservar produto acabado");
+      setError(apiErrorMessage(err, "Falha ao reservar produto acabado"));
     } finally {
       setReserving(false);
     }
@@ -857,7 +937,7 @@ export function CustomerOrderPage() {
       syncFormFromServer(updated);
       reloadReservationStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao realocar reserva");
+      setError(apiErrorMessage(err, "Falha ao realocar reserva"));
     } finally {
       setReallocatingLineId(null);
     }
@@ -871,7 +951,7 @@ export function CustomerOrderPage() {
       const shipment = await createShipmentDraft(id);
       navigate(`/comercial/expedicoes/${shipment.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao preparar expedição");
+      setError(apiErrorMessage(err, "Falha ao preparar expedição"));
     } finally {
       setPreparingShipment(false);
     }
@@ -932,6 +1012,14 @@ export function CustomerOrderPage() {
       {customerOrder && <FlowContext steps={orderFlowSteps(customerOrder)} />}
 
       <div className="doc-body">
+        {/*
+          A ajuda do DOCUMENTO fica aqui, fora de qualquer condicao de status.
+          Ela vivia so dentro da secao do Plano, que so aparece com o pedido
+          confirmado — entao sumia justamente em "Em atendimento", quando
+          reserva, ordens e saldo a expedir passam a existir e a tela fica mais
+          dificil, nao mais facil.
+        */}
+        <ContextHelp topic={helpTopics["comercial.pedido"]} />
         {error && <p className="form-alert">{error}</p>}
 
         {customerOrder?.status === "CANCELLED" && (
@@ -1064,6 +1152,10 @@ export function CustomerOrderPage() {
                           type="text"
                           inputMode="decimal"
                           placeholder="Quantidade"
+                          // Placeholder some ao digitar e nenhum leitor de tela
+                          // o usa como nome: sem isto, o campo que decide a
+                          // quantidade do pedido era só "editar texto".
+                          aria-label={`Quantidade de ${line.productCode || "produto"}`}
                           value={line.orderedQuantity}
                           onChange={(event) => handleLineQuantityChange(line.key, event.target.value)}
                         />
@@ -1133,7 +1225,10 @@ export function CustomerOrderPage() {
             title="Plano de Atendimento"
             subtitle="Análise/projeção — usa estoque disponível agora. Ao aplicar, tudo é recalculado de novo."
           >
-            <ContextHelp topic={helpTopics["planoAtendimento.comoFunciona"]} />
+            <ContextHelp
+              topic={helpTopics["planoAtendimento.comoFunciona"]}
+              triggerLabel="Como funciona o Plano"
+            />
 
             {planLoading && <p className="field__hint">Calculando…</p>}
             {plan && (
@@ -1202,8 +1297,12 @@ export function CustomerOrderPage() {
                     </tbody>
                   </table>
                 </div>
-                {!planCoversEverything && (
-                  <p className="field__hint">Reservar + Produzir precisa somar exatamente a quantidade pedida em cada linha.</p>
+                {ajustePlanoIlegivel ? (
+                  <p className="field__hint">{mensagemDecimalInvalido("Reservar/Produzir")}</p>
+                ) : (
+                  !planCoversEverything && (
+                    <p className="field__hint">Reservar + Produzir precisa somar exatamente a quantidade pedida em cada linha.</p>
+                  )
                 )}
 
                 {plan.materialImpact.length > 0 && (
@@ -1501,6 +1600,7 @@ export function CustomerOrderPage() {
                               <input
                                 type="text"
                                 inputMode="decimal"
+                                aria-label={`Comprar de ${row.itemCode}`}
                                 value={input.quantity}
                                 onChange={(event) => handleDraftQuantityChange(row.itemId, event.target.value)}
                               />
@@ -1679,7 +1779,7 @@ export function CustomerOrderPage() {
                 disabled={
                   reserving ||
                   reservationStatus.lines.every(
-                    (line) => Number(reserveInputs[line.customerOrderLineId] ?? "0") <= 0,
+                    (line) => !temValorParaEnviar(reserveInputs[line.customerOrderLineId]),
                   )
                 }
                 onClick={handleReserveAvailable}

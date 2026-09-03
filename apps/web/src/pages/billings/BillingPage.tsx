@@ -4,6 +4,8 @@ import type { BillingDTO, BillingLineDTO, BillingStatus } from "@veridi/shared";
 import { BILLING_STATUS_LABELS } from "@veridi/shared";
 import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../lib/billings-api";
 import { formatBRL } from "../../lib/currency";
+import { exigirDecimalOpcional } from "../../lib/decimal-field";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
@@ -13,6 +15,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { PriceOverrideDialog } from "./PriceOverrideDialog";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 
 function statusBadgeClass(status: BillingStatus): string {
   switch (status) {
@@ -89,7 +92,9 @@ export function BillingPage() {
         .filter((line) => line.agreedUnitPrice === null)
         .map((line) => ({
           billingLineId: line.id,
-          unitPrice: (prices[line.id] ?? "").trim(),
+          // Vazio continua sendo "sem preço" — faturamento quantitativo é
+          // legítimo. Só o que foi digitado precisa ser legível.
+          unitPrice: exigirDecimalOpcional(prices[line.id] ?? "", "Preço faturado") ?? "",
         })),
     };
   }
@@ -178,8 +183,9 @@ export function BillingPage() {
   function totalDaLinha(line: BillingLineDTO): string | null {
     const digitado = (prices[line.id] ?? "").trim();
     if (isDraft && !line.agreedUnitPrice) {
-      if (digitado === "" || Number.isNaN(Number(digitado))) return null;
-      return (Number(line.quantity) * Number(digitado)).toFixed(2);
+      const legivel = parseDecimalInput(digitado);
+      if (legivel === null) return null;
+      return (Number(line.quantity) * Number(legivel)).toFixed(2);
     }
     return line.lineTotal;
   }
@@ -197,12 +203,21 @@ export function BillingPage() {
    * está congelando um documento sem valor, e quais linhas estão assim.
    */
   const linhasSemPreco = billing.lines.filter((line) => (prices[line.id] ?? "").trim() === "");
+  /*
+   * Preço ilegível não é "sem preço": ficava fora de `linhasSemPreco`, a
+   * prévia sumia sem dizer por quê, e emitir congelava o documento com o
+   * texto cru. Agora a tela nomeia o problema antes de emitir.
+   */
+  const linhasComPrecoIlegivel = billing.lines.filter((line) => {
+    const digitado = (prices[line.id] ?? "").trim();
+    return digitado !== "" && parseDecimalInput(digitado) === null;
+  });
 
   return (
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Comercial / Faturamento / Detalhe</div>
+          <PageBreadcrumbs items={[{ label: "Faturamento", href: "/comercial/faturamento" }, { label: "Detalhe" }]} />
           <div className="doc-title">
             <h1>{billing.code}</h1>
             <span className={statusBadgeClass(billing.status)}>{BILLING_STATUS_LABELS[billing.status]}</span>
@@ -368,16 +383,35 @@ export function BillingPage() {
                             )}
                           </div>
                         ) : isDraft ? (
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Opcional"
-                            aria-label={`Preço faturado de ${line.productCode}`}
-                            value={prices[line.id] ?? ""}
-                            onChange={(event) =>
-                              setPrices((prev) => ({ ...prev, [line.id]: event.target.value }))
-                            }
-                          />
+                          (() => {
+                            const digitado = (prices[line.id] ?? "").trim();
+                            const ilegivel =
+                              digitado !== "" && parseDecimalInput(digitado) === null;
+                            return (
+                              <>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="Opcional"
+                                  aria-label={`Preço faturado de ${line.productCode}`}
+                                  aria-invalid={ilegivel || undefined}
+                                  className={ilegivel ? "is-invalid" : undefined}
+                                  value={prices[line.id] ?? ""}
+                                  onChange={(event) =>
+                                    setPrices((prev) => ({
+                                      ...prev,
+                                      [line.id]: event.target.value,
+                                    }))
+                                  }
+                                />
+                                {ilegivel && (
+                                  <p className="field__error">
+                                    {mensagemDecimalInvalido("Preço faturado")}
+                                  </p>
+                                )}
+                              </>
+                            );
+                          })()
                         ) : (
                           formatBRL(line.unitPrice)
                         )}
@@ -483,8 +517,13 @@ export function BillingPage() {
               <button
                 type="button"
                 className="btn btn--accent"
-                disabled={saving}
+                disabled={saving || linhasComPrecoIlegivel.length > 0}
                 onClick={() => setIssueDialogOpen(true)}
+                title={
+                  linhasComPrecoIlegivel.length > 0
+                    ? mensagemDecimalInvalido("Preço faturado")
+                    : undefined
+                }
               >
                 Emitir faturamento
               </button>

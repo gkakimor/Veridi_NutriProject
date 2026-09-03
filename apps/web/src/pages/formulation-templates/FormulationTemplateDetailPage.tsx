@@ -28,8 +28,11 @@ import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { TemplateDiff } from "./TemplateDiff";
 import { formatDateTime } from "../../lib/dates";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { useAuth } from "../../app/AuthProvider";
 import { ContextHelp, InfoHint } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
@@ -263,7 +266,7 @@ export function FormulationTemplateDetailPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
@@ -322,7 +325,7 @@ export function FormulationTemplateDetailPage() {
     <div className="doc-page">
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Produção / Templates de Formulação</div>
+          <PageBreadcrumbs items={[{ label: "Templates de Formulação", href: "/producao/templates-formulacao" }, { label: "Detalhe" }]} />
           <h1 className="doc-title">
             <code>{template.code}</code> {template.name}
             {template.archived && <span className="badge badge--neutral">Arquivado</span>}
@@ -614,11 +617,14 @@ export function FormulationTemplateDetailPage() {
                   onClick={() =>
                     void run(() =>
                       updateFormulationTemplateVersion(rascunho.id, {
-                        basisQuantity: base,
+                        basisQuantity: exigirDecimal(base, "Base da formulação"),
                         outputUnitCode: unidade,
                         components: linhas
                           .filter((linha) => linha.itemId && linha.quantity)
-                          .map(({ chave: _chave, ...resto }) => resto),
+                          .map(({ chave: _chave, ...resto }) => ({
+                            ...resto,
+                            quantity: exigirDecimal(resto.quantity, "Quantidade"),
+                          })),
                       }),
                     )
                   }

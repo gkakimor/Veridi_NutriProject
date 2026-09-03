@@ -36,6 +36,8 @@ import { helpTopics } from "../../help/help-content";
 import { IndustrialCostPendencies } from "../../components/IndustrialCostPendencies";
 import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
+import { apiErrorMessage } from "../../lib/api-errors";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import {
   activateIndustrialCostVersion,
   createIndustrialCostLine,
@@ -50,6 +52,7 @@ import {
 import { listIndustrialResources } from "../../lib/industrial-resources-api";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
@@ -233,6 +236,11 @@ export function IndustrialCostPage() {
       .catch(() => setResources([]));
   }, []);
 
+  /*
+   * O funil único da tela. A ação pode recusar antes de chamar a API — é o
+   * que um valor decimal ilegível faz —, e a recusa chega aqui como
+   * qualquer outra falha, sem que a requisição saia.
+   */
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
@@ -240,7 +248,7 @@ export function IndustrialCostPage() {
       await action();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao executar a ação");
+      setError(apiErrorMessage(err, "Falha ao executar a ação"));
     } finally {
       setSaving(false);
     }
@@ -293,7 +301,7 @@ export function IndustrialCostPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Cadastros / Produtos / Custos industriais</div>
+          <PageBreadcrumbs items={[{ label: "Produtos", href: "/cadastros/produtos" }, { label: "Custos industriais" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={productId} code={data.productCode} /> ·{" "}
@@ -364,14 +372,13 @@ export function IndustrialCostPage() {
                 // Criar versão grava documento com código, autor e data. Sem
                 // confirmação, quem só queria olhar saía com uma V2 no banco.
                 if (data.versions.length === 0) {
-                  void run(() =>
-                    createIndustrialCostVersion(
+                  void run(() => {
+                    const base = exigirDecimalOpcional(referenceQuantity, "Base de produção");
+                    return createIndustrialCostVersion(
                       productId,
-                      referenceQuantity.trim()
-                        ? { referenceOutputQuantity: referenceQuantity.trim() }
-                        : {},
-                    ),
-                  );
+                      base ? { referenceOutputQuantity: base } : {},
+                    );
+                  });
                   return;
                 }
                 setNewVersionConfirm(true);
@@ -550,7 +557,10 @@ export function IndustrialCostPage() {
                       onClick={() =>
                         void run(() =>
                           updateIndustrialCostVersion(version.id, {
-                            referenceOutputQuantity: referenceQuantity.trim(),
+                            referenceOutputQuantity: exigirDecimal(
+                              referenceQuantity,
+                              "Base de produção",
+                            ),
                           }),
                         )
                       }
@@ -786,11 +796,13 @@ export function IndustrialCostPage() {
                       disabled={saving || !description.trim()}
                       onClick={() =>
                         void run(async () => {
+                          // Vazio segue sendo "não informado" — nunca zero.
+                          const valor = exigirDecimalOpcional(rateValue, "Valor");
                           await createIndustrialCostLine(version.id, {
                             category,
                             description: description.trim(),
                             calculationBasis: basis,
-                            ...(rateValue.trim() ? { rateValue: rateValue.trim() } : {}),
+                            ...(valor ? { rateValue: valor } : {}),
                           });
                           setDescription("");
                           setRateValue("");
@@ -938,7 +950,10 @@ export function IndustrialCostPage() {
                         void run(async () => {
                           await createResourceUsage(version.id, {
                             resourceId: usageResourceId,
-                            usageQuantity: usageQuantity.trim(),
+                            usageQuantity: exigirDecimal(
+                              usageQuantity,
+                              "Consumo por lote de referência",
+                            ),
                           });
                           setUsageResourceId("");
                           setUsageQuantity("");

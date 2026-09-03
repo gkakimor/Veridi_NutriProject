@@ -6,11 +6,13 @@ import { COST_SOURCE_LABELS, ITEM_TYPE_LABELS, LOT_STATUS_LABELS } from "@veridi
 import { getAllocationSuggestion, getInventoryItem } from "../../lib/inventory-api";
 import { getItemCostReference } from "../../lib/costs-api";
 import { formatBRL } from "../../lib/currency";
+import { exigirDecimal } from "../../lib/decimal-field";
 import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp, InfoHint } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
@@ -77,7 +79,10 @@ export function InventoryItemDetailPage() {
     setSuggestionError(null);
     setSuggestion(null);
     try {
-      const result = await getAllocationSuggestion(itemId, requiredQuantity.trim());
+      const result = await getAllocationSuggestion(
+        itemId,
+        exigirDecimal(requiredQuantity, "Quantidade necessária"),
+      );
       setSuggestion(result);
     } catch (err) {
       setSuggestionError(err instanceof Error ? err.message : "Falha ao calcular sugestão");
@@ -114,7 +119,7 @@ export function InventoryItemDetailPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Estoque / Visão Geral / Detalhe</div>
+          <PageBreadcrumbs items={[{ label: "Posição de Estoque", href: "/estoque" }, { label: "Detalhe" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="item" id={detail.itemId} code={detail.itemCode} name={detail.itemName} />

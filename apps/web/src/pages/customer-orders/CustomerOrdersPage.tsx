@@ -138,7 +138,7 @@ export function CustomerOrdersPage() {
         <ExportCsvButton path="/customer-orders/export.csv" filters={{ search, customerId: customerFilter, status: statusFilter === "all" ? undefined : statusFilter }} />
 </div>
 
-      <ContextHelp topic={helpTopics["planoAtendimento.comoFunciona"]} />
+      <ContextHelp topic={helpTopics["comercial.pedidos"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">
