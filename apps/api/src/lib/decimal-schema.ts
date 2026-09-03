@@ -29,6 +29,32 @@ function normalizarDecimal(texto: string): string {
   return texto.replace(",", ".");
 }
 
+/**
+ * Decimal OPCIONAL que aceita `null` explícito (limpar o campo).
+ *
+ * O módulo de Projetos mantinha uma cópia própria disto que não aceitava
+ * vírgula e, ao recusar, respondia "Valor inválido (não pode ser negativo)".
+ * `4,05` não é negativo: a mensagem descrevia um defeito diferente do que
+ * havia acontecido, e mandava o operador procurar erro onde não existia.
+ *
+ * Duas implementações da mesma regra divergem por definição — a que está
+ * fora do caminho principal é a que fica para trás. Uma só.
+ */
+export function optionalDecimalStringSchema() {
+  return z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((value) => {
+      if (value === undefined) return undefined;
+      if (value === null) return null;
+      const texto = normalizarDecimal(String(value).trim());
+      return texto === "" ? null : texto;
+    })
+    .refine((value) => value === undefined || value === null || /^\d+(\.\d+)?$/.test(value), {
+      message: `Valor decimal inválido. ${AJUDA}`,
+    });
+}
+
 export function decimalStringSchema(options: { allowZero?: boolean } = {}) {
   return z
     .union([z.string(), z.number()])

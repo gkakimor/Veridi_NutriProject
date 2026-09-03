@@ -205,9 +205,9 @@ export function CustomerOrdersPage() {
               <th className="col-tight">Entrega</th>
               <th className="col-tight">Produtos</th>
               <th className="is-numeric col-tight">Quantidade</th>
-              <th className="col-tight">Atendimento</th>
-              <th className="col-tight">Faturamento</th>
-              <th className="col-tight">Status</th>
+              <th className="col-label">Atendimento</th>
+              <th className="col-label">Faturamento</th>
+              <th className="col-label">Status</th>
               <th aria-hidden="true" />
             </tr>
           </thead>
@@ -231,7 +231,7 @@ export function CustomerOrdersPage() {
                   <td className="col-tight">{formatDate(order.requestedDeliveryDate)}</td>
                   <td className="col-tight">{order.lines.length}</td>
                   <td className="is-numeric col-tight">{totalQuantity}</td>
-                  <td className="col-tight">
+                  <td className="col-label">
                     {/*
                       A situação de expedição vem do STATUS, nunca de uma
                       segunda derivação aqui.
@@ -256,10 +256,10 @@ export function CustomerOrdersPage() {
                         ? "Em atendimento"
                         : "Não analisado"}
                   </td>
-                  <td className="col-tight">
+                  <td className="col-label">
                     {CUSTOMER_ORDER_BILLING_STATUS_LABELS[order.billingStatus]}
                   </td>
-                  <td className="col-tight">
+                  <td className="col-label">
                     <span className={statusBadgeClass(order.status)}>
                       {CUSTOMER_ORDER_STATUS_LABELS[order.status]}
                     </span>

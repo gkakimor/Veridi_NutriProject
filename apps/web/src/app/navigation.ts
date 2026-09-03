@@ -69,7 +69,23 @@ export const navigation: NavGroup[] = [
   },
   {
     title: "Qualidade",
-    items: [{ label: "Documentos / CoA", path: "/qualidade/documentos", implemented: true }],
+    /*
+     * Liberar e bloquear lote é trabalho da Qualidade e não tinha entrada
+     * própria: chegava-se lá pelo Dashboard ou filtrando Estoque > Lotes à
+     * mão. Quem abrisse o grupo "Qualidade" via só Documentos/CoA e concluía
+     * que a liberação mora em outro lugar.
+     *
+     * O destino é a mesma lista de Lotes, já filtrada — a tela lê `?status=`
+     * da URL, então não há tela nova, só o caminho que faltava.
+     */
+    items: [
+      { label: "Documentos / CoA", path: "/qualidade/documentos", implemented: true },
+      {
+        label: "Liberação de lotes",
+        path: "/estoque/lotes?status=AWAITING_RELEASE",
+        implemented: true,
+      },
+    ],
   },
   {
     title: "Cadastros",
