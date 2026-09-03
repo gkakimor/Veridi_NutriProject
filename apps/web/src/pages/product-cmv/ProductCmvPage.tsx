@@ -34,7 +34,7 @@ import {
   saveIndustrialCostCalculation,
 } from "../../lib/cost-calculation-api";
 import { getProductPricing } from "../../lib/pricing-api";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { formatPercent } from "../../lib/percent";
 import { formatDate } from "../../lib/dates";
@@ -465,7 +465,7 @@ export function ProductCmvPage() {
                 {data?.pricing?.unitPrice && (
                   <div className="cmv-card">
                     <div className="cmv-card__label">Preço vigente</div>
-                    <div className="cmv-card__value">{formatBRL(data.pricing.unitPrice)}</div>
+                    <div className="cmv-card__value">{formatUnitPriceBRL(data.pricing.unitPrice)}</div>
                     <div className="cmv-card__note">
                       Faixa de {formatQuantity(data.pricing.tierQuantity)} {simulation.uomCode}
                     </div>
@@ -507,7 +507,7 @@ export function ProductCmvPage() {
                   </dd>
                   <dt>Preço</dt>
                   <dd>
-                    {formatBRL(data.pricing.unitPrice)} / {data.outputUomCode}
+                    {formatUnitPriceBRL(data.pricing.unitPrice)} / {data.outputUomCode}
                   </dd>
                   <dt>CMV por unidade</dt>
                   <dd>{simulation?.costPerUnit ? formatBRL(simulation.costPerUnit) : "—"}</dd>

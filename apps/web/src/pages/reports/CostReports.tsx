@@ -15,7 +15,7 @@ import {
   getQuotePricingAuditReport,
 } from "../../lib/reports-api";
 import { formatUnitCost } from "../../components/CostBreakdown";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 
@@ -321,7 +321,7 @@ export function QuotePricingAuditReportPage() {
             <td>
               {row.quotedQuantity ?? "—"} {row.uomCode ?? ""}
             </td>
-            <td>{row.unitPrice ? formatBRL(row.unitPrice) : "—"}</td>
+            <td>{row.unitPrice ? formatUnitPriceBRL(row.unitPrice) : "—"}</td>
             <td>{row.total ? formatBRL(row.total) : "—"}</td>
             <td>{QUOTE_PRICE_SOURCE_LABELS[row.priceSource]}</td>
             <td className="is-code">{row.pricingLabel ?? "—"}</td>

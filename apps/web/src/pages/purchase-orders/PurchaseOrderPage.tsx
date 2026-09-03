@@ -22,7 +22,7 @@ import { listSuppliers } from "../../lib/suppliers-api";
 import { listSupplierItems } from "../../lib/supplier-items-api";
 import { getItem, listItems } from "../../lib/items-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { parseDecimalInput } from "../../lib/decimal-input";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
@@ -977,7 +977,7 @@ options={supplierOptions.map((supplier) => ({
                           }
                         />
                       ) : (
-                        formatBRL(line.unitPrice || null)
+                        formatUnitPriceBRL(line.unitPrice || null)
                       )}
                     </td>
                     <td className="is-numeric">{formatBRL(lineTotal)}</td>

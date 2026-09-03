@@ -9,7 +9,7 @@ import {
 } from "@veridi/shared";
 import { getConsultationOrder } from "../../lib/customer-consultation-api";
 import { formatDate } from "../../lib/dates";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 import { ConsultationError, ConsultationLoading, ConsultationNotFound } from "./DetailStates";
 import { useScopedDetail } from "./useScopedDetail";
@@ -148,7 +148,7 @@ export function OrderPage() {
                   <td>
                     {formatQuantity(line.billedQuantity)} {line.unitCode}
                   </td>
-                  <td>{formatBRL(line.agreedPrice?.unitPrice ?? null)}</td>
+                  <td>{formatUnitPriceBRL(line.agreedPrice?.unitPrice ?? null)}</td>
                   <td>{formatBRL(line.agreedPrice?.lineTotal ?? null)}</td>
                 </tr>
               ))}

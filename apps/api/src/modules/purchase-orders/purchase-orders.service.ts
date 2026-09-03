@@ -66,9 +66,20 @@ const purchaseOrderInclude = {
   },
 } as const;
 
-/** Dinheiro (BRL) sempre com 2 casas decimais na saida da API. */
+/** TOTAL em dinheiro (BRL): 2 casas. So para valor ja somado. */
 function formatMoney(value: Prisma.Decimal): string {
   return value.toFixed(2);
+}
+
+/**
+ * PRECO UNITARIO: as 4 casas que `purchase_order_lines.unitPrice` guarda.
+ *
+ * Mesma correcao aplicada ao Faturamento: o total da linha e calculado sobre
+ * o valor cheio, entao cortar o preco na saida deixava a conta impossivel de
+ * refazer no papel. A precisao da coluna foi conferida no banco, nao suposta.
+ */
+function formatUnitPrice(value: Prisma.Decimal): string {
+  return value.toFixed(4);
 }
 
 function toLineDTO(line: LineWithReceipts): PurchaseOrderLineDTO {
@@ -85,7 +96,7 @@ function toLineDTO(line: LineWithReceipts): PurchaseOrderLineDTO {
     itemName: line.itemName,
     unitCode: line.unitCode,
     orderedQuantity: line.orderedQuantity.toString(),
-    unitPrice: line.unitPrice ? formatMoney(line.unitPrice) : null,
+    unitPrice: line.unitPrice ? formatUnitPrice(line.unitPrice) : null,
     lineTotal: lineTotal ? formatMoney(lineTotal) : null,
     receivedQuantity: receivedQuantity.toString(),
     openQuantity: openQuantity.toString(),

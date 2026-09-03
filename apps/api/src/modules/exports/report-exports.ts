@@ -26,7 +26,7 @@ import {
   PRODUCTION_ORDER_STATUS_LABELS,
   PURCHASE_ORDER_STATUS_LABELS,
 } from "@veridi/shared";
-import { csvCode, csvDate, csvDateTime, csvDecimal, csvMoney, csvText } from "../../lib/csv.js";
+import { csvCode, csvDate, csvDateTime, csvDecimal, csvMoney, csvText, csvUnitPrice } from "../../lib/csv.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import {
   getExpiryReport,
@@ -328,7 +328,7 @@ const r09 = defineCsvExport({
       value: (row: ReceiptReportRowDTO) =>
         row.coaStatus ? COA_STATUS_LABELS[row.coaStatus] : "Não exigido",
     },
-    { header: "Preço previsto (OC)", value: (row: ReceiptReportRowDTO) => csvMoney(row.orderedUnitPrice) },
+    { header: "Preço previsto (OC)", value: (row: ReceiptReportRowDTO) => csvUnitPrice(row.orderedUnitPrice) },
     { header: "Custo efetivo", value: (row: ReceiptReportRowDTO) => csvMoney(row.actualUnitCost) },
     { header: "Qualidade do custo", value: (row: ReceiptReportRowDTO) => row.costQuality },
   ],
@@ -572,7 +572,7 @@ const r20 = defineCsvExport({
     { header: "Status", value: (row: QuotePricingAuditRowDTO) => QUOTE_STATUS_LABELS[row.status] },
     { header: "Quantidade", value: (row: QuotePricingAuditRowDTO) => csvDecimal(row.quotedQuantity) },
     { header: "Unidade", value: (row: QuotePricingAuditRowDTO) => csvText(row.uomCode) },
-    { header: "Preço unitário", value: (row: QuotePricingAuditRowDTO) => csvMoney(row.unitPrice) },
+    { header: "Preço unitário", value: (row: QuotePricingAuditRowDTO) => csvUnitPrice(row.unitPrice) },
     { header: "Total", value: (row: QuotePricingAuditRowDTO) => csvMoney(row.total) },
     {
       header: "Origem do preço",

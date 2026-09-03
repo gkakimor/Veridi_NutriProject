@@ -12,7 +12,7 @@ import { listSuppliers } from "../../lib/suppliers-api";
 import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage";
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 
@@ -286,7 +286,7 @@ export function ReceiptsReportPage() {
             <td className="is-number">
               {formatQuantity(row.receivedQuantity)} {row.unitCode}
             </td>
-            <td className="is-number">{row.orderedUnitPrice ? formatBRL(row.orderedUnitPrice) : "—"}</td>
+            <td className="is-number">{row.orderedUnitPrice ? formatUnitPriceBRL(row.orderedUnitPrice) : "—"}</td>
             <td className="is-number">
               {row.actualUnitCost ? formatBRL(row.actualUnitCost) : "Sem custo informado"}
             </td>

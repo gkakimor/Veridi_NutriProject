@@ -7,7 +7,7 @@ import { getReceipt } from "../../lib/receiving-api";
 import { setAcquisitionCost } from "../../lib/costs-api";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { EntityLink } from "../../components/EntityLink";
@@ -252,7 +252,7 @@ export function ReceiptDetailPage() {
                     <td>
                       {line.coaStatus ? COA_STATUS_LABELS[line.coaStatus] : "—"}
                     </td>
-                    <td className="is-numeric">{formatBRL(line.purchaseUnitPrice)}</td>
+                    <td className="is-numeric">{formatUnitPriceBRL(line.purchaseUnitPrice)}</td>
                     <td className="is-numeric">
                       {editingLineId === line.id ? (
                         <input

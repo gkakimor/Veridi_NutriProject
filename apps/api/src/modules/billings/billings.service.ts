@@ -46,9 +46,31 @@ const billingInclude = {
   customerOrder: { select: { customerId: true } },
 } as const;
 
-/** Dinheiro (BRL) sempre com 2 casas decimais na saida da API. */
+/**
+ * TOTAL em dinheiro (BRL): sempre 2 casas na saida da API.
+ *
+ * So para valor JA somado — total de linha, total de documento. Nunca para
+ * preco unitario: ver `formatUnitPrice`.
+ */
 function formatMoney(value: Prisma.Decimal): string {
   return value.toFixed(2);
+}
+
+/**
+ * PRECO UNITARIO: as 4 casas que a coluna guarda, sem cortar.
+ *
+ * A coluna e `Decimal(14,4)` e o total da linha e calculado sobre o valor
+ * cheio. Enquanto o preco saia daqui com 2 casas, o documento exibia
+ * `R$ 4,05 x 123 = R$ 498,53` — conta que nao fecha, porque o total vem de
+ * `4,0531 x 123`. A diferenca de R$ 0,38 nao tinha origem visivel no papel.
+ *
+ * Arredondar o preco para 2 casas resolveria a aparencia e falsificaria o
+ * acordo: o pedido foi fechado a 4,0531, e esse e o valor historico. Quem
+ * decide quantas casas MOSTRAR e a camada de apresentacao, que hoje exibe de
+ * 2 a 4 conforme o preco. A API entrega o numero inteiro.
+ */
+function formatUnitPrice(value: Prisma.Decimal): string {
+  return value.toFixed(4);
 }
 
 function toBillingLineDTO(line: BillingLine): BillingLineDTO {
@@ -68,8 +90,8 @@ function toBillingLineDTO(line: BillingLine): BillingLineDTO {
     businessLotNumber: line.businessLotNumber,
     quantity: line.quantity.toString(),
     unitCode: line.unitCode,
-    agreedUnitPrice: line.agreedUnitPrice ? formatMoney(line.agreedUnitPrice) : null,
-    unitPrice: line.unitPrice ? formatMoney(line.unitPrice) : null,
+    agreedUnitPrice: line.agreedUnitPrice ? formatUnitPrice(line.agreedUnitPrice) : null,
+    unitPrice: line.unitPrice ? formatUnitPrice(line.unitPrice) : null,
     lineTotal: lineTotal ? formatMoney(lineTotal) : null,
     priceOverridden: line.priceOverridden,
     overrideReason: line.overrideReason,
@@ -89,8 +111,26 @@ function toBillingLineDTO(line: BillingLine): BillingLineDTO {
 function toBillingDTO(billing: BillingWithLines): BillingDTO {
   const totalQuantity = billing.lines.reduce((sum, line) => sum.plus(line.quantity), new Prisma.Decimal(0));
   const hasCompletePricing = billing.lines.length > 0 && billing.lines.every((line) => line.unitPrice !== null);
+  /*
+   * O total do documento e a soma das linhas IMPRESSAS.
+   *
+   * Somar os produtos cheios e arredondar uma vez no fim e o certo em
+   * estatistica e o errado num documento: `Σ round(linha)` e
+   * `round(Σ linha)` divergem, e o que o cliente confere sao as linhas.
+   * Medido com duas linhas de preco de quatro casas — 123 x 4,0531 e
+   * 147 x 9,7203 — as linhas impressas somavam R$ 1.927,41 e o rodape dizia
+   * R$ 1.927,42. Um centavo que nao sai de nenhuma conta possivel com o
+   * papel na mao, e que cresce com o numero de linhas.
+   *
+   * A ordem correta e a mesma que a nota fiscal usa: cada linha fecha em
+   * dois decimais, e o documento e a soma dessas linhas.
+   */
   const totalAmount = hasCompletePricing
-    ? billing.lines.reduce((sum, line) => sum.plus(line.quantity.times(line.unitPrice!)), new Prisma.Decimal(0))
+    ? billing.lines.reduce(
+        (sum, line) =>
+          sum.plus(new Prisma.Decimal(line.quantity.times(line.unitPrice!).toFixed(2))),
+        new Prisma.Decimal(0),
+      )
     : null;
 
   return {
@@ -401,7 +441,7 @@ export async function updateBilling(id: string, input: UpdateBillingInput): Prom
 
         const current = billing.lines.find((row) => row.id === line.billingLineId)!;
         if (current.agreedUnitPrice !== null) {
-          throw new AgreedPriceNotEditableError(formatMoney(current.agreedUnitPrice));
+          throw new AgreedPriceNotEditableError(formatUnitPrice(current.agreedUnitPrice));
         }
 
         await tx.billingLine.update({

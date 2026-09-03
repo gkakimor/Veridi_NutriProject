@@ -7,7 +7,7 @@ import { createReceipt } from "../../lib/receiving-api";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { parseDecimalInput } from "../../lib/decimal-input";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
-import { formatBRL } from "../../lib/currency";
+import { formatUnitPriceBRL } from "../../lib/currency";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
@@ -412,7 +412,7 @@ export function ReceivePurchaseOrderPage() {
                   />
                   <p className="field__hint">
                     {line.purchaseUnitPrice
-                      ? `Preço previsto da OC: ${formatBRL(line.purchaseUnitPrice)} / ${line.unitCode}. `
+                      ? `Preço previsto da OC: ${formatUnitPriceBRL(line.purchaseUnitPrice)} / ${line.unitCode}. `
                       : ""}
                     Opcional — o recebimento não depende do custo. Informe apenas o custo realmente
                     praticado; o preço da OC nunca é assumido como custo real.

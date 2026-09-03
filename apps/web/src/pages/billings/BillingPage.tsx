@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import type { BillingDTO, BillingLineDTO, BillingStatus } from "@veridi/shared";
 import { BILLING_STATUS_LABELS } from "@veridi/shared";
 import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../lib/billings-api";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { FormSection } from "../../components/FormSection";
@@ -362,12 +362,12 @@ export function BillingPage() {
                         {/* Veio do Pedido e não se redigita. Deixá-lo
                             editável transformaria a quebra de um acordo
                             num deslize de digitação. */}
-                        {line.agreedUnitPrice ? formatBRL(line.agreedUnitPrice) : "—"}
+                        {line.agreedUnitPrice ? formatUnitPriceBRL(line.agreedUnitPrice) : "—"}
                       </td>
                       <td className="is-numeric">
                         {line.agreedUnitPrice ? (
                           <div className="cell-stack">
-                            <span>{formatBRL(line.unitPrice)}</span>
+                            <span>{formatUnitPriceBRL(line.unitPrice)}</span>
                             {line.priceOverridden && (
                               <span className="badge badge--warn">Alterado</span>
                             )}
@@ -412,7 +412,7 @@ export function BillingPage() {
                             );
                           })()
                         ) : (
-                          formatBRL(line.unitPrice)
+                          formatUnitPriceBRL(line.unitPrice)
                         )}
                       </td>
                       <td className="is-numeric">{formatBRL(lineTotal)}</td>
@@ -446,8 +446,8 @@ export function BillingPage() {
                       .map((line) => (
                         <tr key={line.id}>
                           <td>{line.productCode}</td>
-                          <td className="is-numeric">{formatBRL(line.agreedUnitPrice)}</td>
-                          <td className="is-numeric">{formatBRL(line.unitPrice)}</td>
+                          <td className="is-numeric">{formatUnitPriceBRL(line.agreedUnitPrice)}</td>
+                          <td className="is-numeric">{formatUnitPriceBRL(line.unitPrice)}</td>
                           <td className="cell-sub cell-sub--wrap">{line.overrideReason}</td>
                           <td>{line.overriddenBy ?? "—"}</td>
                           <td>

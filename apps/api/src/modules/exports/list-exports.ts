@@ -44,7 +44,7 @@ import {
   INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
-import { csvBoolean, csvCode, csvDate, csvDateTime, csvDecimal, csvMoney, csvText } from "../../lib/csv.js";
+import { csvBoolean, csvCode, csvDate, csvDateTime, csvDecimal, csvMoney, csvText, csvUnitPrice } from "../../lib/csv.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import { listCustomers } from "../customers/customers.service.js";
 import { listSuppliers } from "../suppliers/suppliers.service.js";
@@ -275,7 +275,7 @@ const receiptsExport = defineCsvExport({
     { header: "Lote do fornecedor", value: (row: ReceiptLineRow) => csvCode(row.line.supplierLot) },
     { header: "Validade", value: (row: ReceiptLineRow) => csvDate(row.line.expiryDate) },
     { header: "Localização", value: (row: ReceiptLineRow) => csvText(row.line.location) },
-    { header: "Preço previsto (OC)", value: (row: ReceiptLineRow) => csvMoney(row.line.purchaseUnitPrice) },
+    { header: "Preço previsto (OC)", value: (row: ReceiptLineRow) => csvUnitPrice(row.line.purchaseUnitPrice) },
     { header: "Custo efetivo", value: (row: ReceiptLineRow) => csvMoney(row.line.actualUnitCost) },
     // Custo sempre acompanhado da sua origem/qualidade.
     { header: "Origem do custo", value: (row: ReceiptLineRow) => (row.line.actualUnitCost ? "REAL" : "NO_COST") },

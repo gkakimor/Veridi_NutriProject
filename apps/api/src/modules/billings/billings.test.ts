@@ -417,7 +417,7 @@ describe("Faturamento — preço e valor", () => {
       url: `/billings/${billing.id}`,
       payload: { lines: [{ billingLineId: billing.lines[0].id, unitPrice: "15.90" }] },
     });
-    expect(partial.json().lines[0].unitPrice).toBe("15.90");
+    expect(partial.json().lines[0].unitPrice).toBe("15.9000");
     expect(partial.json().lines[0].lineTotal).toBe("3975.00");
     expect(partial.json().hasCompletePricing).toBe(false);
     expect(partial.json().totalAmount).toBeNull();
@@ -459,7 +459,7 @@ describe("Faturamento — preço e valor", () => {
       payload: { lines: [{ billingLineId: billing.lines[0].id, unitPrice: "0" }] },
     });
     expect(zero.statusCode).toBe(200);
-    expect(zero.json().lines[0].unitPrice).toBe("0.00");
+    expect(zero.json().lines[0].unitPrice).toBe("0.0000");
     expect(zero.json().totalAmount).toBe("0.00");
 
     const cleared = await app.inject({

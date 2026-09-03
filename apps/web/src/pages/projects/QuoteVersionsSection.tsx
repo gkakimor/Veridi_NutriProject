@@ -23,7 +23,7 @@ import { QuoteClosingSection } from "./QuoteClosingSection";
 import { FormSection } from "../../components/FormSection";
 import { IncompleteCostApiError, apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
-import { formatBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { QuoteConditionsForm } from "./QuoteConditionsForm";
 import { formatQuantity } from "../../lib/quantity";
 
@@ -474,7 +474,7 @@ export function QuoteVersionsSection({
                           }
                         />
                       ) : line.unitPrice ? (
-                        formatBRL(line.unitPrice)
+                        formatUnitPriceBRL(line.unitPrice)
                       ) : (
                         "—"
                       )}
@@ -522,7 +522,7 @@ export function QuoteVersionsSection({
                           <div className="quote-suggestion__row">
                             <span>
                               Existe uma precificação vigente para {formatQuantity(tier.quantity)} {tier.uomCode}:{" "}
-                              <strong>{formatBRL(tier.selectedUnitPrice)}</strong> / {tier.uomCode}.
+                              <strong>{formatUnitPriceBRL(tier.selectedUnitPrice)}</strong> / {tier.uomCode}.
                             </span>
                             <button
                               type="button"
@@ -581,7 +581,7 @@ export function QuoteVersionsSection({
                   {pricingOptions.tiers.map((tier) => (
                     <li key={tier.id}>
                       {formatQuantity(tier.quantity)} {tier.uomCode} ·{" "}
-                      {tier.selectedUnitPrice ? formatBRL(tier.selectedUnitPrice) : "sem preço"}{" "}
+                      {tier.selectedUnitPrice ? formatUnitPriceBRL(tier.selectedUnitPrice) : "sem preço"}{" "}
                       <button
                         type="button"
                         className="btn btn--ghost btn--sm"

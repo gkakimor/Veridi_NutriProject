@@ -273,8 +273,10 @@ describe("Usar política num cálculo de custo", () => {
     await waitFor(() =>
       expect(previewPricingPolicy).toHaveBeenCalledWith("p-1", "tppv-1", "calc-1"),
     );
-    expect(await screen.findByText("R$ 5,33")).toBeInTheDocument();
-    expect(screen.getByText("R$ 4,18")).toBeInTheDocument();
+    // Preço unitário mostra até quatro casas: `5.3333` cortado em `R$ 5,33`
+    // era o que fazia o documento de faturamento não fechar na conferência.
+    expect(await screen.findByText("R$ 5,3333")).toBeInTheDocument();
+    expect(screen.getByText("R$ 4,1791")).toBeInTheDocument();
     // Ver a prévia não aplica: nada foi gravado ainda.
     expect(applyPricingPolicyToProduct).not.toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
