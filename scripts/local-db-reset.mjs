@@ -37,6 +37,14 @@ function rodar(comando, args, opcoes = {}) {
     cwd: RAIZ,
     stdio: opcoes.silencioso ? ["ignore", "pipe", "pipe"] : "inherit",
     encoding: "utf8",
+    /*
+     * `shell: true` porque no Windows `pnpm` e um `.cmd`, e `execFileSync` sem
+     * shell procura um executavel com esse nome exato e falha com ENOENT — o
+     * que ja aconteceu DEPOIS do drop, deixando a base recriada e vazia de
+     * schema. As chamadas ao Postgres passam caminho absoluto e nao dependem
+     * disto; quem precisa e o pnpm.
+     */
+    shell: true,
     ...opcoes,
   });
 }

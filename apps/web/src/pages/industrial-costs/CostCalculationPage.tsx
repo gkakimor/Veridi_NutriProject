@@ -7,6 +7,7 @@ import { CostBreakdown, CostQualityBadge } from "../../components/CostBreakdown"
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { FormSection } from "../../components/FormSection";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { getIndustrialCostCalculation } from "../../lib/cost-calculation-api";
 import { formatDate } from "../../lib/dates";
 
@@ -39,7 +40,7 @@ export function CostCalculationPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Cadastros / Produtos / Custos industriais / Cálculo</div>
+          <PageBreadcrumbs items={[{ label: "Produtos", href: "/cadastros/produtos" }, { label: "Cálculo de custo" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={calculation.productId} code={calculation.productCode} />{" "}

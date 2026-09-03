@@ -29,6 +29,7 @@ import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { TemplateDiffTable } from "../../components/TemplateDiffTable";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
@@ -202,7 +203,7 @@ export function CostTemplateDetailPage() {
     <div className="doc-page">
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Gestão / Templates de Estrutura de Custos</div>
+          <PageBreadcrumbs items={[{ label: "Templates de Estrutura", href: "/gestao/templates-estrutura" }, { label: "Detalhe" }]} />
           <h1 className="doc-title">
             <code>{template.code}</code> {template.name}
             {template.archived && <span className="badge badge--neutral">Arquivado</span>}

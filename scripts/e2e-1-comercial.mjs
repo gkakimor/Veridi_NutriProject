@@ -63,6 +63,28 @@ const S =
  * ou defeito fica acumulado no estado, sem repetição.
  */
 S.registro = S.registro ?? { vazios: [], observacoes: [], ergonomia: [], findings: [] };
+S.registro.separadores = S.registro.separadores ?? [];
+/*
+ * As dez provas do item 90 valem para a JORNADA inteira.
+ *
+ * Marco concluído não roda de novo — é o que impede a retomada de duplicar
+ * cliente e ordem na base. O efeito colateral é que a prova exercitada no
+ * marco 10 não reaparece numa execução que começa no 14, e um relatório que
+ * só olhasse a execução corrente diria "não exercitada" sobre algo que
+ * passou. O resultado de cada prova fica gravado junto do resto do estado.
+ */
+S.registro.provas = S.registro.provas ?? {};
+
+function registrarProva(rotulo, passou) {
+  const n = (rotulo.match(/^PROVA (\d+)(?![0-9])/) ?? [])[1];
+  if (!n) return;
+  const registro = (S.registro.provas[n] = S.registro.provas[n] ?? { ok: [], nok: [] });
+  const lista = passou ? registro.ok : registro.nok;
+  const oposta = passou ? registro.nok : registro.ok;
+  const i = oposta.indexOf(rotulo);
+  if (i >= 0) oposta.splice(i, 1);
+  if (!lista.includes(rotulo)) lista.push(rotulo);
+}
 
 function acumular(lista, itens, chave) {
   for (const item of itens) {
@@ -76,6 +98,7 @@ function salvarEstado() {
   acumular(S.registro.observacoes, observacoes, (o) => o);
   acumular(S.registro.ergonomia, ergonomia, (e) => e);
   acumular(S.registro.findings, findings, (f) => f.titulo);
+  acumular(S.registro.separadores, separadores, (s) => `${s.campo}::${s.digitado}::${s.onde}`);
   fs.writeFileSync(STATE_FILE, JSON.stringify(S, null, 2));
 }
 
@@ -105,6 +128,7 @@ async function login() {
 const failures = [];
 const passes = [];
 function check(label, condition, detail = "") {
+  registrarProva(label, Boolean(condition));
   if (condition) {
     passes.push(label);
     console.log("ok  ", label);
@@ -135,6 +159,22 @@ function registrarVazio(tela, texto) {
   vazios.push({ tela, texto });
   console.log(`  ∅ ${tela}: "${texto}"`);
 }
+
+/**
+ * Campos de dinheiro em que a vírgula brasileira foi digitada de propósito.
+ *
+ * A prova pedida não é "o número gravou": é "o número gravou com VÍRGULA".
+ * Sem a lista, um relatório que só dissesse "faixa cadastrada" esconderia
+ * uma retentativa com ponto — que é o defeito que já existiu aqui.
+ */
+const separadores = [];
+function registrarSeparador(registro) {
+  separadores.push(registro);
+  console.log(`  , ${registro.campo} ← "${registro.digitado}" → ${registro.como}`);
+}
+
+/** O mesmo número como a pessoa digita em português. */
+const comoDigitado = (valor) => String(valor).replace(".", ",");
 
 /** Telas lentas / sem retorno visual / com salto de layout. */
 const ergonomia = [];
@@ -579,7 +619,7 @@ async function marco02Itens() {
 
   await abrir("/cadastros/itens/novo");
 
-  // ── PROVA 1 · Produto Acabado NÃO pode ser criado manualmente ───────────
+  // ── REGRA PA · Produto Acabado NÃO pode ser criado manualmente ───────────
   const opcoesTipo = await page.evaluate(() =>
     [...document.querySelectorAll("#item-type option")].map((o) => ({
       value: o.value,
@@ -590,24 +630,24 @@ async function marco02Itens() {
     (o) => o.value === "FINISHED_PRODUCT" || /produto acabado/i.test(o.label),
   );
   check(
-    "PROVA 1 · o seletor de tipo do item NÃO oferece Produto acabado",
+    "REGRA PA · o seletor de tipo do item NÃO oferece Produto acabado",
     !temPA,
     JSON.stringify(opcoesTipo),
   );
   const dica = await texto(".field__hint");
   check(
-    "PROVA 1 · a tela explica por que Produto acabado não está na lista",
+    "REGRA PA · a tela explica por que Produto acabado não está na lista",
     /produtos acabados são criados automaticamente/i.test(dica),
     dica,
   );
-  anotar(`PROVA 1 · tipos ofertados na criação: ${opcoesTipo.map((o) => o.value).join(", ") || "—"}`);
+  anotar(`REGRA PA · tipos ofertados na criação: ${opcoesTipo.map((o) => o.value).join(", ") || "—"}`);
   await shot("e2e1-02a-tipo-sem-produto-acabado");
 
   // A porta fechada pelo seletor também não abre por parâmetro de URL.
   await abrir("/cadastros/itens/novo?tipo=FINISHED_PRODUCT");
   const tipoNaUrl = await page.locator("#item-type").inputValue();
   check(
-    "PROVA 1 · ?tipo=FINISHED_PRODUCT na URL não pré-seleciona Produto acabado",
+    "REGRA PA · ?tipo=FINISHED_PRODUCT na URL não pré-seleciona Produto acabado",
     tipoNaUrl !== "FINISHED_PRODUCT",
     `valor selecionado="${tipoNaUrl}"`,
   );
@@ -1234,13 +1274,13 @@ async function marco08Produto() {
     anotar(`PRODUTO · ${jaTem[0].code} já existia — criação pulada`);
   }
 
-  // ── PROVA 2 · o produto nascido do Projeto ─────────────────────────────
+  // ── REGRA PRODUTO · o produto nascido do Projeto ─────────────────────────────
   const linhaProduto = await textos(
     "section.form-section:has(h3) table.table tbody tr",
   );
   const linha = linhaProduto.find((l) => l.includes(PRODUTO.nome));
   check(
-    "PROVA 2 · o produto aparece no projeto como Em desenvolvimento",
+    "REGRA PRODUTO · o produto aparece no projeto como Em desenvolvimento",
     Boolean(linha) && /Em desenvolvimento/.test(linha ?? ""),
     linha ?? JSON.stringify(linhaProduto),
   );
@@ -1248,7 +1288,7 @@ async function marco08Produto() {
 
   const produtos = (await apiGet("/products?pageSize=20")).products ?? [];
   const produto = produtos.find((p) => p.name === PRODUTO.nome);
-  if (!check("PROVA 2 · o produto existe e é único", Boolean(produto), JSON.stringify(produtos.map((p) => p.name)))) {
+  if (!check("REGRA PRODUTO · o produto existe e é único", Boolean(produto), JSON.stringify(produtos.map((p) => p.name)))) {
     return;
   }
   S.dados.produto = {
@@ -1260,17 +1300,17 @@ async function marco08Produto() {
   salvarEstado();
 
   check(
-    "PROVA 2 · o produto HERDOU o cliente do projeto",
+    "REGRA PRODUTO · o produto HERDOU o cliente do projeto",
     produto.customerId === S.dados.cliente.id,
     `produto.customerId=${produto.customerId} cliente=${S.dados.cliente.id}`,
   );
   check(
-    "PROVA 2 · o produto nasceu Em desenvolvimento (lifecycle DEVELOPMENT)",
+    "REGRA PRODUTO · o produto nasceu Em desenvolvimento (lifecycle DEVELOPMENT)",
     produto.lifecycle === "DEVELOPMENT",
     String(produto.lifecycle),
   );
   check(
-    "PROVA 2 · o item de Produto Acabado foi criado automaticamente, com prefixo PA",
+    "REGRA PRODUTO · o item de Produto Acabado foi criado automaticamente, com prefixo PA",
     /^PA-\d+$/.test(produto.finishedProductItem?.code ?? ""),
     JSON.stringify(produto.finishedProductItem ?? {}),
   );
@@ -1281,7 +1321,7 @@ async function marco08Produto() {
   await page.waitForTimeout(1200);
   const linhasItens = await textos("table tbody tr");
   check(
-    "PROVA 1+2 · o item PA aparece em Itens de estoque, criado pelo Produto e não pela tela de itens",
+    "REGRA PA+PRODUTO · o item PA aparece em Itens de estoque, criado pelo Produto e não pela tela de itens",
     linhasItens.some((l) => l.includes("Produto acabado") && l.includes(PRODUTO.nome)),
     JSON.stringify(linhasItens),
   );
@@ -1290,7 +1330,7 @@ async function marco08Produto() {
   await abrir(`/producao/formulacoes/${produto.id}`, { espera: ".doc-title h1" });
   const versoes = await textos("table tbody tr");
   check(
-    "PROVA 2 · o produto já nasce com formulação V1 em RASCUNHO",
+    "REGRA PRODUTO · o produto já nasce com formulação V1 em RASCUNHO",
     versoes.length === 1 && versoes[0].includes("V1") && versoes[0].includes("Rascunho"),
     JSON.stringify(versoes),
   );
@@ -1370,7 +1410,7 @@ async function marco09Formulacao() {
   if (jaAtiva) {
     anotar(`FORMULAÇÃO · ${jaAtiva.versionLabel} já estava ATIVA — edição pulada, conferência mantida`);
     check(
-      "PROVA 3 · a versão ATIVA contém os 6 componentes, incluindo a embalagem adicionada sem salvar",
+      "PROVA 4 · a versão ATIVA contém os 6 componentes, incluindo a embalagem adicionada sem salvar",
       (jaAtiva.components ?? []).length === MP.length + 1 &&
         (jaAtiva.components ?? []).some((c) => (c.itemName ?? "").includes(EMBALAGEM.nome)),
       JSON.stringify((jaAtiva.components ?? []).map((c) => `${c.itemCode} ${c.quantity}${c.unitCode}/${c.basis}`)),
@@ -1439,7 +1479,7 @@ async function marco09Formulacao() {
   );
   await shot("e2e1-09b-formulacao-materias-primas");
 
-  // ── PROVA 3 · salvar-antes-de-ativar ────────────────────────────────────
+  // ── PROVA 4 · salvar-antes-de-ativar ────────────────────────────────────
   // A embalagem é adicionada e NÃO salva: o clique vai direto em "Ativar
   // versão". Se a tela ativasse antes de gravar, a versão ativa nasceria com
   // cinco componentes e a receita perderia o pote — sem nenhum aviso.
@@ -1454,7 +1494,7 @@ async function marco09Formulacao() {
   });
   const naTelaAntes = await linhasDeComponente().count();
   anotar(
-    `PROVA 3 · a tela tem ${naTelaAntes} componentes; a embalagem foi adicionada e NÃO foi salva`,
+    `PROVA 4 · a tela tem ${naTelaAntes} componentes; a embalagem foi adicionada e NÃO foi salva`,
   );
   await shot("e2e1-09c-antes-de-ativar-sem-salvar");
 
@@ -1464,7 +1504,7 @@ async function marco09Formulacao() {
 
   const situacaoAtiva = await texto(".doc-title .badge");
   check(
-    "PROVA 3 · a versão foi ativada mesmo com edição não salva na tela",
+    "PROVA 4 · a versão foi ativada mesmo com edição não salva na tela",
     situacaoAtiva === "Ativa",
     `${situacaoAtiva} · erros=${JSON.stringify(await mensagensDeErro())}`,
   );
@@ -1474,7 +1514,7 @@ async function marco09Formulacao() {
   );
   const componentesAtivos = ativa?.components ?? [];
   check(
-    "PROVA 3 · a versão ATIVADA contém a alteração que não tinha sido salva (a embalagem)",
+    "PROVA 4 · a versão ATIVADA contém a alteração que não tinha sido salva (a embalagem)",
     componentesAtivos.length === MP.length + 1 &&
       componentesAtivos.some((c) => (c.itemName ?? "").includes(EMBALAGEM.nome)),
     `componentes=${componentesAtivos.length} → ${JSON.stringify(componentesAtivos.map((c) => c.itemName))}`,
@@ -1486,9 +1526,9 @@ async function marco09Formulacao() {
 
 // ── MARCO 10 · Recursos industriais ───────────────────────────────────────
 const RECURSOS = [
-  { nome: `${P} Encapsuladora`, tipo: "EQUIPMENT", potencia: "5", tarifa: "120" },
-  { nome: `${P} Mao de obra producao`, tipo: "LABOR", potencia: null, tarifa: "45" },
-  { nome: `${P} Energia eletrica`, tipo: "ENERGY", potencia: null, tarifa: "0,85" },
+  { nome: `${P} Encapsuladora`, tipo: "EQUIPMENT", potencia: "5", tarifa: "120.50" },
+  { nome: `${P} Mao de obra producao`, tipo: "LABOR", potencia: null, tarifa: "45.75" },
+  { nome: `${P} Energia eletrica`, tipo: "ENERGY", potencia: null, tarifa: "0.85" },
 ];
 
 /** Registra a tarifa do recurso na tela de detalhe, já aberta. */
@@ -1510,6 +1550,27 @@ async function registrarTarifa(r) {
     como !== "falhou",
     `separador aceito: ${como} · erros=${JSON.stringify(await mensagensDeErro())}`,
   );
+  /*
+   * PROVA 1 · a vírgula brasileira num campo de dinheiro.
+   *
+   * `decimalComRetentativa` SEMPRE digita a vírgula primeiro. "virgula" quer
+   * dizer que a primeira tentativa gravou; "ponto" quer dizer que só o
+   * separador do contrato funcionou — e aí o defeito já foi registrado lá
+   * dentro. A verificação existe para o cenário não passar em silêncio com o
+   * separador errado, que era exatamente o que acontecia antes.
+   */
+  check(
+    `PROVA 1 · a vírgula decimal foi aceita na tarifa de "${r.nome}" (${comoDigitado(r.tarifa)})`,
+    como === "virgula",
+    `separador aceito: ${como}`,
+  );
+  registrarSeparador({
+    campo: "#rate-value",
+    onde: `Gestão › Recursos industriais › ${r.nome} › Valor da tarifa`,
+    digitado: comoDigitado(r.tarifa),
+    como,
+  });
+  return como;
 }
 
 async function marco10Recursos() {
@@ -1561,6 +1622,32 @@ async function marco10Recursos() {
     depois.length === 3 && depois.every((r) => r.currentRate != null),
     JSON.stringify(depois.map((r) => `${r.code}/${r.type}/${r.currentRate?.rateValue ?? "SEM TARIFA"}`)),
   );
+
+  /*
+   * O código do recurso industrial é RIN, não REC.
+   *
+   * REC já era do Recebimento: dois documentos de módulos diferentes com o
+   * mesmo prefixo transformam qualquer busca por código numa adivinhação. A
+   * conferência olha os dois lados — o novo prefixo E o antigo intacto.
+   */
+  check(
+    "PREFIXO · recurso industrial usa RIN (o antigo REC colidia com Recebimento)",
+    depois.length > 0 && depois.every((r) => /^RIN-\d+/.test(r.code ?? "")),
+    JSON.stringify(depois.map((r) => r.code)),
+  );
+  const codigosDeRecebimento = Object.values(S.dados.recebimentos ?? {}).map((r) => r.code ?? "");
+  check(
+    "PREFIXO · o Recebimento continua REC — os dois códigos deixaram de colidir",
+    codigosDeRecebimento.length > 0 && codigosDeRecebimento.every((c) => /^REC-\d+/.test(c)),
+    JSON.stringify(codigosDeRecebimento),
+  );
+  anotar(
+    `PREFIXO · recursos=${JSON.stringify(depois.map((r) => r.code))} · ` +
+      `recebimentos=${JSON.stringify(codigosDeRecebimento)}`,
+  );
+
+  const tarifasGravadas = depois.map((r) => `${r.code}=${r.currentRate?.rateValue ?? "—"}`);
+  anotar(`PROVA 1 · tarifas gravadas a partir de valores com vírgula: ${JSON.stringify(tarifasGravadas)}`);
   await shot("e2e1-10-recursos");
 }
 
@@ -1647,6 +1734,17 @@ async function marco11EstruturaDeCustos() {
     comoPremissa !== "falhou",
     `separador aceito: ${comoPremissa} · erros=${JSON.stringify(await mensagensDeErro())}`,
   );
+  check(
+    'PROVA 2 · a vírgula decimal foi aceita na premissa de custo ("3,50")',
+    comoPremissa === "virgula",
+    `separador aceito: ${comoPremissa}`,
+  );
+  registrarSeparador({
+    campo: "#cost-rate",
+    onde: "Produto › Custos industriais › Premissas de custo adicionais › Valor",
+    digitado: "3,50",
+    como: comoPremissa,
+  });
   await shot("e2e1-11a-estrutura-montada");
 
   await clicarBotao("Ativar estrutura");
@@ -1664,6 +1762,22 @@ async function marco11EstruturaDeCustos() {
     `${situacao} · erros=${JSON.stringify(await mensagensDeErro())}`,
   );
   await shot("e2e1-11-estrutura-ativa");
+
+  /*
+   * A premissa digitada com vírgula precisa estar na versão ATIVA — não só
+   * ter aparecido na tabela antes de ativar. A conferência é por leitura do
+   * que ficou gravado: 3,50 digitado, 3.5 no contrato.
+   */
+  const ativaEc = (await apiGet(`/products/${produtoId}/industrial-costs`)).current ?? {};
+  const linhaCaixa = (ativaEc.lines ?? []).find((l) =>
+    (l.description ?? "").toLowerCase().includes("caixa de expedicao"),
+  );
+  check(
+    "PROVA 2 · a premissa digitada com vírgula sobreviveu à ativação, com o valor certo",
+    Boolean(linhaCaixa) && Number(linhaCaixa.rateValue ?? linhaCaixa.rate ?? NaN) === 3.5,
+    JSON.stringify((ativaEc.lines ?? []).map((l) => `${l.description}=${l.rateValue ?? l.rate}`)),
+  );
+
   S.dados.estruturaDeCustos = { url: caminho() };
   salvarEstado();
 }
@@ -1838,31 +1952,51 @@ const linhasDeFaixa = () =>
     .filter({ has: page.locator("h3", { hasText: "Faixas de quantidade" }) })
     .locator("table.table tbody tr:not(:has(td.table__empty))");
 
+/**
+ * PROVA 3 · as TRÊS faixas sobrevivem à ativação.
+ *
+ * Antes, duas das três se perdiam entre digitar e ativar (a vírgula não era
+ * aceita e a linha nunca chegava a existir), e a versão ativava com uma faixa
+ * só — sem nada na tela dizendo que faltava preço. Contar na tabela antes de
+ * ativar não bastaria: a conferência é contra o que a carteira devolve como
+ * VIGENTE, e por isso ela vale igual numa execução retomada.
+ */
+async function conferirFaixasVigentes(produtoId) {
+  const vigente = (await apiGet(`/products/${produtoId}/pricing`)).current ?? {};
+  const faixasVigentes = (vigente.tiers ?? []).map((t) => ({
+    quantidade: Number(t.quantity ?? t.minimumQuantity ?? NaN),
+    preco: Number(t.manualUnitPrice ?? t.selectedUnitPrice ?? t.unitPrice ?? NaN),
+  }));
+  check(
+    "PROVA 3 · as três faixas (300, 500, 1000) estão na precificação ATIVA",
+    faixasVigentes.length === FAIXAS.length &&
+      FAIXAS.every((f) => faixasVigentes.some((v) => v.quantidade === f.quantidade)),
+    JSON.stringify(faixasVigentes),
+  );
+  check(
+    "PROVA 3 · os preços das três faixas são exatamente os digitados com vírgula",
+    FAIXAS.every((f) =>
+      faixasVigentes.some((v) => v.quantidade === f.quantidade && Math.abs(v.preco - f.preco) < 0.0001),
+    ),
+    JSON.stringify(faixasVigentes),
+  );
+  anotar(`PROVA 3 · faixas vigentes na precificação ativa: ${JSON.stringify(faixasVigentes)}`);
+  return faixasVigentes;
+}
+
 async function marco14Precificacao() {
   const produtoId = S.dados.produto.id;
 
   /*
-   * A premissa adicional da estrutura de custos não persistiu — o valor foi
-   * digitado com vírgula. A estrutura ficou completa e ativa mesmo assim
-   * (premissa é opcional), então nenhuma verificação reprovou; o defeito só
-   * aparece conferindo o conteúdo gravado. Fica registrado aqui.
+   * A premissa adicional já é conferida no marco 11, contra a versão ATIVA.
+   * Aqui a leitura serve só ao relatório — quanto do custo declarado chegou
+   * à precificação.
    */
   const estrutura = (await apiGet(`/products/${produtoId}/industrial-costs`)).current ?? {};
-  if ((estrutura.lines ?? []).length === 0) {
-    finding(
-      "MEDIUM",
-      'Premissa de custo com valor "3,50" some sem deixar rastro na estrutura de custos',
-      `Produto › Custos industriais (/produtos/${produtoId}/custos) › “Premissas de custo adicionais”: ` +
-        'preencher Descrição="Caixa de expedicao", Base="Por caixa de expedição", Valor="3,50" e clicar ' +
-        "em “Adicionar premissa”. A linha não é criada. A estrutura continua marcada como Completa e pode " +
-        "ser ativada, então nada avisa que um custo declarado ficou de fora — e ele não entra no CMV. " +
-        "Mesmo `decimalStringSchema` do campo de tarifa.",
-    );
-    anotar(
-      "ESTRUTURA · a versão ativa EC ficou com 0 premissas adicionais; " +
-        "o custo da caixa de expedição não entrou no CMV",
-    );
-  }
+  anotar(
+    `ESTRUTURA · a versão ativa EC entrou na precificação com ${(estrutura.lines ?? []).length} ` +
+      `premissa(s): ${JSON.stringify((estrutura.lines ?? []).map((l) => `${l.description}=${l.rateValue ?? l.rate}`))}`,
+  );
 
   await abrir("/gestao/precificacao");
   const vazioPrec = await texto("td.table__empty");
@@ -1871,7 +2005,8 @@ async function marco14Precificacao() {
   const carteira = await apiGet(`/products/${produtoId}/pricing`);
   const vigente = carteira.current;
   if (vigente && (vigente.tiers ?? []).length >= FAIXAS.length) {
-    anotar(`PRECIFICAÇÃO · ${vigente.label} já ativa com as três faixas — marco pulado`);
+    anotar(`PRECIFICAÇÃO · ${vigente.label} já ativa com as três faixas — cadastro pulado`);
+    await conferirFaixasVigentes(produtoId);
     S.dados.precificacao = { code: vigente.code, id: vigente.id, label: vigente.label };
     salvarEstado();
     return;
@@ -1934,6 +2069,17 @@ async function marco14Precificacao() {
       como !== "falhou",
       `separador aceito: ${como}`,
     );
+    check(
+      `PROVA 3 · a vírgula decimal foi aceita no preço da faixa de ${faixa.quantidade} un (${comoDigitado(faixa.preco.toFixed(2))})`,
+      como === "virgula",
+      `separador aceito: ${como}`,
+    );
+    registrarSeparador({
+      campo: "#tier-price",
+      onde: `Gestão › Precificação › Faixas de quantidade › Preço unitário (${faixa.quantidade} un)`,
+      digitado: comoDigitado(faixa.preco.toFixed(2)),
+      como,
+    });
     if (como === "falhou") return;
   }
 
@@ -1958,6 +2104,8 @@ async function marco14Precificacao() {
     situacao === "Ativa",
     `${situacao} · erros=${JSON.stringify(await mensagensDeErro())}`,
   );
+  await conferirFaixasVigentes(produtoId);
+
   S.dados.precificacao = { url: caminho(), code: await texto(".doc-title .code") };
   salvarEstado();
   await shot("e2e1-14-precificacao-ativa");
@@ -2132,12 +2280,12 @@ async function marco17Aprovacao() {
   // ── PROVA 4 · a aprovação promove o produto ────────────────────────────
   const depois = await apiGet(`/products/${S.dados.produto.id}`);
   check(
-    "PROVA 4 · aprovar o projeto promoveu o produto de Em desenvolvimento para Aprovado",
+    "REGRA PROMOÇÃO · aprovar o projeto promoveu o produto de Em desenvolvimento para Aprovado",
     depois.lifecycle === "APPROVED",
     `${antes.lifecycle} → ${depois.lifecycle}`,
   );
   check(
-    "PROVA 4 · a promoção manteve o MESMO produto (código, item PA e formulação intactos)",
+    "REGRA PROMOÇÃO · a promoção manteve o MESMO produto (código, item PA e formulação intactos)",
     depois.code === antes.code &&
       depois.finishedProductItem?.code === antes.finishedProductItem?.code,
     JSON.stringify({
@@ -2153,6 +2301,33 @@ async function marco18Pedido() {
   await abrir("/comercial/pedidos");
   const vazioPed = await texto("td.table__empty");
   if (vazioPed) registrarVazio("Comercial › Pedidos (nenhum pedido)", vazioPed);
+
+  /*
+   * PROVA 9 · a ajuda da lista de Pedidos é sobre PEDIDO.
+   *
+   * A tela abria o painel do Plano de Atendimento — que é uma etapa DENTRO
+   * do pedido, não a tela. Quem clicava em "Como funciona" procurando o que
+   * é um pedido lia sobre a conta de atendimento e saía sem resposta. A
+   * conferência é pelo título do painel e pelo assunto do resumo.
+   */
+  await clicarBotao("Como funciona");
+  await page.waitForSelector(".help-modal__title", { timeout: 20000 });
+  const tituloAjuda = await texto(".help-modal__title");
+  const resumoAjuda = await texto(".help-modal__summary");
+  check(
+    "PROVA 9 · a ajuda da lista de Pedidos tem título sobre o Pedido do Cliente",
+    /pedido do cliente/i.test(tituloAjuda),
+    `título="${tituloAjuda}"`,
+  );
+  check(
+    "PROVA 9 · e não é a ajuda do Plano de Atendimento",
+    !/plano de atendimento/i.test(tituloAjuda) && /pedido/i.test(resumoAjuda),
+    `título="${tituloAjuda}" resumo="${resumoAjuda.slice(0, 160)}"`,
+  );
+  anotar(`PROVA 9 · ajuda de Comercial › Pedidos: "${tituloAjuda}"`);
+  await shot("e2e1-18a-ajuda-do-pedido");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
 
   if (!S.dados.pedido) {
     await abrir(S.dados.projeto.url, { espera: ".doc-title h1" });
@@ -2397,7 +2572,44 @@ async function marco21Consumo() {
    * ser concluída. Cada linha é confirmada individualmente, relendo a tabela a
    * cada passo porque a confirmação a re-renderiza.
    */
+  /*
+   * PROVA 8 · retrato do estoque ANTES de qualquer baixa.
+   *
+   * "O estoque baixou" não se prova pelo saldo final: 9.800 g de celulose
+   * podem ser o que sobrou ou o que nunca saiu. Só a diferença contra o
+   * retrato anterior responde, e ela precisa ser tirada aqui — depois da
+   * reserva, antes do consumo.
+   */
+  S.dados.estoqueAntes = Object.fromEntries(
+    ((await apiGet("/inventory?pageSize=100")).items ?? []).map((i) => [
+      i.itemCode,
+      { nome: i.itemName, onHand: i.onHand, reserved: i.reserved, available: i.available },
+    ]),
+  );
+  anotar(`PROVA 8 · estoque antes do consumo: ${JSON.stringify(S.dados.estoqueAntes)}`);
+
+  /*
+   * UM material fica de fora de propósito.
+   *
+   * A regra nova diz que a OP não conclui com material por reconciliar. Uma
+   * jornada que consumisse as seis linhas nunca encostaria nessa regra —
+   * passaria por ela sem tocá-la e o relatório afirmaria uma proteção que
+   * não foi exercida. A linha que sobra é o material do teste do marco 22.
+   */
+  const codigoDaLinha = async (linha) => {
+    const primeira = ((await linha.locator("td").first().textContent()) ?? "").replace(/\s+/g, " ");
+    return (primeira.match(/\b(?:MP|EMB|ME|PA)-\d+/) ?? [""])[0];
+  };
+  const linhasIniciais = await consumo.locator("tbody tr").count();
+  const pendenteDeProposito = await codigoDaLinha(consumo.locator("tbody tr").nth(linhasIniciais - 1));
+  S.dados.materialPendente = pendenteDeProposito;
+  anotar(
+    `CONSUMO · ${linhasIniciais} linhas de reserva; ${pendenteDeProposito} fica SEM consumo de ` +
+      "propósito, para o marco 22 provar que a OP não conclui com material por reconciliar",
+  );
+
   let confirmadas = 0;
+  let deixadas = 0;
   for (let passo = 0; passo < 15; passo += 1) {
     const linhas = consumo.locator("tbody tr");
     const total = await linhas.count();
@@ -2407,12 +2619,16 @@ async function marco21Consumo() {
       const campo = linha.locator('input[inputmode="decimal"]');
       if ((await campo.count()) === 0) continue;
       if (await campo.first().isDisabled()) continue;
+      if ((await codigoDaLinha(linha)) === pendenteDeProposito) {
+        deixadas += 1;
+        continue;
+      }
       const celulas = (await linha.locator("td").allTextContents()).map((t) =>
         t.replace(/\s+/g, " ").trim(),
       );
       const bruto = colRestante >= 0 ? celulas[colRestante] : "";
       const restante = (bruto.match(/[\d.,]+/) ?? [""])[0]
-        .replace(/\.(?=\d{3})/g, "")
+        .replace(/\.(?=\d{3}\b)/g, "")
         .replace(",", ".");
       if (!restante || Number(restante) <= 0) continue;
       await campo.first().fill(restante);
@@ -2428,14 +2644,22 @@ async function marco21Consumo() {
     if (!agiu) break;
   }
   check(
-    "CONSUMO · todas as linhas de reserva tiveram o consumo real apontado",
-    confirmadas >= 6,
-    `linhas confirmadas=${confirmadas}`,
+    "CONSUMO · todas as linhas de reserva menos a reservada ao teste tiveram consumo apontado",
+    confirmadas === linhasIniciais - 1 && deixadas > 0,
+    `confirmadas=${confirmadas} de ${linhasIniciais} · deixada=${pendenteDeProposito}`,
   );
   await page.waitForTimeout(1500);
 
+  const situacaoAposConsumo = await texto(".doc-title .badge");
+  check(
+    "CONSUMO · apontar consumo real leva a OP de Liberada para Em produção",
+    situacaoAposConsumo === "Em produção",
+    situacaoAposConsumo,
+  );
+
   const historico = await secao("Consumo Real").locator("tbody tr").allTextContents();
   anotar(`CONSUMO · linhas na seção de consumo após confirmar: ${historico.length}`);
+  salvarEstado();
   await shot("e2e1-21-consumo");
 }
 
@@ -2445,6 +2669,54 @@ const LOTE_VERIDI = "E2E1-CQ10-001";
 
 async function marco22Producao() {
   await abrir(S.dados.op.url, { espera: ".doc-title h1" });
+
+  /*
+   * OP concluída é histórico: não há botão para clicar de novo e não deveria
+   * haver. Numa execução retomada o marco confere o que FICOU — que é onde
+   * moram as provas duráveis (reconciliação, baixa de estoque, lote gerado) —
+   * e deixa registrado que os atos já aconteceram.
+   */
+  if ((await texto(".doc-title .badge")) === "Concluída") {
+    anotar(`PRODUÇÃO · ${S.dados.op.code} já estava Concluída — conferência do resultado`);
+    const opPronta = await apiGet(`/production-orders/${S.dados.op.id}`);
+    const req = opPronta.requirements ?? [];
+    check(
+      "PROVA 5 · nenhum material continua por reconciliar na OP concluída",
+      req.length > 0 &&
+        req.every(
+          (r) => r.reconciliationStatus === "RECONCILED" || r.reconciliationStatus === "VARIANCE_ACCEPTED",
+        ),
+      JSON.stringify(req.map((r) => `${r.itemCode}=${r.reconciliationStatus}`)),
+    );
+    check(
+      "PROVA 5 · a divergência justificada guarda motivo e autor no documento",
+      req.some(
+        (r) =>
+          r.reconciliationStatus === "VARIANCE_ACCEPTED" &&
+          (r.varianceReason ?? "").length > 0 &&
+          (r.varianceAcceptedBy ?? "").length > 0,
+      ),
+      JSON.stringify(
+        req
+          .filter((r) => r.reconciliationStatus === "VARIANCE_ACCEPTED")
+          .map((r) => `${r.itemCode}: "${r.varianceReason}" — ${r.varianceAcceptedBy}`),
+      ),
+    );
+    const baixas = S.dados.baixaDeEstoque ?? [];
+    check(
+      "PROVA 8 · a baixa de estoque medida na conclusão bate material a material",
+      baixas.length > 0 && baixas.every((b) => b.confere && b.depois < b.antes),
+      JSON.stringify(baixas),
+    );
+    check(
+      "PROVA 6 · a OP só chegou a Concluída com todos os materiais reconciliados",
+      (opPronta.materialReconciliation?.reconciledRequirements ?? -1) ===
+        (opPronta.materialReconciliation?.totalRequirements ?? -2),
+      JSON.stringify(opPronta.materialReconciliation),
+    );
+    await shot("e2e1-22-op-concluida");
+    return;
+  }
 
   if ((await page.locator("#output-quantity").count()) > 0) {
     await preencher("#output-quantity", String(QUANTIDADE_PRODUZIDA));
@@ -2475,7 +2747,195 @@ async function marco22Producao() {
   anotar(`PRODUÇÃO · planejado × realizado na tela: ${JSON.stringify(numeros)}`);
   await shot("e2e1-22a-apontamento");
 
-  await clicarBotao("Concluir OP");
+  // ════════════════════════════════════════════════════════════════════════
+  // PROVA 6 · a OP NÃO conclui com material por reconciliar
+  // ════════════════════════════════════════════════════════════════════════
+  const pendente = S.dados.materialPendente;
+  const botaoConcluir = page
+    .locator(".line-actions")
+    .getByRole("button", { name: "Concluir OP", exact: true });
+  await botaoConcluir.waitFor({ state: "visible", timeout: 20000 });
+  check(
+    `PROVA 6 · com ${pendente} sem consumo, o botão "Concluir OP" está desabilitado`,
+    await botaoConcluir.isDisabled(),
+    `desabilitado=${await botaoConcluir.isDisabled()}`,
+  );
+
+  const avisoPendencia = (await textos(".line-actions p.form-alert")).join(" | ");
+  check(
+    "PROVA 6 · a tela diz QUAIS materiais faltam, em vez de só desabilitar o botão",
+    /falta reconciliar/i.test(avisoPendencia) && avisoPendencia.includes(pendente),
+    `aviso="${avisoPendencia}"`,
+  );
+  anotar(`PROVA 6 · impedimento exibido na tela: "${avisoPendencia}"`);
+
+  const situacaoNaTabela = await secao("Necessidade de Materiais")
+    .locator("tbody tr")
+    .filter({ hasText: pendente })
+    .first()
+    .textContent();
+  check(
+    "PROVA 6 · a linha do material pendente mostra a situação da reconciliação",
+    /sem consumo|consumo parcial/i.test((situacaoNaTabela ?? "").replace(/\s+/g, " ")),
+    (situacaoNaTabela ?? "").replace(/\s+/g, " ").slice(0, 200),
+  );
+  await shot("e2e1-22b-concluir-bloqueado-material-pendente");
+
+  /*
+   * O botão desabilitado NÃO é contornável pelo navegador — e isso é um
+   * resultado, não uma lacuna.
+   *
+   * A tentativa foi feita: soltar o `disabled` do elemento e disparar o
+   * clique. Nada acontece, e o motivo é do React: o handler é decidido pelas
+   * PROPS do componente, não pelo atributo do DOM, então evento de mouse em
+   * elemento cujas props dizem `disabled` é descartado antes de chegar ao
+   * `onClick`. Nenhum pedido sai do navegador — não há o que o servidor
+   * recuse porque nada é enviado.
+   *
+   * Ficou registrado que a recusa do domínio existe e é conferida em outro
+   * lugar: `apps/api/src/modules/production-orders/material-reconciliation.test.ts`
+   * cobre `unreconciled_materials` chamando a rota direto. Repetir isso aqui
+   * exigiria um POST fora da interface — proibido nesta validação.
+   */
+  anotar(
+    "PROVA 6 · a proteção da tela não é contornável pelo navegador: soltar o atributo " +
+      "`disabled` e clicar não dispara o handler (o React decide pelo prop, não pelo DOM), " +
+      "então nenhum pedido chega a sair. A recusa equivalente do servidor " +
+      "(`unreconciled_materials`) é coberta por apps/api/src/modules/production-orders/" +
+      "material-reconciliation.test.ts, fora do alcance desta jornada, que não faz POST de API.",
+  );
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Reconciliar o que faltava: consumo parcial + justificativa da diferença
+  // ════════════════════════════════════════════════════════════════════════
+  /*
+   * O material pendente é consumido em PARTE, não por inteiro.
+   *
+   * Consumir tudo resolveria a pendência sem nunca exercitar a justificativa
+   * — e a justificativa é a outra metade da regra nova. Consumo parcial
+   * mantém a linha na rastreabilidade (PROVA 7 pede consumo em todos os
+   * componentes) e ainda deixa a diferença que precisa ser explicada.
+   */
+  const consumo22 = secao("Consumo Real");
+  const linhaPendente = consumo22.locator("tbody tr").filter({ hasText: pendente }).first();
+  const cabecalhos22 = (await consumo22.locator("thead th").allTextContents()).map((t) =>
+    t.replace(/\s+/g, " ").trim(),
+  );
+  const colRestante22 = cabecalhos22.findIndex((h) => h.startsWith("Restante"));
+  const celulas22 = (await linhaPendente.locator("td").allTextContents()).map((t) =>
+    t.replace(/\s+/g, " ").trim(),
+  );
+  const restante22 = Number(
+    (celulas22[colRestante22] ?? "").match(/[\d.,]+/)?.[0].replace(/\.(?=\d{3}\b)/g, "").replace(",", ".") ??
+      "0",
+  );
+  const parcial = Number((restante22 / 2).toFixed(3));
+  /* Vírgula de novo, agora num campo de quantidade: a correção é do sistema,
+     não de uma tela. */
+  await linhaPendente.locator('input[inputmode="decimal"]').first().fill(comoDigitado(String(parcial)));
+  await page.waitForTimeout(250);
+  await linhaPendente.getByRole("button", { name: "Confirmar consumo", exact: true }).click();
+  await page.waitForTimeout(2800);
+  registrarSeparador({
+    campo: "Consumo Real › Consumir agora",
+    onde: `Produção › OP ${S.dados.op.code} › Consumo Real (${pendente})`,
+    digitado: comoDigitado(String(parcial)),
+    como: "virgula",
+  });
+  anotar(
+    `RECONCILIAÇÃO · ${pendente} recebeu consumo PARCIAL de ${comoDigitado(String(parcial))} ` +
+      `(restante era ${restante22}) — a diferença fica para justificar`,
+  );
+
+  const aindaPendente = (await textos(".line-actions p.form-alert")).join(" | ");
+  const concluirAindaTravado = await page
+    .locator(".line-actions")
+    .getByRole("button", { name: "Concluir OP", exact: true })
+    .isDisabled();
+  check(
+    "PROVA 6 · consumo parcial não resolve a pendência: a tela continua cobrando o material",
+    aindaPendente.includes(pendente) && concluirAindaTravado,
+    `aviso="${aindaPendente}" botãoDesabilitado=${concluirAindaTravado}`,
+  );
+  await shot("e2e1-22d-consumo-parcial-ainda-bloqueia");
+
+  // ── "Justificar diferença", na coluna Situação da Necessidade de Materiais
+  const linhaNecessidade = secao("Necessidade de Materiais")
+    .locator("tbody tr")
+    .filter({ hasText: pendente })
+    .first();
+  await linhaNecessidade
+    .getByRole("button", { name: "Justificar diferença", exact: true })
+    .click();
+  await page.waitForSelector("#variance-reason", { timeout: 20000 });
+  const tituloJustificativa = await texto("#variance-title");
+  check(
+    "RECONCILIAÇÃO · a ação “Justificar diferença” abre o pedido de motivo para AQUELE material",
+    tituloJustificativa.includes(pendente),
+    tituloJustificativa,
+  );
+  await preencher(
+    "#variance-reason",
+    `Sobra devolvida ao lote de origem: a formulação pedia mais ${pendente} do que o processo consumiu.`,
+  );
+  await shot("e2e1-22e-justificar-diferenca");
+  await clicarBotao("Registrar justificativa");
+  await page.waitForTimeout(3000);
+
+  // ════════════════════════════════════════════════════════════════════════
+  // PROVA 5 · todos os materiais reconciliados
+  // ════════════════════════════════════════════════════════════════════════
+  const opAntesDeConcluir = await apiGet(`/production-orders/${S.dados.op.id}`);
+  const requisitos22 = opAntesDeConcluir.requirements ?? [];
+  const porReconciliar = requisitos22.filter(
+    (r) => r.reconciliationStatus === "PENDING_NONE" || r.reconciliationStatus === "PENDING_PARTIAL",
+  );
+  check(
+    "PROVA 5 · nenhum material continua por reconciliar antes de concluir a OP",
+    requisitos22.length > 0 && porReconciliar.length === 0,
+    JSON.stringify(requisitos22.map((r) => `${r.itemCode}=${r.reconciliationStatus}`)),
+  );
+  check(
+    "PROVA 5 · o material da diferença ficou como divergência justificada, com motivo e autor",
+    requisitos22.some(
+      (r) =>
+        r.itemCode === pendente &&
+        r.reconciliationStatus === "VARIANCE_ACCEPTED" &&
+        (r.varianceReason ?? "").length > 0,
+    ),
+    JSON.stringify(
+      requisitos22
+        .filter((r) => r.itemCode === pendente)
+        .map((r) => `${r.reconciliationStatus}/${r.varianceReason}/${r.varianceAcceptedBy}`),
+    ),
+  );
+  const progresso = await texto("section .form-section__sub");
+  const progressoConsumo = (await textos(".form-section__sub")).find((t) =>
+    /materiais reconciliados/.test(t),
+  );
+  check(
+    "PROVA 5 · a tela mostra o progresso da reconciliação completo",
+    /(\d+) de \1 materiais reconciliados/.test(progressoConsumo ?? ""),
+    `"${progressoConsumo ?? progresso}"`,
+  );
+  anotar(`PROVA 5 · progresso na tela: "${progressoConsumo ?? "—"}"`);
+  anotar(
+    `PROVA 5 · situações: ${JSON.stringify(requisitos22.map((r) => `${r.itemCode}=${r.reconciliationStatus}`))}`,
+  );
+  await shot("e2e1-22f-tudo-reconciliado");
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Conclusão, agora permitida
+  // ════════════════════════════════════════════════════════════════════════
+  const concluirLiberado = page
+    .locator(".line-actions")
+    .getByRole("button", { name: "Concluir OP", exact: true });
+  check(
+    "PROVA 6 · reconciliado tudo, o mesmo botão “Concluir OP” fica habilitado",
+    !(await concluirLiberado.isDisabled()),
+    `desabilitado=${await concluirLiberado.isDisabled()}`,
+  );
+  await concluirLiberado.click();
   await page.waitForTimeout(900);
   if ((await page.locator("#op-completion-reason").count()) > 0) {
     check(
@@ -2516,6 +2976,50 @@ async function marco22Producao() {
     salvarEstado();
     anotar(`PRODUÇÃO · lote de PA ${lotePa.code} nasceu com situação ${lotePa.status}`);
   }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // PROVA 8 · o estoque baixou — diferença contra o retrato do marco 21
+  // ════════════════════════════════════════════════════════════════════════
+  const estoqueDepois = Object.fromEntries(
+    ((await apiGet("/inventory?pageSize=100")).items ?? []).map((i) => [
+      i.itemCode,
+      { nome: i.itemName, onHand: i.onHand, reserved: i.reserved, available: i.available },
+    ]),
+  );
+  const consumosDaOp = (await apiGet(`/production-orders/${S.dados.op.id}`)).consumptions ?? [];
+  const consumidoPorItem = new Map();
+  for (const c of consumosDaOp) {
+    consumidoPorItem.set(
+      c.itemCode,
+      Number(consumidoPorItem.get(c.itemCode) ?? 0) + Number(c.quantity ?? 0),
+    );
+  }
+  const baixas = [];
+  for (const [codigo, consumido] of consumidoPorItem) {
+    const antes = Number(S.dados.estoqueAntes?.[codigo]?.onHand ?? NaN);
+    const depoisSaldo = Number(estoqueDepois[codigo]?.onHand ?? NaN);
+    baixas.push({
+      item: codigo,
+      antes,
+      depois: depoisSaldo,
+      consumido,
+      confere: Math.abs(antes - depoisSaldo - consumido) < 0.001,
+    });
+  }
+  check(
+    "PROVA 8 · o saldo físico de cada material consumido caiu exatamente o que a OP registrou",
+    baixas.length > 0 && baixas.every((b) => b.confere),
+    JSON.stringify(baixas),
+  );
+  check(
+    "PROVA 8 · nenhum material consumido ficou com o saldo intacto",
+    baixas.every((b) => b.depois < b.antes),
+    JSON.stringify(baixas.map((b) => `${b.item}: ${b.antes} → ${b.depois}`)),
+  );
+  anotar(`PROVA 8 · baixa de estoque por material: ${JSON.stringify(baixas)}`);
+  S.dados.baixaDeEstoque = baixas;
+  salvarEstado();
+
   await shot("e2e1-22-op-concluida");
 }
 
@@ -2726,7 +3230,7 @@ async function marco26ConsultaDoCliente() {
     await shot(`e2e1-26-consulta-${aba.rota}`);
   }
 
-  // ── PROVA 6 · o ciclo inteiro aparece na Consulta ───────────────────────
+  // ── REGRA CONSULTA · o ciclo inteiro aparece na Consulta ───────────────────────
   const codigos = {
     Produtos: S.dados.produto.code,
     Projetos: S.dados.projeto.code,
@@ -2737,7 +3241,7 @@ async function marco26ConsultaDoCliente() {
   for (const [aba, codigo] of Object.entries(codigos)) {
     if (!codigo) continue;
     check(
-      `PROVA 6 · a aba ${aba} da Consulta mostra ${codigo}`,
+      `REGRA CONSULTA · a aba ${aba} da Consulta mostra ${codigo}`,
       (conteudoPorAba[aba] ?? "").includes(codigo),
       (conteudoPorAba[aba] ?? "").slice(0, 200),
     );
@@ -2749,7 +3253,7 @@ async function marco26ConsultaDoCliente() {
    */
   const estoque = conteudoPorAba["Estoque"] ?? "";
   check(
-    "PROVA 6 · a aba Estoque mostra a posição de produto acabado do cliente (item PA e lotes)",
+    "REGRA CONSULTA · a aba Estoque mostra a posição de produto acabado do cliente (item PA e lotes)",
     estoque.includes(S.dados.produto.itemPA) && estoque.includes(S.dados.produto.code),
     estoque.slice(0, 260),
   );
@@ -2802,26 +3306,26 @@ async function marco27Rastreabilidade() {
     `registrados=${JSON.stringify(consumidos)} na tela=${JSON.stringify(naTela)}`,
   );
 
+  /*
+   * A árvore do lote precisa estar INTEIRA.
+   *
+   * Isto já foi um defeito: a OP concluía com materiais em consumo zero e o
+   * lote nascia com a genealogia furada, sem nada na tela avisando. Agora a
+   * reconciliação obrigatória fecha a porta, então a ausência de consumo
+   * deixa de ser observação e volta a ser reprovação.
+   */
   const requisitos = op.requirements ?? [];
   const semConsumo = requisitos.filter((r) => Number(r.consumedQuantity ?? 0) === 0);
-  if (semConsumo.length > 0) {
-    finding(
-      "MEDIUM",
-      `OP concluída com ${semConsumo.length} de ${requisitos.length} materiais sem nenhum consumo apontado, sem aviso`,
-      `Produção › Ordens de Produção › ${S.dados.op.code}: apontar consumo em apenas uma linha da seção ` +
-        "“Consumo Real” (o botão “Confirmar consumo” é por linha), registrar produção e clicar em " +
-        "“Concluir OP”. O modal só cobra o motivo da VARIAÇÃO DE QUANTIDADE; nada menciona que " +
-        `${semConsumo.length} materiais (${semConsumo.map((r) => r.itemCode).join(", ")}) ficaram com ` +
-        "consumo zero. A OP conclui, o lote de produto acabado é criado e a rastreabilidade dele nasce " +
-        "com a árvore de materiais incompleta — sem que nada na tela sinalize a lacuna. " +
-        "O texto do modal (“Qualquer reserva de material ainda não consumida será liberada.”) descreve " +
-        "a liberação da reserva, não o buraco na genealogia.",
-    );
-    anotar(
-      `RASTREABILIDADE · a OP ${S.dados.op.code} produziu ${op.producedQuantity} un consumindo ` +
-        `${requisitos.length - semConsumo.length} de ${requisitos.length} materiais declarados`,
-    );
-  }
+  check(
+    "PROVA 7 · todos os componentes da formulação têm consumo registrado no lote produzido",
+    requisitos.length > 0 && semConsumo.length === 0,
+    JSON.stringify(requisitos.map((r) => `${r.itemCode}=${r.consumedQuantity}/${r.reconciliationStatus}`)),
+  );
+  anotar(
+    `PROVA 7 · a OP ${S.dados.op.code} produziu ${op.producedQuantity} un consumindo ` +
+      `${requisitos.length - semConsumo.length} de ${requisitos.length} materiais declarados: ` +
+      JSON.stringify(requisitos.map((r) => `${r.itemCode}=${r.consumedQuantity}`)),
+  );
   const codigoPedido = (S.dados.pedido.code ?? "").split(" ")[0];
   check(
     "PROVA 7 · o destino comercial fecha a cadeia até o pedido do cliente",
@@ -2834,6 +3338,93 @@ async function marco27Rastreabilidade() {
       `${S.dados.faturamento?.code ?? "—"}`,
   );
   await shot("e2e1-27-rastreabilidade-produto-acabado");
+}
+
+// ── MARCO 28 · Trilha de navegação (PROVA 10) ─────────────────────────────
+/**
+ * A trilha virou link de verdade — e link se prova clicando.
+ *
+ * Conferir só o `href` provaria que o atributo existe; o que interessa é
+ * que o clique SOBE um nível real, com a lista certa do outro lado. Por
+ * isso cada degrau é clicado de fato e o destino é conferido pela URL e pelo
+ * título da tela que abriu.
+ */
+async function marco28Trilha() {
+  const degraus = [
+    {
+      onde: "Estoque › Lote de produto acabado",
+      rota: `/estoque/lotes/${S.dados.lotePa.id}`,
+      destino: "/estoque/lotes",
+      rotulo: "Lotes",
+    },
+    {
+      onde: "Produção › Formulação (versão)",
+      rota: S.dados.formulacaoUrl ?? `/producao/formulacoes/${S.dados.produto.id}`,
+      destino: "/producao/formulacoes",
+      rotulo: "Formulações",
+    },
+    {
+      onde: "Produção › Ordem de Produção",
+      rota: S.dados.op.url,
+      destino: "/producao/ordens",
+      rotulo: "Ordens de Produção",
+    },
+    {
+      onde: "Produto › CMV",
+      rota: `/produtos/${S.dados.produto.id}/cmv`,
+      destino: "/cadastros/produtos",
+      rotulo: "Produtos",
+    },
+    {
+      onde: "Produto › Custos industriais",
+      rota: `/produtos/${S.dados.produto.id}/custos`,
+      destino: "/cadastros/produtos",
+      rotulo: "Produtos",
+    },
+    {
+      onde: "Comercial › Faturamento",
+      rota: S.dados.faturamento?.url ?? null,
+      destino: "/comercial/faturamento",
+      rotulo: "Faturamento",
+    },
+  ].filter((d) => d.rota);
+
+  const subidas = [];
+  for (const degrau of degraus) {
+    await abrir(degrau.rota, { espera: ".doc-title h1, .page__title" });
+    const trilha = page.locator("nav.page-crumbs");
+    if ((await trilha.count()) === 0) {
+      check(`TRILHA · ${degrau.onde} tem trilha de navegação`, false, "nav.page-crumbs ausente");
+      continue;
+    }
+    const niveis = (await trilha.locator("li").allTextContents()).map((t) => t.trim());
+    const link = trilha.getByRole("link", { name: degrau.rotulo, exact: true }).first();
+    if ((await link.count()) === 0) {
+      check(
+        `TRILHA · ${degrau.onde} → "${degrau.rotulo}" é link clicável`,
+        false,
+        `níveis=${JSON.stringify(niveis)}`,
+      );
+      continue;
+    }
+    const href = await link.getAttribute("href");
+    await link.click();
+    const chegou = await esperarUrl((u) => u.pathname === degrau.destino, 20000);
+    check(
+      `PROVA 10 · trilha de ${degrau.onde}: clicar em "${degrau.rotulo}" sobe para ${degrau.destino}`,
+      chegou,
+      `href=${href} · parou em ${caminho()} · níveis=${JSON.stringify(niveis)}`,
+    );
+    if (chegou) subidas.push(`${degrau.onde} → ${degrau.rotulo} (${degrau.destino})`);
+  }
+
+  check(
+    "PROVA 10 · pelo menos três níveis reais foram subidos clicando na trilha",
+    subidas.length >= 3,
+    JSON.stringify(subidas),
+  );
+  anotar(`PROVA 10 · subidas pela trilha: ${JSON.stringify(subidas)}`);
+  await shot("e2e1-28-trilha-clicavel");
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -2867,6 +3458,7 @@ const JORNADA = [
   [25, "faturamento", marco25Faturamento],
   [26, "consulta-do-cliente", marco26ConsultaDoCliente],
   [27, "rastreabilidade", marco27Rastreabilidade],
+  [28, "trilha", marco28Trilha],
 ];
 
 let parada = null;
@@ -2965,11 +3557,58 @@ for (const f of S.registro.findings) {
   console.log(`    repro: ${f.comoReproduzir}`);
 }
 
+console.log(`\n── Vírgula decimal nos campos de dinheiro (${S.registro.separadores.length}) ──`);
+if (S.registro.separadores.length === 0) console.log(" (nenhum campo exercitado na jornada)");
+for (const s of S.registro.separadores) {
+  console.log(` ${s.como === "virgula" ? "✓" : "✗"} "${s.digitado}" em ${s.campo} — ${s.onde} → ${s.como}`);
+}
+
 console.log("\n── Screenshots desta execução ──");
 for (const s of screenshots) console.log(` - ${s}`);
 
+/*
+ * As dez provas do handoff, cada uma com as verificações que a sustentam.
+ *
+ * O relatório antigo listava 200 linhas de "ok" e deixava para quem lê a
+ * tarefa de reagrupar mentalmente o que provava o quê. Aqui cada prova é
+ * respondida por si: quantas verificações a sustentam e se alguma caiu.
+ */
+const PROVAS = [
+  [1, "Decimal com vírgula numa tarifa de recurso (0,85)"],
+  [2, "Decimal com vírgula numa premissa de custo (3,50)"],
+  [3, "Três faixas de preço criadas e sobreviventes à ativação"],
+  [4, "Salvar-antes-de-ativar na formulação"],
+  [5, "Todos os materiais reconciliados antes de concluir a OP"],
+  [6, "A OP NÃO conclui com material pendente"],
+  [7, "Rastreabilidade completa do lote de produto acabado"],
+  [8, "O estoque baixou o que a OP consumiu"],
+  [9, "A ajuda do Pedido é do Pedido"],
+  [10, "Trilha de navegação clicável"],
+];
+console.log("\n── AS DEZ PROVAS (jornada inteira) ──");
+let provasReprovadas = 0;
+let provasSemExercicio = 0;
+for (const [n, titulo] of PROVAS) {
+  const registro = S.registro.provas[String(n)] ?? { ok: [], nok: [] };
+  const veredito =
+    registro.nok.length > 0 ? "FALHOU" : registro.ok.length > 0 ? "ok" : "NÃO EXERCITADA";
+  if (registro.nok.length > 0) provasReprovadas += 1;
+  else if (registro.ok.length === 0) provasSemExercicio += 1;
+  console.log(
+    ` ${String(n).padStart(2)} · ${veredito} — ${titulo} (${registro.ok.length} ok, ${registro.nok.length} falhas)`,
+  );
+  for (const p of registro.ok) console.log(`      ✓ ${p}`);
+  for (const f of registro.nok) console.log(`      ✗ ${f}`);
+}
+
 console.log(`\nverificações desta execução: ${passes.length} ok, ${failures.length} falharam`);
 for (const f of failures) console.log(` ✗ ${f}`);
+
+if (provasSemExercicio > 0 || provasReprovadas > 0) {
+  console.log(
+    `\nATENÇÃO · ${provasReprovadas} prova(s) reprovada(s) e ${provasSemExercicio} sem nenhuma verificação na jornada`,
+  );
+}
 
 const completou = S.marcos.length >= JORNADA.length;
 const veredito =

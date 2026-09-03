@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { ContextHelp } from "../../components/help";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpTopics } from "../../help/help-content";
 import { useOptionalAuth } from "../../app/AuthProvider";
 import type { ReportFilters } from "../../lib/reports-api";
@@ -60,7 +61,7 @@ export function ReportPage({
     <>
       <div className="page__header">
         <div>
-          <div className="doc-crumb">Gestão / Relatórios</div>
+          <PageBreadcrumbs items={[{ label: "Relatórios", href: "/relatorios" }, { label: "Relatório" }]} />
           <h1 className="page__title">{title}</h1>
           <p className="page__subtitle">{subtitle}</p>
         </div>

@@ -58,6 +58,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { formatDate } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 
 /**
@@ -985,7 +986,7 @@ export function CustomerOrderPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Comercial / Pedidos / {isNew ? "Novo" : "Editar"}</div>
+          <PageBreadcrumbs items={[{ label: "Pedidos", href: "/comercial/pedidos" }, { label: isNew ? "Novo" : (customerOrder?.code ?? "Editar") }]} />
           <div className="doc-title">
             <h1>{isNew ? "Novo pedido" : customerOrder?.code}</h1>
             {customerOrder && (

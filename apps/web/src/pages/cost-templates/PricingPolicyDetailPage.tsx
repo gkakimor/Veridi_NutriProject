@@ -20,6 +20,7 @@ import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { TemplateDiffTable } from "../../components/TemplateDiffTable";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatPercent } from "../../lib/percent";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
@@ -143,7 +144,7 @@ export function PricingPolicyDetailPage() {
     <div className="doc-page">
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Gestão / Políticas de Precificação</div>
+          <PageBreadcrumbs items={[{ label: "Políticas de Precificação", href: "/gestao/politicas-precificacao" }, { label: "Detalhe" }]} />
           <h1 className="doc-title">
             <code>{policy.code}</code> {policy.name}
             {policy.archived && <span className="badge badge--neutral">Arquivada</span>}

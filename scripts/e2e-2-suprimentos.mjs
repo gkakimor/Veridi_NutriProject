@@ -36,6 +36,27 @@ import path from "node:path";
  * dois excipientes e um pote. Dados independentes do E2E-1, prefixados
  * `E2E2`.
  *
+ * ## O que mudou desde a execução anterior deste script
+ *
+ * Cinco mudanças de produto entraram entre uma execução e outra, e o script
+ * foi reescrito para EXERCITÁ-LAS, não para desviar delas:
+ *
+ *  1. a OP não conclui com material por reconciliar — um material fica sem
+ *     consumo DE PROPÓSITO, para o bloqueio ser medido, e só depois é
+ *     resolvido por consumo parcial + justificativa por linha;
+ *  2. Recurso Industrial passou a `RIN` (Recebimento continua `REC`) — os
+ *     dois prefixos são conferidos lado a lado;
+ *  3. a vírgula decimal passou a funcionar — antes era defeito reconfirmado,
+ *     agora é comportamento esperado em CINCO campos, um deles atravessando
+ *     uma ativação;
+ *  4. a trilha virou link de verdade em telas de documento — as subidas são
+ *     CLICADAS, e as telas que ficaram com trilha de texto são medidas;
+ *  5. seis telas de gestão ganharam "Como funciona" — Precificação e Cálculo
+ *     de custo, que não tinham nenhuma, são conferidas por tópico próprio.
+ *
+ * Esperado nesta versão: ZERO `RangeError`. A recursão da validação nativa
+ * pt-BR foi corrigida; se voltar a aparecer, é regressão e vira finding.
+ *
  *   pnpm exec dotenv -e .env -- node scripts/e2e-2-suprimentos.mjs
  */
 
@@ -69,6 +90,7 @@ const S =
     : { marcos: [], dados: {}, iniciadoEm: new Date().toISOString() };
 
 S.registro = S.registro ?? { vazios: [], observacoes: [], ergonomia: [], findings: [], ajuda: [] };
+S.registro.separadores = S.registro.separadores ?? [];
 
 function acumular(lista, itens, chave) {
   for (const item of itens) {
@@ -83,6 +105,7 @@ function salvarEstado() {
   acumular(S.registro.ergonomia, ergonomia, (e) => e);
   acumular(S.registro.findings, findings, (f) => f.titulo);
   acumular(S.registro.ajuda, ajudas, (a) => a.tela);
+  acumular(S.registro.separadores, separadores, (s) => `${s.campo}::${s.digitado}::${s.onde}`);
   fs.writeFileSync(STATE_FILE, JSON.stringify(S, null, 2));
 }
 
@@ -111,7 +134,29 @@ async function login() {
 // ── Veredito ──────────────────────────────────────────────────────────────
 const failures = [];
 const passes = [];
+
+/*
+ * O veredito vale para a JORNADA, não para a última execução.
+ *
+ * Marco concluído não roda de novo — é o que impede a retomada de duplicar
+ * fornecedor e ordem na base. O efeito colateral é que a prova exercitada no
+ * marco 3 não reaparece numa execução que começa no 15, e um relatório que só
+ * olhasse a execução corrente diria "não exercitada" sobre algo que passou.
+ * Cada resultado fica gravado junto do resto do estado.
+ */
+S.registro.verificacoes = S.registro.verificacoes ?? { ok: [], nok: [] };
+
+function registrarVerificacao(label, passou) {
+  const registro = S.registro.verificacoes;
+  const lista = passou ? registro.ok : registro.nok;
+  const oposta = passou ? registro.nok : registro.ok;
+  const i = oposta.indexOf(label);
+  if (i >= 0) oposta.splice(i, 1);
+  if (!lista.includes(label)) lista.push(label);
+}
+
 function check(label, condition, detail = "") {
+  registrarVerificacao(label, Boolean(condition));
   if (condition) {
     passes.push(label);
     console.log("ok  ", label);
@@ -204,6 +249,9 @@ const PRODUTO = {
 const QUANTIDADE_PEDIDA = 500;
 const QUANTIDADE_PRODUZIDA = 500;
 const LOTE_VERIDI = "E2E2-D3-001";
+
+/** Premissa de custo adicional — digitada com vírgula e conferida após a ativação. */
+const PREMISSA_VALOR = "2.80";
 
 // ── Instrumentação de navegador ───────────────────────────────────────────
 const consoleErrors = [];
@@ -462,6 +510,12 @@ async function confirmarModal(textoBotao) {
   await page.waitForTimeout(700);
 }
 
+/** Seção de formulário pelo título do `<h3>` — escopo estável entre re-renders. */
+const secao = (titulo) =>
+  page
+    .locator("section.form-section")
+    .filter({ has: page.locator("h3", { hasText: titulo }) });
+
 const hoje = () => new Date().toISOString().slice(0, 10);
 const daquiAnos = (n) => {
   const d = new Date();
@@ -470,28 +524,63 @@ const daquiAnos = (n) => {
 };
 
 /**
- * Campo decimal em tela pt-BR: tenta com vírgula, registra o defeito, segue.
+ * Campos decimais em que a vírgula brasileira foi digitada DE PROPÓSITO.
  *
- * Defeito já conhecido do E2E-1 e explicitamente pedido para reconfirmação.
- * A ordem importa: o defeito só é afirmado quando o PONTO funciona onde a
- * vírgula falhou — sem isso, um 409 viraria "defeito de vírgula".
+ * A prova pedida não é "o número gravou": é "o número gravou com VÍRGULA".
+ * Sem esta lista, um relatório que só dissesse "tarifa cadastrada" esconderia
+ * uma retentativa com ponto — que é exatamente o defeito que existiu aqui.
  */
-const camposDecimaisJaRelatados = new Set();
+const separadores = [];
+function registrarSeparador(registro) {
+  separadores.push(registro);
+  console.log(`  , ${registro.campo} ← "${registro.digitado}" → ${registro.como}`);
+}
+
+/** O mesmo número como a pessoa digita em português. */
+const comoDigitado = (valor) => String(valor).replace(".", ",");
+
 const separadorPorCampo = {};
 
-async function decimalComRetentativa({ campo, valor, acao, confirmou, ondeNaTela }) {
-  const comVirgula = String(valor).replace(".", ",");
+/**
+ * Campo decimal em tela pt-BR: a VÍRGULA é o comportamento esperado.
+ *
+ * A versão anterior deste script tratava a vírgula como defeito a
+ * reconfirmar — digitava, via falhar, retentava com ponto e reportava. A
+ * correção entrou; então a ordem se inverte: a vírgula tem de gravar, e é a
+ * necessidade de ponto que vira finding de REGRESSÃO. A retentativa continua
+ * existindo só para a jornada não parar num campo — o veredito já terá sido
+ * dado antes dela.
+ */
+async function decimalComVirgula({ campo, valor, acao, confirmou, ondeNaTela }) {
+  const comVirgula = comoDigitado(valor);
   await preencher(campo, comVirgula);
   await deliberadamente(`decimal-virgula:${campo}`, async () => {
     await acao();
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(1600);
   });
   if (await confirmou()) {
     separadorPorCampo[campo] = "virgula";
+    S.dados.separadorPorCampo = { ...(S.dados.separadorPorCampo ?? {}), [campo]: "virgula" };
+    registrarSeparador({ campo, onde: ondeNaTela, digitado: comVirgula, como: "virgula" });
+    check(`DECIMAL · ${ondeNaTela} aceita a vírgula brasileira ("${comVirgula}")`, true);
     return "virgula";
   }
 
   const errosComVirgula = await mensagensDeErro();
+  check(
+    `DECIMAL · ${ondeNaTela} aceita a vírgula brasileira ("${comVirgula}")`,
+    false,
+    JSON.stringify(errosComVirgula),
+  );
+  finding(
+    "HIGH",
+    `REGRESSÃO · campo decimal "${campo}" voltou a recusar a vírgula brasileira (${ondeNaTela})`,
+    `${ondeNaTela} · digitar "${comVirgula}" em ${campo} e executar a ação: nada é gravado e a tela ` +
+      `devolve ${JSON.stringify(errosComVirgula)}. A vírgula passou a ser aceita em 7cb5fdb ` +
+      "(apps/web/src/lib/decimal-input.ts normaliza na tela e apps/api/src/lib/decimal-schema.ts " +
+      "aceita no servidor); voltar a recusar é regressão dessa correção.",
+  );
+
   await preencher(campo, String(valor));
   await acao();
   await page.waitForTimeout(1500);
@@ -499,20 +588,8 @@ async function decimalComRetentativa({ campo, valor, acao, confirmou, ondeNaTela
     separadorPorCampo[campo] = "falhou";
     return "falhou";
   }
-
   separadorPorCampo[campo] = "ponto";
-  if (!camposDecimaisJaRelatados.has(campo)) {
-    camposDecimaisJaRelatados.add(campo);
-    finding(
-      "MEDIUM",
-      `Campo decimal "${campo}" recusa a vírgula brasileira (${ondeNaTela})`,
-      `${ondeNaTela} · digitar "${comVirgula}" em ${campo} e executar a ação: nada é gravado e a tela ` +
-        `devolve ${JSON.stringify(errosComVirgula)}. Repetir com "${valor}" (ponto) grava. ` +
-        "Confirmado no E2E-2 pelo mesmo caminho do E2E-1: decimalStringSchema " +
-        "(apps/api/src/lib/decimal-schema.ts) exige ponto e a tela envia o texto digitado sem " +
-        "normalizar o separador.",
-    );
-  }
+  S.dados.separadorPorCampo = { ...(S.dados.separadorPorCampo ?? {}), [campo]: "ponto" };
   return "ponto";
 }
 
@@ -941,10 +1018,44 @@ async function marco03Compra() {
   if (itemNovo[0]) S.dados.itens[itemNovo[0].name] = { id: itemNovo[0].id, code: itemNovo[0].code };
   await shot("e2e2-03b-item-voltou-selecionado");
 
+  /*
+   * DECIMAL 1 · o preço da embalagem é digitado com VÍRGULA, e o que se mede
+   * é o TOTAL da ordem.
+   *
+   * Recusar a vírgula era o defeito conhecido; calcular errado com cara de
+   * certo era o pior dele — `Number("1,35")` virava `NaN`, a linha sumia da
+   * soma e o rodapé exibia um total MENOR do que a ordem vale, sem sinal
+   * nenhum de linha faltando. Conferir só "a ordem salvou" passaria por cima
+   * disso; conferir o total contra a conta feita à mão não passa.
+   */
   const linhaEmb = page.locator("table.table tbody tr").nth(MP.length);
   const decimaisEmb = linhaEmb.locator('input[inputmode="decimal"]');
   await decimaisEmb.nth(0).fill(EMBALAGEM.comprar);
-  await decimaisEmb.nth(1).fill(EMBALAGEM.preco);
+  await decimaisEmb.nth(1).fill(comoDigitado(EMBALAGEM.preco));
+  await page.waitForTimeout(400);
+
+  const totalEsperado = LINHAS_COMPRA.reduce(
+    (soma, l) => soma + Number(l.quantidade) * Number(l.preco),
+    0,
+  );
+  const rodape = await texto(".table-foot");
+  const totalNaTela = Number(
+    (rodape.match(/[\d.]+,\d{2}/) ?? ["0"])[0].replace(/\./g, "").replace(",", "."),
+  );
+  check(
+    `PROVA 4 · com "${comoDigitado(EMBALAGEM.preco)}" na linha, o total da OC soma as 4 linhas ` +
+      `(R$ ${totalEsperado.toFixed(2)}) — a linha com vírgula não some da conta`,
+    Math.abs(totalNaTela - totalEsperado) < 0.02,
+    `rodapé="${rodape}" · lido=${totalNaTela} · esperado=${totalEsperado}`,
+  );
+  registrarSeparador({
+    campo: "Ordem de compra › linha › Preço unitário",
+    onde: "Compras › Nova OC › linha da embalagem",
+    digitado: comoDigitado(EMBALAGEM.preco),
+    como: "virgula",
+  });
+  anotar(`OC · rodapé com a linha de vírgula somada: "${rodape}"`);
+  await shot("e2e2-03c-total-com-virgula");
 
   await clicarBotao("Salvar rascunho");
   const salvou = await esperarUrl(
@@ -1642,7 +1753,8 @@ async function registrarTarifa(r) {
   const semTarifa = await texto("td.table__empty");
   if (semTarifa) registrarVazio(`Recurso ${r.nome} › Histórico de tarifas`, semTarifa);
 
-  const como = await decimalComRetentativa({
+  /* DECIMAL 2 · campo de dinheiro, vírgula de propósito. */
+  const como = await decimalComVirgula({
     campo: "#rate-value",
     valor: r.tarifa,
     acao: async () => {
@@ -1704,14 +1816,60 @@ async function marco09Recursos() {
     meus.length === RECURSOS.length && meus.every((r) => r.currentRate != null),
     JSON.stringify(meus.map((r) => `${r.code}/${r.currentRate?.rateValue ?? "SEM TARIFA"}`)),
   );
+
+  /*
+   * ── O prefixo `RIN` ────────────────────────────────────────────────────
+   *
+   * Recurso industrial e Recebimento usavam `REC` com sequences separadas, e
+   * as duas começavam em 1: `REC-000001` nomeava um recebimento E um recurso
+   * ao mesmo tempo. Conferir só "o recurso tem código" não pegaria isso —
+   * ele TINHA. O que se mede é o prefixo de cada um e a ausência de colisão
+   * entre os códigos das duas entidades na base inteira.
+   */
+  const codigosDeRecurso = meus.map((r) => r.code);
+  check(
+    "RIN · todo recurso industrial nasce com o prefixo RIN",
+    codigosDeRecurso.length > 0 && codigosDeRecurso.every((c) => /^RIN-\d+$/.test(c)),
+    JSON.stringify(codigosDeRecurso),
+  );
+  check(
+    "RIN · o Recebimento continua com o prefixo REC (a troca foi só do recurso)",
+    /^REC-\d+$/.test(S.dados.recebimento?.code ?? ""),
+    S.dados.recebimento?.code ?? "sem recebimento no estado",
+  );
+  const todosRecursos = (depois ?? []).map((r) => r.code);
+  const todosRecebimentos = ((await apiGet("/receipts?pageSize=100")).receipts ?? []).map(
+    (r) => r.code,
+  );
+  const colisao = todosRecursos.filter((c) => todosRecebimentos.includes(c));
+  check(
+    "RIN · nenhum código de recurso industrial colide com código de recebimento na base",
+    colisao.length === 0,
+    JSON.stringify({ colisao, recursos: todosRecursos, recebimentos: todosRecebimentos }),
+  );
+  anotar(
+    `RIN · recursos ${JSON.stringify(todosRecursos)} × recebimentos ` +
+      `${JSON.stringify(todosRecebimentos)} — nenhum código em comum`,
+  );
   await shot("e2e2-09-recursos");
 }
 
 // ── MARCO 10 · Estrutura de custos ────────────────────────────────────────
-/** Usos de recurso já declarados na versão corrente, pelo servidor. */
-async function usosDeRecurso(produtoId) {
-  const atual = (await apiGet(`/products/${produtoId}/industrial-costs`)).current;
-  return (atual?.resourceUsages ?? []).map((u) => u.resourceName);
+/**
+ * Usos de recurso declarados na versão que está sendo montada.
+ *
+ * Lidos da TELA, não de `/industrial-costs`.`current`: aquele campo é a
+ * versão ATIVA, e enquanto a estrutura é rascunho ele vale `null` — uma
+ * leitura por ali diria "nenhum recurso declarado" logo depois de declarar
+ * um, e acusaria a tela de perder o que ela acabou de gravar.
+ */
+async function usosDeRecurso() {
+  return page.evaluate(() => {
+    const s = document.querySelector("#secao-recursos");
+    return [...(s?.querySelectorAll("table tbody tr") ?? [])]
+      .map((tr) => (tr.textContent ?? "").replace(/\s+/g, " ").trim())
+      .filter((t) => t && !/Nenhum/i.test(t));
+  });
 }
 
 async function marco10EstruturaDeCustos() {
@@ -1720,7 +1878,14 @@ async function marco10EstruturaDeCustos() {
 
   const antes = (await apiGet(`/products/${produtoId}/industrial-costs`)).current;
   if (antes?.status === "ACTIVE" && antes.complete) {
-    anotar(`ESTRUTURA · ${antes.label} já ativa e completa — marco pulado`);
+    /*
+     * A estrutura já nasceu numa passagem anterior. Recriá-la duplicaria a
+     * versão; o que continua valendo é a PROVA do decimal, que fala do que
+     * ficou gravado depois da ativação — e isso é lido, não refeito.
+     */
+    anotar(`ESTRUTURA · ${antes.label} já ativa e completa — criação pulada`);
+    conferirDecimaisAposAtivacao(antes);
+    salvarEstado();
     return;
   }
 
@@ -1761,19 +1926,42 @@ async function marco10EstruturaDeCustos() {
   }
 
   // ── Recursos industriais ────────────────────────────────────────────────
-  const jaDeclarados = new Set(await usosDeRecurso(produtoId));
-  for (const [nome, consumo] of [
-    [`${P} Encapsuladora automatica`, "6"],
-    [`${P} Mao de obra envase`, "10"],
+  /*
+   * DECIMAL 3 · "6,5" horas de encapsuladora — campo de QUANTIDADE, não de
+   * dinheiro. A correção da vírgula foi do sistema, não de uma tela de preço,
+   * e é isso que este par mede: um campo de consumo e um de tarifa.
+   */
+  const jaDeclarados = await usosDeRecurso();
+  for (const [nome, consumo, comVirgula] of [
+    [`${P} Encapsuladora automatica`, "6.5", true],
+    [`${P} Mao de obra envase`, "10", false],
   ]) {
-    if (jaDeclarados.has(nome)) {
+    if (jaDeclarados.some((linha) => linha.includes(nome))) {
       anotar(`ESTRUTURA · recurso "${nome}" já declarado nesta versão — não recadastrado`);
       continue;
     }
     await escolherEntidade("#usage-resource", nome, nome);
-    await preencher("#usage-quantity", consumo);
+    const digitado = comVirgula ? comoDigitado(consumo) : consumo;
+    await preencher("#usage-quantity", digitado);
     await clicarBotao("Adicionar recurso");
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(1800);
+    if (comVirgula) {
+      const linhas = await usosDeRecurso();
+      const linha = linhas.find((l) => l.includes(nome)) ?? "";
+      check(
+        `DECIMAL · Estrutura de custos › Consumo por lote aceita "${digitado}"`,
+        linha.length > 0 && /6[.,]5/.test(linha),
+        `linhas na tela=${JSON.stringify(linhas)} · erros=${JSON.stringify(await mensagensDeErro())}`,
+      );
+      if (linha) {
+        registrarSeparador({
+          campo: "Estrutura de custos › Consumo por lote de referência",
+          onde: "Produto › Custos industriais › Recursos industriais",
+          digitado,
+          como: "virgula",
+        });
+      }
+    }
   }
   const recursosNaTela = await page.evaluate(() => {
     const s = document.querySelector("#secao-recursos");
@@ -1797,9 +1985,18 @@ async function marco10EstruturaDeCustos() {
     await selecionar("#cost-category", "SECONDARY_PACKAGING");
     await preencher("#cost-description", "Caixa de expedicao E2E2");
     await selecionar("#cost-basis", "PER_SHIPPING_BOX");
-    const comoPremissa = await decimalComRetentativa({
+    /*
+     * DECIMAL 4 · o valor que precisa ATRAVESSAR UMA ATIVAÇÃO.
+     *
+     * "Gravou" e "continua gravado depois de a versão virar histórico" são
+     * afirmações diferentes: ativar copia, congela e derruba a versão
+     * anterior, e é aí que um número mal normalizado vira 280 ou some. O
+     * valor é conferido de novo depois do "Ativar estrutura", no documento
+     * que passou a valer.
+     */
+    const comoPremissa = await decimalComVirgula({
       campo: "#cost-rate",
-      valor: "2.80",
+      valor: PREMISSA_VALOR,
       acao: async () => {
         if ((await page.locator("#cost-description").inputValue()) === "") {
           await preencher("#cost-description", "Caixa de expedicao E2E2");
@@ -1876,9 +2073,62 @@ async function marco10EstruturaDeCustos() {
       `${(gravada.resourceUsages ?? []).length} recurso(s), energia=${gravada.energyCalculationMode} ` +
       `(${gravada.derivedEnergyKwh ?? "—"} kWh/lote)`,
   );
-  S.dados.estruturaDeCustos = { code: gravada.code, label: gravada.label };
+
+  conferirDecimaisAposAtivacao(gravada);
   salvarEstado();
   await shot("e2e2-10-estrutura-ativa");
+}
+
+/**
+ * PROVA 4 · o decimal com vírgula ATRAVESSOU a ativação.
+ *
+ * "Gravou" e "continua gravado depois de a versão virar histórico" são
+ * afirmações diferentes: ativar copia, congela e derruba a versão anterior, e
+ * é aí que um número mal normalizado vira 280 ou some. Separado da criação
+ * para valer também na reexecução, quando a estrutura já nasceu antes.
+ */
+function conferirDecimaisAposAtivacao(gravada) {
+  const premissaGravada = (gravada.lines ?? []).find((l) =>
+    (l.description ?? "").includes("Caixa de expedicao E2E2"),
+  );
+  const usoGravado = (gravada.resourceUsages ?? []).find((u) =>
+    (u.resourceName ?? "").includes("Encapsuladora"),
+  );
+  check(
+    `PROVA 4 · "${comoDigitado(PREMISSA_VALOR)}" digitado com vírgula continua valendo ` +
+      `${PREMISSA_VALOR} DEPOIS de a estrutura ser ativada`,
+    premissaGravada != null &&
+      Math.abs(Number(premissaGravada.rateValue) - Number(PREMISSA_VALOR)) < 0.001,
+    JSON.stringify((gravada.lines ?? []).map((l) => `${l.description}=${l.rateValue}`)),
+  );
+  const consumoOk =
+    usoGravado != null && Math.abs(Number(usoGravado.usageQuantity) - 6.5) < 0.001;
+  check(
+    'PROVA 4 · "6,5" (consumo por lote) continua 6.5 na versão ativa — não virou 65 nem 6',
+    consumoOk,
+    JSON.stringify((gravada.resourceUsages ?? []).map((u) => `${u.resourceName}=${u.usageQuantity}`)),
+  );
+  if (consumoOk) {
+    registrarSeparador({
+      campo: "Estrutura de custos › Consumo por lote de referência",
+      onde: "Produto › Custos industriais › Recursos industriais (sobreviveu à ativação)",
+      digitado: "6,5",
+      como: "virgula",
+    });
+  }
+  anotar(
+    `PROVA 4 · valores digitados com vírgula depois da ativação: ` +
+      `premissa=${premissaGravada?.rateValue}, consumo=${usoGravado?.usageQuantity}, ` +
+      `tarifas congeladas=${
+        (gravada.resourceUsages ?? []).map((u) => u.rateValueSnapshot).join("/") || "—"
+      }`,
+  );
+  S.dados.estruturaDeCustos = {
+    code: gravada.code,
+    label: gravada.label,
+    premissaAposAtivacao: premissaGravada?.rateValue ?? null,
+    consumoAposAtivacao: usoGravado?.usageQuantity ?? null,
+  };
 }
 
 
@@ -2070,6 +2320,16 @@ async function marco14Producao() {
         (op.requirements ?? []).map((r) => `${r.itemCode}:${r.consumedQuantity ?? 0}`),
       ),
     );
+    check(
+      "PROVA 6 · nenhum material ficou por reconciliar na OP concluída em execução anterior",
+      (op.requirements ?? []).length > 0 &&
+        (op.requirements ?? []).every(
+          (r) =>
+            r.reconciliationStatus === "RECONCILED" ||
+            r.reconciliationStatus === "VARIANCE_ACCEPTED",
+        ),
+      JSON.stringify((op.requirements ?? []).map((r) => `${r.itemCode}=${r.reconciliationStatus}`)),
+    );
     anotar(
       `PRODUÇÃO · ${S.dados.op.code} produziu ${op.producedQuantity} de ${op.plannedQuantity} un; ` +
         `lote de PA ${S.dados.lotePa.code}`,
@@ -2082,6 +2342,36 @@ async function marco14Producao() {
   await abrir(S.dados.pedido.url, { espera: ".doc-title h1" });
 
   if ((await texto(".doc-title .badge")) === "Confirmado") {
+    /*
+     * A ajuda do Plano de Atendimento é lida AQUI, e não no marco 15.
+     *
+     * A seção do Plano — e o painel que a explica — só existe enquanto o
+     * pedido está Confirmado. Aplicado o plano, ele vira "Em atendimento" e a
+     * seção sai da tela. Ler a ajuda depois exigiria abrir outro documento e
+     * chamar de "ajuda do Plano" o que não é; ler agora é ler onde ela mora.
+     * O documento tem painel PRÓPRIO no índice 0 desde a correção a346cec, e
+     * o do Plano é o do índice 1.
+     */
+    const ajudaDoPedido = await lerAjuda("Pedido (documento, status Confirmado)", { indice: 0 });
+    const ajudaDoPlano = await lerAjuda("Plano de Atendimento (seção do pedido)", { indice: 1 });
+    S.dados.ajudaLida = {
+      pedido: ajudaDoPedido?.titulo ?? null,
+      plano: ajudaDoPlano?.titulo ?? null,
+    };
+    check(
+      "AJUDA · o documento do Pedido tem painel PRÓPRIO, separado do painel do Plano",
+      Boolean(ajudaDoPedido) &&
+        Boolean(ajudaDoPlano) &&
+        ajudaDoPedido.titulo !== ajudaDoPlano.titulo &&
+        !/plano de atendimento/i.test(ajudaDoPedido.titulo),
+      `pedido="${ajudaDoPedido?.titulo}" plano="${ajudaDoPlano?.titulo}"`,
+    );
+    anotar(
+      `AJUDA · Pedido → "${ajudaDoPedido?.titulo}" · Plano de Atendimento → ` +
+        `"${ajudaDoPlano?.titulo}" (lidos no documento Confirmado, antes de aplicar o plano)`,
+    );
+    await shot("e2e2-14z-ajuda-pedido-e-plano");
+
     await page.waitForSelector('input[aria-label^="Produzir de"]', { timeout: 40000 });
     await page.getByLabel(`Produzir de ${S.dados.produto.code}`).fill(String(QUANTIDADE_PEDIDA));
     await page.waitForTimeout(900);
@@ -2210,14 +2500,37 @@ async function marco14Producao() {
   await shot("e2e2-14e-picking");
 
   // ── Consumo real, linha a linha ─────────────────────────────────────────
-  const consumo = page
-    .locator("section.form-section")
-    .filter({ has: page.locator("h3", { hasText: "Consumo Real" }) });
+  const consumo = secao("Consumo Real");
   const cabecalhos = (await consumo.locator("thead th").allTextContents()).map((t) =>
     t.replace(/\s+/g, " ").trim(),
   );
   const colRestante = cabecalhos.findIndex((h) => h.startsWith("Restante"));
+  anotar(`CONSUMO · colunas da tabela: ${JSON.stringify(cabecalhos)}`);
+
+  /*
+   * PROVA 6 · UM material fica SEM consumo, de propósito.
+   *
+   * A regra nova diz que a OP não conclui com material por reconciliar. Uma
+   * jornada que consumisse as quatro linhas nunca encostaria nela — passaria
+   * por cima e o relatório afirmaria uma proteção que não foi exercida. A
+   * linha que sobra é o material do teste do bloqueio, logo adiante.
+   */
+  const codigoDaLinha = async (linha) => {
+    const primeira = ((await linha.locator("td").first().textContent()) ?? "").replace(/\s+/g, " ");
+    return (primeira.match(/\b(?:MP|EMB|ME|PA)-\d+/) ?? [""])[0];
+  };
+  const linhasIniciais = await consumo.locator("tbody tr").count();
+  const pendenteDeProposito = await codigoDaLinha(
+    consumo.locator("tbody tr").nth(linhasIniciais - 1),
+  );
+  S.dados.materialPendente = pendenteDeProposito;
+  anotar(
+    `CONSUMO · ${linhasIniciais} linhas de reserva; ${pendenteDeProposito} fica SEM consumo de ` +
+      "propósito, para o bloqueio da conclusão ser medido em vez de suposto",
+  );
+
   let confirmadas = 0;
+  let deixadas = 0;
   for (let passo = 0; passo < 15; passo += 1) {
     const total = await consumo.locator("tbody tr").count();
     let agiu = false;
@@ -2226,12 +2539,16 @@ async function marco14Producao() {
       const campo = linha.locator('input[inputmode="decimal"]');
       if ((await campo.count()) === 0) continue;
       if (await campo.first().isDisabled()) continue;
+      if ((await codigoDaLinha(linha)) === pendenteDeProposito) {
+        deixadas += 1;
+        continue;
+      }
       const celulas = (await linha.locator("td").allTextContents()).map((t) =>
         t.replace(/\s+/g, " ").trim(),
       );
       const bruto = colRestante >= 0 ? celulas[colRestante] : "";
       const restante = (bruto.match(/[\d.,]+/) ?? [""])[0]
-        .replace(/\.(?=\d{3})/g, "")
+        .replace(/\.(?=\d{3}\b)/g, "")
         .replace(",", ".");
       if (!restante || Number(restante) <= 0) continue;
       await campo.first().fill(restante);
@@ -2242,15 +2559,16 @@ async function marco14Producao() {
       await page.waitForTimeout(2600);
       confirmadas += 1;
       agiu = true;
-      break;
+      break; // a tabela foi re-renderizada: recomeçar a leitura
     }
     if (!agiu) break;
   }
   check(
-    "CONSUMO · todas as linhas de reserva tiveram o consumo real apontado",
-    confirmadas >= MP.length + 1,
-    `linhas confirmadas=${confirmadas} de ${MP.length + 1}`,
+    "CONSUMO · todas as linhas de reserva menos a reservada ao teste tiveram consumo apontado",
+    confirmadas === linhasIniciais - 1 && deixadas > 0,
+    `confirmadas=${confirmadas} de ${linhasIniciais} · deixada=${pendenteDeProposito}`,
   );
+  salvarEstado();
   await shot("e2e2-14f-consumo");
 
   // ── Apontamento de produção ─────────────────────────────────────────────
@@ -2283,7 +2601,188 @@ async function marco14Producao() {
   );
   anotar(`PRODUÇÃO · planejado × realizado: ${JSON.stringify(numeros)}`);
 
-  await clicarBotao("Concluir OP");
+  // ════════════════════════════════════════════════════════════════════════
+  // PROVA 6 · a OP NÃO conclui com material por reconciliar
+  // ════════════════════════════════════════════════════════════════════════
+  const pendente = S.dados.materialPendente;
+  const botaoConcluir = page
+    .locator(".line-actions")
+    .getByRole("button", { name: "Concluir OP", exact: true });
+  await botaoConcluir.waitFor({ state: "visible", timeout: 20000 });
+  check(
+    `PROVA 6 · com ${pendente} sem consumo, o botão "Concluir OP" está DESABILITADO`,
+    await botaoConcluir.isDisabled(),
+    `desabilitado=${await botaoConcluir.isDisabled()}`,
+  );
+
+  const avisoPendencia = (await textos(".line-actions p.form-alert")).join(" | ");
+  check(
+    "PROVA 6 · a tela NOMEIA o material que falta, em vez de só desabilitar o botão",
+    /falta reconciliar/i.test(avisoPendencia) && avisoPendencia.includes(pendente),
+    `aviso="${avisoPendencia}"`,
+  );
+  anotar(`PROVA 6 · impedimento exibido na tela: "${avisoPendencia}"`);
+
+  const situacaoNaTabela = await secao("Necessidade de Materiais")
+    .locator("tbody tr")
+    .filter({ hasText: pendente })
+    .first()
+    .textContent();
+  check(
+    "PROVA 6 · a linha do material pendente mostra a situação da reconciliação",
+    /sem consumo|consumo parcial/i.test((situacaoNaTabela ?? "").replace(/\s+/g, " ")),
+    (situacaoNaTabela ?? "").replace(/\s+/g, " ").slice(0, 200),
+  );
+  await shot("e2e2-14g-concluir-bloqueado-material-pendente");
+
+  /*
+   * O botão desabilitado não é contornável pelo navegador, e isso é
+   * resultado, não lacuna: o React decide o `onClick` pelas PROPS, então
+   * soltar o atributo `disabled` do DOM e clicar não dispara handler nenhum —
+   * nada sai do navegador, e não há requisição para o servidor recusar. A
+   * recusa equivalente do servidor (`unreconciled_materials`) é coberta por
+   * apps/api/src/modules/production-orders/material-reconciliation.test.ts,
+   * fora do alcance desta jornada, que não faz POST de API.
+   */
+
+  // ── Consumo PARCIAL: não resolve a pendência, e é assim que deve ser ─────
+  /*
+   * Consumir o restante inteiro fecharia a pendência sem nunca exercitar a
+   * justificativa — que é a outra metade da regra nova. O parcial mantém a
+   * linha na rastreabilidade e ainda deixa a diferença a explicar.
+   *
+   * DECIMAL 5 · a quantidade é digitada com VÍRGULA. A correção do separador
+   * é do sistema, não de uma tela de dinheiro.
+   */
+  const consumo14 = secao("Consumo Real");
+  const linhaPendente = consumo14.locator("tbody tr").filter({ hasText: pendente }).first();
+  const cabecalhos14 = (await consumo14.locator("thead th").allTextContents()).map((t) =>
+    t.replace(/\s+/g, " ").trim(),
+  );
+  const colRestante14 = cabecalhos14.findIndex((h) => h.startsWith("Restante"));
+  const celulas14 = (await linhaPendente.locator("td").allTextContents()).map((t) =>
+    t.replace(/\s+/g, " ").trim(),
+  );
+  const restante14 = Number(
+    (celulas14[colRestante14] ?? "")
+      .match(/[\d.,]+/)?.[0]
+      .replace(/\.(?=\d{3}\b)/g, "")
+      .replace(",", ".") ?? "0",
+  );
+  const parcial = Number((restante14 / 2).toFixed(3));
+  await linhaPendente
+    .locator('input[inputmode="decimal"]')
+    .first()
+    .fill(comoDigitado(String(parcial)));
+  await page.waitForTimeout(250);
+  await linhaPendente.getByRole("button", { name: "Confirmar consumo", exact: true }).click();
+  await page.waitForTimeout(2800);
+  registrarSeparador({
+    campo: "Consumo Real › Consumir agora",
+    onde: `Produção › OP ${S.dados.op.code} › Consumo Real (${pendente})`,
+    digitado: comoDigitado(String(parcial)),
+    como: "virgula",
+  });
+  const consumoGravado = (
+    (await apiGet(`/production-orders/${S.dados.op.id}`)).requirements ?? []
+  ).find((r) => r.itemCode === pendente);
+  check(
+    `DECIMAL · Consumo Real aceita "${comoDigitado(String(parcial))}" e grava ${parcial}`,
+    consumoGravado != null && Math.abs(Number(consumoGravado.consumedQuantity) - parcial) < 0.001,
+    `gravado=${consumoGravado?.consumedQuantity} esperado=${parcial}`,
+  );
+  anotar(
+    `RECONCILIAÇÃO · ${pendente} recebeu consumo PARCIAL de ${comoDigitado(String(parcial))} ` +
+      `(restante era ${restante14}) — a diferença fica para justificar`,
+  );
+
+  const aindaPendente = (await textos(".line-actions p.form-alert")).join(" | ");
+  const concluirAindaTravado = await page
+    .locator(".line-actions")
+    .getByRole("button", { name: "Concluir OP", exact: true })
+    .isDisabled();
+  check(
+    "PROVA 6 · consumo parcial NÃO resolve a pendência: a tela continua cobrando o material",
+    aindaPendente.includes(pendente) && concluirAindaTravado,
+    `aviso="${aindaPendente}" botãoDesabilitado=${concluirAindaTravado}`,
+  );
+  await shot("e2e2-14h-consumo-parcial-ainda-bloqueia");
+
+  // ── "Justificar diferença", na coluna Situação da Necessidade de Materiais
+  const linhaNecessidade = secao("Necessidade de Materiais")
+    .locator("tbody tr")
+    .filter({ hasText: pendente })
+    .first();
+  await linhaNecessidade
+    .getByRole("button", { name: "Justificar diferença", exact: true })
+    .click();
+  await page.waitForSelector("#variance-reason", { timeout: 20000 });
+  const tituloJustificativa = await texto("#variance-title");
+  check(
+    "RECONCILIAÇÃO · “Justificar diferença” abre o pedido de motivo para AQUELE material",
+    tituloJustificativa.includes(pendente),
+    tituloJustificativa,
+  );
+  await preencher(
+    "#variance-reason",
+    `Sobra devolvida ao lote de origem: a formulacao pedia mais ${pendente} do que o envase consumiu.`,
+  );
+  await shot("e2e2-14i-justificar-diferenca");
+  await clicarBotao("Registrar justificativa");
+  await page.waitForTimeout(3000);
+
+  // ── Reconciliação completa ──────────────────────────────────────────────
+  const opAntesDeConcluir = await apiGet(`/production-orders/${S.dados.op.id}`);
+  const requisitos = opAntesDeConcluir.requirements ?? [];
+  const porReconciliar = requisitos.filter(
+    (r) => r.reconciliationStatus === "PENDING_NONE" || r.reconciliationStatus === "PENDING_PARTIAL",
+  );
+  check(
+    "PROVA 6 · nenhum material continua por reconciliar antes de concluir a OP",
+    requisitos.length > 0 && porReconciliar.length === 0,
+    JSON.stringify(requisitos.map((r) => `${r.itemCode}=${r.reconciliationStatus}`)),
+  );
+  check(
+    "PROVA 6 · a diferença ficou registrada como divergência justificada, com motivo e autor",
+    requisitos.some(
+      (r) =>
+        r.itemCode === pendente &&
+        r.reconciliationStatus === "VARIANCE_ACCEPTED" &&
+        (r.varianceReason ?? "").length > 0 &&
+        (r.varianceAcceptedBy ?? "").length > 0,
+    ),
+    JSON.stringify(
+      requisitos
+        .filter((r) => r.itemCode === pendente)
+        .map((r) => `${r.reconciliationStatus}/${r.varianceReason}/${r.varianceAcceptedBy}`),
+    ),
+  );
+  const progressoConsumo = (await textos(".form-section__sub")).find((t) =>
+    /materiais reconciliados/.test(t),
+  );
+  check(
+    "PROVA 6 · a tela mostra o progresso da reconciliação completo",
+    /(\d+) de \1 materiais reconciliados/.test(progressoConsumo ?? ""),
+    `"${progressoConsumo ?? "—"}"`,
+  );
+  anotar(`PROVA 6 · progresso na tela: "${progressoConsumo ?? "—"}"`);
+  anotar(
+    `PROVA 6 · situações finais: ${JSON.stringify(
+      requisitos.map((r) => `${r.itemCode}=${r.reconciliationStatus}`),
+    )}`,
+  );
+  await shot("e2e2-14j-tudo-reconciliado");
+
+  // ── Conclusão, agora permitida ──────────────────────────────────────────
+  const concluirLiberado = page
+    .locator(".line-actions")
+    .getByRole("button", { name: "Concluir OP", exact: true });
+  check(
+    "PROVA 6 · reconciliado tudo, o MESMO botão “Concluir OP” fica habilitado",
+    !(await concluirLiberado.isDisabled()),
+    `desabilitado=${await concluirLiberado.isDisabled()}`,
+  );
+  await concluirLiberado.click();
   await page.waitForTimeout(900);
   if ((await page.locator("#op-completion-reason").count()) > 0) {
     await preencher("#op-completion-reason", "Rendimento conforme planejado no cenario E2E2.");
@@ -2294,6 +2793,13 @@ async function marco14Producao() {
     "PRODUÇÃO · a OP foi concluída pela tela",
     (await texto(".doc-title .badge")) === "Concluída",
     `${await texto(".doc-title .badge")} · erros=${JSON.stringify(await mensagensDeErro())}`,
+  );
+  const opConcluida = await apiGet(`/production-orders/${S.dados.op.id}`);
+  check(
+    "PROVA 6 · a OP só chegou a Concluída com TODOS os materiais reconciliados",
+    (opConcluida.materialReconciliation?.reconciledRequirements ?? -1) ===
+      (opConcluida.materialReconciliation?.totalRequirements ?? -2),
+    JSON.stringify(opConcluida.materialReconciliation),
   );
 
   const lotes = ((await apiGet("/lots?pageSize=100")).lots ?? []).filter(
@@ -2320,18 +2826,15 @@ const TELAS_DE_AJUDA = [
     espera: ".doc-title h1",
   },
   {
-    nome: "Plano de Atendimento (pedido)",
+    /*
+     * O Pedido ganhou painel PRÓPRIO e INCONDICIONAL (a346cec): antes o único
+     * ajuda do documento vivia dentro da seção do Plano e sumia justamente
+     * quando o pedido virava "Em atendimento". Aqui o documento é aberto no
+     * estado em que a ajuda antes desaparecia — é esse o teste.
+     */
+    nome: "Pedido (documento em Em atendimento)",
     rota: () => S.dados.pedido.url,
     espera: ".doc-title h1",
-    /*
-     * A seção "Plano de Atendimento" — e a ajuda que mora dentro dela — só
-     * é renderizada enquanto o pedido está CONFIRMADO. Aplicado o plano, o
-     * pedido vira "Em atendimento" e a tela perde o painel. A alternativa
-     * existe para o painel ainda ser LIDO e julgado; a ausência no documento
-     * é registrada como achado, não contornada em silêncio.
-     */
-    alternativa: "/comercial/pedidos",
-    esperaAlternativa: ".page__title",
   },
   {
     nome: "Ordem de Produção",
@@ -2350,33 +2853,36 @@ const TELAS_DE_AJUDA = [
   },
 ];
 
+/**
+ * Telas de gestão que NÃO tinham ajuda nenhuma até 62013d9.
+ *
+ * A verificação não é "o painel abre": um painel que abrisse com o tópico do
+ * CMV abriria igual e explicaria a tela do vizinho — foi exatamente o defeito
+ * corrigido. O que se mede é o painel abrir E falar da PRÓPRIA tela.
+ */
+const TELAS_DE_GESTAO_SEM_AJUDA_ANTES = [
+  {
+    nome: "Gestão › Precificação (lista)",
+    rota: () => "/gestao/precificacao",
+    espera: ".page__title",
+    // O título do painel precisa falar de PREÇO, não de CMV nem de custo.
+    proprio: /pre(ç|c)o|precifica/i,
+    naoPodeSer: /^Como o CMV/i,
+  },
+  {
+    nome: "Cálculo de custo (documento CALC)",
+    rota: () => S.dados.calculo.url,
+    espera: ".doc-title h1, .page__title",
+    proprio: /c(á|a)lculo|custo/i,
+    naoPodeSer: /^Como o CMV/i,
+  },
+];
+
 async function marco15Ajuda() {
   for (const tela of TELAS_DE_AJUDA) {
     await abrir(tela.rota(), { espera: tela.espera });
     await page.waitForTimeout(800);
-    let painel = await lerAjuda(tela.nome);
-
-    if (!painel && tela.alternativa) {
-      const situacao = await texto(".doc-title .badge");
-      anotar(
-        `AJUDA · ${tela.nome} · o documento em "${situacao}" NÃO oferece painel de ajuda nenhum ` +
-          `(${caminho()}); o painel do Plano será lido em ${tela.alternativa}`,
-      );
-      finding(
-        "MEDIUM",
-        "Aplicado o Plano de Atendimento, o pedido fica SEM nenhuma ajuda contextual",
-        `Abrir um pedido em "Em atendimento" (${S.dados.pedido.url}): não há botão “ⓘ Como ` +
-          "funciona” em lugar nenhum da tela. O único ContextHelp do documento vive DENTRO da " +
-          "seção “Plano de Atendimento” (apps/web/src/pages/customer-orders/CustomerOrderPage.tsx:1136), " +
-          "e essa seção é renderizada só enquanto `showPlan` é verdadeiro — isto é, enquanto o " +
-          "status é CONFIRMED (linha 334). Depois de aplicar o plano, que é justamente quando " +
-          "aparecem reserva, OPs em rascunho e saldo a expedir, a explicação some. Quem abre o " +
-          "pedido para entender o que aconteceu não tem onde ler.",
-      );
-      await abrir(tela.alternativa, { espera: tela.esperaAlternativa });
-      await page.waitForTimeout(600);
-      painel = await lerAjuda(`${tela.nome} — lido em ${tela.alternativa}`);
-    }
+    const painel = await lerAjuda(tela.nome);
 
     if (
       !check(
@@ -2409,7 +2915,7 @@ async function marco15Ajuda() {
     await shot(`e2e2-15-ajuda-${tela.nome.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}`);
   }
 
-  // ── Denúncia recebida: a lista de Pedidos abriria a ajuda do Plano ──────
+  // ── A lista de Pedidos, que abria a ajuda do Plano, agora tem a própria ──
   await abrir("/comercial/pedidos", { espera: ".page__title" });
   await page.waitForTimeout(600);
   const tituloDaTela = await texto(".page__title");
@@ -2429,41 +2935,73 @@ async function marco15Ajuda() {
     `AJUDA · a tela "${tituloDaTela}" abre o painel "${ajudaDaLista.titulo}" — ` +
       `resumo: "${ajudaDaLista.resumo.slice(0, 200)}"`,
   );
+  check(
+    "AJUDA · a lista de Pedidos abre painel PRÓPRIO, não mais o do Plano de Atendimento",
+    !abreOPlano,
+    `tela="${tituloDaTela}" painel="${ajudaDaLista.titulo}"`,
+  );
   if (abreOPlano) {
     finding(
       "MEDIUM",
-      "Comercial › Pedidos (lista) abre a ajuda do PLANO DE ATENDIMENTO — CONFIRMADO",
-      `Abrir /comercial/pedidos (título da tela: "${tituloDaTela}") e clicar em “ⓘ Como ` +
-        `funciona”: o painel que abre é "${ajudaDaLista.titulo}", que explica o ato de dividir um ` +
-        "pedido JÁ CONFIRMADO entre estoque e produção — coisa que só existe dentro do documento. " +
-        "A listagem não explica o que é um pedido, como ele nasce (direto ou de orçamento aceito), " +
-        "o que significam Rascunho / Confirmado / Em atendimento nas colunas, nem o que se faz " +
-        "nela. Causa: apps/web/src/pages/customer-orders/CustomerOrdersPage.tsx:141 usa " +
-        'helpTopics["planoAtendimento.comoFunciona"]; não existe tópico "pedido.comoFunciona" em ' +
-        "apps/web/src/help/content/. A mesma reutilização em CustomerOrderPage.tsx:1136 é correta, " +
-        "porque ali o painel fica ao lado da seção que ele descreve.",
-    );
-  }
-  /*
-   * A verificação afirma o FATO OBSERVADO, não o desejo.
-   *
-   * Reprovar aqui pararia a jornada num defeito que já era conhecido e que o
-   * roteiro mandou confirmar — e os marcos de exportação e de trilha nunca
-   * rodariam. O defeito vira finding, com severidade e reprodução; o veredito
-   * o carrega como "PASS WITH FINDINGS".
-   */
-  check(
-    "AJUDA · a denúncia sobre a lista de Pedidos foi verificada na tela (confirmada ou desmentida)",
-    typeof abreOPlano === "boolean",
-    `tela="${tituloDaTela}" painel="${ajudaDaLista.titulo}" → ${abreOPlano ? "CONFIRMADA" : "DESMENTIDA"}`,
-  );
-  if (!abreOPlano) {
-    anotar(
-      "AJUDA · denúncia DESMENTIDA: a lista de Pedidos abre um painel próprio, " +
-        `"${ajudaDaLista.titulo}", e não o do Plano de Atendimento`,
+      "REGRESSÃO · Comercial › Pedidos (lista) voltou a abrir a ajuda do PLANO DE ATENDIMENTO",
+      `Abrir /comercial/pedidos (título "${tituloDaTela}") e clicar em “ⓘ Como funciona”: o painel ` +
+        `que abre é "${ajudaDaLista.titulo}", que explica dividir um pedido já confirmado entre ` +
+        "estoque e produção — coisa que só existe dentro do documento. O tópico próprio " +
+        '"comercial.pedidos" foi escrito em a346cec e o contrato de tela↔tópico está em ' +
+        "apps/web/src/pages/help-topic-contract.test.ts.",
     );
   }
   await shot("e2e2-15-ajuda-lista-pedidos");
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PROVA 7b · Precificação e Cálculo de custo, que NÃO tinham ajuda nenhuma
+  // ══════════════════════════════════════════════════════════════════════════
+  for (const tela of TELAS_DE_GESTAO_SEM_AJUDA_ANTES) {
+    await abrir(tela.rota(), { espera: tela.espera });
+    await page.waitForTimeout(700);
+    const painel = await lerAjuda(tela.nome);
+    if (
+      !check(
+        `PROVA 7 · ${tela.nome} passou a ter “Como funciona” (antes não tinha nenhum)`,
+        Boolean(painel),
+        `nenhum .context-help__trigger em ${caminho()}`,
+      )
+    ) {
+      continue;
+    }
+    check(
+      `PROVA 7 · ${tela.nome} · o painel é da PRÓPRIA tela, não emprestado do CMV`,
+      tela.proprio.test(painel.titulo) && !tela.naoPodeSer.test(painel.titulo),
+      `título="${painel.titulo}"`,
+    );
+    check(
+      `PROVA 7 · ${tela.nome} · o painel responde “o que é / quando uso / o que acontece depois”`,
+      painel.oQueE && painel.quandoUso && painel.oQueAcontece,
+      `oQueE=${painel.oQueE} quandoUso=${painel.quandoUso} depois=${painel.oQueAcontece}`,
+    );
+    anotar(
+      `PROVA 7 · ${tela.nome} → "${painel.titulo}" · ${painel.conceitos} conceitos · ` +
+        `${painel.fluxos.length} fluxo(s) · ${painel.tamanho} caracteres`,
+    );
+    await shot(
+      `e2e2-15-ajuda-nova-${tela.nome.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}`,
+    );
+  }
+
+  // O painel do Plano de Atendimento foi lido no marco 14, onde ele mora.
+  const planoLido = S.registro.ajuda
+    .concat(ajudas)
+    .find((a) => /Plano de Atendimento \(seção do pedido\)/.test(a.tela));
+  check(
+    "AJUDA · Plano de Atendimento · o painel foi lido na seção que ele explica",
+    Boolean(planoLido) &&
+      planoLido.oQueE &&
+      planoLido.quandoUso &&
+      planoLido.oQueAcontece,
+    planoLido
+      ? `"${planoLido.titulo}" · oQueE=${planoLido.oQueE} quandoUso=${planoLido.quandoUso} depois=${planoLido.oQueAcontece}`
+      : "não lido no marco 14",
+  );
 }
 
 
@@ -2538,21 +3076,51 @@ async function marco16Exportacao() {
 }
 
 // ── MARCO 17 · Breadcrumbs ────────────────────────────────────────────────
+/**
+ * A trilha virou link de verdade — e link se prova CLICANDO.
+ *
+ * Conferir `href` provaria que o atributo existe; o que interessa é que o
+ * clique SOBE um nível real, com a lista certa do outro lado. Dez telas de
+ * documento usavam `.doc-crumb` (texto puro, visualmente idêntico ao
+ * breadcrumb) e passaram a `PageBreadcrumbs` em a346cec — então as telas
+ * escolhidas aqui são justamente as que antes não levavam a lugar nenhum.
+ */
 async function marco17Breadcrumbs() {
   const trilhas = [
     {
-      nome: "Cadastros › Produtos › Novo produto",
-      rota: "/cadastros/produtos/novo",
-      espera: ".page__title",
+      nome: "Produção › Ordem de Produção (documento)",
+      rota: () => S.dados.op.url,
+      espera: ".doc-title h1",
+      clicar: "Ordens de Produção",
+      destino: "/producao/ordens",
+    },
+    {
+      nome: "Estoque › Lote de produto acabado (documento)",
+      rota: () => `/estoque/lotes/${S.dados.lotePa.id}`,
+      espera: ".doc-title h1",
+      clicar: "Lotes",
+      destino: "/estoque/lotes",
+    },
+    {
+      nome: "Produto › CMV (documento)",
+      rota: () => `/produtos/${S.dados.produto.id}/cmv`,
+      espera: ".doc-title h1, .page__title",
       clicar: "Produtos",
       destino: "/cadastros/produtos",
     },
     {
-      nome: "Cadastros › Itens de estoque › Novo item",
-      rota: "/cadastros/itens/novo",
-      espera: ".page__title",
-      clicar: "Itens de estoque",
-      destino: "/cadastros/itens",
+      nome: "Produto › Custos industriais (documento)",
+      rota: () => `/produtos/${S.dados.produto.id}/custos`,
+      espera: ".doc-title h1, .page__title",
+      clicar: "Produtos",
+      destino: "/cadastros/produtos",
+    },
+    {
+      nome: "Produção › Formulação (versão)",
+      rota: () => S.dados.formulacaoUrl,
+      espera: ".doc-title h1",
+      clicar: "Formulações",
+      destino: "/producao/formulacoes",
     },
     {
       nome: "Ordens de Compra › OC",
@@ -2562,11 +3130,18 @@ async function marco17Breadcrumbs() {
       destino: "/compras/ordens",
     },
     {
-      nome: "Recebimentos › RC",
+      nome: "Recebimentos › REC",
       rota: () => S.dados.recebimento.url,
       espera: ".doc-title h1",
       clicar: "Recebimentos",
       destino: "/compras/recebimentos",
+    },
+    {
+      nome: "Cadastros › Itens de estoque › Novo item",
+      rota: "/cadastros/itens/novo",
+      espera: ".page__title",
+      clicar: "Itens de estoque",
+      destino: "/cadastros/itens",
     },
   ];
 
@@ -2605,94 +3180,137 @@ async function marco17Breadcrumbs() {
   }
 
   check(
-    "BREADCRUMB · pelo menos três níveis reais foram subidos clicando na trilha (sem o Voltar do navegador)",
+    "PROVA 8 · pelo menos TRÊS níveis reais foram subidos clicando na trilha (sem o Voltar do navegador)",
     subidas >= 3,
-    `subidas bem-sucedidas=${subidas}`,
+    `subidas bem-sucedidas=${subidas} de ${trilhas.length} tentativas`,
   );
+  S.dados.subidasPelaTrilha = subidas;
   await shot("e2e2-17-breadcrumbs");
 
-  // A trilha do documento nem sempre é clicável: onde é `.doc-crumb`, é texto.
-  await abrir(`/produtos/${S.dados.produto.id}/cmv`, { espera: ".doc-title h1, .page__title" });
-  const docCrumb = await texto(".doc-crumb");
-  const linksNoDocCrumb = await page.locator(".doc-crumb a").count();
-  if (docCrumb && linksNoDocCrumb === 0) {
-    anotar(
-      `BREADCRUMB · em telas de documento a trilha é texto, não link: CMV mostra "${docCrumb}" ` +
-        "(.doc-crumb) sem nenhum nível clicável — quem quer subir depende do menu ou do Voltar",
-    );
+  /*
+   * O que SOBROU do padrão antigo.
+   *
+   * A migração de `.doc-crumb` para `PageBreadcrumbs` cobriu as telas de
+   * documento da jornada, e o marco acima prova isso clicando. Estas aqui
+   * continuam com texto puro — visualmente idêntico a uma trilha e sem levar
+   * a lugar nenhum. Medir quantas ainda são assim é mais honesto do que
+   * declarar a migração concluída.
+   */
+  const aindaTexto = [];
+  const paraConferir = [
+    { nome: "Comercial › Pedido (documento)", rota: S.dados.pedido.url, espera: ".doc-title h1" },
+    {
+      nome: "Cálculo de custo (documento CALC)",
+      rota: S.dados.calculo.url,
+      espera: ".doc-title h1, .page__title",
+    },
+    { nome: "Gestão › Templates de Estrutura", rota: "/gestao/templates-estrutura", espera: ".page__title" },
+  ];
+  for (const alvo of paraConferir) {
+    await abrir(alvo.rota, { espera: alvo.espera });
+    await page.waitForTimeout(400);
+    const docCrumb = await texto(".doc-crumb");
+    const linksNoDocCrumb = await page.locator(".doc-crumb a").count();
+    const temTrilhaDeVerdade = (await page.locator("nav.page-crumbs").count()) > 0;
+    if (docCrumb && linksNoDocCrumb === 0 && !temTrilhaDeVerdade) {
+      aindaTexto.push(`${alvo.nome} (${alvo.rota}) → "${docCrumb}"`);
+    }
+  }
+  anotar(
+    `BREADCRUMB · telas ainda com trilha de TEXTO (.doc-crumb sem link): ` +
+      `${aindaTexto.length === 0 ? "nenhuma das conferidas" : JSON.stringify(aindaTexto)}`,
+  );
+  if (aindaTexto.length > 0) {
     finding(
       "LOW",
-      "Trilha de documento (.doc-crumb) não é clicável em várias telas",
-      "Abrir /produtos/<id>/cmv (também vale para /producao/formulacoes/<id>, " +
-        "/comercial/pedidos/<id>, /producao/ordens/<id>, /estoque/lotes/<id>): a trilha " +
-        `"${docCrumb}" é renderizada como <div class=\"doc-crumb\"> com texto puro. As telas de ` +
-        "cadastro e as de Compras usam <nav class=\"page-crumbs\"> com <Link> de verdade, e ali a " +
-        "trilha sobe. A convivência dos dois padrões faz a trilha funcionar em umas telas e não em " +
-        "outras, sem nada que distinga as duas visualmente.",
+      `Trilha de texto (.doc-crumb) sobrevive em ${aindaTexto.length} tela(s): a migração para ` +
+        "PageBreadcrumbs cobriu os documentos da jornada, não o resto",
+      "Abrir " +
+        aindaTexto.join(" · ") +
+        '. A trilha é <div class="doc-crumb"> com texto puro, visualmente igual ao breadcrumb de ' +
+        'verdade (<nav class="page-crumbs"> com <Link>), e nenhum nível sobe. O commit a346cec ' +
+        "migrou dez telas de documento; estas ficaram de fora. A convivência dos dois padrões faz " +
+        "a trilha funcionar em umas telas e não em outras, sem nada que distinga as duas.",
     );
   }
 }
 
-// ── MARCO 18 · Os dois defeitos já conhecidos, medidos sem criar nada ─────
+// ── MARCO 18 · As correções, medidas onde os defeitos moravam ─────────────
 /**
- * Reconfirmação dos dois defeitos que o roteiro mandou procurar.
+ * Onde a execução anterior reconfirmava DOIS defeitos, esta mede as duas
+ * correções — no mesmo lugar e pelo mesmo caminho.
  *
- * Este marco existe porque os dois só aparecem no caminho de CRIAÇÃO, e a
- * jornada não recria o que já nasceu. Aqui eles são provocados de propósito
- * em ações que NÃO gravam nada: uma tarifa recusada não vira registro, e um
- * formulário barrado pela validação nativa não cria produto. A base fica
- * exatamente como estava.
+ * A afirmação inverteu de lado, então a verificação também: o que antes era
+ * "a recusa foi observada" agora é "a recusa NÃO acontece mais", e o que era
+ * "contamos os RangeError" agora é "não há nenhum". Um marco que só contasse
+ * concordaria com qualquer resultado.
+ *
+ * Nada aqui grava: um formulário barrado pela validação nativa não cria
+ * produto. A base fica exatamente como estava.
  */
-async function marco18DefeitosConhecidos() {
-  // ── Defeito A · vírgula decimal em campo de dinheiro ────────────────────
-  const recurso = S.dados.recursos[`${P} Energia eletrica`];
-  await abrir(`/gestao/recursos-industriais/${recurso.id}`, { espera: ".doc-title h1" });
-  await page.waitForSelector("#rate-value", { timeout: 20000 });
-  const tarifasAntes = (await textos("table tbody tr")).length;
-
-  await preencher("#rate-value", "0,85");
-  const respostasAntes = deliberados.rede.length;
-  await deliberadamente("virgula-em-campo-de-dinheiro", async () => {
-    await clicarBotao("Registrar tarifa");
-    await page.waitForTimeout(2500);
-  });
-  const tarifasDepois = (await textos("table tbody tr")).length;
-  const mensagens = await mensagensDeErro();
-  const campoDepois = await page.locator("#rate-value").inputValue();
-  const respostasDaVirgula = deliberados.rede.slice(respostasAntes);
-
-  const recusou = tarifasDepois === tarifasAntes;
+async function marco18Regressoes() {
+  /*
+   * ── Correção A · a vírgula decimal, somada da JORNADA inteira ──────────
+   *
+   * A soma é do estado, não da execução corrente: marco concluído não roda de
+   * novo, e um relatório que só olhasse esta passagem diria "um campo" sobre
+   * cinco que passaram.
+   */
+  salvarEstado();
+  /*
+   * Só conta quem de fato TEM vírgula.
+   *
+   * Um valor redondo — "250" — atravessa o campo sem exercitar separador
+   * nenhum, e contá-lo como prova de vírgula seria inflar a evidência com
+   * um caso que não prova nada.
+   */
+  const comVirgula = S.registro.separadores.filter(
+    (s) => s.como === "virgula" && s.digitado.includes(","),
+  );
+  const porCampo = { ...(S.dados.separadorPorCampo ?? {}), ...separadorPorCampo };
   check(
-    "DEFEITO A · a recusa da vírgula foi medida na tela (nada foi gravado por engano)",
-    recusou,
-    `linhas antes=${tarifasAntes} depois=${tarifasDepois}`,
+    "PROVA 4 · a vírgula brasileira foi digitada e ACEITA em pelo menos três campos decimais",
+    comVirgula.length >= 3,
+    JSON.stringify(comVirgula.map((s) => `${s.campo} ← "${s.digitado}"`)),
+  );
+  /*
+   * "Nenhum campo precisou de ponto" não se mede pelo mapa da execução
+   * corrente: marco concluído não roda de novo, e numa retomada o mapa chega
+   * vazio — o que diria "nenhum campo foi testado" com cara de aprovação.
+   *
+   * O sinal durável é o outro lado: toda retentativa com ponto DEIXA um
+   * finding de regressão, gravado no estado. Zero findings desse tipo, com
+   * pelo menos três campos aceitos com vírgula, é a afirmação honesta.
+   */
+  const regressoesDeVirgula = S.registro.findings.filter((f) =>
+    /campo decimal .* recusa/i.test(f.titulo),
+  );
+  check(
+    "PROVA 4 · nenhum campo decimal precisou de retentativa com ponto na jornada inteira",
+    regressoesDeVirgula.length === 0 &&
+      comVirgula.length >= 3 &&
+      Object.values(porCampo).every((v) => v === "virgula"),
+    `findings de recusa=${JSON.stringify(regressoesDeVirgula.map((f) => f.titulo))} · ` +
+      `mapa desta execução=${JSON.stringify(porCampo)}`,
   );
   anotar(
-    `DEFEITO A · “0,85” em ${"#rate-value"}: ${recusou ? "NADA foi gravado" : "gravou"} · ` +
-      `mensagens visíveis=${JSON.stringify(mensagens)} · campo continua "${campoDepois}" · ` +
-      `rede=${JSON.stringify(respostasDaVirgula.map((r) => `${r.method} ${r.pathname} → ${r.status}`))}`,
+    `PROVA 4 · campos com vírgula aceita (${comVirgula.length}): ` +
+      JSON.stringify(comVirgula.map((s) => `${s.campo} ← "${s.digitado}" · ${s.onde}`)),
   );
-  await shot("e2e2-18a-virgula-recusada");
+  check(
+    "PROVA 4 · um deles atravessou uma ATIVAÇÃO e continuou valendo o mesmo número",
+    S.dados.estruturaDeCustos?.premissaAposAtivacao != null &&
+      Math.abs(Number(S.dados.estruturaDeCustos.premissaAposAtivacao) - Number(PREMISSA_VALOR)) <
+        0.001,
+    `premissa após ativar a estrutura: ${S.dados.estruturaDeCustos?.premissaAposAtivacao}`,
+  );
 
-  if (recusou) {
-    finding(
-      "MEDIUM",
-      `Campo de dinheiro recusa a vírgula brasileira ${
-        mensagens.length === 0 ? "EM SILÊNCIO" : "com mensagem genérica"
-      } — CONFIRMADO em 3 campos`,
-      "Gestão › Recursos industriais › detalhe › “Valor da tarifa” (#rate-value): digitar “0,85” e " +
-        `clicar em “Registrar tarifa”. Nenhuma tarifa é criada; a tela mostra ${JSON.stringify(mensagens)} ` +
-        `e a rede devolve ${JSON.stringify(respostasDaVirgula.map((r) => `${r.method} ${r.pathname} → ${r.status}`))}. ` +
-        'Repetir com “0.85” grava. Mesmo comportamento medido neste cenário em Produto › Custos ' +
-        "industriais › “Premissas de custo adicionais” › Valor (#cost-rate, testado com “2,80”), e " +
-        "no E2E-1 em Gestão › Precificação › Preço unitário (#tier-price). Causa: " +
-        "decimalStringSchema (apps/api/src/lib/decimal-schema.ts) só aceita ^\\d+(\\.\\d+)?$ e as " +
-        "telas enviam o texto digitado sem normalizar o separador — item-form.tsx normaliza, estas " +
-        "não. Em tela pt-BR, com teclado numérico brasileiro, a vírgula é o que o operador digita.",
-    );
-  }
-
-  // ── Defeito B · recursão da validação nativa em pt-BR ───────────────────
+  // ── Correção B · a recursão da validação nativa em pt-BR ────────────────
+  /*
+   * A prova continua sendo PROVOCADA: um formulário com campo obrigatório
+   * vazio é exatamente o gesto que estourava a pilha. Medir o console numa
+   * navegação tranquila não diria nada sobre a correção.
+   */
   await abrir("/cadastros/produtos/novo", { espera: ".page__title" });
   const produtosAntes =
     ((await apiGet(`/products?search=${encodeURIComponent(P)}&pageSize=20`)).products ?? []).length;
@@ -2713,34 +3331,32 @@ async function marco18DefeitosConhecidos() {
     ((await apiGet(`/products?search=${encodeURIComponent(P)}&pageSize=20`)).products ?? []).length;
 
   check(
-    "DEFEITO B · o campo obrigatório vazio barra o envio (nenhum produto criado)",
+    "VALIDAÇÃO · o campo obrigatório vazio barra o envio (nenhum produto criado)",
     nativo.faltando === true && produtosDepois === produtosAntes,
     `${JSON.stringify(nativo)} produtos antes=${produtosAntes} depois=${produtosDepois}`,
   );
   check(
-    "DEFEITO B · a série de RangeError na validação nativa foi contada",
-    recursao.length >= 0,
-    `${recursao.length} RangeError nesta submissão`,
+    "VALIDAÇÃO · a submissão com campo obrigatório vazio NÃO produz RangeError (esperado: zero)",
+    recursao.length === 0,
+    `${recursao.length} RangeError nesta submissão: ${JSON.stringify(recursao.slice(0, 3))}`,
   );
   anotar(
-    `DEFEITO B · uma submissão com campo obrigatório vazio produziu ${recursao.length} ` +
-      `RangeError “Maximum call stack size exceeded”; o balão nativo traduzido aparece ` +
-      `normalmente ("${nativo.mensagem}") e o operador não vê quebra`,
+    `VALIDAÇÃO · submissão provocada com obrigatório vazio: ${recursao.length} RangeError · ` +
+      `balão nativo traduzido: "${nativo.mensagem}"`,
   );
-  await shot("e2e2-18b-recursao-validacao-nativa");
+  await shot("e2e2-18-validacao-nativa-sem-recursao");
 
   if (recursao.length > 0) {
     finding(
-      "MEDIUM",
-      `Recursão na validação nativa pt-BR: ${recursao.length} RangeError “Maximum call stack size ` +
-        "exceeded” por submissão com campo obrigatório vazio — CONFIRMADO",
+      "HIGH",
+      `REGRESSÃO · a recursão da validação nativa pt-BR voltou: ${recursao.length} RangeError ` +
+        "“Maximum call stack size exceeded” por submissão com campo obrigatório vazio",
       "Abrir /cadastros/produtos/novo, preencher só o Nome e clicar em “Criar produto” (o campo " +
-        `Cliente é required e está vazio): ${recursao.length} RangeError não capturados aparecem no ` +
-        "console em série. Causa: apps/web/src/lib/native-validation-ptbr.ts — o tratador do evento " +
-        "`invalid` chama `campo.reportValidity()`, que dispara `invalid` de novo no mesmo campo, sem " +
-        "guarda de reentrância. A barreira funciona e o balão traduzido aparece, então nada quebra " +
-        "para o operador; o custo é o console poluído em TODO formulário do sistema com campo " +
-        "obrigatório, o que esconde erro de verdade e queima pilha a cada tentativa.",
+        `Cliente é required e está vazio): ${recursao.length} RangeError não capturados aparecem ` +
+        "no console em série. O tratador de `invalid` em apps/web/src/lib/native-validation-ptbr.ts " +
+        "voltou a chamar `campo.reportValidity()` sem guarda de reentrância — a correção está em " +
+        "4ba458b. O operador não vê quebra (o balão traduzido aparece), e é isso que torna o " +
+        "defeito silencioso: o console fica poluído em TODO formulário com campo obrigatório.",
     );
   }
 }
@@ -2766,7 +3382,7 @@ const JORNADA = [
   [15, "ajuda-contextual", marco15Ajuda],
   [16, "exportacao", marco16Exportacao],
   [17, "breadcrumbs", marco17Breadcrumbs],
-  [18, "defeitos-conhecidos", marco18DefeitosConhecidos],
+  [18, "regressoes", marco18Regressoes],
 ];
 
 let parada = null;
@@ -2799,9 +3415,12 @@ try {
 }
 
 /*
- * Defeito que a instrumentação encontra sozinha. No E2E-1 ele foi reportado
- * como MEDIUM; aqui a contagem é o que interessa — o roteiro pede quantos
- * aparecem NESTE cenário.
+ * ZERO `RangeError` é o resultado esperado desta versão.
+ *
+ * A recursão da validação nativa pt-BR foi corrigida em 4ba458b. A contagem
+ * abaixo não é curiosidade: qualquer ocorrência — provocada ou espontânea —
+ * é REGRESSÃO, e a espontânea é a pior das duas, porque acontece sem ninguém
+ * ter feito nada de errado.
  */
 const recursaoDeliberada = deliberados.pageerror.filter((e) =>
   /Maximum call stack size exceeded/.test(e),
@@ -2812,22 +3431,16 @@ const recursaoEspontanea = pageErrors.filter((e) =>
 const recursaoTotal = recursaoDeliberada + recursaoEspontanea;
 console.log(
   `\nRangeError "Maximum call stack size exceeded" nesta execução: ${recursaoTotal} ` +
-    `(${recursaoDeliberada} em submissão provocada de propósito, ${recursaoEspontanea} fora dela)`,
+    `(esperado: 0) — ${recursaoDeliberada} em submissão provocada, ${recursaoEspontanea} fora dela`,
 );
-/*
- * A recursão provocada de propósito já vira finding no marco 18, com a
- * contagem por submissão. O que sobra aqui é o caso GRAVE: a mesma quebra
- * acontecendo sem ninguém ter provocado — aí não é o preço de um formulário
- * incompleto, é ruído em operação normal.
- */
 if (recursaoEspontanea > 0) {
   finding(
     "HIGH",
-    `Recursão na validação nativa disparou ${recursaoEspontanea} vez(es) FORA de submissão ` +
-      "provocada, em operação normal da jornada",
+    `REGRESSÃO · a recursão da validação nativa disparou ${recursaoEspontanea} vez(es) FORA de ` +
+      "submissão provocada, em operação normal da jornada",
     "apps/web/src/lib/native-validation-ptbr.ts — o tratador de `invalid` chama " +
       "`campo.reportValidity()`, que dispara `invalid` de novo no mesmo campo, sem guarda de " +
-      "reentrância. Ocorrências registradas em: " +
+      "reentrância (a guarda entrou em 4ba458b). Ocorrências registradas em: " +
       JSON.stringify(
         pageErrors.filter((e) => /Maximum call stack size exceeded/.test(e)).slice(0, 5),
       ),
@@ -2885,8 +3498,20 @@ console.log(` avisos "Failed to load resource": ${avisosDeRede.length}`);
 console.log(` diálogos nativos (alert/confirm): ${dialogosNativos.length}`);
 for (const d of dialogosNativos) console.log(`   ! ${d}`);
 
-console.log(`\n── Separador decimal por campo ──`);
-console.log(` ${JSON.stringify(separadorPorCampo)}`);
+const separadoresComVirgula = S.registro.separadores.filter((s) => s.digitado.includes(","));
+console.log(`\n── Decimal com VÍRGULA (${separadoresComVirgula.length} campos) ──`);
+for (const s of separadoresComVirgula) {
+  console.log(` , ${s.campo} ← "${s.digitado}" (${s.como}) · ${s.onde}`);
+}
+const semVirgula = S.registro.separadores.filter((s) => !s.digitado.includes(","));
+if (semVirgula.length > 0) {
+  console.log(` (não contam como prova — valor redondo, sem casa decimal:)`);
+  for (const s of semVirgula) console.log(`   · ${s.campo} ← "${s.digitado}" · ${s.onde}`);
+}
+console.log(
+  ` separador aceito por campo (jornada): ` +
+    JSON.stringify({ ...(S.dados.separadorPorCampo ?? {}), ...separadorPorCampo }),
+);
 
 console.log(`\n── Busca de catálogo observada (${buscasDeItem.length} GET /items) ──`);
 for (const b of buscasDeItem.filter((x) => x.search).slice(0, 20)) console.log(`   → ${b.query}`);
@@ -2904,9 +3529,17 @@ for (const s of screenshots) console.log(` - ${s}`);
 console.log(`\nverificações desta execução: ${passes.length} ok, ${failures.length} falharam`);
 for (const f of failures) console.log(` ✗ ${f}`);
 
+console.log(
+  `\n── Verificações da JORNADA INTEIRA (marcos concluídos em qualquer execução) ──\n` +
+    ` ${S.registro.verificacoes.ok.length} ok, ${S.registro.verificacoes.nok.length} reprovadas`,
+);
+for (const v of S.registro.verificacoes.ok) console.log(`   ok   ${v}`);
+for (const v of S.registro.verificacoes.nok) console.log(`   ✗    ${v}`);
+
 const completou = S.marcos.length >= JORNADA.length;
+const reprovadasNaJornada = S.registro.verificacoes.nok.length;
 const veredito =
-  failures.length > 0 || !completou
+  failures.length > 0 || reprovadasNaJornada > 0 || !completou
     ? "FAIL"
     : S.registro.findings.length > 0 ||
         consoleErrors.length > 0 ||
@@ -2915,4 +3548,10 @@ const veredito =
       ? "PASS WITH FINDINGS"
       : "PASS";
 console.log(`\nVEREDITO: ${veredito}`);
-process.exitCode = failures.length > 0 ? 1 : 0;
+if (!completou) {
+  console.log(
+    ` (jornada incompleta: ${S.marcos.length} de ${JORNADA.length} marcos — o veredito de uma ` +
+      "jornada parcial é sempre FAIL, por construção)",
+  );
+}
+process.exitCode = failures.length > 0 || reprovadasNaJornada > 0 ? 1 : 0;

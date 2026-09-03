@@ -1044,12 +1044,6 @@
   white-space: nowrap;
 }
 
-.doc-crumb {
-  font-size: 12.5px;
-  color: var(--ink-3);
-  margin-bottom: var(--sp-1);
-}
-
 .doc-title {
   display: flex;
   align-items: center;
@@ -2262,7 +2256,7 @@ input.is-invalid {
    da Consulta de Cliente vive dentro do contexto de UM cliente e pode
    divergir daqui sem arrastar todas as outras telas junto.
 
-   Substitui o `.doc-crumb`, que era texto morto: parecia trilha, mas não
+   Substituiu o `.doc-crumb`, que era texto morto: parecia trilha, mas não
    levava a lugar nenhum. */
 .page-crumbs {
   margin-bottom: var(--sp-1);

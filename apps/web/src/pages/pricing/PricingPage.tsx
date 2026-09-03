@@ -18,6 +18,7 @@ import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
 import { FormSection } from "../../components/FormSection";
 import { RowActions } from "../../components/RowActions";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useAuth } from "../../app/AuthProvider";
 import { formatBRL } from "../../lib/currency";
 import {
@@ -121,7 +122,7 @@ export function PricingPage() {
     <>
       <div className="doc-header">
         <div>
-          <div className="doc-crumb">Gestão / Precificação</div>
+          <PageBreadcrumbs items={[{ label: "Precificação", href: "/gestao/precificacao" }, { label: "Detalhe" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={pricing.productId} code={pricing.productCode} /> ·{" "}
