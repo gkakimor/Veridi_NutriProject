@@ -1907,6 +1907,9 @@ options={optionsForRow(line).map((product) => ({
                       key={shipment.id}
                       tabIndex={0}
                       onClick={() => navigate(`/comercial/expedicoes/${shipment.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") navigate(`/comercial/expedicoes/${shipment.id}`);
+                      }}
                     >
                       <td className="is-code">{shipment.code}</td>
                       <td>
@@ -1919,13 +1922,9 @@ options={optionsForRow(line).map((product) => ({
                         </span>
                       </td>
                       <td onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/comercial/expedicoes/${shipment.id}`)}
-                        >
+                        <Link className="btn btn--ghost btn--sm" to={`/comercial/expedicoes/${shipment.id}`}>
                           Abrir
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -1988,6 +1987,9 @@ options={optionsForRow(line).map((product) => ({
                         key={billing.id}
                         tabIndex={0}
                         onClick={() => navigate(`/comercial/faturamento/${billing.id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") navigate(`/comercial/faturamento/${billing.id}`);
+                        }}
                       >
                         <td className="is-code">{billing.code}</td>
                         <td className="is-code">{billing.shipmentCode}</td>
@@ -2001,13 +2003,9 @@ options={optionsForRow(line).map((product) => ({
                           </span>
                         </td>
                         <td onClick={(event) => event.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
-                            onClick={() => navigate(`/comercial/faturamento/${billing.id}`)}
-                          >
+                          <Link className="btn btn--ghost btn--sm" to={`/comercial/faturamento/${billing.id}`}>
                             Abrir
-                          </button>
+                          </Link>
                         </td>
                       </tr>
                     ))}
@@ -2034,7 +2032,14 @@ options={optionsForRow(line).map((product) => ({
                 </thead>
                 <tbody>
                   {customerOrder.linkedPurchaseOrders.map((po) => (
-                    <tr key={po.id} tabIndex={0} onClick={() => navigate(`/compras/ordens/${po.id}`)}>
+                    <tr
+                      key={po.id}
+                      tabIndex={0}
+                      onClick={() => navigate(`/compras/ordens/${po.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") navigate(`/compras/ordens/${po.id}`);
+                      }}
+                    >
                       <td className="is-code">{po.code}</td>
                       <td>{po.supplierName}</td>
                       <td className="is-numeric">{po.lineCount}</td>
@@ -2045,13 +2050,9 @@ options={optionsForRow(line).map((product) => ({
                       </td>
                       <td className="is-numeric">{po.orderTotal ?? "—"}</td>
                       <td onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/compras/ordens/${po.id}`)}
-                        >
+                        <Link className="btn btn--ghost btn--sm" to={`/compras/ordens/${po.id}`}>
                           Abrir
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -2201,7 +2202,14 @@ options={optionsForRow(line).map((product) => ({
                     </thead>
                     <tbody>
                       {customerOrder.generatedProductionOrders.map((op) => (
-                        <tr key={op.id} tabIndex={0} onClick={() => navigate(`/producao/ordens/${op.id}`)}>
+                        <tr
+                      key={op.id}
+                      tabIndex={0}
+                      onClick={() => navigate(`/producao/ordens/${op.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") navigate(`/producao/ordens/${op.id}`);
+                      }}
+                    >
                           <td className="is-code">
                             <EntityLink kind="productionOrder" id={op.id} code={op.code} />
                           </td>

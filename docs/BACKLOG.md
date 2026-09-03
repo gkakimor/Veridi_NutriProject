@@ -14,15 +14,14 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 5 |
+| LOW | 2 |
 
 A rodada de hardening pós-validação fechou tudo o que os três E2E e as duas
 auditorias de UX levantaram como defeito de produto, e mais o que a
 reauditoria achou nas próprias correções — ver
-[VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md). Os LOW que restam são o flake
-histórico do runner (3), o legado sem cliente (6), o `select` nativo do item na
-entrada de material do cliente (16), e dois registrados abaixo (17, 18) por
-serem decisão de produto, não conserto pendente. As três auditorias profundas (VAL-LEG-01, 02, 03), o
+[VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md). Os LOW que restam são os dois que não são
+defeito do produto atual: o flake histórico do runner (3) e o legado local sem
+cliente (6). Todo o resto foi fechado com correção, teste e revalidação. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
 correções em [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md).
 
@@ -497,37 +496,43 @@ aceita `onSearch`, e ligá-la é uma função por tela. Fazer quando o catálogo
 produtos passar de ~800, ou antes se a Veridi trouxer base maior na migração.
 Não fazer agora seria escolha diferente se algum desses números fosse outro.
 
-### 16. Item na entrada de material do cliente ainda é `<select>` nativo — LOW
+### 16. Item na entrada de material do cliente — resolvido
 
 `ReceiveCustomerMaterialPage` carrega matéria-prima e embalagem com
 `pageSize: 1000` — os mesmos 211 invisíveis das outras telas de item —, mas o
 campo é um `<select>` nativo, não o `SearchableEntitySelect`. Não há onde
 pendurar a busca no servidor sem antes trocar o componente.
 
-**Decisão / próxima ação:** trocar pelo seletor pesquisável quando a tela for
-mexida por outro motivo. É mudança de componente com semântica de lote e
-proprietário no meio — não a mesma correção do 15, e não foi feita no
-hardening de propósito: o campo de cliente da mesma tela ganhou busca no
-servidor; o de item ficou como está até haver rodada que o toque.
+**Resolvido.** O campo passou a usar o seletor pesquisável, com os mesmos
+filtros de elegibilidade da carga anterior — matéria-prima e embalagem,
+ativos. Achar não virou poder usar: tipo e situação continuam decidindo no
+servidor, e o aviso de item que não controla lote segue onde estava.
 
 
-### 17. Rota inválida redireciona em silêncio para o Dashboard — LOW
+### 17. Rota inválida redirecionava em silêncio — resolvido
 
 `App.tsx` manda qualquer caminho desconhecido para `/` sem aviso, diferente
 do "não encontrado" bem escrito que lote e pedido inexistentes já mostram.
 Baixo impacto: só acontece com endereço digitado ou link quebrado.
 
-**Decisão / próxima ação:** página de "não encontrado" com o mesmo padrão
-das outras. Fazer junto com a próxima mudança de rotas.
+**Resolvido.** `App.tsx` deixou de mandar endereço desconhecido para o
+Dashboard com `Navigate replace` — que ainda apagava do histórico o endereço
+errado, então nem dava para copiar num chamado. Agora há página de "não
+encontrado" no padrão das telas de detalhe, mostrando o endereço pedido e o
+caminho de volta.
 
-### 18. Projeto só nasce em modal, sem `/comercial/projetos/novo` — LOW
+### 18. Referência a Projeto que não parecia link — resolvido
 
 Cliente, Produto, Item, Fornecedor e Recurso têm página canônica de criação;
 Projeto — a entidade da qual tudo depende — não tem. Confirmado: F5 com o
 modal aberto perde o rascunho.
 
-**Decisão / próxima ação:** espelhar o padrão de `ItemCreatePage`. É a
-mesma correção já feita cinco vezes, e o custo é conhecido.
+**Resolvido, por outro caminho.** O Product Owner redirecionou: em vez de
+criar uma segunda tela de Projeto, tornar real a referência que já existia. A
+coluna "Cadeia técnica" e a barra "Ver do produto" pareciam link e não eram —
+texto cinza, só o cursor mudava. Passaram a usar a mesma classe de link que
+Cliente e Produto já usam na mesma tela. A rota canônica do Projeto continua
+sendo a única.
 
 ### Não reproduzido — registrado para não reabrir
 

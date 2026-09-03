@@ -232,8 +232,26 @@ export function CustomerOrdersPage() {
                   <td className="col-tight">{order.lines.length}</td>
                   <td className="is-numeric col-tight">{totalQuantity}</td>
                   <td className="col-tight">
-                    {order.shipments.some((shipment) => shipment.status === "CONFIRMED")
-                      ? "Expedido"
+                    {/*
+                      A situação de expedição vem do STATUS, nunca de uma
+                      segunda derivação aqui.
+
+                      Esta célula recalculava por conta própria — bastava UMA
+                      expedição confirmada para dizer "Expedido", sem olhar se
+                      ela cobria o pedido. `PED-000001` embarcou 980 de 1000 e a
+                      linha dizia "Expedido" na coluna Atendimento e
+                      "Parcialmente expedido" na coluna Status, lado a lado.
+                      Duas colunas discordando sobre o mesmo fato é pior que uma
+                      só: quem passa o olho na lista acredita na primeira.
+
+                      `PARTIALLY_SHIPPED` e `SHIPPED` já são derivados no
+                      servidor a partir das expedições confirmadas reais — é o
+                      que o contrato do domínio declara. O que sobra para esta
+                      coluna dizer é o que o status ainda não diz: se o plano de
+                      atendimento chegou a ser aplicado.
+                    */}
+                    {order.status === "SHIPPED" || order.status === "PARTIALLY_SHIPPED"
+                      ? CUSTOMER_ORDER_STATUS_LABELS[order.status]
                       : order.reservation || order.generatedProductionOrders.length > 0
                         ? "Em atendimento"
                         : "Não analisado"}

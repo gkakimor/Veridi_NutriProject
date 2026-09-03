@@ -173,8 +173,8 @@
   background-image:
     linear-gradient(to right, var(--surface), rgba(255, 255, 255, 0)),
     linear-gradient(to left, var(--surface), rgba(255, 255, 255, 0)),
-    linear-gradient(to right, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0)),
-    linear-gradient(to left, rgba(20, 40, 30, 0.3), rgba(20, 40, 30, 0));
+    linear-gradient(to right, rgba(20, 40, 30, 0.5), rgba(20, 40, 30, 0)),
+    linear-gradient(to left, rgba(20, 40, 30, 0.5), rgba(20, 40, 30, 0));
   background-position:
     0 0,
     100% 0,
@@ -184,7 +184,11 @@
   /* A sombra é a ÚNICA pista de que há coluna fora da tela. Medida a 12px
      e 0,16 de opacidade ela passava despercebida numa lista onde metade das
      colunas está cortada — o público do sistema não é de gente que sai
-     arrastando tabela para conferir. */
+     arrastando tabela para conferir.
+
+     A 0,3 ela ainda media 1,88:1 contra `--surface`, abaixo do limiar de 3:1
+     que vale para objeto gráfico: existia e não cumpria função. A 0,5 mede
+     3,13:1. Aumentar sem medir foi o erro da vez anterior. */
   background-size:
     32px 100%,
     32px 100%,
@@ -219,10 +223,15 @@
    * coluna fixa na seguinte, e ninguém olhou a interação. Agora quem avisa é a
    * própria coluna — ela projeta para a esquerda, que é de onde o conteúdo
    * passa por baixo.
+   *
+   * A opacidade é 0,5 porque foi MEDIDA: 3,13:1 contra `--surface`, o limiar
+   * de contraste para objeto gráfico. A primeira versão saiu com 0,32 e mediu
+   * 1,97:1 — acrescentei a pista sem conferir se ela cumpria função, que é o
+   * mesmo erro que já tinha cometido na pista do menu lateral.
    */
   box-shadow:
     inset 1px 0 0 var(--line),
-    -8px 0 8px -6px rgba(20, 40, 30, 0.32);
+    -8px 0 8px -6px rgba(20, 40, 30, 0.5);
 }
 
 /*
