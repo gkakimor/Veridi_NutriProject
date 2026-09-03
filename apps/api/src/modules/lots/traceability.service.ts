@@ -76,46 +76,69 @@ async function buildFinishedLotTraceability(lot: Lot): Promise<FinishedLotTracea
    * Fica em campo separado de propósito: cliente NÃO é origem de
    * material, e misturá-lo aos materiais consumidos leria como se fosse.
    */
-  const commercialDestination = order.customerOrderId
-    ? await (async () => {
-        const pedido = await prisma.customerOrder.findUnique({
-          where: { id: order.customerOrderId! },
+  const commercialDestination = await (async () => {
+    /*
+     * SAÍDA FÍSICA — a relação autoritativa é `ShipmentLine.lotId`.
+     *
+     * A busca anterior filtrava também por `customerOrderId` do Pedido da
+     * OP, o que confundia a ORIGEM da produção com o DESTINO do lote.
+     * Estoque acabado é fungível: `LT-20260903-000803` foi produzido para
+     * `PED-000484` e saiu por `EXP-000235`, atendendo `PED-000485`. O
+     * físico caiu de 800 para 400, o vínculo estava gravado, e a tela
+     * respondia "este lote ainda não foi expedido".
+     *
+     * Rascunho continua fora: rascunho não saiu do estoque.
+     */
+    const expedicoes = await prisma.shipment.findMany({
+      where: { status: "CONFIRMED", lines: { some: { lotId: lot.id } } },
+      include: {
+        lines: { where: { lotId: lot.id } },
+        customerOrder: { include: { customer: true } },
+      },
+      orderBy: { shipmentDate: "asc" },
+    });
+
+    const pedidoDaOrdem = order.customerOrderId
+      ? await prisma.customerOrder.findUnique({
+          where: { id: order.customerOrderId },
           include: { customer: true },
-        });
-        if (!pedido) return null;
+        })
+      : null;
 
-        // Só expedições CONFIRMED que levaram ESTE lote — rascunho não
-        // saiu, e outro lote do mesmo pedido não é deste documento.
-        const expedicoes = await prisma.shipment.findMany({
-          where: { customerOrderId: pedido.id, status: "CONFIRMED", lines: { some: { lotId: lot.id } } },
-          include: { lines: { where: { lotId: lot.id } } },
-          orderBy: { shipmentDate: "asc" },
-        });
+    // Nem origem nem saída: não há destino comercial a mostrar.
+    if (!pedidoDaOrdem && expedicoes.length === 0) return null;
 
-        const projeto = pedido.sourceProjectId
-          ? await prisma.project.findUnique({ where: { id: pedido.sourceProjectId } })
-          : null;
+    const projeto = pedidoDaOrdem?.sourceProjectId
+      ? await prisma.project.findUnique({ where: { id: pedidoDaOrdem.sourceProjectId } })
+      : null;
 
-        return {
-          customerOrderId: pedido.id,
-          customerOrderCode: pedido.code,
-          customerId: pedido.customerId,
-          customerCode: pedido.customerCode ?? pedido.customer.code,
-          customerName: pedido.customerName ?? pedido.customer.legalName,
-          projectId: projeto?.id ?? null,
-          projectCode: projeto?.code ?? null,
-          projectName: projeto?.name ?? null,
-          shipments: expedicoes.map((expedicao) => ({
-            shipmentId: expedicao.id,
-            shipmentCode: expedicao.code,
-            shipmentDate: expedicao.shipmentDate ? expedicao.shipmentDate.toISOString() : null,
-            quantity: expedicao.lines
-              .reduce((soma, linha) => soma.plus(linha.quantity), new Prisma.Decimal(0))
-              .toString(),
-          })),
-        };
-      })()
-    : null;
+    return {
+      customerOrderId: pedidoDaOrdem?.id ?? null,
+      customerOrderCode: pedidoDaOrdem?.code ?? null,
+      customerId: pedidoDaOrdem?.customerId ?? null,
+      customerCode: pedidoDaOrdem ? (pedidoDaOrdem.customerCode ?? pedidoDaOrdem.customer.code) : null,
+      customerName: pedidoDaOrdem
+        ? (pedidoDaOrdem.customerName ?? pedidoDaOrdem.customer.legalName)
+        : null,
+      projectId: projeto?.id ?? null,
+      projectCode: projeto?.code ?? null,
+      projectName: projeto?.name ?? null,
+      shipments: expedicoes.map((expedicao) => ({
+        shipmentId: expedicao.id,
+        shipmentCode: expedicao.code,
+        shipmentDate: expedicao.shipmentDate ? expedicao.shipmentDate.toISOString() : null,
+        quantity: expedicao.lines
+          .reduce((soma, linha) => soma.plus(linha.quantity), new Prisma.Decimal(0))
+          .toString(),
+        customerOrderId: expedicao.customerOrderId,
+        customerOrderCode: expedicao.customerOrder.code,
+        customerId: expedicao.customerOrder.customerId,
+        customerCode: expedicao.customerOrder.customerCode ?? expedicao.customerOrder.customer.code,
+        customerName:
+          expedicao.customerOrder.customerName ?? expedicao.customerOrder.customer.legalName,
+      })),
+    };
+  })();
 
   return {
     kind: "FINISHED_GOOD",

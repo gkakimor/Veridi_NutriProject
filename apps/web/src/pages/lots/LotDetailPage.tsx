@@ -848,23 +848,31 @@ export function LotDetailPage() {
               subtitle="Para quem este lote foi produzido e por onde saiu — não faz parte da genealogia de material."
             >
               <dl className="definition-list">
-                <dt>Pedido</dt>
+                <dt>Pedido de origem</dt>
                 <dd>
-                  <EntityLink
-                    kind="customerOrder"
-                    id={traceability.commercialDestination.customerOrderId}
-                    code={traceability.commercialDestination.customerOrderCode}
-                  />
+                  {traceability.commercialDestination.customerOrderId ? (
+                    <EntityLink
+                      kind="customerOrder"
+                      id={traceability.commercialDestination.customerOrderId}
+                      code={traceability.commercialDestination.customerOrderCode ?? ""}
+                    />
+                  ) : (
+                    "Produzido para estoque — sem pedido de origem."
+                  )}
                 </dd>
-                <dt>Cliente</dt>
-                <dd>
-                  <EntityLink
-                    kind="customer"
-                    id={traceability.commercialDestination.customerId}
-                    code={traceability.commercialDestination.customerCode}
-                    name={traceability.commercialDestination.customerName}
-                  />
-                </dd>
+                {traceability.commercialDestination.customerId && (
+                  <>
+                    <dt>Cliente do pedido de origem</dt>
+                    <dd>
+                      <EntityLink
+                        kind="customer"
+                        id={traceability.commercialDestination.customerId}
+                        code={traceability.commercialDestination.customerCode ?? ""}
+                        name={traceability.commercialDestination.customerName ?? ""}
+                      />
+                    </dd>
+                  </>
+                )}
                 {traceability.commercialDestination.projectId && (
                   <>
                     <dt>Projeto</dt>
@@ -885,6 +893,8 @@ export function LotDetailPage() {
                   <thead>
                     <tr>
                       <th>Expedição</th>
+                      <th>Pedido atendido</th>
+                      <th>Cliente</th>
                       <th>Data</th>
                       <th className="is-numeric">Quantidade deste lote</th>
                     </tr>
@@ -899,6 +909,21 @@ export function LotDetailPage() {
                             code={shipment.shipmentCode}
                           />
                         </td>
+                        <td className="is-code">
+                          <EntityLink
+                            kind="customerOrder"
+                            id={shipment.customerOrderId}
+                            code={shipment.customerOrderCode}
+                          />
+                        </td>
+                        <td>
+                          <EntityLink
+                            kind="customer"
+                            id={shipment.customerId}
+                            code={shipment.customerCode}
+                            name={shipment.customerName}
+                          />
+                        </td>
                         <td>{formatDate(shipment.shipmentDate)}</td>
                         <td className="is-numeric">
                           {formatQuantity(shipment.quantity)} {traceability.unitCode}
@@ -907,7 +932,7 @@ export function LotDetailPage() {
                     ))}
                     {traceability.commercialDestination.shipments.length === 0 && (
                       <tr>
-                        <td colSpan={3} className="table__empty">
+                        <td colSpan={5} className="table__empty">
                           Este lote ainda não foi expedido.
                         </td>
                       </tr>
