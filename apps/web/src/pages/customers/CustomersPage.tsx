@@ -266,6 +266,7 @@ export function CustomersPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
+                    label={`Mais ações de ${customer.code}`}
                     actions={[
                       {
                         label: customer.active ? "Inativar" : "Reativar",

@@ -770,13 +770,12 @@ export function ProductionOrderPage() {
             }
           >
             <div className="line-actions">
-              <button
-                type="button"
+              <Link
                 className="btn btn--primary"
-                onClick={() => navigate(`/producao/ordens/${productionOrder.id}/receita`)}
+                to={`/producao/ordens/${productionOrder.id}/receita`}
               >
                 Folha de Receita
-              </button>
+              </Link>
             </div>
           </FormSection>
         )}

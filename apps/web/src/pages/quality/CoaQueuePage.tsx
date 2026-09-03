@@ -244,13 +244,12 @@ export function CoaQueuePage() {
                 </td>
                 <td>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/estoque/lotes/${row.lotId}`)}
+                      to={`/estoque/lotes/${row.lotId}`}
                     >
                       Abrir lote
-                    </button>
+                    </Link>
                     {canReview && row.requiresCoa && row.coaStatus === "RECEIVED" && (
                       <>
                         <button

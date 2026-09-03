@@ -1,6 +1,6 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { CostTemplateSummaryDTO } from "@veridi/shared";
 import { createCostTemplate, listCostTemplates } from "../../lib/cost-pricing-templates-api";
 import { formatDate } from "../../lib/dates";
@@ -189,13 +189,12 @@ export function CostTemplatesPage() {
                   />
                 </td>
                 <td>
-                  <button
-                    type="button"
+                  <Link
                     className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/gestao/templates-estrutura/${template.id}`)}
+                    to={`/gestao/templates-estrutura/${template.id}`}
                   >
                     Abrir
-                  </button>
+                  </Link>
                 </td>
               </tr>
             ))}

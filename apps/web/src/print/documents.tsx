@@ -50,6 +50,17 @@ function money(value: string | null): string {
   return value === null ? "—" : formatBRL(value);
 }
 
+/**
+ * Aviso do Pedido do Cliente impresso.
+ *
+ * A folha mostra reservado, faturado e falta expedir — posição de
+ * atendimento, assunto de dentro da fábrica. Os documentos irmãos que vão
+ * ao cliente já dizem o que são; este saía sem dizer nada e podia ser
+ * entregue no balcão como se fosse confirmação de pedido.
+ */
+const CUSTOMER_ORDER_INTERNAL_NOTICE =
+  "Documento interno de acompanhamento — mostra reservado, faturado e falta expedir; não é documento fiscal nem confirmação ao cliente.";
+
 /** Pedido do Cliente. */
 export function CustomerOrderPrintDocument({ order }: { order: CustomerOrderDTO }) {
   return (
@@ -58,6 +69,7 @@ export function CustomerOrderPrintDocument({ order }: { order: CustomerOrderDTO 
       code={order.code}
       status={CUSTOMER_ORDER_STATUS_LABELS[order.status]}
       isDraft={order.status === "DRAFT"}
+      notice={CUSTOMER_ORDER_INTERNAL_NOTICE}
       meta={[
         { label: "Cliente", value: printOrDash(order.customerName) },
         { label: "CNPJ", value: printOrDash(order.customerCnpj) },

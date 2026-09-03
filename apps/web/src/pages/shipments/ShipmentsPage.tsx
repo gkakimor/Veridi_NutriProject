@@ -176,8 +176,16 @@ export function ShipmentsPage() {
                   if (event.key === "Enter") navigate(`/comercial/expedicoes/${shipment.id}`);
                 }}
               >
-                <td className="is-code col-tight">{shipment.code}</td>
-                <td className="is-code col-tight">{shipment.customerOrderCode}</td>
+                <td className="is-code col-tight">
+                  <EntityLink kind="shipment" id={shipment.id} code={shipment.code} />
+                </td>
+                <td className="is-code col-tight">
+                  <EntityLink
+                    kind="customerOrder"
+                    id={shipment.customerOrderId}
+                    code={shipment.customerOrderCode}
+                  />
+                </td>
                 <td className="col-flex">
                   <EntityLink kind="customer" id={shipment.customerId} code={shipment.customerName} />
                 </td>
@@ -190,13 +198,12 @@ export function ShipmentsPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/comercial/expedicoes/${shipment.id}`)}
+                      to={`/comercial/expedicoes/${shipment.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>

@@ -1,7 +1,7 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { FinishedGoodRowDTO, LotStatus, ProductDTO } from "@veridi/shared";
 import { COST_QUALITY_LABELS, COST_SOURCE_LABELS, LOT_STATUSES, LOT_STATUS_LABELS } from "@veridi/shared";
 import { listFinishedGoods } from "../../lib/finished-goods-api";
@@ -299,13 +299,12 @@ export function FinishedGoodsPage() {
                 </td>
                 <td>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/estoque/lotes/${row.lotId}`)}
+                      to={`/estoque/lotes/${row.lotId}`}
                     >
                       Abrir lote
-                    </button>
+                    </Link>
                     {/* Reaproveita a rota de impressão de etiqueta já existente —
                         o QR do lote produzido é o mesmo `LOT:<code>` de sempre. */}
                     <button
@@ -316,13 +315,12 @@ export function FinishedGoodsPage() {
                       Etiqueta / QR
                     </button>
                     {row.productionOrderId && (
-                      <button
-                        type="button"
+                      <Link
                         className="btn btn--ghost btn--sm"
-                        onClick={() => navigate(`/producao/ordens/${row.productionOrderId}`)}
+                        to={`/producao/ordens/${row.productionOrderId}`}
                       >
                         Abrir OP
-                      </button>
+                      </Link>
                     )}
                   </div>
                 </td>

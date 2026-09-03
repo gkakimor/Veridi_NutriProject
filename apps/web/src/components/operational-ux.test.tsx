@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { renderHook, act } from "@testing-library/react";
@@ -27,6 +29,34 @@ afterEach(() => {
 });
 
 describe("Ações de linha", () => {
+  /**
+   * O botão "⋯" tem que dizer DE QUAL LINHA ele é.
+   *
+   * Com o nome padrão, uma tabela de trinta linhas anunciava trinta botões
+   * chamados "Mais ações": quem usa leitor de tela abria o menu sem saber
+   * sobre qual registro estava agindo — e as ações de dentro são inativar,
+   * bloquear e remover.
+   */
+  it("dá ao menu de cada linha o nome do próprio registro", () => {
+    render(
+      <>
+        <RowActions
+          label="Mais ações de MP-000001"
+          actions={[{ label: "Inativar", destructive: true, onSelect: vi.fn() }]}
+        />
+        <RowActions
+          label="Mais ações de MP-000002"
+          actions={[{ label: "Inativar", destructive: true, onSelect: vi.fn() }]}
+        />
+      </>,
+    );
+
+    expect(screen.getByLabelText("Mais ações de MP-000001")).toBeTruthy();
+    expect(screen.getByLabelText("Mais ações de MP-000002")).toBeTruthy();
+    // Nenhum botão sobra com o nome genérico.
+    expect(screen.queryByLabelText("Mais ações")).toBeNull();
+  });
+
   it("fecha o menu quando o foco sai por Tab", () => {
     render(
       <>
@@ -353,5 +383,38 @@ describe("Atenções do dashboard", () => {
       // seria um beco sem saída no cockpit.
       expect(ATTENTION_LIST_PATH[type].startsWith("/")).toBe(true);
     }
+  });
+});
+
+/**
+ * O nome por linha só serve se as TELAS o passarem — o componente sozinho
+ * volta ao padrão genérico em silêncio, que foi exatamente o defeito.
+ *
+ * A varredura é textual de propósito, como em `help-topic-contract`: ela
+ * enxerga chamada que nenhum teste de tela renderiza.
+ *
+ * A lista é explícita, e não uma varredura de `src/pages` inteiro, porque as
+ * demais telas com menu de linha (Lotes, Clientes) estão sendo editadas em
+ * outra frente — incluí-las aqui deixaria a suíte vermelha por trabalho de
+ * terceiro. Ao ganharem o nome por linha, entram nesta lista.
+ */
+describe("Nome do menu de linha nas telas", () => {
+  const TELAS = [
+    "pages/items/ItemsPage.tsx",
+    "pages/products/ProductsPage.tsx",
+    "pages/suppliers/SuppliersPage.tsx",
+    "pages/industrial-costs/IndustrialCostPage.tsx",
+    "pages/pricing/PricingPage.tsx",
+  ];
+
+  it.each(TELAS)("%s identifica o registro no nome do menu", (tela) => {
+    const fonte = readFileSync(join(process.cwd(), "src", tela), "utf8");
+
+    const chamadas = (fonte.match(/<RowActions[\s>]/g) ?? []).length;
+    // Nome montado com dado da linha: template literal com interpolação.
+    const nomeados = (fonte.match(/label=\{`Mais ações [^`]*\$\{/g) ?? []).length;
+
+    expect(chamadas).toBeGreaterThan(0);
+    expect(nomeados).toBe(chamadas);
   });
 });

@@ -690,13 +690,12 @@ export function FormulationVersionPage() {
       <div className="page__header">
         <div>
           <h1 className="page__title">Versão não encontrada</h1>
-          <button
-            type="button"
+          <Link
             className="btn btn--ghost"
-            onClick={() => navigate(`/producao/formulacoes/${productId ?? ""}`)}
+            to={`/producao/formulacoes/${productId ?? ""}`}
           >
             ← Voltar
-          </button>
+          </Link>
         </div>
       </div>
     );
@@ -716,13 +715,12 @@ export function FormulationVersionPage() {
         </div>
         <div className="table__actions">
           <ProjectOriginLink productId={productId} />
-          <button
-            type="button"
+          <Link
             className="btn btn--ghost"
-            onClick={() => navigate(`/producao/formulacoes/${productId}`)}
+            to={`/producao/formulacoes/${productId}`}
           >
             ← Voltar
-          </button>
+          </Link>
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { EntityLink } from "../../components/EntityLink";
 import type { ProductionOrderDTO } from "@veridi/shared";
 import { listProductionOrders } from "../../lib/production-orders-api";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -121,7 +122,9 @@ export function PickingConsumptionPage() {
                   if (event.key === "Enter") navigate(`/producao/ordens/${order.id}`);
                 }}
               >
-                <td className="col-tight is-code">{order.code}</td>
+                <td className="col-tight is-code">
+                  <EntityLink kind="productionOrder" id={order.id} code={order.code} />
+                </td>
                 <td className="col-flex">
                   {order.productCode} — {order.productName}
                 </td>
@@ -132,13 +135,12 @@ export function PickingConsumptionPage() {
                 <td className="col-tight">{consumptionSummary(order)}</td>
                 <td className="col-actions" onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/producao/ordens/${order.id}`)}
+                      to={`/producao/ordens/${order.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>

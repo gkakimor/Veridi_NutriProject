@@ -70,7 +70,7 @@ describe("LotScanPage", () => {
     vi.mocked(lookupLot).mockReset();
   });
 
-  it("mostra o card de resultado e navega ao clicar em Ver detalhes", async () => {
+  it("mostra o card de resultado e oferece o lote como link de verdade", async () => {
     vi.mocked(lookupLot).mockResolvedValue(fixtureLot);
     const user = userEvent.setup();
     render(
@@ -87,8 +87,12 @@ describe("LotScanPage", () => {
       expect(screen.getByRole("link", { name: /Farinha de trigo/ })).toBeInTheDocument(),
     );
 
-    await user.click(screen.getByRole("button", { name: "Ver detalhes" }));
-    expect(navigateMock).toHaveBeenCalledWith("/estoque/lotes/lot-1");
+    // "Ver detalhes" abre outro documento: precisa ser link de verdade, com
+    // endereço no href — botão que chama navigate() não abre em nova aba,
+    // não aceita clique do meio e não deixa copiar o endereço.
+    const detalhes = screen.getByRole("link", { name: "Ver detalhes" });
+    expect(detalhes).toHaveAttribute("href", "/estoque/lotes/lot-1");
+    expect(screen.queryByRole("button", { name: "Ver detalhes" })).toBeNull();
   });
 
   it("mostra erro Veridi-branded quando o lote não é encontrado", async () => {

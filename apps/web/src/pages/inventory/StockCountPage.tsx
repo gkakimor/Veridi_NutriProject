@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { ItemDTO, StockCountResultDTO } from "@veridi/shared";
 import { listItems } from "../../lib/items-api";
 import { getInventoryItem, createStockCount } from "../../lib/inventory-api";
@@ -340,13 +340,12 @@ export function StockCountPage() {
             <button type="button" className="btn btn--ghost btn--sm" onClick={handleReset}>
               Nova contagem
             </button>
-            <button
-              type="button"
+            <Link
               className="btn btn--primary btn--sm"
-              onClick={() => navigate(`/estoque/${itemId}`)}
+              to={`/estoque/${itemId}`}
             >
               Ver item
-            </button>
+            </Link>
           </div>
         </FormSection>
       )}

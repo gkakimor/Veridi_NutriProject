@@ -1,6 +1,6 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type { BillingDTO, BillingLineDTO, BillingStatus } from "@veridi/shared";
 import { BILLING_STATUS_LABELS } from "@veridi/shared";
 import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../lib/billings-api";
@@ -282,23 +282,21 @@ export function BillingPage() {
           <dl className="definition-list">
             <dt>Pedido</dt>
             <dd>
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/comercial/pedidos/${billing.customerOrderId}`)}
+                to={`/comercial/pedidos/${billing.customerOrderId}`}
               >
                 {billing.customerOrderCode}
-              </button>
+              </Link>
             </dd>
             <dt>Expedição</dt>
             <dd>
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/comercial/expedicoes/${billing.shipmentId}`)}
+                to={`/comercial/expedicoes/${billing.shipmentId}`}
               >
                 {billing.shipmentCode}
-              </button>
+              </Link>
             </dd>
             <dt>Cliente</dt>
             <dd>

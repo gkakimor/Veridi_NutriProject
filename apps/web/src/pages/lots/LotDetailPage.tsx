@@ -319,13 +319,12 @@ export function LotDetailPage() {
               <dt>Produzido por</dt>
               <dd>
                 {lot.productionOrderId ? (
-                  <button
-                    type="button"
+                  <Link
                     className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/producao/ordens/${lot.productionOrderId}`)}
+                    to={`/producao/ordens/${lot.productionOrderId}`}
                   >
                     {lot.productionOrderCode}
-                  </button>
+                  </Link>
                 ) : (
                   "—"
                 )}
@@ -759,13 +758,12 @@ export function LotDetailPage() {
             <dl className="definition-list">
               <dt>Produzido por</dt>
               <dd>
-                <button
-                  type="button"
+                <Link
                   className="btn btn--ghost btn--sm"
-                  onClick={() => navigate(`/producao/ordens/${traceability.productionOrderId}`)}
+                  to={`/producao/ordens/${traceability.productionOrderId}`}
                 >
                   {traceability.productionOrderCode}
-                </button>
+                </Link>
               </dd>
               <dt>Produto</dt>
               <dd>
@@ -997,13 +995,12 @@ export function LotDetailPage() {
                   {traceability.usedInSamples.map((usage) => (
                     <tr key={usage.sampleId}>
                       <td>
-                        <button
-                          type="button"
+                        <Link
                           className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/comercial/amostras/${usage.sampleId}`)}
+                          to={`/comercial/amostras/${usage.sampleId}`}
                         >
                           {usage.sampleCode}
-                        </button>
+                        </Link>
                       </td>
                       <td className="is-code">{usage.testLabel}</td>
                       <td>

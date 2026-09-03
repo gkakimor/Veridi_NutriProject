@@ -28,6 +28,14 @@ export function RowActions({
   children,
 }: {
   actions: RowAction[];
+  /**
+   * Nome do botão "⋯" para leitor de tela — sempre com o identificador da
+   * linha ("Mais ações de MP-000001").
+   *
+   * Sem ele toda linha da tabela anuncia o mesmo nome, e quem ouve a tela
+   * abre o menu sem saber de qual registro ele é. O padrão existe só para
+   * não deixar o botão mudo.
+   */
   label?: string;
   /** Ação principal, renderizada fora do menu. */
   children?: ReactNode;

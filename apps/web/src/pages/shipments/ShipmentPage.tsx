@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   ShipmentDTO,
   ShipmentLineDTO,
@@ -613,13 +613,12 @@ export function ShipmentPage() {
           <dl className="definition-list">
             <dt>Pedido</dt>
             <dd>
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/comercial/pedidos/${shipment.customerOrderId}`)}
+                to={`/comercial/pedidos/${shipment.customerOrderId}`}
               >
                 {shipment.customerOrderCode}
-              </button>
+              </Link>
             </dd>
             <dt>Cliente</dt>
             <dd>

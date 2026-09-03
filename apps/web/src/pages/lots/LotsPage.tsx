@@ -1,7 +1,7 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate , useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { InventoryOwnerType, LotDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
 import { listLots } from "../../lib/lots-api";
@@ -329,6 +329,7 @@ export function LotsPage() {
                     LISTA ela custava mais largura que seis colunas de negócio.
                   */}
                   <RowActions
+                    label={`Mais ações de ${lot.code}`}
                     actions={[
                       {
                         label: "Imprimir etiqueta (QR)",
@@ -336,13 +337,12 @@ export function LotsPage() {
                       },
                     ]}
                   >
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/estoque/lotes/${lot.id}`)}
+                      to={`/estoque/lotes/${lot.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </RowActions>
                 </td>
               </tr>

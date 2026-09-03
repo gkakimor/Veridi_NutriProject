@@ -145,13 +145,12 @@ export function PricingPage() {
             Imprimir / Salvar PDF
           </button>
           <ProjectOriginLink productId={pricing.productId} />
-          <button
-            type="button"
+          <Link
             className="btn btn--ghost"
-            onClick={() => navigate(`/produtos/${pricing.productId}/custos`)}
+            to={`/produtos/${pricing.productId}/custos`}
           >
             ← Custos do produto
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -178,13 +177,12 @@ export function PricingPage() {
             <dd>{pricing.customerName ?? "—"}</dd>
             <dt>Cálculo de custo</dt>
             <dd>
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/calculos-custo/${pricing.industrialCostCalculationId}`)}
+                to={`/calculos-custo/${pricing.industrialCostCalculationId}`}
               >
                 {pricing.calculationCode}
-              </button>
+              </Link>
             </dd>
             <dt>Estrutura de custos</dt>
             <dd>{pricing.industrialCostVersionLabel}</dd>
@@ -323,6 +321,7 @@ export function PricingPage() {
                     {editable && (
                       <td onClick={(event) => event.stopPropagation()}>
                         <RowActions
+                          label={`Mais ações da faixa de ${formatQuantity(tier.quantity)} ${tier.uomCode}`}
                           actions={[
                             {
                               label: "Remover faixa",

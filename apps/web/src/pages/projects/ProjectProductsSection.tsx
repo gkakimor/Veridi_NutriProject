@@ -141,11 +141,13 @@ export function ProjectProductsSection({
                       largura — com a coluna de ação fixa e o corpo do documento
                       mais largo, esconder metade do caminho passou a ser
                       escolha ruim, não restrição. */}
+                  {/* Estilo de LINK, o mesmo que a linha já usa em Produto e
+                      Cliente: vestidos de botão fantasma eram texto cinza sem
+                      sublinhado, e só o cursor no hover dizia que levavam a
+                      algum lugar. Quem não passa o mouse por cima nunca
+                      descobre que a cadeia técnica é navegável. */}
                   <td className="table__actions table__actions--centered">
-                    <Link
-                      className="btn btn--ghost btn--sm"
-                      to={`/producao/formulacoes/${link.productId}`}
-                    >
+                    <Link className="entity-link" to={`/producao/formulacoes/${link.productId}`}>
                       Formulação
                     </Link>
                     {/* Custos ANTES do CMV: o CMV lê a estrutura de custo
@@ -154,20 +156,17 @@ export function ProjectProductsSection({
                         cabeçalho desta coluna, que promete "a ordem em que a
                         cadeia é percorrida". Mesmos rótulos e mesma sequência
                         de `ProductRelatedLinks`, usado nas cinco telas irmãs. */}
-                    <Link
-                      className="btn btn--ghost btn--sm"
-                      to={`/produtos/${link.productId}/custos`}
-                    >
+                    <Link className="entity-link" to={`/produtos/${link.productId}/custos`}>
                       Custos industriais
                     </Link>
                     <Link
-                      className="btn btn--ghost btn--sm"
+                      className="entity-link"
                       to={`/produtos/${link.productId}/cmv?projectId=${projectId}`}
                     >
                       CMV
                     </Link>
                     <Link
-                      className="btn btn--ghost btn--sm"
+                      className="entity-link"
                       to={`/gestao/precificacao?productId=${link.productId}`}
                     >
                       Precificação

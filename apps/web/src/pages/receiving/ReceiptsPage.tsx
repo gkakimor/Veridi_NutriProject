@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { EntityLink } from "../../components/EntityLink";
 import type { ReceiptDTO } from "@veridi/shared";
 import { RECEIPT_SOURCE_TYPE_LABELS } from "@veridi/shared";
 import { listReceipts } from "../../lib/receiving-api";
@@ -128,9 +129,19 @@ export function ReceiptsPage() {
                   if (event.key === "Enter") navigate(`/compras/recebimentos/${receipt.id}`);
                 }}
               >
-                <td className="col-tight is-code">{receipt.code}</td>
+                <td className="col-tight is-code">
+                  <EntityLink kind="receipt" id={receipt.id} code={receipt.code} />
+                </td>
                 <td className="col-tight">{RECEIPT_SOURCE_TYPE_LABELS[receipt.sourceType]}</td>
-                <td className="col-tight is-code">{receipt.purchaseOrderCode ?? "—"}</td>
+                <td className="col-tight is-code">
+                  {/* Recebimento de material do cliente não tem OC: sem id, o
+                      EntityLink devolve texto e o traço continua traço. */}
+                  <EntityLink
+                    kind="purchaseOrder"
+                    id={receipt.purchaseOrderId}
+                    code={receipt.purchaseOrderCode ?? "—"}
+                  />
+                </td>
                 <td className="col-flex">
                   {receipt.sourceType === "CUSTOMER_SUPPLIED"
                     ? `Cliente — ${receipt.customerName ?? ""}`
@@ -143,13 +154,12 @@ export function ReceiptsPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/compras/recebimentos/${receipt.id}`)}
+                      to={`/compras/recebimentos/${receipt.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>

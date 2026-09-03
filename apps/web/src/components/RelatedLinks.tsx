@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 export function RelatedLinks({
   title = "Ver relacionados",
   links,
+  variant = "button",
 }: {
   title?: string;
   /**
@@ -23,8 +24,24 @@ export function RelatedLinks({
    * filtrada. Sem a marca, o link é secundário como os outros.
    */
   links: { label: string; to: string; highlight?: boolean }[];
+  /**
+   * Como o destino se apresenta.
+   *
+   * `button` é a barra de atalhos de um CADASTRO: cada destino abre outra
+   * lista, e o botão fantasma separa esses atalhos do corpo do formulário.
+   *
+   * `link` é a barra que troca de TELA do mesmo registro. Vestida de botão
+   * fantasma ela virava texto cinza sem sublinhado — só o cursor no hover
+   * dizia que levava a algum lugar, e quem não passa o mouse não descobre.
+   * O estilo de link é o mesmo que a tela já usa para citar Cliente e
+   * Produto (`entity-link`), então a pessoa reconhece a afordância que já
+   * viu em toda tabela do sistema.
+   */
+  variant?: "button" | "link";
 }) {
   if (links.length === 0) return null;
+
+  const defaultClass = variant === "link" ? "entity-link" : "btn btn--ghost btn--sm";
 
   return (
     <div className="related-links">
@@ -32,7 +49,7 @@ export function RelatedLinks({
       {links.map((link) => (
         <Link
           key={link.to}
-          className={link.highlight ? "btn btn--secondary btn--sm" : "btn btn--ghost btn--sm"}
+          className={link.highlight ? "btn btn--secondary btn--sm" : defaultClass}
           to={link.to}
         >
           {link.label}

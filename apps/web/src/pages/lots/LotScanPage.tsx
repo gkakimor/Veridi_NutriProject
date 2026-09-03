@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { LotDTO } from "@veridi/shared";
 import { LOT_STATUS_LABELS } from "@veridi/shared";
 import { lookupLot } from "../../lib/lots-api";
@@ -102,13 +102,12 @@ export function LotScanPage() {
               >
                 Escanear outro
               </button>
-              <button
-                type="button"
+              <Link
                 className="btn btn--primary btn--sm"
-                onClick={() => navigate(`/estoque/lotes/${result.id}`)}
+                to={`/estoque/lotes/${result.id}`}
               >
                 Ver detalhes
-              </button>
+              </Link>
             </div>
           </div>
         </FormSection>

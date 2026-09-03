@@ -351,6 +351,7 @@ export function ProductsPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
+                    label={`Mais ações de ${product.code}`}
                     actions={[
                       {
                         // Pergunta de negócio antes do documento: quanto custa

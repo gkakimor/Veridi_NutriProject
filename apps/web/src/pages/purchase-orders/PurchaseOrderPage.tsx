@@ -1,6 +1,6 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useState , useRef } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
@@ -735,13 +735,12 @@ export function PurchaseOrderPage() {
             <dd>Pedido do Cliente</dd>
             <dt>Pedido</dt>
             <dd>
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/comercial/pedidos/${purchaseOrder.customerOrderId}`)}
+                to={`/comercial/pedidos/${purchaseOrder.customerOrderId}`}
               >
                 {purchaseOrder.customerOrderCode}
-              </button>
+              </Link>
             </dd>
           </dl>
         </FormSection>

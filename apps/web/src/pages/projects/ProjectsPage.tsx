@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { CustomerDTO, ProjectDTO, ProjectStatus } from "@veridi/shared";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS } from "@veridi/shared";
 import { EntityLink } from "../../components/EntityLink";
@@ -333,13 +333,12 @@ export function ProjectsPage() {
                 <td className="is-code col-tight">{project.productCode ?? "—"}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/comercial/projetos/${project.id}`)}
+                      to={`/comercial/projetos/${project.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>

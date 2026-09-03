@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { FormulationSummaryDTO } from "@veridi/shared";
 import { listFormulations } from "../../lib/formulations-api";
 import { EntityLink } from "../../components/EntityLink";
@@ -141,13 +141,12 @@ export function FormulationsPage() {
                 <td>{formatDate(formulation.updatedAt)}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/producao/formulacoes/${formulation.productId}`)}
+                      to={`/producao/formulacoes/${formulation.productId}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>

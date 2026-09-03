@@ -400,6 +400,26 @@ export function CustomerOrderPage() {
   const linhasEditaveis = isDraft && origemComercial === null;
   const isCancellable = !isNew && (status === "DRAFT" || status === "CONFIRMED");
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
+  /*
+   * Quem grava a "Entrega prevista".
+   *
+   * O campo mora no topo e o botão que o grava fica no fim da página, mais
+   * de mil pixels abaixo: quem mudava a data não tinha como saber que ela
+   * ainda não estava no pedido. O rótulo aqui é o MESMO texto do botão do
+   * rodapé — e é aquele botão que salva; nenhum caminho novo de gravação
+   * nasce ao lado do campo.
+   */
+  const rotuloDeSalvar = isDraft ? "Salvar rascunho" : "Salvar prazo e observações";
+  /**
+   * Existe botão de salvar no rodapé? Pedido cancelado não tem, e apontar
+   * para um botão que não está na tela é pior que não dizer nada.
+   */
+  const temBotaoDeSalvar = isDraft || status !== "CANCELLED";
+  /** Data no campo diferente da data que está no pedido salvo. */
+  const prazoNaoSalvo =
+    !isNew &&
+    customerOrder !== null &&
+    requestedDeliveryDate !== toDateInputValue(customerOrder.requestedDeliveryDate);
   const showPlan = !isNew && status === "CONFIRMED";
   const showPurchaseSuggestion = !isNew && status === "IN_FULFILLMENT";
 
@@ -1136,7 +1156,22 @@ options={customerOptions.map((customer) => ({
                 type="date"
                 value={requestedDeliveryDate}
                 onChange={(event) => setRequestedDeliveryDate(event.target.value)}
+                {...(temBotaoDeSalvar ? { "aria-describedby": "co-delivery-date-hint" } : {})}
               />
+              {/* `role="status"` para que quem usa leitor de tela ouça a
+                  mudança de "onde se salva" para "ainda não salvo". */}
+              {temBotaoDeSalvar && (
+                <p className="field__hint" id="co-delivery-date-hint" role="status">
+                  {prazoNaoSalvo ? (
+                    <>
+                      <span className="badge badge--warn">Data ainda não salva</span> A nova
+                      data entra no pedido com “{rotuloDeSalvar}”, no fim desta página.
+                    </>
+                  ) : (
+                    <>Mudar a data aqui não grava sozinho: use “{rotuloDeSalvar}”, no fim desta página.</>
+                  )}
+                </p>
+              )}
             </div>
           </div>
         </FormSection>
@@ -1773,7 +1808,11 @@ options={optionsForRow(line).map((product) => ({
 
         {isOperational && reservationStatus && (
           <FormSection
-            title="Reserva de Produto Acabado"
+            /* Duas seções quase homônimas separavam mil e duzentos pixels de
+               rolagem: esta AGE (separa produto para o pedido), a de baixo
+               REGISTRA (mostra o que já foi separado, lote a lote). O título
+               agora diz qual é qual. */
+            title="Reservar Produto Acabado"
             subtitle="Produto produzido depois do Plano precisa ser explicitamente reservado antes de poder ser expedido."
           >
             <div className="table-container">
@@ -2026,8 +2065,8 @@ options={optionsForRow(line).map((product) => ({
           <>
             {customerOrder?.reservation && (
               <FormSection
-                title="Reservas de Produto Acabado"
-                subtitle="Lote inelegível (vencido/bloqueado) pode ser realocado — o já expedido continua no lote original."
+                title="Produto Acabado já reservado — por lote"
+                subtitle="Registro do que já foi separado para este pedido. Lote inelegível (vencido/bloqueado) pode ser realocado — o já expedido continua no lote original."
               >
                 <div className="table-container">
                   <table className="table">

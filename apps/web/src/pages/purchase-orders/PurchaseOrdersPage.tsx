@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useInitialFilters } from "../../lib/filter-params";
 import { EntityLink } from "../../components/EntityLink";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { PurchaseOrderDTO, PurchaseOrderStatus, SupplierDTO } from "@veridi/shared";
 import { PURCHASE_ORDER_STATUSES, PURCHASE_ORDER_STATUS_LABELS } from "@veridi/shared";
 import { listPurchaseOrders } from "../../lib/purchase-orders-api";
@@ -187,7 +187,9 @@ export function PurchaseOrdersPage() {
                   if (event.key === "Enter") navigate(`/compras/ordens/${po.id}`);
                 }}
               >
-                <td className="col-tight is-code">{po.code}</td>
+                <td className="col-tight is-code">
+                  <EntityLink kind="purchaseOrder" id={po.id} code={po.code} />
+                </td>
                 <td className="col-flex">
                   <EntityLink kind="supplier" id={po.supplierId} code={po.supplierCode} name={po.supplierName} />
                 </td>
@@ -202,13 +204,12 @@ export function PurchaseOrdersPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <div className="table__actions">
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/compras/ordens/${po.id}`)}
+                      to={`/compras/ordens/${po.id}`}
                     >
                       Abrir
-                    </button>
+                    </Link>
                   </div>
                 </td>
               </tr>

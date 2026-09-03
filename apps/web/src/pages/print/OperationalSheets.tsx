@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import type {
   InventoryPositionRowDTO,
+  LotStatus,
   ProductionOrderDTO,
   QualityQueueRowDTO,
   ShipmentDTO,
@@ -50,6 +51,18 @@ function useSheetData<T>(load: () => Promise<T>): { data: T | null; error: strin
   }, []);
 
   return { data, error };
+}
+
+/**
+ * Situação do lote no papel.
+ *
+ * Vencimento manda sobre o estado gravado: um lote ainda marcado como
+ * disponível, mas fora da validade, não pode aparecer no papel como
+ * disponível.
+ */
+function situacaoDoLote(status: LotStatus | null, isExpired: boolean): string {
+  if (isExpired) return LOT_STATUS_LABELS.EXPIRED;
+  return status ? LOT_STATUS_LABELS[status] : "—";
 }
 
 function SheetError({ message }: { message: string }) {
@@ -177,6 +190,21 @@ export function InventoryPositionSheetPage() {
         { label: "Linhas", value: String(rows.length) },
       ]}
     >
+      {/*
+        Por que Disponível pode ser zero com Físico cheio.
+
+        Lote aguardando liberação da Qualidade, bloqueado ou vencido continua
+        no Físico e não entra no Disponível. Sem a coluna e sem esta linha, a
+        folha mostrava Físico 500 e Disponível 0 e quem estava no estoque com
+        o papel na mão não tinha como saber o motivo.
+      */}
+      <p className="print-doc__notice">
+        Disponível = Físico − Reservado, e só conta lote com situação
+        “{LOT_STATUS_LABELS.AVAILABLE}”. Lote “{LOT_STATUS_LABELS.AWAITING_RELEASE}”,
+        “{LOT_STATUS_LABELS.BLOCKED}” ou “{LOT_STATUS_LABELS.EXPIRED}” continua no
+        estoque físico e conta zero no disponível.
+      </p>
+
       <PrintTable
         columns={[
           "Código",
@@ -185,6 +213,7 @@ export function InventoryPositionSheetPage() {
           "Fornecedor / proprietário",
           "Validade",
           "Localização",
+          "Situação do lote",
           "Físico",
           "Reservado",
           "Disponível",
@@ -205,6 +234,7 @@ export function InventoryPositionSheetPage() {
             </td>
             <td>{formatPrintDate(row.expiryDate)}</td>
             <td>{printOrDash(row.location)}</td>
+            <td>{situacaoDoLote(row.status, row.isExpired)}</td>
             <td className="is-number">{formatQuantity(row.onHand)}</td>
             <td className="is-number">{formatQuantity(row.reserved)}</td>
             <td className="is-number">{formatQuantity(row.available)}</td>

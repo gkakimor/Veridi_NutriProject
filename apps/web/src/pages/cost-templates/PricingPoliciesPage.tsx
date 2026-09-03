@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { PricingPolicySummaryDTO } from "@veridi/shared";
 import { createPricingPolicy, listPricingPolicies } from "../../lib/cost-pricing-templates-api";
 import { formatDate } from "../../lib/dates";
@@ -176,13 +176,12 @@ export function PricingPoliciesPage() {
                   />
                 </td>
                 <td>
-                  <button
-                    type="button"
+                  <Link
                     className="btn btn--ghost btn--sm"
-                    onClick={() => navigate(`/gestao/politicas-precificacao/${policy.id}`)}
+                    to={`/gestao/politicas-precificacao/${policy.id}`}
                   >
                     Abrir
-                  </button>
+                  </Link>
                 </td>
               </tr>
             ))}

@@ -227,6 +227,7 @@ export function SuppliersPage() {
                 </td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <RowActions
+                    label={`Mais ações de ${supplier.code}`}
                     actions={[
                       {
                         label: supplier.active ? "Inativar" : "Reativar",

@@ -235,7 +235,9 @@ export function SamplesPage() {
                   if (event.key === "Enter") navigate(`/comercial/amostras/${sample.id}`);
                 }}
               >
-                <td className="is-code col-tight">{sample.code}</td>
+                <td className="is-code col-tight">
+                  <EntityLink kind="sample" id={sample.id} code={sample.code} />
+                </td>
                 <td className="is-code col-tight">{sample.testLabel}</td>
                 <td className="col-flex">
                   <EntityLink kind="project" id={sample.projectId} code={sample.projectCode} name={sample.projectName} />

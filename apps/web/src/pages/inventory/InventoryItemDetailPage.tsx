@@ -1,7 +1,7 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type { AllocationSuggestionDTO, CostReferenceDTO, InventoryItemDetailDTO } from "@veridi/shared";
 import { COST_SOURCE_LABELS, ITEM_TYPE_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
 import { getAllocationSuggestion, getInventoryItem } from "../../lib/inventory-api";
@@ -207,13 +207,12 @@ export function InventoryItemDetailPage() {
               >
                 Ajustar estoque
               </button>
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/estoque/movimentacoes?itemId=${detail.itemId}`)}
+                to={`/estoque/movimentacoes?itemId=${detail.itemId}`}
               >
                 Ver movimentações
-              </button>
+              </Link>
             </div>
           </div>
         </FormSection>
@@ -261,13 +260,12 @@ export function InventoryItemDetailPage() {
                         {formatQuantity(lot.available)} {detail.unitCode}
                       </td>
                       <td>
-                        <button
-                          type="button"
+                        <Link
                           className="btn btn--ghost btn--sm"
-                          onClick={() => navigate(`/estoque/lotes/${lot.lotId}`)}
+                          to={`/estoque/lotes/${lot.lotId}`}
                         >
                           Ver lote
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -360,13 +358,12 @@ export function InventoryItemDetailPage() {
                         <tr key={allocation.lotId}>
                           <td>{index + 1}</td>
                           <td>
-                            <button
-                              type="button"
+                            <Link
                               className="btn btn--ghost btn--sm"
-                              onClick={() => navigate(`/estoque/lotes/${allocation.lotId}`)}
+                              to={`/estoque/lotes/${allocation.lotId}`}
                             >
                               <span className="code">{allocation.lotCode}</span>
-                            </button>
+                            </Link>
                             {index === 0 && (
                               <div className="field__hint">
                                 {suggestion.strategy === "FIFO"

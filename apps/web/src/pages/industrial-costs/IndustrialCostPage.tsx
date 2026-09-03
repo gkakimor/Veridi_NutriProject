@@ -2,7 +2,7 @@ import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import type {
   EnergyCalculationMode,
@@ -428,13 +428,12 @@ export function IndustrialCostPage() {
           {canEdit && missingActiveFormulation && (
             <p className="form-alert" role="status">
               Este produto ainda não tem formulação ativa, e a estrutura de custos parte dela.{" "}
-              <button
-                type="button"
+              <Link
                 className="btn btn--ghost btn--sm"
-                onClick={() => navigate(`/producao/formulacoes/${data.productId}`)}
+                to={`/producao/formulacoes/${data.productId}`}
               >
                 Abrir formulação
-              </button>
+              </Link>
             </p>
           )}
           {version && (
@@ -719,6 +718,7 @@ export function IndustrialCostPage() {
                         {editable && (
                           <td onClick={(event) => event.stopPropagation()}>
                             <RowActions
+                              label={`Mais ações de ${line.description}`}
                               actions={[
                                 {
                                   label: "Remover premissa",
@@ -885,6 +885,7 @@ export function IndustrialCostPage() {
                         {editable && (
                           <td onClick={(event) => event.stopPropagation()}>
                             <RowActions
+                              label={`Mais ações de ${usage.resourceCode}`}
                               actions={[
                                 {
                                   label: "Remover recurso",

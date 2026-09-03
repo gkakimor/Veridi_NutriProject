@@ -73,13 +73,12 @@ export function CostCalculationPage() {
           >
             Imprimir / Salvar PDF
           </button>
-          <button
-            type="button"
+          <Link
             className="btn btn--ghost"
-            onClick={() => navigate(`/produtos/${calculation.productId}/custos`)}
+            to={`/produtos/${calculation.productId}/custos`}
           >
             ← Voltar
-          </button>
+          </Link>
         </div>
       </div>
 

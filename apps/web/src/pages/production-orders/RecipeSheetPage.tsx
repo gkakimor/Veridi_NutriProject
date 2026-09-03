@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState , useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { RecipeSheetDTO, RecipeSheetPartDTO, RecipeSheetRequirementDTO } from "@veridi/shared";
 import {
   PRODUCTION_PART_STATUS_LABELS,
@@ -53,7 +53,6 @@ function partBadgeClass(status: RecipeSheetPartDTO["status"]): string {
  * sempre da sessão (a tela nunca escolhe quem executou).
  */
 export function RecipeSheetPage() {
-  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
   const [sheet, setSheet] = useState<RecipeSheetDTO | null>(null);
@@ -438,13 +437,12 @@ export function RecipeSheetPage() {
                       O saldo reservado desta linha já foi consumido pelo apontamento de Consumo
                       Real. Registrar a pesagem novamente criaria uma duplicidade de consumo.
                     </p>
-                    <button
-                      type="button"
+                    <Link
                       className="btn btn--ghost btn--sm"
-                      onClick={() => navigate(`/producao/ordens/${sheet.productionOrderId}`)}
+                      to={`/producao/ordens/${sheet.productionOrderId}`}
                     >
                       Ver Consumo Real da OP
-                    </button>
+                    </Link>
                   </div>
                 )}
 
