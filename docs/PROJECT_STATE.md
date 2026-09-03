@@ -93,6 +93,14 @@ Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive e
   A forma nova custa **quatro**, com teste que conta consultas pelo log do
   driver. 78 das 108 ordens locais não têm cliente, então a aba fica vazia
   para a maioria estando correta, e o estado vazio diz isso. §47.
+- **Validação por interface + hardening** (`fix/release-hardening-e2e-ux`) —
+  3 UI E2E executados com todo dado nascendo pela tela, e depois corrigidos e
+  reexecutados: OP não conclui mais com material por reconciliar (§49), vírgula
+  decimal em português, prefixo `RIN` para recurso industrial, sidebar com
+  pista de rolagem, 125 mensagens de erro com `role`, ajuda própria em sete
+  telas. Baseline UX 7,1; reauditoria 6,6–7,6 antes de desfazer três
+  regressões da própria rodada. Ver
+  [VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md).
 - **Integridade de dado** (`fix/data-integrity-mediums`) — fecha os dois MEDIUM
   do guia passo a passo, ambos de falha silenciosa. Ativar formulação passou a
   gravar antes, com a gravação como condição: falhou, não ativa. E a busca de
@@ -118,10 +126,9 @@ Nenhum.
 
 ## Backlog aberto
 
-Zero CRITICAL, HIGH e MEDIUM. Cinco LOW, nenhum bloqueante — os dois mais
-recentes (15 e 16) são o mesmo padrão de catálogo truncado em telas que ainda
-não estouraram o teto; produtos aprovados estão em 784 de 1000. Ver
-[BACKLOG.md](BACKLOG.md).
+Zero CRITICAL, HIGH e MEDIUM. Quatro LOW, nenhum bloqueante — flake do runner,
+legado sem cliente, rota inválida sem página própria e Projeto sem rota de
+criação. Ver [BACKLOG.md](BACKLOG.md).
 
 ## Decisões de produto ainda em aberto (não bloqueantes)
 

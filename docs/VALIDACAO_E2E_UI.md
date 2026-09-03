@@ -1,8 +1,8 @@
-# Validação por interface — base limpa + jornadas ponta a ponta
+# Validação por interface — baseline, correção e revalidação
 
 **Rodada:** VALIDATION RELEASE · setembro de 2026
 **Base:** `bbabd2c` · branch `validation/full-ui-e2e`
-**Estado:** E2E 1 e E2E 2 concluídos · E2E 3 aguardando revisão
+**Estado:** baseline medido, corrigido, e revalidado com três E2E e nova auditoria
 
 ---
 
@@ -380,3 +380,159 @@ comportamento e não por teste.
 
 Nenhuma correção foi feita durante a validação, por decisão de método: uma
 rodada que conserta enquanto mede deixa de saber o que mediu.
+
+---
+---
+
+# Parte II — Correção e revalidação
+
+Tudo acima é o **baseline**: o que existia antes, medido. Fica registrado como
+foi, inclusive a nota 7,1 e os defeitos. Reescrever essa parte como se nunca
+tivessem acontecido tiraria a única prova de que a rodada mudou alguma coisa.
+
+## O que foi corrigido
+
+### A Ordem de Produção não conclui com material por reconciliar
+
+O HIGH da rodada. Regra nova em [PRODUCT_RULES §49](PRODUCT_RULES.md), três
+colunas anuláveis no requisito, portão no servidor e a mesma decisão repetida na
+tela antes do clique. Sem tolerância, porque o domínio já tomou essa posição em
+`RecipeWeighing`: *diferença é registrada, nunca escondida*.
+
+Motivo de material e motivo de produção **não compartilham campo** — uma OP pode
+fechar 100% do planejado com falta de material, e vice-versa.
+
+Ordens já concluídas **não** foram reconciliadas retroativamente: a regra vale
+para concluir, não para reescrever documento histórico.
+
+### Vírgula decimal, e o que ela escondia
+
+O relato inicial dizia recusa silenciosa. A segunda medição contradisse — a tela
+mostra erro e a rede devolve 400 — e a verificação revelou algo pior que recusa:
+em quatro lugares `Number(texto)` virava `NaN` e o resultado **seguia adiante**.
+
+O total da Ordem de Compra pulava a linha com vírgula e exibia um valor **menor
+do que a ordem vale**, sem sinal de linha faltando. O Plano de Atendimento
+acusava "Reservar + Produzir precisa somar exatamente" quando as parcelas
+somavam. Recusar é ruim; calcular errado com cara de certo é outra categoria.
+
+Tradutor único, com regra conservadora: um separador é sempre casa decimal, dois
+separadores devolvem inválido em vez de adivinhar milhar — `1.234` é ambíguo e
+adivinhar erra por um fator de mil, em campo que costuma ser preço ou peso.
+
+### Colisão de prefixo, e as três que vieram junto
+
+`REC` nomeava Recebimento **e** Recurso Industrial, com sequences separadas: os
+dois começavam em 1 e produziam códigos idênticos para coisas diferentes.
+Recurso passou a `RIN`.
+
+A correção não parou nas três letras. Um teste de contrato passou a afirmar duas
+coisas: nenhum prefixo se repete, e **nenhum fica declarado dentro de um
+serviço** — porque foi por estar fora do lugar onde a comparação acontece que a
+colisão passou meses. Esse segundo teste achou mais três na primeira execução:
+`CALC`, `EC` e `PREC`. Não colidiam ainda.
+
+### Erro que não se ouvia
+
+`.form-alert` é o padrão de erro do sistema: 125 usos, e **só 14 tinham `role`**.
+As outras eram visíveis e mudas para leitor de tela. Numa rodada que trata falha
+silenciosa como HIGH, mensagem que não chega a quem não vê é exatamente isso.
+
+Erro leva `alert`; condição persistente leva `status` — usar `alert` para o que
+fica parado na tela ensina a ignorar o alerta seguinte.
+
+### Precisão que o domínio não tem
+
+`0.0061224489795918367347 kg` numa tela onde alguém confere o número contra uma
+balança. O banco guarda `Decimal(18,6)`; o resto é ruído de divisão com
+aparência de exatidão. Corte em seis casas, e valor abaixo disso vira "≈ 0" e
+nunca "0" — zero significa "não precisa de material".
+
+### Navegação
+
+Sidebar virou coluna com miolo rolável e pista visível. Trilha `.doc-crumb`
+migrou para `PageBreadcrumbs` em todas as dezesseis telas, e a classe morta saiu
+do CSS. Pedido ganhou ajuda própria — antes abria a do Plano de Atendimento, e
+sumia justamente em "Em atendimento". Seis telas de gestão que não tinham
+"Como funciona" ganharam tópico próprio, com teste de contrato ligando página a
+tópico.
+
+## A revalidação
+
+Base recriada do zero, e as três jornadas rodadas em sequência.
+
+| Cenário | Veredito | Marcos | Verificações |
+|---|---|---|---|
+| E2E 1 — comercial, do projeto ao faturamento | PASS WITH FINDINGS | 28/28 | 194 |
+| E2E 2 — suprimentos e produto direto | PASS WITH FINDINGS | 18/18 | 68 |
+| E2E 3 — material do cliente e templates | **PASS** | 27/27 | 265 |
+
+Nenhum defeito de produto nos três. Os findings restantes são de método — por
+exemplo, a prova do bloqueio da OP fica limitada à camada de tela, porque tirar
+`disabled` do DOM não dispara o handler do React; a recusa do servidor existe e
+tem teste próprio.
+
+**Zero `RangeError` nos três**, inclusive em submissões provocadas com campo
+obrigatório vazio. Zero `console.error`, zero `pageerror`, zero resposta ≥ 400
+inesperada.
+
+O E2E 3 nunca havia rodado, e é o cenário mais difícil do domínio. Três provas
+merecem registro:
+
+- **Isolamento testado do jeito certo.** Os dois clientes receberam o *mesmo
+  item*, ambos com saldo — sem isso, "o dono foi gravado" seria só um rótulo.
+- **Recusa por proprietário provada ativamente.** Informar o lote do cliente B
+  no picking da OP do cliente A é recusado pelo servidor, e o lote de B fica
+  intocado. Provar ausência por ausência não prova nada.
+- **Falta sem caminho de compra, medida por assimetria.** Duas faltas
+  simultâneas na mesma tela: a da Veridi ganha "Ver sugestão de compra", a do
+  cliente ganha "depende de nova remessa do cliente", sem botão.
+
+## A auditoria depois — e o que ela encontrou de mim
+
+Três auditores independentes, mesma rubrica de doze eixos, sem saber o que fora
+corrigido nem que nota se esperava.
+
+| | Usuário final | Operacional | Visual e acessibilidade |
+|---|---|---|---|
+| Média | 6,6 | 7,6 | 6,9 |
+
+**Faixa 6,6 – 7,6, média 7,03**, contra 7,1 do baseline. Praticamente parado — e
+a razão é a parte mais útil desta rodada.
+
+**Três dos defeitos encontrados foram criados pelas correções, e dois deles eu
+havia declarado como feitos em mensagem de commit.**
+
+- **`scrollIntoView` sequestrou o Tab.** Revelar o item ativo do menu deslocava
+  o ponto de partida da navegação sequencial: o primeiro Tab depois de carregar
+  qualquer rota pulava o skip-link e tudo antes do item ativo. Consertar a
+  descoberta com o mouse custou a descoberta com o teclado.
+- **`dismissOnBackdrop` não funcionava.** O fundo escurecido é *irmão* do
+  diálogo no DOM, e a varredura que marca o fundo como `inert` o marcava junto:
+  sumia do teste de acerto do ponteiro e o clique nunca chegava. O commit
+  afirmava que a ajuda fechava clicando fora. Não fechava.
+- **A pista de rolagem media 1,16:1.** A receita foi copiada de onde a sombra
+  cai sobre superfície clara; sobre o verde escuro do menu, escurecer não
+  contrasta com nada.
+
+**Os três vieram do mesmo erro de método:** verificar a *presença da
+propriedade* em vez do *comportamento*. Perguntei ao CSS se o gradiente estava
+aplicado — estava, e era invisível.
+
+`scripts/check-a11y-regressoes.mjs` existe por causa disso: mede as seis
+correções por comportamento, incluindo `elementFromPoint` no ponto exato do
+clique. Antes devolvia o shell da aplicação; agora devolve o overlay.
+
+## Decisão de release
+
+A ser tomada pelo Product Owner com os números acima. O que a rodada entrega é o
+material para decidir, não a decisão:
+
+- **O sistema é operável pela interface.** 73 marcos em três jornadas, nenhuma
+  etapa precisou de API, SQL ou banco para avançar.
+- **Nenhum defeito de integridade permanece aberto.** O HIGH que existia — a OP
+  concluindo sem reconciliar — está fechado com regra, portão de servidor e
+  teste que falha contra o código anterior.
+- **A nota de UX não subiu**, e não subiu por um motivo específico e corrigível,
+  não por limite do sistema. As três regressões foram desfeitas depois da
+  auditoria; a nota atual não as reflete.

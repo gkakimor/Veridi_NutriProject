@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   CostReferenceDTO,
@@ -793,7 +793,20 @@ export function LotDetailPage() {
                       <td>
                         <EntityLink kind="item" id={material.itemId} code={material.itemCode} name={material.itemName} />
                       </td>
-                      <td>{material.lotCode ?? "—"}</td>
+                      <td>
+                        {/* O lote consumido leva ao lote consumido. Era texto
+                            puro ao lado de uma coluna Item que já era link, na
+                            mesma linha — e ir de um lote de produto acabado até
+                            a matéria-prima que o originou é exatamente a
+                            pergunta que esta tabela existe para responder. O
+                            `lotId` sempre esteve no DTO. */}
+                        <EntityLink
+                          kind="lot"
+                          id={material.lotId}
+                          code={material.lotCode}
+                          name={material.supplierLot}
+                        />
+                      </td>
                       <td>{material.supplierLot ?? "—"}</td>
                       <td className="is-numeric">
                         {material.quantity} {material.unitCode}
@@ -938,11 +951,21 @@ export function LotDetailPage() {
                         {usage.consumedQuantity} {usage.unitCode}
                       </td>
                       <td>
+                        {/* Mesma coisa no sentido inverso: da matéria-prima
+                            para os lotes de produto acabado que ela gerou. */}
                         {usage.finishedLots.length === 0
                           ? "—"
-                          : usage.finishedLots
-                              .map((finished) => finished.businessLotNumber ?? finished.lotCode)
-                              .join(", ")}
+                          : usage.finishedLots.map((finished, indice) => (
+                              <Fragment key={finished.lotId}>
+                                {indice > 0 ? ", " : ""}
+                                <EntityLink
+                                  kind="lot"
+                                  id={finished.lotId}
+                                  code={finished.businessLotNumber ?? finished.lotCode}
+                                  name={finished.businessLotNumber ? finished.lotCode : null}
+                                />
+                              </Fragment>
+                            ))}
                       </td>
                     </tr>
                   ))}

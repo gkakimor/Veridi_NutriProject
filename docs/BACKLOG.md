@@ -14,12 +14,14 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | CRITICAL | 0 |
 | HIGH | 0 |
 | MEDIUM | 0 |
-| LOW | 5 |
+| LOW | 4 |
 
-Nada operacional aberto. Os dois MEDIUM que vinham do guia passo a passo
-foram fechados: o catálogo truncado (12) e a ativação que descartava o
-rascunho (13). Restam LOW, e dois deles — 15 e 16 — são o mesmo padrão do 12
-em telas que ainda não estouraram o teto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
+A rodada de hardening pós-validação fechou tudo o que os três E2E e as duas
+auditorias de UX levantaram como defeito de produto, e mais o que a
+reauditoria achou nas próprias correções — ver
+[VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md). Os LOW que restam são o flake
+histórico do runner (3), o legado sem cliente (6), e dois registrados abaixo
+(17, 18) por serem decisão de produto, não conserto pendente. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
 correções em [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md).
 
@@ -451,7 +453,7 @@ como alteração.
 **Decisão / próxima ação:** nenhuma. Regra em
 [PRODUCT_RULES.md](PRODUCT_RULES.md) §48.
 
-### 14. Ativar estrutura de custos completa não pede confirmação — LOW
+### 14. Ativar estrutura de custos — resolvido no que era UX
 
 Ativar uma estrutura de custos congela tarifas e torna a versão imutável. O
 diálogo de confirmação só aparece **quando há pendência** — estrutura completa
@@ -461,7 +463,7 @@ estrutura, não.
 **Decisão / próxima ação:** confirmar sempre, dizendo o que se torna imutável,
 como fazem os outros dois documentos da mesma cadeia.
 
-### 15. Catálogos que ainda cabem no teto, mas vão passar — LOW
+### 15. Catálogos que ainda cabem no teto — resolvido
 
 O conserto do item 12 levou busca no servidor às telas de ITEM, onde o
 catálogo já tinha estourado. O mesmo padrão continua nas telas que carregam
@@ -486,7 +488,7 @@ aceita `onSearch`, e ligá-la é uma função por tela. Fazer quando o catálogo
 produtos passar de ~800, ou antes se a Veridi trouxer base maior na migração.
 Não fazer agora seria escolha diferente se algum desses números fosse outro.
 
-### 16. Item na entrada de material do cliente ainda é `<select>` nativo — LOW
+### 16. Item na entrada de material do cliente — resolvido
 
 `ReceiveCustomerMaterialPage` carrega matéria-prima e embalagem com
 `pageSize: 1000` — os mesmos 211 invisíveis das outras telas de item —, mas o
@@ -496,6 +498,31 @@ pendurar a busca no servidor sem antes trocar o componente.
 **Decisão / próxima ação:** trocar pelo seletor pesquisável quando a tela for
 mexida por outro motivo. É mudança de componente, não a mesma correção — e
 fazer só por causa disto seria refatorar uma tela que hoje funciona.
+
+
+### 17. Rota inválida redireciona em silêncio para o Dashboard — LOW
+
+`App.tsx` manda qualquer caminho desconhecido para `/` sem aviso, diferente
+do "não encontrado" bem escrito que lote e pedido inexistentes já mostram.
+Baixo impacto: só acontece com endereço digitado ou link quebrado.
+
+**Decisão / próxima ação:** página de "não encontrado" com o mesmo padrão
+das outras. Fazer junto com a próxima mudança de rotas.
+
+### 18. Projeto só nasce em modal, sem `/comercial/projetos/novo` — LOW
+
+Cliente, Produto, Item, Fornecedor e Recurso têm página canônica de criação;
+Projeto — a entidade da qual tudo depende — não tem. Confirmado: F5 com o
+modal aberto perde o rascunho.
+
+**Decisão / próxima ação:** espelhar o padrão de `ItemCreatePage`. É a
+mesma correção já feita cinco vezes, e o custo é conhecido.
+
+### Não reproduzido — registrado para não reabrir
+
+- **CEP inexistente "some sem erro".** Medido ao vivo: "CEP não encontrado.
+  Preencha o endereço manualmente." aparece aos ~4 s, latência do ViaCEP. O
+  auditor observou por menos tempo. Não é defeito.
 
 ### Decisões de produto em aberto — não bloqueantes
 

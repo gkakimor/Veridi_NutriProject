@@ -128,6 +128,23 @@ export function SamplesPage() {
           estoque de produto acabado. */}
       <ContextHelp topic={helpTopics["comercial.amostras"]} />
 
+      {/* Amostra nasce dentro de um projeto, porque a numeração T1, T2, T3 é
+          sequencial POR projeto — a regra está certa. O que faltava era dizer
+          isso aqui: quem entrava por este menu encontrava uma lista sem botão
+          de criar e sem nada indicando onde criar. A tela de Expedições, que
+          tem exatamente a mesma situação, já resolvia assim. */}
+      <div className="callout">
+        <p>
+          Novas amostras são criadas dentro de um Projeto, no bloco "Amostras / testes" — a
+          numeração T1, T2, T3 é sequencial por projeto.
+        </p>
+        <div className="line-actions">
+          <Link className="btn btn--secondary btn--sm" to="/comercial/projetos">
+            Ir para Projetos
+          </Link>
+        </div>
+      </div>
+
       <div className="toolbar">
         <div className="toolbar__search">
           <label className="sr-only" htmlFor="samples-search">
