@@ -3272,3 +3272,53 @@ Erro visível e mudo é erro que não chegou. Toda mensagem de falha carrega
 indisponível carrega `role="status"`. A distinção não é decorativa: usar
 `alert` para o que fica parado na tela ensina a ignorar o alerta seguinte, que
 pode ser de verdade.
+
+## §50 — Precisão do dinheiro, rastreabilidade física e opção de filtro
+
+**Preço unitário e total são dois números com precisões diferentes.** As colunas
+de preço unitário são `Decimal(14,4)` e a exibição mostra de 2 a 4 casas,
+conforme o preço: `4,0500` lê `R$ 4,05`, `4,0531` lê `R$ 4,0531`. Total de linha
+e de documento ficam sempre em 2 casas.
+
+O preço nunca é arredondado antes da aritmética, e nunca é arredondado no banco:
+um pedido fechado a `4,0531` guarda `4,0531`, porque esse é o valor histórico do
+acordo. Arredondar para melhorar a aparência do documento falsifica o que o
+cliente aceitou.
+
+**O total do documento é a soma das linhas impressas**, não a soma dos produtos
+cheios. Somar tudo e arredondar uma vez no fim é correto em estatística e errado
+num documento: o que o cliente confere são as linhas, e `Σ round(linha)` difere
+de `round(Σ linha)` em até um centavo por linha.
+
+Um documento tem de fechar na mão de quem confere. Exibir `R$ 4,05` ao lado de
+um total calculado com `4,0531` produz uma diferença que não sai de nenhuma
+conta possível com o papel na mão.
+
+**Rastreabilidade de lote é física.** A pergunta "para onde este lote foi?" é
+respondida pela relação de saída — `ShipmentLine.lotId` — e nunca pelo Pedido
+associado à Ordem de Produção que o produziu. Estoque acabado é fungível: um
+lote produzido para um pedido pode legitimamente atender outro, e tratar isso
+como anomalia faz a tela responder que o lote não saiu quando ele saiu. Essa é
+a pergunta de recall, e ela nunca pode receber uma negativa falsa.
+
+Origem comercial e destino físico aparecem separados: o pedido de origem pode
+não existir, e cada saída mostra o pedido realmente atendido, o cliente, a data
+e a quantidade.
+
+**Filtro de lista deriva da lista canônica do domínio**, nunca de uma cópia à
+mão dentro do schema da rota. Uma tela que oferece uma opção que a consulta
+recusa devolve `400` e mantém a tabela anterior com o contador intacto — o
+operador lê um resultado que não corresponde ao filtro escolhido. Aceitar
+qualquer valor não é a saída: valor inventado continua sendo recusado.
+
+Consultar todo tipo de movimento é auditoria; **criar** qualquer tipo é
+falsificação. O schema de criação de ajuste segue restrito a ajuste e perda.
+
+**Quem muda a quantidade em estoque tem nome e papel.** Ajuste e contagem
+gravam o usuário real, como recebimento, consumo, produção e expedição já
+faziam, e exigem papel — a operação que muda a quantidade não pode estar mais
+aberta que a que muda o status do lote.
+
+**Liberação afirma que o lote pode ser usado.** Lote vencido não é liberável:
+o status ia para Disponível e a listagem imprimia "Vencido" por cima, com
+disponível zero — uma liberação registrada sobre material inutilizável.

@@ -393,3 +393,42 @@ recolhido do mercado. A tela responde que ele não saiu.
 Correção sugerida (não aplicada): remover `customerOrderId: pedido.id` do
 `where` e derivar o pedido de cada expedição encontrada, já que o destino
 comercial de um lote pode ser mais de um pedido.
+
+## ADV-F13 — Drift de centavo entre a soma das linhas e o total do documento
+
+**Severidade:** HIGH · **Achado NOVO, encontrado na rodada de correção**
+
+A Onda 3 não conseguiu exercitar este caso pela interface: um faturamento tem
+uma linha por linha de expedição, que vem de uma linha de reserva, e um
+orçamento aceita cada produto uma única vez — com um lote livre no substrato,
+não havia caminho de tela para montar duas linhas no mesmo documento. Ficou
+registrado como **em aberto, não refutado**.
+
+O handoff de correção mandou escrever o teste barato de serviço mesmo assim, e
+dizer que estava refutado se passasse. **Não passou.**
+
+Duas linhas com preço de quatro casas:
+
+```
+123 × 4,0531 = 498,5313  →  linha impressa  R$   498,53
+147 × 9,7203 = 1428,8841 →  linha impressa  R$ 1.428,88
+                            soma das linhas R$ 1.927,41
+                            total do rodapé R$ 1.927,42
+```
+
+O total somava os produtos **não arredondados** e arredondava uma vez no fim.
+`Σ round(linha)` ≠ `round(Σ linha)`: um centavo que não sai de nenhuma conta
+possível com o documento na mão, e que cresce com o número de linhas.
+
+Somar e arredondar no fim é o correto em estatística e o errado num documento
+— o que o cliente confere são as linhas. A ordem passou a ser a mesma da nota
+fiscal: cada linha fecha em dois decimais, e o documento é a soma dessas
+linhas.
+
+Corrigido em `billings.service.ts`, com regressão em
+`billing-price.test.ts` — o teste que o encontrou.
+
+**Nota de método:** este achado só existe porque o handoff pediu o teste de um
+caso que a interface não alcança. "Não consegui reproduzir pela tela" não é o
+mesmo que "não acontece", e a diferença entre as duas frases era um centavo por
+linha em todo documento de mais de uma linha.

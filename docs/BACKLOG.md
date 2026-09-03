@@ -12,9 +12,9 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 | Severidade | Abertos |
 |---|---|
 | CRITICAL | 0 |
-| HIGH | 4 |
-| MEDIUM | 3 |
-| LOW | 6 |
+| HIGH | 0 |
+| MEDIUM | 0 |
+| LOW | 2 |
 
 A rodada de hardening pós-validação fechou tudo o que os três E2E e as duas
 auditorias de UX levantaram como defeito de produto, e mais o que a
@@ -24,13 +24,16 @@ reauditoria achou nas próprias correções — ver
 fechados — findings e correções em
 [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md).
 
-Os onze itens abertos vêm todos da **rodada adversarial** posterior, que atacou
-o núcleo operacional procurando o que o sistema aceita em silêncio — ver
-[VALIDACAO_E2E_ADVERSARIAL_CORE.md](VALIDACAO_E2E_ADVERSARIAL_CORE.md). Nenhum é
-corrupção de dado: os dois HIGH mais graves são uma consulta que responde errado
-e um documento que exibe menos casas do que calcula. Os dois LOW herdados — o
-flake do runner (3) e o legado local sem cliente (6) — continuam abertos e
-seguem não sendo defeito do produto atual.
+A **rodada adversarial** posterior atacou o núcleo operacional procurando o que
+o sistema aceita em silêncio e levantou onze achados reproduzíveis — ver
+[VALIDACAO_E2E_ADVERSARIAL_CORE.md](VALIDACAO_E2E_ADVERSARIAL_CORE.md). Nenhum
+era corrupção de dado. **Os onze foram fechados**, mais um décimo segundo que
+só apareceu durante a própria correção: o drift de centavo entre a soma das
+linhas e o total do documento, que a interface não conseguia montar e o modelo
+produzia (itens 19 a 23).
+
+Os dois LOW que restam são os herdados — o flake do runner (3) e o legado local
+sem cliente (6) — e seguem não sendo defeito do produto atual.
 
 ---
 
@@ -541,7 +544,7 @@ texto cinza, só o cursor mudava. Passaram a usar a mesma classe de link que
 Cliente e Produto já usam na mesma tela. A rota canônica do Projeto continua
 sendo a única.
 
-### 19. Rastreabilidade nega expedição de lote que saiu por outro pedido — HIGH
+### 19. Rastreabilidade nega expedição de lote que saiu por outro pedido — resolvido
 
 `apps/api/src/modules/lots/traceability.service.ts:90` filtra as expedições do
 lote por `customerOrderId` do Pedido **da Ordem de Produção**. O predicado
@@ -557,11 +560,19 @@ mostra zero expedições.
 O dado está certo; a consulta é que erra. Pesa porque "por onde este lote saiu"
 é a pergunta de recall.
 
-**Decisão / próxima ação:** remover `customerOrderId` do `where` e derivar o
-pedido de cada expedição encontrada — o destino comercial de um lote pode ser
-mais de um pedido.
+**Corrigido.** O `where` passou a usar só `lines: { some: { lotId } }`, que já
+estava na mesma consulta e sempre foi o predicado certo. A seção separou as duas
+perguntas que estavam misturadas: **Pedido de origem** é por que o lote foi
+produzido — e pode não existir, numa OP para estoque —, enquanto a tabela de
+saídas mostra, por expedição, o pedido REALMENTE atendido, o cliente, a data e a
+quantidade.
 
-### 20. Documento de faturamento não fecha com os números que exibe — HIGH
+Verificado na própria evidência: a tela do lote `LT-20260903-000803` passou de
+"Este lote ainda não foi expedido" para `EXP-000235 → PED-000485 · 400 un`.
+
+**Decisão / próxima ação:** nenhuma.
+
+### 20. Documento de faturamento não fecha com os números que exibe — resolvido
 
 O preço unitário sai com duas casas (`billings.service.ts:50`,
 `formatMoney = value.toFixed(2)`) e o total da linha é calculado sobre o valor
@@ -575,12 +586,25 @@ unitário sai com quatro casas em `customer-orders`, `pricing`, `product-cmv` e
 `quotes`; só `billings` e `purchase-orders` aplicam o formatador de dinheiro a
 um preço unitário.
 
-**Decisão / próxima ação:** decidir a precisão de exibição do preço no
-faturamento e aplicá-la também ao cálculo, para que documento e conferência
-usem o mesmo número. Rever `purchase-orders.service.ts:88` na mesma passada —
-está na mesma classe e não foi medido.
+**Corrigido, com a regra escrita.** Preço unitário: de 2 a 4 casas, conforme o
+preço. Total de linha e de documento: sempre 2. O preço nunca é arredondado
+antes da aritmética, e o acordo no banco não foi tocado — `4,0531` continua
+sendo `4,0531`.
 
-### 21. Ajuste de estoque não registra quem fez, e não exige papel — HIGH
+`formatUnitPriceBRL` (web) e `csvUnitPrice` (exportação) concentram a regra em
+um lugar cada, aplicados a 24 pontos de exibição em 16 telas, incluindo os
+documentos impressos. Na API, `formatMoney` passou a valer só para valor já
+somado.
+
+Compras entrou na mesma correção: a precisão foi medida no banco, não suposta —
+`purchase_order_lines.unitPrice` também é `Decimal(14,4)`.
+
+Verificado na evidência: `FAT-000152` mostra `R$ 4,0531 × 123` e o documento diz
+`R$ 498,53`; a conferência manual fecha.
+
+**Decisão / próxima ação:** nenhuma.
+
+### 21. Ajuste de estoque não registra quem fez, e não exige papel — resolvido
 
 Ajustes gravam `createdBy = "Ambiente local"` (constante de sistema) enquanto
 recebimento, consumo, produção e expedição gravam o usuário real.
@@ -589,10 +613,20 @@ enquanto bloquear e liberar lote exigem QUALITY ou ADMIN.
 
 Contraria `CLAUDE.md`: "Inventory history is auditable."
 
-**Decisão / próxima ação:** gravar o ator real e definir o papel exigido para
-ajuste e contagem. A escolha do papel é decisão de produto.
+**Corrigido.** Ajuste e contagem gravam o usuário real; `SYSTEM_ACTOR` virou
+último recurso para chamada sem ator (script, migração), com o comentário
+dizendo isso. As duas rotas passaram a exigir papel — `ADMIN`, `PRODUCTION` ou
+`QUALITY` — e `ForbiddenError` passou a mapear 403 no módulo, que era o motivo
+de um gate novo responder 500.
 
-### 22. Filtros oferecem opções que a API recusa — HIGH e MEDIUM
+**PURCHASING ficou de fora** porque compra e recebe, e o recebimento tem rota
+própria; `VIEWER` é leitura por definição.
+
+**Decisão / próxima ação:** a matriz fina por papel continua pauta de produto.
+Este conjunto é o menor gate defensável, não a palavra final — se a Veridi disser
+que a contagem é de outro papel, a mudança é uma linha em `STOCK_WRITE_ROLES`.
+
+### 22. Filtros oferecem opções que a API recusa — resolvido
 
 Dois filtros renderizam o enum inteiro do domínio enquanto o schema de consulta
 lista um subconjunto à mão. A tela responde `400`, mostra "Erro de validação" e
@@ -612,11 +646,23 @@ filtro, o resto fecha. `reports` lista os 6 status completos e
 `ProductionReports.tsx` escreve à mão o mesmo subconjunto que o schema aceita.
 São dois desvios, não um padrão.
 
-**Decisão / próxima ação:** derivar os dois schemas dos `readonly` já exportados
-em `packages/shared` (`INVENTORY_MOVEMENT_TYPES`, `CUSTOMER_ORDER_STATUSES`),
-para que um estado novo do domínio não nasça quebrando um filtro.
+**Corrigido como a causa, não como os dois casos.** Os dois schemas passaram a
+derivar de `INVENTORY_MOVEMENT_TYPES` e `CUSTOMER_ORDER_STATUSES`, que já
+existiam em `packages/shared`.
 
-### 23. Achados MEDIUM e LOW da rodada adversarial
+A regressão é escrita sobre os MAPAS DE RÓTULO, que é de onde a tela monta o
+`<select>`: se alguém acrescentar um estado ao domínio sem acrescentá-lo ao
+schema, o teste falha antes de o filtro quebrar na mão do operador. Valor
+inventado continua sendo recusado — aceitar tudo seria a correção preguiçosa,
+que troca um erro visível por uma lista silenciosamente errada.
+
+O schema de CRIAÇÃO de ajuste segue restrito a ajuste e perda, agora com o
+motivo escrito no código: consultar todos os tipos é auditoria, criar qualquer
+tipo é falsificação.
+
+**Decisão / próxima ação:** nenhuma.
+
+### 23. Achados MEDIUM e LOW da rodada adversarial — resolvidos
 
 - **MEDIUM · Badge de Status fora da área visível** na lista de Pedidos
   (`scrollWidth` 1296 contra `clientWidth` 1138).
@@ -632,8 +678,60 @@ para que um estado novo do domínio não nasça quebrando um filtro.
   descreve outro defeito. Hoje não chega ao usuário: a tela converte antes.
   Latente.
 
-**Decisão / próxima ação:** os dois MEDIUM valem correção antes da próxima
-demonstração; os LOW cabem na próxima passada de UX.
+**Todos corrigidos.**
+
+- **Badge de Status** — a causa era `white-space: nowrap` em três colunas de
+  rótulo longo ("Parcialmente expedido", "Aguardando faturamento"). Nasceu
+  `.col-label`, que permite quebra onde `col-tight` não permitia. Medido:
+  1296px → 1138px, zero cortado, Status dentro da área visível.
+- **"Preparar Expedição"** desabilita sem nada reservado, como o botão irmão ao
+  lado já fazia.
+- **Liberação de lotes** ganhou entrada em Qualidade, apontando para a lista já
+  filtrada. O realce do menu passou a considerar a query, senão dois itens
+  acenderiam para a mesma tela.
+- **Lote vencido** não é mais liberável: o status ia para Disponível e a
+  listagem imprimia "Vencido" por cima, com disponível zero. Mesmo princípio do
+  CoA — liberar afirma que o lote pode ser usado.
+- **Plano de Atendimento** compara a reserva com o disponível que está na coluna
+  ao lado, diz o máximo por produto e desabilita antes do envio. Antes, o
+  servidor recusava com 400 e o preenchimento de TODAS as linhas era descartado.
+- **Parser decimal** duplicado eliminado: Projetos usa a implementação
+  compartilhada, que aceita vírgula e cuja mensagem descreve o defeito real.
+
+**Decisão / próxima ação:** nenhuma.
+
+### 24. Drift de centavo entre a soma das linhas e o total do documento — resolvido
+
+Achado **novo**, encontrado durante a própria rodada de correção, e o mais
+instrutivo dela.
+
+A rodada adversarial não conseguiu montar um faturamento de duas linhas pela
+interface — um faturamento tem uma linha por linha de expedição, que vem de uma
+linha de reserva, e um orçamento aceita cada produto uma única vez. Ficou
+registrado como **em aberto, não refutado**, e o handoff de correção mandou
+escrever o teste de serviço mesmo assim, dizendo que era para registrar como
+refutado se passasse.
+
+Não passou:
+
+```
+123 × 4,0531 = 498,5313  →  linha impressa  R$   498,53
+147 × 9,7203 = 1428,8841 →  linha impressa  R$ 1.428,88
+                            soma das linhas R$ 1.927,41
+                            total do rodapé R$ 1.927,42
+```
+
+O total somava os produtos não arredondados e arredondava uma vez no fim.
+`Σ round(linha)` ≠ `round(Σ linha)`: um centavo por linha, num documento em que
+o que o cliente confere são as linhas.
+
+**Corrigido** para a ordem que a nota fiscal usa: cada linha fecha em dois
+decimais, e o documento é a soma dessas linhas. Regressão no teste que o
+encontrou.
+
+**Decisão / próxima ação:** nenhuma. Fica a nota de método: "não consegui
+reproduzir pela tela" não é o mesmo que "não acontece", e a distância entre as
+duas frases era um centavo por linha em todo documento de mais de uma linha.
 
 ### Não reproduzido — registrado para não reabrir
 

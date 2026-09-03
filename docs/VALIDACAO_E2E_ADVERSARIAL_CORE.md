@@ -9,9 +9,14 @@ duplicidade, lote trocado, rastreabilidade rompida, faturamento duplicado,
 estado impossível, regra contornável, erro de concorrência e tela que induz o
 operador ao erro.
 
-**Veredito: PASS WITH FINDINGS.** Zero CRITICAL. Dois HIGH reproduzíveis, ambos
-em consulta e apresentação — nenhum em gravação. Nenhum dado corrompido em
-nenhuma das quatro ondas.
+**Veredito da validação: PASS WITH FINDINGS.** Zero CRITICAL. Nenhum dado
+corrompido em nenhuma das quatro ondas: todos os achados estão em consulta,
+apresentação e controle de acesso — nenhum no que grava.
+
+**Estado atual: fechada.** Os onze achados reproduzíveis foram corrigidos, mais
+um décimo segundo que só apareceu durante a correção. Ver
+[Fechamento](#fechamento) no fim deste documento; o corpo abaixo é o registro do
+que foi encontrado, preservado como estava.
 
 ---
 
@@ -206,3 +211,59 @@ node scripts/validate-adversarial-traceability.mjs
 Estado por suíte em `handoff/adversarial-*-state.json`; fotos em
 `handoff/screens/adversarial/`. Apagar o arquivo de estado força a suíte a
 montar a massa do zero — o que cria registros novos.
+
+---
+
+# Fechamento
+
+Product Ownership decidiu **corrigir antes de apresentar**, e não apresentar os
+HIGH com ressalva. Os onze achados reproduzíveis foram fechados na branch
+`fix/adversarial-core-findings`, cada um com correção, regressão e verificação
+na massa que carrega a prova original.
+
+## O que mudou de regra
+
+**Preço unitário e total são dois números com precisões diferentes.** Preço
+unitário: de 2 a 4 casas, conforme o preço. Total de linha e de documento:
+sempre 2, e o total do documento é a **soma das linhas impressas**, não a soma
+dos produtos cheios. O preço acordado no banco nunca é arredondado — `4,0531`
+continua sendo `4,0531`, porque é o valor histórico do acordo.
+
+**Rastreabilidade de lote é física.** A relação autoritativa para "por onde este
+lote saiu" é `ShipmentLine.lotId`, nunca o pedido associado à OP que o produziu.
+Um lote produzido para um pedido pode legitimamente atender outro, e isso não é
+anomalia — é estoque fungível.
+
+**Filtro de lista deriva da lista canônica do domínio.** Nunca uma cópia à mão
+dentro do schema da rota.
+
+## Verificação na evidência original
+
+Rodada pela interface, nos mesmos registros que falharam
+(`scripts/check-adversarial-fixes.mjs`):
+
+| Achado | Antes | Depois |
+|---|---|---|
+| ADV-F10 | `R$ 4,05 × 123` num documento de `R$ 498,53` | `R$ 4,0531 × 123 = R$ 498,53` |
+| ADV-F12 | "Este lote ainda não foi expedido" | `EXP-000235 → PED-000485 · 400 un` |
+| ADV-F6 | 5 das 9 opções davam 400 | 9 de 9 aceitas |
+| ADV-F1 | 2 das 6 opções davam 400 | 6 de 6 aceitas |
+| ADV-F5 | `createdBy = "Ambiente local"` | usuário real; VIEWER recebe 403 |
+| ADV-F7 | lote vencido ia para Disponível | recusado, estado intacto |
+| ADV-F4 | sem entrada no menu | Qualidade › Liberação de lotes |
+| ADV-F2 | 158px cortados, Status fora | 0px cortados, Status visível |
+
+11 verificações, 11 ok, zero `console.error`.
+
+## O achado que a interface não alcançava
+
+O drift de somatório multilinha estava registrado acima como **em aberto, não
+refutado** — não havia caminho de tela para montar duas linhas no mesmo
+faturamento. O teste de serviço foi escrito mesmo assim, e **falhou**: as linhas
+impressas somavam `R$ 1.927,41` e o rodapé dizia `R$ 1.927,42`.
+
+Um centavo por linha, em todo documento de mais de uma linha, num lugar onde o
+cliente confere conta. Corrigido junto.
+
+Vale como método: *"não consegui reproduzir pela tela"* não é o mesmo que *"não
+acontece"*.
