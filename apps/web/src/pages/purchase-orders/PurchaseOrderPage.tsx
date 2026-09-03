@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState , useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type {
+  ItemDTO,
   PurchaseOrderDTO,
   PurchaseOrderStatus,
   SupplierItemDTO,
@@ -50,6 +52,44 @@ interface ItemOption {
   name: string;
   unitCode: string;
   active: boolean;
+}
+
+/**
+ * Primeira página do catálogo — o que a lista mostra antes de digitar.
+ *
+ * Era 1000 por tipo, e o catálogo tem 1.211 matérias-primas ativas: 211
+ * existiam e não apareciam na busca, sem aviso — e a linha oferece "+ Novo
+ * item de estoque" no topo, então quem não achava cadastrava duplicata.
+ * Quem digita agora pergunta ao servidor (`buscarItens`).
+ */
+const PRIMEIRA_PAGINA = 50;
+
+/** Uma conversão só de item do catálogo para opção da tela. */
+function itemOption(item: ItemDTO): ItemOption {
+  return {
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    unitCode: item.unitCode,
+    active: item.active,
+  };
+}
+
+/** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
+function opcaoDoItem(item: ItemOption): EntityOption {
+  return {
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    ...(item.active ? {} : { hint: "inativo" }),
+  };
+}
+
+/** Mescla sem duplicar e sem trocar a referência à toa. */
+function mesclarItens(atual: ItemOption[], novos: ItemOption[]): ItemOption[] {
+  const conhecidos = new Set(atual.map((item) => item.id));
+  const ineditos = novos.filter((item) => !conhecidos.has(item.id));
+  return ineditos.length === 0 ? atual : [...atual, ...ineditos];
 }
 
 interface LineRow {
@@ -228,22 +268,37 @@ export function PurchaseOrderPage() {
       .then((result) => setActiveSuppliers(result.suppliers))
       .catch(() => setActiveSuppliers([]));
     Promise.all([
-      listItems({ type: "RAW_MATERIAL", active: true, pageSize: 1000 }),
-      listItems({ type: "PACKAGING", active: true, pageSize: 1000 }),
+      listItems({ type: "RAW_MATERIAL", active: true, pageSize: PRIMEIRA_PAGINA }),
+      listItems({ type: "PACKAGING", active: true, pageSize: PRIMEIRA_PAGINA }),
     ])
       .then(([raw, packaging]) =>
-        setActiveItems(
-          [...raw.items, ...packaging.items].map((item) => ({
-            id: item.id,
-            code: item.code,
-            name: item.name,
-            unitCode: item.unitCode,
-            active: item.active,
-          })),
-        ),
+        setActiveItems([...raw.items, ...packaging.items].map(itemOption)),
       )
       .catch(() => setActiveItems([]));
   }, []);
+
+  /**
+   * Busca no servidor, com os MESMOS filtros de negócio da carga inicial:
+   * só matéria-prima e embalagem, só ativos, e fora o que outra linha já
+   * pede — as duas primeiras no servidor, a terceira aqui, exatamente como
+   * `optionsForRow` já faz com a primeira página. Comprar continua sendo
+   * possível só para quem já era comprável.
+   */
+  async function buscarItens(row: LineRow, termo: string): Promise<EntityOption[]> {
+    const [raw, packaging] = await Promise.all([
+      listItems({ type: "RAW_MATERIAL", active: true, search: termo, pageSize: PRIMEIRA_PAGINA }),
+      listItems({ type: "PACKAGING", active: true, search: termo, pageSize: PRIMEIRA_PAGINA }),
+    ]);
+    const encontrados = [...raw.items, ...packaging.items].map(itemOption);
+    // O achado entra no catálogo da tela: `handleLineItemChange` lê código,
+    // nome e unidade de `activeItems`. Sem a mesclagem, escolher um item de
+    // fora da primeira página deixaria a linha sem unidade.
+    setActiveItems((atual) => mesclarItens(atual, encontrados));
+    const usadosPorOutrasLinhas = new Set(
+      lines.filter((l) => l.key !== row.key).map((l) => l.itemId),
+    );
+    return encontrados.filter((item) => !usadosPorOutrasLinhas.has(item.id)).map(opcaoDoItem);
+  }
 
   const status: PurchaseOrderStatus = purchaseOrder?.status ?? "DRAFT";
   const isDraftEditable = isNew || status === "DRAFT";
@@ -304,23 +359,40 @@ export function PurchaseOrderPage() {
   const prefilled = useRef(false);
   useEffect(() => {
     if (!isNew || prefilled.current || !shortageItemId) return;
-    const item = activeItems.find((option) => option.id === shortageItemId);
-    if (!item) return;
     prefilled.current = true;
-    setLines([
-      {
-        key: nextRowKey(),
-        itemId: item.id,
-        itemCode: item.code,
-        itemName: item.name,
-        unitCode: item.unitCode,
-        orderedQuantity: shortageQuantity,
-        unitPrice: "",
-        receivedQuantity: "0",
-        openQuantity: "0",
-      },
-    ]);
-  }, [isNew, shortageItemId, shortageQuantity, activeItems]);
+    /*
+     * O item em falta é buscado pelo id, não procurado na lista carregada.
+     * Antes o atalho "Ir para compras" dependia de o item estar na página do
+     * catálogo; fora dela a OC abria vazia e o atalho não fazia nada — e é
+     * justamente o item que ninguém acha que costuma faltar.
+     */
+    void getItem(shortageItemId)
+      .then((dto) => {
+        const item = itemOption(dto);
+        setActiveItems((atual) => mesclarItens(atual, [item]));
+        // Só preenche documento vazio: o rascunho restaurado de um cadastro
+        // no contexto é mais recente que o atalho e não pode ser trocado por
+        // uma linha só.
+        setLines((atual) =>
+          atual.length > 0
+            ? atual
+            : [
+                {
+                  key: nextRowKey(),
+                  itemId: item.id,
+                  itemCode: item.code,
+                  itemName: item.name,
+                  unitCode: item.unitCode,
+                  orderedQuantity: shortageQuantity,
+                  unitPrice: "",
+                  receivedQuantity: "0",
+                  openQuantity: "0",
+                },
+              ],
+        );
+      })
+      .catch(() => undefined);
+  }, [isNew, shortageItemId, shortageQuantity]);
 
   /**
    * Cadastro de fornecedor e de item na TELA OFICIAL, sem perder a OC.
@@ -766,12 +838,8 @@ export function PurchaseOrderPage() {
                           value={line.itemId}
                           onChange={(value) => handleLineItemChange(line.key, value)}
                           placeholder="Digite código ou nome do item…"
-                          options={optionsForRow(line).map((item) => ({
-                            id: item.id,
-                            code: item.code,
-                            name: item.name,
-                            ...(item.active ? {} : { hint: "inativo" }),
-                          }))}
+                          options={optionsForRow(line).map(opcaoDoItem)}
+                          onSearch={(termo) => buscarItens(line, termo)}
                           canCreate
                           createLabel="Novo item de estoque"
                           onCreateNew={() =>

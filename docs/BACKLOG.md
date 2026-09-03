@@ -13,13 +13,13 @@ auditoria e regras duráveis vivem em outros arquivos — ver [Referências](#re
 |---|---|
 | CRITICAL | 0 |
 | HIGH | 0 |
-| MEDIUM | 2 |
-| LOW | 3 |
+| MEDIUM | 0 |
+| LOW | 5 |
 
-Dois MEDIUM abertos, os dois descobertos ao capturar as telas para o guia
-passo a passo: catálogo truncado em silêncio (12) e ativação de formulação que
-descarta o rascunho (13). Nenhum impede operar, mas os dois produzem dado
-errado sem avisar. As três auditorias profundas (VAL-LEG-01, 02, 03), o
+Nada operacional aberto. Os dois MEDIUM que vinham do guia passo a passo
+foram fechados: o catálogo truncado (12) e a ativação que descartava o
+rascunho (13). Restam LOW, e dois deles — 15 e 16 — são o mesmo padrão do 12
+em telas que ainda não estouraram o teto. As três auditorias profundas (VAL-LEG-01, 02, 03), o
 hardening pré-cliente e o polimento visual estão fechados — findings e
 correções em [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md).
 
@@ -366,7 +366,7 @@ onde a tarifa entra — recurso sem tarifa não serve a estrutura nenhuma.
 
 **Decisão / próxima ação:** nenhuma.
 
-### 12. Catálogo truncado em silêncio nas telas de escolher item — MEDIUM
+### 12. Catálogo truncado em silêncio nas telas de escolher item — resolvido
 
 As telas que precisam de uma lista de itens carregam o catálogo inteiro com
 `pageSize` fixo e filtram no navegador. Acima do teto, o item **existe e não
@@ -392,13 +392,36 @@ que some da tela durante o lançamento, e o desfecho provável é duplicata no
 cadastro de itens — que depois aparece como duas matérias-primas iguais com
 saldos separados.
 
-**Decisão / próxima ação:** a busca precisa ir ao servidor em vez de filtrar
-uma lista pré-carregada, ou a lista precisa dizer que está truncada. O
-`SearchableEntitySelect` já tem o aviso de "+N resultados — refine a busca"
-para o que passa de 50 renderizados; o que falta é o mesmo para o que nunca
-chegou do servidor. Descoberto ao capturar as telas para o guia passo a passo.
+**Corrigido na busca, não no teto.** `SearchableEntitySelect` ganhou a
+capacidade opcional `onSearch`: digitando, o campo consulta o SERVIDOR, que
+conhece o catálogo inteiro. Debounce de 200ms, proteção de corrida por geração
+de requisição — "caf" e "cafeína" voltam fora de ordem e a resposta velha não
+sobrescreve a nova —, e três estados separados: procurando, vazio e erro.
+Dizer "nenhum resultado" com a busca ainda no ar é o que fazia a pessoa
+concluir que o registro não existia.
 
-### 13. "Ativar versão" da formulação não salva o rascunho — MEDIUM
+Ligado em **seis telas**: Contagem Física, Formulação, Template de Formulação,
+Ordem de Compra, Amostras e Item × Fornecedor. A carga inicial caiu de 1000
+(200 no template) para 50 — ela agora serve só à abertura, e a lista avisa que
+dá para buscar o catálogo inteiro. Os outros catorze pontos de uso do
+componente não mudaram: sem `onSearch`, tudo como antes.
+
+Elegibilidade preservada em todas: os filtros de negócio que a carga inicial
+usava foram para a busca, um a um. Achar não virou poder usar.
+
+Dois defeitos vizinhos apareceram e foram corrigidos junto, porque a carga
+menor os tornaria visíveis: na Contagem Física o item escolhido era estado
+sincronizado por efeito sobre o catálogo, e uma busca posterior zerava lote e
+saldo de uma contagem em andamento; na Ordem de Compra o atalho `?itemId=`
+procurava o item na lista carregada e abria vazio quando ele estava fora dela.
+
+O que sobrou está registrado como risco medido, não como conserto pendente —
+itens 15 e 16.
+
+**Decisão / próxima ação:** nenhuma. Regra em
+[PRODUCT_RULES.md](PRODUCT_RULES.md) §48.
+
+### 13. "Ativar versão" da formulação não salva o rascunho — resolvido
 
 Na tela da versão de formulação, editar a receita e clicar em **Ativar versão**
 sem antes clicar em **Salvar rascunho** ativa a versão **sem a alteração**, em
@@ -408,11 +431,25 @@ do formulário nem avisar que há edição pendente.
 O agravante é a regra: versão ativa é documento histórico e não se edita. Quem
 perceber depois não conserta — cria outra versão.
 
-**Decisão / próxima ação:** ou salvar antes de ativar, ou recusar a ativação
-com edição pendente dizendo o que falta. A segunda é mais honesta: gravar por
-conta própria decide pela pessoa o que ela talvez quisesse descartar.
-Descoberto ao capturar as telas para o guia passo a passo; está documentado no
-guia como aviso, e aviso em manual não é correção.
+**Product Ownership escolheu salvar antes de ativar** (2026-09-02), e não
+bloquear. Fica registrado o contra-argumento desta entrada — gravar por conta
+própria decide pela pessoa o que ela talvez quisesse descartar —, porque ele
+continua verdadeiro; a decisão foi que o clique redundante custa mais.
+
+Ativar agora grava o formulário e só então ativa. A gravação é **condição**:
+falhando por validação, por item inválido ou por rede, a ativação não acontece
+e a versão continua rascunho, com o erro no campo certo. Sem alteração
+pendente, nada é gravado — ativar continua uma chamada só.
+
+"Pendente" é medido contra o que o servidor devolveu, serializado no mesmo
+ponto em que o formulário é sincronizado. Não é flag por `onChange` nem
+varredura de DOM: as duas quebram no primeiro campo novo que alguém esquecer
+de instrumentar, e quebram em silêncio — o modo de falha que esta correção
+existe para eliminar. Efeito colateral: reeditar até o valor original não conta
+como alteração.
+
+**Decisão / próxima ação:** nenhuma. Regra em
+[PRODUCT_RULES.md](PRODUCT_RULES.md) §48.
 
 ### 14. Ativar estrutura de custos completa não pede confirmação — LOW
 
@@ -423,6 +460,42 @@ estrutura, não.
 
 **Decisão / próxima ação:** confirmar sempre, dizendo o que se torna imutável,
 como fazem os outros dois documentos da mesma cadeia.
+
+### 15. Catálogos que ainda cabem no teto, mas vão passar — LOW
+
+O conserto do item 12 levou busca no servidor às telas de ITEM, onde o
+catálogo já tinha estourado. O mesmo padrão continua nas telas que carregam
+**cliente, fornecedor, produto e recurso** com `pageSize` fixo e filtram no
+navegador. Elas funcionam hoje só porque o catálogo ainda não passou do teto.
+
+Medido em 2026-09-02, contra o teto de 1000:
+
+| Catálogo | Ativos | Folga |
+|---|---|---|
+| Produtos aprovados | 784 | **216** |
+| Clientes | 346 | 654 |
+| Fornecedores | 300 | 700 |
+| Recursos industriais | 132 | 868 |
+
+**Produto é o próximo.** 216 cadastros separam a tela de Pedidos e a de Ordem
+de Produção do mesmo defeito silencioso: produto que existe e não aparece na
+busca, com "+ Novo produto" convidando a duplicar.
+
+**Decisão / próxima ação:** a ferramenta já existe — `SearchableEntitySelect`
+aceita `onSearch`, e ligá-la é uma função por tela. Fazer quando o catálogo de
+produtos passar de ~800, ou antes se a Veridi trouxer base maior na migração.
+Não fazer agora seria escolha diferente se algum desses números fosse outro.
+
+### 16. Item na entrada de material do cliente ainda é `<select>` nativo — LOW
+
+`ReceiveCustomerMaterialPage` carrega matéria-prima e embalagem com
+`pageSize: 1000` — os mesmos 211 invisíveis das outras telas de item —, mas o
+campo é um `<select>` nativo, não o `SearchableEntitySelect`. Não há onde
+pendurar a busca no servidor sem antes trocar o componente.
+
+**Decisão / próxima ação:** trocar pelo seletor pesquisável quando a tela for
+mexida por outro motivo. É mudança de componente, não a mesma correção — e
+fazer só por causa disto seria refatorar uma tela que hoje funciona.
 
 ### Decisões de produto em aberto — não bloqueantes
 

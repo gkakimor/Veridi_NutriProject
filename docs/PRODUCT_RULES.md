@@ -3139,3 +3139,43 @@ planejada, liberada e em produção — o mesmo conjunto que o painel e os
 relatórios usam. Não existe um agrupamento chamado "em andamento", e criar um
 aqui daria dois números para a mesma pergunta, que divergiriam no dia em que
 uma situação nova aparecesse.
+
+---
+
+## §48 — Integridade do que a tela mostra
+
+Duas regras que valem para qualquer tela, e que existem porque as duas foram
+violadas em silêncio — o pior modo de falha que um ERP tem, porque o operador
+não descobre no momento em que dá para consertar.
+
+### Ativar nunca descarta o que está na tela
+
+Ativar uma versão de formulação grava o que está no formulário antes de
+ativar. Ninguém pode ativar uma versão diferente daquela que acredita estar
+vendo.
+
+A gravação é **condição** da ativação, nunca efeito colateral dela: se falhar
+por validação, por item inválido, por unidade incompatível ou por rede, a
+ativação não acontece e a versão continua rascunho, com o erro no campo. Meia
+ativação seria pior que o defeito que a regra corrige — versão ativa é
+documento histórico, e o que entra errado ali não se conserta, só se substitui
+por uma versão nova.
+
+Sem alteração pendente, ativar continua sendo uma operação só. E "pendente" se
+mede contra o que o servidor devolveu, não contra "alguém digitou": reeditar
+até o valor original não é alteração.
+
+### Busca de entidade enxerga o conjunto elegível inteiro
+
+Um campo que parece pesquisar o catálogo não pode pesquisar apenas os
+primeiros N registros carregados. Item que existe e é elegível tem de ser
+encontrável, esteja ele na primeira página ou na décima.
+
+O motivo não é conforto: campo que esconde o que existe, oferecendo "+ Novo"
+logo acima, produz **cadastro duplicado** — e duas matérias-primas iguais com
+saldos separados são um erro de estoque que ninguém rastreia até a origem.
+
+Achar não é o mesmo que poder usar. A busca torna encontrável quem já era
+elegível; ela não altera regra de elegibilidade nenhuma — tipo, situação,
+proprietário e saldo continuam decidindo o que o campo aceita, e continuam
+decidindo no servidor.

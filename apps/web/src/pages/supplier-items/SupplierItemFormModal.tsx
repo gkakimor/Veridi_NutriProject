@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type {
   ItemDTO,
@@ -8,7 +8,9 @@ import type {
 } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
+import { getItem, listItems } from "../../lib/items-api";
 import { createSupplierItem } from "../../lib/supplier-items-api";
 import { listUnits } from "../../lib/units-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
@@ -36,6 +38,21 @@ type RascunhoRelacao = {
   validUntil: string;
   offerNotes: string;
 };
+
+/** Quantos resultados a busca no servidor traz por tipo. */
+const PAGINA_DA_BUSCA = 50;
+
+/** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
+function opcaoDoItem(item: ItemDTO): EntityOption {
+  return { id: item.id, code: item.code, name: item.name, hint: item.unitCode };
+}
+
+/** Mescla sem duplicar e sem trocar a referência à toa. */
+function mesclarItens(atual: ItemDTO[], novos: ItemDTO[]): ItemDTO[] {
+  const conhecidos = new Set(atual.map((item) => item.id));
+  const ineditos = novos.filter((item) => !conhecidos.has(item.id));
+  return ineditos.length === 0 ? atual : [...atual, ...ineditos];
+}
 
 /**
  * Nova relação item × fornecedor.
@@ -139,11 +156,60 @@ export function SupplierItemFormModal({
     },
   });
 
+  /**
+   * O que a busca no servidor achou, somado à página que a listagem passou.
+   *
+   * Mora aqui e não na listagem porque quem conhece a regra do campo é este
+   * formulário: a listagem só abastece a abertura.
+   */
+  const [encontrados, setEncontrados] = useState<ItemDTO[]>([]);
+  const catalogo = mesclarItens(items, encontrados);
+
   // Produto acabado é produzido, não comprado — fica fora da lista.
-  const purchasableItems = items.filter(
+  const purchasableItems = catalogo.filter(
     (item) => item.type === "RAW_MATERIAL" || item.type === "PACKAGING",
   );
   const selectedItem = purchasableItems.find((item) => item.id === itemId);
+
+  /**
+   * Busca no servidor, com os MESMOS filtros de negócio da lista de hoje:
+   * `active: true`, como a carga da listagem, e só o que se compra.
+   *
+   * O tipo era filtrado só no navegador, e na busca ele PRECISA ir junto:
+   * perguntando sem tipo, o servidor devolveria produto acabado e a lista
+   * ofereceria justamente o que este formulário recusa. Duas consultas
+   * porque o filtro do servidor é de um tipo por vez — as mesmas duas que
+   * Formulação e Pedido de Compra já fazem.
+   */
+  async function buscarItens(termo: string): Promise<EntityOption[]> {
+    const [materiaPrima, embalagem] = await Promise.all([
+      listItems({ type: "RAW_MATERIAL", active: true, search: termo, pageSize: PAGINA_DA_BUSCA }),
+      listItems({ type: "PACKAGING", active: true, search: termo, pageSize: PAGINA_DA_BUSCA }),
+    ]);
+    const achados = [...materiaPrima.items, ...embalagem.items];
+    setEncontrados((atual) => mesclarItens(atual, achados));
+    return achados.map(opcaoDoItem);
+  }
+
+  /**
+   * Rótulo do item que chega de FORA da lista.
+   *
+   * Cadastrar item no contexto sai desta tela e volta com o id escolhido, e
+   * a listagem remonta trazendo só a primeira página do catálogo — onde o
+   * item recém-criado, de código mais alto, não está. Sem isto o campo
+   * voltaria em branco depois do cadastro, que lê como "não salvou".
+   */
+  const rotuloPedido = useRef("");
+  useEffect(() => {
+    if (!itemId || rotuloPedido.current === itemId) return;
+    if (catalogo.some((item) => item.id === itemId)) return;
+    rotuloPedido.current = itemId;
+    void getItem(itemId)
+      .then((item) => setEncontrados((atual) => mesclarItens(atual, [item])))
+      .catch(() => undefined);
+    // `catalogo` é recalculado a cada render; as fontes dele é que importam.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, items, encontrados]);
 
   /*
    * A unidade do preço acompanha a unidade de estoque do item por padrão.
@@ -258,12 +324,8 @@ export function SupplierItemFormModal({
                 onChange={setItemId}
                 required
                 placeholder="Digite código ou nome do item…"
-                options={purchasableItems.map((item) => ({
-                  id: item.id,
-                  code: item.code,
-                  name: item.name,
-                  hint: item.unitCode,
-                }))}
+                options={purchasableItems.map(opcaoDoItem)}
+                onSearch={buscarItens}
                 canCreate
                 createLabel="Novo item de estoque"
                 onCreateNew={() =>

@@ -6,6 +6,7 @@ import type {
   FormulationComponentBasis,
   FormulationCostEstimateDTO,
   FormulationVersionDTO,
+  ItemDTO,
   SupplyResponsibility,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
@@ -42,6 +43,7 @@ import { useAuth } from "../../app/AuthProvider";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 
 interface ItemOption {
@@ -51,6 +53,37 @@ interface ItemOption {
   unitCode: string;
   unitDimension: string;
   active: boolean;
+}
+
+/**
+ * Primeira página do catálogo — o que a lista mostra antes de digitar.
+ *
+ * Era 1000 por tipo, e o catálogo tem 1.211 matérias-primas ativas: 211
+ * existiam e não apareciam na busca, sem aviso. Quem digita agora pergunta
+ * ao servidor (`buscarItens`), que conhece o catálogo inteiro.
+ */
+const PRIMEIRA_PAGINA = 50;
+
+/** Uma conversão só de item do catálogo para opção da tela. */
+function itemOption(item: ItemDTO): ItemOption {
+  return {
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    unitCode: item.unitCode,
+    unitDimension: item.unit.dimension,
+    active: item.active,
+  };
+}
+
+/** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
+function opcaoDoItem(item: ItemOption): EntityOption {
+  return {
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    ...(item.active ? {} : { hint: "inativo" }),
+  };
 }
 
 interface ComponentRow {
@@ -127,6 +160,33 @@ function lerChaveDaLinha(contexto: Record<string, unknown> | null | undefined): 
   return typeof chave === "string" && chave.length > 0 ? chave : null;
 }
 
+/**
+ * O DTO do servidor projetado na MESMA forma do payload de gravação.
+ *
+ * É o outro lado de `montarRascunho`: comparar as duas serializações é o que
+ * diz se há alteração pendente. Precisam produzir a mesma forma para o mesmo
+ * conteúdo, senão a tela acharia que há edição onde não há — e salvaria a
+ * cada ativação, ou pior, o contrário.
+ */
+function rascunhoDoDTO(dto: FormulationVersionDTO) {
+  return {
+    basisQuantity: dto.basisQuantity.trim(),
+    calculationMode: dto.calculationMode,
+    dosesPerPackage: dto.dosesPerPackage === null ? null : String(dto.dosesPerPackage).trim(),
+    notes: (dto.notes ?? "").trim(),
+    components: dto.components.map((component) => ({
+      itemId: component.itemId,
+      quantity: component.quantity.trim(),
+      unitCode: component.unitCode,
+      basis: component.basis,
+      supplyResponsibility: component.supplyResponsibility,
+      purityPercentApplied: (component.purityPercentApplied ?? "").trim() || null,
+      overagePercent: (component.overagePercent ?? "").trim() || null,
+      ...((component.notes ?? "").trim() ? { notes: (component.notes ?? "").trim() } : {}),
+    })),
+  };
+}
+
 function rowFromDTO(component: FormulationVersionDTO["components"][number]): ComponentRow {
   return {
     key: nextRowKey(),
@@ -183,12 +243,24 @@ export function FormulationVersionPage() {
   const { user } = useAuth();
   const [costEstimate, setCostEstimate] = useState<FormulationCostEstimateDTO | null>(null);
 
+  /**
+   * O rascunho como ele está GRAVADO, serializado.
+   *
+   * Comparar contra isto é o que responde "há alteração pendente?". A
+   * alternativa — vasculhar o DOM ou marcar uma flag em cada `onChange` —
+   * quebra no primeiro campo novo que alguém esquecer de instrumentar, e
+   * quebra em silêncio, que é o modo de falha que esta correção existe para
+   * eliminar.
+   */
+  const gravado = useRef<string>("");
+
   const syncFromServer = useCallback((dto: FormulationVersionDTO) => {
     setBasisQuantity(dto.basisQuantity);
     setCalculationMode(dto.calculationMode);
     setDosesPerPackage(dto.dosesPerPackage === null ? "" : String(dto.dosesPerPackage));
     setNotes(dto.notes ?? "");
     setComponents(dto.components.map(rowFromDTO));
+    gravado.current = JSON.stringify(rascunhoDoDTO(dto));
   }, []);
 
   /**
@@ -233,26 +305,49 @@ export function FormulationVersionPage() {
 
   useEffect(() => {
     Promise.all([
-      listItems({ type: "RAW_MATERIAL", active: true, pageSize: 1000 }),
-      listItems({ type: "PACKAGING", active: true, pageSize: 1000 }),
+      listItems({ type: "RAW_MATERIAL", active: true, pageSize: PRIMEIRA_PAGINA }),
+      listItems({ type: "PACKAGING", active: true, pageSize: PRIMEIRA_PAGINA }),
     ])
       .then(([raw, packaging]) =>
-        setActiveItems(
-          [...raw.items, ...packaging.items].map((item) => ({
-            id: item.id,
-            code: item.code,
-            name: item.name,
-            unitCode: item.unitCode,
-            unitDimension: item.unit.dimension,
-            active: item.active,
-          })),
-        ),
+        setActiveItems([...raw.items, ...packaging.items].map(itemOption)),
       )
       .catch(() => setActiveItems([]));
     listUnits()
       .then(setUnits)
       .catch(() => setUnits([]));
   }, []);
+
+  /**
+   * Busca no servidor, com os MESMOS filtros de negócio da carga inicial:
+   * só matéria-prima e embalagem, só ativos, e fora o que outra linha já
+   * consome — as duas primeiras no servidor, a terceira aqui, exatamente
+   * como `optionsForRow` já faz com a primeira página. Componente encontrado
+   * é componente que já era elegível; nada passa a ser escolhível por causa
+   * da busca.
+   */
+  async function buscarItens(row: ComponentRow, termo: string): Promise<EntityOption[]> {
+    const [raw, packaging] = await Promise.all([
+      listItems({ type: "RAW_MATERIAL", active: true, search: termo, pageSize: PRIMEIRA_PAGINA }),
+      listItems({ type: "PACKAGING", active: true, search: termo, pageSize: PRIMEIRA_PAGINA }),
+    ]);
+    const encontrados = [...raw.items, ...packaging.items].map(itemOption);
+    /*
+     * O achado entra no catálogo da tela porque a escolha é resolvida por
+     * ele: `handleComponentItemChange` lê código, nome e unidade de estoque
+     * de `activeItems`, e `unitOptionsForRow` limita as unidades pela
+     * dimensão do item. Sem a mesclagem, escolher um item de fora da
+     * primeira página deixaria a linha sem unidade.
+     */
+    setActiveItems((atual) => {
+      const conhecidos = new Set(atual.map((item) => item.id));
+      const ineditos = encontrados.filter((item) => !conhecidos.has(item.id));
+      return ineditos.length === 0 ? atual : [...atual, ...ineditos];
+    });
+    const usadosPorOutrasLinhas = new Set(
+      components.filter((c) => c.key !== row.key).map((c) => c.itemId),
+    );
+    return encontrados.filter((item) => !usadosPorOutrasLinhas.has(item.id)).map(opcaoDoItem);
+  }
 
   /**
    * Cadastro de item na TELA OFICIAL, sem perder a fórmula.
@@ -427,36 +522,56 @@ export function FormulationVersionPage() {
     setComponents((prev) => prev.map((row) => (row.key === key ? { ...row, [field]: value } : row)));
   }
 
-  async function handleSaveDraft() {
-    if (!versionId) return;
-    setSaving(true);
+  function temAlteracaoPendente() {
+    return JSON.stringify(montarRascunho()) !== gravado.current;
+  }
+
+  /**
+   * O rascunho como o servidor o receberia AGORA.
+   *
+   * Uma função só, usada por salvar e por ativar: se cada caminho montasse o
+   * seu, um deles ficaria para trás no dia em que um campo fosse acrescentado
+   * — e o que fica para trás é justamente o que some sem avisar.
+   */
+  function montarRascunho() {
+    return {
+      basisQuantity: basisQuantity.trim(),
+      calculationMode,
+      dosesPerPackage: dosesPerPackage.trim() || null,
+      notes: notes.trim(),
+      components: components
+        .filter((row) => row.itemId)
+        .map((row) => ({
+          itemId: row.itemId,
+          quantity: row.quantity.trim(),
+          unitCode: row.unitCode,
+          basis: row.basis,
+          supplyResponsibility: row.supplyResponsibility,
+          // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
+          purityPercentApplied: row.purityPercentApplied.trim() || null,
+          overagePercent: row.overagePercent.trim() || null,
+          ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
+        })),
+    };
+  }
+
+  /**
+   * Grava o rascunho e devolve se deu certo.
+   *
+   * O booleano existe por causa da ativação: ela precisa saber se pode
+   * seguir, e `try/catch` do lado de fora não distingue "salvou" de "falhou
+   * e já mostrei o erro".
+   */
+  async function salvarRascunho(): Promise<boolean> {
+    if (!versionId) return false;
     setError(null);
     setFieldErrors({});
 
-    const componentsPayload = components
-      .filter((row) => row.itemId)
-      .map((row) => ({
-        itemId: row.itemId,
-        quantity: row.quantity.trim(),
-        unitCode: row.unitCode,
-        basis: row.basis,
-        supplyResponsibility: row.supplyResponsibility,
-        // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
-        purityPercentApplied: row.purityPercentApplied.trim() || null,
-        overagePercent: row.overagePercent.trim() || null,
-        ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
-      }));
-
     try {
-      const updated = await updateFormulationVersion(versionId, {
-        basisQuantity: basisQuantity.trim(),
-        calculationMode,
-        dosesPerPackage: dosesPerPackage.trim() || null,
-        notes: notes.trim(),
-        components: componentsPayload,
-      });
+      const updated = await updateFormulationVersion(versionId, montarRascunho());
       setVersion(updated);
       syncFromServer(updated);
+      return true;
     } catch (err) {
       if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};
@@ -466,6 +581,15 @@ export function FormulationVersionPage() {
       } else {
         setError(err instanceof Error ? err.message : "Falha ao salvar rascunho");
       }
+      return false;
+    }
+  }
+
+  async function handleSaveDraft() {
+    if (!versionId || saving) return;
+    setSaving(true);
+    try {
+      await salvarRascunho();
     } finally {
       setSaving(false);
     }
@@ -488,12 +612,31 @@ export function FormulationVersionPage() {
     }
   }
 
+  /**
+   * Ativar grava o que está na tela ANTES de ativar.
+   *
+   * Antes, `activate` era chamado direto: quem editava e clicava em Ativar
+   * sem passar por "Salvar rascunho" ativava a versão SEM a alteração, em
+   * silêncio — e versão ativa é documento histórico, então o estrago não se
+   * conserta, só se substitui por uma versão nova.
+   *
+   * A gravação é condição da ativação, nunca um efeito colateral dela: se o
+   * salvamento falhar por validação, por item inválido ou por rede, a
+   * ativação NÃO acontece e a versão continua em rascunho, com o erro na
+   * tela. Ativação parcial seria pior que o defeito original.
+   *
+   * Sem alteração pendente nada é gravado — ativar continua uma chamada só.
+   */
   async function handleActivate() {
-    if (!versionId) return;
+    if (!versionId || saving) return;
     setActivateDialogOpen(false);
     setSaving(true);
     setError(null);
     try {
+      if (temAlteracaoPendente()) {
+        const salvou = await salvarRascunho();
+        if (!salvou) return;
+      }
       const updated = await activateFormulationVersion(versionId);
       setVersion(updated);
       syncFromServer(updated);
@@ -781,12 +924,8 @@ export function FormulationVersionPage() {
                           value={row.itemId}
                           onChange={(itemId) => handleComponentItemChange(row.key, itemId)}
                           placeholder="Digite código ou nome do item…"
-                          options={optionsForRow(row).map((item) => ({
-                            id: item.id,
-                            code: item.code,
-                            name: item.name,
-                            ...(item.active ? {} : { hint: "inativo" }),
-                          }))}
+                          options={optionsForRow(row).map(opcaoDoItem)}
+                          onSearch={(termo) => buscarItens(row, termo)}
                           canCreate
                           createLabel="Novo item de estoque"
                           onCreateNew={() =>

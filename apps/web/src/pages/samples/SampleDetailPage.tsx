@@ -13,6 +13,7 @@ import { FormSection } from "../../components/FormSection";
 import { FlowContext } from "../../components/FlowContext";
 import { useAuth } from "../../app/AuthProvider";
 import { getInventoryItem } from "../../lib/inventory-api";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { listItems } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
@@ -42,6 +43,21 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
 
 function formatDateTime(value: string | null): string {
   return value ? new Date(value).toLocaleString("pt-BR") : "—";
+}
+
+/**
+ * Primeira página do catálogo — o que a lista mostra antes de digitar.
+ *
+ * Era 1000 sobre 2.729 itens ativos: 1.729 existiam e não apareciam na
+ * busca, sem aviso. Quem digita agora pergunta ao servidor (`buscarItens`),
+ * que conhece o catálogo inteiro — carregar mil registros só para filtrar no
+ * navegador deixou de ter propósito.
+ */
+const PRIMEIRA_PAGINA = 50;
+
+/** Um formato só de rótulo: o da lista inicial e o da busca não podem divergir. */
+function opcaoDoItem(item: ItemDTO): EntityOption {
+  return { id: item.id, code: item.code, name: item.name };
 }
 
 /**
@@ -103,13 +119,35 @@ export function SampleDetailPage() {
   }, [reload]);
 
   useEffect(() => {
-    listItems({ active: true, pageSize: 1000 })
+    listItems({ active: true, pageSize: PRIMEIRA_PAGINA })
       .then((response) => setItems(response.items))
       .catch(() => setItems([]));
     listUnits()
       .then(setUnits)
       .catch(() => setUnits([]));
   }, []);
+
+  /**
+   * Busca no servidor, com o MESMO filtro de negócio da carga inicial
+   * (`active: true`, sem restrição de tipo — amostra consome o que houver em
+   * estoque). Quem não é elegível continua não sendo: a elegibilidade real do
+   * consumo é do serviço, que recusa acima do disponível e exige lote onde há
+   * controle de lote. Achar não é poder consumir.
+   *
+   * O achado entra em `items` porque é de lá que sai o rótulo do campo e a
+   * unidade mostrada ao lado da quantidade. A mesclagem é segura para um
+   * consumo em andamento: nenhum efeito desta tela depende de `items` — lote,
+   * saldo e controle de lote são recarregados só quando o ITEM muda.
+   */
+  async function buscarItens(termo: string): Promise<EntityOption[]> {
+    const resposta = await listItems({ active: true, search: termo, pageSize: PRIMEIRA_PAGINA });
+    setItems((atual) => {
+      const conhecidos = new Set(atual.map((item) => item.id));
+      const novos = resposta.items.filter((item) => !conhecidos.has(item.id));
+      return novos.length === 0 ? atual : [...atual, ...novos];
+    });
+    return resposta.items.map(opcaoDoItem);
+  }
 
   // Lotes do item escolhido — mesma leitura de estoque do resto do sistema,
   // sem atalho "porque é amostra".
@@ -413,11 +451,8 @@ export function SampleDetailPage() {
                     onChange={setItemId}
                     required
                     placeholder="Digite código ou nome do item…"
-                    options={items.map((item) => ({
-                      id: item.id,
-                      code: item.code,
-                      name: item.name,
-                    }))}
+                    options={items.map(opcaoDoItem)}
+                    onSearch={buscarItens}
                   />
                 </div>
 
