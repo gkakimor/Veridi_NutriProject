@@ -52,6 +52,30 @@ export function AppShell() {
       block: "nearest",
     });
   }, [location.pathname]);
+
+  /*
+   * Titulo da aba por tela.
+   *
+   * Era "Veridi Nutrition" em todas, entao quem trabalha com varias abas —
+   * que e o normal aqui: pedido numa, estoque noutra, ordem numa terceira —
+   * so descobria qual era qual clicando. O nome do item de menu ja e o nome
+   * que a pessoa usa para a tela; nao ha por que inventar outro.
+   *
+   * A rota mais especifica ganha: `/estoque/lotes` e Lotes, nao Posicao de
+   * Estoque.
+   */
+  useEffect(() => {
+    const atual = [...navItems]
+      .filter((item) =>
+        item.path === "/"
+          ? location.pathname === "/"
+          : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
+      )
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    document.title = atual && atual.path !== "/"
+      ? `${atual.label} · Veridi Nutrition`
+      : "Veridi Nutrition";
+  }, [location.pathname]);
   const { user, signOut } = useAuth();
   const [navCollapsed, setNavCollapsed] = useState(startsCollapsed);
 
