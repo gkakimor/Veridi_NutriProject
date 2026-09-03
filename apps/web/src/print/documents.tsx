@@ -680,18 +680,37 @@ export function LotTraceabilityPrintDocument({
               separada: cliente é destino, não origem de material. */}
           {traceability.commercialDestination && (
             <PrintSection title="Destino comercial">
+              {/*
+                ORIGEM e DESTINO, separados também no papel.
+
+                O documento dizia "Pedido do cliente: PED-000484" e logo abaixo
+                listava a expedição sem pedido na linha. A leitura natural é que
+                aquela saída foi do pedido citado acima — e não era: o lote foi
+                produzido para PED-000484 e saiu atendendo PED-000485. É o mesmo
+                mal-entendido que a tela deixou de produzir, sobrevivendo no
+                documento que circula fora dela, sem link para conferir.
+
+                Rastreabilidade impressa vai para auditoria e para o cliente. É
+                o pior lugar para o leitor precisar adivinhar de qual pedido é
+                cada saída.
+              */}
               <dl className="print-doc__meta">
                 <div>
-                  <dt>Pedido do cliente</dt>
-                  <dd>{traceability.commercialDestination.customerOrderCode}</dd>
-                </div>
-                <div>
-                  <dt>Cliente</dt>
+                  <dt>Pedido de origem</dt>
                   <dd>
-                    {traceability.commercialDestination.customerCode} —{" "}
-                    {traceability.commercialDestination.customerName}
+                    {traceability.commercialDestination.customerOrderCode ??
+                      "Produzido para estoque — sem pedido de origem"}
                   </dd>
                 </div>
+                {traceability.commercialDestination.customerName && (
+                  <div>
+                    <dt>Cliente do pedido de origem</dt>
+                    <dd>
+                      {traceability.commercialDestination.customerCode} —{" "}
+                      {traceability.commercialDestination.customerName}
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt>Projeto</dt>
                   <dd>
@@ -703,13 +722,17 @@ export function LotTraceabilityPrintDocument({
               </dl>
 
               <PrintTable
-                columns={["Expedição", "Data", "Quantidade deste lote"]}
+                columns={["Expedição", "Pedido atendido", "Cliente", "Data", "Quantidade deste lote"]}
                 isEmpty={traceability.commercialDestination.shipments.length === 0}
                 emptyMessage="Este lote ainda não foi expedido."
               >
                 {traceability.commercialDestination.shipments.map((shipment) => (
                   <tr key={shipment.shipmentId}>
                     <td>{shipment.shipmentCode}</td>
+                    <td>{shipment.customerOrderCode}</td>
+                    <td>
+                      {shipment.customerCode} — {shipment.customerName}
+                    </td>
                     <td>{formatPrintDate(shipment.shipmentDate)}</td>
                     <td className="is-number">
                       {formatQuantity(shipment.quantity)} {traceability.unitCode}

@@ -335,13 +335,17 @@ export function BillingPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Produto</th>
-                  <th>Lote</th>
-                  <th className="is-numeric">Quantidade</th>
-                  <th>Unidade</th>
-                  <th className="is-numeric">Preço acordado</th>
-                  <th className="is-numeric">Preço faturado</th>
-                  <th className="is-numeric">Total</th>
+                  {/* Produto e Lote absorvem a largura; sem isto, o padrão
+                      `nowrap` das células empurrava a coluna Total — justamente
+                      a que o operador confere — para fora da área visível em
+                      tela de notebook. */}
+                  <th className="col-flex">Produto</th>
+                  <th className="col-flex">Lote</th>
+                  <th className="is-numeric col-tight">Quantidade</th>
+                  <th className="col-tight">Unidade</th>
+                  <th className="is-numeric col-tight">Preço acordado</th>
+                  <th className="is-numeric col-tight">Preço faturado</th>
+                  <th className="is-numeric col-tight">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -349,10 +353,10 @@ export function BillingPage() {
                   const lineTotal = totaisDeLinha[indice] ?? line.lineTotal;
                   return (
                     <tr key={line.id}>
-                      <td>
+                      <td className="col-flex">
                         <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
                       </td>
-                      <td>
+                      <td className="col-flex">
                         {line.lotCode ?? "—"}
                         {line.businessLotNumber ? ` — ${line.businessLotNumber}` : ""}
                       </td>

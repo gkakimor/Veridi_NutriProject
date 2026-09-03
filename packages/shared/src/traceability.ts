@@ -51,8 +51,13 @@ export interface FinishedLotTraceabilityDTO {
   unitCode: string;
   consumedMaterials: TraceabilityConsumedMaterialDTO[];
   /**
-   * Para quem este lote foi produzido e para onde saiu. `null` quando a
-   * ordem não nasceu de um Pedido (produção para estoque).
+   * Para quem este lote foi produzido e para onde saiu.
+   *
+   * SEMPRE presente em lote de produto acabado, mesmo sem pedido de origem e
+   * sem nenhuma saída — nesse caso os campos de origem vêm `null` e a lista
+   * de saídas vem vazia, e a tela diz que o lote não foi expedido. Devolver
+   * `null` fazia a seção sumir por inteiro, e silêncio não é resposta para a
+   * pergunta de recall.
    *
    * Deliberadamente **fora** de `consumedMaterials`: cliente não é origem
    * de material, e a tela apresenta os dois como seções distintas —

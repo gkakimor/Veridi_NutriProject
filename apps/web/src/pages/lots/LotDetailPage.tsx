@@ -437,7 +437,16 @@ export function LotDetailPage() {
           </dl>
         </FormSection>
 
-        {lot.shipments.length > 0 && (
+        {/*
+          A resposta de recall mora aqui, perto do topo, e vale mesmo quando
+          está vazia: um lote de produção que nunca saiu precisa DIZER que
+          nunca saiu. Antes, sem expedição a seção sumia e a página ficava
+          muda sobre a única pergunta que se faz quando um lote é recolhido.
+
+          Cada linha traz o pedido REALMENTE atendido, que nem sempre é o
+          pedido que motivou a produção — estoque acabado é fungível.
+        */}
+        {(lot.shipments.length > 0 || lot.origin === "PRODUCTION") && (
           <FormSection
             title="Expedições"
             subtitle="Para onde este lote foi. Só expedição confirmada saiu de fato do estoque."
@@ -485,6 +494,13 @@ export function LotDetailPage() {
                       <td>{shipment.shippedAt ? formatDate(shipment.shippedAt) : "—"}</td>
                     </tr>
                   ))}
+                  {lot.shipments.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="table__empty">
+                        Este lote ainda não foi expedido.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -845,7 +861,7 @@ export function LotDetailPage() {
           traceability.commercialDestination && (
             <FormSection
               title="Destino comercial"
-              subtitle="Para quem este lote foi produzido e por onde saiu — não faz parte da genealogia de material."
+              subtitle="Por que este lote foi produzido. Por onde ele saiu está em Expedições, acima."
             >
               <dl className="definition-list">
                 <dt>Pedido de origem</dt>
@@ -888,58 +904,13 @@ export function LotDetailPage() {
                 )}
               </dl>
 
-              <div className="table-container table-container--spaced">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Expedição</th>
-                      <th>Pedido atendido</th>
-                      <th>Cliente</th>
-                      <th>Data</th>
-                      <th className="is-numeric">Quantidade deste lote</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {traceability.commercialDestination.shipments.map((shipment) => (
-                      <tr key={shipment.shipmentId}>
-                        <td className="is-code">
-                          <EntityLink
-                            kind="shipment"
-                            id={shipment.shipmentId}
-                            code={shipment.shipmentCode}
-                          />
-                        </td>
-                        <td className="is-code">
-                          <EntityLink
-                            kind="customerOrder"
-                            id={shipment.customerOrderId}
-                            code={shipment.customerOrderCode}
-                          />
-                        </td>
-                        <td>
-                          <EntityLink
-                            kind="customer"
-                            id={shipment.customerId}
-                            code={shipment.customerCode}
-                            name={shipment.customerName}
-                          />
-                        </td>
-                        <td>{formatDate(shipment.shipmentDate)}</td>
-                        <td className="is-numeric">
-                          {formatQuantity(shipment.quantity)} {traceability.unitCode}
-                        </td>
-                      </tr>
-                    ))}
-                    {traceability.commercialDestination.shipments.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="table__empty">
-                          Este lote ainda não foi expedido.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              {/*
+                A tabela de saídas mora na seção "Expedições", perto do topo,
+                com status e data de confirmação. Repeti-la aqui punha duas
+                tabelas sobre as mesmas linhas separadas por seis seções, e o
+                leitor que encontrasse só uma delas não sabia que a outra
+                existia. Aqui fica a ORIGEM: por que este lote foi produzido.
+              */}
             </FormSection>
           )}
 

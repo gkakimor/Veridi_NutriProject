@@ -71,6 +71,19 @@ export function InventoryMovementsPage() {
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Falha ao carregar movimentações");
+        /*
+         * Consulta que falhou não deixa o resultado anterior na tela.
+         *
+         * Era exatamente este o sintoma da rodada adversarial: cinco tipos do
+         * filtro devolviam 400, a tabela anterior continuava exibida e o
+         * contador seguia com o número velho, então o operador lia um
+         * resultado que não correspondia ao filtro escolhido. Os 400 sumiram
+         * quando o schema passou a derivar da lista canônica, mas o padrão que
+         * transformava um erro em resultado errado continuava aqui, esperando
+         * a próxima falha para reaparecer.
+         */
+        setMovements([]);
+        setTotal(0);
       })
       .finally(() => setLoading(false));
   }, [page, search, typeFilter, itemId]);

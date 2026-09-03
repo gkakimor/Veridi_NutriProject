@@ -105,8 +105,16 @@ async function buildFinishedLotTraceability(lot: Lot): Promise<FinishedLotTracea
         })
       : null;
 
-    // Nem origem nem saída: não há destino comercial a mostrar.
-    if (!pedidoDaOrdem && expedicoes.length === 0) return null;
+    /*
+     * A seção existe SEMPRE para lote de produto acabado, mesmo sem origem e
+     * sem saída.
+     *
+     * Devolver `null` fazia a seção inteira sumir da tela e do papel: um lote
+     * produzido para estoque e nunca expedido não dizia "não foi expedido" —
+     * não dizia nada. Silêncio não é resposta para a pergunta de recall, e
+     * quem procura por onde o lote saiu precisa ler que ele não saiu, não
+     * deduzir isso da ausência de uma seção que nem sabe que existe.
+     */
 
     const projeto = pedidoDaOrdem?.sourceProjectId
       ? await prisma.project.findUnique({ where: { id: pedidoDaOrdem.sourceProjectId } })

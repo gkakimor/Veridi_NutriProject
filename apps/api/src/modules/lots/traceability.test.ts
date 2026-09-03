@@ -224,8 +224,20 @@ describe("Rastreabilidade bidirecional (backward/forward)", () => {
     expect(body.consumedMaterials[0].supplierLot).toBe("FORN-LOTE-X");
     expect(body.consumedMaterials[0].supplierName).toBe(supplierName);
     expect(body.consumedMaterials[0].quantity).toBe("20");
-    // Produção para estoque: não há pedido, e nada é inventado.
-    expect(body.commercialDestination).toBeNull();
+    /*
+     * Produção para estoque: não há pedido, e nada é inventado — os campos de
+     * origem vêm `null` e a lista de saídas vem vazia.
+     *
+     * A seção em si EXISTE. Devolver `null` fazia ela sumir da tela e do
+     * papel, e um lote que nunca saiu deixava de dizer que nunca saiu: quem
+     * procurasse por onde ele foi encontrava silêncio, que não é resposta para
+     * a pergunta de recall.
+     */
+    expect(body.commercialDestination).not.toBeNull();
+    expect(body.commercialDestination.customerOrderId).toBeNull();
+    expect(body.commercialDestination.customerOrderCode).toBeNull();
+    expect(body.commercialDestination.customerName).toBeNull();
+    expect(body.commercialDestination.shipments).toEqual([]);
 
     await app.close();
   });
