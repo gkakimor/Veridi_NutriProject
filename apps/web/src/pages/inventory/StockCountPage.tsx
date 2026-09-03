@@ -7,6 +7,7 @@ import { listItems } from "../../lib/items-api";
 import { getInventoryItem, createStockCount } from "../../lib/inventory-api";
 import { FormSection } from "../../components/FormSection";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { formatQuantity, formatQuantityWithUnit } from "../../lib/quantity";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
@@ -256,7 +257,7 @@ export function StockCountPage() {
               {loadingScope
                 ? "Carregando…"
                 : systemQuantity !== null
-                  ? `${systemQuantity} ${selectedItem?.unitCode ?? ""}`
+                  ? formatQuantityWithUnit(systemQuantity, selectedItem?.unitCode ?? null)
                   : "—"}
             </div>
           </div>
@@ -286,7 +287,7 @@ export function StockCountPage() {
               <DicaDoCampo id="estoque.diferenca" />
             </label>
             <div className="field-readonly-value">
-              {difference !== null ? `${difference} ${selectedItem?.unitCode ?? ""}` : "—"}
+              {formatQuantityWithUnit(difference, selectedItem?.unitCode ?? null)}
             </div>
           </div>
 
@@ -323,11 +324,11 @@ export function StockCountPage() {
         <FormSection title="Resultado">
           <dl className="definition-list">
             <dt>Saldo sistema</dt>
-            <dd>{result.systemQuantity}</dd>
+            <dd>{formatQuantity(result.systemQuantity)}</dd>
             <dt>Contagem física</dt>
             <dd>{result.countedQuantity}</dd>
             <dt>Diferença</dt>
-            <dd>{result.difference}</dd>
+            <dd>{formatQuantity(result.difference)}</dd>
             <dt>Ajuste gerado</dt>
             <dd>
               {result.movementCreated

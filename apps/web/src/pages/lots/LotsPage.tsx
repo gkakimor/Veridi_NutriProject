@@ -25,6 +25,19 @@ type OwnerFilter = InventoryOwnerType | "all";
 
 const PAGE_SIZE = 20;
 
+/**
+ * Traduz o `?status=` da URL, recusando o que não for um status conhecido.
+ *
+ * `null` significa "sem contexto na URL", que é o que faz o filtro guardado da
+ * sessão continuar valendo. Aceitar texto arbitrário aqui produziria uma tela
+ * filtrada por um status que não existe, e portanto vazia sem explicação.
+ */
+function statusDaUrl(valor: string): StatusFilter | null {
+  if (valor === "") return null;
+  if (valor === "all") return "all";
+  return (LOT_STATUSES as readonly string[]).includes(valor) ? (valor as LotStatus) : null;
+}
+
 function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
   if (isExpired) return "badge badge--err";
   switch (status) {
@@ -71,6 +84,18 @@ export function LotsPage() {
     FILTER_SCOPE,
     "status",
     "all",
+    /*
+     * O parâmetro da URL vence o filtro guardado da sessão — o campo de busca
+     * ao lado já fazia isso e este não fazia.
+     *
+     * O Dashboard aponta para `?status=AWAITING_RELEASE` no atalho de "Lotes
+     * aguardando liberação", e a tela abria em "Todos os status": a pessoa
+     * clicava no caminho mais visível para a tarefa mais sensível e recebia a
+     * lista inteira, com o lote que aguarda Qualidade perdido no meio. Link
+     * que carrega contexto e a tela ignora é pior que link nenhum, porque
+     * ensina a confiar num filtro que não foi aplicado.
+     */
+    statusDaUrl(urlFilter("status")),
   );
   const [ownerFilter, setOwnerFilter] = usePersistentFilter<OwnerFilter>(
     user?.id ?? null,

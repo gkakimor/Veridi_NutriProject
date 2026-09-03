@@ -226,6 +226,17 @@ export function RowActions({
                   onClick={(event) => {
                     event.stopPropagation();
                     setOpen(false);
+                    /*
+                     * O foco volta para o gatilho ANTES da ação abrir qualquer
+                     * coisa. O item de menu que estava em foco é desmontado
+                     * junto com o menu, e um diálogo que abra em seguida
+                     * guarda "para onde devolver o foco" lendo quem estava em
+                     * foco naquele instante — se fosse o item desmontado, ao
+                     * fechar o diálogo o foco caía no `body`, jogando quem usa
+                     * teclado de volta ao topo da página, dezenas de Tab longe
+                     * da linha onde estava. O gatilho continua montado.
+                     */
+                    toggle.current?.focus();
                     action.onSelect();
                   }}
                 >

@@ -6,6 +6,7 @@ import { lookupLot } from "../../lib/lots-api";
 import { FormSection } from "../../components/FormSection";
 import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
+import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDate } from "../../lib/dates";
 
 
@@ -55,8 +56,12 @@ export function LotScanPage() {
     <>
       <div className="page__header">
         <div>
+          {/* Era um subtitulo com cara de trilha: "Estoque / Lotes / Escanear"
+              em texto puro, imitando navegacao sem navegar — e nesta tela, que
+              e a pensada para o operador de chao de fabrica com a mao ocupada,
+              tentar voltar por ali e o gesto natural. */}
+          <PageBreadcrumbs items={[{ label: "Lotes", href: "/estoque/lotes" }, { label: "Escanear" }]} />
           <h1 className="page__title">Escanear lote</h1>
-          <p className="page__subtitle">Estoque / Lotes / Escanear</p>
         </div>
         <button type="button" className="btn btn--ghost" onClick={() => navigate("/estoque/lotes")}>
           ← Voltar

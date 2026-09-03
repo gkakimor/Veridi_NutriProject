@@ -34,6 +34,16 @@ export function useInertBackground(open: boolean, ref: RefObject<HTMLElement | n
         if (sibling === node) continue;
         if (!(sibling instanceof HTMLElement)) continue;
         if (sibling.hasAttribute("inert")) continue;
+        /*
+         * O fundo escurecido NÃO é fundo: ele pertence ao diálogo, é irmão dele
+         * no DOM, e é onde o clique de "fechar clicando fora" acontece.
+         *
+         * Marcá-lo `inert` tirava o overlay do teste de acerto do ponteiro, e o
+         * `onClick` dele nunca disparava — o painel de ajuda simplesmente não
+         * fechava ao clicar fora, embora o código dissesse que sim. Escondê-lo
+         * de leitor de tela também não faria sentido: não há nada para ler ali.
+         */
+        if (sibling.classList.contains("confirm-overlay")) continue;
         sibling.setAttribute("inert", "");
         sibling.setAttribute("aria-hidden", "true");
         marked.push(sibling);

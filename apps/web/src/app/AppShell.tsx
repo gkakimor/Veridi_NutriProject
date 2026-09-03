@@ -48,9 +48,31 @@ export function AppShell() {
    * apenas o proprio miolo da navegacao: a pagina principal fica onde estava.
    */
   useEffect(() => {
-    navRef.current?.querySelector<HTMLElement>(".sidebar__link.is-active")?.scrollIntoView({
-      block: "nearest",
-    });
+    const nav = navRef.current;
+    const ativo = nav?.querySelector<HTMLElement>(".sidebar__link.is-active");
+    if (!nav || !ativo) return;
+
+    /*
+     * ROLAR SEM TOCAR NO FOCO.
+     *
+     * `scrollIntoView` parecia inofensivo e não era: ele move o "ponto de
+     * partida sequencial" do navegador para o elemento revelado. O primeiro
+     * Tab depois de carregar qualquer rota passava a pular tudo o que vem
+     * antes do item ativo — inclusive o skip-link, que existe justamente para
+     * quem navega por teclado não precisar atravessar trinta e dois links.
+     * Na última entrada do menu era pior: não havendo próximo, o Tab pulava a
+     * navegação inteira.
+     *
+     * Consertar a descoberta com o mouse não pode custar a descoberta com o
+     * teclado. Ajustar `scrollTop` à mão rola igual e não mexe em foco nenhum.
+     */
+    const caixaNav = nav.getBoundingClientRect();
+    const caixaItem = ativo.getBoundingClientRect();
+    if (caixaItem.top < caixaNav.top) {
+      nav.scrollTop -= caixaNav.top - caixaItem.top;
+    } else if (caixaItem.bottom > caixaNav.bottom) {
+      nav.scrollTop += caixaItem.bottom - caixaNav.bottom;
+    }
   }, [location.pathname]);
 
   /*

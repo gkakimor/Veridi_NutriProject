@@ -42,6 +42,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
 import { useAuth } from "../../app/AuthProvider";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
+import { formatQuantityWithUnit } from "../../lib/quantity";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
@@ -1073,7 +1074,7 @@ export function FormulationVersionPage() {
                       {row.stockEquivalentQuantity} {row.stockUnitCode}
                     </td>
                     <td>
-                      {row.physicalPerUnit ? `${row.physicalPerUnit} ${row.stockUnitCode}` : "—"}
+                      {formatQuantityWithUnit(row.physicalPerUnit, row.stockUnitCode)}
                     </td>
                     {isDraft && (
                       <td>
