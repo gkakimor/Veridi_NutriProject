@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { requireCurrentUser } from "../../lib/current-user.js";
 import {
   activateItem,
   createItem,
@@ -9,6 +10,8 @@ import {
   updateItem,
 } from "./items.service.js";
 import {
+  CostReferenceUnitIncompatibleError,
+  InvalidCostReferenceError,
   ItemNotFoundError,
   PackagingSubtypeNotApplicableError,
   StructuralFieldLockedError,
@@ -62,7 +65,7 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const item = await createItem(parsed.data);
+      const item = await createItem(parsed.data, requireCurrentUser(request));
       return reply.status(201).send(item);
     } catch (error) {
       if (error instanceof PackagingSubtypeNotApplicableError) {
@@ -74,6 +77,16 @@ export const itemsRoutes: FastifyPluginAsync = async (app) => {
         return reply
           .status(400)
           .send({ error: "invalid_unit", message: error.message });
+      }
+      if (error instanceof CostReferenceUnitIncompatibleError) {
+        return reply
+          .status(400)
+          .send({ error: "cost_reference_unit_incompatible", message: error.message });
+      }
+      if (error instanceof InvalidCostReferenceError) {
+        return reply
+          .status(400)
+          .send({ error: "invalid_cost_reference", message: error.message });
       }
       throw error;
     }

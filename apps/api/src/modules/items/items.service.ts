@@ -1,10 +1,11 @@
-import type { Item, UnitOfMeasure } from "@prisma/client";
+import type { Item, UnitOfMeasure, User } from "@prisma/client";
 import type { ItemDTO, ItemListResponse } from "@veridi/shared";
 import { ITEM_TYPE_DEFAULTS } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextItemCode } from "./item-codes.js";
+import { insertItemCostReference } from "./item-cost-references.service.js";
 import {
   ItemNotFoundError,
   PackagingSubtypeNotApplicableError,
@@ -156,15 +157,22 @@ export async function getItemById(id: string): Promise<ItemDTO | null> {
   return toItemDTO(item, await isItemOperationallyUsed(id));
 }
 
-export async function createItem(input: CreateItemInput): Promise<ItemDTO> {
+export async function createItem(
+  input: CreateItemInput,
+  actor: Pick<User, "id" | "name"> | null = null,
+): Promise<ItemDTO> {
   await assertUnitExists(input.unitCode);
   assertPackagingSubtypeCoherent(input.type, input.packagingSubtype);
 
   const defaults = ITEM_TYPE_DEFAULTS[input.type];
   const prisma = getPrisma();
-  const code = await nextItemCode(prisma, input.type);
 
-  const item = await prisma.item.create({
+  // Item e referência inicial nascem juntos ou não nascem: uma referência
+  // recusada (unidade incompatível, valor negativo) não pode deixar para
+  // trás um item que o usuário acha que tem custo.
+  const item = await prisma.$transaction(async (tx) => {
+    const code = await nextItemCode(tx, input.type);
+    const created = await tx.item.create({
     data: {
       type: input.type,
       code,
@@ -191,6 +199,11 @@ export async function createItem(input: CreateItemInput): Promise<ItemDTO> {
       externalBarcode: input.externalBarcode ? input.externalBarcode : null,
     },
     include: { unit: true },
+    });
+    if (input.initialCostReference) {
+      await insertItemCostReference(tx, created, input.initialCostReference, actor);
+    }
+    return created;
   });
 
   // Item recem-criado nunca pode ja estar operacionalmente utilizado.

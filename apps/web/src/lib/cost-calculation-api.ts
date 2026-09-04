@@ -2,6 +2,7 @@ import type {
   IndustrialCostCalculationDTO,
   IndustrialCostCalculationSnapshotDTO,
   IndustrialCostCalculationSummaryDTO,
+  PreviewIndustrialCostCalculationInput,
   ProductionOrderCostDTO,
   SaveIndustrialCostCalculationInput,
 } from "@veridi/shared";
@@ -21,6 +22,22 @@ export async function calculateIndustrialCost(
 ): Promise<IndustrialCostCalculationDTO> {
   const query = referenceDate ? `?referenceDate=${encodeURIComponent(referenceDate)}` : "";
   const response = await apiFetch(`${API_URL}/industrial-costs/${versionId}/calculate${query}`);
+  return (await parseJsonOrThrow(response)) as IndustrialCostCalculationDTO;
+}
+
+/**
+ * Prévia com substituições de fonte (referência manual forçada por
+ * material). Mesma matemática do GET; nada é persistido.
+ */
+export async function previewIndustrialCost(
+  versionId: string,
+  input: PreviewIndustrialCostCalculationInput,
+): Promise<IndustrialCostCalculationDTO> {
+  const response = await apiFetch(`${API_URL}/industrial-costs/${versionId}/calculate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
   return (await parseJsonOrThrow(response)) as IndustrialCostCalculationDTO;
 }
 

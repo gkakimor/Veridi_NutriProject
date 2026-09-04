@@ -5,6 +5,40 @@ export class IndustrialCostCalculationNotFoundError extends Error {
   }
 }
 
+/**
+ * Forçar referência manual exige que ela exista na data do cálculo. Sem
+ * referência não há o que forçar — e inventar um número seria o oposto do
+ * que a substituição existe para fazer.
+ */
+export class ManualReferenceMissingError extends Error {
+  constructor(public readonly itemCode: string) {
+    super(
+      `${itemCode}: não há referência manual de custo válida na data de referência para forçar. Defina a referência no cadastro do item.`,
+    );
+    this.name = "ManualReferenceMissingError";
+  }
+}
+
+/**
+ * Substituição só faz sentido para material Veridi da estrutura: material do
+ * cliente não tem custo de aquisição a substituir, e item fora da formulação
+ * não está no cálculo.
+ */
+export class OverrideNotApplicableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OverrideNotApplicableError";
+  }
+}
+
+/** Ao salvar, cada substituição precisa dizer por quê. */
+export class OverrideReasonRequiredError extends Error {
+  constructor(public readonly itemCode: string) {
+    super(`${itemCode}: informe o motivo para forçar a referência manual.`);
+    this.name = "OverrideReasonRequiredError";
+  }
+}
+
 /** Data de referência é decisão de quem calcula — nunca "hoje" implícito. */
 export class InvalidCostReferenceDateError extends Error {
   constructor() {

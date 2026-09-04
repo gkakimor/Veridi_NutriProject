@@ -2683,3 +2683,60 @@ button.help-flow__box:focus-visible {
   padding-top: var(--sp-2);
   border-top: 1px solid var(--line);
 }
+
+/* Fonte do custo por material (cálculo padrão): automático × referência
+   manual forçada. Mesma gramática visual dos cartões de escolha. */
+.cost-source-chooser {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+.cost-source-chooser__title {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.cost-source-chooser__material {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.cost-source-chooser__material legend {
+  padding: 0 var(--sp-1);
+  font-weight: 600;
+}
+
+.cost-source-chooser__options {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.cost-source-chooser__option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+
+.cost-source-chooser__option input {
+  margin-top: 0.2em;
+}
+
+.cost-source-chooser textarea {
+  width: 100%;
+  max-width: 40rem;
+}
+
+/* Auditoria da substituição, dentro da coluna de origem do custo. */
+.cost-override-audit {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--sp-1);
+}

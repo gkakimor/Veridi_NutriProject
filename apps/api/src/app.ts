@@ -24,6 +24,7 @@ import { usersRoutes } from "./modules/users/users.routes.js";
 import { controlledDocumentsRoutes } from "./modules/controlled-documents/controlled-documents.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { itemsRoutes } from "./modules/items/items.routes.js";
+import { itemCostReferencesRoutes } from "./modules/items/item-cost-references.routes.js";
 import { unitsRoutes } from "./modules/units/units.routes.js";
 import { suppliersRoutes } from "./modules/suppliers/suppliers.routes.js";
 import { customersRoutes } from "./modules/customers/customers.routes.js";
@@ -95,6 +96,7 @@ export function buildApp() {
   app.register(formulationTemplatesRoutes);
   app.register(costPricingTemplatesRoutes);
   app.register(itemsRoutes);
+  app.register(itemCostReferencesRoutes);
   app.register(unitsRoutes);
   app.register(suppliersRoutes);
   app.register(customersRoutes);

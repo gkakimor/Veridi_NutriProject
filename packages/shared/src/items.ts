@@ -1,5 +1,7 @@
 /** Contratos do módulo de Itens, consumidos por `apps/api` e `apps/web`. */
 
+import type { CreateItemCostReferenceInput } from "./item-cost-reference.js";
+
 export type ItemType = "RAW_MATERIAL" | "PACKAGING" | "FINISHED_PRODUCT";
 
 export const ITEM_TYPES: readonly ItemType[] = [
@@ -181,6 +183,11 @@ export interface CreateItemInput {
   requiresQualityRelease?: boolean;
   requiresCoa?: boolean;
   externalBarcode?: string;
+  /**
+   * Custo de referência inicial — opcional. Sem ele o item continua
+   * válido; o custo vem da compra real quando ela acontecer.
+   */
+  initialCostReference?: CreateItemCostReferenceInput;
 }
 
 export interface UpdateItemInput {

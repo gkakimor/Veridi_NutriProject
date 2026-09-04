@@ -40,22 +40,52 @@ export type IndustrialMaterialCostSource =
   | "SUPPLIER_OFFER_PREFERRED"
   | "SUPPLIER_OFFER_SINGLE_APPROVED"
   | "AMBIGUOUS_SUPPLIER_REFERENCE"
+  | "MANUAL_REFERENCE"
+  | "MANUAL_REFERENCE_FORCED"
   | "NO_COST"
   | "EXCLUDED_CUSTOMER_SUPPLIED";
 
+/**
+ * Como cada fonte é lida na tela — o mesmo texto no cálculo, no CMV e na
+ * impressão. Diz o que a fonte É ("compra real", "oferta", "referência
+ * manual"), porque é isso que decide o quanto o número sustenta uma decisão.
+ */
 export const INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS: Record<
   IndustrialMaterialCostSource,
   string
 > = {
-  WEIGHTED_AVG_30D: "Média ponderada de compras (30 dias)",
-  WEIGHTED_AVG_90D: "Média ponderada de compras (90 dias)",
-  LAST_REAL: "Último custo real de aquisição",
-  SUPPLIER_OFFER_PREFERRED: "Referência do fornecedor preferencial (estimativa)",
-  SUPPLIER_OFFER_SINGLE_APPROVED: "Referência do único fornecedor homologado (estimativa)",
-  AMBIGUOUS_SUPPLIER_REFERENCE: "Múltiplas referências de fornecedor, sem preferencial",
-  NO_COST: "Sem custo conhecido",
-  EXCLUDED_CUSTOMER_SUPPLIED: "Material do cliente — fora do custo Veridi",
+  WEIGHTED_AVG_30D: "Compra real · média 30 dias",
+  WEIGHTED_AVG_90D: "Compra real · média 90 dias",
+  LAST_REAL: "Última compra real",
+  SUPPLIER_OFFER_PREFERRED: "Oferta válida do fornecedor preferencial",
+  SUPPLIER_OFFER_SINGLE_APPROVED: "Oferta válida do único fornecedor homologado",
+  AMBIGUOUS_SUPPLIER_REFERENCE: "Várias ofertas válidas, sem fornecedor preferencial",
+  MANUAL_REFERENCE: "Referência manual de custo",
+  MANUAL_REFERENCE_FORCED: "Referência manual forçada",
+  NO_COST: "Sem referência de custo",
+  EXCLUDED_CUSTOMER_SUPPLIED: "Material do cliente · não aplicável",
 };
+
+/**
+ * Ordem CANÔNICA da seleção automática da fonte de custo — regra durável
+ * (PRODUCT_RULES §53). A implementação vive em
+ * `apps/api/src/lib/cost-source-selection.ts`; esta lista existe para a tela
+ * mostrar a ordem sem redigitá-la. "Desconhecido" fica de fora de propósito:
+ * não é uma opção, é a ausência de todas.
+ */
+export const COST_SOURCE_PRIORITY_LABELS: readonly string[] = [
+  "Compra real · média 30 dias",
+  "Compra real · média 90 dias",
+  "Última compra real",
+  "Oferta válida de fornecedor",
+  "Referência manual de custo",
+];
+
+/** Frase única da UI sobre a seleção — reusada em custo, CMV e item. */
+export const COST_SOURCE_AUTO_SELECTION_TEXT =
+  "O sistema seleciona automaticamente a melhor fonte disponível: " +
+  COST_SOURCE_PRIORITY_LABELS.join(" → ") +
+  ".";
 
 /** Fontes que representam custo real de aquisição já ocorrido. */
 export const REAL_REFERENCE_SOURCES: readonly IndustrialMaterialCostSource[] = [
@@ -72,7 +102,7 @@ export type IndustrialCostQuality =
 
 export const INDUSTRIAL_COST_QUALITY_LABELS: Record<IndustrialCostQuality, string> = {
   COMPLETE_REAL_REFERENCE: "Completo — referências reais de compra",
-  COMPLETE_WITH_ESTIMATES: "Completo — com estimativa de fornecedor",
+  COMPLETE_WITH_ESTIMATES: "Completo — com estimativas",
   PARTIAL: "Parcial — há custos não informados",
   NO_COST: "Sem custo conhecido",
 };
@@ -81,7 +111,7 @@ export const INDUSTRIAL_COST_QUALITY_HINTS: Record<IndustrialCostQuality, string
   COMPLETE_REAL_REFERENCE:
     "Todos os materiais Veridi vieram de compras reais e todas as premissas estão informadas. Isso é referência completa, não o custo realizado de uma produção.",
   COMPLETE_WITH_ESTIMATES:
-    "Tudo está calculado, mas pelo menos um material usou referência comercial de fornecedor — estimativa, não custo real.",
+    "Tudo está calculado, mas pelo menos um material usou estimativa — oferta de fornecedor ou referência manual de custo — em vez de compra real.",
   PARTIAL:
     "Existe custo ou premissa não informada. O total completo não existe; o que aparece é o subtotal conhecido.",
   NO_COST: "Nenhum custo Veridi conhecido para esta estrutura.",
@@ -132,6 +162,44 @@ export interface IndustrialCostWarningDTO {
   receiptCode?: string;
 }
 
+/**
+ * Referência manual vigente para o material na data do cálculo — o que
+ * "Forçar referência manual" usaria. Já convertida para a unidade do item;
+ * o valor como foi declarado vem junto para a tela dizer "R$ 1.200,00/kg".
+ */
+export interface IndustrialMaterialManualReferenceDTO {
+  referenceId: string;
+  /** Na unidade do item. */
+  unitCost: string;
+  /** Como foi declarado (valor e unidade). */
+  declaredUnitCost: string;
+  declaredUomCode: string;
+  effectiveFrom: string;
+  note: string | null;
+}
+
+/**
+ * Auditoria de uma referência manual FORÇADA num cálculo.
+ *
+ * Congela tudo o que é preciso para reproduzir a decisão sem consultar o
+ * item de novo: o que foi usado, o que a seleção automática teria usado, o
+ * motivo, quem e quando. O cálculo salvo carrega isto dentro do próprio
+ * documento.
+ */
+export interface IndustrialMaterialCostOverrideDTO {
+  reason: string;
+  automaticSource: IndustrialMaterialCostSource;
+  automaticUnitCost: string | null;
+  automaticDetails: string | null;
+  automaticSubtotal: string | null;
+  /** `subtotal forçado − subtotal automático`; `null` quando o automático não tem custo. */
+  impact: string | null;
+  referenceId: string;
+  referenceEffectiveFrom: string;
+  forcedByName: string | null;
+  forcedAt: string;
+}
+
 export interface IndustrialMaterialCostLineDTO {
   itemId: string;
   itemCode: string;
@@ -145,6 +213,19 @@ export interface IndustrialMaterialCostLineDTO {
   costSource: IndustrialMaterialCostSource;
   costSourceDetails: string | null;
   subtotal: string | null;
+  /**
+   * Opcionais porque cálculos salvos antes desta capacidade não os têm:
+   * ler `undefined` como "sem referência" e "sem substituição" é correto.
+   */
+  manualReference?: IndustrialMaterialManualReferenceDTO | null;
+  override?: IndustrialMaterialCostOverrideDTO | null;
+}
+
+/** Substituição pedida pelo usuário: por material, por cálculo. */
+export interface MaterialCostOverrideInput {
+  itemId: string;
+  /** Obrigatório ao salvar; na prévia pode vir vazio. */
+  reason?: string | undefined;
 }
 
 export interface IndustrialResourceCostLineDTO {
@@ -265,6 +346,17 @@ export interface IndustrialCostCalculationSummaryDTO {
 export interface SaveIndustrialCostCalculationInput {
   costReferenceDate?: string;
   notes?: string | null;
+  /**
+   * Materiais em que a referência manual é forçada NESTE cálculo. Exceção
+   * por documento: nada disso muda o item nem a ordem global de seleção.
+   */
+  materialOverrides?: MaterialCostOverrideInput[];
+}
+
+/** Prévia com as mesmas opções de salvar — nada é persistido. */
+export interface PreviewIndustrialCostCalculationInput {
+  costReferenceDate?: string;
+  materialOverrides?: MaterialCostOverrideInput[];
 }
 
 /** Consumo real avaliado de uma OP. */
