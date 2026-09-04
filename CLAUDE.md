@@ -154,5 +154,35 @@ Keep `docs/PROJECT_STATE.md` compact. Rewrite/condense it; do not append an endl
 - benchmark rationale: `docs/BENCHMARK_NOTES.md`
 - current implementation: `docs/PROJECT_STATE.md`
 - legacy migration runbook: `docs/VERIDI_MIGRATION.md`
+- where each rule is protected: `docs/TEST_COVERAGE_MAP.md`
+- E2E plan and rules: `docs/E2E_STRATEGY.md`
 
 Use `/ship` for implementation work.
+
+## Session execution and finalization
+
+**Any task running past 10 minutes must be investigated** — command, background
+shell, agent, auditor, E2E, build, watcher. Investigating is not killing: check
+last output, elapsed time since it, CPU, the file being written, whether it is
+waiting on stdin or an unclosed heredoc, whether the agent that created it has
+already finished, and whether the target file still exists. A long task showing
+real progress keeps going and is reviewed again every ~10 minutes. One with no
+progress, or whose purpose is gone, is a zombie.
+
+**Prove ownership before ending any process.** Never `pkill node`, `killall` or
+equivalent — the user's own editors, browsers and servers run on this machine.
+After killing, confirm it actually left RUNNING; a kill sent is not a kill done.
+
+**Account for agents and background tasks.** An agent finishing does not mean
+its background shells did; that gap is a red flag, not a coincidence.
+
+**Stop dev servers and watchers Claude started** at the end of a task, unless
+the user asked in that task for them to stay up. Record the exception if so.
+
+**Every round ends with a final report** — including when nothing changed, a
+gate failed, the work was interrupted, or a blocker appeared. The report comes
+*after* the operational state is clean: agents running 0, background tasks
+running 0, no orphan project processes, session temporaries removed, `git
+status` actually run rather than remembered. If something could not be cleaned,
+say "finalização com pendência" and name the task, its owner and the risk —
+never "concluído limpo".

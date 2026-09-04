@@ -36,8 +36,36 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const prisma = getPrisma();
-  // Antes de tudo: a OP aponta para o Pedido, e o Pedido para o Cliente.
+  /*
+   * Ordem de remoção segue as chaves estrangeiras, do documento mais externo
+   * para o mais interno: Faturamento aponta para Expedição, Expedição para o
+   * Pedido, reserva para a linha do Pedido, e a OP também para o Pedido.
+   *
+   * Sem esta cadeia, o caso do lote expedido em outro Pedido deixava a
+   * Expedição para trás, o `deleteMany` do Pedido falhava por chave
+   * estrangeira e a massa sobrevivia à suíte — e o relatório comercial, que
+   * agrega o banco inteiro, passava a somar documentos de teste.
+   */
   if (fixtureCustomerOrderIds.length > 0) {
+    const expedicoes = await prisma.shipment.findMany({
+      where: { customerOrderId: { in: fixtureCustomerOrderIds } },
+      select: { id: true },
+    });
+    const expedicaoIds = expedicoes.map((e) => e.id);
+    if (expedicaoIds.length > 0) {
+      await prisma.billing.deleteMany({ where: { shipmentId: { in: expedicaoIds } } });
+      await prisma.shipmentLine.deleteMany({ where: { shipmentId: { in: expedicaoIds } } });
+      await prisma.shipment.deleteMany({ where: { id: { in: expedicaoIds } } });
+    }
+    await prisma.customerOrderReservationLine.deleteMany({
+      where: { reservation: { customerOrderId: { in: fixtureCustomerOrderIds } } },
+    });
+    await prisma.customerOrderReservation.deleteMany({
+      where: { customerOrderId: { in: fixtureCustomerOrderIds } },
+    });
+    await prisma.customerOrderLine.deleteMany({
+      where: { customerOrderId: { in: fixtureCustomerOrderIds } },
+    });
     await prisma.productionOrder.updateMany({
       where: { customerOrderId: { in: fixtureCustomerOrderIds } },
       data: { customerOrderId: null },
@@ -414,6 +442,165 @@ describe("Rastreabilidade bidirecional (backward/forward)", () => {
     ).json();
     expect(finishedTraceability.consumedMaterials).toHaveLength(1);
     expect(finishedTraceability.consumedMaterials[0].lotId).toBe(alternateLot.id);
+
+    await app.close();
+  });
+
+  /*
+   * ESTOQUE ACABADO E FUNGIVEL: o lote sai por quem o RESERVOU, nao por quem o
+   * encomendou.
+   *
+   * Era um HIGH da rodada adversarial. A busca do destino filtrava tambem pelo
+   * `customerOrderId` da Ordem de Producao, o que confunde a ORIGEM da producao
+   * com o DESTINO do lote. Um lote produzido para o Pedido A e expedido no
+   * Pedido B tinha o vinculo gravado em `ShipmentLine.lotId`, o fisico caia, e
+   * a tela respondia "este lote ainda nao foi expedido" — a resposta errada
+   * para a pergunta de recall.
+   *
+   * Este teste substitui o E2E adversarial que provava a mesma coisa em vinte
+   * minutos de navegador.
+   */
+  it("CRITICO: lote produzido para um Pedido e expedido em OUTRO aparece na saida", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const prisma = getPrisma();
+    const marcador = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    const rawLot = await receiveStock(rawMaterial.id, "50", "FORN-LOTE-FUNG");
+    const finishedItem = await createItem("FINISHED_PRODUCT");
+    const ordem = await createReleasedOrder(app, finishedItem.id, rawMaterial.id, "20", "1");
+
+    // ── Pedido A: a ORIGEM. A OP nasce dele. ──────────────────────────────
+    const clienteA = await prisma.customer.create({
+      data: { code: `CLI-TA-${marcador}`, legalName: `Cliente Origem ${marcador}` },
+    });
+    fixtureCustomerIds.push(clienteA.id);
+    const pedidoA = await prisma.customerOrder.create({
+      data: {
+        code: `PED-TA-${marcador}`,
+        customerId: clienteA.id,
+        orderDate: new Date(),
+        status: "IN_FULFILLMENT",
+      },
+    });
+    fixtureCustomerOrderIds.push(pedidoA.id);
+    await prisma.productionOrder.update({
+      where: { id: ordem.id },
+      data: { customerOrderId: pedidoA.id },
+    });
+
+    // Produz o lote acabado.
+    const linha = ordem.requirements[0].reservationLines[0];
+    await app.inject({
+      method: "POST",
+      url: `/production-orders/${ordem.id}/picking/${linha.id}/confirm`,
+      payload: { lotCode: rawLot.code },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/production-orders/${ordem.id}/consumptions`,
+      payload: { entries: [{ reservationLineId: linha.id, quantity: "20" }] },
+    });
+    const saida = await app.inject({
+      method: "POST",
+      url: `/production-orders/${ordem.id}/outputs`,
+      payload: { quantity: "1", destination: "NEW_LOT", businessLotNumber: `VD-FUNG-${marcador}` },
+    });
+    const loteAcabadoId = saida.json().outputs[0].lotId;
+
+    // ── Pedido B: o DESTINO. Reserva o mesmo lote e expede. ───────────────
+    const clienteB = await prisma.customer.create({
+      data: { code: `CLI-TB-${marcador}`, legalName: `Cliente Destino ${marcador}` },
+    });
+    fixtureCustomerIds.push(clienteB.id);
+
+    const pedidoB = (
+      await app.inject({
+        method: "POST",
+        url: "/customer-orders",
+        payload: {
+          customerId: clienteB.id,
+          lines: [{ productId: ordem.productId, orderedQuantity: "1" }],
+        },
+      })
+    ).json();
+    fixtureCustomerOrderIds.push(pedidoB.id);
+    const confirmado = await app.inject({
+      method: "POST",
+      url: `/customer-orders/${pedidoB.id}/confirm`,
+    });
+    const linhaPedido = confirmado.json().lines[0];
+
+    const planoAplicado = await app.inject({
+      method: "POST",
+      url: `/customer-orders/${pedidoB.id}/apply-fulfillment-plan`,
+      payload: {
+        lines: [
+          { customerOrderLineId: linhaPedido.id, reserveQuantity: "1", produceQuantity: "0" },
+        ],
+      },
+    });
+    expect(
+      planoAplicado.statusCode,
+      `plano do Pedido B falhou: ${planoAplicado.body}`,
+    ).toBeLessThan(400);
+
+    const reservas = await prisma.customerOrderReservationLine.findMany({
+      where: { customerOrderLineId: linhaPedido.id, lotId: loteAcabadoId },
+    });
+    expect(reservas.length, "o Pedido B precisa ter reservado o lote produzido").toBeGreaterThan(0);
+
+    const expedicao = (
+      await app.inject({ method: "POST", url: `/customer-orders/${pedidoB.id}/shipments` })
+    ).json();
+    await app.inject({
+      method: "PATCH",
+      url: `/shipments/${expedicao.id}`,
+      payload: {
+        lines: [{ customerOrderReservationLineId: reservas[0]!.id, quantity: "1" }],
+      },
+    });
+    /*
+     * Conferência de lote antes de confirmar: a expedição recusa sair com
+     * linha não conferida, e é assim que a fábrica opera de verdade.
+     */
+    const comLinhas = (
+      await app.inject({ method: "GET", url: `/shipments/${expedicao.id}` })
+    ).json();
+    for (const l of comLinhas.lines) {
+      if (!l.requiresVerification) continue;
+      await app.inject({
+        method: "POST",
+        url: `/shipments/${expedicao.id}/lines/${l.id}/verify`,
+        payload: { lotCode: l.lotCode },
+      });
+    }
+
+    const confirmada = await app.inject({
+      method: "POST",
+      url: `/shipments/${expedicao.id}/confirm`,
+    });
+    expect(
+      confirmada.statusCode,
+      `confirmação da expedição falhou: ${confirmada.body}`,
+    ).toBeLessThan(400);
+
+    // ── A regra ───────────────────────────────────────────────────────────
+    const corpo = (
+      await app.inject({ method: "GET", url: `/lots/${loteAcabadoId}/traceability` })
+    ).json();
+
+    // A saída física existe, e é a do Pedido B — não a do Pedido da OP.
+    expect(corpo.commercialDestination.shipments.length).toBe(1);
+    const saidaLida = corpo.commercialDestination.shipments[0];
+    expect(saidaLida.customerOrderCode).toBe(confirmado.json().code);
+    expect(saidaLida.customerName).toBe(clienteB.legalName);
+
+    // E a ORIGEM continua sendo o Pedido A: origem e destino são campos
+    // diferentes, e trocá-los foi exatamente o defeito.
+    expect(corpo.commercialDestination.customerOrderCode).toBe(pedidoA.code);
+    expect(corpo.commercialDestination.customerName).toBe(clienteA.legalName);
 
     await app.close();
   });
