@@ -108,3 +108,88 @@ describe("CalcHint", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
+
+describe("A conferência não depende de ninguém lembrar dela", () => {
+  /*
+   * `esperado` era opcional, e omitir desligava a checagem em silêncio. Foi o
+   * que aconteceu na Formulação: a explicação da quantidade física mostrava
+   * `22 kg × (1 + 23%) ÷ 99%` — que dá 27,33 — ao lado do valor exibido de
+   * 0,091111 kg, porque faltava a divisão pela base de 300. O motor estava
+   * certo; a explicação, não. E o alarme escrito para exatamente esse caso
+   * estava dormindo.
+   */
+  it("um fator esquecido na explicação acusa divergência, sem `esperado`", () => {
+    render(
+      <CalcHint
+        label="Quantidade física"
+        operandos={[
+          { valor: "22 kg", papel: "quantidade teórica", numero: 22 },
+          { valor: "99%", papel: "pureza", operador: "÷", numero: 0.99 },
+          { valor: "(1 + 23%)", papel: "overage", numero: 1.23 },
+        ]}
+        resultado="0,091111 kg"
+      />,
+    );
+    abrir("Quantidade física");
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("com todos os fatores, a mesma conta fecha e não acusa nada", () => {
+    render(
+      <CalcHint
+        label="Quantidade física"
+        operandos={[
+          { valor: "22 kg", papel: "quantidade teórica", numero: 22 },
+          { valor: "300", papel: "base da fórmula", operador: "÷", numero: 300 },
+          { valor: "99%", papel: "pureza", operador: "÷", numero: 0.99 },
+          { valor: "(1 + 23%)", papel: "overage", numero: 1.23 },
+        ]}
+        resultado="0,091111 kg"
+      />,
+    );
+    abrir("Quantidade física");
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("a folga sai da precisão exibida, não de meio centavo fixo", () => {
+    /*
+     * Meio centavo sobre 0,091111 kg seria 5% do valor — folga larga o
+     * bastante para deixar passar erro nenhum. Aqui a conta dá 0,0911111 e a
+     * tela mostraria 0,0916: divergência de 0,0005, invisível para a folga
+     * antiga e visível para a que vem das seis casas exibidas.
+     */
+    render(
+      <CalcHint
+        label="Quantidade física"
+        operandos={[
+          { valor: "22 kg", papel: "quantidade teórica", numero: 22 },
+          { valor: "300", papel: "base da fórmula", operador: "÷", numero: 300 },
+          { valor: "99%", papel: "pureza", operador: "÷", numero: 0.99 },
+          { valor: "(1 + 23%)", papel: "overage", numero: 1.23 },
+        ]}
+        resultado="0,091600 kg"
+      />,
+    );
+    abrir("Quantidade física");
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("sem `numero` em algum operando, a conferência fica desligada como antes", () => {
+    render(
+      <CalcHint
+        label="Total da linha"
+        operandos={[
+          { valor: "R$ 4,0531", papel: "preço faturado" },
+          { valor: "123", papel: "quantidade em un" },
+        ]}
+        resultado="R$ 1,00"
+      />,
+    );
+    abrir("Total da linha");
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
