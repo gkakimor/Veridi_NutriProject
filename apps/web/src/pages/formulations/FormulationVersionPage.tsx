@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type {
   FormulationActivationImpactDTO,
@@ -316,6 +316,16 @@ export function FormulationVersionPage() {
    * quebra em silêncio, que é o modo de falha que esta correção existe para
    * eliminar.
    */
+  /*
+   * Quais linhas tem o painel de ajustes aberto.
+   *
+   * Era um `<details>` dentro da celula, e o painel herdava a rolagem
+   * horizontal da tabela: numa tela de 1500px o aviso de dupla correcao ficava
+   * 20% visivel, o resto atras da borda. O painel agora e uma LINHA propria,
+   * de largura inteira, entao nao depende de rolar a tabela para o lado.
+   */
+  const [ajustesAbertos, setAjustesAbertos] = useState<Record<string, boolean>>({});
+
   const gravado = useRef<string>("");
 
   const syncFromServer = useCallback((dto: FormulationVersionDTO) => {
@@ -648,15 +658,26 @@ export function FormulationVersionPage() {
       notes: notes.trim(),
       components: components
         .filter((row) => row.itemId)
-        .map((row) => ({
+        .map((row) => {
+          /*
+           * O erro diz QUAL componente, não só qual campo.
+           *
+           * "Pureza %: informe um valor numérico válido" numa receita de doze
+           * linhas manda a pessoa conferir doze linhas — e se a linha estiver
+           * com o painel fechado, não há nem pista de onde procurar. O código
+           * do item é o que ela usa para achar a linha.
+           */
+          const doItem = (campo: string) =>
+            row.itemCode ? `${campo} de ${row.itemCode}` : campo;
+          return {
           itemId: row.itemId,
-          quantity: exigirDecimal(row.quantity, "Quantidade"),
+          quantity: exigirDecimal(row.quantity, doItem("Quantidade")),
           unitCode: row.unitCode,
           basis: row.basis,
           supplyResponsibility: row.supplyResponsibility,
           // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
-          purityPercentApplied: exigirDecimalOpcional(row.purityPercentApplied, "Pureza %"),
-          overagePercent: exigirDecimalOpcional(row.overagePercent, "Overage %"),
+          purityPercentApplied: exigirDecimalOpcional(row.purityPercentApplied, doItem("Pureza %")),
+          overagePercent: exigirDecimalOpcional(row.overagePercent, doItem("Overage %")),
           /*
            * O modo VIAJA no payload, senão o seletor da linha é decorativo.
            *
@@ -671,7 +692,8 @@ export function FormulationVersionPage() {
           applyPurityAdjustment: row.applyPurityAdjustment,
           applyOverageAdjustment: row.applyOverageAdjustment,
           ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
-        })),
+          };
+        }),
     };
   }
 
@@ -1065,10 +1087,12 @@ export function FormulationVersionPage() {
                         units,
                       )
                     : null;
+                  const aberto = ajustesAbertos[row.key] === true;
                   const fisicoExibido = previa?.fisico ?? row.physicalPerUnit;
                   const equivalenteExibido = previa?.teorico ?? row.stockEquivalentQuantity;
                   return (
-                  <tr key={row.key}>
+                  <Fragment key={row.key}>
+                  <tr>
                     <td>
                       {isDraft ? (
                         <SearchableEntitySelect
@@ -1183,7 +1207,7 @@ export function FormulationVersionPage() {
                       )}
                     </td>
                     {/*
-                      AJUSTES NUM DISCLOSURE, não soltos na linha.
+                      AJUSTES ATRÁS DE UM BOTÃO, não soltos na linha.
 
                       Pureza e overage são de duas naturezas ao mesmo tempo:
                       documentação de auditoria e, quando autorizados, entrada de
@@ -1191,21 +1215,70 @@ export function FormulationVersionPage() {
                       preenchimento parecer a autorização — e era, até esta
                       capability: bastava digitar a pureza para a necessidade
                       física mudar.
+
+                      A célula guarda só o RESUMO do estado; o painel abre numa
+                      linha própria, logo abaixo.
                     */}
                     <td colSpan={2}>
-                      <details className="ajuste-quantidade">
-                        <summary>
-                          {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS"
+                      <button
+                        type="button"
+                        className="ajuste-quantidade__botao"
+                        aria-expanded={aberto}
+                        aria-controls={`ajustes-${row.key}`}
+                        onClick={() =>
+                          setAjustesAbertos((prev) => ({ ...prev, [row.key]: !prev[row.key] }))
+                        }
+                      >
+                        <span aria-hidden="true">{aberto ? "▾" : "▸"}</span>{" "}
+                        {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS"
+                          ? row.applyPurityAdjustment || row.applyOverageAdjustment
                             ? `Calculada${row.applyPurityAdjustment ? " · pureza" : ""}${row.applyOverageAdjustment ? " · overage" : ""}`
-                            : "Física direta"}
-                          {(row.purityPercentApplied || row.overagePercent) &&
-                            row.quantityMode === "PHYSICAL_DIRECT" && (
-                              <span className="ajuste-quantidade__nota">
-                                {" · registrado, não aplicado"}
-                              </span>
-                            )}
-                        </summary>
+                            : /*
+                                Modo teórico sem ajuste marcado NÃO calcula nada.
+                                Dizer só "Calculada" aqui afirmava uma correção
+                                que não está ligada — o erro contrário ao antigo,
+                                e igualmente silencioso.
+                              */
+                              "Calculada · nenhum ajuste marcado"
+                          : "Física direta"}
+                        {(row.purityPercentApplied || row.overagePercent) &&
+                          row.quantityMode === "PHYSICAL_DIRECT" && (
+                            <span className="ajuste-quantidade__nota">
+                              {" · registrado, não aplicado"}
+                            </span>
+                          )}
+                      </button>
+                    </td>
+                    <td>
+                      {formatQuantityWithUnit(equivalenteExibido, row.stockUnitCode)}
+                    </td>
+                    <td>{formatQuantityWithUnit(fisicoExibido, row.stockUnitCode)}</td>
+                    {isDraft && (
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          aria-label="Remover componente"
+                          onClick={() => handleRemoveComponent(row.key)}
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                  {/*
+                    O painel de ajustes é uma LINHA, não uma célula.
 
+                    Dentro da célula ele herdava a rolagem horizontal da tabela:
+                    numa tela de 1500px o aviso de dupla correção ficava a 20%
+                    visível, e a única pista de que havia mais texto era a sombra
+                    de borda — que significa "tem mais coluna", não "esta frase
+                    continua". Aviso de segurança não pode depender de rolar a
+                    tabela para o lado.
+                  */}
+                  {aberto && (
+                    <tr className="ajuste-quantidade__linha">
+                      <td colSpan={isDraft ? 11 : 10} id={`ajustes-${row.key}`}>
                         <div className="ajuste-quantidade__corpo">
                           {isDraft ? (
                             <>
@@ -1225,10 +1298,25 @@ export function FormulationVersionPage() {
                                   ),
                                 )}
                               </fieldset>
+                              {/*
+                                Trocar o modo não liga ajuste nenhum — de
+                                propósito: marcar é a autorização, e ligar
+                                sozinho seria a aplicação silenciosa que esta
+                                capability tirou do sistema.
+
+                                Mas a frase anterior dizia "O sistema calcula a
+                                quantidade física" já na troca, antes de
+                                qualquer caixa marcada. Quem lia rápido saía
+                                achando que a correção estava ativa quando não
+                                estava — sub-correção em silêncio, o erro
+                                espelhado do que motivou a capability.
+                              */}
                               <p className="field__hint">
                                 {row.quantityMode === "PHYSICAL_DIRECT"
                                   ? "Use quando a quantidade informada já considera pureza, overage ou outros ajustes técnicos."
-                                  : "O sistema calcula a quantidade física usada em novas Ordens de Produção e no CMV desta versão."}
+                                  : row.applyPurityAdjustment || row.applyOverageAdjustment
+                                    ? "O sistema calcula a quantidade física usada em novas Ordens de Produção e no CMV desta versão."
+                                    : "Marque abaixo o que deve ser corrigido. Enquanto nada estiver marcado, a quantidade física continua igual à informada."}
                               </p>
                               {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
                                 <p className="field__hint ajuste-quantidade__aviso">
@@ -1244,6 +1332,20 @@ export function FormulationVersionPage() {
                             </p>
                           )}
 
+                          {/*
+                            Em modo físico direto os campos de pureza e overage
+                            aparecem SEM caixa de marcar. Sem esta linha, nada
+                            junto deles diz que preencher não aplica — a frase
+                            existia só no ⓘ do cabeçalho da coluna, que quase
+                            ninguém abre. É a regra central desta capability, e
+                            ela precisa estar onde a pessoa digita.
+                          */}
+                          {row.quantityMode === "PHYSICAL_DIRECT" && (
+                            <p className="field__hint">
+                              Pureza e overage aqui são registro de auditoria:
+                              preencher não aplica correção nenhuma.
+                            </p>
+                          )}
                           <div className="ajuste-quantidade__campos">
                             <label>
                               {isDraft && row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
@@ -1387,25 +1489,10 @@ export function FormulationVersionPage() {
                             </p>
                           )}
                         </div>
-                      </details>
-                    </td>
-                    <td>
-                      {formatQuantityWithUnit(equivalenteExibido, row.stockUnitCode)}
-                    </td>
-                    <td>{formatQuantityWithUnit(fisicoExibido, row.stockUnitCode)}</td>
-                    {isDraft && (
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          aria-label="Remover componente"
-                          onClick={() => handleRemoveComponent(row.key)}
-                        >
-                          ✕
-                        </button>
                       </td>
-                    )}
-                  </tr>
+                    </tr>
+                  )}
+                  </Fragment>
                   );
                 })}
 

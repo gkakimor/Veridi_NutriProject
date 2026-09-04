@@ -2587,20 +2587,57 @@ button.help-flow__box:focus-visible {
  * de cálculo. Deixá-los crus lado a lado fazia o preenchimento parecer a
  * autorização — e era, até a quantidade física virar decisão explícita.
  */
-.ajuste-quantidade > summary {
+/* O resumo do estado, na célula. Não quebra: é rótulo curto, não prosa. */
+.ajuste-quantidade__botao {
   cursor: pointer;
   white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.ajuste-quantidade__botao:focus-visible {
+  box-shadow: var(--focus-ring);
+  border-radius: 2px;
+}
+
+/*
+ * A linha do painel. Ocupa a largura toda da tabela, então o conteúdo não
+ * depende da rolagem horizontal para ser lido — que era o defeito.
+ */
+.ajuste-quantidade__linha > td {
+  background: var(--canvas);
+  white-space: normal;
 }
 
 .ajuste-quantidade__nota {
   opacity: 0.75;
 }
 
+/*
+ * O corpo do disclosure é PROSA dentro de uma célula de tabela.
+ *
+ * `.table td` declara `white-space: nowrap`, e `white-space` herda: o aviso de
+ * dupla correção virava uma linha só de 627px, dos quais 128px — 20% — ficavam
+ * dentro da área visível. O resto exigia rolar a tabela para o lado, e a única
+ * pista de que havia mais texto era a sombra de borda, que significa "tem mais
+ * coluna" e não "esta frase continua".
+ *
+ * Aviso de segurança não pode depender de rolagem lateral para ser lido. O
+ * `nowrap` continua certo para as colunas — quantidade e unidade não se
+ * quebram —, então o reset é aqui, onde o conteúdo é texto corrido.
+ */
 .ajuste-quantidade__corpo {
   display: grid;
   gap: var(--sp-2);
   padding: var(--sp-2) 0 0;
   min-width: 20rem;
+  /* Largura de leitura. A linha é larga; a prosa não deve ser. */
+  max-width: 44rem;
+  white-space: normal;
 }
 
 .ajuste-quantidade__modos {

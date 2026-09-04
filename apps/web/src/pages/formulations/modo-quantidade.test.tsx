@@ -251,3 +251,99 @@ describe("O modo do componente chega ao servidor", () => {
     );
   });
 });
+
+describe("O painel de ajustes não mente sobre o que está ligado", () => {
+  it("modo teórico sem ajuste marcado diz que nada está sendo corrigido", async () => {
+    const user = userEvent.setup();
+    // Componente com pureza REGISTRADA e modo físico direto — o caso legado.
+    await abrir(
+      versao({
+        components: [
+          componente({ quantityMode: "PHYSICAL_DIRECT", applyPurityAdjustment: false }),
+        ],
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: /Física direta/ }));
+    await user.click(
+      screen.getByRole("radio", { name: "Calcular quantidade física automaticamente" }),
+    );
+
+    /*
+     * Trocar o modo não liga ajuste nenhum, de propósito: marcar é a
+     * autorização. Mas a tela dizia "O sistema calcula a quantidade física"
+     * nesse exato momento, o que faz quem lê rápido achar que a correção está
+     * ativa — sub-correção em silêncio, o erro espelhado do que motivou esta
+     * capability.
+     */
+    expect(
+      screen.getByText(/Enquanto nada estiver marcado, a quantidade física continua igual/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /nenhum ajuste marcado/ })).toBeInTheDocument();
+    // E o número não mudou: 220 g continuam 0,22 kg.
+    expect(celula("fisico")).toBe("0,22 kg");
+  });
+
+  it("marcar a pureza troca a frase e o número junto", async () => {
+    const user = userEvent.setup();
+    await abrir(
+      versao({
+        components: [
+          componente({ quantityMode: "PHYSICAL_DIRECT", applyPurityAdjustment: false }),
+        ],
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: /Física direta/ }));
+    await user.click(
+      screen.getByRole("radio", { name: "Calcular quantidade física automaticamente" }),
+    );
+    await user.click(screen.getByRole("checkbox", { name: "Corrigir pela pureza" }));
+
+    await waitFor(() => expect(celula("fisico")).toBe("0,22449 kg"));
+    expect(
+      screen.queryByText(/Enquanto nada estiver marcado/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("o painel abre numa linha de largura inteira, fora da rolagem lateral", async () => {
+    const user = userEvent.setup();
+    await abrir();
+
+    await user.click(screen.getByRole("button", { name: /^▸|Calculada/ }));
+
+    /*
+     * Estrutura, não estilo: jsdom não faz layout, então medir pixels aqui não
+     * provaria nada. O que impede o defeito é o painel morar numa LINHA que
+     * atravessa a tabela — dentro da célula ele herdava a rolagem horizontal e
+     * o aviso de dupla correção ficava 20% visível numa tela de 1500px.
+     */
+    const linha = document.querySelector("tr.ajuste-quantidade__linha");
+    expect(linha).not.toBeNull();
+    const celulaDoPainel = linha!.querySelector("td");
+    expect(Number(celulaDoPainel!.getAttribute("colspan"))).toBeGreaterThanOrEqual(10);
+    expect(celulaDoPainel!.querySelector(".ajuste-quantidade__corpo")).not.toBeNull();
+  });
+});
+
+describe("Erro de decimal aponta a linha", () => {
+  it("a mensagem diz qual componente tem o valor inválido", async () => {
+    const user = userEvent.setup();
+    await abrir();
+
+    await user.click(screen.getByRole("button", { name: /Calculada/ }));
+    const pureza = screen.getByRole("textbox", { name: /Pureza/ });
+    fireEvent.change(pureza, { target: { value: "abc" } });
+    await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
+
+    /*
+     * "Pureza %: informe um valor válido" numa receita de doze linhas manda
+     * conferir doze linhas — e se o painel da linha estiver fechado, não há
+     * pista de onde procurar. O código do item é como a pessoa acha a linha.
+     */
+    await waitFor(() =>
+      expect(screen.getByText(/Pureza % de MP-000003/)).toBeInTheDocument(),
+    );
+    expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
+  });
+});
