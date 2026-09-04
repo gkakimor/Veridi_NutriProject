@@ -89,6 +89,44 @@ Product
 
 Do not hide critical history only in JSON blobs.
 
+## Migration order
+
+`prisma migrate deploy` applies pending migrations in folder-name order. On
+an existing database that order is invisible — only what is missing gets
+applied, in the order the folders arrived. On an empty database it is the
+real order. Rules:
+
+- a migration may only reference tables, types and columns created by a
+  migration with a smaller-or-equal name. `scripts/migration-order.test.ts`
+  checks this statically as part of `pnpm test`;
+- folder names carry the real timestamp of the session that created them
+  (`YYYYMMDDHHMMSS_snake_case`), never a future date;
+- `pnpm validate:migrations:fresh` proves the rebuild against a throwaway
+  database on the local Postgres. It goes through `scripts/local-db-guard.mjs`
+  (local host only, never Railway) and drops the database at the end. Run it
+  before merging any migration;
+- never edit the SQL of a migration production already applied. To repair
+  ordering, rename the folder to a name after its dependency and make its
+  statements idempotent (`IF NOT EXISTS`) so it applies as a no-op where the
+  old name already ran. `migrate deploy` ignores checksums of applied rows
+  and tolerates orphan rows in `_prisma_migrations`; an orphan row may be
+  deleted later in a coordinated window, never before the renamed migration
+  has run there.
+
+Repair record (2026-09-04): `20260904093000_template_component_quantity_mode`
+renamed to `20260921093000_…` because it depended on
+`20260921090000_formulation_templates`. Alternatives compared: editing the
+historical SQL (rejected — rewrites applied history), baseline squash
+(rejected — loses per-migration history and needs `migrate resolve` on every
+existing database), repair migration with existence guards (works, but keeps
+a pair that only applies out of order), rename plus `migrate resolve
+--applied` in production (works, needs a manual production step). Rename plus
+idempotent columns needs no manual step anywhere.
+
+New environment from zero: create the database, set `DATABASE_URL` in
+`.env`, run `pnpm --filter @veridi/api exec prisma migrate deploy`, then
+expect `Database schema is up to date` from `prisma migrate status`.
+
 ---
 
 # Purchase Order / receiving

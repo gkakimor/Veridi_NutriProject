@@ -86,24 +86,31 @@ podem discordar num item sem compra. Pré-existente (oferta já era ignorada).
 Corrigir é trocar a fundação pela seleção canônica nesse serviço e ampliar a
 taxonomia `CostSource`.
 
-### 13. Migrations `20260904…` da quantidade física ordenam antes da dependência — MEDIUM
+### 13. Reconstrução de banco vazio — REPARADO em 2026-09-04, resta limpeza opcional em produção — LOW
 
-`20260904093000_template_component_quantity_mode` altera
-`formulation_template_components`, criada só em `20260921090000_formulation_templates`.
-Num banco **limpo**, `prisma migrate deploy` aplica na ordem dos nomes e
-falha ali (`relation "formulation_template_components" does not exist`) —
-provado em 2026-09-04 num banco descartável. Produção e o banco local não
-sofrem: lá as duas já foram aplicadas depois das `20260925…`, e `migrate
-deploy` só aplica o que falta. Afeta ambiente novo do zero (clone, staging,
-restauração sem dump).
+Defeito: `20260904093000_template_component_quantity_mode` alterava
+`formulation_template_components`, criada só em `20260921090000`. Banco
+existente nunca sofreu (ordem de chegada); banco **limpo** falhava ali.
 
-Correção exige coordenação com produção, porque os nomes já estão em
-`_prisma_migrations` lá: renomear as duas pastas para depois de
-`20260921090000` **e** marcar os nomes novos como aplicadas em produção
-(`prisma migrate resolve --applied`) antes do próximo deploy — ou reescrever
-as duas como idempotentes. Decisão de PO; não feito nesta rodada. A mesma
-prova mostrou que, com as duas reordenadas, as 49 migrations aplicam do zero
-e `20260904214653_item_manual_cost_reference` aplica exatamente uma vez.
+Reparo aplicado (estratégia "renomear + idempotente", escolhida entre editar
+SQL histórico, renomear, baseline e repair migration — comparação em
+[`TECH_BASELINE.md`](TECH_BASELINE.md), *Migration order*):
+- pasta renomeada para `20260921093000_template_component_quantity_mode`,
+  SQL igual byte a byte exceto `ADD COLUMN IF NOT EXISTS` nas três colunas;
+- `20260904214653_item_manual_cost_reference` preservada;
+- provado em banco vazio (49 aplicadas, `Database schema is up to date`) e
+  em cópia do histórico de produção (aplica uma vez como no-op, nada
+  destrutivo, `migrate diff` entre os dois bancos vazio);
+- proteção permanente: `scripts/migration-order.test.ts` (estático, em
+  `pnpm test`) e `pnpm validate:migrations:fresh` (banco descartável local).
+
+Pendente, sem urgência: produção guarda a linha órfã
+`20260904093000_template_component_quantity_mode` em `_prisma_migrations`.
+`migrate deploy` tolera órfã e o próximo deploy aplica a renomeada como
+no-op; nenhum passo manual é necessário. Limpeza cosmética, se desejada,
+numa janela combinada: `DELETE FROM _prisma_migrations WHERE migration_name
+= '20260904093000_template_component_quantity_mode'` — só depois do deploy
+que aplicar a renomeada, nunca antes.
 
 ---
 

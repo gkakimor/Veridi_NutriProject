@@ -58,6 +58,12 @@ futuras: [`E2E_STRATEGY.md`](E2E_STRATEGY.md). Ferramental de segurança
 (`local-db-guard`, `local-db-reset`, `smoke-prod`, `maintenance/`) e os
 importadores oficiais permanecem.
 
+**Reconstrução do banco do zero** (2026-09-04): as 49 migrations aplicam num
+banco vazio só com o repositório. Ordem dos nomes é a ordem real —
+`scripts/migration-order.test.ts` vigia isso em `pnpm test`, e
+`pnpm validate:migrations:fresh` prova contra um Postgres local descartável.
+Regra e procedimento em [`TECH_BASELINE.md`](TECH_BASELINE.md).
+
 ## Próximo gate
 
 **Validação com a Veridi.** Nenhum desenvolvimento novo até a conversa acontecer
@@ -67,12 +73,12 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado por política.
 
 ## Backlog aberto
 
-Zero CRITICAL e HIGH. Três MEDIUM (`aria-invalid` por campo na Formulação;
-recebimento de material do cliente sem regra por Item para lote e validade;
-duas migrations `20260904…` da capability anterior que quebram a aplicação
-num banco limpo — produção não é afetada), quatro LOW, quatro decisões de PO
-e quatro melhorias adiadas de propósito — a maior delas é levar o cálculo ao
-vivo às demais telas. Ver [`BACKLOG.md`](BACKLOG.md).
+Zero CRITICAL e HIGH. Dois MEDIUM (`aria-invalid` por campo na Formulação;
+recebimento de material do cliente sem regra por Item para lote e validade),
+cinco LOW — inclusive a limpeza opcional de uma linha órfã em
+`_prisma_migrations` de produção —, quatro decisões de PO e quatro melhorias
+adiadas de propósito — a maior delas é levar o cálculo ao vivo às demais
+telas. Ver [`BACKLOG.md`](BACKLOG.md).
 
 ## Blockers
 
