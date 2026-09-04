@@ -53,3 +53,9 @@ docs/*.docx
 
 # Runner temporário do portão adversarial — não versionado.
 scripts/_*.sh
+
+# Capturas do smoke de produção. São telas autenticadas do ambiente real:
+# carregam nome de cliente, pedido e lote. O script as escreve na raiz do
+# repositório, a um `git add -A` distraído de virarem públicas — a mesma
+# distração que já trouxe o DOCX acima para dentro do Git uma vez.
+/prod-*.png
