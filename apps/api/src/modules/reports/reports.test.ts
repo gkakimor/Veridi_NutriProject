@@ -980,7 +980,7 @@ describe("Relatórios — Comercial e Faturamento", () => {
     await activateFormulation(app, productA.id, rawMaterial.id);
 
     // A: 500 pedido / 500 reservado. B: 300 pedido / 300 reservado.
-    const { orderId } = await createOrder(app, [
+    const { orderId, customer } = await createOrder(app, [
       { productId: productA.id, orderedQuantity: "500", reserveQuantity: "500" },
       { productId: productB.id, orderedQuantity: "300", reserveQuantity: "300" },
     ]);
@@ -990,8 +990,16 @@ describe("Relatórios — Comercial e Faturamento", () => {
     // Faturamento cobre a expedição inteira: A 500 + B 200.
     await issueBilling(app, shipment.id, { unitPrice: "10" });
 
-    /* R-12 */
-    const orders = await report(app, "commercial/orders", {});
+    /*
+     * R-12 — filtrado pelo CLIENTE desta fixture, não a lista inteira.
+     *
+     * O relatório é paginado. Procurar a própria linha na página 1 de uma
+     * lista sem filtro funciona enquanto a base é pequena e falha no dia em
+     * que qualquer outra suíte cria um pedido — a linha sai da página e o
+     * `find` devolve `undefined`. `createOrder` cria o próprio cliente, então
+     * o filtro por cliente isola exatamente esta massa.
+     */
+    const orders = await report(app, "commercial/orders", { customerId: customer.id });
     const orderRow = orders.rows.find(
       (row: { customerOrderId: string }) => row.customerOrderId === orderId,
     );
@@ -1057,7 +1065,8 @@ describe("Relatórios — Comercial e Faturamento", () => {
       await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: shipment2.id } })
     ).json();
 
-    const awaiting = await report(app, "billing/awaiting", {});
+    // Mesmo motivo do R-12: lista paginada, filtrada pelo cliente da fixture.
+    const awaiting = await report(app, "billing/awaiting", { customerId: customer.id });
     const awaitingRow = awaiting.rows.find(
       (row: { shipmentId: string }) => row.shipmentId === shipment2.id,
     );
