@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type {
   FormulationComponent,
+  FormulationComponentQuantityMode,
   FormulationTemplate,
   FormulationTemplateVersion,
   FormulationVersion,
@@ -234,6 +235,44 @@ async function requireVersion(id: string): Promise<VersionWithRelations> {
   });
   if (!version) throw new FormulationVersionNotFoundError(id);
   return version;
+}
+
+/**
+ * Modo e flags do componente, com a marca desligada fora do modo teorico.
+ *
+ * `applyPurityAdjustment: true` debaixo de `PHYSICAL_DIRECT` e um registro que
+ * mente: o motor ignora a marca nesse modo, entao o dado guardado diz que a
+ * pureza sera aplicada e ela nao e. Pior, e estado invisivel — a tela so mostra
+ * as caixas no modo teorico, e voltar o modo depois religaria a correcao sem
+ * ninguem ter marcado nada.
+ *
+ * Normalizar aqui e no servidor, e nao so na tela, porque a regra e do dominio:
+ * um cliente que mande a combinacao incoerente nao deve conseguir grava-la.
+ * Nenhum resultado de calculo muda — `ajustesHabilitados` ja devolvia
+ * `{ purity: false, overage: false }` para `PHYSICAL_DIRECT`.
+ *
+ * Componentes sao apagados e recriados a cada gravacao, entao `undefined` aqui
+ * significa "use o padrao do banco", nunca "preserve o que estava la".
+ */
+function modoEFlags(component: {
+  // `| undefined` explicito por causa de `exactOptionalPropertyTypes`: os dois
+  // chamadores sao diferentes — a copia de versao le linhas do banco, e a
+  // gravacao le um payload validado onde o campo pode faltar.
+  quantityMode?: FormulationComponentQuantityMode | null | undefined;
+  applyPurityAdjustment?: boolean | null | undefined;
+  applyOverageAdjustment?: boolean | null | undefined;
+}) {
+  const modo = component.quantityMode ?? undefined;
+  const teorico = modo === "THEORETICAL_WITH_ADJUSTMENTS";
+  return {
+    ...(modo !== undefined ? { quantityMode: modo } : {}),
+    ...(component.applyPurityAdjustment !== undefined && component.applyPurityAdjustment !== null
+      ? { applyPurityAdjustment: teorico && component.applyPurityAdjustment }
+      : {}),
+    ...(component.applyOverageAdjustment !== undefined && component.applyOverageAdjustment !== null
+      ? { applyOverageAdjustment: teorico && component.applyOverageAdjustment }
+      : {}),
+  };
 }
 
 export async function listFormulations(
@@ -500,15 +539,7 @@ export async function createNewVersionFrom(
               : {}),
             // Modo e flags acompanham o snapshot: sao a INTERPRETACAO da
             // quantidade, e mudar a receita depois nao reescreve versao ativa.
-            ...(component.quantityMode !== undefined
-              ? { quantityMode: component.quantityMode }
-              : {}),
-            ...(component.applyPurityAdjustment !== undefined
-              ? { applyPurityAdjustment: component.applyPurityAdjustment }
-              : {}),
-            ...(component.applyOverageAdjustment !== undefined
-              ? { applyOverageAdjustment: component.applyOverageAdjustment }
-              : {}),
+            ...modoEFlags(component),
             ...(component.legacyTotalQuantity !== undefined
               ? { legacyTotalQuantity: component.legacyTotalQuantity }
               : {}),
@@ -619,15 +650,7 @@ export async function updateFormulationVersion(
               : {}),
             // Modo e flags acompanham o snapshot: sao a INTERPRETACAO da
             // quantidade, e mudar a receita depois nao reescreve versao ativa.
-            ...(component.quantityMode !== undefined
-              ? { quantityMode: component.quantityMode }
-              : {}),
-            ...(component.applyPurityAdjustment !== undefined
-              ? { applyPurityAdjustment: component.applyPurityAdjustment }
-              : {}),
-            ...(component.applyOverageAdjustment !== undefined
-              ? { applyOverageAdjustment: component.applyOverageAdjustment }
-              : {}),
+            ...modoEFlags(component),
             ...(component.legacyTotalQuantity !== undefined
               ? { legacyTotalQuantity: component.legacyTotalQuantity }
               : {}),

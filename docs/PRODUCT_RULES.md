@@ -3388,11 +3388,37 @@ Pureza ausente nunca vira 100%, pureza zero não divide, e overage ausente nunca
 vira zero implícito — ausência de premissa é cálculo inválido, não resultado
 conveniente.
 
-A matemática vive em **um lugar só**, `lib/formulation-math.ts`, e os cinco
-consumidores — plano de atendimento, tela da Formulação, cálculo industrial,
-custo da precificação e Ordem de Produção — a chamam. Explicação na tela mostra
-essa conta; nunca recalcula por conta própria, senão passa a poder discordar do
-número que manda.
+A matemática vive em **um lugar só** e os cinco consumidores — plano de
+atendimento, tela da Formulação, cálculo industrial, custo da precificação e
+Ordem de Produção — a chamam. Explicação na tela mostra essa conta; nunca
+recalcula por conta própria, senão passa a poder discordar do número que manda.
+
+Esse lugar é `packages/shared/src/formulation-quantity.ts`, e
+`apps/api/src/lib/formulation-math.ts` delega para ele. A conta subiu para o
+pacote compartilhado quando a tela da Formulação passou a mostrar o físico
+**enquanto se digita**: quem decide a quantidade precisa ver o efeito antes de
+gravar, e a alternativa — reimplementar a fórmula no navegador — criaria um
+segundo motor cuja resposta seria justamente a que a fábrica vê e ninguém usa.
+Não é cópia sincronizada: os dois lados chamam a mesma função, sobre a mesma
+biblioteca decimal.
+
+Base que o motor não reconhece **bloqueia**: devolve o motivo, não um número.
+Zero ali seria a resposta mais perigosa possível, porque "não precisa de
+material" é plausível e ninguém confere.
+
+### O modo é a autoridade; a marca sozinha não autoriza nada
+
+`applyPurityAdjustment` e `applyOverageAdjustment` só têm efeito sob **teórica
+com ajustes**. Guardar uma marca ligada sob **física direta** é registro que
+mente — o cálculo a ignora, e voltar o modo depois religaria a correção sem
+ninguém ter marcado nada. Por isso a marca é desligada ao sair do modo teórico,
+na tela **e** no servidor: um cliente que mande a combinação incoerente não
+consegue gravá-la. Nenhum resultado de cálculo muda com isso.
+
+O modo viaja em toda gravação da versão. Omiti-lo fazia o servidor reaplicar o
+default, e um componente marcado como teórico voltava a físico direto ao salvar
+qualquer outra edição — a mudança silenciosa de receita que esta regra existe
+para impedir, entrando pela porta dos fundos.
 
 ### A Formulação vigente define o futuro; o documento guarda o passado
 

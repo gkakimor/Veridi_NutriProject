@@ -4,6 +4,8 @@ import type {
   FormulationComponentQuantityMode,
   UnitOfMeasure,
 } from "@prisma/client";
+import { Decimal as SharedDecimal } from "decimal.js";
+import { aplicarAjustes } from "@veridi/shared";
 import { convertUomDecimal } from "../modules/items/uom.js";
 
 /**
@@ -121,8 +123,6 @@ export interface ComponentRequirement {
   overagePercent: Prisma.Decimal | null;
 }
 
-const HUNDRED = new Prisma.Decimal(100);
-
 /**
  * Quantas vezes a quantidade declarada do componente entra na produção
  * pedida. É a única parte que depende da base escolhida.
@@ -165,15 +165,26 @@ export function applyPurityAndOverage(
   overagePercent: Prisma.Decimal | null,
   ajustes: { purity: boolean; overage: boolean } = { purity: true, overage: true },
 ): Prisma.Decimal {
-  let physical = theoretical;
-
-  if (ajustes.purity && purityPercentApplied !== null && purityPercentApplied.greaterThan(0)) {
-    physical = physical.dividedBy(purityPercentApplied.dividedBy(HUNDRED));
-  }
-  if (ajustes.overage && overagePercent !== null && overagePercent.greaterThanOrEqualTo(0)) {
-    physical = physical.times(HUNDRED.plus(overagePercent).dividedBy(HUNDRED));
-  }
-  return physical;
+  /*
+   * DELEGA para `@veridi/shared`, e não repete a conta.
+   *
+   * A tela da Formulação precisa mostrar o físico enquanto a pessoa digita —
+   * antes disso ela só via o número depois de salvar, o que é tarde para
+   * decidir. Recalcular no navegador criaria um segundo motor, e duas contas
+   * para o mesmo número acabam discordando. Então a matemática mudou de lugar,
+   * não de dono: os dois lados chamam a MESMA função.
+   *
+   * `decimal.js` é a biblioteca que o `Prisma.Decimal` usa por dentro, então a
+   * aritmética é idêntica dos dois lados.
+   */
+  return new Prisma.Decimal(
+    aplicarAjustes(
+      new SharedDecimal(theoretical.toString()),
+      purityPercentApplied ? purityPercentApplied.toString() : null,
+      overagePercent ? overagePercent.toString() : null,
+      ajustes,
+    ).toString(),
+  );
 }
 
 /**

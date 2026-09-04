@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
 import { computeComponentRequirement, ajustesHabilitados } from "./formulation-math.js";
+import { calcularQuantidadeDoComponente } from "@veridi/shared";
 
 /**
  * Registrar um ajuste não é autorizá-lo.
@@ -167,5 +168,49 @@ describe("ajustesHabilitados", () => {
         applyOverageAdjustment: false,
       }),
     ).toEqual({ purity: true, overage: false });
+  });
+});
+
+describe("A base que o motor nao reconhece BLOQUEIA", () => {
+  /*
+   * A conta agora mora em `@veridi/shared` e a tela da Formulacao chama a MESMA
+   * funcao para mostrar a previa enquanto se digita. Isso amplia quem entrega
+   * `basis`: o tipo cobre o caminho compilado, e nao cobre DTO antigo, campo
+   * novo no banco nem payload de terceiro.
+   *
+   * O `switch` sem `default` devolvia `undefined` nesse caso, e a multiplicacao
+   * seguinte estourava dentro do decimal.js — na tela, com a pagina inteira
+   * junto. Devolver zero seria pior: "nao precisa de material" e uma resposta
+   * plausivel e errada, do tipo que ninguem confere.
+   */
+  const unidades = [
+    { code: "mg", dimension: "MASS", toBaseFactor: "0.000001" },
+    { code: "kg", dimension: "MASS", toBaseFactor: "1" },
+  ];
+  const componente = {
+    basis: "FIXED_BASIS" as const,
+    quantity: "220",
+    unitCode: "mg",
+    stockUnitCode: "kg",
+    purityPercent: null,
+    overagePercent: null,
+  };
+  const contexto = { basisQuantity: "1", dosesPerPackage: null };
+
+  it("uma base desconhecida devolve o motivo, nao um numero e nao uma excecao", () => {
+    const r = calcularQuantidadeDoComponente(
+      // O cast reproduz exatamente o que o tipo nao consegue impedir.
+      { ...componente, basis: "PER_BATCH" as unknown as "FIXED_BASIS" },
+      1,
+      contexto,
+      unidades,
+    );
+    expect(r).toBe("BASE_DESCONHECIDA");
+  });
+
+  it("as bases reconhecidas continuam calculando", () => {
+    const r = calcularQuantidadeDoComponente(componente, 1000, contexto, unidades);
+    expect(typeof r).not.toBe("string");
+    expect(typeof r === "string" ? "" : r.physical.toFixed(6)).toBe("0.220000");
   });
 });

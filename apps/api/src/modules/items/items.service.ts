@@ -30,6 +30,7 @@ function toItemDTO(item: ItemWithUnit, operationallyUsed: boolean): ItemDTO {
       code: item.unit.code,
       label: item.unit.label,
       dimension: item.unit.dimension,
+      toBaseFactor: item.unit.toBaseFactor.toString(),
     },
     controlsLot: item.controlsLot,
     controlsExpiry: item.controlsExpiry,

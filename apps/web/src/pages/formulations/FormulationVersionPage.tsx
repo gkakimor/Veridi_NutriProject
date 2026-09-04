@@ -22,8 +22,10 @@ import {
   FORMULATION_VERSION_STATUS_LABELS,
   SUPPLY_RESPONSIBILITIES,
   SUPPLY_RESPONSIBILITY_LABELS,
+  calcularQuantidadeDoComponente,
 } from "@veridi/shared";
 import { CalcHint } from "../../components/help/CalcHint";
+import { parseDecimalInput } from "../../lib/decimal-input";
 import {
   activateFormulationVersion,
   getFormulationActivationImpact,
@@ -220,6 +222,53 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
     stockEquivalentQuantity: component.stockEquivalentQuantity,
     physicalPerUnit: component.physicalPerUnit,
   };
+}
+
+/**
+ * Prévia do físico ENQUANTO se digita.
+ *
+ * As colunas de equivalente e de físico vinham do servidor, então uma linha
+ * nova ou recém-editada mostrava um travessão até salvar — e é justamente
+ * enquanto se edita que a pessoa precisa ver o efeito do que está fazendo.
+ * Descobrir o número depois de gravar é descobrir tarde.
+ *
+ * A conta vem de `@veridi/shared`, a MESMA função que a API chama. Recalcular
+ * aqui com uma cópia da fórmula criaria um segundo motor, e duas contas para o
+ * mesmo número acabam discordando — com a agravante de que a que aparece na
+ * tela seria a que ninguém usa.
+ *
+ * Devolve `null` quando a conta não é possível (premissa ausente, unidade
+ * incompatível). `null` vira travessão, nunca zero: zero seria "não precisa de
+ * material".
+ */
+function previaDoComponente(
+  row: ComponentRow,
+  basisQuantity: string,
+  dosesPerPackage: number | null,
+  units: UnitOfMeasureDTO[],
+): { teorico: string; fisico: string } | null {
+  const quantidade = parseDecimalInput(row.quantity);
+  if (quantidade === null) return null;
+
+  const resultado = calcularQuantidadeDoComponente(
+    {
+      basis: row.basis,
+      quantity: quantidade,
+      unitCode: row.unitCode,
+      stockUnitCode: row.stockUnitCode,
+      purityPercent: parseDecimalInput(row.purityPercentApplied),
+      overagePercent: parseDecimalInput(row.overagePercent),
+      quantityMode: row.quantityMode,
+      applyPurityAdjustment: row.applyPurityAdjustment,
+      applyOverageAdjustment: row.applyOverageAdjustment,
+    },
+    1,
+    { basisQuantity: parseDecimalInput(basisQuantity) ?? "0", dosesPerPackage },
+    units.map((u) => ({ code: u.code, dimension: u.dimension, toBaseFactor: u.toBaseFactor })),
+  );
+
+  if (typeof resultado === "string") return null;
+  return { teorico: resultado.theoretical.toString(), fisico: resultado.physical.toString() };
 }
 
 /**
@@ -550,6 +599,35 @@ export function FormulationVersionPage() {
     setComponents((prev) => prev.map((row) => (row.key === key ? { ...row, [field]: value } : row)));
   }
 
+  /**
+   * Troca o modo da linha e desliga os ajustes ao sair do modo teórico.
+   *
+   * As caixas de pureza e overage só existem na tela sob
+   * `THEORETICAL_WITH_ADJUSTMENTS`. Guardar `applyPurityAdjustment: true`
+   * debaixo de `PHYSICAL_DIRECT` seria estado invisível: o cálculo ignora a
+   * marca hoje, e voltar o modo depois religaria a correção sem ninguém ter
+   * marcado nada nesta sessão — a autorização silenciosa que esta capability
+   * existe para acabar.
+   *
+   * Desmarcar é a perda recuperável: quem voltar ao modo teórico vê as caixas
+   * vazias e remarca. O contrário não se vê.
+   */
+  function trocarModo(key: string, modo: FormulationComponentQuantityMode) {
+    setComponents((prev) =>
+      prev.map((row) =>
+        row.key === key
+          ? {
+              ...row,
+              quantityMode: modo,
+              ...(modo === "PHYSICAL_DIRECT"
+                ? { applyPurityAdjustment: false, applyOverageAdjustment: false }
+                : {}),
+            }
+          : row,
+      ),
+    );
+  }
+
   function temAlteracaoPendente() {
     return JSON.stringify(montarRascunho()) !== gravado.current;
   }
@@ -579,6 +657,19 @@ export function FormulationVersionPage() {
           // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
           purityPercentApplied: exigirDecimalOpcional(row.purityPercentApplied, "Pureza %"),
           overagePercent: exigirDecimalOpcional(row.overagePercent, "Overage %"),
+          /*
+           * O modo VIAJA no payload, senão o seletor da linha é decorativo.
+           *
+           * Sem estes três campos o servidor recebia a versão sem o modo e
+           * reaplicava o padrão: um componente marcado como teórico voltava a
+           * `PHYSICAL_DIRECT` ao salvar qualquer outra edição, e a necessidade
+           * física caía pelo fator de pureza sem ninguém ter pedido. É a
+           * mudança silenciosa de receita que esta capability existe para
+           * impedir, entrando pela porta dos fundos.
+           */
+          quantityMode: row.quantityMode,
+          applyPurityAdjustment: row.applyPurityAdjustment,
+          applyOverageAdjustment: row.applyOverageAdjustment,
           ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
         })),
     };
@@ -959,7 +1050,24 @@ export function FormulationVersionPage() {
                 </tr>
               </thead>
               <tbody>
-                {components.map((row) => (
+                {components.map((row) => {
+                  /*
+                    O físico ENQUANTO se digita, não só depois de salvar.
+                    A prévia usa a mesma função que a API chama; quando a conta
+                    não é possível, cai no valor gravado, e `null` vira
+                    travessão — nunca zero.
+                  */
+                  const previa = isDraft
+                    ? previaDoComponente(
+                        row,
+                        basisQuantity,
+                        dosesPerPackage.trim() === "" ? null : Number(dosesPerPackage),
+                        units,
+                      )
+                    : null;
+                  const fisicoExibido = previa?.fisico ?? row.physicalPerUnit;
+                  const equivalenteExibido = previa?.teorico ?? row.stockEquivalentQuantity;
+                  return (
                   <tr key={row.key}>
                     <td>
                       {isDraft ? (
@@ -1110,9 +1218,7 @@ export function FormulationVersionPage() {
                                         type="radio"
                                         name={`modo-${row.key}`}
                                         checked={row.quantityMode === modo}
-                                        onChange={() =>
-                                          handleComponentFieldChange(row.key, "quantityMode", modo)
-                                        }
+                                        onChange={() => trocarModo(row.key, modo)}
                                       />
                                       {FORMULATION_QUANTITY_MODE_LABELS[modo]}
                                     </label>
@@ -1218,7 +1324,7 @@ export function FormulationVersionPage() {
                             um segundo motor: se recalculasse aqui, passaria a
                             poder discordar do número que manda.
                           */}
-                          {row.physicalPerUnit !== null && (
+                          {fisicoExibido !== null && (
                             <p className="ajuste-quantidade__resultado">
                               <span>
                                 Quantidade informada:{" "}
@@ -1229,7 +1335,7 @@ export function FormulationVersionPage() {
                               <span>
                                 Quantidade física:{" "}
                                 <strong>
-                                  {formatQuantity(row.physicalPerUnit)} {row.stockUnitCode}
+                                  {formatQuantity(fisicoExibido)} {row.stockUnitCode}
                                 </strong>
                               </span>
                               {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" ? (
@@ -1258,7 +1364,7 @@ export function FormulationVersionPage() {
                                         ]
                                       : []),
                                   ]}
-                                  resultado={`${formatQuantity(row.physicalPerUnit)} ${row.stockUnitCode}`}
+                                  resultado={`${formatQuantity(fisicoExibido)} ${row.stockUnitCode}`}
                                   nota="Calculado pelo mesmo motor que a Ordem de Produção e o CMV usam."
                                 />
                               ) : (
@@ -1270,7 +1376,7 @@ export function FormulationVersionPage() {
                                       papel: "quantidade informada",
                                     },
                                   ]}
-                                  resultado={`${formatQuantity(row.physicalPerUnit)} ${row.stockUnitCode}`}
+                                  resultado={`${formatQuantity(fisicoExibido)} ${row.stockUnitCode}`}
                                   nota={
                                     row.purityPercentApplied || row.overagePercent
                                       ? "Quantidade física informada diretamente. Pureza e overage estão registrados, não aplicados automaticamente."
@@ -1284,11 +1390,9 @@ export function FormulationVersionPage() {
                       </details>
                     </td>
                     <td>
-                      {formatQuantity(row.stockEquivalentQuantity)} {row.stockUnitCode}
+                      {formatQuantityWithUnit(equivalenteExibido, row.stockUnitCode)}
                     </td>
-                    <td>
-                      {formatQuantityWithUnit(row.physicalPerUnit, row.stockUnitCode)}
-                    </td>
+                    <td>{formatQuantityWithUnit(fisicoExibido, row.stockUnitCode)}</td>
                     {isDraft && (
                       <td>
                         <button
@@ -1302,7 +1406,8 @@ export function FormulationVersionPage() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
 
                 {components.length === 0 && (
                   <tr>

@@ -33,8 +33,8 @@ import { ItemCreatePage } from "./ItemCreatePage";
 import { ItemFormModal } from "./ItemFormModal";
 
 const UNIDADES: UnitOfMeasureDTO[] = [
-  { code: "kg", label: "Quilograma", dimension: "MASS" },
-  { code: "un", label: "Unidade", dimension: "COUNT" },
+  { code: "kg", label: "Quilograma", dimension: "MASS", toBaseFactor: "1" },
+  { code: "un", label: "Unidade", dimension: "COUNT", toBaseFactor: "1" },
 ];
 
 function item(overrides: Partial<ItemDTO> = {}): ItemDTO {

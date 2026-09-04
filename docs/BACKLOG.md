@@ -749,6 +749,102 @@ da capability de quantidade física — mexer em `Product.customerId` atravessar
 pedido, precificação, CMV e isolamento por cliente ao mesmo tempo, e nenhuma
 dessas fronteiras está sendo tocada nesta rodada.
 
+### 26. Cálculo ao vivo — onde já existe e onde falta
+
+Pedido do PO: *"idealmente todas as telas deveriam funcionar da mesma maneira
+quando tiverem cálculos, quais outros locais devemos aplicar também?"*
+
+O padrão nasceu na Formulação e tem três partes: **(1)** o valor derivado
+aparece enquanto se digita; **(2)** a conta vem da mesma função que a API usa,
+nunca de uma cópia no navegador; **(3)** `CalcHint` mostra a aritmética com os
+números daquela linha. Premissa ausente vira travessão, nunca zero.
+
+Varredura das 133 telas de `apps/web/src/pages`. `CalcHint` existe hoje em
+**quatro** arquivos: Faturamento, Formulação, CMV e a prévia de política de
+preço.
+
+**Já no padrão** — nada a fazer:
+
+| Tela | Valor |
+|---|---|
+| `billings/BillingPage.tsx` | total da linha e do documento, ao vivo, com `CalcHint` |
+| `formulations/FormulationVersionPage.tsx` | equivalente e físico do componente, ao vivo, motor compartilhado |
+| `product-cmv/ProductCmvPage.tsx` | CMV sob botão, com `CalcHint` — recálculo por tecla foi recusado de propósito e a recusa está comentada no código |
+| `cost-templates/UsePricingPolicyDialog.tsx` | preço sob "Ver prévia", com `CalcHint` |
+
+**Calcula ao vivo, mas sem `CalcHint`** — falta só a explicação:
+
+- `inventory/StockCountPage.tsx` — **Diferença** = contagem − saldo. É o número
+  que decide se o ajuste exige motivo.
+- `purchase-orders/PurchaseOrderPage.tsx` — total da linha.
+- `shipments/ShipmentPage.tsx` — total do rodapé.
+- `customer-orders/CustomerOrderPage.tsx` — complemento Reservar ↔ Produzir.
+
+**Duas telas mostram número vivo e número velho lado a lado** — é o pior caso,
+porque nada na tela diz qual é qual:
+
+- `purchase-orders/PurchaseOrderPage.tsx` — numa OC já salva, as linhas
+  recalculam ao digitar e o rodapé continua exibindo `orderTotal` da última
+  gravação.
+- `shipments/ShipmentPage.tsx` — `Expedindo agora` vem do read model e o
+  `Total` do rodapé é conta do navegador; "Expedindo agora: 0" pode ficar
+  acima de "Total: 98". O rodapé também imprime o número cru, sem
+  `formatQuantity`.
+
+**Em branco até apertar um botão** — decisão legítima quando a conta é cara,
+desde que a tela diga que o valor é do que está salvo. Só `QuoteConditionsForm`
+faz isso hoje:
+
+| Tela | Gatilho | Diz que está desatualizado? |
+|---|---|---|
+| `projects/QuoteConditionsForm.tsx` | "Simular" | **sim** — melhor exemplo do repo |
+| `industrial-costs/CostCalculationSection.tsx` | "Calcular custo" | não |
+| `pricing/PricingPage.tsx` | "Adicionar faixa" | não — e o gatilho é uma **gravação**: não existe caminho de leitura para ver preço sugerido e margem antes de persistir |
+| `customer-orders/CustomerOrderPage.tsx` (impacto de materiais) | "Aplicar plano" + recarga | não |
+
+**Derivado que nem existe, e faria falta:**
+
+- `receiving/ReceivePurchaseOrderPage.tsx` — "Custo efetivo de aquisição" é
+  campo solto: nenhum custo estendido, nenhum total, nenhuma comparação com o
+  preço previsto da OC.
+- `billings/PriceOverrideDialog.tsx` — quantidade e preço novo no mesmo modal, e
+  o total resultante só aparece depois de confirmar.
+- `industrial-costs/IndustrialCostPage.tsx` — "Consumo por lote de referência"
+  não mostra prévia de kWh; a energia derivada só existe depois de gravar.
+- `production-orders/RecipeSheetPage.tsx` — "Quantidade pesada" não mostra a
+  diferença contra o planejado enquanto se digita.
+- `production-orders/ProductionOrderPage.tsx` — mudar `plannedQuantity` no
+  rascunho não mexe nas necessidades até salvar e recarregar.
+- `projects/QuoteVersionsSection.tsx` — quantidade e preço são campos não
+  controlados que salvam no `blur`, então a coluna Total mostra o número
+  antigo durante toda a digitação.
+
+**Decisão / próxima ação:** priorizar por risco de decisão errada, não por
+quantidade de telas. A leitura técnica é: primeiro as duas telas com números
+divergentes visíveis ao mesmo tempo (OC e Expedição), depois `CalcHint` nas
+quatro que já calculam ao vivo, depois rótulo de "referente ao que está salvo"
+nas de botão. `pricing/PricingPage.tsx` merece caso próprio — hoje só se vê o
+preço depois de gravar a faixa.
+
+### 27. `QuotePricingSection.tsx` — código morto, corrigido no lugar
+
+Encontrado na varredura do item 26. O componente tem um erro de precedência:
+
+```ts
+line ? getQuotePricingOptions(line.id) : Promise.resolve(null).then(setPricing)
+```
+
+O `.then` encadeia só no ramo falso, então a busca acontecia e o resultado era
+descartado; `pricing` ficava sempre `null` e a tabela de faixas nunca renderizava.
+
+**Não chegou a usuário nenhum:** o arquivo não é importado em lugar algum. Quem
+está montada é `QuoteVersionsSection.tsx`, que busca as opções corretamente.
+
+**Decisão / próxima ação:** a precedência e a dependência do `useCallback` foram
+corrigidas — se alguém montar o componente, ele funciona. Falta decidir se o
+arquivo deve existir: código morto com defeito dentro é armadilha para quem
+for ligá-lo.
+
 ### Não reproduzido — registrado para não reabrir
 
 - **CEP inexistente "some sem erro".** Medido ao vivo: "CEP não encontrado.

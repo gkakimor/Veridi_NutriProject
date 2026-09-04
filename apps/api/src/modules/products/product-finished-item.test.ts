@@ -146,17 +146,27 @@ describe("Produto — item de produto acabado automático", () => {
     await app.ready();
     const prisma = getPrisma();
 
-    const antes = await prisma.item.count({ where: { type: "FINISHED_PRODUCT" } });
+    /*
+     * Conta os itens DESTE nome, nao todos os `FINISHED_PRODUCT` do banco.
+     *
+     * A contagem global media o banco inteiro durante a janela do teste, entao
+     * qualquer arquivo rodando em paralelo que criasse um produto acabado
+     * reprovava este aqui — e, pior, um orfao real passaria despercebido se
+     * outro teste apagasse um item no mesmo intervalo. O item acabado nasce com
+     * o nome do produto, entao o nome unico e a chave exata do que este teste
+     * afirma: a criacao que falhou nao deixou item para tras.
+     */
+    const nome = `Produto com unidade inválida ${marker()}`;
     const response = await createProduct(app, {
       customerId: await fixtureCustomerId(),
-      name: `Produto com unidade inválida ${marker()}`,
+      name: nome,
       finishedUnitCode: "xyz",
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toBe("finished_unit_not_found");
 
-    const depois = await prisma.item.count({ where: { type: "FINISHED_PRODUCT" } });
-    expect(depois).toBe(antes);
+    const orfaos = await prisma.item.count({ where: { type: "FINISHED_PRODUCT", name: nome } });
+    expect(orfaos).toBe(0);
 
     await app.close();
   });

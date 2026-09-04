@@ -240,6 +240,38 @@ O E2E usa o token de execução do harness, então cria a própria massa e
 reencontra só o que ele criou. Rodado **duas vezes sobre a mesma base**:
 `10 ok / 0 nok` nas duas, sem console error.
 
+## A prévia ao vivo, e os dois defeitos que ela revelou
+
+A tela mostrava travessão nas colunas de equivalente e de físico até a versão
+ser salva: os dois números vinham do DTO. Quem estava decidindo a quantidade só
+via o efeito depois de gravar.
+
+Recalcular no navegador criaria um segundo motor. Em vez disso a matemática
+subiu para `packages/shared/src/formulation-quantity.ts` e a API passou a
+delegar — a mesma função, não uma cópia. `decimal.js` é a biblioteca que o
+`Prisma.Decimal` usa por dentro, então os dois lados fazem a mesma aritmética.
+`UnitOfMeasureDTO` ganhou `toBaseFactor` para a tela converter unidade sem uma
+ida ao servidor a cada tecla.
+
+Ligar a prévia expôs dois defeitos que estavam no código e nenhum teste via:
+
+**1. O modo não viajava no payload.** `montarRascunho` não enviava
+`quantityMode`, `applyPurityAdjustment` nem `applyOverageAdjustment`, embora o
+comparador de alteração pendente já os lesse. Consequências fora do teste: o
+seletor de modo era decorativo, e salvar qualquer edição de um componente
+teórico o devolvia a `PHYSICAL_DIRECT` — a necessidade física caía pelo fator de
+pureza, em silêncio, e a tela mostrava o número novo como se fosse o pedido.
+
+**2. Base desconhecida derrubava a tela.** O `switch` da base não tinha
+`default`, devolvia `undefined`, e a multiplicação seguinte estourava dentro do
+`decimal.js`. Enquanto a conta era só do servidor o tipo bastava; com a tela
+chamando a mesma função, um DTO antigo derruba a página inteira. Agora bloqueia
+com motivo — e não devolve zero, que seria a resposta plausível e errada.
+
+Um terceiro ponto foi decidido junto: sair do modo teórico **desliga** as marcas
+de pureza e overage, na tela e no servidor. Marca ligada sob física direta é
+estado invisível que religa a correção quando alguém volta o modo.
+
 ## Fora de escopo, registrado
 
 Produto próprio Veridi, estoque de produto acabado próprio e venda do mesmo
