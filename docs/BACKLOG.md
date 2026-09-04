@@ -859,6 +859,23 @@ painel, viewport 1500×980.
 | HIGH | Erro de decimal não dizia qual componente | Mensagem passou a citar o código do item |
 | MEDIUM | "Preencher não aplica" só existia no ⓘ do cabeçalho | Frase foi para junto dos campos |
 
+**Achado depois, na mesma tela** (`fix/ajustes-quantidade-legibilidade`):
+
+A explicação da quantidade física omitia dois fatores que o motor aplica — a
+base da fórmula e a conversão de unidade. Com base 300 ela mostrava
+`22 kg × (1 + 23%) ÷ 99%`, que dá **27,33**, ao lado do valor exibido de
+**0,091111 kg**. O motor estava certo; a explicação, não.
+
+O `CalcHint` foi feito para acusar exatamente isso, e estava calado: `esperado`
+era opcional, e o chamador não passou. Agora, quando cada operando traz o seu
+`numero`, o componente **refaz a conta escrita na tela** e compara — a
+conferência deixou de depender de alguém lembrar dela. A folga também passou a
+sair da precisão exibida: meio centavo sobre 0,091111 kg era 5% do valor.
+
+As duas linhas do resumo também tinham denominadores diferentes lado a lado — a
+informada é para a base inteira, a física é por unidade. O rótulo agora diz
+"por unidade".
+
 **Restos, não corrigidos:**
 
 - **`aria-invalid` e rolagem até a linha com erro.** Os oito campos por
@@ -872,6 +889,13 @@ painel, viewport 1500×980.
   natural. É anterior a esta capability — dez colunas —, e o painel novo mostra
   a quantidade física em texto, então o número não depende mais dessas colunas.
   Continua valendo revisar a densidade.
+- **Os outros `CalcHint` ainda não se conferem.** Faturamento e dois do CMV
+  passam `esperado` e portanto checam; "Lotes de referência", "CMV por unidade"
+  e "Preço sugerido" não. Ligar a conferência neles é passar `numero` em cada
+  operando, mas exige conferir cada um contra dado real antes — um alarme falso
+  por padrão seria pior que o silêncio de hoje. "Lotes de referência" é caso
+  à parte: o resultado é arredondado para cima, então a divisão crua nunca vai
+  fechar e a conferência tem de continuar desligada ali.
 - **Rótulos dos dois modos** falam de "quantidade física" nos dois, e a
   diferença é sutil numa leitura rápida. Mudar texto que o operador vai
   aprender é decisão de Product Ownership, não técnica.

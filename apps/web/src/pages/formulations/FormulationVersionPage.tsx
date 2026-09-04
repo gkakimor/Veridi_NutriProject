@@ -272,6 +272,86 @@ function previaDoComponente(
 }
 
 /**
+ * A conta da quantidade física, escrita como se lê — e refazível à mão.
+ *
+ * A versão anterior listava só `quantidade × (1 + overage) ÷ pureza` e omitia
+ * dois fatores que o motor aplica: a base da fórmula e a conversão de unidade.
+ * Com base 300, isso mostrava `22 kg × 1,23 ÷ 0,99`, que dá 27,33, ao lado do
+ * valor exibido de 0,091111 kg. O número da tela estava certo; a explicação,
+ * não — e explicação errada convence mais do que explicação nenhuma.
+ *
+ * A ordem segue a do motor: base, unidade, pureza, overage.
+ */
+function operandosDoFisico(
+  row: ComponentRow,
+  basisQuantity: string,
+  dosesPerPackage: number | null,
+  units: UnitOfMeasureDTO[],
+): { valor: string; papel: string; operador?: string; numero?: number }[] {
+  const teorico = row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS";
+  const operandos: { valor: string; papel: string; operador?: string; numero?: number }[] = [
+    {
+      valor: `${formatQuantity(row.quantity)} ${row.unitCode}`,
+      papel: teorico ? "quantidade teórica" : "quantidade informada",
+      numero: Number(parseDecimalInput(row.quantity)),
+    },
+  ];
+
+  if (row.basis === "FIXED_BASIS") {
+    const base = parseDecimalInput(basisQuantity);
+    if (base !== null && Number(base) !== 0) {
+      operandos.push({
+        valor: formatQuantity(base),
+        papel: "base da fórmula",
+        operador: "÷",
+        numero: Number(base),
+      });
+    }
+  } else if (row.basis === "PER_DOSE" && dosesPerPackage) {
+    operandos.push({
+      valor: String(dosesPerPackage),
+      papel: "doses por embalagem",
+      numero: dosesPerPackage,
+    });
+  }
+
+  // Conversão de unidade só entra na conta quando as duas diferem.
+  const de = units.find((u) => u.code === row.unitCode);
+  const para = units.find((u) => u.code === row.stockUnitCode);
+  if (de && para && de.code !== para.code && Number(para.toBaseFactor) !== 0) {
+    const fator = Number(de.toBaseFactor) / Number(para.toBaseFactor);
+    operandos.push({
+      valor: String(fator),
+      papel: `${de.code} para ${para.code}`,
+      numero: fator,
+    });
+  }
+
+  if (teorico && row.applyPurityAdjustment && row.purityPercentApplied) {
+    const pureza = Number(parseDecimalInput(row.purityPercentApplied));
+    if (pureza > 0) {
+      operandos.push({
+        valor: `${row.purityPercentApplied}%`,
+        papel: "pureza",
+        operador: "÷",
+        numero: pureza / 100,
+      });
+    }
+  }
+  if (teorico && row.applyOverageAdjustment && row.overagePercent) {
+    const overage = Number(parseDecimalInput(row.overagePercent));
+    if (overage >= 0) {
+      operandos.push({
+        valor: `(1 + ${row.overagePercent}%)`,
+        papel: "overage",
+        numero: 1 + overage / 100,
+      });
+    }
+  }
+  return operandos;
+}
+
+/**
  * Editor de versão de formulação — página própria (documento transacional),
  * não modal. DRAFT é totalmente editável; ACTIVE/INACTIVE são read-only por
  * construção (backend também bloqueia).
@@ -1434,58 +1514,39 @@ export function FormulationVersionPage() {
                                   {formatQuantity(row.quantity)} {row.unitCode}
                                 </strong>
                               </span>
+                              {/*
+                                "POR UNIDADE" no rótulo, não subentendido.
+
+                                As duas linhas ficavam lado a lado com
+                                denominadores diferentes: a informada é para a
+                                base inteira da fórmula, a física é para uma
+                                unidade. Numa base de 300, isso mostrava
+                                "22 kg" acima de "0,091111 kg" sem nada
+                                explicando a razão de 240 vezes entre elas.
+                              */}
                               <span>
-                                Quantidade física:{" "}
+                                Quantidade física por unidade:{" "}
                                 <strong>
                                   {formatQuantity(fisicoExibido)} {row.stockUnitCode}
                                 </strong>
                               </span>
-                              {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" ? (
-                                <CalcHint
-                                  label="Quantidade física"
-                                  operandos={[
-                                    {
-                                      valor: `${formatQuantity(row.quantity)} ${row.unitCode}`,
-                                      papel: "quantidade teórica",
-                                    },
-                                    ...(row.applyOverageAdjustment && row.overagePercent
-                                      ? [
-                                          {
-                                            valor: `(1 + ${row.overagePercent}%)`,
-                                            papel: "overage",
-                                          },
-                                        ]
-                                      : []),
-                                    ...(row.applyPurityAdjustment && row.purityPercentApplied
-                                      ? [
-                                          {
-                                            valor: `${row.purityPercentApplied}%`,
-                                            papel: "pureza",
-                                            operador: "÷",
-                                          },
-                                        ]
-                                      : []),
-                                  ]}
-                                  resultado={`${formatQuantity(fisicoExibido)} ${row.stockUnitCode}`}
-                                  nota="Calculado pelo mesmo motor que a Ordem de Produção e o CMV usam."
-                                />
-                              ) : (
-                                <CalcHint
-                                  label="Quantidade física"
-                                  operandos={[
-                                    {
-                                      valor: `${formatQuantity(row.quantity)} ${row.unitCode}`,
-                                      papel: "quantidade informada",
-                                    },
-                                  ]}
-                                  resultado={`${formatQuantity(fisicoExibido)} ${row.stockUnitCode}`}
-                                  nota={
-                                    row.purityPercentApplied || row.overagePercent
+                              <CalcHint
+                                label="Quantidade física"
+                                operandos={operandosDoFisico(
+                                  row,
+                                  basisQuantity,
+                                  dosesPerPackage.trim() === "" ? null : Number(dosesPerPackage),
+                                  units,
+                                )}
+                                resultado={`${formatQuantity(fisicoExibido)} ${row.stockUnitCode}`}
+                                nota={
+                                  row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS"
+                                    ? "Calculado pelo mesmo motor que a Ordem de Produção e o CMV usam."
+                                    : row.purityPercentApplied || row.overagePercent
                                       ? "Quantidade física informada diretamente. Pureza e overage estão registrados, não aplicados automaticamente."
                                       : "Quantidade física informada diretamente."
-                                  }
-                                />
-                              )}
+                                }
+                              />
                             </p>
                           )}
                         </div>
