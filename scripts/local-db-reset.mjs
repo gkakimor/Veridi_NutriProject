@@ -33,18 +33,28 @@ function passo(texto) {
 }
 
 function rodar(comando, args, opcoes = {}) {
+  /*
+   * SHELL SO PARA O QUE PRECISA.
+   *
+   * `shell: true` existe por causa do `pnpm`, que no Windows e um `.cmd` e
+   * sem shell falha com ENOENT — o que ja aconteceu DEPOIS do drop, deixando
+   * a base recriada e sem schema.
+   *
+   * Aplicar o mesmo aos binarios do Postgres quebrava duas vezes: o caminho
+   * `C:/Program Files/...` virava dois argumentos, e o `<>` do SQL de
+   * `pg_terminate_backend` era lido como redirecionamento. Eles sao caminhos
+   * absolutos de `.exe` e nao precisam de shell nenhum — passar os argumentos
+   * direto e o que garante que o SQL chegue como foi escrito.
+   *
+   * As duas falhas cairam do lado seguro, antes do drop. Mas um reset que nao
+   * roda nao protege nada: so adia.
+   */
+  const precisaDeShell = !comando.toLowerCase().endsWith(".exe");
   return execFileSync(comando, args, {
     cwd: RAIZ,
     stdio: opcoes.silencioso ? ["ignore", "pipe", "pipe"] : "inherit",
     encoding: "utf8",
-    /*
-     * `shell: true` porque no Windows `pnpm` e um `.cmd`, e `execFileSync` sem
-     * shell procura um executavel com esse nome exato e falha com ENOENT — o
-     * que ja aconteceu DEPOIS do drop, deixando a base recriada e vazia de
-     * schema. As chamadas ao Postgres passam caminho absoluto e nao dependem
-     * disto; quem precisa e o pnpm.
-     */
-    shell: true,
+    shell: precisaDeShell,
     ...opcoes,
   });
 }

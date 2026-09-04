@@ -1,5 +1,6 @@
 import { chromium } from "@playwright/test";
 import fs from "node:fs";
+import { obterRun, publicar, consultar } from "./adversarial-run.mjs";
 import path from "node:path";
 
 /**
@@ -61,6 +62,19 @@ const CRED = { email: "admin@veridi.local", password: "veridi-local-dev" };
 
 const STATE_FILE = path.resolve("handoff/adversarial-billing-state.json");
 const RESET = process.argv.includes("--reset");
+
+/*
+ * Identidade desta execucao — herdada da suite de estoque quando ela ja
+ * rodou, criada aqui quando esta suite roda sozinha. `--reset` comeca um
+ * run novo; sem ele, retoma o corrente.
+ */
+/*
+ * SEMPRE herda. Quem abre execucao nova e a suite de estoque, cabeca da
+ * cadeia: se cada suite criasse a sua, `--reset` em todas geraria quatro
+ * execucoes isoladas e a de producao nao acharia a massa da de estoque.
+ * `--reset` aqui limpa o estado de marcos DESTA suite, nao a identidade.
+ */
+const RUN = obterRun({ novo: false, dono: "billing" });
 const ATE = Number(
   (process.argv.find((a) => a.startsWith("--ate=")) ?? "--ate=99").slice("--ate=".length),
 );
@@ -180,11 +194,25 @@ function registrarNegativo(caso, veredito, detalhe) {
 }
 
 // ══ Massa ═════════════════════════════════════════════════════════════════
-const P = "ADV3";
+/*
+ * Prefixo carimbado no nome de negocio desta execucao. Nome fixo fazia a
+ * busca reencontrar a massa da execucao anterior — Produto ja com
+ * Formulacao ativa, Precificacao ja em outro preco — e a suite acusava
+ * defeito de laboratorio como se fosse do produto.
+ */
+const P = `ADV3${RUN.runId}`;
 
 /** Produto e cliente do substrato — reaproveitados, nunca recriados. */
-const PRODUTO_CODE = "PROD-000002";
-const ITEM_PA_CODE = "PA-000002";
+/*
+ * PRODUTO DESTA EXECUCAO, publicado pela suite de producao.
+ *
+ * Eram `PROD-000002` e `PA-000002`, codigos do ambiente de demonstracao. No
+ * instante em que a base e recriada eles deixam de existir e a suite falha por
+ * nao achar massa que nunca foi criada — defeito de laboratorio lido como
+ * defeito de produto. Resolvidos em tempo de execucao, logo abaixo.
+ */
+let PRODUTO_CODE = null;
+let ITEM_PA_CODE = null;
 
 /**
  * Faixas de preço.
@@ -220,9 +248,27 @@ const EXPEDIR_1 = 40;
 const EXPEDIR_2 = 60;
 const PEDIDO_B_QTD = 123;
 
-/** Lotes do substrato usados nos caminhos proibidos. */
-const LOTE_BLOQUEADO_MP = "LT-20260320-000799";
-const LOTE_OUTRO_PRODUTO = "LT-20260903-000803";
+/*
+ * Lotes usados nos caminhos proibidos — resolvidos em tempo de execucao.
+ *
+ * Eram codigos cravados de uma execucao especifica. O que o teste precisa nao
+ * e daquele lote: e de UM lote bloqueado de materia-prima e de UM lote de
+ * OUTRO produto, seja qual for o codigo que a sequencia do dominio deu.
+ */
+let LOTE_BLOQUEADO_MP = null;
+let LOTE_OUTRO_PRODUTO = null;
+
+/** Acha os dois pela caracteristica, nao pelo codigo. */
+async function resolverLotesProibidos(itemPaId) {
+  const bloqueados = (await apiGet("/lots?status=BLOCKED&pageSize=50")).lots ?? [];
+  LOTE_BLOQUEADO_MP = bloqueados.find((l) => Number(l.onHand) > 0)?.code ?? bloqueados[0]?.code ?? null;
+
+  const todos = (await apiGet("/lots?pageSize=200")).lots ?? [];
+  LOTE_OUTRO_PRODUTO =
+    todos.find((l) => l.itemId !== itemPaId && Number(l.onHand) > 0 && l.status === "AVAILABLE")?.code ??
+    null;
+  return { LOTE_BLOQUEADO_MP, LOTE_OUTRO_PRODUTO };
+}
 
 // ── Instrumentação de navegador ───────────────────────────────────────────
 const consoleErrors = [];
@@ -709,9 +755,23 @@ const daquiDias = (n) => new Date(Date.now() + n * 86400000).toISOString().slice
 // MARCO 1 · Massa: liberar o produto acabado e montar a precificação real
 // ══════════════════════════════════════════════════════════════════════════
 async function marco01MassaEPrecificacao() {
+  const daProducao = consultar("production") ?? {};
+  PRODUTO_CODE = daProducao.produto?.code ?? null;
+  ITEM_PA_CODE = daProducao.itemPa?.code ?? null;
+  if (
+    !check(
+      "MASSA · a suíte de produção publicou o produto desta execução",
+      Boolean(PRODUTO_CODE && ITEM_PA_CODE),
+      JSON.stringify({ PRODUTO_CODE, ITEM_PA_CODE }),
+    )
+  ) {
+    return;
+  }
   const produtos = await apiGet("/products?pageSize=100");
   const produto = (produtos.products ?? []).find((p) => p.code === PRODUTO_CODE);
-  if (!check(`MASSA · o produto ${PRODUTO_CODE} do substrato existe`, Boolean(produto), "")) return;
+  if (!check(`MASSA · o produto ${PRODUTO_CODE} desta execução existe`, Boolean(produto), "")) return;
+  await resolverLotesProibidos(daProducao.itemPa?.id ?? null);
+  anotar(`ALVOS PROIBIDOS · bloqueado ${LOTE_BLOQUEADO_MP ?? "(nenhum)"} · outro produto ${LOTE_OUTRO_PRODUTO ?? "(nenhum)"}`);
   S.dados.produto = {
     id: produto.id,
     code: produto.code,
@@ -724,8 +784,13 @@ async function marco01MassaEPrecificacao() {
     id: detalhe.finishedProductItem.id,
     code: detalhe.finishedProductItem.code,
   };
+  /*
+   * Um item de produto acabado de OUTRO produto, com estoque — usado nos
+   * caminhos proibidos de conferencia. Era o codigo `PA-000365` cravado; o
+   * que o teste precisa e da caracteristica, nao daquele codigo.
+   */
   const advItem = (await apiGet("/inventory?pageSize=100&onlyWithStock=true")).items.find(
-    (i) => i.itemCode === "PA-000365",
+    (i) => i.itemType === "FINISHED_PRODUCT" && i.itemCode !== S.dados.itemPa?.code,
   );
   if (advItem) S.dados.itemPaAdv = { id: advItem.itemId, code: advItem.itemCode };
   salvarEstado();
@@ -2125,9 +2190,15 @@ async function marco09PrecoHistoricoEArredondamento() {
  * reservadas desde a onda anterior — é essa a saída que fecha a genealogia.
  */
 async function marco10CadeiaAdv() {
+  /*
+   * Pedido que fecha a genealogia — o que esta EM ATENDIMENTO com reserva do
+   * produto desta execucao, nao o `PED-000485` de uma execucao passada.
+   */
   const pedidos = (await apiGet("/customer-orders?pageSize=100")).customerOrders;
-  const alvo = pedidos.find((o) => o.code === "PED-000485");
-  if (!check("CADEIA ADV · PED-000485 existe no substrato", Boolean(alvo), "")) return;
+  const alvo =
+    pedidos.find((o) => o.status === "IN_FULFILLMENT" || o.status === "PARTIALLY_SHIPPED") ??
+    pedidos.find((o) => o.status === "CONFIRMED");
+  if (!check("CADEIA ADV · há pedido em atendimento nesta execução", Boolean(alvo), JSON.stringify(pedidos.map((o) => `${o.code}/${o.status}`).slice(0, 8)))) return;
   S.dados.pedidos = S.dados.pedidos ?? {};
   S.dados.pedidos.ADV = { chave: "ADV", id: alvo.id, code: alvo.code, url: `/comercial/pedidos/${alvo.id}` };
   salvarEstado();
@@ -2375,8 +2446,21 @@ principal()
     salvarEstado();
     if (browser) await browser.close();
 
+    // Publica o que ESTA execucao produziu, para a suite seguinte da
+    // cadeia reencontrar por id em vez de por codigo cravado no script.
+    publicar("billing", {
+      runId: RUN.runId,
+      prefixo: P,
+      produto: S.dados.produto ?? null,
+      itemPa: S.dados.itemPa ?? null,
+      itemPaAdv: S.dados.itemPaAdv ?? null,
+      pedidos: S.dados.pedidos ?? null,
+      precificacao: S.dados.precificacao ?? null,
+    });
+
     const reg = S.registro;
     console.log("\n════════════════════ RESUMO ════════════════════");
+    console.log(`run: ${RUN.runId} · prefixo de massa: ${P}`);
     console.log(`marcos concluídos: ${S.marcos.join(", ") || "(nenhum)"}`);
     console.log(`verificações ok=${reg.verificacoes.ok.length} nok=${reg.verificacoes.nok.length}`);
     if (reg.verificacoes.nok.length) {

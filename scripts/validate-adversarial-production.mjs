@@ -1,5 +1,6 @@
 import { chromium } from "@playwright/test";
 import fs from "node:fs";
+import { obterRun, publicar, consultar, cnpjDoRun } from "./adversarial-run.mjs";
 import path from "node:path";
 
 /**
@@ -57,6 +58,19 @@ const CRED = { email: "admin@veridi.local", password: "veridi-local-dev" };
 
 const STATE_FILE = path.resolve("handoff/adversarial-production-state.json");
 const RESET = process.argv.includes("--reset");
+
+/*
+ * Identidade desta execucao — herdada da suite de estoque quando ela ja
+ * rodou, criada aqui quando esta suite roda sozinha. `--reset` comeca um
+ * run novo; sem ele, retoma o corrente.
+ */
+/*
+ * SEMPRE herda. Quem abre execucao nova e a suite de estoque, cabeca da
+ * cadeia: se cada suite criasse a sua, `--reset` em todas geraria quatro
+ * execucoes isoladas e a de producao nao acharia a massa da de estoque.
+ * `--reset` aqui limpa o estado de marcos DESTA suite, nao a identidade.
+ */
+const RUN = obterRun({ novo: false, dono: "production" });
 const ATE = Number(
   (process.argv.find((a) => a.startsWith("--ate=")) ?? "--ate=99").slice("--ate=".length),
 );
@@ -169,12 +183,29 @@ function registrarNegativo(caso, veredito, detalhe) {
 }
 
 // ══ Massa ═════════════════════════════════════════════════════════════════
-const P = "ADV";
+/*
+ * Prefixo carimbado no nome de negocio desta execucao. Nome fixo fazia a
+ * busca reencontrar a massa da execucao anterior — Produto ja com
+ * Formulacao ativa, Precificacao ja em outro preco — e a suite acusava
+ * defeito de laboratorio como se fosse do produto.
+ */
+const P = `ADV${RUN.runId}`;
 
 /** Item da onda 1 — reaproveitado, nunca recriado. */
 const MP_NOME = `${P} Carbonato de calcio`;
 const FORNECEDOR_NOME = `${P} Fornecedor Insumos`;
-const LOTE_BLOQUEADO = "LT-20260320-000799";
+/*
+ * Lote bloqueado — resolvido por caracteristica em `resolverLoteBloqueado`.
+ * Era um codigo cravado de execucao anterior; o teste precisa de UM lote
+ * bloqueado com saldo, nao daquele.
+ */
+let LOTE_BLOQUEADO = null;
+
+async function resolverLoteBloqueado() {
+  const bloqueados = (await apiGet("/lots?status=BLOCKED&pageSize=50")).lots ?? [];
+  LOTE_BLOQUEADO = bloqueados.find((l) => Number(l.onHand) > 0)?.code ?? bloqueados[0]?.code ?? null;
+  return LOTE_BLOQUEADO;
+}
 
 /** Segundo material: existe para partir a reconciliação em duas histórias. */
 const MP2 = {
@@ -814,11 +845,13 @@ async function marco01Massa() {
     elegiveis.length >= 3,
     JSON.stringify(elegiveis.map((l) => `${l.code}/${l.expiryDate}/${l.available}`)),
   );
-  const bloqueado = lotesMp.find((l) => l.code === LOTE_BLOQUEADO);
+  // O lote bloqueado desta execucao — pela caracteristica, nao pelo codigo.
+  await resolverLoteBloqueado();
+  const bloqueado = lotesMp.find((l) => l.code === LOTE_BLOQUEADO) ?? lotesMp.find((l) => l.status === "BLOCKED");
   check(
-    `MASSA · o lote ${LOTE_BLOQUEADO} continua BLOQUEADO com físico > 0`,
+    `MASSA · há lote BLOQUEADO com físico > 0 (${bloqueado?.code ?? "nenhum"})`,
     bloqueado?.status === "BLOCKED" && num(bloqueado.onHand) > 0,
-    JSON.stringify(bloqueado),
+    JSON.stringify(lotesMp.map((l) => `${l.code}/${l.status}/${l.onHand}`)),
   );
 
   const lotesMp2 = await lerLotesDoItem(S.dados.mp2.id);
@@ -847,9 +880,25 @@ const PRODUTO_NOME = `${P} Pedido Producao`;
 
 async function marco02ProdutoEFormulacao() {
   if (!S.dados.produto) {
-    const clientes = (await apiGet("/customers?pageSize=5")).customers ?? [];
-    if (!check("PRODUTO · há cliente cadastrado", clientes.length > 0, "")) return;
-    const cliente = clientes[0];
+    /*
+     * Cliente DESTA execucao. Pegar "o primeiro cadastrado" falha em base
+     * recem-criada e, pior, numa base cheia amarra o produto a um cliente de
+     * outra execucao — o teste deixa de dizer o que testou.
+     */
+    const nomeCliente = `${P} Cliente Producao LTDA`;
+    let cliente = ((await apiGet(`/customers?search=${encodeURIComponent(P)}&pageSize=10`)).customers ?? [])
+      .find((c) => c.legalName === nomeCliente);
+    if (!cliente) {
+      await abrir("/cadastros/clientes/novo", { espera: "#customer-legal-name" });
+      await preencher("#customer-legal-name", nomeCliente);
+      await preencher("#customer-cnpj", cnpjDoRun(RUN.runId, 11));
+      await clicarBotao("Criar cliente");
+      await page.waitForTimeout(2500);
+      cliente = ((await apiGet(`/customers?search=${encodeURIComponent(P)}&pageSize=10`)).customers ?? [])
+        .find((c) => c.legalName === nomeCliente);
+    }
+    if (!check("PRODUTO · cliente desta execução disponível", Boolean(cliente),
+      JSON.stringify(await mensagensDeErro()))) return;
     await abrir("/cadastros/produtos/novo", { espera: "#product-name" });
     await escolherEntidade("#product-customer", cliente.code, cliente.code);
     await preencher("#product-name", PRODUTO_NOME);
@@ -2951,8 +3000,21 @@ principal()
     salvarEstado();
     if (browser) await browser.close();
 
+    // Publica o que ESTA execucao produziu, para a suite seguinte da
+    // cadeia reencontrar por id em vez de por codigo cravado no script.
+    publicar("production", {
+      runId: RUN.runId,
+      prefixo: P,
+      produto: S.dados.produto ?? null,
+      itemPa: S.dados.itemPa ?? null,
+      mp: S.dados.mp ?? null,
+      mp2: S.dados.mp2 ?? null,
+      lotePa: S.dados.lotePa ?? null,
+    });
+
     const reg = S.registro;
     console.log("\n════════════════════ RESUMO ════════════════════");
+    console.log(`run: ${RUN.runId} · prefixo de massa: ${P}`);
     console.log(`marcos concluídos: ${S.marcos.join(", ") || "(nenhum)"}`);
     console.log(`verificações ok=${reg.verificacoes.ok.length} nok=${reg.verificacoes.nok.length}`);
     if (reg.verificacoes.nok.length) {

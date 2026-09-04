@@ -1,5 +1,6 @@
 import { chromium } from "@playwright/test";
 import fs from "node:fs";
+import { obterRun, consultar } from "./adversarial-run.mjs";
 import path from "node:path";
 
 /**
@@ -48,6 +49,12 @@ const CRED = { email: "admin@veridi.local", password: "veridi-local-dev" };
 
 const STATE_FILE = path.resolve("handoff/adversarial-traceability-state.json");
 const RESET = process.argv.includes("--reset");
+
+/*
+ * Identidade da execucao — herdada das suites anteriores da cadeia. Esta
+ * suite nao cria massa: ela le o que producao e faturamento produziram.
+ */
+const RUN = obterRun({ novo: false, dono: "traceability" });
 const ATE = Number(
   (process.argv.find((a) => a.startsWith("--ate=")) ?? "--ate=99").slice("--ate=".length),
 );
@@ -160,12 +167,51 @@ function noArvore(chave, valor) {
 }
 
 // ══ Alvos ═════════════════════════════════════════════════════════════════
-const OP_CODE = "OP-000659";
-const LOTE_PA = "LT-20260903-000803";
-/** Reservado e DEVOLVIDO por substituição no picking — nunca consumido. */
-const LOTE_DEVOLVIDO = "LT-20260115-000798";
-/** Bloqueado com 49 kg — nunca entrou em nada. */
-const LOTE_BLOQUEADO = "LT-20260320-000799";
+/*
+ * ALVOS — derivados da execucao, nunca cravados.
+ *
+ * Estes quatro codigos eram literais de uma execucao especifica
+ * (`OP-000659`, `LT-20260903-000803`, ...). No instante em que a base e
+ * recriada eles deixam de existir e a suite falha por nao achar massa que
+ * nunca foi criada — defeito de laboratorio lido como defeito de produto.
+ *
+ * A resolucao acontece em tempo de execucao, a partir do que a suite de
+ * producao publicou: o produto desta execucao leva a OP concluida, a OP leva
+ * ao lote de produto acabado, e o item de materia-prima leva aos lotes
+ * especiais (bloqueado, devolvido no picking).
+ */
+const PRODUCAO = consultar("production") ?? {};
+let OP_CODE = null;
+let LOTE_PA = null;
+/** Reservado e DEVOLVIDO por substituicao no picking — nunca consumido. */
+let LOTE_DEVOLVIDO = null;
+/** Bloqueado com saldo fisico — nunca entrou em nada. */
+let LOTE_BLOQUEADO = null;
+
+/** Resolve os alvos pela API, a partir das entidades desta execucao. */
+async function resolverAlvos() {
+  const produtoId = PRODUCAO.produto?.id;
+  const itemPaId = PRODUCAO.itemPa?.id;
+  const mpId = PRODUCAO.mp?.id;
+
+  const ordens = (await apiGet("/production-orders?pageSize=100")).productionOrders ?? [];
+  const daExecucao = ordens.filter(
+    (o) => o.status === "COMPLETED" && (!produtoId || o.productId === produtoId),
+  );
+  OP_CODE = daExecucao[0]?.code ?? null;
+
+  if (itemPaId) {
+    const lotes = (await apiGet(`/lots?itemId=${itemPaId}&pageSize=50`)).lots ?? [];
+    LOTE_PA = lotes[0]?.code ?? null;
+  }
+  if (mpId) {
+    const lotes = (await apiGet(`/lots?itemId=${mpId}&pageSize=100`)).lots ?? [];
+    LOTE_BLOQUEADO = lotes.find((l) => l.status === "BLOCKED")?.code ?? null;
+    LOTE_DEVOLVIDO =
+      lotes.find((l) => l.status === "AVAILABLE" && Number(l.onHand) > 0)?.code ?? null;
+  }
+  return { OP_CODE, LOTE_PA, LOTE_DEVOLVIDO, LOTE_BLOQUEADO };
+}
 
 // ── Instrumentação ────────────────────────────────────────────────────────
 const consoleErrors = [];
@@ -623,7 +669,11 @@ async function marco02Consumo() {
   } else {
     anotar("CONSUMO EXTRA · nenhuma linha de reserva marcada como extra nesta OP — o extra veio como apontamento avulso");
   }
-  const linha801 = [...porLoteNaArvore.entries()].find(([k]) => k.includes("LT-20260408-000801"));
+  /*
+   * O lote que levou planejado + extra: identificado pela contagem, nao pelo
+   * codigo. Era `LT-20260408-000801`, de uma execucao especifica.
+   */
+  const linha801 = [...porLoteNaArvore.entries()].find(([, n]) => n > 1);
   if (linha801) {
     check(
       `CONSUMO EXTRA · o lote ${linha801[0].split("/")[1]} aparece com ${linha801[1]} (planejado + extra), não só com o planejado`,
@@ -967,6 +1017,24 @@ let parada = null;
 async function principal() {
   await login();
   await abrirNavegador();
+
+  /*
+   * Alvos ANTES do primeiro marco, e nao dentro dele: retomar a partir do
+   * marco 3 nao pode deixar `OP_CODE` e `LOTE_PA` nulos.
+   */
+  await resolverAlvos();
+  if (
+    !check(
+      "ALVOS · a execução publicou uma OP concluída e um lote de produto acabado",
+      Boolean(OP_CODE && LOTE_PA),
+      JSON.stringify({ OP_CODE, LOTE_PA, LOTE_BLOQUEADO, LOTE_DEVOLVIDO }),
+    )
+  ) {
+    parada = "erro: alvos da execução não resolvidos — rode a suíte de produção antes";
+    return;
+  }
+  anotar(`ALVOS · OP ${OP_CODE} · PA ${LOTE_PA} · bloqueado ${LOTE_BLOQUEADO ?? "(nenhum)"}`);
+
   await marco(1, "arvore", marco01Arvore);
   await marco(2, "consumo", marco02Consumo);
   await marco(3, "nao-aparecem-e-reversa", marco03NaoAparecemEReversa);
