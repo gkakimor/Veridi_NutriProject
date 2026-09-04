@@ -1506,8 +1506,14 @@ export function FormulationVersionPage() {
                             um segundo motor: se recalculasse aqui, passaria a
                             poder discordar do número que manda.
                           */}
+                          {/*
+                            `div`, não `p`: o CalcHint emite parágrafos, e `<p>`
+                            dentro de `<p>` é HTML inválido — o navegador fecha o
+                            de fora antes da hora e o React reclama no console. O
+                            bloco é uma grade de linhas, não um parágrafo.
+                          */}
                           {fisicoExibido !== null && (
-                            <p className="ajuste-quantidade__resultado">
+                            <div className="ajuste-quantidade__resultado">
                               <span>
                                 Quantidade informada:{" "}
                                 <strong>
@@ -1547,7 +1553,7 @@ export function FormulationVersionPage() {
                                       : "Quantidade física informada diretamente."
                                 }
                               />
-                            </p>
+                            </div>
                           )}
                         </div>
                       </td>
