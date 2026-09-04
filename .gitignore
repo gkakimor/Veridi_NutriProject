@@ -51,8 +51,16 @@ handoff/
 # abaixo é para não entrar de novo.
 docs/*.docx
 
-# Runner temporário do portão adversarial — não versionado.
+# Artefatos de execução: temporário de sessão, estado de suíte, saída de
+# ferramenta. Nada disso é fonte — é o que sobra depois de rodar, e já entrou
+# no repositório por engano mais de uma vez. `handoff/` cobre o resto.
 scripts/_*.sh
+**/tmp-*.mjs
+**/tmp-*.py
+*.state.json
+*-state.json
+*-log.json
+*.pdf
 
 # Capturas do smoke de produção. São telas autenticadas do ambiente real:
 # carregam nome de cliente, pedido e lote. O script as escreve na raiz do
