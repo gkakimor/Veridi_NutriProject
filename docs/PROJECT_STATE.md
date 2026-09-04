@@ -67,11 +67,12 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado por política.
 
 ## Backlog aberto
 
-Zero CRITICAL e HIGH. Dois MEDIUM (`aria-invalid` por campo na Formulação;
-recebimento de material do cliente sem exigir lote do fabricante e validade),
-quatro LOW, quatro decisões de PO e quatro melhorias adiadas de propósito — a
-maior delas é levar o cálculo ao vivo às demais telas. Ver
-[`BACKLOG.md`](BACKLOG.md).
+Zero CRITICAL e HIGH. Três MEDIUM (`aria-invalid` por campo na Formulação;
+recebimento de material do cliente sem regra por Item para lote e validade;
+duas migrations `20260904…` da capability anterior que quebram a aplicação
+num banco limpo — produção não é afetada), quatro LOW, quatro decisões de PO
+e quatro melhorias adiadas de propósito — a maior delas é levar o cálculo ao
+vivo às demais telas. Ver [`BACKLOG.md`](BACKLOG.md).
 
 ## Blockers
 
