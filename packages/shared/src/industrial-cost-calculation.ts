@@ -59,7 +59,7 @@ export const INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS: Record<
   LAST_REAL: "Última compra real",
   SUPPLIER_OFFER_PREFERRED: "Oferta válida do fornecedor preferencial",
   SUPPLIER_OFFER_SINGLE_APPROVED: "Oferta válida do único fornecedor homologado",
-  AMBIGUOUS_SUPPLIER_REFERENCE: "Várias ofertas válidas, sem fornecedor preferencial",
+  AMBIGUOUS_SUPPLIER_REFERENCE: "Ofertas disponíveis · seleção necessária",
   MANUAL_REFERENCE: "Referência manual de custo",
   MANUAL_REFERENCE_FORCED: "Referência manual forçada",
   NO_COST: "Sem referência de custo",

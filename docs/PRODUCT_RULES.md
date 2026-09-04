@@ -3472,9 +3472,23 @@ A implementação vive em `apps/api/src/lib/cost-source-selection.ts`
 (`selectItemCostSource`) e **reusa** os passos 1–3 da fundação de custos
 (`getItemCostReference`), sem reescrever a média nem a `referenceDate`. Nenhum
 outro serviço repete a ordem; a tela lê a lista de `@veridi/shared` para
-mostrá-la. Vários fornecedores homologados sem preferencial **não** contam
-como oferta disponível — é decisão comercial em aberto —, então a referência
-manual entra e a ambiguidade fica registrada no detalhe da fonte.
+mostrá-la.
+
+**A prioridade é entre categorias.** Ambiguidade dentro de uma categoria de
+prioridade maior **não** autoriza pular em silêncio para a seguinte. Dentro
+da categoria "oferta válida":
+
+- exatamente uma oferta válida → usa essa oferta;
+- várias, e exatamente um preferencial → usa o preferencial;
+- várias e nenhum preferencial → **ofertas disponíveis, seleção necessária**
+  (`AMBIGUOUS_SUPPLIER_REFERENCE`): custo desconhecido, sem escolher o menor
+  preço e sem cair para a referência manual;
+- mais de um preferencial → dado inconsistente, tratado igual: ambíguo.
+
+Nesse estado a referência manual só entra **forçada** — escolha explícita no
+cálculo, com motivo, usuário, data/hora e a fonte automática registrada como
+ambígua no documento. A tela diz o que fazer: definir a oferta preferencial em
+Item × Fornecedor, ou escolher explicitamente outra fonte para este cálculo.
 
 Custo do material **realmente consumido** numa OP continua com a regra da
 fundação: custo efetivo do lote consumido primeiro, depois o histórico de
@@ -3488,7 +3502,11 @@ valor em Decimal, unidade de medida da mesma dimensão do item, válido desde,
 observação, quem e quando. Não é compra, recebimento, custo real histórico nem
 valor pago. Alterar **insere** uma vigência nova; nada é atualizado nem apagado.
 A referência válida numa data é a de maior "válido desde" até aquele dia — um
-cálculo histórico encontra a referência que valia na sua data.
+cálculo histórico encontra a referência que valia na sua data. Duas
+referências podem ter o mesmo "válido desde" (corrigir o valor no mesmo dia);
+o desempate é canônico e testado (`COST_REFERENCE_VALIDITY_ORDER`): a criada
+por último vence, e no empate de instante o `id` maior — arbitrário, mas
+estável. Histórico salvo nunca é reinterpretado.
 
 Três estados que nunca se confundem na tela: referência existente ("R$ X /
 unidade"), sem referência ("Não informado") e custo não aplicável ("Não

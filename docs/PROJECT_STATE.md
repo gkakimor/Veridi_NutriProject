@@ -33,7 +33,9 @@ histórico por vigência, unidade coerente e Decimal; a tela do item mostra a
 referência e a fonte selecionada hoje. No cálculo padrão o usuário pode
 **forçar** a referência por material, só naquele cálculo, com motivo; o
 documento congela fonte usada, fonte automática, impacto, motivo, autor e hora.
-Regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §53.
+Ofertas válidas ambíguas (sem preferencial, ou com vários) ficam em "seleção
+necessária" — nunca caem para a manual sozinhas. Regra em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §53.
 
 A ajuda contextual foi revisada tela a tela: 62 telas inventariadas, 5 tópicos
 novos (estrutura de custos, lista de OPs, lista de faturamento, lista de

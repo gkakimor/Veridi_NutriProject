@@ -183,6 +183,41 @@ function textoDoTopico(topico: HelpTopic): string[] {
 }
 
 /**
+ * Componentes RELEVANTES de cada tela principal, nomeados como o glossário
+ * os nomeia. É a cobertura que importa: uma ajuda pode ter quantos termos a
+ * tela pedir, mas não pode deixar de fora o que está na frente da pessoa.
+ * Substring, case-sensitive, contra os termos do glossário.
+ */
+const ESSENCIAIS: Record<string, string[]> = {
+  "formulacao.comoFunciona": [
+    "Modo de cálculo",
+    "Doses por embalagem",
+    "Quantidade informada",
+    "Ajustes da quantidade",
+    "Pureza e overage",
+    "dupla correção",
+    "Fornecimento",
+    "Custo estimado",
+  ],
+  "item.comoFunciona": ["Tipo do item", "Unidade", "Controla lote", "Custo de referência", "Fonte selecionada hoje", "Fornecedores"],
+  "cmv.comoFunciona": ["Fonte do custo", "Referência manual", "Qualidade do custo", "Precificação vigente", "Data de referência"],
+  "estruturaCusto.comoFunciona": ["Rascunho × Ativa", "Recursos industriais", "Energia", "Premissas", "Cálculo padrão", "Fonte do custo por material", "Cálculos salvos"],
+  "calculo.comoFunciona": ["Data de referência", "Fonte do custo", "Referência manual forçada", "Qualidade do custo"],
+  "precificacao.comoFunciona": ["Faixa de quantidade", "Margem de contribuição", "Comissão", "Markup", "Modo de preço", "Lista de precificações"],
+  "comercial.pedido": ["Reserva", "Produzir", "Sugestão de Compra", "Materiais aguardando cliente", "Reservar Produto Acabado", "Preço acordado"],
+  "ordemProducao.comoFunciona": ["Necessidade de materiais", "Liberação", "Consumo extra", "Justificar diferença", "Lote interno × Lote Veridi", "Custo industrial"],
+  "estoque.posicao": ["Físico", "Reservado", "Disponível", "Em Compra"],
+  "estoque.lotes": ["Lote interno", "Lote do fornecedor", "Situação", "Laudo", "Expedições", "Custo de aquisição", "Destino comercial", "Auditoria"],
+  "compras.ordens": ["Rascunho × confirmada", "Quantidade em aberto", "Preço previsto", "Recebimentos"],
+  "compras.recebimentos": ["Lote do fornecedor × lote interno", "Custo efetivo", "Material do cliente", "Localização"],
+  "qualidadeDocumentos.comoFunciona": ["CoA", "Situação do CoA", "Situação do lote", "Pendências"],
+  "comercial.expedicao": ["Separação", "Reservado disponível", "Enviar agora", "Conferência", "Confirmar", "Folha de separação"],
+  "faturamento.comoFunciona": ["Quantidade faturada", "Preço acordado", "Preço faturado", "Alteração de preço", "Situação"],
+  "comercial.projeto": ["Versão de orçamento", "Faixa de precificação", "Aceite", "Produtos do projeto", "Condições comerciais", "Documentos do projeto"],
+  "consultaCliente.comoFunciona": ["Abas", "Trocar cliente", "Resumo", "Abrir … completo"],
+};
+
+/**
  * Telas do menu que NÃO precisam de "Como funciona": entrada, erro e
  * espaço reservado. Toda outra tela roteada dentro da casca precisa abrir
  * uma ajuda — é o inventário que impede uma tela nova de nascer sem ela.
@@ -284,6 +319,13 @@ describe("contrato entre tela e ajuda contextual", () => {
       if ((topico.notes ?? []).length < 2) rasos.push(`${id}: menos de 2 ressalvas`);
     }
     expect(rasos).toEqual([]);
+  });
+
+  it.each(Object.entries(ESSENCIAIS))("%s nomeia os componentes relevantes da tela", (id, termos) => {
+    const topico: HelpTopic = helpTopics[id as keyof typeof helpTopics];
+    const glossario = (topico.concepts ?? []).map((conceito) => `${conceito.term} ${conceito.text}`).join("\n");
+    const faltando = termos.filter((termo) => !glossario.includes(termo));
+    expect(faltando).toEqual([]);
   });
 
   it("nenhum tópico ou dica fala em vocabulário técnico", () => {

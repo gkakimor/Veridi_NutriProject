@@ -165,6 +165,7 @@ describe("Referência manual de custo do Item", () => {
     expect(refs.automatic.unitCost).toBe("1.200000");
 
     const nome = `Sem item ${m}`;
+    const referenciasAntes = await prisma.itemCostReference.count();
     const recusado = await app.inject({
       method: "POST",
       url: "/items",
@@ -178,6 +179,10 @@ describe("Referência manual de custo do Item", () => {
     expect(recusado.statusCode).toBe(400);
     expect(recusado.json().error).toBe("cost_reference_unit_incompatible");
     expect(await prisma.item.findFirst({ where: { name: nome } })).toBeNull();
+    // Nem item nem referência: a transação desfaz os dois juntos.
+    expect(await prisma.itemCostReference.count()).toBe(referenciasAntes);
+    // E a resposta diz o motivo, não uma falha genérica.
+    expect(recusado.json().message).toContain("não converte");
 
     // Sem referência inicial o item continua válido.
     const semReferencia = await app.inject({

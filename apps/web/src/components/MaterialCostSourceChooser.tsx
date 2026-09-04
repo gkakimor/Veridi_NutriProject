@@ -74,8 +74,19 @@ export function MaterialCostSourceChooser({
                     {INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[autoSource]}
                     {autoUnitCost !== null
                       ? ` · ${formatUnitCost(autoUnitCost)}/${material.unitCode}`
-                      : " · sem custo conhecido"}
+                      : autoSource === "AMBIGUOUS_SUPPLIER_REFERENCE"
+                        ? ""
+                        : " · sem custo conhecido"}
                   </span>
+                  {/* Ofertas existem, falta escolher: dizer o que fazer aqui,
+                      onde a pessoa está prestes a forçar outra fonte. */}
+                  {autoSource === "AMBIGUOUS_SUPPLIER_REFERENCE" && (
+                    <span className="field__hint cost-source-chooser__ambiguous">
+                      Existem várias ofertas válidas de fornecedor e nenhuma está definida como
+                      preferencial. Defina a oferta preferencial ou escolha explicitamente outra
+                      fonte para este cálculo.
+                    </span>
+                  )}
                 </span>
               </label>
               <label className="cost-source-chooser__option">

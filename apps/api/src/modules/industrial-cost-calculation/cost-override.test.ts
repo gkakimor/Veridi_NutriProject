@@ -84,6 +84,10 @@ afterAll(async () => {
     await prisma.purchaseOrder.deleteMany({ where: { id: { in: fixturePurchaseOrderIds } } });
   }
   if (fixtureItemIds.length > 0) {
+    await prisma.supplierItemOffer.deleteMany({
+      where: { supplierItem: { itemId: { in: fixtureItemIds } } },
+    });
+    await prisma.supplierItem.deleteMany({ where: { itemId: { in: fixtureItemIds } } });
     await prisma.inventoryMovement.deleteMany({ where: { itemId: { in: fixtureItemIds } } });
     await prisma.lot.deleteMany({ where: { itemId: { in: fixtureItemIds } } });
     await prisma.item.deleteMany({ where: { id: { in: fixtureItemIds } } });
@@ -382,6 +386,74 @@ describe("Referência manual forçada — por cálculo e por componente", () => 
     const forcado = await preview(app, version.id, [{ itemId: material.id, reason: "x" }]);
     expect(forcado.status).toBe(400);
     expect(forcado.body.error).toBe("override_not_applicable");
+    await app.close();
+  });
+
+  it("E. ofertas ambíguas: o automático fica sem custo, e só a referência forçada — com motivo — o preenche", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const material = await createItem("RAW_MATERIAL");
+    const a = await createSupplier();
+    const b = await createSupplier();
+    for (const supplier of [a, b]) {
+      const supplierItem = await getPrisma().supplierItem.create({
+        data: { itemId: material.id, supplierId: supplier.id, qualificationStatus: "APPROVED", preferred: false, active: true },
+      });
+      await getPrisma().supplierItemOffer.create({
+        data: {
+          supplierItemId: supplierItem.id,
+          unitPrice: supplier.id === a.id ? "900" : "910",
+          currencyCode: "BRL",
+          priceUomCode: "kg",
+          effectiveAt: new Date(Date.now() - DAY_MS),
+          source: "MANUAL",
+        },
+      });
+    }
+    await setManualReference(app, material.id, "1000");
+    const { version } = await createActiveStructure(app, [{ itemId: material.id, quantity: "2" }]);
+
+    const automatico = await preview(app, version.id);
+    expect(automatico.status).toBe(200);
+    const linha = automatico.body.materials[0];
+    expect(linha.costSource).toBe("AMBIGUOUS_SUPPLIER_REFERENCE");
+    expect(linha.unitCost).toBeNull();
+    expect(linha.manualReference?.unitCost).toBe("1000.000000");
+    expect(automatico.body.quality).toBe("PARTIAL");
+    const aviso = automatico.body.warnings.find(
+      (warning: { code: string }) => warning.code === "AMBIGUOUS_SUPPLIER_REFERENCE",
+    );
+    expect(aviso?.message).toContain("Defina a oferta preferencial");
+    expect(aviso?.itemId).toBe(material.id);
+
+    const forcado = await preview(app, version.id, [{ itemId: material.id }]);
+    expect(forcado.status, JSON.stringify(forcado.body)).toBe(200);
+    const forcada = forcado.body.materials[0];
+    expect(forcada.costSource).toBe("MANUAL_REFERENCE_FORCED");
+    expect(forcada.unitCost).toBe("1000.000000");
+    expect(forcada.override.automaticSource).toBe("AMBIGUOUS_SUPPLIER_REFERENCE");
+    expect(forcada.override.automaticUnitCost).toBeNull();
+    expect(forcada.override.impact).toBeNull();
+    expect(forcado.body.quality).toBe("COMPLETE_WITH_ESTIMATES");
+
+    const semMotivo = await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${version.id}/calculations`,
+      payload: { materialOverrides: [{ itemId: material.id }] },
+    });
+    expect(semMotivo.statusCode).toBe(400);
+
+    const salvo = await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${version.id}/calculations`,
+      payload: { materialOverrides: [{ itemId: material.id, reason: "Fornecedor preferencial em homologação" }] },
+    });
+    expect(salvo.statusCode, salvo.body).toBe(201);
+    const doc = salvo.json();
+    expect(doc.materials[0].costSource).toBe("MANUAL_REFERENCE_FORCED");
+    expect(doc.materials[0].override.automaticSource).toBe("AMBIGUOUS_SUPPLIER_REFERENCE");
+    expect(doc.materials[0].override.reason).toBe("Fornecedor preferencial em homologação");
+    expect(doc.materials[0].override.forcedByName).toBeTruthy();
     await app.close();
   });
 

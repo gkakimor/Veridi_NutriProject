@@ -263,7 +263,20 @@ describe("Seleção automática da fonte de custo — ordem canônica", () => {
     expect(result.unitCost).not.toEqual(new Prisma.Decimal(0));
   });
 
-  it("várias ofertas sem preferencial não são oferta disponível: a referência manual entra, com a ambiguidade registrada", async () => {
+  it("B. várias ofertas válidas e exatamente um preferencial: usa o preferencial", async () => {
+    const item = await createItem();
+    const a = await createSupplier();
+    const b = await createSupplier();
+    await approveSupplierWithOffer(item.id, { supplierId: a.id, unitPrice: "900" });
+    await approveSupplierWithOffer(item.id, { supplierId: b.id, unitPrice: "910", preferred: true });
+
+    const result = await select(item.id, "kg");
+    expect(result.source).toBe("SUPPLIER_OFFER_PREFERRED");
+    // O preferencial vence mesmo sendo o mais caro: preferência é decisão, não preço.
+    expect(result.unitCost?.toString()).toBe("910");
+  });
+
+  it("C/D. várias ofertas válidas sem preferencial: seleção necessária — e a referência manual NÃO entra sozinha", async () => {
     const app = buildTestApp("ADMIN");
     await app.ready();
     const item = await createItem();
@@ -272,17 +285,68 @@ describe("Seleção automática da fonte de custo — ordem canônica", () => {
     await approveSupplierWithOffer(item.id, { supplierId: a.id, unitPrice: "900" });
     await approveSupplierWithOffer(item.id, { supplierId: b.id, unitPrice: "910" });
 
-    // Sem referência manual, a ambiguidade continua sendo o veredito.
     const semManual = await select(item.id, "kg");
     expect(semManual.source).toBe("AMBIGUOUS_SUPPLIER_REFERENCE");
     expect(semManual.unitCost).toBeNull();
+    expect(semManual.details).toContain("nenhuma está definida como preferencial");
+    expect(semManual.details).toContain("Defina a oferta preferencial");
 
+    // A categoria "oferta válida" existe; ambiguidade dentro dela não pula
+    // para a categoria seguinte.
     await setManualReference(app, item.id, { unitCost: "1000" });
     const comManual = await select(item.id, "kg");
-    expect(comManual.source).toBe("MANUAL_REFERENCE");
-    expect(comManual.unitCost?.toString()).toBe("1000");
-    expect(comManual.details).toContain("nenhum preferencial");
+    expect(comManual.source).toBe("AMBIGUOUS_SUPPLIER_REFERENCE");
+    expect(comManual.unitCost).toBeNull();
     await app.close();
+  });
+
+  it("F. mais de um preferencial é inconsistência: o banco recusa a colisão, e a seleção continua com um só", async () => {
+    const item = await createItem();
+    const a = await createSupplier();
+    const b = await createSupplier();
+    await approveSupplierWithOffer(item.id, { supplierId: a.id, unitPrice: "900", preferred: true });
+
+    // A colisão é impedida na origem: índice parcial único de preferencial
+    // por item (`supplier_items_preferred_per_item_key`). O segundo
+    // preferencial nem chega a existir — fail-closed no dado, não na leitura.
+    await expect(
+      approveSupplierWithOffer(item.id, { supplierId: b.id, unitPrice: "910", preferred: true }),
+    ).rejects.toThrow(/Unique constraint|unique/i);
+
+    // Sobrou uma relação só — e uma oferta só é a oferta única, preferencial ou não.
+    const result = await select(item.id, "kg");
+    expect(result.source).toBe("SUPPLIER_OFFER_SINGLE_APPROVED");
+    expect(result.unitCost?.toString()).toBe("900");
+  });
+
+  it("duas referências com o mesmo válido desde: a criada por último vence, e o empate total é estável", async () => {
+    const prisma = getPrisma();
+    const item = await createItem();
+    const dia = new Date(Date.UTC(2026, 7, 1));
+    const antes = new Date("2026-08-01T10:00:00.000Z");
+    const depois = new Date("2026-08-01T10:00:01.000Z");
+    await prisma.itemCostReference.create({
+      data: { itemId: item.id, unitCost: "100", uomCode: "kg", effectiveFrom: dia, createdAt: antes },
+    });
+    await prisma.itemCostReference.create({
+      data: { itemId: item.id, unitCost: "120", uomCode: "kg", effectiveFrom: dia, createdAt: depois },
+    });
+    // Correção do mesmo dia: vale a última gravada.
+    expect((await select(item.id, "kg")).unitCost?.toString()).toBe("120");
+
+    // Empate até no instante de criação: o desempate por id é arbitrário,
+    // mas estável — cinco leituras, uma resposta.
+    const mesmoInstante = new Date("2026-08-01T11:00:00.000Z");
+    const x = await prisma.itemCostReference.create({
+      data: { itemId: item.id, unitCost: "130", uomCode: "kg", effectiveFrom: dia, createdAt: mesmoInstante },
+    });
+    const y = await prisma.itemCostReference.create({
+      data: { itemId: item.id, unitCost: "140", uomCode: "kg", effectiveFrom: dia, createdAt: mesmoInstante },
+    });
+    const esperado = x.id > y.id ? "130" : "140";
+    for (let i = 0; i < 5; i += 1) {
+      expect((await select(item.id, "kg")).unitCost?.toString()).toBe(esperado);
+    }
   });
 
   it("respeita a data de referência: a vigência que valia naquele dia, não a de hoje", async () => {

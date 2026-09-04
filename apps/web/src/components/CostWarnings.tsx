@@ -50,6 +50,18 @@ function WarningAction({
       </Link>
     );
   }
+  /*
+   * Ofertas existem e nenhuma foi escolhida: a decisão mora em Item ×
+   * Fornecedor (marcar o preferencial). A outra saída — forçar a referência
+   * manual — está no seletor de fonte deste mesmo cálculo.
+   */
+  if (warning.code === "AMBIGUOUS_SUPPLIER_REFERENCE" && warning.itemId) {
+    return (
+      <Link to={`/compras/item-fornecedor?itemId=${warning.itemId}`}>
+        Definir a oferta preferencial em Item × Fornecedor
+      </Link>
+    );
+  }
   if (warning.target === "PURCHASE") {
     return (
       <Link to="/compras/ordens">

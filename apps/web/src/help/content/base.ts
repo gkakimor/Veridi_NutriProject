@@ -464,7 +464,7 @@ export const baseTopics = {
       },
       {
         term: "Referência manual e referência forçada",
-        text: "A referência manual é uma estimativa declarada no cadastro do item, usada só quando não há compra real nem oferta válida. “Referência manual forçada” é a exceção: no cálculo de referência alguém escolheu usar a referência mesmo havendo fonte melhor, com motivo registrado. O cálculo salvo guarda a fonte usada e a que teria sido usada.",
+        text: "A referência manual é uma estimativa declarada no cadastro do item, usada só quando não há compra real nem oferta válida. “Referência manual forçada” é a exceção: no cálculo de referência alguém escolheu usar a referência mesmo havendo fonte melhor — ou havendo ofertas válidas sem preferencial —, com motivo registrado. O cálculo salvo guarda a fonte usada e a que teria sido usada.",
       },
       {
         term: "Qualidade do custo",
@@ -527,6 +527,7 @@ export const baseTopics = {
       "Material sem custo conhecido não vira zero: ele aparece como pendência, o total fica indisponível e o que se mostra é o subtotal conhecido, rotulado como subtotal. Zero informado, esse sim, é um valor real.",
       "Material de propriedade do cliente fica fora da aquisição da Veridi. Não é zero nem desconhecido — é de terceiro, e não piora a qualidade do resultado.",
       "A qualidade da referência diz de onde vieram os preços: tudo de compra real, com estimativas (oferta de fornecedor ou referência manual), parcial ou sem custo. É ela que diz o quanto o número sustenta uma decisão.",
+      "Várias ofertas válidas de fornecedor sem preferencial não escolhem sozinhas nem caem para a referência manual: o material aparece como “Ofertas disponíveis · seleção necessária”, sem custo, até alguém definir o preferencial ou forçar outra fonte no cálculo.",
       "Referência manual de custo é estimativa, nunca compra: entra só quando não há fonte melhor, e um cálculo que a usa é classificado como completo com estimativas. Forçá-la mesmo havendo compra real é decisão registrada no cálculo de referência, com motivo, autor e data — a composição mostra “Referência manual forçada” e o cálculo mostra o resto.",
       "Custo é uma coisa, preço é outra: a precificação vigente aparece ao lado para comparar, e a margem mostrada vem calculada de lá — esta tela não refaz a conta.",
       "Simular é ler: abrir a tela ou mudar a quantidade não cria cálculo, não grava preço e não persiste nada. Congelar continua sendo trabalho do cálculo salvo.",

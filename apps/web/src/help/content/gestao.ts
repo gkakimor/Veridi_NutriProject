@@ -220,6 +220,10 @@ export const gestaoTopics = {
         text: "Depois de calcular, cada material que tem referência manual de custo no cadastro oferece a escolha: seleção automática (recomendada) ou forçar a referência manual. Forçar vale só para este cálculo e este material, exige motivo ao salvar, e o documento guarda a fonte usada, a que teria sido usada e o impacto.",
       },
       {
+        term: "Ofertas disponíveis · seleção necessária",
+        text: "Quando existem várias ofertas válidas de fornecedor e nenhuma está definida como preferencial (ou mais de uma está), o sistema não escolhe por conta própria e não pula para a referência manual: o material fica sem custo, com a observação dizendo o que fazer — definir a oferta preferencial em Item × Fornecedor, ou forçar explicitamente a referência manual neste cálculo.",
+      },
+      {
         term: "Cálculos salvos",
         text: "A lista dos cálculos congelados do produto. Daqui saem “Criar precificação” e “Usar política” (que também cria uma precificação, a partir de uma política de preço). Cálculo que nenhuma precificação cita pode ser descartado; citado, não.",
       },

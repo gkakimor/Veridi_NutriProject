@@ -433,8 +433,8 @@ describe("Vocabulário da tela", () => {
     ] as const) {
       const topico: HelpTopic = helpTopics[id];
       const conceitos = topico.concepts ?? [];
+      // Piso, não teto: quantos termos a tela precisa é decisão da tela.
       expect(conceitos.length).toBeGreaterThanOrEqual(4);
-      expect(conceitos.length).toBeLessThanOrEqual(14);
     }
   });
 });

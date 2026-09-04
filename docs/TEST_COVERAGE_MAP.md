@@ -107,6 +107,9 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Template de formulação/custo: cópia profunda | — | `modules/formulation-templates/formulation-templates.test.ts`, `modules/cost-templates/cost-templates.test.ts` |
 | Fonte de custo: 30d → 90d → última compra → oferta válida → referência manual → desconhecido, num lugar só | referência manual escolhida com compra real existente | `lib/cost-source-selection.test.ts` |
 | Referência manual respeita a data de referência e a unidade; ausência nunca vira zero | — | `lib/cost-source-selection.test.ts` |
+| Ofertas válidas: uma → ela; várias com um preferencial → ele; sem preferencial ou com vários → seleção necessária, sem cair para a manual | primeira versão caía para a referência manual | `lib/cost-source-selection.test.ts` |
+| Mesmo "válido desde": a criada por último vence; empate total é estável | leitura dependente da ordem física | `lib/cost-source-selection.test.ts` |
+| Ambiguidade + referência forçada: fonte automática congelada como ambígua, impacto nulo, motivo ao salvar | — | `modules/industrial-cost-calculation/cost-override.test.ts` |
 | Alterar referência cria vigência nova; unidade incompatível e negativo recusados; papel COMMERCIAL/ADMIN | — | `modules/items/item-cost-references.test.ts` |
 | Item com referência inicial nasce atômico — recusada, nada fica pela metade | — | `modules/items/item-cost-references.test.ts` |
 | Referência forçada: por cálculo e por componente, motivo ao salvar, fonte automática e impacto congelados | override que grudasse no item | `modules/industrial-cost-calculation/cost-override.test.ts` |
@@ -126,6 +129,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Mensagem de erro tem `role` e é anunciada | 125 mensagens sem voz | `web` testes de formulário |
 | Criação contextual volta para o campo que a pediu | — | `web lib/contextual-create.test.ts`, `pages/create-in-context-navigation.test.tsx` |
 | Toda tela roteada abre "Como funciona"; tópico tem resumo, vocabulário, caminho e ressalvas; sem termo técnico | tela nova sem ajuda, ajuda que explica o código | `web pages/help-topic-contract.test.ts` |
+| Cada tela principal nomeia os seus componentes relevantes no glossário (piso, não teto) | ajuda que omite o que está na tela | `web pages/help-topic-contract.test.ts` |
 | Cada tela principal abre o tópico da própria área (lista ≠ documento) | Pedido abria a ajuda do Plano | `web pages/help-topic-contract.test.ts`, `pages/help-*-screens.test.tsx` |
 
 ## Permissões

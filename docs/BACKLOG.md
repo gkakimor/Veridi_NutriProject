@@ -63,15 +63,19 @@ de legibilidade **reduziu** o problema (era 1925px). O painel de ajustes mostra
 a quantidade física em texto, com a conta ao lado, então nenhum número exibido
 depende dessas colunas. A página em si não estoura.
 
-### 11. Recebimento de material do cliente não exige lote do fabricante nem validade — MEDIUM
+### 11. Rastreabilidade do material fornecido pelo cliente: regra por Item a definir — MEDIUM
 
 `receiving/ReceiveCustomerMaterialPage.tsx` aceita confirmar com "Lote do
-fabricante" e "Validade" em branco, mesmo para item que controla lote e
-validade; o recebimento de OC exige os dois. Material de terceiro pode entrar
-sem identificação externa nem vencimento. Achado da revisão de ajuda
-(2026-09-04). Não corrigido nesta rodada: a exigência muda comportamento de
-entrada de estoque e precisa de decisão — a ajuda passou a descrever o que a
-tela faz, não o que deveria fazer.
+fabricante" e "Validade" em branco; o recebimento de OC exige os dois quando o
+item controla lote e validade. Achado da revisão de ajuda (2026-09-04). A
+ajuda descreve o que a tela faz hoje.
+
+**Não** assumir que todo material do cliente exige validade: parte dele chega
+sem lote de fabricante ou sem vencimento declarado, e isso pode ser legítimo.
+O que falta é a **regra por tipo/configuração do Item** para material
+fornecido pelo cliente — se o lote do fabricante é exigido, se a validade é
+exigida, e o que a rastreabilidade precisa guardar quando não vêm. Decisão de
+PO; mantido aberto de propósito, sem correção nesta rodada.
 
 ### 12. Custo estimado da Formulação usa só compra real — LOW
 

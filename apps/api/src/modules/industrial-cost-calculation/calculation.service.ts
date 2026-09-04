@@ -17,7 +17,7 @@ import { computeFormulationRequirements } from "../production-orders/requirement
 import { FormulationContextIncompleteError } from "../../lib/formulation-math.js";
 import { pickCurrentRate } from "../industrial-resources/industrial-resources.service.js";
 import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industrial-costs.errors.js";
-import { resolveManualReference, selectItemCostSource } from "../../lib/cost-source-selection.js";
+import { diaDaVigencia, resolveManualReference, selectItemCostSource } from "../../lib/cost-source-selection.js";
 import {
   ManualReferenceMissingError,
   OverrideNotApplicableError,
@@ -554,7 +554,7 @@ export async function calculateIndustrialCost(
       resolution = {
         unitCost: manual.unitCost,
         source: "MANUAL_REFERENCE_FORCED",
-        details: `Referência manual (R$ ${manual.declaredUnitCost.toString()}/${manual.declaredUomCode}, válida desde ${manual.effectiveFrom.toLocaleDateString("pt-BR")}) forçada neste cálculo.`,
+        details: `Referência manual (R$ ${manual.declaredUnitCost.toString()}/${manual.declaredUomCode}, válida desde ${diaDaVigencia(manual.effectiveFrom)}) forçada neste cálculo.`,
       };
       const automaticSubtotal = automatic.unitCost
         ? requirement.requiredQuantity.times(automatic.unitCost)
@@ -588,10 +588,14 @@ export async function calculateIndustrialCost(
           resolution.source === "AMBIGUOUS_SUPPLIER_REFERENCE"
             ? "AMBIGUOUS_SUPPLIER_REFERENCE"
             : "MATERIAL_COST_UNKNOWN",
+        // Ofertas existem, falta escolher: a frase diz o que fazer, e o
+        // item viaja junto para a tela levar a Item × Fornecedor.
         message:
           resolution.source === "AMBIGUOUS_SUPPLIER_REFERENCE"
-            ? `${requirement.itemCode}: há múltiplas referências de fornecedor e nenhum preferencial.`
+            ? `${requirement.itemCode}: ${resolution.details ?? "ofertas disponíveis, seleção necessária."}`
             : `${requirement.itemCode}: sem custo conhecido.`,
+        itemId: requirement.itemId,
+        itemCode: requirement.itemCode,
       });
     }
 

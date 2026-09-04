@@ -7,6 +7,7 @@ import type {
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import {
+  COST_REFERENCE_VALIDITY_ORDER,
   getManualCostReference,
   selectItemCostSource,
 } from "../../lib/cost-source-selection.js";
@@ -139,7 +140,7 @@ export async function listItemCostReferences(
   const [rows, current, units] = await Promise.all([
     prisma.itemCostReference.findMany({
       where: { itemId },
-      orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }],
+      orderBy: [...COST_REFERENCE_VALIDITY_ORDER],
     }),
     getManualCostReference(prisma, itemId, referenceDate),
     prisma.unitOfMeasure.findMany(),

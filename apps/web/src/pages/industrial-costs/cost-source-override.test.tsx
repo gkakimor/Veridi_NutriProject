@@ -176,6 +176,31 @@ describe("Fonte do custo por material — referência manual forçada", () => {
     });
   });
 
+  it("ofertas ambíguas: o automático fica sem custo, com a orientação, e forçar é a saída explícita", async () => {
+    const ambiguo = resultado(false);
+    ambiguo.materials[0] = {
+      ...ambiguo.materials[0]!,
+      unitCost: null,
+      costSource: "AMBIGUOUS_SUPPLIER_REFERENCE",
+      subtotal: null,
+    };
+    ambiguo.quality = "PARTIAL";
+    ambiguo.totalIndustrialCost = null;
+    vi.mocked(calculateIndustrialCost).mockResolvedValue(ambiguo);
+
+    renderSecao();
+    fireEvent.click(screen.getByRole("button", { name: "Calcular custo" }));
+
+    expect(await screen.findByText("Fonte do custo por material")).toBeInTheDocument();
+    expect(screen.getAllByText("Ofertas disponíveis · seleção necessária").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Existem várias ofertas válidas de fornecedor e nenhuma está definida como preferencial/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Seleção automática/ })).toBeChecked();
+    // Nada foi forçado sozinho: "Referência manual forçada" só aparece por escolha.
+    expect(screen.queryByText("Referência manual forçada")).not.toBeInTheDocument();
+  });
+
   it("voltar para a seleção automática recalcula sem substituição nenhuma", async () => {
     renderSecao();
     fireEvent.click(screen.getByRole("button", { name: "Calcular custo" }));

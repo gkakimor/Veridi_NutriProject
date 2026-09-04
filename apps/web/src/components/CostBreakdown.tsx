@@ -121,7 +121,9 @@ export function CostBreakdown({
                         {INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[material.override.automaticSource]}
                         {material.override.automaticUnitCost !== null
                           ? ` · ${formatUnitCost(material.override.automaticUnitCost)}/${material.unitCode}`
-                          : " · sem custo conhecido"}
+                          : material.override.automaticSource === "AMBIGUOUS_SUPPLIER_REFERENCE"
+                            ? ""
+                            : " · sem custo conhecido"}
                       </div>
                       {material.override.impact !== null && (
                         <div>

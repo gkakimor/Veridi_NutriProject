@@ -25,7 +25,9 @@ type UnitLike = { code: string; dimension: UomDimension; toBaseFactor: Prisma.De
  * `referenceDate` continua explícita. Este módulo só acrescenta os passos
  * 4 e 5 e é o único lugar que conhece a ordem inteira — cálculo de custo,
  * CMV e tela do item chamam `selectItemCostSource` em vez de repetir a
- * regra.
+ * regra. A prioridade é entre categorias: ambiguidade dentro de uma
+ * categoria de prioridade maior (ofertas válidas sem preferencial) nunca
+ * pula em silêncio para a seguinte.
  *
  * O que sai daqui é PROSPECTIVO: custo de material realmente consumido numa
  * OP continua com `getConsumedLotCostReference` (custo do lote real primeiro).
@@ -36,6 +38,8 @@ export const COST_SOURCE_PRIORITY: readonly IndustrialMaterialCostSource[] = [
   "LAST_REAL",
   "SUPPLIER_OFFER_PREFERRED",
   "SUPPLIER_OFFER_SINGLE_APPROVED",
+  // Ainda é a categoria "oferta válida": ofertas existem, falta escolher.
+  "AMBIGUOUS_SUPPLIER_REFERENCE",
   "MANUAL_REFERENCE",
   "NO_COST",
 ];
@@ -63,17 +67,34 @@ function fimDoDia(date: Date): Date {
 }
 
 /**
+ * Ordem CANÔNICA de vigência das referências de um item — a mais recente
+ * primeiro. Uma só, usada pela seleção e pelo histórico da tela.
+ *
+ * Duas referências podem ter o mesmo "válido desde" (corrigir um valor
+ * digitado errado no mesmo dia é o caso normal), então o desempate é
+ * explícito e testado: a criada por último vence; no empate de `createdAt`
+ * (mesmo milissegundo) o `id` maior — arbitrário, mas estável entre
+ * chamadas. Sem esse último critério a resposta dependeria da ordem física
+ * das linhas.
+ */
+export const COST_REFERENCE_VALIDITY_ORDER = [
+  { effectiveFrom: "desc" },
+  { createdAt: "desc" },
+  { id: "desc" },
+] as const;
+
+/**
  * Referência manual vigente para o item na data.
  *
  * A vigência é decidida por `effectiveFrom`: vale a de maior data até o dia
- * pedido (empate: a criada por último). Alterar a referência cria linha
- * nova, então uma consulta histórica encontra a referência que valia
- * naquele dia — não a de hoje.
+ * pedido, com o desempate de `COST_REFERENCE_VALIDITY_ORDER`. Alterar a
+ * referência cria linha nova, então uma consulta histórica encontra a
+ * referência que valia naquele dia — não a de hoje.
  */
 export async function getManualCostReference(prisma: PrismaOrTx, itemId: string, referenceDate: Date) {
   return prisma.itemCostReference.findFirst({
     where: { itemId, effectiveFrom: { lte: fimDoDia(referenceDate) } },
-    orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }],
+    orderBy: [...COST_REFERENCE_VALIDITY_ORDER],
   });
 }
 
@@ -122,8 +143,16 @@ export async function resolveManualReference(
   };
 }
 
+/**
+ * "Válido desde" é dia de calendário gravado à meia-noite UTC. Formatar no
+ * fuso do servidor (UTC-3) recuava um dia: 04/09 virava 03/09 no texto.
+ */
+export function diaDaVigencia(date: Date): string {
+  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+}
+
 function manualReferenceDetails(manual: ManualReferenceResolution): string {
-  return `Referência manual de custo (R$ ${manual.declaredUnitCost.toString()}/${manual.declaredUomCode}, válida desde ${manual.effectiveFrom.toLocaleDateString("pt-BR")}) — estimativa, não custo real.`;
+  return `Referência manual de custo (R$ ${manual.declaredUnitCost.toString()}/${manual.declaredUomCode}, válida desde ${diaDaVigencia(manual.effectiveFrom)}) — estimativa, não custo real.`;
 }
 
 /**
@@ -147,28 +176,20 @@ export async function selectItemCostSource(
   }
 
   // Passo 4: oferta válida de fornecedor homologado.
+  //
+  // A prioridade é entre CATEGORIAS. Havendo ofertas válidas, a categoria
+  // existe — e ambiguidade dentro dela (várias sem preferencial, ou mais de
+  // um preferencial) NÃO autoriza pular para a categoria seguinte. O
+  // resultado é explícito: ofertas disponíveis, seleção necessária. A
+  // referência manual só entra aí por escolha de gente, forçada e com motivo.
   const offer = await resolveSupplierOfferCost(prisma, params, units);
-  if (offer.unitCost) return offer;
+  if (offer.unitCost || offer.source === "AMBIGUOUS_SUPPLIER_REFERENCE") return offer;
 
-  // Passo 5: referência manual do item. Vários fornecedores homologados sem
-  // preferencial NÃO é oferta disponível — é decisão comercial em aberto —,
-  // então a referência manual (declarada por gente) é a próxima fonte; a
-  // ambiguidade fica registrada no detalhe para não sumir da vista.
+  // Passo 5: referência manual do item — só quando não há oferta nenhuma.
   const manual = await resolveManualReference(prisma, params, units);
   if (manual) {
-    const ambiguidade =
-      offer.source === "AMBIGUOUS_SUPPLIER_REFERENCE" && offer.details
-        ? ` Oferta não usada: ${offer.details}`
-        : "";
-    return {
-      unitCost: manual.unitCost,
-      source: "MANUAL_REFERENCE",
-      details: manualReferenceDetails(manual) + ambiguidade,
-    };
+    return { unitCost: manual.unitCost, source: "MANUAL_REFERENCE", details: manualReferenceDetails(manual) };
   }
-
-  // Sem referência manual, a ambiguidade continua sendo o que há para dizer.
-  if (offer.source === "AMBIGUOUS_SUPPLIER_REFERENCE") return offer;
 
   // Passo 6: desconhecido. Nunca zero.
   return { unitCost: null, source: "NO_COST", details: null };
@@ -242,15 +263,7 @@ async function resolveSupplierOfferCost(
     return { unitCost: null, source: "NO_COST", details: null };
   }
 
-  const preferred = candidates.find((candidate) => candidate.preferred);
-  if (preferred) {
-    return {
-      unitCost: preferred.unitCost,
-      source: "SUPPLIER_OFFER_PREFERRED",
-      details: `Oferta válida de ${preferred.supplierName} (R$ ${preferred.offerPrice.toString()}/${preferred.priceUomCode}) — estimativa, não custo real.`,
-    };
-  }
-
+  // A. exatamente uma oferta válida: é ela.
   if (candidates.length === 1) {
     const only = candidates[0]!;
     return {
@@ -260,10 +273,27 @@ async function resolveSupplierOfferCost(
     };
   }
 
-  // Escolher o menor preço seria tomar decisão de compra no lugar de gente.
+  // B. várias, e exatamente um preferencial: é ele.
+  const preferred = candidates.filter((candidate) => candidate.preferred);
+  if (preferred.length === 1) {
+    const chosen = preferred[0]!;
+    return {
+      unitCost: chosen.unitCost,
+      source: "SUPPLIER_OFFER_PREFERRED",
+      details: `Oferta válida de ${chosen.supplierName} (R$ ${chosen.offerPrice.toString()}/${chosen.priceUomCode}), fornecedor preferencial — estimativa, não custo real.`,
+    };
+  }
+
+  // C/D. várias sem preferencial, ou mais de um preferencial (dado
+  // inconsistente): ofertas disponíveis, seleção necessária. Escolher o
+  // menor preço, ou o primeiro preferencial, seria decidir no lugar de gente.
+  const causa =
+    preferred.length > 1
+      ? `Existem ${preferred.length} fornecedores marcados como preferenciais ao mesmo tempo para este item — situação inconsistente.`
+      : "Existem várias ofertas válidas de fornecedor e nenhuma está definida como preferencial.";
   return {
     unitCost: null,
     source: "AMBIGUOUS_SUPPLIER_REFERENCE",
-    details: `${candidates.length} fornecedores homologados com oferta vigente e nenhum preferencial.`,
+    details: `${causa} Defina a oferta preferencial ou escolha explicitamente outra fonte para este cálculo.`,
   };
 }
