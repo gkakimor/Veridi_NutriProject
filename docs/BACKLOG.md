@@ -114,6 +114,22 @@ que aplicar a renomeada, nunca antes.
 
 ---
 
+### 14. `schema.prisma` diverge das migrations em 27 chaves estrangeiras e 32 índices — LOW
+
+`prisma migrate diff` do banco (novo ou produção, idênticos) para o
+`schema.prisma` gera 86 comandos, nenhum de tabela, coluna ou tipo: 27 chaves
+estrangeiras que o banco aplica com `ON DELETE RESTRICT` e o schema declara
+`SET NULL` (`attachments.lotId`, `lots.ownerCustomerId`,
+`production_orders.customerOrderId`, `billing_lines.lotId`…), 15 índices e 11
+chaves com nome diferente, 6 índices que existem no banco e o schema não
+declara. Pré-existente, sem efeito na reconstrução nem na segurança — o banco
+é o lado mais restritivo. Risco: o próximo `prisma migrate dev` empacota os
+86 comandos numa migration e afrouxa as 27 exclusões sem ninguém decidir.
+Decisão de PO: alinhar o schema ao banco (`onDelete: Restrict`, `@@index`,
+`map:`) ou o banco ao schema, caso a caso. Até lá, só `migrate deploy`.
+
+---
+
 ## Decisões pendentes de Product Ownership
 
 ### 5. Rótulos dos dois modos de quantidade — LOW

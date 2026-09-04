@@ -75,8 +75,9 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado por política.
 
 Zero CRITICAL e HIGH. Dois MEDIUM (`aria-invalid` por campo na Formulação;
 recebimento de material do cliente sem regra por Item para lote e validade),
-cinco LOW — inclusive a limpeza opcional de uma linha órfã em
-`_prisma_migrations` de produção —, quatro decisões de PO e quatro melhorias
+seis LOW — entre elas a limpeza opcional de uma linha órfã em
+`_prisma_migrations` de produção e o `schema.prisma` que declara `SET NULL`
+onde as migrations aplicam `RESTRICT` —, quatro decisões de PO e quatro melhorias
 adiadas de propósito — a maior delas é levar o cálculo ao vivo às demais
 telas. Ver [`BACKLOG.md`](BACKLOG.md).
 
