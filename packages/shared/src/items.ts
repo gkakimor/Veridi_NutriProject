@@ -116,6 +116,15 @@ export interface UnitOfMeasureDTO {
   code: string;
   label: string;
   dimension: UomDimension;
+  /**
+   * Fator para a base da dimensão, como decimal-string.
+   *
+   * A tela precisa dele para converter unidade sem pedir ao servidor — a
+   * Formulação mostra o físico por unidade de estoque enquanto a pessoa digita
+   * em mg. Sem o fator, a prévia teria de escolher entre uma ida ao servidor a
+   * cada tecla ou uma tabela de conversão duplicada no front.
+   */
+  toBaseFactor: string;
 }
 
 export interface ItemDTO {

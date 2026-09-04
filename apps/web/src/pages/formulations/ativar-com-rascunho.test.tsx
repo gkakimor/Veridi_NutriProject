@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { FormulationVersionDTO } from "@veridi/shared";
+import type { FormulationComponentDTO, FormulationVersionDTO } from "@veridi/shared";
 
 /**
  * Ativar uma versão nunca pode descartar o que está na tela.
@@ -40,7 +40,14 @@ import {
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormulationVersionPage } from "./FormulationVersionPage";
 
-function componente() {
+/**
+ * O fixture dizia `basis: "PER_BATCH"`, que nao existe no dominio — a base do
+ * componente e FIXED_BASIS | PER_DOSE | PER_FINISHED_UNIT. O `as
+ * FormulationVersionDTO` do fixture da versao engolia o erro, entao o valor
+ * apodreceu em silencio ate a tela passar a calcular de verdade. Anotar o
+ * retorno faz o compilador conferir o fixture, que e onde a conferencia serve.
+ */
+function componente(): FormulationComponentDTO {
   return {
     id: "cmp-1",
     itemId: "item-1",
@@ -50,10 +57,13 @@ function componente() {
     itemActive: true,
     quantity: "200",
     unitCode: "mg",
-    basis: "PER_BATCH" as const,
+    basis: "FIXED_BASIS" as const,
     supplyResponsibility: "VERIDI" as const,
     purityPercentApplied: null,
     overagePercent: null,
+    quantityMode: "PHYSICAL_DIRECT" as const,
+    applyPurityAdjustment: false,
+    applyOverageAdjustment: false,
     legacyTotalQuantity: null,
     legacyTotalUnitCode: null,
     legacyBatchUnits: null,

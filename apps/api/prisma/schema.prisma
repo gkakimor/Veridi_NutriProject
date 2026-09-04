@@ -245,6 +245,25 @@ enum FormulationComponentBasis {
   PER_FINISHED_UNIT
 }
 
+/// O que a quantidade declarada do componente SIGNIFICA.
+///
+/// A distincao existe porque o dado real tem as duas semanticas e elas sao
+/// indistinguiveis pelo valor: um componente com 224,4898 mg ja corrigidos por
+/// pureza e outro com 220 mg teoricos sao o mesmo numero para o banco, e a
+/// diferenca entre eles e 2% de material.
+///
+/// PHYSICAL_DIRECT: a quantidade JA e a fisica. Pureza e overage, quando
+/// preenchidos, ficam como documentacao — nunca disparam recalculo. E o
+/// default para componente novo: aplicar ajuste passa a ser escolha explicita.
+///
+/// THEORETICAL_WITH_ADJUSTMENTS: a quantidade e teorica, e o sistema calcula a
+/// fisica aplicando SOMENTE os ajustes marcados. Preencher pureza nao e o
+/// mesmo que autorizar sua aplicacao.
+enum FormulationComponentQuantityMode {
+  PHYSICAL_DIRECT
+  THEORETICAL_WITH_ADJUSTMENTS
+}
+
 /// Ciclo de vida de uma versao de TEMPLATE.
 ///
 /// ARCHIVED em vez de INACTIVE: a Formulacao de um Produto e desativada
@@ -2297,6 +2316,26 @@ model FormulationComponent {
   /// e inferido matematicamente so para bater com um total historico.
   overagePercent Decimal? @db.Decimal(6, 3)
 
+  /// O que `quantity` significa neste componente. Ver o enum.
+  ///
+  /// O backfill NAO usou "campo preenchido" como criterio: usou o
+  /// comportamento canonico do motor, que so aplica pureza quando ela e
+  /// maior que zero e so aplica overage quando ele e maior ou igual a zero.
+  /// Componente cujo calculo de hoje aplica algum ajuste nasceu
+  /// THEORETICAL_WITH_ADJUSTMENTS com as flags correspondentes ligadas; o
+  /// resto nasceu PHYSICAL_DIRECT. Nenhuma receita mudou de resultado.
+  quantityMode FormulationComponentQuantityMode @default(PHYSICAL_DIRECT)
+
+  /// Aplicar a pureza a quantidade? So tem efeito no modo teorico.
+  ///
+  /// Separado da presenca do valor de proposito: pureza documental e caso
+  /// legitimo, e ate esta capability preencher o campo era o bastante para
+  /// mudar a necessidade de material em silencio.
+  applyPurityAdjustment Boolean @default(false)
+
+  /// Aplicar o overage a quantidade? Mesma regra da pureza.
+  applyOverageAdjustment Boolean @default(false)
+
   /// Referencia historica da planilha (total que a fabrica pesava e o
   /// tamanho do lote correspondente). NUNCA entra no calculo — existe para
   /// comparar ERP x historico durante a migracao.
@@ -3663,6 +3702,14 @@ model FormulationTemplateComponent {
 
   purityPercentApplied Decimal? @db.Decimal(6, 3)
   overagePercent       Decimal? @db.Decimal(6, 3)
+
+  /// O template carrega a CONFIGURACAO, nao o resultado: modo e flags viajam
+  /// junto com pureza e overage, para que aplicar o template reproduza a
+  /// intencao tecnica e nao so os numeros. A quantidade fisica da instancia e
+  /// recalculada na versao nova — template nao congela resultado de calculo.
+  quantityMode FormulationComponentQuantityMode @default(PHYSICAL_DIRECT)
+  applyPurityAdjustment  Boolean @default(false)
+  applyOverageAdjustment Boolean @default(false)
 
   notes String?
 

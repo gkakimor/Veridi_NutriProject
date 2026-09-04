@@ -27,8 +27,22 @@ const PEDIDO_DA_SAIDA = "PED-000485";
 const LOTE_VENCIDO_BLOQUEADO = "LT-20260320-000799";
 
 const resultados = [];
-const ok = (achado, o_que, medida) => resultados.push({ achado, o_que, medida, passou: true });
-const nok = (achado, o_que, medida) => resultados.push({ achado, o_que, medida, passou: false });
+const ok = (achado, o_que, medida) => resultados.push({ achado, o_que, medida, estado: "ok" });
+const nok = (achado, o_que, medida) => resultados.push({ achado, o_que, medida, estado: "nok" });
+/*
+ * Terceiro estado: a massa que a verificação cita não está nesta base.
+ *
+ * Contar isso como `ok` afirma que o defeito foi conferido quando nada foi
+ * conferido — falso verde. Contar como `nok` acusa regressão onde não houve —
+ * falso vermelho, que treina quem lê a ignorar o relatório inteiro. As duas
+ * respostas erram sobre a mesma coisa: a evidência sumiu, e a conclusão certa
+ * é "não sei".
+ *
+ * Sai com código zero, porque nada falhou, e aparece separado na contagem para
+ * ninguém confundir com prova.
+ */
+const naoVerificavel = (achado, o_que, medida) =>
+  resultados.push({ achado, o_que, medida, estado: "?" });
 
 const login = await fetch(`${API}/auth/login`, {
   method: "POST",
@@ -68,7 +82,11 @@ pagina.on("pageerror", (e) => erros.push(String(e).slice(0, 160)));
   const lista = await api(`/billings?search=${FATURA}`);
   const fatura = (lista.body?.billings ?? lista.body?.items ?? [])[0];
   if (!fatura) {
-    nok("ADV-F10", "faturamento da evidência existe", `${FATURA} não encontrado`);
+    naoVerificavel(
+      "ADV-F10",
+      "faturamento da evidência",
+      `${FATURA} não está nesta base — a massa da rodada que o criou não existe mais aqui`,
+    );
   } else {
     await pagina.goto(`${WEB}/comercial/faturamento/${fatura.id}`);
     await pagina.waitForSelector("table tbody tr", { timeout: 20000 });
@@ -103,7 +121,11 @@ pagina.on("pageerror", (e) => erros.push(String(e).slice(0, 160)));
   const lista = await api(`/lots?search=${LOTE}`);
   const lote = (lista.body?.lots ?? lista.body?.items ?? [])[0];
   if (!lote) {
-    nok("ADV-F12", "lote da evidência existe", `${LOTE} não encontrado`);
+    naoVerificavel(
+      "ADV-F12",
+      "lote da evidência",
+      `${LOTE} não está nesta base — a massa da rodada que o criou não existe mais aqui`,
+    );
   } else {
     await pagina.goto(`${WEB}/estoque/lotes/${lote.id}`);
     await pagina.waitForTimeout(1200);
@@ -179,7 +201,7 @@ for (const [achado, tela, seletor] of [
   const lista = await api(`/lots?search=${LOTE_VENCIDO_BLOQUEADO}`);
   const lote = (lista.body?.lots ?? lista.body?.items ?? [])[0];
   if (!lote) {
-    ok("ADV-F7", "lote de controle presente", "ausente da base — não verificável aqui");
+    naoVerificavel("ADV-F7", "lote de controle", "ausente da base — nada foi conferido");
   } else {
     const antes = lote.status;
     const tentativa = await fetch(`${API}/lots/${lote.id}/release`, {
@@ -222,12 +244,20 @@ await navegador.close();
 
 /* ── Veredito ───────────────────────────────────────────────────────────── */
 console.log("");
+const rotulo = { ok: "ok  ", nok: "NOK ", "?": "  ? " };
 for (const r of resultados) {
-  console.log(`${r.passou ? "ok  " : "NOK "} ${r.achado.padEnd(8)} ${r.o_que}`);
+  console.log(`${rotulo[r.estado]} ${r.achado.padEnd(8)} ${r.o_que}`);
   console.log(`              ${r.medida}`);
 }
-const falhas = resultados.filter((r) => !r.passou);
+const falhas = resultados.filter((r) => r.estado === "nok");
+const passaram = resultados.filter((r) => r.estado === "ok");
+const semEvidencia = resultados.filter((r) => r.estado === "?");
 console.log(`\nconsole.error/pageerror não deliberados: ${erros.length}`);
 if (erros.length > 0) console.log(erros.slice(0, 5).join("\n"));
-console.log(`\n${resultados.length - falhas.length} ok · ${falhas.length} nok`);
+console.log(
+  `\n${passaram.length} ok · ${falhas.length} nok · ${semEvidencia.length} não verificável`,
+);
+if (semEvidencia.length > 0) {
+  console.log("Não verificável NÃO é aprovação — a massa citada não está nesta base.");
+}
 process.exit(falhas.length === 0 && erros.length === 0 ? 0 : 1);

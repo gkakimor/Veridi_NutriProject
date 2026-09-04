@@ -11,5 +11,6 @@ export async function listUnitsOfMeasure(): Promise<UnitOfMeasureDTO[]> {
     code: unit.code,
     label: unit.label,
     dimension: unit.dimension,
+    toBaseFactor: unit.toBaseFactor.toString(),
   }));
 }

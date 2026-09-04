@@ -3359,3 +3359,78 @@ para reproduzir um valor que a própria fonte não sustenta.
 quantidade, pureza, preço por quilo, tamanho de lote — e comparar os dois
 resultados com esse terceiro número. Quem diverge do terceiro está errado,
 independentemente de ser o sistema ou a planilha.
+
+## §52 — Quantidade física do componente, e o que a Formulação manda
+
+Cada componente versionado declara **o que a sua quantidade significa**, e a
+declaração é explícita porque as duas leituras convivem no dado real e são
+indistinguíveis pelo valor: `224,4898 mg` já corrigidos por pureza e `220 mg`
+teóricos são o mesmo número para o banco, e a diferença entre eles é 2% de
+material.
+
+**Física direta** — a quantidade já é a que a fábrica pesa. Pureza e overage,
+quando preenchidos, ficam como documentação auditável e não disparam recálculo.
+É o default de componente novo.
+
+**Teórica com ajustes** — a quantidade é a base, e o sistema calcula a física
+aplicando **somente** os ajustes marcados:
+
+```
+físico = teórico ÷ (pureza/100) × (1 + overage/100)
+```
+
+**Registrar um ajuste não é autorizá-lo.** Preencher a pureza deixou de aplicar
+a correção sozinho. A regra existe porque o caminho oposto já causava dupla
+correção em silêncio: num componente cuja quantidade já vinha corrigida de fora,
+preencher a pureza dividia de novo.
+
+Pureza ausente nunca vira 100%, pureza zero não divide, e overage ausente nunca
+vira zero implícito — ausência de premissa é cálculo inválido, não resultado
+conveniente.
+
+A matemática vive em **um lugar só** e os cinco consumidores — plano de
+atendimento, tela da Formulação, cálculo industrial, custo da precificação e
+Ordem de Produção — a chamam. Explicação na tela mostra essa conta; nunca
+recalcula por conta própria, senão passa a poder discordar do número que manda.
+
+Esse lugar é `packages/shared/src/formulation-quantity.ts`, e
+`apps/api/src/lib/formulation-math.ts` delega para ele. A conta subiu para o
+pacote compartilhado quando a tela da Formulação passou a mostrar o físico
+**enquanto se digita**: quem decide a quantidade precisa ver o efeito antes de
+gravar, e a alternativa — reimplementar a fórmula no navegador — criaria um
+segundo motor cuja resposta seria justamente a que a fábrica vê e ninguém usa.
+Não é cópia sincronizada: os dois lados chamam a mesma função, sobre a mesma
+biblioteca decimal.
+
+Base que o motor não reconhece **bloqueia**: devolve o motivo, não um número.
+Zero ali seria a resposta mais perigosa possível, porque "não precisa de
+material" é plausível e ninguém confere.
+
+### O modo é a autoridade; a marca sozinha não autoriza nada
+
+`applyPurityAdjustment` e `applyOverageAdjustment` só têm efeito sob **teórica
+com ajustes**. Guardar uma marca ligada sob **física direta** é registro que
+mente — o cálculo a ignora, e voltar o modo depois religaria a correção sem
+ninguém ter marcado nada. Por isso a marca é desligada ao sair do modo teórico,
+na tela **e** no servidor: um cliente que mande a combinação incoerente não
+consegue gravá-la. Nenhum resultado de cálculo muda com isso.
+
+O modo viaja em toda gravação da versão. Omiti-lo fazia o servidor reaplicar o
+default, e um componente marcado como teórico voltava a físico direto ao salvar
+qualquer outra edição — a mudança silenciosa de receita que esta regra existe
+para impedir, entrando pela porta dos fundos.
+
+### A Formulação vigente define o futuro; o documento guarda o passado
+
+Uma Ordem de Produção **congela** a necessidade no momento em que nasce, junto
+com a versão que a originou, o teórico e os fatores aplicados. Ativar uma versão
+nova **não recalcula ordem existente**, e cálculo de CMV salvo não muda.
+
+Duas ordens do mesmo produto com necessidades diferentes é o resultado **certo**
+quando nasceram de versões diferentes — não é divergência a investigar. O que
+seria defeito é o contrário: a ordem que a fábrica já está separando mudar de
+quantidade porque alguém editou a receita.
+
+CMV e Ordem de Produção usam a **mesma** quantidade física quando nascem da
+mesma versão e da mesma base. Documentos históricos podem divergir
+legitimamente da versão vigente de hoje.

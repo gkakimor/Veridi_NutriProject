@@ -1,5 +1,11 @@
 import { Prisma } from "@prisma/client";
-import type { FormulationComponentBasis, UnitOfMeasure } from "@prisma/client";
+import type {
+  FormulationComponentBasis,
+  FormulationComponentQuantityMode,
+  UnitOfMeasure,
+} from "@prisma/client";
+import { Decimal as SharedDecimal } from "decimal.js";
+import { aplicarAjustes } from "@veridi/shared";
 import { convertUomDecimal } from "../modules/items/uom.js";
 
 /**
@@ -34,6 +40,15 @@ export interface ComponentCalculationInput {
   stockUnitCode: string;
   purityPercentApplied: Prisma.Decimal | null;
   overagePercent: Prisma.Decimal | null;
+  /**
+   * O que `quantity` significa. Ausente = `PHYSICAL_DIRECT`, o default do
+   * domínio para componente novo.
+   */
+  quantityMode?: FormulationComponentQuantityMode | null;
+  /** Aplicar a pureza? Só tem efeito no modo teórico. */
+  applyPurityAdjustment?: boolean | null;
+  /** Aplicar o overage? Só tem efeito no modo teórico. */
+  applyOverageAdjustment?: boolean | null;
 }
 
 export interface VersionCalculationContext {
@@ -108,8 +123,6 @@ export interface ComponentRequirement {
   overagePercent: Prisma.Decimal | null;
 }
 
-const HUNDRED = new Prisma.Decimal(100);
-
 /**
  * Quantas vezes a quantidade declarada do componente entra na produção
  * pedida. É a única parte que depende da base escolhida.
@@ -150,16 +163,51 @@ export function applyPurityAndOverage(
   theoretical: Prisma.Decimal,
   purityPercentApplied: Prisma.Decimal | null,
   overagePercent: Prisma.Decimal | null,
+  ajustes: { purity: boolean; overage: boolean } = { purity: true, overage: true },
 ): Prisma.Decimal {
-  let physical = theoretical;
+  /*
+   * DELEGA para `@veridi/shared`, e não repete a conta.
+   *
+   * A tela da Formulação precisa mostrar o físico enquanto a pessoa digita —
+   * antes disso ela só via o número depois de salvar, o que é tarde para
+   * decidir. Recalcular no navegador criaria um segundo motor, e duas contas
+   * para o mesmo número acabam discordando. Então a matemática mudou de lugar,
+   * não de dono: os dois lados chamam a MESMA função.
+   *
+   * `decimal.js` é a biblioteca que o `Prisma.Decimal` usa por dentro, então a
+   * aritmética é idêntica dos dois lados.
+   */
+  return new Prisma.Decimal(
+    aplicarAjustes(
+      new SharedDecimal(theoretical.toString()),
+      purityPercentApplied ? purityPercentApplied.toString() : null,
+      overagePercent ? overagePercent.toString() : null,
+      ajustes,
+    ).toString(),
+  );
+}
 
-  if (purityPercentApplied !== null && purityPercentApplied.greaterThan(0)) {
-    physical = physical.dividedBy(purityPercentApplied.dividedBy(HUNDRED));
-  }
-  if (overagePercent !== null && overagePercent.greaterThanOrEqualTo(0)) {
-    physical = physical.times(HUNDRED.plus(overagePercent).dividedBy(HUNDRED));
-  }
-  return physical;
+/**
+ * Quais ajustes ESTE componente autoriza.
+ *
+ * Preencher a pureza não é o mesmo que autorizar sua aplicação. Antes desta
+ * capability era: bastava o campo ter valor para a necessidade física mudar, e
+ * o dado real tem componentes cuja quantidade já vem corrigida de fora — nesses,
+ * preencher a pureza aplicaria a correção uma segunda vez, em silêncio.
+ *
+ * `PHYSICAL_DIRECT` não aplica nada: a quantidade declarada já é a física, e
+ * pureza e overage ficam como documentação auditável.
+ */
+export function ajustesHabilitados(component: ComponentCalculationInput): {
+  purity: boolean;
+  overage: boolean;
+} {
+  const modo = component.quantityMode ?? "PHYSICAL_DIRECT";
+  if (modo !== "THEORETICAL_WITH_ADJUSTMENTS") return { purity: false, overage: false };
+  return {
+    purity: component.applyPurityAdjustment === true,
+    overage: component.applyOverageAdjustment === true,
+  };
 }
 
 /**
@@ -188,6 +236,7 @@ export function computeComponentRequirement(
       theoreticalQuantity,
       component.purityPercentApplied,
       component.overagePercent,
+      ajustesHabilitados(component),
     ),
     purityPercentApplied: component.purityPercentApplied,
     overagePercent: component.overagePercent,

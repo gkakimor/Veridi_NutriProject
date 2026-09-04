@@ -96,6 +96,27 @@ Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive e
   deriva da lista canônica do domínio; ajuste e contagem de estoque gravam o
   usuário real e exigem papel. §50. Ver
   [VALIDACAO_E2E_ADVERSARIAL_CORE.md](VALIDACAO_E2E_ADVERSARIAL_CORE.md).
+- **Quantidade física do componente** (`feat/formulation-physical-quantity`) —
+  cada componente declara se a quantidade informada já é física ou se é teórica
+  e o sistema deve calculá-la, com pureza e overage aplicados só quando
+  marcados. O motor já aplicava os dois; o que faltava era distinguir as duas
+  semânticas, que convivem no dado e são indistinguíveis pelo valor — a
+  Coenzima Q10 guarda 224,4898 mg, que é 220 ÷ 0,98, e preencher a pureza ali
+  aplicaria a correção uma segunda vez. Migration preservadora: backfill pelo
+  comportamento canônico, não pela presença do campo, com zero drift provado nos
+  1.725 componentes. A tela passou a mostrar o físico **enquanto se digita**: a
+  matemática subiu para `packages/shared` e a API delega, então os dois lados
+  chamam a mesma função em vez de haver um segundo motor no navegador. Ligar a
+  prévia expôs dois defeitos que nenhum teste via — o modo não viajava no
+  payload de gravação, e uma base desconhecida derrubava a página em vez de
+  bloquear. §52. Ver
+  [AUDITORIA_QUANTIDADE_FISICA.md](AUDITORIA_QUANTIDADE_FISICA.md).
+
+O padrão de cálculo ao vivo vale para toda tela com valor derivado, e o
+levantamento de onde ele já existe e onde falta está no item 26 do
+[BACKLOG.md](BACKLOG.md) — quatro telas calculam ao vivo sem explicação, duas
+mostram número vivo e número velho lado a lado, e seis não derivam nada onde
+faria falta.
 
 ## Validação em produção
 

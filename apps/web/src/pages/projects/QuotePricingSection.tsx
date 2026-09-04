@@ -38,11 +38,29 @@ export function QuotePricingSection({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const lineId = quote.lines[0]?.id ?? null;
+
+  /*
+   * O `.then` estava encadeado so no ramo falso do ternario — precedencia.
+   *
+   * `line ? buscar() : Promise.resolve(null).then(setPricing)` faz a busca e
+   * DESCARTA o resultado quando a linha existe; `setPricing` so era chamado no
+   * caso em que nao ha nada para mostrar. Resultado: `pricing` ficava sempre
+   * `null` e a tabela de faixas nunca aparecia — a secao inteira sumia em
+   * silencio, sem erro, exatamente no caso normal.
+   *
+   * A dependencia tambem estava errada: `[quote.id]` congelava a primeira
+   * linha vista, entao trocar a linha nao recarregava as opcoes.
+   */
   const load = useCallback(() => {
-    line ? getQuotePricingOptions(line.id) : Promise.resolve(null)
+    if (!lineId) {
+      setPricing(null);
+      return;
+    }
+    getQuotePricingOptions(lineId)
       .then(setPricing)
       .catch(() => setPricing(null));
-  }, [quote.id]);
+  }, [lineId]);
 
   useEffect(() => {
     load();

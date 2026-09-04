@@ -4,6 +4,7 @@ import type {
   FormulationActivationImpactDTO,
   FormulationCalculationMode,
   FormulationComponentBasis,
+  FormulationComponentQuantityMode,
   FormulationCostEstimateDTO,
   FormulationVersionDTO,
   ItemDTO,
@@ -17,10 +18,14 @@ import {
   FORMULATION_CALCULATION_MODE_LABELS,
   FORMULATION_COMPONENT_BASES,
   FORMULATION_COMPONENT_BASIS_LABELS,
+  FORMULATION_QUANTITY_MODE_LABELS,
   FORMULATION_VERSION_STATUS_LABELS,
   SUPPLY_RESPONSIBILITIES,
   SUPPLY_RESPONSIBILITY_LABELS,
+  calcularQuantidadeDoComponente,
 } from "@veridi/shared";
+import { CalcHint } from "../../components/help/CalcHint";
+import { parseDecimalInput } from "../../lib/decimal-input";
 import {
   activateFormulationVersion,
   getFormulationActivationImpact,
@@ -102,6 +107,9 @@ interface ComponentRow {
   supplyResponsibility: SupplyResponsibility;
   purityPercentApplied: string;
   overagePercent: string;
+  quantityMode: FormulationComponentQuantityMode;
+  applyPurityAdjustment: boolean;
+  applyOverageAdjustment: boolean;
   notes: string;
   stockEquivalentQuantity: string;
   physicalPerUnit: string | null;
@@ -185,6 +193,9 @@ function rascunhoDoDTO(dto: FormulationVersionDTO) {
       supplyResponsibility: component.supplyResponsibility,
       purityPercentApplied: (component.purityPercentApplied ?? "").trim() || null,
       overagePercent: (component.overagePercent ?? "").trim() || null,
+      quantityMode: component.quantityMode,
+      applyPurityAdjustment: component.applyPurityAdjustment,
+      applyOverageAdjustment: component.applyOverageAdjustment,
       ...((component.notes ?? "").trim() ? { notes: (component.notes ?? "").trim() } : {}),
     })),
   };
@@ -204,10 +215,60 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
     supplyResponsibility: component.supplyResponsibility,
     purityPercentApplied: component.purityPercentApplied ?? "",
     overagePercent: component.overagePercent ?? "",
+    quantityMode: component.quantityMode,
+    applyPurityAdjustment: component.applyPurityAdjustment,
+    applyOverageAdjustment: component.applyOverageAdjustment,
     notes: component.notes ?? "",
     stockEquivalentQuantity: component.stockEquivalentQuantity,
     physicalPerUnit: component.physicalPerUnit,
   };
+}
+
+/**
+ * Prévia do físico ENQUANTO se digita.
+ *
+ * As colunas de equivalente e de físico vinham do servidor, então uma linha
+ * nova ou recém-editada mostrava um travessão até salvar — e é justamente
+ * enquanto se edita que a pessoa precisa ver o efeito do que está fazendo.
+ * Descobrir o número depois de gravar é descobrir tarde.
+ *
+ * A conta vem de `@veridi/shared`, a MESMA função que a API chama. Recalcular
+ * aqui com uma cópia da fórmula criaria um segundo motor, e duas contas para o
+ * mesmo número acabam discordando — com a agravante de que a que aparece na
+ * tela seria a que ninguém usa.
+ *
+ * Devolve `null` quando a conta não é possível (premissa ausente, unidade
+ * incompatível). `null` vira travessão, nunca zero: zero seria "não precisa de
+ * material".
+ */
+function previaDoComponente(
+  row: ComponentRow,
+  basisQuantity: string,
+  dosesPerPackage: number | null,
+  units: UnitOfMeasureDTO[],
+): { teorico: string; fisico: string } | null {
+  const quantidade = parseDecimalInput(row.quantity);
+  if (quantidade === null) return null;
+
+  const resultado = calcularQuantidadeDoComponente(
+    {
+      basis: row.basis,
+      quantity: quantidade,
+      unitCode: row.unitCode,
+      stockUnitCode: row.stockUnitCode,
+      purityPercent: parseDecimalInput(row.purityPercentApplied),
+      overagePercent: parseDecimalInput(row.overagePercent),
+      quantityMode: row.quantityMode,
+      applyPurityAdjustment: row.applyPurityAdjustment,
+      applyOverageAdjustment: row.applyOverageAdjustment,
+    },
+    1,
+    { basisQuantity: parseDecimalInput(basisQuantity) ?? "0", dosesPerPackage },
+    units.map((u) => ({ code: u.code, dimension: u.dimension, toBaseFactor: u.toBaseFactor })),
+  );
+
+  if (typeof resultado === "string") return null;
+  return { teorico: resultado.theoretical.toString(), fisico: resultado.physical.toString() };
 }
 
 /**
@@ -486,6 +547,10 @@ export function FormulationVersionPage() {
         supplyResponsibility: "VERIDI",
         purityPercentApplied: "",
         overagePercent: "",
+        // Componente novo nasce FÍSICO: aplicar ajuste é escolha explícita.
+        quantityMode: "PHYSICAL_DIRECT",
+        applyPurityAdjustment: false,
+        applyOverageAdjustment: false,
         notes: "",
         stockEquivalentQuantity: "",
         physicalPerUnit: null,
@@ -526,12 +591,41 @@ export function FormulationVersionPage() {
     );
   }
 
-  function handleComponentFieldChange(
+  function handleComponentFieldChange<K extends keyof ComponentRow>(
     key: string,
-    field: "quantity" | "unitCode" | "notes" | "purityPercentApplied" | "overagePercent",
-    value: string,
+    field: K,
+    value: ComponentRow[K],
   ) {
     setComponents((prev) => prev.map((row) => (row.key === key ? { ...row, [field]: value } : row)));
+  }
+
+  /**
+   * Troca o modo da linha e desliga os ajustes ao sair do modo teórico.
+   *
+   * As caixas de pureza e overage só existem na tela sob
+   * `THEORETICAL_WITH_ADJUSTMENTS`. Guardar `applyPurityAdjustment: true`
+   * debaixo de `PHYSICAL_DIRECT` seria estado invisível: o cálculo ignora a
+   * marca hoje, e voltar o modo depois religaria a correção sem ninguém ter
+   * marcado nada nesta sessão — a autorização silenciosa que esta capability
+   * existe para acabar.
+   *
+   * Desmarcar é a perda recuperável: quem voltar ao modo teórico vê as caixas
+   * vazias e remarca. O contrário não se vê.
+   */
+  function trocarModo(key: string, modo: FormulationComponentQuantityMode) {
+    setComponents((prev) =>
+      prev.map((row) =>
+        row.key === key
+          ? {
+              ...row,
+              quantityMode: modo,
+              ...(modo === "PHYSICAL_DIRECT"
+                ? { applyPurityAdjustment: false, applyOverageAdjustment: false }
+                : {}),
+            }
+          : row,
+      ),
+    );
   }
 
   function temAlteracaoPendente() {
@@ -563,6 +657,19 @@ export function FormulationVersionPage() {
           // Campo vazio = fator DESCONHECIDO (null), nunca 100%/0% implícito.
           purityPercentApplied: exigirDecimalOpcional(row.purityPercentApplied, "Pureza %"),
           overagePercent: exigirDecimalOpcional(row.overagePercent, "Overage %"),
+          /*
+           * O modo VIAJA no payload, senão o seletor da linha é decorativo.
+           *
+           * Sem estes três campos o servidor recebia a versão sem o modo e
+           * reaplicava o padrão: um componente marcado como teórico voltava a
+           * `PHYSICAL_DIRECT` ao salvar qualquer outra edição, e a necessidade
+           * física caía pelo fator de pureza sem ninguém ter pedido. É a
+           * mudança silenciosa de receita que esta capability existe para
+           * impedir, entrando pela porta dos fundos.
+           */
+          quantityMode: row.quantityMode,
+          applyPurityAdjustment: row.applyPurityAdjustment,
+          applyOverageAdjustment: row.applyOverageAdjustment,
           ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
         })),
     };
@@ -911,7 +1018,7 @@ export function FormulationVersionPage() {
 
         <FormSection
           title="Componentes"
-          subtitle="Fornecimento Cliente = material que o cliente envia (exige produto vinculado a cliente). Pureza vazia = desconhecida (nenhuma correção é aplicada). Embalagem normalmente usa base por unidade acabada. O físico por unidade já inclui pureza e overage."
+          subtitle="Fornecimento Cliente = material que o cliente envia (exige produto vinculado a cliente). Cada componente declara se a quantidade informada já é física ou se o sistema deve calculá-la — pureza e overage só são aplicados quando explicitamente marcados. Embalagem normalmente usa base por unidade acabada."
         >
           <div className="table-container">
             {/* Dez colunas não cabem na largura de leitura: a ação da linha era
@@ -930,11 +1037,10 @@ export function FormulationVersionPage() {
                   </th>
                   <th className="is-numeric">Quantidade</th>
                   <th>Unidade</th>
-                  <th>
-                    Pureza % <Dica id="formulacao.pureza" />
-                  </th>
-                  <th>
-                    Overage % <Dica id="formulacao.overage" />
+                  {/* Uma coluna só: os dois campos moram no disclosure, porque
+                      preencher deixou de ser o mesmo que autorizar. */}
+                  <th colSpan={2}>
+                    Ajustes da quantidade <Dica id="formulacao.pureza" />
                   </th>
                   <th>
                     Equivalente estoque <Dica id="formulacao.equivalenteEstoque" />
@@ -944,7 +1050,24 @@ export function FormulationVersionPage() {
                 </tr>
               </thead>
               <tbody>
-                {components.map((row) => (
+                {components.map((row) => {
+                  /*
+                    O físico ENQUANTO se digita, não só depois de salvar.
+                    A prévia usa a mesma função que a API chama; quando a conta
+                    não é possível, cai no valor gravado, e `null` vira
+                    travessão — nunca zero.
+                  */
+                  const previa = isDraft
+                    ? previaDoComponente(
+                        row,
+                        basisQuantity,
+                        dosesPerPackage.trim() === "" ? null : Number(dosesPerPackage),
+                        units,
+                      )
+                    : null;
+                  const fisicoExibido = previa?.fisico ?? row.physicalPerUnit;
+                  const equivalenteExibido = previa?.teorico ?? row.stockEquivalentQuantity;
+                  return (
                   <tr key={row.key}>
                     <td>
                       {isDraft ? (
@@ -1059,48 +1182,217 @@ export function FormulationVersionPage() {
                         row.unitCode
                       )}
                     </td>
-                    <td>
-                      {isDraft ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          aria-label="Pureza aplicada"
-                          placeholder="—"
-                          value={row.purityPercentApplied}
-                          onChange={(event) =>
-                            handleComponentFieldChange(
-                              row.key,
-                              "purityPercentApplied",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      ) : (
-                        row.purityPercentApplied || "—"
-                      )}
+                    {/*
+                      AJUSTES NUM DISCLOSURE, não soltos na linha.
+
+                      Pureza e overage são de duas naturezas ao mesmo tempo:
+                      documentação de auditoria e, quando autorizados, entrada de
+                      cálculo. Deixar os dois campos crus lado a lado fazia o
+                      preenchimento parecer a autorização — e era, até esta
+                      capability: bastava digitar a pureza para a necessidade
+                      física mudar.
+                    */}
+                    <td colSpan={2}>
+                      <details className="ajuste-quantidade">
+                        <summary>
+                          {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS"
+                            ? `Calculada${row.applyPurityAdjustment ? " · pureza" : ""}${row.applyOverageAdjustment ? " · overage" : ""}`
+                            : "Física direta"}
+                          {(row.purityPercentApplied || row.overagePercent) &&
+                            row.quantityMode === "PHYSICAL_DIRECT" && (
+                              <span className="ajuste-quantidade__nota">
+                                {" · registrado, não aplicado"}
+                              </span>
+                            )}
+                        </summary>
+
+                        <div className="ajuste-quantidade__corpo">
+                          {isDraft ? (
+                            <>
+                              <fieldset className="ajuste-quantidade__modos">
+                                <legend>O que a quantidade informada significa</legend>
+                                {(["PHYSICAL_DIRECT", "THEORETICAL_WITH_ADJUSTMENTS"] as const).map(
+                                  (modo) => (
+                                    <label key={modo}>
+                                      <input
+                                        type="radio"
+                                        name={`modo-${row.key}`}
+                                        checked={row.quantityMode === modo}
+                                        onChange={() => trocarModo(row.key, modo)}
+                                      />
+                                      {FORMULATION_QUANTITY_MODE_LABELS[modo]}
+                                    </label>
+                                  ),
+                                )}
+                              </fieldset>
+                              <p className="field__hint">
+                                {row.quantityMode === "PHYSICAL_DIRECT"
+                                  ? "Use quando a quantidade informada já considera pureza, overage ou outros ajustes técnicos."
+                                  : "O sistema calcula a quantidade física usada em novas Ordens de Produção e no CMV desta versão."}
+                              </p>
+                              {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
+                                <p className="field__hint ajuste-quantidade__aviso">
+                                  Não ative o ajuste automático se a quantidade informada já
+                                  estiver corrigida — a correção seria aplicada duas vezes.
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="field__hint">
+                              {FORMULATION_QUANTITY_MODE_LABELS[row.quantityMode]} — congelado
+                              nesta versão. Mudar exige uma versão nova.
+                            </p>
+                          )}
+
+                          <div className="ajuste-quantidade__campos">
+                            <label>
+                              {isDraft && row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
+                                <input
+                                  type="checkbox"
+                                  aria-label="Corrigir pela pureza"
+                                  checked={row.applyPurityAdjustment}
+                                  onChange={(event) =>
+                                    handleComponentFieldChange(
+                                      row.key,
+                                      "applyPurityAdjustment",
+                                      event.target.checked,
+                                    )
+                                  }
+                                />
+                              )}
+                              <span>Pureza %</span>
+                              {isDraft ? (
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  aria-label="Pureza aplicada"
+                                  placeholder="—"
+                                  value={row.purityPercentApplied}
+                                  onChange={(event) =>
+                                    handleComponentFieldChange(
+                                      row.key,
+                                      "purityPercentApplied",
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <strong>{row.purityPercentApplied || "—"}</strong>
+                              )}
+                            </label>
+
+                            <label>
+                              {isDraft && row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
+                                <input
+                                  type="checkbox"
+                                  aria-label="Aplicar overage"
+                                  checked={row.applyOverageAdjustment}
+                                  onChange={(event) =>
+                                    handleComponentFieldChange(
+                                      row.key,
+                                      "applyOverageAdjustment",
+                                      event.target.checked,
+                                    )
+                                  }
+                                />
+                              )}
+                              <span>Overage %</span>
+                              {isDraft ? (
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  aria-label="Overage do componente"
+                                  placeholder="—"
+                                  value={row.overagePercent}
+                                  onChange={(event) =>
+                                    handleComponentFieldChange(
+                                      row.key,
+                                      "overagePercent",
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <strong>{row.overagePercent || "—"}</strong>
+                              )}
+                            </label>
+                          </div>
+
+                          {/*
+                            A conta vem do servidor (`physicalPerUnit`), que a
+                            calcula pelo motor canônico. A explicação não pode ser
+                            um segundo motor: se recalculasse aqui, passaria a
+                            poder discordar do número que manda.
+                          */}
+                          {fisicoExibido !== null && (
+                            <p className="ajuste-quantidade__resultado">
+                              <span>
+                                Quantidade informada:{" "}
+                                <strong>
+                                  {formatQuantity(row.quantity)} {row.unitCode}
+                                </strong>
+                              </span>
+                              <span>
+                                Quantidade física:{" "}
+                                <strong>
+                                  {formatQuantity(fisicoExibido)} {row.stockUnitCode}
+                                </strong>
+                              </span>
+                              {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" ? (
+                                <CalcHint
+                                  label="Quantidade física"
+                                  operandos={[
+                                    {
+                                      valor: `${formatQuantity(row.quantity)} ${row.unitCode}`,
+                                      papel: "quantidade teórica",
+                                    },
+                                    ...(row.applyOverageAdjustment && row.overagePercent
+                                      ? [
+                                          {
+                                            valor: `(1 + ${row.overagePercent}%)`,
+                                            papel: "overage",
+                                          },
+                                        ]
+                                      : []),
+                                    ...(row.applyPurityAdjustment && row.purityPercentApplied
+                                      ? [
+                                          {
+                                            valor: `${row.purityPercentApplied}%`,
+                                            papel: "pureza",
+                                            operador: "÷",
+                                          },
+                                        ]
+                                      : []),
+                                  ]}
+                                  resultado={`${formatQuantity(fisicoExibido)} ${row.stockUnitCode}`}
+                                  nota="Calculado pelo mesmo motor que a Ordem de Produção e o CMV usam."
+                                />
+                              ) : (
+                                <CalcHint
+                                  label="Quantidade física"
+                                  operandos={[
+                                    {
+                                      valor: `${formatQuantity(row.quantity)} ${row.unitCode}`,
+                                      papel: "quantidade informada",
+                                    },
+                                  ]}
+                                  resultado={`${formatQuantity(fisicoExibido)} ${row.stockUnitCode}`}
+                                  nota={
+                                    row.purityPercentApplied || row.overagePercent
+                                      ? "Quantidade física informada diretamente. Pureza e overage estão registrados, não aplicados automaticamente."
+                                      : "Quantidade física informada diretamente."
+                                  }
+                                />
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </details>
                     </td>
                     <td>
-                      {isDraft ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          aria-label="Overage do componente"
-                          placeholder="—"
-                          value={row.overagePercent}
-                          onChange={(event) =>
-                            handleComponentFieldChange(row.key, "overagePercent", event.target.value)
-                          }
-                        />
-                      ) : (
-                        row.overagePercent || "—"
-                      )}
+                      {formatQuantityWithUnit(equivalenteExibido, row.stockUnitCode)}
                     </td>
-                    <td>
-                      {formatQuantity(row.stockEquivalentQuantity)} {row.stockUnitCode}
-                    </td>
-                    <td>
-                      {formatQuantityWithUnit(row.physicalPerUnit, row.stockUnitCode)}
-                    </td>
+                    <td>{formatQuantityWithUnit(fisicoExibido, row.stockUnitCode)}</td>
                     {isDraft && (
                       <td>
                         <button
@@ -1114,7 +1406,8 @@ export function FormulationVersionPage() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
 
                 {components.length === 0 && (
                   <tr>

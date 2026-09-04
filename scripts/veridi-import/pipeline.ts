@@ -522,6 +522,18 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
           basis: draft.basis,
           purityPercentApplied: draft.purityPercentApplied,
           overagePercent: draft.overagePercent,
+          /*
+           * PUREZA IMPORTADA NAO ATIVA O AJUSTE, de proposito.
+           *
+           * O componente nasce `PHYSICAL_DIRECT` pelo default do schema, e e
+           * isso que se quer: a quantidade que vem da planilha pode JA estar
+           * corrigida — a Coenzima Q10 do corpus guarda 224,4898 mg, que e 220
+           * dividido por 0,98. Ligar o ajuste porque o arquivo traz uma pureza
+           * aplicaria a correcao uma segunda vez, em silencio.
+           *
+           * Nao remover este comentario para "completar" o mapeamento: a
+           * ausencia das flags aqui e a decisao, nao um esquecimento.
+           */
           legacyTotalQuantity: draft.legacyTotalQuantity,
           legacyTotalUnitCode: draft.legacyTotalUnitCode,
           legacyBatchUnits: draft.legacyBatchUnits,
