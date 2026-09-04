@@ -344,8 +344,12 @@ describe("conteúdo centralizado", () => {
        * Itens e Produtos têm mesmo mais vocabulário que as outras.
        */
       const conceitos = topico.concepts ?? [];
-      if (conceitos.length < 4 || conceitos.length > 8) {
-        problemas.push([chave, `concepts precisa ter de 4 a 8 termos — tem ${conceitos.length}`]);
+      // Teto de 14: a ajuda cobre os componentes VISÍVEIS da tela (filtros,
+      // colunas, painéis, ações), e telas como Lote, Pedido e Formulação
+      // têm mais de oito coisas que precisam de nome. Glossário é lista
+      // de definições curtas, não manual — cada termo continua em 1-2 frases.
+      if (conceitos.length < 4 || conceitos.length > 14) {
+        problemas.push([chave, `concepts precisa ter de 4 a 14 termos — tem ${conceitos.length}`]);
       }
       conceitos.forEach((conceito, indice) => {
         if (conceito.term.trim() === "") problemas.push([chave, `concepts[${indice}] sem term`]);

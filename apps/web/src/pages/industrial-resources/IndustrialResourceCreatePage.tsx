@@ -8,6 +8,8 @@ import {
   IndustrialResourceFormFields,
   useIndustrialResourceForm,
 } from "./industrial-resource-form";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 const LISTA = "/gestao/recursos-industriais";
 
@@ -68,6 +70,10 @@ export function IndustrialResourceCreatePage() {
           </button>
         )}
       </div>
+
+      {/* A mesma ajuda da lista: o fluxo A descreve exatamente este formulário. */}
+
+      <ContextHelp topic={helpTopics["recursoIndustrial.comoFunciona"]} />
 
       <IndustrialResourceFormFields {...controller} />
 

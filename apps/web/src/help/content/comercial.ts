@@ -48,6 +48,14 @@ export const comercialTopics = {
         term: "Histórico do pipeline",
         text: "Toda mudança de estágio fica registrada com autor, data e motivo. A data da última alteração do registro não conta essa história.",
       },
+      {
+        term: "Novo projeto",
+        text: "A ação principal desta lista. Abre o cadastro do projeto: cliente (obrigatório), conceito, canal, responsável e o perfil técnico pretendido. O projeto nasce em Aguardando.",
+      },
+      {
+        term: "Filtros e exportação",
+        text: "Busca por código, código legado, nome ou cliente; filtros por situação, cliente e canal. Exportar leva exatamente o recorte filtrado.",
+      },
     ],
     flows: [
       {
@@ -149,6 +157,30 @@ export const comercialTopics = {
         term: "Proveniência do preço",
         text: "De onde o preço veio: precificação, cálculo de custo, margem, markup e comissão. É informação interna e nunca sai no documento do cliente.",
       },
+      {
+        term: "Produtos do projeto",
+        text: "Um projeto pode desenvolver vários produtos, cada um com fórmula, custo e preço próprios. A tabela mostra a situação técnica e a situação no projeto de cada um, a última amostra e a cadeia técnica (formulação, custos, CMV, precificação). “Criar novo produto” prepara um produto técnico; “Vincular produto existente” traz um que já existe.",
+      },
+      {
+        term: "Condições comerciais",
+        text: "Da versão de orçamento: validade da proposta, prazo de entrega, desconto, forma de pagamento, entrada, parcelas, intervalo e juros ao mês, mais observações comerciais. Editáveis só no rascunho. O plano de parcelas (valor e vencimento de cada parcela) é calculado a partir delas e do total.",
+      },
+      {
+        term: "Simular CMV",
+        text: "Atalho da linha do orçamento para a tela de CMV, já com o produto e a quantidade cotada. É leitura: não muda preço nem grava nada.",
+      },
+      {
+        term: "Fechamento",
+        text: "Depois do aceite: o resumo da proposta aceita e o pedido gerado a partir dela. Uma proposta aceita gera no máximo um pedido, e só depois do projeto aprovado.",
+      },
+      {
+        term: "Recusa",
+        text: "“Registrar recusa” marca a versão como recusada. O projeto continua vivo — uma nova versão pode ser negociada.",
+      },
+      {
+        term: "Documentos do projeto",
+        text: "Anexos de referência: briefing, arte e ficha técnica. Documentação, não trava operação nenhuma.",
+      },
     ],
     flows: [
       {
@@ -239,6 +271,8 @@ export const comercialTopics = {
       "Custo, margem, markup e comissão são informação interna: não entram no documento do cliente, e só perfis comercial e administrativo os enxergam.",
       "Aprovar duas vezes não cria um segundo produto, e aprovar exige orçamento aceito — pelo estágio, não pela boa vontade da tela.",
       "Cancelar o projeto desativa apenas o produto em desenvolvimento que aquele projeto criou. Nada é apagado: formulação, custo, preço e propostas continuam auditáveis.",
+      "Condições comerciais e plano de parcelas fazem parte da versão: mudam só no rascunho e viajam congelados com a proposta enviada. O total da proposta é a soma das linhas; desconto e juros aparecem nas condições e nas parcelas, não no preço unitário de cada linha.",
+      "Imprimir a proposta é leitura do que está gravado. Enviar ao cliente é o que congela; imprimir não muda situação nenhuma.",
     ],
   },
 
@@ -297,7 +331,8 @@ export const comercialTopics = {
       },
     ],
     notes: [
-      "Amostra não é lote e não é ordem de produção. O QR dela começa com SAMPLE:, diferente do LOT: dos lotes de estoque — ler uma amostra nunca abre um lote.",
+      "Amostra não é lote e não é ordem de produção. O QR dela tem prefixo próprio, diferente do prefixo dos lotes de estoque — ler uma amostra nunca abre um lote.",
+      "Esta lista não cria amostra: ela nasce dentro do projeto, na seção Amostras / testes. Aqui ficam a busca, os filtros por situação e cliente e a exportação do recorte filtrado.",
       "O material consumido é saída física real do estoque, com tipo de movimento próprio. Não existe exceção “porque é amostra”: lote bloqueado, vencido, sem laudo ou de outro cliente continua fora, e a amostra nunca come estoque reservado para ordem de produção ou pedido.",
       "Reprovar ou cancelar não estorna consumo: o que foi usado continua usado. Devolver material seria uma operação de estoque à parte, com motivo próprio.",
       "Aprovar a amostra não aprova o projeto. A aprovação comercial continua exigindo orçamento aceito e ação explícita no projeto.",
@@ -329,7 +364,7 @@ export const comercialTopics = {
         text: "Informa a quantidade produzida e fecha a preparação. É o passo que muda a amostra para Produzida e habilita a decisão.",
       },
       {
-        term: "Snapshot da etiqueta",
+        term: "Cópia congelada da etiqueta",
         text: "A cópia de cliente e projeto gravada na conclusão. Renomear o cliente depois não reescreve a etiqueta que já foi impressa e enviada.",
       },
       {
@@ -360,7 +395,7 @@ export const comercialTopics = {
           {
             label: "Concluir",
             detail:
-              "Informa a quantidade produzida e a unidade, e congela cliente e projeto no snapshot da etiqueta.",
+              "Informa a quantidade produzida e a unidade, e congela cliente e projeto na cópia que a etiqueta usa.",
           },
           {
             label: "Etiqueta",
@@ -392,7 +427,7 @@ export const comercialTopics = {
           {
             label: "Produzida",
             detail:
-              "A amostra fica com quantidade produzida e snapshot congelado, igual ao fluxo A.",
+              "A amostra fica com quantidade produzida e a cópia da etiqueta congelada, igual ao fluxo A.",
           },
           {
             label: "Decisão",
@@ -417,7 +452,7 @@ export const comercialTopics = {
     module: "comercial",
     title: "O que é um Pedido do Cliente e o que ele decide",
     summary:
-      "Pedido do Cliente é a demanda comercial: quem pediu, o que pediu e quanto. Ele não é estoque, não é produção e não reserva nada sozinho — é o documento que autoriza o resto a acontecer. Esta lista mostra todos os pedidos e em que ponto do atendimento cada um está.",
+      "Pedido do Cliente é a demanda comercial: quem pediu, o que pediu e quanto. Ele não é estoque e não reserva nada sozinho — é o documento que autoriza o resto a acontecer: reserva, produção, compra de material em falta, expedição e faturamento. Esta lista mostra todos os pedidos e três leituras de situação lado a lado: o status do pedido, o atendimento e o faturamento.",
     concepts: [
       {
         term: "Pedido do Cliente",
@@ -442,6 +477,22 @@ export const comercialTopics = {
       {
         term: "Expedido",
         text: "Tudo o que foi pedido saiu. O status é consequência do que foi confirmado na expedição, nunca uma marcação manual.",
+      },
+      {
+        term: "Coluna Atendimento",
+        text: "Quanto do pedido já está coberto: reservado e produzido em relação ao pedido. É a leitura operacional, e pode estar completa antes de qualquer expedição.",
+      },
+      {
+        term: "Coluna Faturamento",
+        text: "Quanto do que saiu já foi faturado. Só avança depois da expedição confirmada e do documento de faturamento emitido.",
+      },
+      {
+        term: "Entrega",
+        text: "A data de entrega combinada no pedido. Informativa: não muda reserva nem produção.",
+      },
+      {
+        term: "Novo pedido",
+        text: "A ação principal da lista: abre o pedido em rascunho, com cliente, produtos, quantidades e datas.",
       },
     ],
     flow: [
@@ -478,7 +529,8 @@ export const comercialTopics = {
       },
     ],
     notes: [
-      "Pedido não movimenta estoque em momento nenhum. Quem movimenta é reserva, produção e expedição.",
+      "Pedido não movimenta estoque em momento nenhum. Quem movimenta é produção e expedição; reserva compromete sem movimentar.",
+      "O pedido pode gerar ordens de compra em rascunho para material em falta — mas gerar rascunho não compra nada: confirmar a ordem de compra continua sendo um ato à parte, em Compras.",
       "Não existe mudar status à mão: cada um é consequência de um ato — confirmar, aplicar o plano, confirmar uma expedição.",
       "O Plano de Atendimento é projeção, não segunda verdade sobre saldo. Ele é recalculado e revalidado no momento em que você aplica.",
       "Cancelar pedido em atendimento não desfaz sozinho reserva e ordem já criadas — elas são fatos operacionais com vida própria.",
@@ -511,6 +563,38 @@ export const comercialTopics = {
         term: "Preço acordado",
         text: "O valor congelado na confirmação. O faturamento herda daqui, não da tabela de preço de hoje.",
       },
+      {
+        term: "Origem comercial",
+        text: "Quando o pedido nasceu de uma proposta aceita, o bloco aponta o projeto e a versão de orçamento de origem — é de lá que vieram os preços acordados. Pedido escrito à mão não tem origem.",
+      },
+      {
+        term: "Falta expedir",
+        text: "Por linha, o que ainda não saiu: pedido menos expedido. É ele que diz se o pedido acabou.",
+      },
+      {
+        term: "Sugestão de Compra",
+        text: "Análise a partir das ordens de produção deste pedido: por material, a falta física, o que já está em compra, os fornecedores homologados, o necessário restante, o já reservado para este pedido, o que já está em rascunho, o comprar sugerido (considera pedido mínimo) e o campo Comprar agora. Falta física e compra sugerida são conceitos diferentes.",
+      },
+      {
+        term: "Gerar OCs em rascunho",
+        text: "Cria ordens de compra em rascunho com o que foi digitado em Comprar agora, agrupadas por fornecedor. Não compra nada: confirmar cada ordem continua sendo ato de Compras. As ordens geradas aparecem em Ordens de Compra Vinculadas.",
+      },
+      {
+        term: "Materiais aguardando cliente",
+        text: "Material que a receita declara como fornecido pelo cliente e que ainda falta: necessário, disponível do cliente e falta. Não vira compra da Veridi — resolve-se com nova remessa do cliente.",
+      },
+      {
+        term: "Reservar Produto Acabado",
+        text: "Produto produzido depois do plano não entra sozinho na expedição. Este painel mostra, por linha, o expedido, o reservado restante, o que falta reservar e o disponível agora, e “Reservar disponível” prende ao pedido o que existe.",
+      },
+      {
+        term: "Produto Acabado já reservado — por lote",
+        text: "As reservas deste pedido, lote a lote: reservado, expedido e restante. Lote que ficou inelegível (vencido, bloqueado) pode ser realocado para outro lote; o que já foi expedido continua no lote original.",
+      },
+      {
+        term: "Gerar OP para o saldo restante",
+        text: "Quando uma ordem concluída produziu menos que o planejado e a linha continua descoberta, o pedido oferece uma nova ordem para o que falta. A ordem encerrada não gera nada sozinha.",
+      },
     ],
     flow: [
       {
@@ -535,6 +619,16 @@ export const comercialTopics = {
           "As ordens nascem em rascunho. Liberar, produzir e concluir seguem o fluxo normal de produção, com o consumo de material reconciliado.",
       },
       {
+        label: "Comprar o que falta",
+        detail:
+          "A Sugestão de Compra lê as ordens deste pedido e propõe quanto comprar por material e fornecedor. Gerar cria ordens de compra em rascunho; confirmar é em Compras.",
+      },
+      {
+        label: "Reservar o produzido",
+        detail:
+          "Produto que ficou pronto depois do plano precisa ser reservado a este pedido explicitamente, no painel Reservar Produto Acabado.",
+      },
+      {
         label: "Expedir",
         detail:
           "Prepare a expedição daqui. Só o que está reservado para este pedido pode sair, e só a expedição confirmada baixa estoque.",
@@ -550,6 +644,8 @@ export const comercialTopics = {
       "Aplicar o plano nunca confia no número que a tela mostrou: a disponibilidade é conferida de novo, sob trava, no instante da aplicação.",
       "Produto produzido depois não entra sozinho na expedição: precisa ser reservado a este pedido explicitamente.",
       "O pedido fica expedido por consequência das expedições confirmadas. Não há marcar como expedido.",
+      "Gerar ordens de compra a partir do pedido não compra nada e não cobre falta: material só vira estoque no recebimento. Falta de material do cliente nunca vira compra da Veridi.",
+      "Cancelar o pedido exige motivo e não desfaz reserva e ordem já criadas — elas são fatos operacionais com vida própria. Imprimir e Observações não alteram o pedido.",
     ],
   },
 
@@ -659,6 +755,18 @@ export const comercialTopics = {
       {
         term: "Realocação de reserva",
         text: "Trocar o lote de uma linha nunca é automático e não acontece aqui: é uma realocação explícita da reserva, feita no Pedido do Cliente.",
+      },
+      {
+        term: "Validade e localização",
+        text: "Colunas de cada linha, lidas do lote: onde ele está e até quando vale. Lote vencido aparece marcado — ele não sai na confirmação, e o caminho é realocar a reserva no pedido.",
+      },
+      {
+        term: "Folha de separação (FO-05)",
+        text: "O papel de quem vai buscar o material: lotes, localização e quantidades desta expedição. Imprimir não muda a expedição.",
+      },
+      {
+        term: "Observações",
+        text: "Texto livre do rascunho. Entra no documento impresso e não altera quantidade nenhuma.",
       },
     ],
     flows: [

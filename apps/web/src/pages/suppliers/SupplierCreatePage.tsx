@@ -3,6 +3,8 @@ import type { SupplierDTO } from "@veridi/shared";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useContextualCreateTarget } from "../../lib/use-contextual-create";
 import { SUPPLIER_FORM_ID, SupplierFormFields, useSupplierForm } from "./supplier-form";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 /**
  * Tela oficial de cadastro de fornecedor — `/cadastros/fornecedores/novo`.
@@ -76,6 +78,10 @@ export function SupplierCreatePage() {
           </button>
         )}
       </div>
+
+      {/* A mesma ajuda da lista: o fluxo descreve exatamente este formulário. */}
+
+      <ContextHelp topic={helpTopics["fornecedor.comoFunciona"]} />
 
       <SupplierFormFields {...controller} />
 

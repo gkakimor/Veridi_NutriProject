@@ -483,7 +483,7 @@ export function IndustrialCostPage() {
         {/* Materiais, recursos, energia e premissas são preenchidos aqui e só
             viram número na tela de CMV. Mesmo painel das duas telas: é um
             processo só, lido de pontos diferentes. */}
-        <ContextHelp topic={helpTopics["cmv.comoFunciona"]} />
+        <ContextHelp topic={helpTopics["estruturaCusto.comoFunciona"]} />
 
         {!version && (
           <FormSection title="Estrutura de custos">

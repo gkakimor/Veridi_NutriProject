@@ -8,6 +8,8 @@ import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDate } from "../../lib/dates";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 
 function statusBadgeClass(status: LotDTO["status"], isExpired: boolean): string {
@@ -67,6 +69,10 @@ export function LotScanPage() {
           ← Voltar
         </button>
       </div>
+
+      {/* Ler é consultar: a tela não movimenta, não libera nem reserva, e é
+          isso que precisa estar dito antes da primeira leitura. */}
+      <ContextHelp topic={helpTopics["estoque.escanear"]} />
 
       {!result && (
         <FormSection title="Ler QR ou digitar lote">

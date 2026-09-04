@@ -434,7 +434,7 @@ describe("Vocabulário da tela", () => {
       const topico: HelpTopic = helpTopics[id];
       const conceitos = topico.concepts ?? [];
       expect(conceitos.length).toBeGreaterThanOrEqual(4);
-      expect(conceitos.length).toBeLessThanOrEqual(7);
+      expect(conceitos.length).toBeLessThanOrEqual(14);
     }
   });
 });

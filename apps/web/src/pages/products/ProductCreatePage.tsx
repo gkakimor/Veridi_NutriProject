@@ -8,6 +8,8 @@ import {
 } from "../../lib/use-contextual-create";
 import { PRODUCT_FORM_ID, ProductFormFields, useProductForm } from "./product-form";
 import type { ProductCustomerLock, ProductFormState } from "./product-form";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 /**
  * Tela oficial de cadastro de produto — `/cadastros/produtos/novo`.
@@ -132,6 +134,10 @@ export function ProductCreatePage() {
           </button>
         )}
       </div>
+
+      {/* A mesma ajuda da lista: o fluxo A descreve exatamente este formulário. */}
+
+      <ContextHelp topic={helpTopics["produto.comoFunciona"]} />
 
       <ProductFormFields {...controller} />
 

@@ -8,43 +8,63 @@ import type { HelpHint, HelpTopic } from "../help-content";
 export const baseTopics = {
   "formulacao.comoFunciona": {
     module: "producao",
-    title: "Formulação: o que é e como usar esta tela",
+    title: "Formulação: a receita em versões, e o que cada número significa",
     summary:
-      "A formulação é a receita oficial de um produto: quais matérias-primas entram, quanto de cada uma, e sobre qual base essa quantidade é declarada. Ela não é editada no lugar — é escrita em versões. Uma versão vale enquanto é rascunho, e vira documento no momento em que é ativada: dali em diante ela não muda mais, e é ela que a produção executa e que o custo e o preço leem.",
+      "A formulação é a receita oficial de um produto: quais matérias-primas e embalagens entram, quanto de cada uma, e sobre qual base essa quantidade é declarada. Ela não é editada no lugar — é escrita em versões. Uma versão vale enquanto é rascunho e vira documento no momento em que é ativada: dali em diante ela não muda mais, e é ela que a produção executa e que o custo e o preço leem. Esta ajuda cobre a lista de versões do produto e a tela de uma versão.",
     concepts: [
       {
-        term: "Versão",
-        text: "Cada revisão da receita é uma versão própria, com número e situação. Mudar a receita é criar uma versão nova, nunca reescrever a anterior — é assim que o histórico do que já foi produzido continua verdadeiro.",
+        term: "Versão e situação",
+        text: "Cada revisão da receita é uma versão própria, com número e situação: Rascunho, Ativa ou Inativa. Mudar a receita é criar uma versão nova, nunca reescrever a anterior — é assim que o histórico do que já foi produzido continua verdadeiro. Só existe uma versão ativa por produto.",
       },
       {
-        term: "Versão ativa",
-        text: "A única versão que vale para produzir e custear. Só existe uma por produto. Ativar é o ato que fecha a receita: a partir daí ela é histórico.",
+        term: "Produto e base",
+        text: "O bloco de cima da versão: o produto, o item de saída (o produto acabado que a receita produz), a base da formulação — a quantidade de produto acabado que a receita abaixo produz — e o modo de cálculo. Tudo o que os componentes declaram se refere à base.",
       },
       {
-        term: "Base de cálculo",
-        text: "A referência das quantidades que você digita: por lote (a receita inteira de uma batelada), por unidade acabada, ou por dose. Ela muda o significado de todo número da tabela, não o número em si.",
+        term: "Modo de cálculo: base fixa × por dose",
+        text: "Base fixa: as quantidades declaradas produzem a base informada, e é isso. Por dose: a quantidade de cada componente é declarada para UMA dose e multiplicada pelas doses por embalagem. Embalagem continua por unidade acabada — não se multiplica por dose.",
+      },
+      {
+        term: "Doses por embalagem",
+        text: "Quantas doses cabem em uma unidade acabada. É obrigatório assim que existe componente por dose: sem esse número a versão não ativa, e o custo de material não existe — não é zero.",
       },
       {
         term: "Componente",
-        text: "Uma linha da receita: um item de estoque com a quantidade que entra. Matéria-prima, embalagem ou material que o próprio cliente fornece.",
+        text: "Uma linha da receita: um item de estoque, a base da linha (base da fórmula, por dose ou por unidade acabada), quem fornece (Veridi ou cliente), a quantidade informada e a unidade em que ela foi digitada.",
       },
       {
-        term: "Quantidade declarada × equivalente em estoque",
-        text: "Você declara na unidade em que se pensa a fórmula; o sistema converte para a unidade em que o item é comprado e estocado. É o valor convertido que reserva e baixa material.",
+        term: "Quantidade informada × equivalente estoque × físico por unidade",
+        text: "Três números da mesma linha. A quantidade informada é o que você digitou, na unidade que escolheu. Equivalente estoque é essa quantidade convertida para a unidade em que o item é comprado e estocado. Físico por unidade é o que sai do estoque por unidade acabada, já com os ajustes que a linha autoriza — é este que a ordem de produção reserva e consome.",
+      },
+      {
+        term: "Ajustes da quantidade: o que a quantidade informada significa",
+        text: "Cada componente declara uma de duas coisas. “Quantidade física já ajustada”: o número digitado já é o que sai do estoque, e pureza e overage ficam só como registro. “Calcular quantidade física automaticamente”: o número é teórico, e o sistema aplica somente os ajustes que você marcar — pureza, overage ou os dois.",
       },
       {
         term: "Pureza e overage",
-        text: "Correções sobre a quantidade declarada: pureza compensa o que o insumo tem de ativo, overage compensa a perda de processo. Ambos aumentam o que sai do estoque sem mudar a fórmula pretendida.",
+        text: "Pureza é o teor real do insumo; overage é o excesso declarado de propósito para compensar perda. Preencher REGISTRA; marcar AUTORIZA. Sem a marcação, os dois ficam documentados na linha e não alteram a quantidade. Pureza em branco é desconhecida — nunca 100%.",
+      },
+      {
+        term: "Aviso de dupla correção",
+        text: "A tela avisa para não ativar o ajuste automático quando a quantidade informada já veio corrigida de origem: corrigir de novo aplicaria a divisão pela pureza uma segunda vez, e a linha passaria a reservar mais material do que a receita pede.",
       },
       {
         term: "Fornecimento",
-        text: "Diz de quem é o material: Veridi ou o cliente. Material do cliente entra na receita e na necessidade de compra, mas nunca no custo de aquisição da Veridi.",
+        text: "Diz de quem é o material: Veridi ou o cliente. Material do cliente entra na receita e na necessidade de material, mas nunca no custo de aquisição da Veridi, e exige produto vinculado a um cliente.",
+      },
+      {
+        term: "Custo estimado de materiais",
+        text: "Bloco de leitura, com a estimativa de HOJE: lê a fonte de custo vigente de cada componente a cada abertura e nunca é gravado na versão. O CMV e a precificação leem a base congelada do cálculo salvo — por isso os dois podem discordar, e é o cálculo salvo que vale como documento.",
+      },
+      {
+        term: "Pendências",
+        text: "Painel no alto da versão com o que impede ativar ou custear — item sem premissa, doses por embalagem em branco. Cada pendência tem o caminho para ser resolvida, como “Abrir o item”.",
       },
     ],
     flows: [
       {
         name: "A. Montar e ativar uma versão",
-        when: "É o que você faz nesta tela.",
+        when: "Na tela de uma versão em rascunho.",
         steps: [
           {
             label: "Nova versão",
@@ -53,30 +73,61 @@ export const baseTopics = {
               "Nasce em rascunho. Criada a partir da versão ativa, já vem com a receita atual copiada — você altera só o que mudou.",
           },
           {
-            label: "Base de cálculo",
+            label: "Produto e base",
             detail:
-              "Escolha antes de digitar quantidade: ela define o que cada número significa. Trocar depois não reinterpreta o que já foi digitado.",
+              "Base da formulação, modo de cálculo e, havendo componente por dose, doses por embalagem. Decida antes de digitar quantidade: a base muda o que cada número significa.",
           },
           {
             label: "Componentes",
             detail:
-              "Cada linha é um item de estoque e quanto dele entra. O equivalente em estoque aparece ao lado, já convertido para a unidade de compra.",
+              "Uma linha por item de estoque: base da linha, fornecimento, quantidade e unidade. Equivalente estoque e físico por unidade aparecem ao lado, calculados enquanto você digita.",
           },
           {
-            label: "Correções",
+            label: "Ajustes da quantidade",
             detail:
-              "Pureza, overage e fornecimento por linha. Só onde houver motivo — linha sem correção é a leitura mais fácil.",
+              "Por linha: diga se a quantidade já é física ou se deve ser calculada, e marque só os ajustes que valem. A conta aparece explicada ao lado do físico por unidade.",
           },
           {
-            label: "Ativar",
+            label: "Salvar rascunho",
+            detail:
+              "Guarda o trabalho sem autorizar uso: rascunho não é executado pela produção nem lido pelo custo. Salvar quantas vezes precisar.",
+          },
+          {
+            label: "Ativar versão",
             tone: "accent",
             detail:
-              "Fecha a versão e substitui a anterior. A partir daqui a receita não muda mais, e é ela que a produção passa a executar.",
+              "Grava o rascunho e fecha a versão, substituindo a ativa anterior. A partir daqui a receita não muda mais, e é ela que a produção passa a executar.",
           },
         ],
       },
       {
-        name: "B. Da versão ativa ao preço",
+        name: "B. Histórico de versões",
+        when: "Na tela da formulação do produto, que lista a versão ativa e todas as anteriores.",
+        steps: [
+          {
+            label: "Item acabado",
+            detail: "O item de estoque que a receita produz. Vem do cadastro do Produto, não se escolhe aqui.",
+          },
+          {
+            label: "Formulação ativa",
+            detail:
+              "A versão em vigor, com base e modo de cálculo. “Nenhuma versão ativa” significa que o produto ainda não pode ser produzido nem custeado.",
+          },
+          {
+            label: "Histórico de versões",
+            detail:
+              "Versão, situação, origem, base, criada em e ativada em. Cada linha abre a versão — as inativas continuam legíveis, porque ordens antigas apontam para elas.",
+          },
+          {
+            label: "Criar nova versão",
+            tone: "accent",
+            detail:
+              "Copia a versão ativa para um rascunho novo. Enquanto ele é trabalhado, a ativa continua valendo.",
+          },
+        ],
+      },
+      {
+        name: "C. Da versão ativa ao preço",
         when: "O que acontece depois, em outras telas, por causa do que você ativou aqui.",
         steps: [
           {
@@ -92,7 +143,7 @@ export const baseTopics = {
           {
             label: "Cálculo",
             detail:
-              "Aplica as referências de custo de uma data à estrutura e congela o resultado. É o documento que a precificação lê.",
+              "Aplica as fontes de custo de uma data à estrutura e congela o resultado. É o documento que a precificação lê.",
           },
           {
             label: "Precificação",
@@ -105,9 +156,63 @@ export const baseTopics = {
     notes: [
       "Versão ativa é histórico: depois de ativada ela não se altera. Para mudar a receita, crie uma nova versão a partir dela — a anterior continua registrada.",
       "Ordem de produção já emitida nunca muda porque uma nova versão foi ativada: cada ordem guarda a versão que executou.",
-      "Por dose: a quantidade do componente é declarada para UMA dose e multiplicada pelas doses por embalagem. Embalagem continua por unidade acabada — não se multiplica por dose.",
+      "Preencher pureza ou overage não aplica correção nenhuma. A correção só acontece em componente “Calcular quantidade física automaticamente” com o ajuste marcado. Em “Quantidade física já ajustada” os dois campos são registro de auditoria.",
+      "Não ative o ajuste automático se a quantidade informada já estiver corrigida — a correção seria aplicada duas vezes. É o aviso que a própria linha mostra.",
+      "Por dose: a quantidade do componente é declarada para UMA dose e multiplicada pelas doses por embalagem. Sem doses por embalagem a versão não ativa e o custo de material não existe — não é zero.",
+      "Ativar grava o rascunho antes: o que está na tela é o que vira versão ativa, não a última gravação.",
       "Material fornecido pelo cliente é declarado na própria versão e segue congelado na ordem de produção. Ele entra na receita e na necessidade de material, mas nunca no custo de aquisição da Veridi.",
       "Versão com componente do cliente só ativa se o produto tiver cliente vinculado: sem cliente não existe estoque elegível para aquele componente.",
+      "Observações e notas técnicas são texto livre da versão: não entram em cálculo nenhum.",
+    ],
+  },
+  "formulacao.lista": {
+    module: "producao",
+    title: "Formulações: qual produto já tem receita ativa",
+    summary:
+      "Esta lista mostra, produto a produto, se existe formulação e em que estado ela está: a versão ativa, ou rascunho sem versão ativa, ou nenhuma formulação. Não se edita receita aqui — cada linha abre a formulação do produto, onde ficam o histórico de versões e a edição.",
+    concepts: [
+      {
+        term: "Versão ativa",
+        text: "O número da versão em vigor do produto. É a única que a produção executa e que o custo e o preço leem.",
+      },
+      {
+        term: "Situação",
+        text: "Ativa: existe versão ativa. Rascunho, sem versão ativa: alguém começou a receita e ainda não ativou. Sem formulação: o produto não tem receita nenhuma e não pode ser produzido nem custeado.",
+      },
+      {
+        term: "Item acabado",
+        text: "O item de estoque que a receita produz — o produto acabado que ganha lote e saldo.",
+      },
+      {
+        term: "Busca",
+        text: "Por produto, cliente ou item acabado. A lista é de produtos, não de versões: um produto aparece uma vez só.",
+      },
+    ],
+    flow: [
+      { label: "Buscar o produto" },
+      { label: "Ler a situação" },
+      { label: "Abrir a formulação", tone: "accent" },
+      { label: "Versão" },
+    ],
+    steps: [
+      { label: "Buscar o produto", detail: "Por nome, código, cliente ou item acabado." },
+      {
+        label: "Ler a situação",
+        detail: "Ativa, rascunho sem versão ativa, ou sem formulação. É o que diz se o produto está pronto para produzir.",
+      },
+      {
+        label: "Abrir a formulação",
+        detail: "A linha abre a formulação do produto: versão ativa, histórico e o botão de criar nova versão.",
+      },
+      {
+        label: "Versão",
+        detail: "Da formulação do produto se abre cada versão — é lá que a receita é escrita, salva e ativada.",
+      },
+    ],
+    notes: [
+      "Produto sem formulação não é erro da lista: é um produto que ainda não teve receita escrita.",
+      "Rascunho não vale para produzir nem custear. Só a ativação fecha a receita.",
+      "A lista não cria produto. Produto novo nasce em Cadastros › Produtos, e é lá que o item acabado é criado junto.",
     ],
   },
   "planoAtendimento.comoFunciona": {
@@ -204,8 +309,28 @@ export const baseTopics = {
         text: "Planejado é a quantidade congelada no planejamento; produzido é a soma dos apontamentos reais. Produção parcial é normal, mas o produzido nunca ultrapassa o planejado. Antes de concluir, a diferença aparece como Restante; ao concluir, vira Variação e exige motivo.",
       },
       {
-        term: "Folha de Receita",
-        text: "O documento de execução da produção: quem pesou, quanto, de qual lote e quando, parte por parte quando a ordem é fracionada. A pesagem registrada ali baixa o material pelo mesmo consumo real desta tela — é registro de execução, não um segundo estoque.",
+        term: "Folha de Receita e folha de separação",
+        text: "A Folha de Receita (R.COQ.003) é o documento de execução: quem pesou, quanto, de qual lote e quando, parte por parte quando a ordem é fracionada. A pesagem registrada ali baixa o material pelo mesmo consumo real desta tela. A folha de separação (FO-04) é o papel de quem vai buscar o material: lista os lotes reservados com validade e localização.",
+      },
+      {
+        term: "Lote diferente na separação",
+        text: "Lote conferido diferente do reservado nunca é aceito em silêncio: os dois códigos aparecem e a troca precisa ser uma ação explícita. A substituição só vale antes de qualquer consumo na linha, exige um único lote alternativo, do mesmo dono, que cubra a quantidade inteira, e a linha original fica registrada.",
+      },
+      {
+        term: "Consumo extra",
+        text: "Pesou mais do que a receita pedia? “Adicionar consumo extra” amplia a reserva daquela linha sobre o saldo realmente livre do lote, com motivo obrigatório — e só depois disso o material pode ser consumido. Ampliar não é consumir.",
+      },
+      {
+        term: "Justificar diferença",
+        text: "Antes de concluir, cada material cujo consumido ficou diferente do reservado precisa de um motivo. É a reconciliação de material: sem ela a ordem não conclui, e o motivo fica gravado com autor e data na própria linha.",
+      },
+      {
+        term: "Lote interno × Lote Veridi",
+        text: "No apontamento de produção nascem os dois: o lote interno é o código que o sistema cria e que vai no QR; o Lote Veridi é o número comercial que vai para o rótulo, informado por quem aponta. A tela sugere a máscara; o operador confirma ou informa outro.",
+      },
+      {
+        term: "Custo industrial da ordem",
+        text: "Bloco de leitura: material realmente consumido, lote a lote, com custo unitário e origem, mais os custos industriais padrão aplicados na proporção do produzido. É híbrido — horas de operador, de máquina e energia não são medidas, vêm da estrutura de custos. Material sem preço fica em aberto, nunca zero.",
       },
     ],
     flow: [
@@ -241,7 +366,7 @@ export const baseTopics = {
       {
         label: "Produção realizada",
         detail:
-          "Apontamento do que efetivamente saiu da linha. Produção parcial é permitida e pode ter vários apontamentos.",
+          "Apontamento do que efetivamente saiu da linha, com quantidade, lote interno e Lote Veridi. Produção parcial é permitida e pode ter vários apontamentos.",
       },
       {
         label: "Lote acabado",
@@ -259,7 +384,56 @@ export const baseTopics = {
       "O consumo extra confere o saldo realmente livre do lote antes de ampliar a reserva — estoque reservado por outra ordem nunca é tomado.",
       "Ampliar a reserva ainda não é consumir: o estoque só se move quando o consumo é registrado.",
       "Sobra reservada continua reservada enquanto a ordem está em produção; ela é liberada no encerramento da ordem.",
+      "Concluir exige reconciliar o material: toda diferença entre reservado e consumido precisa do motivo registrado em “Justificar diferença”. Concluir também pede o motivo quando o produzido ficou abaixo do planejado.",
+      "Necessidade de materiais mostra Em Compra só como informação: material pedido ao fornecedor não cobre liberação. Falta com material já no galpão costuma ser lote aguardando a Qualidade ou reservado por outra ordem.",
       "A ordem guarda a versão da formulação que executou — ativar uma versão nova depois nunca reescreve uma ordem já emitida.",
+      "Depois do primeiro consumo a ordem não pode mais ser cancelada: material físico já saiu, e desfazer isso pede um fluxo de devolução que ainda não existe.",
+      "Imprimir a ordem, a folha de separação (FO-04) e o custo da ordem são leituras: nenhuma impressão altera a ordem.",
+    ],
+  },
+  "producao.ordens": {
+    module: "producao",
+    title: "Ordens de Produção: a fila da fábrica",
+    summary:
+      "Esta lista reúne todas as ordens de produção e diz, de cada uma, o produto, o cliente, a versão da formulação, a quantidade planejada, se o material já está reservado e em que situação a ordem está. Nada se executa aqui: liberar, separar, consumir e concluir acontecem dentro da ordem.",
+    concepts: [
+      {
+        term: "Situação",
+        text: "Rascunho, Planejada, Liberada, Em produção, Concluída ou Cancelada. É a situação que diz o que ainda dá para fazer dentro da ordem.",
+      },
+      {
+        term: "Formulação",
+        text: "A versão da receita que a ordem executa. Congelada no planejamento — a lista mostra a versão da ordem, não a ativa do produto.",
+      },
+      {
+        term: "Quantidade",
+        text: "O planejado. Produzido e restante vivem dentro da ordem, porque mudam a cada apontamento.",
+      },
+      {
+        term: "Materiais",
+        text: "Se as necessidades já viraram reserva. Reservado é compromisso: o material continua na prateleira até o consumo.",
+      },
+      {
+        term: "Nova OP",
+        text: "Cria uma ordem em rascunho: produto e quantidade. Ordem que nasce de um pedido de cliente já vem ligada a ele pelo plano de atendimento.",
+      },
+    ],
+    flow: [
+      { label: "Filtrar" },
+      { label: "Ler a situação" },
+      { label: "Abrir a ordem", tone: "accent" },
+      { label: "Executar na ordem" },
+    ],
+    steps: [
+      { label: "Filtrar", detail: "Por situação, ou buscando por código, produto ou cliente. Exportar leva o recorte filtrado." },
+      { label: "Ler a situação", detail: "Rascunho e planejada ainda aceitam mudança; liberada e em produção têm material comprometido; concluída e cancelada são histórico." },
+      { label: "Abrir a ordem", detail: "A linha abre a ordem completa: necessidades, reservas, separação, consumo, apontamento e custo." },
+      { label: "Executar na ordem", detail: "Planejar, liberar, consumir, apontar e concluir são ações da própria ordem, cada uma com a sua regra." },
+    ],
+    notes: [
+      "Ordem em produção não pode mais ser cancelada: material físico já saiu.",
+      "A lista de Picking / Consumo mostra só as ordens liberadas ou em produção, com o progresso da conferência e da baixa.",
+      "Quantidade produzida não aparece aqui: ela é a soma dos apontamentos, dentro da ordem.",
     ],
   },
   "cmv.comoFunciona": {
@@ -285,8 +459,20 @@ export const baseTopics = {
         text: "A base de produção declarada na estrutura. A quantidade simulada é convertida em número de lotes, e é isso que faz o unitário mudar com a quantidade: custo fixo por lote não dilui abaixo de um lote.",
       },
       {
+        term: "Fonte do custo de cada material",
+        text: "De onde veio o custo unitário de cada material, escolhido automaticamente na melhor fonte disponível, nesta ordem: compra real dos últimos 30 dias, compra real dos últimos 90 dias, última compra real, oferta válida de fornecedor, referência manual de custo. Sem nenhuma delas o custo é desconhecido — e desconhecido nunca vira zero.",
+      },
+      {
+        term: "Referência manual e referência forçada",
+        text: "A referência manual é uma estimativa declarada no cadastro do item, usada só quando não há compra real nem oferta válida. “Referência manual forçada” é a exceção: no cálculo de referência alguém escolheu usar a referência mesmo havendo fonte melhor, com motivo registrado. O cálculo salvo guarda a fonte usada e a que teria sido usada.",
+      },
+      {
         term: "Qualidade do custo",
-        text: "O veredito sobre de onde vieram os preços: completo com referências reais de compra, completo com estimativa de fornecedor, parcial quando há custo não informado, ou sem custo conhecido. É ela que diz o quanto o número sustenta uma decisão.",
+        text: "O veredito sobre de onde vieram os preços: completo com referências reais de compra, completo com estimativas (oferta de fornecedor ou referência manual), parcial quando há custo não informado, ou sem custo conhecido. É ela que diz o quanto o número sustenta uma decisão.",
+      },
+      {
+        term: "Precificação vigente",
+        text: "Quando existe precificação ativa para o produto, a tela mostra a faixa cuja quantidade bate EXATAMENTE com a simulada: preço, margem de contribuição, comissão e markup, já calculados pela precificação. Faixa não se interpola: 750 entre 500 e 1.000 não tem preço vigente.",
       },
       {
         term: "Subtotal conhecido",
@@ -314,7 +500,7 @@ export const baseTopics = {
       {
         label: "Materiais",
         detail:
-          "Cada material recebe uma referência de custo: média ponderada das compras recentes e, só em último caso, oferta de fornecedor homologado.",
+          "Cada material recebe a melhor fonte disponível: compra real de 30 dias, depois 90 dias, última compra real, oferta válida de fornecedor e, por último, a referência manual do item.",
       },
       {
         label: "Recursos",
@@ -340,7 +526,9 @@ export const baseTopics = {
     notes: [
       "Material sem custo conhecido não vira zero: ele aparece como pendência, o total fica indisponível e o que se mostra é o subtotal conhecido, rotulado como subtotal. Zero informado, esse sim, é um valor real.",
       "Material de propriedade do cliente fica fora da aquisição da Veridi. Não é zero nem desconhecido — é de terceiro, e não piora a qualidade do resultado.",
-      "A qualidade da referência diz de onde vieram os preços: tudo de compra real, com estimativa de oferta de fornecedor, parcial ou sem custo. É ela que diz o quanto o número sustenta uma decisão.",
+      "A qualidade da referência diz de onde vieram os preços: tudo de compra real, com estimativas (oferta de fornecedor ou referência manual), parcial ou sem custo. É ela que diz o quanto o número sustenta uma decisão.",
+      "Referência manual de custo é estimativa, nunca compra: entra só quando não há fonte melhor, e um cálculo que a usa é classificado como completo com estimativas. Forçá-la mesmo havendo compra real é decisão registrada no cálculo de referência, com motivo, autor e data — a composição mostra “Referência manual forçada” e o cálculo mostra o resto.",
+      "Custo é uma coisa, preço é outra: a precificação vigente aparece ao lado para comparar, e a margem mostrada vem calculada de lá — esta tela não refaz a conta.",
       "Simular é ler: abrir a tela ou mudar a quantidade não cria cálculo, não grava preço e não persiste nada. Congelar continua sendo trabalho do cálculo salvo.",
       "A data de referência escolhe o cálculo em vigor até aquele dia — um cálculo salvo depois não poderia ser conhecido antes.",
     ],
@@ -408,6 +596,47 @@ export const baseTopics = {
       "Onde não houve preço acordado, o faturamento quantitativo continua válido e o preço é informado à mão — nada é inventado para preencher a lacuna.",
       "Não é Nota Fiscal: nenhum documento fiscal é emitido aqui. A emissão fiscal é um passo separado, fora do sistema nesta fase.",
       "Não é Contas a Receber: faturar não gera título, não registra pagamento e não movimenta estoque — a saída física já aconteceu na expedição.",
+      "A tela do documento tem Observações, Auditoria (quem criou, emitiu ou cancelou, e quando) e Imprimir. Nenhum deles altera valor.",
+    ],
+  },
+  "faturamento.lista": {
+    module: "comercial",
+    title: "Faturamento: a fila de expedições e os documentos",
+    summary:
+      "Esta tela tem duas tabelas. A primeira, Aguardando faturamento, é a fila: expedições confirmadas que ainda não têm documento de faturamento ativo. A segunda, Documentos de faturamento, é o histórico: cada faturamento com expedição, pedido, cliente, quantidade, valor, situação e data de emissão. Preparar faturamento é a única ação daqui — e ela cria um rascunho, não emite nada.",
+    concepts: [
+      {
+        term: "Aguardando faturamento",
+        text: "Expedições confirmadas sem faturamento ativo. Cada expedição é faturada por um documento de cada vez; cancelar o rascunho devolve a expedição para esta fila.",
+      },
+      {
+        term: "Preparar faturamento",
+        text: "Cria o rascunho a partir da expedição, com as linhas do que realmente saiu. Emitir, alterar preço e cancelar acontecem dentro do documento.",
+      },
+      {
+        term: "Status",
+        text: "Rascunho, Emitido ou Cancelado. Só rascunho aceita edição; emitido é histórico.",
+      },
+      {
+        term: "Valor",
+        text: "Só existe quando todas as linhas têm preço. Faltando alguma, o documento mostra valores incompletos em vez de somar parte — e o faturamento quantitativo continua válido.",
+      },
+      {
+        term: "Filtros",
+        text: "Busca por código, situação e cliente valem para a tabela de documentos. Exportar leva o recorte filtrado.",
+      },
+    ],
+    flow: [{ label: "Expedição confirmada" }, { label: "Preparar", tone: "accent" }, { label: "Documento" }, { label: "Emitir" }],
+    steps: [
+      { label: "Expedição confirmada", detail: "Entra na fila sozinha: é a saída física que gera a obrigação de faturar." },
+      { label: "Preparar", detail: "Cria o rascunho e abre o documento. A expedição sai da fila enquanto o rascunho existir." },
+      { label: "Documento", detail: "Conferir linhas, preço acordado e preço faturado; alterar preço exige motivo e perfil." },
+      { label: "Emitir", detail: "Torna o documento somente leitura. Não emite Nota Fiscal e não movimenta estoque." },
+    ],
+    notes: [
+      "Faturamento nasce de expedição confirmada — nunca de pedido, reserva ou produção.",
+      "Não é Nota Fiscal nem Contas a Receber: nenhum documento fiscal ou título é gerado aqui.",
+      "Cancelar um rascunho devolve a expedição à fila; cancelar um emitido registra o cancelamento e o histórico continua visível.",
     ],
   },
 } satisfies Record<string, HelpTopic>;
@@ -429,7 +658,7 @@ export const baseHints = {
   "planoAtendimento.reservado": {
     module: "comercial",
     label: "Reservado",
-    text: "Quantidade já comprometida com ordens de produção liberadas e ainda não consumida. Continua no estoque físico, mas nenhuma outra ordem pode contar com ela.",
+    text: "Quantidade já comprometida — com ordens de produção liberadas e ainda não consumidas, ou, no produto acabado, com pedidos de cliente. Continua no estoque físico, mas ninguém mais pode contar com ela.",
   },
   "planoAtendimento.disponivel": {
     module: "comercial",

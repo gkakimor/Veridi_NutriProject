@@ -4,6 +4,8 @@ import type { CustomerDTO } from "@veridi/shared";
 import { formatBrPhone, formatCnpj } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
 import { consultationPath } from "./ConsultationShell";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 /**
  * Porta de entrada da Consulta do Cliente: escolher de quem se está falando.
@@ -71,6 +73,9 @@ export function ConsultationSearchPage() {
           </p>
         </div>
       </div>
+
+      {/* A mesma ajuda da consulta: escolher o cliente é o primeiro passo dela. */}
+      <ContextHelp topic={helpTopics["consultaCliente.comoFunciona"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">

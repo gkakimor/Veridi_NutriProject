@@ -49,6 +49,14 @@ export const gestaoTopics = {
         term: "Modo de preço",
         text: "Calcular pela margem, e o sistema devolve o preço que atinge a margem desejada; ou preço informado à mão, e o sistema devolve a margem que aquele preço dá.",
       },
+      {
+        term: "Lista de precificações",
+        text: "A tela de entrada: uma linha por versão de precificação, com produto, cliente, situação (rascunho, ativa, inativa), cálculo e estrutura de origem, data do custo, qualidade do custo e número de faixas. Os filtros por situação e por qualidade do custo respondem “o que está vigente sobre custo real?”; a busca aceita código da precificação, do cálculo ou do produto.",
+      },
+      {
+        term: "Observações",
+        text: "Texto livre do documento. Não entra em conta nenhuma e não muda com a ativação.",
+      },
     ],
     flow: [
       {
@@ -83,7 +91,8 @@ export const gestaoTopics = {
       "Custo incompleto não vira preço pela margem: o preço sugerido fica em branco e a faixa não ativa nesse modo. Preço informado à mão é aceito sobre custo incompleto, mas margem, markup e contribuição continuam em branco — margem calculada sobre subtotal conhecido pareceria segura e não seria.",
       "Ativar assim mesmo é possível e exige confirmação explícita, tanto com custo incompleto quanto quando o cálculo aponta para uma estrutura de custos que já não é a ativa do produto.",
       "Trocar a base tem dois caminhos, e a tela mostra a diferença antes: no rascunho a base é trocada nele mesmo e o documento continua o mesmo; sobre uma versão ativa nasce um rascunho novo com as faixas copiadas, e a ativa fica intacta.",
-      "Nada é calculado na tela. Ao ativar, tudo é refeito do zero e os números que estavam à vista são ignorados.",
+      "Nada é calculado na tela. Os números de uma faixa aparecem depois de ela ser adicionada — não há prévia enquanto se digita — e, ao ativar, tudo é refeito do zero: os números que estavam à vista são ignorados.",
+      "Custo e preço são colunas diferentes da mesma faixa: custo por unidade vem do cálculo salvo; preço sugerido, preço escolhido, margem resultante, markup e contribuição são a decisão comercial sobre ele.",
       "Quantidade abaixo do lote mínimo do produto é aviso, nunca correção automática: a quantidade digitada é a que fica.",
       "O sistema não arredonda preço por conta própria — 15,3846 continua 15,3846 até alguém decidir outra coisa. E contribuição negativa aparece como está: preço abaixo do custo é informação comercial, não erro a esconder.",
       "Material fornecido pelo cliente fica fora do custo da Veridi e não piora a qualidade do custo. O documento apenas registra que ele existe.",
@@ -113,8 +122,16 @@ export const gestaoTopics = {
         text: "De que o cálculo foi feito: qual configuração industrial e qual versão da receita. As duas ficam registradas no documento e não mudam depois.",
       },
       {
+        term: "Fonte do custo de cada material",
+        text: "A linha de cada material diz de onde veio o custo unitário: compra real (média de 30 ou 90 dias, ou a última compra), oferta válida de fornecedor, referência manual de custo — ou sem referência. A seleção foi automática, na melhor fonte disponível na data de referência.",
+      },
+      {
+        term: "Referência manual forçada",
+        text: "Material em que quem calculou escolheu a referência manual do item mesmo havendo fonte melhor. A linha mostra a fonte automática que teria sido usada, o impacto no valor, o motivo, quem forçou e quando — tudo gravado neste documento, sem depender do item de hoje.",
+      },
+      {
         term: "Qualidade do custo",
-        text: "De onde vieram os preços: tudo de compra real, com estimativa de oferta de fornecedor, parcial ou sem custo conhecido. É ela que diz o quanto o número sustenta uma decisão.",
+        text: "De onde vieram os preços: tudo de compra real, com estimativas (oferta de fornecedor ou referência manual), parcial ou sem custo conhecido. É ela que diz o quanto o número sustenta uma decisão.",
       },
       {
         term: "Subtotal conhecido",
@@ -150,12 +167,127 @@ export const gestaoTopics = {
     ],
     notes: [
       "Cálculo salvo não se edita. Custo de recebimento informado depois, tarifa reajustada e estrutura alterada não reescrevem este documento.",
-      "Cálculo que nenhuma precificação cita pode ser descartado inteiro — enquanto o produto está sendo definido, ele é só um retrato provisório. Citado por um preço, não: apagar deixaria um preço sem origem verificável. Editar continua fora de questão nos dois casos.",
+      "Cálculo que nenhuma precificação cita pode ser descartado inteiro — enquanto o produto está sendo definido, ele é só um retrato provisório. Citado por um preço, não: apagar deixaria um preço sem origem verificável. Editar continua fora de questão nos dois casos. Descartar é feito na lista de cálculos salvos, nos custos industriais do produto, ou na tela de CMV quando a base ficou defasada — não nesta tela.",
+      "Referência manual mudada depois, ou compra que entrou depois, não altera este documento. Um cálculo novo pode usar a fonte nova; este continua dizendo o que foi usado e o que teria sido usado.",
       "Material sem preço conhecido não vira zero: o total fica indisponível e o que se mostra é o subtotal conhecido. Zero informado, esse sim, é valor real.",
       "Material fornecido pelo cliente fica de fora do custo da Veridi — não é zero nem desconhecido, e não piora a qualidade do resultado.",
       "Este não é o custo de nenhuma produção realizada. É o custo esperado da base de referência pelo que se sabia naquela data; o custo do que foi produzido de fato vive na ordem de produção.",
       "O sistema nunca escolhe a data sozinho. Trocar a data de referência pode trocar a base inteira do número.",
       "Não é possível salvar um cálculo cuja formulação não consegue dizer quanto material entra — congelar um custo sem matéria-prima seria pior do que não ter cálculo nenhum.",
+    ],
+  },
+
+  "estruturaCusto.comoFunciona": {
+    module: "gestao",
+    title: "Estrutura de custos: o que entra no custo de produzir este produto",
+    summary:
+      "A estrutura de custos é o documento que declara, para um produto, sobre qual versão da formulação se calcula, qual é a base de produção e o que entra além do material: recursos industriais, energia e premissas de custo adicionais. Ela não calcula: o cálculo padrão, no fim da tela, é que transforma a estrutura em número, e salvar um cálculo congela esse número como base econômica. A estrutura é versionada — o rascunho se edita, a versão ativa é história.",
+    concepts: [
+      {
+        term: "Rascunho × Ativa",
+        text: "As duas abas do topo. Rascunho é a versão em trabalho, editável; Ativa é a versão em vigor, somente leitura. Um produto tem no máximo um rascunho e uma ativa por vez. Sem versão nenhuma, o botão é “Criar estrutura de custos”; com ativa, “Nova versão” copia a ativa para um rascunho.",
+      },
+      {
+        term: "Resumo",
+        text: "Cliente, formulação usada pela estrutura, formulação ativa do produto, base de referência, unidades por caixa, criada e ativada por quem e quando. O rascunho segue a formulação ativa do produto por padrão; escolher outra versão de propósito fixa a escolha.",
+      },
+      {
+        term: "Matérias-primas e embalagens da formulação",
+        text: "Vêm da versão da formulação e não são redigitadas aqui: item, quantidade, base, pureza, overage e fornecimento. Material fornecido pelo cliente aparece marcado e fica fora do custo Veridi. O custo de cada material é resolvido no cálculo, não neste bloco.",
+      },
+      {
+        term: "Premissas de custo adicionais",
+        text: "O que não vem da formulação nem dos recursos: embalagem secundária, serviço de terceiros, overhead e outros. Cada premissa tem categoria, descrição, base de cálculo (por lote, por unidade, por mil unidades, por caixa de expedição ou percentual sobre o custo direto) e valor. Valor em branco é premissa não informada — nunca zero.",
+      },
+      {
+        term: "Recursos industriais",
+        text: "Quanto de mão de obra, equipamento e energia esta base de produção consome, por recurso: quantidade e base de uso. Nenhum valor é multiplicado neste bloco; a tarifa vem do cadastro do recurso e é congelada na ativação.",
+      },
+      {
+        term: "Energia",
+        text: "Três modos: não estruturada (a energia é desconhecida, e o custo não fecha), informada diretamente (um consumo em kWh na lista de recursos) ou derivada dos equipamentos (horas × potência, valorizadas pela tarifa do recurso de energia escolhido). Os dois últimos são exclusivos — somar contaria a mesma energia duas vezes.",
+      },
+      {
+        term: "Versões",
+        text: "A linha de versões da estrutura: versão, situação, formulação, base, completude e data de ativação. Completude diz se todas as premissas e tarifas estão informadas — ativar com pendências é possível, mas exige confirmação e deixa o custo incompleto.",
+      },
+      {
+        term: "Cálculo padrão",
+        text: "Quanto custa produzir a base de referência pelas informações conhecidas na data de referência escolhida. Calcular não grava nada; Salvar cálculo cria um documento imutável, com código próprio, que o CMV e a precificação passam a citar. Cada material mostra a fonte do custo usada, escolhida automaticamente na melhor fonte disponível.",
+      },
+      {
+        term: "Fonte do custo por material",
+        text: "Depois de calcular, cada material que tem referência manual de custo no cadastro oferece a escolha: seleção automática (recomendada) ou forçar a referência manual. Forçar vale só para este cálculo e este material, exige motivo ao salvar, e o documento guarda a fonte usada, a que teria sido usada e o impacto.",
+      },
+      {
+        term: "Cálculos salvos",
+        text: "A lista dos cálculos congelados do produto. Daqui saem “Criar precificação” e “Usar política” (que também cria uma precificação, a partir de uma política de preço). Cálculo que nenhuma precificação cita pode ser descartado; citado, não.",
+      },
+      {
+        term: "Usar template",
+        text: "Copia a configuração de um template de estrutura de custos para o rascunho: recursos, energia e premissas. É cópia, não vínculo — o template pode mudar depois e esta estrutura continua a mesma.",
+      },
+    ],
+    flows: [
+      {
+        name: "A. Montar e ativar a estrutura",
+        when: "No rascunho.",
+        steps: [
+          {
+            label: "Criar ou nova versão",
+            detail: "A primeira nasce vazia ou de um template; as seguintes copiam a ativa. Informe a base de referência — o lote mínimo do produto é a sugestão.",
+          },
+          {
+            label: "Recursos e energia",
+            detail: "Quanto a base consome de cada recurso, e como a energia entra. Recurso inativo impede ativar: reative ou remova.",
+          },
+          {
+            label: "Premissas adicionais",
+            detail: "Embalagem secundária, serviços, overhead. Deixe o valor em branco quando não souber — o cálculo vai dizer que falta, em vez de assumir zero.",
+          },
+          {
+            label: "Ativar estrutura",
+            tone: "accent",
+            detail: "Congela tarifas, potências, nome dos recursos e unidades por caixa. Com pendências, pede confirmação e o custo fica incompleto até uma versão nova.",
+          },
+        ],
+      },
+      {
+        name: "B. Calcular e congelar o custo",
+        when: "Com a estrutura montada — rascunho ou ativa.",
+        steps: [
+          {
+            label: "Data de referência",
+            detail: "Compras posteriores a essa data não entram. Trocar a data pode trocar a fonte de custo de cada material.",
+          },
+          {
+            label: "Calcular custo",
+            detail: "Mostra o detalhamento: materiais com fonte e conta, recursos, premissas, subtotais, qualidade do custo e observações com o caminho para resolver cada falta.",
+          },
+          {
+            label: "Fonte do custo",
+            detail: "Se algum material tem referência manual, escolha entre automático e forçar. Mudar a escolha recalcula na hora e mostra o impacto antes do motivo.",
+          },
+          {
+            label: "Salvar cálculo",
+            tone: "accent",
+            detail: "Cria o documento imutável. Salvar incompleto é permitido com confirmação: o total continua sem existir, e o que aparece é o subtotal conhecido.",
+          },
+          {
+            label: "Precificar",
+            detail: "Da lista de cálculos salvos: criar precificação ou usar uma política de preço. O preço nasce sempre de um cálculo salvo.",
+          },
+        ],
+      },
+    ],
+    notes: [
+      "A estrutura declara; o cálculo valoriza. Nenhum total aparece nos blocos de recursos e premissas — eles são premissas, não custo.",
+      "Versão ativa não se edita. Mudar tarifa, premissa ou recurso é criar uma versão nova; cálculos já salvos sobre a ativa continuam como estão.",
+      "Formulação nova no produto não reescreve a estrutura ativa: ela congelou a receita da qual foi feita. Para o custo falar da receita nova, crie uma nova versão da estrutura sobre ela.",
+      "Material do cliente fica fora do custo Veridi: não é zero nem desconhecido, e não piora a qualidade do cálculo.",
+      "Custo desconhecido nunca vira zero: material sem compra, oferta nem referência manual deixa o total indisponível e aparece nas observações com o caminho — informar o custo num recebimento, registrar uma compra ou definir a referência no item.",
+      "Forçar a referência manual não muda o item nem a ordem de seleção: o próximo cálculo volta ao automático.",
+      "Imprimir a estrutura é leitura: o papel sai do que está gravado.",
     ],
   },
 
@@ -253,7 +385,7 @@ export const gestaoTopics = {
       },
       {
         term: "Prévia",
-        text: "Os preços que a política produziria NESTE produto, mostrados antes de gravar qualquer coisa. Sai do mesmo motor da precificação, para prévia e aplicação não divergirem.",
+        text: "Os preços que a política produziria NESTE produto, mostrados antes de gravar qualquer coisa. Usa exatamente o mesmo cálculo da precificação, para prévia e aplicação não divergirem.",
       },
       {
         term: "Usada por",
