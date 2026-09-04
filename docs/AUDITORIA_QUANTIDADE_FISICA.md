@@ -1,7 +1,9 @@
 # Auditoria de domínio — quantidade física do componente
 
-Fase 1 da capability "quantidade física canônica". Auditoria concluída;
-**implementação parada no portão do item 16**, aguardando decisão do PO.
+Fase 1 da capability "quantidade física canônica". A auditoria parou no portão
+do item 16 e devolveu a decisão ao PO; ele escolheu **(a) preservar o
+comportamento existente**, e a implementação está na segunda metade deste
+documento.
 
 ---
 
@@ -9,7 +11,7 @@ Fase 1 da capability "quantidade física canônica". Auditoria concluída;
 
 Eu relatei, ao fechar a rodada passada, que `purityPercentApplied` era registro
 e não cálculo — que o motor não aplicava pureza à quantidade. **Isso está
-errado**, e o handaff foi escrito sobre essa premissa.
+errado**, e o handoff foi escrito sobre essa premissa.
 
 A afirmação veio de um comentário do `schema.prisma` que fala em congelar a
 pureza como capacidade futura, e de uma busca que não alcançou
