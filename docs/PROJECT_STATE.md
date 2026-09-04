@@ -2,147 +2,70 @@
 
 **Versão:** baseline v0.4 — post-benchmark · **Fase:** FAST MVP.
 
----
-
 ## Onde estamos
 
-**Release congelada:** `9a653a0`
-**Ambiente:** Railway, deploy `8949e780`, health 200.
+**`main`:** `0673b13` · **Produção:** Railway, health 200, banco up, smoke
+autenticado passando. Produção não tem dado de negócio — a base foi limpa.
 
-O MVP operacional está **validado internamente**. Deliveries 01 a 40+
-concluídas: Blocos A a G fechados — cadastros, compras, recebimento e lotes,
-estoque e FEFO, formulações versionadas, produção com consumo real e
-rastreabilidade, pedido do cliente com plano de atendimento, expedição,
-faturamento, fundação de custos, cockpit e relatórios, cadastros e formulação
-industrial, material do cliente, GMP, qualidade documental, projetos e
-orçamentos versionados, recursos e custo industrial, precificação e margem.
+MVP operacional **validado internamente**. Blocos A a G fechados: cadastros,
+compras, recebimento e lotes, estoque e FEFO, formulações versionadas, produção
+com consumo real e rastreabilidade, pedido do cliente com plano de atendimento,
+expedição, faturamento, custos, cockpit e relatórios, formulação industrial,
+material do cliente, GMP, qualidade documental, projetos e orçamentos
+versionados, recursos e custo industrial, precificação e margem.
 
-Detalhe por delivery: [archive/DELIVERY_HISTORY.md](archive/DELIVERY_HISTORY.md).
+Três casos profundos derivados do legado rodaram ponta a ponta contra a
+interface publicada — VAL-LEG-01, 02 e 03, todos PASS. Detalhe do que cada
+rodada descobriu: [`archive/E2E_VALIDATION_HISTORY.md`](archive/E2E_VALIDATION_HISTORY.md).
 
-## MVP validado?
+## Última capability entregue
 
-Sim, internamente. Três casos profundos derivados de dados legados rodaram
-ponta a ponta contra a interface publicada, cada um pressionando uma parte
-diferente do domínio:
+**Quantidade física canônica do componente** (`0673b13`, deployada e smokeada).
 
-- **VAL-LEG-01 — PASS.** `PED-000001` do pedido ao faturamento.
-- **VAL-LEG-02 — PASS.** Falta, compra complementar de fornecedor alternativo,
-  recebimento parcial, FEFO entre três lotes, reserva multi-lote, consumo extra
-  com motivo, produção parcial (147 de 150), saldo, segunda OP e faturamento
-  herdando o preço acordado.
-- **VAL-LEG-03 — PASS.** Material fornecido pelo cliente ponta a ponta:
-  propriedade e segregação, recebimento sem OC da Veridi, templates de
-  formulação e de custo, cálculo excluindo aquisição do cliente, política de
-  preço, parcelamento com juros, produção, rastreabilidade e faturamento.
+Cada componente declara o que a quantidade informada **significa**: já é a
+física, ou é teórica e o sistema calcula aplicando somente os ajustes marcados.
+Registrar pureza deixou de aplicar a correção sozinho — o dado real tem
+componentes cuja quantidade já vem corrigida de fora, e neles preencher a pureza
+aplicava a divisão uma segunda vez, em silêncio.
 
-O hardening pré-cliente e o polimento visual que se seguiram não criaram
-capacidade de negócio: fecharam o backlog funcional e de UX dos três casos, com
-cobertura de regressão. Findings e correções em
-[archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md); as regras que eles
-viraram, em [PRODUCT_RULES.md](PRODUCT_RULES.md) §38 e §40.
+A matemática vive em `packages/shared/src/formulation-quantity.ts` e a API
+delega, então a tela mostra o físico **enquanto se digita** chamando a mesma
+função — não há segundo motor. `CalcHint` mostra a conta com os números da linha
+e refaz essa conta para conferir a própria explicação.
+
+Migration preservadora: backfill pelo comportamento canônico, não pela presença
+do campo, com zero drift provado nos 1.725 componentes. Regra em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §52.
+
+## Estado operacional do repositório
+
+**Baseline V2** (2026-09-04): as suítes E2E exploratórias e adversariais
+históricas foram aposentadas — 51 scripts, ≈35 mil linhas. Cada regra que elas
+protegiam está mapeada em [`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md), numa
+camada menor e determinística. Uma exigiu teste novo antes da remoção: a saída
+física do lote por `ShipmentLine.lotId`.
+
+Infraestrutura E2E genérica preservada em `scripts/e2e/lib/`. Plano das suítes
+futuras: [`E2E_STRATEGY.md`](E2E_STRATEGY.md). Ferramental de segurança
+(`local-db-guard`, `local-db-reset`, `smoke-prod`, `maintenance/`) e os
+importadores oficiais permanecem.
 
 ## Próximo gate
 
-**Validação com a Veridi.** Nenhum desenvolvimento novo até essa conversa
-acontecer e o feedback ser classificado — o que a operação real apontar vale
-mais do que qualquer item priorizado sozinho daqui.
+**Validação com a Veridi.** Nenhum desenvolvimento novo até a conversa acontecer
+e o feedback ser classificado. Roteiro em
+[`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md); guia do usuário
+final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado por política.
 
-Material preparado:
+## Backlog aberto
 
-- `Guia_Fluxo_Comercial_Veridi.docx` — guia do usuário final em 36 capítulos,
-  em português, sem termos de implementação. Não versionado no repositório,
-  conforme a política atual.
-- [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md) — roteiro da
-  reunião em quinze blocos, com perguntas abertas por etapa e a grade de
-  classificação do feedback.
-
-## Rodadas curtas sobre a release congelada
-
-Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive em
-[PRODUCT_RULES.md](PRODUCT_RULES.md); aqui fica só o que mudou de estado.
-
-- **Cadastro e Consulta do Cliente** (`cab5bf3`, `7cd61f2`) — validação na tela
-  e na API, endereço por CEP, autoria; leitura escopada que recusa com 404
-  entidade de outro Cliente. §41, §42.
-- **Produto + item de produto acabado** — o Produto cria o seu item na mesma
-  transação; Cliente virou obrigatório. §43, §44.
-- **Ajuda contextual** (`344d00e`) — "Como funciona" em modal: conceito,
-  glossário, fluxos numerados, ressalvas. §45.
-- **Tabelas** (`f6f93c0`) — não havia estouro global; havia rolagem local em 18
-  listagens. Três classes de coluna e teto para a coluna de ações.
-- **Telas oficiais de cadastro** (`feat/canonical-create-return`) — criação em
-  `/cadastros/<entidade>/novo`: sobrevive a F5, vale como link, entra no
-  histórico, e guarda o rascunho da origem. §46.
-- **Produção na Consulta** (`0657cd1`) — read model próprio: o DTO operacional
-  custava 548 consultas por página de 25; a forma nova custa quatro. §47.
-- **Integridade de dado** (`7be63c3`) — ativar formulação passou a gravar
-  antes, com a gravação como condição, e a busca de item foi para o servidor
-  em seis telas. §48.
-- **Validação por interface + hardening** (`fix/release-hardening-e2e-ux`) —
-  três E2E com todo dado nascendo pela tela, corrigidos e reexecutados. OP não
-  conclui com material por reconciliar, vírgula decimal em português, prefixo
-  `RIN`, quantidade sem precisão inventada, coluna fixa que avisa o que
-  esconde, referência a documento como link real, 125 mensagens de erro com
-  `role`. Baseline UX 7,1. §49. Ver
-  [VALIDACAO_E2E_UI.md](VALIDACAO_E2E_UI.md).
-- **Rodada adversarial + correção** (`fix/adversarial-core-findings`) — 45
-  marcos e 352 verificações procurando o que o sistema aceita em silêncio no
-  núcleo operacional. Zero CRITICAL, nada de corrupção: todos os achados em
-  consulta, apresentação e controle de acesso. Doze corrigidos. Regras que
-  passaram a valer: preço unitário exibe de 2 a 4 casas e nunca é arredondado
-  antes da aritmética, enquanto totais ficam em 2 e o total do documento é a
-  soma das linhas impressas; rastreabilidade de lote é física, pela
-  `ShipmentLine.lotId`, nunca pelo pedido da OP que o produziu; filtro de lista
-  deriva da lista canônica do domínio; ajuste e contagem de estoque gravam o
-  usuário real e exigem papel. §50. Ver
-  [VALIDACAO_E2E_ADVERSARIAL_CORE.md](VALIDACAO_E2E_ADVERSARIAL_CORE.md).
-- **Quantidade física do componente** (`feat/formulation-physical-quantity`) —
-  cada componente declara se a quantidade informada já é física ou se é teórica
-  e o sistema deve calculá-la, com pureza e overage aplicados só quando
-  marcados. O motor já aplicava os dois; o que faltava era distinguir as duas
-  semânticas, que convivem no dado e são indistinguíveis pelo valor — a
-  Coenzima Q10 guarda 224,4898 mg, que é 220 ÷ 0,98, e preencher a pureza ali
-  aplicaria a correção uma segunda vez. Migration preservadora: backfill pelo
-  comportamento canônico, não pela presença do campo, com zero drift provado nos
-  1.725 componentes. A tela passou a mostrar o físico **enquanto se digita**: a
-  matemática subiu para `packages/shared` e a API delega, então os dois lados
-  chamam a mesma função em vez de haver um segundo motor no navegador. Ligar a
-  prévia expôs dois defeitos que nenhum teste via — o modo não viajava no
-  payload de gravação, e uma base desconhecida derrubava a página em vez de
-  bloquear. §52. Ver
-  [AUDITORIA_QUANTIDADE_FISICA.md](AUDITORIA_QUANTIDADE_FISICA.md).
-
-O padrão de cálculo ao vivo vale para toda tela com valor derivado, e o
-levantamento de onde ele já existe e onde falta está no item 26 do
-[BACKLOG.md](BACKLOG.md) — quatro telas calculam ao vivo sem explicação, duas
-mostram número vivo e número velho lado a lado, e seis não derivam nada onde
-faria falta.
-
-## Validação em produção
-
-**Smoke autenticado feito** (`344d00e`, 2026-09-02), e automatizado em
-[`scripts/smoke-prod.mjs`](../scripts/smoke-prod.mjs). Sessão real, oito telas
-abertas, onze endpoints de listagem, console e rede limpos. A perna de escrita
-(`--escrita`) criou um cliente, provou as validações de e-mail, telefone, CNPJ
-e CEP, conferiu a autoria gravada a partir do usuário autenticado e inativou
-pelo fluxo oficial. Tudo passou.
-
-Era o que faltava desde a rodada do cadastro de Cliente. Rodar antes de fechar
-cada rodada passa a ser o padrão.
+Zero CRITICAL e HIGH. Um MEDIUM (`aria-invalid` por campo na Formulação), três
+LOW, três decisões de PO e quatro melhorias adiadas de propósito — a maior
+delas é levar o cálculo ao vivo às demais telas. Ver [`BACKLOG.md`](BACKLOG.md).
 
 ## Blockers
 
 Nenhum.
-
-## Backlog aberto
-
-Zero CRITICAL, HIGH e MEDIUM. Cinco LOW, nenhum bloqueante — flake do runner,
-legado sem cliente, `select` nativo na entrada de material do cliente, rota
-inválida sem página própria e Projeto sem rota de criação. Ver [BACKLOG.md](BACKLOG.md).
-
-## Decisões de produto ainda em aberto (não bloqueantes)
-
-Listadas em [BACKLOG.md](BACKLOG.md) para terem fonte única.
 
 ---
 
@@ -152,20 +75,23 @@ Listadas em [BACKLOG.md](BACKLOG.md) para terem fonte única.
 |---|---|
 | Estado atual, release, próximo gate | este arquivo |
 | Pendências abertas | [BACKLOG.md](BACKLOG.md) |
-| Valor futuro mapeado | [ROADMAP_POST_MVP.md](ROADMAP_POST_MVP.md) |
 | Regras duráveis de negócio | [PRODUCT_RULES.md](PRODUCT_RULES.md) |
+| Onde cada regra é protegida | [TEST_COVERAGE_MAP.md](TEST_COVERAGE_MAP.md) |
+| Estratégia de E2E | [E2E_STRATEGY.md](E2E_STRATEGY.md) |
 | Regras duráveis de UI e marca | [UI_BRAND.md](UI_BRAND.md) |
 | Escopo e plano do MVP | [MVP_PLAN.md](MVP_PLAN.md) |
+| Valor futuro mapeado | [ROADMAP_POST_MVP.md](ROADMAP_POST_MVP.md) |
 | Política de migração do legado | [VERIDI_MIGRATION.md](VERIDI_MIGRATION.md) |
 | Stack e ambiente | [TECH_BASELINE.md](TECH_BASELINE.md) |
 | Implantação | [DEPLOY.md](DEPLOY.md) |
 | Roteiro da validação com o cliente | [ROTEIRO_VALIDACAO_CLIENTE.md](ROTEIRO_VALIDACAO_CLIENTE.md) |
+| Perguntas regulatórias abertas | [BLOCK_H_VALIDATION.md](BLOCK_H_VALIDATION.md) |
+| O que cada rodada de validação descobriu | [archive/E2E_VALIDATION_HISTORY.md](archive/E2E_VALIDATION_HISTORY.md) |
 | Histórico de deliveries | [archive/DELIVERY_HISTORY.md](archive/DELIVERY_HISTORY.md) |
-| Histórico de findings de auditoria | [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md) |
-
----
+| Histórico de findings | [archive/BACKLOG_HISTORY.md](archive/BACKLOG_HISTORY.md) |
 
 ## Manutenção deste arquivo
 
-Manter curto. Reescrever/condensar após mudanças relevantes. Não transformar em
-log cronológico — o log vive no arquivo de histórico.
+Manter curto — alvo de 120 linhas. Reescrever e condensar após mudanças
+relevantes. Não transformar em log cronológico: o log vive nos arquivos de
+histórico.
