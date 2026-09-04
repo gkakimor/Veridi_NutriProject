@@ -858,6 +858,7 @@ painel, viewport 1500×980.
 | HIGH | Trocar para modo teórico dizia "O sistema calcula a quantidade física" antes de qualquer caixa marcada — sub-correção em silêncio | Rótulo virou "Calculada · nenhum ajuste marcado" |
 | HIGH | Erro de decimal não dizia qual componente | Mensagem passou a citar o código do item |
 | MEDIUM | "Preencher não aplica" só existia no ⓘ do cabeçalho | Frase foi para junto dos campos |
+| — | `<p>` dentro de `<p>`: o bloco de resultado era parágrafo e o `CalcHint` emite parágrafos, o que gerava dois `console.error` a cada render | Virou `div`; console limpo nas duas larguras |
 
 **Achado depois, na mesma tela** (`fix/ajustes-quantidade-legibilidade`):
 
@@ -878,17 +879,20 @@ informada é para a base inteira, a física é por unidade. O rótulo agora diz
 
 **Restos, não corrigidos:**
 
-- **`aria-invalid` e rolagem até a linha com erro.** Os oito campos por
+- **`aria-invalid` e rolagem até a linha com erro — MEDIUM.** Os oito campos por
   componente não marcam o campo inválido nem levam a pessoa até ele, ao
   contrário de `basisQuantity` e `dosesPerPackage`, que têm `aria-invalid` e
   `field__error` embaixo do campo. Exige estado de erro por linha, não só a
   mensagem no topo. A mensagem agora identifica o item, então o pior caso
   deixou de ser "procure em doze linhas".
-- **Densidade da tabela de componentes.** Em 1500px a tabela mede 1607px, então
-  "Equivalente estoque" e "Físico / unidade" ficam fora da tela na rolagem
-  natural. É anterior a esta capability — dez colunas —, e o painel novo mostra
-  a quantidade física em texto, então o número não depende mais dessas colunas.
-  Continua valendo revisar a densidade.
+- **Densidade da tabela de componentes — LOW.** Medida nas duas larguras do
+  portão: a tabela ocupa 1621px numa área útil de 928px (1280×800) e 1088px
+  (1440×900), então "Equivalente estoque" e "Físico / unidade" seguem fora da
+  tela na rolagem natural. É anterior a esta capability — dez colunas — e esta
+  branch **reduziu** o problema: a mesma medida na `main` dava 1925px. O painel
+  novo mostra a quantidade física em texto, com a conta ao lado, então nenhum
+  número depende mais dessas colunas. A página em si não estoura
+  (`documentElement` sem overflow horizontal).
 - **Os outros `CalcHint` ainda não se conferem.** Faturamento e dois do CMV
   passam `esperado` e portanto checam; "Lotes de referência", "CMV por unidade"
   e "Preço sugerido" não. Ligar a conferência neles é passar `numero` em cada
@@ -896,9 +900,12 @@ informada é para a base inteira, a física é por unidade. O rótulo agora diz
   por padrão seria pior que o silêncio de hoje. "Lotes de referência" é caso
   à parte: o resultado é arredondado para cima, então a divisão crua nunca vai
   fechar e a conferência tem de continuar desligada ali.
-- **Rótulos dos dois modos** falam de "quantidade física" nos dois, e a
-  diferença é sutil numa leitura rápida. Mudar texto que o operador vai
-  aprender é decisão de Product Ownership, não técnica.
+- **Rótulos dos dois modos — LOW, decisão de Product Ownership.** Os dois falam
+  de "quantidade física", e a diferença é sutil numa leitura rápida. O risco
+  caiu com as frases novas — o resumo agora distingue "Física direta" de
+  "Calculada · nenhum ajuste marcado", e a frase de apoio muda com o modo —, mas
+  o texto dos rótulos em si continua como estava. Mudar texto que o operador vai
+  aprender é chamada do PO, não técnica.
 
 ### Não reproduzido — registrado para não reabrir
 
