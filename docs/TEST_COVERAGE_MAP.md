@@ -105,6 +105,16 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Estrutura de custo industrial e cópia de versão | — | `modules/industrial-costs/*.test.ts` |
 | Cálculo industrial usa a base congelada | — | `modules/industrial-cost-calculation/calculation.test.ts` |
 | Template de formulação/custo: cópia profunda | — | `modules/formulation-templates/formulation-templates.test.ts`, `modules/cost-templates/cost-templates.test.ts` |
+| Fonte de custo: 30d → 90d → última compra → oferta válida → referência manual → desconhecido, num lugar só | referência manual escolhida com compra real existente | `lib/cost-source-selection.test.ts` |
+| Referência manual respeita a data de referência e a unidade; ausência nunca vira zero | — | `lib/cost-source-selection.test.ts` |
+| Alterar referência cria vigência nova; unidade incompatível e negativo recusados; papel COMMERCIAL/ADMIN | — | `modules/items/item-cost-references.test.ts` |
+| Item com referência inicial nasce atômico — recusada, nada fica pela metade | — | `modules/items/item-cost-references.test.ts` |
+| Referência forçada: por cálculo e por componente, motivo ao salvar, fonte automática e impacto congelados | override que grudasse no item | `modules/industrial-cost-calculation/cost-override.test.ts` |
+| Cálculo salvo não muda com referência nova nem compra nova | — | `modules/industrial-cost-calculation/cost-override.test.ts` |
+| Material do cliente não ganha custo mesmo com referência no item | — | `modules/industrial-cost-calculation/cost-override.test.ts` |
+| Conta do material na tela fecha e diz a fonte (e a automática, quando forçada) | — | `web components/cost-breakdown-calc-hint.test.tsx` |
+| Escolha da fonte por material: automático é o padrão, forçar recalcula e trava salvar sem motivo | — | `web pages/industrial-costs/cost-source-override.test.tsx` |
+| Tela do item: "Não informado" nunca é R$ 0,00; compra real vence a referência | — | `web components/item-cost-reference-section.test.tsx` |
 
 ## Apresentação e entrada
 
@@ -115,6 +125,8 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Filtro de lista não oferece opção que a consulta recusa | achado adversarial | `modules/list-filter-options.test.ts` |
 | Mensagem de erro tem `role` e é anunciada | 125 mensagens sem voz | `web` testes de formulário |
 | Criação contextual volta para o campo que a pediu | — | `web lib/contextual-create.test.ts`, `pages/create-in-context-navigation.test.tsx` |
+| Toda tela roteada abre "Como funciona"; tópico tem resumo, vocabulário, caminho e ressalvas; sem termo técnico | tela nova sem ajuda, ajuda que explica o código | `web pages/help-topic-contract.test.ts` |
+| Cada tela principal abre o tópico da própria área (lista ≠ documento) | Pedido abria a ajuda do Plano | `web pages/help-topic-contract.test.ts`, `pages/help-*-screens.test.tsx` |
 
 ## Permissões
 

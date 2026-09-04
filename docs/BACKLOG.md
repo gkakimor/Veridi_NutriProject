@@ -63,6 +63,25 @@ de legibilidade **reduziu** o problema (era 1925px). O painel de ajustes mostra
 a quantidade física em texto, com a conta ao lado, então nenhum número exibido
 depende dessas colunas. A página em si não estoura.
 
+### 11. Recebimento de material do cliente não exige lote do fabricante nem validade — MEDIUM
+
+`receiving/ReceiveCustomerMaterialPage.tsx` aceita confirmar com "Lote do
+fabricante" e "Validade" em branco, mesmo para item que controla lote e
+validade; o recebimento de OC exige os dois. Material de terceiro pode entrar
+sem identificação externa nem vencimento. Achado da revisão de ajuda
+(2026-09-04). Não corrigido nesta rodada: a exigência muda comportamento de
+entrada de estoque e precisa de decisão — a ajuda passou a descrever o que a
+tela faz, não o que deveria fazer.
+
+### 12. Custo estimado da Formulação usa só compra real — LOW
+
+`FormulationVersionPage` lê `getFormulationCostEstimate`, que usa a fundação
+(30d → 90d → última compra) e ignora oferta válida e referência manual. O
+CMV e o cálculo padrão usam a seleção canônica completa (§53), então os dois
+podem discordar num item sem compra. Pré-existente (oferta já era ignorada).
+Corrigir é trocar a fundação pela seleção canônica nesse serviço e ampliar a
+taxonomia `CostSource`.
+
 ---
 
 ## Decisões pendentes de Product Ownership
@@ -89,6 +108,12 @@ falta é do lado do Produto, não do estoque.
 **Decisão:** nenhuma agora. Mexer em `Product.customerId` atravessa pedido,
 precificação, CMV e isolamento por cliente ao mesmo tempo. Permanece futuro —
 ver [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
+
+### 7a. "Dashboard" no título e no menu — LOW
+
+A tela inicial se chama "Dashboard" na interface e "Painel" na ajuda. A regra
+de vocabulário pede português; trocar o rótulo que o operador já aprendeu é
+chamada do PO.
 
 ### 7. Convenções que ninguém formalizou
 

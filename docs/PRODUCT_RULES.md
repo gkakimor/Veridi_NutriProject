@@ -2997,6 +2997,24 @@ O conteúdo vive em `apps/web/src/help/content/`, um arquivo por módulo,
 nunca escrito na tela. Um teste de contrato garante que todo tópico tenha
 resumo, glossário e ao menos um fluxo.
 
+### Toda tela roteada abre um "Como funciona", e ele descreve a tela que está aberta
+
+Cada tela do menu — lista, documento e tela de criação — abre uma ajuda. A tela
+de criação abre a **mesma** ajuda da lista, porque é o fluxo "cadastrar" dela
+que descreve o formulário. Lista e documento com ações diferentes têm tópicos
+diferentes: a fila de faturamento não emite, a lista de ordens não libera.
+
+A ajuda cobre os componentes **visíveis** daquela tela — filtros, colunas,
+selos, botões, ações de linha, painéis de cálculo, anexos, histórico — e não
+descreve componente que a tela não tem. Vocabulário de usuário final, em
+português: nada de termo de código na ajuda.
+
+Três testes sustentam isso sem ler frase por frase: o inventário lê as rotas de
+`App.tsx` e exige `<ContextHelp>` em toda página da casca; cada tópico precisa
+de resumo, vocabulário, caminho e ressalvas; e uma lista curta de termos
+técnicos é proibida em todo texto de ajuda. Uma tela nova sem ajuda, ou uma
+ajuda que explique o código em vez da tela, quebra antes de chegar a alguém.
+
 ### `InfoHint` explica termo; `ContextHelp` explica tela
 
 O ⓘ pequeno ao lado de um rótulo ou cabeçalho de coluna explica **aquele
@@ -3434,3 +3452,78 @@ quantidade porque alguém editou a receita.
 CMV e Ordem de Produção usam a **mesma** quantidade física quando nascem da
 mesma versão e da mesma base. Documentos históricos podem divergir
 legitimamente da versão vigente de hoje.
+
+## §53 — Fonte de custo do material: seleção automática, referência manual e substituição por cálculo
+
+### A ordem canônica, num lugar só
+
+O custo unitário de um material num cálculo prospectivo — cálculo padrão da
+estrutura, CMV, tela do item — vem da **primeira fonte disponível** nesta
+ordem, e a ordem é regra durável:
+
+1. compra real dos últimos 30 dias (média ponderada por quantidade);
+2. compra real dos últimos 90 dias (idem);
+3. última compra real;
+4. oferta válida de fornecedor homologado;
+5. referência manual de custo do Item;
+6. desconhecido.
+
+A implementação vive em `apps/api/src/lib/cost-source-selection.ts`
+(`selectItemCostSource`) e **reusa** os passos 1–3 da fundação de custos
+(`getItemCostReference`), sem reescrever a média nem a `referenceDate`. Nenhum
+outro serviço repete a ordem; a tela lê a lista de `@veridi/shared` para
+mostrá-la. Vários fornecedores homologados sem preferencial **não** contam
+como oferta disponível — é decisão comercial em aberto —, então a referência
+manual entra e a ambiguidade fica registrada no detalhe da fonte.
+
+Custo do material **realmente consumido** numa OP continua com a regra da
+fundação: custo efetivo do lote consumido primeiro, depois o histórico de
+compra do item na data do consumo. Referência manual não entra em custo
+realizado.
+
+### Referência manual é estimativa, com histórico por vigência
+
+A referência manual (`ItemCostReference`) é uma estimativa declarada por gente:
+valor em Decimal, unidade de medida da mesma dimensão do item, válido desde,
+observação, quem e quando. Não é compra, recebimento, custo real histórico nem
+valor pago. Alterar **insere** uma vigência nova; nada é atualizado nem apagado.
+A referência válida numa data é a de maior "válido desde" até aquele dia — um
+cálculo histórico encontra a referência que valia na sua data.
+
+Três estados que nunca se confundem na tela: referência existente ("R$ X /
+unidade"), sem referência ("Não informado") e custo não aplicável ("Não
+aplicável", material do cliente). Ausência nunca vira R$ 0,00. A tela do item
+mostra a referência **e** a fonte que a seleção automática usaria hoje — é
+assim que se lê que uma compra real vence a referência.
+
+Definir referência é papel de COMMERCIAL ou ADMIN. Criar o item já com
+referência inicial é opcional e atômico: referência recusada não deixa item
+criado pela metade.
+
+### Substituição forçada é exceção por cálculo e por componente
+
+O usuário pode forçar a referência manual num cálculo mesmo existindo fonte de
+prioridade maior. A substituição é **por documento e por material**: nada
+marca o item, a ordem global não muda, e o próximo cálculo nasce automático.
+Salvar exige motivo; a prévia pode mostrar o impacto antes do motivo. Forçar
+sem referência vigente é recusado; material do cliente não tem custo a
+substituir e também é recusado.
+
+O cálculo salvo congela, na própria linha do material: fonte usada
+(`MANUAL_REFERENCE_FORCED`), valor e unidade, referência escolhida, fonte
+automática que teria sido usada com o seu valor, subtotal automático, impacto
+(mesma aritmética da linha: quantidade × custo), motivo, usuário e data/hora.
+Reproduzir o cálculo nunca depende da referência de hoje.
+
+### O que a referência manual faz com a qualidade e com o histórico
+
+Cálculo que usa referência manual — automática ou forçada — é **completo com
+estimativas**, nunca "referências reais de compra". A qualidade continua vindo
+de `REAL_REFERENCE_SOURCES`, que não inclui referência manual nem oferta.
+
+Cálculo salvo não muda: referência alterada depois, ou compra real que entrou
+depois, não reescrevem o documento. Um cálculo novo pode usar a fonte nova.
+
+Material de propriedade do cliente continua **não aplicável** mesmo que o Item
+tenha referência manual: a referência pertence ao Item; o custo de aquisição da
+OP e do CMV depende também de quem é o dono do material.
