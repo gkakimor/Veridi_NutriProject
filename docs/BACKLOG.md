@@ -733,6 +733,22 @@ encontrou.
 reproduzir pela tela" não é o mesmo que "não acontece", e a distância entre as
 duas frases era um centavo por linha em todo documento de mais de uma linha.
 
+### 25. Produto próprio Veridi — fora de escopo, registrado para depois
+
+Hoje todo Produto pertence a um Cliente (`Product.customerId` obrigatório).
+Isso impede três coisas que a operação vai pedir: produto próprio da Veridi,
+estoque de produto acabado próprio, e vender o MESMO produto acabado para mais
+de um cliente.
+
+Matéria-prima e embalagem continuam itens globais — a restrição é só do produto
+acabado. Lotes já suportam `VERIDI` e `CUSTOMER(customerId)` pelo modelo atual,
+então a peça que falta é do lado do Produto, não do estoque.
+
+**Decisão / próxima ação:** nenhuma agora. O PO excluiu explicitamente do escopo
+da capability de quantidade física — mexer em `Product.customerId` atravessaria
+pedido, precificação, CMV e isolamento por cliente ao mesmo tempo, e nenhuma
+dessas fronteiras está sendo tocada nesta rodada.
+
 ### Não reproduzido — registrado para não reabrir
 
 - **CEP inexistente "some sem erro".** Medido ao vivo: "CEP não encontrado.

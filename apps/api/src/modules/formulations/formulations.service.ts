@@ -108,6 +108,9 @@ function toComponentDTO(
       ? component.purityPercentApplied.toString()
       : null,
     overagePercent: component.overagePercent ? component.overagePercent.toString() : null,
+    quantityMode: component.quantityMode,
+    applyPurityAdjustment: component.applyPurityAdjustment,
+    applyOverageAdjustment: component.applyOverageAdjustment,
     legacyTotalQuantity: component.legacyTotalQuantity
       ? component.legacyTotalQuantity.toString()
       : null,

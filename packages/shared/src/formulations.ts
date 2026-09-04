@@ -37,6 +37,22 @@ export const FORMULATION_CALCULATION_MODE_LABELS: Record<FormulationCalculationM
 /** Base de cálculo do COMPONENTE — declarada linha a linha. */
 export type FormulationComponentBasis = "FIXED_BASIS" | "PER_DOSE" | "PER_FINISHED_UNIT";
 
+/**
+ * O que a quantidade declarada do componente significa.
+ *
+ * A distinção existe porque as duas semânticas convivem no dado real e são
+ * indistinguíveis pelo valor: 224,4898 mg já corrigidos por pureza e 220 mg
+ * teóricos são o mesmo número para o banco, e a diferença entre eles é 2% de
+ * material.
+ */
+export type FormulationComponentQuantityMode = "PHYSICAL_DIRECT" | "THEORETICAL_WITH_ADJUSTMENTS";
+
+/** Rótulos das duas leituras, na linguagem de quem monta a receita. */
+export const FORMULATION_QUANTITY_MODE_LABELS: Record<FormulationComponentQuantityMode, string> = {
+  PHYSICAL_DIRECT: "Quantidade física já ajustada",
+  THEORETICAL_WITH_ADJUSTMENTS: "Calcular quantidade física automaticamente",
+};
+
 export const FORMULATION_COMPONENT_BASES: readonly FormulationComponentBasis[] = [
   "FIXED_BASIS",
   "PER_DOSE",
@@ -73,6 +89,21 @@ export interface FormulationComponentDTO {
   purityPercentApplied: string | null;
   /** Perda/excesso de processo em %; `null` = não informado. */
   overagePercent: string | null;
+  /**
+   * O que `quantity` SIGNIFICA neste componente.
+   *
+   * `PHYSICAL_DIRECT`: já é a quantidade física; pureza e overage, quando
+   * preenchidos, ficam como documentação e não disparam recálculo.
+   * `THEORETICAL_WITH_ADJUSTMENTS`: é a quantidade teórica, e o sistema
+   * calcula a física aplicando SOMENTE os ajustes marcados.
+   *
+   * Registrar um ajuste deixou de ser o mesmo que autorizá-lo: o dado real tem
+   * componentes cuja quantidade já vem corrigida de fora, e neles preencher a
+   * pureza aplicava a correção uma segunda vez, em silêncio.
+   */
+  quantityMode: FormulationComponentQuantityMode;
+  applyPurityAdjustment: boolean;
+  applyOverageAdjustment: boolean;
   /** Referência histórica da planilha — nunca entra no cálculo. */
   legacyTotalQuantity: string | null;
   legacyTotalUnitCode: string | null;
@@ -222,6 +253,9 @@ export interface FormulationComponentInput {
   supplyResponsibility?: SupplyResponsibility;
   purityPercentApplied?: string | null;
   overagePercent?: string | null;
+  quantityMode?: FormulationComponentQuantityMode;
+  applyPurityAdjustment?: boolean;
+  applyOverageAdjustment?: boolean;
   legacyTotalQuantity?: string | null;
   legacyTotalUnitCode?: string | null;
   legacyBatchUnits?: string | null;

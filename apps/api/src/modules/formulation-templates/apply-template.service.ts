@@ -118,6 +118,12 @@ export async function applyTemplateToProduct(
       supplyResponsibility: component.supplyResponsibility,
       purityPercentApplied: component.purityPercentApplied,
       overagePercent: component.overagePercent,
+      // A configuracao tecnica viaja junto: sem isto, aplicar um template
+      // produzia sempre PHYSICAL_DIRECT e a intencao de "corrija pela pureza"
+      // se perdia na copia.
+      quantityMode: component.quantityMode,
+      applyPurityAdjustment: component.applyPurityAdjustment,
+      applyOverageAdjustment: component.applyOverageAdjustment,
       notes: component.notes,
       position: index,
     }));

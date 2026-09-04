@@ -3703,6 +3703,14 @@ model FormulationTemplateComponent {
   purityPercentApplied Decimal? @db.Decimal(6, 3)
   overagePercent       Decimal? @db.Decimal(6, 3)
 
+  /// O template carrega a CONFIGURACAO, nao o resultado: modo e flags viajam
+  /// junto com pureza e overage, para que aplicar o template reproduza a
+  /// intencao tecnica e nao so os numeros. A quantidade fisica da instancia e
+  /// recalculada na versao nova — template nao congela resultado de calculo.
+  quantityMode FormulationComponentQuantityMode @default(PHYSICAL_DIRECT)
+  applyPurityAdjustment  Boolean @default(false)
+  applyOverageAdjustment Boolean @default(false)
+
   notes String?
 
   /// Ordem de exibicao estavel.
