@@ -207,8 +207,24 @@ async function resolverAlvos() {
   if (mpId) {
     const lotes = (await apiGet(`/lots?itemId=${mpId}&pageSize=100`)).lots ?? [];
     LOTE_BLOQUEADO = lotes.find((l) => l.status === "BLOCKED")?.code ?? null;
+
+    /*
+     * O lote que NAO entrou na arvore precisa ser um que a OP nao consumiu.
+     *
+     * Pegar "qualquer lote disponivel" escolheu justamente o que a producao
+     * usou como consumo extra — e ele aparece na genealogia com razao. O
+     * teste passa a excluir os lotes efetivamente consumidos pela OP, que e
+     * a caracteristica que importa: um lote nunca usado nao aparece.
+     */
+    const ordem = OP_CODE ? daExecucao.find((o) => o.code === OP_CODE) : null;
+    const detalhe = ordem ? await apiGet(`/production-orders/${ordem.id}`) : null;
+    const consumidos = new Set(
+      (detalhe?.consumptions ?? []).map((c) => c.lotCode).filter(Boolean),
+    );
     LOTE_DEVOLVIDO =
-      lotes.find((l) => l.status === "AVAILABLE" && Number(l.onHand) > 0)?.code ?? null;
+      lotes.find(
+        (l) => l.status === "AVAILABLE" && Number(l.onHand) > 0 && !consumidos.has(l.code),
+      )?.code ?? null;
   }
   return { OP_CODE, LOTE_PA, LOTE_DEVOLVIDO, LOTE_BLOQUEADO };
 }

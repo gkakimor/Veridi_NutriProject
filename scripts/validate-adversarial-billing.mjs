@@ -25,22 +25,42 @@ import path from "node:path";
  *
  * ## Massa
  *
- * O substrato das ondas anteriores não tem produto acabado LIVRE: as 800 un
- * de `PA-000365` estão inteiramente reservadas a `PED-000485`/`PED-000486`.
- * E preço acordado não nasce no formulário de Pedido — só a cadeia
- * Projeto → Orçamento → Pedido grava `agreedUnitPrice`.
+ * Esta onda NÃO depende de produto acabado livre deixado por outra suíte.
  *
- * Por isso esta onda usa `PROD-000002` (`PA-000002`), que tem 500 un num
- * lote AGUARDANDO LIBERAÇÃO e um cálculo de custo real salvo
- * (`CALC-000002`, custo/un 5,252480), e monta pela tela:
+ * A montagem antiga pressupunha um substrato de demonstração em que o
+ * estoque já existia antes dos pedidos — bastava liberar um lote pela
+ * Qualidade e reservar. Esse substrato não existe mais: a suíte de produção
+ * produz 800 un e reserva as 800 nos pedidos dela, de propósito. A suíte
+ * parava em "há produto acabado livre suficiente — disponível=0", que é
+ * defeito de laboratório, não do produto.
  *
- *   * liberação do lote pela Qualidade (500 un passam a disponíveis);
+ * Faturamento não precisa de estoque LIVRE. Precisa de estoque RESERVADO AOS
+ * PEDIDOS DELE. Então cada pedido desta onda traz o próprio estoque pela
+ * cadeia comercial real, toda pela interface:
+ *
+ *   Projeto → Orçamento (preço vindo da FAIXA) → Pedido → Plano de
+ *   Atendimento com PRODUZIR (não Reservar) → Ordem de Produção gerada:
+ *   Planejar → Liberar (reserva material) → Separação (picking) → Consumo
+ *   real → Apontamento de produção → Concluir → Qualidade libera o lote de
+ *   produto acabado → "Reservar disponível" no pedido → Expedição →
+ *   Faturamento.
+ *
+ * Preço acordado não nasce no formulário de Pedido — só a cadeia
+ * Projeto → Orçamento → Pedido grava `agreedUnitPrice`. Por isso os dois
+ * pedidos desta onda passam pelo Orçamento, e o preço vem da FAIXA
+ * (proveniência, não digitação solta):
+ *
  *   * uma precificação com as FAIXAS REAIS da planilha — 300/500/1000 un a
  *     R$ 4,00 / R$ 3,80 / R$ 3,60, comissão 5% — mais duas faixas de
  *     quantidade menor ao preço de centavo quebrado `R$ 4,0531`, que é onde
  *     o arredondamento aparece;
- *   * dois projetos, dois orçamentos e dois pedidos com preço acordado
- *     vindo da FAIXA (proveniência, não digitação solta).
+ *   * a precificação nasce de um cálculo de custo SALVO, e a estrutura de
+ *     custos, a ativação e o cálculo são montados aqui mesmo pela tela —
+ *     nada é herdado de substrato.
+ *
+ * As 123 un do pedido B são a prova aritmética do preço de quatro casas
+ * (4,0531 × 123 = 498,53); as 100 un do pedido A são o controle da
+ * expedição parcial (40 + 60).
  *
  * `R$ 4,0531` é o preço com quatro casas que o domínio aceita
  * (`Decimal(14,4)` em `quote_lines`, `customer_order_lines` e
@@ -243,6 +263,16 @@ const FAIXAS_V2 = [
   { quantidade: 1000, preco: "8.50" },
 ];
 
+/*
+ * Quantidades dos dois pedidos.
+ *
+ * `PEDIDO_B_QTD` é a prova aritmética do preço de quatro casas — 4,0531 ×
+ * 123 = 498,5313, que arredonda para 498,53 e não fecha com o preço truncado
+ * que a tela imprime. Trocar esse número apaga o caso.
+ *
+ * `PEDIDO_A_QTD` é controle: só precisa partir em duas expedições
+ * (40 + 60) e caber no material disponível.
+ */
 const PEDIDO_A_QTD = 100;
 const EXPEDIR_1 = 40;
 const EXPEDIR_2 = 60;
@@ -257,16 +287,23 @@ const PEDIDO_B_QTD = 123;
  */
 let LOTE_BLOQUEADO_MP = null;
 let LOTE_OUTRO_PRODUTO = null;
+let ITEM_DO_LOTE_OUTRO_PRODUTO = null;
+let ITEM_DO_LOTE_BLOQUEADO = null;
 
 /** Acha os dois pela caracteristica, nao pelo codigo. */
 async function resolverLotesProibidos(itemPaId) {
   const bloqueados = (await apiGet("/lots?status=BLOCKED&pageSize=50")).lots ?? [];
-  LOTE_BLOQUEADO_MP = bloqueados.find((l) => Number(l.onHand) > 0)?.code ?? bloqueados[0]?.code ?? null;
+  const bloqueado = bloqueados.find((l) => Number(l.onHand) > 0) ?? bloqueados[0] ?? null;
+  LOTE_BLOQUEADO_MP = bloqueado?.code ?? null;
+  ITEM_DO_LOTE_BLOQUEADO = bloqueado
+    ? `${bloqueado.itemCode ?? bloqueado.item?.code ?? "item desconhecido"} com ${bloqueado.onHand}`
+    : null;
 
-  const todos = (await apiGet("/lots?pageSize=200")).lots ?? [];
-  LOTE_OUTRO_PRODUTO =
-    todos.find((l) => l.itemId !== itemPaId && Number(l.onHand) > 0 && l.status === "AVAILABLE")?.code ??
-    null;
+  const todos = (await apiGet("/lots?pageSize=100")).lots ?? [];
+  const outro =
+    todos.find((l) => l.itemId !== itemPaId && Number(l.onHand) > 0 && l.status === "AVAILABLE") ?? null;
+  LOTE_OUTRO_PRODUTO = outro?.code ?? null;
+  ITEM_DO_LOTE_OUTRO_PRODUTO = outro?.itemCode ?? outro?.item?.code ?? null;
   return { LOTE_BLOQUEADO_MP, LOTE_OUTRO_PRODUTO };
 }
 
@@ -751,8 +788,141 @@ async function caminhoProibido(caso, { pre, acao, esperado, invariante }, tentat
 const hoje = () => new Date().toISOString().slice(0, 10);
 const daquiDias = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 
+/**
+ * Estrutura de custos ativa + cálculo salvo, tudo pela interface.
+ *
+ * Cada passo é condicional: numa retomada a estrutura já existe e o objetivo
+ * é chegar ao estado, não repetir o clique.
+ */
+async function montarCadeiaDeCusto() {
+  if (await existeBotao("Criar estrutura de custos")) {
+    await clicarBotao("Criar estrutura de custos");
+    await page.waitForTimeout(1500);
+    if ((await page.locator(".confirm-dialog").count()) > 0) {
+      await confirmarDialogoFlexivel(["Criar", "Criar estrutura"]);
+    }
+    await page.waitForTimeout(1500);
+  }
+
+  if (await existeBotao("Ativar estrutura")) {
+    await clicarBotao("Ativar estrutura");
+    await page.waitForTimeout(1200);
+    if ((await page.locator(".confirm-dialog").count()) > 0) {
+      // Com massa mínima a estrutura tem pendências, e o domínio exige
+      // confirmação explícita para ativar assim — o caminho certo.
+      const titulo = await confirmarDialogoFlexivel(["Ativar assim mesmo", "Ativar"]);
+      anotar(`ESTRUTURA · ativação confirmada em "${titulo}"`);
+    }
+    await page.waitForTimeout(1800);
+  }
+
+  if (await existeBotao("Calcular custo")) {
+    await clicarBotao("Calcular custo");
+    await page.waitForTimeout(2500);
+  }
+
+  if (await existeBotao("Salvar cálculo")) {
+    await clicarBotao("Salvar cálculo");
+    await page.waitForTimeout(1000);
+    const titulo = await confirmarDialogoFlexivel(["Salvar assim mesmo", "Salvar"]);
+    anotar(`CÁLCULO · salvo em "${titulo}"`);
+  }
+
+  /*
+   * Espera pelo ESTADO, nao pelo relogio.
+   *
+   * Salvar navega sozinho para a tela do calculo (`/calculos-custo/:id`), e o
+   * botao "Criar precificacao" so existe na LINHA do calculo, na tela de
+   * custos do produto. Conferir o botao logo depois do clique media a
+   * latencia da rede e a corrida com essa navegacao — a suite ja acusou
+   * "botao ausente" com o calculo salvo e visivel na API. A condicao de
+   * parada e o registro salvo, e a tela e recarregada ate refleti-lo.
+   */
+  for (let volta = 0; volta < 6; volta += 1) {
+    const salvos = (await apiGet(`/products/${S.dados.produto.id}/cost-calculations`)).calculations ?? [];
+    if (salvos.length === 0) {
+      await page.waitForTimeout(1200);
+      continue;
+    }
+    await abrir(`/produtos/${S.dados.produto.id}/custos`, { espera: ".doc-title h1" });
+    const apareceu = await page
+      .getByRole("button", { name: "Criar precificação", exact: true })
+      .first()
+      .waitFor({ state: "visible", timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
+    if (apareceu) return;
+  }
+}
+
+/**
+ * Deixa UMA faixa do rascunho de precificação aberto na tela com a
+ * quantidade e o preço pedidos — pela tela, sempre.
+ *
+ * Uma versão nova de precificação nasce COPIANDO as faixas da anterior. Só
+ * "adicionar se não existe" nunca corrige um preço herdado: a faixa já está
+ * lá, com o valor da versão anterior. Por isso a faixa com preço divergente
+ * é removida pelo menu da própria linha antes de ser recadastrada — é o
+ * mesmo caminho que o marco 8 usa para trocar a vigente, e agora os dois
+ * compartilham a regra em vez de repeti-la com dois comportamentos.
+ */
+async function ajustarFaixaDoRascunho(produtoId, faixa) {
+  const faixasDoRascunho = async () =>
+    ((await apiGet(`/products/${produtoId}/pricing`)).draft?.tiers ?? []).map((t) => ({
+      quantidade: t.quantity,
+      preco: t.selectedUnitPrice,
+    }));
+
+  const existente = (await faixasDoRascunho()).find((t) => num(t.quantidade) === faixa.quantidade);
+  if (existente && perto(existente.preco, faixa.preco, 0.000001)) {
+    anotar(`PRECIFICAÇÃO · faixa de ${faixa.quantidade} un já estava a R$ ${existente.preco}`);
+    return existente;
+  }
+
+  if (existente) {
+    /*
+     * O rótulo do menu vem de `formatQuantity`, que NÃO agrupa milhar — é
+     * decisão do produto, para que a quantidade possa ser copiada de volta
+     * num campo decimal. O roteiro procurava "faixa de 1.000" e nunca achava
+     * o menu da última faixa: a de 1000 un ficava com o preço da versão
+     * anterior e a troca de precificação saía pela metade, em silêncio.
+     * `\s` no fim é o que impede "100" de casar com "1000".
+     */
+    const menu = page.getByRole("button", {
+      name: new RegExp(`Mais ações da faixa de ${faixa.quantidade}\\s`),
+    });
+    if ((await menu.count()) === 0) {
+      anotar(`PRECIFICAÇÃO · a faixa de ${faixa.quantidade} un não tem menu de ações`);
+      return existente;
+    }
+    await menu.first().click();
+    await page.waitForTimeout(600);
+    // Os itens do menu são `role="menuitem"`, nunca `button`.
+    const remover = page.getByRole("menuitem", { name: "Remover faixa", exact: true });
+    if ((await remover.count()) === 0) {
+      anotar(`PRECIFICAÇÃO · o menu da faixa de ${faixa.quantidade} un abriu sem "Remover faixa"`);
+      return existente;
+    }
+    await remover.first().click();
+    await page.waitForTimeout(1000);
+    await confirmarDialogoFlexivel(["Remover faixa", "Remover", "Confirmar"]);
+    await page.waitForTimeout(1600);
+  }
+
+  await preencher("#tier-quantity", String(faixa.quantidade));
+  await selecionar("#tier-mode", "MANUAL_PRICE");
+  await page.waitForTimeout(250);
+  await preencher("#tier-commission", COMISSAO);
+  const separador = await preencherDecimal("#tier-price", faixa.preco);
+  await clicarBotao("Adicionar faixa");
+  await page.waitForTimeout(1600);
+  const criada = (await faixasDoRascunho()).find((t) => num(t.quantidade) === faixa.quantidade);
+  if (criada) anotar(`PRECIFICAÇÃO · faixa de ${faixa.quantidade} un gravada (separador: ${separador})`);
+  return criada ?? null;
+}
+
 // ══════════════════════════════════════════════════════════════════════════
-// MARCO 1 · Massa: liberar o produto acabado e montar a precificação real
+// MARCO 1 · Massa: produto acabado produzido sob encomenda + precificação
 // ══════════════════════════════════════════════════════════════════════════
 async function marco01MassaEPrecificacao() {
   const daProducao = consultar("production") ?? {};
@@ -795,51 +965,83 @@ async function marco01MassaEPrecificacao() {
   if (advItem) S.dados.itemPaAdv = { id: advItem.itemId, code: advItem.itemCode };
   salvarEstado();
 
-  // ── Liberação do lote de produto acabado, pela tela ────────────────────
-  const antesLote = await lerLotesDoItem(S.dados.itemPa.id);
-  const pendente = antesLote.find((l) => l.status === "AWAITING_RELEASE");
-  if (pendente) {
-    await abrir(`/estoque/lotes/${pendente.id}`, { espera: ".doc-title h1" });
-    const situacaoAntes = await texto(".doc-title .badge");
-    if (await existeBotao("Liberar")) {
-      await clicarBotao("Liberar");
-      await confirmarDialogo("Liberar");
-      await page.waitForTimeout(1800);
-    }
-    const depoisLote = await lerLotesDoItem(S.dados.itemPa.id);
-    const liberado = depoisLote.find((l) => l.id === pendente.id);
-    registrarCaso("MASSA · liberação do lote de produto acabado", {
-      pre: `${ITEM_PA_CODE}/${pendente.code} com ${pendente.onHand} un em ${situacaoAntes}, disponível ${pendente.available}`,
-      acao: "Estoque › Lotes › Liberar, pela tela de Qualidade do lote",
-      esperado: "status AVAILABLE e a quantidade passa a contar como disponível",
-      real: `${liberado?.status} · disponível ${liberado?.available}`,
-      invariante: "liberação não cria movimento de estoque — só muda elegibilidade",
-      veredito: liberado?.status === "AVAILABLE" ? "PASS" : "FAIL",
-    });
-    check(
-      `MASSA · ${pendente.code} foi liberado e ficou disponível`,
-      liberado?.status === "AVAILABLE" && num(liberado.available) > 0,
-      JSON.stringify(liberado),
-    );
-  }
-
+  /*
+   * A PRÉ-CONDIÇÃO desta onda não é estoque livre — é capacidade de
+   * PRODUZIR.
+   *
+   * A versão anterior exigia `PEDIDO_A_QTD + PEDIDO_B_QTD` un de produto
+   * acabado disponíveis, herdadas de outra suíte. Isso amarrava o
+   * faturamento a um substrato de demonstração que não existe mais: a suíte
+   * de produção reserva as 800 un que produz nos próprios pedidos dela, por
+   * desenho. O que o faturamento precisa é de estoque RESERVADO AOS PEDIDOS
+   * DELE, e cada pedido desta onda traz o seu pela cadeia comercial —
+   * plano em Produzir, OP, separação, consumo, apontamento.
+   *
+   * O que tem de ser verdade aqui é só o que a produção exige: formulação
+   * ativa e material disponível para a receita.
+   */
   const lotes = await lerLotesDoItem(S.dados.itemPa.id);
   const disponivel = lotes.reduce((a, l) => a + num(l.available), 0);
+  const formulacoes = await apiGet(`/products/${S.dados.produto.id}/formulations`);
+  const ativa = (formulacoes.versions ?? []).find((v) => v.status === "ACTIVE") ?? null;
   check(
-    `MASSA · há produto acabado livre suficiente (${PEDIDO_A_QTD} + ${PEDIDO_B_QTD} un)`,
-    disponivel >= PEDIDO_A_QTD + PEDIDO_B_QTD,
-    `disponível=${disponivel}`,
+    "MASSA · o produto tem formulação ATIVA — é o que permite produzir sob encomenda",
+    Boolean(ativa),
+    JSON.stringify((formulacoes.versions ?? []).map((v) => `${v.versionLabel}/${v.status}`)),
   );
-  S.dados.lotePa = lotes.find((l) => num(l.onHand) > 0) ?? null;
+  if (ativa) {
+    const receita = (ativa.components ?? []).map((c) => ({
+      code: c.itemCode,
+      itemId: c.itemId,
+      porUnidade: num(c.stockEquivalentQuantity) / num(ativa.basisQuantity),
+    }));
+    const precisa = PEDIDO_A_QTD + PEDIDO_B_QTD;
+    const faltando = [];
+    for (const componente of receita) {
+      const lotesMp = await lerLotesDoItem(componente.itemId);
+      const livre = lotesMp.reduce((a, l) => a + num(l.available), 0);
+      const necessario = componente.porUnidade * precisa;
+      if (livre < necessario) faltando.push(`${componente.code}: livre ${livre} < necessário ${necessario}`);
+    }
+    check(
+      `MASSA · há material livre para produzir as ${precisa} un dos dois pedidos`,
+      faltando.length === 0,
+      faltando.join(" · "),
+    );
+    numero("massa.receitaPorUnidade", receita.map((c) => `${c.code}=${c.porUnidade}`));
+  }
+  anotar(
+    `MASSA · produto acabado livre agora: ${disponivel} un — a onda não depende disso, cada pedido produz o que vai expedir`,
+  );
   numero("massa.disponivelInicialPa", disponivel);
   salvarEstado();
 
   // ── Precificação vindo do cálculo real, pela tela ──────────────────────
+  /*
+   * A vigente só serve se tiver as faixas NOS PREÇOS desta onda.
+   *
+   * Bastava contar cinco faixas. Numa base onde o marco 8 já rodou, a
+   * vigente do produto é a V2 a R$ 9,99 — cinco faixas, todas com o preço
+   * errado — e a suíte a reaproveitava. O pedido A nascia a 9,99 e a
+   * asserção do centavo quebrado falhava como se o produto tivesse mudado
+   * o preço acordado. O que importa é o VALOR da faixa, não a contagem.
+   */
   const carteira = await apiGet(`/products/${S.dados.produto.id}/pricing`);
-  if (carteira.current && (carteira.current.tiers ?? []).length >= FAIXAS.length) {
-    anotar(`PRECIFICAÇÃO · ${carteira.current.label} já ativa com as faixas — cadastro pulado`);
+  const faixaBate = (tiers, faixa) =>
+    (tiers ?? []).some(
+      (t) => num(t.quantity) === faixa.quantidade && perto(t.selectedUnitPrice, faixa.preco, 0.000001),
+    );
+  if (carteira.current && FAIXAS.every((f) => faixaBate(carteira.current.tiers, f))) {
+    anotar(`PRECIFICAÇÃO · ${carteira.current.label} já ativa com as faixas e os preços — cadastro pulado`);
     await conferirPrecificacaoVigente();
     return;
+  }
+  if (carteira.current) {
+    anotar(
+      `PRECIFICAÇÃO · ${carteira.current.label} está ativa com outros preços (${(carteira.current.tiers ?? [])
+        .map((t) => `${t.quantity}=${t.selectedUnitPrice}`)
+        .join(" ")}) — esta onda abre uma versão nova`,
+    );
   }
 
   if (carteira.draft) {
@@ -847,6 +1049,21 @@ async function marco01MassaEPrecificacao() {
     await abrir(`/gestao/precificacao/${carteira.draft.id}`, { espera: ".doc-title h1" });
   } else {
     await abrir(`/produtos/${S.dados.produto.id}/custos`, { espera: ".doc-title h1" });
+    /*
+     * A CADEIA DE CUSTO, montada pela tela.
+     *
+     * "Criar precificação" nasce de um CALCULO SALVO, e o botao aparece por
+     * linha de calculo. O substrato de demonstracao ja trazia um
+     * (`CALC-000002`), entao a suite pulava direto para o preco — e numa base
+     * recem-criada nao ha calculo nenhum, e o botao simplesmente nao existe.
+     *
+     * Montar a cadeia aqui e o que torna a suite independente do substrato:
+     * estrutura de custos, ativacao, calculo e salvamento, cada passo pela
+     * interface. Com massa minima o calculo sai INCOMPLETO, e salvar assim
+     * pede confirmacao propria — o que exercita, de graca, a regra de que
+     * congelar custo incompleto e decisao explicita e nunca silenciosa.
+     */
+    await montarCadeiaDeCusto();
     if (!(await existeBotao("Criar precificação"))) {
       check("PRECIFICAÇÃO · a tela de custos oferece criar precificação", false, "botão ausente");
       return;
@@ -860,26 +1077,10 @@ async function marco01MassaEPrecificacao() {
   }
   await page.waitForTimeout(1500);
 
-  const faixasDoRascunho = async () =>
-    ((await apiGet(`/products/${S.dados.produto.id}/pricing`)).draft?.tiers ?? []).map((t) => ({
-      quantidade: t.quantity,
-      preco: t.selectedUnitPrice,
-    }));
   for (const faixa of FAIXAS) {
-    if ((await faixasDoRascunho()).some((t) => num(t.quantidade) === faixa.quantidade)) {
-      anotar(`PRECIFICAÇÃO · faixa de ${faixa.quantidade} un já estava na tabela`);
-      continue;
-    }
-    await preencher("#tier-quantity", String(faixa.quantidade));
-    await selecionar("#tier-mode", "MANUAL_PRICE");
-    await page.waitForTimeout(250);
-    await preencher("#tier-commission", COMISSAO);
-    const separador = await preencherDecimal("#tier-price", faixa.preco);
-    await clicarBotao("Adicionar faixa");
-    await page.waitForTimeout(1600);
-    const criada = (await faixasDoRascunho()).find((t) => num(t.quantidade) === faixa.quantidade);
+    const criada = await ajustarFaixaDoRascunho(S.dados.produto.id, faixa);
     check(
-      `PRECIFICAÇÃO · faixa de ${faixa.quantidade} un a R$ ${faixa.preco} cadastrada (separador: ${separador})`,
+      `PRECIFICAÇÃO · faixa de ${faixa.quantidade} un a R$ ${faixa.preco} cadastrada`,
       Boolean(criada) && perto(criada.preco, faixa.preco, 0.000001),
       `${JSON.stringify(criada)} · ${JSON.stringify(await mensagensDeErro())}`,
     );
@@ -1087,17 +1288,339 @@ async function aprovarProjetoEGerarPedido(projeto, chave) {
   return registro;
 }
 
-/** Aplica o Plano de Atendimento — o pedido só fica expedível depois disso. */
-async function aplicarPlano(pedido) {
+/**
+ * Aplica o Plano de Atendimento pedindo PRODUZIR a quantidade inteira.
+ *
+ * O plano nasce propondo reservar o que houver de estoque livre. Aqui o campo
+ * "Produzir" é forçado à quantidade pedida — a tela recalcula "Reservar" como
+ * complemento, e o plano fecha com zero reservado. É o caminho que faz o
+ * pedido trazer o próprio estoque, em vez de depender do que outra suíte
+ * deixou solto.
+ */
+async function aplicarPlano(pedido, quantidade) {
+  const antes = await lerPedido(pedido.id);
+  if (antes.status !== "CONFIRMED") return antes;
+
   await abrir(pedido.url, { espera: ".doc-title h1" });
   await page.waitForTimeout(2500);
-  if (await existeBotao("Aplicar Plano de Atendimento")) {
-    await clicarBotao("Aplicar Plano de Atendimento");
+
+  const produzir = page.locator(`input[aria-label="Produzir de ${S.dados.produto.code}"]`).first();
+  await produzir.waitFor({ state: "visible", timeout: 25000 });
+  await produzir.fill(String(quantidade));
+  await page.waitForTimeout(600);
+  const reservar = page.locator(`input[aria-label="Reservar de ${S.dados.produto.code}"]`).first();
+  const reservaProposta = (await reservar.count()) > 0 ? await reservar.inputValue() : "?";
+  anotar(`PLANO ${pedido.chave} · produzir=${quantidade} · reservar recalculado pela tela=${reservaProposta}`);
+
+  const botao = page.getByRole("button", { name: "Aplicar Plano de Atendimento", exact: true });
+  if ((await botao.count()) > 0 && !(await botao.first().isDisabled())) {
+    await botao.first().click();
     await confirmarDialogo("Aplicar Plano");
     await page.waitForTimeout(3200);
+  } else {
+    anotar(`PLANO ${pedido.chave} · botão indisponível: ${JSON.stringify(await mensagensDeErro())}`);
   }
+  return lerPedido(pedido.id);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Ordem de Produção — a massa de produto acabado desta onda
+// ══════════════════════════════════════════════════════════════════════════
+/**
+ * Confirma um `ModalDialog`.
+ *
+ * O `ModalDialog` reusa a MESMA casca `.confirm-dialog` do `ConfirmDialog`,
+ * com `role="alertdialog"`. O escopo importa: "Concluir OP" existe duas vezes
+ * na página — rodapé e diálogo — e clicar fora do escopo reabre o diálogo em
+ * vez de confirmar.
+ */
+async function confirmarModal(textoBotao, { timeout = 20000 } = {}) {
+  const dialogo = page.locator(".confirm-dialog");
+  await dialogo.waitFor({ state: "visible", timeout });
+  const alvo = dialogo.getByRole("button", { name: textoBotao, exact: true }).first();
+  await alvo.waitFor({ state: "visible", timeout });
+  await alvo.click();
+  await page.waitForTimeout(1400);
+}
+
+const lerOp = async (id) => apiGet(`/production-orders/${id}`);
+
+/** Linhas de reserva ainda válidas (as substituídas no picking não contam). */
+const linhasAtivasDaOp = (op) => (op.reservation?.lines ?? []).filter((l) => l.releasedAt === null);
+
+async function abrirLote(lotId) {
+  await abrir(`/estoque/lotes/${lotId}`, { espera: ".doc-title h1" });
+}
+
+/** Qualidade › Liberar, lote a lote, pela tela do próprio lote. */
+async function liberarLotesPendentes(itemId) {
+  const lotes = await lerLotesDoItem(itemId);
+  const aguardando = lotes.filter((l) => l.status === "AWAITING_RELEASE");
+  for (const lote of aguardando) {
+    await abrirLote(lote.id);
+    if (!(await existeBotao("Liberar"))) continue;
+    await clicarBotao("Liberar");
+    await confirmarDialogo("Liberar");
+    await page.waitForTimeout(1400);
+  }
+  return aguardando.map((l) => l.code);
+}
+
+async function abrirScannerDaLinha(opUrl, lotCode) {
+  await abrir(opUrl, { espera: ".doc-title h1" });
+  const linha = page
+    .locator("section.form-section", { has: page.locator("h3", { hasText: "Picking" }) })
+    .locator("table tbody tr")
+    .filter({ hasText: lotCode })
+    .first();
+  const botao = linha.getByRole("button", { name: "Escanear / Informar lote", exact: true });
+  if ((await botao.count()) === 0) return false;
+  await botao.click();
+  await page.waitForTimeout(700);
+  return (await page.locator("#lot-scanner-manual").count()) > 0;
+}
+
+async function informarLote(codigo) {
+  await preencher("#lot-scanner-manual", codigo);
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+  await page.waitForTimeout(1800);
+}
+
+/** Confere fisicamente cada linha de separação, pela tela da OP. */
+async function separarOp(registro) {
+  for (let volta = 0; volta < 10; volta += 1) {
+    const op = await lerOp(registro.id);
+    const pendente = linhasAtivasDaOp(op).find((l) => l.pickingStatus !== "CONFIRMED");
+    if (!pendente) return true;
+    if (!pendente.lotCode) {
+      await abrir(registro.url, { espera: ".doc-title h1" });
+      const linha = page
+        .locator("section.form-section", { has: page.locator("h3", { hasText: "Picking" }) })
+        .locator("table tbody tr")
+        .filter({ hasText: pendente.itemCode })
+        .first();
+      await linha.getByRole("button", { name: "Confirmar separação", exact: true }).click();
+      await page.waitForTimeout(2000);
+      continue;
+    }
+    if (!(await abrirScannerDaLinha(registro.url, pendente.lotCode))) return false;
+    await informarLote(pendente.lotCode);
+  }
+  return false;
+}
+
+/** Consome o reservado de cada linha, pela tela da OP. */
+async function consumirOp(registro) {
+  for (let volta = 0; volta < 10; volta += 1) {
+    const op = await lerOp(registro.id);
+    const pendente = linhasAtivasDaOp(op).find(
+      (l) => l.pickingStatus === "CONFIRMED" && num(l.remainingQuantity) > 0,
+    );
+    if (!pendente) return true;
+    await abrir(registro.url, { espera: ".doc-title h1" });
+    const linha = page
+      .locator("section.form-section")
+      .filter({ has: page.locator("h3", { hasText: "Consumo Real" }) })
+      .locator("table tbody tr")
+      .filter({ hasText: pendente.lotCode ?? pendente.itemCode })
+      .first();
+    await linha.locator('input[inputmode="decimal"]').first().fill(String(pendente.remainingQuantity));
+    await page.waitForTimeout(300);
+    await linha.getByRole("button", { name: "Confirmar consumo", exact: true }).click();
+    await page.waitForTimeout(2800);
+  }
+  return false;
+}
+
+/**
+ * Leva a Ordem de Produção gerada pelo plano do Rascunho até Concluída, toda
+ * pela interface: Planejar → Liberar → Separação → Consumo → Apontamento →
+ * Conclusão. Cada passo lê o estado antes de agir, então uma retomada
+ * continua de onde parou em vez de repetir o clique.
+ */
+async function executarOp(registro, quantidade, chave) {
+  await abrir(registro.url, { espera: ".doc-title h1" });
+  if (await existeBotao("Planejar OP")) {
+    await clicarBotao("Planejar OP");
+    await page.waitForTimeout(2800);
+  }
+  let op = await lerOp(registro.id);
+  if (
+    !check(
+      `OP ${chave} · Rascunho → Planejada pela tela`,
+      ["PLANNED", "RELEASED", "IN_PRODUCTION", "COMPLETED"].includes(op.status),
+      `${op.status} · ${JSON.stringify(await mensagensDeErro())}`,
+    )
+  ) {
+    return null;
+  }
+
+  if (op.status === "PLANNED") {
+    await abrir(registro.url, { espera: ".doc-title h1" });
+    if (await existeBotao("Liberar OP")) {
+      const botao = page.getByRole("button", { name: "Liberar OP", exact: true }).first();
+      if (await botao.isDisabled()) {
+        check(`OP ${chave} · há material suficiente para liberar`, false, JSON.stringify(await mensagensDeErro()));
+        return null;
+      }
+      await botao.click();
+      await confirmarDialogo("Liberar");
+      await page.waitForTimeout(3000);
+    }
+    op = await lerOp(registro.id);
+  }
+  if (
+    !check(
+      `OP ${chave} · Planejada → Liberada pela tela (material reservado)`,
+      ["RELEASED", "IN_PRODUCTION", "COMPLETED"].includes(op.status),
+      `${op.status} · ${JSON.stringify(await mensagensDeErro())}`,
+    )
+  ) {
+    return null;
+  }
+
+  if (op.status !== "COMPLETED") {
+    if (!check(`OP ${chave} · separação conferida em todas as linhas`, await separarOp(registro), "")) return null;
+    if (!check(`OP ${chave} · consumo real registrado em todas as linhas`, await consumirOp(registro), "")) return null;
+  }
+
+  op = await lerOp(registro.id);
+  if (num(op.producedQuantity) < quantidade) {
+    await abrir(registro.url, { espera: ".doc-title h1" });
+    await preencher("#output-quantity", String(quantidade - num(op.producedQuantity)));
+    await preencher("#output-business-lot", `${P}-${chave}`);
+    if ((await page.locator("#output-expiry").count()) > 0) {
+      await preencher("#output-expiry", daquiDias(730));
+    }
+    await preencher("#output-location", `${P}-PA`);
+    await clicarBotao("Registrar produção");
+    await page.waitForTimeout(3500);
+    op = await lerOp(registro.id);
+  }
+  if (
+    !check(
+      `OP ${chave} · apontamento de produção de ${quantidade} un`,
+      perto(op.producedQuantity, quantidade),
+      `${op.producedQuantity} · ${JSON.stringify(await mensagensDeErro())}`,
+    )
+  ) {
+    return null;
+  }
+
+  if (op.status === "IN_PRODUCTION") {
+    await abrir(registro.url, { espera: ".doc-title h1" });
+    const botao = page.getByRole("button", { name: "Concluir OP", exact: true }).first();
+    if ((await botao.count()) > 0 && !(await botao.isDisabled())) {
+      await botao.click();
+      await page.waitForTimeout(900);
+      await confirmarModal("Concluir OP");
+      await page.waitForTimeout(3000);
+    }
+    op = await lerOp(registro.id);
+  }
+  check(
+    `OP ${chave} · Concluída`,
+    op.status === "COMPLETED",
+    `${op.status} · ${JSON.stringify(await mensagensDeErro())}`,
+  );
+  return op;
+}
+
+/**
+ * O pedido traz o próprio estoque: plano em PRODUZIR, a OP inteira pela tela,
+ * liberação do lote pela Qualidade e a reserva explícita no pedido.
+ *
+ * "Produto produzido depois do Plano precisa ser explicitamente reservado
+ * antes de poder ser expedido" — é o que a própria tela do pedido diz, e é o
+ * último elo antes da expedição.
+ */
+async function produzirParaOPedido(pedido, quantidade, chave) {
+  const depoisDoPlano = await aplicarPlano(pedido, quantidade);
+  check(
+    `PEDIDO ${chave} · ficou Em atendimento após aplicar o plano`,
+    depoisDoPlano.status === "IN_FULFILLMENT",
+    depoisDoPlano.status,
+  );
+  const reservaNoPlano = (depoisDoPlano.reservation?.lines ?? []).reduce((a, l) => a + num(l.quantity), 0);
+  check(
+    `PEDIDO ${chave} · o plano NÃO reservou nada — a cobertura inteira foi para produção`,
+    reservaNoPlano === 0,
+    JSON.stringify((depoisDoPlano.reservation?.lines ?? []).map((l) => `${l.lotCode}:${l.quantity}`)),
+  );
+  const ops = depoisDoPlano.generatedProductionOrders ?? [];
+  if (
+    !check(
+      `PEDIDO ${chave} · o plano gerou exatamente uma Ordem de Produção de ${quantidade} un`,
+      ops.length === 1 && perto(ops[0].plannedQuantity, quantidade),
+      JSON.stringify(ops.map((o) => `${o.code}/${o.plannedQuantity}`)),
+    )
+  ) {
+    return null;
+  }
+
+  S.dados.ops = S.dados.ops ?? {};
+  S.dados.ops[chave] = { chave, id: ops[0].id, code: ops[0].code, url: `/producao/ordens/${ops[0].id}` };
+  salvarEstado();
+
+  const op = await executarOp(S.dados.ops[chave], quantidade, chave);
+  if (!op) return null;
+
+  // ── Qualidade libera o lote produzido ───────────────────────────────────
+  const liberados = await liberarLotesPendentes(S.dados.itemPa.id);
+  const lotes = await lerLotesDoItem(S.dados.itemPa.id);
+  const disponivel = lotes.reduce((a, l) => a + num(l.available), 0);
+  const loteDaOp = lotes.find((l) => (op.outputs ?? []).some((o) => o.lotCode === l.code)) ?? null;
+  registrarCaso(`MASSA ${chave} · o pedido produz o próprio estoque`, {
+    pre: `${S.dados.produto.code} sem produto acabado livre (disponível 0 antes do plano)`,
+    acao: `plano em PRODUZIR ${quantidade} un → ${S.dados.ops[chave].code} liberada, separada, consumida, apontada e concluída → Qualidade libera o lote`,
+    esperado: `${quantidade} un disponíveis no lote novo, prontas para reserva comercial`,
+    real: `lote ${loteDaOp?.code ?? "—"} · ${loteDaOp?.onHand ?? 0} un · ${loteDaOp?.status} · disponível do item ${disponivel}`,
+    invariante: "produto acabado só nasce de apontamento de produção; liberar não movimenta estoque",
+    veredito: loteDaOp?.status === "AVAILABLE" && perto(loteDaOp?.onHand, quantidade) ? "PASS" : "FAIL",
+  });
+  check(
+    `MASSA ${chave} · o lote produzido foi liberado pela Qualidade (${liberados.join(", ") || "nenhum pendente"})`,
+    loteDaOp?.status === "AVAILABLE" && num(loteDaOp.available) > 0,
+    JSON.stringify(lotes.map((l) => `${l.code}/${l.status}/${l.available}`)),
+  );
+  if (!loteDaOp) return null;
+  S.dados.lotePa = loteDaOp;
+  salvarEstado();
+
+  // ── Reserva explícita do que acabou de ser produzido ────────────────────
   const ped = await lerPedido(pedido.id);
-  return ped;
+  const jaReservado = (ped.reservation?.lines ?? []).reduce((a, l) => a + num(l.quantity), 0);
+  if (jaReservado < quantidade) {
+    await abrir(pedido.url, { espera: ".doc-title h1" });
+    await page.waitForTimeout(1800);
+    const campo = page.locator(`input[aria-label="Reservar de ${S.dados.produto.code}"]`).first();
+    await campo.waitFor({ state: "visible", timeout: 25000 });
+    await campo.fill(String(quantidade - jaReservado));
+    await page.waitForTimeout(400);
+    const botao = page.getByRole("button", { name: "Reservar disponível", exact: true }).first();
+    if (await botao.isDisabled()) {
+      check(`PEDIDO ${chave} · a tela habilita reservar o produzido`, false, JSON.stringify(await mensagensDeErro()));
+      return null;
+    }
+    await botao.click();
+    await page.waitForTimeout(3000);
+  }
+
+  const final = await lerPedido(pedido.id);
+  const reservado = (final.reservation?.lines ?? []).reduce((a, l) => a + num(l.quantity), 0);
+  check(
+    `PEDIDO ${chave} · as ${quantidade} un produzidas ficaram reservadas ao pedido`,
+    perto(reservado, quantidade),
+    JSON.stringify((final.reservation?.lines ?? []).map((l) => `${l.lotCode}:${l.quantity}`)),
+  );
+  numero(`massa.${chave}`, {
+    op: S.dados.ops[chave].code,
+    lote: loteDaOp.code,
+    produzido: op.producedQuantity,
+    reservadoNoPedido: reservado,
+  });
+  salvarEstado();
+  return final;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1149,19 +1672,7 @@ async function marco02PedidoA() {
   );
   await shot("adv-billing-pedido-preco-acordado");
 
-  const depois = await aplicarPlano(pedido);
-  check("PEDIDO A · ficou Em atendimento após aplicar o plano", depois.status === "IN_FULFILLMENT", depois.status);
-  const reserva = depois.reservation?.lines ?? [];
-  check(
-    `PEDIDO A · o plano reservou as ${PEDIDO_A_QTD} un do estoque livre (nada a produzir)`,
-    reserva.reduce((a, l) => a + num(l.quantity), 0) === PEDIDO_A_QTD,
-    JSON.stringify(reserva.map((l) => `${l.lotCode}:${l.quantity}`)),
-  );
-  check(
-    "PEDIDO A · nenhuma OP foi criada — havia estoque",
-    (depois.generatedProductionOrders ?? []).length === 0,
-    JSON.stringify((depois.generatedProductionOrders ?? []).map((o) => o.code)),
-  );
+  await produzirParaOPedido(pedido, PEDIDO_A_QTD, "A");
   salvarEstado();
 }
 
@@ -1392,11 +1903,12 @@ async function marco04NegativosExpedicao() {
     `LOTE DE OUTRO PRODUTO · conferir ${LOTE_OUTRO_PRODUTO} numa linha de ${ITEM_PA_CODE}`,
     {
       pre: `expedição em rascunho com a linha do lote ${lote} (${ITEM_PA_CODE})`,
-      acao: `informar na conferência o lote ${LOTE_OUTRO_PRODUTO}, que é de PA-000365 (outro produto, outro cliente)`,
+      acao: `informar na conferência o lote ${LOTE_OUTRO_PRODUTO}, que é de ${ITEM_DO_LOTE_OUTRO_PRODUTO} — outro item, nunca reservado a esta linha`,
       esperado: "conferência recusada; a linha continua não conferida e nada sai",
       invariante: "conferência física só aceita o lote reservado àquela linha",
     },
     async () => {
+      if (!LOTE_OUTRO_PRODUTO) return "não há na base lote de outro item com saldo para o caso";
       const linha = page.locator("div.shipment-product table tbody tr").first();
       const campo = linha.getByLabel(`Lote conferido da linha ${lote}`);
       if ((await campo.count()) === 0) return "linha já conferida — campo ausente";
@@ -1411,12 +1923,13 @@ async function marco04NegativosExpedicao() {
   await caminhoProibido(
     `LOTE BLOQUEADO · conferir ${LOTE_BLOQUEADO_MP} numa linha de expedição`,
     {
-      pre: `${LOTE_BLOQUEADO_MP} é um lote BLOQUEADO de MP-000327 com 49 kg`,
+      pre: `${LOTE_BLOQUEADO_MP} é um lote BLOQUEADO de ${ITEM_DO_LOTE_BLOQUEADO ?? "outro item"} em estoque`,
       acao: "informar esse lote na conferência da linha de produto acabado",
       esperado: "conferência recusada — nem o produto confere, nem o lote é elegível",
       invariante: "lote bloqueado nunca entra em documento de saída",
     },
     async () => {
+      if (!LOTE_BLOQUEADO_MP) return "não há na base lote BLOQUEADO para o caso";
       const linha = page.locator("div.shipment-product table tbody tr").first();
       const campo = linha.getByLabel(`Lote conferido da linha ${lote}`);
       if ((await campo.count()) === 0) return "linha já conferida — campo ausente";
@@ -1523,10 +2036,19 @@ async function marco04NegativosExpedicao() {
   });
   await abaVelha.close();
 
+  /*
+   * O escopo é o LOTE deste pedido, não o item inteiro.
+   *
+   * O item de produto acabado é o mesmo em todas as execuções; contando as
+   * saídas do item, a suíte somava as expedições da execução anterior e
+   * reprovava "duas saídas, nunca três" mostrando cinco — nenhuma delas
+   * indevida. O que a invariante afirma é sobre ESTA expedição: o lote que
+   * saiu para o pedido A saiu duas vezes, 40 e 60, e nunca uma terceira.
+   */
   const movimentos = await lerMovimentos(S.dados.itemPa.id);
-  const saidas = movimentos.filter((m) => m.type === "SHIPMENT_OUT");
+  const saidas = movimentos.filter((m) => m.type === "SHIPMENT_OUT" && m.lotCode === lote);
   check(
-    "REENVIO · o item tem exatamente duas saídas (40 e 60), nunca três",
+    `REENVIO · o lote ${lote} tem exatamente duas saídas (${EXPEDIR_1} e ${EXPEDIR_2}), nunca três`,
     saidas.length === 2 && saidas.reduce((a, m) => a + num(m.quantity), 0) === PEDIDO_A_QTD,
     JSON.stringify(saidas.map((m) => `${m.lotCode}:${m.quantity}`)),
   );
@@ -1771,9 +2293,16 @@ async function marco06NegativosFaturamento() {
   );
 
   // ── 6.4 · Faturar pedido CANCELADO ─────────────────────────────────────
-  const cancelado = (await apiGet("/customer-orders?pageSize=100")).customerOrders.find(
-    (o) => o.status === "CANCELLED",
-  );
+  /*
+   * Cancelado DESTA execução primeiro — a suíte de produção cancela um
+   * pedido do mesmo cliente, de propósito. Pegar o primeiro cancelado da
+   * base inteira reencontrava massa de outra execução; a base pode não ter
+   * nenhum, e aí o caso simplesmente não roda.
+   */
+  const todosPedidos = (await apiGet("/customer-orders?pageSize=100")).customerOrders;
+  const cancelados = todosPedidos.filter((o) => o.status === "CANCELLED");
+  const cancelado =
+    cancelados.find((o) => o.customerId === S.dados.produto.customerId) ?? cancelados[0] ?? null;
   if (cancelado) {
     await caminhoProibido(
       `FATURAR PEDIDO CANCELADO · ${cancelado.code}`,
@@ -1843,9 +2372,9 @@ async function marco07PedidoB() {
   });
 
   anotar(
-    "CONTROLE · o pedido A foi expedido e faturado em duas partes com uma troca de VERSÃO de precificação no meio " +
-      "(PREC-000219 V1 → PREC-000220 V2), mas os valores das faixas não mudaram nessa troca — serve como controle de " +
-      "identidade de versão, não como prova de preço. A prova de valor é o pedido B",
+    `CONTROLE · o pedido A foi expedido e faturado em duas partes sob a precificação ${vigenteAgora?.label ?? "(nenhuma)"}; ` +
+      "a troca de VERSÃO que prova preço histórico acontece no marco 8, entre o pedido B nascer e ser faturado. " +
+      "O pedido A é controle de identidade de versão, não prova de valor — a prova de valor é o pedido B",
   );
 
   const projeto = await criarProjeto("B", `${P} Preco historico e arredondamento`);
@@ -1885,13 +2414,7 @@ async function marco07PedidoB() {
   });
   await shot("adv-billing-arredondamento-pedido");
 
-  const depoisPlano = await aplicarPlano(pedido);
-  check("PEDIDO B · Em atendimento com a reserva feita", depoisPlano.status === "IN_FULFILLMENT", depoisPlano.status);
-  check(
-    `PEDIDO B · reservou as ${PEDIDO_B_QTD} un`,
-    (depoisPlano.reservation?.lines ?? []).reduce((a, l) => a + num(l.quantity), 0) === PEDIDO_B_QTD,
-    JSON.stringify((depoisPlano.reservation?.lines ?? []).map((l) => `${l.lotCode}:${l.quantity}`)),
-  );
+  await produzirParaOPedido(pedido, PEDIDO_B_QTD, "B");
   salvarEstado();
 }
 
@@ -1922,48 +2445,12 @@ async function marco08TrocaDePrecificacao() {
   }
   await page.waitForTimeout(1800);
 
-  const faixasDoRascunhoV2 = async () =>
-    ((await apiGet(`/products/${produtoId}/pricing`)).draft?.tiers ?? []).map((t) => ({
-      quantidade: t.quantity,
-      preco: t.selectedUnitPrice,
-    }));
+  for (const faixa of FAIXAS_V2) await ajustarFaixaDoRascunho(produtoId, faixa);
 
-  for (const faixa of FAIXAS_V2) {
-    const existente = (await faixasDoRascunhoV2()).find((t) => num(t.quantidade) === faixa.quantidade);
-    if (existente && !perto(existente.preco, faixa.preco, 0.000001)) {
-      const rotuloQtd =
-        faixa.quantidade >= 1000 ? faixa.quantidade.toLocaleString("pt-BR") : String(faixa.quantidade);
-      const menu = page.getByRole("button", {
-        name: new RegExp(`Mais ações da faixa de ${rotuloQtd.replace(".", "\\.")}\\s`),
-      });
-      if ((await menu.count()) > 0) {
-        await menu.first().click();
-        await page.waitForTimeout(600);
-        // Os itens do menu são `role="menuitem"`, nunca `button`.
-        const remover = page.getByRole("menuitem", { name: "Remover faixa", exact: true });
-        if ((await remover.count()) > 0) {
-          await remover.first().click();
-          await page.waitForTimeout(1000);
-          await confirmarDialogoFlexivel(["Remover faixa", "Remover", "Confirmar"]);
-          await page.waitForTimeout(1600);
-        } else {
-          anotar(`TROCA · o menu da faixa de ${faixa.quantidade} un abriu sem "Remover faixa"`);
-        }
-      } else {
-        anotar(`TROCA · a faixa de ${faixa.quantidade} un não tem menu de ações`);
-      }
-    }
-    if ((await faixasDoRascunhoV2()).some((t) => num(t.quantidade) === faixa.quantidade)) continue;
-    await preencher("#tier-quantity", String(faixa.quantidade));
-    await selecionar("#tier-mode", "MANUAL_PRICE");
-    await page.waitForTimeout(250);
-    await preencher("#tier-commission", COMISSAO);
-    await preencherDecimal("#tier-price", faixa.preco);
-    await clicarBotao("Adicionar faixa");
-    await page.waitForTimeout(1600);
-  }
-
-  const rascunhoFinal = await faixasDoRascunhoV2();
+  const rascunhoFinal = ((await apiGet(`/products/${produtoId}/pricing`)).draft?.tiers ?? []).map((t) => ({
+    quantidade: t.quantity,
+    preco: t.selectedUnitPrice,
+  }));
   check(
     `TROCA · o rascunho novo tem a faixa de ${PEDIDO_B_QTD} un a R$ ${FAIXAS_V2[1].preco}`,
     rascunhoFinal.some((t) => num(t.quantidade) === PEDIDO_B_QTD && perto(t.preco, FAIXAS_V2[1].preco, 0.000001)),
@@ -2073,7 +2560,22 @@ async function marco09PrecoHistoricoEArredondamento() {
   });
 
   // ── Preço histórico ────────────────────────────────────────────────────
-  const usouOAcordado = perto(linha.unitPrice, Number(PRECO_QUEBRADO).toFixed(2), 0.0001);
+  /*
+   * O que prova preço histórico é a IGUALDADE com o acordo do pedido, não
+   * uma quantidade de casas decimais.
+   *
+   * A asserção só aceitava `4,05` — o valor cortado em duas casas que a API
+   * devolvia quando este roteiro foi escrito. `formatUnitPrice` passou a
+   * entregar as quatro casas que a coluna guarda, e a suíte reprovava
+   * `4,0531` dizendo que o faturamento não usou o preço do pedido, quando
+   * era exatamente o que ele tinha feito. As duas leituras valem: o valor
+   * cheio e o mesmo valor arredondado ao centavo — as duas são o acordo, e
+   * nenhuma delas é a precificação vigente. É a mesma dupla aceitação que o
+   * marco 5 já fazia.
+   */
+  const usouOAcordado =
+    perto(linha.unitPrice, PRECO_QUEBRADO, 1e-9) ||
+    perto(linha.unitPrice, Number(PRECO_QUEBRADO).toFixed(2), 0.0001);
   const usouONovo = perto(linha.unitPrice, precoVigenteHoje, 0.0001);
   registrarCaso("PREÇO HISTÓRICO · faturar depois de mudar a precificação vigente", {
     pre: `${pedido.code} fechado a R$ ${PRECO_QUEBRADO}; precificação vigente do produto agora vale R$ ${precoVigenteHoje} na mesma faixa de ${PEDIDO_B_QTD} un`,
@@ -2118,8 +2620,12 @@ async function marco09PrecoHistoricoEArredondamento() {
     mesmaExibicao,
     `pedido="${precoNoPedidoTela}" faturamento="${precoExibido}"`,
   );
+  const casasNoFaturamento = String(linha.agreedUnitPrice ?? "").split(".")[1]?.replace(/0+$/, "").length ?? 0;
   anotar(
-    `CONTRATO · o preço acordado sai da API com QUATRO casas no Pedido (${PRECO_QUEBRADO}) e com DUAS no Faturamento (${linha.agreedUnitPrice}); nas duas telas o pt-BR corta em duas casas, então a divergência não aparece entre telas — aparece entre a tela e o total`,
+    `CONTRATO · o preço acordado sai do Pedido com ${PRECO_QUEBRADO} e do Faturamento com ${linha.agreedUnitPrice}` +
+      ` (${casasNoFaturamento} casas significativas); as duas telas exibem "${precoNoPedidoTela}" e "${precoExibido}"` +
+      ` — quando a API corta o preço unitário no centavo e o total é calculado sobre o valor cheio, a divergência não` +
+      " aparece entre telas, aparece entre a tela e o total",
   );
 
   // ── Arredondamento, hipótese 2: o documento fecha na conferência manual ─
@@ -2182,23 +2688,50 @@ async function marco09PrecoHistoricoEArredondamento() {
 
 
 // ══════════════════════════════════════════════════════════════════════════
-// MARCO 10 · Cadeia ADV — expedir e faturar o lote da OP-000659
+// MARCO 10 · Cadeia ADV — expedir e faturar um pedido SEM preço acordado
 // ══════════════════════════════════════════════════════════════════════════
 /**
  * A rastreabilidade só chega a Expedição e Faturamento se o lote produzido
- * pela OP tiver saído. `PED-000485` tem 400 un de `LT-20260903-000803`
- * reservadas desde a onda anterior — é essa a saída que fecha a genealogia.
+ * pela OP tiver saído. A suíte de produção deixa pedidos desta MESMA execução
+ * com produto acabado reservado e sem preço acordado — eles nasceram no
+ * formulário de Pedido, não na cadeia Projeto → Orçamento. Um deles fecha a
+ * genealogia e, de quebra, prova o faturamento sem preço.
  */
 async function marco10CadeiaAdv() {
   /*
-   * Pedido que fecha a genealogia — o que esta EM ATENDIMENTO com reserva do
-   * produto desta execucao, nao o `PED-000485` de uma execucao passada.
+   * Escolha por CARACTERÍSTICA, dentro desta execução: mesmo cliente do
+   * produto que a suíte de produção publicou, com reserva remanescente e sem
+   * preço acordado, e nunca um dos pedidos que ESTA suíte criou.
+   *
+   * Pegar "o primeiro pedido em atendimento" da lista global reencontrava
+   * massa de outra execução — e, pior, podia cair num pedido sem nenhuma
+   * reserva, onde "Preparar Expedição" nasce desabilitado e o roteiro
+   * travava num clique de 30 s que parecia defeito de produto.
    */
+  const meus = new Set(Object.values(S.dados.pedidos ?? {}).map((p) => p.id));
   const pedidos = (await apiGet("/customer-orders?pageSize=100")).customerOrders;
-  const alvo =
-    pedidos.find((o) => o.status === "IN_FULFILLMENT" || o.status === "PARTIALLY_SHIPPED") ??
-    pedidos.find((o) => o.status === "CONFIRMED");
-  if (!check("CADEIA ADV · há pedido em atendimento nesta execução", Boolean(alvo), JSON.stringify(pedidos.map((o) => `${o.code}/${o.status}`).slice(0, 8)))) return;
+  const candidatos = pedidos.filter(
+    (o) => !meus.has(o.id) && ["IN_FULFILLMENT", "PARTIALLY_SHIPPED"].includes(o.status),
+  );
+  let alvo = null;
+  for (const candidato of candidatos) {
+    const detalhe = await lerPedido(candidato.id);
+    if (detalhe.customerId !== S.dados.produto.customerId) continue;
+    const reservado = (detalhe.reservation?.lines ?? []).reduce((a, l) => a + num(l.reservedRemaining), 0);
+    if (reservado <= 0) continue;
+    if (detalhe.lines.some((l) => l.agreedPrice)) continue;
+    alvo = detalhe;
+    break;
+  }
+  if (
+    !check(
+      "CADEIA ADV · há pedido desta execução com produto acabado reservado e sem preço acordado",
+      Boolean(alvo),
+      JSON.stringify(candidatos.map((o) => `${o.code}/${o.status}`).slice(0, 8)),
+    )
+  ) {
+    return;
+  }
   S.dados.pedidos = S.dados.pedidos ?? {};
   S.dados.pedidos.ADV = { chave: "ADV", id: alvo.id, code: alvo.code, url: `/comercial/pedidos/${alvo.id}` };
   salvarEstado();
@@ -2361,6 +2894,10 @@ async function marco12Varredura() {
   for (const chave of Object.keys(S.dados.expedicoes ?? {})) rotas.push(S.dados.expedicoes[chave].url);
   for (const chave of Object.keys(S.dados.faturamentos ?? {})) rotas.push(S.dados.faturamentos[chave].url);
   for (const chave of Object.keys(S.dados.projetos ?? {})) rotas.push(S.dados.projetos[chave].url);
+  // As Ordens de Produção entraram no escopo quando a massa passou a nascer
+  // da cadeia comercial: são telas que esta suíte agora dirige.
+  for (const chave of Object.keys(S.dados.ops ?? {})) rotas.push(S.dados.ops[chave].url);
+  if (S.dados.lotePa?.id) rotas.push(`/estoque/lotes/${S.dados.lotePa.id}`);
   rotas.push(
     "/comercial/pedidos",
     "/comercial/expedicoes",
@@ -2413,9 +2950,29 @@ async function marco12Varredura() {
 // ══════════════════════════════════════════════════════════════════════════
 let parada = null;
 
+/**
+ * Retomada: o marco 1 é quem resolve produto, item de produto acabado e os
+ * lotes dos caminhos proibidos. Quando ele já está concluído no estado, é
+ * pulado — e essas variáveis ficam nulas. O marco 4 então chamava
+ * `fill(null)` e a suíte morria com "expected string, got object", que não
+ * diz nada sobre o produto. Reconstruir o contexto antes dos marcos custa
+ * duas leituras e é o que faz a retomada valer.
+ */
+async function restaurarContexto() {
+  const daProducao = consultar("production") ?? {};
+  PRODUTO_CODE = daProducao.produto?.code ?? S.dados.produto?.code ?? null;
+  ITEM_PA_CODE = daProducao.itemPa?.code ?? S.dados.itemPa?.code ?? null;
+  if (!S.dados.itemPa?.id) return;
+  await resolverLotesProibidos(S.dados.itemPa.id);
+  anotar(
+    `RETOMADA · contexto reconstruído: ${PRODUTO_CODE}/${ITEM_PA_CODE} · bloqueado ${LOTE_BLOQUEADO_MP ?? "—"} · outro item ${LOTE_OUTRO_PRODUTO ?? "—"}`,
+  );
+}
+
 async function principal() {
   await login();
   await abrirNavegador();
+  await restaurarContexto();
 
   await marco(1, "massa-e-precificacao", marco01MassaEPrecificacao);
   await marco(2, "pedido-a-com-preco", marco02PedidoA);

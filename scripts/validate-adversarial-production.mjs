@@ -1601,20 +1601,60 @@ async function marco06ConsumoReal() {
 
   // ── Regra: consumo ACIMA do necessário baixa o REAL ────────────────────
   if (!S.dados.provaAcimaDoNecessario) {
-    const extra = "0.5";
     const antesLotes = await lerLotesDoItem(S.dados.mp.id);
     const antesConsumido = num(reqMp.consumedQuantity);
     op = await lerOp(registro.id);
     const alvo = linhasAtivas(op).find((l) => l.itemCode === S.dados.mp.code && l.pickingStatus === "CONFIRMED");
+    /*
+     * A ampliacao sai do saldo LIVRE DAQUELE LOTE, que e o teto que o dialogo
+     * usa (`lotFreeQuantity`), nao do disponivel do item.
+     *
+     * Era `0.5` cravado, medida do substrato de uma execucao especifica. Com
+     * massa nova o lote tem outro saldo, o dialogo desabilita o envio por
+     * exceder, e a suite trava num clique de 30 s — falha de roteiro que
+     * parece defeito de produto. Meio quilo continua sendo o alvo quando cabe.
+     */
+    const livreNoLote = num(alvo?.lotFreeQuantity ?? "0") || 0;
+    /*
+     * Sem saldo livre no lote da linha, a ampliacao vai para OUTRO LOTE — que
+     * e o que o operador faz quando o lote acaba, e um caminho mais
+     * interessante que o mesmo lote. O dialogo tem a opcao explicita e nao
+     * aplica o teto de `lotFreeQuantity` nesse caso: "em outro lote o teto e
+     * o saldo de la".
+     *
+     * Pular o caso deixaria duas assercoes dependentes falharem por falta de
+     * cenario, o que nao diz nada sobre o produto.
+     */
+    const outrosDisponiveis = antesLotes
+      .filter((l) => l.code !== alvo?.lotCode && num(l.available) > 0)
+      .sort((a, b) => num(b.available) - num(a.available));
+    const loteAlternativo = livreNoLote > 0 ? null : (outrosDisponiveis[0] ?? null);
+    const tetoDisponivel = livreNoLote > 0 ? livreNoLote : num(loteAlternativo?.available ?? "0");
+    const extra = String(Math.min(0.5, Math.max(tetoDisponivel / 2, 0.001)));
+    anotar(
+      `CONSUMO EXTRA · livre em ${alvo?.lotCode ?? "?"}: ${livreNoLote}` +
+        (loteAlternativo ? ` · usando outro lote ${loteAlternativo.code} (${loteAlternativo.available})` : "") +
+        ` · ampliação pedida: ${extra}`,
+    );
 
     // Numa reexecução a ampliação já pode existir: criar outra dobraria a
     // quantidade e o caso passaria a medir um erro do roteiro.
-    if (!(op.reservation?.lines ?? []).some((l) => l.extraReason && l.releasedAt === null)) {
+    if (tetoDisponivel <= 0) {
+      // Nem o lote da linha nem outro tem saldo: a tela desabilita o envio,
+      // corretamente. Sem esta guarda a suite esperava 30 s por um botao que
+      // nunca habilitaria.
+      anotar("CONSUMO EXTRA · nenhum lote com saldo livre — ampliação não exercitada");
+    } else if (!(op.reservation?.lines ?? []).some((l) => l.extraReason && l.releasedAt === null)) {
       await abrir(registro.url, { espera: ".doc-title h1" });
       const linha = linhaDeConsumo(alvo.lotCode);
       await linha.getByRole("button", { name: "Adicionar consumo extra", exact: true }).click();
       await page.waitForSelector("#extra-quantity", { timeout: 20000 });
       await preencher("#extra-quantity", extra);
+      if (loteAlternativo) {
+        await page.locator("#extra-other-lot").setChecked(true);
+        await page.waitForSelector("#extra-lot-code", { timeout: 10000 });
+        await preencher("#extra-lot-code", loteAlternativo.code);
+      }
       await preencher("#extra-reason", "ADV perda de pesagem no funil de carga");
       await page.waitForTimeout(300);
       await page.locator('button[type="submit"][form="extra-consumption-form"]').click();
