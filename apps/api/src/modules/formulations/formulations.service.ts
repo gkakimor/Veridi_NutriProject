@@ -84,6 +84,9 @@ function toComponentDTO(
       stockUnitCode: item.unitCode,
       purityPercentApplied: component.purityPercentApplied,
       overagePercent: component.overagePercent,
+      quantityMode: component.quantityMode,
+      applyPurityAdjustment: component.applyPurityAdjustment,
+      applyOverageAdjustment: component.applyOverageAdjustment,
     },
     new Prisma.Decimal(1),
     { basisQuantity: version.basisQuantity, dosesPerPackage: version.dosesPerPackage },
@@ -492,6 +495,17 @@ export async function createNewVersionFrom(
             ...(component.overagePercent !== undefined
               ? { overagePercent: component.overagePercent }
               : {}),
+            // Modo e flags acompanham o snapshot: sao a INTERPRETACAO da
+            // quantidade, e mudar a receita depois nao reescreve versao ativa.
+            ...(component.quantityMode !== undefined
+              ? { quantityMode: component.quantityMode }
+              : {}),
+            ...(component.applyPurityAdjustment !== undefined
+              ? { applyPurityAdjustment: component.applyPurityAdjustment }
+              : {}),
+            ...(component.applyOverageAdjustment !== undefined
+              ? { applyOverageAdjustment: component.applyOverageAdjustment }
+              : {}),
             ...(component.legacyTotalQuantity !== undefined
               ? { legacyTotalQuantity: component.legacyTotalQuantity }
               : {}),
@@ -599,6 +613,17 @@ export async function updateFormulationVersion(
               : {}),
             ...(component.overagePercent !== undefined
               ? { overagePercent: component.overagePercent }
+              : {}),
+            // Modo e flags acompanham o snapshot: sao a INTERPRETACAO da
+            // quantidade, e mudar a receita depois nao reescreve versao ativa.
+            ...(component.quantityMode !== undefined
+              ? { quantityMode: component.quantityMode }
+              : {}),
+            ...(component.applyPurityAdjustment !== undefined
+              ? { applyPurityAdjustment: component.applyPurityAdjustment }
+              : {}),
+            ...(component.applyOverageAdjustment !== undefined
+              ? { applyOverageAdjustment: component.applyOverageAdjustment }
               : {}),
             ...(component.legacyTotalQuantity !== undefined
               ? { legacyTotalQuantity: component.legacyTotalQuantity }

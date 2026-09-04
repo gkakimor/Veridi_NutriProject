@@ -1,5 +1,9 @@
 import { Prisma } from "@prisma/client";
-import type { FormulationComponentBasis, UnitOfMeasure } from "@prisma/client";
+import type {
+  FormulationComponentBasis,
+  FormulationComponentQuantityMode,
+  UnitOfMeasure,
+} from "@prisma/client";
 import { convertUomDecimal } from "../modules/items/uom.js";
 
 /**
@@ -34,6 +38,15 @@ export interface ComponentCalculationInput {
   stockUnitCode: string;
   purityPercentApplied: Prisma.Decimal | null;
   overagePercent: Prisma.Decimal | null;
+  /**
+   * O que `quantity` significa. Ausente = `PHYSICAL_DIRECT`, o default do
+   * domínio para componente novo.
+   */
+  quantityMode?: FormulationComponentQuantityMode | null;
+  /** Aplicar a pureza? Só tem efeito no modo teórico. */
+  applyPurityAdjustment?: boolean | null;
+  /** Aplicar o overage? Só tem efeito no modo teórico. */
+  applyOverageAdjustment?: boolean | null;
 }
 
 export interface VersionCalculationContext {
@@ -150,16 +163,40 @@ export function applyPurityAndOverage(
   theoretical: Prisma.Decimal,
   purityPercentApplied: Prisma.Decimal | null,
   overagePercent: Prisma.Decimal | null,
+  ajustes: { purity: boolean; overage: boolean } = { purity: true, overage: true },
 ): Prisma.Decimal {
   let physical = theoretical;
 
-  if (purityPercentApplied !== null && purityPercentApplied.greaterThan(0)) {
+  if (ajustes.purity && purityPercentApplied !== null && purityPercentApplied.greaterThan(0)) {
     physical = physical.dividedBy(purityPercentApplied.dividedBy(HUNDRED));
   }
-  if (overagePercent !== null && overagePercent.greaterThanOrEqualTo(0)) {
+  if (ajustes.overage && overagePercent !== null && overagePercent.greaterThanOrEqualTo(0)) {
     physical = physical.times(HUNDRED.plus(overagePercent).dividedBy(HUNDRED));
   }
   return physical;
+}
+
+/**
+ * Quais ajustes ESTE componente autoriza.
+ *
+ * Preencher a pureza não é o mesmo que autorizar sua aplicação. Antes desta
+ * capability era: bastava o campo ter valor para a necessidade física mudar, e
+ * o dado real tem componentes cuja quantidade já vem corrigida de fora — nesses,
+ * preencher a pureza aplicaria a correção uma segunda vez, em silêncio.
+ *
+ * `PHYSICAL_DIRECT` não aplica nada: a quantidade declarada já é a física, e
+ * pureza e overage ficam como documentação auditável.
+ */
+export function ajustesHabilitados(component: ComponentCalculationInput): {
+  purity: boolean;
+  overage: boolean;
+} {
+  const modo = component.quantityMode ?? "PHYSICAL_DIRECT";
+  if (modo !== "THEORETICAL_WITH_ADJUSTMENTS") return { purity: false, overage: false };
+  return {
+    purity: component.applyPurityAdjustment === true,
+    overage: component.applyOverageAdjustment === true,
+  };
 }
 
 /**
@@ -188,6 +225,7 @@ export function computeComponentRequirement(
       theoreticalQuantity,
       component.purityPercentApplied,
       component.overagePercent,
+      ajustesHabilitados(component),
     ),
     purityPercentApplied: component.purityPercentApplied,
     overagePercent: component.overagePercent,

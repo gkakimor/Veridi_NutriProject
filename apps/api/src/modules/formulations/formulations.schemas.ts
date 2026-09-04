@@ -39,6 +39,19 @@ const formulationComponentInputSchema = z.object({
   // Pureza: mesma regra do cadastro — 0 < x <= 100, null = desconhecida.
   purityPercentApplied: optionalPurityPercent,
   overagePercent: optionalOveragePercent,
+  /*
+   * O que a quantidade SIGNIFICA, e quais ajustes ela autoriza.
+   *
+   * Preencher a pureza deixou de aplicar a correção sozinho. Antes bastava o
+   * campo ter valor, e o dado real tem componentes cuja quantidade já vem
+   * corrigida de fora — neles, preencher a pureza aplicava a correção uma
+   * segunda vez, em silêncio. Autorizar virou ato separado de registrar.
+   *
+   * Ausente = `PHYSICAL_DIRECT`, o default do domínio.
+   */
+  quantityMode: z.enum(["PHYSICAL_DIRECT", "THEORETICAL_WITH_ADJUSTMENTS"]).optional(),
+  applyPurityAdjustment: z.boolean().optional(),
+  applyOverageAdjustment: z.boolean().optional(),
   legacyTotalQuantity: optionalLegacyDecimal,
   legacyTotalUnitCode: z.string().trim().max(20).nullish(),
   legacyBatchUnits: optionalLegacyDecimal,
