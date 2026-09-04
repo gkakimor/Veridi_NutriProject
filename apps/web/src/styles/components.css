@@ -2532,3 +2532,50 @@ button.help-flow__box:focus-visible {
   border-radius: var(--radius-sm);
   box-shadow: 0 0 0 var(--sp-2) var(--selected-bg);
 }
+
+/*
+ * "Como este valor foi calculado" — a conta com os números da própria linha.
+ *
+ * Vive dentro da bolha do `InfoHint`, então herda posicionamento e contraste;
+ * o que se define aqui é só a leitura da expressão: o número precisa saltar do
+ * papel que ele cumpre, senão a conta vira uma frase.
+ */
+.calc-hint__titulo {
+  margin: 0 0 var(--sp-2);
+  font-weight: 600;
+}
+
+.calc-hint__conta {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.calc-hint__valor {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.calc-hint__papel {
+  opacity: 0.75;
+}
+
+.calc-hint__op {
+  padding: 0 var(--sp-1);
+  opacity: 0.75;
+}
+
+.calc-hint__nota {
+  margin: var(--sp-2) 0 0;
+  opacity: 0.85;
+}
+
+/* Explicação que não fecha com o valor exibido é aviso, não nota de rodapé. */
+.calc-hint__divergencia {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2);
+  border-left: 3px solid var(--err-border);
+  background: var(--err-bg);
+  color: var(--err-fg);
+  font-weight: 600;
+}
