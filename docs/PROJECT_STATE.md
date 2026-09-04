@@ -104,8 +104,19 @@ Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive e
   Coenzima Q10 guarda 224,4898 mg, que é 220 ÷ 0,98, e preencher a pureza ali
   aplicaria a correção uma segunda vez. Migration preservadora: backfill pelo
   comportamento canônico, não pela presença do campo, com zero drift provado nos
-  1.725 componentes. §52. Ver
+  1.725 componentes. A tela passou a mostrar o físico **enquanto se digita**: a
+  matemática subiu para `packages/shared` e a API delega, então os dois lados
+  chamam a mesma função em vez de haver um segundo motor no navegador. Ligar a
+  prévia expôs dois defeitos que nenhum teste via — o modo não viajava no
+  payload de gravação, e uma base desconhecida derrubava a página em vez de
+  bloquear. §52. Ver
   [AUDITORIA_QUANTIDADE_FISICA.md](AUDITORIA_QUANTIDADE_FISICA.md).
+
+O padrão de cálculo ao vivo vale para toda tela com valor derivado, e o
+levantamento de onde ele já existe e onde falta está no item 26 do
+[BACKLOG.md](BACKLOG.md) — quatro telas calculam ao vivo sem explicação, duas
+mostram número vivo e número velho lado a lado, e seis não derivam nada onde
+faria falta.
 
 ## Validação em produção
 
