@@ -201,8 +201,26 @@ async function resolverAlvos() {
   OP_CODE = daExecucao[0]?.code ?? null;
 
   if (itemPaId) {
+    /*
+     * O lote de produto acabado sob teste e o que FOI EXPEDIDO.
+     *
+     * Pegar o primeiro da lista escolhia um lote qualquer do item, e o caso
+     * central desta suite — "o destino comercial mostra todas as expedicoes
+     * confirmadas deste lote" — comparava as saidas de um lote com a tela de
+     * outro. A tela estava certa; o alvo e que estava errado.
+     */
     const lotes = (await apiGet(`/lots?itemId=${itemPaId}&pageSize=50`)).lots ?? [];
-    LOTE_PA = lotes[0]?.code ?? null;
+    const expedicoes = (await apiGet("/shipments?pageSize=100")).shipments ?? [];
+    const confirmadas = expedicoes.filter((e) => e.status === "CONFIRMED");
+    const comSaida = new Set();
+    for (const expedicao of confirmadas) {
+      const detalhe = await apiGet(`/shipments/${expedicao.id}`);
+      for (const linha of detalhe.lines ?? []) {
+        if (linha.lotCode) comSaida.add(linha.lotCode);
+      }
+    }
+    LOTE_PA =
+      lotes.find((l) => comSaida.has(l.code))?.code ?? lotes[0]?.code ?? null;
   }
   if (mpId) {
     const lotes = (await apiGet(`/lots?itemId=${mpId}&pageSize=100`)).lots ?? [];
@@ -415,7 +433,19 @@ async function marco01Arvore() {
   await page.waitForTimeout(1500);
   const defs = await definicoes();
   const genealogia = await tabelaDaSecao("Rastreabilidade");
-  const destino = await tabelaDaSecao("Destino comercial");
+  /*
+   * As SAIDAS FISICAS moram na secao "Expedicoes", perto do topo da pagina.
+   *
+   * Elas ficavam duplicadas: a mesma expedicao aparecia ali e de novo em
+   * "Destino comercial", seis secoes abaixo, uma sem contexto e a outra com
+   * explicacao. A copia de baixo saiu, e "Destino comercial" passou a
+   * responder so a ORIGEM — por que o lote foi produzido.
+   *
+   * A pergunta deste caso continua a mesma: para onde o lote foi. Mudou o
+   * lugar em que a tela responde.
+   */
+  const destino = await tabelaDaSecao("Expedições");
+  const origem = await tabelaDaSecao("Destino comercial");
   // PRIVACIDADE: a última coluna da genealogia é a razão social do
   // fornecedor. Guarda-se a presença, nunca o nome.
   const materiaisSemNome = (genealogia?.linhas ?? []).map((l) => ({
