@@ -3322,3 +3322,40 @@ aberta que a que muda o status do lote.
 **Liberação afirma que o lote pode ser usado.** Lote vencido não é liberável:
 o status ia para Disponível e a listagem imprimia "Vencido" por cima, com
 disponível zero — uma liberação registrada sobre material inutilizável.
+
+## §51 — A referência externa não manda no modelo
+
+O sistema segue o **modelo matemático correto**. Quando a planilha de
+referência diverge do sistema, a pergunta é qual dos dois está certo — e a
+resposta vem de aritmética, nunca de autoridade. Planilha não é especificação.
+
+**Nunca ajustar o motor de cálculo para "bater" com a planilha.** Um cálculo
+alterado para reproduzir um número externo deixa de ser cálculo: vira uma
+constante disfarçada, que passa a errar em silêncio em todo caso que não seja
+aquele.
+
+Divergência conferida e atribuída a erro da referência é registrada como
+`EXTERNAL_DATA_FINDING`, separada de `BUG` no backlog. As duas classes exigem
+prova; só uma delas exige mudança de código.
+
+**Caso que originou a regra.** A rodada adversarial comparou o CMV da Coenzima
+Q10 — sistema ≈ R$ 11 mil por 1000 potes contra ≈ R$ 2,4 mil na planilha — e
+deixou aberta a hipótese de o motor estar errado por um fator de quatro.
+
+Medido depois: `cmv_precificacao.csv` repete `custo_por_1000_unid = 2431.872`
+nos **nove** produtos, inclusive na linha chamada `CMV modelo`. Valores
+distintos na planilha inteira: um. Creatina, de um componente, não custa o mesmo
+que Magnésio Treonato, de lote 20.000 — a aba de precificação nunca foi
+recalculada por produto.
+
+Somando os próprios componentes da planilha (`kg_lote × preço_brl_kg`), a
+Coenzima Q10 dá **R$ 9.708,23** de material por 1000 unidades. A planilha
+contradiz a si mesma, e o número que servia de referência era o do modelo.
+
+Ajustar o motor para R$ 2,4 mil teria quebrado o cálculo de todos os produtos
+para reproduzir um valor que a própria fonte não sustenta.
+
+**Como conferir uma divergência:** refazer a conta a partir dos dados brutos —
+quantidade, pureza, preço por quilo, tamanho de lote — e comparar os dois
+resultados com esse terceiro número. Quem diverge do terceiro está errado,
+independentemente de ser o sistema ou a planilha.

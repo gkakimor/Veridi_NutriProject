@@ -35,6 +35,7 @@ import {
 } from "../../lib/cost-calculation-api";
 import { getProductPricing } from "../../lib/pricing-api";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
+import { CalcHint } from "../../components/help/CalcHint";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { formatPercent } from "../../lib/percent";
 import { formatDate } from "../../lib/dates";
@@ -419,7 +420,23 @@ export function ProductCmvPage() {
                   </div>
                   <div className="cmv-card__note">
                     {simulation.batchCount}{" "}
-                    {simulation.batchCount === "1" ? "lote de referência" : "lotes de referência"}
+                    {simulation.batchCount === "1" ? "lote de referência" : "lotes de referência"}{" "}
+                    {/*
+                      O número de lotes é TETO, não proporção: pedir 1,1 lote
+                      custa dois lotes inteiros. É o único número desta tela
+                      que o operador não consegue deduzir olhando os outros, e
+                      é o que explica um custo que "pulou" sem a quantidade ter
+                      mudado muito.
+                    */}
+                    <CalcHint
+                      label="Lotes de referência"
+                      operandos={[
+                        { valor: formatQuantity(simulation.quantity), papel: `quantidade pedida em ${simulation.uomCode}` },
+                        { valor: formatQuantity(data?.referenceOutputQuantity ?? "0"), papel: "lote de referência", operador: "÷" },
+                      ]}
+                      resultado={`${simulation.batchCount} (arredondado para cima)`}
+                      nota="Um lote parcial custa um lote inteiro: a fábrica não produz meia batelada. Por isso o custo sobe em degraus, não continuamente."
+                    />
                   </div>
                 </div>
 
@@ -444,6 +461,17 @@ export function ProductCmvPage() {
                   <div className="cmv-card__value">
                     {simulation.costPerUnit ? formatBRL(simulation.costPerUnit) : "—"}
                   </div>
+                  {simulation.costPerUnit && simulation.totalCost && (
+                    <CalcHint
+                      label="CMV por unidade"
+                      operandos={[
+                        { valor: formatBRL(simulation.totalCost), papel: "CMV total" },
+                        { valor: formatQuantity(data?.referenceOutputQuantity ?? simulation.quantity), papel: "unidades do lote de referência", operador: "÷" },
+                      ]}
+                      resultado={formatBRL(simulation.costPerUnit)}
+                      nota="Divide pelo LOTE DE REFERÊNCIA, não pela quantidade simulada — é o custo de produzir uma unidade na batelada padrão."
+                    />
+                  )}
                 </div>
 
                 <div className="cmv-card">
@@ -451,6 +479,17 @@ export function ProductCmvPage() {
                   <div className="cmv-card__value">
                     {simulation.costPer1000 ? formatBRL(simulation.costPer1000) : "—"}
                   </div>
+                  {simulation.costPerUnit && simulation.costPer1000 && (
+                    <CalcHint
+                      label="CMV por 1.000"
+                      operandos={[
+                        { valor: formatBRL(simulation.costPerUnit), papel: "CMV por unidade" },
+                        { valor: "1.000", papel: "unidades" },
+                      ]}
+                      resultado={formatBRL(simulation.costPer1000)}
+                      esperado={Number(simulation.costPerUnit) * 1000}
+                    />
+                  )}
                 </div>
 
                 {/* O cartão diz o veredito; a explicação inteira mora no
@@ -746,7 +785,35 @@ export function ProductCmvPage() {
                               {component.unitCost ? formatBRL(component.unitCost) : "—"}
                             </td>
                             <td className="is-numeric">
-                              {component.totalCost ? formatBRL(component.totalCost) : "—"}
+                              {component.totalCost ? formatBRL(component.totalCost) : "—"}{" "}
+                              {component.totalCost && component.unitCost && component.requiredQuantity && (
+                                <CalcHint
+                                  label={`Custo de ${component.code}`}
+                                  operandos={[
+                                    { valor: formatQuantity(component.requiredQuantity), papel: `quantidade em ${component.unitCode ?? "un"}` },
+                                    { valor: formatBRL(component.unitCost), papel: "custo unitário" },
+                                  ]}
+                                  resultado={formatBRL(component.totalCost)}
+                                  esperado={Number(component.requiredQuantity) * Number(component.unitCost)}
+                                  nota={describeOrigin(component)}
+                                />
+                              )}
+                              {/*
+                                Material do cliente entra na estrutura física e
+                                NUNCA no custo de aquisição. "Não aplicável" não
+                                é zero, e a diferença some se a célula ficar só
+                                com um travessão.
+                              */}
+                              {component.customerSupplied && !component.totalCost && (
+                                <CalcHint
+                                  label={`Custo de ${component.code}`}
+                                  operandos={[
+                                    { valor: formatQuantity(component.requiredQuantity ?? "0"), papel: `quantidade em ${component.unitCode ?? "un"}` },
+                                  ]}
+                                  resultado="não aplicável"
+                                  nota="Material fornecido pelo cliente: a Veridi não o comprou, então não há custo de aquisição. Isto não é custo zero nem custo desconhecido — a quantidade entra na necessidade física, na reserva, no consumo e na rastreabilidade."
+                                />
+                              )}
                             </td>
                             <td>{component.customerSupplied ? "Cliente" : "Veridi"}</td>
                           </tr>

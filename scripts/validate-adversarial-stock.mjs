@@ -1,6 +1,7 @@
 import { chromium } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { obterRun, publicar, cnpjDoRun } from "./adversarial-run.mjs";
 
 /**
  * VALIDAÇÃO ADVERSARIAL — ESTOQUE E SUPRIMENTOS.
@@ -63,6 +64,13 @@ const ATE = Number(
 
 fs.mkdirSync(OUT, { recursive: true });
 fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+
+/*
+ * Identidade desta execucao. `--reset` comeca um run novo; sem ele, retoma o
+ * corrente e reencontra os registros do PROPRIO run. Esta e a primeira suite
+ * da cadeia, entao e ela quem cria o token que as outras herdam.
+ */
+const RUN = obterRun({ novo: RESET, dono: "stock" });
 
 const S =
   !RESET && fs.existsSync(STATE_FILE)
@@ -173,13 +181,21 @@ function registrarNegativo(caso, veredito, detalhe) {
 const separadores = [];
 
 // ══ Massa ═════════════════════════════════════════════════════════════════
-const P = "ADV";
+/*
+ * Prefixo carimbado em todo nome de negocio que esta execucao cria.
+ *
+ * Com nome fixo, a busca por nome reencontrava tambem a massa da execucao
+ * anterior: a contagem de lotes somava os antigos aos novos e a suite acusava
+ * defeito que nao existia. Com o token, cada execucao so enxerga o que ela
+ * mesma criou, e a base pode estar cheia de massa legitima.
+ */
+const P = `ADV${RUN.runId}`;
 
 /** CNPJ sintético com dígitos verificadores válidos; empresa inexistente. */
 const FORNECEDOR = {
   legalName: `${P} Insumos Minerais LTDA`,
   tradeName: `${P} Fornecedor Insumos`,
-  cnpj: "99.000.111/0001-65",
+  cnpj: cnpjDoRun(RUN.runId),
 };
 
 /**
@@ -1195,22 +1211,49 @@ async function marco06Qualidade() {
   }
   const depois = await lerLotesDoItem(S.dados.item.id);
   const liberados = depois.filter((l) => l.status === "AVAILABLE");
+  /*
+   * LOTE VENCIDO NAO E LIBERAVEL, e por isso nao entra na conta.
+   *
+   * A massa recebe tres lotes com validade real de 2022/2023, que chegam ja
+   * vencidos — sao eles que provam FEFO e elegibilidade mais adiante. A
+   * expectativa original era "todos passam a Disponivel", escrita quando
+   * liberar um lote vencido era aceito: o status ia para AVAILABLE e a
+   * listagem imprimia "Vencido" por cima, com disponivel zero.
+   *
+   * O dominio passou a recusar essa liberacao, e a recusa e o comportamento
+   * certo — liberar afirma que o lote pode ser usado. Quem esperava o
+   * contrario era esta suite.
+   */
+  const vencidosNaMassa = depois.filter((l) => l.isExpired);
+  const liberaveis = aguardando.filter((a) => !vencidosNaMassa.some((v) => v.code === a.code));
+  const naoLiberaveis = depois.filter((l) => l.isExpired && l.status === "AWAITING_RELEASE");
   registrarCaso("CORRETO-3 · liberação de qualidade", {
-    pre: `${aguardando.length} lotes em "Aguardando liberação"`,
+    pre: `${aguardando.length} lotes em "Aguardando liberação", ${vencidosNaMassa.length} deles vencidos na chegada`,
     acao: "abrir cada lote e usar Qualidade › Liberar",
-    esperado: "todos passam a Disponível; nenhum saldo físico muda",
-    real: `${liberados.length} lotes Disponível`,
-    invariante: "liberação não movimenta estoque — só troca o status",
-    veredito: liberados.length === aguardando.length ? "PASS" : "FAIL",
+    esperado: "os dentro da validade passam a Disponível; os vencidos são recusados; nenhum saldo físico muda",
+    real: `${liberados.length} Disponível · ${naoLiberaveis.length} vencidos recusados`,
+    invariante: "liberação não movimenta estoque — só troca o status, e só de lote utilizável",
+    veredito: liberados.length === liberaveis.length ? "PASS" : "FAIL",
   });
   check(
-    "CORRETO · a liberação levou todos os lotes a Disponível",
-    liberados.length === depois.length,
-    JSON.stringify(depois.map((l) => `${l.code}/${l.status}`)),
+    "CORRETO · a liberação levou a Disponível todo lote DENTRO da validade",
+    liberados.length === liberaveis.length,
+    JSON.stringify(depois.map((l) => `${l.code}/${l.status}${l.isExpired ? "/vencido" : ""}`)),
+  );
+  check(
+    "CORRETO · lote que chegou VENCIDO não é liberado — a recusa é o comportamento certo",
+    naoLiberaveis.length === vencidosNaMassa.length,
+    JSON.stringify(vencidosNaMassa.map((l) => `${l.code}/${l.status}`)),
   );
 
   // O que a liberação NÃO faz: ressuscitar lote vencido.
-  const vencidosLiberados = depois.filter((l) => l.isExpired && l.status === "AVAILABLE");
+  /*
+   * Agora que lote vencido nao e liberavel, filtrar por `AVAILABLE` deixaria a
+   * lista vazia e o `every` passaria a vacuo — asserção que nao afirma nada.
+   * O invariante real independe do status: lote vencido nunca tem disponivel,
+   * tenha ele sido liberado antes de vencer ou nao.
+   */
+  const vencidosLiberados = depois.filter((l) => l.isExpired);
   const disponivelDeVencido = vencidosLiberados.map((l) => `${l.code}=${l.available}`);
   check(
     "INVARIANTE · lote VENCIDO liberado continua com disponível ZERO (o físico permanece)",
@@ -1902,9 +1945,28 @@ async function marco12FiltroDeTipo() {
 async function marco13ReservaEConsumo() {
   // ── Produto e formulação, pela tela ────────────────────────────────────
   if (!S.dados.produto) {
-    const clientes = (await apiGet("/customers?pageSize=5")).customers ?? [];
-    if (!check("OP · há cliente cadastrado para vincular o produto", clientes.length > 0, "")) return;
-    const cliente = clientes[0];
+    /*
+     * O CLIENTE DESTA EXECUCAO, criado aqui se ainda nao existe.
+     *
+     * A suite pegava "o primeiro cliente cadastrado" e falhava numa base
+     * recem-criada, onde nao ha nenhum. Depender de dado que a execucao nao
+     * criou e a mesma fragilidade que o token de execucao veio resolver: o
+     * laboratorio nao pode exigir um estado anterior para funcionar.
+     */
+    const nomeCliente = `${P} Cliente Operacional LTDA`;
+    let cliente = ((await apiGet(`/customers?search=${encodeURIComponent(P)}&pageSize=10`)).customers ?? [])
+      .find((c) => c.legalName === nomeCliente);
+    if (!cliente) {
+      await abrir("/cadastros/clientes/novo", { espera: "#customer-legal-name" });
+      await preencher("#customer-legal-name", nomeCliente);
+      await preencher("#customer-cnpj", cnpjDoRun(RUN.runId, 7));
+      await clicarBotao("Criar cliente");
+      await page.waitForTimeout(2500);
+      cliente = ((await apiGet(`/customers?search=${encodeURIComponent(P)}&pageSize=10`)).customers ?? [])
+        .find((c) => c.legalName === nomeCliente);
+    }
+    if (!check("OP · cliente desta execução disponível para vincular o produto", Boolean(cliente),
+      JSON.stringify(await mensagensDeErro()))) return;
     await abrir("/cadastros/produtos/novo", { espera: "#product-name" });
     await escolherEntidade("#product-customer", cliente.code, cliente.code);
     await preencher("#product-name", `${P} Produto Carbonato`);
@@ -2277,8 +2339,21 @@ principal()
     salvarEstado();
     if (browser) await browser.close();
 
+    /*
+     * Publica o que ESTA execucao produziu, para as suites seguintes
+     * reencontrarem por id em vez de por codigo cravado no script.
+     */
+    publicar("stock", {
+      runId: RUN.runId,
+      prefixo: P,
+      fornecedor: S.dados.fornecedor ?? null,
+      item: S.dados.item ?? null,
+      itemInativo: S.dados.itemInativo ?? null,
+    });
+
     const reg = S.registro;
     console.log("\n════════════════════ RESUMO ════════════════════");
+    console.log(`run: ${RUN.runId} · prefixo de massa: ${P}`);
     console.log(`marcos concluídos: ${S.marcos.join(", ") || "(nenhum)"}`);
     console.log(`verificações ok=${reg.verificacoes.ok.length} nok=${reg.verificacoes.nok.length}`);
     if (reg.verificacoes.nok.length) {

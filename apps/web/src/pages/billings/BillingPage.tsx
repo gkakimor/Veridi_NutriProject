@@ -5,6 +5,7 @@ import type { BillingDTO, BillingLineDTO, BillingStatus } from "@veridi/shared";
 import { BILLING_STATUS_LABELS } from "@veridi/shared";
 import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../lib/billings-api";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
+import { CalcHint } from "../../components/help/CalcHint";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { FormSection } from "../../components/FormSection";
@@ -419,7 +420,32 @@ export function BillingPage() {
                           formatUnitPriceBRL(line.unitPrice)
                         )}
                       </td>
-                      <td className="is-numeric">{formatBRL(lineTotal)}</td>
+                      <td className="is-numeric">
+                        {formatBRL(lineTotal)}{" "}
+                        {line.unitPrice && lineTotal && (
+                          /*
+                            A conta que o operador refaz na calculadora. Este
+                            documento já exibiu R$ 4,05 ao lado de um total
+                            calculado sobre 4,0531 — quem conferia chegava a
+                            outro número e não tinha como descobrir de onde
+                            vinha a diferença.
+                          */
+                          <CalcHint
+                            label="Total da linha"
+                            operandos={[
+                              { valor: formatUnitPriceBRL(line.unitPrice), papel: "preço faturado" },
+                              { valor: formatQuantity(line.quantity), papel: `quantidade em ${line.unitCode}` },
+                            ]}
+                            resultado={formatBRL(lineTotal)}
+                            esperado={Number(line.unitPrice) * Number(line.quantity)}
+                            nota={
+                              line.priceOverridden
+                                ? "Preço alterado em relação ao acordado — a diferença está registrada com motivo e autor."
+                                : "Preço vem do Pedido e não é recalculado pela precificação vigente de hoje."
+                            }
+                          />
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

@@ -5,6 +5,7 @@ import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
 import { listPricingPolicies, previewPricingPolicy } from "../../lib/cost-pricing-templates-api";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
+import { CalcHint } from "../../components/help/CalcHint";
 import { formatPercent } from "../../lib/percent";
 import { formatDate } from "../../lib/dates";
 
@@ -231,7 +232,30 @@ export function UsePricingPolicyDialog({
                         {tier.suggestedUnitPrice === null ? (
                           <span className="badge badge--warn">{tier.warning ?? "Sem preço"}</span>
                         ) : (
-                          formatUnitPriceBRL(tier.suggestedUnitPrice)
+                          <>
+                            {formatUnitPriceBRL(tier.suggestedUnitPrice)}{" "}
+                            {/*
+                              A comissão sai de DENTRO do preço, não por cima.
+                              Quem espera `custo × (1 + margem)` acha o número
+                              alto sem entender por quê — e planilhas de
+                              referência costumam somar a comissão ao preço
+                              final, que é outro modelo. Mostrar o divisor
+                              resolve a dúvida na hora.
+                            */}
+                            <CalcHint
+                              label="Preço sugerido"
+                              operandos={[
+                                { valor: formatBRL(tier.costPerUnit), papel: "custo por unidade" },
+                                {
+                                  valor: `(1 − ${formatPercent(tier.targetContributionMarginPercent)} − ${formatPercent(tier.commissionPercent)})`,
+                                  papel: "margem de contribuição e comissão",
+                                  operador: "÷",
+                                },
+                              ]}
+                              resultado={formatUnitPriceBRL(tier.suggestedUnitPrice)}
+                              nota="A comissão incide sobre o preço bruto de venda e sai de dentro dele — por isso o custo é dividido, não multiplicado. Margem de contribuição não é lucro: impostos, despesas financeiras e frete não estão nesta conta."
+                            />
+                          </>
                         )}
                       </td>
                     </tr>
