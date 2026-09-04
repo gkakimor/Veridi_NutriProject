@@ -12,10 +12,18 @@
 -- aquele dia. Calculos salvos congelam o valor usado no proprio documento,
 -- entao nenhum custo historico e reinterpretado por esta migration.
 --
--- Tudo aditivo: tabela nova, dois valores novos num enum que nenhuma coluna
--- usa (a fonte viaja dentro do JSON do calculo salvo). Nenhum dado existente
--- muda. Escrita a mao, como as anteriores: `migrate dev` arrasta um drift do
--- repositorio que nao pertence a esta mudanca.
+-- Tudo aditivo: uma tabela nova. Nenhum dado existente muda. Escrita a mao,
+-- como as anteriores: `migrate dev` arrasta um drift do repositorio que nao
+-- pertence a esta mudanca.
+--
+-- As duas fontes novas (MANUAL_REFERENCE, MANUAL_REFERENCE_FORCED) vivem no
+-- tipo de @veridi/shared e viajam dentro do JSON do calculo salvo. O enum
+-- "IndustrialMaterialCostSource" do banco nao e usado por coluna nenhuma e
+-- fica como esta: esta migration precede, na ordem dos nomes, a que criou o
+-- enum, entao nao pode alteralo — e nao precisa.
+--
+-- Depende so de tabelas anteriores a ela na ordem: items (20260815),
+-- units_of_measure (20260815) e users (20260904090000).
 
 CREATE TABLE "item_cost_references" (
   "id"                    TEXT NOT NULL,
@@ -45,6 +53,3 @@ ALTER TABLE "item_cost_references"
 ALTER TABLE "item_cost_references"
   ADD CONSTRAINT "item_cost_references_createdByUserId_fkey"
   FOREIGN KEY ("createdByUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
-ALTER TYPE "IndustrialMaterialCostSource" ADD VALUE IF NOT EXISTS 'MANUAL_REFERENCE';
-ALTER TYPE "IndustrialMaterialCostSource" ADD VALUE IF NOT EXISTS 'MANUAL_REFERENCE_FORCED';
