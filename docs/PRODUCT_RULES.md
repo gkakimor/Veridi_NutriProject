@@ -3359,3 +3359,52 @@ para reproduzir um valor que a própria fonte não sustenta.
 quantidade, pureza, preço por quilo, tamanho de lote — e comparar os dois
 resultados com esse terceiro número. Quem diverge do terceiro está errado,
 independentemente de ser o sistema ou a planilha.
+
+## §52 — Quantidade física do componente, e o que a Formulação manda
+
+Cada componente versionado declara **o que a sua quantidade significa**, e a
+declaração é explícita porque as duas leituras convivem no dado real e são
+indistinguíveis pelo valor: `224,4898 mg` já corrigidos por pureza e `220 mg`
+teóricos são o mesmo número para o banco, e a diferença entre eles é 2% de
+material.
+
+**Física direta** — a quantidade já é a que a fábrica pesa. Pureza e overage,
+quando preenchidos, ficam como documentação auditável e não disparam recálculo.
+É o default de componente novo.
+
+**Teórica com ajustes** — a quantidade é a base, e o sistema calcula a física
+aplicando **somente** os ajustes marcados:
+
+```
+físico = teórico ÷ (pureza/100) × (1 + overage/100)
+```
+
+**Registrar um ajuste não é autorizá-lo.** Preencher a pureza deixou de aplicar
+a correção sozinho. A regra existe porque o caminho oposto já causava dupla
+correção em silêncio: num componente cuja quantidade já vinha corrigida de fora,
+preencher a pureza dividia de novo.
+
+Pureza ausente nunca vira 100%, pureza zero não divide, e overage ausente nunca
+vira zero implícito — ausência de premissa é cálculo inválido, não resultado
+conveniente.
+
+A matemática vive em **um lugar só**, `lib/formulation-math.ts`, e os cinco
+consumidores — plano de atendimento, tela da Formulação, cálculo industrial,
+custo da precificação e Ordem de Produção — a chamam. Explicação na tela mostra
+essa conta; nunca recalcula por conta própria, senão passa a poder discordar do
+número que manda.
+
+### A Formulação vigente define o futuro; o documento guarda o passado
+
+Uma Ordem de Produção **congela** a necessidade no momento em que nasce, junto
+com a versão que a originou, o teórico e os fatores aplicados. Ativar uma versão
+nova **não recalcula ordem existente**, e cálculo de CMV salvo não muda.
+
+Duas ordens do mesmo produto com necessidades diferentes é o resultado **certo**
+quando nasceram de versões diferentes — não é divergência a investigar. O que
+seria defeito é o contrário: a ordem que a fábrica já está separando mudar de
+quantidade porque alguém editou a receita.
+
+CMV e Ordem de Produção usam a **mesma** quantidade física quando nascem da
+mesma versão e da mesma base. Documentos históricos podem divergir
+legitimamente da versão vigente de hoje.

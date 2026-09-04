@@ -470,17 +470,17 @@ export const baseHints = {
   "formulacao.pureza": {
     module: "producao",
     label: "Pureza",
-    text: "Teor real do insumo. Com 80% de pureza é preciso pesar mais para entregar a mesma quantidade ativa. Deixar vazio significa pureza desconhecida — nenhuma correção é aplicada.",
+    text: "Teor real do insumo. Com 80% de pureza é preciso pesar mais para entregar a mesma quantidade ativa. Registrar a pureza NÃO aplica a correção sozinha: marque “Calcular quantidade física automaticamente” e a caixa da pureza para o sistema corrigir. Sem isso ela fica registrada para auditoria e a quantidade informada é usada como está — importante quando a quantidade já vem corrigida de origem, porque corrigir de novo dobraria o ajuste. Vazio significa desconhecida, e nunca é lida como 100%.",
   },
   "formulacao.overage": {
     module: "producao",
     label: "Overage",
-    text: "Excesso declarado de propósito, para compensar perda de processo ou de validade. Entra no físico a pesar, nunca no que é declarado ao cliente.",
+    text: "Excesso declarado de propósito, para compensar perda de processo ou de validade. Nunca entra no que é declarado ao cliente. Como a pureza, só é aplicado quando explicitamente marcado — preencher registra, marcar autoriza.",
   },
   "formulacao.equivalenteEstoque": {
     module: "producao",
     label: "Equivalente estoque",
-    text: "Quanto sai do estoque por unidade acabada, já com pureza e overage aplicados. É este número que a ordem de produção reserva e consome.",
+    text: "Quanto sai do estoque por unidade acabada, com os ajustes que ESTE componente autoriza. É o número que a ordem de produção reserva e consome, e ele fica congelado na ordem: ativar uma versão nova da formulação não recalcula ordem que já existe.",
   },
 } satisfies Record<string, HelpHint>;
 

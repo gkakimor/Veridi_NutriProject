@@ -159,3 +159,87 @@ silenciosamente" quer dizer, e que o item 19 foi escrito sob a premissa errada
 que este documento corrige. Mas isso muda necessidade de material em formulação
 ativa, e a regra do projeto é não reinterpretar comportamento de fórmula sem
 decisão explícita.
+
+---
+
+# Implementação — decisão (a), preservar o comportamento
+
+O PO decidiu preservar o comportamento existente e **não** executar o item que
+mandava colocar todo componente legado em `PHYSICAL_DIRECT`. A auditoria acima
+corrigiu a premissa do handoff.
+
+## O modelo
+
+`FormulationComponent` ganhou três colunas: `quantityMode`
+(`PHYSICAL_DIRECT` | `THEORETICAL_WITH_ADJUSTMENTS`), `applyPurityAdjustment` e
+`applyOverageAdjustment`. O mesmo trio foi para o componente de **template**,
+porque template carrega configuração técnica, não resultado de cálculo.
+
+Nada foi persistido além disso. `ProductionOrderRequirement` já congela
+`formulaQuantity`, `theoreticalQuantity`, `purityPercentApplied`,
+`overagePercent` e `requiredQuantity`, e a versão da formulação é imutável
+quando ativa — o histórico já estava coberto, e duplicar campo "por segurança"
+só cria duas fontes que podem divergir.
+
+## O backfill
+
+Espelha a **condição do motor**, não a presença do campo: `applyPurityAndOverage`
+aplica pureza quando `purity > 0` e overage quando `overage >= 0`. Reproduzir
+essas duas condições é o que garante que nenhuma receita mude de resultado —
+"campo preenchido" trataria pureza zero como ativa, e ela não é.
+
+| Modo | Componentes |
+|---|---|
+| `PHYSICAL_DIRECT`, ambos desligados | 1.699 |
+| `THEORETICAL_WITH_ADJUSTMENTS`, ambos ligados | 26 |
+
+## Zero drift
+
+`scripts/zero-drift-quantidade-fisica.mjs` fotografa o resultado autoritativo de
+**todos** os componentes antes da mudança e reconfere depois, a doze casas
+decimais, linha a linha.
+
+```
+conferidos 1725 de 1725
+ZERO DRIFT: 1725/1725 semanticamente idênticos.
+```
+
+O conferente **replica** a conta em vez de chamar a função que está sendo
+alterada. Um conferente que chama o próprio alvo não confere nada.
+
+## O motor
+
+`computeComponentRequirement` passou a perguntar quais ajustes o componente
+autoriza, via `ajustesHabilitados`. Os cinco consumidores seguem intactos, e
+continua havendo **uma** matemática.
+
+## Prova histórica
+
+`historico-versao-e-op.test.ts` e o E2E
+`scripts/validate-physical-quantity-consistency.mjs` provam a cadeia:
+
+| | Necessidade |
+|---|---|
+| V1 teórica, pureza aplicada → OP-A | `0,224490 kg` |
+| V2 física direta, mesma pureza registrada → OP-B | `0,220000 kg` |
+| OP-A **depois** de ativar a V2 | `0,224490 kg` — intocada |
+
+As duas ordens divergirem é o resultado **certo**. O E2E também confere pela
+tela que a V1 se apresenta como "Calculada · pureza" e a V2 como "Física direta ·
+registrado, não aplicado".
+
+Um segundo teste prende a propriedade do motor único: o físico por unidade que a
+tela da Formulação mostra, multiplicado pelo lote, é exatamente a necessidade
+que a Ordem de Produção congelou — dois consumidores, um resultado.
+
+## Reexecução
+
+O E2E usa o token de execução do harness, então cria a própria massa e
+reencontra só o que ele criou. Rodado **duas vezes sobre a mesma base**:
+`10 ok / 0 nok` nas duas, sem console error.
+
+## Fora de escopo, registrado
+
+Produto próprio Veridi, estoque de produto acabado próprio e venda do mesmo
+produto acabado para múltiplos clientes ficaram fora por decisão do PO — item 25
+do `BACKLOG.md`. Matéria-prima e embalagem continuam itens globais.

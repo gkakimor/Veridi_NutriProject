@@ -96,6 +96,16 @@ Sem módulo novo e sem mudança de domínio. A regra durável de cada uma vive e
   deriva da lista canônica do domínio; ajuste e contagem de estoque gravam o
   usuário real e exigem papel. §50. Ver
   [VALIDACAO_E2E_ADVERSARIAL_CORE.md](VALIDACAO_E2E_ADVERSARIAL_CORE.md).
+- **Quantidade física do componente** (`feat/formulation-physical-quantity`) —
+  cada componente declara se a quantidade informada já é física ou se é teórica
+  e o sistema deve calculá-la, com pureza e overage aplicados só quando
+  marcados. O motor já aplicava os dois; o que faltava era distinguir as duas
+  semânticas, que convivem no dado e são indistinguíveis pelo valor — a
+  Coenzima Q10 guarda 224,4898 mg, que é 220 ÷ 0,98, e preencher a pureza ali
+  aplicaria a correção uma segunda vez. Migration preservadora: backfill pelo
+  comportamento canônico, não pela presença do campo, com zero drift provado nos
+  1.725 componentes. §52. Ver
+  [AUDITORIA_QUANTIDADE_FISICA.md](AUDITORIA_QUANTIDADE_FISICA.md).
 
 ## Validação em produção
 
