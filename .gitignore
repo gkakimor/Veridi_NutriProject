@@ -50,3 +50,6 @@ handoff/
 # de propósito. Entrou uma vez por um `git add docs/` distraído; a linha
 # abaixo é para não entrar de novo.
 docs/*.docx
+
+# Runner temporário do portão adversarial — não versionado.
+scripts/_*.sh
