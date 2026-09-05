@@ -14,9 +14,10 @@ escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 **Rodada 1 aprovada em 2026-09-04:** #12, #9, #3, #5 resolvidos; #4
 resolvido com residual aceito (≈117px em 1280×800).
 **Rodada 2 aprovada e publicada em 2026-09-05** (merge `dfb2673`): #8A, #8B e
-#8C resolvidos. **Rodada 3 entregue** (em revisão do PO, branch
-`feat/billing-quote-live-preview`): #8D e #8H resolvidos. **Seguinte, quando o
-PO autorizar:** #8E, #8F e #8G.
+#8C resolvidos.
+**Rodada 3 aprovada e publicada em 2026-09-05** (merge `b89f9a4`): #8D e #8H
+resolvidos; #15, #16 e #17 abertos como achados. **Seguinte, quando o PO
+autorizar:** #8E, #8F e #8G.
 
 ---
 
@@ -295,7 +296,7 @@ permanece obrigatório no escopo atual.
 1. **Rodada 1 — aprovada:** #12 + #9 + #3 + #5 resolvidos; #4 resolvido com
    residual aceito em 1280×800.
 2. **Rodada 2 — aprovada e publicada:** #8A + #8B + #8C resolvidos.
-3. **Rodada 3 — entregue, em revisão do PO:** #8D + #8H resolvidos;
+3. **Rodada 3 — aprovada e publicada:** #8D + #8H resolvidos;
    #8E, #8F e #8G quando o PO autorizar.
 4. **Validação com a Veridi:** #7 + #11.
 5. **Manutenção:** #10. #1 e #2 permanecem observação/adiados.
