@@ -68,20 +68,23 @@ Regra e procedimento em [`TECH_BASELINE.md`](TECH_BASELINE.md).
 
 ## Próximo gate
 
-**Validação com a Veridi.** Nenhum desenvolvimento novo até a conversa acontecer
-e o feedback ser classificado. Roteiro em
-[`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md); guia do usuário
-final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado por política.
+**Validação com a Veridi** para as regras que dependem do processo real do
+cliente (#7, #11). Não bloqueia os itens internos já decididos pelo PO (#12,
+#9, #3, #4, #5), que entram quando o PO autorizar a próxima capability. Roteiro
+em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md); guia do
+usuário final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado por política.
 
 ## Backlog aberto
 
-Zero CRITICAL e HIGH. Dois MEDIUM (`aria-invalid` por campo na Formulação;
-recebimento de material do cliente sem regra por Item para lote e validade),
-cinco LOW — entre elas o `schema.prisma` que declara `SET NULL` onde as
-migrations aplicam `RESTRICT` (#14, aberto por decisão do PO; até resolver,
-migration nova carrega só a mudança da sua capability) —, quatro decisões de
-PO e quatro melhorias adiadas de propósito — a maior delas é levar o cálculo
-ao vivo às demais telas. Ver [`BACKLOG.md`](BACKLOG.md).
+Consolidado com o PO em 2026-09-04 — [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL
+e HIGH. **Próxima rodada, quando autorizada:** #12 estimativa de custo da
+Formulação pelo seletor canônico (fail-closed, sem segundo seletor), #9
+conferência do `CalcHint` provada caso a caso, #3/#4/#5 UX da Formulação —
+rótulos dos modos já decididos ("Quantidade física informada" / "Calcular
+quantidade física"). **Depois:** #8A–#8C cálculo ao vivo em Ordem de Compra,
+Expedição e Precificação. **Aguardando a Veridi:** #7 convenções e #11
+material do cliente. **Manutenção:** #10 e #14 (Schema Integrity Audit, em
+rodada isolada). **Observação:** #1, #2. Produto próprio Veridi só no roadmap.
 
 ## Blockers
 
