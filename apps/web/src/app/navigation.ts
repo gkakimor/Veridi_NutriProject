@@ -23,7 +23,7 @@ export interface NavGroup {
 export const navigation: NavGroup[] = [
   {
     title: null,
-    items: [{ label: "Dashboard", path: "/", implemented: true }],
+    items: [{ label: "Painel", path: "/", implemented: true }],
   },
   {
     title: "Comercial",

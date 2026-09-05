@@ -15,7 +15,7 @@ export const producaoTopics = {
     module: "producao",
     title: "Separar material é conferir; consumir é dar baixa",
     summary:
-      "Separação (picking) é a conferência física do material que uma ordem já tem reservado: o operador confirma que o lote na mão é o lote que a ordem separou. Reservar é compromisso — o saldo deixa de estar disponível para outras ordens, mas nada sai da prateleira; só o consumo tira quantidade do estoque. Esta lista reúne as ordens liberadas ou em produção e mostra quanto já foi conferido e quanto já foi consumido em cada uma; a ação acontece dentro da ordem.",
+      "Esta lista reúne as ordens liberadas ou em produção e mostra, por ordem, o progresso de duas coisas que não são a mesma: Picking, quantas linhas já foram conferidas, e Consumo, quantas já foram baixadas. Não há botão nem formulário aqui — conferir, consumir e pedir material extra acontecem dentro da ordem, que a coluna Abrir leva. Separação (picking) é a conferência física do material que a ordem já tem reservado; reservar é compromisso, e só o consumo tira quantidade do estoque.",
     concepts: [
       {
         term: "Reserva",
@@ -44,6 +44,10 @@ export const producaoTopics = {
       {
         term: "Situação da ordem",
         text: "Liberada: material reservado, nada consumido ainda. Em produção: o primeiro consumo já foi registrado — e a partir daí a ordem não pode mais ser cancelada.",
+      },
+      {
+        term: "Colunas Picking e Consumo",
+        text: "Contagens de linhas de material: quantas já foram conferidas e quantas já foram consumidas, sobre o total da ordem. Lidas lado a lado sem explicação passam por sinônimos — uma mede conferência, a outra mede baixa.",
       },
     ],
     flows: [
@@ -122,6 +126,7 @@ export const producaoTopics = {
       "Depois do primeiro consumo a ordem não pode mais ser cancelada: material físico já saiu, e desfazer isso pede um fluxo de devolução que ainda não existe.",
       "Sobra reservada continua reservada enquanto a ordem está em produção. Ela é liberada na conclusão da ordem, sem gerar movimento — nada físico mudou, o saldo só volta a ficar disponível.",
       "Material do cliente não tem custo de aquisição da Veridi. Isso não é custo faltando: é propriedade de terceiro, e nenhum valor pode ser lançado ali.",
+      "Esta lista é só leitura de progresso. Ordem que não está liberada nem em produção não aparece — rascunho e planejada ficam na lista de Ordens de Produção.",
     ],
   },
 
@@ -222,6 +227,7 @@ export const producaoTopics = {
       "Embalagem não é pesada por parte: ela segue no Picking/Consumo, com a quantidade total da ordem.",
       "O lote pesado precisa ser um dos lotes que a ordem reservou para aquele material, dentro da validade, liberado pela qualidade e do dono certo — material de um cliente nunca abastece a ordem de outro.",
       "Ordem encerrada ou cancelada transforma a folha em documento de consulta: não se pesa nem se conclui parte numa produção que já terminou.",
+      "A coluna Proprietário das pesagens diz de quem era o lote pesado — Veridi ou cliente. “Imprimir Folha de Receita” e o atalho “Ver Consumo Real da OP” são leituras: nenhum dos dois altera a folha.",
     ],
   },
 
@@ -330,6 +336,7 @@ export const producaoTopics = {
       "Material fornecido pelo cliente fica fora do custo: é propriedade de terceiro, não custo faltando.",
       "O lote produzido é sempre da Veridi, mesmo quando parte do material consumido era do cliente.",
       "A tela não cria, não edita e não libera nada. Decisão de qualidade é na tela do Lote; apontamento e conclusão são na Ordem de Produção.",
+      "Cada linha oferece três caminhos: Abrir lote, Etiqueta / QR e Abrir OP. Os filtros por qualidade, produto e período de produção, mais a busca por lote, item, produto ou ordem, recortam a lista — e Exportar leva o recorte.",
     ],
   },
 
@@ -535,6 +542,7 @@ export const producaoTopics = {
       "Aplicar um template a um produto preenche a primeira versão quando ela está vazia. Se a formulação de destino já tem componentes, nasce uma versão nova e a anterior fica intacta — nada é sobrescrito.",
       "Versão em rascunho não pode ser usada por produto nenhum, e template arquivado sai da escolha de novas formulações.",
       "Editar e ativar exigem perfil de Administração ou Produção. Os demais perfis leem a matriz e o histórico.",
+      "Nome e descrição do template se editam fora do versionamento, em “Salvar identificação”: renomear não cria versão. Arquivar tira o template da escolha de novas formulações sem apagar versão nenhuma.",
     ],
   },
 } satisfies Record<string, HelpTopic>;

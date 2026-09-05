@@ -258,7 +258,7 @@ describe("Tela de CMV", () => {
     expect(screen.getByText("Embalagens")).toBeInTheDocument();
     expect(screen.getByText("Recursos industriais")).toBeInTheDocument();
     // Origem em português: enum cru nunca chega ao usuário.
-    expect(screen.getAllByText("Média ponderada de compras (30 dias)").length).toBe(2);
+    expect(screen.getAllByText("Compra real · média 30 dias").length).toBe(2);
     expect(screen.getByText("Mão de obra")).toBeInTheDocument();
     expect(screen.queryByText("WEIGHTED_AVG_30D")).not.toBeInTheDocument();
     expect(screen.queryByText("LABOR")).not.toBeInTheDocument();

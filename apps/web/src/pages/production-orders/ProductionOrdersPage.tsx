@@ -149,7 +149,7 @@ export function ProductionOrdersPage() {
         <ExportCsvButton path="/production-orders/export.csv" filters={{ search, status: statusFilter === "all" ? undefined : statusFilter }} />
 </div>
 
-      <ContextHelp topic={helpTopics["ordemProducao.comoFunciona"]} />
+      <ContextHelp topic={helpTopics["producao.ordens"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">

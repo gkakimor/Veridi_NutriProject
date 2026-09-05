@@ -1,6 +1,7 @@
 import { formatQuantity } from "../lib/quantity";
 import type { IndustrialCostCalculationDTO } from "@veridi/shared";
 import {
+  COST_SOURCE_AUTO_SELECTION_TEXT,
   INDUSTRIAL_COST_BASIS_LABELS,
   INDUSTRIAL_COST_CATEGORY_LABELS,
   INDUSTRIAL_COST_QUALITY_HINTS,
@@ -10,8 +11,10 @@ import {
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
 import { formatBRL } from "../lib/currency";
+import { formatDateTime } from "../lib/dates";
 import { EntityLink } from "./EntityLink";
 import { CostWarnings } from "./CostWarnings";
+import { CalcHint } from "./help/CalcHint";
 
 /**
  * Dinheiro na tela é real brasileiro com dois centavos.
@@ -66,6 +69,9 @@ export function CostBreakdown({
 
   return (
     <>
+      {/* A ordem da seleção é regra do produto, e é aqui que ela é lida:
+          ao lado da coluna que diz qual fonte cada material recebeu. */}
+      <p className="field__hint">{COST_SOURCE_AUTO_SELECTION_TEXT}</p>
       <div className="table-container">
         <table className="table">
           <thead>
@@ -94,14 +100,98 @@ export function CostBreakdown({
                 <td className="is-numeric">
                   {formatQuantity(material.requiredQuantity)} {material.unitCode}
                 </td>
-                <td className="is-numeric">{formatUnitCost(material.unitCost)}</td>
+                {/* Três estados que não se confundem: valor, "Não aplicável"
+                    (material do cliente) e "—" (desconhecido). Nunca R$ 0,00. */}
+                <td className="is-numeric">
+                  {material.customerSupplied ? "Não aplicável" : formatUnitCost(material.unitCost)}
+                </td>
                 <td>
+                  {material.override && <span className="badge badge--warn">Forçada</span>}{" "}
                   {INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[material.costSource]}
                   {material.costSourceDetails && (
                     <span className="field__hint"> {material.costSourceDetails}</span>
                   )}
+                  {/* Auditoria da substituição, lida do próprio documento:
+                      o que a seleção automática teria usado, o motivo, quem
+                      e quando. Não depende do item de hoje. */}
+                  {material.override && (
+                    <div className="field__hint cost-override-audit">
+                      <div>
+                        Fonte automática:{" "}
+                        {INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[material.override.automaticSource]}
+                        {material.override.automaticUnitCost !== null
+                          ? ` · ${formatUnitCost(material.override.automaticUnitCost)}/${material.unitCode}`
+                          : material.override.automaticSource === "AMBIGUOUS_SUPPLIER_REFERENCE"
+                            ? ""
+                            : " · sem custo conhecido"}
+                      </div>
+                      {material.override.impact !== null && (
+                        <div>
+                          Impacto neste cálculo:{" "}
+                          <b>
+                            {Number(material.override.impact) >= 0 ? "+ " : "− "}
+                            {formatBRL(String(Math.abs(Number(material.override.impact))))}
+                          </b>
+                        </div>
+                      )}
+                      {material.override.reason && <div>Motivo: {material.override.reason}</div>}
+                      <div>
+                        Por {material.override.forcedByName ?? "—"} em{" "}
+                        {formatDateTime(material.override.forcedAt)}
+                      </div>
+                    </div>
+                  )}
                 </td>
-                <td className="is-numeric">{material.subtotal === null ? "—" : formatBRL(material.subtotal)}</td>
+                <td className="is-numeric">
+                  {material.customerSupplied
+                    ? "Não aplicável"
+                    : material.subtotal === null
+                      ? "—"
+                      : formatBRL(material.subtotal)}
+                  {/* A conta com os números DESTA linha, conferida pelo
+                      próprio componente: quantidade × custo unitário. A nota
+                      diz a fonte — e, quando forçada, a que teria sido usada. */}
+                  {!material.customerSupplied && material.subtotal !== null && material.unitCost !== null && (
+                    <CalcHint
+                      label={`Subtotal de ${material.itemCode}`}
+                      operandos={[
+                        {
+                          valor: formatQuantity(material.requiredQuantity),
+                          papel: `quantidade física em ${material.unitCode}`,
+                          numero: Number(material.requiredQuantity),
+                        },
+                        {
+                          valor: formatUnitCost(material.unitCost),
+                          papel: `custo utilizado por ${material.unitCode}`,
+                          numero: Number(material.unitCost),
+                        },
+                      ]}
+                      resultado={formatBRL(material.subtotal)}
+                      nota={
+                        material.override
+                          ? `Fonte: ${INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[material.costSource]}. Fonte automática: ${INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[material.override.automaticSource]}${
+                              material.override.automaticUnitCost !== null
+                                ? ` · ${formatUnitCost(material.override.automaticUnitCost)}/${material.unitCode}`
+                                : ""
+                            }.`
+                          : `Fonte: ${INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[material.costSource]}.`
+                      }
+                    />
+                  )}
+                  {material.customerSupplied && (
+                    <CalcHint
+                      label={`Subtotal de ${material.itemCode}`}
+                      operandos={[
+                        {
+                          valor: formatQuantity(material.requiredQuantity),
+                          papel: `quantidade física em ${material.unitCode}`,
+                        },
+                      ]}
+                      resultado="não aplicável"
+                      nota="Material do cliente: a Veridi não o comprou, então não há custo de aquisição. Não é zero nem desconhecido — mesmo que o item tenha referência manual de custo."
+                    />
+                  )}
+                </td>
               </tr>
             ))}
             {result.materials.length === 0 && (

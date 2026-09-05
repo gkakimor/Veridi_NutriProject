@@ -4,8 +4,12 @@
 
 ## Onde estamos
 
-**`main`:** `0673b13` · **Produção:** Railway, health 200, banco up, smoke
-autenticado passando. Produção não tem dado de negócio — a base foi limpa.
+**`main`:** baseline v2 (`78463a0`) + referência manual de custo, revisão do
+"Como funciona" e reparo da reconstrução do banco — merge `--no-ff` de
+`feat/manual-cost-reference-and-help-review` em 2026-09-04, aprovado pelo PO.
+**Produção:** Railway, deploy automático da `main`; health 200, banco up,
+smoke autenticado passando. Produção não tem dado de negócio — a base foi
+limpa.
 
 MVP operacional **validado internamente**. Blocos A a G fechados: cadastros,
 compras, recebimento e lotes, estoque e FEFO, formulações versionadas, produção
@@ -18,24 +22,30 @@ Três casos profundos derivados do legado rodaram ponta a ponta contra a
 interface publicada — VAL-LEG-01, 02 e 03, todos PASS. Detalhe do que cada
 rodada descobriu: [`archive/E2E_VALIDATION_HISTORY.md`](archive/E2E_VALIDATION_HISTORY.md).
 
-## Última capability entregue
+## Última capability publicada
 
-**Quantidade física canônica do componente** (`0673b13`, deployada e smokeada).
+**Referência manual de custo + substituição por cálculo + revisão global do
+"Como funciona"** (2026-09-04).
 
-Cada componente declara o que a quantidade informada **significa**: já é a
-física, ou é teórica e o sistema calcula aplicando somente os ajustes marcados.
-Registrar pureza deixou de aplicar a correção sozinho — o dado real tem
-componentes cuja quantidade já vem corrigida de fora, e neles preencher a pureza
-aplicava a divisão uma segunda vez, em silêncio.
+A fonte de custo de um material passou a ter **uma** implementação canônica —
+`lib/cost-source-selection.ts`: compra real 30d → 90d → última compra → oferta
+válida → referência manual → desconhecido — reusando a fundação de compras. A
+referência manual (`ItemCostReference`, migration aditiva) é estimativa com
+histórico por vigência, unidade coerente e Decimal; a tela do item mostra a
+referência e a fonte selecionada hoje. No cálculo padrão o usuário pode
+**forçar** a referência por material, só naquele cálculo, com motivo; o
+documento congela fonte usada, fonte automática, impacto, motivo, autor e hora.
+Ofertas válidas ambíguas (sem preferencial, ou com vários) ficam em "seleção
+necessária" — nunca caem para a manual sozinhas. Regra em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §53.
 
-A matemática vive em `packages/shared/src/formulation-quantity.ts` e a API
-delega, então a tela mostra o físico **enquanto se digita** chamando a mesma
-função — não há segundo motor. `CalcHint` mostra a conta com os números da linha
-e refaz essa conta para conferir a própria explicação.
+A ajuda contextual foi revisada tela a tela: 62 telas inventariadas, 5 tópicos
+novos (estrutura de custos, lista de OPs, lista de faturamento, lista de
+formulações, escanear lote), 6 telas de criação e a de escanear passaram a
+abrir ajuda, Formulação e Pedido reescritos, vocabulário técnico removido. Um
+teste de inventário lê as rotas e exige ajuda em toda tela da casca.
 
-Migration preservadora: backfill pelo comportamento canônico, não pela presença
-do campo, com zero drift provado nos 1.725 componentes. Regra em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §52.
+**Anterior:** quantidade física canônica do componente (`0673b13`, §52).
 
 ## Estado operacional do repositório
 
@@ -50,6 +60,12 @@ futuras: [`E2E_STRATEGY.md`](E2E_STRATEGY.md). Ferramental de segurança
 (`local-db-guard`, `local-db-reset`, `smoke-prod`, `maintenance/`) e os
 importadores oficiais permanecem.
 
+**Reconstrução do banco do zero** (2026-09-04): as 49 migrations aplicam num
+banco vazio só com o repositório. Ordem dos nomes é a ordem real —
+`scripts/migration-order.test.ts` vigia isso em `pnpm test`, e
+`pnpm validate:migrations:fresh` prova contra um Postgres local descartável.
+Regra e procedimento em [`TECH_BASELINE.md`](TECH_BASELINE.md).
+
 ## Próximo gate
 
 **Validação com a Veridi.** Nenhum desenvolvimento novo até a conversa acontecer
@@ -59,9 +75,13 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado por política.
 
 ## Backlog aberto
 
-Zero CRITICAL e HIGH. Um MEDIUM (`aria-invalid` por campo na Formulação), três
-LOW, três decisões de PO e quatro melhorias adiadas de propósito — a maior
-delas é levar o cálculo ao vivo às demais telas. Ver [`BACKLOG.md`](BACKLOG.md).
+Zero CRITICAL e HIGH. Dois MEDIUM (`aria-invalid` por campo na Formulação;
+recebimento de material do cliente sem regra por Item para lote e validade),
+cinco LOW — entre elas o `schema.prisma` que declara `SET NULL` onde as
+migrations aplicam `RESTRICT` (#14, aberto por decisão do PO; até resolver,
+migration nova carrega só a mudança da sua capability) —, quatro decisões de
+PO e quatro melhorias adiadas de propósito — a maior delas é levar o cálculo
+ao vivo às demais telas. Ver [`BACKLOG.md`](BACKLOG.md).
 
 ## Blockers
 

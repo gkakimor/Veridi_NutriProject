@@ -10,6 +10,8 @@ import {
   parseCreatableItemType,
   useItemForm,
 } from "./item-form";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 /** Query que pré-escolhe o tipo: `/cadastros/itens/novo?tipo=RAW_MATERIAL`. */
 const PARAM_TIPO = "tipo";
@@ -100,6 +102,10 @@ export function ItemCreatePage() {
           </button>
         )}
       </div>
+
+      {/* A mesma ajuda da lista: o fluxo A descreve exatamente este formulário. */}
+
+      <ContextHelp topic={helpTopics["item.comoFunciona"]} />
 
       <ItemFormFields {...controller} />
 

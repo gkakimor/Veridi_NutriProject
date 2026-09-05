@@ -4,6 +4,7 @@ import type {
   IndustrialCostCalculationDTO,
   IndustrialCostCalculationSnapshotDTO,
   IndustrialCostCalculationSummaryDTO,
+  MaterialCostOverrideInput,
 } from "@veridi/shared";
 import { INDUSTRIAL_COST_CALCULATION_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -31,12 +32,23 @@ const CODE_PREFIX = INDUSTRIAL_COST_CALCULATION_CODE_PREFIX;
  */
 export async function saveIndustrialCostCalculation(
   versionId: string,
-  input: { costReferenceDate?: Date; notes?: string | null },
+  input: {
+    costReferenceDate?: Date;
+    notes?: string | null;
+    materialOverrides?: MaterialCostOverrideInput[];
+  },
   actor: User,
 ): Promise<IndustrialCostCalculationSnapshotDTO> {
   const prisma = getPrisma();
   const referenceDate = input.costReferenceDate ?? new Date();
-  const result = await calculateIndustrialCost(versionId, referenceDate);
+  // Substituição forçada viaja para dentro do documento: fonte usada, fonte
+  // automática que teria sido usada, valores, motivo, quem e quando ficam
+  // no `result` congelado. Reproduzir o cálculo nunca depende do item.
+  const result = await calculateIndustrialCost(versionId, referenceDate, {
+    materialOverrides: input.materialOverrides ?? [],
+    requireOverrideReason: true,
+    actor,
+  });
 
   // Cálculo parcial por falta de custo de compra é documento legítimo — ele
   // diz o que não sabe. Cálculo sem quantidade de material não é: ele nem

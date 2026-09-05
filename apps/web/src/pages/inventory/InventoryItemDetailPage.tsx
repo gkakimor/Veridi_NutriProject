@@ -2,11 +2,16 @@ import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { AllocationSuggestionDTO, CostReferenceDTO, InventoryItemDetailDTO } from "@veridi/shared";
-import { COST_SOURCE_LABELS, ITEM_TYPE_LABELS, LOT_STATUS_LABELS } from "@veridi/shared";
+import type { AllocationSuggestionDTO, InventoryItemDetailDTO, ItemCostReferencesResponse } from "@veridi/shared";
+import {
+  COST_SOURCE_AUTO_SELECTION_TEXT,
+  INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
+  ITEM_TYPE_LABELS,
+  LOT_STATUS_LABELS,
+} from "@veridi/shared";
 import { getAllocationSuggestion, getInventoryItem } from "../../lib/inventory-api";
-import { getItemCostReference } from "../../lib/costs-api";
-import { formatBRL } from "../../lib/currency";
+import { getItemCostReferences } from "../../lib/items-api";
+import { formatUnitPriceBRL } from "../../lib/currency";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { FormSection } from "../../components/FormSection";
 import { AdjustStockDialog } from "../../components/AdjustStockDialog";
@@ -49,7 +54,7 @@ export function InventoryItemDetailPage() {
   const [suggestion, setSuggestion] = useState<AllocationSuggestionDTO | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
-  const [costReference, setCostReference] = useState<CostReferenceDTO | null>(null);
+  const [costReference, setCostReference] = useState<ItemCostReferencesResponse | null>(null);
 
   const load = useCallback(() => {
     if (!itemId) return;
@@ -65,10 +70,12 @@ export function InventoryItemDetailPage() {
     load();
   }, [load]);
 
+  // A MESMA seleção canônica do cálculo de custo: o que aparece aqui é o
+  // que o CMV usaria hoje para este item, com a referência manual ao lado.
   useEffect(() => {
     if (!itemId) return;
-    getItemCostReference(itemId)
-      .then(setCostReference)
+    getItemCostReferences(itemId)
+      .then((result) => setCostReference(result ?? null))
       .catch(() => setCostReference(null));
   }, [itemId]);
 
@@ -141,30 +148,59 @@ export function InventoryItemDetailPage() {
 
         {costReference && (
           <FormSection
-            title="Referência de custo"
-            subtitle="Baseada apenas em custos efetivos de aquisição informados — preço de OC nunca entra."
+            title="Custo de referência"
+            subtitle="A fonte que o cálculo de custo e o CMV usariam hoje para este item. Preço de OC nunca entra."
           >
             <dl className="definition-list">
-              <dt>Custo unitário</dt>
+              <dt>Custo utilizado</dt>
               <dd>
-                {costReference.unitCost
-                  ? `${formatBRL(costReference.unitCost)} / ${costReference.unitCode}`
-                  : "Sem custo"}
+                {costReference.automatic.unitCost !== null
+                  ? `${formatUnitPriceBRL(costReference.automatic.unitCost)} / ${costReference.automatic.unitCode}`
+                  : "Não informado"}
               </dd>
-              <dt>Origem</dt>
+              <dt>Fonte</dt>
               <dd>
                 <span
                   className={
-                    costReference.source === "NO_COST" ? "badge badge--warn" : "badge badge--neutral"
+                    costReference.automatic.source === "NO_COST"
+                      ? "badge badge--warn"
+                      : "badge badge--neutral"
                   }
                 >
-                  {COST_SOURCE_LABELS[costReference.source]}
+                  {INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[costReference.automatic.source]}
                 </span>
+                {costReference.automatic.details && (
+                  <span className="field__hint"> {costReference.automatic.details}</span>
+                )}
+              </dd>
+              <dt>Referência manual</dt>
+              <dd>
+                {costReference.current ? (
+                  <>
+                    {formatUnitPriceBRL(costReference.current.unitCost)} / {costReference.current.uomCode}
+                    <span className="field__hint">
+                      {" "}
+                      — válida desde {formatDate(costReference.current.effectiveFrom)}
+                    </span>
+                  </>
+                ) : (
+                  "Não informado"
+                )}
               </dd>
               <dt>Data de referência</dt>
-              <dd>{formatDate(costReference.referenceDate)}</dd>
+              <dd>{formatDate(costReference.automatic.referenceDate)}</dd>
             </dl>
-            {costReference.details && <p className="field__hint">{costReference.details}</p>}
+            <p className="field__hint">{COST_SOURCE_AUTO_SELECTION_TEXT}</p>
+            <div className="line-actions">
+              {/* A referência se define no cadastro do item, que é onde ela
+                  tem histórico — não aqui, no estoque. */}
+              <Link
+                className="btn btn--ghost btn--sm"
+                to={`/cadastros/itens?ids=${detail.itemId}&open=${detail.itemId}`}
+              >
+                {costReference.current ? "Alterar referência manual" : "Definir referência manual"}
+              </Link>
+            </div>
           </FormSection>
         )}
 

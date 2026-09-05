@@ -50,6 +50,18 @@ export const suprimentosTopics = {
         term: "Origem",
         text: "De onde a ordem nasceu: escrita à mão, ou gerada como rascunho a partir de uma falta detectada num pedido de cliente. Gerar rascunho não compra nada; confirmar continua sendo um ato à parte.",
       },
+      {
+        term: "Dica comercial da linha",
+        text: "Sob cada item aparece o que Item × Fornecedor sabe daquele par: homologação, se é preferencial, preço de referência e pedido mínimo. É orientação para quem digita o preço previsto — não trava e não preenche sozinha.",
+      },
+      {
+        term: "Recebimentos",
+        text: "Na ordem confirmada, o bloco lista cada recebimento já feito contra ela: data, nota fiscal, itens, quantidade e lotes gerados. É por ele que se lê quanto ainda está em aberto.",
+      },
+      {
+        term: "Total e previsão",
+        text: "Na lista, Total é a soma dos preços previstos das linhas e Previsão é a data de entrega prevista. Os dois são compromisso comercial, não custo nem estoque.",
+      },
     ],
     flow: [
       {
@@ -88,6 +100,7 @@ export const suprimentosTopics = {
       "Fornecedor e item ficam congelados na ordem no momento em que a linha é escrita: renomear o item no cadastro depois não muda como a ordem já confirmada é lida.",
       "Não existe fechamento por saldo: uma ordem com sobra em aberto que nunca vai chegar continua parcialmente recebida.",
       "Material do cliente nunca entra em ordem de compra da Veridi. Falta de material do cliente se resolve com nova remessa dele.",
+      "Na ordem confirmada, “Salvar previsão e observações” é a única edição que sobra; “Receber materiais” leva ao recebimento; Imprimir é leitura.",
     ],
   },
 
@@ -124,6 +137,18 @@ export const suprimentosTopics = {
       {
         term: "Situação inicial do lote",
         text: "Item que exige liberação da Qualidade ou laudo entra como Aguardando liberação: o material já está no estoque físico, mas ainda não conta como disponível.",
+      },
+      {
+        term: "Localização",
+        text: "Onde o lote foi guardado, informado na linha do recebimento. É texto de apoio à separação; não é regra de estoque.",
+      },
+      {
+        term: "Usar preço da OC",
+        text: "Atalho de digitação: copia o preço previsto da ordem para o campo de custo efetivo. É você quem afirma que o valor praticado foi esse — o sistema nunca assume o preço da ordem como custo sozinho.",
+      },
+      {
+        term: "Lista de recebimentos",
+        text: "Todos os recebimentos, com origem (compra ou material do cliente), ordem de compra, fornecedor ou cliente, data e itens. A situação é sempre Confirmado: recebimento não tem rascunho nem outra situação.",
       },
     ],
     flows: [
@@ -192,13 +217,44 @@ export const suprimentosTopics = {
           {
             label: "Lote do cliente",
             detail:
-              "O lote nasce com aquele cliente como proprietário e sem fornecedor — quem enviou é o dono, e dono não é fornecedor. O lote do fabricante fica registrado à parte.",
+              "O lote interno nasce com aquele cliente como proprietário e sem fornecedor — quem enviou é o dono, e dono não é fornecedor. O campo Lote do fabricante guarda a identificação que veio na embalagem, e Validade e Localização entram na mesma linha.",
           },
           {
             label: "Estoque segregado",
             detail:
               "O material entra no estoque físico com o dono explícito e só pode ser usado em ordens de produção do próprio cliente. Não recebe custo de aquisição da Veridi.",
             tone: "accent",
+          },
+        ],
+      },
+      {
+        name: "Fluxo C · Consultar um recebimento",
+        when: "O recebimento já existe e a pergunta é o que entrou, em qual lote, com qual custo e com qual documento.",
+        steps: [
+          {
+            label: "Dados do recebimento",
+            detail:
+              "Origem, ordem de compra ou cliente proprietário, fornecedor, data, nota fiscal, referência de documento, quem criou e observações. Nada disso se edita.",
+          },
+          {
+            label: "Itens recebidos",
+            detail:
+              "Por linha: quantidade, lote do fornecedor, validade, localização, o lote interno gerado — com “Imprimir etiqueta” — a situação do laudo, o preço previsto da ordem e o custo efetivo.",
+          },
+          {
+            label: "Definir ou atualizar custo",
+            tone: "accent",
+            detail:
+              "A única ação da tela: informa ou corrige o custo efetivo de aquisição da linha. É custeio — nunca muda quantidade, lote ou estoque. Em linha de material do cliente aparece Não aplicável.",
+          },
+          {
+            label: "Documentos do recebimento",
+            detail:
+              "Anexos como a nota fiscal. O laudo do material fica no lote, não aqui.",
+          },
+          {
+            label: "Imprimir",
+            detail: "O documento de recebimento sai do que está gravado.",
           },
         ],
       },
@@ -245,7 +301,15 @@ export const suprimentosTopics = {
         text: "A mais recente que já começou a valer e ainda não expirou. Preço sem vigência é referência histórica e nunca é apresentado como preço de hoje.",
       },
       {
-        term: "Pedido mínimo (MOQ)",
+        term: "Coluna Referências",
+        text: "Quantas ofertas já foram registradas nesta relação, vigentes ou não. É a mesma coisa que “ofertas” no detalhe — o histórico de preços do par.",
+      },
+      {
+        term: "Filtros",
+        text: "Homologação, fornecedor, família do item, só preferenciais e só ativas. A lista chega filtrada por item quando se vem do cadastro do item ou da ordem de compra.",
+      },
+      {
+        term: "Pedido mínimo",
         text: "Quanto o fornecedor exige por pedido. É recomendação, não bloqueio. Vazio quer dizer não informado, nunca zero.",
       },
     ],
@@ -343,11 +407,15 @@ export const suprimentosTopics = {
       },
       {
         term: "Reservado",
-        text: "A parte do físico já comprometida com ordens de produção liberadas e ainda não consumida. Continua no depósito, mas nenhuma outra ordem pode contar com ela.",
+        text: "A parte do físico já comprometida: matéria-prima e embalagem reservadas por ordens de produção liberadas e ainda não consumidas; produto acabado reservado a pedidos de cliente. Continua no depósito, mas ninguém mais pode contar com ela.",
       },
       {
         term: "Disponível",
         text: "Físico menos reservado, contando só lote liberado, com laudo aprovado quando exigido, e não vencido. É o único número que responde 'posso usar?'.",
+      },
+      {
+        term: "Somente com estoque e FO-02",
+        text: "O filtro esconde itens zerados; a busca e o tipo recortam a lista. “Imprimir posição (FO-02)” leva o mesmo recorte para o papel, para conferência no depósito.",
       },
       {
         term: "Em Compra",
@@ -376,7 +444,7 @@ export const suprimentosTopics = {
       {
         label: "Reservado",
         detail:
-          "A parte do físico já comprometida com ordens de produção liberadas e ainda não consumida. Continua no depósito, mas nenhuma outra ordem pode contar com ela.",
+          "A parte do físico já comprometida — com ordens de produção liberadas ou, no produto acabado, com pedidos de cliente. Continua no depósito, mas ninguém mais pode contar com ela.",
       },
       {
         label: "Disponível",
@@ -542,6 +610,14 @@ export const suprimentosTopics = {
         term: "Ajuste de correção",
         text: "O único jeito de corrigir: um lançamento novo, com motivo. O lançamento errado continua visível, porque é a sequência inteira que explica o saldo de hoje.",
       },
+      {
+        term: "Usuário",
+        text: "Quem lançou o movimento, lido da sessão de quem executou a operação — nunca digitado. Com o documento de origem, é a outra metade da resposta de auditoria.",
+      },
+      {
+        term: "Entrada / Saída",
+        text: "O sentido do lançamento, dito pelo tipo. A quantidade é sempre positiva; a coluna é que diz se o saldo subiu ou desceu.",
+      },
     ],
     flow: [
       {
@@ -577,7 +653,7 @@ export const suprimentosTopics = {
       "Liberar, bloquear ou desbloquear lote não aparece nesta lista: essas decisões mudam a disponibilidade, não o estoque físico.",
       "Reserva também não aparece: reservar compromete quantidade para uma ordem, não movimenta estoque. Quem movimenta é o consumo.",
       "Cada lançamento carrega o documento que o originou — recebimento, ordem de compra, ordem de produção, expedição, amostra — e é por ele que se refaz o caminho do material.",
-      "O filtro por tipo desta tela cobre os tipos mais consultados; o histórico completo continua vindo pela busca por item ou lote.",
+      "O filtro por tipo oferece todos os tipos de movimento; a busca por item ou lote recorta o histórico. Exportar leva o recorte filtrado.",
     ],
   },
 
@@ -717,6 +793,7 @@ export const suprimentosTopics = {
       "Ordem de produção com componente do cliente não é liberada sem cliente definido: sem ele não existe estoque elegível para aquele componente.",
       "Qualidade, validade, reserva e FEFO valem igual para material do cliente. O dono é mais um critério de elegibilidade, não uma exceção às outras regras.",
       "A Posição de Estoque continua mostrando esse material no total físico do item, com o dono explícito — a separação por dono acontece na alocação e aqui.",
+      "Reservado e Disponível seguem as mesmas regras do estoque próprio: reserva de ordem de produção do cliente compromete o lote, e a Qualidade decide se ele conta como disponível. O filtro por qualidade recorta a lista por essa situação, e o código do lote abre o lote.",
     ],
   },
 
@@ -752,7 +829,31 @@ export const suprimentosTopics = {
       },
       {
         term: "Laudo (CoA)",
-        text: "Situação documental do certificado do lote, independente da operacional. Anexar não aprova, e aprovar não libera o lote.",
+        text: "Situação documental do certificado do lote, independente da operacional. Anexar não aprova, e aprovar não libera o lote. Rejeitar exige motivo e bloqueia o lote na mesma ação.",
+      },
+      {
+        term: "Expedições",
+        text: "No detalhe do lote: para onde ele foi. Só expedição confirmada saiu de fato do estoque; rascunho de expedição não aparece como saída.",
+      },
+      {
+        term: "Custo de aquisição × custo material da produção",
+        text: "Dois blocos com regras diferentes. Custo de aquisição é o custo efetivo informado no recebimento deste lote — a fonte real de custo; material do cliente não tem. Custo material da produção, em lote produzido, é derivado do que a ordem de produção realmente consumiu — nunca de oferta de fornecedor.",
+      },
+      {
+        term: "Destino comercial",
+        text: "Por que o lote produzido existe: o pedido e o cliente que a ordem de produção atende. Por onde ele saiu está em Expedições.",
+      },
+      {
+        term: "Rastreabilidade",
+        text: "Genealogia real, nos dois sentidos: de quais lotes de material este lote veio, e em quais ordens de produção e amostras ele foi utilizado. Consumo e produção efetivos — nunca reserva nem sugestão.",
+      },
+      {
+        term: "Auditoria",
+        text: "Quem criou, liberou, bloqueou ou desbloqueou o lote, e quando. Lido da sessão de quem agiu.",
+      },
+      {
+        term: "Escanear QR",
+        text: "A leitura de um lote pela câmera ou pelo código digitado, em tela própria. É consulta: mostra o lote e a situação e leva ao detalhe — não movimenta, não libera nem reserva.",
       },
     ],
     flows: [
@@ -858,6 +959,49 @@ export const suprimentosTopics = {
       "Liberar, bloquear e desbloquear são decisões da Qualidade. Para os outros perfis a ação não aparece, e no lugar dela fica o motivo.",
       "Quantidade recebida (ou produzida) não é saldo. O saldo atual é sempre a soma das movimentações do lote.",
       "Lote não é excluído. Um lote criado por engano se resolve zerando o saldo por ajuste, com motivo, e bloqueando o lote.",
+      "A lista filtra por proprietário (Veridi ou cliente) e por situação, e cada linha oferece Imprimir etiqueta (QR) e Abrir. Exportar leva o recorte filtrado.",
+      "Imprimir etiqueta e imprimir a rastreabilidade são leituras: nenhuma impressão altera o lote.",
+    ],
+  },
+  "estoque.escanear": {
+    module: "estoque",
+    title: "Escanear lote: consulta pela leitura, nada mais",
+    summary:
+      "Esta tela lê um lote pelo QR da etiqueta ou pelo código digitado e mostra o que ele é: código, situação, item, validade e localização. É consulta pura — não movimenta estoque, não libera, não bloqueia e não reserva. Conferência de separação e de expedição acontecem dentro da ordem de produção e da expedição, não aqui.",
+    concepts: [
+      {
+        term: "Ler QR ou digitar",
+        text: "A câmera lê o QR da etiqueta; sem câmera, o código interno digitado faz o mesmo. Os dois caminhos consultam o mesmo lote.",
+      },
+      {
+        term: "Lote encontrado",
+        text: "Código, situação de Qualidade (inclusive Vencido), item, validade e localização. A situação é a que decide se o material pode ser usado.",
+      },
+      {
+        term: "Lote não encontrado",
+        text: "Código que não existe ou etiqueta de outra coisa — o QR de amostra tem prefixo próprio e nunca abre um lote.",
+      },
+      {
+        term: "Ver detalhes",
+        text: "Abre o lote completo: saldo, qualidade, laudo, rastreabilidade e as ações da Qualidade.",
+      },
+    ],
+    flow: [
+      { label: "Ler ou digitar" },
+      { label: "Consultando" },
+      { label: "Lote encontrado", tone: "accent" },
+      { label: "Ver detalhes ou escanear outro" },
+    ],
+    steps: [
+      { label: "Ler ou digitar", detail: "Aponte a câmera para o QR ou digite o código interno do lote." },
+      { label: "Consultando", detail: "A tela busca o lote pelo código. Nada é gravado." },
+      { label: "Lote encontrado", detail: "Situação, item, validade e localização. Vencido aparece marcado." },
+      { label: "Ver detalhes ou escanear outro", detail: "Abrir o lote completo, ou voltar à leitura para o próximo." },
+    ],
+    notes: [
+      "Ler não movimenta, não libera, não reserva e não confere separação: essas ações vivem na ordem de produção, na expedição e no lote.",
+      "O QR aponta só para o código interno do lote — nunca para quantidade, situação ou dono, que mudam.",
+      "Etiqueta de amostra não abre lote: amostra tem QR próprio.",
     ],
   },
 } satisfies Record<string, HelpTopic>;
@@ -879,7 +1023,7 @@ export const suprimentosHints = {
   "estoque.reservado": {
     module: "estoque",
     label: "Reservado",
-    text: "A parte do físico já comprometida com ordens de produção liberadas e ainda não consumida. Continua no depósito, mas nenhuma outra ordem pode contar com ela.",
+    text: "A parte do físico já comprometida — com ordens de produção liberadas e ainda não consumidas, ou, no produto acabado, com pedidos de cliente. Continua no depósito, mas ninguém mais pode contar com ela.",
   },
   "estoque.disponivel": {
     module: "estoque",

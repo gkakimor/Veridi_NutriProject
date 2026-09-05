@@ -11,6 +11,7 @@ import type {
 } from "@veridi/shared";
 import {
   CMV_GROUP_LABELS,
+  COST_SOURCE_AUTO_SELECTION_TEXT,
   INDUSTRIAL_COST_BASIS_LABELS,
   INDUSTRIAL_COST_QUALITY_HINTS,
   INDUSTRIAL_COST_QUALITY_LABELS,
@@ -709,6 +710,12 @@ export function ProductCmvPage() {
                   : "De onde vem cada real do custo desta quantidade."
             }
           >
+            {/* A ordem de seleção da fonte é lida aqui, ao lado da coluna que
+                diz qual fonte cada material recebeu. "Referência manual
+                forçada" é exceção registrada no cálculo de referência, com
+                motivo — a tela do cálculo mostra a auditoria. */}
+            <p className="field__hint">{COST_SOURCE_AUTO_SELECTION_TEXT}</p>
+
             {/* Os dois resumos continuam visíveis acima; aqui alterna só o
                 detalhe, e o subtítulo sempre nomeia qual está aberto. */}
             {simulation && live && (

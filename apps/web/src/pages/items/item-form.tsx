@@ -84,6 +84,9 @@ interface FormState {
   defaultPurityPercent: string;
   packagingSubtype: string;
   externalBarcode: string;
+  /** Só na criação. Vazio = sem referência; o item continua válido. */
+  initialCostReference: string;
+  initialCostReferenceNote: string;
 }
 
 function initialState(item: ItemDTO | null, initialType: ItemType | null): FormState {
@@ -102,6 +105,8 @@ function initialState(item: ItemDTO | null, initialType: ItemType | null): FormS
       defaultPurityPercent: item.defaultPurityPercent ?? "",
       packagingSubtype: item.packagingSubtype ?? "",
       externalBarcode: item.externalBarcode ?? "",
+      initialCostReference: "",
+      initialCostReferenceNote: "",
     };
   }
   /*
@@ -126,6 +131,8 @@ function initialState(item: ItemDTO | null, initialType: ItemType | null): FormS
     defaultPurityPercent: "",
     packagingSubtype: "",
     externalBarcode: "",
+    initialCostReference: "",
+    initialCostReferenceNote: "",
   };
 }
 
@@ -196,6 +203,19 @@ export function useItemForm({
       return;
     }
 
+    // Referência inicial passa pelo mesmo parser de decimal da pureza. Vazio
+    // é "sem referência" — nunca zero.
+    const referenciaNormalizada =
+      form.initialCostReference.trim() === ""
+        ? ""
+        : parseDecimalInput(form.initialCostReference);
+    if (referenciaNormalizada === null) {
+      setFieldErrors({ initialCostReference: mensagemDecimalInvalido("Custo de referência inicial") });
+      setError("Corrija os campos destacados.");
+      setSaving(false);
+      return;
+    }
+
     const trimmedBarcode = form.externalBarcode.trim();
     const payload = {
       type: form.type,
@@ -229,7 +249,20 @@ export function useItemForm({
 
     try {
       if (mode === "create") {
-        const created = await createItem(payload);
+        const created = await createItem({
+          ...payload,
+          ...(referenciaNormalizada
+            ? {
+                initialCostReference: {
+                  unitCost: referenciaNormalizada,
+                  uomCode: form.unitCode,
+                  ...(form.initialCostReferenceNote.trim()
+                    ? { note: form.initialCostReferenceNote.trim() }
+                    : {}),
+                },
+              }
+            : {}),
+        });
         onSaved(created);
       } else if (item) {
         await updateItem(item.id, payload);
@@ -577,6 +610,53 @@ export function ItemFormFields({
           <p className="field__hint">Código de barras do fornecedor. Opcional.</p>
         </div>
       </FormSection>
+
+      {/*
+        Referência inicial é opcional e vive só na criação: depois que o item
+        existe, alterar a referência é uma vigência nova, com histórico, na
+        seção "Custo de referência" da edição. Produto acabado não é comprado.
+      */}
+      {mode === "create" && form.type !== "FINISHED_PRODUCT" && (
+        <FormSection
+          title="Custo de referência"
+          subtitle="Opcional. Estimativa usada quando não houver compra real nem oferta válida de fornecedor com prioridade maior."
+        >
+          <div className="field-grid-2">
+            <div className="field field--narrow">
+              <label htmlFor="item-initial-cost-reference">
+                Custo de referência inicial (R$ por {form.unitCode || "unidade"})
+              </label>
+              <input
+                id="item-initial-cost-reference"
+                type="text"
+                inputMode="decimal"
+                placeholder="Ex.: 1200,00"
+                value={form.initialCostReference}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, initialCostReference: event.target.value }))
+                }
+                {...fieldProps("initialCostReference")}
+              />
+              <p className="field__hint">
+                Em branco significa "Não informado" — nunca R$ 0,00. Não é compra nem custo real.
+              </p>
+              {fieldError("initialCostReference")}
+            </div>
+            <div className="field">
+              <label htmlFor="item-initial-cost-reference-note">Observação da referência</label>
+              <input
+                id="item-initial-cost-reference-note"
+                type="text"
+                placeholder="Ex.: cotação verbal do fornecedor"
+                value={form.initialCostReferenceNote}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, initialCostReferenceNote: event.target.value }))
+                }
+              />
+            </div>
+          </div>
+        </FormSection>
+      )}
 
       {mode === "edit" && item && (
         <FormSection title="Status">

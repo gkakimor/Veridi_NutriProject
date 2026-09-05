@@ -1,5 +1,7 @@
 import type {
+  CreateItemCostReferenceInput,
   CreateItemInput,
+  ItemCostReferencesResponse,
   ItemDTO,
   ItemListResponse,
   ItemType,
@@ -57,6 +59,25 @@ export async function updateItem(
     body: JSON.stringify(input),
   });
   return (await parseJsonOrThrow(response)) as ItemDTO;
+}
+
+/** Vigência atual, histórico e a fonte que a seleção automática usa hoje. */
+export async function getItemCostReferences(id: string): Promise<ItemCostReferencesResponse> {
+  const response = await apiFetch(`${API_URL}/items/${id}/cost-references`);
+  return (await parseJsonOrThrow(response)) as ItemCostReferencesResponse;
+}
+
+/** Cria uma vigência NOVA — a anterior fica no histórico. */
+export async function createItemCostReference(
+  id: string,
+  input: CreateItemCostReferenceInput,
+): Promise<ItemCostReferencesResponse> {
+  const response = await apiFetch(`${API_URL}/items/${id}/cost-references`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await parseJsonOrThrow(response)) as ItemCostReferencesResponse;
 }
 
 export async function setItemActive(

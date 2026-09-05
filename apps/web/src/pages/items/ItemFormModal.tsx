@@ -1,6 +1,7 @@
 import type { ItemDTO, UnitOfMeasureDTO } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { SupplierItemsSection } from "../../components/SupplierItemsSection";
+import { ItemCostReferenceSection } from "../../components/ItemCostReferenceSection";
 import { formatDate } from "../../lib/dates";
 import { ITEM_FORM_ID, ItemFormFields, useItemForm } from "./item-form";
 
@@ -83,6 +84,14 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
       {/* Fornecedores existem depois que o item existe — o modal de criacao
           continua enxuto. */}
       {mode === "edit" && item && <SupplierItemsSection scope="item" id={item.id} />}
+
+      {/* Custo de referência vem DEPOIS dos fornecedores de propósito: a
+          referência manual é a última fonte da seleção automática, e a
+          ordem na tela repete a ordem da regra. Produto acabado não é
+          comprado — não tem custo de aquisição a referenciar. */}
+      {mode === "edit" && item && item.type !== "FINISHED_PRODUCT" && (
+        <ItemCostReferenceSection itemId={item.id} />
+      )}
     </FullWorkspaceModal>
   );
 }

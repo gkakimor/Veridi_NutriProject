@@ -164,7 +164,8 @@ export function LotsPage() {
         <div>
           <h1 className="page__title">Lotes</h1>
           <p className="page__subtitle">
-            Lotes internos gerados a partir de recebimentos. Sem saldo de estoque ainda.
+            Lotes internos criados por recebimento ou por produção. O saldo de cada um é a soma
+            das movimentações.
           </p>
         </div>
         <button

@@ -28,7 +28,7 @@ export function NotFoundPage() {
         {/* Voltar é navegação, não ação: link de verdade, com endereço no
             href — a mesma regra que esta entrega aplicou nas outras telas. */}
         <Link className="btn btn--ghost" to="/">
-          ← Voltar para o Dashboard
+          ← Voltar para o Painel
         </Link>
       </div>
     </div>

@@ -110,6 +110,9 @@ No raw feature-level hex colors. Use design tokens.
 - Reservation and physical consumption are distinct.
 - Actual confirmed consumption drives final stock deduction.
 - Important multi-record operations must be transactional.
+- A migration contains only the deliberate changes of its capability. Never
+  commit a Prisma-generated diff carrying unrelated drift (see BACKLOG #14 and
+  `docs/TECH_BASELINE.md`, "Migration order").
 
 ## Delivery style
 For each requested feature:

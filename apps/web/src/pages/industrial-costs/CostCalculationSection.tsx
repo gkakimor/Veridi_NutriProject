@@ -7,12 +7,14 @@ import type {
 } from "@veridi/shared";
 import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
 import { CostBreakdown, CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
+import { MaterialCostSourceChooser } from "../../components/MaterialCostSourceChooser";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { formatBRL } from "../../lib/currency";
 import {
   calculateIndustrialCost,
   listProductCostCalculations,
+  previewIndustrialCost,
   saveIndustrialCostCalculation,
 } from "../../lib/cost-calculation-api";
 import { createPricingVersion } from "../../lib/pricing-api";
@@ -58,6 +60,12 @@ export function CostCalculationSection({
    */
   const salvando = useRef(false);
   const [result, setResult] = useState<IndustrialCostCalculationDTO | null>(null);
+  /**
+   * Referência manual forçada, por material: itemId → motivo. Vive só
+   * nesta tela e só neste cálculo — trocar de versão ou recarregar a página
+   * volta ao automático, que é o padrão.
+   */
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [history, setHistory] = useState<IndustrialCostCalculationSummaryDTO[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +88,28 @@ export function CostCalculationSection({
   // Trocar de versão invalida o resultado exibido: ele é daquela estrutura.
   useEffect(() => {
     setResult(null);
+    setOverrides({});
   }, [versionId]);
+
+  const referenceDateIso = () => new Date(`${referenceDate}T12:00:00`).toISOString();
+  const materialOverrides = (atual: Record<string, string>) =>
+    Object.entries(atual).map(([itemId, reason]) => ({ itemId, reason }));
+
+  /** A prévia com substituições vai pelo caminho que aceita a lista; sem elas, o de sempre. */
+  async function calcular(atual: Record<string, string> = overrides) {
+    const lista = materialOverrides(atual);
+    setResult(
+      lista.length > 0
+        ? await previewIndustrialCost(versionId, {
+            costReferenceDate: referenceDateIso(),
+            materialOverrides: lista,
+          })
+        : await calculateIndustrialCost(versionId, referenceDateIso()),
+    );
+  }
+
+  /** Motivo em branco em alguma substituição: o servidor recusa, e a tela avisa antes. */
+  const substituicaoSemMotivo = Object.values(overrides).some((reason) => reason.trim() === "");
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -108,8 +137,10 @@ export function CostCalculationSection({
     salvando.current = true;
     try {
       await run(async () => {
+        const lista = materialOverrides(overrides);
         const saved = await saveIndustrialCostCalculation(versionId, {
-          costReferenceDate: new Date(`${referenceDate}T12:00:00`).toISOString(),
+          costReferenceDate: referenceDateIso(),
+          ...(lista.length > 0 ? { materialOverrides: lista } : {}),
         });
         loadHistory();
         navigate(`/calculos-custo/${saved.id}`);
@@ -147,16 +178,7 @@ export function CostCalculationSection({
             type="button"
             className="btn btn--accent btn--sm"
             disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                setResult(
-                  await calculateIndustrialCost(
-                    versionId,
-                    new Date(`${referenceDate}T12:00:00`).toISOString(),
-                  ),
-                );
-              })
-            }
+            onClick={() => void run(() => calcular())}
           >
             Calcular custo
           </button>
@@ -170,7 +192,12 @@ export function CostCalculationSection({
             <button
               type="button"
               className="btn btn--secondary btn--sm"
-              disabled={busy}
+              disabled={busy || substituicaoSemMotivo}
+              title={
+                substituicaoSemMotivo
+                  ? "Informe o motivo de cada referência manual forçada antes de salvar."
+                  : undefined
+              }
               onClick={() => {
                 // Congelar é decisão de quem salva — mas congelar um custo
                 // INCOMPLETO em silêncio não é decisão, é acidente: o número
@@ -202,6 +229,25 @@ export function CostCalculationSection({
               productId={productId}
               onStructurePage
               structureLocked={result.structureStatus !== "DRAFT"}
+            />
+            {/* A escolha da fonte vem DEPOIS do detalhamento: primeiro se lê o
+                que o automático fez, depois se decide se há motivo para
+                forçar. Mudar a escolha recalcula na hora — o impacto aparece
+                antes de qualquer justificativa ser escrita. */}
+            <MaterialCostSourceChooser
+              materials={result.materials}
+              overrides={overrides}
+              disabled={busy}
+              onToggle={(itemId, forced) => {
+                const proximo = { ...overrides };
+                if (forced) proximo[itemId] = proximo[itemId] ?? "";
+                else delete proximo[itemId];
+                setOverrides(proximo);
+                void run(() => calcular(proximo));
+              }}
+              onReason={(itemId, reason) =>
+                setOverrides((atual) => ({ ...atual, [itemId]: reason }))
+              }
             />
           </>
         )}

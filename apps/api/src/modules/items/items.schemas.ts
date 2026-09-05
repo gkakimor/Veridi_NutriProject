@@ -41,6 +41,18 @@ const industrialItemFields = {
   packagingSubtype: packagingSubtypeSchema,
 };
 
+/**
+ * Custo de referência inicial — opcional na criação. Validação de domínio
+ * (unidade compatível, valor não negativo) fica no serviço, junto da porta
+ * "alterar referência": duas portas, uma regra.
+ */
+const initialCostReferenceSchema = z.object({
+  unitCost: z.union([z.string(), z.number()]).transform((value) => String(value).trim()),
+  uomCode: z.string().trim().min(1).optional(),
+  effectiveFrom: z.string().trim().min(1).optional(),
+  note: z.string().trim().max(500).nullish(),
+});
+
 export const createItemSchema = z.object({
   type: itemTypeSchema,
   name: z.string().trim().min(1, "Nome é obrigatório").max(200),
@@ -51,6 +63,7 @@ export const createItemSchema = z.object({
   requiresCoa: z.boolean().optional(),
   ...industrialItemFields,
   externalBarcode: z.string().trim().max(64).optional(),
+  initialCostReference: initialCostReferenceSchema.optional(),
 });
 
 export const updateItemSchema = z.object({

@@ -47,11 +47,23 @@ export const cadastrosTopics = {
         term: "Histórico operacional",
         text: "O item passa a ter histórico assim que aparece em uma linha de ordem de compra, um recebimento, um lote ou uma movimentação de estoque. A partir daí os campos estruturais travam.",
       },
+      {
+        term: "Custo de referência",
+        text: "A referência manual de custo do item: uma estimativa declarada por gente, com valor, unidade, válido desde e observação. Não é compra, recebimento nem valor pago. Alterar cria uma nova vigência e a anterior fica no histórico; cálculos já salvos não mudam.",
+      },
+      {
+        term: "Fonte selecionada hoje",
+        text: "Ao lado da referência, a fonte que o cálculo de custo e o CMV usariam agora para este item, escolhida automaticamente nesta ordem: compra real dos últimos 30 dias, compra real dos últimos 90 dias, última compra real, oferta válida de fornecedor, referência manual. A referência só entra quando nada de prioridade maior existe — é assim que se lê a diferença entre referência e compra real.",
+      },
+      {
+        term: "Fornecedores",
+        text: "Na edição, a lista de quem fornece o item, com homologação, preferencial, preço e pedido mínimo — só leitura. Cadastrar relação, homologar e registrar preço acontecem em Compras › Item × Fornecedor.",
+      },
     ],
     flows: [
       {
         name: "A. Cadastrar um item",
-        when: "É o que você faz nesta tela.",
+        when: "Em Novo item de estoque — a tela de criação, que abre esta mesma ajuda.",
         steps: [
           {
             label: "Tipo e unidade",
@@ -75,9 +87,14 @@ export const cadastrosTopics = {
               "Controla lote, controla validade, requer liberação da Qualidade e exige CoA. O tipo escolhido já traz um padrão para os três primeiros; a exigência de laudo começa desligada sempre.",
           },
           {
-            label: "Salvar",
+            label: "Custo de referência inicial",
             detail:
-              "O código sai da sequência oficial do tipo (MP, ME ou PA) e não é digitado nem editado depois.",
+              "Opcional: uma estimativa de custo por unidade do item, para o CMV existir antes da primeira compra. Em branco é “Não informado”, nunca R$ 0,00. Códigos (código de barras) também são opcionais.",
+          },
+          {
+            label: "Criar item",
+            detail:
+              "O código sai da sequência oficial do tipo (MP ou ME) e não é digitado nem editado depois. O item nasce ativo.",
           },
         ],
       },
@@ -99,7 +116,7 @@ export const cadastrosTopics = {
           {
             label: "O que segue editável",
             detail:
-              "Nome, classificação industrial, liberação da Qualidade, exigência de CoA e barcode continuam ajustáveis a qualquer momento.",
+              "Nome, classificação industrial, liberação da Qualidade, exigência de CoA, código de barras e o custo de referência continuam ajustáveis a qualquer momento.",
           },
           {
             label: "Inativar",
@@ -116,6 +133,8 @@ export const cadastrosTopics = {
       "Pureza em branco é pureza desconhecida, não 100%. Nenhuma correção é aplicada quando ela está vazia, e o valor daqui é apenas o ponto de partida de uma formulação nova.",
       "Subtipo de embalagem só existe para material de embalagem. Informá-lo em outro tipo é recusado com \"subtipo de embalagem só se aplica a itens do tipo Material de embalagem\".",
       "Inativar não exclui e não interrompe o que já está em curso: recebimento contra ordem de compra existente, consumo de produção e saldo em estoque continuam funcionando. O que o item deixa de aceitar é vínculo novo — nova relação com fornecedor, nova linha de ordem de compra, novo produto acabado e novo componente de formulação.",
+      "Referência manual de custo é estimativa: entra na seleção automática só depois de compra real e oferta válida. Existindo compra real nos últimos 30 dias, é a compra que vale — a referência fica registrada e a tela do item diz que ela não está sendo usada. Várias ofertas válidas sem preferencial também não deixam a referência entrar sozinha: a fonte fica em “Ofertas disponíveis · seleção necessária” até alguém definir o preferencial. Material do cliente nunca ganha custo Veridi, mesmo com referência no item.",
+      "Na lista, a busca casa código, nome ou código de barras; os filtros são por tipo e por situação. Marcar linhas permite exportar só o que foi marcado; Exportar CSV sem marcação leva o recorte filtrado.",
     ],
   },
 
@@ -231,6 +250,8 @@ export const cadastrosTopics = {
       "Vida útil em meses é a sugestão de validade quando um lote é produzido. Ela não altera lotes já existentes, e a data digitada no apontamento sempre vence a sugestão.",
       "Código de lote comercial do produto e sufixo do cliente só alimentam a sugestão da máscara de lote na ordem de produção. Não são o código do lote interno e não são obrigatórios.",
       "Inativar um produto não apaga nada e não pede confirmação de nada em aberto. A partir daí ele é recusado em nova linha de pedido, na confirmação de pedido e em nova ordem de produção.",
+      "Documentos (arte de rótulo, ficha técnica) e Observações são referência: anexar e anotar não mudam nenhuma regra do produto. Dose e apresentação descrevem o produto e não alimentam cálculo — quem manda no cálculo por dose é a formulação.",
+      "Na lista, cada linha oferece os atalhos CMV e Custos industriais, além de Inativar/Reativar. A busca casa código, nome, referência e cliente; os filtros são cliente, situação e ciclo de vida. Novo produto abre em tela própria.",
     ],
   },
 
@@ -238,7 +259,7 @@ export const cadastrosTopics = {
     module: "cadastros",
     title: "Cliente: a identidade que os documentos congelam",
     summary:
-      "Cliente é a pessoa jurídica que compra da Veridi e que, em private label, é dona da marca e às vezes do próprio material. O cadastro guarda identificação, contato e endereço. Não é agenda de contatos nem CRM: não há histórico de conversas, funil nem tarefas aqui — o funil comercial é o Projeto.",
+      "Cliente é a pessoa jurídica que compra da Veridi e que, em private label, é dona da marca e às vezes do próprio material. O cadastro guarda identificação, contato, endereço e notas internas. Não é agenda de contatos nem ferramenta de relacionamento comercial: não há histórico de conversas, funil nem tarefas aqui — o funil comercial é o Projeto.",
     concepts: [
       {
         term: "Código do cliente",
@@ -293,6 +314,7 @@ export const cadastrosTopics = {
       "Inativar um cliente não é bloqueado por pedido em aberto — o sistema deixa inativar e passa a recusar o que vier depois: novo produto para ele, criação e confirmação de pedido, e registro de material enviado por ele.",
       "Estoque de propriedade do cliente é identificado por este cadastro. É ele que decide qual material de cliente uma formulação, uma ordem ou uma amostra pode consumir.",
       "Alterar razão social ou endereço não reescreve documento já emitido: a proposta enviada guarda a cópia congelada do cliente daquela data.",
+      "Observações são notas internas: nunca saem em documento para o cliente. Na lista, a busca casa código, razão social, nome fantasia e CNPJ; os filtros são UF e situação, e Exportar leva o recorte. Novo cliente abre em tela própria, que usa esta mesma ajuda.",
     ],
   },
 
@@ -300,7 +322,7 @@ export const cadastrosTopics = {
     module: "cadastros",
     title: "Fornecedor: a identidade, e nada além dela",
     summary:
-      "Fornecedor é a empresa de quem a Veridi compra. O cadastro é curto de propósito: aqui ficam só razão social, CNPJ e contato — nem endereço existe. O que este fornecedor vende, com que código, se está homologado e a que preço não vive aqui: vive em Item x Fornecedor, porque essas informações são por par de item e fornecedor, não por empresa.",
+      "Fornecedor é a empresa de quem a Veridi compra. O cadastro é curto de propósito: aqui ficam só razão social, CNPJ e contato — nem endereço existe. O que este fornecedor vende, com que código, se está homologado e a que preço se decide em Item x Fornecedor, porque essas informações são por par de item e fornecedor, não por empresa — a edição do fornecedor mostra essa lista só para consulta.",
     concepts: [
       {
         term: "Código do fornecedor",
@@ -350,6 +372,7 @@ export const cadastrosTopics = {
       'O CNPJ é único entre fornecedores. Repetir um já cadastrado devolve "CNPJ já cadastrado".',
       "Inativar não é bloqueado por ordem de compra em aberto: as compras e os recebimentos existentes seguem íntegros. O fornecedor inativo passa a ser recusado em nova ordem de compra e em nova relação Item x Fornecedor, e deixa de aparecer como candidato em sugestão de compra e como referência de custo.",
       "O cadastro de fornecedor não registra autoria de criação e alteração. Quem precisa dessa informação a encontra nos documentos de compra e recebimento.",
+      "Na edição, o bloco Itens fornecidos é só leitura: código no fornecedor, homologação, preferencial, preço e pedido mínimo, com o caminho para Compras › Item x Fornecedor. Observações são notas internas. Novo fornecedor abre em tela própria, com esta mesma ajuda.",
     ],
   },
 
@@ -452,6 +475,7 @@ export const cadastrosTopics = {
       "Inativar um recurso não bloqueia nada aqui, nem desfaz estrutura que já o usa. O bloqueio aparece depois, ao tentar ativar uma versão de estrutura que ainda contém o recurso inativo: \"Recurso inativo nesta estrutura — reative ou remova antes de ativar\".",
       "Com a energia derivada dos equipamentos, equipamento sem potência cadastrada vira pendência que impede fechar o custo. Não existe potência padrão presumida.",
       "Cadastrar recurso e cadastrar tarifa são ações do perfil administrador. Os demais perfis consultam.",
+      "O histórico de tarifas mostra, por tarifa, valor, unidade, vigente desde, válida até, origem (cadastrada ou herdada da planilha), situação e quem registrou. Novo recurso abre em tela própria, com esta mesma ajuda; a tarifa é cadastrada depois, no detalhe.",
     ],
   },
 
@@ -534,7 +558,7 @@ export const cadastrosTopics = {
     concepts: [
       {
         term: "Perfil de acesso",
-        text: "Administrador, Produção, Qualidade, Compras, Comercial ou Consulta. Um perfil por usuário. É um gate por área, não uma matriz de permissão por botão.",
+        text: "Administrador, Produção, Qualidade, Compras, Comercial ou Consulta. Um perfil por usuário. É um controle por área, não uma matriz de permissão por botão.",
       },
       {
         term: "Código do usuário",
@@ -563,7 +587,7 @@ export const cadastrosTopics = {
         label: "Perfil",
         tone: "accent",
         detail:
-          "Define o que a pessoa vê e o que o servidor aceita dela. Esconder um botão não é o controle: é a consequência dele.",
+          "Define o que a pessoa vê e o que o sistema aceita dela. Esconder um botão não é o controle: é a consequência dele.",
       },
       {
         label: "Editar",
@@ -582,7 +606,7 @@ export const cadastrosTopics = {
       "Criar, editar, inativar usuário e trocar senha são ações do perfil administrador. Nada impede um administrador de inativar a si mesmo nem de inativar o último administrador — confira antes de salvar.",
       "A troca de senha não avisa ninguém. O sistema não envia e-mail: a pessoa descobre porque foi desconectada e a senha anterior parou de funcionar.",
       "Deixar a senha em branco na edição mantém a senha atual. Preencher o campo é o que dispara a troca.",
-      "O perfil vale onde há gate declarado: administração de usuários, recursos industriais e documentos controlados são do administrador; liberação de lote, bloqueio e decisão de laudo são de Qualidade; estrutura de custos, precificação, projetos, orçamentos e alteração de preço faturado são do Comercial; templates de custo e de formulação e a execução de amostras são da Produção; Item x Fornecedor é de Compras. Fora desses pontos, o registro do autor continua acontecendo mesmo onde não há restrição de perfil.",
+      "O perfil vale onde há controle por área declarado: administração de usuários, recursos industriais e documentos controlados são do administrador; liberação de lote, bloqueio e decisão de laudo são de Qualidade; estrutura de custos, precificação, projetos, orçamentos e alteração de preço faturado são do Comercial; templates de custo e de formulação e a execução de amostras são da Produção; Item x Fornecedor é de Compras. Fora desses pontos, o registro do autor continua acontecendo mesmo onde não há restrição de perfil.",
       "Trocar o perfil não reescreve nada do passado: as ações já registradas continuam com o autor e a data em que aconteceram.",
     ],
   },
@@ -591,7 +615,7 @@ export const cadastrosTopics = {
     module: "administracao",
     title: "Documento controlado: o cabeçalho da revisão, só isso",
     summary:
-      "Esta tela guarda a revisão vigente dos formulários impressos da Veridi — a Ordem de Produção (R.PRO.002) e a Folha de Receita (R.COQ.003). É o cabeçalho que esses papéis precisam carregar: código, revisão, data e responsáveis. Não é um gerenciador de documentos, não há upload de arquivo, não há editor de layout, não há assinatura eletrônica, e o sistema não declara conformidade GMP ou ANVISA em lugar nenhum.",
+      "Esta tela guarda a revisão vigente dos formulários impressos da Veridi — a Ordem de Produção (R.PRO.002) e a Folha de Receita (R.COQ.003). É o cabeçalho que esses papéis precisam carregar: código, revisão, data e responsáveis. Não é um gerenciador de documentos: não se anexa arquivo aqui, não há editor do desenho do formulário, não há assinatura eletrônica, e o sistema não declara conformidade GMP ou ANVISA em lugar nenhum.",
     concepts: [
       {
         term: "Tipo de documento",
@@ -651,7 +675,7 @@ export const cadastrosTopics = {
     module: "gestao",
     title: "Relatórios: consulta, nunca fonte de verdade",
     summary:
-      "Esta tela é o catálogo dos relatórios operacionais, agrupados por domínio e numerados de R-01 em diante. Cada relatório é uma consulta somente leitura montada na hora sobre os documentos do sistema — não existe tabela de relatório, número guardado nem BI configurável. Se um relatório e o documento discordam, o documento é que vale.",
+      "Esta tela é o catálogo dos relatórios operacionais, agrupados por domínio e numerados de R-01 em diante. Cada relatório é uma consulta somente leitura montada na hora sobre os documentos do sistema — não existe tabela de relatório, número guardado nem painel analítico configurável. Se um relatório e o documento discordam, o documento é que vale.",
     concepts: [
       {
         term: "Código R-xx",
@@ -709,7 +733,7 @@ export const cadastrosTopics = {
     module: "gestao",
     title: "Painel: o que exige decisão hoje",
     summary:
-      "O painel é o cockpit da operação, não uma ferramenta de BI. Ele junta duas coisas que não se misturam: o estado de agora — o que precisa de atenção e o que está aberto em cada área — e a contagem de documentos do período escolhido. Nada aqui é armazenado: tudo é derivado dos documentos a cada carregamento, e nenhum número do painel é fonte de verdade.",
+      "O painel é a mesa de comando da operação, não uma ferramenta de análise de dados. Ele junta duas coisas que não se misturam: o estado de agora — o que precisa de atenção e o que está aberto em cada área — e a contagem de documentos do período escolhido. Nada aqui é armazenado: tudo é derivado dos documentos a cada carregamento, e nenhum número do painel é fonte de verdade.",
     concepts: [
       {
         term: "Precisa de atenção",
@@ -730,6 +754,10 @@ export const cadastrosTopics = {
       {
         term: "Ações rápidas",
         text: "Atalhos para as telas onde a criação acontece, filtrados pelo seu perfil. São links: as validações continuam sendo aplicadas na tela de destino.",
+      },
+      {
+        term: "Gráfico e últimas movimentações",
+        text: "O gráfico conta lançamentos de estoque por dia dentro do período, e a tabela abaixo lista os últimos: quando, quantidade e origem. Cada linha abre o documento que gerou o movimento.",
       },
       {
         term: "Valor faturado indisponível",
@@ -923,7 +951,7 @@ export const cadastrosHints = {
   "usuario.perfil": {
     module: "administracao",
     label: "Perfil",
-    text: "Administrador, Produção, Qualidade, Compras, Comercial ou Consulta. Um por usuário. É um gate por área, não uma permissão por botão.",
+    text: "Administrador, Produção, Qualidade, Compras, Comercial ou Consulta. Um por usuário. É um controle por área, não uma permissão por botão.",
   },
   "usuario.situacao": {
     module: "administracao",

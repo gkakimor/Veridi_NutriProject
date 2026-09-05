@@ -3,6 +3,8 @@ import type { CustomerDTO } from "@veridi/shared";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { useContextualCreateTarget } from "../../lib/use-contextual-create";
 import { CUSTOMER_FORM_ID, CustomerFormFields, useCustomerForm } from "./customer-form";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 
 /**
  * Tela oficial de cadastro de cliente — `/cadastros/clientes/novo`.
@@ -77,6 +79,10 @@ export function CustomerCreatePage() {
           </button>
         )}
       </div>
+
+      {/* A mesma ajuda da lista: o fluxo descreve exatamente este formulário. */}
+
+      <ContextHelp topic={helpTopics["cliente.comoFunciona"]} />
 
       <CustomerFormFields {...controller} />
 

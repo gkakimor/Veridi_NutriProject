@@ -81,7 +81,7 @@ export function FormulationsPage() {
         <ExportCsvButton path="/formulations/export.csv" filters={{ search }} />
 </div>
 
-      <ContextHelp topic={helpTopics["formulacao.comoFunciona"]} />
+      <ContextHelp topic={helpTopics["formulacao.lista"]} />
 
       <div className="toolbar">
         <div className="toolbar__search">

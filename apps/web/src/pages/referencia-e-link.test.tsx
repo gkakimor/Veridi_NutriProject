@@ -301,7 +301,7 @@ describe("Endereço que não existe", () => {
     render(
       <MemoryRouter initialEntries={["/compras/ordens-que-nao-existem"]}>
         <Routes>
-          <Route path="/" element={<h1>Dashboard</h1>} />
+          <Route path="/" element={<h1>Painel</h1>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </MemoryRouter>,
@@ -310,10 +310,10 @@ describe("Endereço que não existe", () => {
     expect(screen.getByRole("heading", { name: "Página não encontrada" })).toBeInTheDocument();
     // Sem o endereço na tela não há o que copiar para um chamado.
     expect(screen.getByText("/compras/ordens-que-nao-existem")).toBeInTheDocument();
-    // Redirecionar levaria ao Dashboard sem dizer nada.
-    expect(screen.queryByRole("heading", { name: "Dashboard" })).toBeNull();
+    // Redirecionar levaria ao Painel sem dizer nada.
+    expect(screen.queryByRole("heading", { name: "Painel" })).toBeNull();
 
-    expect(screen.getByRole("link", { name: /Voltar para o Dashboard/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Voltar para o Painel/ })).toHaveAttribute(
       "href",
       "/",
     );

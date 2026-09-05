@@ -231,7 +231,10 @@ export function CustomerMaterialsPage() {
                 <td className="col-flex">
                   <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                 </td>
-                <td className="col-tight is-code">{row.lotCode}</td>
+                {/* Toda outra lista de lotes leva ao detalhe; esta era beco. */}
+                <td className="col-tight is-code">
+                  <EntityLink kind="lot" id={row.lotId} code={row.lotCode} />
+                </td>
                 <td className="col-tight">{row.supplierLot ?? "—"}</td>
                 <td className="col-tight">{formatDate(row.expiryDate)}</td>
                 <td className="col-tight">{row.location ?? "—"}</td>

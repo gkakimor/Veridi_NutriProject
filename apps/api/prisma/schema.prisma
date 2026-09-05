@@ -417,6 +417,7 @@ model User {
   createdCustomers           Customer[]                         @relation("CustomerCreatedBy")
   updatedCustomers           Customer[]                         @relation("CustomerUpdatedBy")
   createdIndustrialRates     IndustrialResourceRate[]           @relation("IndustrialResourceRateCreatedBy")
+  createdItemCostReferences  ItemCostReference[]                @relation("ItemCostReferenceCreatedBy")
 
   @@index([active])
   @@map("users")
@@ -1727,6 +1728,9 @@ enum IndustrialMaterialCostSource {
   NO_COST
   /// Material do cliente: fora do custo Veridi, e isso nao e "desconhecido".
   EXCLUDED_CUSTOMER_SUPPLIED
+  // Nenhuma coluna usa este enum: a fonte viaja no JSON do calculo salvo com
+  // o tipo de @veridi/shared, que tem tambem MANUAL_REFERENCE e
+  // MANUAL_REFERENCE_FORCED. O enum do banco fica como nasceu.
 }
 
 /// Calcular o preco pela margem desejada, ou informar o preco e ver a
@@ -1824,6 +1828,7 @@ model UnitOfMeasure {
   formulationTemplateOutputs FormulationTemplateVersion[]    @relation("FormulationTemplateOutputUom")
   costTemplateOutputs        IndustrialCostTemplateVersion[] @relation("CostTemplateOutputUom")
   pricingPolicyTiers         PricingPolicyTemplateTier[]     @relation("PricingPolicyTierUom")
+  itemCostReferences         ItemCostReference[]             @relation("ItemCostReferenceUom")
 
   @@map("units_of_measure")
 }
@@ -1904,6 +1909,7 @@ model Item {
   product Product?
 
   supplierItems                  SupplierItem[]
+  costReferences                 ItemCostReference[]
   purchaseOrderLines             PurchaseOrderLine[]
   receiptLines                   ReceiptLine[]
   lots                           Lot[]
@@ -1926,6 +1932,48 @@ model Item {
   @@index([family])
   @@index([externalCode])
   @@map("items")
+}
+
+/// Referencia MANUAL de custo de um Item — estimativa declarada por gente.
+///
+/// NAO e compra, recebimento, custo real historico nem valor pago. Existe
+/// para que CMV e estimativas possam ser calculados antes de existir compra
+/// real ou oferta valida. Na selecao automatica de fonte de custo ela e a
+/// ULTIMA fonte antes de "desconhecido" — regra canonica em
+/// `lib/cost-source-selection.ts`.
+///
+/// Historico por vigencia: alterar a referencia CRIA uma linha nova com o
+/// seu `effectiveFrom`; a anterior nunca e apagada nem reescrita. A
+/// referencia valida numa data e a de maior `effectiveFrom` ate aquele dia
+/// (empate: a criada por ultimo). Um calculo salvo congela o valor usado,
+/// entao mudar a referencia depois nao altera nenhum CMV historico.
+model ItemCostReference {
+  id String @id @default(uuid())
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  /// Custo por `uomCode`. Zero e zero explicito; desconhecido nao gera linha.
+  unitCost     Decimal @db.Decimal(14, 4)
+  currencyCode String  @default("BRL") @db.VarChar(3)
+
+  /// Unidade a que o valor se refere (R$ 1.200,00 / kg). Mesma dimensao da
+  /// unidade do item — a conversao usa o registro de UOM de todo o resto.
+  uomCode String
+  uom     UnitOfMeasure @relation("ItemCostReferenceUom", fields: [uomCode], references: [code])
+
+  /// Dia de calendario a partir do qual a referencia vale (inclusive).
+  effectiveFrom DateTime
+
+  note String?
+
+  createdAt             DateTime @default(now())
+  createdByUserId       String?
+  createdByUser         User?    @relation("ItemCostReferenceCreatedBy", fields: [createdByUserId], references: [id])
+  createdByNameSnapshot String?
+
+  @@index([itemId, effectiveFrom])
+  @@map("item_cost_references")
 }
 
 /// Fornecedor. Cadastro base: sem preco, avaliacao, dados bancarios ou

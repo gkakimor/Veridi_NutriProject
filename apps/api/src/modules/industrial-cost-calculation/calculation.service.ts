@@ -8,6 +8,7 @@ import type {
   IndustrialManualCostLineDTO,
   IndustrialMaterialCostLineDTO,
   IndustrialResourceCostLineDTO,
+  MaterialCostOverrideInput,
 } from "@veridi/shared";
 import { REAL_REFERENCE_SOURCES } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
@@ -16,7 +17,12 @@ import { computeFormulationRequirements } from "../production-orders/requirement
 import { FormulationContextIncompleteError } from "../../lib/formulation-math.js";
 import { pickCurrentRate } from "../industrial-resources/industrial-resources.service.js";
 import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industrial-costs.errors.js";
-import { resolveMaterialCost } from "./material-cost.js";
+import { diaDaVigencia, resolveManualReference, selectItemCostSource } from "../../lib/cost-source-selection.js";
+import {
+  ManualReferenceMissingError,
+  OverrideNotApplicableError,
+  OverrideReasonRequiredError,
+} from "./calculation.errors.js";
 
 type PrismaOrTx = PrismaClient | PrismaTypes.TransactionClient;
 
@@ -415,11 +421,29 @@ export async function computeResourceCosts(
  * decide, e recalcular amanhã pode dar outro número — por isso existe
  * snapshot.
  */
+export interface CalculationOptions {
+  /**
+   * Materiais em que a referência manual é FORÇADA neste cálculo. Exceção
+   * por documento e por componente: não muda o item, não muda a ordem
+   * global de seleção, e o próximo cálculo volta ao automático.
+   */
+  materialOverrides?: MaterialCostOverrideInput[];
+  /** Ao salvar, o motivo é obrigatório; na prévia pode faltar. */
+  requireOverrideReason?: boolean;
+  /** Quem está forçando — congelado na linha. */
+  actor?: Pick<User, "name"> | null;
+}
+
 export async function calculateIndustrialCost(
   versionId: string,
   costReferenceDate: Date,
+  options: CalculationOptions = {},
 ): Promise<IndustrialCostCalculationDTO> {
   const prisma = getPrisma();
+  const overridesByItem = new Map<string, MaterialCostOverrideInput>();
+  for (const override of options.materialOverrides ?? []) {
+    overridesByItem.set(override.itemId, override);
+  }
   const version = await prisma.industrialCostVersion.findUnique({
     where: { id: versionId },
     include: versionInclude,
@@ -477,7 +501,13 @@ export async function calculateIndustrialCost(
   for (const requirement of requirements) {
     if (requirement.supplyResponsibility === "CUSTOMER") {
       // Material do cliente pertence à estrutura física, não ao custo
-      // Veridi. Isso não é custo zero nem custo desconhecido.
+      // Veridi. Isso não é custo zero nem custo desconhecido — e por isso
+      // também não tem custo a substituir por referência manual.
+      if (overridesByItem.has(requirement.itemId)) {
+        throw new OverrideNotApplicableError(
+          `${requirement.itemCode}: material do cliente não tem custo de aquisição Veridi — não há o que substituir.`,
+        );
+      }
       customerSuppliedMaterials.push({
         itemId: requirement.itemId,
         itemCode: requirement.itemCode,
@@ -501,15 +531,49 @@ export async function calculateIndustrialCost(
     }
 
     veridiMaterialCount += 1;
-    const resolution = await resolveMaterialCost(
-      prisma,
-      {
-        itemId: requirement.itemId,
-        itemUnitCode: requirement.stockUnitCode,
-        referenceDate: costReferenceDate,
-      },
-      units,
-    );
+    const selectionParams = {
+      itemId: requirement.itemId,
+      itemUnitCode: requirement.stockUnitCode,
+      referenceDate: costReferenceDate,
+    };
+    // A seleção automática é SEMPRE calculada — mesmo quando forçada, ela é
+    // congelada na linha como "o que teria sido usado".
+    const automatic = await selectItemCostSource(prisma, selectionParams, units);
+    const manual = await resolveManualReference(prisma, selectionParams, units);
+
+    let resolution = automatic;
+    let override: IndustrialMaterialCostLineDTO["override"] = null;
+    const requested = overridesByItem.get(requirement.itemId);
+    if (requested) {
+      overridesByItem.delete(requirement.itemId);
+      if (!manual) throw new ManualReferenceMissingError(requirement.itemCode);
+      const reason = requested.reason?.trim() ?? "";
+      if (options.requireOverrideReason && reason === "") {
+        throw new OverrideReasonRequiredError(requirement.itemCode);
+      }
+      resolution = {
+        unitCost: manual.unitCost,
+        source: "MANUAL_REFERENCE_FORCED",
+        details: `Referência manual (R$ ${manual.declaredUnitCost.toString()}/${manual.declaredUomCode}, válida desde ${diaDaVigencia(manual.effectiveFrom)}) forçada neste cálculo.`,
+      };
+      const automaticSubtotal = automatic.unitCost
+        ? requirement.requiredQuantity.times(automatic.unitCost)
+        : null;
+      const forcedSubtotal = requirement.requiredQuantity.times(manual.unitCost);
+      override = {
+        reason,
+        automaticSource: automatic.source,
+        automaticUnitCost: automatic.unitCost ? unitMoney(automatic.unitCost) : null,
+        automaticDetails: automatic.details,
+        automaticSubtotal: automaticSubtotal ? money(automaticSubtotal) : null,
+        // Mesma aritmética da linha (quantidade × custo), nunca um segundo motor.
+        impact: automaticSubtotal ? money(forcedSubtotal.minus(automaticSubtotal)) : null,
+        referenceId: manual.referenceId,
+        referenceEffectiveFrom: manual.effectiveFrom.toISOString(),
+        forcedByName: options.actor?.name ?? null,
+        forcedAt: new Date().toISOString(),
+      };
+    }
 
     const subtotal = resolution.unitCost
       ? requirement.requiredQuantity.times(resolution.unitCost)
@@ -524,10 +588,14 @@ export async function calculateIndustrialCost(
           resolution.source === "AMBIGUOUS_SUPPLIER_REFERENCE"
             ? "AMBIGUOUS_SUPPLIER_REFERENCE"
             : "MATERIAL_COST_UNKNOWN",
+        // Ofertas existem, falta escolher: a frase diz o que fazer, e o
+        // item viaja junto para a tela levar a Item × Fornecedor.
         message:
           resolution.source === "AMBIGUOUS_SUPPLIER_REFERENCE"
-            ? `${requirement.itemCode}: há múltiplas referências de fornecedor e nenhum preferencial.`
+            ? `${requirement.itemCode}: ${resolution.details ?? "ofertas disponíveis, seleção necessária."}`
             : `${requirement.itemCode}: sem custo conhecido.`,
+        itemId: requirement.itemId,
+        itemCode: requirement.itemCode,
       });
     }
 
@@ -542,7 +610,33 @@ export async function calculateIndustrialCost(
       costSource: resolution.source,
       costSourceDetails: resolution.details,
       subtotal: subtotal ? money(subtotal) : null,
+      manualReference: manual
+        ? {
+            referenceId: manual.referenceId,
+            unitCost: unitMoney(manual.unitCost),
+            declaredUnitCost: manual.declaredUnitCost.toString(),
+            declaredUomCode: manual.declaredUomCode,
+            effectiveFrom: manual.effectiveFrom.toISOString(),
+            note: manual.note,
+          }
+        : null,
+      override,
     });
+  }
+
+  // Substituição para item que não é material Veridi desta formulação: a
+  // tela pode ter ficado para trás da receita. Recusar é mais honesto que
+  // ignorar em silêncio um pedido que a pessoa acha que foi atendido.
+  if (overridesByItem.size > 0) {
+    const desconhecidos = [...overridesByItem.keys()];
+    const itens = await prisma.item.findMany({
+      where: { id: { in: desconhecidos } },
+      select: { code: true },
+    });
+    const codigos = itens.length > 0 ? itens.map((i) => i.code).join(", ") : desconhecidos.join(", ");
+    throw new OverrideNotApplicableError(
+      `${codigos}: não é material Veridi desta formulação — não há custo a substituir. Calcule novamente.`,
+    );
   }
 
   const resourceCosts = await computeResourceCosts(

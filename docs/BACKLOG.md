@@ -63,6 +63,68 @@ de legibilidade **reduziu** o problema (era 1925px). O painel de ajustes mostra
 a quantidade física em texto, com a conta ao lado, então nenhum número exibido
 depende dessas colunas. A página em si não estoura.
 
+### 11. Rastreabilidade do material fornecido pelo cliente: regra por Item a definir — MEDIUM
+
+`receiving/ReceiveCustomerMaterialPage.tsx` aceita confirmar com "Lote do
+fabricante" e "Validade" em branco; o recebimento de OC exige os dois quando o
+item controla lote e validade. Achado da revisão de ajuda (2026-09-04). A
+ajuda descreve o que a tela faz hoje.
+
+**Não** assumir que todo material do cliente exige validade: parte dele chega
+sem lote de fabricante ou sem vencimento declarado, e isso pode ser legítimo.
+O que falta é a **regra por tipo/configuração do Item** para material
+fornecido pelo cliente — se o lote do fabricante é exigido, se a validade é
+exigida, e o que a rastreabilidade precisa guardar quando não vêm. Decisão de
+PO; mantido aberto de propósito, sem correção nesta rodada.
+
+### 12. Custo estimado da Formulação usa só compra real — LOW
+
+`FormulationVersionPage` lê `getFormulationCostEstimate`, que usa a fundação
+(30d → 90d → última compra) e ignora oferta válida e referência manual. O
+CMV e o cálculo padrão usam a seleção canônica completa (§53), então os dois
+podem discordar num item sem compra. Pré-existente (oferta já era ignorada).
+Corrigir é trocar a fundação pela seleção canônica nesse serviço e ampliar a
+taxonomia `CostSource`.
+
+### 13. Reconstrução de banco vazio — RESOLVIDO em 2026-09-04
+
+Defeito: `20260904093000_template_component_quantity_mode` alterava
+`formulation_template_components`, criada só em `20260921090000`. Banco
+existente nunca sofreu (ordem de chegada); banco **limpo** falhava ali.
+
+Reparo: pasta renomeada para `20260921093000_template_component_quantity_mode`,
+SQL igual byte a byte exceto `ADD COLUMN IF NOT EXISTS` nas três colunas;
+`20260904214653_item_manual_cost_reference` preservada. Provado em banco vazio
+e em cópia do histórico de produção; comparação das estratégias em
+[`TECH_BASELINE.md`](TECH_BASELINE.md), *Migration order*. Proteção
+permanente: `scripts/migration-order.test.ts` (em `pnpm test`) e
+`pnpm validate:migrations:fresh`.
+
+Decisão de PO (2026-09-04): a migration histórica antiga permanece registrada
+em `_prisma_migrations` dos bancos que a executaram; isso é intencional e não
+exige limpeza manual. Não executar `DELETE` nem `migrate resolve` sobre ela.
+
+---
+
+### 14. `schema.prisma` diverge das migrations em 27 chaves estrangeiras e 32 índices — LOW
+
+`prisma migrate diff` do banco (novo ou produção, idênticos) para o
+`schema.prisma` gera 86 comandos, nenhum de tabela, coluna ou tipo: 27 chaves
+estrangeiras que o banco aplica com `ON DELETE RESTRICT` e o schema declara
+`SET NULL` (`attachments.lotId`, `lots.ownerCustomerId`,
+`production_orders.customerOrderId`, `billing_lines.lotId`…), 15 índices e 11
+chaves com nome diferente, 6 índices que existem no banco e o schema não
+declara. Pré-existente, sem efeito na reconstrução nem na segurança — o banco
+é o lado mais restritivo. Risco: o próximo `prisma migrate dev` empacota os
+86 comandos numa migration e afrouxa as 27 exclusões sem ninguém decidir.
+Decisão de PO (2026-09-04): manter aberto, não corrigir agora; alinhar o
+schema ao banco (`onDelete: Restrict`, `@@index`, `map:`) ou o banco ao
+schema, caso a caso, numa rodada própria. Regra de segurança até lá: nenhuma
+migration nova incorpora drift alheio à sua capability — nem
+`RESTRICT → SET NULL`, nem renomeação de índice ou constraint, nem criação ou
+remoção não relacionada. Toda migration nova é revisada linha a linha para
+conter só mudanças deliberadas; diff gigante gerado pelo Prisma não se aprova.
+
 ---
 
 ## Decisões pendentes de Product Ownership
@@ -89,6 +151,12 @@ falta é do lado do Produto, não do estoque.
 **Decisão:** nenhuma agora. Mexer em `Product.customerId` atravessa pedido,
 precificação, CMV e isolamento por cliente ao mesmo tempo. Permanece futuro —
 ver [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
+
+### 7a. "Dashboard" no título e no menu — LOW
+
+A tela inicial se chama "Dashboard" na interface e "Painel" na ajuda. A regra
+de vocabulário pede português; trocar o rótulo que o operador já aprendeu é
+chamada do PO.
 
 ### 7. Convenções que ninguém formalizou
 

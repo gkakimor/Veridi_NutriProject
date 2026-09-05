@@ -10,6 +10,9 @@ import {
   CalculationInUseError,
   IndustrialCostCalculationNotFoundError,
   InvalidCostReferenceDateError,
+  ManualReferenceMissingError,
+  OverrideNotApplicableError,
+  OverrideReasonRequiredError,
 } from "./calculation.errors.js";
 import { getProductionOrderCost } from "./production-cost.service.js";
 import {
@@ -26,9 +29,25 @@ const referenceDateSchema = z
   .optional()
   .transform((value) => (value === undefined ? undefined : new Date(value)));
 
+/**
+ * Substituição por material. O motivo é opcional aqui porque a prévia
+ * precisa mostrar o impacto ANTES de a pessoa escrever a justificativa; ao
+ * salvar, o serviço exige o motivo preenchido.
+ */
+const materialOverrideSchema = z.object({
+  itemId: z.string().trim().min(1),
+  reason: z.string().trim().max(500).optional(),
+});
+
+const previewCalculationSchema = z.object({
+  costReferenceDate: referenceDateSchema,
+  materialOverrides: z.array(materialOverrideSchema).max(200).optional(),
+});
+
 const saveCalculationSchema = z.object({
   costReferenceDate: referenceDateSchema,
   notes: z.string().trim().max(1000).nullish(),
+  materialOverrides: z.array(materialOverrideSchema).max(200).optional(),
 });
 
 /** Data explícita sempre vence; ausência significa "hoje", nunca no domínio. */
@@ -58,6 +77,15 @@ function mapDomainError(
   if (error instanceof CalculationBlockedByFormulationError) {
     return { status: 409, body: { error: "formulation_incomplete", message: error.message } };
   }
+  if (error instanceof ManualReferenceMissingError) {
+    return { status: 409, body: { error: "manual_reference_missing", message: error.message } };
+  }
+  if (error instanceof OverrideReasonRequiredError) {
+    return { status: 400, body: { error: "override_reason_required", message: error.message } };
+  }
+  if (error instanceof OverrideNotApplicableError) {
+    return { status: 400, body: { error: "override_not_applicable", message: error.message } };
+  }
   return null;
 }
 
@@ -83,6 +111,42 @@ export const industrialCostCalculationRoutes: FastifyPluginAsync = async (app) =
     }
   });
 
+  /**
+   * Prévia com substituições — mesma matemática, nada persistido. Existe
+   * separada do GET porque a lista de substituições não cabe numa query.
+   */
+  app.post("/industrial-costs/:id/calculate", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireCurrentUser(request);
+      const parsed = previewCalculationSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: "validation_error",
+          issues: parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        });
+      }
+      const { costReferenceDate, materialOverrides } = parsed.data;
+      if (costReferenceDate && Number.isNaN(costReferenceDate.getTime())) {
+        throw new InvalidCostReferenceDateError();
+      }
+      return reply.send(
+        await calculateIndustrialCost(id, costReferenceDate ?? new Date(), {
+          materialOverrides: materialOverrides ?? [],
+          requireOverrideReason: false,
+          actor,
+        }),
+      );
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
   app.post("/industrial-costs/:id/calculations", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
@@ -97,7 +161,7 @@ export const industrialCostCalculationRoutes: FastifyPluginAsync = async (app) =
           })),
         });
       }
-      const { costReferenceDate, notes } = parsed.data;
+      const { costReferenceDate, notes, materialOverrides } = parsed.data;
       if (costReferenceDate && Number.isNaN(costReferenceDate.getTime())) {
         throw new InvalidCostReferenceDateError();
       }
@@ -107,6 +171,7 @@ export const industrialCostCalculationRoutes: FastifyPluginAsync = async (app) =
           {
             ...(costReferenceDate ? { costReferenceDate } : {}),
             ...(notes !== undefined ? { notes } : {}),
+            ...(materialOverrides ? { materialOverrides } : {}),
           },
           actor,
         ),

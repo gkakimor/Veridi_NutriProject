@@ -30,6 +30,23 @@ export class PackagingSubtypeNotApplicableError extends Error {
   }
 }
 
+/** Referência manual de custo em unidade que não converte para a do item. */
+export class CostReferenceUnitIncompatibleError extends Error {
+  constructor(uomCode: string, itemUnitCode: string) {
+    super(
+      `A unidade da referência (${uomCode}) não converte para a unidade do item (${itemUnitCode}).`,
+    );
+    this.name = "CostReferenceUnitIncompatibleError";
+  }
+}
+
+export class InvalidCostReferenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidCostReferenceError";
+  }
+}
+
 export class StructuralFieldLockedError extends Error {
   constructor(field: string) {
     const label = STRUCTURAL_FIELD_LABELS[field] ?? field;

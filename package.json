@@ -30,7 +30,8 @@
     "veridi:opening-stock:apply": "dotenv -e .env -- tsx scripts/veridi-import/opening-stock.ts --apply",
     "veridi:data:validate": "dotenv -e .env -- tsx scripts/veridi-data/validate.ts",
     "veridi:data:seed": "dotenv -e .env -- tsx scripts/veridi-data/seed.ts",
-    "db:demo": "pnpm --filter @veridi/api db:demo"
+    "db:demo": "pnpm --filter @veridi/api db:demo",
+    "validate:migrations:fresh": "dotenv -e .env -- node scripts/validate-migrations-fresh.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

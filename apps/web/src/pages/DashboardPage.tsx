@@ -314,7 +314,7 @@ export function DashboardPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Dashboard</h1>
+          <h1 className="page__title">Painel</h1>
           <p className="page__subtitle">
             Visão operacional ao vivo. Nenhum número é armazenado aqui — tudo vem dos documentos.
           </p>

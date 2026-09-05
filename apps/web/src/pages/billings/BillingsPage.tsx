@@ -161,7 +161,7 @@ export function BillingsPage() {
           }} />
 </div>
 
-      <ContextHelp topic={helpTopics["faturamento.comoFunciona"]} />
+      <ContextHelp topic={helpTopics["faturamento.lista"]} />
 
       {error && <p className="form-alert" role="alert">{error}</p>}
 
