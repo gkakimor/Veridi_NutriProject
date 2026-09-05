@@ -86,31 +86,23 @@ podem discordar num item sem compra. Pré-existente (oferta já era ignorada).
 Corrigir é trocar a fundação pela seleção canônica nesse serviço e ampliar a
 taxonomia `CostSource`.
 
-### 13. Reconstrução de banco vazio — REPARADO em 2026-09-04, resta limpeza opcional em produção — LOW
+### 13. Reconstrução de banco vazio — RESOLVIDO em 2026-09-04
 
 Defeito: `20260904093000_template_component_quantity_mode` alterava
 `formulation_template_components`, criada só em `20260921090000`. Banco
 existente nunca sofreu (ordem de chegada); banco **limpo** falhava ali.
 
-Reparo aplicado (estratégia "renomear + idempotente", escolhida entre editar
-SQL histórico, renomear, baseline e repair migration — comparação em
-[`TECH_BASELINE.md`](TECH_BASELINE.md), *Migration order*):
-- pasta renomeada para `20260921093000_template_component_quantity_mode`,
-  SQL igual byte a byte exceto `ADD COLUMN IF NOT EXISTS` nas três colunas;
-- `20260904214653_item_manual_cost_reference` preservada;
-- provado em banco vazio (49 aplicadas, `Database schema is up to date`) e
-  em cópia do histórico de produção (aplica uma vez como no-op, nada
-  destrutivo, `migrate diff` entre os dois bancos vazio);
-- proteção permanente: `scripts/migration-order.test.ts` (estático, em
-  `pnpm test`) e `pnpm validate:migrations:fresh` (banco descartável local).
+Reparo: pasta renomeada para `20260921093000_template_component_quantity_mode`,
+SQL igual byte a byte exceto `ADD COLUMN IF NOT EXISTS` nas três colunas;
+`20260904214653_item_manual_cost_reference` preservada. Provado em banco vazio
+e em cópia do histórico de produção; comparação das estratégias em
+[`TECH_BASELINE.md`](TECH_BASELINE.md), *Migration order*. Proteção
+permanente: `scripts/migration-order.test.ts` (em `pnpm test`) e
+`pnpm validate:migrations:fresh`.
 
-Pendente, sem urgência: produção guarda a linha órfã
-`20260904093000_template_component_quantity_mode` em `_prisma_migrations`.
-`migrate deploy` tolera órfã e o próximo deploy aplica a renomeada como
-no-op; nenhum passo manual é necessário. Limpeza cosmética, se desejada,
-numa janela combinada: `DELETE FROM _prisma_migrations WHERE migration_name
-= '20260904093000_template_component_quantity_mode'` — só depois do deploy
-que aplicar a renomeada, nunca antes.
+Decisão de PO (2026-09-04): a migration histórica antiga permanece registrada
+em `_prisma_migrations` dos bancos que a executaram; isso é intencional e não
+exige limpeza manual. Não executar `DELETE` nem `migrate resolve` sobre ela.
 
 ---
 
@@ -125,8 +117,13 @@ chaves com nome diferente, 6 índices que existem no banco e o schema não
 declara. Pré-existente, sem efeito na reconstrução nem na segurança — o banco
 é o lado mais restritivo. Risco: o próximo `prisma migrate dev` empacota os
 86 comandos numa migration e afrouxa as 27 exclusões sem ninguém decidir.
-Decisão de PO: alinhar o schema ao banco (`onDelete: Restrict`, `@@index`,
-`map:`) ou o banco ao schema, caso a caso. Até lá, só `migrate deploy`.
+Decisão de PO (2026-09-04): manter aberto, não corrigir agora; alinhar o
+schema ao banco (`onDelete: Restrict`, `@@index`, `map:`) ou o banco ao
+schema, caso a caso, numa rodada própria. Regra de segurança até lá: nenhuma
+migration nova incorpora drift alheio à sua capability — nem
+`RESTRICT → SET NULL`, nem renomeação de índice ou constraint, nem criação ou
+remoção não relacionada. Toda migration nova é revisada linha a linha para
+conter só mudanças deliberadas; diff gigante gerado pelo Prisma não se aprova.
 
 ---
 

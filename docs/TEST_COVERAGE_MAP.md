@@ -146,6 +146,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Importação idempotente, não duplica e não movimenta estoque | `scripts/veridi-import/importer.test.ts` |
 | Endereço legado decomposto de forma conservadora | `scripts/veridi-data/legacy-address.test.ts` |
 | Oferta com unidade incompatível exige override explícito | `scripts/veridi-import/importer.test.ts` |
+| Toda migration só usa tabela, tipo e coluna criados por migration de nome menor ou igual; banco vazio reconstrói só com o repositório | `scripts/migration-order.test.ts` · `pnpm validate:migrations:fresh` (Postgres local descartável) |
 
 ## O que foi aposentado, e por quê
 

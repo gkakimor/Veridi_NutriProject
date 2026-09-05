@@ -109,9 +109,16 @@ real order. Rules:
   ordering, rename the folder to a name after its dependency and make its
   statements idempotent (`IF NOT EXISTS`) so it applies as a no-op where the
   old name already ran. `migrate deploy` ignores checksums of applied rows
-  and tolerates orphan rows in `_prisma_migrations`; an orphan row may be
-  deleted later in a coordinated window, never before the renamed migration
-  has run there.
+  and tolerates orphan rows in `_prisma_migrations`. An orphan row records a
+  migration that really ran on that database: keep it. Never delete it and
+  never `migrate resolve` it away (Product Ownership decision, 2026-09-04);
+- a new migration contains only the deliberate changes of its capability.
+  `schema.prisma` and the database carry known drift (BACKLOG #14: 27 foreign
+  keys `RESTRICT` in the database vs `SET NULL` in the schema, index and
+  constraint names). Review every generated SQL line by line and strip
+  anything that comes from that drift — `RESTRICT → SET NULL`, renamed
+  indexes or constraints, unrelated creates or drops. A large Prisma-generated
+  diff is never approved as-is.
 
 Repair record (2026-09-04): `20260904093000_template_component_quantity_mode`
 renamed to `20260921093000_…` because it depended on

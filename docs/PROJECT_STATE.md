@@ -4,10 +4,12 @@
 
 ## Onde estamos
 
-**`main`:** `78463a0` (baseline v2) · **Produção:** Railway, health 200, banco
-up, smoke autenticado passando. Produção não tem dado de negócio — a base foi
-limpa. **Em revisão do PO:** `feat/manual-cost-reference-and-help-review`
-(não mergeada, não deployada).
+**`main`:** baseline v2 (`78463a0`) + referência manual de custo, revisão do
+"Como funciona" e reparo da reconstrução do banco — merge `--no-ff` de
+`feat/manual-cost-reference-and-help-review` em 2026-09-04, aprovado pelo PO.
+**Produção:** Railway, deploy automático da `main`; health 200, banco up,
+smoke autenticado passando. Produção não tem dado de negócio — a base foi
+limpa.
 
 MVP operacional **validado internamente**. Blocos A a G fechados: cadastros,
 compras, recebimento e lotes, estoque e FEFO, formulações versionadas, produção
@@ -20,10 +22,10 @@ Três casos profundos derivados do legado rodaram ponta a ponta contra a
 interface publicada — VAL-LEG-01, 02 e 03, todos PASS. Detalhe do que cada
 rodada descobriu: [`archive/E2E_VALIDATION_HISTORY.md`](archive/E2E_VALIDATION_HISTORY.md).
 
-## Capability em revisão
+## Última capability publicada
 
 **Referência manual de custo + substituição por cálculo + revisão global do
-"Como funciona"** (branch `feat/manual-cost-reference-and-help-review`).
+"Como funciona"** (2026-09-04).
 
 A fonte de custo de um material passou a ter **uma** implementação canônica —
 `lib/cost-source-selection.ts`: compra real 30d → 90d → última compra → oferta
@@ -75,11 +77,11 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado por política.
 
 Zero CRITICAL e HIGH. Dois MEDIUM (`aria-invalid` por campo na Formulação;
 recebimento de material do cliente sem regra por Item para lote e validade),
-seis LOW — entre elas a limpeza opcional de uma linha órfã em
-`_prisma_migrations` de produção e o `schema.prisma` que declara `SET NULL`
-onde as migrations aplicam `RESTRICT` —, quatro decisões de PO e quatro melhorias
-adiadas de propósito — a maior delas é levar o cálculo ao vivo às demais
-telas. Ver [`BACKLOG.md`](BACKLOG.md).
+cinco LOW — entre elas o `schema.prisma` que declara `SET NULL` onde as
+migrations aplicam `RESTRICT` (#14, aberto por decisão do PO; até resolver,
+migration nova carrega só a mudança da sua capability) —, quatro decisões de
+PO e quatro melhorias adiadas de propósito — a maior delas é levar o cálculo
+ao vivo às demais telas. Ver [`BACKLOG.md`](BACKLOG.md).
 
 ## Blockers
 
