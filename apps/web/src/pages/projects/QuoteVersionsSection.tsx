@@ -751,8 +751,8 @@ export function QuoteVersionsSection({
                     </strong>
                     {editable && linhasComEdicaoPendente && (
                       <div className="field__hint">
-                        Total salvo: {open.total ? formatBRL(open.total) : "—"} — saia do campo
-                        para gravar.
+                        Total salvo: {open.total ? formatBRL(open.total) : "—"} — alterações são
+                        gravadas ao sair do campo.
                       </div>
                     )}
                     {alguemIlegivel && (

@@ -189,8 +189,10 @@ describe("#8H — orçamento em edição mostra o total do que está na tela", (
       target: { value: "2000" },
     });
     expect(rodape()).toContain("R$ 25.000,00");
-    // E o gravado continua na tela, dito como gravado.
+    // E o gravado continua na tela, dito como gravado — com a copy aprovada
+    // pelo PO, que descreve o mecanismo em vez de mandar o usuário agir.
     expect(rodape()).toContain("Total salvo: R$ 12.500,00");
+    expect(rodape()).toContain("alterações são gravadas ao sair do campo");
   });
 
   it("D. com várias linhas, o total soma a editada com as gravadas", () => {

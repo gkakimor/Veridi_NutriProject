@@ -22,18 +22,55 @@ PO autorizar:** #8E, #8F e #8G.
 
 ## A. Defeitos abertos
 
-- **#15 — LOW — Pedido do Cliente congela o subtotal por outra ordem de
-  arredondamento.** Achado da Rodada 3, sem alteração feita. O total exibido do
-  Orçamento é `Σ round(linha)` (`calcularTotaisOrcamento`); ao aceitar, o Pedido
-  congela `agreedSubtotalAmount` como `round(Σ linha)`
-  (`quote-to-order.service.ts`). Com preço de 4 casas os dois divergem em
-  centavos — a mesma classe de defeito que o Faturamento já corrigiu. Mexer nisso
-  muda o valor congelado de um acordo: **decisão do PO**, não conserto de rodada.
-- **#16 — LOW — `GET /quote-lines/:id/pricing-options` responde 404 quando não há
-  precificação vigente.** A tela trata a ausência corretamente ("Não existe
-  precificação vigente para esta quantidade"), mas o navegador registra
-  `console.error` a cada consulta — ruído que faz uma auditoria de console
-  reprovar uma tela sã. Ausência de opção não é erro de recurso.
+### 15. Integridade comercial Orçamento → Pedido — MEDIUM
+
+**ABERTO. Regra decidida pelo PO em 2026-09-05; capability própria, não
+implementada na Rodada 3.**
+
+Achado da Rodada 3. O total exibido do Orçamento é `Σ round(linha)`
+(`calcularTotaisOrcamento`); ao aceitar, o Pedido congela
+`agreedSubtotalAmount` como `round(Σ linha)` (`quote-to-order.service.ts`). Com
+preço de 4 casas os dois divergem em centavos — a mesma classe de defeito que o
+Faturamento já corrigiu.
+
+**Regra decidida.** O subtotal monetário comercial canônico reconcilia com as
+linhas exibidas:
+
+    subtotal = Σ round(quantidade × preço unitário, 2)
+
+e **não** `round(Σ valores de linha ainda não arredondados)`. Motivo: o total do
+documento tem de fechar exatamente com os totais de linha apresentados ao
+usuário. Além disso, quando um Orçamento aceito originar um Pedido, o Pedido
+preserva exatamente os valores comerciais acordados e congelados no Orçamento
+aceito.
+
+**Limites definidos pelo PO.** Não recalcular documentos históricos existentes.
+Vira capability própria — o valor congelado de um acordo não muda de carona
+numa rodada de UI.
+
+### 16. `pricing-options` responde 404 para ausência de precificação — LOW/MEDIUM
+
+**ABERTO.** `GET /quote-lines/:id/pricing-options` devolve 404 quando o produto
+não tem precificação vigente. A tela trata a ausência corretamente ("Não existe
+precificação vigente para esta quantidade"), mas o navegador registra
+`console.error` a cada consulta.
+
+Ausência de precificação é **estado esperado** da aplicação, não recurso
+inexistente. O ruído faz uma auditoria de console reprovar uma tela sã.
+Observado na auditoria local da Rodada 3 e no smoke; preexistente àquela
+branch. Rodada posterior.
+
+### 17. Suíte da API não é determinística sob paralelismo no banco local — LOW técnico
+
+**ABERTO.** Em execuções completas de `pnpm test`, um teste de
+`modules/production-orders` falha esporadicamente (visto em
+`consumption.test.ts` e em `picking.test.ts`, ambos medindo agregados de
+estoque). Isolado e em reexecução da suíte completa, passa. O paralelismo do
+Vitest sobre o mesmo banco de desenvolvimento é a origem provável.
+
+Custo real: um gate verde exige reexecutar, e uma falha assim se parece com
+regressão de quem está lendo. Rodada posterior — candidato natural a entrar
+junto de #10 (manutenção).
 
 ---
 

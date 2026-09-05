@@ -167,7 +167,7 @@ export const comercialTopics = {
       },
       {
         term: "Prévia e total salvo",
-        text: "Na versão em rascunho, o total da linha e o \u201cTotal da proposta (prévia)\u201d acompanham o que está nos campos, sem esperar o salvamento. Enquanto houver digitação pendente, o total do último salvamento aparece ao lado como \u201cTotal salvo\u201d — o campo grava ao perder o foco. Quantidade ou preço em branco não viram zero: sem eles não há total. Versão enviada ou aceita é histórico e não recalcula: o total dela é o que o cliente recebeu.",
+        text: "Na versão em rascunho, o total da linha e o \u201cTotal da proposta (prévia)\u201d acompanham o que está nos campos, sem esperar o salvamento. Enquanto houver digitação pendente, o total do último salvamento aparece ao lado como \u201cTotal salvo\u201d — as alterações são gravadas ao sair do campo. Quantidade ou preço em branco não viram zero: sem eles não há total. Versão enviada ou aceita é histórico e não recalcula: o total dela é o que o cliente recebeu.",
       },
       {
         term: "Simular CMV",
