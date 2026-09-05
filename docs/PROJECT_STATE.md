@@ -10,8 +10,8 @@
 **Produção:** Railway, deploy automático da `main`; health 200, banco up,
 smoke autenticado passando. Produção não tem dado de negócio — a base foi
 limpa. **Rodada 1 do backlog** (#12, #9, #3, #5; #4 com residual aceito)
-publicada em 2026-09-04. **Em revisão do PO:** `feat/live-calculation-preview-round-2`
-— Rodada 2 (#8A, #8B, #8C), não mergeada.
+publicada em 2026-09-04. **Rodada 2** (#8A, #8B, #8C) aprovada pelo PO e
+publicada em 2026-09-05 — merge `dfb2673`, deploy Railway SUCCESS, smoke ok.
 
 MVP operacional **validado internamente**. Blocos A a G fechados: cadastros,
 compras, recebimento e lotes, estoque e FEFO, formulações versionadas, produção
@@ -78,7 +78,7 @@ revisão): a estimativa de custo da Formulação usa o seletor canônico de font
 unidade" corrigido (÷ quantidade simulada) e de "Preço sugerido" conferido,
 validação inline por componente com foco no primeiro erro, tabela de
 componentes de 1681px para 1088px em 1440×900, rótulos dos modos decididos
-pelo PO; #4 fechado com residual aceito. **Rodada 2 entregue** (em revisão):
+pelo PO; #4 fechado com residual aceito. **Rodada 2 publicada** (2026-09-05):
 OC com total em prévia, Expedição com já expedido × expedindo agora ×
 restante ao vivo, Precificação com prévia da faixa antes de gravar — regra
 durável em `PRODUCT_RULES.md` §54. **Seguinte, quando autorizada:** #8D e
