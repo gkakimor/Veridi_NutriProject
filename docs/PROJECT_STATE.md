@@ -4,13 +4,11 @@
 
 ## Onde estamos
 
-**`main` @ `ccf5995`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `33ee1cd`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodada 1** (#12, #9, #3,
-#5; #4 com residual aceito), **Rodada 2** (#8A, #8B, #8C, merge `dfb2673`) e
-**Rodada 3** (#8D, #8H, merge `b89f9a4`), todas aprovadas pelo PO.
-**Rodada 4** (#15, #16) está implementada na branch
-`feat/commercial-integrity-quote-order-pricing-options` e **aguarda PO
-review** — não mergeada, não publicada.
+#5; #4 com residual aceito), **Rodada 2** (#8A, #8B, #8C, merge `dfb2673`),
+**Rodada 3** (#8D, #8H, merge `b89f9a4`) e **Rodada 4** (#15, #16, merge
+`33ee1cd`), todas aprovadas pelo PO.
 **Produção:** Railway, deploy automático da `main`; health 200, banco up, smoke
 autenticado passando, sem dado de negócio.
 
@@ -22,11 +20,12 @@ casos profundos do legado rodaram ponta a ponta contra a interface publicada
 (VAL-LEG-01 a 03, PASS):
 [`archive/E2E_VALIDATION_HISTORY.md`](archive/E2E_VALIDATION_HISTORY.md).
 
-## Capability em revisão
+## Última capability publicada
 
 **Integridade comercial Orçamento → Pedido e ausência de precificação como
-estado** — BACKLOG #15 e #16, implementada em 2026-09-05, **sem migration**,
-aguardando PO review.
+estado** — BACKLOG #15 e #16, aprovada pelo PO e publicada em 2026-09-05,
+merge `33ee1cd`. Sem migration; deploy Railway com a release conferida no
+bundle publicado e smoke autenticado passando.
 
 O subtotal comercial canônico é `Σ round(quantidade × preço, 2)` — a soma dos
 totais de linha já arredondados, que fecha com o documento que o cliente
@@ -42,7 +41,7 @@ quando não há precificação vigente — estado esperado do negócio; 404 volt
 significar só linha inexistente, e 403 e erro interno seguem distintos. Regras
 duráveis em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §55 e §56.
 
-## Última capability publicada
+## Antes dela
 
 **Prévias monetárias coerentes no Faturamento e no Orçamento** — BACKLOG #8D e
 #8H, publicada em 2026-09-05, merge `b89f9a4`, sem migration; deploy Railway
@@ -51,9 +50,9 @@ total do estado salvo anterior enquanto seus operandos estão em edição, e as
 contas viraram uma só em `@veridi/shared`, usada também pela API. Detalhe em
 [`BACKLOG.md`](BACKLOG.md) §F; regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §54.
 
-**Antes dela:** Rodada 2 — prévias na OC, Expedição e Precificação
-(2026-09-05, merge `dfb2673`); referência manual de custo
-(`PRODUCT_RULES.md` §53) e revisão do "Como funciona" em 62 telas (2026-09-04).
+Rodada 2 — prévias na OC, Expedição e Precificação (2026-09-05, merge
+`dfb2673`); referência manual de custo (`PRODUCT_RULES.md` §53) e revisão do
+"Como funciona" em 62 telas (2026-09-04).
 
 ## Estado operacional do repositório
 
@@ -78,12 +77,13 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado.
 
 ## Backlog aberto
 
-[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL e HIGH. **Rodadas 1, 2 e 3
+[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL e HIGH. **Rodadas 1 a 4
 publicadas** (#12, #9, #3, #5, #4 com residual aceito; #8A, #8B, #8C; #8D,
-#8H). **Seguinte, quando autorizada:** #8E, #8F e #8G. **Aguardando a Veridi:**
-#7 e #11. **Manutenção:** #10 e #14 (Schema Integrity Audit). **Rodada 4
-(#15, #16) aguarda PO review.** Segue aberto #17 (suíte da API não
-determinística sob paralelismo) — não observado na execução desta rodada.
+#8H; #15, #16). **Seguinte, quando autorizada:** #8E, #8F e #8G. **Aguardando
+a Veridi:** #7 e #11. **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API
+não determinística sob paralelismo, não observado nesta rodada) e **#18**
+(Ordem de Compra ainda arredonda com semântica distinta da comercial — MEDIUM,
+capability própria, com auditoria antes de qualquer mudança matemática).
 **Observação:** #1, #2.
 
 ## Blockers
