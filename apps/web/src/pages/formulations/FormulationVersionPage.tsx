@@ -7,25 +7,27 @@ import type {
   FormulationComponentQuantityMode,
   FormulationCostEstimateDTO,
   FormulationVersionDTO,
+  IndustrialMaterialCostSource,
   ItemDTO,
   SupplyResponsibility,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
 import {
   COST_QUALITY_LABELS,
-  COST_SOURCE_LABELS,
   FORMULATION_CALCULATION_MODES,
   FORMULATION_CALCULATION_MODE_LABELS,
   FORMULATION_COMPONENT_BASES,
   FORMULATION_COMPONENT_BASIS_LABELS,
+  FORMULATION_QUANTITY_MODE_DESCRIPTIONS,
   FORMULATION_QUANTITY_MODE_LABELS,
   FORMULATION_VERSION_STATUS_LABELS,
+  INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
   SUPPLY_RESPONSIBILITIES,
   SUPPLY_RESPONSIBILITY_LABELS,
   calcularQuantidadeDoComponente,
 } from "@veridi/shared";
 import { CalcHint } from "../../components/help/CalcHint";
-import { parseDecimalInput } from "../../lib/decimal-input";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import {
   activateFormulationVersion,
   getFormulationActivationImpact,
@@ -225,6 +227,73 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
 }
 
 /**
+ * Validação por CAMPO e por LINHA, antes de qualquer chamada.
+ *
+ * `exigirDecimal` interrompia na primeira recusa com uma frase na faixa do
+ * topo. Numa receita de doze linhas isso obrigava a procurar a linha — e se o
+ * campo morasse no painel de ajustes fechado, nem havia pista. Cada erro agora
+ * nomeia o componente E o campo, marca o próprio campo (`aria-invalid`, mensagem
+ * ligada por `aria-describedby`) e a tela leva a pessoa até o primeiro deles.
+ */
+type CampoDoComponente = "quantity" | "unitCode" | "purityPercentApplied" | "overagePercent";
+
+/** Ordem de leitura na linha: é a ordem em que o primeiro erro é escolhido. */
+const CAMPOS_DO_COMPONENTE: readonly CampoDoComponente[] = [
+  "quantity",
+  "unitCode",
+  "purityPercentApplied",
+  "overagePercent",
+];
+
+/** Campos que vivem no painel de ajustes — o painel precisa abrir para mostrá-los. */
+const CAMPOS_DO_PAINEL: readonly CampoDoComponente[] = ["purityPercentApplied", "overagePercent"];
+
+/** Um id só por campo: o input, a mensagem e o foco falam dele pelo mesmo nome. */
+function idDoCampo(rowKey: string, campo: CampoDoComponente): string {
+  return `comp-${rowKey}-${campo}`;
+}
+
+function chaveDeErro(rowKey: string, campo: CampoDoComponente): string {
+  return `components.${rowKey}.${campo}`;
+}
+
+/** Regras de uma linha — as mesmas que o servidor aplica, ditas antes de enviar. */
+function errosDaLinha(row: ComponentRow): Partial<Record<CampoDoComponente, string>> {
+  const nome = row.itemCode || row.itemName || "Componente";
+  const erros: Partial<Record<CampoDoComponente, string>> = {};
+
+  if (row.quantity.trim() === "") {
+    erros.quantity = `${nome} — Quantidade é obrigatória.`;
+  } else {
+    const quantidade = parseDecimalInput(row.quantity);
+    if (quantidade === null) erros.quantity = `${nome} — ${mensagemDecimalInvalido("Quantidade")}`;
+    else if (Number(quantidade) <= 0) erros.quantity = `${nome} — Quantidade deve ser maior que zero.`;
+  }
+  if (!row.unitCode) erros.unitCode = `${nome} — Unidade é obrigatória.`;
+
+  if (row.purityPercentApplied.trim() !== "") {
+    const pureza = parseDecimalInput(row.purityPercentApplied);
+    if (pureza === null) erros.purityPercentApplied = `${nome} — ${mensagemDecimalInvalido("Pureza %")}`;
+    else if (Number(pureza) <= 0 || Number(pureza) > 100) {
+      erros.purityPercentApplied = `${nome} — Pureza % deve ser maior que zero e no máximo 100.`;
+    }
+  }
+  if (row.overagePercent.trim() !== "") {
+    const overage = parseDecimalInput(row.overagePercent);
+    if (overage === null) erros.overagePercent = `${nome} — ${mensagemDecimalInvalido("Overage %")}`;
+    else if (Number(overage) < 0) erros.overagePercent = `${nome} — Overage % não pode ser negativo.`;
+  }
+  return erros;
+}
+
+/** Cor do selo da origem do custo: o que falta ou exige decisão avisa; o resto informa. */
+function seloDaFonte(source: IndustrialMaterialCostSource): string {
+  return source === "NO_COST" || source === "AMBIGUOUS_SUPPLIER_REFERENCE"
+    ? "badge badge--warn"
+    : "badge badge--neutral";
+}
+
+/**
  * Prévia do físico ENQUANTO se digita.
  *
  * As colunas de equivalente e de físico vinham do servidor, então uma linha
@@ -405,6 +474,26 @@ export function FormulationVersionPage() {
    * de largura inteira, entao nao depende de rolar a tabela para o lado.
    */
   const [ajustesAbertos, setAjustesAbertos] = useState<Record<string, boolean>>({});
+
+  /*
+   * O campo que a próxima renderização deve focar.
+   *
+   * Passa por estado, e não por `getElementById` no clique, porque o campo
+   * pode estar dentro de um painel FECHADO: abrir o painel e focar são duas
+   * renderizações. Só acontece numa tentativa de salvar ou ativar que falhou
+   * por validação — digitar nunca rola a tela.
+   */
+  const [focoPendente, setFocoPendente] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focoPendente) return;
+    const alvo = document.getElementById(focoPendente);
+    if (alvo) {
+      // jsdom não implementa `scrollIntoView`; no navegador ele existe sempre.
+      alvo.scrollIntoView?.({ block: "center" });
+      alvo.focus({ preventScroll: true });
+    }
+    setFocoPendente(null);
+  }, [focoPendente]);
 
   const gravado = useRef<string>("");
 
@@ -719,7 +808,13 @@ export function FormulationVersionPage() {
   }
 
   function temAlteracaoPendente() {
-    return JSON.stringify(montarRascunho()) !== gravado.current;
+    // Rascunho com campo ilegível não serializa — e é alteração pendente por
+    // definição: o que está na tela não é o que está gravado.
+    try {
+      return JSON.stringify(montarRascunho()) !== gravado.current;
+    } catch {
+      return true;
+    }
   }
 
   /**
@@ -778,6 +873,86 @@ export function FormulationVersionPage() {
   }
 
   /**
+   * Todos os erros de uma vez, por campo — nunca só o primeiro.
+   *
+   * Quem corrige um e tenta de novo precisa ir ao PRÓXIMO, não redescobrir
+   * a lista. Linha sem item não entra no payload, então também não é
+   * validada aqui — é o comportamento de sempre.
+   */
+  function validarRascunho(): Record<string, string> {
+    const erros: Record<string, string> = {};
+    // A base só precisa ser legível para GRAVAR: base zero é recusada na
+    // ativação, pelo servidor, com a mensagem dele no campo. Aqui se espelha
+    // o que o servidor recusaria ao salvar — não se inventa regra nova.
+    if (basisQuantity.trim() === "") erros["basisQuantity"] = "Base da formulação é obrigatória.";
+    else if (parseDecimalInput(basisQuantity) === null) {
+      erros["basisQuantity"] = mensagemDecimalInvalido("Base da formulação");
+    }
+
+    for (const row of components) {
+      if (!row.itemId) continue;
+      const daLinha = errosDaLinha(row);
+      for (const campo of CAMPOS_DO_COMPONENTE) {
+        const mensagem = daLinha[campo];
+        if (mensagem) erros[chaveDeErro(row.key, campo)] = mensagem;
+      }
+    }
+    return erros;
+  }
+
+  /**
+   * Recusa do servidor, campo a campo.
+   *
+   * O caminho da API vem por índice (`components.2.quantity`) e o índice conta
+   * só as linhas que foram no payload — as com item. Traduzido para a chave
+   * da linha, o erro cai no mesmo campo que a validação local marcaria.
+   */
+  function errosDaApi(issues: { path: string; message: string }[]): Record<string, string> {
+    const enviadas = components.filter((row) => row.itemId);
+    const erros: Record<string, string> = {};
+    for (const issue of issues) {
+      const componente = /^components\.(\d+)\.(\w+)$/.exec(issue.path);
+      const linha = componente ? enviadas[Number(componente[1])] : undefined;
+      const campo = componente?.[2] as CampoDoComponente | undefined;
+      if (linha && campo && CAMPOS_DO_COMPONENTE.includes(campo)) {
+        const nome = linha.itemCode || linha.itemName || "Componente";
+        erros[chaveDeErro(linha.key, campo)] = `${nome} — ${issue.message}`;
+      } else {
+        erros[issue.path] = issue.message;
+      }
+    }
+    return erros;
+  }
+
+  /**
+   * Foco e rolagem até o PRIMEIRO erro, na ordem de leitura da tela.
+   *
+   * Se o campo mora no painel de ajustes e o painel está fechado, o painel
+   * abre antes — levar a pessoa a uma linha onde o erro continua escondido
+   * não é levar a lugar nenhum. Só roda depois de uma tentativa de ação.
+   */
+  function levarAoPrimeiroErro(erros: Record<string, string>) {
+    if (erros["basisQuantity"]) {
+      setFocoPendente("version-basis");
+      return;
+    }
+    if (erros["dosesPerPackage"]) {
+      setFocoPendente("version-doses");
+      return;
+    }
+    for (const row of components) {
+      for (const campo of CAMPOS_DO_COMPONENTE) {
+        if (!erros[chaveDeErro(row.key, campo)]) continue;
+        if (CAMPOS_DO_PAINEL.includes(campo)) {
+          setAjustesAbertos((prev) => ({ ...prev, [row.key]: true }));
+        }
+        setFocoPendente(idDoCampo(row.key, campo));
+        return;
+      }
+    }
+  }
+
+  /**
    * Grava o rascunho e devolve se deu certo.
    *
    * O booleano existe por causa da ativação: ela precisa saber se pode
@@ -789,6 +964,14 @@ export function FormulationVersionPage() {
     setError(null);
     setFieldErrors({});
 
+    const erros = validarRascunho();
+    if (Object.keys(erros).length > 0) {
+      setFieldErrors(erros);
+      setError("Corrija os campos destacados.");
+      levarAoPrimeiroErro(erros);
+      return false;
+    }
+
     try {
       const updated = await updateFormulationVersion(versionId, montarRascunho());
       setVersion(updated);
@@ -796,10 +979,10 @@ export function FormulationVersionPage() {
       return true;
     } catch (err) {
       if (err instanceof ApiValidationError) {
-        const nextFieldErrors: Record<string, string> = {};
-        for (const issue of err.issues) nextFieldErrors[issue.path] = issue.message;
+        const nextFieldErrors = errosDaApi(err.issues);
         setFieldErrors(nextFieldErrors);
         setError("Corrija os campos destacados.");
+        levarAoPrimeiroErro(nextFieldErrors);
       } else {
         setError(err instanceof Error ? err.message : "Falha ao salvar rascunho");
       }
@@ -1123,31 +1306,29 @@ export function FormulationVersionPage() {
           subtitle="Fornecimento Cliente = material que o cliente envia (exige produto vinculado a cliente). Cada componente declara se a quantidade informada já é física ou se o sistema deve calculá-la — pureza e overage só são aplicados quando explicitamente marcados. Embalagem normalmente usa base por unidade acabada."
         >
           <div className="table-container">
-            {/* Dez colunas não cabem na largura de leitura: a ação da linha era
-                a primeira a sair de cena. Fixa à direita, ela continua ao
-                alcance mesmo com a tabela rolando. */}
-            <table className="table table--sticky-actions">
+            {/*
+              Sete colunas, não dez. Medido em 1440×900 antes desta rodada: a
+              tabela tinha 1681px numa área de 1088px, e três colunas — ajustes,
+              equivalente e físico — nasciam fora da tela. A unidade de estoque
+              passou a morar sob o item; quantidade e unidade dividem a célula;
+              equivalente e físico dividem outra, cada um com o seu rótulo. A
+              ação da linha continua fixa à direita.
+            */}
+            <table className="table table--sticky-actions table--formulacao">
               <thead>
                 <tr>
-                  <th>Item</th>
-                  {/* Mostra `stockUnitCode`: chamar de "Tipo" fazia ler
-                      categoria do material onde está a unidade de estoque. */}
-                  <th>Un. estoque</th>
-                  <th>Base</th>
-                  <th>
+                  <th className="col-item">Item</th>
+                  <th className="col-base">Base</th>
+                  <th className="col-fornecimento">
                     Fornecimento <Dica id="formulacao.fornecimento" />
                   </th>
-                  <th className="is-numeric">Quantidade</th>
-                  <th>Unidade</th>
-                  {/* Uma coluna só: os dois campos moram no disclosure, porque
-                      preencher deixou de ser o mesmo que autorizar. */}
-                  <th colSpan={2}>
+                  <th className="col-quantidade is-numeric">Quantidade · unidade</th>
+                  <th className="col-ajustes">
                     Ajustes da quantidade <Dica id="formulacao.pureza" />
                   </th>
-                  <th>
-                    Equivalente estoque <Dica id="formulacao.equivalenteEstoque" />
+                  <th className="col-estoque is-numeric">
+                    Equivalente estoque <Dica id="formulacao.equivalenteEstoque" /> e físico por unidade
                   </th>
-                  <th>Físico / unidade</th>
                   {isDraft && <th aria-hidden="true" />}
                 </tr>
               </thead>
@@ -1170,10 +1351,26 @@ export function FormulationVersionPage() {
                   const aberto = ajustesAbertos[row.key] === true;
                   const fisicoExibido = previa?.fisico ?? row.physicalPerUnit;
                   const equivalenteExibido = previa?.teorico ?? row.stockEquivalentQuantity;
+                  const nomeDoItem = row.itemCode || "componente";
+                  /** Atributos de erro de um campo desta linha, quando há erro. */
+                  const erroDe = (campo: CampoDoComponente) => fieldErrors[chaveDeErro(row.key, campo)];
+                  const marcaDeErro = (campo: CampoDoComponente) =>
+                    erroDe(campo)
+                      ? {
+                          "aria-invalid": true as const,
+                          "aria-describedby": `${idDoCampo(row.key, campo)}-error`,
+                        }
+                      : {};
+                  const mensagemDeErro = (campo: CampoDoComponente) =>
+                    erroDe(campo) ? (
+                      <p className="field__error" id={`${idDoCampo(row.key, campo)}-error`}>
+                        {erroDe(campo)}
+                      </p>
+                    ) : null;
                   return (
                   <Fragment key={row.key}>
-                  <tr>
-                    <td>
+                  <tr className={CAMPOS_DO_COMPONENTE.some((campo) => erroDe(campo)) ? "is-invalid" : undefined}>
+                    <td className="col-item">
                       {isDraft ? (
                         <SearchableEntitySelect
                           id={`componente-${row.key}`}
@@ -1195,16 +1392,17 @@ export function FormulationVersionPage() {
                           }
                         />
                       ) : (
-                        <>
-                          <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
-                        </>
+                        <EntityLink kind="item" id={row.itemId} code={row.itemCode} name={row.itemName} />
                       )}
-                      {!row.itemActive && (
-                        <div className="field__hint">Item inativo — mantido pelo histórico.</div>
-                      )}
+                      {/* A unidade de estoque era uma coluna: 110px para dizer
+                          "kg". Sob o item ela continua visível e a linha ganha
+                          a largura de volta. */}
+                      <span className="cell-sub">
+                        {row.stockUnitCode ? `Estoque em ${row.stockUnitCode}` : "Estoque: —"}
+                        {!row.itemActive && " · item inativo, mantido pelo histórico"}
+                      </span>
                     </td>
-                    <td>{row.stockUnitCode || "—"}</td>
-                    <td>
+                    <td className="col-base">
                       {isDraft ? (
                         <select
                           aria-label="Base de cálculo do componente"
@@ -1226,7 +1424,7 @@ export function FormulationVersionPage() {
                         FORMULATION_COMPONENT_BASIS_LABELS[row.basis]
                       )}
                     </td>
-                    <td>
+                    <td className="col-fornecimento">
                       {isDraft ? (
                         <select
                           aria-label="Responsabilidade de fornecimento"
@@ -1248,42 +1446,47 @@ export function FormulationVersionPage() {
                         SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]
                       )}
                     </td>
-                    <td className="is-numeric">
+                    <td className="col-quantidade is-numeric">
                       {isDraft ? (
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0"
-                          /* O campo vive numa celula de tabela e nao tem
-                             <label> proprio: sem isto o unico nome acessivel
-                             seria o placeholder "0", que nao diz nada. */
-                          aria-label={`Quantidade de ${row.itemCode || "componente"}`}
-                          value={row.quantity}
-                          onChange={(event) =>
-                            handleComponentFieldChange(row.key, "quantity", event.target.value)
-                          }
-                        />
+                        <>
+                          <div className="quantidade-unidade">
+                            <input
+                              id={idDoCampo(row.key, "quantity")}
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0"
+                              /* O campo vive numa celula de tabela e nao tem
+                                 <label> proprio: sem isto o unico nome acessivel
+                                 seria o placeholder "0", que nao diz nada. */
+                              aria-label={`Quantidade de ${nomeDoItem}`}
+                              value={row.quantity}
+                              onChange={(event) =>
+                                handleComponentFieldChange(row.key, "quantity", event.target.value)
+                              }
+                              {...marcaDeErro("quantity")}
+                            />
+                            <select
+                              id={idDoCampo(row.key, "unitCode")}
+                              aria-label={`Unidade de ${nomeDoItem}`}
+                              value={row.unitCode}
+                              onChange={(event) =>
+                                handleComponentFieldChange(row.key, "unitCode", event.target.value)
+                              }
+                              {...marcaDeErro("unitCode")}
+                            >
+                              <option value="">—</option>
+                              {unitOptionsForRow(row).map((unit) => (
+                                <option key={unit.code} value={unit.code}>
+                                  {unit.code}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {mensagemDeErro("quantity")}
+                          {mensagemDeErro("unitCode")}
+                        </>
                       ) : (
-                        row.quantity
-                      )}
-                    </td>
-                    <td>
-                      {isDraft ? (
-                        <select
-                          value={row.unitCode}
-                          onChange={(event) =>
-                            handleComponentFieldChange(row.key, "unitCode", event.target.value)
-                          }
-                        >
-                          <option value="">—</option>
-                          {unitOptionsForRow(row).map((unit) => (
-                            <option key={unit.code} value={unit.code}>
-                              {unit.code}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        row.unitCode
+                        `${row.quantity} ${row.unitCode}`
                       )}
                     </td>
                     {/*
@@ -1299,7 +1502,7 @@ export function FormulationVersionPage() {
                       A célula guarda só o RESUMO do estado; o painel abre numa
                       linha própria, logo abaixo.
                     */}
-                    <td colSpan={2}>
+                    <td className="col-ajustes">
                       <button
                         type="button"
                         className="ajuste-quantidade__botao"
@@ -1320,19 +1523,36 @@ export function FormulationVersionPage() {
                                 e igualmente silencioso.
                               */
                               "Calculada · nenhum ajuste marcado"
-                          : "Física direta"}
+                          : "Física informada"}
                         {(row.purityPercentApplied || row.overagePercent) &&
                           row.quantityMode === "PHYSICAL_DIRECT" && (
                             <span className="ajuste-quantidade__nota">
                               {" · registrado, não aplicado"}
                             </span>
                           )}
+                        {(erroDe("purityPercentApplied") || erroDe("overagePercent")) && (
+                          <span className="ajuste-quantidade__nota ajuste-quantidade__nota--erro">
+                            {" · corrigir"}
+                          </span>
+                        )}
                       </button>
                     </td>
-                    <td>
-                      {formatQuantityWithUnit(equivalenteExibido, row.stockUnitCode)}
+                    {/* Dois números, dois rótulos, uma célula: eram as duas
+                        colunas que nasciam fora da tela. */}
+                    <td className="col-estoque is-numeric">
+                      <div className="estoque-valor">
+                        <span className="estoque-valor__rotulo">Equiv.</span>{" "}
+                        <span className="estoque-valor__numero estoque-valor--equivalente">
+                          {formatQuantityWithUnit(equivalenteExibido, row.stockUnitCode)}
+                        </span>
+                      </div>
+                      <div className="estoque-valor">
+                        <span className="estoque-valor__rotulo">Físico/un.</span>{" "}
+                        <span className="estoque-valor__numero estoque-valor--fisico">
+                          {formatQuantityWithUnit(fisicoExibido, row.stockUnitCode)}
+                        </span>
+                      </div>
                     </td>
-                    <td>{formatQuantityWithUnit(fisicoExibido, row.stockUnitCode)}</td>
                     {isDraft && (
                       <td>
                         <button
@@ -1358,7 +1578,7 @@ export function FormulationVersionPage() {
                   */}
                   {aberto && (
                     <tr className="ajuste-quantidade__linha">
-                      <td colSpan={isDraft ? 11 : 10} id={`ajustes-${row.key}`}>
+                      <td colSpan={isDraft ? 7 : 6} id={`ajustes-${row.key}`}>
                         <div className="ajuste-quantidade__corpo">
                           {isDraft ? (
                             <>
@@ -1366,14 +1586,26 @@ export function FormulationVersionPage() {
                                 <legend>O que a quantidade informada significa</legend>
                                 {(["PHYSICAL_DIRECT", "THEORETICAL_WITH_ADJUSTMENTS"] as const).map(
                                   (modo) => (
-                                    <label key={modo}>
+                                    <label key={modo} className="ajuste-quantidade__modo">
                                       <input
                                         type="radio"
                                         name={`modo-${row.key}`}
+                                        /* O nome acessível é só o rótulo; a
+                                           descrição vem por `aria-describedby`. */
+                                        aria-label={FORMULATION_QUANTITY_MODE_LABELS[modo]}
+                                        aria-describedby={`modo-${row.key}-${modo}-descricao`}
                                         checked={row.quantityMode === modo}
                                         onChange={() => trocarModo(row.key, modo)}
                                       />
-                                      {FORMULATION_QUANTITY_MODE_LABELS[modo]}
+                                      <span className="ajuste-quantidade__modo-texto">
+                                        <strong>{FORMULATION_QUANTITY_MODE_LABELS[modo]}</strong>
+                                        <span
+                                          className="ajuste-quantidade__descricao"
+                                          id={`modo-${row.key}-${modo}-descricao`}
+                                        >
+                                          {FORMULATION_QUANTITY_MODE_DESCRIPTIONS[modo]}
+                                        </span>
+                                      </span>
                                     </label>
                                   ),
                                 )}
@@ -1382,27 +1614,21 @@ export function FormulationVersionPage() {
                                 Trocar o modo não liga ajuste nenhum — de
                                 propósito: marcar é a autorização, e ligar
                                 sozinho seria a aplicação silenciosa que esta
-                                capability tirou do sistema.
-
-                                Mas a frase anterior dizia "O sistema calcula a
-                                quantidade física" já na troca, antes de
-                                qualquer caixa marcada. Quem lia rápido saía
-                                achando que a correção estava ativa quando não
-                                estava — sub-correção em silêncio, o erro
-                                espelhado do que motivou a capability.
+                                capability tirou do sistema. A frase diz o estado
+                                REAL: com nada marcado, nada é corrigido.
                               */}
-                              <p className="field__hint">
-                                {row.quantityMode === "PHYSICAL_DIRECT"
-                                  ? "Use quando a quantidade informada já considera pureza, overage ou outros ajustes técnicos."
-                                  : row.applyPurityAdjustment || row.applyOverageAdjustment
-                                    ? "O sistema calcula a quantidade física usada em novas Ordens de Produção e no CMV desta versão."
-                                    : "Marque abaixo o que deve ser corrigido. Enquanto nada estiver marcado, a quantidade física continua igual à informada."}
-                              </p>
                               {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
-                                <p className="field__hint ajuste-quantidade__aviso">
-                                  Não ative o ajuste automático se a quantidade informada já
-                                  estiver corrigida — a correção seria aplicada duas vezes.
-                                </p>
+                                <>
+                                  <p className="field__hint">
+                                    {row.applyPurityAdjustment || row.applyOverageAdjustment
+                                      ? "O sistema calcula a quantidade física usada em novas Ordens de Produção e no CMV desta versão."
+                                      : "Nenhum ajuste marcado. Marque abaixo o que deve ser corrigido: enquanto nada estiver marcado, a quantidade física continua igual à informada."}
+                                  </p>
+                                  <p className="field__hint ajuste-quantidade__aviso">
+                                    Não marque a correção se a quantidade informada já
+                                    estiver corrigida — ela seria aplicada duas vezes.
+                                  </p>
+                                </>
                               )}
                             </>
                           ) : (
@@ -1413,7 +1639,7 @@ export function FormulationVersionPage() {
                           )}
 
                           {/*
-                            Em modo físico direto os campos de pureza e overage
+                            Em modo físico informado os campos de pureza e overage
                             aparecem SEM caixa de marcar. Sem esta linha, nada
                             junto deles diz que preencher não aplica — a frase
                             existia só no ⓘ do cabeçalho da coluna, que quase
@@ -1445,6 +1671,7 @@ export function FormulationVersionPage() {
                               <span>Pureza %</span>
                               {isDraft ? (
                                 <input
+                                  id={idDoCampo(row.key, "purityPercentApplied")}
                                   type="text"
                                   inputMode="decimal"
                                   aria-label="Pureza aplicada"
@@ -1457,11 +1684,13 @@ export function FormulationVersionPage() {
                                       event.target.value,
                                     )
                                   }
+                                  {...marcaDeErro("purityPercentApplied")}
                                 />
                               ) : (
                                 <strong>{row.purityPercentApplied || "—"}</strong>
                               )}
                             </label>
+                            {mensagemDeErro("purityPercentApplied")}
 
                             <label>
                               {isDraft && row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
@@ -1481,6 +1710,7 @@ export function FormulationVersionPage() {
                               <span>Overage %</span>
                               {isDraft ? (
                                 <input
+                                  id={idDoCampo(row.key, "overagePercent")}
                                   type="text"
                                   inputMode="decimal"
                                   aria-label="Overage do componente"
@@ -1493,11 +1723,13 @@ export function FormulationVersionPage() {
                                       event.target.value,
                                     )
                                   }
+                                  {...marcaDeErro("overagePercent")}
                                 />
                               ) : (
                                 <strong>{row.overagePercent || "—"}</strong>
                               )}
                             </label>
+                            {mensagemDeErro("overagePercent")}
                           </div>
 
                           {/*
@@ -1549,8 +1781,8 @@ export function FormulationVersionPage() {
                                   row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS"
                                     ? "Calculado pelo mesmo motor que a Ordem de Produção e o CMV usam."
                                     : row.purityPercentApplied || row.overagePercent
-                                      ? "Quantidade física informada diretamente. Pureza e overage estão registrados, não aplicados automaticamente."
-                                      : "Quantidade física informada diretamente."
+                                      ? "Quantidade física informada. Pureza e overage estão registrados, não aplicados."
+                                      : "Quantidade física informada."
                                 }
                               />
                             </div>
@@ -1565,7 +1797,7 @@ export function FormulationVersionPage() {
 
                 {components.length === 0 && (
                   <tr>
-                    <td colSpan={isDraft ? 11 : 10} className="table__empty">
+                    <td colSpan={isDraft ? 7 : 6} className="table__empty">
                       Nenhum componente adicionado.
                     </td>
                   </tr>
@@ -1586,15 +1818,15 @@ export function FormulationVersionPage() {
         {costEstimate && (
           <FormSection
             title="Custo estimado de materiais"
-            subtitle="Estimativa de HOJE: lê a referência de custo vigente a cada abertura e nunca é gravada na versão. O CMV e a precificação leem a base CONGELADA do cálculo salvo — por isso os dois podem discordar, e é o cálculo salvo que vale como documento."
+            subtitle="Estimativa de HOJE, com a MESMA escolha de fonte do cálculo de custo e do CMV: compra real dos últimos 30 dias, depois 90 dias, depois a última compra, depois oferta válida de fornecedor, depois referência manual. Lida a cada abertura e nunca gravada na versão — o CMV e a precificação leem a base CONGELADA do cálculo salvo, e é ele que vale como documento."
           >
             <div className="table-container">
-              <table className="table">
+              <table className="table table--custo-estimado">
                 <thead>
                   <tr>
                     <th>Componente</th>
                     <th className="is-numeric">Quantidade</th>
-                    <th>Referência unitária</th>
+                    <th className="is-numeric">Referência unitária</th>
                     <th>Origem</th>
                     <th className="is-numeric">Custo estimado</th>
                   </tr>
@@ -1612,17 +1844,22 @@ export function FormulationVersionPage() {
                           {formatQuantity(component.formulaQuantity)} {component.formulaUnitCode}
                         </span>
                       </td>
-                      <td>{formatBRL(component.unitCost)}</td>
+                      <td className="is-numeric">{component.customerSupplied ? "—" : formatBRL(component.unitCost)}</td>
                       <td>
-                        <span
-                          className={
-                            component.costSource === "NO_COST" ? "badge badge--warn" : "badge badge--neutral"
-                          }
-                        >
-                          {COST_SOURCE_LABELS[component.costSource]}
+                        {/* O selo diz o que a fonte É; o detalhe (janela, fornecedor,
+                            vigência) fica em segunda linha, sem esticar a tabela. */}
+                        <span className={seloDaFonte(component.costSource)}>
+                          {INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[component.costSource]}
                         </span>
+                        {component.costSourceDetails && (
+                          <span className="cell-sub" title={component.costSourceDetails}>
+                            {component.costSourceDetails}
+                          </span>
+                        )}
                       </td>
-                      <td className="is-numeric">{formatBRL(component.estimatedComponentCost)}</td>
+                      <td className="is-numeric">
+                        {component.customerSupplied ? "—" : formatBRL(component.estimatedComponentCost)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1652,18 +1889,44 @@ export function FormulationVersionPage() {
               </dd>
             </dl>
 
-            {costEstimate.quality === "PARTIAL" && (
+            {costEstimate.ambiguousCostItems.length > 0 && (
               <p className="field__hint">
-                Custo parcial: {costEstimate.missingCostItems.join(", ")} sem referência de custo. O
-                subtotal conhecido ({formatBRL(costEstimate.knownCostSubtotal)}) não representa o custo
-                total da fórmula.{" "}
+                {/* Ofertas existem, falta escolher — e a referência manual não
+                    entra sozinha no lugar delas. A solução mora no cadastro
+                    Item × Fornecedor, não aqui. */}
+                {costEstimate.ambiguousCostItems.join(", ")}: há mais de uma oferta válida de
+                fornecedor e nenhuma preferencial, então o custo fica em aberto — a referência
+                manual não entra sozinha no lugar delas.{" "}
+                <Link to="/compras/item-fornecedor">Definir a oferta preferencial em Item × Fornecedor</Link>.
+              </p>
+            )}
+
+            {costEstimate.missingCostItems.length > 0 && (
+              <p className="field__hint">
+                {costEstimate.quality === "PARTIAL" ? "Custo parcial: " : ""}
+                {costEstimate.missingCostItems.join(", ")} sem referência de custo
+                {costEstimate.quality === "PARTIAL" ? (
+                  <>
+                    . O subtotal conhecido ({formatBRL(costEstimate.knownCostSubtotal)}) não representa o
+                    custo total da fórmula.
+                  </>
+                ) : (
+                  "."
+                )}{" "}
                 {/* Dizer o que falta sem dizer onde resolver deixa a pessoa
-                    parada: a referência de custo vem do preço do fornecedor
-                    para o item, e é lá que ela é corrigida. */}
+                    parada: compra recebida com custo, oferta de fornecedor ou
+                    referência manual no item — nesta ordem. */}
                 <Link to="/compras/item-fornecedor">
                   Definir preço de fornecedor para esses itens
-                </Link>
-                .
+                </Link>{" "}
+                ou informar uma referência manual de custo no cadastro do item.
+              </p>
+            )}
+
+            {costEstimate.hasCustomerSuppliedMaterials && (
+              <p className="field__hint">
+                Material fornecido pelo cliente fica fora do custo: não é custo de aquisição
+                Veridi, nem mesmo quando o item tem compra ou referência manual.
               </p>
             )}
           </FormSection>

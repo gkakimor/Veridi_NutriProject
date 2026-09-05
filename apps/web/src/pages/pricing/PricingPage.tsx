@@ -16,6 +16,7 @@ import {
 import { CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ContextHelp } from "../../components/help";
+import { CalcHint } from "../../components/help/CalcHint";
 import { helpTopics } from "../../help/help-content";
 import { FormSection } from "../../components/FormSection";
 import { RowActions } from "../../components/RowActions";
@@ -309,7 +310,38 @@ export function PricingPage() {
                     <td>{PRICE_MODE_LABELS[tier.priceMode]}</td>
                     <td className="is-numeric">{formatPercent(tier.targetContributionMarginPercent)}</td>
                     <td className="is-numeric">{formatPercent(tier.commissionPercent)}</td>
-                    <td className="is-numeric">{formatUnitCost(tier.suggestedUnitPrice)}</td>
+                    <td className="is-numeric">
+                      {formatUnitCost(tier.suggestedUnitPrice)}
+                      {/* P = C ÷ (1 − margem − comissão), conferida contra o
+                          preço exibido — os números são os desta faixa, na
+                          base congelada do CALC. */}
+                      {tier.priceMode === "TARGET_MARGIN" &&
+                        tier.suggestedUnitPrice !== null &&
+                        tier.industrialCostPerUnit !== null &&
+                        tier.targetContributionMarginPercent !== null && (
+                          <CalcHint
+                            label="Preço sugerido"
+                            operandos={[
+                              {
+                                valor: formatUnitCost(tier.industrialCostPerUnit),
+                                papel: "custo por unidade",
+                                numero: Number(tier.industrialCostPerUnit),
+                              },
+                              {
+                                valor: `(1 − ${formatPercent(tier.targetContributionMarginPercent)} − ${formatPercent(tier.commissionPercent)})`,
+                                papel: "margem de contribuição e comissão",
+                                operador: "÷",
+                                numero:
+                                  1 -
+                                  Number(tier.targetContributionMarginPercent) / 100 -
+                                  Number(tier.commissionPercent) / 100,
+                              },
+                            ]}
+                            resultado={formatUnitCost(tier.suggestedUnitPrice)}
+                            nota="A comissão incide sobre o preço bruto de venda e sai de dentro dele — por isso o custo é dividido, não multiplicado. Margem de contribuição não é lucro."
+                          />
+                        )}
+                    </td>
                     <td className="is-numeric">{formatUnitCost(tier.selectedUnitPrice)}</td>
                     <td className="is-numeric">{formatPercent(tier.contributionMarginPercent)}</td>
                     <td>{formatPercent(tier.markupPercent)}</td>

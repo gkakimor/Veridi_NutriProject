@@ -9,7 +9,8 @@
 `feat/manual-cost-reference-and-help-review` em 2026-09-04, aprovado pelo PO.
 **Produção:** Railway, deploy automático da `main`; health 200, banco up,
 smoke autenticado passando. Produção não tem dado de negócio — a base foi
-limpa.
+limpa. **Em revisão do PO:** `feat/formulation-cost-consistency-ux` (Rodada 1
+do backlog: #12, #9, #3, #5 resolvidos; #4 medido), não mergeada.
 
 MVP operacional **validado internamente**. Blocos A a G fechados: cadastros,
 compras, recebimento e lotes, estoque e FEFO, formulações versionadas, produção
@@ -61,10 +62,8 @@ futuras: [`E2E_STRATEGY.md`](E2E_STRATEGY.md). Ferramental de segurança
 importadores oficiais permanecem.
 
 **Reconstrução do banco do zero** (2026-09-04): as 49 migrations aplicam num
-banco vazio só com o repositório. Ordem dos nomes é a ordem real —
-`scripts/migration-order.test.ts` vigia isso em `pnpm test`, e
-`pnpm validate:migrations:fresh` prova contra um Postgres local descartável.
-Regra e procedimento em [`TECH_BASELINE.md`](TECH_BASELINE.md).
+banco vazio só com o repositório — `scripts/migration-order.test.ts` em
+`pnpm test` e `pnpm validate:migrations:fresh`; regra em [`TECH_BASELINE.md`](TECH_BASELINE.md).
 
 ## Próximo gate
 
@@ -76,15 +75,16 @@ usuário final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado por polít
 
 ## Backlog aberto
 
-Consolidado com o PO em 2026-09-04 — [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL
-e HIGH. **Próxima rodada, quando autorizada:** #12 estimativa de custo da
-Formulação pelo seletor canônico (fail-closed, sem segundo seletor), #9
-conferência do `CalcHint` provada caso a caso, #3/#4/#5 UX da Formulação —
-rótulos dos modos já decididos ("Quantidade física informada" / "Calcular
-quantidade física"). **Depois:** #8A–#8C cálculo ao vivo em Ordem de Compra,
-Expedição e Precificação. **Aguardando a Veridi:** #7 convenções e #11
-material do cliente. **Manutenção:** #10 e #14 (Schema Integrity Audit, em
-rodada isolada). **Observação:** #1, #2. Produto próprio Veridi só no roadmap.
+[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL e HIGH. **Rodada 1 entregue** (em
+revisão): a estimativa de custo da Formulação usa o seletor canônico de fonte
+(mesma fonte e custo unitário do CMV, provado), `CalcHint` de "CMV por
+unidade" corrigido (÷ quantidade simulada) e de "Preço sugerido" conferido,
+validação inline por componente com foco no primeiro erro, tabela de
+componentes de 1681px para 1088px em 1440×900, rótulos dos modos decididos
+pelo PO. **Resta:** #4 residual em 1280×800 (117px de rolagem). **Rodada
+seguinte, quando autorizada:** #8A–#8C cálculo ao vivo em Ordem de Compra,
+Expedição e Precificação. **Aguardando a Veridi:** #7 e #11. **Manutenção:**
+#10 e #14 (Schema Integrity Audit). **Observação:** #1, #2.
 
 ## Blockers
 

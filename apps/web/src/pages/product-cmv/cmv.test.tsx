@@ -506,3 +506,52 @@ describe("Tela de CMV", () => {
     );
   });
 });
+
+/**
+ * A explicação do CMV por unidade CONFERE a própria conta (BACKLOG #9).
+ *
+ * O motor divide o CMV total pela quantidade SIMULADA. A explicação anterior
+ * dividia pelo lote de referência e, sem `numero` nos operandos, o alarme do
+ * `CalcHint` dormia: uma conta errada convencia em silêncio. Aqui a conta
+ * certa passa calada e uma divergência provocada acende o alerta.
+ */
+describe("CalcHint do CMV por unidade", () => {
+  const simulacaoDe500 = (costPerUnit: string) =>
+    cmv({
+      referenceOutputQuantity: "1000",
+      simulation: {
+        ...cmv().simulation!,
+        quantity: "500",
+        batchCount: "1",
+        totalCost: "6021.8000",
+        costPerUnit,
+        costPer1000: (Number(costPerUnit) * 1000).toFixed(4),
+      },
+    });
+
+  it("divide pela quantidade simulada e a conta fecha sem alerta", async () => {
+    // 6021,80 ÷ 500 = 12,0436.
+    vi.mocked(getProductCmv).mockResolvedValue(simulacaoDe500("12.0436"));
+    renderPage("/produtos/prod-1/cmv?quantity=500");
+    await screen.findByText("R$ 12,04");
+
+    fireEvent.click(screen.getByRole("button", { name: "Ajuda sobre CMV por unidade" }));
+
+    expect(screen.getByText("(quantidade simulada)")).toBeInTheDocument();
+    // A quantidade simulada aparece na conta e no cartão — as duas vezes certas.
+    expect(screen.getAllByText("500 un").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Divide pela quantidade simulada/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("valor que não fecha com a conta acende o alerta em vez de convencer", async () => {
+    // 6021,80 ÷ 1000 = 6,0218 — o divisor errado da explicação antiga.
+    vi.mocked(getProductCmv).mockResolvedValue(simulacaoDe500("6.0218"));
+    renderPage("/produtos/prod-1/cmv?quantity=500");
+    await screen.findByText("R$ 6,02");
+
+    fireEvent.click(screen.getByRole("button", { name: "Ajuda sobre CMV por unidade" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/A conta acima não fecha/);
+  });
+});
