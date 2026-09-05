@@ -405,4 +405,49 @@ describe("#8H — orçamento em edição mostra o total do que está na tela", (
       screen.getByLabelText("Quantidade de PROD-000001").getAttribute("aria-invalid"),
     ).toBe("true");
   });
+
+  /*
+   * BACKLOG #15 — a tela e o documento fecham no MESMO centavo.
+   *
+   * Duas linhas de 7 × R$ 12,3450: cada uma imprime R$ 86,42 e a proposta
+   * fecha em R$ 172,84. Somar sem arredondar e arredondar no fim daria
+   * R$ 172,83 — um total que não bate com as linhas que estão na tela.
+   */
+  it("O. o total da proposta é a soma das linhas impressas, centavo por centavo", () => {
+    const quatroCasas = (id: string, code: string, name: string, sortOrder: number) =>
+      linha({
+        id,
+        productId: `prod-${sortOrder}`,
+        productCode: code,
+        productName: name,
+        quotedQuantity: "7",
+        unitPrice: "12.3450",
+        total: "86.42",
+        sortOrder,
+      });
+
+    abrir([
+      versao({
+        lines: [
+          quatroCasas("ql-1", "PROD-000001", "Pré-Treino", 1),
+          quatroCasas("ql-2", "PROD-000002", "Whey", 2),
+        ],
+        subtotal: "172.84",
+        total: "172.84",
+      }),
+    ]);
+
+    expect(totalDaLinha("PROD-000001")).toContain("R$ 86,42");
+    expect(totalDaLinha("PROD-000002")).toContain("R$ 86,42");
+    expect(rodape()).toContain("R$ 172,84");
+    expect(rodape()).not.toContain("R$ 172,83");
+
+    // E ao vivo, com a segunda linha digitada, a regra é a mesma.
+    fireEvent.change(screen.getByLabelText("Quantidade de PROD-000002"), {
+      target: { value: "14" },
+    });
+    // 14 × 12,3450 = 172,83 → R$ 172,83 na linha; 86,42 + 172,83 = 259,25.
+    expect(totalDaLinha("PROD-000002")).toContain("R$ 172,83");
+    expect(rodape()).toContain("R$ 259,25");
+  });
 });

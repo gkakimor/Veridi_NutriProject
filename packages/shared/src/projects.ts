@@ -14,6 +14,7 @@ import type {
   TargetAgeGroup,
 } from "./products.js";
 import type { IndustrialCostQuality } from "./industrial-cost-calculation.js";
+import type { PricingVersionDTO } from "./pricing.js";
 
 export const PROJECT_CODE_PREFIX = "PROJ";
 export const QUOTE_CODE_PREFIX = "ORC";
@@ -161,6 +162,18 @@ export interface QuoteLineDTO {
    * O documento do cliente nunca expõe isso.
    */
   pricing: QuotePricingProvenanceDTO | null;
+}
+
+/**
+ * Precificação ativa disponível para embasar uma linha da proposta.
+ *
+ * `pricing: null` é resposta NORMAL, não erro: um produto sem precificação
+ * vigente é estado esperado do negócio, e a tela oferece preço manual. Por
+ * isso a ausência vem em 200 com o envelope, e não em 404 — 404 aqui
+ * significa que a LINHA não existe.
+ */
+export interface QuoteLinePricingOptionsResponse {
+  pricing: PricingVersionDTO | null;
 }
 
 export type QuotePaymentMethod = "CASH" | "INSTALLMENTS";

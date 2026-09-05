@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import Decimal from "decimal.js";
 import { buildPaymentSchedule, calcularTotaisOrcamento } from "./quote-math.js";
 
 /**
@@ -56,6 +57,56 @@ describe("calcularTotaisOrcamento", () => {
       unitPrice: "3",
     }));
     expect(calcularTotaisOrcamento(linhas).subtotal).toBe("3.00");
+  });
+
+  /*
+   * BACKLOG #15 — a regra comercial canônica, provada no caso em que as duas
+   * candidatas divergem.
+   */
+  it("subtotal é a soma das linhas ARREDONDADAS, não o arredondamento da soma", () => {
+    const linhas = [
+      { quotedQuantity: "7", unitPrice: "12.3450" },
+      { quotedQuantity: "7", unitPrice: "12.3450" },
+    ];
+    const r = calcularTotaisOrcamento(linhas);
+
+    // Cada linha: 7 × 12,3450 = 86,415 → R$ 86,42 impresso.
+    expect(r.lineTotals).toEqual(["86.42", "86.42"]);
+    // Σ round(linha) = 172,84. round(Σ bruto = 172,83) daria 172,83.
+    expect(r.subtotal).toBe("172.84");
+    expect(r.subtotal).not.toBe("172.83");
+
+    // O documento fecha com o que o cliente confere: as linhas.
+    const somaDoQueEstaImpresso = new Decimal(r.lineTotals[0]!)
+      .plus(r.lineTotals[1]!)
+      .toFixed(2);
+    expect(r.subtotal).toBe(somaDoQueEstaImpresso);
+
+    // E a regra antiga, escrita à mão, é de fato o outro número — o teste
+    // vale porque as duas contas divergem neste caso.
+    const regraAntiga = new Decimal("7")
+      .times("12.3450")
+      .plus(new Decimal("7").times("12.3450"))
+      .toFixed(2);
+    expect(regraAntiga).toBe("172.83");
+  });
+
+  it("o desconto e o total incidem sobre o subtotal já reconciliado", () => {
+    const { subtotal } = calcularTotaisOrcamento([
+      { quotedQuantity: "7", unitPrice: "12.3450" },
+      { quotedQuantity: "7", unitPrice: "12.3450" },
+    ]);
+    const plano = buildPaymentSchedule({
+      subtotal: subtotal!,
+      discountPercent: null,
+      method: "CASH",
+      downPaymentPercent: null,
+      installmentCount: null,
+      installmentIntervalDays: null,
+      monthlyInterestPercent: null,
+    });
+    expect(plano.subtotal).toBe("172.84");
+    expect(plano.total).toBe("172.84");
   });
 });
 

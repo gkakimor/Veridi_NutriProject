@@ -10,6 +10,7 @@ import type {
   ProjectStatus,
   PricingVersionDTO,
   ProjectVocabularyResponse,
+  QuoteLinePricingOptionsResponse,
   QuoteVersionDTO,
   RejectQuoteInput,
   UpdateProjectInput,
@@ -173,13 +174,19 @@ export async function prepareTechnicalProduct(
   return postJson<ProjectDTO>(`/projects/${projectId}/technical-product`, input);
 }
 
-/** Precificação ATIVA disponível para embasar a proposta. */
+/**
+ * Precificação ATIVA disponível para embasar a proposta.
+ *
+ * `null` é ausência de precificação vigente — estado normal, que chega em
+ * 200. Um 404 passa a significar linha inexistente e vira erro de verdade:
+ * mascarar recurso ausente como "sem preço" esconderia o defeito real.
+ */
 export async function getQuotePricingOptions(
   lineId: string,
 ): Promise<PricingVersionDTO | null> {
   const response = await apiFetch(`${API_URL}/quote-lines/${lineId}/pricing-options`);
-  if (response.status === 404) return null;
-  return (await parseJsonOrThrow(response)) as PricingVersionDTO;
+  const body = (await parseJsonOrThrow(response)) as QuoteLinePricingOptionsResponse;
+  return body.pricing;
 }
 
 export async function applyQuotePricing(
