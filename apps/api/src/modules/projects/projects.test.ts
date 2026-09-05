@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
+import { buildPaymentSchedule, calcularTotaisOrcamento } from "@veridi/shared";
 import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
 
 /**
@@ -362,6 +363,79 @@ describe("Orçamento versionado", () => {
     const reread = (await app.inject({ method: "GET", url: `/projects/${project.id}` })).json();
     const previous = reread.quoteVersions.find((quote: { id: string }) => quote.id === v1.id);
     expect(previous.status).toBe("SUPERSEDED");
+
+    await app.close();
+  });
+
+  it("o que a tela previu é o que o servidor grava, e a versão enviada não muda (#8H)", async () => {
+    const app = buildTestApp("COMMERCIAL");
+    await app.ready();
+
+    const customer = await createCustomer();
+    const project = (await createProject(app, customer.id)).json();
+
+    // V1 enviada — histórico.
+    const v1 = await sendQuote(app, project.id, "10");
+    expect(v1.total).toBe("3000.00");
+
+    // V2 em rascunho, com duas linhas.
+    const v2 = (
+      await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
+    ).json();
+    const segunda = await addProjectProduct(app, project.id);
+    await addQuoteLine(app, v2.id, segunda.id, {
+      quotedQuantity: "100",
+      uomCode: "un",
+      unitPrice: "20",
+    });
+    await app.inject({
+      method: "PATCH",
+      url: `/quote-versions/${v2.id}`,
+      payload: { discountPercent: "10" },
+    });
+
+    const antes = (await app.inject({ method: "GET", url: `/projects/${project.id}` })).json();
+    const rascunho = antes.quoteVersions.find((q: { id: string }) => q.id === v2.id);
+    // 300 × 10 + 100 × 20 = 5.000,00; com 10% de desconto, 4.500,00.
+    expect(rascunho.subtotal).toBe("5000.00");
+    expect(rascunho.total).toBe("4500.00");
+
+    // A prévia da tela: MESMAS funções, com a quantidade que está no campo.
+    const previa = calcularTotaisOrcamento([
+      { quotedQuantity: "600", unitPrice: "10" },
+      { quotedQuantity: "100", unitPrice: "20" },
+    ]);
+    const totalPrevisto = buildPaymentSchedule({
+      subtotal: previa.subtotal!,
+      discountPercent: rascunho.discountPercent,
+      method: rascunho.paymentMethod,
+      downPaymentPercent: rascunho.downPaymentPercent,
+      installmentCount: rascunho.installmentCount,
+      installmentIntervalDays: rascunho.installmentIntervalDays,
+      monthlyInterestPercent: rascunho.monthlyInterestPercent,
+    }).total;
+    expect(previa.subtotal).toBe("8000.00");
+    expect(totalPrevisto).toBe("7200.00");
+
+    // Gravar a quantidade prevista: o servidor chega ao mesmo número.
+    const primeiraLinha = rascunho.lines.find(
+      (line: { unitPrice: string | null }) => line.unitPrice === "10.0000",
+    );
+    await app.inject({
+      method: "PATCH",
+      url: `/quote-lines/${primeiraLinha.id}`,
+      payload: { quotedQuantity: "600" },
+    });
+
+    const depois = (await app.inject({ method: "GET", url: `/projects/${project.id}` })).json();
+    const gravado = depois.quoteVersions.find((q: { id: string }) => q.id === v2.id);
+    expect(gravado.subtotal).toBe(previa.subtotal);
+    expect(gravado.total).toBe(totalPrevisto);
+
+    // A V1 enviada continua exatamente como o cliente a recebeu.
+    const historica = depois.quoteVersions.find((q: { id: string }) => q.id === v1.id);
+    expect(historica.total).toBe("3000.00");
+    expect(historica.lines[0].quotedQuantity).toBe("300");
 
     await app.close();
   });

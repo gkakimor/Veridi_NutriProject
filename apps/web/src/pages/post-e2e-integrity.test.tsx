@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import type { BillingLineDTO, MaterialReservationLineDTO } from "@veridi/shared";
+import type { BillingDTO, BillingLineDTO, MaterialReservationLineDTO } from "@veridi/shared";
 
 /**
  * Correções vindas do primeiro caso real ponta a ponta (VAL-LEG-01).
@@ -177,6 +177,42 @@ function linhaDeFaturamento(overrides: Partial<BillingLineDTO> = {}): BillingLin
   };
 }
 
+/** Documento mínimo em rascunho — o diálogo precisa dele para prever o total. */
+function faturamentoCom(lines: BillingLineDTO[]): BillingDTO {
+  const totalAmount = lines.every((line) => line.lineTotal !== null)
+    ? lines.reduce((sum, line) => sum + Number(line.lineTotal), 0).toFixed(2)
+    : null;
+  return {
+    id: "fat-1",
+    code: "FAT-000001",
+    customerOrderId: "co-1",
+    customerOrderCode: "PED-000001",
+    shipmentId: "sh-1",
+    shipmentCode: "EXP-000001",
+    shipmentDate: null,
+    customerId: "cli-1",
+    customerCode: "CLI-000001",
+    customerName: "Cliente",
+    customerTradeName: null,
+    customerCnpj: null,
+    status: "DRAFT",
+    externalReference: null,
+    notes: null,
+    lines,
+    totalQuantity: lines.reduce((sum, line) => sum + Number(line.quantity), 0).toString(),
+    totalAmount,
+    hasCompletePricing: totalAmount !== null,
+    issuedAt: null,
+    issuedBy: null,
+    cancelledAt: null,
+    cancelledBy: null,
+    cancelReason: null,
+    createdAt: "2026-09-05T00:00:00.000Z",
+    createdBy: null,
+    updatedAt: "2026-09-05T00:00:00.000Z",
+  };
+}
+
 describe("Alterar preço de faturamento", () => {
   beforeEach(() => {
     vi.mocked(overrideBillingPrice).mockClear();
@@ -186,7 +222,7 @@ describe("Alterar preço de faturamento", () => {
     render(
       <MemoryRouter>
         <PriceOverrideDialog
-          billingId="fat-1"
+          billing={faturamentoCom([line])}
           line={line}
           onClose={() => {}}
           onOverridden={() => {}}

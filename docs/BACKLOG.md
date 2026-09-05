@@ -14,11 +14,63 @@ escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 **Rodada 1 aprovada em 2026-09-04:** #12, #9, #3, #5 resolvidos; #4
 resolvido com residual aceito (≈117px em 1280×800).
 **Rodada 2 aprovada e publicada em 2026-09-05** (merge `dfb2673`): #8A, #8B e
-#8C resolvidos. **Seguinte, quando o PO autorizar:** avaliar #8D e os demais #8.
+#8C resolvidos. **Rodada 3 entregue** (em revisão do PO, branch
+`feat/billing-quote-live-preview`): #8D e #8H resolvidos. **Seguinte, quando o
+PO autorizar:** #8E, #8F e #8G.
 
 ---
 
 ## A. Defeitos abertos
+
+### 15. Integridade comercial Orçamento → Pedido — MEDIUM
+
+**ABERTO. Regra decidida pelo PO em 2026-09-05; capability própria, não
+implementada na Rodada 3.**
+
+Achado da Rodada 3. O total exibido do Orçamento é `Σ round(linha)`
+(`calcularTotaisOrcamento`); ao aceitar, o Pedido congela
+`agreedSubtotalAmount` como `round(Σ linha)` (`quote-to-order.service.ts`). Com
+preço de 4 casas os dois divergem em centavos — a mesma classe de defeito que o
+Faturamento já corrigiu.
+
+**Regra decidida.** O subtotal monetário comercial canônico reconcilia com as
+linhas exibidas:
+
+    subtotal = Σ round(quantidade × preço unitário, 2)
+
+e **não** `round(Σ valores de linha ainda não arredondados)`. Motivo: o total do
+documento tem de fechar exatamente com os totais de linha apresentados ao
+usuário. Além disso, quando um Orçamento aceito originar um Pedido, o Pedido
+preserva exatamente os valores comerciais acordados e congelados no Orçamento
+aceito.
+
+**Limites definidos pelo PO.** Não recalcular documentos históricos existentes.
+Vira capability própria — o valor congelado de um acordo não muda de carona
+numa rodada de UI.
+
+### 16. `pricing-options` responde 404 para ausência de precificação — LOW/MEDIUM
+
+**ABERTO.** `GET /quote-lines/:id/pricing-options` devolve 404 quando o produto
+não tem precificação vigente. A tela trata a ausência corretamente ("Não existe
+precificação vigente para esta quantidade"), mas o navegador registra
+`console.error` a cada consulta.
+
+Ausência de precificação é **estado esperado** da aplicação, não recurso
+inexistente. O ruído faz uma auditoria de console reprovar uma tela sã.
+Observado na auditoria local da Rodada 3 e no smoke; preexistente àquela
+branch. Rodada posterior.
+
+### 17. Suíte da API não é determinística sob paralelismo no banco local — LOW técnico
+
+**ABERTO.** Em execuções completas de `pnpm test`, um teste de
+`modules/production-orders` falha esporadicamente (visto em
+`consumption.test.ts` e em `picking.test.ts`, ambos medindo agregados de
+estoque). Isolado e em reexecução da suíte completa, passa. O paralelismo do
+Vitest sobre o mesmo banco de desenvolvimento é a origem provável.
+
+Custo real: um gate verde exige reexecutar, e uma falha assim se parece com
+regressão de quem está lendo. Rodada posterior — candidato natural a entrar
+junto de #10 (manutenção).
 
 ---
 
@@ -32,8 +84,7 @@ premissa ausente vira travessão. Hoje no padrão: Faturamento, Formulação, CM
 e a prévia de política de preço.
 
 - **#8A, #8B, #8C — RESOLVIDOS na Rodada 2** (ver F).
-- **#8D — LOW/MEDIUM — Faturamento, override de preço.** Mostrar o total
-  resultante antes de confirmar a alteração.
+- **#8D, #8H — RESOLVIDOS na Rodada 3** (ver F).
 - **#8E — LOW — Recebimento, custo efetivo.** Mostrar total e comparação com o
   custo previsto quando aplicável.
 - **#8F — LOW — Ficha de Pesagem.** Mostrar a diferença antes da confirmação.
@@ -41,9 +92,6 @@ e a prévia de política de preço.
   quantidade não atualiza a prévia das necessidades até salvar. Auditar a regra
   histórica/snapshot **antes** de alterar: nenhum cálculo vivo pode mutilar OP
   já congelada.
-- **#8H — MEDIUM — Orçamento.** Campos não controlados mantêm o total anterior
-  durante a digitação. Desejado: prévia coerente antes de salvar.
-
 Também no radar, sem item próprio: Contagem de Estoque e Reservar ↔ Produzir
 calculam ao vivo mas ainda sem `CalcHint`; Custo Industrial e impacto de
 materiais do Pedido ficam em branco até apertar botão sem dizer que o valor é
@@ -140,6 +188,30 @@ próximo reset canônico da base local/E2E. **ADIADO / MANUTENÇÃO LOCAL.**
 
 ## F. Resolvidos recentes (2026-09-04 e 2026-09-05)
 
+- **#8D Faturamento — a consequência do preço antes de confirmar** (2026-09-05).
+  Alterar o preço de uma linha mostra, enquanto se digita, o total da linha e o
+  total do documento que vão resultar, ao lado do "Total da linha gravado" e do
+  "Total do documento gravado". A conta é `calcularTotaisFaturamento` em
+  `@veridi/shared` — a mesma que a API usa para emitir (linha em 2 casas,
+  documento = soma das linhas impressas), agora um motor só: a tela somava em
+  `Number`, a API em `Decimal`. Em rascunho o rodapé é "Valor total (prévia)" e
+  o gravado aparece nomeado quando difere. Preço vazio, ilegível ou negativo não
+  vira R$ 0,00: fica sem total, é dito, e a confirmação trava. Preço acordado,
+  motivo, autor e hora seguem intactos; emitido continua histórico.
+  `packages/shared/src/billings.test.ts`,
+  `modules/billings/billing-price.test.ts`,
+  `web pages/billings/faturamento-previa.test.tsx`.
+- **#8H Orçamento — total ao vivo na versão em rascunho** (2026-09-05).
+  Quantidade e preço deixaram de ser campos não-controlados: o texto vive na
+  tela, e o total da linha e o "Total da proposta (prévia)" acompanham a
+  digitação pela mesma conta do documento (`calcularTotaisOrcamento` +
+  `buildPaymentSchedule`, ambos em `@veridi/shared` e usados pela API — o plano
+  de pagamento saiu de `apps/api` para lá). Com edição pendente, "Total salvo"
+  aparece ao lado; a coluna da lista de versões virou "Total salvo". Gravar
+  continua sendo o blur do campo — nenhuma requisição por tecla. Valor ausente
+  ou ilegível não vira zero e é dito; versão enviada ou aceita não recalcula.
+  `packages/shared/src/quote-math.test.ts`, `modules/projects/projects.test.ts`,
+  `web pages/projects/orcamento-previa.test.tsx`.
 - **#8A Ordem de Compra — total vivo** (2026-09-05). Linha, rodapé e documento
   passam pela mesma função (`calcularTotaisOrdemCompra`, Decimal, 2 casas só
   na saída — usada também pela API). Em edição o rodapé é "Total (prévia)";
@@ -222,18 +294,19 @@ permanece obrigatório no escopo atual.
 
 1. **Rodada 1 — aprovada:** #12 + #9 + #3 + #5 resolvidos; #4 resolvido com
    residual aceito em 1280×800.
-2. **Rodada 2 — aprovada e publicada:** #8A + #8B + #8C resolvidos;
-   avaliar #8D e os demais #8 quando o PO autorizar.
-3. **Validação com a Veridi:** #7 + #11.
-4. **Manutenção:** #10. #1 e #2 permanecem observação/adiados.
-5. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
-6. **Roadmap:** produto próprio Veridi.
+2. **Rodada 2 — aprovada e publicada:** #8A + #8B + #8C resolvidos.
+3. **Rodada 3 — entregue, em revisão do PO:** #8D + #8H resolvidos;
+   #8E, #8F e #8G quando o PO autorizar.
+4. **Validação com a Veridi:** #7 + #11.
+5. **Manutenção:** #10. #1 e #2 permanecem observação/adiados.
+6. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
+7. **Roadmap:** produto próprio Veridi.
 
 ## Próximo gate
 
 A validação com a Veridi continua gate para as regras que dependem do processo
 real do cliente (#7, #11). Ela **não** impede os itens internos já decididos
-pelo PO (agora #8A–#8C) quando o PO autorizar a próxima capability.
+pelo PO (agora #8A–#8D e #8H) quando o PO autorizar a próxima capability.
 
 Material pronto: `Guia_Fluxo_Comercial_Veridi.docx` (36 capítulos, não
 versionado por política) e

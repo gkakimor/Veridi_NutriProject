@@ -1,7 +1,12 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { ProjectDTO, ProjectStatus, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
-import { QUOTE_STATUS_LABELS, QUOTE_PRICE_SOURCE_LABELS } from "@veridi/shared";
+import {
+  QUOTE_STATUS_LABELS,
+  QUOTE_PRICE_SOURCE_LABELS,
+  buildPaymentSchedule,
+  calcularTotaisOrcamento,
+} from "@veridi/shared";
 import {
   acceptQuoteVersion,
   addQuoteLine,
@@ -23,6 +28,7 @@ import { QuoteClosingSection } from "./QuoteClosingSection";
 import { FormSection } from "../../components/FormSection";
 import { IncompleteCostApiError, apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { QuoteConditionsForm } from "./QuoteConditionsForm";
 import { formatQuantity } from "../../lib/quantity";
@@ -114,6 +120,19 @@ export function QuoteVersionsSection({
   const [pricingOptions, setPricingOptions] = useState<PricingVersionDTO | null>(null);
   /** Precificação ativa por linha — consultada, nunca aplicada sozinha. */
   const [tierByLine, setTierByLine] = useState<Record<string, PricingVersionDTO | null>>({});
+  /*
+   * O que está sendo digitado nas linhas, antes de gravar.
+   *
+   * Os campos eram não-controlados e só salvavam ao perder o foco: enquanto
+   * a pessoa trocava a quantidade, o total da linha e o "Total da proposta"
+   * continuavam mostrando a conta do salvamento ANTERIOR — número velho
+   * apresentado como consequência dos campos atuais. Guardar o texto aqui
+   * permite recalcular a prévia com a mesma função que a API usa, sem gravar
+   * nada e sem tirar o foco de quem digita.
+   */
+  const [rascunhoDeLinha, setRascunhoDeLinha] = useState<
+    Record<string, { quotedQuantity?: string; unitPrice?: string }>
+  >({});
 
   /*
    * Abre a versão pedida — e só escolhe sozinho quando ninguém pediu nada.
@@ -170,6 +189,86 @@ export function QuoteVersionsSection({
     // quantidade reconsulta, digitar em outro campo não.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open?.id, open?.status, linesSignature]);
+
+  /*
+   * Campo da linha como está NA TELA agora: o que foi digitado, quando há
+   * digitação em curso; senão, o que está gravado. Texto ilegível (ou vazio)
+   * vira `null` — ausência não é zero, e um total falso é pior que nenhum.
+   */
+  function campoDaLinha(
+    line: QuoteLineDTO,
+    campo: "quotedQuantity" | "unitPrice",
+  ): string | null {
+    const digitado = rascunhoDeLinha[line.id]?.[campo];
+    if (digitado === undefined) return line[campo];
+    return parseDecimalInput(digitado);
+  }
+
+  /** `true` quando o texto digitado existe e não dá para ler como número. */
+  function campoIlegivel(line: QuoteLineDTO, campo: "quotedQuantity" | "unitPrice"): boolean {
+    const digitado = rascunhoDeLinha[line.id]?.[campo];
+    return digitado !== undefined && digitado.trim() !== "" && parseDecimalInput(digitado) === null;
+  }
+
+  function digitarNaLinha(
+    lineId: string,
+    campo: "quotedQuantity" | "unitPrice",
+    valor: string,
+  ) {
+    setRascunhoDeLinha((atual) => ({
+      ...atual,
+      [lineId]: { ...atual[lineId], [campo]: valor },
+    }));
+  }
+
+  /*
+   * O rascunho de tela some quando o gravado o alcança.
+   *
+   * Salvar é assíncrono e a recarga da proposta vem depois: limpar o texto
+   * digitado assim que o PATCH volta faria o campo piscar o valor antigo até
+   * o servidor responder. Aqui o campo sai do rascunho só quando o valor
+   * gravado É o que foi digitado — e continua na tela, com o erro, quando o
+   * salvamento falha.
+   */
+  const linhasGravadas = (open?.lines ?? [])
+    .map((line) => `${line.id}:${line.quotedQuantity ?? ""}:${line.unitPrice ?? ""}`)
+    .join("|");
+  useEffect(() => {
+    setRascunhoDeLinha((atual) => {
+      const proximo: typeof atual = {};
+      let mudou = false;
+      for (const [lineId, campos] of Object.entries(atual)) {
+        const line = (open?.lines ?? []).find((row) => row.id === lineId);
+        if (!line) {
+          mudou = true;
+          continue;
+        }
+        const restante: { quotedQuantity?: string; unitPrice?: string } = {};
+        for (const campo of ["quotedQuantity", "unitPrice"] as const) {
+          const digitado = campos[campo];
+          if (digitado === undefined) continue;
+          const legivel = parseDecimalInput(digitado);
+          const gravado = line[campo];
+          const iguais =
+            legivel === null ? gravado === null && digitado.trim() === "" : gravado !== null && Number(legivel) === Number(gravado);
+          if (iguais) {
+            mudou = true;
+            continue;
+          }
+          restante[campo] = digitado;
+        }
+        if (Object.keys(restante).length > 0) proximo[lineId] = restante;
+      }
+      return mudou ? proximo : atual;
+    });
+    // `linhasGravadas` cobre quantidade e preço de cada linha da versão aberta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open?.id, linhasGravadas]);
+
+  // Trocar de versão descarta qualquer digitação pendente da anterior.
+  useEffect(() => {
+    setRascunhoDeLinha({});
+  }, [openId]);
 
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
@@ -253,6 +352,39 @@ export function QuoteVersionsSection({
   const availableProducts = linkedProducts.filter((link) => !usedProductIds.has(link.productId));
   const missingPrice = (open?.lines ?? []).some((line) => line.unitPrice === null);
 
+  /*
+   * A proposta como está NA TELA — total de linha, subtotal e total.
+   *
+   * `calcularTotaisOrcamento` e `buildPaymentSchedule` são as MESMAS funções
+   * que a API usa para montar o documento; o desconto e as condições entram
+   * como estão gravados (mudá-los é o formulário de condições, que tem o
+   * próprio "Simular"). Nada aqui é enviado ao servidor: quem grava é o blur
+   * do campo, e o servidor recalcula ao gravar.
+   */
+  const previaDasLinhas = calcularTotaisOrcamento(
+    (open?.lines ?? []).map((line) => ({
+      quotedQuantity: campoDaLinha(line, "quotedQuantity"),
+      unitPrice: campoDaLinha(line, "unitPrice"),
+    })),
+  );
+  const previaDoTotal =
+    open && previaDasLinhas.subtotal !== null
+      ? buildPaymentSchedule({
+          subtotal: previaDasLinhas.subtotal,
+          discountPercent: open.discountPercent,
+          method: open.paymentMethod,
+          downPaymentPercent: open.downPaymentPercent,
+          installmentCount: open.installmentCount,
+          installmentIntervalDays: open.installmentIntervalDays,
+          monthlyInterestPercent: open.monthlyInterestPercent,
+        }).total
+      : null;
+  /** Há digitação pendente em alguma linha — o que a tela mostra ainda não foi gravado. */
+  const linhasComEdicaoPendente = Object.keys(rascunhoDeLinha).length > 0;
+  const alguemIlegivel = (open?.lines ?? []).some(
+    (line) => campoIlegivel(line, "quotedQuantity") || campoIlegivel(line, "unitPrice"),
+  );
+
   return (
     <FormSection
       title="Orçamentos"
@@ -267,7 +399,10 @@ export function QuoteVersionsSection({
               <th>Versão</th>
               <th>Data</th>
               <th>Produtos</th>
-              <th className="is-numeric">Total</th>
+              {/* Lista de versões = documentos gravados. Enquanto a versão
+                  aberta está sendo editada, o total dela aqui continua sendo o
+                  do último salvamento — e o rotulo diz isso. */}
+              <th className="is-numeric">Total salvo</th>
               <th>Validade</th>
               <th>Status</th>
             </tr>
@@ -368,9 +503,18 @@ export function QuoteVersionsSection({
                     </td>
                   </tr>
                 )}
-                {open.lines.map((line) => {
+                {open.lines.map((line, indice) => {
                   const options = tierByLine[line.id] ?? null;
                   const tier = exactTier(options, line.quotedQuantity);
+                  /*
+                   * O total da linha é o da PRÉVIA em versão editável: sai dos
+                   * valores que estão nos campos agora, pela mesma função da
+                   * API. Sem digitação pendente ele é idêntico ao gravado.
+                   * Versão enviada/aceita é histórico e nunca recalcula.
+                   */
+                  const totalDaLinha = editable
+                    ? (previaDasLinhas.lineTotals[indice] ?? null)
+                    : line.total;
                   const cmvHref =
                     `/produtos/${line.productId}/cmv` +
                     `?quantity=${encodeURIComponent(line.quotedQuantity ?? "")}` +
@@ -391,37 +535,53 @@ export function QuoteVersionsSection({
                     </td>
                     <td className="is-numeric">
                       {editable ? (
-                        <input
-                          /*
-                           * `key` amarrada ao valor do servidor.
-                           *
-                           * O campo é não-controlado (`defaultValue`), então o
-                           * DOM guarda o que foi digitado e ignora mudanças
-                           * vindas de fora. Aplicar uma faixa passa a definir
-                           * quantidade, unidade e preço no servidor — e a
-                           * linha continuava mostrando os campos vazios, num
-                           * documento que pode ser impresso e enviado. Trocar
-                           * a `key` remonta o campo com o valor novo.
-                           */
-                          key={`qtd-${line.quotedQuantity ?? ""}`}
-                          type="text"
-                          inputMode="decimal"
-                          aria-label={`Quantidade de ${line.productCode}`}
-                          defaultValue={line.quotedQuantity ?? ""}
-                          onBlur={(event) =>
-                            void run(() =>
-                              updateQuoteLine(line.id, {
-                                // Campo em branco apaga a quantidade — ausência
-                                // é resposta legítima. Só o que foi digitado
-                                // precisa ser legível.
-                                quotedQuantity: exigirDecimalOpcional(
-                                  event.target.value,
-                                  `Quantidade de ${line.productCode}`,
-                                ),
-                              }),
-                            )
-                          }
-                        />
+                        <>
+                          <input
+                            /*
+                             * Campo CONTROLADO pelo rascunho de tela.
+                             *
+                             * Enquanto era não-controlado, o DOM guardava o que
+                             * fora digitado e a tela não tinha como recalcular
+                             * nada: o total da linha e o total da proposta
+                             * seguiam mostrando o salvamento ANTERIOR. Agora o
+                             * texto vive no componente, a prévia sai dele, e o
+                             * valor gravado volta a mandar assim que o servidor
+                             * confirma — inclusive quando aplicar uma faixa
+                             * define quantidade, unidade e preço de uma vez.
+                             */
+                            type="text"
+                            inputMode="decimal"
+                            aria-label={`Quantidade de ${line.productCode}`}
+                            aria-invalid={campoIlegivel(line, "quotedQuantity") || undefined}
+                            className={
+                              campoIlegivel(line, "quotedQuantity") ? "is-invalid" : undefined
+                            }
+                            value={
+                              rascunhoDeLinha[line.id]?.quotedQuantity ?? line.quotedQuantity ?? ""
+                            }
+                            onChange={(event) =>
+                              digitarNaLinha(line.id, "quotedQuantity", event.target.value)
+                            }
+                            onBlur={(event) =>
+                              void run(() =>
+                                updateQuoteLine(line.id, {
+                                  // Campo em branco apaga a quantidade — ausência
+                                  // é resposta legítima. Só o que foi digitado
+                                  // precisa ser legível.
+                                  quotedQuantity: exigirDecimalOpcional(
+                                    event.target.value,
+                                    `Quantidade de ${line.productCode}`,
+                                  ),
+                                }),
+                              )
+                            }
+                          />
+                          {campoIlegivel(line, "quotedQuantity") && (
+                            <p className="field__error">
+                              {mensagemDecimalInvalido(`Quantidade de ${line.productCode}`)}
+                            </p>
+                          )}
+                        </>
                       ) : (
                         (line.quotedQuantity ?? "—")
                       )}
@@ -456,30 +616,43 @@ export function QuoteVersionsSection({
                     </td>
                     <td className="is-numeric">
                       {editable && line.priceSource === "MANUAL" ? (
-                        <input
-                          key={`preco-${line.unitPrice ?? ""}`}
-                          type="text"
-                          inputMode="decimal"
-                          aria-label={`Preço unitário de ${line.productCode}`}
-                          defaultValue={line.unitPrice ?? ""}
-                          onBlur={(event) =>
-                            void run(() =>
-                              updateQuoteLine(line.id, {
-                                unitPrice: exigirDecimalOpcional(
-                                  event.target.value,
-                                  `Preço unitário de ${line.productCode}`,
-                                ),
-                              }),
-                            )
-                          }
-                        />
+                        <>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            aria-label={`Preço unitário de ${line.productCode}`}
+                            aria-invalid={campoIlegivel(line, "unitPrice") || undefined}
+                            className={campoIlegivel(line, "unitPrice") ? "is-invalid" : undefined}
+                            value={rascunhoDeLinha[line.id]?.unitPrice ?? line.unitPrice ?? ""}
+                            onChange={(event) =>
+                              digitarNaLinha(line.id, "unitPrice", event.target.value)
+                            }
+                            onBlur={(event) =>
+                              void run(() =>
+                                updateQuoteLine(line.id, {
+                                  unitPrice: exigirDecimalOpcional(
+                                    event.target.value,
+                                    `Preço unitário de ${line.productCode}`,
+                                  ),
+                                }),
+                              )
+                            }
+                          />
+                          {campoIlegivel(line, "unitPrice") && (
+                            <p className="field__error">
+                              {mensagemDecimalInvalido(`Preço unitário de ${line.productCode}`)}
+                            </p>
+                          )}
+                        </>
                       ) : line.unitPrice ? (
                         formatUnitPriceBRL(line.unitPrice)
                       ) : (
                         "—"
                       )}
                     </td>
-                    <td className="is-numeric">{line.total ? formatBRL(line.total) : "—"}</td>
+                    <td className="is-numeric">
+                      {totalDaLinha ? formatBRL(totalDaLinha) : "—"}
+                    </td>
                     {editable && (
                       <td className="table__actions">
                         <button
@@ -555,11 +728,39 @@ export function QuoteVersionsSection({
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={editable ? 5 : 4}>Total da proposta</td>
+                  {/*
+                    Em versão editável o rodapé é a PRÉVIA — o que os campos
+                    dizem agora, com o desconto gravado aplicado pela mesma
+                    função do documento. O gravado aparece ao lado, nomeado,
+                    quando difere: dois números de momentos diferentes só podem
+                    conviver se estiver dito qual é qual.
+                  */}
+                  <td colSpan={editable ? 5 : 4}>
+                    {editable ? "Total da proposta (prévia)" : "Total da proposta"}
+                  </td>
                   <td colSpan={2}>
                     {/* Total parcial não existe: com linha sem preço, não há total. */}
-                    <strong>{open.total ? formatBRL(open.total) : "—"}</strong>
-                    {missingPrice && (
+                    <strong>
+                      {editable
+                        ? previaDoTotal
+                          ? formatBRL(previaDoTotal)
+                          : "—"
+                        : open.total
+                          ? formatBRL(open.total)
+                          : "—"}
+                    </strong>
+                    {editable && linhasComEdicaoPendente && (
+                      <div className="field__hint">
+                        Total salvo: {open.total ? formatBRL(open.total) : "—"} — alterações são
+                        gravadas ao sair do campo.
+                      </div>
+                    )}
+                    {alguemIlegivel && (
+                      <div className="field__hint">
+                        Existe valor que não dá para ler — corrija antes de gravar.
+                      </div>
+                    )}
+                    {missingPrice && !alguemIlegivel && (
                       <div className="field__hint">Existem produtos sem preço definido.</div>
                     )}
                   </td>

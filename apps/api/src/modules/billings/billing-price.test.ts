@@ -3,6 +3,7 @@ import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
+import { calcularTotaisFaturamento } from "@veridi/shared";
 
 /**
  * O preço do faturamento vem do Pedido.
@@ -644,6 +645,42 @@ describe("Alterar o preço de faturamento", () => {
     expect(linha.overriddenAt).toBeTruthy();
     // O total segue o faturado, não o acordado.
     expect(resposta.json().totalAmount).toBe("92.00");
+
+    await app.close();
+  });
+
+  it("o que a tela previu é o que a API grava (#8D)", async () => {
+    const app = buildTestApp("COMMERCIAL");
+    await app.ready();
+    const { orderId } = await pedidoComPrecoAcordado(app, { quantidade: "100", preco: "12.50" });
+    const expedicao = await expedir(app, orderId);
+    const faturamento = (
+      await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
+    ).json();
+    const linha = faturamento.lines[0];
+
+    // A prévia da tela: MESMA função, com o preço que está sendo digitado.
+    const previa = calcularTotaisFaturamento([
+      { quantity: linha.quantity, unitPrice: "13.25" },
+    ]);
+    expect(previa.lineTotals[0]).toBe("1325.00");
+    expect(previa.totalAmount).toBe("1325.00");
+
+    // Antes de confirmar, o documento gravado continua valendo o acordado.
+    expect(faturamento.totalAmount).toBe("1250.00");
+
+    const depois = (
+      await app.inject({
+        method: "POST",
+        url: `/billings/${faturamento.id}/lines/${linha.id}/price-override`,
+        payload: { unitPrice: "13.25", reason: "Reajuste acordado nesta remessa" },
+      })
+    ).json();
+
+    expect(depois.lines[0].lineTotal).toBe(previa.lineTotals[0]);
+    expect(depois.totalAmount).toBe(previa.totalAmount);
+    // E o acordado do Pedido não foi tocado pela prévia nem pela confirmação.
+    expect(depois.lines[0].agreedUnitPrice).toBe("12.5000");
 
     await app.close();
   });

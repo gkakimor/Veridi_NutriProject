@@ -568,6 +568,10 @@ export const baseTopics = {
         term: "Valor total",
         text: "Só existe quando todas as linhas têm preço; faltando alguma, o documento mostra valores incompletos em vez de somar parte. Preço não trava a emissão: o faturamento quantitativo vale mesmo sem valor.",
       },
+      {
+        term: "Prévia e valor gravado",
+        text: "Enquanto o faturamento é rascunho, o rodapé mostra \u201cValor total (prévia)\u201d: o total dos preços que estão na tela agora. Quando ele difere do último salvamento, o valor gravado aparece ao lado, com esse nome. Alterar um preço mostra, antes de confirmar, o total da linha e o total do documento que vão resultar — e nada disso é gravado até a confirmação. Preço em branco ou ilegível não vira zero: a linha fica sem total e o documento fica sem valor.",
+      },
     ],
     flow: [{ label: "Pedido" }, { label: "Expedição" }, { label: "Faturamento", tone: "accent" }],
     steps: [

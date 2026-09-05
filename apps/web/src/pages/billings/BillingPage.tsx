@@ -1,8 +1,8 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { BillingDTO, BillingLineDTO, BillingStatus } from "@veridi/shared";
-import { BILLING_STATUS_LABELS } from "@veridi/shared";
+import type { BillingDTO, BillingStatus } from "@veridi/shared";
+import { BILLING_STATUS_LABELS, calcularTotaisFaturamento } from "@veridi/shared";
 import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../lib/billings-api";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { CalcHint } from "../../components/help/CalcHint";
@@ -171,34 +171,37 @@ export function BillingPage() {
   }
 
   /*
-   * Total da linha — UM cálculo só, usado na célula e no rodapé.
+   * Total da linha e do documento — UMA conta só, a mesma que a API usa para
+   * emitir (`calcularTotaisFaturamento`, em `@veridi/shared`, em `Decimal`).
    *
-   * O preço acordado é guardado com mais casas do que a tela mostra
-   * (9,7203 aparece como R$ 9,72). Recalcular a partir do texto exibido
-   * dava um total diferente do que o servidor emitiria — a linha dizia
-   * R$ 1.677,27 e o rodapé R$ 1.677,00, e o operador via os dois números
-   * discordando justamente na hora de emitir. Por isso o total da linha
-   * vem do servidor sempre que existe; só quando o operador está digitando
-   * um preço novo (linha sem preço acordado) a prévia é local, e aí o valor
-   * digitado É a precisão.
+   * O preço acordado é guardado com mais casas do que a tela mostra (9,7203
+   * aparece como R$ 9,72), e recalcular a partir do texto EXIBIDO dava um
+   * total diferente do que o servidor emitiria — a linha dizia R$ 1.677,27 e
+   * o rodapé R$ 1.677,00, com os dois números discordando justamente na hora
+   * de emitir. Por isso o operando é sempre o preço cheio do DTO; só a linha
+   * cujo preço está sendo digitado (sem preço acordado, em rascunho) usa o
+   * que foi digitado — e aí o digitado É a precisão.
    */
-  function totalDaLinha(line: BillingLineDTO): string | null {
-    const digitado = (prices[line.id] ?? "").trim();
-    if (isDraft && !line.agreedUnitPrice) {
-      const legivel = parseDecimalInput(digitado);
-      if (legivel === null) return null;
-      return (Number(line.quantity) * Number(legivel)).toFixed(2);
-    }
-    return line.lineTotal;
-  }
-
-  const totaisDeLinha = billing.lines.map((line) => totalDaLinha(line));
-  const previewComplete = billing.lines.length > 0 && totaisDeLinha.every((total) => total !== null);
-  // Soma de valores já monetários (2 casas) — nunca de preço unitário formatado.
-  const previewTotal = previewComplete
-    ? totaisDeLinha.reduce((sum, total) => sum + Number(total), 0).toFixed(2)
-    : null;
+  const totais = calcularTotaisFaturamento(
+    billing.lines.map((line) => ({
+      quantity: line.quantity,
+      unitPrice:
+        isDraft && !line.agreedUnitPrice
+          ? parseDecimalInput(prices[line.id] ?? "")
+          : line.unitPrice,
+    })),
+  );
+  const totaisDeLinha = totais.lineTotals;
+  const previewTotal = totais.totalAmount;
   const displayTotal = isDraft ? previewTotal : billing.totalAmount;
+  /*
+   * Em rascunho o rodapé mostra a PRÉVIA — o total dos preços que estão na
+   * tela agora. Quando ela difere do último salvamento, o gravado aparece
+   * ao lado, nomeado: dois números de momentos diferentes só podem conviver
+   * se estiver dito qual é qual.
+   */
+  const totalGravadoDivergente =
+    isDraft && billing.totalAmount !== null && billing.totalAmount !== previewTotal;
   /*
    * Emitir é definitivo. Faturar sem preço continua permitido — existe
    * faturamento puramente quantitativo — mas quem confirma precisa saber que
@@ -452,8 +455,16 @@ export function BillingPage() {
               </tbody>
             </table>
             <div className="table-foot">
-              Quantidade total: {formatQuantity(billing.totalQuantity)} · Valor total:{" "}
+              Quantidade total: {formatQuantity(billing.totalQuantity)} ·{" "}
+              {isDraft ? "Valor total (prévia)" : "Valor total"}:{" "}
               {displayTotal ? formatBRL(displayTotal) : "Valores incompletos"}
+              {totalGravadoDivergente && (
+                <span className="field__hint">
+                  {" "}
+                  · Valor total gravado: {formatBRL(billing.totalAmount)} — salve o rascunho para
+                  atualizar.
+                </span>
+              )}
             </div>
             {/* O acordado não é substituído: quem auditar vê os dois
                 números, o motivo e o autor, e não um valor solitário. */}
@@ -563,7 +574,7 @@ export function BillingPage() {
 
       {overrideLineId && (
         <PriceOverrideDialog
-          billingId={billing.id}
+          billing={billing}
           line={billing.lines.find((line) => line.id === overrideLineId)!}
           onClose={() => setOverrideLineId(null)}
           onOverridden={(atualizado) => {

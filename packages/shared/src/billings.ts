@@ -1,3 +1,5 @@
+import Decimal from "decimal.js";
+
 /**
  * Contratos de Faturamento (Billing) — documento COMERCIAL/OPERACIONAL,
  * nunca fiscal (NF-e/DANFE/SEFAZ/impostos estão fora do MVP). A quantidade
@@ -163,4 +165,62 @@ export interface UpdateBillingInput {
 
 export interface CancelBillingInput {
   reason: string;
+}
+
+/** Uma linha, como está no documento ou como está sendo digitada. */
+export interface LinhaParaTotalDoFaturamento {
+  /** Vem da expedição confirmada — nunca editável, mas pode faltar na prévia. */
+  quantity: string | null;
+  /** `null` = sem preço; texto ilegível também chega como `null`. */
+  unitPrice: string | null;
+}
+
+export interface TotaisDoFaturamento {
+  /** `quantity × unitPrice` por linha, 2 casas; `null` sem preço ou sem quantidade. */
+  lineTotals: (string | null)[];
+  /** `false` quando alguma linha está sem preço — total parcial não existe. */
+  hasCompletePricing: boolean;
+  /** Soma das linhas JÁ arredondadas; `null` quando o preço está incompleto. */
+  totalAmount: string | null;
+}
+
+/**
+ * A conta do Faturamento — uma só, para a API, para o documento e para a prévia.
+ *
+ * A tela somava `Number(qty) * Number(price)` enquanto a API somava em
+ * `Decimal`: dois motores para o mesmo número, e o operador via o rodapé
+ * discordar da linha justamente na hora de emitir.
+ *
+ * O total do documento é a soma das linhas IMPRESSAS — cada linha fecha em
+ * dois decimais e o documento é a soma dessas linhas. `Σ round(linha)` e
+ * `round(Σ linha)` divergem, e o que o cliente confere são as linhas.
+ *
+ * O preço unitário guarda 4 casas: `123 × 4,0531` fecha em R$ 498,53, e é esse
+ * o número, não `123 × 4,05`. Nada é arredondado antes da multiplicação.
+ */
+export function calcularTotaisFaturamento(
+  lines: LinhaParaTotalDoFaturamento[],
+): TotaisDoFaturamento {
+  const lineTotals: (string | null)[] = [];
+  for (const line of lines) {
+    if (line.quantity === null || line.unitPrice === null) {
+      lineTotals.push(null);
+      continue;
+    }
+    let total: Decimal;
+    try {
+      total = new Decimal(line.quantity).times(line.unitPrice);
+    } catch {
+      lineTotals.push(null);
+      continue;
+    }
+    lineTotals.push(total.isFinite() ? total.toFixed(2) : null);
+  }
+  const hasCompletePricing = lines.length > 0 && lineTotals.every((total) => total !== null);
+  const totalAmount = hasCompletePricing
+    ? lineTotals
+        .reduce((sum, total) => sum.plus(new Decimal(total!)), new Decimal(0))
+        .toFixed(2)
+    : null;
+  return { lineTotals, hasCompletePricing, totalAmount };
 }

@@ -1,15 +1,18 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { BillingDTO, BillingLineDTO } from "@veridi/shared";
+import { calcularTotaisFaturamento } from "@veridi/shared";
 import { ModalDialog } from "../../components/ModalDialog";
+import { CalcHint } from "../../components/help/CalcHint";
 import { overrideBillingPrice } from "../../lib/billings-api";
-import { formatUnitPriceBRL } from "../../lib/currency";
+import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { exigirDecimal } from "../../lib/decimal-field";
-import { parseDecimalInput } from "../../lib/decimal-input";
+import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { formatQuantity } from "../../lib/quantity";
 
 interface PriceOverrideDialogProps {
-  billingId: string;
+  /** O documento inteiro — alterar uma linha muda o total dele. */
+  billing: BillingDTO;
   line: BillingLineDTO;
   onClose: () => void;
   onOverridden: (billing: BillingDTO) => void;
@@ -22,9 +25,22 @@ interface PriceOverrideDialogProps {
  * a diferença entre os dois É a evidência. Quem auditar o documento meses
  * depois vê os dois números, o motivo, o autor e a data, em vez de um
  * valor solitário que pode ou não ter sido o combinado.
+ *
+ * ## A consequência aparece antes de confirmar
+ *
+ * Antes, digitar 13,25 no lugar de 12,50 não mostrava nada: o operador
+ * confirmava a alteração do preço unitário sem ver o que ela fazia com a
+ * linha nem com o documento, e só descobria o total depois — quando desfazer
+ * já custava outra alteração, com outro motivo, no histórico. Agora a linha e
+ * o documento aparecem em prévia enquanto se digita, pela MESMA função que a
+ * API usa para emitir (`calcularTotaisFaturamento`), ao lado do que está
+ * gravado e sempre nomeados.
+ *
+ * A prévia não grava nada e não toca no histórico: quem persiste é o botão
+ * "Alterar preço".
  */
 export function PriceOverrideDialog({
-  billingId,
+  billing,
   line,
   onClose,
   onOverridden,
@@ -34,17 +50,39 @@ export function PriceOverrideDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Mesma leitura da vírgula em toda a web; `null` é "ainda não é número".
-  const digitado = parseDecimalInput(unitPrice);
-  const novo = digitado === null ? Number.NaN : Number(digitado);
-  const igualAoAcordado = line.agreedUnitPrice !== null && novo === Number(line.agreedUnitPrice);
+  // Mesma leitura da vírgula em toda a web; `null` é "ainda não é número"
+  // (inclui negativo, que o parser central nunca aceita).
+  const digitado = unitPrice.trim();
+  const precoNovo = parseDecimalInput(unitPrice);
+  const ilegivel = digitado !== "" && precoNovo === null;
+  const igualAoAcordado =
+    line.agreedUnitPrice !== null &&
+    precoNovo !== null &&
+    Number(precoNovo) === Number(line.agreedUnitPrice);
+
+  /*
+   * Prévia do documento com ESTA linha ao preço digitado — as demais entram
+   * como estão gravadas. Preço ilegível ou em branco não vira zero: a linha
+   * fica sem total, o documento fica sem prévia, e a tela diz por quê.
+   */
+  const previa = calcularTotaisFaturamento(
+    billing.lines.map((row) =>
+      row.id === line.id
+        ? { quantity: row.quantity, unitPrice: precoNovo }
+        : { quantity: row.quantity, unitPrice: row.unitPrice },
+    ),
+  );
+  const indiceDaLinha = billing.lines.findIndex((row) => row.id === line.id);
+  const previaDaLinha = previa.lineTotals[indiceDaLinha] ?? null;
+  const previaDoDocumento = previa.totalAmount;
+  const documentoTemOutrasLinhas = billing.lines.length > 1;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      const atualizado = await overrideBillingPrice(billingId, line.id, {
+      const atualizado = await overrideBillingPrice(billing.id, line.id, {
         unitPrice: exigirDecimal(unitPrice, "Preço faturado"),
         reason: reason.trim(),
       });
@@ -56,12 +94,7 @@ export function PriceOverrideDialog({
     }
   }
 
-  const canSubmit =
-    unitPrice.trim().length > 0 &&
-    Number.isFinite(novo) &&
-    novo >= 0 &&
-    reason.trim().length >= 3 &&
-    !saving;
+  const canSubmit = precoNovo !== null && reason.trim().length >= 3 && !saving;
 
   return (
     <ModalDialog labelledBy="price-override-title" onClose={onClose}>
@@ -95,8 +128,16 @@ export function PriceOverrideDialog({
             inputMode="decimal"
             placeholder="0,00"
             value={unitPrice}
+            aria-invalid={ilegivel || undefined}
+            aria-describedby={ilegivel ? "override-price-error" : undefined}
+            className={ilegivel ? "is-invalid" : undefined}
             onChange={(event) => setUnitPrice(event.target.value)}
           />
+          {ilegivel && (
+            <p className="field__error" id="override-price-error">
+              {mensagemDecimalInvalido("Preço faturado")}
+            </p>
+          )}
           {igualAoAcordado && (
             <p className="field__hint">
               Igual ao acordado — confirmar remove a marca de alteração desta linha.
@@ -118,13 +159,71 @@ export function PriceOverrideDialog({
         </div>
       </form>
 
+      {/* Prévia e gravado lado a lado, cada um com o seu nome: em cima o que
+          confirmar vai produzir, embaixo o que o documento diz hoje. */}
+      <div className="quote-plan quote-plan--simulated">
+        <h3 className="quote-plan__title">
+          Prévia <em>— ainda não confirmada</em>
+        </h3>
+        <dl className="definition-list">
+          <dt>Total da linha (prévia)</dt>
+          <dd>
+            {previaDaLinha !== null ? (
+              <>
+                <strong>{formatBRL(previaDaLinha)}</strong>{" "}
+                <CalcHint
+                  label="Total da linha (prévia)"
+                  operandos={[
+                    { valor: formatUnitPriceBRL(precoNovo), papel: "preço faturado nesta prévia" },
+                    {
+                      valor: formatQuantity(line.quantity),
+                      papel: `quantidade em ${line.unitCode}`,
+                    },
+                  ]}
+                  resultado={formatBRL(previaDaLinha)}
+                  esperado={Number(precoNovo) * Number(line.quantity)}
+                  nota="A quantidade vem da expedição confirmada e não muda aqui."
+                />
+              </>
+            ) : (
+              <span className="field__hint">— Informe um preço faturado válido.</span>
+            )}
+          </dd>
+          <dt>Total do documento (prévia)</dt>
+          <dd>
+            {previaDoDocumento !== null ? (
+              <strong>{formatBRL(previaDoDocumento)}</strong>
+            ) : (
+              <span className="field__hint">
+                {documentoTemOutrasLinhas
+                  ? "— Alguma linha do documento está sem preço: total parcial não existe."
+                  : "— Informe um preço faturado válido."}
+              </span>
+            )}
+          </dd>
+        </dl>
+        {/* O gravado continua à vista e nomeado — é o que o documento vale
+            enquanto ninguém confirma. */}
+        <dl className="definition-list">
+          <dt>Total da linha gravado</dt>
+          <dd>{formatBRL(line.lineTotal)}</dd>
+          <dt>Total do documento gravado</dt>
+          <dd>{formatBRL(billing.totalAmount)}</dd>
+        </dl>
+      </div>
+
       {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="confirm-dialog__actions">
         <button type="button" className="btn btn--ghost" onClick={onClose}>
           Cancelar
         </button>
-        <button type="submit" form="price-override-form" className="btn btn--accent" disabled={!canSubmit}>
+        <button
+          type="submit"
+          form="price-override-form"
+          className="btn btn--accent"
+          disabled={!canSubmit}
+        >
           {saving ? "Alterando…" : "Alterar preço"}
         </button>
       </div>

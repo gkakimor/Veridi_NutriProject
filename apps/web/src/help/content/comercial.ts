@@ -166,6 +166,10 @@ export const comercialTopics = {
         text: "Da versão de orçamento: validade da proposta, prazo de entrega, desconto, forma de pagamento, entrada, parcelas, intervalo e juros ao mês, mais observações comerciais. Editáveis só no rascunho. O plano de parcelas (valor e vencimento de cada parcela) é calculado a partir delas e do total.",
       },
       {
+        term: "Prévia e total salvo",
+        text: "Na versão em rascunho, o total da linha e o \u201cTotal da proposta (prévia)\u201d acompanham o que está nos campos, sem esperar o salvamento. Enquanto houver digitação pendente, o total do último salvamento aparece ao lado como \u201cTotal salvo\u201d — as alterações são gravadas ao sair do campo. Quantidade ou preço em branco não viram zero: sem eles não há total. Versão enviada ou aceita é histórico e não recalcula: o total dela é o que o cliente recebeu.",
+      },
+      {
         term: "Simular CMV",
         text: "Atalho da linha do orçamento para a tela de CMV, já com o produto e a quantidade cotada. É leitura: não muda preço nem grava nada.",
       },
