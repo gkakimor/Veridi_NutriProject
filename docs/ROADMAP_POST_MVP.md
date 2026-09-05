@@ -136,6 +136,15 @@ comercial, apoio de IA depois.
 **Portal do cliente** — não recomendado enquanto o modelo de venda consultiva
 não provar a necessidade.
 
+**Produto próprio Veridi** — hoje todo Produto pertence a um Cliente
+(`Product.customerId` obrigatório), e isso permanece no escopo atual. Escopo
+futuro, decidido pelo PO em 2026-09-04: Product sem cliente obrigatório,
+produto acabado próprio da Veridi, estoque próprio de PA e venda do mesmo PA
+a mais de um cliente. Matéria-prima e embalagem já são itens globais e os
+lotes já suportam `VERIDI` e `CUSTOMER(customerId)`; a peça que falta é do
+lado do Produto e atravessa pedido, precificação, CMV e isolamento por
+cliente ao mesmo tempo.
+
 Orçamentos e Pedidos saíram deste roadmap: foram entregues no **Bloco D**
 (capacidades 26–28) e no **Bloco F/G** (capacidades 38, 46, 47).
 
