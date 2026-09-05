@@ -11,38 +11,13 @@ Achado fechado não fica aqui. O que virou regra está em
 cada regra é protegida está em [`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md);
 escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 
-**Rodada 1 entregue em 2026-09-04** (branch
-`feat/formulation-cost-consistency-ux`, em revisão do PO): #12, #9, #3 e #5
-resolvidos; #4 medido e reduzido, com residual em 1280×800.
+**Rodada 1 aprovada em 2026-09-04:** #12, #9, #3, #5 resolvidos; #4
+resolvido com residual aceito (≈117px em 1280×800).
 **Rodada seguinte, quando o PO autorizar:** #8A + #8B + #8C; avaliar #8D.
 
 ---
 
 ## A. Defeitos abertos
-
-### 4. Formulação — densidade horizontal da tabela de componentes — LOW, residual em 1280×800
-
-Medido em 2026-09-04 com uma formulação de oito componentes (nomes longos,
-modos mistos, material do cliente):
-
-| Largura | Área útil | Antes | Depois |
-|---|---|---|---|
-| 1280×800 | 928px | 1681px, 4 colunas fora | 1045px, só equivalente/físico fora (117px de rolagem) |
-| 1440×900 | 1088px | 1681px, 3 colunas fora | 1088px, tudo visível |
-| 1920×1080 | 1548px | 1681px, 1 coluna fora | 1548px, tudo visível |
-
-Sete colunas em vez de dez: unidade de estoque sob o item, quantidade e
-unidade na mesma célula, equivalente e físico na mesma célula com rótulo,
-cabeçalho que quebra linha, larguras MÍNIMAS por coluna (largura fixa
-esmagava o seletor de base em 1280). Zero célula truncada nas três larguras;
-painel de ajustes, aviso de dupla correção, ações, campos, `CalcHint` e
-mensagens de erro conferidos.
-
-Resta: em 1280×800 a célula de equivalente/físico fica atrás da coluna de
-ação fixa até rolar 117px — a sombra projetada avisa, mas o número não está
-à vista. Fechar exige decidir o que sai da linha nessa largura (candidato:
-Fornecimento como sub-linha do item). Aberto de propósito, sem correção
-nesta rodada.
 
 ---
 
@@ -200,6 +175,15 @@ próximo reset canônico da base local/E2E. **ADIADO / MANUTENÇÃO LOCAL.**
 - **#5 Nomenclatura dos modos** — "Quantidade física informada" e "Calcular
   quantidade física", com as descrições decididas pelo PO na tela e na ajuda;
   enum interno intacto, sem migration; zero texto antigo visível.
+- **#4 Densidade da tabela de componentes — RESOLVIDO COM RESIDUAL ACEITO.**
+  Medido com oito componentes: 1681px antes em todas as larguras; depois,
+  1045px em 1280×800, 1088px em 1440×900 e 1548px em 1920×1080 (áreas úteis
+  928/1088/1548). Sete colunas em vez de dez, larguras mínimas por coluna,
+  cabeçalho que quebra linha; zero célula truncada, nenhuma regressão
+  funcional. Decisão de PO (2026-09-04): em 1280×800 permanece
+  aproximadamente 117px de rolagem horizontal; em 1440×900 e superiores a
+  tabela cabe integralmente. Residual aceito pelo PO; reabrir somente se
+  validação operacional demonstrar impacto.
 
 - **#7a "Dashboard" → "Painel"** — publicado: menu, título e interface visível
   sem "Dashboard".
@@ -221,8 +205,8 @@ permanece obrigatório no escopo atual.
 
 ## Ordem de execução definida pelo PO (2026-09-04)
 
-1. **Rodada 1 — entregue (em revisão do PO):** #12 + #9 + #3 + #5 resolvidos;
-   #4 reduzido, residual em 1280×800 registrado.
+1. **Rodada 1 — aprovada:** #12 + #9 + #3 + #5 resolvidos; #4 resolvido com
+   residual aceito em 1280×800.
 2. **Rodada seguinte:** #8A + #8B + #8C; avaliar #8D conforme o tamanho.
 3. **Validação com a Veridi:** #7 + #11.
 4. **Manutenção:** #10. #1 e #2 permanecem observação/adiados.

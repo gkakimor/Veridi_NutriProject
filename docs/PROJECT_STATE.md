@@ -9,8 +9,8 @@
 `feat/manual-cost-reference-and-help-review` em 2026-09-04, aprovado pelo PO.
 **Produção:** Railway, deploy automático da `main`; health 200, banco up,
 smoke autenticado passando. Produção não tem dado de negócio — a base foi
-limpa. **Em revisão do PO:** `feat/formulation-cost-consistency-ux` (Rodada 1
-do backlog: #12, #9, #3, #5 resolvidos; #4 medido), não mergeada.
+limpa. **Rodada 1 do backlog** (#12, #9, #3, #5; #4 com residual aceito)
+aprovada pelo PO em 2026-09-04 e publicada pela `main`.
 
 MVP operacional **validado internamente**. Blocos A a G fechados: cadastros,
 compras, recebimento e lotes, estoque e FEFO, formulações versionadas, produção
@@ -81,7 +81,7 @@ revisão): a estimativa de custo da Formulação usa o seletor canônico de font
 unidade" corrigido (÷ quantidade simulada) e de "Preço sugerido" conferido,
 validação inline por componente com foco no primeiro erro, tabela de
 componentes de 1681px para 1088px em 1440×900, rótulos dos modos decididos
-pelo PO. **Resta:** #4 residual em 1280×800 (117px de rolagem). **Rodada
+pelo PO; #4 fechado com residual aceito (≈117px em 1280×800). **Rodada
 seguinte, quando autorizada:** #8A–#8C cálculo ao vivo em Ordem de Compra,
 Expedição e Precificação. **Aguardando a Veridi:** #7 e #11. **Manutenção:**
 #10 e #14 (Schema Integrity Audit). **Observação:** #1, #2.
