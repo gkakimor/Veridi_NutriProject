@@ -2684,6 +2684,165 @@ button.help-flow__box:focus-visible {
   border-top: 1px solid var(--line);
 }
 
+/*
+ * Tabela de componentes da Formulação — densidade MEDIDA, não estimada.
+ *
+ * Antes desta rodada: 1681px em qualquer largura. Em 1440×900 (área útil de
+ * 1088px) ajustes, equivalente e físico nasciam fora da tela; em 1280×800 a
+ * unidade também. Sete colunas em vez de dez: a unidade de estoque mora sob o
+ * item, quantidade e unidade dividem a célula, equivalente e físico dividem
+ * outra, cada um com rótulo. Cabeçalho quebra linha; campo não passa da
+ * coluna. Continua tabela: editar formulação grande é o uso principal, e
+ * cartão por componente mataria isso.
+ */
+.table--formulacao th,
+.table--formulacao td {
+  padding: var(--sp-2);
+  vertical-align: top;
+}
+
+.table--formulacao th {
+  white-space: normal;
+  line-height: 1.25;
+}
+
+/*
+ * Larguras MÍNIMAS, não fixas. Com `width` fixa e a tabela a 100%, em 1280px
+ * o navegador espremia as colunas abaixo do que o conteúdo precisa e o
+ * seletor de base mostrava "Por d" — um número escondido é perigoso, um
+ * rótulo cortado também. Com mínimos, a tabela cabe em 1440 e 1920 e, em
+ * 1280, rola de lado com a ação fixa e cada célula legível.
+ */
+.table--formulacao .col-item {
+  min-width: 180px;
+}
+
+.table--formulacao .col-base {
+  min-width: 150px;
+}
+
+.table--formulacao .col-fornecimento {
+  min-width: 100px;
+}
+
+.table--formulacao .col-quantidade {
+  min-width: 168px;
+}
+
+.table--formulacao .col-ajustes {
+  min-width: 160px;
+}
+
+.table--formulacao .col-estoque {
+  min-width: 150px;
+}
+
+.table--formulacao td select,
+.table--formulacao td input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Quantidade e unidade na mesma célula: o número decide, a unidade qualifica. */
+.table--formulacao .quantidade-unidade {
+  display: flex;
+  gap: var(--sp-1);
+  align-items: center;
+}
+
+.table--formulacao .quantidade-unidade input {
+  flex: 1 1 88px;
+  text-align: right;
+}
+
+.table--formulacao .quantidade-unidade select {
+  flex: 0 0 64px;
+}
+
+/* O resumo dos ajustes pode quebrar linha: "Calculada · pureza · overage"
+   não cabe em 176px numa linha só, e esconder é pior que quebrar. */
+.table--formulacao .col-ajustes .ajuste-quantidade__botao {
+  white-space: normal;
+}
+
+.ajuste-quantidade__nota--erro {
+  color: var(--err-fg);
+  opacity: 1;
+}
+
+/* Equivalente e físico: dois números com rótulo, alinhados à direita. */
+.table--formulacao .estoque-valor {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.table--formulacao .estoque-valor__rotulo {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+/* Mensagem de erro sob o campo, dentro da coluna — prosa, não célula. */
+.table--formulacao td .field__error {
+  white-space: normal;
+  text-align: left;
+  margin-top: var(--sp-1);
+}
+
+/* Estimativa de custo: o detalhe da fonte (janela, fornecedor, vigência) é
+   segunda linha truncada, com o texto inteiro no `title` — a frase inteira
+   esticava a tabela e empurrava o custo estimado para fora da vista. */
+.table--custo-estimado th,
+.table--custo-estimado td {
+  padding: var(--sp-2) var(--sp-3);
+  vertical-align: top;
+}
+
+/* Nome do componente e selo da origem podem quebrar linha: são texto, não
+   número. Medido em 1440×900 com nomes longos: 1297px viraram ≤ 1088px, e o
+   custo estimado — a coluna que importa — voltou para dentro da tela. */
+.table--custo-estimado td:first-child {
+  white-space: normal;
+  max-width: 18rem;
+}
+
+.table--custo-estimado .badge {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.table--custo-estimado .cell-sub {
+  display: block;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A linha inteira sinaliza que tem campo inválido, mesmo com o painel fechado. */
+.table--formulacao tr.is-invalid > td:first-child {
+  box-shadow: inset 3px 0 0 var(--err-fg);
+}
+
+/* Os dois modos com a frase de apoio embaixo do nome. */
+.ajuste-quantidade__modos .ajuste-quantidade__modo {
+  align-items: flex-start;
+}
+
+.ajuste-quantidade__modo-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ajuste-quantidade__descricao {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
 /* Fonte do custo por material (cálculo padrão): automático × referência
    manual forçada. Mesma gramática visual dos cartões de escolha. */
 .cost-source-chooser {

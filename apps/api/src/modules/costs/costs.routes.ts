@@ -103,7 +103,10 @@ export const costsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      return reply.send(await getFormulationCostEstimate(id, parsed.data.referenceDate));
+      // "Hoje" é decisão da borda: o domínio recebe sempre uma data explícita.
+      return reply.send(
+        await getFormulationCostEstimate(id, parsed.data.referenceDate ?? new Date()),
+      );
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

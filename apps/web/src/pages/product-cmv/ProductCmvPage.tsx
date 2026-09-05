@@ -462,15 +462,33 @@ export function ProductCmvPage() {
                   <div className="cmv-card__value">
                     {simulation.costPerUnit ? formatBRL(simulation.costPerUnit) : "—"}
                   </div>
+                  {/*
+                    A conta REAL do motor: CMV total ÷ quantidade SIMULADA
+                    (`costForOutputQuantity`: `perUnit = total / quantity`).
+                    A explicação anterior dividia pelo lote de referência —
+                    errada sempre que a quantidade simulada não coincidia com
+                    ele, e sem conferência ligada ninguém via. Com `numero` em
+                    cada operando o componente refaz a conta e acusa a
+                    divergência.
+                  */}
                   {simulation.costPerUnit && simulation.totalCost && (
                     <CalcHint
                       label="CMV por unidade"
                       operandos={[
-                        { valor: formatBRL(simulation.totalCost), papel: "CMV total" },
-                        { valor: formatQuantity(data?.referenceOutputQuantity ?? simulation.quantity), papel: "unidades do lote de referência", operador: "÷" },
+                        {
+                          valor: formatBRL(simulation.totalCost),
+                          papel: "CMV total da quantidade simulada",
+                          numero: Number(simulation.totalCost),
+                        },
+                        {
+                          valor: `${formatQuantity(simulation.quantity)} ${simulation.uomCode}`,
+                          papel: "quantidade simulada",
+                          operador: "÷",
+                          numero: Number(simulation.quantity),
+                        },
                       ]}
                       resultado={formatBRL(simulation.costPerUnit)}
-                      nota="Divide pelo LOTE DE REFERÊNCIA, não pela quantidade simulada — é o custo de produzir uma unidade na batelada padrão."
+                      nota="Divide pela quantidade simulada. O custo fixo de cada lote entra inteiro — lotes de referência arredondados para cima —, por isso o custo por unidade sobe em degraus quando a quantidade passa de um lote."
                     />
                   )}
                 </div>

@@ -242,14 +242,28 @@ export function UsePricingPolicyDialog({
                               final, que é outro modelo. Mostrar o divisor
                               resolve a dúvida na hora.
                             */}
+                            {/*
+                              P = C ÷ (1 − margem − comissão), a conta de
+                              `computePrice`. Com `numero` nos operandos a
+                              explicação é CONFERIDA contra o preço exibido —
+                              antes ela só afirmava.
+                            */}
                             <CalcHint
                               label="Preço sugerido"
                               operandos={[
-                                { valor: formatBRL(tier.costPerUnit), papel: "custo por unidade" },
+                                {
+                                  valor: formatBRL(tier.costPerUnit),
+                                  papel: "custo por unidade",
+                                  numero: Number(tier.costPerUnit),
+                                },
                                 {
                                   valor: `(1 − ${formatPercent(tier.targetContributionMarginPercent)} − ${formatPercent(tier.commissionPercent)})`,
                                   papel: "margem de contribuição e comissão",
                                   operador: "÷",
+                                  numero:
+                                    1 -
+                                    Number(tier.targetContributionMarginPercent) / 100 -
+                                    Number(tier.commissionPercent) / 100,
                                 },
                               ]}
                               resultado={formatUnitPriceBRL(tier.suggestedUnitPrice)}

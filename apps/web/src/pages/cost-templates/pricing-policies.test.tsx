@@ -394,3 +394,46 @@ describe("Origem da precificação", () => {
     expect(screen.queryByText(/ficam de fora/)).toBeNull();
   });
 });
+
+/**
+ * A explicação do preço sugerido CONFERE a própria conta (BACKLOG #9).
+ *
+ * P = C ÷ (1 − margem − comissão) é a conta de `computePrice`. Com `numero`
+ * nos operandos o `CalcHint` refaz a divisão e compara com o preço exibido:
+ * a conta certa passa calada, uma divergência provocada acende o alerta.
+ */
+describe("CalcHint do preço sugerido", () => {
+  const props = {
+    productId: "p-1",
+    calculationId: "calc-1",
+    calculationCode: "CALC-001640",
+    saving: false,
+  };
+
+  it("custo ÷ (1 − margem − comissão) fecha com o preço exibido, sem alerta", async () => {
+    // 3,20 ÷ (1 − 0,35 − 0,05) = 5,3333.
+    previewPricingPolicy.mockResolvedValue(previa());
+    renderizar(<UsePricingPolicyDialog {...props} onCancel={vi.fn()} onApply={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Ver prévia" }));
+    await screen.findByText("R$ 5,3333");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajuda sobre Preço sugerido" })[0]!);
+
+    expect(screen.getByText(/custo por unidade/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("preço que não sai da conta acende o alerta", async () => {
+    const base = previa();
+    previewPricingPolicy.mockResolvedValue(
+      previa({ tiers: [{ ...base.tiers[0]!, suggestedUnitPrice: "5.9999" }, base.tiers[1]!] }),
+    );
+    renderizar(<UsePricingPolicyDialog {...props} onCancel={vi.fn()} onApply={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Ver prévia" }));
+    await screen.findByText("R$ 5,9999");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajuda sobre Preço sugerido" })[0]!);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/A conta acima não fecha/);
+  });
+});

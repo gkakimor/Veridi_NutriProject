@@ -131,16 +131,14 @@ async function abrir(dto = versao()) {
 }
 
 /**
- * Lê uma célula da linha do componente pela posição na tabela.
- *
- * Por posição e não por texto porque o mesmo número aparece duas vezes na
- * linha — na coluna e dentro do disclosure de ajustes. Buscar pelo texto
- * acharia os dois e provaria menos do que parece.
+ * Lê o equivalente ou o físico da linha do componente pelo elemento que os
+ * carrega, não por texto: o mesmo número aparece duas vezes na linha — na
+ * coluna e dentro do disclosure de ajustes — e buscar pelo texto acharia os
+ * dois, provando menos do que parece.
  */
 function celula(qual: "equivalente" | "fisico"): string {
-  const celulas = document.querySelectorAll("tbody tr td");
-  const indice = qual === "equivalente" ? 7 : 8;
-  return (celulas[indice]?.textContent ?? "").trim();
+  const alvo = document.querySelector(`tbody tr .estoque-valor--${qual}`);
+  return (alvo?.textContent ?? "").trim();
 }
 
 function editarQuantidade(valor: string) {
@@ -181,7 +179,7 @@ describe("Prévia da quantidade física", () => {
     expect(celula("fisico")).toBe("0,22449 kg");
 
     await user.click(screen.getByText(/^Calculada/));
-    await user.click(screen.getByRole("radio", { name: "Quantidade física já ajustada" }));
+    await user.click(screen.getByRole("radio", { name: "Quantidade física informada" }));
 
     // Sem a correção, o físico é o digitado: 220 g = 0,22 kg.
     await waitFor(() => expect(celula("fisico")).toBe("0,22 kg"));
@@ -231,7 +229,7 @@ describe("O modo do componente chega ao servidor", () => {
     await abrir();
 
     await user.click(screen.getByText(/^Calculada/));
-    await user.click(screen.getByRole("radio", { name: "Quantidade física já ajustada" }));
+    await user.click(screen.getByRole("radio", { name: "Quantidade física informada" }));
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
 
     await waitFor(() => expect(vi.mocked(updateFormulationVersion)).toHaveBeenCalled());
@@ -264,9 +262,9 @@ describe("O painel de ajustes não mente sobre o que está ligado", () => {
       }),
     );
 
-    await user.click(screen.getByRole("button", { name: /Física direta/ }));
+    await user.click(screen.getByRole("button", { name: /Física informada/ }));
     await user.click(
-      screen.getByRole("radio", { name: "Calcular quantidade física automaticamente" }),
+      screen.getByRole("radio", { name: "Calcular quantidade física" }),
     );
 
     /*
@@ -277,7 +275,7 @@ describe("O painel de ajustes não mente sobre o que está ligado", () => {
      * capability.
      */
     expect(
-      screen.getByText(/Enquanto nada estiver marcado, a quantidade física continua igual/),
+      screen.getByText(/enquanto nada estiver marcado, a quantidade física continua igual/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /nenhum ajuste marcado/ })).toBeInTheDocument();
     // E o número não mudou: 220 g continuam 0,22 kg.
@@ -294,15 +292,15 @@ describe("O painel de ajustes não mente sobre o que está ligado", () => {
       }),
     );
 
-    await user.click(screen.getByRole("button", { name: /Física direta/ }));
+    await user.click(screen.getByRole("button", { name: /Física informada/ }));
     await user.click(
-      screen.getByRole("radio", { name: "Calcular quantidade física automaticamente" }),
+      screen.getByRole("radio", { name: "Calcular quantidade física" }),
     );
     await user.click(screen.getByRole("checkbox", { name: "Corrigir pela pureza" }));
 
     await waitFor(() => expect(celula("fisico")).toBe("0,22449 kg"));
     expect(
-      screen.queryByText(/Enquanto nada estiver marcado/),
+      screen.queryByText(/enquanto nada estiver marcado/i),
     ).not.toBeInTheDocument();
   });
 
@@ -321,7 +319,10 @@ describe("O painel de ajustes não mente sobre o que está ligado", () => {
     const linha = document.querySelector("tr.ajuste-quantidade__linha");
     expect(linha).not.toBeNull();
     const celulaDoPainel = linha!.querySelector("td");
-    expect(Number(celulaDoPainel!.getAttribute("colspan"))).toBeGreaterThanOrEqual(10);
+    // Atravessa TODAS as colunas — tantas quantas o cabeçalho tiver.
+    expect(Number(celulaDoPainel!.getAttribute("colspan"))).toBe(
+      document.querySelectorAll("thead th").length,
+    );
     expect(celulaDoPainel!.querySelector(".ajuste-quantidade__corpo")).not.toBeNull();
   });
 });
@@ -342,7 +343,7 @@ describe("Erro de decimal aponta a linha", () => {
      * pista de onde procurar. O código do item é como a pessoa acha a linha.
      */
     await waitFor(() =>
-      expect(screen.getByText(/Pureza % de MP-000003/)).toBeInTheDocument(),
+      expect(screen.getByText(/MP-000003 — Pureza %/)).toBeInTheDocument(),
     );
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });

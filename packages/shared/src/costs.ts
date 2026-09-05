@@ -11,6 +11,7 @@
  * médias de custo. Custo desconhecido é sempre `null`, nunca `0`.
  */
 
+import type { IndustrialMaterialCostSource } from "./industrial-cost-calculation.js";
 import type { InventoryOwnerType } from "./ownership.js";
 
 /**
@@ -65,7 +66,17 @@ export interface FormulationCostComponentDTO {
   normalizedQuantity: string;
   stockUnitCode: string;
   unitCost: string | null;
-  costSource: CostSource;
+  /**
+   * De onde veio o custo unitário — a MESMA seleção canônica do cálculo de
+   * custo e do CMV (PRODUCT_RULES §53): compra real 30d → 90d → última compra
+   * → oferta válida → referência manual → desconhecido. Material do cliente
+   * sai como `EXCLUDED_CUSTOMER_SUPPLIED`: não é custo Veridi.
+   */
+  costSource: IndustrialMaterialCostSource;
+  /** Contexto da fonte (janela, fornecedor, vigência da referência). */
+  costSourceDetails: string | null;
+  /** `true` quando o componente é fornecido pelo cliente — fora do custo. */
+  customerSupplied: boolean;
   /** `normalizedQuantity × unitCost`; `null` quando o componente não tem custo. */
   estimatedComponentCost: string | null;
 }
@@ -82,16 +93,23 @@ export interface FormulationCostEstimateDTO {
   outputUnitCode: string;
   referenceDate: string;
   components: FormulationCostComponentDTO[];
-  /** `ESTIMATED` (todos com custo) / `PARTIAL` (alguns) / `NO_COST` (nenhum). */
+  /**
+   * `ESTIMATED` (todo material Veridi com custo) / `PARTIAL` (algum sem) /
+   * `NO_COST` (nenhum). Material do cliente fica fora da conta.
+   */
   quality: Extract<CostQuality, "ESTIMATED" | "PARTIAL" | "NO_COST">;
-  /** Só existe quando TODOS os componentes têm custo — `PARTIAL` nunca preenche isto. */
+  /** Só existe quando TODOS os componentes Veridi têm custo — `PARTIAL` nunca preenche isto. */
   estimatedMaterialCost: string | null;
   /** `estimatedMaterialCost / basisQuantity`. */
   estimatedMaterialUnitCost: string | null;
   /** Soma do que é conhecido — útil em `PARTIAL`, nunca apresentado como total. */
   knownCostSubtotal: string | null;
-  /** Códigos dos itens sem referência de custo. */
+  /** Códigos dos itens Veridi sem fonte nenhuma de custo. */
   missingCostItems: string[];
+  /** Códigos dos itens com ofertas válidas mas sem preferencial — seleção necessária, nunca queda para a manual. */
+  ambiguousCostItems: string[];
+  /** `true` quando ao menos um componente é material do cliente. */
+  hasCustomerSuppliedMaterials: boolean;
 }
 
 export interface ProductionConsumptionCostDTO {

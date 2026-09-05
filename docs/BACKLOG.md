@@ -11,84 +11,17 @@ Achado fechado não fica aqui. O que virou regra está em
 cada regra é protegida está em [`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md);
 escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 
-**Próxima rodada, quando o PO autorizar:** #12 + #9 + #3 + #4 + #5 —
-consistência de custos, explicabilidade matemática e UX da Formulação.
+**Rodada 1 aprovada em 2026-09-04:** #12, #9, #3, #5 resolvidos; #4
+resolvido com residual aceito (≈117px em 1280×800).
+**Rodada seguinte, quando o PO autorizar:** #8A + #8B + #8C; avaliar #8D.
 
 ---
 
 ## A. Defeitos abertos
 
-### 12. Formulação — estimativa de custo deve usar o seletor canônico de fonte — PRÓXIMA RODADA
-
-`FormulationVersionPage` lê `getFormulationCostEstimate`, que usa só a fundação
-de compras (30d → 90d → última compra) e ignora oferta válida e referência
-manual. O CMV e o cálculo padrão usam a seleção canônica completa (§53), então
-Formulação e CMV podem mostrar custos diferentes para o mesmo material na mesma
-data.
-
-**Decisão de PO.** Toda funcionalidade que responda "quanto custa este material
-nesta data?" usa a **mesma** regra canônica, nesta ordem obrigatória:
-
-1. compra real dos últimos 30 dias;
-2. compra real dos últimos 90 dias;
-3. última compra real;
-4. oferta válida de fornecedor;
-5. referência manual de custo;
-6. desconhecido.
-
-Ambiguidade em categoria superior é **fail-closed**: várias ofertas válidas sem
-preferencial não caem para a referência manual. Material do cliente
-(customer-owned) continua com custo de aquisição Veridi **não aplicável**. Não
-criar segundo seletor: reusar `selectItemCostSource` (ou a fonte canônica
-equivalente) e ampliar a taxonomia `CostSource` do serviço.
-
-Severidade técnica original LOW; prioridade de produto **alta** — consistência.
-
-### 3. Formulação — validação inline por componente — MEDIUM
-
-Os campos de cada componente não têm tratamento completo de erro contextual:
-falta `aria-invalid` no campo inválido, mensagem associada ao campo,
-identificação clara do componente e foco ou rolagem até o primeiro erro
-relevante — tudo com acessibilidade preservada. `basisQuantity` e
-`dosesPerPackage` já fazem isso. Risco reduzido: a mensagem cita o código do
-item. **ABERTO** — próxima rodada de UX/Formulação.
-
-### 4. Formulação — densidade horizontal da tabela de componentes — LOW
-
-A tabela mede ≈1621px; em 1440×900 parte das colunas exige rolagem horizontal.
-Melhor que os ≈1925px anteriores, e nenhuma informação crítica depende só das
-colunas escondidas (o painel de ajustes mostra a quantidade física em texto).
-Desejado: reduzir densidade sem esconder contexto, degradar legibilidade, criar
-cards altos demais ou quebrar a edição rápida de formulações grandes.
-**ABERTO** — mesma rodada de #3 e #5.
-
 ---
 
 ## B. Melhorias aprovadas
-
-### 5. Formulação — nomenclatura dos modos de quantidade — DECIDIDO PELO PO, IMPLEMENTAÇÃO PENDENTE
-
-Os rótulos atuais ("Quantidade física já ajustada" / "Calcular quantidade
-física automaticamente") sugerem correção ativa mesmo sem flag marcada.
-Substituir por:
-
-- **Modo 1 — "Quantidade física informada"**: "A quantidade digitada já
-  representa o material que será usado. Pureza e overage podem ser registrados,
-  mas não alteram automaticamente a quantidade."
-- **Modo 2 — "Calcular quantidade física"**: "Informe a quantidade teórica e
-  escolha quais ajustes de pureza e overage devem ser aplicados."
-
-Motivo: eliminar a ambiguidade de "já ajustada" e "automaticamente". LOW/UX —
-próxima rodada, junto de #3 e #4.
-
-### 9. `CalcHint` — conferência matemática desligada em alguns cálculos — LOW
-
-"CMV por unidade" e "Preço sugerido" não passam `esperado`; Faturamento e dois
-do CMV passam e conferem. **Decisão de PO:** ligar **somente** depois de provar
-a matemática de cada caso contra o valor canônico — nunca passar `esperado`
-para silenciar ou forçar resultado. `CalcHint` explica e reconcilia; não vira
-segundo motor de domínio. "Lotes de referência" arredonda para cima, então a
-conferência ali continua desligada. **ABERTO** — próxima rodada, junto de #12.
 
 ### 8. Cálculo ao vivo nas demais telas — subdividido
 
@@ -216,6 +149,42 @@ próximo reset canônico da base local/E2E. **ADIADO / MANUTENÇÃO LOCAL.**
 
 ## F. Resolvidos recentes (2026-09-04)
 
+- **#12 Estimativa de custo da Formulação** — usa `selectItemCostSource`, a
+  mesma seleção do cálculo de custo e do CMV: 30d → 90d → última compra →
+  oferta válida → referência manual → desconhecido; oferta ambígua fica em
+  "seleção necessária" sem cair para a manual; material do cliente é "não
+  aplicável" mesmo com compra ou referência no item; `referenceDate` explícita
+  (a rota decide "hoje"). A tela mostra a origem de cada componente e o que
+  fazer quando falta. Provado em `modules/costs/formulation-cost-estimate.test.ts`
+  (A–L, incluindo Formulação × motor do CMV com a mesma fonte e o mesmo custo
+  unitário). Nenhum segundo seletor.
+- **#9 `CalcHint` conferido** — "CMV por unidade" explicava "÷ lote de
+  referência"; o motor divide pela quantidade SIMULADA (`perUnit = total /
+  quantity`, provado em `product-cmv.test.ts`). Explicação corrigida e
+  conferência ligada com `numero` nos operandos; "Preço sugerido" (P = C ÷
+  (1 − margem − comissão), `computePrice`) conferido no diálogo de política e
+  na tabela de precificação. Divergência provocada acende o alerta; o valor
+  autoritativo continua vindo do domínio.
+- **#3 Validação inline da Formulação** — cada campo inválido recebe
+  `aria-invalid` e mensagem por `aria-describedby` que nomeia componente e
+  campo ("MP-000003 — Quantidade deve ser maior que zero."); salvar e ativar
+  levam foco e rolagem ao primeiro erro, abrindo o painel de ajustes quando o
+  erro mora lá; todos ficam marcados; a próxima tentativa vai ao seguinte;
+  digitar nunca rola; recusa do servidor cai no campo certo.
+  `pages/formulations/validacao-inline.test.tsx`.
+- **#5 Nomenclatura dos modos** — "Quantidade física informada" e "Calcular
+  quantidade física", com as descrições decididas pelo PO na tela e na ajuda;
+  enum interno intacto, sem migration; zero texto antigo visível.
+- **#4 Densidade da tabela de componentes — RESOLVIDO COM RESIDUAL ACEITO.**
+  Medido com oito componentes: 1681px antes em todas as larguras; depois,
+  1045px em 1280×800, 1088px em 1440×900 e 1548px em 1920×1080 (áreas úteis
+  928/1088/1548). Sete colunas em vez de dez, larguras mínimas por coluna,
+  cabeçalho que quebra linha; zero célula truncada, nenhuma regressão
+  funcional. Decisão de PO (2026-09-04): em 1280×800 permanece
+  aproximadamente 117px de rolagem horizontal; em 1440×900 e superiores a
+  tabela cabe integralmente. Residual aceito pelo PO; reabrir somente se
+  validação operacional demonstrar impacto.
+
 - **#7a "Dashboard" → "Painel"** — publicado: menu, título e interface visível
   sem "Dashboard".
 - **#13 Reconstrução de banco vazio** — cadeia de migrations reconstrói banco
@@ -236,8 +205,8 @@ permanece obrigatório no escopo atual.
 
 ## Ordem de execução definida pelo PO (2026-09-04)
 
-1. **Próxima rodada:** #12 + #9 + #3 + #4 + #5 — consistência de custos,
-   explicabilidade matemática e UX da Formulação.
+1. **Rodada 1 — aprovada:** #12 + #9 + #3 + #5 resolvidos; #4 resolvido com
+   residual aceito em 1280×800.
 2. **Rodada seguinte:** #8A + #8B + #8C; avaliar #8D conforme o tamanho.
 3. **Validação com a Veridi:** #7 + #11.
 4. **Manutenção:** #10. #1 e #2 permanecem observação/adiados.
@@ -248,7 +217,7 @@ permanece obrigatório no escopo atual.
 
 A validação com a Veridi continua gate para as regras que dependem do processo
 real do cliente (#7, #11). Ela **não** impede os itens internos já decididos
-pelo PO (#12, #9, #3, #4, #5) quando o PO autorizar a próxima capability.
+pelo PO (agora #8A–#8C) quando o PO autorizar a próxima capability.
 
 Material pronto: `Guia_Fluxo_Comercial_Veridi.docx` (36 capítulos, não
 versionado por política) e

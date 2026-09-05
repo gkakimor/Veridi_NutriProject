@@ -38,7 +38,7 @@ export const baseTopics = {
       },
       {
         term: "Ajustes da quantidade: o que a quantidade informada significa",
-        text: "Cada componente declara uma de duas coisas. “Quantidade física já ajustada”: o número digitado já é o que sai do estoque, e pureza e overage ficam só como registro. “Calcular quantidade física automaticamente”: o número é teórico, e o sistema aplica somente os ajustes que você marcar — pureza, overage ou os dois.",
+        text: "Cada componente declara uma de duas coisas. “Quantidade física informada”: a quantidade digitada já representa o material que será usado; pureza e overage podem ser registrados, mas não alteram a quantidade. “Calcular quantidade física”: você informa a quantidade teórica e escolhe quais ajustes de pureza e overage devem ser aplicados — só os marcados entram na conta.",
       },
       {
         term: "Pureza e overage",
@@ -46,7 +46,7 @@ export const baseTopics = {
       },
       {
         term: "Aviso de dupla correção",
-        text: "A tela avisa para não ativar o ajuste automático quando a quantidade informada já veio corrigida de origem: corrigir de novo aplicaria a divisão pela pureza uma segunda vez, e a linha passaria a reservar mais material do que a receita pede.",
+        text: "A tela avisa para não marcar a correção quando a quantidade informada já veio corrigida de origem: corrigir de novo aplicaria a divisão pela pureza uma segunda vez, e a linha passaria a reservar mais material do que a receita pede.",
       },
       {
         term: "Fornecimento",
@@ -156,8 +156,8 @@ export const baseTopics = {
     notes: [
       "Versão ativa é histórico: depois de ativada ela não se altera. Para mudar a receita, crie uma nova versão a partir dela — a anterior continua registrada.",
       "Ordem de produção já emitida nunca muda porque uma nova versão foi ativada: cada ordem guarda a versão que executou.",
-      "Preencher pureza ou overage não aplica correção nenhuma. A correção só acontece em componente “Calcular quantidade física automaticamente” com o ajuste marcado. Em “Quantidade física já ajustada” os dois campos são registro de auditoria.",
-      "Não ative o ajuste automático se a quantidade informada já estiver corrigida — a correção seria aplicada duas vezes. É o aviso que a própria linha mostra.",
+      "Preencher pureza ou overage não aplica correção nenhuma. A correção só acontece em componente “Calcular quantidade física” com o ajuste marcado. Em “Quantidade física informada” os dois campos são registro de auditoria.",
+      "Não marque a correção se a quantidade informada já estiver corrigida — ela seria aplicada duas vezes. É o aviso que a própria linha mostra.",
       "Por dose: a quantidade do componente é declarada para UMA dose e multiplicada pelas doses por embalagem. Sem doses por embalagem a versão não ativa e o custo de material não existe — não é zero.",
       "Ativar grava o rascunho antes: o que está na tela é o que vira versão ativa, não a última gravação.",
       "Material fornecido pelo cliente é declarado na própria versão e segue congelado na ordem de produção. Ele entra na receita e na necessidade de material, mas nunca no custo de aquisição da Veridi.",
@@ -700,7 +700,7 @@ export const baseHints = {
   "formulacao.pureza": {
     module: "producao",
     label: "Pureza",
-    text: "Teor real do insumo. Com 80% de pureza é preciso pesar mais para entregar a mesma quantidade ativa. Registrar a pureza NÃO aplica a correção sozinha: marque “Calcular quantidade física automaticamente” e a caixa da pureza para o sistema corrigir. Sem isso ela fica registrada para auditoria e a quantidade informada é usada como está — importante quando a quantidade já vem corrigida de origem, porque corrigir de novo dobraria o ajuste. Vazio significa desconhecida, e nunca é lida como 100%.",
+    text: "Teor real do insumo. Com 80% de pureza é preciso pesar mais para entregar a mesma quantidade ativa. Registrar a pureza NÃO aplica a correção sozinha: marque “Calcular quantidade física” e a caixa da pureza para o sistema corrigir. Sem isso ela fica registrada para auditoria e a quantidade informada é usada como está — importante quando a quantidade já vem corrigida de origem, porque corrigir de novo dobraria o ajuste. Vazio significa desconhecida, e nunca é lida como 100%.",
   },
   "formulacao.overage": {
     module: "producao",

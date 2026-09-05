@@ -47,10 +47,24 @@ export type FormulationComponentBasis = "FIXED_BASIS" | "PER_DOSE" | "PER_FINISH
  */
 export type FormulationComponentQuantityMode = "PHYSICAL_DIRECT" | "THEORETICAL_WITH_ADJUSTMENTS";
 
-/** Rótulos das duas leituras, na linguagem de quem monta a receita. */
+/**
+ * Rótulos das duas leituras, na linguagem de quem monta a receita.
+ *
+ * Decisão de PO (2026-09-04): "já ajustada" e "automaticamente" sugeriam uma
+ * correção ativa mesmo sem nenhuma caixa marcada. Os nomes dizem só o que a
+ * quantidade digitada É — informada ou a calcular.
+ */
 export const FORMULATION_QUANTITY_MODE_LABELS: Record<FormulationComponentQuantityMode, string> = {
-  PHYSICAL_DIRECT: "Quantidade física já ajustada",
-  THEORETICAL_WITH_ADJUSTMENTS: "Calcular quantidade física automaticamente",
+  PHYSICAL_DIRECT: "Quantidade física informada",
+  THEORETICAL_WITH_ADJUSTMENTS: "Calcular quantidade física",
+};
+
+/** A frase de apoio de cada modo — a mesma na tela e na ajuda. */
+export const FORMULATION_QUANTITY_MODE_DESCRIPTIONS: Record<FormulationComponentQuantityMode, string> = {
+  PHYSICAL_DIRECT:
+    "A quantidade digitada já representa o material que será usado. Pureza e overage podem ser registrados, mas não alteram automaticamente a quantidade.",
+  THEORETICAL_WITH_ADJUSTMENTS:
+    "Informe a quantidade teórica e escolha quais ajustes de pureza e overage devem ser aplicados.",
 };
 
 export const FORMULATION_COMPONENT_BASES: readonly FormulationComponentBasis[] = [

@@ -625,3 +625,43 @@ describe("CMV — motor único", () => {
     await app.close();
   });
 });
+
+/**
+ * O divisor do CMV por unidade é a QUANTIDADE SIMULADA (BACKLOG #9).
+ *
+ * `costForOutputQuantity` faz `perUnit = total / quantity`. A tela explicava
+ * "÷ lote de referência" — errado sempre que a quantidade simulada não
+ * coincide com o lote, e invisível porque a conferência do CalcHint estava
+ * desligada ali. Este caso fixa a fórmula real com um custo fixo por lote no
+ * meio, que é exatamente quando os dois divisores divergem.
+ */
+describe("CMV por unidade — o divisor é a quantidade simulada", () => {
+  it("custo por unidade = CMV total ÷ quantidade simulada, não ÷ lote de referência", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const cenario = await criarCenario(app, {
+      referenceOutputQuantity: "1000",
+      laborHoursPerBatch: "2",
+      laborRate: "30",
+    });
+    const via = await getProductCmv({
+      productId: cenario.product.id,
+      quantity: new Prisma.Decimal(500),
+      referenceDate: cenario.referenceDate,
+      includePricing: false,
+    });
+
+    const simulacao = via.simulation!;
+    expect(simulacao.totalCost).not.toBeNull();
+    const total = Number(simulacao.totalCost);
+    const porUnidade = Number(simulacao.costPerUnit);
+    expect(porUnidade).toBeCloseTo(total / 500, 4);
+    // Mão de obra fixa por lote não dilui: dividir pelo lote de referência
+    // (1000) daria outro número — e é esse que a tela não pode explicar.
+    expect(Math.abs(porUnidade - total / 1000)).toBeGreaterThan(0.001);
+    expect(Number(simulacao.costPer1000)).toBeCloseTo(porUnidade * 1000, 3);
+
+    await app.close();
+  });
+});

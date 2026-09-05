@@ -3458,8 +3458,8 @@ legitimamente da versão vigente de hoje.
 ### A ordem canônica, num lugar só
 
 O custo unitário de um material num cálculo prospectivo — cálculo padrão da
-estrutura, CMV, tela do item — vem da **primeira fonte disponível** nesta
-ordem, e a ordem é regra durável:
+estrutura, CMV, tela do item, estimativa de custo da Formulação — vem da
+**primeira fonte disponível** nesta ordem, e a ordem é regra durável:
 
 1. compra real dos últimos 30 dias (média ponderada por quantidade);
 2. compra real dos últimos 90 dias (idem);

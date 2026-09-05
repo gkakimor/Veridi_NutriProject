@@ -32,6 +32,8 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Versão ativa é imutável; nova versão não reescreve OP | CMV salvo mudaria sem decisão | `modules/formulations/historico-versao-e-op.test.ts` |
 | Tela e OP chegam ao MESMO físico | motor único, cinco consumidores | `modules/formulations/historico-versao-e-op.test.ts` |
 | Aritmética exibida reconstrói o número exibido | explicação omitia base e conversão de unidade | `web components/help/calc-hint.test.tsx` |
+| Campo inválido nomeia componente e campo, marca `aria-invalid`/`aria-describedby`; salvar e ativar levam ao primeiro erro e abrem o painel; digitar não rola; recusa do servidor cai no campo | erro só no topo, linha a procurar | `web pages/formulations/validacao-inline.test.tsx` |
+| Rótulos dos modos: "Quantidade física informada" / "Calcular quantidade física"; sem ajuste marcado nada é corrigido | "já ajustada"/"automaticamente" sugeriam correção ativa | `web pages/formulations/modo-quantidade.test.tsx` |
 
 ## Estoque, lote e ledger
 
@@ -118,6 +120,9 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Conta do material na tela fecha e diz a fonte (e a automática, quando forçada) | — | `web components/cost-breakdown-calc-hint.test.tsx` |
 | Escolha da fonte por material: automático é o padrão, forçar recalcula e trava salvar sem motivo | — | `web pages/industrial-costs/cost-source-override.test.tsx` |
 | Tela do item: "Não informado" nunca é R$ 0,00; compra real vence a referência | — | `web components/item-cost-reference-section.test.tsx` |
+| Estimativa da Formulação usa o MESMO seletor (30d, 90d, última, oferta única/preferencial, ambígua fail-closed, manual, desconhecido, cliente não aplicável, `referenceDate`); Formulação × motor do CMV: mesma fonte e mesmo custo unitário | estimativa lia só compra real e discordava do CMV | `modules/costs/formulation-cost-estimate.test.ts` |
+| CMV por unidade = CMV total ÷ quantidade SIMULADA (não ÷ lote de referência); a explicação confere e acusa divergência | explicação dividia pelo lote, sem conferência | `modules/product-cmv/product-cmv.test.ts`, `web pages/product-cmv/cmv.test.tsx` |
+| Preço sugerido explicado e conferido: custo ÷ (1 − margem − comissão) | explicação sem conferência | `web pages/cost-templates/pricing-policies.test.tsx` |
 
 ## Apresentação e entrada
 

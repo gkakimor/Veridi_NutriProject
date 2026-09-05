@@ -9,11 +9,9 @@ import type {
   ProductionOrderMaterialCostDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import {
-  getConsumedLotCostReference,
-  getItemCostReference,
-  getItemCostReferences,
-} from "../../lib/cost-reference.js";
+import { getConsumedLotCostReference, getItemCostReference } from "../../lib/cost-reference.js";
+import { selectItemCostSource } from "../../lib/cost-source-selection.js";
+import type { CostSourceResolution } from "../../lib/cost-source-selection.js";
 import { convertUomDecimal } from "../items/uom.js";
 import { ItemNotFoundError } from "../inventory/inventory.errors.js";
 import { FormulationVersionNotFoundError } from "./costs.errors.js";
@@ -57,10 +55,21 @@ export async function getItemCostReferenceDTO(
  * nao um realizado. Por isso a qualidade agregada nunca e `REAL` aqui.
  * Nunca persistido: a versao e historica/imutavel, a referencia de custo
  * muda com o tempo.
+ *
+ * A FONTE de cada custo unitário vem de `selectItemCostSource` — a mesma
+ * função que o cálculo de custo industrial e o CMV chamam (PRODUCT_RULES
+ * §53). Esta estimativa lia só a fundação de compras (30d → 90d → última) e
+ * ignorava oferta válida e referência manual, então Formulação e CMV podiam
+ * responder custos diferentes para o mesmo item na mesma data. Não existe
+ * segunda hierarquia aqui: quantidade, unidade e soma são desta função; a
+ * escolha da fonte, não.
+ *
+ * `referenceDate` é explícita: quem decide que "hoje" é a data é a borda
+ * (rota), nunca o domínio.
  */
 export async function getFormulationCostEstimate(
   formulationVersionId: string,
-  referenceDate?: Date,
+  referenceDate: Date,
 ): Promise<FormulationCostEstimateDTO> {
   const prisma: PrismaOrTx = getPrisma();
   const version = await prisma.formulationVersion.findUnique({
@@ -69,34 +78,59 @@ export async function getFormulationCostEstimate(
   });
   if (!version) throw new FormulationVersionNotFoundError(formulationVersionId);
 
-  const effectiveDate = referenceDate ?? new Date();
-  const [units, costByItem] = await Promise.all([
-    prisma.unitOfMeasure.findMany(),
-    getItemCostReferences(
-      prisma,
-      version.components.map((component) => component.itemId),
-      effectiveDate,
+  const units = await prisma.unitOfMeasure.findMany();
+
+  // Uma seleção por componente Veridi, em paralelo — a mesma função resolvida
+  // N vezes, sem cache nem cópia da regra. Material do cliente não pergunta
+  // nada: não tem custo de aquisição Veridi, e uma referência manual no item
+  // não muda isso.
+  const resolutions = await Promise.all(
+    version.components.map((component) =>
+      component.supplyResponsibility === "CUSTOMER"
+        ? Promise.resolve<CostSourceResolution>({
+            unitCost: null,
+            source: "EXCLUDED_CUSTOMER_SUPPLIED",
+            details: null,
+          })
+        : selectItemCostSource(
+            prisma,
+            { itemId: component.itemId, itemUnitCode: component.item.unitCode, referenceDate },
+            units,
+          ),
     ),
-  ]);
+  );
 
   const components: FormulationCostComponentDTO[] = [];
   const missingCostItems: string[] = [];
+  const ambiguousCostItems: string[] = [];
   let knownSubtotal = new Prisma.Decimal(0);
-  let componentsWithCost = 0;
+  let veridiComponents = 0;
+  let veridiWithCost = 0;
+  let customerSupplied = 0;
 
-  for (const component of version.components) {
+  version.components.forEach((component, index) => {
     const item = component.item;
+    const resolution = resolutions[index]!;
     // Reaproveita a MESMA conversao de UOM ja usada pelos Requirements —
     // nunca uma segunda implementacao.
     const normalized = convertUomDecimal(component.quantity, component.unitCode, item.unitCode, units);
-    const reference = costByItem.get(item.id)!;
+    const isCustomerSupplied = resolution.source === "EXCLUDED_CUSTOMER_SUPPLIED";
 
-    const componentCost = reference.unitCost ? normalized.times(reference.unitCost) : null;
-    if (componentCost) {
-      knownSubtotal = knownSubtotal.plus(componentCost);
-      componentsWithCost += 1;
+    const componentCost = resolution.unitCost ? normalized.times(resolution.unitCost) : null;
+    if (isCustomerSupplied) {
+      customerSupplied += 1;
     } else {
-      missingCostItems.push(item.code);
+      veridiComponents += 1;
+      if (componentCost) {
+        knownSubtotal = knownSubtotal.plus(componentCost);
+        veridiWithCost += 1;
+      } else if (resolution.source === "AMBIGUOUS_SUPPLIER_REFERENCE") {
+        // Ofertas existem, falta escolher — a lista separa isso de "sem
+        // fonte nenhuma", porque a solução é outra.
+        ambiguousCostItems.push(item.code);
+      } else {
+        missingCostItems.push(item.code);
+      }
     }
 
     components.push({
@@ -107,16 +141,20 @@ export async function getFormulationCostEstimate(
       formulaUnitCode: component.unitCode,
       normalizedQuantity: normalized.toString(),
       stockUnitCode: item.unitCode,
-      unitCost: reference.unitCost ? formatUnitCost(reference.unitCost) : null,
-      costSource: reference.source,
+      unitCost: resolution.unitCost ? formatUnitCost(resolution.unitCost) : null,
+      costSource: resolution.source,
+      costSourceDetails: resolution.details,
+      customerSupplied: isCustomerSupplied,
       estimatedComponentCost: componentCost ? formatAmount(componentCost) : null,
     });
-  }
+  });
 
+  // Qualidade avaliada SÓ sobre o material Veridi: componente do cliente sem
+  // custo não rebaixa a estimativa para PARTIAL — ele não tem custo a ter.
   let quality: FormulationCostEstimateDTO["quality"];
-  if (components.length === 0 || componentsWithCost === 0) {
+  if (veridiComponents === 0 || veridiWithCost === 0) {
     quality = "NO_COST";
-  } else if (componentsWithCost === components.length) {
+  } else if (veridiWithCost === veridiComponents) {
     quality = "ESTIMATED";
   } else {
     quality = "PARTIAL";
@@ -133,13 +171,15 @@ export async function getFormulationCostEstimate(
     formulationVersionId: version.id,
     basisQuantity: version.basisQuantity.toString(),
     outputUnitCode: version.outputUnitCode,
-    referenceDate: effectiveDate.toISOString(),
+    referenceDate: referenceDate.toISOString(),
     components,
     quality,
     estimatedMaterialCost: estimatedMaterialCost ? formatAmount(estimatedMaterialCost) : null,
     estimatedMaterialUnitCost: estimatedMaterialUnitCost ? formatUnitCost(estimatedMaterialUnitCost) : null,
-    knownCostSubtotal: componentsWithCost > 0 ? formatAmount(knownSubtotal) : null,
+    knownCostSubtotal: veridiWithCost > 0 ? formatAmount(knownSubtotal) : null,
     missingCostItems,
+    ambiguousCostItems,
+    hasCustomerSuppliedMaterials: customerSupplied > 0,
   };
 }
 
