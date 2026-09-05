@@ -3590,8 +3590,11 @@ multiplicação — o preço unitário guarda as quatro casas.
 A conta é uma só, em `@veridi/shared`, usada pela API e pela prévia da tela:
 `calcularTotaisOrcamento` (Orçamento e o Pedido dele originado) e
 `calcularTotaisFaturamento` (Faturamento, incluindo o resumo que aparece
-dentro do Pedido). Vale para os documentos **comerciais**; a Ordem de Compra
-tem regra própria e declarada em `calcularTotaisOrdemCompra`.
+dentro do Pedido). Vale para os documentos **comerciais**. A Ordem de Compra
+ainda usa semântica distinta de arredondamento (`calcularTotaisOrdemCompra`
+soma as linhas em precisão cheia e arredonda no fim); comportamento registrado
+em [`BACKLOG.md`](BACKLOG.md) #18 para decisão e adequação próprias — não é
+decisão de negócio fechada nem exceção declarada.
 
 **Documento originado de acordo aceito preserva o acordo.** Quando um
 Orçamento aceito origina um Pedido, o Pedido congela exatamente os valores

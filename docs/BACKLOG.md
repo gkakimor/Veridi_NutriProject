@@ -17,14 +17,35 @@ resolvido com residual aceito (≈117px em 1280×800).
 #8C resolvidos.
 **Rodada 3 aprovada e publicada em 2026-09-05** (merge `b89f9a4`): #8D e #8H
 resolvidos; #15, #16 e #17 abertos como achados.
-**Rodada 4 implementada em 2026-09-05**, na branch
-`feat/commercial-integrity-quote-order-pricing-options`, **aguardando PO
-review**: #15 e #16 resolvidos; #17 segue aberto. **Seguinte, quando o PO
-autorizar:** #8E, #8F e #8G.
+**Rodada 4 aprovada e publicada em 2026-09-05**: #15 e #16 resolvidos; #18
+aberto como achado, por decisão do PO. #17 segue aberto. **Seguinte, quando o
+PO autorizar:** #8E, #8F e #8G.
 
 ---
 
 ## A. Defeitos abertos
+
+### 18. Consistência monetária da Ordem de Compra — MEDIUM
+
+**ABERTO. Registrado por decisão do PO em 2026-09-05; capability própria.**
+
+Achado da Rodada 4. `calcularTotaisOrdemCompra` soma as linhas em precisão
+cheia e arredonda só na saída — `round(Σ valores brutos das linhas)` —,
+enquanto os documentos comerciais passaram a usar
+`Σ round(valor monetário da linha, 2)` ([`PRODUCT_RULES.md`](PRODUCT_RULES.md)
+§55). Com preço de quatro casas as duas contas divergem em centavos.
+
+**Princípio de produto.** Se a Ordem de Compra apresenta totais monetários de
+linha em duas casas, o total do documento deve, em princípio, reconciliar
+exatamente com a soma desses valores apresentados. Alvo conceitual futuro:
+`Σ round(quantidade × preço unitário, 2)` antes de formar o total do
+documento.
+
+**Limites definidos pelo PO.** Não implementar junto de outra rodada e **não
+reabrir #8A** — a regra atual foi publicada como está. Antes de alterar a
+matemática é preciso auditar: OCs históricas; recebimentos; custo efetivo;
+custo de aquisição; vínculos com fornecedor; persistência histórica; e se
+existe razão de domínio para a regra atual. Só então decidir se muda.
 
 ### 17. Suíte da API não é determinística sob paralelismo no banco local — LOW técnico
 
@@ -289,10 +310,11 @@ permanece obrigatório no escopo atual.
    residual aceito em 1280×800.
 2. **Rodada 2 — aprovada e publicada:** #8A + #8B + #8C resolvidos.
 3. **Rodada 3 — aprovada e publicada:** #8D + #8H resolvidos.
-4. **Rodada 4 — implementada, aguardando PO review:** #15 + #16 resolvidos;
+4. **Rodada 4 — aprovada e publicada:** #15 + #16 resolvidos; #18 registrado;
    #8E, #8F e #8G quando o PO autorizar.
 5. **Validação com a Veridi:** #7 + #11.
-6. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
+6. **Manutenção:** #10 e #17. #18 é capability própria, com auditoria antes de
+   qualquer mudança matemática. #1 e #2 permanecem observação/adiados.
 7. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
 8. **Roadmap:** produto próprio Veridi.
 
