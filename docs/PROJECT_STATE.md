@@ -4,64 +4,65 @@
 
 ## Onde estamos
 
-**`main` @ `b89f9a4`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `ccf5995`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodada 1** (#12, #9, #3,
 #5; #4 com residual aceito), **Rodada 2** (#8A, #8B, #8C, merge `dfb2673`) e
 **Rodada 3** (#8D, #8H, merge `b89f9a4`), todas aprovadas pelo PO.
+**Rodada 4** (#15, #16) está implementada na branch
+`feat/commercial-integrity-quote-order-pricing-options` e **aguarda PO
+review** — não mergeada, não publicada.
 **Produção:** Railway, deploy automático da `main`; health 200, banco up, smoke
 autenticado passando, sem dado de negócio.
 
-MVP operacional **validado internamente**. Blocos A a G fechados: cadastros,
-compras, recebimento e lotes, estoque e FEFO, formulações versionadas, produção
-com consumo real e rastreabilidade, pedido do cliente com plano de atendimento,
-expedição, faturamento, custos, cockpit e relatórios, formulação industrial,
-material do cliente, GMP, qualidade documental, projetos e orçamentos
-versionados, recursos e custo industrial, precificação e margem. Três casos
-profundos derivados do legado rodaram ponta a ponta contra a interface
-publicada — VAL-LEG-01, 02 e 03, todos PASS; detalhe em
+MVP operacional **validado internamente**, blocos A a G fechados — cadastros,
+compras, recebimento e lotes, estoque e FEFO, formulações versionadas,
+produção com rastreabilidade, pedido, expedição, faturamento, custos, cockpit
+e relatórios, projetos e orçamentos versionados, precificação e margem. Três
+casos profundos do legado rodaram ponta a ponta contra a interface publicada
+(VAL-LEG-01 a 03, PASS):
 [`archive/E2E_VALIDATION_HISTORY.md`](archive/E2E_VALIDATION_HISTORY.md).
+
+## Capability em revisão
+
+**Integridade comercial Orçamento → Pedido e ausência de precificação como
+estado** — BACKLOG #15 e #16, implementada em 2026-09-05, **sem migration**,
+aguardando PO review.
+
+O subtotal comercial canônico é `Σ round(quantidade × preço, 2)` — a soma dos
+totais de linha já arredondados, que fecha com o documento que o cliente
+confere. `quote-to-order.service.ts` somava em precisão cheia e arredondava no
+fim: com preço de quatro casas o Pedido congelava um centavo que a proposta
+nunca mostrou (R$ 172,84 × R$ 172,83). Agora o Pedido passa por
+`calcularTotaisOrcamento`, a mesma função que montou a proposta aceita, e o
+resumo do Faturamento dentro do Pedido, por `calcularTotaisFaturamento`.
+Nenhum documento histórico recalculado, nenhum backfill.
+
+`GET /quote-lines/:id/pricing-options` responde 200 com `{ "pricing": null }`
+quando não há precificação vigente — estado esperado do negócio; 404 voltou a
+significar só linha inexistente, e 403 e erro interno seguem distintos. Regras
+duráveis em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §55 e §56.
 
 ## Última capability publicada
 
 **Prévias monetárias coerentes no Faturamento e no Orçamento** — BACKLOG #8D e
-#8H, aprovada pelo PO e publicada em 2026-09-05, merge `b89f9a4`. Sem
-migration; deploy Railway com a release conferida no bundle publicado e smoke
-autenticado passando.
+#8H, publicada em 2026-09-05, merge `b89f9a4`, sem migration; deploy Railway
+conferido e smoke autenticado passando. Nenhuma das duas telas mostra mais um
+total do estado salvo anterior enquanto seus operandos estão em edição, e as
+contas viraram uma só em `@veridi/shared`, usada também pela API. Detalhe em
+[`BACKLOG.md`](BACKLOG.md) §F; regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §54.
 
-Nenhuma das duas telas mostra mais um total derivado do estado salvo anterior
-enquanto seus operandos estão em edição. No **Faturamento**, alterar o preço de
-uma linha mostra o total da linha e o total do documento resultantes antes de
-confirmar, ao lado dos gravados, e o rodapé em rascunho é "Valor total
-(prévia)". No **Orçamento**, quantidade e preço viraram campos controlados: o
-total da linha e o "Total da proposta (prévia)" acompanham a digitação, com
-"Total salvo" nomeado ao lado enquanto há edição pendente.
-
-As contas viraram uma só, em `@veridi/shared` e usadas pela API:
-`calcularTotaisFaturamento` (linha em 2 casas, documento = soma das linhas
-impressas) e `calcularTotaisOrcamento` + `buildPaymentSchedule`, este migrado
-de `apps/api`. Nenhum segundo motor, nenhuma requisição por tecla. Histórico
-intacto: preço acordado, motivo/autor/hora do override, faturamento emitido,
-versão enviada ou aceita e o Pedido dela originado.
-
-Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §54, com as duas telas
-e o critério de prévia local × endpoint de prévia.
-
-## Antes dela
-
-**Rodada 2 — prévias na OC, Expedição e Precificação** (2026-09-05, merge
-`dfb2673`); detalhe em [`BACKLOG.md`](BACKLOG.md) §F. Antes: referência manual
-de custo com seletor canônico de fonte (`lib/cost-source-selection.ts`,
-`PRODUCT_RULES.md` §53) e revisão global do "Como funciona" — 62 telas, com
-teste de inventário exigindo ajuda em toda tela da casca (2026-09-04).
+**Antes dela:** Rodada 2 — prévias na OC, Expedição e Precificação
+(2026-09-05, merge `dfb2673`); referência manual de custo
+(`PRODUCT_RULES.md` §53) e revisão do "Como funciona" em 62 telas (2026-09-04).
 
 ## Estado operacional do repositório
 
 **Baseline V2** (2026-09-04): as suítes E2E exploratórias e adversariais
 históricas foram aposentadas — 51 scripts, ≈35 mil linhas —, com cada regra
 mapeada em [`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md) numa camada menor e
-determinística. Infraestrutura E2E genérica preservada em `scripts/e2e/lib/`;
-plano das suítes futuras em [`E2E_STRATEGY.md`](E2E_STRATEGY.md). Ferramental
-de segurança e os importadores oficiais permanecem.
+determinística. Infraestrutura genérica preservada em `scripts/e2e/lib/`,
+plano em [`E2E_STRATEGY.md`](E2E_STRATEGY.md); ferramental de segurança e
+importadores oficiais permanecem.
 
 **Reconstrução do banco do zero** (2026-09-04): as 49 migrations aplicam num
 banco vazio só com o repositório — `scripts/migration-order.test.ts` em
@@ -80,12 +81,9 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado.
 [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL e HIGH. **Rodadas 1, 2 e 3
 publicadas** (#12, #9, #3, #5, #4 com residual aceito; #8A, #8B, #8C; #8D,
 #8H). **Seguinte, quando autorizada:** #8E, #8F e #8G. **Aguardando a Veridi:**
-#7 e #11. **Manutenção:** #10 e #14 (Schema Integrity Audit). **Abertos da
-Rodada 3:** #15 — integridade comercial Orçamento → Pedido, MEDIUM, com a regra
-já **decidida pelo PO** (subtotal = Σ dos totais de linha arredondados; Pedido
-preserva o que o Orçamento aceito congelou) e capability própria, sem
-recalcular histórico —, #16 (`pricing-options` responde 404 para ausência de
-precificação) e #17 (suíte da API não determinística sob paralelismo).
+#7 e #11. **Manutenção:** #10 e #14 (Schema Integrity Audit). **Rodada 4
+(#15, #16) aguarda PO review.** Segue aberto #17 (suíte da API não
+determinística sob paralelismo) — não observado na execução desta rodada.
 **Observação:** #1, #2.
 
 ## Blockers

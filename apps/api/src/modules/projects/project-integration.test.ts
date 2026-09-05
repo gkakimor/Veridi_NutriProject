@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
@@ -1591,6 +1592,186 @@ describe("Proposta aceita → Pedido", () => {
     await app.close();
   });
 
+  /**
+   * Proposta de duas linhas com preço de quatro casas, escolhida porque as
+   * duas regras de arredondamento dão números DIFERENTES aqui:
+   * `Σ round(linha)` = 172,84 e `round(Σ linha)` = 172,83.
+   */
+  async function propostaComDivergenciaDeCentavos(app: App) {
+    const project = await createProject(app);
+    for (const nome of ["Divergência A", "Divergência B"]) {
+      const criado = await app.inject({
+        method: "POST",
+        url: `/projects/${project.id}/products`,
+        payload: { operation: "create", name: `${nome} ${marker()}`, finishedUnitCode: "un" },
+      });
+      expect(criado.statusCode, criado.body).toBe(201);
+    }
+
+    const links = (
+      await app.inject({ method: "GET", url: `/projects/${project.id}/products` })
+    ).json().products as { id: string; productId: string }[];
+    expect(links).toHaveLength(2);
+
+    const quote = (
+      await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
+    ).json();
+    for (const link of links) {
+      if (quote.lines.some((l: { productId: string }) => l.productId === link.productId)) continue;
+      await app.inject({
+        method: "POST",
+        url: `/quote-versions/${quote.id}/lines`,
+        payload: { projectProductId: link.id },
+      });
+    }
+
+    const comLinhas = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    expect(comLinhas.lines).toHaveLength(2);
+    // 7 × R$ 12,3450 = R$ 86,415 → R$ 86,42 na linha que o cliente confere.
+    for (const linha of comLinhas.lines) {
+      const alterado = await app.inject({
+        method: "PATCH",
+        url: `/quote-lines/${linha.id}`,
+        payload: { quotedQuantity: "7", unitPrice: "12.3450" },
+      });
+      expect(alterado.statusCode, alterado.body).toBe(200);
+    }
+
+    return { project, quote };
+  }
+
+  async function aceitarEAprovar(app: App, projectId: string, quoteId: string) {
+    const enviado = await app.inject({
+      method: "POST",
+      url: `/quote-versions/${quoteId}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+    expect(enviado.statusCode, enviado.body).toBe(200);
+    const aceito = await app.inject({ method: "POST", url: `/quote-versions/${quoteId}/accept` });
+    expect(aceito.statusCode, aceito.body).toBe(200);
+    const aprovado = await app.inject({
+      method: "POST",
+      url: `/projects/${projectId}/approve`,
+      payload: {},
+    });
+    expect(aprovado.statusCode, aprovado.body).toBe(200);
+  }
+
+  it("o Pedido congela o subtotal da proposta, e não uma segunda conta", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { project, quote } = await propostaComDivergenciaDeCentavos(app);
+
+    const proposta = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    expect(proposta.lines.map((l: { total: string }) => l.total)).toEqual(["86.42", "86.42"]);
+    expect(proposta.subtotal).toBe("172.84");
+    expect(proposta.total).toBe("172.84");
+
+    await aceitarEAprovar(app, project.id, quote.id);
+    const criado = await gerar(app, quote.id);
+    expect(criado.statusCode, criado.body).toBe(201);
+    const order = criado.json();
+
+    /*
+     * O Pedido fecha pelo MESMO número da proposta aceita, centavo por
+     * centavo. Somava-se em precisão cheia e arredondava no fim: R$ 172,83,
+     * um centavo que a proposta nunca mostrou.
+     */
+    expect(order.commercialOrigin.subtotalAmount).toBe("172.84");
+    expect(order.commercialOrigin.subtotalAmount).not.toBe("172.83");
+    expect(order.commercialOrigin.totalAmount).toBe("172.84");
+    expect(order.commercialOrigin.paymentSchedule.subtotal).toBe("172.84");
+    expect(order.commercialOrigin.paymentSchedule.total).toBe("172.84");
+    expect(order.commercialOrigin.paymentSchedule.totalPayable).toBe("172.84");
+
+    // Preço acordado com as quatro casas e total de linha com as duas.
+    expect(order.lines).toHaveLength(2);
+    for (const linha of order.lines) {
+      expect(linha.orderedQuantity).toBe("7");
+      expect(linha.agreedPrice.unitPrice).toBe("12.3450");
+      expect(linha.agreedPrice.lineTotal).toBe("86.42");
+    }
+
+    // O subtotal do Pedido é exatamente a soma das linhas que ele imprime.
+    const somaDasLinhas = order.lines
+      .reduce(
+        (soma: Prisma.Decimal, linha: { agreedPrice: { lineTotal: string } }) =>
+          soma.plus(linha.agreedPrice.lineTotal),
+        new Prisma.Decimal(0),
+      )
+      .toFixed(2);
+    expect(somaDasLinhas).toBe(order.commercialOrigin.subtotalAmount);
+
+    // Gerar o Pedido não reescreve a proposta.
+    const depois = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    expect(depois.status).toBe("ACCEPTED");
+    expect(depois.subtotal).toBe("172.84");
+    expect(depois.lines.map((l: { total: string }) => l.total)).toEqual(["86.42", "86.42"]);
+
+    await app.close();
+  });
+
+  it("o subtotal do Pedido é o da proposta também no caso comum", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { quote } = await cenarioFechado(app);
+    const proposta = (
+      await app.inject({ method: "GET", url: `/quote-versions/${quote.id}` })
+    ).json();
+    const order = (await gerar(app, quote.id)).json();
+
+    // O invariante, não um número escolhido a dedo: Pedido = proposta aceita.
+    expect(order.commercialOrigin.subtotalAmount).toBe(proposta.subtotal);
+    expect(order.commercialOrigin.totalAmount).toBe(proposta.total);
+
+    await app.close();
+  });
+
+  it("Pedido histórico não é recalculado pela regra nova — zero backfill", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const prisma = getPrisma();
+
+    const { project, quote } = await propostaComDivergenciaDeCentavos(app);
+    await aceitarEAprovar(app, project.id, quote.id);
+    const order = (await gerar(app, quote.id)).json();
+
+    /*
+     * Um Pedido fechado ANTES desta capability: o valor gravado é o da regra
+     * antiga. Ele é o acordo daquele cliente e não muda porque a fórmula
+     * mudou depois.
+     */
+    await prisma.customerOrder.update({
+      where: { id: order.id },
+      data: {
+        agreedSubtotalAmount: new Prisma.Decimal("172.83"),
+        agreedTotalAmount: new Prisma.Decimal("172.83"),
+      },
+    });
+
+    // Gerar de novo devolve o Pedido que existe, sem tocar nos valores.
+    const denovo = await gerar(app, quote.id);
+    expect(denovo.statusCode).toBe(200);
+    expect(denovo.json().id).toBe(order.id);
+    expect(denovo.json().commercialOrigin.subtotalAmount).toBe("172.83");
+
+    const lido = (
+      await app.inject({ method: "GET", url: `/customer-orders/${order.id}` })
+    ).json();
+    expect(lido.commercialOrigin.subtotalAmount).toBe("172.83");
+    expect(lido.commercialOrigin.totalAmount).toBe("172.83");
+
+    await app.close();
+  });
+
   it("produto fora do escopo da proposta aceita não entra no pedido", async () => {
     const app = buildTestApp("ADMIN");
     await app.ready();
@@ -2027,6 +2208,92 @@ describe("Aprovação do projeto", () => {
     expect(csv.statusCode).toBe(200);
     expect(csv.body).toContain("Origem do preço");
     expect(csv.body).toContain(chain.calculation.code);
+
+    await app.close();
+    await production.close();
+  });
+});
+
+/**
+ * BACKLOG #16 — ausência de precificação vigente é ESTADO, não recurso ausente.
+ *
+ * A consulta respondia 404 quando o produto não tinha precificação ativa. A
+ * tela lidava certo com a ausência, mas cada consulta de uma tela sã deixava
+ * um erro no console do navegador, e uma auditoria de console reprovava a
+ * página inteira por causa de um estado normal do negócio.
+ */
+describe("Opções de precificação da linha do orçamento", () => {
+  it("linha sem precificação vigente responde 200 com ausência normal", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const project = await createProject(app);
+    await prepareTechnicalProduct(app, project.id);
+    const quote = await createQuote(app, project.id);
+
+    const resposta = await app.inject({
+      method: "GET",
+      url: `/quote-lines/${quote.lineId}/pricing-options`,
+    });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    // O envelope existe e a ausência vem dentro dele — nada de corpo vazio.
+    expect(resposta.json()).toEqual({ pricing: null });
+
+    await app.close();
+  });
+
+  it("linha com precificação ativa responde 200 com as faixas", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const project = await createProject(app);
+    const chain = await buildPricingChain(app, project.id, {
+      tierQuantity: "500",
+      unitPrice: "20",
+    });
+    const quote = await createQuote(app, project.id);
+
+    const resposta = await app.inject({
+      method: "GET",
+      url: `/quote-lines/${quote.lineId}/pricing-options`,
+    });
+    expect(resposta.statusCode, resposta.body).toBe(200);
+    const corpo = resposta.json();
+    expect(corpo.pricing).not.toBeNull();
+    expect(corpo.pricing.id).toBe(chain.pricing.id);
+    expect(corpo.pricing.tiers.length).toBeGreaterThan(0);
+
+    await app.close();
+  });
+
+  it("linha inexistente continua 404 — ausência de estado não vira ausência de recurso", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const resposta = await app.inject({
+      method: "GET",
+      url: "/quote-lines/00000000-0000-4000-8000-000000000000/pricing-options",
+    });
+    expect(resposta.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it("papel sem autorização comercial recebe 403, não 200 vazio", async () => {
+    const app = buildTestApp("ADMIN");
+    const production = buildTestApp("PRODUCTION");
+    await app.ready();
+    await production.ready();
+
+    const project = await createProject(app);
+    await prepareTechnicalProduct(app, project.id);
+    const quote = await createQuote(app, project.id);
+
+    const negado = await production.inject({
+      method: "GET",
+      url: `/quote-lines/${quote.lineId}/pricing-options`,
+    });
+    expect(negado.statusCode).toBe(403);
 
     await app.close();
     await production.close();

@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { User } from "@prisma/client";
 import type { CustomerOrderDTO, QuotePaymentScheduleDTO } from "@veridi/shared";
-import { CUSTOMER_ORDER_CODE_PREFIX } from "@veridi/shared";
+import { CUSTOMER_ORDER_CODE_PREFIX, calcularTotaisOrcamento } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
@@ -145,10 +145,26 @@ export async function createOrderFromAcceptedQuote(
     }
   }
 
-  const subtotal = linhas.reduce(
-    (soma, line) => soma.plus(line.quotedQuantity!.times(line.unitPrice!)),
-    new Prisma.Decimal(0),
+  /*
+   * O subtotal do Pedido é o subtotal da PROPOSTA — `calcularTotaisOrcamento`,
+   * a mesma função que montou o documento que o cliente aceitou: cada linha
+   * fecha em dois decimais e o subtotal é a soma dessas linhas.
+   *
+   * Aqui se somava em precisão cheia e arredondava no fim. Com preço de
+   * quatro casas, `Σ round(linha)` e `round(Σ linha)` divergem em centavos, e
+   * o Pedido congelava um acordo que a proposta nunca mostrou. O que o
+   * cliente conferiu foram as linhas.
+   */
+  const totais = calcularTotaisOrcamento(
+    linhas.map((line) => ({
+      quotedQuantity: line.quotedQuantity!.toString(),
+      unitPrice: line.unitPrice!.toString(),
+    })),
   );
+  // Toda linha filtrada tem quantidade e preço legíveis; sem subtotal não há
+  // acordo para congelar, e um Pedido sem valor acordado seria pior que o erro.
+  if (totais.subtotal === null) throw new QuoteWithoutOrderableLinesError();
+  const subtotal = new Prisma.Decimal(totais.subtotal);
   const plano = congelarPlano(quote, subtotal);
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, CUSTOMER_ORDER_CODE_PREFIX);
   const proposta = quote;

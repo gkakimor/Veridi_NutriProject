@@ -461,9 +461,13 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.params as { id: string };
     try {
       requireRole(request, "COMMERCIAL", "ADMIN");
-      const pricing = await getQuoteLinePricingOptions(id);
-      if (!pricing) return reply.status(404).send({ error: "not_found" });
-      return reply.send(pricing);
+      /*
+       * Produto sem precificação vigente é estado ESPERADO — a proposta
+       * segue por preço manual. A ausência respondia 404, e cada consulta
+       * de uma tela sã deixava um erro no console do navegador. O 404 aqui
+       * volta a significar só o que deve: a LINHA não existe.
+       */
+      return reply.send({ pricing: await getQuoteLinePricingOptions(id) });
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

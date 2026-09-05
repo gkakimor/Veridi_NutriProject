@@ -16,50 +16,36 @@ resolvido com residual aceito (≈117px em 1280×800).
 **Rodada 2 aprovada e publicada em 2026-09-05** (merge `dfb2673`): #8A, #8B e
 #8C resolvidos.
 **Rodada 3 aprovada e publicada em 2026-09-05** (merge `b89f9a4`): #8D e #8H
-resolvidos; #15, #16 e #17 abertos como achados. **Seguinte, quando o PO
-autorizar:** #8E, #8F e #8G.
+resolvidos; #15, #16 e #17 abertos como achados.
+**Rodada 4 aprovada e publicada em 2026-09-05**: #15 e #16 resolvidos; #18
+aberto como achado, por decisão do PO. #17 segue aberto. **Seguinte, quando o
+PO autorizar:** #8E, #8F e #8G.
 
 ---
 
 ## A. Defeitos abertos
 
-### 15. Integridade comercial Orçamento → Pedido — MEDIUM
+### 18. Consistência monetária da Ordem de Compra — MEDIUM
 
-**ABERTO. Regra decidida pelo PO em 2026-09-05; capability própria, não
-implementada na Rodada 3.**
+**ABERTO. Registrado por decisão do PO em 2026-09-05; capability própria.**
 
-Achado da Rodada 3. O total exibido do Orçamento é `Σ round(linha)`
-(`calcularTotaisOrcamento`); ao aceitar, o Pedido congela
-`agreedSubtotalAmount` como `round(Σ linha)` (`quote-to-order.service.ts`). Com
-preço de 4 casas os dois divergem em centavos — a mesma classe de defeito que o
-Faturamento já corrigiu.
+Achado da Rodada 4. `calcularTotaisOrdemCompra` soma as linhas em precisão
+cheia e arredonda só na saída — `round(Σ valores brutos das linhas)` —,
+enquanto os documentos comerciais passaram a usar
+`Σ round(valor monetário da linha, 2)` ([`PRODUCT_RULES.md`](PRODUCT_RULES.md)
+§55). Com preço de quatro casas as duas contas divergem em centavos.
 
-**Regra decidida.** O subtotal monetário comercial canônico reconcilia com as
-linhas exibidas:
+**Princípio de produto.** Se a Ordem de Compra apresenta totais monetários de
+linha em duas casas, o total do documento deve, em princípio, reconciliar
+exatamente com a soma desses valores apresentados. Alvo conceitual futuro:
+`Σ round(quantidade × preço unitário, 2)` antes de formar o total do
+documento.
 
-    subtotal = Σ round(quantidade × preço unitário, 2)
-
-e **não** `round(Σ valores de linha ainda não arredondados)`. Motivo: o total do
-documento tem de fechar exatamente com os totais de linha apresentados ao
-usuário. Além disso, quando um Orçamento aceito originar um Pedido, o Pedido
-preserva exatamente os valores comerciais acordados e congelados no Orçamento
-aceito.
-
-**Limites definidos pelo PO.** Não recalcular documentos históricos existentes.
-Vira capability própria — o valor congelado de um acordo não muda de carona
-numa rodada de UI.
-
-### 16. `pricing-options` responde 404 para ausência de precificação — LOW/MEDIUM
-
-**ABERTO.** `GET /quote-lines/:id/pricing-options` devolve 404 quando o produto
-não tem precificação vigente. A tela trata a ausência corretamente ("Não existe
-precificação vigente para esta quantidade"), mas o navegador registra
-`console.error` a cada consulta.
-
-Ausência de precificação é **estado esperado** da aplicação, não recurso
-inexistente. O ruído faz uma auditoria de console reprovar uma tela sã.
-Observado na auditoria local da Rodada 3 e no smoke; preexistente àquela
-branch. Rodada posterior.
+**Limites definidos pelo PO.** Não implementar junto de outra rodada e **não
+reabrir #8A** — a regra atual foi publicada como está. Antes de alterar a
+matemática é preciso auditar: OCs históricas; recebimentos; custo efetivo;
+custo de aquisição; vínculos com fornecedor; persistência histórica; e se
+existe razão de domínio para a regra atual. Só então decidir se muda.
 
 ### 17. Suíte da API não é determinística sob paralelismo no banco local — LOW técnico
 
@@ -189,6 +175,33 @@ próximo reset canônico da base local/E2E. **ADIADO / MANUTENÇÃO LOCAL.**
 
 ## F. Resolvidos recentes (2026-09-04 e 2026-09-05)
 
+- **#15 Integridade comercial Orçamento → Pedido** (2026-09-05, Rodada 4).
+  O Pedido gerado de uma proposta aceita congela o subtotal da PROPOSTA:
+  `calcularTotaisOrcamento`, a mesma função que montou o documento aceito.
+  `quote-to-order.service.ts` somava as linhas em precisão cheia e arredondava
+  no fim — com preço de quatro casas, `Σ round(linha)` e `round(Σ linha)`
+  divergem em centavos e o Pedido fechava por um valor que a proposta nunca
+  mostrou (7 × R$ 12,3450 em duas linhas: R$ 172,84 na proposta, R$ 172,83 no
+  Pedido). O mesmo defeito estava no resumo do Faturamento dentro do Pedido,
+  que agora passa por `calcularTotaisFaturamento` (R$ 1.927,41, não
+  R$ 1.927,42). Preços acordados, quantidades, desconto, plano de pagamento e
+  proveniência seguem copiados sem recálculo; nenhum documento histórico foi
+  tocado e não houve backfill. Regra durável em
+  [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §55.
+  `packages/shared/src/quote-math.test.ts`,
+  `modules/projects/project-integration.test.ts`,
+  `modules/billings/billing-price.test.ts`,
+  `web pages/projects/orcamento-previa.test.tsx`.
+- **#16 `pricing-options` responde 404 para ausência de precificação**
+  (2026-09-05, Rodada 4). `GET /quote-lines/:id/pricing-options` responde
+  **200** com `{ "pricing": null }` quando o produto não tem precificação
+  vigente — estado esperado do negócio, não recurso ausente —, e a tela
+  continua oferecendo preço manual sem erro no console. 404 voltou a
+  significar só linha inexistente, e 403 e erro interno continuam distintos.
+  Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §56.
+  `modules/projects/project-integration.test.ts`,
+  `web lib/quote-pricing-options.test.ts`.
+
 - **#8D Faturamento — a consequência do preço antes de confirmar** (2026-09-05).
   Alterar o preço de uma linha mostra, enquanto se digita, o total da linha e o
   total do documento que vão resultar, ao lado do "Total da linha gravado" e do
@@ -296,18 +309,21 @@ permanece obrigatório no escopo atual.
 1. **Rodada 1 — aprovada:** #12 + #9 + #3 + #5 resolvidos; #4 resolvido com
    residual aceito em 1280×800.
 2. **Rodada 2 — aprovada e publicada:** #8A + #8B + #8C resolvidos.
-3. **Rodada 3 — aprovada e publicada:** #8D + #8H resolvidos;
+3. **Rodada 3 — aprovada e publicada:** #8D + #8H resolvidos.
+4. **Rodada 4 — aprovada e publicada:** #15 + #16 resolvidos; #18 registrado;
    #8E, #8F e #8G quando o PO autorizar.
-4. **Validação com a Veridi:** #7 + #11.
-5. **Manutenção:** #10. #1 e #2 permanecem observação/adiados.
-6. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
-7. **Roadmap:** produto próprio Veridi.
+5. **Validação com a Veridi:** #7 + #11.
+6. **Manutenção:** #10 e #17. #18 é capability própria, com auditoria antes de
+   qualquer mudança matemática. #1 e #2 permanecem observação/adiados.
+7. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
+8. **Roadmap:** produto próprio Veridi.
 
 ## Próximo gate
 
 A validação com a Veridi continua gate para as regras que dependem do processo
 real do cliente (#7, #11). Ela **não** impede os itens internos já decididos
-pelo PO (agora #8A–#8D e #8H) quando o PO autorizar a próxima capability.
+pelo PO (agora #8A–#8D, #8H, #15 e #16) quando o PO autorizar a próxima
+capability.
 
 Material pronto: `Guia_Fluxo_Comercial_Veridi.docx` (36 capítulos, não
 versionado por política) e

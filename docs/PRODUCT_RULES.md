@@ -3571,3 +3571,55 @@ BACKLOG #8.
 Onde a prévia depende de operandos já presentes na tela e de uma função pura
 compartilhada, ela é calculada localmente — sem requisição por tecla. Endpoint
 de prévia é para quando a conta depende de dado ou regra que só o servidor tem.
+
+## §55 — O subtotal comercial fecha com as linhas apresentadas
+
+O total monetário de uma **linha** comercial é `quantidade × preço unitário`
+arredondado em **duas casas** — é o número impresso, o que o cliente confere.
+O **subtotal do documento** é a soma desses totais de linha **já
+arredondados**:
+
+    subtotal = Σ round(quantidade × preço unitário, 2)
+
+e nunca `round(Σ das linhas ainda não arredondadas)`. Com preço de quatro
+casas as duas contas divergem em centavos, e o documento tem de fechar
+exatamente com as linhas que estão nele: um rodapé que não bate com a soma da
+página destrói a confiança no documento inteiro. Nada é arredondado antes da
+multiplicação — o preço unitário guarda as quatro casas.
+
+A conta é uma só, em `@veridi/shared`, usada pela API e pela prévia da tela:
+`calcularTotaisOrcamento` (Orçamento e o Pedido dele originado) e
+`calcularTotaisFaturamento` (Faturamento, incluindo o resumo que aparece
+dentro do Pedido). Vale para os documentos **comerciais**. A Ordem de Compra
+ainda usa semântica distinta de arredondamento (`calcularTotaisOrdemCompra`
+soma as linhas em precisão cheia e arredonda no fim); comportamento registrado
+em [`BACKLOG.md`](BACKLOG.md) #18 para decisão e adequação próprias — não é
+decisão de negócio fechada nem exceção declarada.
+
+**Documento originado de acordo aceito preserva o acordo.** Quando um
+Orçamento aceito origina um Pedido, o Pedido congela exatamente os valores
+comerciais daquele Orçamento — preços das linhas, quantidades, desconto,
+subtotal, total e plano de pagamento —, calculados pela mesma função que
+montou a proposta. O Pedido não recalcula o acordo por outra fórmula, não
+consulta a precificação vigente e não usa o CMV atual.
+
+Documento histórico **não é recalculado**: proposta enviada, aceita, rejeitada
+ou superada, e Pedido já existente, mantêm o valor que congelaram. Uma regra
+nova vale da sua data em diante e nunca em backfill — o valor congelado de um
+acordo não muda porque a fórmula mudou depois. Um Orçamento aceito antes da
+regra que origina um Pedido depois dela entrega o snapshot daquele Orçamento,
+não uma reinterpretação dele.
+
+## §56 — Ausência esperada é estado, não recurso inexistente
+
+Quando o negócio prevê que algo pode não existir — produto sem precificação
+vigente, período sem movimento, fila vazia —, a consulta responde **200** com
+o estado vazio dentro do envelope do próprio contrato (`{ "pricing": null }`,
+coleção vazia), e a tela renderiza o estado vazio normal. **404** fica
+reservado para o recurso que de fato não existe.
+
+Responder 404 para um estado normal deixa um erro no console do navegador a
+cada consulta de uma tela sã, e uma auditoria de console passa a reprovar uma
+página correta. Ausência também não vira valor: nada de `R$ 0,00` no lugar de
+"sem preço". E o inverso é igualmente proibido — 403, 404 de recurso ausente e
+erro interno continuam distintos, nunca mascarados como "estado vazio".

@@ -522,6 +522,21 @@ describe("Precisão do preço acordado", () => {
     // que é a forma multilinha do mesmo defeito já corrigido na linha.
     expect(fatura.totalAmount).toBe(somaDasLinhasImpressas);
 
+    /*
+     * E o resumo do Faturamento dentro do Pedido é o MESMO número.
+     *
+     * Ele somava em precisão cheia e arredondava no fim — um segundo motor
+     * para o mesmo documento: R$ 1.927,42 no Pedido e R$ 1.927,41 na tela de
+     * Faturamento, com as linhas fechando no segundo.
+     */
+    const pedido = (
+      await app.inject({ method: "GET", url: `/customer-orders/${criado.id}` })
+    ).json();
+    const resumo = pedido.billings.find((b: { id: string }) => b.id === fatura.id);
+    expect(resumo).toBeTruthy();
+    expect(resumo.totalAmount).toBe(fatura.totalAmount);
+    expect(resumo.totalAmount).toBe(somaDasLinhasImpressas);
+
     await app.close();
   });
 

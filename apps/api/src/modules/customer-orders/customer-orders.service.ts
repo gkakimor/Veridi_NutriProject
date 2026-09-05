@@ -32,7 +32,7 @@ import type {
   CustomerOrderShipmentSummaryDTO,
   QuotePaymentScheduleDTO,
 } from "@veridi/shared";
-import { CUSTOMER_ORDER_CODE_PREFIX } from "@veridi/shared";
+import { CUSTOMER_ORDER_CODE_PREFIX, calcularTotaisFaturamento } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import type { Pagination } from "../../lib/pagination.js";
@@ -222,10 +222,18 @@ function commercialOriginOf(order: CustomerOrder): CustomerOrderCommercialOrigin
 
 function toBillingSummaryDTO(billing: BillingWithLines): CustomerOrderBillingSummaryDTO {
   const totalQuantity = billing.lines.reduce((sum, line) => sum.plus(line.quantity), new Prisma.Decimal(0));
-  const hasCompletePricing = billing.lines.length > 0 && billing.lines.every((line) => line.unitPrice !== null);
-  const totalAmount = hasCompletePricing
-    ? billing.lines.reduce((sum, line) => sum.plus(line.quantity.times(line.unitPrice!)), new Prisma.Decimal(0))
-    : null;
+  /*
+   * O valor do Faturamento aqui é o MESMO que o documento mostra:
+   * `calcularTotaisFaturamento`, soma das linhas já arredondadas. Somar em
+   * precisão cheia e arredondar no fim fazia este resumo divergir em
+   * centavos da tela de Faturamento para o mesmo documento.
+   */
+  const totais = calcularTotaisFaturamento(
+    billing.lines.map((line) => ({
+      quantity: line.quantity.toString(),
+      unitPrice: line.unitPrice !== null ? line.unitPrice.toString() : null,
+    })),
+  );
   return {
     id: billing.id,
     code: billing.code,
@@ -233,7 +241,7 @@ function toBillingSummaryDTO(billing: BillingWithLines): CustomerOrderBillingSum
     shipmentCode: billing.shipmentCode ?? "",
     status: billing.status,
     totalQuantity: totalQuantity.toString(),
-    totalAmount: totalAmount ? totalAmount.toFixed(2) : null,
+    totalAmount: totais.totalAmount,
     issuedAt: billing.issuedAt ? billing.issuedAt.toISOString() : null,
   };
 }
