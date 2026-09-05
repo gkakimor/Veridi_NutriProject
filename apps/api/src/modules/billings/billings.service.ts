@@ -8,7 +8,7 @@ import type {
   BillingListResponse,
   ShipmentBillingStatus,
 } from "@veridi/shared";
-import { BILLING_CODE_PREFIX } from "@veridi/shared";
+import { BILLING_CODE_PREFIX, calcularTotaisFaturamento } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -46,15 +46,6 @@ const billingInclude = {
   customerOrder: { select: { customerId: true } },
 } as const;
 
-/**
- * TOTAL em dinheiro (BRL): sempre 2 casas na saida da API.
- *
- * So para valor JA somado — total de linha, total de documento. Nunca para
- * preco unitario: ver `formatUnitPrice`.
- */
-function formatMoney(value: Prisma.Decimal): string {
-  return value.toFixed(2);
-}
 
 /**
  * PRECO UNITARIO: as 4 casas que a coluna guarda, sem cortar.
@@ -73,8 +64,7 @@ function formatUnitPrice(value: Prisma.Decimal): string {
   return value.toFixed(4);
 }
 
-function toBillingLineDTO(line: BillingLine): BillingLineDTO {
-  const lineTotal = line.unitPrice ? line.quantity.times(line.unitPrice) : null;
+function toBillingLineDTO(line: BillingLine, lineTotal: string | null): BillingLineDTO {
   return {
     id: line.id,
     shipmentLineId: line.shipmentLineId,
@@ -92,7 +82,7 @@ function toBillingLineDTO(line: BillingLine): BillingLineDTO {
     unitCode: line.unitCode,
     agreedUnitPrice: line.agreedUnitPrice ? formatUnitPrice(line.agreedUnitPrice) : null,
     unitPrice: line.unitPrice ? formatUnitPrice(line.unitPrice) : null,
-    lineTotal: lineTotal ? formatMoney(lineTotal) : null,
+    lineTotal,
     priceOverridden: line.priceOverridden,
     overrideReason: line.overrideReason,
     overriddenBy: line.overriddenBy,
@@ -110,28 +100,20 @@ function toBillingLineDTO(line: BillingLine): BillingLineDTO {
  */
 function toBillingDTO(billing: BillingWithLines): BillingDTO {
   const totalQuantity = billing.lines.reduce((sum, line) => sum.plus(line.quantity), new Prisma.Decimal(0));
-  const hasCompletePricing = billing.lines.length > 0 && billing.lines.every((line) => line.unitPrice !== null);
   /*
-   * O total do documento e a soma das linhas IMPRESSAS.
-   *
-   * Somar os produtos cheios e arredondar uma vez no fim e o certo em
-   * estatistica e o errado num documento: `Σ round(linha)` e
-   * `round(Σ linha)` divergem, e o que o cliente confere sao as linhas.
-   * Medido com duas linhas de preco de quatro casas — 123 x 4,0531 e
-   * 147 x 9,7203 — as linhas impressas somavam R$ 1.927,41 e o rodape dizia
-   * R$ 1.927,42. Um centavo que nao sai de nenhuma conta possivel com o
-   * papel na mao, e que cresce com o numero de linhas.
-   *
-   * A ordem correta e a mesma que a nota fiscal usa: cada linha fecha em
-   * dois decimais, e o documento e a soma dessas linhas.
+   * Total de linha e total do documento saem de `calcularTotaisFaturamento`,
+   * em `@veridi/shared` — a MESMA funcao que a tela usa para mostrar o efeito
+   * de alterar um preco antes de confirmar. Ver la a ordem do arredondamento:
+   * cada linha fecha em dois decimais e o documento e a soma dessas linhas,
+   * como na nota fiscal.
    */
-  const totalAmount = hasCompletePricing
-    ? billing.lines.reduce(
-        (sum, line) =>
-          sum.plus(new Prisma.Decimal(line.quantity.times(line.unitPrice!).toFixed(2))),
-        new Prisma.Decimal(0),
-      )
-    : null;
+  const totais = calcularTotaisFaturamento(
+    billing.lines.map((line) => ({
+      quantity: line.quantity.toString(),
+      unitPrice: line.unitPrice !== null ? line.unitPrice.toString() : null,
+    })),
+  );
+  const hasCompletePricing = totais.hasCompletePricing;
 
   return {
     id: billing.id,
@@ -149,9 +131,9 @@ function toBillingDTO(billing: BillingWithLines): BillingDTO {
     status: billing.status,
     externalReference: billing.externalReference,
     notes: billing.notes,
-    lines: billing.lines.map(toBillingLineDTO),
+    lines: billing.lines.map((line, indice) => toBillingLineDTO(line, totais.lineTotals[indice] ?? null)),
     totalQuantity: totalQuantity.toString(),
-    totalAmount: totalAmount ? formatMoney(totalAmount) : null,
+    totalAmount: totais.totalAmount,
     hasCompletePricing,
     issuedAt: billing.issuedAt ? billing.issuedAt.toISOString() : null,
     issuedBy: billing.issuedBy,

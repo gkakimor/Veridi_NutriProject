@@ -3563,5 +3563,11 @@ enviada ao servidor como se fosse dado: quem grava é a ação explícita
 (salvar, confirmar, adicionar), e o servidor recalcula ao gravar. Operando
 ausente ou ilegível não vira zero na prévia — fica fora e é dito. Vale para a
 Ordem de Compra (total previsto), a Expedição (já expedido × expedindo agora ×
-restante) e a Precificação (prévia da faixa), e é o padrão para as demais
-telas do BACKLOG #8.
+restante), a Precificação (prévia da faixa), o Faturamento (total da linha e do
+documento antes de confirmar a alteração de preço) e o Orçamento (total da
+proposta na versão em rascunho), e é o padrão para as demais telas do
+BACKLOG #8.
+
+Onde a prévia depende de operandos já presentes na tela e de uma função pura
+compartilhada, ela é calculada localmente — sem requisição por tecla. Endpoint
+de prévia é para quando a conta depende de dado ou regra que só o servidor tem.

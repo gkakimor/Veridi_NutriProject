@@ -6,7 +6,7 @@ import type {
   QuotePricingProvenanceDTO,
   QuoteVersionDTO,
 } from "@veridi/shared";
-import { QUOTE_CODE_PREFIX } from "@veridi/shared";
+import { QUOTE_CODE_PREFIX, calcularTotaisOrcamento } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import {
@@ -68,14 +68,9 @@ export type QuoteWithLines = PrismaTypes.QuoteVersionGetPayload<{ include: typeo
 function toQuoteLineDTO(
   line: QuoteWithLines["lines"][number],
   pricing: QuotePricingProvenanceDTO | null,
+  /** Vem de `calcularTotaisOrcamento` — a mesma conta que a tela usa na prévia. */
+  total: string | null,
 ): QuoteLineDTO {
-  // Total é derivado; só existe quando quantidade E preço existem. Preço
-  // `null` (não precificado) nunca vira zero.
-  const total =
-    line.quotedQuantity && line.unitPrice !== null
-      ? line.quotedQuantity.times(line.unitPrice).toFixed(2)
-      : null;
-
   return {
     id: line.id,
     quoteVersionId: line.quoteVersionId,
@@ -105,19 +100,28 @@ export function toQuoteVersionDTO(
   quote: QuoteWithLines,
   includePricing: boolean,
 ): QuoteVersionDTO {
-  const lines = quote.lines.map((line) =>
-    toQuoteLineDTO(line, includePricing ? pricingProvenanceForLine(line, quote.status) : null),
+  /*
+   * Total de linha e subtotal saem de `calcularTotaisOrcamento`, em
+   * `@veridi/shared` — a MESMA função que a tela usa para mostrar o efeito
+   * de mudar quantidade ou preço antes de salvar. Total derivado nunca é
+   * persistido, e só existe quando TODAS as linhas têm preço: somar o que
+   * está precificado e ignorar o resto entregaria um número menor que a
+   * proposta, com cara de total.
+   */
+  const totais = calcularTotaisOrcamento(
+    quote.lines.map((line) => ({
+      quotedQuantity: line.quotedQuantity ? line.quotedQuantity.toString() : null,
+      unitPrice: line.unitPrice !== null ? line.unitPrice.toString() : null,
+    })),
   );
-
-  // Total da proposta é a soma das linhas — e só existe quando TODAS têm
-  // preço. Somar o que está precificado e ignorar o resto entregaria um
-  // número menor que a proposta, com cara de total.
-  const subtotal =
-    lines.length > 0 && lines.every((line) => line.total !== null)
-      ? lines
-          .reduce((sum, line) => sum.plus(new Prisma.Decimal(line.total ?? 0)), new Prisma.Decimal(0))
-          .toFixed(2)
-      : null;
+  const lines = quote.lines.map((line, indice) =>
+    toQuoteLineDTO(
+      line,
+      includePricing ? pricingProvenanceForLine(line, quote.status) : null,
+      totais.lineTotals[indice] ?? null,
+    ),
+  );
+  const subtotal = totais.subtotal;
 
   // O plano é derivado: desconto, entrada, parcelas e juros saem daqui, nunca
   // de um valor digitado. `total` passa a ser o preço à vista JÁ COM desconto
