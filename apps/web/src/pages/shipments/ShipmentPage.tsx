@@ -11,6 +11,7 @@ import {
   SHIPMENT_BILLING_STATUS_LABELS,
   SHIPMENT_PRODUCT_STATUS_LABELS,
   SHIPMENT_STATUS_LABELS,
+  previaDeExpedicaoDoProduto,
 } from "@veridi/shared";
 import {
   cancelShipment,
@@ -74,10 +75,48 @@ function productStatusBadgeClass(status: ShipmentProductStatus): string {
   }
 }
 
+/**
+ * O que a expedição faz com UM produto do pedido, lida da tela — antes de
+ * confirmar e sem tocar em nada.
+ *
+ * Três conceitos que um "Total" único misturava: o que já saiu em expedições
+ * confirmadas (histórico), o que sai NESTA (as linhas em edição, ao vivo) e o
+ * que sobra do pedido depois. A conta é a função canônica de
+ * `@veridi/shared`; aqui só se lê o que foi digitado. Quantidade ilegível não
+ * entra e é contada — nunca vira zero em silêncio.
+ */
+function previaDoProduto(
+  group: ShipmentProductGroupDTO,
+  lines: ShipmentLineDTO[],
+  quantities: Record<string, string>,
+) {
+  const legiveis: { id: string; reservedRemaining: string; quantity: string }[] = [];
+  let ilegiveis = 0;
+  for (const line of lines) {
+    const digitado = (quantities[line.customerOrderReservationLineId] ?? "").trim();
+    const legivel = digitado === "" ? "0" : parseDecimalInput(digitado);
+    if (legivel === null) {
+      ilegiveis += 1;
+      continue;
+    }
+    legiveis.push({
+      id: line.customerOrderReservationLineId,
+      reservedRemaining: line.reservedRemaining,
+      quantity: legivel,
+    });
+  }
+  const previa = previaDeExpedicaoDoProduto({
+    outstandingQuantity: group.outstandingQuantity,
+    linhas: legiveis,
+  });
+  return { ...previa, ilegiveis };
+}
+
 interface ProductGroupProps {
   group: ShipmentProductGroupDTO;
   lines: ShipmentLineDTO[];
   isDraft: boolean;
+  shipmentStatus: ShipmentStatus;
   quantities: Record<string, string>;
   onQuantityChange: (reservationLineId: string, value: string) => void;
   lotInputs: Record<string, string>;
@@ -99,6 +138,7 @@ function ProductGroup({
   group,
   lines,
   isDraft,
+  shipmentStatus,
   quantities,
   onQuantityChange,
   lotInputs,
@@ -119,13 +159,61 @@ function ProductGroup({
         </span>
       </div>
 
-      {/* Cada número com a própria unidade — nada é somado entre produtos. */}
-      <p className="shipment-product__meta">
-        Pedido: {formatQuantity(group.orderedQuantity)} {group.unitCode} · Já expedido: {formatQuantity(group.shippedQuantity)} ·
-        Falta expedir: {formatQuantity(group.outstandingQuantity)} · Reservado disponível: {group.reservedRemaining} ·
-        Expedindo agora: {group.shippingNow} · Lotes conferidos: {group.lotsVerified}/
-        {group.lotsRequired}
-      </p>
+      {/*
+        Cada número com a própria unidade — nada é somado entre produtos.
+
+        No rascunho, "Expedindo agora" e "Restante após esta expedição" são
+        PRÉVIA das linhas em edição, não o que está gravado: "Já expedido"
+        é o histórico das expedições confirmadas, e os três não se misturam.
+        Quantidade acima do que falta expedir não vira saldo negativo — vira
+        erro dito, com a confirmação travada.
+      */}
+      {isDraft ? (
+        (() => {
+          const previa = previaDoProduto(group, lines, quantities);
+          const unidade = group.unitCode;
+          return (
+            <p className="shipment-product__meta" aria-live="polite">
+              Quantidade do pedido: {formatQuantity(group.orderedQuantity)} {unidade} · Já expedido
+              (antes desta): {formatQuantity(group.shippedQuantity)} {unidade} · Falta expedir:{" "}
+              {formatQuantity(group.outstandingQuantity)} {unidade} · Reservado disponível:{" "}
+              {formatQuantity(group.reservedRemaining)} {unidade} ·{" "}
+              <strong>
+                Expedindo agora (prévia): {formatQuantity(previa.expedindoAgora)} {unidade}
+              </strong>{" "}
+              ·{" "}
+              {previa.acimaDoQueFalta ? (
+                <span className="field__error">
+                  Acima do que falta expedir em{" "}
+                  {formatQuantity(previa.restanteDepois.replace("-", ""))} {unidade} — corrija a
+                  separação.
+                </span>
+              ) : (
+                <strong>
+                  Restante após esta expedição: {formatQuantity(previa.restanteDepois)} {unidade}
+                </strong>
+              )}
+              {previa.ilegiveis > 0 && (
+                <span className="field__error">
+                  {" "}
+                  · {previa.ilegiveis === 1 ? "1 linha ilegível" : `${previa.ilegiveis} linhas ilegíveis`}{" "}
+                  fora da prévia.
+                </span>
+              )}{" "}
+              · Lotes conferidos: {group.lotsVerified}/{group.lotsRequired}
+            </p>
+          );
+        })()
+      ) : (
+        <p className="shipment-product__meta">
+          Quantidade do pedido: {formatQuantity(group.orderedQuantity)} {group.unitCode} ·{" "}
+          {shipmentStatus === "CONFIRMED" ? "Expedido nesta expedição" : "Separado nesta expedição"}
+          : {formatQuantity(group.shippingNow)} {group.unitCode} · Já expedido (total):{" "}
+          {formatQuantity(group.shippedQuantity)} {group.unitCode} · Falta expedir:{" "}
+          {formatQuantity(group.outstandingQuantity)} {group.unitCode} · Lotes conferidos:{" "}
+          {group.lotsVerified}/{group.lotsRequired}
+        </p>
+      )}
 
       {lines.length === 0 ? (
         <p className="field__hint">Ainda sem reserva disponível para esta expedição.</p>
@@ -163,7 +251,7 @@ function ProductGroup({
                   <td>{formatDate(line.expiryDate)}</td>
                   <td>{line.location ?? "—"}</td>
                   <td className="is-numeric">
-                    {line.reservedRemaining} {line.unitCode}
+                    {formatQuantity(line.reservedRemaining)} {line.unitCode}
                   </td>
                   <td className="is-numeric">
                     {isDraft ? (
@@ -200,8 +288,8 @@ function ProductGroup({
                             )}
                             {excede && (
                               <p className="field__error">
-                                Máximo {line.reservedRemaining} {line.unitCode} — é o que está
-                                reservado a este pedido.
+                                Máximo {formatQuantity(line.reservedRemaining)} {line.unitCode} — é o
+                                que está reservado a este pedido.
                               </p>
                             )}
                           </>
@@ -507,16 +595,20 @@ export function ShipmentPage() {
   }
 
   /*
-   * O total lê a vírgula como o resto da tela lê.
-   *
-   * Sem isso, uma quantidade digitada com vírgula virava `NaN`, o total
-   * inteiro virava `NaN`, e a guarda `totalToShip <= 0` — a que impede
-   * confirmar uma expedição vazia — parava de valer sem dizer nada.
+   * A prévia de cada produto, pela função canônica — e é dela que saem as
+   * guardas da confirmação: nada a enviar, linha acima do reservado, produto
+   * acima do que falta expedir. Um "Total" único somava quantidades de
+   * produtos diferentes, em unidades diferentes, e saía cru na tela.
    */
-  const totalToShip = shipment.lines.reduce((sum, line) => {
-    const legivel = parseDecimalInput(quantities[line.customerOrderReservationLineId] ?? "0");
-    return sum + (legivel === null ? 0 : Number(legivel));
-  }, 0);
+  const previasPorProduto = shipment.products.map((group) =>
+    previaDoProduto(
+      group,
+      shipment.lines.filter((line) => line.customerOrderLineId === group.customerOrderLineId),
+      quantities,
+    ),
+  );
+  const algoAEnviar = previasPorProduto.some((previa) => Number(previa.expedindoAgora) > 0);
+  const produtosAcimaDoQueFalta = previasPorProduto.filter((previa) => previa.acimaDoQueFalta);
 
   /* Quantidade que a tela não consegue ler não vira zero em silêncio. */
   const linhasIlegiveis = shipment.lines.filter((line) => {
@@ -668,6 +760,7 @@ export function ShipmentPage() {
                 (line) => line.customerOrderLineId === group.customerOrderLineId,
               )}
               isDraft={isDraft}
+              shipmentStatus={shipment.status}
               quantities={quantities}
               onQuantityChange={(reservationLineId, value) =>
                 setQuantities((prev) => ({ ...prev, [reservationLineId]: value }))
@@ -689,9 +782,6 @@ export function ShipmentPage() {
             <p className="field__hint">Nenhum item nesta expedição.</p>
           )}
 
-          <p className="field__hint">
-            Total: {isDraft ? totalToShip : shipment.totalQuantity}
-          </p>
         </FormSection>
 
         <FormSection title="Observações">
@@ -813,8 +903,9 @@ export function ShipmentPage() {
                 className="btn btn--accent"
                 disabled={
                   saving ||
-                  totalToShip <= 0 ||
+                  !algoAEnviar ||
                   linhasAcimaDoReservado.length > 0 ||
+                  produtosAcimaDoQueFalta.length > 0 ||
                   linhasIlegiveis.length > 0 ||
                   !shipment.verification.allLotsVerified
                 }
@@ -824,9 +915,13 @@ export function ShipmentPage() {
                     ? mensagemDecimalInvalido("Quantidade")
                     : linhasAcimaDoReservado.length > 0
                       ? "Há quantidade acima do reservado — corrija antes de confirmar."
-                      : shipment.verification.allLotsVerified
-                        ? undefined
-                        : "Existem lotes ainda não conferidos nesta expedição."
+                      : produtosAcimaDoQueFalta.length > 0
+                        ? "Há produto acima do que falta expedir — corrija antes de confirmar."
+                        : !algoAEnviar
+                          ? "Nenhuma quantidade a expedir."
+                          : shipment.verification.allLotsVerified
+                            ? undefined
+                            : "Existem lotes ainda não conferidos nesta expedição."
                 }
               >
                 Confirmar expedição

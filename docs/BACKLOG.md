@@ -13,7 +13,9 @@ escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 
 **Rodada 1 aprovada em 2026-09-04:** #12, #9, #3, #5 resolvidos; #4
 resolvido com residual aceito (≈117px em 1280×800).
-**Rodada seguinte, quando o PO autorizar:** #8A + #8B + #8C; avaliar #8D.
+**Rodada 2 entregue em 2026-09-05** (branch `feat/live-calculation-preview-round-2`,
+em revisão do PO): #8A, #8B e #8C resolvidos. **Seguinte, quando o PO
+autorizar:** avaliar #8D e os demais #8.
 
 ---
 
@@ -30,17 +32,7 @@ conta vem da **mesma função** que a API usa, `CalcHint` mostra a aritmética,
 premissa ausente vira travessão. Hoje no padrão: Faturamento, Formulação, CMV
 e a prévia de política de preço.
 
-- **#8A — MEDIUM — Ordem de Compra, total vivo inconsistente.**
-  `purchase-orders/PurchaseOrderPage.tsx`: linhas recalculam ao digitar
-  enquanto o rodapé mostra `orderTotal` da última gravação. Número vivo ao lado
-  de número velho.
-- **#8B — MEDIUM — Expedição, quantidade viva × total anterior.**
-  `shipments/ShipmentPage.tsx`: "Expedindo agora" vem do read model e o Total do
-  rodapé é conta do navegador, impresso cru, sem `formatQuantity`. O usuário
-  compara valores de momentos diferentes.
-- **#8C — MEDIUM — Precificação, prévia antes de gravar faixa.** Preço sugerido
-  e margem só aparecem depois de `Adicionar faixa`. Desejado: prévia antes da
-  persistência.
+- **#8A, #8B, #8C — RESOLVIDOS na Rodada 2** (ver F).
 - **#8D — LOW/MEDIUM — Faturamento, override de preço.** Mostrar o total
   resultante antes de confirmar a alteração.
 - **#8E — LOW — Recebimento, custo efetivo.** Mostrar total e comparação com o
@@ -53,10 +45,10 @@ e a prévia de política de preço.
 - **#8H — MEDIUM — Orçamento.** Campos não controlados mantêm o total anterior
   durante a digitação. Desejado: prévia coerente antes de salvar.
 
-Também no radar, sem item próprio: Contagem de Estoque, Ordem de Compra,
-Expedição e Reservar ↔ Produzir calculam ao vivo mas ainda sem `CalcHint`;
-Custo Industrial e impacto de materiais do Pedido ficam em branco até apertar
-botão sem dizer que o valor é do que está salvo.
+Também no radar, sem item próprio: Contagem de Estoque e Reservar ↔ Produzir
+calculam ao vivo mas ainda sem `CalcHint`; Custo Industrial e impacto de
+materiais do Pedido ficam em branco até apertar botão sem dizer que o valor é
+do que está salvo. Regra durável de prévia × gravado: `PRODUCT_RULES.md` §54.
 
 ---
 
@@ -147,7 +139,31 @@ próximo reset canônico da base local/E2E. **ADIADO / MANUTENÇÃO LOCAL.**
 
 ---
 
-## F. Resolvidos recentes (2026-09-04)
+## F. Resolvidos recentes (2026-09-04 e 2026-09-05)
+
+- **#8A Ordem de Compra — total vivo** (2026-09-05). Linha, rodapé e documento
+  passam pela mesma função (`calcularTotaisOrdemCompra`, Decimal, 2 casas só
+  na saída — usada também pela API). Em edição o rodapé é "Total (prévia)";
+  o gravado aparece só quando difere, rotulado, com "salve o rascunho para
+  atualizar"; valor ilegível fica fora e é contado, nunca vira zero.
+  `web pages/purchase-orders/oc-total-previa.test.tsx`, `packages/shared/src/purchase-orders.test.ts`.
+- **#8B Expedição — já expedido, expedindo agora, restante** (2026-09-05).
+  Por produto, ao vivo: "Já expedido (antes desta)" é histórico, "Expedindo
+  agora (prévia)" soma as linhas em edição, "Restante após esta expedição" é
+  a diferença — `previaDeExpedicaoDoProduto` em `@veridi/shared`. Acima do
+  reservado ou do que falta expedir: erro dito e confirmação travada, nunca
+  saldo negativo. Toda quantidade passa por `formatQuantity`; o "Total" cru
+  entre produtos saiu. Confirmar grava o que a prévia mostrou e só então o
+  estoque cai (provado na API). `web pages/shipments/expedicao-previa.test.tsx`,
+  `modules/shipments/shipments.test.ts`, `packages/shared/src/shipments.test.ts`.
+- **#8C Precificação — prévia da faixa antes de gravar** (2026-09-05). O
+  custo da quantidade vem de `POST /pricing-versions/:id/tiers/preview`
+  (mesma validação e mesmo caminho da criação, sem gravar); preço, comissão,
+  contribuição e markup saem de `computePrice`, agora em `@veridi/shared` e
+  usado pela API — um motor só. Operando faltante não vira R$ 0,00; margem +
+  comissão ≥ 100% é recusada antes de gravar; o `CalcHint` acompanha a prévia
+  e reconcilia. `web pages/pricing/faixa-previa.test.tsx`,
+  `modules/pricing/pricing.test.ts`, `packages/shared/src/pricing-math.test.ts`.
 
 - **#12 Estimativa de custo da Formulação** — usa `selectItemCostSource`, a
   mesma seleção do cálculo de custo e do CMV: 30d → 90d → última compra →
@@ -207,7 +223,8 @@ permanece obrigatório no escopo atual.
 
 1. **Rodada 1 — aprovada:** #12 + #9 + #3 + #5 resolvidos; #4 resolvido com
    residual aceito em 1280×800.
-2. **Rodada seguinte:** #8A + #8B + #8C; avaliar #8D conforme o tamanho.
+2. **Rodada 2 — entregue (em revisão do PO):** #8A + #8B + #8C resolvidos;
+   avaliar #8D e os demais #8 quando o PO autorizar.
 3. **Validação com a Veridi:** #7 + #11.
 4. **Manutenção:** #10. #1 e #2 permanecem observação/adiados.
 5. **Rodada técnica isolada:** #14 (Schema Integrity Audit).

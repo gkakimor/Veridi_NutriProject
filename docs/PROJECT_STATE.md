@@ -10,7 +10,8 @@
 **Produção:** Railway, deploy automático da `main`; health 200, banco up,
 smoke autenticado passando. Produção não tem dado de negócio — a base foi
 limpa. **Rodada 1 do backlog** (#12, #9, #3, #5; #4 com residual aceito)
-aprovada pelo PO em 2026-09-04 e publicada pela `main`.
+publicada em 2026-09-04. **Em revisão do PO:** `feat/live-calculation-preview-round-2`
+— Rodada 2 (#8A, #8B, #8C), não mergeada.
 
 MVP operacional **validado internamente**. Blocos A a G fechados: cadastros,
 compras, recebimento e lotes, estoque e FEFO, formulações versionadas, produção
@@ -40,13 +41,9 @@ Ofertas válidas ambíguas (sem preferencial, ou com vários) ficam em "seleçã
 necessária" — nunca caem para a manual sozinhas. Regra em
 [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §53.
 
-A ajuda contextual foi revisada tela a tela: 62 telas inventariadas, 5 tópicos
-novos (estrutura de custos, lista de OPs, lista de faturamento, lista de
-formulações, escanear lote), 6 telas de criação e a de escanear passaram a
-abrir ajuda, Formulação e Pedido reescritos, vocabulário técnico removido. Um
-teste de inventário lê as rotas e exige ajuda em toda tela da casca.
-
-**Anterior:** quantidade física canônica do componente (`0673b13`, §52).
+A ajuda contextual foi revisada tela a tela (62 telas, 5 tópicos novos, 7
+telas passaram a abrir ajuda, vocabulário técnico removido); um teste de
+inventário lê as rotas e exige ajuda em toda tela da casca.
 
 ## Estado operacional do repositório
 
@@ -81,9 +78,11 @@ revisão): a estimativa de custo da Formulação usa o seletor canônico de font
 unidade" corrigido (÷ quantidade simulada) e de "Preço sugerido" conferido,
 validação inline por componente com foco no primeiro erro, tabela de
 componentes de 1681px para 1088px em 1440×900, rótulos dos modos decididos
-pelo PO; #4 fechado com residual aceito (≈117px em 1280×800). **Rodada
-seguinte, quando autorizada:** #8A–#8C cálculo ao vivo em Ordem de Compra,
-Expedição e Precificação. **Aguardando a Veridi:** #7 e #11. **Manutenção:**
+pelo PO; #4 fechado com residual aceito. **Rodada 2 entregue** (em revisão):
+OC com total em prévia, Expedição com já expedido × expedindo agora ×
+restante ao vivo, Precificação com prévia da faixa antes de gravar — regra
+durável em `PRODUCT_RULES.md` §54. **Seguinte, quando autorizada:** #8D e
+demais #8. **Aguardando a Veridi:** #7 e #11. **Manutenção:**
 #10 e #14 (Schema Integrity Audit). **Observação:** #1, #2.
 
 ## Blockers

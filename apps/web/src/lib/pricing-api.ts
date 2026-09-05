@@ -2,7 +2,9 @@ import type {
   ActivatePricingVersionInput,
   CreatePricingTierInput,
   CreatePricingVersionInput,
+  PreviewPricingTierInput,
   PricingRebasePreviewDTO,
+  PricingTierPreviewDTO,
   PricingVersionDTO,
   PricingVersionListResponse,
   ProductPricingResponse,
@@ -72,6 +74,22 @@ export async function createPricingTier(
   input: CreatePricingTierInput,
 ): Promise<PricingVersionDTO> {
   return send(`/pricing-versions/${pricingVersionId}/tiers`, "POST", input);
+}
+
+/**
+ * A faixa como ficaria se fosse adicionada agora — o servidor calcula com o
+ * mesmo caminho da criação e não grava nada.
+ */
+export async function previewPricingTier(
+  pricingVersionId: string,
+  input: PreviewPricingTierInput,
+): Promise<PricingTierPreviewDTO> {
+  const response = await apiFetch(`${API_URL}/pricing-versions/${pricingVersionId}/tiers/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await parseJsonOrThrow(response)) as PricingTierPreviewDTO;
 }
 
 export async function updatePricingTier(

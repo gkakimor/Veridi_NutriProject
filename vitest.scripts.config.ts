@@ -20,7 +20,10 @@ export default defineConfig(({ mode }) => ({
   },
   test: {
     env: loadEnv(mode, ".", ""),
-    include: ["scripts/**/*.test.ts"],
+    // As funções puras de `@veridi/shared` (Decimal, sem banco) também rodam
+    // aqui: o pacote não tem runner próprio, e uma segunda instalação de
+    // vitest só para ele seria ferramenta a mais.
+    include: ["scripts/**/*.test.ts", "packages/shared/src/**/*.test.ts"],
     // Cada teste roda o pipeline INTEIRO em dry-run sobre o corpus real e o
     // banco de desenvolvimento: são dezenas de milhares de linhas, e o
     // tempo cresce junto com a base. O padrão de 5s não descreve esse

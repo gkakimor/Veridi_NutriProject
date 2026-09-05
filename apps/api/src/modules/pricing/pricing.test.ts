@@ -1269,3 +1269,96 @@ describe("R-19 — precificação por produto", () => {
     await app.close();
   });
 });
+
+
+/**
+ * Prévia da faixa antes de gravar (BACKLOG #8C): mesma validação, mesmo
+ * custo por quantidade e mesma conta de preço da criação — e nada gravado.
+ */
+describe("Prévia da faixa — antes de gravar", () => {
+  it("devolve os mesmos números que a faixa criada e não persiste nada", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { product, calculation } = await createScenario(app, {
+      materialUnitCost: "10",
+      materialQuantityPerUnit: "1",
+    });
+    const pricing = await createPricing(app, product.id, calculation.id);
+    const entrada = {
+      quantity: "1000",
+      priceMode: "TARGET_MARGIN",
+      targetContributionMarginPercent: "30",
+      commissionPercent: "5",
+    };
+
+    const preview = await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${pricing.id}/tiers/preview`,
+      payload: entrada,
+    });
+    expect(preview.statusCode, preview.body).toBe(200);
+    const previa = preview.json();
+    expect(previa.industrialCostPerUnit).toBe("10.001000");
+    expect(previa.suggestedUnitPrice).toBe("15.386154");
+    expect(previa.id).toBeUndefined();
+
+    // Nada gravado: a versão continua sem faixa, no banco e na leitura.
+    const semFaixa = (await app.inject({ method: "GET", url: `/pricing-versions/${pricing.id}` })).json();
+    expect(semFaixa.tiers).toHaveLength(0);
+    expect(await getPrisma().pricingTier.count({ where: { pricingVersionId: pricing.id } })).toBe(0);
+
+    // Adicionar grava exatamente o que a prévia mostrou.
+    const criada = tierOf((await addTier(app, pricing.id, entrada)).json(), "1000");
+    for (const campo of [
+      "industrialCostPerUnit",
+      "industrialCostTotal",
+      "batchCount",
+      "costQuality",
+      "suggestedUnitPrice",
+      "selectedUnitPrice",
+      "commissionPerUnit",
+      "contributionPerUnit",
+      "contributionMarginPercent",
+      "markupPercent",
+    ]) {
+      expect((criada as Record<string, unknown>)[campo], campo).toBe(previa[campo]);
+    }
+
+    // A mesma quantidade agora é duplicada — a prévia recusa como a criação.
+    const duplicada = await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${pricing.id}/tiers/preview`,
+      payload: entrada,
+    });
+    expect(duplicada.statusCode).toBe(409);
+
+    await app.close();
+  });
+
+  it("recusa margem somada à comissão em 100% e quantidade inválida sem tocar no banco", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { product, calculation } = await createScenario(app, { materialUnitCost: "10" });
+    const pricing = await createPricing(app, product.id, calculation.id);
+
+    const impossivel = await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${pricing.id}/tiers/preview`,
+      payload: { quantity: "500", priceMode: "TARGET_MARGIN", targetContributionMarginPercent: "70", commissionPercent: "30" },
+    });
+    expect(impossivel.statusCode).toBe(400);
+    expect(impossivel.json().message).toMatch(/100%/);
+
+    const zero = await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${pricing.id}/tiers/preview`,
+      payload: { quantity: "0", priceMode: "TARGET_MARGIN", targetContributionMarginPercent: "30", commissionPercent: "5" },
+    });
+    expect(zero.statusCode).toBe(400);
+    expect(await getPrisma().pricingTier.count({ where: { pricingVersionId: pricing.id } })).toBe(0);
+
+    await app.close();
+  });
+});

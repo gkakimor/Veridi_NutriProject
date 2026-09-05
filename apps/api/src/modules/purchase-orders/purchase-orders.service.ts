@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { CustomerOrder, Item, PurchaseOrder, PurchaseOrderLine, ReceiptLine, Supplier } from "@prisma/client";
 import type { PurchaseOrderDTO, PurchaseOrderLineDTO, PurchaseOrderListResponse } from "@veridi/shared";
-import { PURCHASE_ORDER_CODE_PREFIX } from "@veridi/shared";
+import { PURCHASE_ORDER_CODE_PREFIX, calcularTotaisOrdemCompra } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -66,11 +66,6 @@ const purchaseOrderInclude = {
   },
 } as const;
 
-/** TOTAL em dinheiro (BRL): 2 casas. So para valor ja somado. */
-function formatMoney(value: Prisma.Decimal): string {
-  return value.toFixed(2);
-}
-
 /**
  * PRECO UNITARIO: as 4 casas que `purchase_order_lines.unitPrice` guarda.
  *
@@ -83,7 +78,12 @@ function formatUnitPrice(value: Prisma.Decimal): string {
 }
 
 function toLineDTO(line: LineWithReceipts): PurchaseOrderLineDTO {
-  const lineTotal = line.unitPrice ? line.orderedQuantity.times(line.unitPrice) : null;
+  // A MESMA conta que a tela usa na prévia (`@veridi/shared`): quantidade ×
+  // preço, 2 casas só na saída. Nunca duas versões do total.
+  const { lineTotals } = calcularTotaisOrdemCompra([
+    { orderedQuantity: line.orderedQuantity.toString(), unitPrice: line.unitPrice ? line.unitPrice.toString() : null },
+  ]);
+  const lineTotal = lineTotals[0] ?? null;
   const receivedQuantity = line.receiptLines.reduce(
     (sum, receiptLine) => sum.plus(receiptLine.receivedQuantity),
     new Prisma.Decimal(0),
@@ -97,7 +97,7 @@ function toLineDTO(line: LineWithReceipts): PurchaseOrderLineDTO {
     unitCode: line.unitCode,
     orderedQuantity: line.orderedQuantity.toString(),
     unitPrice: line.unitPrice ? formatUnitPrice(line.unitPrice) : null,
-    lineTotal: lineTotal ? formatMoney(lineTotal) : null,
+    lineTotal,
     receivedQuantity: receivedQuantity.toString(),
     openQuantity: openQuantity.toString(),
   };
@@ -106,12 +106,14 @@ function toLineDTO(line: LineWithReceipts): PurchaseOrderLineDTO {
 function toPurchaseOrderDTO(po: PurchaseOrderWithLines): PurchaseOrderDTO {
   const lines = po.lines.map(toLineDTO);
 
-  let orderTotal: Prisma.Decimal | null = null;
-  for (const line of po.lines) {
-    if (!line.unitPrice) continue;
-    const lineTotal = line.orderedQuantity.times(line.unitPrice);
-    orderTotal = orderTotal ? orderTotal.plus(lineTotal) : lineTotal;
-  }
+  // Soma pela função canônica — a tela da OC em edição mostra a MESMA conta
+  // como prévia, então o total gravado e o total previsto nunca divergem.
+  const { orderTotal } = calcularTotaisOrdemCompra(
+    po.lines.map((line) => ({
+      orderedQuantity: line.orderedQuantity.toString(),
+      unitPrice: line.unitPrice ? line.unitPrice.toString() : null,
+    })),
+  );
 
   return {
     id: po.id,
@@ -125,7 +127,7 @@ function toPurchaseOrderDTO(po: PurchaseOrderWithLines): PurchaseOrderDTO {
     status: po.status,
     notes: po.notes,
     lines,
-    orderTotal: orderTotal ? formatMoney(orderTotal) : null,
+    orderTotal,
     origin: po.origin,
     customerOrderId: po.customerOrderId,
     customerOrderCode: po.customerOrder ? po.customerOrder.code : null,

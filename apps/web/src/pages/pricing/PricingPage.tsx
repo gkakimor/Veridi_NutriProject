@@ -1,10 +1,15 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ProductRelatedLinks } from "../../components/ProductRelatedLinks";
 import { EntityLink } from "../../components/EntityLink";
 import { ProjectOriginLink } from "../../components/ProjectOriginLink";
-import type { PriceMode, PricingRebasePreviewDTO, PricingVersionDTO } from "@veridi/shared";
+import type {
+  PriceMode,
+  PricingRebasePreviewDTO,
+  PricingTierPreviewDTO,
+  PricingVersionDTO,
+} from "@veridi/shared";
 import {
   COMMISSION_BASE_DESCRIPTION,
   CONTRIBUTION_DEFINITION,
@@ -12,6 +17,7 @@ import {
   PRICE_MODE_LABELS,
   PRICE_MODES,
   PRICING_VERSION_STATUS_LABELS,
+  computePrice,
 } from "@veridi/shared";
 import { CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -28,6 +34,7 @@ import {
   createPricingTier,
   deletePricingTier,
   getPricingRebasePreview,
+  previewPricingTier,
   rebasePricingVersion,
   getPricingVersion,
 } from "../../lib/pricing-api";
@@ -35,6 +42,7 @@ import { formatDate } from "../../lib/dates";
 import { formatPercent } from "../../lib/percent";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
+import { parseDecimalInput } from "../../lib/decimal-input";
 import { PricingPolicyOrigin } from "../cost-templates/PricingPolicyOrigin";
 
 function statusBadgeClass(status: string): string {
@@ -75,6 +83,105 @@ export function PricingPage() {
   const [manualPrice, setManualPrice] = useState("");
 
   const canEdit = user?.role === "COMMERCIAL" || user?.role === "ADMIN";
+
+  /*
+   * PRÉVIA DA FAIXA — antes de gravar.
+   *
+   * Preço, margem e contribuição só apareciam depois de "Adicionar faixa":
+   * a gravação era pré-requisito para descobrir se o valor fazia sentido.
+   * Duas partes, dois ritmos:
+   *
+   * 1. o CUSTO da quantidade vem do servidor (`previewPricingTier`, o mesmo
+   *    caminho da criação — custo fixo por lote e caixa inteira não se
+   *    calculam no navegador), pedido com folga de 300ms enquanto a
+   *    quantidade muda;
+   * 2. preço, comissão, contribuição e markup saem de `computePrice`, a conta
+   *    canônica de `@veridi/shared` que a API também usa, na hora, a cada
+   *    tecla de margem ou comissão. Nada aqui é segundo motor.
+   *
+   * Nada disso grava: só "Adicionar faixa" cria a faixa, e o servidor
+   * recalcula tudo ao gravar.
+   */
+  const [custoDaPrevia, setCustoDaPrevia] = useState<PricingTierPreviewDTO | null>(null);
+  const [previaErro, setPreviaErro] = useState<string | null>(null);
+  const [previaCarregando, setPreviaCarregando] = useState(false);
+  const quantidadeLegivel = quantity.trim() === "" ? null : parseDecimalInput(quantity);
+  const editavel = canEdit && pricing?.status === "DRAFT";
+
+  useEffect(() => {
+    if (!editavel || !pricing) return;
+    if (quantidadeLegivel === null || Number(quantidadeLegivel) <= 0) {
+      setCustoDaPrevia(null);
+      setPreviaErro(null);
+      setPreviaCarregando(false);
+      return;
+    }
+    let vivo = true;
+    setPreviaCarregando(true);
+    const timer = setTimeout(() => {
+      // Só a quantidade importa para o custo: modo e percentuais entram na
+      // conta local, para a prévia não cair por um percentual em digitação.
+      previewPricingTier(pricing.id, {
+        quantity: quantidadeLegivel,
+        priceMode: "MANUAL_PRICE",
+        commissionPercent: "0",
+      })
+        .then((custo) => {
+          if (!vivo) return;
+          setCustoDaPrevia(custo);
+          setPreviaErro(null);
+        })
+        .catch((err: unknown) => {
+          if (!vivo) return;
+          setCustoDaPrevia(null);
+          setPreviaErro(apiErrorMessage(err, "Não foi possível calcular a prévia."));
+        })
+        .finally(() => {
+          if (vivo) setPreviaCarregando(false);
+        });
+    }, 300);
+    return () => {
+      vivo = false;
+      clearTimeout(timer);
+    };
+  }, [editavel, pricing?.id, quantidadeLegivel]);
+
+  /** A parte comercial da prévia, imediata, pela conta canônica. */
+  const previa = useMemo(() => {
+    if (!custoDaPrevia) return null;
+    const comissao = commission.trim() === "" ? "0" : parseDecimalInput(commission);
+    const margem = priceMode === "TARGET_MARGIN" ? parseDecimalInput(targetMargin) : null;
+    const manual = priceMode === "MANUAL_PRICE" ? parseDecimalInput(manualPrice) : null;
+    if (comissao === null) return { faltando: "Comissão ilegível — use vírgula ou ponto." };
+    if (priceMode === "TARGET_MARGIN" && (targetMargin.trim() === "" || margem === null)) {
+      return { faltando: "Preencha a margem de contribuição desejada para ver o preço." };
+    }
+    if (priceMode === "MANUAL_PRICE" && (manualPrice.trim() === "" || manual === null)) {
+      return { faltando: "Informe o preço unitário para ver margem e contribuição." };
+    }
+    // Mesmos limites da API: percentual entre 0 e 100, e margem + comissão < 100.
+    if (Number(comissao) < 0 || Number(comissao) >= 100) {
+      return { erro: "A comissão deve ficar entre 0% e 100%." };
+    }
+    if (margem !== null && (Number(margem) < 0 || Number(margem) >= 100)) {
+      return { erro: "A margem desejada deve ficar entre 0% e 100%." };
+    }
+    if (margem !== null && Number(margem) + Number(comissao) >= 100) {
+      return { erro: "Margem somada à comissão atinge 100% — não existe preço que satisfaça." };
+    }
+    return {
+      resultado: computePrice({
+        priceMode,
+        quantity: custoDaPrevia.quantity,
+        costPerUnit: custoDaPrevia.industrialCostPerUnit,
+        targetMarginPercent: margem,
+        commissionPercent: comissao,
+        manualUnitPrice: manual,
+      }),
+      margem,
+      comissao,
+    };
+  }, [custoDaPrevia, commission, targetMargin, manualPrice, priceMode]);
 
   const load = useCallback(() => {
     if (!pricingId) return;
@@ -463,6 +570,100 @@ export function PricingPage() {
                   />
                   <span className="field__hint">{COMMISSION_BASE_DESCRIPTION}</span>
                 </div>
+              </div>
+
+              {/* A prévia mora entre os campos e o botão: é o que se lê antes
+                  de decidir gravar. Nunca R$ 0,00 no lugar de "falta dado". */}
+              <div className="tier-preview" aria-live="polite">
+                <h4 className="tier-preview__titulo">Prévia da faixa</h4>
+                {quantidadeLegivel === null || Number(quantidadeLegivel) <= 0 ? (
+                  <p className="field__hint">
+                    Preencha a quantidade{priceMode === "TARGET_MARGIN" ? ", a margem" : ", o preço"} e a
+                    comissão para ver a prévia. Nada é gravado até "Adicionar faixa".
+                  </p>
+                ) : previaErro ? (
+                  <p className="form-alert form-alert--inline" role="status">
+                    {previaErro}
+                  </p>
+                ) : previaCarregando && !custoDaPrevia ? (
+                  <p className="field__hint">Calculando o custo desta quantidade…</p>
+                ) : previa && "faltando" in previa ? (
+                  <p className="field__hint">{previa.faltando}</p>
+                ) : previa && "erro" in previa ? (
+                  <p className="form-alert form-alert--inline" role="status">
+                    {previa.erro}
+                  </p>
+                ) : previa && custoDaPrevia ? (
+                  <>
+                    <dl className="definition-list tier-preview__dados">
+                      <dt>Custo utilizado (por unidade)</dt>
+                      <dd>
+                        {formatUnitCost(custoDaPrevia.industrialCostPerUnit)}
+                        {custoDaPrevia.industrialCostTotal === null && (
+                          <span className="field__hint"> — subtotal conhecido {formatBRL(custoDaPrevia.knownSubtotal)}</span>
+                        )}
+                        <span className="field__hint">
+                          {" "}· {custoDaPrevia.batchCount}{" "}
+                          {custoDaPrevia.batchCount === "1" ? "lote" : "lotes"} ·{" "}
+                          {INDUSTRIAL_COST_QUALITY_LABELS[custoDaPrevia.costQuality]}
+                        </span>
+                      </dd>
+                      <dt>Preço sugerido</dt>
+                      <dd>
+                        {previa.resultado.suggestedUnitPrice === null ? (
+                          <span className="field__hint">
+                            {priceMode === "MANUAL_PRICE"
+                              ? "— (preço informado à mão)"
+                              : "indisponível — custo incompleto para esta quantidade"}
+                          </span>
+                        ) : (
+                          <>
+                            {formatUnitCost(previa.resultado.suggestedUnitPrice)}
+                            {previa.margem !== null && custoDaPrevia.industrialCostPerUnit !== null && (
+                              <CalcHint
+                                label="Preço sugerido (prévia)"
+                                operandos={[
+                                  {
+                                    valor: formatUnitCost(custoDaPrevia.industrialCostPerUnit),
+                                    papel: "custo por unidade",
+                                    numero: Number(custoDaPrevia.industrialCostPerUnit),
+                                  },
+                                  {
+                                    valor: `(1 − ${formatPercent(previa.margem)} − ${formatPercent(previa.comissao)})`,
+                                    papel: "margem de contribuição e comissão",
+                                    operador: "÷",
+                                    numero: 1 - Number(previa.margem) / 100 - Number(previa.comissao) / 100,
+                                  },
+                                ]}
+                                resultado={formatUnitCost(previa.resultado.suggestedUnitPrice)}
+                                nota="A comissão incide sobre o preço bruto de venda e sai de dentro dele — por isso o custo é dividido, não multiplicado. Margem de contribuição não é lucro."
+                              />
+                            )}
+                          </>
+                        )}
+                      </dd>
+                      <dt>Preço escolhido</dt>
+                      <dd>{formatUnitCost(previa.resultado.selectedUnitPrice)}</dd>
+                      <dt>Comissão por unidade</dt>
+                      <dd>{formatUnitCost(previa.resultado.commissionPerUnit)}</dd>
+                      <dt>Contribuição por unidade</dt>
+                      <dd>{formatUnitCost(previa.resultado.contributionPerUnit)}</dd>
+                      <dt>Margem resultante</dt>
+                      <dd>{formatPercent(previa.resultado.contributionMarginPercent)}</dd>
+                      <dt>Markup</dt>
+                      <dd>{formatPercent(previa.resultado.markupPercent)}</dd>
+                    </dl>
+                    {[...custoDaPrevia.warnings, ...previa.resultado.warnings].map((warning, index) => (
+                      <p key={`${index}-${warning.code}`} className="field__hint">
+                        {warning.message}
+                      </p>
+                    ))}
+                    <p className="field__hint">
+                      Prévia: nada foi gravado. "Adicionar faixa" grava esta faixa com estes
+                      valores, recalculados pelo servidor.
+                    </p>
+                  </>
+                ) : null}
               </div>
 
               <div className="line-actions">

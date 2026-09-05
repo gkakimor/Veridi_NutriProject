@@ -349,7 +349,9 @@ describe("Ordem de Compra — vírgula decimal", () => {
     // A conta acontece no navegador, e é o primeiro lugar onde a vírgula
     // aparecia como mentira: a coluna Total virava "—" no exato momento em
     // que a pessoa terminava de digitar o preço.
-    expect(await screen.findByText("R$ 50,00")).toBeInTheDocument();
+    // O mesmo número aparece na linha e no rodapé "Total (prévia)" — os dois
+    // vêm da mesma conta, e é isso que se quer.
+    expect((await screen.findAllByText("R$ 50,00")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
 

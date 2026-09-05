@@ -3545,3 +3545,23 @@ depois, não reescrevem o documento. Um cálculo novo pode usar a fonte nova.
 Material de propriedade do cliente continua **não aplicável** mesmo que o Item
 tenha referência manual: a referência pertence ao Item; o custo de aquisição da
 OP e do CMV depende também de quem é o dono do material.
+
+## §54 — Prévia e número gravado nunca se confundem
+
+Se uma tela permite editar operandos antes de salvar ou confirmar, todo número
+derivado exibido junto deles é, inequivocamente, uma de duas coisas:
+
+1. **prévia** — recalculado ao vivo com os valores atuais da tela, pela mesma
+   função que o servidor usa (função pura em `@veridi/shared`, ou o endpoint de
+   prévia do próprio recurso quando a conta depende do servidor);
+2. **gravado** — identificado como pertencente ao último salvamento
+   ("Gravado", "Valor do último salvamento", "Atualizado após salvar").
+
+É proibido mostrar dois números de momentos diferentes sem dizer qual é qual.
+A prévia nunca persiste, nunca move estoque, reserva ou linha, e nunca é
+enviada ao servidor como se fosse dado: quem grava é a ação explícita
+(salvar, confirmar, adicionar), e o servidor recalcula ao gravar. Operando
+ausente ou ilegível não vira zero na prévia — fica fora e é dito. Vale para a
+Ordem de Compra (total previsto), a Expedição (já expedido × expedindo agora ×
+restante) e a Precificação (prévia da faixa), e é o padrão para as demais
+telas do BACKLOG #8.

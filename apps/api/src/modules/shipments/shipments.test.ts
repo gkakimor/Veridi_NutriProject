@@ -3,6 +3,7 @@ import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
+import { previaDeExpedicaoDoProduto } from "@veridi/shared";
 
 const fixtureCustomerOrderIds: string[] = [];
 const fixtureProductIds: string[] = [];
@@ -897,6 +898,88 @@ describe("Hardening — bloqueio de lote reservado", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().message).toContain("reservada");
+
+    await app.close();
+  });
+});
+
+
+/**
+ * A prévia da tela (BACKLOG #8B) e a confirmação são a mesma conta: o que
+ * `previaDeExpedicaoDoProduto` diz sobre o rascunho é o que o servidor grava
+ * ao confirmar — e o estoque só muda nesse ato.
+ */
+describe("Prévia da expedição × confirmação", () => {
+  it("expedição parcial: a prévia bate com o confirmado, e o estoque só cai ao confirmar", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const finishedItem = await createFinishedItem();
+    await stockFinishedLot(finishedItem.id, "300");
+    const product = await createProduct(app, finishedItem.id);
+    const order = await createOrderInFulfillment(app, product.id, "100", "100");
+    const draft = (await prepareShipment(app, order.id)).json();
+    await setShipmentLines(app, draft.id, [
+      { customerOrderReservationLineId: draft.lines[0].customerOrderReservationLineId, quantity: "40" },
+    ]);
+
+    const rascunho = await getShipment(app, draft.id);
+    const grupo = rascunho.products[0];
+    const previa = previaDeExpedicaoDoProduto({
+      outstandingQuantity: grupo.outstandingQuantity,
+      linhas: rascunho.lines.map((line: { id: string; reservedRemaining: string; quantity: string }) => ({
+        id: line.id,
+        reservedRemaining: line.reservedRemaining,
+        quantity: line.quantity,
+      })),
+    });
+    expect(previa.expedindoAgora).toBe(grupo.shippingNow);
+    expect(previa.expedindoAgora).toBe("40");
+    expect(previa.restanteDepois).toBe("60");
+    expect(previa.acimaDoQueFalta).toBe(false);
+    expect(previa.linhasAcimaDoReservado).toEqual([]);
+
+    // Separar e prever não movem estoque.
+    const antes = await getInventory(app, finishedItem.id);
+    expect(antes.onHand).toBe("300");
+    expect(antes.reserved).toBe("100");
+
+    await verifyAllLots(app, draft.id);
+    const confirmada = (await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` })).json();
+    const depois = confirmada.products[0];
+    expect(depois.shippingNow).toBe(previa.expedindoAgora);
+    expect(depois.shippedQuantity).toBe(previa.expedindoAgora);
+    expect(depois.outstandingQuantity).toBe(previa.restanteDepois);
+
+    const estoque = await getInventory(app, finishedItem.id);
+    expect(estoque.onHand).toBe("260");
+    expect(estoque.reserved).toBe("60");
+
+    await app.close();
+  });
+
+  it("acima do reservado a prévia acusa a linha e o servidor recusa a separação", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const finishedItem = await createFinishedItem();
+    await stockFinishedLot(finishedItem.id, "300");
+    const product = await createProduct(app, finishedItem.id);
+    const order = await createOrderInFulfillment(app, product.id, "100", "100");
+    const draft = (await prepareShipment(app, order.id)).json();
+    const linha = draft.lines[0];
+
+    const previa = previaDeExpedicaoDoProduto({
+      outstandingQuantity: draft.products[0].outstandingQuantity,
+      linhas: [{ id: linha.id, reservedRemaining: linha.reservedRemaining, quantity: "101" }],
+    });
+    expect(previa.linhasAcimaDoReservado).toEqual([linha.id]);
+    expect(previa.acimaDoQueFalta).toBe(true);
+
+    const recusada = await setShipmentLines(app, draft.id, [
+      { customerOrderReservationLineId: linha.customerOrderReservationLineId, quantity: "101" },
+    ]);
+    expect(recusada.statusCode).toBe(400);
 
     await app.close();
   });
