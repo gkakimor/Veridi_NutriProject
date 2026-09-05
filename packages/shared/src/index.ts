@@ -21,6 +21,7 @@ export * from "./industrial-costs.js";
 export * from "./industrial-resources.js";
 export * from "./industrial-cost-calculation.js";
 export * from "./pricing.js";
+export * from "./pricing-math.js";
 export * from "./cnpj.js";
 export * from "./contact.js";
 export * from "./br-states.js";

@@ -1,6 +1,56 @@
 /** Contratos do módulo de Ordens de Compra, consumidos por `apps/api` e `apps/web`. */
 
+import Decimal from "decimal.js";
+
 export const PURCHASE_ORDER_CODE_PREFIX = "OC";
+
+export interface LinhaParaTotalDaOrdem {
+  /** Como está no documento ou como foi digitada, já legível; `null` quando não há. */
+  orderedQuantity: string | null;
+  unitPrice: string | null;
+}
+
+export interface TotaisDaOrdemDeCompra {
+  /** `orderedQuantity × unitPrice` por linha, 2 casas; `null` sem preço ou sem quantidade. */
+  lineTotals: (string | null)[];
+  /** Soma das linhas com preço, 2 casas só na saída; `null` se nenhuma tiver preço. */
+  orderTotal: string | null;
+}
+
+/**
+ * A conta do total previsto da OC — uma só, para a API e para a tela.
+ *
+ * A tela somava `Number(qty) * Number(price)` enquanto a API somava em
+ * `Decimal`, e o rodapé de uma OC gravada mostrava o `orderTotal` do último
+ * salvamento ao lado de linhas recalculadas ao vivo: número vivo ao lado de
+ * número velho. Agora a prévia e o documento passam pela mesma função. Nada é
+ * arredondado antes da soma; as 2 casas entram só na saída, como o total em
+ * dinheiro sempre foi.
+ */
+export function calcularTotaisOrdemCompra(lines: LinhaParaTotalDaOrdem[]): TotaisDaOrdemDeCompra {
+  let orderTotal: Decimal | null = null;
+  const lineTotals: (string | null)[] = [];
+  for (const line of lines) {
+    if (line.orderedQuantity === null || line.unitPrice === null) {
+      lineTotals.push(null);
+      continue;
+    }
+    let total: Decimal;
+    try {
+      total = new Decimal(line.orderedQuantity).times(line.unitPrice);
+    } catch {
+      lineTotals.push(null);
+      continue;
+    }
+    if (!total.isFinite()) {
+      lineTotals.push(null);
+      continue;
+    }
+    orderTotal = orderTotal === null ? total : orderTotal.plus(total);
+    lineTotals.push(total.toFixed(2));
+  }
+  return { lineTotals, orderTotal: orderTotal === null ? null : orderTotal.toFixed(2) };
+}
 
 export type PurchaseOrderStatus =
   | "DRAFT"

@@ -245,6 +245,14 @@ export interface CreatePricingTierInput {
   notes?: string | null;
 }
 
+/**
+ * A faixa como ficaria se fosse adicionada AGORA — mesma conta da criação,
+ * sem gravar nada. É o que a tela mostra enquanto a pessoa preenche.
+ */
+export type PricingTierPreviewDTO = Omit<PricingTierDTO, "id" | "sortOrder" | "notes">;
+
+export type PreviewPricingTierInput = Omit<CreatePricingTierInput, "notes">;
+
 export interface UpdatePricingTierInput {
   quantity?: string;
   priceMode?: PriceMode;

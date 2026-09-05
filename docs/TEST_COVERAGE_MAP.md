@@ -86,6 +86,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Faturamento herda o preço acordado do Pedido | — | `modules/billings/billing-price.test.ts` |
 | Preço unitário exibe 2 a 4 casas e não é arredondado antes da conta | achado adversarial: `R$ 4,05` ao lado de total sobre `4,0531` | `modules/billings/billing-price.test.ts`, `web lib/currency` |
 | Total do documento é a soma das linhas impressas | drift de centavo | `modules/billings/billing-price.test.ts` |
+| Expedição em edição: já expedido (histórico), expedindo agora (prévia das linhas) e restante após — mesma conta da confirmação; acima do reservado ou do que falta trava, nunca saldo negativo; estoque só muda ao confirmar | "Expedindo agora" gravado ao lado de quantidade viva; "Total" cru entre produtos | `packages/shared/src/shipments.test.ts`, `modules/shipments/shipments.test.ts`, `web pages/shipments/expedicao-previa.test.tsx` |
 | Faturamento exige Expedição CONFIRMED | — | `modules/billings/billings.test.ts` |
 
 ## Rastreabilidade e recall
@@ -123,12 +124,14 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Estimativa da Formulação usa o MESMO seletor (30d, 90d, última, oferta única/preferencial, ambígua fail-closed, manual, desconhecido, cliente não aplicável, `referenceDate`); Formulação × motor do CMV: mesma fonte e mesmo custo unitário | estimativa lia só compra real e discordava do CMV | `modules/costs/formulation-cost-estimate.test.ts` |
 | CMV por unidade = CMV total ÷ quantidade SIMULADA (não ÷ lote de referência); a explicação confere e acusa divergência | explicação dividia pelo lote, sem conferência | `modules/product-cmv/product-cmv.test.ts`, `web pages/product-cmv/cmv.test.tsx` |
 | Preço sugerido explicado e conferido: custo ÷ (1 − margem − comissão) | explicação sem conferência | `web pages/cost-templates/pricing-policies.test.tsx` |
+| Prévia da faixa antes de gravar: custo da quantidade pelo mesmo caminho da criação (`tiers/preview`, sem persistir), preço/contribuição/markup por `computePrice` de `@veridi/shared` (um motor); operando faltante sem R$ 0,00; margem + comissão ≥ 100% recusada | preço só aparecia depois de gravar | `packages/shared/src/pricing-math.test.ts`, `modules/pricing/pricing.test.ts`, `web pages/pricing/faixa-previa.test.tsx` |
 
 ## Apresentação e entrada
 
 | Regra | Origem do risco | Proteção canônica |
 |---|---|---|
 | Decimal pt-BR: vírgula, sem adivinhar milhar | separador único vira casa decimal | `web lib/decimal-input.test.ts` |
+| OC em edição: linha, rodapé e documento pela mesma conta (`calcularTotaisOrdemCompra`); "Total (prévia)" com o gravado rotulado só quando difere; ilegível fora da prévia e contado | rodapé mostrava o total gravado ao lado de linhas vivas | `packages/shared/src/purchase-orders.test.ts`, `modules/purchase-orders/purchase-orders.test.ts`, `web pages/purchase-orders/oc-total-previa.test.tsx` |
 | Quantidade não inventa precisão; pequeno vira `≈ 0`, nunca `0` | zero significa "não precisa de material" | `web lib/quantity` |
 | Filtro de lista não oferece opção que a consulta recusa | achado adversarial | `modules/list-filter-options.test.ts` |
 | Mensagem de erro tem `role` e é anunciada | 125 mensagens sem voz | `web` testes de formulário |

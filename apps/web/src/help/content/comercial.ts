@@ -741,6 +741,10 @@ export const comercialTopics = {
         text: "Quanto sai nesta expedição. Limitado ao reservado disponível do lote e ao que ainda falta expedir daquele produto no pedido: vale o menor dos dois.",
       },
       {
+        term: "Já expedido, expedindo agora e restante",
+        text: "Três números diferentes por produto. Já expedido é o histórico das expedições confirmadas antes desta. Expedindo agora é a prévia da separação em edição: muda a cada quantidade digitada, sem gravar nada. Restante após esta expedição é o que ainda faltará do pedido depois de confirmar. Quantidade acima do que falta não vira saldo negativo: a linha avisa e a confirmação fica travada até corrigir.",
+      },
+      {
         term: "Conferência",
         text: "Ler o lote físico para confirmar que é o lote reservado nesta linha. Responde só “o lote certo está aqui?”: não movimenta estoque e nunca infere quantidade.",
       },

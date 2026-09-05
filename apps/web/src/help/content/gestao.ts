@@ -67,7 +67,7 @@ export const gestaoTopics = {
       {
         label: "Montar as faixas",
         detail:
-          "Uma linha por quantidade, cada uma com o seu modo, a margem desejada e a comissão. Enquanto é rascunho, nada foi prometido a ninguém.",
+          "Uma linha por quantidade, cada uma com o seu modo, a margem desejada e a comissão. Ao preencher, a Prévia da faixa mostra custo, preço sugerido, comissão, contribuição e markup antes de gravar — nada é criado até “Adicionar faixa”. Enquanto é rascunho, nada foi prometido a ninguém.",
       },
       {
         label: "Ler os números",
@@ -91,7 +91,7 @@ export const gestaoTopics = {
       "Custo incompleto não vira preço pela margem: o preço sugerido fica em branco e a faixa não ativa nesse modo. Preço informado à mão é aceito sobre custo incompleto, mas margem, markup e contribuição continuam em branco — margem calculada sobre subtotal conhecido pareceria segura e não seria.",
       "Ativar assim mesmo é possível e exige confirmação explícita, tanto com custo incompleto quanto quando o cálculo aponta para uma estrutura de custos que já não é a ativa do produto.",
       "Trocar a base tem dois caminhos, e a tela mostra a diferença antes: no rascunho a base é trocada nele mesmo e o documento continua o mesmo; sobre uma versão ativa nasce um rascunho novo com as faixas copiadas, e a ativa fica intacta.",
-      "Nada é calculado na tela. Os números de uma faixa aparecem depois de ela ser adicionada — não há prévia enquanto se digita — e, ao ativar, tudo é refeito do zero: os números que estavam à vista são ignorados.",
+      "A Prévia da faixa usa a mesma conta do servidor: o custo da quantidade vem do cálculo salvo, e preço, comissão, contribuição e markup saem da regra de precificação — sem margem, comissão ou quantidade preenchidas ela não mostra preço nenhum, e margem somada à comissão em 100% é recusada antes de gravar. Ao adicionar e ao ativar, o servidor refaz tudo: os números da prévia nunca são enviados como se fossem dados.",
       "Custo e preço são colunas diferentes da mesma faixa: custo por unidade vem do cálculo salvo; preço sugerido, preço escolhido, margem resultante, markup e contribuição são a decisão comercial sobre ele.",
       "Quantidade abaixo do lote mínimo do produto é aviso, nunca correção automática: a quantidade digitada é a que fica.",
       "O sistema não arredonda preço por conta própria — 15,3846 continua 15,3846 até alguém decidir outra coisa. E contribuição negativa aparece como está: preço abaixo do custo é informação comercial, não erro a esconder.",

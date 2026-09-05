@@ -6,9 +6,58 @@
  * pedida/reservada/planejada.
  */
 
+import Decimal from "decimal.js";
 import type { ShipmentBillingStatus } from "./billings.js";
 
 export const SHIPMENT_CODE_PREFIX = "EXP";
+
+export interface LinhaDaPreviaDeExpedicao {
+  id: string;
+  /** Teto da linha: o que continua reservado a este pedido naquele lote. */
+  reservedRemaining: string;
+  /** Quantidade que se pretende enviar agora, já legível. */
+  quantity: string;
+}
+
+export interface PreviaDeExpedicaoDoProduto {
+  /** Soma das linhas deste produto como estão na tela. */
+  expedindoAgora: string;
+  /** `falta expedir − expedindo agora`; negativo só para dizer que passou — nunca se mostra como saldo. */
+  restanteDepois: string;
+  /** Linhas cuja quantidade passa do reservado disponível do lote. */
+  linhasAcimaDoReservado: string[];
+  /** A soma passa do que ainda falta expedir do produto no pedido. */
+  acimaDoQueFalta: boolean;
+}
+
+/**
+ * O que esta expedição faz com o produto do pedido, ANTES de confirmar.
+ *
+ * Três conceitos que a tela misturava num "Total": o que já saiu em
+ * expedições confirmadas (histórico), o que sai nesta (as linhas em edição) e
+ * o que sobra do pedido depois. A conta é a mesma que o servidor aplica ao
+ * confirmar — soma por produto contra `outstandingQuantity`, linha a linha
+ * contra `reservedRemaining` — sem mover estoque, reserva ou linha alguma.
+ */
+export function previaDeExpedicaoDoProduto(input: {
+  outstandingQuantity: string;
+  linhas: LinhaDaPreviaDeExpedicao[];
+}): PreviaDeExpedicaoDoProduto {
+  let soma = new Decimal(0);
+  const linhasAcimaDoReservado: string[] = [];
+  for (const linha of input.linhas) {
+    const quantidade = new Decimal(linha.quantity);
+    soma = soma.plus(quantidade);
+    if (quantidade.greaterThan(linha.reservedRemaining)) linhasAcimaDoReservado.push(linha.id);
+  }
+  const restante = new Decimal(input.outstandingQuantity).minus(soma);
+  return {
+    expedindoAgora: soma.toString(),
+    restanteDepois: restante.toString(),
+    linhasAcimaDoReservado,
+    acimaDoQueFalta: restante.lessThan(0),
+  };
+}
 
 /** `CONFIRMED` é histórico imutável — reversão exigiria devolução/reentrada explícita, fora desta fase. */
 export type ShipmentStatus = "DRAFT" | "CONFIRMED" | "CANCELLED";

@@ -36,6 +36,7 @@ import {
   getPricingRebasePreview,
   rebasePricingVersion,
   getPricingVersion,
+  previewPricingTier,
   getProductPricing,
   listPricingVersions,
   updatePricingTier,
@@ -221,6 +222,29 @@ export const pricingRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
       return reply.send(await updatePricingVersion(id, parsed.data, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  /**
+   * A faixa como ficaria — sem gravar. Mesma validação e mesma conta da
+   * criação; quem pode ler a precificação pode ver a prévia.
+   */
+  app.post("/pricing-versions/:id/tiers/preview", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      requireRole(request, ...READ_ROLES);
+      const parsed = createPricingTierSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      const { notes: _notes, ...input } = parsed.data;
+      return reply.send(await previewPricingTier(id, input));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

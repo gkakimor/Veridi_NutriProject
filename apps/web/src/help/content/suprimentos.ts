@@ -62,6 +62,10 @@ export const suprimentosTopics = {
         term: "Total e previsão",
         text: "Na lista, Total é a soma dos preços previstos das linhas e Previsão é a data de entrega prevista. Os dois são compromisso comercial, não custo nem estoque.",
       },
+      {
+        term: "Total (prévia)",
+        text: "Enquanto a ordem é rascunho, o total do rodapé é a prévia do que está na tela: muda a cada quantidade ou preço digitado, pela mesma conta que o documento usa. Se difere do que está gravado, a tela diz o valor gravado ao lado — salvar o rascunho é o que atualiza o documento. Linha com valor ilegível fica fora da prévia e é contada, nunca vira zero.",
+      },
     ],
     flow: [
       {

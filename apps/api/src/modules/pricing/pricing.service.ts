@@ -7,7 +7,9 @@ import type {
   PricingRebaseChangeDTO,
   PricingRebasePreviewDTO,
   PricingRebaseTierDTO,
+  PriceMode,
   PricingTierDTO,
+  PricingTierPreviewDTO,
   PricingVersionDTO,
   PricingVersionListResponse,
   PricingVersionSummaryDTO,
@@ -107,61 +109,92 @@ interface ComputedTier {
   price: ReturnType<typeof computePrice>;
 }
 
-async function computeTiers(version: VersionWithRelations): Promise<ComputedTier[]> {
+/**
+ * O que define uma faixa para a conta — gravada ou só proposta.
+ *
+ * A prévia da tela passa por aqui com os mesmos campos que a linha do banco
+ * tem: é o que garante que "adicionar" grava exatamente o que a prévia
+ * mostrou.
+ */
+interface TierEconomicInput {
+  quantity: Prisma.Decimal;
+  uomCode: string;
+  priceMode: PriceMode;
+  targetContributionMarginPercent: Prisma.Decimal | null;
+  commissionPercent: Prisma.Decimal;
+  manualUnitPrice: Prisma.Decimal | null;
+}
+
+async function loadCostVersion(
+  calculation: IndustrialCostCalculationDTO,
+): Promise<CostVersionForPricing | null> {
   const prisma = getPrisma();
-  const calculation = calculationResult(version);
-  const costVersion = (await prisma.industrialCostVersion.findUnique({
+  return (await prisma.industrialCostVersion.findUnique({
     where: { id: calculation.industrialCostVersionId },
     include: pricingVersionInclude,
   })) as CostVersionForPricing | null;
+}
+
+/** Custo para a quantidade + preço pela regra canônica — o único caminho. */
+async function computeTierEconomics(
+  costVersion: CostVersionForPricing | null,
+  calculation: IndustrialCostCalculationDTO,
+  tier: TierEconomicInput,
+): Promise<{ cost: TierCostResult; price: ReturnType<typeof computePrice> }> {
+  const prisma = getPrisma();
+  if (!costVersion) {
+    return {
+      cost: {
+        quantity: tier.quantity,
+        batchCount: new Prisma.Decimal(1),
+        total: null,
+        perUnit: null,
+        per1000: null,
+        knownSubtotal: new Prisma.Decimal(0),
+        quality: "NO_COST",
+        warnings: [
+          {
+            code: "COST_STRUCTURE_UNAVAILABLE",
+            message: "A estrutura de custos do cálculo não está mais disponível.",
+          },
+        ],
+        hasCustomerSuppliedMaterials: false,
+      },
+      price: computePrice({
+        priceMode: tier.priceMode,
+        quantity: tier.quantity,
+        costPerUnit: null,
+        targetMarginPercent: tier.targetContributionMarginPercent,
+        commissionPercent: tier.commissionPercent,
+        manualUnitPrice: tier.manualUnitPrice,
+      }),
+    };
+  }
+
+  const cost = await costForOutputQuantity(prisma, {
+    costVersion,
+    calculation,
+    quantity: tier.quantity,
+    quantityUomCode: tier.uomCode,
+  });
+  const price = computePrice({
+    priceMode: tier.priceMode,
+    quantity: tier.quantity,
+    costPerUnit: cost.perUnit,
+    targetMarginPercent: tier.targetContributionMarginPercent,
+    commissionPercent: tier.commissionPercent,
+    manualUnitPrice: tier.manualUnitPrice,
+  });
+  return { cost, price };
+}
+
+async function computeTiers(version: VersionWithRelations): Promise<ComputedTier[]> {
+  const calculation = calculationResult(version);
+  const costVersion = await loadCostVersion(calculation);
 
   const computed: ComputedTier[] = [];
   for (const tier of version.tiers) {
-    if (!costVersion) {
-      computed.push({
-        tier,
-        cost: {
-          quantity: tier.quantity,
-          batchCount: new Prisma.Decimal(1),
-          total: null,
-          perUnit: null,
-          per1000: null,
-          knownSubtotal: new Prisma.Decimal(0),
-          quality: "NO_COST",
-          warnings: [
-            {
-              code: "COST_STRUCTURE_UNAVAILABLE",
-              message: "A estrutura de custos do cálculo não está mais disponível.",
-            },
-          ],
-          hasCustomerSuppliedMaterials: false,
-        },
-        price: computePrice({
-          priceMode: tier.priceMode,
-          quantity: tier.quantity,
-          costPerUnit: null,
-          targetMarginPercent: tier.targetContributionMarginPercent,
-          commissionPercent: tier.commissionPercent,
-          manualUnitPrice: tier.manualUnitPrice,
-        }),
-      });
-      continue;
-    }
-
-    const cost = await costForOutputQuantity(prisma, {
-      costVersion,
-      calculation,
-      quantity: tier.quantity,
-      quantityUomCode: tier.uomCode,
-    });
-    const price = computePrice({
-      priceMode: tier.priceMode,
-      quantity: tier.quantity,
-      costPerUnit: cost.perUnit,
-      targetMarginPercent: tier.targetContributionMarginPercent,
-      commissionPercent: tier.commissionPercent,
-      manualUnitPrice: tier.manualUnitPrice,
-    });
+    const { cost, price } = await computeTierEconomics(costVersion, calculation, tier);
     computed.push({ tier, cost, price });
   }
   return computed;
@@ -219,8 +252,19 @@ function toTierDTO(entry: ComputedTier, frozen: boolean): PricingTierDTO {
     };
   }
 
+  return { id: tier.id, notes: tier.notes, sortOrder: tier.sortOrder, ...liveTierDTO(tier, cost, price) };
+}
+
+/**
+ * A faixa recalculada AGORA, sem identidade: serve à linha do rascunho e à
+ * prévia de uma faixa ainda não gravada — a mesma montagem para as duas.
+ */
+function liveTierDTO(
+  tier: TierEconomicInput,
+  cost: TierCostResult,
+  price: ReturnType<typeof computePrice>,
+): PricingTierPreviewDTO {
   return {
-    id: tier.id,
     quantity: tier.quantity.toString(),
     uomCode: tier.uomCode,
     priceMode: tier.priceMode,
@@ -229,8 +273,6 @@ function toTierDTO(entry: ComputedTier, frozen: boolean): PricingTierDTO {
       : null,
     commissionPercent: percent(tier.commissionPercent),
     manualUnitPrice: tier.manualUnitPrice ? unitMoney(tier.manualUnitPrice) : null,
-    notes: tier.notes,
-    sortOrder: tier.sortOrder,
 
     industrialCostTotal: cost.total ? money(cost.total) : null,
     industrialCostPerUnit: cost.perUnit ? unitMoney(cost.perUnit) : null,
@@ -731,14 +773,19 @@ function assertPercents(
   }
 }
 
-export async function createPricingTier(
-  versionId: string,
-  input: CreatePricingTierInput,
-  _actor: User,
-): Promise<PricingVersionDTO> {
-  const prisma = getPrisma();
-  const version = await requireDraft(versionId);
+/**
+ * A entrada de uma faixa, validada como a criação valida — e é a MESMA
+ * função que a prévia usa. Quantidade positiva, unidade compatível com o
+ * produto acabado, quantidade inédita na versão e percentuais possíveis.
+ */
+/** A entrada de uma faixa sem o que a prévia não usa — o mesmo tipo da criação. */
+type TierInput = Omit<CreatePricingTierInput, "notes">;
 
+async function resolveTierInput(
+  version: VersionWithRelations,
+  input: TierInput,
+): Promise<TierEconomicInput> {
+  const prisma = getPrisma();
   const quantity = new Prisma.Decimal(input.quantity);
   if (quantity.lessThanOrEqualTo(0)) throw new InvalidTierQuantityError();
 
@@ -761,17 +808,55 @@ export async function createPricingTier(
   const commission = new Prisma.Decimal(input.commissionPercent ?? "0");
   assertPercents(input.priceMode === "TARGET_MARGIN" ? targetMargin : null, commission);
 
+  return {
+    quantity,
+    uomCode,
+    priceMode: input.priceMode,
+    targetContributionMarginPercent: targetMargin,
+    commissionPercent: commission,
+    manualUnitPrice: input.manualUnitPrice != null ? new Prisma.Decimal(input.manualUnitPrice) : null,
+  };
+}
+
+/**
+ * A faixa como ficaria se fosse adicionada agora — sem gravar.
+ *
+ * Mesma validação, mesmo custo por quantidade e mesma conta de preço da
+ * criação: o que a prévia mostra é o que "Adicionar faixa" grava. A
+ * persistência continua sendo só da criação.
+ */
+export async function previewPricingTier(
+  versionId: string,
+  input: TierInput,
+): Promise<PricingTierPreviewDTO> {
+  const version = await requireDraft(versionId);
+  const tier = await resolveTierInput(version, input);
+  const calculation = calculationResult(version);
+  const costVersion = await loadCostVersion(calculation);
+  const { cost, price } = await computeTierEconomics(costVersion, calculation, tier);
+  return liveTierDTO(tier, cost, price);
+}
+
+export async function createPricingTier(
+  versionId: string,
+  input: CreatePricingTierInput,
+  _actor: User,
+): Promise<PricingVersionDTO> {
+  const prisma = getPrisma();
+  const version = await requireDraft(versionId);
+  const tier = await resolveTierInput(version, input);
+
   await prisma.pricingTier.create({
     data: {
       pricingVersionId: versionId,
-      quantity,
-      uomCode,
-      priceMode: input.priceMode,
-      ...(targetMargin ? { targetContributionMarginPercent: targetMargin } : {}),
-      commissionPercent: commission,
-      ...(input.manualUnitPrice != null
-        ? { manualUnitPrice: new Prisma.Decimal(input.manualUnitPrice) }
+      quantity: tier.quantity,
+      uomCode: tier.uomCode,
+      priceMode: tier.priceMode,
+      ...(tier.targetContributionMarginPercent
+        ? { targetContributionMarginPercent: tier.targetContributionMarginPercent }
         : {}),
+      commissionPercent: tier.commissionPercent,
+      ...(tier.manualUnitPrice ? { manualUnitPrice: tier.manualUnitPrice } : {}),
       ...(input.notes !== undefined ? { notes: input.notes } : {}),
       sortOrder: version.tiers.length,
     },

@@ -10,7 +10,11 @@ import type {
   PurchaseOrderStatus,
   SupplierItemDTO,
 } from "@veridi/shared";
-import { PURCHASE_ORDER_STATUS_LABELS, SUPPLIER_ITEM_QUALIFICATION_LABELS } from "@veridi/shared";
+import {
+  PURCHASE_ORDER_STATUS_LABELS,
+  SUPPLIER_ITEM_QUALIFICATION_LABELS,
+  calcularTotaisOrdemCompra,
+} from "@veridi/shared";
 import {
   cancelPurchaseOrder,
   confirmPurchaseOrder,
@@ -529,28 +533,36 @@ export function PurchaseOrderPage() {
   }
 
   /*
-   * Total previsto da OC, somado sobre o que foi digitado.
+   * PRÉVIA do total da OC, sobre o que está digitado — pela MESMA função que
+   * a API usa para o documento (`calcularTotaisOrdemCompra`, em Decimal).
    *
-   * Era `Number(line.unitPrice)` direto, e `12,50` virava `NaN`: a linha
-   * era pulada e o total aparecia menor do que a OC realmente vale, sem
-   * nenhum sinal de que faltava uma linha na conta.
+   * Duas versões anteriores erraram aqui de jeitos opostos: `Number(price)`
+   * lia `12,50` como `NaN` e pulava a linha; depois, numa OC já gravada, o
+   * rodapé mostrava o `orderTotal` do último salvamento ao lado de linhas
+   * recalculadas ao vivo — número vivo ao lado de número velho. Enquanto a OC
+   * é editável, o total principal é a prévia; o gravado só aparece quando
+   * difere, dito como gravado.
+   *
+   * Linha com valor ilegível não entra na conta e não vira zero: ela é
+   * contada e dita, para o total nunca parecer menor do que a OC vale.
    */
-  const previewTotal = useMemo(() => {
-    let total: number | null = null;
-    for (const line of lines) {
-      const price = parseDecimalInput(line.unitPrice);
-      const qty = parseDecimalInput(line.orderedQuantity);
-      if (price === null || qty === null) continue;
-      total = (total ?? 0) + Number(qty) * Number(price);
-    }
-    return total;
+  const previa = useMemo(() => {
+    const legiveis = lines.map((line) => ({
+      orderedQuantity: parseDecimalInput(line.orderedQuantity),
+      unitPrice: parseDecimalInput(line.unitPrice),
+    }));
+    const totais = calcularTotaisOrdemCompra(legiveis);
+    const ilegiveis = lines.filter(
+      (line, indice) =>
+        (line.orderedQuantity.trim() !== "" && legiveis[indice]!.orderedQuantity === null) ||
+        (line.unitPrice.trim() !== "" && legiveis[indice]!.unitPrice === null),
+    ).length;
+    return { lineTotals: totais.lineTotals, orderTotal: totais.orderTotal, ilegiveis };
   }, [lines]);
 
-  const displayTotal = purchaseOrder
-    ? purchaseOrder.orderTotal
-    : previewTotal !== null
-      ? previewTotal.toFixed(2)
-      : null;
+  const totalGravado = purchaseOrder?.orderTotal ?? null;
+  const previaDifereDoGravado =
+    isDraftEditable && purchaseOrder !== null && previa.orderTotal !== totalGravado;
 
   async function handleSaveDraft() {
     if (!supplierId) {
@@ -866,16 +878,9 @@ options={supplierOptions.map((supplier) => ({
               </tr>
             </thead>
             <tbody>
-              {lines.map((line) => {
-                // Mesma leitura do total previsto: `12,50` é doze e cinquenta,
-                // não `NaN` — antes a coluna Total virava "—" no exato momento
-                // em que a pessoa terminava de digitar o preço.
-                const precoDigitado = parseDecimalInput(line.unitPrice);
-                const qtdDigitada = parseDecimalInput(line.orderedQuantity);
-                const lineTotal =
-                  precoDigitado !== null && qtdDigitada !== null
-                    ? (Number(qtdDigitada) * Number(precoDigitado)).toFixed(2)
-                    : null;
+              {lines.map((line, indice) => {
+                // O total da linha vem da mesma conta do rodapé e do documento.
+                const lineTotal = previa.lineTotals[indice] ?? null;
 
                 return (
                   <tr key={line.key}>
@@ -1006,7 +1011,33 @@ options={supplierOptions.map((supplier) => ({
               )}
             </tbody>
           </table>
-          <div className="table-foot">Total: {formatBRL(displayTotal)}</div>
+          {/* Enquanto editável, o total é a PRÉVIA do que está na tela. O
+              gravado só aparece quando difere — rotulado, para nunca
+              concorrer com o número vivo como se fosse o mesmo. */}
+          <div className="table-foot" aria-live="polite">
+            {isDraftEditable ? (
+              <>
+                <span>
+                  Total (prévia): <strong>{formatBRL(previa.orderTotal)}</strong>
+                </span>
+                {previaDifereDoGravado && (
+                  <span className="field__hint">
+                    {" "}· Gravado: {formatBRL(totalGravado)} — salve o rascunho para atualizar.
+                  </span>
+                )}
+                {previa.ilegiveis > 0 && (
+                  <span className="field__error">
+                    {" "}·{" "}
+                    {previa.ilegiveis === 1
+                      ? "1 linha com valor ilegível não entra na prévia."
+                      : `${previa.ilegiveis} linhas com valor ilegível não entram na prévia.`}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>Total: {formatBRL(totalGravado)}</>
+            )}
+          </div>
         </div>
 
         {isDraftEditable && (
