@@ -24,45 +24,51 @@ casos profundos do legado rodaram ponta a ponta contra a interface publicada
 
 ## Última capability
 
-**Fundação numérica A — #20 + PREC-MIG-A**, aprovada pelo PO e publicada em
-2026-09-05, merge `5f855cd`. Primeira implementação sobre a auditoria PREC-01, e
-a primeira capability com migration desde então.
+**Fundação numérica B — PREC-MIG-B**, em revisão do PO na branch
+`feat/numeric-precision-foundation-b-unit-cost`. Custo unitário em
+`DECIMAL(20,8)`.
 
-**#20 — motor decimal canônico em 40 dígitos.** A auditoria contou um
-construtor; a implementação achou dois. O Prisma empacota a própria cópia do
-`decimal.js`: `Prisma.Decimal !== Decimal`, configuração independente, e é o do
-Prisma que roda quase todo o cálculo de domínio da API. Configurar só
-`@veridi/shared` teria deixado a API inteira em 20 dígitos sem nenhum teste
-perceber. `packages/shared/src/decimal-config.ts` é a configuração única;
-`apps/api/src/lib/decimal.ts` a aplica ao construtor do Prisma. Só `precision`
-muda — `rounding` segue `ROUND_HALF_UP`, o mesmo que o PostgreSQL usa ao gravar.
+Três colunas, a família UNIT_COST inteira do inventário:
+`ReceiptLine.actualUnitCost` (a origem de TODO custo real — média ponderada
+30d/90d, último custo real, custo do lote consumido),
+`ItemCostReference.unitCost` e `SupplierItemOffer.unitPrice`, que o seletor
+canônico lê como custo. Migration
+`20260925093002_numeric_precision_unit_cost_20_8`, só `ALTER COLUMN ... TYPE`,
+**sem backfill**: valores existentes conferidos antes e depois em banco
+descartável, zero divergência matemática.
 
-**PREC-MIG-A — 43 colunas em `DECIMAL(24,12)`:** 39 QUANTITY, 1 FACTOR
-(`UnitOfMeasure.toBaseFactor` — quantidade com doze casas não adianta se a
-conversão perder precisão antes dela) e 3 TECHNICAL_RESULT que já estavam em
-`18,6` e têm o mesmo alvo. Migration
-`20260925093001_numeric_precision_quantities_24_12`, só `ALTER COLUMN ... TYPE`.
-O diff gerado pelo Prisma trazia junto 86 blocos do drift #14; foram removidos
-na revisão linha a linha e o drift segue intocado. **Sem backfill:** 371 valores
-existentes conferidos antes e depois, zero divergência matemática — só a
-representação ganhou zeros à direita.
+`4,05318764` agora atravessa banco, DTO, seletor e média ponderada sem virar
+`4,0532` em ponto nenhum — e a entrada **recusa** acima de 8 casas em vez de
+deixar o PostgreSQL arredondar em silêncio. A média ponderada carrega a dízima
+inteira no motor de 40 dígitos; o corte só acontece na saída.
 
-O defeito de #19 está fechado: `0,000000048` persiste como `0,000000048000` em
-vez de `0,000000`, provado contra o banco real. E a entrada passou a **recusar**
-acima de 12 casas em vez de deixar o PostgreSQL arredondar em silêncio — o
-operador digitava um número e o banco gravava outro.
+**`PurchaseOrderLine.unitPrice` ficou de fora, de propósito.** A linha do
+inventário diz "Sim — B", mas a **categoria** é UNIT_PRICE, e o PREC-MIG-B do PO
+é UNIT_COST. Onde os dois discordam vale a categoria. O PO confirmou a exclusão
+e abriu o **PREC-MIG-P** para a família UNIT_PRICE, com
+`PurchaseOrderLine.unitPrice → DECIMAL(20,8)` já aprovado: um preço de compra
+pode legitimamente ter mais de quatro casas, e o total documental da linha segue
+regra própria — os dois conceitos são independentes.
 
-Três colunas `18,6` ficaram fora de propósito: os dois campos `legacy*` de
-`FormulationComponent` e `QuoteLine.industrialCostPerUnitSnapshot`, que viaja
-com os demais snapshots de precificação no PREC-MIG-B.
-`scripts/numeric-precision-matrix.test.ts` guarda a matriz de §58 contra
-reincidência.
-
-**#20 RESOLVIDO. PREC-MIG-A RESOLVIDO.** #19 e PREC-MIG-D seguem **ABERTOS /
-PARCIAIS** — os três resultados técnicos entregues aqui não reaparecem numa
-migration futura; o residual do D são os que ainda estão em `14,4` e `14,6`.
+**PREC-MIG-B RESOLVIDO. #19 e PREC-MIG-D seguem ABERTOS / PARCIAIS.
+PREC-MIG-P aberto, HIGH.**
 
 ## Antes dela
+
+**Fundação numérica A — #20 + PREC-MIG-A** (merge `5f855cd`). O motor decimal
+canônico subiu para 40 dígitos: a auditoria contou um construtor, a
+implementação achou dois — o Prisma empacota a própria cópia do `decimal.js`, e
+é a dele que roda quase todo o cálculo da API, então configurar só
+`@veridi/shared` teria deixado a API em 20 dígitos sem nenhum teste perceber.
+`packages/shared/src/decimal-config.ts` é a configuração única; só `precision`
+muda, `rounding` segue `ROUND_HALF_UP`.
+
+43 colunas foram para `DECIMAL(24,12)` — 39 QUANTITY, 1 FACTOR
+(`UnitOfMeasure.toBaseFactor`) e 3 TECHNICAL_RESULT —, sem backfill: 371 valores
+conferidos antes e depois, zero divergência. `0,000000048` persiste em vez de
+virar `0,000000`, e a entrada recusa acima de 12 casas.
+`scripts/numeric-precision-matrix.test.ts` guarda a matriz de §58 contra
+reincidência.
 
 **Auditoria de precisão numérica — PREC-01** (merge `0305704`, só documentação).
 Provou o que já funcionava — zero `Float`, zero divergência Prisma × banco
@@ -106,10 +112,9 @@ banco vazio só com o repositório — `scripts/migration-order.test.ts` em
 
 ## Próxima capability
 
-**PREC-MIG-B, C e D** — custo e `ReceiptLine.actualUnitCost` em
-`DECIMAL(20,8)`, pureza e overage em `DECIMAL(9,6)`, demais resultados técnicos.
-A fundação já está no lugar: o motor em 40 dígitos e a matriz de §58 protegida
-por teste de schema.
+**PREC-MIG-C** — pureza e overage em `DECIMAL(9,6)`, para que `99,9995%` não
+seja persistido como `100,000`. Depois: **PREC-MIG-P** (UNIT_PRICE de alta
+precisão, HIGH, junto de PREC-SER-02) e o PREC-MIG-D residual.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do
 processo real do cliente (#7, #11) — não bloqueia os itens internos já decididos
@@ -119,11 +124,12 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado.
 
 ## Backlog aberto
 
-[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL. **#20 resolvido; #19 aberto** com o
-primeiro grupo (PREC-MIG-A) entregue e o defeito de microdosagem fechado.
+[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL. **#20 resolvido; #19 aberto** com
+PREC-MIG-A e PREC-MIG-B entregues — microdosagem e custo unitário fechados.
 **Rodadas 1 a 4 e PREC-01 publicadas** (#12, #9, #3, #5, #4 com residual aceito;
-#8A–#8C; #8D, #8H; #15, #16; auditoria). **Seguinte:** PREC-MIG-B/C/D, depois
-PREC-SER-01/02, PREC-FMT-01, **#18** (desbloqueado) e PREC-MIG-E. **Roadmap:**
+#8A–#8C; #8D, #8H; #15, #16; auditoria). **Seguinte:** PREC-MIG-C, depois **PREC-MIG-P** (HIGH),
+D residual, PREC-SER-01, PREC-FMT-01, **#18** (desbloqueado) e PREC-MIG-E.
+**Roadmap:**
 PREC-UI-01 a 08. **Quando autorizada:**
 #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11. **Manutenção:** #10 e #14.
 **Abertos:** #17 (suíte da API não determinística sob paralelismo, não observado

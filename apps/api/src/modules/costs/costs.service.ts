@@ -16,12 +16,18 @@ import { convertUomDecimal } from "../items/uom.js";
 import { ItemNotFoundError } from "../inventory/inventory.errors.js";
 import { FormulationVersionNotFoundError } from "./costs.errors.js";
 import { ProductionOrderNotFoundError } from "../production-orders/production-orders.errors.js";
+import { custoUnitario } from "../../lib/decimal-serialization.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
-/** Dinheiro/custo unitario sempre com 4 casas; valores compostos com 2. */
+/**
+ * Custo unitario com a escala da coluna (`DECIMAL(20,8)`, PREC-MIG-B); valores
+ * compostos seguem com 2 casas. Cortar o custo em 4 aqui devolveria menos
+ * precisao do que o banco guarda, e este DTO alimenta a estimativa de custo da
+ * Formulacao e o seletor canonico.
+ */
 function formatUnitCost(value: Prisma.Decimal): string {
-  return value.toFixed(4);
+  return custoUnitario(value);
 }
 
 function formatAmount(value: Prisma.Decimal): string {

@@ -365,7 +365,7 @@ describe("Produto Acabado — visão operacional", () => {
 
     const realResult = await listFinishedGoods(app, `?productionOrderId=${producedReal.orderId}`);
     expect(realResult.rows[0].costQuality).toBe("REAL");
-    expect(realResult.rows[0].materialUnitCost).toBe("20.0000");
+    expect(realResult.rows[0].materialUnitCost).toBe("20.00000000");
     expect(realResult.rows[0].costSource).toBe("REAL");
 
     // Cenário sem custo: matéria-prima recebida sem custo informado.

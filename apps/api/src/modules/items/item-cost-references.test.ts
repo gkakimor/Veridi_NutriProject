@@ -75,7 +75,7 @@ describe("Referência manual de custo do Item", () => {
     expect(primeira.json().current.uomCode).toBe("kg");
     expect(primeira.json().current.createdByName).toBeTruthy();
     expect(primeira.json().automatic.source).toBe("MANUAL_REFERENCE");
-    expect(primeira.json().automatic.unitCost).toBe("1200.500000");
+    expect(primeira.json().automatic.unitCost).toBe("1200.50000000");
 
     const segunda = (
       await app.inject({
@@ -119,7 +119,7 @@ describe("Referência manual de custo do Item", () => {
       payload: { unitCost: "0" },
     });
     expect(zero.statusCode).toBe(201);
-    expect(zero.json().automatic.unitCost).toBe("0.000000");
+    expect(zero.json().automatic.unitCost).toBe("0.00000000");
     await app.close();
   });
 
@@ -162,7 +162,7 @@ describe("Referência manual de custo do Item", () => {
     expect(refs.current.unitCost).toBe("1200");
     expect(refs.current.uomCode).toBe("kg");
     // Item em gramas, referência por quilo: a seleção converte.
-    expect(refs.automatic.unitCost).toBe("1.200000");
+    expect(refs.automatic.unitCost).toBe("1.20000000");
 
     const nome = `Sem item ${m}`;
     const referenciasAntes = await prisma.itemCostReference.count();

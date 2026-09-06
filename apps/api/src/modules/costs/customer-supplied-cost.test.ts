@@ -191,7 +191,7 @@ describe("Custo de aquisição — material fornecido pelo cliente", () => {
     });
 
     expect(definido.statusCode).toBe(200);
-    expect(definido.json().lines[0].actualUnitCost).toBe("12.5000");
+    expect(definido.json().lines[0].actualUnitCost).toBe("12.50000000");
 
     await app.close();
   });

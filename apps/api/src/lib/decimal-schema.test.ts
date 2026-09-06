@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  CASAS_CUSTO_UNITARIO,
   CASAS_QUANTIDADE,
+  casasDecimais,
   decimalStringSchema,
+  mensagemCasasCustoUnitario,
   optionalQuantityDecimalSchema,
   quantityDecimalSchema,
 } from "./decimal-schema.js";
@@ -63,5 +66,20 @@ describe("quantityDecimalSchema", () => {
     // `decimalStringSchema` sem `maxDecimals` continua como estava: custo e
     // preço pertencem ao PREC-MIG-B e não têm o teto de 12 aplicado aqui.
     expect(decimalStringSchema().safeParse("0.1234567890123").success).toBe(true);
+  });
+});
+
+describe("casas de custo unitário — PREC-MIG-B", () => {
+  it("fixa o limite no scale da coluna", () => {
+    expect(CASAS_CUSTO_UNITARIO).toBe(8);
+    expect(mensagemCasasCustoUnitario()).toContain("8 casas decimais");
+  });
+
+  it("conta casas decimais como o banco conta", () => {
+    expect(casasDecimais("4")).toBe(0);
+    expect(casasDecimais("4.05")).toBe(2);
+    expect(casasDecimais("4.05318764")).toBe(8);
+    expect(casasDecimais("4.053187641")).toBe(9);
+    expect(casasDecimais("0.00381726")).toBe(8);
   });
 });

@@ -26,8 +26,9 @@ const PRECISOES_DA_MATRIZ = new Map<string, string>([
   ["14,2", "COMMERCIAL_TOTAL fechado"],
   ["7,4", "PERCENTAGE comercial"],
   ["12,4", "MARKUP e PHYSICAL_MEASUREMENT (kW)"],
+  ["20,8", "UNIT_COST"],
   // Ainda não migradas. Cada uma tem capability nomeada no BACKLOG, seção E.
-  ["14,4", "UNIT_COST/UNIT_PRICE/RATE — aguarda PREC-MIG-B"],
+  ["14,4", "UNIT_PRICE, RATE e composição de custo — aguardam PREC-MIG-D e decisão própria"],
   ["14,6", "UNIT_PRICE técnico da precificação — aguarda PREC-MIG-B"],
   ["6,3", "PURITY/OVERAGE — aguarda PREC-MIG-C"],
   ["18,6", "excluídas do PREC-MIG-A por decisão — ver lista abaixo"],
@@ -109,6 +110,31 @@ describe("matriz de precisão numérica", () => {
     const presentes = new Set(colunas.map((c) => `${c.model}.${c.campo}`));
     for (const excecao of EXCECOES_18_6) {
       expect(presentes.has(excecao), `${excecao} saiu do schema; remova a exceção`).toBe(true);
+    }
+  });
+
+  it("os custos unitários do PREC-MIG-B estão em 20,8", () => {
+    // A família UNIT_COST inteira, e só ela. Preço e tarifa continuam em 14,4
+    // porque são outra categoria — o teste falha se alguém arrastar um
+    // `unitPrice` documental junto por semelhança de nome.
+    const porChave = new Map(colunas.map((c) => [`${c.model}.${c.campo}`, c.precisao]));
+    for (const chave of [
+      "ItemCostReference.unitCost",
+      "ReceiptLine.actualUnitCost",
+      "SupplierItemOffer.unitPrice",
+    ]) {
+      expect(porChave.get(chave), `${chave} deveria ser Decimal(20,8)`).toBe("20,8");
+    }
+    for (const chave of [
+      "QuoteLine.unitPrice",
+      "PurchaseOrderLine.unitPrice",
+      "CustomerOrderLine.agreedUnitPrice",
+      "BillingLine.unitPrice",
+      "IndustrialResourceRate.rateValue",
+    ]) {
+      expect(porChave.get(chave), `${chave} não é UNIT_COST e não deveria ter migrado`).toBe(
+        "14,4",
+      );
     }
   });
 

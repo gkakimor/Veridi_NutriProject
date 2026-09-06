@@ -31,6 +31,7 @@ import {
   PurchaseOrderLineNotFoundError,
   PurchaseOrderNotFoundError,
 } from "./receiving.errors.js";
+import { custoUnitario } from "../../lib/decimal-serialization.js";
 import type {
   CreateCustomerSuppliedReceiptInput,
   CreateReceiptInput,
@@ -85,7 +86,7 @@ function toReceiptLineDTO(line: ReceiptLineWithRelations): ReceiptLineDTO {
     purchaseUnitPrice: line.purchaseOrderLine?.unitPrice
       ? line.purchaseOrderLine.unitPrice.toFixed(4)
       : null,
-    actualUnitCost: line.actualUnitCost ? line.actualUnitCost.toFixed(4) : null,
+    actualUnitCost: line.actualUnitCost ? custoUnitario(line.actualUnitCost) : null,
     costUpdatedAt: line.costUpdatedAt ? line.costUpdatedAt.toISOString() : null,
     costUpdatedBy: line.costUpdatedBy,
     costNote: line.costNote,
