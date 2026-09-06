@@ -44,9 +44,12 @@ seis casas: pureza/overage com mais de 6 casas respondem HTTP 400 em vez de
 serem aceitos e arredondados em silêncio pelo PostgreSQL. O PO também nomeou
 **PREC-P-01** (`PurchaseOrderLine.unitPrice → DECIMAL(20,8)`) dentro do
 PREC-MIG-P.
-**Fundação numérica P (2026-09-06):** **PREC-P-01 RESOLVIDO** — UMA coluna,
-`PurchaseOrderLine.unitPrice` em `DECIMAL(20,8)`, migration
-`20260925093004_numeric_precision_unit_price_20_8`, sem backfill.
+**Fundação numérica P aprovada pelo PO e publicada em 2026-09-06:**
+**PREC-P-01 RESOLVIDO** — UMA coluna, `PurchaseOrderLine.unitPrice` em
+`DECIMAL(20,8)`, migration `20260925093004_numeric_precision_unit_price_20_8`,
+sem backfill. Na aprovação o PO **ratificou o escopo mínimo como decisão
+correta**: nenhum outro preço entra sem decisão própria, e uma migration com um
+campo certo vale mais que uma com dez semanticamente duvidosos.
 **PREC-MIG-P fica PARCIAL:** o inventário da família UNIT_PRICE classificou dez
 colunas e só uma tinha decisão segura; as quatro técnicas da precificação viraram
 **PREC-P-02 a PREC-P-05**, todas NEEDS_PO_DECISION. **PREC-SER-02 fica PARCIAL**

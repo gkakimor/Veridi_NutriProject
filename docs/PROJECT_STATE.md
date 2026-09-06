@@ -20,8 +20,8 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
 ## Última capability
 
-**Fundação numérica P — PREC-MIG-P / PREC-P-01**, em revisão do PO na branch
-`feat/numeric-precision-unit-price`. **UMA coluna:**
+**Fundação numérica P — PREC-MIG-P / PREC-P-01**, aprovada pelo PO e publicada
+em 2026-09-06. **UMA coluna:**
 `PurchaseOrderLine.unitPrice`, de `Decimal(14,4)` para `DECIMAL(20,8)`.
 Migration `20260925093004_numeric_precision_unit_price_20_8`, só `ALTER COLUMN
 ... SET DATA TYPE`, **sem backfill**. Medido contra o PostgreSQL antes de
