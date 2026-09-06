@@ -602,6 +602,81 @@ vínculo Orçamento↔faixa grava `toFixed(4)`. Enquanto as colunas forem `14,6`
 `14,4`, isso é o scale da coluna, não perda — vira perda no dia em que a coluna
 crescer. `PREC-SER-02` fecha com esses campos, não antes.
 
+### 10.2 Auditoria read-only da cadeia UNIT_PRICE (2026-09-06)
+
+Levantada depois da publicação do PREC-P-01, **sem alterar código, schema ou
+comportamento**, para o PO decidir PREC-P-02 a PREC-P-05 com evidência em vez
+de intuição.
+
+**Onde o número perde casas hoje.** Seguindo `4,05318764` — o mesmo valor do
+acceptance — pelos dois caminhos reais:
+
+| Fronteira | Arquivo | Valor depois |
+|---|---|---|
+| motor calcula `P = C ÷ (1 − margem − comissão)` em 40 dígitos | `packages/shared/src/pricing-math.ts:71-85` | `4.05318764…` |
+| **INSERT na ativação da PREC** — sem `.toFixed()` no código; quem corta é o PostgreSQL | `pricing.service.ts:1005-1006` → coluna `14,6` | **`4.053188`** |
+| vínculo faixa → linha de orçamento, `.toFixed(4)` explícito | `quote-pricing.service.ts:289` → coluna `14,4` | **`4.0532`** |
+| congelamento da proveniência no ENVIO, `.toFixed(6)` | `quote-pricing.service.ts:193` + `:392` → coluna `14,6` | `4.053188` |
+| Orçamento aceito → Pedido: cópia exata do `Prisma.Decimal` | `quote-to-order.service.ts:210` | `4.0532` |
+| Pedido → Faturamento: cópia exata, dois campos | `billings.service.ts:384,386` | `4.0532` |
+| impressão | `print/documents.tsx:594,994` via `formatUnitPriceBRL` (2–4 casas) | `R$ 4,0532` |
+
+**Primeiro corte de 8 para 6:** o INSERT da ativação da precificação. **Primeiro
+corte de 6 para 4:** o vínculo com a linha do orçamento. **Nenhum operando
+técnico cai para 2 casas antes do fechamento documental** — as duas casas
+aparecem só em `total.toFixed(2)` dentro de `calcularTotaisOrcamento`
+(`quote-math.ts:65`), que já é o total, não operando.
+
+**A mesma linha de orçamento carrega dois números para o que nasceu preço
+único:** `unitPrice` com 4 casas e `pricingSelectedUnitPriceSnapshot` com 6.
+Nenhum dos dois guarda as 8 de origem.
+
+**Achado que independe de widening — quatro entradas de preço sem teto de
+casas.** `PRODUCT_RULES.md` §58 exige recusar acima do scale em vez de deixar o
+PostgreSQL arredondar calado. A regra está aplicada nas famílias já migradas,
+mas **não** nestas fronteiras, que aceitam qualquer número de casas e deixam o
+banco decidir:
+
+| Fronteira | Arquivo | Coluna de destino |
+|---|---|---|
+| `manualUnitPrice` (create e update de faixa) | `pricing/pricing.schemas.ts:30,39` | `14,6` |
+| `QuoteLine.unitPrice` | `projects/projects.schemas.ts:129` (`optionalDecimal`, sem `maxDecimals`) | `14,4` |
+| preço faturado em lote | `billings/billings.schemas.ts:13-22` | `14,4` |
+| override de preço faturado | `billings/billings.schemas.ts:35-43` | `14,4` |
+
+Fechar essa lacuna **não depende** de decidir o widening: é aplicar §58 onde ele
+ainda não chegou. **Não implementado nesta rodada** — não havia autorização, e
+mudar a fronteira de entrada de preço comercial é decisão de produto.
+
+**O que teria de migrar junto, se o PO ampliar.** As cópias da cadeia são
+exatas, então alargar um elo isolado cria truncamento no elo seguinte:
+
+- **família técnica (P-02/P-03/P-04):** `PricingTier.manualUnitPrice`,
+  `.suggestedPriceSnapshot`, `.selectedPriceSnapshot` e
+  `QuoteLine.pricingSelectedUnitPriceSnapshot`. No mesmo bloco "congelados na
+  ativação" convivem `PricingTier.commissionPerUnitSnapshot` e
+  `.contributionPerUnitSnapshot`, mais `QuoteLine.contributionPerUnitSnapshot`,
+  todos `14,6` e todos saídos do mesmo motor — deixá-los para trás parte a
+  família por conveniência;
+- **família comercial (P-05):** `QuoteLine.unitPrice`,
+  `CustomerOrderLine.agreedUnitPrice`, `BillingLine.agreedUnitPrice` e
+  `BillingLine.unitPrice` — quatro colunas que hoje são cópias byte a byte uma
+  da outra.
+
+**#15 continua matematicamente consistente com preço de 8 casas.** A regra é
+`subtotal = Σ round(quantidade × preço, 2)` (`quote-math.ts:58-70`), definida
+sobre qualquer precisão de preço: o total de linha continua fechando em duas
+casas e a soma continua sendo das linhas já arredondadas. O que muda não é a
+fórmula, é o insumo — um acordo novo poderia fechar centavos diferentes do que
+uma leitura de quatro casas faria prever. Documento histórico não muda: as
+linhas gravadas continuam com quatro casas e produzem o mesmo total.
+
+**Nenhuma precisão escondida no caminho comercial.** Toda escrita manda o texto
+cru por `parseDecimalInput`/`exigirDecimal`, que só troca o separador; a saída
+de `formatBRL`/`formatUnitPriceBRL` nunca volta ao servidor. Os `Number()`
+restantes em preço comercial alimentam apenas comparação de UI e o aviso do
+`CalcHint` — nunca valor persistido nem impresso.
+
 **Derivação interna que o widening melhorou sem mudar regra:** a Sugestão de
 Compra grava `PurchaseOrderLine.unitPrice` a partir de uma oferta de fornecedor
 convertida de unidade (`purchase-suggestion.service.ts`). O resultado da divisão

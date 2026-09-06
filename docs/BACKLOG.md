@@ -357,10 +357,10 @@ implementação.
 | **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
 | **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **PARCIAL** — PREC-P-01 entregue; P-02 a P-05 aguardam o PO |
 | **PREC-P-01** | `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` | **RESOLVIDO** — 1 coluna, migration `20260925093004_numeric_precision_unit_price_20_8` |
-| **PREC-P-02** | `PricingTier.manualUnitPrice` (`14,6`) → ampliar? | **NEEDS_PO_DECISION** — entrada de operador; oito casas mudam o que a precificação aceita digitar |
-| **PREC-P-03** | `PricingTier.suggestedPriceSnapshot` e `.selectedPriceSnapshot` (`14,6`) | **NEEDS_PO_DECISION** — saída do motor, congelada na ativação; widening admite faixa nova com 8 casas |
-| **PREC-P-04** | `QuoteLine.pricingSelectedUnitPriceSnapshot` (`14,6`) | **NEEDS_PO_DECISION** — proveniência congelada DENTRO de documento comercial; é o elo que obriga a família a se mover inteira |
-| **PREC-P-05** | `QuoteLine.unitPrice` (`14,4`) | **NEEDS_PO_DECISION** — hoje MANTER por §58; reabrir é decisão comercial |
+| **PREC-P-02** | `PricingTier.manualUnitPrice` (`14,6`) → ampliar? | **NEEDS_PO_DECISION** — entrada de operador. Hoje o Zod não limita casa nenhuma (`pricing.schemas.ts:30,39`) e o PostgreSQL corta na sexta em silêncio |
+| **PREC-P-03** | `PricingTier.suggestedPriceSnapshot` e `.selectedPriceSnapshot` (`14,6`) | **NEEDS_PO_DECISION** — saída do motor, congelada na ativação. O write não tem `.toFixed()` (`pricing.service.ts:1005-1006`): o corte de 8 para 6 já acontece hoje, feito pelo banco |
+| **PREC-P-04** | `QuoteLine.pricingSelectedUnitPriceSnapshot` (`14,6`) | **NEEDS_PO_DECISION** — proveniência congelada DENTRO de documento comercial, interna (só papel COMMERCIAL/ADMIN) e nunca operando; é o elo que obriga a família a se mover inteira |
+| **PREC-P-05** | `QuoteLine.unitPrice` (`14,4`) | **NEEDS_PO_DECISION** — hoje MANTER por §58. Ampliar exigiria migration coordenada com `CustomerOrderLine.agreedUnitPrice` e os dois preços de `BillingLine`, cópias exatas dele |
 
 **PREC-MIG-B — entregue em 2026-09-05.** `ReceiptLine.actualUnitCost` é a fonte
 de custo real e alimenta custo de aquisição, média ponderada, estoque, CMV e
@@ -405,6 +405,19 @@ recebe, então abrir e salvar sem editar bastava para gravar o valor cortado. O
 mesmo preço servido como referência no Recebimento também subiu para oito casas
 — ali **não era só apresentação**: o atalho "Usar preço da OC" copia esse valor
 para `ReceiptLine.actualUnitCost`, que é `DECIMAL(20,8)`.
+
+**Auditoria read-only de 2026-09-06, depois da publicação.** O mapa de perda da
+cadeia inteira — motor, faixa, orçamento, pedido, faturamento e impressão — está
+em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §10.2, com o
+primeiro ponto onde oito casas viram seis e onde seis viram quatro.
+
+**Lacuna de §58 registrada, não corrigida.** Quatro fronteiras de entrada de
+preço ainda aceitam qualquer número de casas e deixam o PostgreSQL arredondar em
+silêncio: `manualUnitPrice` (`pricing.schemas.ts:30,39`), `QuoteLine.unitPrice`
+(`projects.schemas.ts:129`) e os dois caminhos de preço faturado
+(`billings.schemas.ts:13-22` e `:35-43`). É o defeito que §58 proíbe, em campos
+que a regra ainda não alcançou. **Fechar isso independe de decidir o widening** —
+e é decisão de produto, porque muda o que a tela comercial passa a recusar.
 
 **O inventário completo da família está em
 [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §10.1**, com as dez
