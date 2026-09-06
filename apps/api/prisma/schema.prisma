@@ -2482,7 +2482,13 @@ model PurchaseOrderLine {
   /// como referencia visual no Recebimento, mas o custo so vira real
   /// quando informado explicitamente em ReceiptLine.actualUnitCost.
   /// Nunca alimenta as medias de custo real.
-  unitPrice Decimal? @db.Decimal(14, 4)
+  ///
+  /// UNIT_PRICE operacional em DECIMAL(20,8) — PRODUCT_RULES.md §58,
+  /// PREC-MIG-P/PREC-P-01. Insumo cotado por grama ou por dose tem preco
+  /// unitario legitimo de oito casas (`4.05318764`); quatro casas gravavam
+  /// outro numero sem avisar. O TOTAL do documento continua fechando pela
+  /// regra propria da OC — precisao do operando nao e precisao do total.
+  unitPrice Decimal? @db.Decimal(20, 8)
 
   receiptLines ReceiptLine[]
 

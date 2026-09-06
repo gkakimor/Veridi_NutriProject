@@ -26,11 +26,11 @@ const PRECISOES_DA_MATRIZ = new Map<string, string>([
   ["14,2", "COMMERCIAL_TOTAL fechado"],
   ["7,4", "PERCENTAGE comercial"],
   ["12,4", "MARKUP e PHYSICAL_MEASUREMENT (kW)"],
-  ["20,8", "UNIT_COST"],
+  ["20,8", "UNIT_COST e UNIT_PRICE técnico/operacional"],
   ["9,6", "PURITY/OVERAGE"],
   // Ainda não migradas. Cada uma tem capability nomeada no BACKLOG, seção E.
-  ["14,4", "UNIT_PRICE, RATE e composição de custo — aguardam PREC-MIG-D e decisão própria"],
-  ["14,6", "UNIT_PRICE técnico da precificação — aguarda PREC-MIG-B"],
+  ["14,4", "UNIT_PRICE contratual, RATE e composição de custo — §58 e PREC-MIG-D"],
+  ["14,6", "UNIT_PRICE técnico da precificação — aguarda PREC-P-02 a PREC-P-05"],
   ["18,6", "excluídas do PREC-MIG-A por decisão — ver lista abaixo"],
 ]);
 
@@ -127,7 +127,6 @@ describe("matriz de precisão numérica", () => {
     }
     for (const chave of [
       "QuoteLine.unitPrice",
-      "PurchaseOrderLine.unitPrice",
       "CustomerOrderLine.agreedUnitPrice",
       "BillingLine.unitPrice",
       "IndustrialResourceRate.rateValue",
@@ -135,6 +134,35 @@ describe("matriz de precisão numérica", () => {
       expect(porChave.get(chave), `${chave} não é UNIT_COST e não deveria ter migrado`).toBe(
         "14,4",
       );
+    }
+  });
+
+  it("o preço unitário da OC do PREC-MIG-P está em 20,8", () => {
+    // A capability P migrou UM campo: o preço unitário da Ordem de Compra,
+    // UNIT_PRICE operacional. Preço CONTRATUAL é outra categoria — §58 diz
+    // que snapshot de acordo comercial não sofre widening por decisão
+    // técnica —, e o teste falha se alguém arrastar um deles junto por
+    // semelhança de nome.
+    const porChave = new Map(colunas.map((c) => [`${c.model}.${c.campo}`, c.precisao]));
+    expect(porChave.get("PurchaseOrderLine.unitPrice")).toBe("20,8");
+    for (const chave of [
+      "QuoteLine.unitPrice",
+      "CustomerOrderLine.agreedUnitPrice",
+      "BillingLine.agreedUnitPrice",
+      "BillingLine.unitPrice",
+    ]) {
+      expect(porChave.get(chave), `${chave} é UNIT_PRICE contratual e fica em 14,4`).toBe("14,4");
+    }
+    // O preço técnico da precificação continua em 14,6: a cadeia congela
+    // dentro de documento comercial (`QuoteLine.pricingSelectedUnitPriceSnapshot`)
+    // e move-se inteira ou não se move — PREC-P-02 a PREC-P-05, decisão do PO.
+    for (const chave of [
+      "PricingTier.manualUnitPrice",
+      "PricingTier.suggestedPriceSnapshot",
+      "PricingTier.selectedPriceSnapshot",
+      "QuoteLine.pricingSelectedUnitPriceSnapshot",
+    ]) {
+      expect(porChave.get(chave), `${chave} aguarda decisão do PO e fica em 14,6`).toBe("14,6");
     }
   });
 
@@ -199,6 +227,7 @@ describe("as migrations de precisão só alargam tipo", () => {
     "20260925093001_numeric_precision_quantities_24_12",
     "20260925093002_numeric_precision_unit_cost_20_8",
     "20260925093003_numeric_precision_purity_overage_9_6",
+    "20260925093004_numeric_precision_unit_price_20_8",
   ];
 
   /** Os comandos reais, sem comentário — que é onde as palavras aparecem. */
@@ -246,6 +275,18 @@ describe("as migrations de precisão só alargam tipo", () => {
       'ALTER TABLE "production_order_requirements" ALTER COLUMN "overagePercent" SET DATA TYPE DECIMAL(9,6)',
       'ALTER TABLE "formulation_template_components" ALTER COLUMN "purityPercentApplied" SET DATA TYPE DECIMAL(9,6)',
       'ALTER TABLE "formulation_template_components" ALTER COLUMN "overagePercent" SET DATA TYPE DECIMAL(9,6)',
+    ]);
+  });
+
+  it("o PREC-MIG-P alarga o preço da OC, e SÓ ele", () => {
+    // Uma migration com um campo correto vale mais que uma com dez
+    // semanticamente duvidosos. Se um preço contratual entrar aqui depois,
+    // ele terá de entrar por decisão do PO — não por conveniência de diff.
+    const alvo = comandos("20260925093004_numeric_precision_unit_price_20_8").map((comando) =>
+      comando.replace(/\s+/g, " "),
+    );
+    expect(alvo).toEqual([
+      'ALTER TABLE "purchase_order_lines" ALTER COLUMN "unitPrice" SET DATA TYPE DECIMAL(20,8)',
     ]);
   });
 });

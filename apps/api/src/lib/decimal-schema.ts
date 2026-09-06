@@ -58,6 +58,19 @@ export const CASAS_QUANTIDADE = 12;
 export const CASAS_CUSTO_UNITARIO = 8;
 
 /**
+ * Casas decimais de um preço unitário técnico/operacional — `DECIMAL(20,8)`.
+ *
+ * `PRODUCT_RULES.md` §58, PREC-MIG-P. O número coincide com o do custo
+ * unitário e a constante é outra de propósito: UNIT_PRICE e UNIT_COST são
+ * categorias distintas, com decisões distintas, e uma delas pode mudar sem a
+ * outra. Uma constante só faria a próxima decisão arrastar a família errada.
+ *
+ * Vale para o preço da OC. **Não vale para preço contratual** — orçamento,
+ * pedido e faturamento seguem a precisão do documento comercial, §58.
+ */
+export const CASAS_PRECO_UNITARIO = 8;
+
+/**
  * Casas decimais de um percentual técnico — o scale de `DECIMAL(9,6)`.
  *
  * `PRODUCT_RULES.md` §58, PREC-MIG-C. Vale para pureza e overage. Antes da

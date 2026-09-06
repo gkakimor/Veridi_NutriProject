@@ -1,0 +1,36 @@
+-- PREC-MIG-P / PREC-P-01 — preço unitário da Ordem de Compra para DECIMAL(20,8).
+--
+-- BACKLOG #19 / PRODUCT_RULES.md §58: UNIT_PRICE técnico/operacional em
+-- `DECIMAL(20,8)`. Quatro casas em reais bastam para insumo comprado por
+-- quilo; para insumo cotado por grama, por miligrama ou por dose, o preço
+-- unitário negociado tem legitimamente mais casas — `4.05318764` — e a coluna
+-- de quatro gravava `4.0532` sem dizer a ninguém que trocou o número.
+--
+-- SOMENTE widening de precisão. Zero backfill, zero UPDATE, zero recálculo.
+-- A parte inteira CRESCE de 10 para 12 dígitos (14,4 -> 20,8), então nenhum
+-- valor existente pode estourar; o valor gravado permanece o mesmo e passa a
+-- ser reescrito com zeros à direita (`4.0531` -> `4.05310000`).
+--
+-- PRECISÃO DO OPERANDO != PRECISÃO DO TOTAL DOCUMENTAL. O total da OC
+-- continua fechando pela regra atual (`calcularTotaisOrdemCompra`: soma em
+-- precisão cheia, arredonda no fim). Esta migration NÃO implementa BACKLOG
+-- #18 e NÃO altera a regra comercial #15 de Orçamento, Pedido e Faturamento.
+--
+-- O diff gerado pelo Prisma traz junto o drift conhecido de BACKLOG #14
+-- (chaves estrangeiras RESTRICT/SET NULL, renomeação de índices e
+-- constraints). Removido na revisão linha a linha exigida por
+-- TECH_BASELINE.md, "Migration order". Esta migration não o aplica.
+--
+-- FORA desta migration, de propósito — cada um com motivo próprio:
+--   SupplierItemOffer.unitPrice        já em 20,8 desde o PREC-MIG-B
+--   QuoteLine.unitPrice                UNIT_PRICE contratual editável — §58
+--   CustomerOrderLine.agreedUnitPrice  UNIT_PRICE contratual congelado — §58
+--   BillingLine.agreedUnitPrice/.unitPrice  contratual/emitido — §58
+--   PricingTier.manualUnitPrice, .suggestedPriceSnapshot,
+--   .selectedPriceSnapshot e QuoteLine.pricingSelectedUnitPriceSnapshot
+--                                      UNIT_PRICE técnico em 14,6; a cadeia
+--                                      congela dentro de documento comercial
+--                                      e precisa de decisão do PO — PREC-P-02
+--                                      a PREC-P-05 no BACKLOG.
+
+ALTER TABLE "purchase_order_lines" ALTER COLUMN "unitPrice" SET DATA TYPE DECIMAL(20,8);

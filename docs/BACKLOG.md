@@ -42,10 +42,20 @@ PO confirmou a exclusão de `PurchaseOrderLine.unitPrice` e abriu **PREC-MIG-P**
 aprovação o PO **registrou como regra de produto** a recusa explícita acima de
 seis casas: pureza/overage com mais de 6 casas respondem HTTP 400 em vez de
 serem aceitos e arredondados em silêncio pelo PostgreSQL. O PO também nomeou
-**PREC-P-01** (`PurchaseOrderLine.unitPrice → DECIMAL(20,8)`, DECIDIDO /
-PENDENTE) dentro do PREC-MIG-P. #19 segue
-**ABERTO / PARCIAL** e PREC-MIG-D **ABERTO / PARCIAL**. **Seguinte:**
-**PREC-MIG-P** (HIGH, com PREC-SER-02), depois o D residual.
+**PREC-P-01** (`PurchaseOrderLine.unitPrice → DECIMAL(20,8)`) dentro do
+PREC-MIG-P.
+**Fundação numérica P aprovada pelo PO e publicada em 2026-09-06:**
+**PREC-P-01 RESOLVIDO** — UMA coluna, `PurchaseOrderLine.unitPrice` em
+`DECIMAL(20,8)`, migration `20260925093004_numeric_precision_unit_price_20_8`,
+sem backfill. Na aprovação o PO **ratificou o escopo mínimo como decisão
+correta**: nenhum outro preço entra sem decisão própria, e uma migration com um
+campo certo vale mais que uma com dez semanticamente duvidosos.
+**PREC-MIG-P fica PARCIAL:** o inventário da família UNIT_PRICE classificou dez
+colunas e só uma tinha decisão segura; as quatro técnicas da precificação viraram
+**PREC-P-02 a PREC-P-05**, todas NEEDS_PO_DECISION. **PREC-SER-02 fica PARCIAL**
+— a fatia dos campos migrados está feita. #19 segue **ABERTO / PARCIAL** e
+PREC-MIG-D **ABERTO / PARCIAL**. **#18 permanece desbloqueado e não iniciado.**
+**Seguinte:** decisão do PO sobre PREC-P-02 a 05, depois o D residual.
 
 ---
 
@@ -53,8 +63,8 @@ PENDENTE) dentro do PREC-MIG-P. #19 segue
 
 ### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — ABERTO / PARCIAL
 
-**PREC-MIG-A, B e C RESOLVIDOS; #19 segue ABERTO** enquanto PREC-MIG-D, E e P
-não fecharem. O defeito que originou o item está corrigido: as 43 colunas
+**PREC-MIG-A, B e C RESOLVIDOS e PREC-MIG-P PARCIAL; #19 segue ABERTO** enquanto
+PREC-MIG-D, E e o restante do P não fecharem. O defeito que originou o item está corrigido: as 43 colunas
 de quantidade e grandeza técnica inequívoca estão em `DECIMAL(24,12)`, e
 `0,000000048` persiste como `0,000000048000` em vez de `0,000000`. Provado
 contra o banco real em
@@ -189,7 +199,7 @@ PO exigiu está cumprida, e o resultado libera a decisão:
   nenhuma coluna de total; o total é sempre derivado na leitura. Não existe
   documento histórico congelado para reconciliar nem backfill possível.
 - **O preço unitário preciso é preservado**: `PurchaseOrderLine.unitPrice`,
-  `Decimal(14,4)`, nunca arredondado além da própria coluna.
+  hoje `DECIMAL(20,8)` (PREC-P-01), nunca arredondado além da própria coluna.
 - **O custo de aquisição não vem da OC.** É `ReceiptLine.actualUnitCost`,
   informado por pessoa. `lib/cost-reference.ts` recusa explicitamente o preço da
   OC como fallback: sem custo real histórico o resultado é `NO_COST`, nunca o
@@ -203,6 +213,14 @@ PO exigiu está cumprida, e o resultado libera a decisão:
 da OC em ponto nenhum. A divergência de #18 é exclusivamente de apresentação
 documental. Mudar `round(Σ)` para `Σ round()` não contamina custo, CMV nem
 precificação — a decisão é do PO, e agora é uma decisão isolada.
+
+**PREC-MIG-P (2026-09-06) caracterizou #18 e NÃO o implementou.** Com preço de
+oito casas a divergência fica mais fácil de ver: três linhas fechando `40,53`,
+`0,13` e `0,13` somam `40,79` na tela e `40,78` no rodapé, porque a OC soma em
+precisão cheia e arredonda no fim. O cenário está congelado em
+`apps/api/src/modules/purchase-orders/unit-price-precision.test.ts` exigindo o
+comportamento **atual** — implementar #18 será uma mudança visível e deliberada,
+não um efeito colateral. **#18 segue DESBLOQUEADO e não iniciado.**
 
 ### 17. Suíte da API não é determinística sob paralelismo no banco local — LOW técnico
 
@@ -337,8 +355,12 @@ implementação.
 | **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **RESOLVIDO** — 7 colunas, migration `20260925093003_numeric_precision_purity_overage_9_6` |
 | **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL** — 3 campos já entregues no A, ver abaixo |
 | **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
-| **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **ABERTO / NEXT, HIGH** — contém **PREC-P-01** |
-| **PREC-P-01** | `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` | **DECIDIDO / PENDENTE** — alvo aprovado pelo PO em 2026-09-05, sem implementação |
+| **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **PARCIAL** — PREC-P-01 entregue; P-02 a P-05 aguardam o PO |
+| **PREC-P-01** | `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` | **RESOLVIDO** — 1 coluna, migration `20260925093004_numeric_precision_unit_price_20_8` |
+| **PREC-P-02** | `PricingTier.manualUnitPrice` (`14,6`) → ampliar? | **NEEDS_PO_DECISION** — entrada de operador; oito casas mudam o que a precificação aceita digitar |
+| **PREC-P-03** | `PricingTier.suggestedPriceSnapshot` e `.selectedPriceSnapshot` (`14,6`) | **NEEDS_PO_DECISION** — saída do motor, congelada na ativação; widening admite faixa nova com 8 casas |
+| **PREC-P-04** | `QuoteLine.pricingSelectedUnitPriceSnapshot` (`14,6`) | **NEEDS_PO_DECISION** — proveniência congelada DENTRO de documento comercial; é o elo que obriga a família a se mover inteira |
+| **PREC-P-05** | `QuoteLine.unitPrice` (`14,4`) | **NEEDS_PO_DECISION** — hoje MANTER por §58; reabrir é decisão comercial |
 
 **PREC-MIG-B — entregue em 2026-09-05.** `ReceiptLine.actualUnitCost` é a fonte
 de custo real e alimenta custo de aquisição, média ponderada, estoque, CMV e
@@ -367,12 +389,32 @@ Apesar do nome, no domínio atual o campo participa diretamente da seleção
 canônica de custo — `cost-source-selection.ts` o lê como `unitCost`. Vale o uso
 real, não o nome.
 
-**PREC-MIG-P — UNIT_PRICE de alta precisão. ABERTO / NEXT, HIGH.** Decisão do PO
-de 2026-09-05: um preço unitário de compra pode legitimamente ter mais de quatro
+**PREC-MIG-P — UNIT_PRICE de alta precisão. PARCIAL.** Decisão do PO de
+2026-09-05: um preço unitário de compra pode legitimamente ter mais de quatro
 casas — `4,05318764` —, e o banco deve preservar o valor preciso mesmo quando a
-tela mostra menos. **PREC-P-01 — `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)`
-— está DECIDIDO e PENDENTE de implementação**; os demais UNIT_PRICE entram na
-avaliação da capability.
+tela mostra menos. **PREC-P-01 entregue em 2026-09-06**, uma coluna:
+`PurchaseOrderLine.unitPrice` em `DECIMAL(20,8)`, migration
+`20260925093004_numeric_precision_unit_price_20_8`, sem backfill. Medido contra
+o PostgreSQL antes de migrar: `4.05318764::decimal(14,4)` devolvia `4.0532`.
+Agora persiste inteiro, e acima de oito casas a fronteira **recusa** — criação e
+edição da OC — em vez de deixar o banco arredondar a nona.
+
+A serialização foi junto, na fatia que a família exigia (**PREC-SER-02
+PARCIAL**): o DTO da OC servia `toFixed(4)` e a tela devolve ao servidor o que
+recebe, então abrir e salvar sem editar bastava para gravar o valor cortado. O
+mesmo preço servido como referência no Recebimento também subiu para oito casas
+— ali **não era só apresentação**: o atalho "Usar preço da OC" copia esse valor
+para `ReceiptLine.actualUnitCost`, que é `DECIMAL(20,8)`.
+
+**O inventário completo da família está em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §10.1**, com as dez
+colunas de preço classificadas por uso real. Só uma tinha decisão segura, e uma
+migration com um campo correto vale mais que uma com dez semanticamente
+duvidosos: os preços contratuais ficam por §58, e os quatro preços técnicos da
+precificação viraram **PREC-P-02 a PREC-P-05** porque a cadeia
+`PricingTier.selectedPriceSnapshot → QuoteLine.pricingSelectedUnitPriceSnapshot
+→ QuoteLine.unitPrice` congela dentro de documento comercial e move-se inteira
+ou não se move.
 
 A separação que a capability precisa respeitar: **preço unitário da OC** é
 grandeza técnica de alta precisão; **total monetário da linha e do documento**
@@ -451,7 +493,7 @@ em `18,6` falha o gate.
 | Item | Escopo | Status |
 |---|---|---|
 | **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | **ABERTO / PARCIAL A+B+C** — as três famílias já migradas foram auditadas e serializam por `.toString()`/`csvDecimal`, sem corte; o resto segue as dependências de D e P |
-| **PREC-SER-02** | Gravação de preço técnico de 6 casas em coluna de 4 quando **não** for snapshot contratual | APROVADO — anda junto do **PREC-MIG-P**, a família UNIT_PRICE |
+| **PREC-SER-02** | Gravação de preço técnico de 6 casas em coluna de 4 quando **não** for snapshot contratual | **PARCIAL** — a fatia do PREC-P-01 está feita (`purchase-orders.service.ts`, `receiving.service.ts` → `precoUnitario`); fecha com PREC-P-02 a P-05 |
 | **PREC-FMT-01** | Eliminar `Number` nos formatters para grandeza técnica de alta precisão | APROVADO — obrigatório antes de qualquer preset acima de 6 casas |
 
 Ocorrências mapeadas em
@@ -648,13 +690,20 @@ permanece obrigatório no escopo atual.
 7. **Fundação de precisão B — entregue em 2026-09-05:** **PREC-MIG-B**
    (UNIT_COST em `DECIMAL(20,8)`), com o custo real de 8 casas preservado do
    banco até o seletor canônico e a média ponderada.
-8. **PRÓXIMA CAPABILITY:** **PREC-MIG-P** (HIGH, com
-   PREC-SER-02), D residual, PREC-SER-01, PREC-FMT-01, #18 e PREC-MIG-E
-   conforme as respostas de domínio.
-8. **Validação com a Veridi:** #7 + #11.
-9. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
-10. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
-11. **Roadmap:** preferências de exibição (PREC-UI-01 a 08) e produto próprio
+8. **Fundação de precisão C — entregue em 2026-09-06:** **PREC-MIG-C**
+   (PURITY/OVERAGE em `DECIMAL(9,6)`), com a recusa acima do scale registrada
+   como regra de produto em §58.
+9. **Fundação de precisão P — entregue em 2026-09-06:** **PREC-P-01**
+   (`PurchaseOrderLine.unitPrice` em `DECIMAL(20,8)`) mais a fatia de
+   **PREC-SER-02** dos campos migrados. **PREC-MIG-P fica PARCIAL**: PREC-P-02 a
+   PREC-P-05 são NEEDS_PO_DECISION.
+10. **PRÓXIMA CAPABILITY:** decisão do PO sobre PREC-P-02 a PREC-P-05, depois o
+    D residual, PREC-SER-01, PREC-FMT-01, #18 e PREC-MIG-E conforme as respostas
+    de domínio.
+11. **Validação com a Veridi:** #7 + #11.
+12. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
+13. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
+14. **Roadmap:** preferências de exibição (PREC-UI-01 a 08) e produto próprio
     Veridi.
 
 **Precisão numérica — ordem obrigatória.** #20 antes ou junto de #19: ampliar
