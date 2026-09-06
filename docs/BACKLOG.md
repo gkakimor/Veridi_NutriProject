@@ -35,8 +35,12 @@ dígitos, nos DOIS construtores) e **PREC-MIG-A RESOLVIDO** — 43 colunas em
 UNIT_COST em `DECIMAL(20,8)`, migration
 `20260925093002_numeric_precision_unit_cost_20_8`, sem backfill. Na aprovação o
 PO confirmou a exclusão de `PurchaseOrderLine.unitPrice` e abriu **PREC-MIG-P**
-(UNIT_PRICE de alta precisão, ABERTO / HIGH). #19 segue **ABERTO / PARCIAL** e
-PREC-MIG-D **ABERTO / PARCIAL**. **Seguinte:** PREC-MIG-C.
+(UNIT_PRICE de alta precisão, ABERTO / HIGH).
+**Fundação numérica C (2026-09-06):** **PREC-MIG-C RESOLVIDO** — 7 colunas
+PURITY/OVERAGE em `DECIMAL(9,6)`, migration
+`20260925093003_numeric_precision_purity_overage_9_6`, sem backfill. #19 segue
+**ABERTO / PARCIAL** e PREC-MIG-D **ABERTO / PARCIAL**. **Seguinte:**
+**PREC-MIG-P** (HIGH, com PREC-SER-02), depois o D residual.
 
 ---
 
@@ -44,8 +48,8 @@ PREC-MIG-D **ABERTO / PARCIAL**. **Seguinte:** PREC-MIG-C.
 
 ### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — ABERTO / PARCIAL
 
-**PREC-MIG-A RESOLVIDO em 2026-09-05; #19 segue ABERTO** enquanto PREC-MIG-B, C,
-D e E não fecharem. O defeito que originou o item está corrigido: as 43 colunas
+**PREC-MIG-A, B e C RESOLVIDOS; #19 segue ABERTO** enquanto PREC-MIG-D, E e P
+não fecharem. O defeito que originou o item está corrigido: as 43 colunas
 de quantidade e grandeza técnica inequívoca estão em `DECIMAL(24,12)`, e
 `0,000000048` persiste como `0,000000048000` em vez de `0,000000`. Provado
 contra o banco real em
@@ -325,10 +329,10 @@ implementação.
 |---|---|---|
 | **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **RESOLVIDO** — 43 colunas (39 QUANTITY + 1 FACTOR + 3 TECHNICAL_RESULT), migration `20260925093001_numeric_precision_quantities_24_12` |
 | **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | **RESOLVIDO** — 3 colunas, migration `20260925093002_numeric_precision_unit_cost_20_8` |
-| **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **ABERTO / NEXT** |
+| **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **RESOLVIDO** — 7 colunas, migration `20260925093003_numeric_precision_purity_overage_9_6` |
 | **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL** — 3 campos já entregues no A, ver abaixo |
 | **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
-| **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **ABERTO / HIGH** — `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` já aprovado |
+| **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **ABERTO / NEXT, HIGH** — `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` já aprovado |
 
 **PREC-MIG-B — entregue em 2026-09-05.** `ReceiptLine.actualUnitCost` é a fonte
 de custo real e alimenta custo de aquisição, média ponderada, estoque, CMV e
@@ -372,9 +376,39 @@ histórica: `4,0531` continua matematicamente `4,0531`, apenas representado como
 `4,05310000`. Sem backfill, sem recálculo documental. **PREC-SER-02** trata a
 serialização desses preços e anda junto desta família.
 
-**PREC-MIG-C — motivo do PO.** `99,9995%` não pode ser persistido em silêncio
-como `100,000`. A tela pode mostrar menos casas; a persistência preserva o
-valor.
+**PREC-MIG-C — entregue em 2026-09-06.** `99,9995%` não pode ser persistido em
+silêncio como `100,000`. A tela pode mostrar menos casas; a persistência preserva
+o valor. Sete colunas saíram de `Decimal(6,3)` para `DECIMAL(9,6)` — a família
+PERCENTAGE (pureza/overage) inteira do inventário:
+
+- `Item.defaultPurityPercent` — pureza padrão do cadastro
+- `FormulationComponent.purityPercentApplied` e `.overagePercent` — o snapshot da
+  receita, e os operandos que o motor divide e multiplica
+- `ProductionOrderRequirement.purityPercentApplied` e `.overagePercent` —
+  congelados na OP
+- `FormulationTemplateComponent.purityPercentApplied` e `.overagePercent` — a
+  origem da versão gerada de template
+
+Medido contra o PostgreSQL antes da migration: `99.9995::decimal(6,3)` devolvia
+`100.000`, e `0.000001` devolvia `0.000`. Agora persistem como `99.999500` e
+`0.000001`, e continuam distintos de `100.000000`. A entrada **recusa** acima de
+seis casas — em Item, Formulação e template — em vez de deixar o PostgreSQL
+arredondar a sétima em silêncio; `99.9999999` viraria `100.000000` mesmo em
+`9,6`, então trocar um silêncio por outro não resolveria nada.
+
+**Precisão e faixa continuam separadas.** O schema suporta `999,999999`, e isso
+não é autorização de negócio: pureza segue `0 < x <= 100` e overage segue `>= 0`,
+como sempre. A fórmula canônica não mudou — `físico = teórico ÷ (pureza/100) ×
+(1 + overage/100)` —, `PHYSICAL_DIRECT` continua sem aplicar ajuste nenhum e
+`PER_DOSE` sem `dosesPerPackage` continua fail-closed. O que mudou é só a
+precisão dos operandos.
+
+**Nenhum resultado ficou estrangulado.** O físico que a pureza produz é gravado
+em `ProductionOrderRequirement.requiredQuantity` e `.theoreticalQuantity`, ambos
+já em `DECIMAL(24,12)` desde o PREC-MIG-A, e o custo industrial por unidade em
+`IndustrialCostCalculation.costPerUnit`, também `24,12`. O residual do
+PREC-MIG-D (`14,4` e `14,6`) é composição de custo e de CMV — não recebe o
+resultado de pureza/overage, e por isso não limita o benefício desta capability.
 
 **PREC-MIG-D — o que já saiu e o que resta.** Três resultados técnicos que já
 estavam em `Decimal(18,6)` viajaram junto do PREC-MIG-A, porque o alvo deles é o
@@ -607,7 +641,7 @@ permanece obrigatório no escopo atual.
 7. **Fundação de precisão B — entregue em 2026-09-05:** **PREC-MIG-B**
    (UNIT_COST em `DECIMAL(20,8)`), com o custo real de 8 casas preservado do
    banco até o seletor canônico e a média ponderada.
-8. **PRÓXIMA CAPABILITY:** PREC-MIG-C. Depois: **PREC-MIG-P** (HIGH, com
+8. **PRÓXIMA CAPABILITY:** **PREC-MIG-P** (HIGH, com
    PREC-SER-02), D residual, PREC-SER-01, PREC-FMT-01, #18 e PREC-MIG-E
    conforme as respostas de domínio.
 8. **Validação com a Veridi:** #7 + #11.

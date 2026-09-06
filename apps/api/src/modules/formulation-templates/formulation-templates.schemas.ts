@@ -1,10 +1,29 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
+import {
+  CASAS_PERCENTUAL_TECNICO,
+  casasDecimais,
+  mensagemCasasPercentualTecnico,
+} from "../../lib/decimal-schema.js";
 
 const decimalString = z
   .union([z.string(), z.number()])
   .transform((value) => String(value).trim())
   .refine((value) => /^\d+(\.\d+)?$/.test(value), { message: "Valor inválido" });
+
+/**
+ * Pureza e overage do template — `DECIMAL(9,6)` desde o PREC-MIG-C.
+ *
+ * O template é a origem de uma versão de Formulação: uma pureza cortada aqui
+ * chegaria cortada lá, e a perda apareceria como divergência entre o template
+ * e a receita gerada dele. O limite de casas é o mesmo dos demais percentuais
+ * técnicos; a FAIXA do template continua sendo a que sempre foi, porque
+ * aumentar o scale não é decisão de negócio.
+ */
+const percentualTecnicoDoTemplate = decimalString.refine(
+  (value) => casasDecimais(value) <= CASAS_PERCENTUAL_TECNICO,
+  { message: mensagemCasasPercentualTecnico() },
+);
 
 const componentSchema = z.object({
   itemId: z.string().trim().min(1),
@@ -12,8 +31,8 @@ const componentSchema = z.object({
   unitCode: z.string().trim().min(1).max(20),
   basis: z.enum(["FIXED_BASIS", "PER_DOSE", "PER_FINISHED_UNIT"]).optional(),
   supplyResponsibility: z.enum(["VERIDI", "CUSTOMER"]).optional(),
-  purityPercentApplied: decimalString.nullish(),
-  overagePercent: decimalString.nullish(),
+  purityPercentApplied: percentualTecnicoDoTemplate.nullish(),
+  overagePercent: percentualTecnicoDoTemplate.nullish(),
   notes: optionalNullableText(500),
 });
 

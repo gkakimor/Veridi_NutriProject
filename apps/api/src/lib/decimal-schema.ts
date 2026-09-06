@@ -57,6 +57,18 @@ export const CASAS_QUANTIDADE = 12;
  */
 export const CASAS_CUSTO_UNITARIO = 8;
 
+/**
+ * Casas decimais de um percentual técnico — o scale de `DECIMAL(9,6)`.
+ *
+ * `PRODUCT_RULES.md` §58, PREC-MIG-C. Vale para pureza e overage. Antes da
+ * migration a coluna guardava três casas e `99,9995%` de um laudo de ensaio
+ * era gravado como `100,000` — "100% puro" é uma afirmação diferente da que o
+ * laudo faz, e ninguém era avisado da troca. Seis casas resolvem o laudo; a
+ * sétima o PostgreSQL voltaria a arredondar em silêncio, então a fronteira
+ * recusa em vez de deixar o banco decidir.
+ */
+export const CASAS_PERCENTUAL_TECNICO = 6;
+
 /** Quantas casas decimais o texto declara. */
 export function casasDecimais(valor: string): number {
   const ponto = valor.indexOf(".");
@@ -134,4 +146,16 @@ export function optionalQuantityDecimalSchema() {
  */
 export function mensagemCasasCustoUnitario(): string {
   return mensagemCasas(CASAS_CUSTO_UNITARIO);
+}
+
+/**
+ * Mesma mensagem para pureza e overage acima do scale — PREC-MIG-C.
+ *
+ * Pureza e overage têm forma própria (`null` é DESCONHECIDA e distinta de
+ * zero; pureza tem faixa de negócio e overage não) e não cabem em
+ * `decimalStringSchema`. O texto do limite, porém, é o mesmo do resto do
+ * sistema: duas redações da mesma regra divergem com o tempo.
+ */
+export function mensagemCasasPercentualTecnico(): string {
+  return mensagemCasas(CASAS_PERCENTUAL_TECNICO);
 }

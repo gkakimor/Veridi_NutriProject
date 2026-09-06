@@ -13,6 +13,9 @@ import { parseLegacyAddress } from "./legacy-address.js";
 
 const HUNDRED = new Prisma.Decimal(100);
 
+/** Scale de `Item.defaultPurityPercent` — `DECIMAL(9,6)`, PREC-MIG-C. */
+const CASAS_PUREZA = 6;
+
 /* ─────────────── Fornecedores ─────────────── */
 
 export interface MappedSupplier {
@@ -233,7 +236,24 @@ export function mapItems(findings: FindingSink): MappedItem[] {
         if (!parsed) throw new Error("pureza ilegível");
         const scaled = parsed.times(HUNDRED);
         if (scaled.greaterThan(0) && scaled.lessThanOrEqualTo(100)) {
-          defaultPurityPercent = scaled.toString();
+          /*
+           * Seis casas, o scale de `DECIMAL(9,6)` desde o PREC-MIG-C.
+           *
+           * O importador escreve via Prisma, sem passar pelo validator da API,
+           * e acima do scale o PostgreSQL arredonda sem dizer. Se o corpus
+           * trouxer mais precisão do que a coluna guarda, o corte fica
+           * registrado como achado em vez de acontecer dentro do banco.
+           */
+          const cortado = scaled.toDecimalPlaces(CASAS_PUREZA);
+          if (!cortado.equals(scaled)) {
+            findings.add(
+              "ITEM_PURITY_PRECISION_TRUNCATED",
+              "Item",
+              externalCode,
+              `grau_pureza=${rawPurity} tem mais de ${CASAS_PUREZA} casas; gravado como ${cortado.toString()}`,
+            );
+          }
+          defaultPurityPercent = cortado.toString();
         } else {
           findings.add("ITEM_PURITY_OUT_OF_RANGE", "Item", externalCode, `grau_pureza=${rawPurity}`);
         }

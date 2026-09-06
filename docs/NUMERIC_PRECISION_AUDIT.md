@@ -106,7 +106,7 @@ Prisma, fora do domínio. Zero Float. Zero Decimal sem precision/scale explícit
 | `Decimal(14,4)` | 27 | UNIT_COST, UNIT_PRICE, RATE, custos compostos |
 | `Decimal(7,4)` | 13 | PERCENTAGE |
 | `Decimal(14,6)` | 7 | UNIT_PRICE técnico (precificação) |
-| `Decimal(6,3)` | 7 | PERCENTAGE (pureza/overage) |
+| `Decimal(6,3)` | 7 | PERCENTAGE (pureza/overage) — **migrados para `9,6` no PREC-MIG-C** |
 | `Decimal(12,4)` | 4 | RATIO_FACTOR (markup), PHYSICAL_MEASUREMENT (kW) |
 | `Decimal(14,2)` | 2 | COMMERCIAL_DOCUMENT_TOTAL |
 
@@ -150,13 +150,13 @@ precificação no PREC-MIG-B.
 | FormulationVersion.basisQuantity | QUANTITY | 18,6 | base da versão (divisor) | POTENTIAL_RISK | 24,12 | Sim — A |
 | ProjectSample.outputQuantity | QUANTITY | 18,6 | piloto — lote pequeno | POTENTIAL_RISK | 24,12 | Sim — A |
 | **UnitOfMeasure.toBaseFactor** | UOM_CONVERSION | 18,6 | fator de conversão, multiplica e divide toda quantidade | decidido pelo PO | **24,12** | **Sim — A (ENTREGUE)** |
-| Item.defaultPurityPercent | PERCENTAGE | 6,3 | pureza padrão | POTENTIAL_RISK | 9,6 | Sim — B |
-| FormulationComponent.purityPercentApplied | PERCENTAGE | 6,3 | pureza aplicada (divisor) | POTENTIAL_RISK | 9,6 | Sim — B |
-| FormulationComponent.overagePercent | PERCENTAGE | 6,3 | overage aplicado | POTENTIAL_RISK | 9,6 | Sim — B |
-| ProductionOrderRequirement.purityPercentApplied | PERCENTAGE | 6,3 | congelado na OP | POTENTIAL_RISK | 9,6 | Sim — B |
-| ProductionOrderRequirement.overagePercent | PERCENTAGE | 6,3 | congelado na OP | POTENTIAL_RISK | 9,6 | Sim — B |
-| FormulationTemplateComponent.purityPercentApplied | PERCENTAGE | 6,3 | template | POTENTIAL_RISK | 9,6 | Sim — B |
-| FormulationTemplateComponent.overagePercent | PERCENTAGE | 6,3 | template | POTENTIAL_RISK | 9,6 | Sim — B |
+| Item.defaultPurityPercent | PERCENTAGE | 6,3 | pureza padrão | POTENTIAL_RISK | 9,6 | **Sim — C (ENTREGUE)** |
+| FormulationComponent.purityPercentApplied | PERCENTAGE | 6,3 | pureza aplicada (divisor) | POTENTIAL_RISK | 9,6 | **Sim — C (ENTREGUE)** |
+| FormulationComponent.overagePercent | PERCENTAGE | 6,3 | overage aplicado | POTENTIAL_RISK | 9,6 | **Sim — C (ENTREGUE)** |
+| ProductionOrderRequirement.purityPercentApplied | PERCENTAGE | 6,3 | congelado na OP | POTENTIAL_RISK | 9,6 | **Sim — C (ENTREGUE)** |
+| ProductionOrderRequirement.overagePercent | PERCENTAGE | 6,3 | congelado na OP | POTENTIAL_RISK | 9,6 | **Sim — C (ENTREGUE)** |
+| FormulationTemplateComponent.purityPercentApplied | PERCENTAGE | 6,3 | template | POTENTIAL_RISK | 9,6 | **Sim — C (ENTREGUE)** |
+| FormulationTemplateComponent.overagePercent | PERCENTAGE | 6,3 | template | POTENTIAL_RISK | 9,6 | **Sim — C (ENTREGUE)** |
 | ItemCostReference.unitCost | UNIT_COST | 14,4 | referência manual de custo | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
 | ReceiptLine.actualUnitCost | UNIT_COST | 14,4 | custo efetivo de aquisição — origem de toda média | decidido pelo PO | 20,8 | **Sim — B (ENTREGUE)** |
 | SupplierItemOffer.unitPrice | UNIT_COST | 14,4 | oferta de fornecedor, lida como custo pelo seletor | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
@@ -527,6 +527,10 @@ colunas**); `Decimal(6,3)` → `Decimal(9,6)` para pureza e overage (**7
 colunas**); `Decimal(14,6)` → `Decimal(20,8)` para preço de precificação (**7
 colunas**). Perguntas em §12.
 
+A fatia de pureza e overage **saiu deste grupo e foi entregue** como PREC-MIG-C,
+migration `20260925093003_numeric_precision_purity_overage_9_6`: as sete colunas
+`PERCENTAGE` estão em `DECIMAL(9,6)`, sem backfill.
+
 `UnitOfMeasure.toBaseFactor` **saiu deste grupo**: o PO o colocou no PREC-MIG-A
 e ele foi entregue lá. Quantidade com doze casas não adianta se a conversão
 perder precisão antes dela.
@@ -569,8 +573,13 @@ truncaria. Por isso a decisão de scale precisa nascer certa, e por isso 12 e n�
    confirmou a exclusão e abriu o **PREC-MIG-P** para a família UNIT_PRICE, com
    `PurchaseOrderLine.unitPrice → DECIMAL(20,8)` aprovado: preço unitário de
    compra é grandeza técnica; o total documental da linha segue regra própria.
-3. **PREC-MIG-C e D** — pureza e overage em `DECIMAL(9,6)`, demais resultados
-   técnicos.
+3. **PREC-MIG-C — ENTREGUE.** Pureza e overage em `DECIMAL(9,6)`, sete colunas,
+   migration `20260925093003_numeric_precision_purity_overage_9_6`, sem backfill.
+   `99,9995%` de laudo persiste como `99.999500` em vez de virar `100,000`, e a
+   fronteira da API recusa acima de seis casas — o scale maior não mexeu na faixa
+   de negócio (`0 < pureza <= 100`, overage `>= 0`) nem na fórmula canônica. O
+   **PREC-MIG-D residual** segue aberto: os resultados técnicos ainda em `14,4` e
+   `14,6`.
 4. **PREC-SER-01, PREC-SER-02 e PREC-FMT-01** — não são migration de schema, mas
    precisam entrar depois do widening para que a serialização já espelhe o scale
    novo. `PREC-FMT-01` é pré-requisito de qualquer preset acima de seis casas.

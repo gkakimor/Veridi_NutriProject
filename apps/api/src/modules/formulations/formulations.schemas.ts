@@ -1,12 +1,24 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
+import {
+  CASAS_PERCENTUAL_TECNICO,
+  casasDecimais,
+  mensagemCasasPercentualTecnico,
+  quantityDecimalSchema,
+} from "../../lib/decimal-schema.js";
 import {
   optionalPositiveInt,
   optionalPurityPercent,
 } from "../../lib/industrial-schema.js";
 
-/** Overage: 0 é legítimo (declarar "sem perda"); negativo nunca é. */
+/**
+ * Overage: 0 é legítimo (declarar "sem perda"); negativo nunca é.
+ *
+ * Sem teto superior, de propósito — o domínio nunca definiu um, e o
+ * `DECIMAL(9,6)` do PREC-MIG-C não é lugar de inventar regra de negócio. O
+ * limite de casas é outra coisa: acima de seis o PostgreSQL arredondaria sem
+ * avisar, e um overage de `0,000001%` viraria zero.
+ */
 const optionalOveragePercent = z
   .union([z.string(), z.number()])
   .nullish()
@@ -18,7 +30,12 @@ const optionalOveragePercent = z
   })
   .refine((value) => value === undefined || value === null || /^\d+(\.\d+)?$/.test(value), {
     message: "Overage inválido",
-  });
+  })
+  .refine(
+    (value) =>
+      value === undefined || value === null || casasDecimais(value) <= CASAS_PERCENTUAL_TECNICO,
+    { message: mensagemCasasPercentualTecnico() },
+  );
 
 const optionalLegacyDecimal = z
   .union([z.string(), z.number()])
