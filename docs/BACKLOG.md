@@ -181,9 +181,11 @@ impresso não fecha, num documento de execução GMP.
 Lista completa em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md)
 §5. A correção do `print` é independente de migration e cabe em qualquer rodada.
 
-### 18. Consistência monetária da Ordem de Compra — RESOLVIDO
+### 18. Consistência monetária da Ordem de Compra — RESOLVIDO / PUBLICADO
 
-**RESOLVIDO em 2026-09-06**, depois da fundação de precisão, em capability
+**RESOLVIDO e PUBLICADO em 2026-09-06** (merge `34a5424`, deploy Railway verde;
+`prisma migrate deploy` respondeu "No pending migrations to apply" — nenhuma
+migration nova, como esperado), depois da fundação de precisão, em capability
 própria como o PO exigiu. O total documental da OC passou a reconciliar com as
 linhas exibidas: `Σ round(quantidade × preço, 2)` em vez de
 `round(Σ valores brutos, 2)`. Regra durável em

@@ -20,7 +20,8 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 ## Última capability
 
 **Reconciliação monetária da Ordem de Compra — #18**, aprovada pelo PO e
-publicada em 2026-09-06, merge `34a5424`. **Zero migration, zero mudança de
+publicada em 2026-09-06, merge `34a5424`, deploy Railway verde — o `preDeploy`
+respondeu "No pending migrations to apply". **Zero migration, zero mudança de
 schema.** O rodapé da OC somava as linhas em
 precisão cheia e arredondava no fim, enquanto a página imprimia cada linha já
 fechada em dois centavos: `10 × 4,05318764`, `1 × 0,125` e `5 × 0,025` imprimem
