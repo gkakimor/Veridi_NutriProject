@@ -18,8 +18,8 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
 ## Última capability
 
-**Precificação técnica em alta precisão — PREC-P-TECH**, na branch
-`feat/numeric-precision-pricing-technical`, aguardando revisão do PO. **QUATRO
+**Precificação técnica em alta precisão — PREC-P-TECH**, aprovada pelo PO e
+publicada em 2026-09-06. **QUATRO
 colunas** de `Decimal(14,6)` para `DECIMAL(20,8)`: `PricingTier.manualUnitPrice`,
 `.suggestedPriceSnapshot`, `.selectedPriceSnapshot` e
 `QuoteLine.pricingSelectedUnitPriceSnapshot`. Migration
@@ -37,9 +37,12 @@ carrega as mesmas oito.
 Preço técnico (8 casas) e preço comercial (4 casas) são **dois números**, lado a
 lado de propósito: uma linha com `pricingSelectedUnitPriceSnapshot = 4,05318764`
 e `unitPrice = 4,0532` está certa. A passagem entre eles é FECHAMENTO, não perda,
-e acontece em `fecharPrecoUnitarioComercial` — com nome, rounding mode do produto
-e teste —, nunca por scale de coluna, formatter ou `Number`. Depois dela, Pedido
-e Faturamento recebem cópias exatas e ninguém volta às oito casas.
+e acontece em `fecharPrecoUnitarioComercial` — com nome, teste e
+**`ROUND_HALF_UP` declarado na chamada** —, nunca por scale de coluna, formatter
+ou `Number`. O fechamento técnico de 8 casas, `fecharPrecoTecnicoPersistido`,
+declara o mesmo modo: nenhuma das duas depende do default do `decimal.js`, e um
+teste inverte o rounding global para provar. Depois da fronteira, Pedido e
+Faturamento recebem cópias exatas e ninguém volta às oito casas.
 
 **`QuoteLine.unitPrice` permanece `14,4` por decisão do PO** (PREC-P-05), e o
 outro lado da regra veio junto: as **quatro entradas de preço sem teto de casas**
@@ -55,8 +58,8 @@ não foram tocados:** o total sai do preço comercial, `500 × 4,0532 = R$
 **P — PREC-MIG-P / PREC-P-01** (`e94971f`). `PurchaseOrderLine.unitPrice` em
 `DECIMAL(20,8)`, sem backfill: `4.05318764::decimal(14,4)` devolvia `4.0532`, e
 um insumo cotado por grama tinha o preço trocado por outro em silêncio. Junto, o
-preço servido como referência no Recebimento, onde "Usar preço da OC" copia o
-valor para `ReceiptLine.actualUnitCost`.
+preço servido no Recebimento, onde "Usar preço da OC" copia o valor para
+`ReceiptLine.actualUnitCost`.
 
 **C — PREC-MIG-C** (`e7656ab`). Pureza e overage em `DECIMAL(9,6)`, sete colunas:
 `99.9995` deixou de virar `100.000`. Na aprovação o PO **registrou a recusa acima
@@ -64,7 +67,7 @@ do scale como regra de produto** (§58); precisão e faixa de negócio são regr
 independentes.
 
 **B — PREC-MIG-B** (`b5f6089`). Custo unitário em `DECIMAL(20,8)`:
-`ReceiptLine.actualUnitCost` — a origem de TODO custo real —,
+`ReceiptLine.actualUnitCost` — origem de TODO custo real —,
 `ItemCostReference.unitCost` e `SupplierItemOffer.unitPrice`, lido como custo.
 
 **A — #20 + PREC-MIG-A** (`5f855cd`). Motor decimal em 40 dígitos, numa
@@ -73,9 +76,9 @@ construtores nesta base, e o Prisma roda no dele. 43 colunas para
 `DECIMAL(24,12)` sem backfill; `0,000000048` persiste em vez de virar `0,000000`.
 `scripts/numeric-precision-matrix.test.ts` guarda a matriz de §58.
 
-**Auditoria PREC-01** (`0305704`, só documentação) e **Rodadas 1 a 4** — #15 e
-#16 (`33ee1cd`), #8D e #8H (`b89f9a4`), #8A–#8C (`dfb2673`), referência manual de
-custo e revisão do "Como funciona" em 62 telas. Regras em §53 a §60; detalhe em
+**Auditoria PREC-01** (`0305704`, só documentação) e **Rodadas 1 a 4** — #15 e #16
+(`33ee1cd`), #8D e #8H (`b89f9a4`), #8A–#8C (`dfb2673`), referência manual de custo
+e revisão do "Como funciona" em 62 telas. Regras §53 a §60; detalhe em
 [`BACKLOG.md`](BACKLOG.md), seção G.
 
 ## Estado operacional do repositório
@@ -91,21 +94,21 @@ migrations aplicam num banco vazio só com o repositório —
 
 ## Próxima capability
 
-**PREC-MIG-D residual** — os resultados técnicos ainda em `Decimal(14,4)` e
-`(14,6)`, incluindo a comissão e a contribuição por unidade que o PREC-P-TECH
-deixou para trás de propósito. Depois: PREC-SER-01, PREC-FMT-01, #18 e
-PREC-MIG-E.
+**#18 — reconciliação monetária da Ordem de Compra.** Decisão do PO em
+2026-09-06, na publicação do PREC-P-TECH: com a fundação numérica no lugar, o
+total da OC passa a ser a próxima capability, em conversa própria. Depois dela:
+**PREC-MIG-D** residual (comissão e contribuição por unidade em `14,6`),
+PREC-SER-01, PREC-FMT-01 e PREC-MIG-E.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11) — não bloqueia os itens internos já decididos pelo PO.
-Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md); guia
-do usuário final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado.
+Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 
 ## Backlog aberto
 
 [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#20 resolvido; #19
-aberto** com PREC-MIG-A, B, C e P entregues. **Seguinte:** D residual,
-PREC-SER-01, PREC-FMT-01, **#18** (desbloqueado) e PREC-MIG-E. **Roadmap:**
+aberto** com PREC-MIG-A, B, C e P entregues. **Seguinte: #18**, depois D
+residual, PREC-SER-01, PREC-FMT-01 e PREC-MIG-E. **Roadmap:**
 PREC-UI-01 a 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:**
 #7 e #11. **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não
 determinística sob paralelismo, não observado nesta rodada) e #21.

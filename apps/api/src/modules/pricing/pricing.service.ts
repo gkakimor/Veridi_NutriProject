@@ -22,7 +22,8 @@ import { getIndustrialCostCalculation } from "../industrial-cost-calculation/sna
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
-import { ESCALA_PRECO_UNITARIO, precoUnitario } from "../../lib/decimal-serialization.js";
+import { precoUnitario } from "../../lib/decimal-serialization.js";
+import { fecharPrecoTecnicoPersistido } from "../../lib/technical-price.js";
 import { isUomCompatible } from "../items/uom.js";
 import {
   CalculationProductMismatchError,
@@ -1044,13 +1045,14 @@ export async function activatePricingVersion(
            * é do domínio: o banco recebe um valor que já cabe.
            *
            * Não é arredondamento novo — é o mesmo `ROUND_HALF_UP` que o
-           * PostgreSQL aplicava, agora escrito onde dá para ler e testar.
+           * PostgreSQL aplicava, agora escrito onde dá para ler e testar, e
+           * declarado na chamada em vez de herdado do default do `decimal.js`.
            */
           suggestedPriceSnapshot: entry.price.suggestedUnitPrice
-            ? entry.price.suggestedUnitPrice.toDecimalPlaces(ESCALA_PRECO_UNITARIO)
+            ? fecharPrecoTecnicoPersistido(entry.price.suggestedUnitPrice)
             : null,
           selectedPriceSnapshot: entry.price.selectedUnitPrice
-            ? entry.price.selectedUnitPrice.toDecimalPlaces(ESCALA_PRECO_UNITARIO)
+            ? fecharPrecoTecnicoPersistido(entry.price.selectedUnitPrice)
             : null,
           commissionPerUnitSnapshot: entry.price.commissionPerUnit,
           commissionTotalSnapshot: entry.price.commissionTotal,

@@ -3773,11 +3773,27 @@ precisão do documento que o registra. Por isso ela não pode acontecer:
 - por conversão para `Number`;
 - incidentalmente, num `.toFixed()` que ninguém sabe explicar.
 
-Ela acontece **em código de domínio, num ponto nomeado**, com o rounding mode
-canônico do produto (§59) — hoje `fecharPrecoUnitarioComercial`, no vínculo da
-faixa com a linha do Orçamento. Um corte de precisão que não se distingue de um
-defeito acaba "corrigido" por engano na capability seguinte; um corte com nome
-e teste é uma decisão que se lê.
+Ela acontece **em código de domínio, num ponto nomeado** — hoje
+`fecharPrecoUnitarioComercial`, no vínculo da faixa com a linha do Orçamento. Um
+corte de precisão que não se distingue de um defeito acaba "corrigido" por
+engano na capability seguinte; um corte com nome e teste é uma decisão que se lê.
+
+**As duas fronteiras declaram `ROUND_HALF_UP`.** Decisão de Product Ownership de
+2026-09-06, no hardening do PREC-P-TECH:
+
+- **A.** preço técnico persistido em 8 casas — `ROUND_HALF_UP` **explícito**;
+- **B.** preço técnico → preço comercial em 4 casas — `ROUND_HALF_UP`
+  **explícito**;
+- **C.** nenhuma das duas depende do rounding **default** do `decimal.js`. A
+  configuração canônica continua mexendo só em `precision` (§59); o modo viaja
+  na chamada.
+
+Metade para cima, afastando-se do zero — o mesmo critério que o PostgreSQL
+aplica ao gravar, e nunca banker's rounding. Confiar no default bastava enquanto
+o arredondamento era detalhe de biblioteca; virou regra de domínio, e regra de
+domínio não pode mudar porque outra capability trocou uma configuração global de
+carona. O comportamento publicado é o mesmo: o que deixa de existir é a
+dependência.
 
 **Depois do fechamento, ninguém volta.** Pedido e Faturamento recebem cópias
 exatas do preço comercial — nenhum elo adiante recupera as oito casas, e

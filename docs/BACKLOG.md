@@ -61,9 +61,11 @@ colunas e só uma tinha decisão segura; as quatro técnicas da precificação v
 `preço técnico → preço comercial` é uma **fronteira deliberada de fechamento em
 quatro casas** ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §60), e estendeu a recusa
 de §58 ao lado comercial: preço de documento acima de 4 casas responde HTTP 400.
-#19 segue **ABERTO / PARCIAL** e PREC-MIG-D **ABERTO / PARCIAL** — comissão e
-contribuição por unidade continuam em `14,6`. **#18 permanece desbloqueado e não
-iniciado.** **Seguinte:** PREC-MIG-D residual.
+Na aprovação o PO exigiu **um hardening antes do merge — PREC-ROUND-P01,
+RESOLVIDO**: `ROUND_HALF_UP` declarado nas duas fronteiras, sem depender do
+default do `decimal.js` (§60 A/B/C). #19 segue **ABERTO / PARCIAL**; PREC-MIG-D
+**ABERTO**, depois do #18 — comissão e contribuição por unidade continuam em
+`14,6`. **Seguinte: #18**, reconciliação monetária da OC, em conversa própria.
 
 ---
 
@@ -362,7 +364,7 @@ PREC-FMT-01.
 | **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **RESOLVIDO** — 43 colunas (39 QUANTITY + 1 FACTOR + 3 TECHNICAL_RESULT), migration `20260925093001_numeric_precision_quantities_24_12` |
 | **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | **RESOLVIDO** — 3 colunas, migration `20260925093002_numeric_precision_unit_cost_20_8` |
 | **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **RESOLVIDO** — 7 colunas, migration `20260925093003_numeric_precision_purity_overage_9_6` |
-| **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL** — 3 campos já entregues no A, ver abaixo |
+| **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL, depois do #18** — 3 campos já entregues no A, ver abaixo |
 | **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
 | **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **RESOLVIDO** — PREC-P-01 e PREC-P-TECH entregues; nenhum UNIT_PRICE pendente |
 | **PREC-P-01** | `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` | **RESOLVIDO** — 1 coluna, migration `20260925093004_numeric_precision_unit_price_20_8` |
@@ -371,6 +373,7 @@ PREC-FMT-01.
 | **PREC-P-04** | `QuoteLine.pricingSelectedUnitPriceSnapshot` → `DECIMAL(20,8)` | **RESOLVIDO** — PREC-P-TECH. Proveniência técnica com 8 casas ao lado do preço comercial de 4, na mesma linha e de propósito |
 | **PREC-P-05** | `QuoteLine.unitPrice` (`14,4`) | **RESOLVIDO POR DECISÃO DE MANTER** — o PO ratificou `14,4` em 2026-09-06: é o preço do documento comercial, §58 e §60. Entrada acima de 4 casas passou a ser recusada |
 | **PREC-P-TECH** | Os 4 preços técnicos da precificação → `DECIMAL(20,8)` + fronteira explícita de fechamento comercial | **RESOLVIDO** — 4 colunas, migration `20260925093005_numeric_precision_pricing_technical_20_8` |
+| **PREC-ROUND-P01** | `ROUND_HALF_UP` explícito nas duas fronteiras de precisão, sem depender do default do `decimal.js` | **RESOLVIDO** — hardening exigido pelo PO na aprovação; `technical-price.ts` e `commercial-price.ts`, regra em §60 A/B/C |
 
 **PREC-MIG-B — entregue em 2026-09-05.** `ReceiptLine.actualUnitCost` é a fonte
 de custo real e alimenta custo de aquisição, média ponderada, estoque, CMV e
@@ -761,8 +764,10 @@ permanece obrigatório no escopo atual.
     fronteira `técnico → comercial` virou regra durável (§60), a redução para
     oito casas passou a acontecer no domínio e as quatro entradas de preço
     ganharam teto de casas. **PREC-MIG-P e PREC-SER-02 RESOLVIDOS.**
-11. **PRÓXIMA CAPABILITY:** **PREC-MIG-D** residual (comissão e contribuição por
-    unidade em `14,6`), depois PREC-SER-01, PREC-FMT-01, #18 e PREC-MIG-E.
+11. **PRÓXIMA CAPABILITY: #18** — reconciliação monetária da Ordem de Compra, em
+    conversa própria, por decisão do PO em 2026-09-06. Depois: **PREC-MIG-D**
+    residual (comissão e contribuição por unidade em `14,6`), PREC-SER-01,
+    PREC-FMT-01 e PREC-MIG-E.
 12. **Validação com a Veridi:** #7 + #11.
 13. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
 14. **Rodada técnica isolada:** #14 (Schema Integrity Audit).

@@ -1,5 +1,4 @@
-import { Prisma } from "@prisma/client";
-import "./decimal.js";
+import { Decimal } from "./decimal.js";
 
 /**
  * A fronteira entre preço TÉCNICO e preço COMERCIAL.
@@ -22,18 +21,18 @@ import "./decimal.js";
  *
  *     custo preciso (20,8)
  *       → motor de precificação (40 dígitos)
- *       → preço técnico (20,8)
+ *       → preço técnico (20,8) — `fecharPrecoTecnicoPersistido`
  *       → FECHAMENTO COMERCIAL EXPLÍCITO (esta função, 4 casas)
  *       → QuoteLine.unitPrice (14,4)
  *       → CustomerOrderLine.agreedUnitPrice → BillingLine (cópias exatas)
  *       → total documental em 2 casas, regra #15
  *
  * **Não é um segundo motor monetário.** Não há aritmética aqui: só a decisão
- * de escala, sobre o `Prisma.Decimal` canônico configurado em `./decimal.js`.
+ * de escala e de modo de arredondamento, sobre o `Decimal` canônico da API.
  *
  * **Não é formatação.** Formatter visual pode mostrar duas casas sem tocar no
  * que está gravado; isto produz o valor que será persistido, e o resultado sai
- * como `Prisma.Decimal`, nunca como `Number`.
+ * como `Decimal`, nunca como `Number`.
  */
 
 /** Escala do preço unitário comercial — `DECIMAL(14,4)`, §58. */
@@ -44,12 +43,15 @@ export const ESCALA_PRECO_COMERCIAL = 4;
  *
  * `4.05318764` → `4.0532`.
  *
- * O arredondamento é o do `Prisma.Decimal` canônico e **não é escolhido aqui**:
- * `decimal-config.ts` mexe em `precision` e em nada mais, então `rounding`
- * continua no `ROUND_HALF_UP` do default — o mesmo modo que o PostgreSQL aplica
- * ao gravar, e o mesmo que o `.toFixed(4)` anterior já usava. Trocá-lo de
- * carona mudaria em silêncio o centavo de todo documento comercial do sistema.
+ * `ROUND_HALF_UP` **explícito**, e não herdado do default do `decimal.js`.
+ * `decimal-config.ts` continua mexendo só em `precision` (§59) — o modo de
+ * arredondamento desta fronteira é decisão de domínio e viaja na chamada, para
+ * que uma mudança global do `Decimal.rounding` não mova em silêncio o centavo
+ * de todo documento comercial do sistema. `ROUND_HALF_UP` é o mesmo critério
+ * que o PostgreSQL aplica ao gravar e o mesmo que o `.toFixed(4)` anterior já
+ * usava: o comportamento publicado não muda, só deixa de depender de um
+ * default.
  */
-export function fecharPrecoUnitarioComercial(precoTecnico: Prisma.Decimal): Prisma.Decimal {
-  return precoTecnico.toDecimalPlaces(ESCALA_PRECO_COMERCIAL);
+export function fecharPrecoUnitarioComercial(precoTecnico: Decimal): Decimal {
+  return precoTecnico.toDecimalPlaces(ESCALA_PRECO_COMERCIAL, Decimal.ROUND_HALF_UP);
 }
