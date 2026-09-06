@@ -4,12 +4,12 @@
 
 ## Onde estamos
 
-**`main` @ `579f82f`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `b358fd8`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9, #3,
 #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**
-(só documentação) e as **Fundações numéricas A, B, C e P**, todas com migration e
-aprovadas pelo PO. **Produção:** Railway, deploy automático da `main`; health
-200, banco up, smoke autenticado passando, sem dado de negócio.
+(só documentação), as **Fundações numéricas A, B, C e P** e o **PREC-P-TECH**,
+todas com migration e aprovadas pelo PO. **Produção:** Railway, deploy automático
+da `main`; health 200, banco up, smoke autenticado passando, sem dado de negócio.
 
 MVP operacional **validado internamente**, blocos A a G fechados — de cadastros
 e compras a produção rastreada, expedição, faturamento, custos, cockpit,
@@ -19,7 +19,7 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 ## Última capability
 
 **Precificação técnica em alta precisão — PREC-P-TECH**, aprovada pelo PO e
-publicada em 2026-09-06. **QUATRO
+publicada em 2026-09-06, merge `b358fd8`. **QUATRO
 colunas** de `Decimal(14,6)` para `DECIMAL(20,8)`: `PricingTier.manualUnitPrice`,
 `.suggestedPriceSnapshot`, `.selectedPriceSnapshot` e
 `QuoteLine.pricingSelectedUnitPriceSnapshot`. Migration
