@@ -22,8 +22,9 @@ import { getIndustrialCostCalculation } from "../industrial-cost-calculation/sna
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
-import { precoUnitario } from "../../lib/decimal-serialization.js";
+import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
 import { fecharPrecoTecnicoPersistido } from "../../lib/technical-price.js";
+import { fecharResultadoTecnicoPersistido } from "../../lib/technical-result.js";
 import { isUomCompatible } from "../items/uom.js";
 import {
   CalculationProductMismatchError,
@@ -93,16 +94,19 @@ function money(value: Prisma.Decimal): string {
 }
 
 /**
- * Resultado técnico da precificação ainda em `DECIMAL(14,6)`.
+ * RESULTADO TÉCNICO da precificação — `DECIMAL(24,12)`, PREC-MIG-D.
  *
- * Continua servindo comissão e contribuição por unidade, e o custo unitário da
- * faixa. Deixou de servir PREÇO: preço técnico é `DECIMAL(20,8)` desde o
- * PREC-P-TECH, e uma função só para as duas escalas voltaria a cortar em seis
- * casas o que a coluna passou a guardar em oito. As colunas que sobraram aqui
- * pertencem ao PREC-MIG-D e sobem quando o PO decidir.
+ * Custo unitário congelado da faixa, comissão e contribuição por unidade. Doze
+ * casas porque é o scale da coluna: o DTO devolve o que o banco guarda, nem
+ * mais nem menos (`PRODUCT_RULES.md` §57). Até o PREC-MIG-D esta função servia
+ * seis, e o custo unitário já estava em `DECIMAL(24,12)` desde o PREC-MIG-A —
+ * a migration desfeita na saída.
+ *
+ * **Não é preço.** Preço técnico é `DECIMAL(20,8)` (`precoTecnico`) e preço
+ * comercial é `DECIMAL(14,4)`: categorias distintas, §58.
  */
-function unitMoney(value: Prisma.Decimal): string {
-  return value.toFixed(6);
+function resultadoTecnicoDaFaixa(value: Prisma.Decimal): string {
+  return resultadoTecnico(value);
 }
 
 /**
@@ -252,7 +256,7 @@ function toTierDTO(entry: ComputedTier, frozen: boolean): PricingTierDTO {
       sortOrder: tier.sortOrder,
 
       industrialCostTotal: tier.costTotalSnapshot ? money(tier.costTotalSnapshot) : null,
-      industrialCostPerUnit: tier.costPerUnitSnapshot ? unitMoney(tier.costPerUnitSnapshot) : null,
+      industrialCostPerUnit: tier.costPerUnitSnapshot ? resultadoTecnicoDaFaixa(tier.costPerUnitSnapshot) : null,
       costPer1000: tier.costPer1000Snapshot ? money(tier.costPer1000Snapshot) : null,
       knownSubtotal: money(tier.knownSubtotalSnapshot ?? new Prisma.Decimal(0)),
       costQuality: (tier.costQualitySnapshot ?? "NO_COST") as IndustrialCostQuality,
@@ -263,12 +267,12 @@ function toTierDTO(entry: ComputedTier, frozen: boolean): PricingTierDTO {
         : null,
       selectedUnitPrice: tier.selectedPriceSnapshot ? precoTecnico(tier.selectedPriceSnapshot) : null,
       commissionPerUnit: tier.commissionPerUnitSnapshot
-        ? unitMoney(tier.commissionPerUnitSnapshot)
+        ? resultadoTecnicoDaFaixa(tier.commissionPerUnitSnapshot)
         : null,
       commissionTotal: tier.commissionTotalSnapshot ? money(tier.commissionTotalSnapshot) : null,
       grossRevenue: tier.grossRevenueSnapshot ? money(tier.grossRevenueSnapshot) : null,
       contributionPerUnit: tier.contributionPerUnitSnapshot
-        ? unitMoney(tier.contributionPerUnitSnapshot)
+        ? resultadoTecnicoDaFaixa(tier.contributionPerUnitSnapshot)
         : null,
       contributionTotal: tier.contributionTotalSnapshot
         ? money(tier.contributionTotalSnapshot)
@@ -304,7 +308,7 @@ function liveTierDTO(
     manualUnitPrice: tier.manualUnitPrice ? precoTecnico(tier.manualUnitPrice) : null,
 
     industrialCostTotal: cost.total ? money(cost.total) : null,
-    industrialCostPerUnit: cost.perUnit ? unitMoney(cost.perUnit) : null,
+    industrialCostPerUnit: cost.perUnit ? resultadoTecnicoDaFaixa(cost.perUnit) : null,
     costPer1000: cost.per1000 ? money(cost.per1000) : null,
     knownSubtotal: money(cost.knownSubtotal),
     costQuality: cost.quality,
@@ -312,11 +316,18 @@ function liveTierDTO(
 
     suggestedUnitPrice: price.suggestedUnitPrice ? precoTecnico(price.suggestedUnitPrice) : null,
     selectedUnitPrice: price.selectedUnitPrice ? precoTecnico(price.selectedUnitPrice) : null,
-    commissionPerUnit: price.commissionPerUnit ? unitMoney(price.commissionPerUnit) : null,
+    // A prévia mostra o que a ATIVAÇÃO vai gravar, e por isso fecha pela mesma
+    // fronteira: o motor devolve 40 dígitos, o helper reduz a doze com
+    // `ROUND_HALF_UP` declarado, e só então o DTO serializa. Servir o valor de
+    // 40 dígitos cortado pelo `toFixed` daria uma prévia que o `UPDATE` depois
+    // desmente na última casa.
+    commissionPerUnit: price.commissionPerUnit
+      ? resultadoTecnicoDaFaixa(fecharResultadoTecnicoPersistido(price.commissionPerUnit))
+      : null,
     commissionTotal: price.commissionTotal ? money(price.commissionTotal) : null,
     grossRevenue: price.grossRevenue ? money(price.grossRevenue) : null,
     contributionPerUnit: price.contributionPerUnit
-      ? unitMoney(price.contributionPerUnit)
+      ? resultadoTecnicoDaFaixa(fecharResultadoTecnicoPersistido(price.contributionPerUnit))
       : null,
     contributionTotal: price.contributionTotal ? money(price.contributionTotal) : null,
     contributionMarginPercent: price.contributionMarginPercent
@@ -540,8 +551,11 @@ export async function getPricingRebasePreview(id: string): Promise<PricingRebase
     tiers.push({
       quantity: tier.quantity.toString(),
       uomCode: tier.uomCode,
-      costPerUnitFrom: de && de.perUnit ? de.perUnit.toFixed(4) : null,
-      costPerUnitTo: para && para.perUnit ? para.perUnit.toFixed(4) : null,
+      // O custo comparado é RESULTADO TÉCNICO: doze casas, o scale de
+      // `costPerUnitSnapshot`. Em quatro, um rebase que mexe na quinta casa
+      // apareceria como "de X para X" — a comparação diria que nada mudou.
+      costPerUnitFrom: de && de.perUnit ? resultadoTecnico(de.perUnit) : null,
+      costPerUnitTo: para && para.perUnit ? resultadoTecnico(para.perUnit) : null,
       // Prévia de REBASE: o preço aqui é técnico, não é o preço de um
       // documento. Servi-lo em quatro casas cortaria o valor da faixa antes
       // da fronteira comercial — §60 — e a comparação diria que dois preços
@@ -1054,10 +1068,27 @@ export async function activatePricingVersion(
           selectedPriceSnapshot: entry.price.selectedUnitPrice
             ? fecharPrecoTecnicoPersistido(entry.price.selectedUnitPrice)
             : null,
-          commissionPerUnitSnapshot: entry.price.commissionPerUnit,
+          /*
+           * FRONTEIRA DE PERSISTÊNCIA do resultado técnico — PREC-MIG-D.
+           *
+           * Mesma história do preço, uma capability depois. O motor devolve
+           * `preço × comissão%` e `preço − comissão − custo` em 40 dígitos, a
+           * coluna guarda doze casas, e até aqui quem reduzia 40 para SEIS era
+           * o PostgreSQL: `0.2026593333333333` gravava `0.202659`. Agora a
+           * redução é do domínio, com `ROUND_HALF_UP` declarado na chamada em
+           * vez de herdado do default do `decimal.js`.
+           *
+           * Comissão e contribuição por unidade continuam LEITURA econômica —
+           * o preço do documento tem fronteira própria, em quatro casas.
+           */
+          commissionPerUnitSnapshot: entry.price.commissionPerUnit
+            ? fecharResultadoTecnicoPersistido(entry.price.commissionPerUnit)
+            : null,
           commissionTotalSnapshot: entry.price.commissionTotal,
           grossRevenueSnapshot: entry.price.grossRevenue,
-          contributionPerUnitSnapshot: entry.price.contributionPerUnit,
+          contributionPerUnitSnapshot: entry.price.contributionPerUnit
+            ? fecharResultadoTecnicoPersistido(entry.price.contributionPerUnit)
+            : null,
           contributionTotalSnapshot: entry.price.contributionTotal,
           contributionMarginSnapshot: entry.price.contributionMarginPercent,
           markupSnapshot: entry.price.markupPercent,

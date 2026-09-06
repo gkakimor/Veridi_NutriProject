@@ -4,89 +4,83 @@
 
 ## Onde estamos
 
-**`main` @ `34a5424`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `6c5c146`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9, #3,
-#5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**
-(só documentação), as **Fundações numéricas A, B, C e P**, o **PREC-P-TECH** e
-o **#18**, todos aprovados pelo PO. **Produção:** Railway, deploy automático
-da `main`; health 200, banco up, 55 migrations sem pendência, smoke autenticado
-passando, sem dado de negócio.
+#5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**,
+as **Fundações numéricas A, B, C e P**, o **PREC-P-TECH** e o **#18**, todos
+aprovados pelo PO. **Produção:** Railway, deploy automático da `main`; health
+200, banco up, 55 migrations sem pendência, smoke autenticado passando, sem dado
+de negócio.
 
-MVP operacional **validado internamente**, blocos A a G fechados — de cadastros
-e compras a produção rastreada, expedição, faturamento, custos, cockpit,
+MVP operacional **validado internamente**, blocos A a G fechados — de cadastros e
+compras a produção rastreada, expedição, faturamento, custos, cockpit,
 relatórios, projetos, orçamentos e precificação. Três casos profundos do legado
 rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
-## Última capability
+## Última capability — aguardando PO review
 
-**Reconciliação monetária da Ordem de Compra — #18**, aprovada pelo PO e
-publicada em 2026-09-06, merge `34a5424`, deploy Railway verde — o `preDeploy`
-respondeu "No pending migrations to apply". **Zero migration, zero mudança de
-schema.** O rodapé da OC somava as linhas em
-precisão cheia e arredondava no fim, enquanto a página imprimia cada linha já
-fechada em dois centavos: `10 × 4,05318764`, `1 × 0,125` e `5 × 0,025` imprimem
-`40,53 + 0,13 + 0,13`, a coluna soma `40,79` e o rodapé dizia **`40,78`**. Quem
-confere o papel estava certo.
+**PREC-MIG-D — resultado técnico da precificação em `DECIMAL(24,12)`**, na branch
+`feat/numeric-precision-technical-results`, **não mergeada**. Três colunas de
+`Decimal(14,6)`, migration `20260925093006_numeric_precision_technical_results_24_12`,
+sem backfill: `PricingTier.commissionPerUnitSnapshot`,
+`.contributionPerUnitSnapshot` e `QuoteLine.contributionPerUnitSnapshot`. Medido
+contra o PostgreSQL antes de migrar: `'0.2026593333333333'::decimal(14,6)`
+devolvia `0.202659` — **seis casas perdidas**, cortadas pelo banco no `UPDATE` da
+ativação, sem `.toFixed()` no código.
 
-**A regra agora é a da página** — [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §61:
-`lineTotal = round(quantidade × preço, 2)` e `orderTotal = Σ lineTotal`, com
-`ROUND_HALF_UP` declarado na chamada, como §60 exige. **O operando não é
-tocado:** o preço de `DECIMAL(20,8)` e a quantidade de `DECIMAL(24,12)` entram
-inteiros na multiplicação, e o único fechamento é o da linha.
+**A decisão durável é a TERCEIRA fronteira** ([`PRODUCT_RULES.md`](PRODUCT_RULES.md)
+§62): resultado técnico persistido fecha em **doze casas** com `ROUND_HALF_UP`
+declarado na chamada, em `fecharResultadoTecnicoPersistido`. Resultado técnico
+não é preço, mesmo sendo dinheiro por unidade — a categoria é o PAPEL do valor,
+não a unidade; por isso `24,12` e não os `20,8` do preço técnico. Entrada de
+usuário acima do scale continua sendo HTTP 400 (§58); resultado CALCULADO com
+mais de doze casas é normal e é fechado, nunca recusado.
 
-**Uma conta só, e duas duplicatas eliminadas.** `calcularTotaisOrdemCompra`
-passou a servir também o relatório de Compras e a OC vinculada dentro do Pedido,
-que somavam por conta própria — o mesmo documento valia dois números conforme a
-tela. A prévia já delegava.
+**A cadeia moveu-se inteira** — a contribuição da faixa é copiada para a linha do
+Orçamento no ENVIO da proposta, e alargar só a faixa trocaria um corte silencioso
+por outro. Serialização em 12 casas na faixa, prévia, proveniência, relatório de
+precificação, política de preço e prévia de rebase; a prévia fecha pela MESMA
+fronteira da ativação, com teste exigindo números iguais. **Nada comercial se
+moveu:** `QuoteLine.unitPrice` em `14,4`, total e subtotal por §55, #15 e #18
+intocados, e a tela continua mostrando `R$ 0,65` — apresentação não é
+armazenamento (§57), e nenhum caminho da tela devolve resultado derivado.
 
-**Nada de custo mudou.** O total documental existe para ser lido e conferido:
-`ReceiptLine.actualUnitCost`, o seletor canônico, média ponderada, CMV e
-precificação seguem intocados, e o teste prova que uma OC precificada sem
-recebimento deixa o item em `NO_COST`. **#15 intocado** — a OC tem função
-própria; o que ela alcançou foi a mesma FORMA de fechamento, não a função dos
-documentos comerciais. **Sem histórico para reconciliar:** a OC não persiste
-dinheiro nenhum, o valor é derivado na leitura, e a regra nova vale para toda OC
-sem backfill possível nem necessário. O PO ratificou a consequência: uma OC
-antiga pode passar a exibir `R$ 40,79` onde exibia `R$ 40,78` — a conta que
-deriva mudou, o dado histórico não (§61).
+**O residual foi para o PREC-MIG-E, não para o D.** O inventário classificou as
+107 colunas `Decimal` do schema e achou exatamente **três** TECHNICAL_RESULT
+residuais inequívocos. Ficaram `NEEDS_PO_DECISION` 16 colunas de **alvo órfão** —
+totais de `PricingTier`, composição de `IndustrialCostCalculation` e de
+`ProductionOrderCostSnapshot`, e `QuoteLine.industrialCostPerUnitSnapshot` em
+`18,6`, que hoje recebe doze casas numa coluna de seis. A auditoria recomendou
+`20,8` para elas dentro de um PREC-MIG-B que fechou como UNIT_COST, e o alvo
+ficou sem dono. Detalhe em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.1.
 
 ## Antes dela
 
-**PREC-P-TECH** (`b358fd8`, publicado em 2026-09-06). Os quatro preços técnicos
-da precificação de `Decimal(14,6)` para `DECIMAL(20,8)` — `manualUnitPrice`,
-`suggestedPriceSnapshot`, `selectedPriceSnapshot` e
-`QuoteLine.pricingSelectedUnitPriceSnapshot` —, migration
-`20260925093005_numeric_precision_pricing_technical_20_8`, sem backfill. A
-decisão durável é a **fronteira** ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §60):
-preço técnico (8 casas) e preço comercial (4 casas) são dois números, e a
-passagem entre eles é fechamento explícito — `fecharPrecoUnitarioComercial` e
-`fecharPrecoTecnicoPersistido`, com `ROUND_HALF_UP` declarado na chamada.
-`QuoteLine.unitPrice` fica em `14,4` por decisão do PO, e preço acima do scale
-passou a ser recusado dos dois lados. Comissão e contribuição por unidade seguem
-em `14,6` — PREC-MIG-D.
+**#18** (`34a5424`). O rodapé da Ordem de Compra virou a soma das linhas
+impressas — `40,53 + 0,13 + 0,13` fecha `40,79`, não `40,78` (§61) —, com
+`ROUND_HALF_UP` declarado, operando intocado e uma conta só para todas as
+superfícies. Zero migration; a OC não persiste dinheiro, então mudou a conta que
+deriva, não o dado.
 
-**P — PREC-MIG-P / PREC-P-01** (`e94971f`). `PurchaseOrderLine.unitPrice` em
-`DECIMAL(20,8)`, sem backfill: `4.05318764::decimal(14,4)` devolvia `4.0532`, e
-um insumo cotado por grama tinha o preço trocado por outro em silêncio. Junto, o
-preço servido no Recebimento, onde "Usar preço da OC" copia o valor para
-`ReceiptLine.actualUnitCost`.
+**PREC-P-TECH** (`b358fd8`). Os quatro preços técnicos da precificação em
+`DECIMAL(20,8)`, sem backfill. A regra durável é a **fronteira** (§60): preço
+técnico (8 casas) e preço comercial (4) são dois números, e a passagem é
+fechamento explícito — `fecharPrecoUnitarioComercial` e
+`fecharPrecoTecnicoPersistido`, com `ROUND_HALF_UP` declarado.
+`QuoteLine.unitPrice` fica em `14,4` por decisão do PO, e preço acima do scale é
+recusado dos dois lados.
 
-**C — PREC-MIG-C** (`e7656ab`). Pureza e overage em `DECIMAL(9,6)`, sete colunas:
-`99.9995` deixou de virar `100.000`. Na aprovação o PO **registrou a recusa acima
-do scale como regra de produto** (§58); precisão e faixa de negócio são
-independentes. **B — PREC-MIG-B** (`b5f6089`). Custo unitário em `DECIMAL(20,8)`:
-`ReceiptLine.actualUnitCost` — origem de TODO custo real —,
-`ItemCostReference.unitCost` e `SupplierItemOffer.unitPrice`, lido como custo.
-
-**A — #20 + PREC-MIG-A** (`5f855cd`). Motor decimal em 40 dígitos, numa
-configuração única (`packages/shared/src/decimal-config.ts`): existem DOIS
-construtores nesta base, e o Prisma roda no dele. 43 colunas para
-`DECIMAL(24,12)` sem backfill; `0,000000048` persiste em vez de virar `0,000000`.
-`scripts/numeric-precision-matrix.test.ts` guarda a matriz de §58.
-
-**Auditoria PREC-01** (`0305704`, só documentação) e **Rodadas 1 a 4** — #15 e #16
-(`33ee1cd`), #8D e #8H (`b89f9a4`), #8A–#8C (`dfb2673`), referência manual de custo
-e revisão do "Como funciona" em 62 telas. Regras §53 a §60; detalhe em
+**P, C, B e A** (`e94971f`, `e7656ab`, `b5f6089`, `5f855cd`). O preço da OC em
+`DECIMAL(20,8)` (`4.05318764::decimal(14,4)` devolvia `4.0532`), servido também
+no Recebimento, onde "Usar preço da OC" vira custo. Pureza e overage em
+`DECIMAL(9,6)` — `99.9995` deixou de virar `100.000`, e daí saiu a **recusa acima
+do scale como regra de produto** (§58). Custo unitário em `DECIMAL(20,8)`, com
+`ReceiptLine.actualUnitCost` como origem de TODO custo real. E a base: motor
+decimal em 40 dígitos numa configuração única — existem DOIS construtores nesta
+base e o Prisma roda no dele — com 43 colunas em `DECIMAL(24,12)`. Antes disso,
+**auditoria PREC-01** (`0305704`) e **Rodadas 1 a 4** — #15 e #16 (`33ee1cd`),
+#8D e #8H (`b89f9a4`), #8A–#8C (`dfb2673`). Regras §53 a §62; detalhe em
 [`BACKLOG.md`](BACKLOG.md), seção G.
 
 ## Estado operacional do repositório
@@ -95,16 +89,16 @@ e revisão do "Como funciona" em 62 telas. Regras §53 a §60; detalhe em
 históricas foram aposentadas — 51 scripts, ≈35 mil linhas —, com cada regra
 mapeada em [`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md) numa camada menor e
 determinística; infraestrutura em `scripts/e2e/lib/`, plano em
-[`E2E_STRATEGY.md`](E2E_STRATEGY.md). **Reconstrução do banco do zero:** as 54
+[`E2E_STRATEGY.md`](E2E_STRATEGY.md). **Reconstrução do banco do zero:** as 55
 migrations aplicam num banco vazio só com o repositório —
 `scripts/migration-order.test.ts` em `pnpm test` e
 `pnpm validate:migrations:fresh`; regra em [`TECH_BASELINE.md`](TECH_BASELINE.md).
 
 ## Próxima capability
 
-**PREC-MIG-D residual** — os resultados técnicos ainda em `Decimal(14,4)` e
-`(14,6)`, incluindo a comissão e a contribuição por unidade que o PREC-P-TECH
-deixou para trás de propósito. Depois: PREC-SER-01, PREC-FMT-01 e PREC-MIG-E.
+**PREC-MIG-E** — as 16 colunas de alvo órfão do inventário D, campo a campo.
+Depois: PREC-SER-01 (PARCIAL — dois pontos medidos, ambos fora do grupo D) e
+PREC-FMT-01.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11) — não bloqueia os itens internos já decididos pelo PO.
@@ -113,11 +107,12 @@ Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 ## Backlog aberto
 
 [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#20 e #18
-resolvidos; #19 aberto** com PREC-MIG-A, B, C e P entregues. **Seguinte:**
-PREC-MIG-D residual, PREC-SER-01, PREC-FMT-01 e PREC-MIG-E. **Roadmap:**
-PREC-UI-01 a 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:**
-#7 e #11. **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não
-determinística sob paralelismo, não observado nesta rodada) e #21.
+resolvidos; #19 ABERTO / PARCIAL** com PREC-MIG-A, B, C, P e D entregues.
+**Seguinte:** PREC-MIG-E, PREC-SER-01 e PREC-FMT-01. **Roadmap:** PREC-UI-01 a
+08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
+**Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não determinística sob
+paralelismo — uma falha isolada em `finished-goods.test.ts` nesta rodada, não
+reproduzida na re-execução nem no arquivo isolado) e #21.
 **Observação:** #1, #2.
 
 ## Mapa de documentos

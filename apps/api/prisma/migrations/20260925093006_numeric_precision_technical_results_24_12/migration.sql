@@ -1,0 +1,71 @@
+-- PREC-MIG-D — RESULTADO TÉCNICO residual da precificação para DECIMAL(24,12).
+--
+-- BACKLOG #19 / PRODUCT_RULES.md §58: TECHNICAL_RESULT persistido em
+-- `DECIMAL(24,12)`. O PREC-P-TECH levou os quatro PREÇOS técnicos para
+-- `DECIMAL(20,8)` e deixou estas três colunas para trás DE PROPÓSITO: elas
+-- saem do mesmo motor e congelam no mesmo bloco, mas a categoria é outra.
+-- Comissão e contribuição por unidade não são preço acordado — são resultado
+-- derivado por unidade, e resultado derivado segue a matriz de TECHNICAL_RESULT.
+--
+-- O que estava sendo perdido, medido contra este PostgreSQL antes de migrar:
+--   '0.2026593333333333'::decimal(14,6)  -> 0.202659
+--   '0.2026593333333333'::decimal(24,12) -> 0.202659333333
+-- Seis casas. Quem cortava era o banco, no `UPDATE` da ativação, sem
+-- `.toFixed()` no código e sem ninguém ter decidido — o mesmo defeito que o
+-- PREC-P-TECH corrigiu do lado do preço.
+--
+-- TRÊS colunas, a cadeia inteira. `PricingTier.contributionPerUnitSnapshot`
+-- é copiada para `QuoteLine.contributionPerUnitSnapshot` no ENVIO da
+-- proposta, através do DTO de proveniência: alargar só a faixa trocaria um
+-- corte silencioso por outro, no congelamento. Move-se inteira ou não se move.
+--
+-- SOMENTE widening de precisão. Zero backfill, zero UPDATE, zero recálculo,
+-- zero chave estrangeira, zero índice, zero constraint. A parte inteira CRESCE
+-- de 8 para 12 dígitos (14,6 -> 24,12), então nenhum valor existente pode
+-- estourar; o valor gravado permanece o mesmo e passa a ser reescrito com
+-- zeros à direita (`0.202659` -> `0.202659000000`). Casa que nunca foi
+-- persistida NÃO se reconstrói: uma faixa ativada ou uma proposta enviada
+-- antes desta migration continua valendo exatamente o que valia. NULL
+-- continua NULL — ausência de resultado não é zero.
+--
+-- CONTRIBUIÇÃO NEGATIVA continua válida. Preço abaixo do custo mais comissão
+-- é informação comercial legítima (`NEGATIVE_CONTRIBUTION`), e a faixa de
+-- negócio não muda com a precisão: `-2.444444` passa a caber como
+-- `-2.444444444444`, e o aviso continua sendo emitido pelo mesmo motor.
+--
+-- RESULTADO TÉCNICO NÃO É PREÇO DOCUMENTAL. `QuoteLine.unitPrice` continua em
+-- `DECIMAL(14,4)` e o total do documento continua em duas casas: comissão e
+-- contribuição por unidade são leitura econômica, nunca operando do total. A
+-- regra comercial #15 e a reconciliação #18 da Ordem de Compra não mudam.
+--
+-- O diff gerado pelo Prisma traz junto o drift conhecido de BACKLOG #14
+-- (chaves estrangeiras RESTRICT/SET NULL, renomeação de índices e
+-- constraints). Removido na revisão linha a linha exigida por
+-- TECH_BASELINE.md, "Migration order". Esta migration não o aplica.
+--
+-- FORA desta migration, de propósito — cada um com motivo próprio:
+--   PricingTier.*Snapshot de TOTAIS (costTotal, costPer1000, knownSubtotal,
+--     commissionTotal, grossRevenue, contributionTotal), em `14,4`
+--                                    NEEDS_PO_DECISION — a auditoria
+--                                    recomendou `20,8` dentro de um PREC-MIG-B
+--                                    que fechou como UNIT_COST; o alvo ficou
+--                                    órfão. PREC-MIG-E, campo a campo.
+--   IndustrialCostCalculation.* e ProductionOrderCostSnapshot.* em `14,4`
+--                                    composição de custo industrial e de CMV,
+--                                    mesma ambiguidade. PREC-MIG-E.
+--   QuoteLine.industrialCostPerUnitSnapshot, em `18,6`
+--                                    resultado técnico POR UNIDADE, mas o
+--                                    inventário o registra viajando com o
+--                                    PREC-MIG-B. Alvo conflitante = decisão do
+--                                    PO. PREC-MIG-E, prioridade alta.
+--   IndustrialResourceRate.rateValue e as demais `rateValue`, em `14,4`
+--                                    categoria RATE — tarifa é entrada, não
+--                                    resultado derivado.
+--   QuoteLine.unitPrice, CustomerOrderLine.agreedUnitPrice e os dois preços de
+--   BillingLine                      UNIT_PRICE comercial — §58, PREC-P-05:
+--                                    MANTER em `14,4` por decisão do PO.
+
+ALTER TABLE "pricing_tiers" ALTER COLUMN "commissionPerUnitSnapshot" SET DATA TYPE DECIMAL(24,12);
+ALTER TABLE "pricing_tiers" ALTER COLUMN "contributionPerUnitSnapshot" SET DATA TYPE DECIMAL(24,12);
+
+ALTER TABLE "quote_lines" ALTER COLUMN "contributionPerUnitSnapshot" SET DATA TYPE DECIMAL(24,12);
