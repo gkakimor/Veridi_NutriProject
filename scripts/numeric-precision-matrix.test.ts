@@ -30,7 +30,7 @@ const PRECISOES_DA_MATRIZ = new Map<string, string>([
   ["9,6", "PURITY/OVERAGE"],
   // Ainda não migradas. Cada uma tem capability nomeada no BACKLOG, seção E.
   ["14,4", "UNIT_PRICE contratual, RATE e composição de custo — §58 e PREC-MIG-D"],
-  ["14,6", "UNIT_PRICE técnico da precificação — aguarda PREC-P-02 a PREC-P-05"],
+  ["14,6", "TECHNICAL_RESULT de comissão e contribuição por unidade — aguarda PREC-MIG-D"],
   ["18,6", "excluídas do PREC-MIG-A por decisão — ver lista abaixo"],
 ]);
 
@@ -153,16 +153,42 @@ describe("matriz de precisão numérica", () => {
     ]) {
       expect(porChave.get(chave), `${chave} é UNIT_PRICE contratual e fica em 14,4`).toBe("14,4");
     }
-    // O preço técnico da precificação continua em 14,6: a cadeia congela
-    // dentro de documento comercial (`QuoteLine.pricingSelectedUnitPriceSnapshot`)
-    // e move-se inteira ou não se move — PREC-P-02 a PREC-P-05, decisão do PO.
+  });
+
+  it("o preço TÉCNICO da precificação do PREC-P-TECH está em 20,8", () => {
+    // A cadeia técnica inteira: faixa → snapshot da ativação → proveniência
+    // congelada no envio do Orçamento. Ela move-se inteira ou não se move —
+    // alargar só a ponta trocaria um corte silencioso por outro.
+    const porChave = new Map(colunas.map((c) => [`${c.model}.${c.campo}`, c.precisao]));
     for (const chave of [
       "PricingTier.manualUnitPrice",
       "PricingTier.suggestedPriceSnapshot",
       "PricingTier.selectedPriceSnapshot",
       "QuoteLine.pricingSelectedUnitPriceSnapshot",
     ]) {
-      expect(porChave.get(chave), `${chave} aguarda decisão do PO e fica em 14,6`).toBe("14,6");
+      expect(porChave.get(chave), `${chave} é UNIT_PRICE técnico e deveria ser 20,8`).toBe("20,8");
+    }
+    // Comissão e contribuição por unidade saem do MESMO motor e continuam em
+    // 14,6: a categoria é TECHNICAL_RESULT, e a decisão é do PREC-MIG-D.
+    // Arrastá-las junto por vizinhança de bloco seria ampliar escopo sem PO.
+    for (const chave of [
+      "PricingTier.commissionPerUnitSnapshot",
+      "PricingTier.contributionPerUnitSnapshot",
+      "QuoteLine.contributionPerUnitSnapshot",
+    ]) {
+      expect(porChave.get(chave), `${chave} é TECHNICAL_RESULT e pertence ao PREC-MIG-D`).toBe(
+        "14,6",
+      );
+    }
+    // E o preço COMERCIAL fica onde está: §58 mantém o documento assinado na
+    // precisão do documento, e PREC-P-05 fechou como MANTER.
+    for (const chave of [
+      "QuoteLine.unitPrice",
+      "CustomerOrderLine.agreedUnitPrice",
+      "BillingLine.agreedUnitPrice",
+      "BillingLine.unitPrice",
+    ]) {
+      expect(porChave.get(chave), `${chave} é UNIT_PRICE comercial e fica em 14,4`).toBe("14,4");
     }
   });
 
@@ -228,6 +254,7 @@ describe("as migrations de precisão só alargam tipo", () => {
     "20260925093002_numeric_precision_unit_cost_20_8",
     "20260925093003_numeric_precision_purity_overage_9_6",
     "20260925093004_numeric_precision_unit_price_20_8",
+    "20260925093005_numeric_precision_pricing_technical_20_8",
   ];
 
   /** Os comandos reais, sem comentário — que é onde as palavras aparecem. */
@@ -287,6 +314,21 @@ describe("as migrations de precisão só alargam tipo", () => {
     );
     expect(alvo).toEqual([
       'ALTER TABLE "purchase_order_lines" ALTER COLUMN "unitPrice" SET DATA TYPE DECIMAL(20,8)',
+    ]);
+  });
+
+  it("o PREC-P-TECH alarga as quatro colunas do preço técnico, e nada mais", () => {
+    // Nenhum preço COMERCIAL aqui. A lista literal existe para que ampliar a
+    // família contratual continue exigindo decisão do PO — e não caiba num
+    // diff que "já estava perto".
+    const alvo = comandos("20260925093005_numeric_precision_pricing_technical_20_8").map((comando) =>
+      comando.replace(/\s+/g, " "),
+    );
+    expect(alvo).toEqual([
+      'ALTER TABLE "pricing_tiers" ALTER COLUMN "manualUnitPrice" SET DATA TYPE DECIMAL(20,8)',
+      'ALTER TABLE "pricing_tiers" ALTER COLUMN "suggestedPriceSnapshot" SET DATA TYPE DECIMAL(20,8)',
+      'ALTER TABLE "pricing_tiers" ALTER COLUMN "selectedPriceSnapshot" SET DATA TYPE DECIMAL(20,8)',
+      'ALTER TABLE "quote_lines" ALTER COLUMN "pricingSelectedUnitPriceSnapshot" SET DATA TYPE DECIMAL(20,8)',
     ]);
   });
 });

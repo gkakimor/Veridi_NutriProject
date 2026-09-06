@@ -627,6 +627,50 @@ describe("O acordo não é reescrito pelo presente", () => {
 
     await app.close();
   });
+
+  /*
+   * Preço COMERCIAL acima de quatro casas — PREC-P-TECH, `PRODUCT_RULES.md`
+   * §58 e §60.
+   *
+   * `BillingLine.unitPrice` é `DECIMAL(14,4)` e continua sendo: preço faturado
+   * é valor de documento. Até esta capability o campo aceitava qualquer número
+   * de casas e o PostgreSQL gravava a versão cortada — a pessoa digitava
+   * `4,05318` e a nota saía com `4,0532`, sem ninguém ser avisado da troca.
+   * A precificação técnica é que tem oito casas, do outro lado da fronteira.
+   */
+  it("preço faturado acima de 4 casas é recusado antes do PostgreSQL", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { orderId } = await pedidoComPrecoAcordado(app, { quantidade: "5", preco: null });
+    const expedicao = await expedir(app, orderId);
+    const faturamento = (
+      await app.inject({ method: "POST", url: "/billings", payload: { shipmentId: expedicao.id } })
+    ).json();
+    const lineId = faturamento.lines[0].id as string;
+
+    const aceito = await app.inject({
+      method: "PATCH",
+      url: `/billings/${faturamento.id}`,
+      payload: { lines: [{ billingLineId: lineId, unitPrice: "4.0531" }] },
+    });
+    expect(aceito.statusCode).toBe(200);
+    expect(aceito.json().lines[0].unitPrice).toBe("4.0531");
+
+    const recusado = await app.inject({
+      method: "PATCH",
+      url: `/billings/${faturamento.id}`,
+      payload: { lines: [{ billingLineId: lineId, unitPrice: "4.05318" }] },
+    });
+    expect(recusado.statusCode).toBe(400);
+    expect(JSON.stringify(recusado.json())).toContain("4 casas decimais");
+
+    // Recusa não é gravação parcial: o valor anterior continua lá.
+    const relido = (await app.inject({ method: "GET", url: `/billings/${faturamento.id}` })).json();
+    expect(relido.lines[0].unitPrice).toBe("4.0531");
+
+    await app.close();
+  });
 });
 
 describe("Alterar o preço de faturamento", () => {
@@ -660,6 +704,26 @@ describe("Alterar o preço de faturamento", () => {
     expect(linha.overriddenAt).toBeTruthy();
     // O total segue o faturado, não o acordado.
     expect(resposta.json().totalAmount).toBe("92.00");
+
+    await app.close();
+  });
+
+  it("o override acima de 4 casas também é recusado, e nada é gravado", async () => {
+    const app = buildTestApp("COMMERCIAL");
+    await app.ready();
+    const { faturamento, lineId } = await cenarioComOverride(app);
+
+    const recusado = await app.inject({
+      method: "POST",
+      url: `/billings/${faturamento.id}/lines/${lineId}/price-override`,
+      payload: { unitPrice: "4.05318", reason: "Tentativa com precisão acima do documento" },
+    });
+    expect(recusado.statusCode).toBe(400);
+    expect(JSON.stringify(recusado.json())).toContain("4 casas decimais");
+
+    const relido = (await app.inject({ method: "GET", url: `/billings/${faturamento.id}` })).json();
+    expect(relido.lines[0].unitPrice).toBe("9.4800");
+    expect(relido.lines[0].priceOverridden).toBe(false);
 
     await app.close();
   });

@@ -775,7 +775,7 @@ describe("Orçamento com precificação", () => {
       chain.pricing.industrialCostVersionLabel,
     );
     expect(detail.lines[0].pricing.formulationVersionNumber).toBe(1);
-    expect(detail.lines[0].pricing.selectedUnitPrice).toBe("20.000000");
+    expect(detail.lines[0].pricing.selectedUnitPrice).toBe("20.00000000");
     const frozenCost = detail.lines[0].pricing.industrialCostPerUnit;
 
     // Compra nova depois do envio não reescreve a proposta apresentada.

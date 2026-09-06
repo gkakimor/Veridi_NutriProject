@@ -8,6 +8,7 @@ import type {
   ProductCmvResponse,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { precoUnitario } from "../../lib/decimal-serialization.js";
 import { costForOutputQuantity, pricingVersionInclude } from "../pricing/pricing-cost.js";
 import type { CostVersionForPricing } from "../pricing/pricing-cost.js";
 import { getIndustrialCostCalculation } from "../industrial-cost-calculation/snapshot.service.js";
@@ -38,11 +39,20 @@ function money(value: Prisma.Decimal | null): string | null {
   return value === null ? null : value.toFixed(4);
 }
 
-/** Preço vigente da faixa: o congelado na ativação, ou o manual informado. */
+/**
+ * Preço vigente da faixa: o congelado na ativação, ou o manual informado.
+ *
+ * Preço TÉCNICO em oito casas — `PRODUCT_RULES.md` §58, PREC-P-03. O CMV lê a
+ * precificação para comparar preço com custo, e as duas pontas da comparação
+ * precisam ter a mesma precisão: servir o preço em quatro casas ao lado de um
+ * custo em doze produziria uma margem que não é a margem da faixa. O que é
+ * documento comercial continua em quatro casas, do outro lado da fronteira
+ * (§60) — aqui não há documento nenhum.
+ */
 function precoDaFaixa(tier: { selectedPriceSnapshot: Prisma.Decimal | null; manualUnitPrice: Prisma.Decimal | null } | null): string | null {
   if (!tier) return null;
   const price = tier.selectedPriceSnapshot ?? tier.manualUnitPrice;
-  return price ? price.toFixed(4) : null;
+  return price ? precoUnitario(price) : null;
 }
 
 /** Materiais de embalagem viram grupo próprio; o resto é matéria-prima. */

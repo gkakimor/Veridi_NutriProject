@@ -9,7 +9,7 @@ import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import { latestCalculationsByProduct } from "../industrial-cost-calculation/snapshot.service.js";
-import { resultadoTecnico } from "../../lib/decimal-serialization.js";
+import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
 import type {
   IndustrialCostByProductQuery,
   PricingByProductQuery,
@@ -137,7 +137,9 @@ export async function getPricingByProductReport(
       priceMode: tier.priceMode,
       costPerUnit: tier.costPerUnitSnapshot ? resultadoTecnico(tier.costPerUnitSnapshot) : null,
       commissionPercent: (tier.commissionPercentSnapshot ?? tier.commissionPercent).toFixed(4),
-      unitPrice: tier.selectedPriceSnapshot ? tier.selectedPriceSnapshot.toFixed(6) : null,
+      // Preço TÉCNICO da faixa — oito casas, §58. Relatório de precificação
+      // é leitura técnica, não documento comercial.
+      unitPrice: tier.selectedPriceSnapshot ? precoUnitario(tier.selectedPriceSnapshot) : null,
       contributionMarginPercent: tier.contributionMarginSnapshot
         ? tier.contributionMarginSnapshot.toFixed(4)
         : null,
