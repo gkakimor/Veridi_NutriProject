@@ -4,11 +4,11 @@
 
 ## Onde estamos
 
-**`main` @ `549c41c`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `34a5424`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9, #3,
 #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**
-(só documentação), as **Fundações numéricas A, B, C e P** e o **PREC-P-TECH**,
-todas com migration e aprovadas pelo PO. **Produção:** Railway, deploy automático
+(só documentação), as **Fundações numéricas A, B, C e P**, o **PREC-P-TECH** e
+o **#18**, todos aprovados pelo PO. **Produção:** Railway, deploy automático
 da `main`; health 200, banco up, 55 migrations sem pendência, smoke autenticado
 passando, sem dado de negócio.
 
@@ -20,7 +20,8 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 ## Última capability
 
 **Reconciliação monetária da Ordem de Compra — #18**, aprovada pelo PO e
-publicada em 2026-09-06. **Zero migration, zero mudança de schema.** O rodapé da OC somava as linhas em
+publicada em 2026-09-06, merge `34a5424`. **Zero migration, zero mudança de
+schema.** O rodapé da OC somava as linhas em
 precisão cheia e arredondava no fim, enquanto a página imprimia cada linha já
 fechada em dois centavos: `10 × 4,05318764`, `1 × 0,125` e `5 × 0,025` imprimem
 `40,53 + 0,13 + 0,13`, a coluna soma `40,79` e o rodapé dizia **`40,78`**. Quem
