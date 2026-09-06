@@ -72,12 +72,15 @@ default do `decimal.js` (§60 A/B/C).
 passou a ser a soma das linhas impressas (`40,79`, não `40,78`), regra durável
 em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §61, sem migration e sem histórico
 recalculado.
-**PREC-MIG-D RESOLVIDO em 2026-09-06** (PREC-D-01, D-02 e D-03): as três colunas
-`14,6` de resultado técnico em `DECIMAL(24,12)`, migration
-`20260925093006_numeric_precision_technical_results_24_12`, sem backfill, com a
+**PREC-MIG-D RESOLVIDO e PUBLICADO em 2026-09-06** (PREC-D-01, D-02 e D-03),
+merge `8a40b52`, deploy Railway verde — o `preDeploy` aplicou
+`20260925093006_numeric_precision_technical_results_24_12` em produção. As três
+colunas `14,6` de resultado técnico em `DECIMAL(24,12)`, sem backfill, com a
 TERCEIRA fronteira de fechamento — 12 casas, `ROUND_HALF_UP` declarado — como
 regra durável ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §62). #19 segue
-**ABERTO / PARCIAL** enquanto o PREC-MIG-E não fechar. **Seguinte: PREC-MIG-E.**
+**ABERTO / PARCIAL** enquanto o PREC-MIG-E não fechar. **PREC-MIG-E: a
+classificação semântica das 16 colunas está concluída (§12.3 da auditoria) e a
+proposta aguarda o PO — nenhuma migration foi criada.**
 
 ---
 
@@ -397,7 +400,9 @@ PREC-FMT-01.
 | **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | **RESOLVIDO** — 3 colunas, migration `20260925093002_numeric_precision_unit_cost_20_8` |
 | **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **RESOLVIDO** — 7 colunas, migration `20260925093003_numeric_precision_purity_overage_9_6` |
 | **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **RESOLVIDO** — 3 campos entregues no A + 3 no D, migration `20260925093006_numeric_precision_technical_results_24_12`. `14,6` deixou de existir no schema |
-| **PREC-MIG-E** | Campos que ainda exigem decisão individual | **ABERTO — próxima capability candidata.** Inventário fechado no PREC-MIG-D: 15 colunas `14,4` (totais de precificação, composição de custo industrial e de CMV, tarifas) + `QuoteLine.industrialCostPerUnitSnapshot` em `18,6`. Ver §12 de [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) |
+| **PREC-MIG-E** | Campos que ainda exigem decisão individual | **ABERTO — classificação semântica CONCLUÍDA, aguardando decisão do PO.** 16 colunas analisadas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.3. Proposta: **1 migration** (`QuoteLine.industrialCostPerUnitSnapshot` → `24,12`) e **15 MANTER**. Nenhuma migration criada |
+| **PREC-E-01** | `QuoteLine.industrialCostPerUnitSnapshot` `18,6` → `DECIMAL(24,12)` | **PROPOSTO — aguarda PO.** TECHNICAL_RESULT; copia `PricingTier.costPerUnitSnapshot` (`24,12`) e o banco corta a 7ª casa |
+| **PREC-E-02** | Fronteira de fechamento nos 6 totais de `PricingTier` | **PROPOSTO — aguarda PO.** Escala fica em `14,4`; o que falta é fechamento explícito no domínio, hoje delegado ao `INSERT` |
 | **PREC-D-01** | `PricingTier.commissionPerUnitSnapshot` `14,6` → `DECIMAL(24,12)` | **RESOLVIDO** — PREC-MIG-D |
 | **PREC-D-02** | `PricingTier.contributionPerUnitSnapshot` `14,6` → `DECIMAL(24,12)` | **RESOLVIDO** — PREC-MIG-D |
 | **PREC-D-03** | `QuoteLine.contributionPerUnitSnapshot` `14,6` → `DECIMAL(24,12)` | **RESOLVIDO** — PREC-MIG-D. Cópia congelada no ENVIO da proposta |
@@ -639,6 +644,37 @@ snapshots de precificação da mesma linha, no **PREC-MIG-B** — o inventário 
 classifica assim, e separá-lo quebraria a família por conveniência.
 `scripts/numeric-precision-matrix.test.ts` guarda essa lista: uma coluna nova
 em `18,6` falha o gate.
+
+**PREC-MIG-E — classificação concluída em 2026-09-06, migration NÃO criada.**
+As 16 colunas que o inventário do D deixou como `NEEDS_PO_DECISION` foram
+classificadas pelo PAPEL do valor, campo a campo, em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.3. O resultado
+separa os três grupos que pareciam iguais:
+
+- **`QuoteLine.industrialCostPerUnitSnapshot` (`18,6`) — o único que pede
+  migration.** É TECHNICAL_RESULT: custo industrial POR UNIDADE, resultado de
+  `total ÷ quantidade da faixa`, cópia de `PricingTier.costPerUnitSnapshot`, que
+  está em `DECIMAL(24,12)` desde o PREC-MIG-A. O congelamento da proveniência
+  serializa doze casas e a coluna guarda seis: o PostgreSQL corta a sétima.
+  Alvo proposto `DECIMAL(24,12)` — **PREC-E-01**;
+- **os 9 de `IndustrialCostCalculation` e `ProductionOrderCostSnapshot`
+  (`14,4`) — MANTER, sem discussão.** O motor já fecha esses valores em DUAS
+  casas (`money()`) antes de gravar; a coluna de quatro recebe um número de
+  duas. Widening não recuperaria nada, porque o banco nunca chegou a arredondar.
+  Quatro delas (`directIndustrialCost`, `overheadCost` e as quatro do CMV) nem
+  sequer são lidas de volta: o DTO vem do JSON do snapshot;
+- **os 6 totais de `PricingTier` (`14,4`) — MANTER a escala, CORRIGIR a
+  fronteira.** Aqui o banco **é** a primeira camada de arredondamento: a
+  ativação grava `entry.cost.total` e os outros cinco direto do motor, em 40
+  dígitos, e o `INSERT` corta a quinta casa. Mas nenhum consumidor recebe mais
+  de duas casas — o DTO da faixa serve todos por `money()`. O que falta é
+  fechamento explícito no domínio, §62, não escala — **PREC-E-02**.
+
+Dois achados registrados sem ação: o total persistido do CALC não reproduz o
+custo por unidade persistido (F-2), e há assimetria deliberada entre
+`contributionPerUnitSnapshot` em doze casas e `contributionTotalSnapshot` em
+quatro (F-3). Os dois são §57 funcionando, e precisam estar escritos para não
+voltarem como defeito.
 
 ### Serialização e formatação
 

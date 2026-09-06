@@ -4,29 +4,30 @@
 
 ## Onde estamos
 
-**`main` @ `6c5c146`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `8a40b52`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9, #3,
 #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**,
-as **Fundações numéricas A, B, C e P**, o **PREC-P-TECH** e o **#18**, todos
-aprovados pelo PO. **Produção:** Railway, deploy automático da `main`; health
-200, banco up, 55 migrations sem pendência, smoke autenticado passando, sem dado
-de negócio.
+as **Fundações numéricas A, B, C, P e D** e o **#18**, todos aprovados pelo PO.
+**Produção:** Railway, deploy automático da `main`; health 200, banco up, 55
+migrations sem pendência, smoke autenticado passando, sem dado de negócio.
 
 MVP operacional **validado internamente**, blocos A a G fechados — de cadastros e
 compras a produção rastreada, expedição, faturamento, custos, cockpit,
 relatórios, projetos, orçamentos e precificação. Três casos profundos do legado
 rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
-## Última capability — aguardando PO review
+## Última capability
 
-**PREC-MIG-D — resultado técnico da precificação em `DECIMAL(24,12)`**, na branch
-`feat/numeric-precision-technical-results`, **não mergeada**. Três colunas de
-`Decimal(14,6)`, migration `20260925093006_numeric_precision_technical_results_24_12`,
-sem backfill: `PricingTier.commissionPerUnitSnapshot`,
-`.contributionPerUnitSnapshot` e `QuoteLine.contributionPerUnitSnapshot`. Medido
-contra o PostgreSQL antes de migrar: `'0.2026593333333333'::decimal(14,6)`
-devolvia `0.202659` — **seis casas perdidas**, cortadas pelo banco no `UPDATE` da
-ativação, sem `.toFixed()` no código.
+**PREC-MIG-D — resultado técnico da precificação em `DECIMAL(24,12)`**, aprovado
+pelo PO e publicado em 2026-09-06, merge `8a40b52`, deploy Railway verde — o
+`preDeploy` aplicou
+`20260925093006_numeric_precision_technical_results_24_12` em produção. Três
+colunas de `Decimal(14,6)`, sem backfill:
+`PricingTier.commissionPerUnitSnapshot`, `.contributionPerUnitSnapshot` e
+`QuoteLine.contributionPerUnitSnapshot`. Medido contra o PostgreSQL antes de
+migrar: `'0.2026593333333333'::decimal(14,6)` devolvia `0.202659` — **seis casas
+perdidas**, cortadas pelo banco no `UPDATE` da ativação, sem `.toFixed()` no
+código.
 
 **A decisão durável é a TERCEIRA fronteira** ([`PRODUCT_RULES.md`](PRODUCT_RULES.md)
 §62): resultado técnico persistido fecha em **doze casas** com `ROUND_HALF_UP`
@@ -44,16 +45,6 @@ fronteira da ativação, com teste exigindo números iguais. **Nada comercial se
 moveu:** `QuoteLine.unitPrice` em `14,4`, total e subtotal por §55, #15 e #18
 intocados, e a tela continua mostrando `R$ 0,65` — apresentação não é
 armazenamento (§57), e nenhum caminho da tela devolve resultado derivado.
-
-**O residual foi para o PREC-MIG-E, não para o D.** O inventário classificou as
-107 colunas `Decimal` do schema e achou exatamente **três** TECHNICAL_RESULT
-residuais inequívocos. Ficaram `NEEDS_PO_DECISION` 16 colunas de **alvo órfão** —
-totais de `PricingTier`, composição de `IndustrialCostCalculation` e de
-`ProductionOrderCostSnapshot`, e `QuoteLine.industrialCostPerUnitSnapshot` em
-`18,6`, que hoje recebe doze casas numa coluna de seis. A auditoria recomendou
-`20,8` para elas dentro de um PREC-MIG-B que fechou como UNIT_COST, e o alvo
-ficou sem dono. Detalhe em
-[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.1.
 
 ## Antes dela
 
@@ -96,9 +87,19 @@ migrations aplicam num banco vazio só com o repositório —
 
 ## Próxima capability
 
-**PREC-MIG-E** — as 16 colunas de alvo órfão do inventário D, campo a campo.
-Depois: PREC-SER-01 (PARCIAL — dois pontos medidos, ambos fora do grupo D) e
-PREC-FMT-01.
+**PREC-MIG-E — classificação concluída, migration NÃO criada, aguardando o PO.**
+As 16 colunas de alvo órfão foram classificadas pelo PAPEL do valor em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.3, na branch
+`feat/numeric-precision-technical-results-e`. Os três grupos que pareciam iguais
+se separaram: **1 coluna pede migration** —
+`QuoteLine.industrialCostPerUnitSnapshot`, `18,6`, que copia doze casas de
+`PricingTier.costPerUnitSnapshot` e deixa o banco cortar a sétima (PREC-E-01);
+**9 são MANTER sem discussão** — `IndustrialCostCalculation` e
+`ProductionOrderCostSnapshot` já recebem o valor fechado em duas casas pelo
+motor, e quatro delas nem são lidas de volta; **6 mantêm a escala e precisam de
+fronteira** — nos totais de `PricingTier` o banco ainda é a primeira camada de
+arredondamento, mas nenhum consumidor recebe mais de duas casas (PREC-E-02).
+Depois: PREC-SER-01 (PARCIAL) e PREC-FMT-01.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11) — não bloqueia os itens internos já decididos pelo PO.
@@ -107,8 +108,9 @@ Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 ## Backlog aberto
 
 [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#20 e #18
-resolvidos; #19 ABERTO / PARCIAL** com PREC-MIG-A, B, C, P e D entregues.
-**Seguinte:** PREC-MIG-E, PREC-SER-01 e PREC-FMT-01. **Roadmap:** PREC-UI-01 a
+resolvidos; #19 ABERTO / PARCIAL** com PREC-MIG-A, B, C, P e D entregues e
+publicados. **Seguinte:** PREC-MIG-E (proposta pronta, aguarda o PO),
+PREC-SER-01 e PREC-FMT-01. **Roadmap:** PREC-UI-01 a
 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
 **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não determinística sob
 paralelismo — uma falha isolada em `finished-goods.test.ts` nesta rodada, não
