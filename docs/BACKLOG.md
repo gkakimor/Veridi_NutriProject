@@ -53,7 +53,11 @@ campo certo vale mais que uma com dez semanticamente duvidosos.
 **PREC-MIG-P ficou PARCIAL:** o inventário da família UNIT_PRICE classificou dez
 colunas e só uma tinha decisão segura; as quatro técnicas da precificação viraram
 **PREC-P-02 a PREC-P-05**.
-**Precificação técnica em alta precisão — PREC-P-TECH, publicada em 2026-09-06:**
+**Precificação técnica em alta precisão — PREC-P-TECH, aprovada pelo PO e
+publicada em produção em 2026-09-06** (merge `b358fd8`, deploy Railway verde;
+migration aplicada UMA vez pelo `preDeploy`, `finished`, sem rollback, zero
+pendentes; as quatro colunas técnicas em `numeric(20,8)` e as quatro comerciais
+ainda em `numeric(14,4)`, conferidas em leitura pura):
 **PREC-P-02, P-03, P-04 RESOLVIDOS** (4 colunas em `DECIMAL(20,8)`, migration
 `20260925093005_numeric_precision_pricing_technical_20_8`, sem backfill) e
 **PREC-P-05 RESOLVIDO POR DECISÃO DE MANTER** `14,4`. Com isso **PREC-MIG-P** e
