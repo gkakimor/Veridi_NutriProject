@@ -27,10 +27,10 @@ const PRECISOES_DA_MATRIZ = new Map<string, string>([
   ["7,4", "PERCENTAGE comercial"],
   ["12,4", "MARKUP e PHYSICAL_MEASUREMENT (kW)"],
   ["20,8", "UNIT_COST"],
+  ["9,6", "PURITY/OVERAGE"],
   // Ainda não migradas. Cada uma tem capability nomeada no BACKLOG, seção E.
   ["14,4", "UNIT_PRICE, RATE e composição de custo — aguardam PREC-MIG-D e decisão própria"],
   ["14,6", "UNIT_PRICE técnico da precificação — aguarda PREC-MIG-B"],
-  ["6,3", "PURITY/OVERAGE — aguarda PREC-MIG-C"],
   ["18,6", "excluídas do PREC-MIG-A por decisão — ver lista abaixo"],
 ]);
 
@@ -138,6 +138,34 @@ describe("matriz de precisão numérica", () => {
     }
   });
 
+  it("a pureza e o overage do PREC-MIG-C estão em 9,6", () => {
+    // As sete colunas PERCENTAGE do inventário, e só elas. `6,3` saiu da
+    // matriz junto: uma coluna nova de pureza copiada da linha de cima falha
+    // em "toda precisão usada está na matriz aprovada" antes de chegar aqui.
+    const porChave = new Map(colunas.map((c) => [`${c.model}.${c.campo}`, c.precisao]));
+    for (const chave of [
+      "Item.defaultPurityPercent",
+      "FormulationComponent.purityPercentApplied",
+      "FormulationComponent.overagePercent",
+      "ProductionOrderRequirement.purityPercentApplied",
+      "ProductionOrderRequirement.overagePercent",
+      "FormulationTemplateComponent.purityPercentApplied",
+      "FormulationTemplateComponent.overagePercent",
+    ]) {
+      expect(porChave.get(chave), `${chave} deveria ser Decimal(9,6)`).toBe("9,6");
+    }
+    // Percentual COMERCIAL é outra categoria e continua em 7,4 — o teste
+    // falha se alguém arrastar um desconto ou uma margem por semelhança.
+    for (const chave of [
+      "QuoteVersion.discountPercent",
+      "PricingTier.targetContributionMarginPercent",
+    ]) {
+      expect(porChave.get(chave), `${chave} não é PURITY/OVERAGE e não deveria ter migrado`).toBe(
+        "7,4",
+      );
+    }
+  });
+
   it("as quantidades do PREC-MIG-A estão em 24,12", () => {
     const criticas = [
       "ProductionOrderRequirement.requiredQuantity",
@@ -153,5 +181,71 @@ describe("matriz de precisão numérica", () => {
     for (const chave of criticas) {
       expect(porChave.get(chave), `${chave} deveria ser Decimal(24,12)`).toBe("24,12");
     }
+  });
+});
+
+/**
+ * Widening NÃO é recálculo.
+ *
+ * `98.500` continua matematicamente `98.500000`; a coluna só passa a escrever
+ * zeros à direita. Uma migration de precisão que traga um `UPDATE` estará
+ * reescrevendo valor histórico — Formulação, OP, snapshot de custo — e casa
+ * que nunca foi persistida não se reconstrói a partir do que sobrou. Este
+ * teste é estático de propósito: ele lê o SQL versionado, não o banco, e falha
+ * na revisão em vez de na produção.
+ */
+describe("as migrations de precisão só alargam tipo", () => {
+  const MIGRACOES = [
+    "20260925093001_numeric_precision_quantities_24_12",
+    "20260925093002_numeric_precision_unit_cost_20_8",
+    "20260925093003_numeric_precision_purity_overage_9_6",
+  ];
+
+  /** Os comandos reais, sem comentário — que é onde as palavras aparecem. */
+  function comandos(migracao: string): string[] {
+    const caminho = join(
+      process.cwd(),
+      "apps",
+      "api",
+      "prisma",
+      "migrations",
+      migracao,
+      "migration.sql",
+    );
+    return readFileSync(caminho, "utf8")
+      .split("\n")
+      .filter((linha) => !linha.trim().startsWith("--"))
+      .join("\n")
+      .split(";")
+      .map((bloco) => bloco.trim())
+      .filter(Boolean);
+  }
+
+  for (const migracao of MIGRACOES) {
+    it(`${migracao} contém apenas ALTER COLUMN ... SET DATA TYPE`, () => {
+      // Um `ALTER TABLE` pode alargar várias colunas da MESMA tabela numa só
+      // instrução, separadas por vírgula — é o que o PREC-MIG-A faz.
+      const clausula = 'ALTER COLUMN "\\w+" SET DATA TYPE DECIMAL\\(\\d+,\\d+\\)';
+      const widening = new RegExp(`^ALTER TABLE "\\w+" ${clausula}(, ${clausula})*$`);
+      const fora = comandos(migracao).filter(
+        (comando) => !widening.test(comando.replace(/\s+/g, " ")),
+      );
+      expect(fora, `${migracao} traz comando que não é widening`).toEqual([]);
+    });
+  }
+
+  it("o PREC-MIG-C alarga as sete colunas de pureza e overage, e nada mais", () => {
+    const alvo = comandos("20260925093003_numeric_precision_purity_overage_9_6").map((comando) =>
+      comando.replace(/\s+/g, " "),
+    );
+    expect(alvo).toEqual([
+      'ALTER TABLE "items" ALTER COLUMN "defaultPurityPercent" SET DATA TYPE DECIMAL(9,6)',
+      'ALTER TABLE "formulation_components" ALTER COLUMN "purityPercentApplied" SET DATA TYPE DECIMAL(9,6)',
+      'ALTER TABLE "formulation_components" ALTER COLUMN "overagePercent" SET DATA TYPE DECIMAL(9,6)',
+      'ALTER TABLE "production_order_requirements" ALTER COLUMN "purityPercentApplied" SET DATA TYPE DECIMAL(9,6)',
+      'ALTER TABLE "production_order_requirements" ALTER COLUMN "overagePercent" SET DATA TYPE DECIMAL(9,6)',
+      'ALTER TABLE "formulation_template_components" ALTER COLUMN "purityPercentApplied" SET DATA TYPE DECIMAL(9,6)',
+      'ALTER TABLE "formulation_template_components" ALTER COLUMN "overagePercent" SET DATA TYPE DECIMAL(9,6)',
+    ]);
   });
 });

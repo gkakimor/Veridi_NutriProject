@@ -455,8 +455,19 @@ export async function runPipeline(ctx: PipelineContext): Promise<PipelineResult>
           unitCode: (row.doseUnit ?? "MG").toLowerCase(),
           basis: "PER_DOSE",
           purityPercentApplied: mapped.defaultPurityPercent,
+          /*
+           * Seis casas, o scale da coluna desde o PREC-MIG-C.
+           *
+           * O overage aqui é DERIVADO — `fator ÷ doses − 1` costuma ter dízima
+           * —, então algum corte existe. Ele acontece aqui, no valor que a
+           * importação decidiu gravar, e não dentro do PostgreSQL depois: três
+           * casas descartavam precisão que a coluna hoje guarda, e mais de seis
+           * voltariam a ser arredondadas em silêncio pelo banco. O importador
+           * escreve via Prisma, sem passar pelo validator da API, então o
+           * limite precisa estar escrito aqui.
+           */
           overagePercent: reconstruction.overagePercent
-            ? reconstruction.overagePercent.toFixed(3)
+            ? reconstruction.overagePercent.toFixed(6)
             : null,
           ...legacy,
         });

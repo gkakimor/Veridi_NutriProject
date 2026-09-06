@@ -1893,7 +1893,7 @@ model Item {
   /// o default para novas formulacoes: a capacidade 34 congelara
   /// `purityPercentApplied` no componente, entao mudar este campo nunca
   /// altera formulacao/OP historica.
-  defaultPurityPercent Decimal? @db.Decimal(6, 3)
+  defaultPurityPercent Decimal? @db.Decimal(9, 6)
 
   /// So para type = PACKAGING; permanece null nos demais tipos.
   packagingSubtype PackagingSubtype?
@@ -2358,11 +2358,11 @@ model FormulationComponent {
   /// alterar o Item depois NUNCA muda esta versao. `null` = pureza
   /// desconhecida: nenhuma correcao e aplicada (jamais assume 100% para
   /// "consertar" o numero).
-  purityPercentApplied Decimal? @db.Decimal(6, 3)
+  purityPercentApplied Decimal? @db.Decimal(9, 6)
 
   /// Perda/excesso de processo em % (>= 0). `null` = nao informado; nunca
   /// e inferido matematicamente so para bater com um total historico.
-  overagePercent Decimal? @db.Decimal(6, 3)
+  overagePercent Decimal? @db.Decimal(9, 6)
 
   /// O que `quantity` significa neste componente. Ver o enum.
   ///
@@ -2948,8 +2948,8 @@ model ProductionOrderRequirement {
   theoreticalQuantity Decimal? @db.Decimal(24, 12)
 
   /// Pureza/overage efetivamente aplicados — congelados junto com a OP.
-  purityPercentApplied Decimal? @db.Decimal(6, 3)
-  overagePercent       Decimal? @db.Decimal(6, 3)
+  purityPercentApplied Decimal? @db.Decimal(9, 6)
+  overagePercent       Decimal? @db.Decimal(9, 6)
 
   /// Necessidade FISICA final (ja com pureza/overage), convertida para a
   /// unidade de estoque do Item — fonte de verdade da necessidade da OP.
@@ -3748,8 +3748,8 @@ model FormulationTemplateComponent {
   /// usuario ajusta no produto sem tocar no template.
   supplyResponsibility SupplyResponsibility @default(VERIDI)
 
-  purityPercentApplied Decimal? @db.Decimal(6, 3)
-  overagePercent       Decimal? @db.Decimal(6, 3)
+  purityPercentApplied Decimal? @db.Decimal(9, 6)
+  overagePercent       Decimal? @db.Decimal(9, 6)
 
   /// O template carrega a CONFIGURACAO, nao o resultado: modo e flags viajam
   /// junto com pureza e overage, para que aplicar o template reproduza a

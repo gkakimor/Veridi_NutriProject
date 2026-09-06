@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  CASAS_PERCENTUAL_TECNICO,
+  casasDecimais,
+  mensagemCasasPercentualTecnico,
+} from "./decimal-schema.js";
 
 /**
  * Validações do cadastro industrial (capacidade 33).
@@ -77,6 +82,12 @@ export function optionalPositiveDecimal(message: string) {
 /**
  * Pureza em porcentagem: `0 < x <= 100`. `null` significa DESCONHECIDA e
  * nunca deve virar 100% em lugar nenhum do sistema.
+ *
+ * A FAIXA é regra de negócio e a PRECISÃO é regra de armazenamento — duas
+ * coisas independentes. A coluna passou a `DECIMAL(9,6)` no PREC-MIG-C e
+ * suporta até 999,999999, e isso não autoriza pureza acima de 100: quem manda
+ * na faixa continua sendo o domínio. O que muda aqui é só o limite de casas,
+ * que existe para o valor não ser arredondado em silêncio pelo PostgreSQL.
  */
 export const optionalPurityPercent = z
   .union([z.string(), z.number()])
@@ -93,6 +104,11 @@ export const optionalPurityPercent = z
   .refine(
     (value) => value === undefined || value === null || (Number(value) > 0 && Number(value) <= 100),
     { message: "Pureza deve ser maior que 0 e no máximo 100" },
+  )
+  .refine(
+    (value) =>
+      value === undefined || value === null || casasDecimais(value) <= CASAS_PERCENTUAL_TECNICO,
+    { message: mensagemCasasPercentualTecnico() },
   );
 
 /** CEP: guarda somente dígitos; a máscara `00000-000` é apresentação. */
