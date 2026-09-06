@@ -77,14 +77,15 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado.
 
 ## Backlog aberto
 
-[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL e HIGH. **Rodadas 1 a 4
-publicadas** (#12, #9, #3, #5, #4 com residual aceito; #8A, #8B, #8C; #8D,
-#8H; #15, #16). **Seguinte, quando autorizada:** #8E, #8F e #8G. **Aguardando
-a Veridi:** #7 e #11. **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API
-não determinística sob paralelismo, não observado nesta rodada) e **#18**
-(Ordem de Compra ainda arredonda com semântica distinta da comercial — MEDIUM,
-capability própria, com auditoria antes de qualquer mudança matemática).
-**Observação:** #1, #2.
+[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL. **Dois HIGH abertos pela auditoria
+PREC-01:** #19 (scale de quantidade zera microdosagem) e #20 (`decimal.js` em 20
+dígitos significativos). **Rodadas 1 a 4 publicadas** (#12, #9, #3, #5, #4 com
+residual aceito; #8A, #8B, #8C; #8D, #8H; #15, #16). **Seguinte, quando
+autorizada:** #8E, #8F e #8G. **Aguardando a Veridi:** #7 e #11.
+**Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não determinística sob
+paralelismo, não observado nesta rodada), **#18** (Ordem de Compra — a auditoria
+matemática exigida pelo PO está cumprida e a decisão está liberada) e **#21**
+(seis DTOs entregam menos casas do que a coluna guarda). **Observação:** #1, #2.
 
 ## Blockers
 

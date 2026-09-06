@@ -20,10 +20,74 @@ resolvidos; #15, #16 e #17 abertos como achados.
 **Rodada 4 aprovada e publicada em 2026-09-05**: #15 e #16 resolvidos; #18
 aberto como achado, por decisão do PO. #17 segue aberto. **Seguinte, quando o
 PO autorizar:** #8E, #8F e #8G.
+**Auditoria PREC-01 (2026-09-05)**, só documentação, sem migration e sem
+mudança de regra: **PREC-01 resolvido**; #19, #20 e #21 abertos como achados;
+**PREC-15 permanece bloqueado até revisão do PO**. Relatório em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md).
 
 ---
 
 ## A. Defeitos abertos
+
+### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — HIGH
+
+**ABERTO. Achado da auditoria PREC-01 (2026-09-05), com dado real do banco
+local.** Componente `MP-000147`, `FIXED_BASIS` `0,000048 kg` sobre base 1000,
+item estocado em kg: produzir de 1 a 10 unidades dá necessidade física de
+`4,8e-8` a `4,8e-7 kg`, e `ProductionOrderRequirement.requiredQuantity`
+**persiste `0,000000`** — a OP afirma que não precisa do material. A 100
+unidades grava `0,000005` contra `0,0000048` reais, erro de +4,2%. Com scale 12
+todos os casos são exatos.
+
+O motor de Formulação está correto: ele calcula em `Decimal` sem arredondar. A
+perda é do scale da coluna, aplicada na gravação — reintroduzindo exatamente o
+"não precisa de material" que `formulation-quantity.ts` foi escrito para evitar.
+
+**Alcance medido:** 1991 componentes de formulação, 142 abaixo de `0,001` na
+unidade de estoque, 1 já zerando. Dói em amostra, piloto e lote pequeno.
+
+**Colunas afetadas** (todas `Decimal(18,6)`, quantidade derivada persistida):
+`ProductionOrderRequirement.requiredQuantity` e `.theoreticalQuantity`,
+`MaterialReservationLine.quantity`, `ProductionConsumption.quantity`,
+`InventoryMovement.quantity`, `RecipeWeighing.plannedQuantitySnapshot`,
+`SampleConsumption.quantity`.
+
+**Não implementar sem o gate do PO.** Exige migration de widening e, no mesmo
+passo, `Decimal.set({ precision: … })` — ver #20. Sem backfill: casa nunca
+persistida não se reconstrói. Perguntas de domínio em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.
+
+### 20. `decimal.js` roda em 20 dígitos significativos — HIGH estrutural
+
+**ABERTO. Achado da auditoria PREC-01 (2026-09-05).** `Decimal.precision = 20`,
+default, nunca reconfigurado em nenhum ponto do repositório. Medido:
+`new Decimal("123456789012.123456789012").times(1)` devolve
+`123456789012.12345679`.
+
+É um teto de JavaScript **independente da coluna**: ampliar scale sem ampliar
+`Decimal.precision` cria coluna que o sistema não consegue preencher. Bloqueia
+#19 e qualquer hipótese de `DECIMAL(30,12)`. **Ordem obrigatória:**
+`Decimal.set` antes ou junto do widening, com teste que prove o dígito extra.
+
+### 21. Seis serializações de DTO entregam menos casas do que a coluna guarda — MEDIUM
+
+**ABERTO. Achado da auditoria PREC-01 (2026-09-05).** `toFixed(N)` com `N`
+menor que o scale da coluna. Cinco são exibição; uma grava:
+`projects/quote-pricing.service.ts:288` aplica faixa de precificação a linha de
+orçamento convertendo preço de 6 casas em 4 — perda da coluna
+(`QuoteLine.unitPrice` é `Decimal(14,4)`), não do código, e recuperável por
+leitura via `pricingSelectedUnitPriceSnapshot` (14,6).
+
+Junto: a mesma média ponderada de custo sai com 4 casas em
+`costs/costs.service.ts` e 6 em `items/item-cost-references.service.ts:162` —
+`11,6586` contra `11,658585`, duas telas mostrando números diferentes do mesmo
+dado. E `print/documents.tsx:353` imprime `requiredQuantity / numberOfParts` em
+float no documento da OP, enquanto a API divide com `splitDecimal`
+(`ROUND_DOWN` + resto na última parte): num total não divisível o `X × N`
+impresso não fecha, num documento de execução GMP.
+
+Lista completa em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md)
+§5. A correção do `print` é independente de migration e cabe em qualquer rodada.
 
 ### 18. Consistência monetária da Ordem de Compra — MEDIUM
 
@@ -46,6 +110,28 @@ reabrir #8A** — a regra atual foi publicada como está. Antes de alterar a
 matemática é preciso auditar: OCs históricas; recebimentos; custo efetivo;
 custo de aquisição; vínculos com fornecedor; persistência histórica; e se
 existe razão de domínio para a regra atual. Só então decidir se muda.
+
+**Auditoria PREC-01 (2026-09-05) — o que ficou provado.** A pré-condição que o
+PO exigiu está cumprida, e o resultado libera a decisão:
+
+- **Nada da OC é persistido em dinheiro.** `PurchaseOrder` e `Receipt` não têm
+  nenhuma coluna de total; o total é sempre derivado na leitura. Não existe
+  documento histórico congelado para reconciliar nem backfill possível.
+- **O preço unitário preciso é preservado**: `PurchaseOrderLine.unitPrice`,
+  `Decimal(14,4)`, nunca arredondado além da própria coluna.
+- **O custo de aquisição não vem da OC.** É `ReceiptLine.actualUnitCost`,
+  informado por pessoa. `lib/cost-reference.ts` recusa explicitamente o preço da
+  OC como fallback: sem custo real histórico o resultado é `NO_COST`, nunca o
+  preço da compra.
+- **Recebimento parcial** usa `ReceiptLine.receivedQuantity` `Decimal(18,6)`,
+  independente do total do documento.
+- **Custo efetivo** é `Σ(receivedQuantity × actualUnitCost) ÷ Σ receivedQuantity`
+  em `Decimal`, sem arredondamento intermediário.
+
+**Conclusão:** o custo industrial **não** consome o total documental arredondado
+da OC em ponto nenhum. A divergência de #18 é exclusivamente de apresentação
+documental. Mudar `round(Σ)` para `Σ round()` não contamina custo, CMV nem
+precificação — a decisão é do PO, e agora é uma decisão isolada.
 
 ### 17. Suíte da API não é determinística sob paralelismo no banco local — LOW técnico
 
@@ -312,11 +398,20 @@ permanece obrigatório no escopo atual.
 3. **Rodada 3 — aprovada e publicada:** #8D + #8H resolvidos.
 4. **Rodada 4 — aprovada e publicada:** #15 + #16 resolvidos; #18 registrado;
    #8E, #8F e #8G quando o PO autorizar.
-5. **Validação com a Veridi:** #7 + #11.
-6. **Manutenção:** #10 e #17. #18 é capability própria, com auditoria antes de
-   qualquer mudança matemática. #1 e #2 permanecem observação/adiados.
-7. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
-8. **Roadmap:** produto próprio Veridi.
+5. **Auditoria PREC-01 — concluída em 2026-09-05**, só documentação. #19, #20 e
+   #21 registrados; a auditoria exigida por #18 está cumprida. **PREC-15 segue
+   bloqueado até revisão do PO.**
+6. **Validação com a Veridi:** #7 + #11.
+7. **Manutenção:** #10 e #17. #18 é capability própria — a auditoria matemática
+   já foi feita e a decisão está liberada. #1 e #2 permanecem
+   observação/adiados.
+8. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
+9. **Roadmap:** produto próprio Veridi.
+
+**Precisão numérica — ordem obrigatória.** #20 antes ou junto de #19: ampliar
+scale sem ampliar `Decimal.precision` cria coluna que o sistema não consegue
+preencher. #21 depois de #19 e #20, para que o `toFixed` já espelhe o scale
+novo. A parte do `print` de #21 é independente e cabe em qualquer rodada.
 
 ## Próximo gate
 
