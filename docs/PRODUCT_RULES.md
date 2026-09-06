@@ -3623,3 +3623,93 @@ cada consulta de uma tela sã, e uma auditoria de console passa a reprovar uma
 página correta. Ausência também não vira valor: nada de `R$ 0,00` no lugar de
 "sem preço". E o inverso é igualmente proibido — 403, 404 de recurso ausente e
 erro interno continuam distintos, nunca mascarados como "estado vazio".
+
+## §57 — Precisão de armazenamento não é precisão de apresentação
+
+Decisão de Product Ownership de 2026-09-05, sobre a auditoria
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md).
+
+**O banco preserva a precisão que o domínio produz; a tela mostra a que a
+pessoa precisa ler.** São duas coisas distintas e nunca se determinam.
+
+Mudar quantas casas a interface exibe:
+
+- não altera dado armazenado;
+- não exige migration;
+- não recalcula histórico;
+- não muda regra de negócio.
+
+**Invariante de campo editável.** Um valor armazenado como `4.053187640000`
+pode ser lido na tela como `4,0532`. Mas abrir o campo, não editar e salvar
+preserva `4.053187640000` — exatamente, casa por casa. A máscara visual nunca
+destrói casa oculta. Um campo que devolve ao servidor o que a máscara mostrou
+está errado, mesmo que o número pareça certo.
+
+**Valor técnico nunca nasce de valor arredondado para apresentação.** Custo,
+CMV, quantidade física, conversão e precificação são calculados sobre o valor
+íntegro. O arredondamento é a última operação, na saída, e o resultado dela não
+volta a ser operando.
+
+**Preferência de exibição alcança apresentação e nada mais.** Ela não grava,
+não recalcula e não altera regra. Totais documentais fechados seguem o domínio,
+nunca o perfil do usuário: um Pedido com Total acordado de `R$ 172,84` continua
+`R$ 172,84` para quem escolheu modo técnico.
+
+**Documental fechado não contamina técnico.** Que um total comercial tenha duas
+casas por regra de acordo — §55 — não autoriza reduzir a duas casas o preço
+unitário, a quantidade, o custo, o CMV ou os fatores que o produziram.
+
+## §58 — Matriz de precisão numérica por categoria
+
+Decisão de Product Ownership de 2026-09-05, derivada da auditoria. É a
+referência para toda coluna numérica nova e para o widening futuro. **Ainda não
+aplicada ao schema** — a implementação pertence às capabilities PREC-MIG-A a E.
+
+| Categoria | Tipo aprovado |
+|---|---|
+| QUANTITY | `DECIMAL(24,12)` |
+| UNIT_COST | `DECIMAL(20,8)` |
+| UNIT_PRICE técnico | `DECIMAL(20,8)` |
+| UNIT_PRICE contratual | precisão definida pelo documento comercial |
+| PERCENTAGE comercial | `DECIMAL(7,4)` enquanto suficiente |
+| PURITY / OVERAGE | `DECIMAL(9,6)` |
+| FACTOR / conversão de unidade | `DECIMAL(24,12)` |
+| MARKUP / fator comercial | precisão atual enquanto suficiente |
+| TECHNICAL_RESULT persistido | `DECIMAL(24,12)` |
+| COMMERCIAL_TOTAL fechado | `DECIMAL(14,2)` |
+
+**UNIT_PRICE contratual não é ampliado automaticamente.** Snapshot histórico de
+acordo comercial não sofre widening por decisão técnica: o valor que está no
+documento assinado é o valor do documento.
+
+**MARKUP e percentual comercial não são ampliados sem necessidade
+demonstrada.** Quatro casas decidem margem e comissão; mais casas não mudam
+decisão nenhuma.
+
+**`DECIMAL(30,12)` foi recusado como baseline.** Não por excesso de casas
+decimais, mas por excesso de parte inteira e por incompatibilidade com o motor:
+ver §59.
+
+## §59 — Uma configuração canônica de Decimal
+
+Decisão de Product Ownership de 2026-09-05.
+
+A precisão computacional do `decimal.js` deve ser elevada para **40 dígitos
+significativos**. O default é 20, e a auditoria mediu a consequência: uma
+coluna de 24 dígitos totais guardaria um número que a aritmética do sistema não
+é capaz de produzir.
+
+Quarenta é margem sobre os 24 dígitos da maior persistência técnica planejada,
+porque as operações intermediárias — multiplicação, divisão, média ponderada,
+conversão de unidade, pureza, overage, CMV e precificação — encadeiam antes de
+qualquer arredondamento.
+
+**A configuração é uma só, canônica, e não se espalha.** `Decimal.set()` não
+aparece em módulo de domínio: existe um ponto de configuração, carregado por
+`@veridi/shared` e por `apps/api`, e todo o resto herda. Duas configurações
+divergem por definição, e a que está fora do caminho principal é a que fica
+para trás.
+
+**Ordem obrigatória.** A elevação da precisão vem antes ou junto do primeiro
+widening de coluna. Ampliar a coluna sem ampliar o motor cria coluna que o
+sistema não consegue preencher.

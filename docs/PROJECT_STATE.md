@@ -22,37 +22,51 @@ casos profundos do legado rodaram ponta a ponta contra a interface publicada
 
 ## Última capability publicada
 
-**Integridade comercial Orçamento → Pedido e ausência de precificação como
-estado** — BACKLOG #15 e #16, aprovada pelo PO e publicada em 2026-09-05,
-merge `33ee1cd`. Sem migration; deploy Railway com a release conferida no
-bundle publicado e smoke autenticado passando.
+**Auditoria global de precisão numérica — PREC-01**, aprovada pelo PO e
+publicada em 2026-09-05. **Só documentação:** nenhuma migration, nenhuma
+mudança de schema, nenhum código de produto tocado.
 
-O subtotal comercial canônico é `Σ round(quantidade × preço, 2)` — a soma dos
-totais de linha já arredondados, que fecha com o documento que o cliente
-confere. `quote-to-order.service.ts` somava em precisão cheia e arredondava no
-fim: com preço de quatro casas o Pedido congelava um centavo que a proposta
-nunca mostrou (R$ 172,84 × R$ 172,83). Agora o Pedido passa por
-`calcularTotaisOrcamento`, a mesma função que montou a proposta aceita, e o
-resumo do Faturamento dentro do Pedido, por `calcularTotaisFaturamento`.
-Nenhum documento histórico recalculado, nenhum backfill.
+A auditoria provou o que já funciona: zero `Float` no banco, 106 colunas
+`numeric` com precisão explícita, **zero divergência de precisão entre Prisma e
+banco** (164/164), nenhuma grandeza atravessando a API como número JSON, motores
+de cálculo em `Decimal` de ponta a ponta e round-trip de edição **IDENTICAL** em
+dez casos determinísticos — abrir, não editar e salvar preserva o valor.
 
-`GET /quote-lines/:id/pricing-options` responde 200 com `{ "pricing": null }`
-quando não há precificação vigente — estado esperado do negócio; 404 voltou a
-significar só linha inexistente, e 403 e erro interno seguem distintos. Regras
-duráveis em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §55 e §56.
+E provou o que quebra, com dado real: `Decimal(18,6)` **zera** quantidade física
+derivada em microdosagem — `MP-000147` a `0,000048 kg` sobre base 1000 grava
+`0,000000` ao produzir de 1 a 10 unidades, e a OP passa a afirmar que não precisa
+do material (#19, HIGH/URGENTE). E o `decimal.js` roda em 20 dígitos
+significativos, teto de JavaScript independente da coluna, que reprovou
+`DECIMAL(30,12)` como baseline (#20, HIGH).
+
+Decisões do PO registradas em [`PRODUCT_RULES.md`](PRODUCT_RULES.md): §57
+armazenamento ≠ apresentação e o invariante de casa oculta; §58 a matriz de
+tipos por categoria; §59 a configuração canônica de `Decimal` em 40 dígitos.
+Decomposição PREC-MIG-A a E, PREC-SER, PREC-FMT e PREC-UI na seção E de
+[`BACKLOG.md`](BACKLOG.md). Relatório completo em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md).
+
+**#18 desbloqueado:** nenhum total de OC é persistido, o custo real vem de
+`ReceiptLine.actualUnitCost` e o custo industrial nunca consome o total
+documental — a decisão ficou isolada. Implementa depois da fundação.
 
 ## Antes dela
 
-**Prévias monetárias coerentes no Faturamento e no Orçamento** — BACKLOG #8D e
-#8H, publicada em 2026-09-05, merge `b89f9a4`, sem migration; deploy Railway
-conferido e smoke autenticado passando. Nenhuma das duas telas mostra mais um
-total do estado salvo anterior enquanto seus operandos estão em edição, e as
-contas viraram uma só em `@veridi/shared`, usada também pela API. Detalhe em
-[`BACKLOG.md`](BACKLOG.md) §F; regra em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §54.
+**Rodada 4** — integridade comercial Orçamento → Pedido (#15) e ausência de
+precificação como estado (#16), merge `33ee1cd`. O subtotal comercial canônico é
+`Σ round(quantidade × preço, 2)`: o Pedido gerado de uma proposta aceita passa
+pela mesma função que montou a proposta, em vez de somar em precisão cheia e
+arredondar no fim (R$ 172,84, não R$ 172,83). `pricing-options` responde 200 com
+`{ "pricing": null }` para ausência esperada. Regras em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §55 e §56.
 
-Rodada 2 — prévias na OC, Expedição e Precificação (2026-09-05, merge
-`dfb2673`); referência manual de custo (`PRODUCT_RULES.md` §53) e revisão do
-"Como funciona" em 62 telas (2026-09-04).
+**Rodada 3** — prévias monetárias coerentes no Faturamento e no Orçamento (#8D e
+#8H, merge `b89f9a4`): nenhuma das duas telas mostra o total do estado salvo
+anterior enquanto seus operandos estão em edição, e as contas viraram uma só em
+`@veridi/shared`, usada também pela API (`PRODUCT_RULES.md` §54). **Rodada 2** —
+prévias na OC, Expedição e Precificação (merge `dfb2673`). Antes: referência
+manual de custo (`PRODUCT_RULES.md` §53) e revisão do "Como funciona" em 62
+telas (2026-09-04). Detalhe em [`BACKLOG.md`](BACKLOG.md), seção G.
 
 ## Estado operacional do repositório
 
@@ -67,24 +81,31 @@ importadores oficiais permanecem.
 banco vazio só com o repositório — `scripts/migration-order.test.ts` em
 `pnpm test` e `pnpm validate:migrations:fresh`; regra em [`TECH_BASELINE.md`](TECH_BASELINE.md).
 
-## Próximo gate
+## Próxima capability
 
-**Validação com a Veridi** para as regras que dependem do processo real do
-cliente (#7, #11) — não bloqueia os itens internos já decididos pelo PO, que
-entram quando o PO autorizar a próxima capability. Roteiro em
+**Fundação de precisão numérica: #20 + PREC-MIG-A** — `Decimal` canônico em 40
+dígitos significativos e widening de QUANTITY e fatores técnicos para
+`DECIMAL(24,12)`, com preservação ponta a ponta e migration segura. #20 vem
+antes ou junto de #19: ampliar coluna sem ampliar o motor cria coluna que o
+sistema não consegue preencher. **Começa em conversa nova.**
+
+**Gate paralelo:** validação com a Veridi para as regras que dependem do
+processo real do cliente (#7, #11) — não bloqueia os itens internos já decididos
+pelo PO. Roteiro em
 [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md); guia do usuário
 final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado.
 
 ## Backlog aberto
 
-[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL e HIGH. **Rodadas 1 a 4
-publicadas** (#12, #9, #3, #5, #4 com residual aceito; #8A, #8B, #8C; #8D,
-#8H; #15, #16). **Seguinte, quando autorizada:** #8E, #8F e #8G. **Aguardando
-a Veridi:** #7 e #11. **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API
-não determinística sob paralelismo, não observado nesta rodada) e **#18**
-(Ordem de Compra ainda arredonda com semântica distinta da comercial — MEDIUM,
-capability própria, com auditoria antes de qualquer mudança matemática).
-**Observação:** #1, #2.
+[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL. **Dois HIGH da auditoria PREC-01, e
+são a próxima capability:** #19 (scale zera microdosagem, URGENTE) e #20
+(`decimal.js` em 20 dígitos). **Rodadas 1 a 4 e PREC-01 publicadas** (#12, #9,
+#3, #5, #4 com residual aceito; #8A–#8C; #8D, #8H; #15, #16; auditoria).
+**Depois da fundação:** PREC-MIG-B/C/D, PREC-SER-01/02, PREC-FMT-01, **#18**
+(desbloqueado) e PREC-MIG-E. **Roadmap:** PREC-UI-01 a 08. **Quando autorizada:**
+#8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11. **Manutenção:** #10 e #14.
+**Abertos:** #17 (suíte da API não determinística sob paralelismo, não observado
+na auditoria) e #21. **Observação:** #1, #2.
 
 ## Blockers
 
@@ -97,6 +118,7 @@ Nenhum.
 | Estado atual, release, próximo gate | este arquivo |
 | Pendências abertas | [BACKLOG.md](BACKLOG.md) |
 | Regras duráveis de negócio | [PRODUCT_RULES.md](PRODUCT_RULES.md) |
+| Precisão numérica: inventário, riscos e plano | [NUMERIC_PRECISION_AUDIT.md](NUMERIC_PRECISION_AUDIT.md) |
 | Onde cada regra é protegida | [TEST_COVERAGE_MAP.md](TEST_COVERAGE_MAP.md) |
 | Estratégia de E2E | [E2E_STRATEGY.md](E2E_STRATEGY.md) |
 | Regras duráveis de UI e marca | [UI_BRAND.md](UI_BRAND.md) |
