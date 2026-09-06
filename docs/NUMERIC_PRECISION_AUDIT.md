@@ -86,9 +86,10 @@ conta em `Number` e produzem valor enviado ou impresso estão em §5.
 
 ## 3. Inventário por categoria
 
-166 campos numéricos auditados: **106 Decimal** e **59 Int** no banco (58 no
-Prisma; o excedente é `_prisma_migrations.applied_steps_count`, bookkeeping do
-próprio Prisma). Zero Float. Zero Decimal sem precision/scale explícita.
+**164 campos numéricos auditados** — os de domínio, declarados no
+`schema.prisma`: **106 Decimal** e **58 Int**. O banco tem 165 colunas numéricas;
+a excedente é `_prisma_migrations.applied_steps_count`, bookkeeping do próprio
+Prisma, fora do domínio. Zero Float. Zero Decimal sem precision/scale explícita.
 
 | Scale | Campos | Categorias predominantes |
 |---|---|---|
