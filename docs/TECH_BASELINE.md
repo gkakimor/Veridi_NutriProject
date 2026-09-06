@@ -99,8 +99,22 @@ real order. Rules:
 - a migration may only reference tables, types and columns created by a
   migration with a smaller-or-equal name. `scripts/migration-order.test.ts`
   checks this statically as part of `pnpm test`;
-- folder names carry the real timestamp of the session that created them
-  (`YYYYMMDDHHMMSS_snake_case`), never a future date;
+- folder names are 14-digit identifiers (`YYYYMMDDHHMMSS_snake_case`) and the
+  chain is **strictly monotonic**: a new migration NEVER gets an identifier
+  smaller than or equal to the largest one already present. The identifier is
+  first an ordering key for the chain and only then a date.
+
+  The chain already contains future-dated identifiers, so "use today's
+  timestamp" would produce a name that sorts *before* migrations it depends on
+  and break the rebuild from an empty database. **Transitional policy (Product
+  Ownership, 2026-09-05):** when the largest existing identifier is in the
+  future, use the **smallest valid monotonic increment** from it — never jump
+  further ahead. `20260925093000` was followed by `20260925093001`, not by a new
+  invented date. Where the largest identifier is in the past, the real timestamp
+  of the session is both correct and monotonic, and stays the rule.
+
+  Historical migrations already published are never renamed to tidy the
+  sequence;
 - `pnpm validate:migrations:fresh` proves the rebuild against a throwaway
   database on the local Postgres. It goes through `scripts/local-db-guard.mjs`
   (local host only, never Railway) and drops the database at the end. Run it

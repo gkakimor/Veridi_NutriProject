@@ -36,8 +36,11 @@ perceber. `packages/shared/src/decimal-config.ts` é a configuração única;
 `apps/api/src/lib/decimal.ts` a aplica ao construtor do Prisma. Só `precision`
 muda — `rounding` segue `ROUND_HALF_UP`, o mesmo que o PostgreSQL usa ao gravar.
 
-**PREC-MIG-A — 43 colunas em `DECIMAL(24,12)`.** Migration
-`20260926090000_numeric_precision_quantities_24_12`, só `ALTER COLUMN ... TYPE`.
+**PREC-MIG-A — 43 colunas em `DECIMAL(24,12)`:** 39 QUANTITY, 1 FACTOR
+(`UnitOfMeasure.toBaseFactor` — quantidade com doze casas não adianta se a
+conversão perder precisão antes dela) e 3 TECHNICAL_RESULT que já estavam em
+`18,6` e têm o mesmo alvo. Migration
+`20260925093001_numeric_precision_quantities_24_12`, só `ALTER COLUMN ... TYPE`.
 O diff gerado pelo Prisma trazia junto 86 blocos do drift #14; foram removidos
 na revisão linha a linha e o drift segue intocado. **Sem backfill:** 371 valores
 existentes conferidos antes e depois, zero divergência matemática — só a
@@ -54,7 +57,9 @@ com os demais snapshots de precificação no PREC-MIG-B.
 `scripts/numeric-precision-matrix.test.ts` guarda a matriz de §58 contra
 reincidência.
 
-**#20 RESOLVIDO. PREC-MIG-A RESOLVIDO. #19 segue aberto** até PREC-MIG-B a E.
+**#20 RESOLVIDO. PREC-MIG-A RESOLVIDO.** #19 e PREC-MIG-D seguem **ABERTOS /
+PARCIAIS** — os três resultados técnicos entregues aqui não reaparecem numa
+migration futura; o residual do D são os que ainda estão em `14,4` e `14,6`.
 
 ## Antes dela
 

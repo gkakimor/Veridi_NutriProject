@@ -149,7 +149,7 @@ precificação no PREC-MIG-B.
 | ProductionOrder.plannedQuantity | QUANTITY | 18,6 | quantidade planejada | OK | 24,12 | Sim — A |
 | FormulationVersion.basisQuantity | QUANTITY | 18,6 | base da versão (divisor) | POTENTIAL_RISK | 24,12 | Sim — A |
 | ProjectSample.outputQuantity | QUANTITY | 18,6 | piloto — lote pequeno | POTENTIAL_RISK | 24,12 | Sim — A |
-| **UnitOfMeasure.toBaseFactor** | UOM_CONVERSION | 18,6 | fator de conversão, multiplica e divide toda quantidade | **NEEDS_DOMAIN_DECISION** | **24,12** | **Sim — B** |
+| **UnitOfMeasure.toBaseFactor** | UOM_CONVERSION | 18,6 | fator de conversão, multiplica e divide toda quantidade | decidido pelo PO | **24,12** | **Sim — A (ENTREGUE)** |
 | Item.defaultPurityPercent | PERCENTAGE | 6,3 | pureza padrão | POTENTIAL_RISK | 9,6 | Sim — B |
 | FormulationComponent.purityPercentApplied | PERCENTAGE | 6,3 | pureza aplicada (divisor) | POTENTIAL_RISK | 9,6 | Sim — B |
 | FormulationComponent.overagePercent | PERCENTAGE | 6,3 | overage aplicado | POTENTIAL_RISK | 9,6 | Sim — B |
@@ -249,7 +249,7 @@ coluna guardaria um número que o motor nunca é capaz de produzir. Qualquer
 ampliação de scale exige, no mesmo passo, `Decimal.set({ precision: N })` em
 `@veridi/shared` e em `apps/api`, com N coberto por teste.
 
-### R3 — Fator de conversão de unidade em `Decimal(18,6)` — ALTO
+### R3 — Fator de conversão de unidade em `Decimal(18,6)` — RESOLVIDO na Fundação A
 
 `UnitOfMeasure.toBaseFactor` multiplica e divide **toda** conversão de
 quantidade do sistema. Hoje os fatores são `1`, `1000` e `0.001`: exatos. Um
@@ -525,8 +525,11 @@ de R1.
 `Decimal(14,4)` → `Decimal(20,8)` para custo, tarifa e preço técnico (**~25
 colunas**); `Decimal(6,3)` → `Decimal(9,6)` para pureza e overage (**7
 colunas**); `Decimal(14,6)` → `Decimal(20,8)` para preço de precificação (**7
-colunas**); `UnitOfMeasure.toBaseFactor` → `Decimal(24,12)` (**1 coluna**).
-Perguntas em §12.
+colunas**). Perguntas em §12.
+
+`UnitOfMeasure.toBaseFactor` **saiu deste grupo**: o PO o colocou no PREC-MIG-A
+e ele foi entregue lá. Quantidade com doze casas não adianta se a conversão
+perder precisão antes dela.
 
 ### Grupo C — manter 2 casas
 `CustomerOrder.agreedSubtotalAmount`, `CustomerOrder.agreedTotalAmount`.
@@ -551,9 +554,11 @@ truncaria. Por isso a decisão de scale precisa nascer certa, e por isso 12 e n�
 ### Sequência aprovada
 
 1. **#20 + PREC-MIG-A** — **ENTREGUE em 2026-09-05.** Precisão canônica em 40
-   dígitos (§59) nos dois construtores, e widening de 43 colunas de QUANTITY,
-   fatores e resultado técnico para `DECIMAL(24,12)`. Migration
-   `20260926090000_numeric_precision_quantities_24_12`, sem backfill: 371
+   dígitos (§59) nos dois construtores, e widening de 43 colunas —
+   39 QUANTITY, 1 FACTOR (`toBaseFactor`) e 3 TECHNICAL_RESULT que já estavam em
+   `18,6` — para `DECIMAL(24,12)`. Os três resultados técnicos saem do residual
+   do PREC-MIG-D, que fica só com os de `14,4` e `14,6`. Migration
+   `20260925093001_numeric_precision_quantities_24_12`, sem backfill: 371
    valores existentes conferidos antes e depois, zero divergência matemática.
 2. **PREC-MIG-B, C e D** — custo em `DECIMAL(20,8)`, pureza e overage em
    `DECIMAL(9,6)`, demais resultados técnicos.

@@ -28,16 +28,17 @@ como achados. Relatório em
 arquivo. **#18 desbloqueado**, para depois da fundação. **PREC-15 permanece
 bloqueado até revisão do PO.**
 **Fundação numérica A (2026-09-05):** **#20 RESOLVIDO** (motor canônico em 40
-dígitos, nos DOIS construtores) e **PREC-MIG-A RESOLVIDO** (43 colunas em
-`DECIMAL(24,12)`, migration
-`20260926090000_numeric_precision_quantities_24_12`, sem backfill). #19 segue
-aberto até PREC-MIG-B a E. **Seguinte:** PREC-MIG-B, C e D.
+dígitos, nos DOIS construtores) e **PREC-MIG-A RESOLVIDO** — 43 colunas em
+`DECIMAL(24,12)` (39 QUANTITY + 1 FACTOR + 3 TECHNICAL_RESULT), migration
+`20260925093001_numeric_precision_quantities_24_12`, sem backfill. #19 segue
+**ABERTO / PARCIAL** e PREC-MIG-D **ABERTO / PARCIAL**. **Seguinte:**
+PREC-MIG-B.
 
 ---
 
 ## A. Defeitos abertos
 
-### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — ABERTO, primeiro grupo entregue
+### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — ABERTO / PARCIAL
 
 **PREC-MIG-A RESOLVIDO em 2026-09-05; #19 segue ABERTO** enquanto PREC-MIG-B, C,
 D e E não fecharem. O defeito que originou o item está corrigido: as 43 colunas
@@ -318,10 +319,10 @@ implementação.
 
 | Item | Escopo | Status |
 |---|---|---|
-| **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **RESOLVIDO** — 43 colunas, migration `20260926090000_numeric_precision_quantities_24_12` |
-| **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | APROVADO — depois de A |
-| **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | APROVADO — depois de A |
-| **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | APROVADO — depois de A |
+| **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **RESOLVIDO** — 43 colunas (39 QUANTITY + 1 FACTOR + 3 TECHNICAL_RESULT), migration `20260925093001_numeric_precision_quantities_24_12` |
+| **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | **ABERTO / NEXT** |
+| **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | ABERTO — depois de B |
+| **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL** — 3 campos já entregues no A, ver abaixo |
 | **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
 
 **PREC-MIG-B — motivo do PO.** `ReceiptLine.actualUnitCost` é a fonte de custo
@@ -331,6 +332,20 @@ posterior. Arredondamento visual é independente disso.
 **PREC-MIG-C — motivo do PO.** `99,9995%` não pode ser persistido em silêncio
 como `100,000`. A tela pode mostrar menos casas; a persistência preserva o
 valor.
+
+**PREC-MIG-D — o que já saiu e o que resta.** Três resultados técnicos que já
+estavam em `Decimal(18,6)` viajaram junto do PREC-MIG-A, porque o alvo deles é o
+mesmo `DECIMAL(24,12)` e separá-los criaria uma segunda migration sobre as
+mesmas tabelas:
+
+- `IndustrialCostCalculation.costPerUnit`
+- `PricingTier.costPerUnitSnapshot`
+- `ProductionOrderCostSnapshot.costPerProducedUnit`
+
+**Esses três estão ENTREGUES e não devem reaparecer numa migration futura.**
+O residual do PREC-MIG-D são os resultados técnicos ainda em `Decimal(14,4)` e
+`Decimal(14,6)` — composição do custo industrial, composição do CMV e os totais
+de snapshot da precificação —, que o inventário classifica em §3.1.
 
 Nenhuma dessas migrations faz backfill. Widening preserva o valor gravado e o
 reescreve com zeros à direita; casa que nunca foi persistida não se reconstrói.
@@ -546,7 +561,7 @@ permanece obrigatório no escopo atual.
 6. **Fundação de precisão A — entregue em 2026-09-05:** #20 (motor canônico em
    40 dígitos) + **PREC-MIG-A** (QUANTITY e fatores técnicos em
    `DECIMAL(24,12)`), com preservação ponta a ponta e migration sem backfill.
-7. **PRÓXIMA CAPABILITY:** PREC-MIG-B, C e D. Depois: PREC-SER-01/02,
+7. **PRÓXIMA CAPABILITY:** PREC-MIG-B. Depois: C, D residual, PREC-SER-01/02,
    PREC-FMT-01, #18 e PREC-MIG-E conforme as respostas de domínio.
 8. **Validação com a Veridi:** #7 + #11.
 9. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
