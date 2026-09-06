@@ -4,11 +4,11 @@
 
 ## Onde estamos
 
-**`main` @ `8a40b52`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `56b563c`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9, #3,
 #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**,
-as **Fundações numéricas A, B, C, P e D** e o **#18**, todos aprovados pelo PO.
-**Produção:** Railway, deploy automático da `main`; health 200, banco up, 55
+as **Fundações numéricas A, B, C, P, D e E** e o **#18**, todos aprovados pelo
+PO. **Produção:** Railway, deploy automático da `main`; health 200, banco up, 56
 migrations sem pendência, smoke autenticado passando, sem dado de negócio.
 
 MVP operacional **validado internamente**, blocos A a G fechados — de cadastros e
@@ -16,11 +16,14 @@ compras a produção rastreada, expedição, faturamento, custos, cockpit,
 relatórios, projetos, orçamentos e precificação. Três casos profundos do legado
 rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
-## Última capability — aguardando PO review
+## Última capability
 
-**PREC-MIG-E — a matriz de §58 aplicada ao schema inteiro.** Branch
-`feat/numeric-precision-technical-results-e`. As 16 colunas de alvo órfão foram
-classificadas pelo PAPEL do valor, e a decisão do PO separou o que parecia igual.
+**PREC-MIG-E — a matriz de §58 aplicada ao schema inteiro**, aprovado pelo PO e
+publicado em 2026-09-06, merge `56b563c`, deploy Railway verde — o `preDeploy`
+aplicou `20260925093007_numeric_precision_quote_industrial_cost_24_12` em
+produção, e o smoke autenticado passou em precificação, projetos, pedidos e nos
+três relatórios técnicos. As 16 colunas de alvo órfão foram classificadas pelo
+PAPEL do valor, e a decisão do PO separou o que parecia igual.
 
 **PREC-E-01 — uma migration, uma coluna.**
 `QuoteLine.industrialCostPerUnitSnapshot` de `Decimal(18,6)` para
