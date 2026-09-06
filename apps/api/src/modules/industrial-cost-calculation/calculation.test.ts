@@ -883,7 +883,7 @@ describe("Custo padrão — composição", () => {
     expect(result.directIndustrialCost).toBe("25.50");
     expect(result.overheadSubtotalKnown).toBe("2.55");
     expect(result.totalIndustrialCost).toBe("28.05");
-    expect(result.costPerUnit).toBe("1.122000");
+    expect(result.costPerUnit).toBe("1.122000000000");
     expect(result.costPer1000).toBe("1122.00");
     expect(result.quality).toBe("COMPLETE_REAL_REFERENCE");
 
@@ -1053,7 +1053,7 @@ describe("Custo industrial da produção", () => {
     // 500 un × 0,1 kg × R$ 10 = R$ 500 de material realmente consumido.
     expect(cost.actualMaterialCostKnown).toBe("500.00");
     expect(cost.totalIndustrialCost).toBe("700.00");
-    expect(cost.costPerProducedUnit).toBe("1.400000");
+    expect(cost.costPerProducedUnit).toBe("1.400000000000");
     expect(cost.hybrid).toBe(true);
     expect(cost.status).toBe("PROVISIONAL");
     expect(cost.materials[0].costSource).toBe("REAL");

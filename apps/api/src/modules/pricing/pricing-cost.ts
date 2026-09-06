@@ -16,6 +16,8 @@ import {
   shippingBoxes,
   unitMoney,
 } from "../industrial-cost-calculation/calculation.service.js";
+// Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
+import "../../lib/decimal.js";
 
 type PrismaOrTx = PrismaClient | PrismaTypes.TransactionClient;
 

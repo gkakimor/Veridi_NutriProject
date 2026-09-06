@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { CUSTOMER_ORDER_STATUSES } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
 
 const customerOrderLineInputSchema = z.object({
   productId: z.string().trim().min(1, "Produto é obrigatório"),
-  orderedQuantity: decimalStringSchema(),
+  orderedQuantity: quantityDecimalSchema(),
 });
 
 export const createCustomerOrderSchema = z.object({

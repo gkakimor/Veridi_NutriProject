@@ -23,6 +23,9 @@ import {
   OverrideNotApplicableError,
   OverrideReasonRequiredError,
 } from "./calculation.errors.js";
+// Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
+import "../../lib/decimal.js";
+import { resultadoTecnico } from "../../lib/decimal-serialization.js";
 
 type PrismaOrTx = PrismaClient | PrismaTypes.TransactionClient;
 
@@ -803,7 +806,7 @@ export async function calculateIndustrialCost(
     directIndustrialCost: directIndustrialCost ? money(directIndustrialCost) : null,
     totalIndustrialCost: totalIndustrialCost ? money(totalIndustrialCost) : null,
     knownSubtotal: money(knownSubtotal),
-    costPerUnit: costPerUnit ? unitMoney(costPerUnit) : null,
+    costPerUnit: costPerUnit ? resultadoTecnico(costPerUnit) : null,
     costPer1000: costPerUnit ? money(costPerUnit.times(THOUSAND)) : null,
 
     quality,

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { INVENTORY_MOVEMENT_TYPES } from "@veridi/shared";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 
 /**
  * Filtro de tipo de movimento: a lista canônica do domínio, nunca uma cópia.
@@ -48,19 +48,19 @@ export const createInventoryAdjustmentSchema = z.object({
    * os tipos é auditoria; criar qualquer tipo é falsificação.
    */
   type: z.enum(["ADJUSTMENT_IN", "ADJUSTMENT_OUT", "LOSS"]),
-  quantity: decimalStringSchema(),
+  quantity: quantityDecimalSchema(),
   reason: z.string().trim().min(3, "Motivo é obrigatório"),
 });
 
 export const stockCountSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
   lotId: z.string().trim().min(1).optional(),
-  countedQuantity: decimalStringSchema({ allowZero: true }),
+  countedQuantity: quantityDecimalSchema({ allowZero: true }),
   reason: z.string().trim().min(3).optional(),
 });
 
 export const allocationSuggestionQuerySchema = z.object({
-  quantity: decimalStringSchema(),
+  quantity: quantityDecimalSchema(),
 });
 
 export const listCustomerMaterialsQuerySchema = z.object({

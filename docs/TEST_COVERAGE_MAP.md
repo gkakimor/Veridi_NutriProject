@@ -132,6 +132,16 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Resumo do Faturamento dentro do Pedido usa `calcularTotaisFaturamento` — mesmo número do documento | resumo somava sem arredondar: R$ 1.927,42 no Pedido × R$ 1.927,41 no Faturamento | `modules/billings/billing-price.test.ts` |
 | Ausência de precificação vigente responde 200 com `{ pricing: null }`; 404 é só linha inexistente; 403 e erro interno seguem distintos e não viram estado vazio | 404 para estado normal deixava `console.error` em toda consulta de tela sã | `modules/projects/project-integration.test.ts`, `web lib/quote-pricing-options.test.ts` |
 
+## Precisão numérica
+
+| Regra | Origem do risco | Proteção canônica |
+|---|---|---|
+| Motor decimal em 40 dígitos significativos, numa configuração canônica só; `precision` e nada mais — `rounding` segue `ROUND_HALF_UP` | `decimal.js` e `Prisma.Decimal` são construtores DIFERENTES: configurar um deixava o outro em 20, e a API roda no do Prisma | `packages/shared/src/decimal-config.test.ts`, `apps/api/src/lib/decimal.test.ts` |
+| Quantidade e grandeza técnica persistem 12 casas: `0,000000048` grava `0,000000048000`, nunca `0,000000` | BACKLOG #19 — `Decimal(18,6)` zerava microdosagem e a OP dizia que não precisava do material | `apps/api/src/modules/inventory/precision-round-trip.test.ts` |
+| Entrada acima de 12 casas é recusada, não arredondada em silêncio | o operador digitava um número e o banco gravava outro sem dizer | `apps/api/src/lib/decimal-schema.test.ts` |
+| Toda coluna `Decimal` do schema segue a matriz de `PRODUCT_RULES.md` §58, com precisão explícita | reincidência: tabela nova copia `@db.Decimal(18, 6)` da linha de cima e a microdosagem volta a zerar | `scripts/numeric-precision-matrix.test.ts` |
+| Widening preserva o valor gravado; nenhum backfill | migration de precisão não pode recalcular histórico | `pnpm validate:migrations:fresh`, `scripts/migration-order.test.ts` |
+
 ## Apresentação e entrada
 
 | Regra | Origem do risco | Proteção canônica |

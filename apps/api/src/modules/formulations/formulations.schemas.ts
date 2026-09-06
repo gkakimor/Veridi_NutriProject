@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import {
   optionalPositiveInt,
   optionalPurityPercent,
@@ -32,7 +32,7 @@ const optionalLegacyDecimal = z
 
 const formulationComponentInputSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
-  quantity: decimalStringSchema(),
+  quantity: quantityDecimalSchema(),
   unitCode: z.string().trim().min(1, "Unidade é obrigatória"),
   basis: z.enum(["FIXED_BASIS", "PER_DOSE", "PER_FINISHED_UNIT"]).optional(),
   supplyResponsibility: z.enum(["VERIDI", "CUSTOMER"]).optional(),
@@ -69,7 +69,7 @@ export const createFormulationVersionSchema = z.object({
 });
 
 export const updateFormulationVersionSchema = z.object({
-  basisQuantity: decimalStringSchema().optional(),
+  basisQuantity: quantityDecimalSchema().optional(),
   calculationMode: z.enum(["FIXED_BASIS", "PER_DOSE"]).optional(),
   dosesPerPackage: optionalPositiveInt("Doses por embalagem deve ser maior que zero"),
   notes: optionalNullableText(2000),

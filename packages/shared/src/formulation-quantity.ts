@@ -1,4 +1,4 @@
-import Decimal from "decimal.js";
+import { Decimal, type DecimalInstance, type DecimalValue } from "./decimal-config.js";
 
 /**
  * Quantidade física do componente — a conta, num lugar só, usável dos dois
@@ -29,34 +29,34 @@ export type FormulationComponentQuantityModeLike =
 export interface UomFactorLike {
   code: string;
   dimension: string;
-  toBaseFactor: Decimal.Value;
+  toBaseFactor: DecimalValue;
 }
 
 export interface ComponentQuantityInput {
   basis: FormulationComponentBasisLike;
   /** Significado depende de `basis`: base da versão, por dose, por unidade. */
-  quantity: Decimal.Value;
+  quantity: DecimalValue;
   unitCode: string;
   /** Unidade de estoque do item — destino da conversão. */
   stockUnitCode: string;
-  purityPercent: Decimal.Value | null;
-  overagePercent: Decimal.Value | null;
+  purityPercent: DecimalValue | null;
+  overagePercent: DecimalValue | null;
   quantityMode?: FormulationComponentQuantityModeLike | null;
   applyPurityAdjustment?: boolean | null;
   applyOverageAdjustment?: boolean | null;
 }
 
 export interface VersionQuantityContext {
-  basisQuantity: Decimal.Value;
+  basisQuantity: DecimalValue;
   /** Obrigatório para qualquer componente `PER_DOSE`. */
   dosesPerPackage: number | null;
 }
 
 export interface ComponentQuantityResult {
   /** Antes dos ajustes, já na unidade de estoque. */
-  theoretical: Decimal;
+  theoretical: DecimalInstance;
   /** Depois dos ajustes autorizados — o que a fábrica separa. */
-  physical: Decimal;
+  physical: DecimalInstance;
 }
 
 /**
@@ -97,11 +97,11 @@ export function ajustesAutorizados(component: {
  * zero não é correção.
  */
 export function aplicarAjustes(
-  theoretical: Decimal,
-  purityPercent: Decimal.Value | null,
-  overagePercent: Decimal.Value | null,
+  theoretical: DecimalInstance,
+  purityPercent: DecimalValue | null,
+  overagePercent: DecimalValue | null,
   autorizados: { purity: boolean; overage: boolean },
-): Decimal {
+): DecimalInstance {
   let physical = theoretical;
   if (autorizados.purity && purityPercent !== null) {
     const pureza = new Decimal(purityPercent);
@@ -126,9 +126,9 @@ export function aplicarAjustes(
  */
 function fatorDaBase(
   basis: FormulationComponentBasisLike,
-  produzido: Decimal,
+  produzido: DecimalInstance,
   context: VersionQuantityContext,
-): Decimal | FormulationQuantityBlock {
+): DecimalInstance | FormulationQuantityBlock {
   switch (basis) {
     case "FIXED_BASIS": {
       const base = new Decimal(context.basisQuantity);
@@ -156,7 +156,7 @@ function fatorDaBase(
  */
 export function calcularQuantidadeDoComponente(
   component: ComponentQuantityInput,
-  producedQuantity: Decimal.Value,
+  producedQuantity: DecimalValue,
   context: VersionQuantityContext,
   units: readonly UomFactorLike[],
 ): ComponentQuantityResult | FormulationQuantityBlock {

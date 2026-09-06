@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 
 const shipmentLineInputSchema = z.object({
   customerOrderReservationLineId: z.string().trim().min(1, "Linha de reserva é obrigatória"),
-  quantity: decimalStringSchema({ allowZero: true }),
+  quantity: quantityDecimalSchema({ allowZero: true }),
 });
 
 export const updateShipmentSchema = z.object({
@@ -31,7 +31,7 @@ export const listShipmentsQuerySchema = z.object({
 
 const reserveAvailableLineSchema = z.object({
   customerOrderLineId: z.string().trim().min(1, "Linha do pedido é obrigatória"),
-  quantity: decimalStringSchema({ allowZero: true }),
+  quantity: quantityDecimalSchema({ allowZero: true }),
 });
 
 export const reserveAvailableSchema = z.object({

@@ -26,18 +26,29 @@ como achados. Relatório em
 [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md); decisões do PO em
 [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57, §58 e §59 e na seção E deste
 arquivo. **#18 desbloqueado**, para depois da fundação. **PREC-15 permanece
-bloqueado até revisão do PO.** **Próxima capability:** #20 + primeiro grupo
-seguro de #19 (PREC-MIG-A).
+bloqueado até revisão do PO.**
+**Fundação numérica A (2026-09-05):** **#20 RESOLVIDO** (motor canônico em 40
+dígitos, nos DOIS construtores) e **PREC-MIG-A RESOLVIDO** (43 colunas em
+`DECIMAL(24,12)`, migration
+`20260926090000_numeric_precision_quantities_24_12`, sem backfill). #19 segue
+aberto até PREC-MIG-B a E. **Seguinte:** PREC-MIG-B, C e D.
 
 ---
 
 ## A. Defeitos abertos
 
-### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — HIGH / URGENTE
+### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — ABERTO, primeiro grupo entregue
 
-**ABERTO — PRÓXIMA CAPABILITY, junto de #20.** Prioridade elevada para
-**HIGH / URGENTE** por decisão do PO em 2026-09-05: perda real de informação em
-Formulação e Produção é inaceitável. Achado da auditoria PREC-01, com dado real
+**PREC-MIG-A RESOLVIDO em 2026-09-05; #19 segue ABERTO** enquanto PREC-MIG-B, C,
+D e E não fecharem. O defeito que originou o item está corrigido: as 43 colunas
+de quantidade e grandeza técnica inequívoca estão em `DECIMAL(24,12)`, e
+`0,000000048` persiste como `0,000000048000` em vez de `0,000000`. Provado
+contra o banco real em
+`apps/api/src/modules/inventory/precision-round-trip.test.ts`.
+
+Prioridade elevada para **HIGH / URGENTE** por decisão do PO em 2026-09-05:
+perda real de informação em Formulação e Produção é inaceitável. Achado da
+auditoria PREC-01, com dado real
 do banco local. Componente `MP-000147`, `FIXED_BASIS` `0,000048 kg` sobre base
 1000, item estocado em kg: produzir de 1 a 10 unidades dá necessidade física de
 `4,8e-8` a `4,8e-7 kg`, e `ProductionOrderRequirement.requiredQuantity`
@@ -71,9 +82,28 @@ Exige migration de widening e, no mesmo passo ou antes, a precisão canônica de
 #20. Sem backfill: casa nunca persistida não se reconstrói. Perguntas de domínio
 remanescentes em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.
 
-### 20. `decimal.js` roda em 20 dígitos significativos — HIGH / NEXT
+### 20. `decimal.js` roda em 20 dígitos significativos — RESOLVIDO
 
-**ABERTO — PRÓXIMA CAPABILITY, antes ou junto de #19.** Achado da auditoria
+**RESOLVIDO em 2026-09-05, junto do PREC-MIG-A.** A configuração canônica vive
+em `packages/shared/src/decimal-config.ts` — 40 dígitos, `precision` e nada
+mais: `rounding` segue `ROUND_HALF_UP`, o mesmo que o PostgreSQL aplica ao
+gravar, e os expoentes ficaram como estavam.
+
+**A implementação encontrou o que a auditoria não tinha visto: são DOIS
+construtores, não um.** O Prisma empacota a própria cópia do `decimal.js`, e
+`Prisma.Decimal !== Decimal` — objetos distintos, com configuração
+independente. Como quase todo o cálculo de domínio da API roda em
+`Prisma.Decimal`, um `Decimal.set()` só no pacote compartilhado teria deixado a
+API inteira em 20 dígitos, e nenhum teste de `@veridi/shared` perceberia.
+`apps/api/src/lib/decimal.ts` aplica a mesma configuração ao construtor do
+Prisma; os dois são conferidos por comportamento em
+`packages/shared/src/decimal-config.test.ts` e `apps/api/src/lib/decimal.test.ts`.
+
+Sem dependência de ordem de import: quem calcula importa o construtor do módulo
+canônico, e é o import que configura. Regra durável em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §59.
+
+Achado original da auditoria
 PREC-01 (2026-09-05). `Decimal.precision = 20`, default, nunca reconfigurado em
 nenhum ponto do repositório. Medido:
 `new Decimal("123456789012.123456789012").times(1)` devolve
@@ -171,6 +201,15 @@ Vitest sobre o mesmo banco de desenvolvimento é a origem provável.
 Custo real: um gate verde exige reexecutar, e uma falha assim se parece com
 regressão de quem está lendo. Rodada posterior — candidato natural a entrar
 junto de #10 (manutenção).
+
+**Observado de novo na Fundação A (2026-09-05), com um arquivo novo:**
+`modules/finished-goods/finished-goods.test.ts` > "lista apenas lotes origin
+PRODUCTION" falhou com `Cannot read properties of undefined (reading 'map')` —
+o `listFinishedGoods` devolveu resposta sem `rows`. Isolado passa (5/5) e a
+reexecução completa passou (80 arquivos, 1026 testes). Confirma que o item não
+é só de `production-orders`: alcança qualquer teste que meça agregado de
+estoque sob paralelismo no mesmo banco. **Não corrigido nesta branch**, por
+escopo.
 
 ---
 
@@ -272,13 +311,14 @@ Aprovada pelo PO em 2026-09-05 sobre
 [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §58; regra de configuração do motor em
 §59; separação armazenamento × apresentação em §57.
 
-**Nenhum destes itens foi implementado.** Nenhuma migration existe.
+**Fundação A entregue em 2026-09-05** (#20 + PREC-MIG-A). O restante segue sem
+implementação.
 
 ### Migrations de widening
 
 | Item | Escopo | Status |
 |---|---|---|
-| **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **APROVADO — NEXT**, junto de #20 |
+| **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **RESOLVIDO** — 43 colunas, migration `20260926090000_numeric_precision_quantities_24_12` |
 | **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | APROVADO — depois de A |
 | **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | APROVADO — depois de A |
 | **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | APROVADO — depois de A |
@@ -294,6 +334,18 @@ valor.
 
 Nenhuma dessas migrations faz backfill. Widening preserva o valor gravado e o
 reescreve com zeros à direita; casa que nunca foi persistida não se reconstrói.
+Provado no PREC-MIG-A: 371 valores existentes comparados antes e depois, zero
+divergência matemática — só a representação ganhou zeros
+(`kg = 1000.000000` virou `1000.000000000000`).
+
+**Três colunas `18,6` ficaram fora do PREC-MIG-A, de propósito.**
+`FormulationComponent.legacyTotalQuantity` e `.legacyBatchUnits` são dado
+importado do legado sobre o qual ninguém calcula (`NOT_APPLICABLE` no
+inventário). `QuoteLine.industrialCostPerUnitSnapshot` viaja com os demais
+snapshots de precificação da mesma linha, no **PREC-MIG-B** — o inventário o
+classifica assim, e separá-lo quebraria a família por conveniência.
+`scripts/numeric-precision-matrix.test.ts` guarda essa lista: uma coluna nova
+em `18,6` falha o gate.
 
 ### Serialização e formatação
 
@@ -491,12 +543,11 @@ permanece obrigatório no escopo atual.
 5. **Auditoria PREC-01 — aprovada e publicada em 2026-09-05**, só documentação.
    #19, #20 e #21 registrados; a auditoria exigida por #18 está cumprida e #18
    desbloqueado; decomposição PREC-MIG/SER/FMT/UI aprovada na seção E.
-6. **PRÓXIMA CAPABILITY — fundação de precisão:** #20 (`Decimal` canônico em 40
-   dígitos) + primeiro grupo seguro de #19 (**PREC-MIG-A**: QUANTITY e fatores
-   técnicos em `DECIMAL(24,12)`), com preservação ponta a ponta e migration
-   segura. **Começa em conversa nova.**
-7. **Depois da fundação:** PREC-MIG-B, C, D; PREC-SER-01/02; PREC-FMT-01; #18;
-   PREC-MIG-E conforme as respostas de domínio.
+6. **Fundação de precisão A — entregue em 2026-09-05:** #20 (motor canônico em
+   40 dígitos) + **PREC-MIG-A** (QUANTITY e fatores técnicos em
+   `DECIMAL(24,12)`), com preservação ponta a ponta e migration sem backfill.
+7. **PRÓXIMA CAPABILITY:** PREC-MIG-B, C e D. Depois: PREC-SER-01/02,
+   PREC-FMT-01, #18 e PREC-MIG-E conforme as respostas de domínio.
 8. **Validação com a Veridi:** #7 + #11.
 9. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
 10. **Rodada técnica isolada:** #14 (Schema Integrity Audit).

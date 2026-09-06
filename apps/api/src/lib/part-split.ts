@@ -1,4 +1,6 @@
 import { Prisma } from "@prisma/client";
+// Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
+import "./decimal.js";
 
 /**
  * Divisão determinística de uma quantidade em N partes, em Decimal.

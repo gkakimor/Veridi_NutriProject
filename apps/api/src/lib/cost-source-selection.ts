@@ -3,6 +3,8 @@ import type { PrismaClient, UomDimension } from "@prisma/client";
 import type { IndustrialMaterialCostSource } from "@veridi/shared";
 import { getItemCostReference } from "./cost-reference.js";
 import { convertUomDecimal, isUomCompatible } from "../modules/items/uom.js";
+// Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
+import "./decimal.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 

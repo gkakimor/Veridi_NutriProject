@@ -211,7 +211,7 @@ describe("Plano de Atendimento — escopo de propriedade", () => {
     await receberLote(material.id, "1", { ownerType: "CUSTOMER", customerId: clienteB.id });
 
     const { product } = await criarProduto(app, clienteA.id, [
-      { itemId: material.id, quantity: "1.8367346938775510204", unitCode: "kg", supplyResponsibility: "CUSTOMER" },
+      { itemId: material.id, quantity: "1.836734693878", unitCode: "kg", supplyResponsibility: "CUSTOMER" },
     ]);
     const orderId = await pedidoConfirmado(app, clienteA.id, product.id, "1");
 
@@ -222,9 +222,10 @@ describe("Plano de Atendimento — escopo de propriedade", () => {
     expect(linha.ownerCustomerId).toBe(clienteA.id);
     expect(linha.onHand).toBe("1.5");
     expect(linha.available).toBe("1.5");
-    // O domínio guarda o componente com 6 casas: 1,836735 - 1,5.
-    expect(linha.requiredQuantity).toBe("1.836735");
-    expect(linha.shortage).toBe("0.336735");
+    // O domínio guarda o componente com 12 casas desde o PREC-MIG-A: a
+    // necessidade é o valor informado, e a falta é ela menos o que existe.
+    expect(linha.requiredQuantity).toBe("1.836734693878");
+    expect(linha.shortage).toBe("0.336734693878");
 
     await app.close();
   });
@@ -241,7 +242,7 @@ describe("Plano de Atendimento — escopo de propriedade", () => {
     await receberLote(material.id, "1", { ownerType: "CUSTOMER", customerId: clienteB.id });
 
     const { product } = await criarProduto(app, clienteA.id, [
-      { itemId: material.id, quantity: "1.8367346938775510204", unitCode: "kg", supplyResponsibility: "CUSTOMER" },
+      { itemId: material.id, quantity: "1.836734693878", unitCode: "kg", supplyResponsibility: "CUSTOMER" },
     ]);
     const orderId = await pedidoConfirmado(app, clienteA.id, product.id, "1");
 

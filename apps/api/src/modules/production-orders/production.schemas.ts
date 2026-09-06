@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
 
 export const registerProductionOutputSchema = z
   .object({
-    quantity: decimalStringSchema(),
+    quantity: quantityDecimalSchema(),
     destination: z.enum(["NEW_LOT", "EXISTING_LOT"]),
     lotId: z.string().trim().min(1).optional(),
     businessLotNumber: z.string().trim().min(1).optional(),

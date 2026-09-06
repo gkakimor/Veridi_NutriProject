@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 
 export const confirmPickingSchema = z.object({
   lotCode: z.string().trim().min(1).optional(),
@@ -11,7 +11,7 @@ export const substituteReservationLineSchema = z.object({
 
 const consumptionEntrySchema = z.object({
   reservationLineId: z.string().trim().min(1, "Linha de reserva é obrigatória"),
-  quantity: decimalStringSchema(),
+  quantity: quantityDecimalSchema(),
 });
 
 /**
@@ -21,7 +21,7 @@ const consumptionEntrySchema = z.object({
  * pedido incompleto, e um pedido diferente.
  */
 export const addExtraReservationSchema = z.object({
-  quantity: decimalStringSchema(),
+  quantity: quantityDecimalSchema(),
   reason: z.string().trim().min(1, "Informe o motivo do consumo adicional"),
   lotCode: z.string().trim().min(1).optional(),
 });

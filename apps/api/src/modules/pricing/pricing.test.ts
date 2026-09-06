@@ -1241,7 +1241,7 @@ describe("R-19 — precificação por produto", () => {
     expect(activeRows.rows).toHaveLength(2);
     expect(activeRows.rows.map((row: { quantity: string }) => row.quantity)).toEqual(["500", "1000"]);
     expect(activeRows.rows[0].unitPrice).toBe("25.000000");
-    expect(activeRows.rows[0].costPerUnit).toBe("10.001000");
+    expect(activeRows.rows[0].costPerUnit).toBe("10.001000000000");
 
     // Custo novo depois da ativação não muda o relatório.
     await receiveWithCost(app, {
@@ -1256,7 +1256,7 @@ describe("R-19 — precificação por produto", () => {
         url: `/reports/costs/pricing-by-product?search=${scenario.product.code}`,
       })
     ).json();
-    expect(reread.rows[0].costPerUnit).toBe("10.001000");
+    expect(reread.rows[0].costPerUnit).toBe("10.001000000000");
 
     const csv = await app.inject({
       method: "GET",

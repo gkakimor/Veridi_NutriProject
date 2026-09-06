@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { CostSource } from "@veridi/shared";
+// Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
+import "./decimal.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 

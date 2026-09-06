@@ -1,6 +1,6 @@
 /** Contratos do módulo de Ordens de Compra, consumidos por `apps/api` e `apps/web`. */
 
-import Decimal from "decimal.js";
+import { Decimal, type DecimalInstance } from "./decimal-config.js";
 
 export const PURCHASE_ORDER_CODE_PREFIX = "OC";
 
@@ -28,14 +28,14 @@ export interface TotaisDaOrdemDeCompra {
  * dinheiro sempre foi.
  */
 export function calcularTotaisOrdemCompra(lines: LinhaParaTotalDaOrdem[]): TotaisDaOrdemDeCompra {
-  let orderTotal: Decimal | null = null;
+  let orderTotal: DecimalInstance | null = null;
   const lineTotals: (string | null)[] = [];
   for (const line of lines) {
     if (line.orderedQuantity === null || line.unitPrice === null) {
       lineTotals.push(null);
       continue;
     }
-    let total: Decimal;
+    let total: DecimalInstance;
     try {
       total = new Decimal(line.orderedQuantity).times(line.unitPrice);
     } catch {

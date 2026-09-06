@@ -9,6 +9,7 @@ import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import { latestCalculationsByProduct } from "../industrial-cost-calculation/snapshot.service.js";
+import { resultadoTecnico } from "../../lib/decimal-serialization.js";
 import type {
   IndustrialCostByProductQuery,
   PricingByProductQuery,
@@ -134,7 +135,7 @@ export async function getPricingByProductReport(
       quantity: tier.quantity.toString(),
       uomCode: tier.uomCode,
       priceMode: tier.priceMode,
-      costPerUnit: tier.costPerUnitSnapshot ? tier.costPerUnitSnapshot.toFixed(6) : null,
+      costPerUnit: tier.costPerUnitSnapshot ? resultadoTecnico(tier.costPerUnitSnapshot) : null,
       commissionPercent: (tier.commissionPercentSnapshot ?? tier.commissionPercent).toFixed(4),
       unitPrice: tier.selectedPriceSnapshot ? tier.selectedPriceSnapshot.toFixed(6) : null,
       contributionMarginPercent: tier.contributionMarginSnapshot

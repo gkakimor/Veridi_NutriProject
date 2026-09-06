@@ -533,9 +533,9 @@ model RecipeWeighing {
   lot   Lot?    @relation(fields: [lotId], references: [id])
 
   /// Quanto a parte deveria pesar quando a pesagem foi registrada.
-  plannedQuantitySnapshot Decimal @db.Decimal(18, 6)
+  plannedQuantitySnapshot Decimal @db.Decimal(24, 12)
   /// Quanto realmente foi pesado. Diferenca e registrada, nunca escondida.
-  actualQuantity          Decimal @db.Decimal(18, 6)
+  actualQuantity          Decimal @db.Decimal(24, 12)
   uomCode                 String
 
   executedByUserId       String
@@ -659,12 +659,12 @@ model Project {
   /// na aprovacao; a partir dai as duas entidades seguem separadas.
   dosageForm           DosageForm?
   presentationType     PresentationType?
-  doseAmount           Decimal?          @db.Decimal(18, 6)
+  doseAmount           Decimal?          @db.Decimal(24, 12)
   doseUomCode          String?
   doseUom              UnitOfMeasure?    @relation("ProjectDoseUom", fields: [doseUomCode], references: [code])
   dosesPerPackage      Int?
   targetAgeGroup       TargetAgeGroup?
-  minimumBatchQuantity Decimal?          @db.Decimal(18, 6)
+  minimumBatchQuantity Decimal?          @db.Decimal(24, 12)
   shelfLifeMonths      Int?
 
   /// Produto resultante. Null enquanto o projeto nao foi aprovado — e
@@ -889,7 +889,7 @@ model QuoteLine {
   /// Ordem de exibicao e de impressao.
   sortOrder Int @default(0)
 
-  quotedQuantity Decimal?       @db.Decimal(18, 6)
+  quotedQuantity Decimal?       @db.Decimal(24, 12)
   uomCode        String?
   uom            UnitOfMeasure? @relation("QuoteLineUom", fields: [uomCode], references: [code])
 
@@ -912,7 +912,7 @@ model QuoteLine {
   productNameSnapshot              String?
   pricingCodeSnapshot              String?
   pricingVersionNumberSnapshot     Int?
-  pricingTierQuantitySnapshot      Decimal?               @db.Decimal(18, 6)
+  pricingTierQuantitySnapshot      Decimal?               @db.Decimal(24, 12)
   pricingTierUomSnapshot           String?
   pricingSelectedUnitPriceSnapshot Decimal?               @db.Decimal(14, 6)
   costCalculationCodeSnapshot      String?
@@ -982,7 +982,7 @@ model IndustrialCostVersion {
 
   /// Base de producao usada para estruturar o custo (ex.: 1000 un). Nunca
   /// assumida: o usuario informa ou confirma a sugestao do lote minimo.
-  referenceOutputQuantity Decimal       @db.Decimal(18, 6)
+  referenceOutputQuantity Decimal       @db.Decimal(24, 12)
   referenceOutputUomCode  String
   referenceOutputUom      UnitOfMeasure @relation("IndustrialCostOutputUom", fields: [referenceOutputUomCode], references: [code])
 
@@ -1167,7 +1167,7 @@ model IndustrialCostResourceUsage {
   industrialResource   IndustrialResource @relation(fields: [industrialResourceId], references: [id])
 
   usageBasis    IndustrialResourceUsageBasis @default(FIXED_PER_REFERENCE_BATCH)
-  usageQuantity Decimal                      @db.Decimal(18, 6)
+  usageQuantity Decimal                      @db.Decimal(24, 12)
   usageUom      IndustrialRateUom
 
   notes     String?
@@ -1228,10 +1228,10 @@ model IndustrialCostCalculation {
   overheadCost         Decimal? @db.Decimal(14, 4)
   totalIndustrialCost  Decimal? @db.Decimal(14, 4)
   knownSubtotal        Decimal  @db.Decimal(14, 4)
-  costPerUnit          Decimal? @db.Decimal(18, 6)
+  costPerUnit          Decimal? @db.Decimal(24, 12)
   costPer1000          Decimal? @db.Decimal(14, 4)
 
-  referenceOutputQuantity Decimal @db.Decimal(18, 6)
+  referenceOutputQuantity Decimal @db.Decimal(24, 12)
   referenceOutputUomCode  String
 
   /// Snapshots do documento — renomear produto/cliente depois nao reescreve
@@ -1277,14 +1277,14 @@ model ProductionOrderCostSnapshot {
   formulationVersionNumber Int?
 
   completedAt      DateTime
-  producedQuantity Decimal  @db.Decimal(18, 6)
+  producedQuantity Decimal  @db.Decimal(24, 12)
   outputUnitCode   String
 
   actualMaterialCostKnown  Decimal  @db.Decimal(14, 4)
   standardAppliedCostKnown Decimal  @db.Decimal(14, 4)
   knownSubtotal            Decimal  @db.Decimal(14, 4)
   totalIndustrialCost      Decimal? @db.Decimal(14, 4)
-  costPerProducedUnit      Decimal? @db.Decimal(18, 6)
+  costPerProducedUnit      Decimal? @db.Decimal(24, 12)
 
   quality IndustrialCostQuality
 
@@ -1377,7 +1377,7 @@ model PricingTier {
   pricingVersionId String
   pricingVersion   PricingVersion @relation(fields: [pricingVersionId], references: [id], onDelete: Cascade)
 
-  quantity Decimal       @db.Decimal(18, 6)
+  quantity Decimal       @db.Decimal(24, 12)
   uomCode  String
   uom      UnitOfMeasure @relation("PricingTierUom", fields: [uomCode], references: [code])
 
@@ -1396,7 +1396,7 @@ model PricingTier {
   /// Congelados na ativacao. Depois disso, receber material mais barato ou
   /// reajustar tarifa nao reescreve preco ja negociado.
   costTotalSnapshot           Decimal?               @db.Decimal(14, 4)
-  costPerUnitSnapshot         Decimal?               @db.Decimal(18, 6)
+  costPerUnitSnapshot         Decimal?               @db.Decimal(24, 12)
   costPer1000Snapshot         Decimal?               @db.Decimal(14, 4)
   knownSubtotalSnapshot       Decimal?               @db.Decimal(14, 4)
   costQualitySnapshot         IndustrialCostQuality?
@@ -1463,7 +1463,7 @@ model ProjectSample {
 
   /// Quanto foi produzido da amostra. NAO e estoque comercial: amostra
   /// nunca entra em Finished Goods.
-  outputQuantity Decimal?       @db.Decimal(18, 6)
+  outputQuantity Decimal?       @db.Decimal(24, 12)
   outputUomCode  String?
   outputUom      UnitOfMeasure? @relation("SampleOutputUom", fields: [outputUomCode], references: [code])
 
@@ -1529,7 +1529,7 @@ model SampleConsumption {
   lotId String?
   lot   Lot?    @relation(fields: [lotId], references: [id])
 
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
   uomCode  String
 
   /// 1:1 com o movimento SAMPLE_CONSUMPTION do ledger — a baixa continua
@@ -1642,7 +1642,7 @@ model SupplierItemOffer {
 
   /// Pedido minimo faz parte das condicoes DAQUELE preco. `null` significa
   /// nao informado — nunca zero.
-  minimumOrderQuantity Decimal?       @db.Decimal(18, 6)
+  minimumOrderQuantity Decimal?       @db.Decimal(24, 12)
   minimumOrderUomCode  String?
   minimumOrderUom      UnitOfMeasure? @relation("OfferMoqUom", fields: [minimumOrderUomCode], references: [code])
 
@@ -1814,7 +1814,7 @@ model UnitOfMeasure {
   code         String       @id
   label        String
   dimension    UomDimension
-  toBaseFactor Decimal      @db.Decimal(18, 6)
+  toBaseFactor Decimal      @db.Decimal(24, 12)
 
   items                      Item[]
   offerPrices                SupplierItemOffer[]             @relation("OfferPriceUom")
@@ -2174,7 +2174,7 @@ model Product {
 
   /// Dose declarada (ex.: 500 mg). `doseUom` existe porque a unidade da
   /// dose pode ser diferente da unidade de estoque do Finished Item.
-  doseAmount  Decimal?       @db.Decimal(18, 6)
+  doseAmount  Decimal?       @db.Decimal(24, 12)
   doseUomCode String?
   doseUom     UnitOfMeasure? @relation("ProductDoseUom", fields: [doseUomCode], references: [code])
 
@@ -2190,7 +2190,7 @@ model Product {
 
   /// Lote minimo de fabricacao, na unidade do Finished Product Item —
   /// por isso nao existe `minimumBatchUom`. Nao bloqueia OP nesta fase.
-  minimumBatchQuantity Decimal? @db.Decimal(18, 6)
+  minimumBatchQuantity Decimal? @db.Decimal(24, 12)
 
   /// Codigo do produto dentro da mascara de lote comercial (ex.: "0340").
   /// So alimenta a SUGESTAO de businessLotNumber.
@@ -2258,7 +2258,7 @@ model FormulationVersion {
   /// "Estas quantidades de componentes produzem `basisQuantity` do produto
   /// acabado" — base de calculo, futura fundacao do Requirement Calculation
   /// da OP (nao implementado ainda).
-  basisQuantity Decimal @db.Decimal(18, 6)
+  basisQuantity Decimal @db.Decimal(24, 12)
 
   /// Modo de calculo da versao. FIXED_BASIS preserva o comportamento
   /// original; PER_DOSE declara a formula por DOSE do produto acabado, do
@@ -2341,7 +2341,7 @@ model FormulationComponent {
   /// Significado depende de `basis`: quantidade para a base da versao
   /// (FIXED_BASIS), por dose (PER_DOSE) ou por unidade acabada
   /// (PER_FINISHED_UNIT — embalagem).
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
 
   /// Pode diferir da unidade de estoque do Item, desde que mesma dimensao
   /// (ex.: item em kg, componente em g) — validado via lib/uom existente.
@@ -2476,7 +2476,7 @@ model PurchaseOrderLine {
   itemName String
   unitCode String
 
-  orderedQuantity Decimal @db.Decimal(18, 6)
+  orderedQuantity Decimal @db.Decimal(24, 12)
 
   /// PRECO PREVISTO/NEGOCIADO — nunca custo real nem valor pago. Serve
   /// como referencia visual no Recebimento, mas o custo so vira real
@@ -2562,7 +2562,7 @@ model ReceiptLine {
   itemCode String?
   itemName String?
 
-  receivedQuantity Decimal @db.Decimal(18, 6)
+  receivedQuantity Decimal @db.Decimal(24, 12)
   unitCode         String
 
   /// Identificacao do fornecedor para o lote — nunca substituida pelo
@@ -2654,7 +2654,7 @@ model Lot {
   supplierLot String?
   expiryDate  DateTime?
 
-  initialReceivedQuantity Decimal @db.Decimal(18, 6)
+  initialReceivedQuantity Decimal @db.Decimal(24, 12)
 
   status   LotStatus @default(AVAILABLE)
   location String?
@@ -2723,7 +2723,7 @@ model InventoryMovement {
   /// Sempre positivo (magnitude) — o sinal na soma do On Hand vem do
   /// `type` (RECEIPT_IN/ADJUSTMENT_IN = +, ADJUSTMENT_OUT/LOSS = -), nunca
   /// de um valor negativo armazenado.
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
 
   occurredAt DateTime
 
@@ -2791,7 +2791,7 @@ model ProductionOrder {
   industrialCostVersionId String?
   industrialCostVersion   IndustrialCostVersion? @relation("ProductionOrderCostVersion", fields: [industrialCostVersionId], references: [id])
 
-  plannedQuantity Decimal @db.Decimal(18, 6)
+  plannedQuantity Decimal @db.Decimal(24, 12)
   outputUnitCode  String
 
   status ProductionOrderStatus @default(DRAFT)
@@ -2936,7 +2936,7 @@ model ProductionOrderRequirement {
   itemType ItemType
 
   /// Quantidade/unidade originais da formula (component.quantity/unitCode).
-  formulaQuantity Decimal @db.Decimal(18, 6)
+  formulaQuantity Decimal @db.Decimal(24, 12)
   formulaUnitCode String
 
   /// SNAPSHOT da responsabilidade de fornecimento vinda do
@@ -2945,7 +2945,7 @@ model ProductionOrderRequirement {
   supplyResponsibility SupplyResponsibility @default(VERIDI)
 
   /// Necessidade TEORICA (antes de pureza/overage), na unidade de estoque.
-  theoreticalQuantity Decimal? @db.Decimal(18, 6)
+  theoreticalQuantity Decimal? @db.Decimal(24, 12)
 
   /// Pureza/overage efetivamente aplicados — congelados junto com a OP.
   purityPercentApplied Decimal? @db.Decimal(6, 3)
@@ -2953,7 +2953,7 @@ model ProductionOrderRequirement {
 
   /// Necessidade FISICA final (ja com pureza/overage), convertida para a
   /// unidade de estoque do Item — fonte de verdade da necessidade da OP.
-  requiredQuantity Decimal @db.Decimal(18, 6)
+  requiredQuantity Decimal @db.Decimal(24, 12)
   stockUnitCode    String
 
   /// Ordem de exibicao estavel.
@@ -3037,7 +3037,7 @@ model MaterialReservationLine {
   lotId String?
   lot   Lot?    @relation(fields: [lotId], references: [id])
 
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
 
   /// Confirmacao fisica (Picking) desta linha — nunca cria
   /// InventoryMovement, nunca recalcula/reserva de novo. So pode ser
@@ -3111,7 +3111,7 @@ model ProductionConsumption {
   lotId String?
   lot   Lot?    @relation(fields: [lotId], references: [id])
 
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
 
   consumedAt DateTime
   consumedBy String?
@@ -3146,7 +3146,7 @@ model ProductionOutput {
   lotId String?
   lot   Lot?    @relation(fields: [lotId], references: [id])
 
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
 
   producedAt DateTime
   producedBy String?
@@ -3278,7 +3278,7 @@ model CustomerOrderLine {
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
-  orderedQuantity Decimal @db.Decimal(18, 6)
+  orderedQuantity Decimal @db.Decimal(24, 12)
   unitCode        String
 
   /// Ordem de exibicao estavel.
@@ -3315,7 +3315,7 @@ model CustomerOrderLine {
   agreedPricingTier          PricingTier?    @relation("CustomerOrderLinePricingTier", fields: [agreedPricingTierId], references: [id], onDelete: SetNull)
   agreedPricingCode          String?
   agreedPricingVersionNumber Int?
-  agreedPricingTierQuantity  Decimal?        @db.Decimal(18, 6)
+  agreedPricingTierQuantity  Decimal?        @db.Decimal(24, 12)
   agreedPricingTierUom       String?
 
   createdAt DateTime @default(now())
@@ -3378,7 +3378,7 @@ model CustomerOrderReservationLine {
   lotId String?
   lot   Lot?    @relation(fields: [lotId], references: [id])
 
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
 
   /// Preenchidos quando o remanescente desta linha e realocado para outro
   /// lote (ex.: lote venceu antes da expedicao) — nunca apagada, so
@@ -3473,7 +3473,7 @@ model ShipmentLine {
   lotId String?
   lot   Lot?    @relation(fields: [lotId], references: [id])
 
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
   unitCode String
 
   /// Ordem de exibicao estavel.
@@ -3599,7 +3599,7 @@ model BillingLine {
   businessLotNumber String?
 
   /// Identica a ShipmentLine.quantity — nunca recalculada, nunca editavel.
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
   unitCode String
 
   /// O PRECO ACORDADO no Pedido, congelado na criacao do Faturamento.
@@ -3687,7 +3687,7 @@ model FormulationTemplateVersion {
 
   /// Mesmo significado da formulacao: estas quantidades produzem
   /// `basisQuantity` do produto acabado.
-  basisQuantity   Decimal                    @db.Decimal(18, 6)
+  basisQuantity   Decimal                    @db.Decimal(24, 12)
   calculationMode FormulationCalculationMode @default(FIXED_BASIS)
   dosesPerPackage Int?
   /// Unidade do produto acabado a que a base se refere ("un", "kg").
@@ -3738,7 +3738,7 @@ model FormulationTemplateComponent {
   itemId String
   item   Item   @relation(fields: [itemId], references: [id])
 
-  quantity Decimal @db.Decimal(18, 6)
+  quantity Decimal @db.Decimal(24, 12)
   unitCode String
 
   basis FormulationComponentBasis @default(FIXED_BASIS)
@@ -3814,7 +3814,7 @@ model IndustrialCostTemplateVersion {
   status        TemplateVersionStatus @default(DRAFT)
 
   /// Base de producao SUGERIDA. O produto pode adotar outra ao aplicar.
-  referenceOutputQuantity Decimal       @db.Decimal(18, 6)
+  referenceOutputQuantity Decimal       @db.Decimal(24, 12)
   referenceOutputUomCode  String
   referenceOutputUom      UnitOfMeasure @relation("CostTemplateOutputUom", fields: [referenceOutputUomCode], references: [code])
 
@@ -3864,7 +3864,7 @@ model IndustrialCostTemplateResourceUsage {
   industrialResource   IndustrialResource @relation("CostTemplateResourceUsage", fields: [industrialResourceId], references: [id])
 
   usageBasis    IndustrialResourceUsageBasis @default(FIXED_PER_REFERENCE_BATCH)
-  usageQuantity Decimal                      @db.Decimal(18, 6)
+  usageQuantity Decimal                      @db.Decimal(24, 12)
   usageUom      IndustrialRateUom
 
   notes     String?
@@ -3985,7 +3985,7 @@ model PricingPolicyTemplateTier {
   pricingPolicyTemplateVersionId String
   pricingPolicyTemplateVersion   PricingPolicyTemplateVersion @relation(fields: [pricingPolicyTemplateVersionId], references: [id], onDelete: Cascade)
 
-  quantity Decimal       @db.Decimal(18, 6)
+  quantity Decimal       @db.Decimal(24, 12)
   uomCode  String
   uom      UnitOfMeasure @relation("PricingPolicyTierUom", fields: [uomCode], references: [code])
 
