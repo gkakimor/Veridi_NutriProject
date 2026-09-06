@@ -68,8 +68,11 @@ de §58 ao lado comercial: preço de documento acima de 4 casas responde HTTP 40
 Na aprovação o PO exigiu **um hardening antes do merge — PREC-ROUND-P01,
 RESOLVIDO**: `ROUND_HALF_UP` declarado nas duas fronteiras, sem depender do
 default do `decimal.js` (§60 A/B/C). #19 segue **ABERTO / PARCIAL**; PREC-MIG-D
-**ABERTO**, depois do #18 — comissão e contribuição por unidade continuam em
-`14,6`. **Seguinte: #18**, reconciliação monetária da OC, em conversa própria.
+**ABERTO** — comissão e contribuição por unidade continuam em `14,6`.
+**Reconciliação monetária da OC — #18, resolvida em 2026-09-06:** o rodapé
+passou a ser a soma das linhas impressas (`40,79`, não `40,78`), regra durável
+em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §61, sem migration e sem histórico
+recalculado. **Seguinte: PREC-MIG-D.**
 
 ---
 
@@ -178,36 +181,53 @@ impresso não fecha, num documento de execução GMP.
 Lista completa em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md)
 §5. A correção do `print` é independente de migration e cabe em qualquer rodada.
 
-### 18. Consistência monetária da Ordem de Compra — MEDIUM
+### 18. Consistência monetária da Ordem de Compra — RESOLVIDO
 
-**ABERTO — DESBLOQUEADO em 2026-09-05, capability própria, depois da fundação
-de precisão.** A auditoria exigida pelo PO está cumprida e a direção está
-aprovada: o total documental da OC passa a reconciliar com as linhas exibidas,
-`Σ round(total monetário da linha, 2)` em vez de `round(Σ valores brutos)`.
-**Não implementar antes de #20 e do primeiro grupo de #19** — mexer na
-aritmética monetária enquanto a fundação numérica está em movimento cria duas
-mudanças concorrentes no mesmo número.
+**RESOLVIDO em 2026-09-06**, depois da fundação de precisão, em capability
+própria como o PO exigiu. O total documental da OC passou a reconciliar com as
+linhas exibidas: `Σ round(quantidade × preço, 2)` em vez de
+`round(Σ valores brutos, 2)`. Regra durável em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) **§61**.
 
-Achado da Rodada 4. `calcularTotaisOrdemCompra` soma as linhas em precisão
-cheia e arredonda só na saída — `round(Σ valores brutos das linhas)` —,
-enquanto os documentos comerciais passaram a usar
+**Acceptance:** `10 × 4,05318764`, `1 × 0,125` e `5 × 0,025` imprimem
+`40,53 + 0,13 + 0,13`; o rodapé fechava `40,78` e passa a fechar **`40,79`**,
+que é o que quem confere a página obtém somando a coluna.
+
+**Cinco frentes, e o que cada uma fechou:**
+
+| | Frente | Estado |
+|---|---|---|
+| **#18-A** | A regra: `lineTotal = round(qty × preço, 2)`, `orderTotal = Σ lineTotal`, em `calcularTotaisOrdemCompra` | RESOLVIDO |
+| **#18-B** | `ROUND_HALF_UP` declarado na chamada, não herdado do default do `decimal.js` — mesma disciplina de §60 | RESOLVIDO |
+| **#18-C** | UMA conta para todas as superfícies: documento, prévia da tela, relatório de Compras e OC vinculada dentro do Pedido. Duas somavam por conta própria | RESOLVIDO |
+| **#18-D** | O operando intacto: preço em `DECIMAL(20,8)` e quantidade em `DECIMAL(24,12)` entram inteiros na multiplicação; o fechamento é só da linha | RESOLVIDO |
+| **#18-E** | Total documental **não** alimenta custo técnico — `actualUnitCost`, média ponderada, seletor canônico, CMV e precificação intocados | RESOLVIDO |
+
+**Sem migration e sem histórico recalculado.** A OC não persiste dinheiro
+nenhum: `PurchaseOrder` e `PurchaseOrderLine` não têm coluna de total, e o
+valor é derivado na leitura. Não existe documento congelado para reconciliar —
+a leitura de toda OC, nova ou antiga, passa a bater com a própria página.
+
+**Consequência histórica ratificada pelo PO na aprovação:** uma OC antiga que
+mostrava `R$ 40,78` pode passar a mostrar `R$ 40,79`. É intencional e **não é
+mutação de dado histórico** — zero `UPDATE`, zero snapshot recalculado, zero
+backfill; o total nunca esteve gravado. Registrado em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §61.
+
+**#15 intocado.** `calcularTotaisOrcamento` e `calcularTotaisFaturamento` não
+foram tocados; a OC tem função própria. O que mudou foi a OC alcançar a mesma
+FORMA de fechamento dos documentos comerciais, não passar a usar a função
+deles.
+
+**Como o achado nasceu.** Rodada 4: `calcularTotaisOrdemCompra` somava as
+linhas em precisão cheia e arredondava só na saída — `round(Σ valores brutos)`
+—, enquanto os documentos comerciais já usavam
 `Σ round(valor monetário da linha, 2)` ([`PRODUCT_RULES.md`](PRODUCT_RULES.md)
-§55). Com preço de quatro casas as duas contas divergem em centavos.
+§55). O PO exigiu capability própria, depois da fundação de precisão, e uma
+auditoria antes de mexer na aritmética.
 
-**Princípio de produto.** Se a Ordem de Compra apresenta totais monetários de
-linha em duas casas, o total do documento deve, em princípio, reconciliar
-exatamente com a soma desses valores apresentados. Alvo conceitual futuro:
-`Σ round(quantidade × preço unitário, 2)` antes de formar o total do
-documento.
-
-**Limites definidos pelo PO.** Não implementar junto de outra rodada e **não
-reabrir #8A** — a regra atual foi publicada como está. Antes de alterar a
-matemática é preciso auditar: OCs históricas; recebimentos; custo efetivo;
-custo de aquisição; vínculos com fornecedor; persistência histórica; e se
-existe razão de domínio para a regra atual. Só então decidir se muda.
-
-**Auditoria PREC-01 (2026-09-05) — o que ficou provado.** A pré-condição que o
-PO exigiu está cumprida, e o resultado libera a decisão:
+**Auditoria PREC-01 (2026-09-05) — o que ficou provado**, e que sustentou a
+correção:
 
 - **Nada da OC é persistido em dinheiro.** `PurchaseOrder` e `Receipt` não têm
   nenhuma coluna de total; o total é sempre derivado na leitura. Não existe
@@ -223,18 +243,18 @@ PO exigiu está cumprida, e o resultado libera a decisão:
 - **Custo efetivo** é `Σ(receivedQuantity × actualUnitCost) ÷ Σ receivedQuantity`
   em `Decimal`, sem arredondamento intermediário.
 
-**Conclusão:** o custo industrial **não** consome o total documental arredondado
-da OC em ponto nenhum. A divergência de #18 é exclusivamente de apresentação
-documental. Mudar `round(Σ)` para `Σ round()` não contamina custo, CMV nem
-precificação — a decisão é do PO, e agora é uma decisão isolada.
+**Conclusão da auditoria:** o custo industrial **não** consome o total
+documental arredondado da OC em ponto nenhum. A divergência era exclusivamente
+de apresentação documental, e trocar `round(Σ)` por `Σ round()` não contamina
+custo, CMV nem precificação. A correção de 2026-09-06 confirmou isso em teste:
+sem recebimento, o item continua `NO_COST` mesmo com a OC precificada.
 
-**PREC-MIG-P (2026-09-06) caracterizou #18 e NÃO o implementou.** Com preço de
-oito casas a divergência fica mais fácil de ver: três linhas fechando `40,53`,
-`0,13` e `0,13` somam `40,79` na tela e `40,78` no rodapé, porque a OC soma em
-precisão cheia e arredonda no fim. O cenário está congelado em
+**O PREC-MIG-P (2026-09-06) caracterizou o defeito antes de corrigi-lo**, e o
+cenário ficou congelado em
 `apps/api/src/modules/purchase-orders/unit-price-precision.test.ts` exigindo o
-comportamento **atual** — implementar #18 será uma mudança visível e deliberada,
-não um efeito colateral. **#18 segue DESBLOQUEADO e não iniciado.**
+comportamento antigo — para que a correção fosse uma mudança visível e
+deliberada, não efeito colateral. Esta capability virou aquele teste para o
+comportamento novo, no mesmo arquivo e com a diferença explicada.
 
 ### 17. Suíte da API não é determinística sob paralelismo no banco local — LOW técnico
 
@@ -368,7 +388,7 @@ PREC-FMT-01.
 | **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **RESOLVIDO** — 43 colunas (39 QUANTITY + 1 FACTOR + 3 TECHNICAL_RESULT), migration `20260925093001_numeric_precision_quantities_24_12` |
 | **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | **RESOLVIDO** — 3 colunas, migration `20260925093002_numeric_precision_unit_cost_20_8` |
 | **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **RESOLVIDO** — 7 colunas, migration `20260925093003_numeric_precision_purity_overage_9_6` |
-| **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL, depois do #18** — 3 campos já entregues no A, ver abaixo |
+| **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL — próxima capability** — 3 campos já entregues no A, ver abaixo |
 | **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
 | **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **RESOLVIDO** — PREC-P-01 e PREC-P-TECH entregues; nenhum UNIT_PRICE pendente |
 | **PREC-P-01** | `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` | **RESOLVIDO** — 1 coluna, migration `20260925093004_numeric_precision_unit_price_20_8` |
@@ -768,22 +788,25 @@ permanece obrigatório no escopo atual.
     fronteira `técnico → comercial` virou regra durável (§60), a redução para
     oito casas passou a acontecer no domínio e as quatro entradas de preço
     ganharam teto de casas. **PREC-MIG-P e PREC-SER-02 RESOLVIDOS.**
-11. **PRÓXIMA CAPABILITY: #18** — reconciliação monetária da Ordem de Compra, em
-    conversa própria, por decisão do PO em 2026-09-06. Depois: **PREC-MIG-D**
-    residual (comissão e contribuição por unidade em `14,6`), PREC-SER-01,
-    PREC-FMT-01 e PREC-MIG-E.
-12. **Validação com a Veridi:** #7 + #11.
-13. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
-14. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
-15. **Roadmap:** preferências de exibição (PREC-UI-01 a 08) e produto próprio
+11. **#18 — reconciliação monetária da Ordem de Compra, entregue em
+    2026-09-06:** o total documental passou a ser `Σ round(quantidade × preço,
+    2)`, com `ROUND_HALF_UP` declarado, uma conta só para todas as superfícies e
+    o operando intocado. Sem migration, sem histórico recalculado, §61.
+12. **PRÓXIMA CAPABILITY: PREC-MIG-D** residual (comissão e contribuição por
+    unidade em `14,6`), depois PREC-SER-01, PREC-FMT-01 e PREC-MIG-E.
+13. **Validação com a Veridi:** #7 + #11.
+14. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
+15. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
+16. **Roadmap:** preferências de exibição (PREC-UI-01 a 08) e produto próprio
     Veridi.
 
 **Precisão numérica — ordem obrigatória.** #20 antes ou junto de #19: ampliar
 scale sem ampliar `Decimal.precision` cria coluna que o sistema não consegue
 preencher. PREC-SER e PREC-FMT depois do widening, para que a serialização já
 espelhe o scale novo. PREC-UI só depois da fundação inteira. A parte do `print`
-de #21 é independente e cabe em qualquer rodada. **#18 não entra junto de
-nenhuma delas** — duas mudanças concorrentes no mesmo número não se auditam.
+de #21 é independente e cabe em qualquer rodada. **#18 não entrou junto de
+nenhuma delas**, de propósito — duas mudanças concorrentes no mesmo número não
+se auditam; foi capability própria, depois da fundação inteira.
 
 ## Próximo gate
 

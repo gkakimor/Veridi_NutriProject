@@ -19,11 +19,11 @@ import "../../lib/decimal.js";
  *
  * - preço unitário preserva até oito casas, e acima disso a fronteira recusa;
  * - abrir sem editar e salvar preserva a casa oculta;
- * - o TOTAL do documento continua fechando pela regra ATUAL da OC. Precisão do
- *   operando não é precisão do total: `10 × 4,05318764 = 40,53187640` fecha em
- *   `40,53` e isso não autoriza reduzir o preço armazenado. A regra de
- *   fechamento da OC (BACKLOG #18) NÃO muda aqui — é caracterizada, não
- *   corrigida.
+ * - o TOTAL do documento fecha em duas casas sem devolver o preço arredondado
+ *   ao operando: `10 × 4,05318764 = 40,53187640` fecha em `40,53`, e isso não
+ *   autoriza reduzir o preço armazenado. Desde o BACKLOG #18 o rodapé é a soma
+ *   das linhas já fechadas (`PRODUCT_RULES.md` §61) — o que continua valendo
+ *   aqui é a independência entre operando e total.
  *
  * Caminho REAL, pela API: um `prisma.create` direto provaria que o PostgreSQL
  * guarda oito casas e nada sobre o caminho que o operador percorre.
@@ -329,7 +329,7 @@ describe("preço preciso e total documental são independentes", () => {
     // O bruto, em precisão cheia, antes de qualquer arredondamento.
     expect(new Prisma.Decimal("10").times(PRECO_8_CASAS).toFixed(8)).toBe("40.53187640");
 
-    // O documento, pela REGRA ATUAL da OC — nada aqui muda o #18.
+    // O documento fecha em duas casas; com uma linha só, rodapé = linha.
     expect(oc.lines[0].lineTotal).toBe("40.53");
     expect(oc.orderTotal).toBe("40.53");
 
@@ -342,17 +342,18 @@ describe("preço preciso e total documental são independentes", () => {
   });
 
   /**
-   * Caracterização de MÚLTIPLAS linhas — a regra atual da OC, sem correção.
+   * MÚLTIPLAS linhas — o acceptance do BACKLOG #18, agora corrigido.
    *
-   * `calcularTotaisOrdemCompra` soma as linhas em precisão CHEIA e arredonda
-   * só no fim; os `lineTotal` exibidos já vêm arredondados. Com preços de
-   * oito casas os dois caminhos divergem em centavos, e é exatamente a
-   * divergência registrada em BACKLOG #18 — apresentação, não gravação.
+   * `calcularTotaisOrdemCompra` fecha cada linha em duas casas e soma as
+   * linhas fechadas: o rodapé é a soma da coluna que está na página. Antes do
+   * #18 a soma era feita em precisão cheia e arredondada no fim, e com preços
+   * de oito casas isso fechava um centavo abaixo do que quem confere o papel
+   * obtém somando as linhas impressas.
    *
-   * O teste NÃO exige o comportamento futuro do #18: ele congela o atual,
-   * para que implementá-lo depois seja uma mudança visível e deliberada.
+   * O operando continua íntegro: o preço de oito casas não é tocado pelo
+   * fechamento do documento.
    */
-  it("três linhas: o rodapé soma em precisão cheia, as linhas já vêm arredondadas", async () => {
+  it("três linhas: o rodapé é a soma das linhas impressas — 40,53 + 0,13 + 0,13", async () => {
     const app = buildTestApp();
     await app.ready();
     const fornecedor = await criarFornecedor();
@@ -372,25 +373,26 @@ describe("preço preciso e total documental são independentes", () => {
       .sort();
     expect(totaisDeLinha).toEqual(["0.13", "0.13", "40.53"]);
 
-    // Σ das linhas JÁ ARREDONDADAS daria 40,79 — a regra de #15, dos
-    // documentos comerciais. A OC usa a outra: soma cheia, arredonda no fim.
+    // A soma da coluna, como quem confere o papel.
     const somaDasLinhasArredondadas = new Prisma.Decimal("40.53")
       .plus("0.13")
       .plus("0.13")
       .toFixed(2);
     expect(somaDasLinhasArredondadas).toBe("40.79");
 
+    // A conta ANTIGA, para deixar a correção visível: soma cheia fecharia
+    // 40,78 — um centavo abaixo da página.
     const somaCheia = new Prisma.Decimal("10")
       .times(PRECO_8_CASAS)
       .plus(new Prisma.Decimal("1").times("0.125"))
       .plus(new Prisma.Decimal("5").times("0.025"));
     expect(somaCheia.toFixed(8)).toBe("40.78187640");
+    expect(somaCheia.toFixed(2)).toBe("40.78");
 
-    // O rodapé da OC segue a soma cheia e fecha um centavo abaixo da soma das
-    // linhas impressas. Divergência REGISTRADA — é o BACKLOG #18, e esta
-    // capability não o implementa.
-    expect(oc.orderTotal).toBe("40.78");
-    expect(oc.orderTotal).not.toBe(somaDasLinhasArredondadas);
+    // O rodapé fecha com as linhas — BACKLOG #18, `PRODUCT_RULES.md` §61.
+    expect(oc.orderTotal).toBe("40.79");
+    expect(oc.orderTotal).toBe(somaDasLinhasArredondadas);
+    expect(oc.orderTotal).not.toBe(somaCheia.toFixed(2));
 
     // E nenhum dos preços foi tocado pelo fechamento do documento.
     const linhas = await getPrisma().purchaseOrderLine.findMany({
@@ -403,17 +405,16 @@ describe("preço preciso e total documental são independentes", () => {
     await app.close();
   });
 
-  it("a função canônica da OC não mudou — mesma conta, com 8 casas no operando", () => {
-    // A prova de que o widening não redefiniu `calcularTotaisOrdemCompra`:
-    // a regra continua "soma cheia, arredonda no fim", agora com um operando
-    // que antes não cabia na coluna.
+  it("a função canônica da OC fecha o rodapé com as linhas, com 8 casas no operando", () => {
+    // O DTO da API e a prévia da tela passam por esta função. Se ela voltar a
+    // somar valores brutos, o documento volta a divergir da própria página.
     const totais = calcularTotaisOrdemCompra([
       { orderedQuantity: "10", unitPrice: PRECO_8_CASAS },
       { orderedQuantity: "1", unitPrice: "0.12500000" },
       { orderedQuantity: "5", unitPrice: "0.02500000" },
     ]);
     expect(totais.lineTotals).toEqual(["40.53", "0.13", "0.13"]);
-    expect(totais.orderTotal).toBe("40.78");
+    expect(totais.orderTotal).toBe("40.79");
   });
 });
 

@@ -6,6 +6,7 @@ import type {
   ReceiptReportRowDTO,
   ReportPageDTO,
 } from "@veridi/shared";
+import { calcularTotaisOrdemCompra } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
@@ -66,11 +67,23 @@ export async function getPurchaseOrdersReport(
   const rows = orders.map((order): PurchaseOrderReportRowDTO => {
     const linesWithPrice = order.lines.filter((line) => line.unitPrice !== null).length;
     const complete = order.lines.length > 0 && linesWithPrice === order.lines.length;
-    const expectedAmount = complete
-      ? order.lines
-          .reduce((sum, line) => sum.plus(line.orderedQuantity.times(line.unitPrice!)), new Prisma.Decimal(0))
-          .toFixed(2)
-      : null;
+    /*
+     * O MESMO total do documento — `calcularTotaisOrdemCompra`, §61 e BACKLOG
+     * #18. O relatório somava os valores brutos e arredondava no fim; com
+     * preço de oito casas isso fechava um centavo diferente do rodapé da
+     * própria OC, e o mesmo documento valia dois números conforme a tela.
+     *
+     * A regra de AUSÊNCIA continua sendo a do relatório: "Valor previsto" só
+     * aparece quando TODA linha tem preço — uma soma parcial numa coluna de
+     * valor previsto seria menor que o previsto, com cara de total.
+     */
+    const { orderTotal } = calcularTotaisOrdemCompra(
+      order.lines.map((line) => ({
+        orderedQuantity: line.orderedQuantity.toString(),
+        unitPrice: line.unitPrice ? line.unitPrice.toString() : null,
+      })),
+    );
+    const expectedAmount = complete ? orderTotal : null;
 
     return {
       purchaseOrderId: order.id,

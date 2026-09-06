@@ -219,6 +219,55 @@ describe("Total da OC em edição é prévia da tela", () => {
     expect(rodape()).toContain("Gravado: R$ 141,21");
   });
 
+  /**
+   * BACKLOG #18 / `PRODUCT_RULES.md` §61 — o rodapé fecha com a coluna.
+   *
+   * O acceptance na TELA: quem soma `40,53 + 0,13 + 0,13` com o dedo tem de
+   * chegar ao mesmo número do rodapé. A prévia usa a mesma função do
+   * documento, então o que se prova aqui é a leitura: nenhuma soma visual
+   * diverge do total apresentado.
+   */
+  it("#18. o rodapé é a soma das linhas visíveis — 40,53 + 0,13 + 0,13 = 40,79", async () => {
+    abrir(
+      ordem({
+        lines: [
+          linha({ orderedQuantity: "10", unitPrice: "4.05318764", lineTotal: "40.53" }),
+          linha({
+            id: "pol-2",
+            itemId: "item-2",
+            itemCode: "MP-000002",
+            itemName: "Magnésio",
+            orderedQuantity: "1",
+            unitPrice: "0.12500000",
+            lineTotal: "0.13",
+            openQuantity: "1",
+          }),
+          linha({
+            id: "pol-3",
+            itemId: "item-3",
+            itemCode: "MP-000003",
+            itemName: "Zinco",
+            orderedQuantity: "5",
+            unitPrice: "0.02500000",
+            lineTotal: "0.13",
+            openQuantity: "5",
+          }),
+        ],
+        orderTotal: "40.79",
+      }),
+    );
+    await screen.findByRole("heading", { level: 1, name: "OC-000001" });
+
+    await waitFor(() => expect(rodape()).toContain("Total (prévia): R$ 40,79"));
+    expect(totalDaLinha("MP-000001")).toBe("R$ 40,53");
+    expect(totalDaLinha("MP-000002")).toBe("R$ 0,13");
+    expect(totalDaLinha("MP-000003")).toBe("R$ 0,13");
+    // A soma visual da coluna bate com o rodapé, e o gravado não diverge.
+    expect(rodape()).not.toContain("Gravado");
+    // A conta antiga mostraria 40,78 no rodapé ao lado das mesmas linhas.
+    expect(rodape()).not.toContain("40,78");
+  });
+
   it("OC confirmada mostra só o total gravado — não há prévia sem edição", async () => {
     abrir(ordem({ status: "ORDERED" }));
     await screen.findByRole("heading", { level: 1, name: "OC-000001" });

@@ -32,7 +32,11 @@ import type {
   CustomerOrderShipmentSummaryDTO,
   QuotePaymentScheduleDTO,
 } from "@veridi/shared";
-import { CUSTOMER_ORDER_CODE_PREFIX, calcularTotaisFaturamento } from "@veridi/shared";
+import {
+  CUSTOMER_ORDER_CODE_PREFIX,
+  calcularTotaisFaturamento,
+  calcularTotaisOrdemCompra,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
 import type { Pagination } from "../../lib/pagination.js";
@@ -361,12 +365,18 @@ function toGeneratedProductionOrderDTO(order: GeneratedOrder): CustomerOrderGene
 }
 
 function toLinkedPurchaseOrderDTO(po: LinkedPurchaseOrder): CustomerOrderLinkedPurchaseOrderDTO {
-  let orderTotal: Prisma.Decimal | null = null;
-  for (const line of po.lines) {
-    if (!line.unitPrice) continue;
-    const lineTotal = line.orderedQuantity.times(line.unitPrice);
-    orderTotal = orderTotal ? orderTotal.plus(lineTotal) : lineTotal;
-  }
+  /*
+   * O total da OC vinculada é o total DA OC, e sai da função canônica dela —
+   * `calcularTotaisOrdemCompra`, §61 e BACKLOG #18. Somar aqui em precisão
+   * cheia fazia a mesma Ordem de Compra valer um número no próprio documento
+   * e outro dentro do Pedido que a originou.
+   */
+  const { orderTotal } = calcularTotaisOrdemCompra(
+    po.lines.map((line) => ({
+      orderedQuantity: line.orderedQuantity.toString(),
+      unitPrice: line.unitPrice ? line.unitPrice.toString() : null,
+    })),
+  );
   return {
     id: po.id,
     code: po.code,
@@ -374,7 +384,7 @@ function toLinkedPurchaseOrderDTO(po: LinkedPurchaseOrder): CustomerOrderLinkedP
     supplierName: po.supplier.legalName,
     lineCount: po.lines.length,
     status: po.status,
-    orderTotal: orderTotal ? orderTotal.toFixed(2) : null,
+    orderTotal,
   };
 }
 

@@ -3590,11 +3590,9 @@ multiplicação — o preço unitário guarda as quatro casas.
 A conta é uma só, em `@veridi/shared`, usada pela API e pela prévia da tela:
 `calcularTotaisOrcamento` (Orçamento e o Pedido dele originado) e
 `calcularTotaisFaturamento` (Faturamento, incluindo o resumo que aparece
-dentro do Pedido). Vale para os documentos **comerciais**. A Ordem de Compra
-ainda usa semântica distinta de arredondamento (`calcularTotaisOrdemCompra`
-soma as linhas em precisão cheia e arredonda no fim); comportamento registrado
-em [`BACKLOG.md`](BACKLOG.md) #18 para decisão e adequação próprias — não é
-decisão de negócio fechada nem exceção declarada.
+dentro do Pedido). Vale para os documentos **comerciais**. A **Ordem de Compra
+segue a mesma forma desde 2026-09-06**, com função própria e regra própria:
+§61.
 
 **Documento originado de acordo aceito preserva o acordo.** Quando um
 Orçamento aceito origina um Pedido, o Pedido congela exatamente os valores
@@ -3805,3 +3803,55 @@ ativação, congelamento da proveniência, CMV, relatórios e prévias — trafe
 serializa as oito casas. Cortar mais cedo destruiria a informação que a
 migration existe para guardar; cortar mais tarde faria o documento comercial
 prometer precisão que ele não tem.
+
+## §61 — O total da Ordem de Compra fecha com as linhas que estão na página
+
+Decisão de Product Ownership de 2026-09-06, sobre [`BACKLOG.md`](BACKLOG.md)
+#18.
+
+O valor monetário de uma **linha** da Ordem de Compra é
+`quantidade × preço unitário` arredondado em **duas casas** — é o número
+impresso, o que se confere. O **total do documento** é a soma desses valores de
+linha **já arredondados**:
+
+    orderTotal = Σ round(quantidade × preço unitário, 2)
+
+e nunca `round(Σ valores brutos, 2)`. Com preço de oito casas as duas contas
+divergem em centavos: `10 × 4,05318764`, `1 × 0,125` e `5 × 0,025` imprimem
+`40,53 + 0,13 + 0,13`, que quem confere soma como **`40,79`** — e a conta
+antiga fechava `40,78`. Quem confere está certo, e um rodapé que não bate com a
+soma da página destrói a confiança no documento inteiro.
+
+**O operando não é arredondado.** A multiplicação usa o preço íntegro de
+`DECIMAL(20,8)` e a quantidade de `DECIMAL(24,12)`; o único fechamento é o da
+LINHA. Precisão do operando não é precisão do total — §57. O modo de
+arredondamento é `ROUND_HALF_UP` **declarado na chamada**, pela mesma razão de
+§60: o critério que decide o centavo de um documento não pode depender de um
+default global.
+
+**A conta é uma só.** `calcularTotaisOrdemCompra`, em `@veridi/shared`, serve o
+documento da API, a prévia da tela, o relatório de Compras e a OC vinculada
+dentro do Pedido do Cliente. Cada superfície que somava por conta própria era
+uma chance de o mesmo documento valer dois números.
+
+**O total documental NÃO é fonte de custo técnico.** Ele existe para ser lido e
+conferido, e nada o consome: custo de aquisição é `ReceiptLine.actualUnitCost`,
+informado por pessoa no Recebimento, e o seletor canônico recusa explicitamente
+o preço da OC como fallback — sem custo real o resultado é ausência, nunca o
+preço da compra. Média ponderada, custo do lote, CMV e precificação continuam
+lendo operandos precisos, nunca o valor fechado do documento.
+
+**A OC não persiste dinheiro.** Não há coluna de total em `PurchaseOrder` nem
+em `PurchaseOrderLine`: o valor é sempre derivado na leitura.
+
+**Consequência histórica, aprovada pelo PO em 2026-09-06.** Uma Ordem de Compra
+antiga que aparecia como `R$ 40,78` pode passar a aparecer como `R$ 40,79`,
+quando as suas linhas somadas documentalmente derem `40,79`. **Isso é
+intencional e NÃO é mutação de dado histórico:** nenhum registro foi alterado no
+banco, nenhum snapshot foi recalculado, nenhum backfill foi executado. O total
+nunca esteve gravado — ele é derivado a cada leitura, e o que mudou foi a conta
+que o deriva. Documento antigo passa a exibir o número que a própria página
+sempre somou.
+
+Onde o valor é **congelado** — Orçamento, Pedido e Faturamento, §55 — a história
+não se move: lá o total é persistido, e regra nova vale da sua data em diante.
