@@ -610,6 +610,66 @@ Sete perguntas. Nenhuma foi decidida nesta rodada.
 
 ---
 
+## 13. Plano de testes obrigatório da capability de implementação
+
+Nenhum widening entra sem estes testes. A auditoria mediu o comportamento atual;
+os testes abaixo travam o comportamento novo e provam que o antigo não volta.
+
+**Precisão do motor** — antes de qualquer coluna. Provar que
+`new Decimal("123456789012.123456789012").times(1)` devolve o valor íntegro, e
+que a configuração é **uma só**: um teste que falhe se `Decimal.set()` aparecer
+fora do ponto canônico.
+
+**Round-trip do banco.** Para cada categoria da matriz de §58, gravar e ler o
+valor de referência da sua granularidade e comparar exatamente: 2, 4, 6, 8 e 12
+casas, mais `0,000000048` e `0,000123456789`. Esperado: IDENTICAL.
+
+**Round-trip da API.** O DTO devolve o scale da coluna, nem mais nem menos. Um
+teste por serializador corrigido em PREC-SER-01, incluindo o caso que hoje
+diverge — a mesma média ponderada servida por dois endpoints tem que sair igual.
+
+**Round-trip da UI.** Abrir, não editar, salvar: o valor gravado é byte a byte o
+anterior. Vale para os fluxos de Formulação, Precificação, OC, Recebimento,
+Faturamento e Contagem de Estoque — um por família de tela, não um só.
+
+**Casa oculta.** Com preferência de exibição reduzida, o campo em edição revela
+a precisão íntegra e o submit preserva o que não estava visível. Enquanto
+PREC-UI não existir, o teste roda contra `formatDecimalInput`.
+
+**Microdosagem — o caso que originou #19.** `MP-000147` a `0,000048 kg` sobre
+base 1000, produzindo 1, 5, 10, 11, 100 e 1000 unidades: nenhum `requiredQuantity`
+grava zero, e o valor bate com o do motor sem arredondamento. Este teste é a
+prova de que #19 fechou.
+
+**UOM.** Conversão `mg → kg` e `mL → L` em cadeia com pureza e overage, com o
+resultado conferido contra a aritmética exata. Um caso com fator não decimal
+(oito casas) para provar que `toBaseFactor` ampliado não trunca.
+
+**Custo.** Média ponderada 30d/90d com quantidades fracionárias e custos de 6 a
+12 casas; último custo real; custo do lote consumido; referência manual; oferta
+de fornecedor. Comparar contra o valor exato, não contra o valor arredondado.
+
+**Formulação.** `PHYSICAL_DIRECT` e `THEORETICAL_WITH_ADJUSTMENTS`, com
+`FIXED_BASIS`, `PER_DOSE` e `PER_FINISHED_UNIT`, pureza e overage encadeados:
+nenhum arredondamento antes do resultado final.
+
+**CMV e precificação.** Custo industrial, custo por unidade, custo por mil,
+contribuição e preço sugerido: a cadeia interna permanece em `Decimal` e só a
+saída arredonda.
+
+**Compras e recebimento.** Preço unitário preservado; recebimento parcial
+independente do total; nenhum total documental persistido.
+
+**Documentos históricos — o teste que protege o que não pode mudar.** Um
+Orçamento, um Pedido e um Faturamento gravados **antes** da migration mantêm
+exatamente o valor congelado depois dela. Widening não é backfill: se este teste
+mudar de valor, a migration está errada.
+
+**Gate de regressão de escala.** Um teste que leia o `schema.prisma` e recuse
+coluna numérica nova fora da matriz de §58 — o mesmo espírito de
+`scripts/migration-order.test.ts`, para que a decisão não se perca na próxima
+capability que criar uma tabela.
+
 ## Reprodutibilidade
 
 Os números deste documento vieram de quatro scripts temporários, **removidos após
