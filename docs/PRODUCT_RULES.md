@@ -3664,8 +3664,11 @@ unitário, a quantidade, o custo, o CMV ou os fatores que o produziram.
 Decisão de Product Ownership de 2026-09-05, derivada da auditoria. É a
 referência para toda coluna numérica nova e para o widening futuro. **Aplicada
 ao schema em QUANTITY, FACTOR, TECHNICAL_RESULT persistido (PREC-MIG-A),
-UNIT_COST (PREC-MIG-B) e PURITY / OVERAGE (PREC-MIG-C).** O restante pertence às
-capabilities PREC-MIG-D, E e P.
+UNIT_COST (PREC-MIG-B), PURITY / OVERAGE (PREC-MIG-C) e o UNIT_PRICE
+operacional da Ordem de Compra (PREC-MIG-P / PREC-P-01).** O restante pertence
+às capabilities PREC-MIG-D e E e ao residual do P — o UNIT_PRICE técnico da
+precificação, que segue em `14,6` aguardando decisão do PO (PREC-P-02 a
+PREC-P-05).
 
 | Categoria | Tipo aprovado |
 |---|---|

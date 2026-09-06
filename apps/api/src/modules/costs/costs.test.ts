@@ -288,8 +288,10 @@ describe("Custo de aquisição no recebimento", () => {
       purchasePrice: "30",
     });
 
-    // O preço da OC aparece só como referência visual.
-    expect(receipt.lines[0].purchaseUnitPrice).toBe("30.0000");
+    // O preço da OC aparece só como referência — no scale da coluna, 8 casas
+    // desde o PREC-MIG-P, porque é ele que o atalho "Usar preço da OC" copia
+    // para `actualUnitCost`.
+    expect(receipt.lines[0].purchaseUnitPrice).toBe("30.00000000");
     expect(receipt.lines[0].actualUnitCost).toBeNull();
 
     const reference = await getCostReference(app, item.id);

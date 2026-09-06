@@ -159,14 +159,14 @@ precificação no PREC-MIG-B.
 | FormulationTemplateComponent.overagePercent | PERCENTAGE | 6,3 | template | POTENTIAL_RISK | 9,6 | **Sim — C (ENTREGUE)** |
 | ItemCostReference.unitCost | UNIT_COST | 14,4 | referência manual de custo | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
 | ReceiptLine.actualUnitCost | UNIT_COST | 14,4 | custo efetivo de aquisição — origem de toda média | decidido pelo PO | 20,8 | **Sim — B (ENTREGUE)** |
-| SupplierItemOffer.unitPrice | UNIT_COST | 14,4 | oferta de fornecedor, lida como custo pelo seletor | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
-| PurchaseOrderLine.unitPrice | UNIT_PRICE | 14,4 | preço da OC | decidido pelo PO | **20,8** | **Sim — PREC-MIG-P** (aprovado, não implementado) |
-| **QuoteLine.unitPrice** | UNIT_PRICE | 14,4 | preço da linha do orçamento | **NEEDS_DOMAIN_DECISION** | 20,6 ou manter | **Decisão do PO** |
-| CustomerOrderLine.agreedUnitPrice | UNIT_PRICE | 14,4 | preço acordado — contratual | DOCUMENTAL, ver §6 | manter 14,4 | Não |
-| BillingLine.agreedUnitPrice / unitPrice | UNIT_PRICE | 14,4 | preço faturado — emitido | DOCUMENTAL, ver §6 | manter 14,4 | Não |
-| PricingTier.manualUnitPrice | UNIT_PRICE | 14,6 | preço manual da faixa | OK | 20,8 | Sim — B |
-| PricingTier.selectedPriceSnapshot | UNIT_PRICE | 14,6 | preço congelado na ativação | OK | 20,8 | Sim — B |
-| PricingTier.suggestedPriceSnapshot | UNIT_PRICE | 14,6 | preço sugerido | OK | 20,8 | Sim — B |
+| SupplierItemOffer.unitPrice | UNIT_COST (ALREADY_DELIVERED) | 20,8 | oferta de fornecedor, lida como custo pelo seletor | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
+| PurchaseOrderLine.unitPrice | UNIT_PRICE_OPERATIONAL | 14,4 | preço da OC | decidido pelo PO | **20,8** | **Sim — PREC-MIG-P (ENTREGUE)** |
+| **QuoteLine.unitPrice** | UNIT_PRICE_CONTRACTUAL_EDITABLE | 14,4 | preço da linha do orçamento | **NEEDS_PO_DECISION** | manter 14,4 até decidir | **Não — PREC-P-05** |
+| CustomerOrderLine.agreedUnitPrice | UNIT_PRICE_CONTRACTUAL_SNAPSHOT | 14,4 | preço acordado — contratual | DOCUMENTAL, ver §6 | manter 14,4 | Não |
+| BillingLine.agreedUnitPrice / unitPrice | UNIT_PRICE_CONTRACTUAL_SNAPSHOT / _EDITABLE | 14,4 | acordado congelado / faturado com override | DOCUMENTAL, ver §6 | manter 14,4 | Não |
+| PricingTier.manualUnitPrice | UNIT_PRICE_TECHNICAL | 14,6 | preço manual da faixa | **NEEDS_PO_DECISION** | 20,8 | **Não — PREC-P-02** |
+| PricingTier.selectedPriceSnapshot | UNIT_PRICE_TECHNICAL (snapshot) | 14,6 | preço congelado na ativação | **NEEDS_PO_DECISION** | 20,8 | **Não — PREC-P-03** |
+| PricingTier.suggestedPriceSnapshot | UNIT_PRICE_DERIVED | 14,6 | saída do motor de precificação | **NEEDS_PO_DECISION** | 20,8 | **Não — PREC-P-03** |
 | IndustrialCostCalculation.costPerUnit | TECHNICAL_VALUE | 18,6 | custo industrial unitário | OK | 24,12 | Sim — A |
 | IndustrialCostCalculation.costPer1000 | TECHNICAL_VALUE | 14,4 | custo por mil | POTENTIAL_RISK | 20,8 | Sim — B |
 | IndustrialCostCalculation.knownSubtotal / totalIndustrialCost / directIndustrialCost / overheadCost | TECHNICAL_VALUE | 14,4 | composição do custo | POTENTIAL_RISK | 20,8 | Sim — B |
@@ -276,9 +276,20 @@ o banco tem, e um deles grava.
 
 ### 5.1 Serialização API — `toFixed(N)` abaixo do scale da coluna
 
-**Nenhuma das seis linhas abaixo foi corrigida na Fundação A**, e isso é
+**Nenhuma das sete linhas abaixo foi corrigida na Fundação A**, e isso é
 deliberado: todas serializam coluna do PREC-MIG-B ou preço contratual, que o PO
 decidiu não ampliar. PREC-SER-01 segue integralmente aberto.
+
+**A Fundação P (PREC-MIG-P) corrigiu dois pontos que não estão nesta tabela** —
+os que serializavam `PurchaseOrderLine.unitPrice`, cuja coluna passou a
+`DECIMAL(20,8)` e que continuariam servindo quatro casas:
+`purchase-orders.service.ts` (`formatUnitPrice`, removido) e
+`receiving.service.ts` (`purchaseUnitPrice`). Os dois passam agora por
+`precoUnitario` em `decimal-serialization.ts`. O segundo **não era só
+apresentação**: o atalho "Usar preço da OC" da tela de Recebimento copia esse
+valor para `ReceiptLine.actualUnitCost`, que é `DECIMAL(20,8)` — servir quatro
+casas fazia o atalho gravar um custo arredondado que ninguém digitou. Esta é a
+fatia de **PREC-SER-02** que a família migrada exigia; o resto continua aberto.
 
 A Fundação A ajustou **outros cinco** pontos — os que serializavam coluna que
 passou a `DECIMAL(24,12)` e continuariam cortando em seis casas o que o banco
@@ -508,13 +519,14 @@ margem que evita uma segunda migration.
 
 ---
 
-## 10. Plano de migration — aprovado, nenhuma gerada
+## 10. Plano de migration — A, B, C e P entregues
 
 Os grupos abaixo viraram os itens **PREC-MIG-A a E** na seção E de
 [`BACKLOG.md`](BACKLOG.md): A ≙ Grupo A, e o Grupo B foi separado por categoria
 em B (custo), C (pureza/overage) e D (resultado técnico), com E para o que ainda
-exige decisão individual. **Nenhuma migration foi gerada** nesta rodada nem na
-aprovação.
+exige decisão individual, e **P** para a família UNIT_PRICE. A auditoria em si
+não gerou migration nenhuma; as quatro que existem hoje saíram das capabilities
+A, B, C e P.
 
 ### Grupo A — widening seguro de grandeza física e técnica
 `Decimal(18,6)` → `Decimal(24,12)`. **~40 colunas.** Sem decisão de domínio: o
@@ -543,6 +555,59 @@ Os 58 `Int`; `IndustrialResource.powerKw` e `powerKwSnapshot`; markup;
 percentuais comerciais `(7,4)`; os dois campos `legacy*` de
 `FormulationComponent`; e, salvo decisão comercial, os preços contratuais
 `(14,4)` de `CustomerOrderLine` e `BillingLine`.
+
+### 10.1 Inventário UNIT_PRICE — classificação final (PREC-MIG-P)
+
+Dez colunas de preço existem no schema. A classificação abaixo é por **uso
+real**, não por nome do campo — foi assim que `SupplierItemOffer.unitPrice`
+acabou na família UNIT_COST, e é assim que se evita arrastar um preço
+contratual junto com um operacional por semelhança de nome.
+
+| Model.field | Categoria | Antes | Recomendação |
+|---|---|---|---|
+| `PurchaseOrderLine.unitPrice` | UNIT_PRICE_OPERATIONAL | `14,4` | **MIGRAR — `DECIMAL(20,8)`, feito** |
+| `SupplierItemOffer.unitPrice` | ALREADY_DELIVERED (lido como UNIT_COST) | `20,8` | **Não remigrar, não mexer na semântica** |
+| `QuoteLine.unitPrice` | UNIT_PRICE_CONTRACTUAL_EDITABLE | `14,4` | MANTER — decisão comercial, **PREC-P-05** |
+| `CustomerOrderLine.agreedUnitPrice` | UNIT_PRICE_CONTRACTUAL_SNAPSHOT | `14,4` | MANTER — §58, §6 |
+| `BillingLine.agreedUnitPrice` | UNIT_PRICE_CONTRACTUAL_SNAPSHOT | `14,4` | MANTER — §58, §6 |
+| `BillingLine.unitPrice` | UNIT_PRICE_CONTRACTUAL_EDITABLE (override) | `14,4` | MANTER — §58, §6 |
+| `PricingTier.manualUnitPrice` | UNIT_PRICE_TECHNICAL | `14,6` | NEEDS_PO_DECISION — **PREC-P-02** |
+| `PricingTier.suggestedPriceSnapshot` | UNIT_PRICE_DERIVED | `14,6` | NEEDS_PO_DECISION — **PREC-P-03** |
+| `PricingTier.selectedPriceSnapshot` | UNIT_PRICE_TECHNICAL (snapshot) | `14,6` | NEEDS_PO_DECISION — **PREC-P-03** |
+| `QuoteLine.pricingSelectedUnitPriceSnapshot` | UNIT_PRICE_TECHNICAL congelado em documento comercial | `14,6` | NEEDS_PO_DECISION — **PREC-P-04** |
+
+**Por que só um campo migrou.** `PurchaseOrderLine.unitPrice` tinha decisão
+explícita do PO (PREC-P-01) e nenhuma dependência: a OC não persiste total
+monetário nenhum, então widening do operando não reconcilia documento algum.
+
+Os preços **contratuais** ficam onde estão por regra publicada: §58 diz que
+snapshot de acordo comercial não sofre widening por decisão técnica, e o valor
+do documento assinado é o valor do documento. Ampliá-los é decisão comercial —
+passaria a admitir contrato novo com oito casas —, não decisão de precisão.
+
+Os preços **técnicos da precificação** são um caso à parte, e o motivo de
+ficarem fora é de cadeia, não de categoria. `PricingTier.selectedPriceSnapshot`
+é copiado, no ENVIO do Orçamento, para
+`QuoteLine.pricingSelectedUnitPriceSnapshot` (`quote-pricing.service.ts`, via
+`toFixed(6)`), e dali para `QuoteLine.unitPrice` via `toFixed(4)`. Alargar só a
+ponta da cadeia trocaria um arredondamento silencioso por outro — o congelamento
+da proveniência passaria a cortar em seis casas o que a faixa guarda em oito. A
+cadeia move-se inteira ou não se move, e mover a parte que vive dentro de
+documento comercial congelado é decisão do PO. Por isso **PREC-P-02 a PREC-P-05
+foram abertos juntos**, e nenhum deles entrou nesta migration.
+
+**O que a serialização da precificação faz hoje, e continua fazendo:**
+`pricing.service.ts` serve preço de faixa por `unitMoney` = `toFixed(6)`, e o
+vínculo Orçamento↔faixa grava `toFixed(4)`. Enquanto as colunas forem `14,6` e
+`14,4`, isso é o scale da coluna, não perda — vira perda no dia em que a coluna
+crescer. `PREC-SER-02` fecha com esses campos, não antes.
+
+**Derivação interna que o widening melhorou sem mudar regra:** a Sugestão de
+Compra grava `PurchaseOrderLine.unitPrice` a partir de uma oferta de fornecedor
+convertida de unidade (`purchase-suggestion.service.ts`). O resultado da divisão
+era arredondado pelo PostgreSQL em quatro casas; agora em oito. Continua sendo
+valor derivado, não entrada de operador — a fronteira de §58 vale para o que a
+pessoa digita.
 
 ### Reversibilidade e backfill
 
@@ -580,10 +645,22 @@ truncaria. Por isso a decisão de scale precisa nascer certa, e por isso 12 e n�
    de negócio (`0 < pureza <= 100`, overage `>= 0`) nem na fórmula canônica. O
    **PREC-MIG-D residual** segue aberto: os resultados técnicos ainda em `14,4` e
    `14,6`.
-4. **PREC-SER-01, PREC-SER-02 e PREC-FMT-01** — não são migration de schema, mas
+4. **PREC-MIG-P / PREC-P-01 — ENTREGUE em 2026-09-06.** UMA coluna:
+   `PurchaseOrderLine.unitPrice` de `Decimal(14,4)` para `DECIMAL(20,8)`,
+   migration `20260925093004_numeric_precision_unit_price_20_8`, sem backfill.
+   O inventário completo da família e a classificação de cada campo estão em
+   §10.1; o resto do UNIT_PRICE **não** entrou, e o motivo de cada exclusão está
+   lá. Medido no banco antes de migrar: `4.05318764::decimal(14,4)` devolvia
+   `4.0532` — o operador digitava um preço de insumo cotado por grama e o banco
+   gravava outro, sem dizer. Depois: persiste `4.05318764`, e acima de oito
+   casas a fronteira **recusa** em vez de deixar o PostgreSQL arredondar a nona.
+   **Precisão do operando não é precisão do total:** `10 × 4,05318764 =
+   40,53187640` continua fechando o documento em `R$ 40,53`, pela regra ATUAL da
+   OC — o BACKLOG #18 permanece caracterizado e não implementado.
+5. **PREC-SER-01, PREC-SER-02 e PREC-FMT-01** — não são migration de schema, mas
    precisam entrar depois do widening para que a serialização já espelhe o scale
    novo. `PREC-FMT-01` é pré-requisito de qualquer preset acima de seis casas.
-5. **PREC-MIG-E** — o que exigir decisão individual, caso a caso.
+6. **PREC-MIG-E** — o que exigir decisão individual, caso a caso.
 
 **Ordem obrigatória:** `Decimal.precision` **antes ou junto** do widening. Ampliar
 a coluna sem ampliar o motor cria coluna que o sistema não consegue preencher.
@@ -688,6 +765,30 @@ E decidiu também o que a auditoria não tinha perguntado: `decimal.js` sobe par
 **40 dígitos significativos**, numa configuração canônica só (§59), e
 `DECIMAL(30,12)` fica recusado como baseline.
 
+**Decisão do PO de 2026-09-05, registrada depois:** `PurchaseOrderLine.unitPrice`
+vai para `DECIMAL(20,8)` — preço unitário de compra é grandeza técnica, e o total
+documental da linha segue regra própria. **Entregue em 2026-09-06** como
+PREC-MIG-P / PREC-P-01.
+
+**O que a Fundação P deixou explicitamente para o PO — PREC-P-02 a PREC-P-05.**
+A família UNIT_PRICE técnica da precificação, mapeada em §10.1. As perguntas que
+a capability não pode responder sozinha:
+
+- **`PricingTier.manualUnitPrice` (PREC-P-02)** — é entrada de operador. Oito
+  casas mudariam o que a tela de precificação aceita digitar; hoje o schema Zod
+  não limita casa nenhuma e a coluna corta na sexta. Ampliar exige decidir se
+  preço de faixa passa a ser negociável em oito casas.
+- **`PricingTier.suggestedPriceSnapshot` e `.selectedPriceSnapshot`
+  (PREC-P-03)** — nascem do motor (`P = C ÷ (1 − margem − comissão)`) e congelam
+  na ATIVAÇÃO da versão de precificação. Widening puro é seguro para o histórico,
+  mas passa a admitir faixa nova com oito casas.
+- **`QuoteLine.pricingSelectedUnitPriceSnapshot` (PREC-P-04)** — a mesma
+  proveniência, congelada no ENVIO do Orçamento, **dentro de documento
+  comercial**. É o elo que obriga a família a se mover inteira: deixá-lo em
+  `14,6` com a faixa em `20,8` cria um corte silencioso novo no congelamento.
+- **`QuoteLine.unitPrice` (PREC-P-05)** — permanece MANTER pela resposta acima;
+  reabrir é decisão comercial, não técnica.
+
 **O que continua aberto — PREC-MIG-E.** Os campos que a matriz de §58 não
 resolve sozinha e que exigem decisão individual, caso a caso, no momento em que
 a fundação já estiver no lugar:
@@ -702,7 +803,7 @@ a fundação já estiver no lugar:
 - percentuais comerciais em `Decimal(7,4)` — mantidos, mas revisitar se margem
   ou comissão passarem a ser negociadas com mais casas.
 
-Nenhum deles bloqueia PREC-MIG-A.
+Nenhum deles bloqueia PREC-MIG-A nem foi tocado pelo PREC-MIG-P.
 
 ---
 

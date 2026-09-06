@@ -55,3 +55,26 @@ export const ESCALA_CUSTO_UNITARIO = 8;
 export function custoUnitario(value: Prisma.Decimal): string {
   return value.toFixed(ESCALA_CUSTO_UNITARIO);
 }
+
+/** Escala das colunas `DECIMAL(20,8)` de UNIT_PRICE técnico/operacional, §58. */
+export const ESCALA_PRECO_UNITARIO = 8;
+
+/**
+ * Preço unitário técnico/operacional em `DECIMAL(20,8)` — PREC-MIG-P.
+ *
+ * Hoje: `PurchaseOrderLine.unitPrice`, e o mesmo preço servido como referência
+ * na tela de Recebimento. Servia em quatro casas; com a coluna em oito isso
+ * seria a migration desfeita na saída — pior ainda porque a tela devolve ao
+ * servidor o que recebeu, e um salvamento sem edição gravaria o valor cortado.
+ *
+ * A escala é a mesma de `custoUnitario` e a função é outra de propósito:
+ * UNIT_PRICE e UNIT_COST são categorias distintas (`PRODUCT_RULES.md` §58) e a
+ * escolha da escala pertence à categoria do campo. Quem serializa custo não
+ * deve passar a servir preço porque o número coincide hoje.
+ *
+ * **Não usar para preço contratual.** Orçamento, Pedido e Faturamento seguem a
+ * precisão do documento comercial e continuam em quatro casas.
+ */
+export function precoUnitario(value: Prisma.Decimal): string {
+  return value.toFixed(ESCALA_PRECO_UNITARIO);
+}

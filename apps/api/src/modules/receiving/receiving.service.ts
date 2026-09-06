@@ -31,7 +31,7 @@ import {
   PurchaseOrderLineNotFoundError,
   PurchaseOrderNotFoundError,
 } from "./receiving.errors.js";
-import { custoUnitario } from "../../lib/decimal-serialization.js";
+import { custoUnitario, precoUnitario } from "../../lib/decimal-serialization.js";
 import type {
   CreateCustomerSuppliedReceiptInput,
   CreateReceiptInput,
@@ -82,9 +82,12 @@ function toReceiptLineDTO(line: ReceiptLineWithRelations): ReceiptLineDTO {
     lotCode: line.lot ? line.lot.code : null,
     ownerType: line.lot ? line.lot.ownerType : "VERIDI",
     coaStatus: line.lot ? line.lot.coaStatus : null,
-    // Preco previsto da OC — so referencia visual, nunca custo real.
+    // Preco previsto da OC — so referencia, nunca custo real. Continua sendo
+    // o operando de 8 casas do PREC-MIG-P: "Usar preco da OC" copia ESTE
+    // valor para `actualUnitCost`, que e DECIMAL(20,8). Servir 4 casas fazia
+    // o atalho gravar um custo arredondado que ninguem digitou.
     purchaseUnitPrice: line.purchaseOrderLine?.unitPrice
-      ? line.purchaseOrderLine.unitPrice.toFixed(4)
+      ? precoUnitario(line.purchaseOrderLine.unitPrice)
       : null,
     actualUnitCost: line.actualUnitCost ? custoUnitario(line.actualUnitCost) : null,
     costUpdatedAt: line.costUpdatedAt ? line.costUpdatedAt.toISOString() : null,

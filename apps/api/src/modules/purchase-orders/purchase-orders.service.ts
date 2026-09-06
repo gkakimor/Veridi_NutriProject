@@ -3,6 +3,7 @@ import type { CustomerOrder, Item, PurchaseOrder, PurchaseOrderLine, ReceiptLine
 import type { PurchaseOrderDTO, PurchaseOrderLineDTO, PurchaseOrderListResponse } from "@veridi/shared";
 import { PURCHASE_ORDER_CODE_PREFIX, calcularTotaisOrdemCompra } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { precoUnitario } from "../../lib/decimal-serialization.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -66,17 +67,6 @@ const purchaseOrderInclude = {
   },
 } as const;
 
-/**
- * PRECO UNITARIO: as 4 casas que `purchase_order_lines.unitPrice` guarda.
- *
- * Mesma correcao aplicada ao Faturamento: o total da linha e calculado sobre
- * o valor cheio, entao cortar o preco na saida deixava a conta impossivel de
- * refazer no papel. A precisao da coluna foi conferida no banco, nao suposta.
- */
-function formatUnitPrice(value: Prisma.Decimal): string {
-  return value.toFixed(4);
-}
-
 function toLineDTO(line: LineWithReceipts): PurchaseOrderLineDTO {
   // A MESMA conta que a tela usa na prévia (`@veridi/shared`): quantidade ×
   // preço, 2 casas só na saída. Nunca duas versões do total.
@@ -96,7 +86,11 @@ function toLineDTO(line: LineWithReceipts): PurchaseOrderLineDTO {
     itemName: line.itemName,
     unitCode: line.unitCode,
     orderedQuantity: line.orderedQuantity.toString(),
-    unitPrice: line.unitPrice ? formatUnitPrice(line.unitPrice) : null,
+    // PRECO UNITARIO: as 8 casas que `purchase_order_lines.unitPrice` guarda
+    // desde o PREC-MIG-P. O DTO devolve o scale da coluna, nem mais nem menos
+    // — a tela devolve ao servidor o que recebeu, e servir quatro casas faria
+    // um salvamento sem edicao gravar o valor ja cortado.
+    unitPrice: line.unitPrice ? precoUnitario(line.unitPrice) : null,
     lineTotal,
     receivedQuantity: receivedQuantity.toString(),
     openQuantity: openQuantity.toString(),

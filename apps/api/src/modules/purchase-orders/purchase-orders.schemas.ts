@@ -1,12 +1,19 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { decimalStringSchema, quantityDecimalSchema } from "../../lib/decimal-schema.js";
+import {
+  CASAS_PRECO_UNITARIO,
+  decimalStringSchema,
+  quantityDecimalSchema,
+} from "../../lib/decimal-schema.js";
 import { optionalNullableDateSchema, requiredDateSchema } from "../../lib/date-schema.js";
 
 const purchaseOrderLineInputSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
   orderedQuantity: quantityDecimalSchema(),
-  unitPrice: decimalStringSchema({ allowZero: true }).optional(),
+  // Até oito casas — o scale de `DECIMAL(20,8)`, PREC-MIG-P. Acima disso a
+  // fronteira RECUSA (§58) em vez de deixar o PostgreSQL arredondar a nona em
+  // silêncio: o operador digitava um preço e o banco gravava outro.
+  unitPrice: decimalStringSchema({ allowZero: true, maxDecimals: CASAS_PRECO_UNITARIO }).optional(),
 });
 
 export const createPurchaseOrderSchema = z.object({
