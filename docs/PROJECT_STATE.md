@@ -4,11 +4,12 @@
 
 ## Onde estamos
 
-**`main` @ `33ee1cd`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `0305704`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodada 1** (#12, #9, #3,
 #5; #4 com residual aceito), **Rodada 2** (#8A, #8B, #8C, merge `dfb2673`),
-**Rodada 3** (#8D, #8H, merge `b89f9a4`) e **Rodada 4** (#15, #16, merge
-`33ee1cd`), todas aprovadas pelo PO.
+**Rodada 3** (#8D, #8H, merge `b89f9a4`), **Rodada 4** (#15, #16, merge
+`33ee1cd`) e a **auditoria de precisão numérica PREC-01** (merge `0305704`,
+só documentação), todas aprovadas pelo PO.
 **Produção:** Railway, deploy automático da `main`; health 200, banco up, smoke
 autenticado passando, sem dado de negócio.
 
