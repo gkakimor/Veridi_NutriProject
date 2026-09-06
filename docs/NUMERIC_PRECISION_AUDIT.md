@@ -1,6 +1,10 @@
 # Auditoria de precisão numérica — PREC-01
 
-**Rodada:** auditoria, sem migration e sem mudança de regra.
+**Status:** auditoria **aprovada pelo PO e publicada em 2026-09-05**, sem
+migration e sem mudança de regra. As decisões tomadas sobre ela viraram regra
+durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57, §58 e §59, e trabalho
+nomeado na seção E de [`BACKLOG.md`](BACKLOG.md). Este documento continua sendo
+a **evidência**: o inventário, as medições e o porquê de cada decisão.
 **Branch:** `audit/global-numeric-precision`, a partir de `main @ 4b9df47`.
 **Escopo:** todo o domínio numérico mensurável — estoque, itens, lotes, compras,
 recebimentos, fornecedores, formulações, templates, ordens de produção, pesagem,
@@ -55,16 +59,18 @@ seis pontos de serialização inconsistentes.
 
 ---
 
-## 2. Política proposta
+## 2. Política — aprovada
 
-Quatro regras, derivadas do que a auditoria encontrou:
+Quatro regras, derivadas do que a auditoria encontrou e **aprovadas pelo PO em
+2026-09-05**. P1 a P4 estão consolidadas em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57 e §58; aqui fica o raciocínio.
 
 **P1 — A coluna é a precisão. Não existe casa escondida além do scale.**
 Hoje o sistema não tem "precisão oculta" para preservar: `Decimal(18,6)` guarda
 exatamente seis casas, e o que passa disso já foi descartado no `INSERT`. Toda
 discussão de "não destruir casas ocultas" só passa a ter objeto **depois** de a
-migration ampliar o scale. Até lá o gate do §18 do handoff está satisfeito por
-construção.
+migration ampliar o scale — e é por isso que o invariante de §57 precisa estar
+escrito antes, não depois.
 
 **P2 — Serialização espelha o scale da coluna, sempre.**
 `toFixed(N)` no DTO com `N < scale` é perda silenciosa. Seis ocorrências
@@ -425,16 +431,20 @@ serialização inconsistente de §5.1, não a matemática.
 
 ---
 
-## 9. Proposta de tipos PostgreSQL
+## 9. Tipos PostgreSQL — a evidência por trás da matriz
 
-`DECIMAL(30,12)` **não é aprovado como baseline cego**, por dois motivos
-medidos: `decimal.js` só produz 20 dígitos significativos (R2), e 18 dígitos
-inteiros são ordens de grandeza acima de qualquer necessidade da Veridi. A
-proposta é **`DECIMAL(24,12)`** para grandeza técnica — 12 inteiros + 12
-decimais, 24 dígitos significativos —, ainda acima do teto do `decimal.js`, o
-que torna o ajuste de `Decimal.precision` parte obrigatória da migration.
+**Aprovada pelo PO em 2026-09-05**; a matriz canônica vive em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §58. A tabela abaixo é o raciocínio que a
+sustenta — o range e a granularidade que cada categoria precisa, e por quê.
 
-| Categoria | Recomendação | Máximo inteiro | Menor fração | Justificativa |
+`DECIMAL(30,12)` foi **recusado como baseline**, por dois motivos medidos:
+`decimal.js` só produz 20 dígitos significativos (R2), e 18 dígitos inteiros são
+ordens de grandeza acima de qualquer necessidade da Veridi. O aprovado é
+**`DECIMAL(24,12)`** para grandeza técnica — 12 inteiros + 12 decimais, 24
+dígitos significativos —, ainda acima do teto atual do `decimal.js`, o que torna
+a elevação para 40 dígitos (§59) parte obrigatória da mesma migration.
+
+| Categoria | Tipo aprovado | Máximo inteiro | Menor fração | Justificativa |
 |---|---|---|---|---|
 | QUANTITY | `DECIMAL(24,12)` | 999.999.999.999 | `1e-12` | R1: `4,8e-8 kg` precisa de 8 casas só para existir; 12 dá margem para mg→kg com overage e pureza encadeados |
 | UNIT_COST | `DECIMAL(20,8)` | 999.999.999.999 | `1e-8` | custo por grama de insumo caro; 8 casas cobrem R$/mg |
@@ -462,7 +472,13 @@ margem que evita uma segunda migration.
 
 ---
 
-## 10. Plano de migration (futuro — nada gerado nesta rodada)
+## 10. Plano de migration — aprovado, nenhuma gerada
+
+Os grupos abaixo viraram os itens **PREC-MIG-A a E** na seção E de
+[`BACKLOG.md`](BACKLOG.md): A ≙ Grupo A, e o Grupo B foi separado por categoria
+em B (custo), C (pureza/overage) e D (resultado técnico), com E para o que ainda
+exige decisão individual. **Nenhuma migration foi gerada** nesta rodada nem na
+aprovação.
 
 ### Grupo A — widening seguro de grandeza física e técnica
 `Decimal(18,6)` → `Decimal(24,12)`. **~40 colunas.** Sem decisão de domínio: o
@@ -496,22 +512,29 @@ handoff, e não há como reconstruir a casa que nunca foi persistida.
 A operação **não** é reversível na direção contrária sem perda: reduzir scale
 truncaria. Por isso a decisão de scale precisa nascer certa, e por isso 12 e não 8.
 
-### Número estimado de migrations: **3**
+### Sequência aprovada
 
-1. **Grupo A** — widening mecânico de quantidade e resultado técnico, junto com
-   `Decimal.set({ precision: 40 })` em `@veridi/shared` e `apps/api` e os testes
-   que provam R1 resolvido.
-2. **Grupo B** — depois das respostas de §12.
-3. **Correção dos seis pontos de serialização de §5.1** — não é migration de
-   schema, mas é a mesma capability e precisa entrar depois de A e B para que o
-   `toFixed` já espelhe o scale novo.
+1. **#20 + PREC-MIG-A** — a precisão canônica em 40 dígitos (§59) e o widening
+   de QUANTITY, fatores e resultado técnico para `DECIMAL(24,12)`, com os testes
+   de §13 que provam R1 resolvido. **É a próxima capability.**
+2. **PREC-MIG-B, C e D** — custo em `DECIMAL(20,8)`, pureza e overage em
+   `DECIMAL(9,6)`, demais resultados técnicos.
+3. **PREC-SER-01, PREC-SER-02 e PREC-FMT-01** — não são migration de schema, mas
+   precisam entrar depois do widening para que a serialização já espelhe o scale
+   novo. `PREC-FMT-01` é pré-requisito de qualquer preset acima de seis casas.
+4. **PREC-MIG-E** — o que exigir decisão individual, caso a caso.
 
 **Ordem obrigatória:** `Decimal.precision` **antes ou junto** do widening. Ampliar
 a coluna sem ampliar o motor cria coluna que o sistema não consegue preencher.
 
 ---
 
-## 11. Plano de preferências de exibição (desenho, não implementação)
+## 11. Preferências de exibição — desenho aprovado, nada implementado
+
+Aprovado como roadmap pelo PO em 2026-09-05, **depois da fundação**, e nomeado
+em PREC-UI-01 a 08 na seção E de [`BACKLOG.md`](BACKLOG.md). Os invariantes que
+a implementação não pode violar são regra durável em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57.
 
 ### 11.1 Arquitetura
 
@@ -583,30 +606,42 @@ A implementação futura precisa **preservar** isso, não construir.
 
 ---
 
-## 12. Gaps e decisões do PO
+## 12. Decisões do PO e o que ainda falta
 
-Sete perguntas. Nenhuma foi decidida nesta rodada.
+A auditoria abriu sete perguntas. **O PO respondeu seis em 2026-09-05**, na
+aprovação de PREC-01. As decisões duráveis estão em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57, §58 e §59; o que segue é o
+fechamento de cada pergunta desta auditoria.
 
-1. **Scale de quantidade — 12 casas confirma?** A evidência de R1 exige ao menos
-   8. Doze é margem para não migrar duas vezes. Custo: nenhum de correção,
-   algum de armazenamento (§13).
-2. **`ReceiptLine.actualUnitCost` — 4 ou 8 casas?** É a origem de todo custo real.
-   Depende de como a Veridi compra insumo micronutriente: por kg ou por grama.
-3. **`QuoteLine.unitPrice` — ampliar para 6/8 ou manter 4?** A precificação
-   produz 6 casas e o orçamento guarda 4. A proveniência de 6 casas sobrevive em
-   `pricingSelectedUnitPriceSnapshot`, então a perda é recuperável por leitura.
-   Ampliar muda o valor que o cliente vê na proposta.
-4. **Preço contratual (`CustomerOrderLine.agreedUnitPrice`, `BillingLine`) —
-   ampliar?** Decisão comercial: 4 casas é o que está no documento acordado.
-5. **Pureza e overage — 3 ou 6 casas?** Depende do laudo do fornecedor. Se o
-   certificado de análise traz 99,9995%, três casas registram 100,000 — uma
-   pureza que o insumo não tem.
-6. **`UnitOfMeasure.toBaseFactor` — ampliar agora ou quando a primeira unidade
-   não decimal entrar?** Ampliar agora é barato e evita contaminação global
-   depois.
-7. **`print/documents.tsx:353` — a divisão por partes do documento impresso deve
-   usar `splitDecimal`?** É correção de defeito, não de precisão de coluna. Pode
-   entrar em qualquer rodada.
+| Pergunta | Decisão do PO |
+|---|---|
+| Scale de quantidade — 12 casas confirma? | **Sim.** QUANTITY em `DECIMAL(24,12)`, §58 |
+| `ReceiptLine.actualUnitCost` — 4 ou 8 casas? | **8.** `DECIMAL(20,8)`, por ser fonte de custo real que alimenta aquisição, média ponderada, estoque e CMV — PREC-MIG-B |
+| `QuoteLine.unitPrice` — ampliar ou manter? | **Manter.** É preço do documento comercial; snapshot histórico não sofre widening por decisão técnica, §58 |
+| Preço contratual (`CustomerOrderLine`, `BillingLine`) — ampliar? | **Não.** Mesma regra: o valor do documento assinado é o valor do documento |
+| Pureza e overage — 3 ou 6 casas? | **6.** `DECIMAL(9,6)`, para que `99,9995%` não vire `100,000` — PREC-MIG-C |
+| `toBaseFactor` — ampliar agora? | **Agora.** FACTOR/conversão em `DECIMAL(24,12)`, dentro de PREC-MIG-A |
+| `print/documents.tsx:353` deve usar `splitDecimal`? | **Sim.** Vira PREC-FMT/#21, independente de migration |
+
+E decidiu também o que a auditoria não tinha perguntado: `decimal.js` sobe para
+**40 dígitos significativos**, numa configuração canônica só (§59), e
+`DECIMAL(30,12)` fica recusado como baseline.
+
+**O que continua aberto — PREC-MIG-E.** Os campos que a matriz de §58 não
+resolve sozinha e que exigem decisão individual, caso a caso, no momento em que
+a fundação já estiver no lugar:
+
+- `IndustrialResource.powerKw` e `powerKwSnapshot` — `Decimal(12,4)` hoje;
+  ampliar só se a medição de energia passar a exigir;
+- `PricingTier.*Snapshot` de totais em `Decimal(14,4)` — são snapshot de
+  precificação, e a fronteira entre resultado técnico e valor congelado precisa
+  ser dita campo a campo;
+- `FormulationComponent.legacyTotalQuantity` e `legacyBatchUnits` — dado
+  importado do legado, `NOT_APPLICABLE` enquanto ninguém calcular sobre eles;
+- percentuais comerciais em `Decimal(7,4)` — mantidos, mas revisitar se margem
+  ou comissão passarem a ser negociadas com mais casas.
+
+Nenhum deles bloqueia PREC-MIG-A.
 
 ---
 
