@@ -1,0 +1,58 @@
+-- PREC-MIG-E / PREC-E-01 — custo industrial por unidade congelado no Orçamento
+-- para DECIMAL(24,12).
+--
+-- BACKLOG #19 / PRODUCT_RULES.md §58 e §62: TECHNICAL_RESULT persistido em
+-- `DECIMAL(24,12)`. `QuoteLine.industrialCostPerUnitSnapshot` ficou de fora do
+-- PREC-MIG-A e do PREC-MIG-D com alvo conflitante — o inventário o registrava
+-- viajando com o PREC-MIG-B, que o PO fechou como UNIT_COST. A classificação
+-- semântica do PREC-MIG-E desfez o conflito: o campo NÃO é custo de aquisição
+-- informado (recebimento, referência manual, oferta de fornecedor). Ele é
+-- DERIVADO — `total industrial ÷ quantidade da faixa` —, cópia de
+-- `PricingTier.costPerUnitSnapshot`, que está em `DECIMAL(24,12)` desde o
+-- PREC-MIG-A. Categoria: TECHNICAL_RESULT.
+--
+-- O que estava sendo perdido, medido contra este PostgreSQL antes de migrar:
+--   (1000.00/300)::numeric(24,12)  -> 3.333333333333
+--   o mesmo em numeric(18,6)       -> 3.333333
+--   diferença                      -> 0.000000333333
+-- Seis casas. O DTO de proveniência já serializava doze; quem cortava na
+-- sétima era o banco, no `update` do congelamento, sem `.toFixed()` no código.
+--
+-- UMA coluna. A origem já é `24,12` e a cadeia só tem este elo estreito: não
+-- há família a mover junto.
+--
+-- SOMENTE widening de precisão. Zero backfill, zero UPDATE, zero recálculo,
+-- zero chave estrangeira, zero índice, zero constraint. A parte inteira CRESCE
+-- de 12 para 12 dígitos (18,6 -> 24,12), então nenhum valor existente pode
+-- estourar; o valor gravado permanece o mesmo e passa a ser reescrito com
+-- zeros à direita (`3.333333` -> `3.333333000000`). Casa que nunca foi
+-- persistida NÃO se reconstrói: uma proposta enviada antes desta migration
+-- continua valendo exatamente `3.333333`. NULL continua NULL.
+--
+-- FRONTEIRA, não só coluna. O congelamento passa a fechar explicitamente em
+-- doze casas com `ROUND_HALF_UP` declarado (`fecharResultadoTecnicoPersistido`,
+-- §62), para que o PostgreSQL nunca volte a ser a primeira camada a decidir.
+--
+-- O diff gerado pelo Prisma traz junto o drift conhecido de BACKLOG #14
+-- (chaves estrangeiras RESTRICT/SET NULL, renomeação de índices e
+-- constraints). Removido na revisão linha a linha exigida por
+-- TECH_BASELINE.md, "Migration order". Esta migration não o aplica.
+--
+-- FORA desta migration, por DECISÃO do PO em 2026-09-06 — não por dúvida:
+--   PricingTier.costTotalSnapshot, .costPer1000Snapshot, .knownSubtotalSnapshot,
+--   .commissionTotalSnapshot, .grossRevenueSnapshot, .contributionTotalSnapshot
+--                                    TECHNICAL_TOTAL — MANTÊM `DECIMAL(14,4)`.
+--                                    O que faltava ali era fronteira, não
+--                                    escala: PREC-E-02 fecha os seis em quatro
+--                                    casas no domínio, sem tocar no schema.
+--   IndustrialCostCalculation.directIndustrialCost, .overheadCost,
+--   .totalIndustrialCost, .knownSubtotal, .costPer1000 e as quatro de
+--   ProductionOrderCostSnapshot     TECHNICAL_TOTAL — MANTÊM `DECIMAL(14,4)`.
+--                                    O motor já fecha esses valores em DUAS
+--                                    casas antes de gravar; widening não
+--                                    recuperaria nada.
+--   FormulationComponent.legacyTotalQuantity e .legacyBatchUnits
+--                                    dado importado do legado sobre o qual
+--                                    ninguém calcula — NOT_APPLICABLE.
+
+ALTER TABLE "quote_lines" ALTER COLUMN "industrialCostPerUnitSnapshot" SET DATA TYPE DECIMAL(24,12);

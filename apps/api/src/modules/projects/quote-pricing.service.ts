@@ -164,8 +164,11 @@ export function pricingProvenanceForLine(
         : null,
       costStructureLabel: quote.costStructureLabelSnapshot,
       formulationVersionNumber: quote.formulationVersionNumberSnapshot,
+      // RESULTADO TÉCNICO congelado — `DECIMAL(24,12)`, PREC-E-01. Servia seis
+      // casas porque a coluna guardava seis; com ela em doze isso seria a
+      // migration desfeita na saída.
       industrialCostPerUnit: quote.industrialCostPerUnitSnapshot
-        ? quote.industrialCostPerUnitSnapshot.toFixed(6)
+        ? resultadoTecnico(quote.industrialCostPerUnitSnapshot)
         : null,
       costQuality: quote.costQualitySnapshot,
       commissionPercent: quote.commissionPercentSnapshot
@@ -415,8 +418,12 @@ function buildProvenanceSnapshot(
       : null,
     costStructureLabelSnapshot: provenance.costStructureLabel,
     formulationVersionNumberSnapshot: provenance.formulationVersionNumber,
+    // FRONTEIRA DE PERSISTÊNCIA do resultado técnico — PREC-E-01. A
+    // proveniência chega da faixa em doze casas e a coluna guardava seis: o
+    // `update` deixava o PostgreSQL cortar a sétima. Medido antes de migrar:
+    // `1000,00 ÷ 300` valia `3.333333333333` na faixa e `3.333333` na linha.
     industrialCostPerUnitSnapshot: provenance.industrialCostPerUnit
-      ? new Prisma.Decimal(provenance.industrialCostPerUnit)
+      ? fecharResultadoTecnicoPersistido(new Prisma.Decimal(provenance.industrialCostPerUnit))
       : null,
     costQualitySnapshot: provenance.costQuality,
     commissionPercentSnapshot: provenance.commissionPercent

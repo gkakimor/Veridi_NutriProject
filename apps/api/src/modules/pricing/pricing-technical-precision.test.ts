@@ -1332,3 +1332,324 @@ describe("PREC-MIG-D — o congelamento do Orçamento carrega as 12 casas", () =
     await app.close();
   });
 });
+
+
+/*
+ * ============================================================================
+ * PREC-MIG-E — o último elo estreito da cadeia técnica.
+ *
+ * PREC-E-01: `QuoteLine.industrialCostPerUnitSnapshot` de `Decimal(18,6)` para
+ * `DECIMAL(24,12)`. O campo é cópia de `PricingTier.costPerUnitSnapshot`, que
+ * já é `24,12` desde o PREC-MIG-A, e o congelamento da proveniência gravava
+ * doze casas numa coluna de seis. Medido contra o PostgreSQL antes de migrar:
+ *
+ *     (1000.00 / 300)::numeric(24,12)  ->  3.333333333333
+ *     o mesmo em numeric(18,6)         ->  3.333333
+ *     diferença                        ->  0.000000333333
+ *
+ * PREC-E-02: os seis TOTAIS de `PricingTier` permanecem `DECIMAL(14,4)` — a
+ * escala está certa, nenhum consumidor recebe mais de duas casas — mas o
+ * fechamento passa a ser do domínio, `fecharTotalTecnicoPersistido`, com
+ * `ROUND_HALF_UP` declarado (§63). O banco deixa de ser a primeira camada.
+ *
+ * F-3 vive aqui: `contribuiçãoPorUnidade × quantidade` NÃO reproduz
+ * `contributionTotalSnapshot` casa por casa, porque as duas grandezas fecham
+ * em fronteiras diferentes — doze casas e quatro. É esperado, e o teste o
+ * afirma para que não volte como defeito.
+ * ============================================================================
+ */
+
+/** `1000 ÷ 300` — o caso de acceptance do PREC-E-01. */
+const DIZIMA_1000_POR_300 = "3.333333333333";
+
+describe("PREC-MIG-E — custo industrial por unidade congelado em 12 casas", () => {
+  it("a cadeia inteira carrega o MESMO número: faixa, rascunho, envio e coluna", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    /*
+     * Faixa de 300 unidades sobre um custo de material que não divide redondo:
+     * o custo por unidade da faixa sai com casa significativa muito além da
+     * sexta, que é onde a coluna antiga cortava.
+     */
+    const cadeia = await cadeiaDePrecificacao(app, projeto.id, {
+      tierQuantity: "300",
+      materialUnitCost: "3.14159265",
+    });
+    const daFaixa = cadeia.ativa.tiers[0].industrialCostPerUnit as string;
+    expect(daFaixa.split(".")[1]).toHaveLength(12);
+
+    const orcamento = await criarOrcamento(app, projeto.id);
+    const vinculo = await app.inject({
+      method: "POST",
+      url: `/quote-lines/${orcamento.lineId}/apply-pricing`,
+      payload: { pricingTierId: faixaDe(cadeia.ativa).id },
+    });
+    expect(vinculo.statusCode, vinculo.body).toBe(200);
+
+    // Rascunho: a proveniência é lida da faixa VIVA.
+    const rascunho = (
+      await app.inject({ method: "GET", url: `/quote-versions/${orcamento.id}` })
+    ).json();
+    expect(rascunho.lines[0].pricing.frozen).toBe(false);
+    expect(rascunho.lines[0].pricing.industrialCostPerUnit).toBe(daFaixa);
+
+    const enviado = await app.inject({
+      method: "POST",
+      url: `/quote-versions/${orcamento.id}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+    expect(enviado.statusCode, enviado.body).toBe(200);
+
+    // Congelado: a COLUNA guarda o mesmo número, sem o corte da sétima casa.
+    const linha = await getPrisma().quoteLine.findUniqueOrThrow({
+      where: { id: orcamento.lineId },
+    });
+    expect(linha.industrialCostPerUnitSnapshot!.equals(decimal(daFaixa))).toBe(true);
+    expect(linha.industrialCostPerUnitSnapshot!.decimalPlaces()).toBeLessThanOrEqual(12);
+
+    // E o DTO congelado devolve as mesmas doze casas.
+    const depois = (
+      await app.inject({ method: "GET", url: `/quote-versions/${orcamento.id}` })
+    ).json();
+    expect(depois.lines[0].pricing.frozen).toBe(true);
+    expect(depois.lines[0].pricing.industrialCostPerUnit).toBe(daFaixa);
+    expect(typeof depois.lines[0].pricing.industrialCostPerUnit).toBe("string");
+
+    await app.close();
+  });
+
+  it.each([
+    ["o caso 1000/300", DIZIMA_1000_POR_300, DIZIMA_1000_POR_300],
+    ["histórico de 6 casas atravessa intacto", "3.333333", "3.333333000000"],
+    ["8 casas", "3.33333333", "3.333333330000"],
+    ["zero técnico continua zero", "0", "0.000000000000"],
+  ])("a coluna congelada guarda e a API serve: %s", async (_nome, gravado, servido) => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    const cadeia = await cadeiaDePrecificacao(app, projeto.id, { tierQuantity: "300" });
+    const orcamento = await criarOrcamento(app, projeto.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${orcamento.lineId}/apply-pricing`,
+      payload: { pricingTierId: faixaDe(cadeia.ativa).id },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/quote-versions/${orcamento.id}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+
+    /*
+     * Escrita direta DE PROPÓSITO: a cadeia real está provada acima, com o
+     * motor. Aqui o alvo é a coluna e a serialização, com um valor escolhido
+     * casa a casa. `3.333333` é o valor histórico — uma proposta enviada antes
+     * da migration continua valendo exatamente isso, sem casa reconstruída.
+     */
+    await getPrisma().quoteLine.update({
+      where: { id: orcamento.lineId },
+      data: { industrialCostPerUnitSnapshot: decimal(gravado) },
+    });
+
+    const relida = (
+      await app.inject({ method: "GET", url: `/quote-versions/${orcamento.id}` })
+    ).json();
+    expect(relida.lines[0].pricing.industrialCostPerUnit).toBe(servido);
+
+    await app.close();
+  });
+
+  it("null continua null — proposta sem faixa não ganha custo zero", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    const cadeia = await cadeiaDePrecificacao(app, projeto.id, { tierQuantity: "300" });
+    const orcamento = await criarOrcamento(app, projeto.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${orcamento.lineId}/apply-pricing`,
+      payload: { pricingTierId: faixaDe(cadeia.ativa).id },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/quote-versions/${orcamento.id}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+
+    await getPrisma().quoteLine.update({
+      where: { id: orcamento.lineId },
+      data: { industrialCostPerUnitSnapshot: null },
+    });
+
+    const relida = (
+      await app.inject({ method: "GET", url: `/quote-versions/${orcamento.id}` })
+    ).json();
+    expect(relida.lines[0].pricing.industrialCostPerUnit).toBeNull();
+
+    const linha = await getPrisma().quoteLine.findUniqueOrThrow({
+      where: { id: orcamento.lineId },
+    });
+    expect(linha.industrialCostPerUnitSnapshot).toBeNull();
+
+    await app.close();
+  });
+});
+
+describe("PREC-MIG-E — o TOTAL técnico fecha em 4 casas, no domínio", () => {
+  it("os seis totais da faixa cabem em 4 casas depois da ativação", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    // Cenário de dízima: o motor produz totais com muito mais de 4 casas.
+    const { ativa } = await cadeiaDePrecificacao(app, projeto.id, {
+      ...CENARIO_DIZIMA,
+      tierQuantity: "300",
+    });
+
+    const gravada = await getPrisma().pricingTier.findUniqueOrThrow({
+      where: { id: ativa.tiers[0].id },
+    });
+
+    /*
+     * A escala permanece `DECIMAL(14,4)` por decisão do PO — mas quem decide o
+     * corte passa a ser o domínio. Se o fechamento sumisse, o valor chegaria
+     * ao banco com 40 dígitos e o `update` cortaria por conta própria: o teste
+     * não veria diferença no resultado, e é por isso que a prova de que a
+     * fronteira é explícita mora em `lib/technical-total.test.ts`, sobre a
+     * função. Aqui se prova o CONTRATO: nada além de quatro casas persiste.
+     */
+    for (const campo of [
+      "costTotalSnapshot",
+      "costPer1000Snapshot",
+      "knownSubtotalSnapshot",
+      "commissionTotalSnapshot",
+      "grossRevenueSnapshot",
+      "contributionTotalSnapshot",
+    ] as const) {
+      const valor = gravada[campo];
+      if (valor === null) continue;
+      expect(valor.decimalPlaces(), `${campo} deveria caber em 4 casas`).toBeLessThanOrEqual(4);
+    }
+
+    // E o custo POR UNIDADE, na mesma linha, continua com doze — §62.
+    expect(gravada.costPerUnitSnapshot!.decimalPlaces()).toBeLessThanOrEqual(12);
+    expect((ativa.tiers[0].industrialCostPerUnit as string).split(".")[1]).toHaveLength(12);
+
+    await app.close();
+  });
+
+  it("o DTO de dinheiro continua em 2 casas — armazenamento não é exibição", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    const { ativa } = await cadeiaDePrecificacao(app, projeto.id, {
+      ...CENARIO_DIZIMA,
+      tierQuantity: "300",
+    });
+    const faixa = ativa.tiers[0];
+
+    // A coluna guarda quatro casas; o DTO serve duas, e isso é regra (§57).
+    // Ampliar a saída só porque o banco guarda mais seria trocar de defeito.
+    for (const campo of [
+      "industrialCostTotal",
+      "costPer1000",
+      "knownSubtotal",
+      "commissionTotal",
+      "grossRevenue",
+      "contributionTotal",
+    ] as const) {
+      const valor = faixa[campo] as string | null;
+      if (valor === null) continue;
+      expect(valor.split(".")[1], `${campo} deveria sair com 2 casas`).toHaveLength(2);
+    }
+
+    await app.close();
+  });
+
+  it("F-2: o custo por unidade não sai de dividir o total PERSISTIDO", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    const { calculo } = await cadeiaDePrecificacao(app, projeto.id, {
+      materialUnitCost: "3.14159265",
+    });
+
+    const gravado = await getPrisma().industrialCostCalculation.findUniqueOrThrow({
+      where: { id: calculo.id },
+    });
+    if (!gravado.costPerUnit || !gravado.totalIndustrialCost) {
+      await app.close();
+      return;
+    }
+
+    /*
+     * `costPerUnit` é calculado no motor a partir do total em PRECISÃO CHEIA e
+     * fechado em doze casas (§62). A coluna `totalIndustrialCost` guarda o
+     * total já fechado em centavos pelo motor — `DECIMAL(14,4)` recebendo duas
+     * casas. Dividir a coluna pela quantidade de referência devolve um número
+     * PRÓXIMO, não idêntico.
+     *
+     * Isso é §64, e é intencional: total fecha, operando não. O teste existe
+     * para que a diferença seja lida como decisão e não perseguida como
+     * defeito na próxima auditoria.
+     */
+    const recalculado = gravado.totalIndustrialCost.dividedBy(gravado.referenceOutputQuantity);
+    const persistido = gravado.costPerUnit;
+
+    // Próximos dentro do que o fechamento do total permite: meio centavo
+    // dividido pela quantidade de referência.
+    const tolerancia = decimal("0.005").dividedBy(gravado.referenceOutputQuantity);
+    expect(recalculado.minus(persistido).abs().lessThanOrEqualTo(tolerancia)).toBe(true);
+
+    // E o total persistido cabe em centavos, enquanto o por unidade tem doze.
+    expect(gravado.totalIndustrialCost.decimalPlaces()).toBeLessThanOrEqual(4);
+    expect(persistido.decimalPlaces()).toBeLessThanOrEqual(12);
+
+    await app.close();
+  });
+
+  it("F-3: por unidade × quantidade NÃO reproduz o total, e isso é esperado", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    const { ativa } = await cadeiaDePrecificacao(app, projeto.id, {
+      ...CENARIO_DIZIMA,
+      tierQuantity: "300",
+    });
+    const gravada = await getPrisma().pricingTier.findUniqueOrThrow({
+      where: { id: ativa.tiers[0].id },
+    });
+
+    /*
+     * As duas grandezas fecham em fronteiras diferentes: contribuição POR
+     * UNIDADE em doze casas (§62), contribuição TOTAL em quatro (§63). Logo o
+     * produto do primeiro pela quantidade não reproduz o segundo casa por
+     * casa — ele o reproduz DENTRO da precisão do total, que é o que importa.
+     *
+     * Este teste existe para que a assimetria seja lida como decisão e não
+     * "corrigida" por engano na próxima capability.
+     */
+    const porUnidade = gravada.contributionPerUnitSnapshot!;
+    const total = gravada.contributionTotalSnapshot!;
+    const recalculado = porUnidade.times(gravada.quantity);
+
+    // Igual dentro da precisão do total — a diferença cabe em meia unidade da
+    // última casa que o total guarda.
+    const tolerancia = decimal("0.00005").times(gravada.quantity);
+    expect(recalculado.minus(total).abs().lessThanOrEqualTo(tolerancia)).toBe(true);
+
+    // E o total é o que a coluna guarda: quatro casas, não doze.
+    expect(total.decimalPlaces()).toBeLessThanOrEqual(4);
+    expect(porUnidade.decimalPlaces()).toBeLessThanOrEqual(12);
+
+    await app.close();
+  });
+});

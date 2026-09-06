@@ -162,8 +162,8 @@ precificação no PREC-MIG-B.
 | SupplierItemOffer.unitPrice | UNIT_COST (ALREADY_DELIVERED) | 20,8 | oferta de fornecedor, lida como custo pelo seletor | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
 | PurchaseOrderLine.unitPrice | UNIT_PRICE_OPERATIONAL | 14,4 | preço da OC | decidido pelo PO | **20,8** | **Sim — PREC-MIG-P (ENTREGUE)** |
 | **QuoteLine.unitPrice** | UNIT_PRICE_CONTRACTUAL_EDITABLE | 14,4 | preço da linha do orçamento | **NEEDS_PO_DECISION** | manter 14,4 até decidir | **Não — PREC-P-05** |
-| CustomerOrderLine.agreedUnitPrice | UNIT_PRICE_CONTRACTUAL_SNAPSHOT | 14,4 | preço acordado — contratual | DOCUMENTAL, ver §6 | manter 14,4 | Não |
-| BillingLine.agreedUnitPrice / unitPrice | UNIT_PRICE_CONTRACTUAL_SNAPSHOT / _EDITABLE | 14,4 | acordado congelado / faturado com override | DOCUMENTAL, ver §6 | manter 14,4 | Não |
+| CustomerOrderLine.agreedUnitPrice | UNIT_PRICE_CONTRACTUAL_SNAPSHOT | 14,4 | preço acordado — contratual | DOCUMENTAL, ver §6 | manter 14,4 — **CONFIRMADO pelo PO** | Não |
+| BillingLine.agreedUnitPrice / unitPrice | UNIT_PRICE_CONTRACTUAL_SNAPSHOT / _EDITABLE | 14,4 | acordado congelado / faturado com override | DOCUMENTAL, ver §6 | manter 14,4 — **CONFIRMADO pelo PO** | Não |
 | PricingTier.manualUnitPrice | UNIT_PRICE_TECHNICAL | 14,6 | preço manual da faixa | **NEEDS_PO_DECISION** | 20,8 | **Não — PREC-P-02** |
 | PricingTier.selectedPriceSnapshot | UNIT_PRICE_TECHNICAL (snapshot) | 14,6 | preço congelado na ativação | **NEEDS_PO_DECISION** | 20,8 | **Não — PREC-P-03** |
 | PricingTier.suggestedPriceSnapshot | UNIT_PRICE_DERIVED | 14,6 | saída do motor de precificação | **NEEDS_PO_DECISION** | 20,8 | **Não — PREC-P-03** |
@@ -1007,29 +1007,34 @@ PREC-MIG-D.
 
 ### 12.3 PREC-MIG-E — classificação semântica das 16 colunas (2026-09-06)
 
-Leitura de código, **sem migration**. Cada campo foi classificado pelo PAPEL do
+**APROVADA E ENTREGUE pelo PO em 2026-09-06.** Uma migration —
+`20260925093007_numeric_precision_quote_industrial_cost_24_12`, uma coluna — e
+quinze MANTER, com a categoria **TECHNICAL_TOTAL** formalizada em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §63 e os achados F-2 e F-3 virando §64.
+
+A classificação abaixo é o registro do que embasou a decisão. Cada campo foi classificado pelo PAPEL do
 valor: de onde ele nasce, quem o consome, se entra em soma, se entra em
 multiplicação ou divisão, se é snapshot, se é histórico. Nenhuma escala foi
 escolhida por "é dinheiro" nem por "é técnico".
 
 | Model.field | tipo atual | categoria final proposta | tipo proposto | motivo | risco | consumidores | migration? |
 |---|---|---|---|---|---|---|---|
-| **QuoteLine.industrialCostPerUnitSnapshot** | 18,6 | **TECHNICAL_RESULT** | **24,12** | custo industrial POR UNIDADE, derivado por divisão; cópia de `PricingTier.costPerUnitSnapshot`, que já é `24,12` | **ALTO** — o congelamento copia 12 casas para uma coluna de 6, e o PostgreSQL corta a 7ª | proveniência do Orçamento (congelada), R-20 | **SIM — proposto** |
-| PricingTier.costTotalSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 | soma `direto + overhead` da faixa; total econômico lido, nunca operando | MÉDIO — banco é a 1ª camada de arredondamento (corta a 5ª casa) | só o DTO da faixa, via `money()` = 2 casas | NÃO |
-| PricingTier.costPer1000Snapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 | `costPerUnit × 1000`; leitura de referência comercial | MÉDIO — idem | só o DTO da faixa, 2 casas | NÃO |
-| PricingTier.knownSubtotalSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 | soma dos subtotais conhecidos; existe para dizer o que o custo NÃO sabe | MÉDIO — idem | só o DTO da faixa, 2 casas | NÃO |
-| PricingTier.commissionTotalSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 | `grossRevenue × comissão%` | MÉDIO — idem | só o DTO da faixa, 2 casas | NÃO |
-| PricingTier.grossRevenueSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 | `preço selecionado × quantidade da faixa` | MÉDIO — idem | só o DTO da faixa, 2 casas | NÃO |
-| PricingTier.contributionTotalSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 | `contribuição por unidade × quantidade` | MÉDIO — idem, e assimetria nova com o `24,12` do PREC-MIG-D | só o DTO da faixa, 2 casas | NÃO |
-| IndustrialCostCalculation.directIndustrialCost | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 | soma dos diretos; **o motor já fecha em 2 casas** (`money()`) antes de gravar | BAIXO — coluna nunca é lida de volta | **nenhum** — o DTO vem do `result` JSON | NÃO |
-| IndustrialCostCalculation.overheadCost | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 | overhead somado + percentuais sobre o direto; já fechado em 2 casas | BAIXO — coluna nunca é lida de volta | **nenhum** | NÃO |
-| IndustrialCostCalculation.totalIndustrialCost | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 | `direto + overhead`, já fechado em 2 casas | BAIXO na coluna; ver achado F-2 | resumo do CALC, `toFixed(2)` | NÃO |
-| IndustrialCostCalculation.knownSubtotal | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 | `diretoConhecido + overhead`, já fechado em 2 casas | BAIXO | resumo do CALC, `toFixed(2)` | NÃO |
-| IndustrialCostCalculation.costPer1000 | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 | `costPerUnit × 1000`, já fechado em 2 casas | BAIXO | resumo do CALC, `toFixed(2)` | NÃO |
-| ProductionOrderCostSnapshot.actualMaterialCostKnown | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 | soma do material realmente consumido; já fechado em 2 casas | BAIXO — coluna nunca é lida | **nenhum** — o DTO vem do `breakdown` JSON | NÃO |
-| ProductionOrderCostSnapshot.standardAppliedCostKnown | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 | soma do padrão aplicado; já fechado em 2 casas | BAIXO | **nenhum** | NÃO |
-| ProductionOrderCostSnapshot.knownSubtotal | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 | `material + padrão`; já fechado em 2 casas | BAIXO | **nenhum** | NÃO |
-| ProductionOrderCostSnapshot.totalIndustrialCost | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 | igual ao `knownSubtotal` quando completo; já fechado em 2 casas | BAIXO | **nenhum** | NÃO |
+| **QuoteLine.industrialCostPerUnitSnapshot** | 18,6 | **TECHNICAL_RESULT** | **24,12** | custo industrial POR UNIDADE, derivado por divisão; cópia de `PricingTier.costPerUnitSnapshot`, que já é `24,12` | **ALTO** — o congelamento copiava 12 casas para uma coluna de 6, e o PostgreSQL cortava a 7ª | proveniência do Orçamento (congelada), R-20 | **SIM — ENTREGUE (PREC-E-01)** |
+| PricingTier.costTotalSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 — **CONFIRMADO pelo PO** | soma `direto + overhead` da faixa; total econômico lido, nunca operando | MÉDIO — banco é a 1ª camada de arredondamento (corta a 5ª casa) | só o DTO da faixa, via `money()` = 2 casas | NÃO |
+| PricingTier.costPer1000Snapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 — **CONFIRMADO pelo PO** | `costPerUnit × 1000`; leitura de referência comercial | MÉDIO — idem | só o DTO da faixa, 2 casas | NÃO |
+| PricingTier.knownSubtotalSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 — **CONFIRMADO pelo PO** | soma dos subtotais conhecidos; existe para dizer o que o custo NÃO sabe | MÉDIO — idem | só o DTO da faixa, 2 casas | NÃO |
+| PricingTier.commissionTotalSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 — **CONFIRMADO pelo PO** | `grossRevenue × comissão%` | MÉDIO — idem | só o DTO da faixa, 2 casas | NÃO |
+| PricingTier.grossRevenueSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 — **CONFIRMADO pelo PO** | `preço selecionado × quantidade da faixa` | MÉDIO — idem | só o DTO da faixa, 2 casas | NÃO |
+| PricingTier.contributionTotalSnapshot | 14,4 | TECHNICAL_TOTAL exibido | manter 14,4 — **CONFIRMADO pelo PO** | `contribuição por unidade × quantidade` | MÉDIO — idem, e assimetria nova com o `24,12` do PREC-MIG-D | só o DTO da faixa, 2 casas | NÃO |
+| IndustrialCostCalculation.directIndustrialCost | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 — **CONFIRMADO pelo PO** | soma dos diretos; **o motor já fecha em 2 casas** (`money()`) antes de gravar | BAIXO — coluna nunca é lida de volta | **nenhum** — o DTO vem do `result` JSON | NÃO |
+| IndustrialCostCalculation.overheadCost | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 — **CONFIRMADO pelo PO** | overhead somado + percentuais sobre o direto; já fechado em 2 casas | BAIXO — coluna nunca é lida de volta | **nenhum** | NÃO |
+| IndustrialCostCalculation.totalIndustrialCost | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 — **CONFIRMADO pelo PO** | `direto + overhead`, já fechado em 2 casas | BAIXO na coluna; ver achado F-2 | resumo do CALC, `toFixed(2)` | NÃO |
+| IndustrialCostCalculation.knownSubtotal | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 — **CONFIRMADO pelo PO** | `diretoConhecido + overhead`, já fechado em 2 casas | BAIXO | resumo do CALC, `toFixed(2)` | NÃO |
+| IndustrialCostCalculation.costPer1000 | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 — **CONFIRMADO pelo PO** | `costPerUnit × 1000`, já fechado em 2 casas | BAIXO | resumo do CALC, `toFixed(2)` | NÃO |
+| ProductionOrderCostSnapshot.actualMaterialCostKnown | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 — **CONFIRMADO pelo PO** | soma do material realmente consumido; já fechado em 2 casas | BAIXO — coluna nunca é lida | **nenhum** — o DTO vem do `breakdown` JSON | NÃO |
+| ProductionOrderCostSnapshot.standardAppliedCostKnown | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 — **CONFIRMADO pelo PO** | soma do padrão aplicado; já fechado em 2 casas | BAIXO | **nenhum** | NÃO |
+| ProductionOrderCostSnapshot.knownSubtotal | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 — **CONFIRMADO pelo PO** | `material + padrão`; já fechado em 2 casas | BAIXO | **nenhum** | NÃO |
+| ProductionOrderCostSnapshot.totalIndustrialCost | 14,4 | TECHNICAL_TOTAL fechado | manter 14,4 — **CONFIRMADO pelo PO** | igual ao `knownSubtotal` quando completo; já fechado em 2 casas | BAIXO | **nenhum** | NÃO |
 
 Snapshot: **todos os 16 são snapshot**. Histórico: **todos os 16 são
 históricos** — congelados na ativação da precificação, no cálculo de custo
@@ -1082,8 +1087,13 @@ PREC-MIG-A.
   os cenários de teste usam custos que dividem redondo — não porque o domínio o
   impeça.
 
-Alvo proposto: `DECIMAL(24,12)`, com o congelamento passando por
-`fecharResultadoTecnicoPersistido`. Uma coluna, uma migration.
+Alvo: `DECIMAL(24,12)`, com o congelamento passando por
+`fecharResultadoTecnicoPersistido`. Uma coluna, uma migration. **ENTREGUE.**
+
+Provado contra banco existente com histórico real: sete valores congelados
+comparados antes e depois num clone descartável do dump pré-migration, zero
+divergência matemática, só zeros à direita (`1.001000` → `1.001000000000`), NULL
+preservado (50 de 57 linhas).
 
 #### F-2 — o total persistido não reproduz o custo por unidade persistido
 
@@ -1093,7 +1103,9 @@ partir do `totalIndustrialCost` **em memória**, com precisão cheia; a coluna
 recalcular `costPerUnit` a partir das colunas obterá um número diferente do
 gravado, a partir da terceira casa. Isso é correto por §57 — total fecha,
 operando não —, mas hoje não está escrito em lugar nenhum. Vale nota no
-documento e teste de trava, **não migration**.
+documento e teste de trava, **não migration**. **Virou
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §64 em 2026-09-06**, com teste em
+`pricing-technical-precision.test.ts`.
 
 #### F-3 — assimetria nova entre por unidade e total, no `PricingTier`
 
@@ -1102,7 +1114,9 @@ Depois do PREC-MIG-D, `contributionPerUnitSnapshot` guarda doze casas e
 `contribuiçãoPorUnidade × quantidade ≠ contribuiçãoTotal` além da quarta casa.
 É a mesma regra de §57 e de §61 — o total fecha, o operando não —, e a
 diferença é intencional. Precisa ser **declarada** para não voltar como defeito
-na próxima auditoria.
+na próxima auditoria. **Virou §64 junto com F-2**, com o limite que a regra
+precisava: a assimetria vive DENTRO da fronteira, e divergência **visível**
+entre duas telas para a mesma grandeza comercial continua sendo defeito.
 
 ---
 
@@ -1117,9 +1131,10 @@ Aberto, **medido** e fora do grupo D:
 | Ponto | O que corta | Por quê fica |
 |---|---|---|
 | `industrial-cost-calculation/calculation.service.ts`, `unitMoney` | custo unitário de material, de coluna `DECIMAL(20,8)`, servido em 6 casas | família UNIT_COST — PREC-SER-01, fora do D |
-| `projects/quote-pricing.service.ts:168` e `reports/cost-reports.service.ts:273` | `QuoteLine.industrialCostPerUnitSnapshot` em 6 casas | **correto para a coluna `18,6`**; muda junto com PREC-MIG-E |
+| ~~`projects/quote-pricing.service.ts` e `reports/cost-reports.service.ts`~~ | ~~`QuoteLine.industrialCostPerUnitSnapshot` em 6 casas~~ | **FECHADO no PREC-MIG-E** — a coluna virou `24,12` e os dois pontos passaram a servir doze |
 
-`PREC-SER-01` fica portanto **PARCIAL**, não resolvido.
+`PREC-SER-01` fica portanto **PARCIAL** — **um** ponto restante, o custo
+unitário de material, fora de toda a cadeia da precificação.
 
 ---
 
