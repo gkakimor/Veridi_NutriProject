@@ -19,6 +19,7 @@ import type {
 import { PRICING_POLICY_TEMPLATE_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { precoUnitario } from "../../lib/decimal-serialization.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { createPricingTier, createPricingVersion, getPricingVersion } from "../pricing/pricing.service.js";
@@ -450,7 +451,10 @@ export async function previewPricingPolicy(
       targetContributionMarginPercent: margem ? margem.toString() : null,
       commissionPercent: tier.commissionPercent.toString(),
       costPerUnit: perUnit ? perUnit.toFixed(6) : null,
-      suggestedUnitPrice: sugerido ? sugerido.toFixed(6) : null,
+      // Preço TÉCNICO da prévia — oito casas, o mesmo que a faixa guardará
+      // quando a política for aplicada. Cortar aqui mostraria um preço que a
+      // aplicação não produz.
+      suggestedUnitPrice: sugerido ? precoUnitario(sugerido) : null,
       costQuality: calculation.quality,
       warning: aviso,
     });

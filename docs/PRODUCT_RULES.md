@@ -3664,11 +3664,13 @@ unitário, a quantidade, o custo, o CMV ou os fatores que o produziram.
 Decisão de Product Ownership de 2026-09-05, derivada da auditoria. É a
 referência para toda coluna numérica nova e para o widening futuro. **Aplicada
 ao schema em QUANTITY, FACTOR, TECHNICAL_RESULT persistido (PREC-MIG-A),
-UNIT_COST (PREC-MIG-B), PURITY / OVERAGE (PREC-MIG-C) e o UNIT_PRICE
-operacional da Ordem de Compra (PREC-MIG-P / PREC-P-01).** O restante pertence
-às capabilities PREC-MIG-D e E e ao residual do P — o UNIT_PRICE técnico da
-precificação, que segue em `14,6` aguardando decisão do PO (PREC-P-02 a
-PREC-P-05).
+UNIT_COST (PREC-MIG-B), PURITY / OVERAGE (PREC-MIG-C), o UNIT_PRICE
+operacional da Ordem de Compra (PREC-MIG-P / PREC-P-01) e o UNIT_PRICE técnico
+da precificação (PREC-P-TECH: `PricingTier.manualUnitPrice`,
+`.suggestedPriceSnapshot`, `.selectedPriceSnapshot` e
+`QuoteLine.pricingSelectedUnitPriceSnapshot`).** O restante pertence às
+capabilities PREC-MIG-D e E — comissão e contribuição por unidade seguem em
+`14,6` como TECHNICAL_RESULT.
 
 | Categoria | Tipo aprovado |
 |---|---|
@@ -3685,7 +3687,11 @@ PREC-P-05).
 
 **UNIT_PRICE contratual não é ampliado automaticamente.** Snapshot histórico de
 acordo comercial não sofre widening por decisão técnica: o valor que está no
-documento assinado é o valor do documento.
+documento assinado é o valor do documento. Decisão de Product Ownership de
+2026-09-06, na aprovação do PREC-P-TECH: `QuoteLine.unitPrice`,
+`CustomerOrderLine.agreedUnitPrice` e os dois preços de `BillingLine`
+**permanecem em `DECIMAL(14,4)`** — quatro casas são a precisão do documento
+comercial, e ampliá-las seria decisão comercial, não de precisão.
 
 **MARKUP e percentual comercial não são ampliados sem necessidade
 demonstrada.** Quatro casas decidem margem e comissão; mais casas não mudam
@@ -3711,6 +3717,12 @@ pureza segue `0 < x <= 100` e overage segue `>= 0`. Ampliar uma coluna nunca
 amplia um limite de domínio, e nenhuma migration de precisão altera unidade ou
 semântica — `98` continua significando 98%, jamais 0,98.
 
+**A recusa vale nos dois sentidos.** O teto não é só do campo técnico: preço
+COMERCIAL acima de quatro casas também responde HTTP 400, em vez de ser aceito
+e cortado pelo PostgreSQL. Vale para a linha do Orçamento, o preço faturado e o
+override de faturamento. Um teto que existe só do lado preciso deixa o defeito
+inteiro do lado do documento.
+
 ## §59 — Uma configuração canônica de Decimal
 
 Decisão de Product Ownership de 2026-09-05.
@@ -3734,3 +3746,62 @@ para trás.
 **Ordem obrigatória.** A elevação da precisão vem antes ou junto do primeiro
 widening de coluna. Ampliar a coluna sem ampliar o motor cria coluna que o
 sistema não consegue preencher.
+
+## §60 — Preço técnico e preço comercial são dois números, e a passagem entre eles é deliberada
+
+Decisão de Product Ownership de 2026-09-06, na aprovação do PREC-P-TECH.
+
+A precificação produz um **preço técnico**. O documento comercial congela um
+**preço comercial**. Não são o mesmo número com formatação diferente: são dois
+valores, com precisões diferentes, guardados lado a lado de propósito.
+
+| | Guarda | Responde a pergunta | Onde vive |
+|---|---|---|---|
+| Preço técnico | 8 casas, `DECIMAL(20,8)` | "qual preço a faixa de precificação produziu?" | `PricingTier.manualUnitPrice`, `.suggestedPriceSnapshot`, `.selectedPriceSnapshot`, `QuoteLine.pricingSelectedUnitPriceSnapshot` |
+| Preço comercial | 4 casas, `DECIMAL(14,4)` | "qual preço unitário foi congelado no documento?" | `QuoteLine.unitPrice`, `CustomerOrderLine.agreedUnitPrice`, `BillingLine.agreedUnitPrice` e `.unitPrice` |
+
+Uma linha de Orçamento com `pricingSelectedUnitPriceSnapshot = 4,05318764` e
+`unitPrice = 4,0532` **está correta**. O primeiro é proveniência técnica —
+interna, nunca apresentada ao cliente como preço contratado e nunca operando de
+total. O segundo é o preço do acordo.
+
+**A redução de 8 para 4 casas é FECHAMENTO, não perda.** Um acordo tem a
+precisão do documento que o registra. Por isso ela não pode acontecer:
+
+- por scale de coluna do PostgreSQL;
+- por formatter de apresentação;
+- por conversão para `Number`;
+- incidentalmente, num `.toFixed()` que ninguém sabe explicar.
+
+Ela acontece **em código de domínio, num ponto nomeado** — hoje
+`fecharPrecoUnitarioComercial`, no vínculo da faixa com a linha do Orçamento. Um
+corte de precisão que não se distingue de um defeito acaba "corrigido" por
+engano na capability seguinte; um corte com nome e teste é uma decisão que se lê.
+
+**As duas fronteiras declaram `ROUND_HALF_UP`.** Decisão de Product Ownership de
+2026-09-06, no hardening do PREC-P-TECH:
+
+- **A.** preço técnico persistido em 8 casas — `ROUND_HALF_UP` **explícito**;
+- **B.** preço técnico → preço comercial em 4 casas — `ROUND_HALF_UP`
+  **explícito**;
+- **C.** nenhuma das duas depende do rounding **default** do `decimal.js`. A
+  configuração canônica continua mexendo só em `precision` (§59); o modo viaja
+  na chamada.
+
+Metade para cima, afastando-se do zero — o mesmo critério que o PostgreSQL
+aplica ao gravar, e nunca banker's rounding. Confiar no default bastava enquanto
+o arredondamento era detalhe de biblioteca; virou regra de domínio, e regra de
+domínio não pode mudar porque outra capability trocou uma configuração global de
+carona. O comportamento publicado é o mesmo: o que deixa de existir é a
+dependência.
+
+**Depois do fechamento, ninguém volta.** Pedido e Faturamento recebem cópias
+exatas do preço comercial — nenhum elo adiante recupera as oito casas, e
+nenhum deles arredonda de novo. O total do documento continua saindo de §55,
+sobre o preço comercial: `subtotal = Σ round(quantidade × preço unitário, 2)`.
+
+**Antes do fechamento, ninguém corta.** Toda a cadeia técnica — motor, faixa,
+ativação, congelamento da proveniência, CMV, relatórios e prévias — trafega e
+serializa as oito casas. Cortar mais cedo destruiria a informação que a
+migration existe para guardar; cortar mais tarde faria o documento comercial
+prometer precisão que ele não tem.

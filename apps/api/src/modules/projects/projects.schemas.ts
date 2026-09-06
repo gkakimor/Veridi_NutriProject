@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
-import { optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
+import { CASAS_PRECO_COMERCIAL, optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
 
 const statusEnum = z.enum(["WAITING", "SAMPLE", "APPROVED", "CANCELLED", "STAND_BY"]);
 const cancelReasonEnum = z.enum(["PRICE", "COMPETITOR", "PROJECT_CHANGED", "NOT_MET", "OTHER"]);
@@ -13,6 +13,21 @@ const cancelReasonEnum = z.enum(["PRICE", "COMPETITOR", "PROJECT_CHANGED", "NOT_
  * inválido (não pode ser negativo)", mensagem que descreve outro defeito.
  */
 const optionalDecimal = optionalDecimalStringSchema();
+
+/**
+ * Preço unitário COMERCIAL da linha do Orçamento — até quatro casas.
+ *
+ * `PRODUCT_RULES.md` §58 e §60. `QuoteLine.unitPrice` é `DECIMAL(14,4)` por
+ * decisão comercial: é o preço do documento, e o valor do documento assinado é
+ * o valor do documento. Antes deste teto, digitar `4,05318` fazia o PostgreSQL
+ * gravar `4,0532` sem dizer que trocou o número — exatamente o defeito que a
+ * fundação numérica existe para eliminar, do lado comercial.
+ *
+ * A precificação técnica continua com oito casas; o fechamento para quatro é
+ * feito pelo domínio, em `fecharPrecoUnitarioComercial`, não pelo operador nem
+ * pelo banco.
+ */
+const precoComercial = optionalDecimalStringSchema({ maxDecimals: CASAS_PRECO_COMERCIAL });
 
 const optionalPositiveInt = z
   .union([z.string(), z.number(), z.null()])
@@ -126,7 +141,7 @@ export const updateQuoteLineSchema = z.object({
   quotedQuantity: optionalDecimal,
   uomCode: optionalNullableText(20),
   // Preço `null` = ainda não precificado; `0` é preço zero explícito.
-  unitPrice: optionalDecimal,
+  unitPrice: precoComercial,
 });
 
 /**

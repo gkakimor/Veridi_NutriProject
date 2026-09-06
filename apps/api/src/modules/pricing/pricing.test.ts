@@ -638,8 +638,8 @@ describe("Precificação — preço, margem e contribuição", () => {
     // Energia direta: 0,001 kWh/un × R$ 1 = R$ 0,001 por unidade.
     expect(tier.industrialCostPerUnit).toBe("10.001000");
     // P = C / (1 − 0,30 − 0,05) = 10,001 / 0,65.
-    expect(tier.suggestedUnitPrice).toBe("15.386154");
-    expect(tier.selectedUnitPrice).toBe("15.386154");
+    expect(tier.suggestedUnitPrice).toBe("15.38615385");
+    expect(tier.selectedUnitPrice).toBe("15.38615385");
 
     await app.close();
   });
@@ -879,7 +879,7 @@ describe("Precificação — custo incompleto", () => {
       })
     ).json();
     const manualTier = tierOf(manual, "1000");
-    expect(manualTier.selectedUnitPrice).toBe("20.000000");
+    expect(manualTier.selectedUnitPrice).toBe("20.00000000");
     expect(manualTier.commissionPerUnit).toBe("1.000000");
     // Subtotal conhecido não vira custo total: sem custo, sem margem.
     expect(manualTier.contributionPerUnit).toBeNull();
@@ -958,7 +958,7 @@ describe("Precificação — ativação e histórico", () => {
       })
     ).json();
     const tier = tierOf(activated, "1000");
-    expect(tier.selectedUnitPrice).toBe("15.386154");
+    expect(tier.selectedUnitPrice).toBe("15.38615385");
     expect(tier.industrialCostPerUnit).toBe("10.001000");
 
     // Depois de ativa: imutável.
@@ -982,7 +982,7 @@ describe("Precificação — ativação e histórico", () => {
       await app.inject({ method: "GET", url: `/pricing-versions/${pricing.id}` })
     ).json();
     expect(tierOf(reread, "1000").industrialCostPerUnit).toBe("10.001000");
-    expect(tierOf(reread, "1000").selectedUnitPrice).toBe("15.386154");
+    expect(tierOf(reread, "1000").selectedUnitPrice).toBe("15.38615385");
 
     await app.close();
   });
@@ -1240,7 +1240,7 @@ describe("R-19 — precificação por produto", () => {
     ).json();
     expect(activeRows.rows).toHaveLength(2);
     expect(activeRows.rows.map((row: { quantity: string }) => row.quantity)).toEqual(["500", "1000"]);
-    expect(activeRows.rows[0].unitPrice).toBe("25.000000");
+    expect(activeRows.rows[0].unitPrice).toBe("25.00000000");
     expect(activeRows.rows[0].costPerUnit).toBe("10.001000000000");
 
     // Custo novo depois da ativação não muda o relatório.
@@ -1300,7 +1300,7 @@ describe("Prévia da faixa — antes de gravar", () => {
     expect(preview.statusCode, preview.body).toBe(200);
     const previa = preview.json();
     expect(previa.industrialCostPerUnit).toBe("10.001000");
-    expect(previa.suggestedUnitPrice).toBe("15.386154");
+    expect(previa.suggestedUnitPrice).toBe("15.38615385");
     expect(previa.id).toBeUndefined();
 
     // Nada gravado: a versão continua sem faixa, no banco e na leitura.

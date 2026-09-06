@@ -1,5 +1,27 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
+import {
+  CASAS_PRECO_COMERCIAL,
+  casasDecimais,
+  mensagemCasasPrecoComercial,
+} from "../../lib/decimal-schema.js";
+
+/**
+ * Teto de casas do preco COMERCIAL — `PRODUCT_RULES.md` §58 e §60.
+ *
+ * `BillingLine.unitPrice` e `DECIMAL(14,4)`, e continua sendo: preco faturado
+ * e valor de documento. Antes deste teto, `4,05318` era aceito e o PostgreSQL
+ * gravava `4,0532` sem dizer que trocou o numero — a pessoa via um preco na
+ * tela e outro na nota.
+ *
+ * Fica aqui, e nao em `decimalStringSchema`, porque estes dois campos tem
+ * forma propria: string vazia LIMPA o valor, zero e bonificacao legitima e
+ * distinta de ausente. A mensagem, essa, e a mesma do resto do sistema.
+ */
+function precisaoComercialOk(value: string | undefined): boolean {
+  if (value === undefined || value === "") return true;
+  return casasDecimais(value) <= CASAS_PRECO_COMERCIAL;
+}
 
 export const createBillingSchema = z.object({
   shipmentId: z.string().trim().min(1, "Expedição é obrigatória"),
@@ -18,7 +40,8 @@ const updateBillingLineSchema = z.object({
     .transform((value) => (value === undefined ? undefined : String(value).trim()))
     .refine((value) => value === undefined || value === "" || /^\d+(\.\d+)?$/.test(value), {
       message: "Preço unitário inválido (não pode ser negativo)",
-    }),
+    })
+    .refine(precisaoComercialOk, { message: mensagemCasasPrecoComercial() }),
 });
 
 export const updateBillingSchema = z.object({
@@ -38,7 +61,8 @@ export const overrideBillingPriceSchema = z.object({
     .transform((value) => String(value).trim())
     .refine((value) => /^\d+(\.\d+)?$/.test(value), {
       message: "Preço unitário inválido (não pode ser negativo)",
-    }),
+    })
+    .refine(precisaoComercialOk, { message: mensagemCasasPrecoComercial() }),
   reason: z.string().trim().min(3, "Motivo da alteração é obrigatório").max(500),
 });
 

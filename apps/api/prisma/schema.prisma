@@ -914,7 +914,12 @@ model QuoteLine {
   pricingVersionNumberSnapshot     Int?
   pricingTierQuantitySnapshot      Decimal?               @db.Decimal(24, 12)
   pricingTierUomSnapshot           String?
-  pricingSelectedUnitPriceSnapshot Decimal?               @db.Decimal(14, 6)
+  /// PROVENIENCIA TECNICA em `DECIMAL(20,8)` — §58, PREC-P-04. Responde "qual
+  /// preco tecnico da faixa originou esta linha?"; `unitPrice` acima responde
+  /// "qual preco unitario comercial foi congelado no documento?". Sao numeros
+  /// diferentes de proposito: este nao aparece ao cliente e nao entra em
+  /// nenhum total comercial.
+  pricingSelectedUnitPriceSnapshot Decimal?               @db.Decimal(20, 8)
   costCalculationCodeSnapshot      String?
   costReferenceDateSnapshot        DateTime?
   costStructureLabelSnapshot       String?
@@ -1388,7 +1393,11 @@ model PricingTier {
   /// Sobre o preco BRUTO de venda. Zero e zero explicito.
   commissionPercent               Decimal  @default(0) @db.Decimal(7, 4)
   /// Preco informado; null = nao informado (nunca confundido com zero).
-  manualUnitPrice                 Decimal? @db.Decimal(14, 6)
+  /// PRECO TECNICO em `DECIMAL(20,8)` — PRODUCT_RULES.md §58, PREC-P-02. Um
+  /// produto cotado por dose tem preco de faixa legitimamente longo; a
+  /// fronteira da API recusa acima de oito casas em vez de deixar o
+  /// PostgreSQL arredondar a nona em silencio.
+  manualUnitPrice                 Decimal? @db.Decimal(20, 8)
 
   notes     String?
   sortOrder Int     @default(0)
@@ -1403,8 +1412,13 @@ model PricingTier {
   batchCountSnapshot          Int?
   targetMarginSnapshot        Decimal?               @db.Decimal(7, 4)
   commissionPercentSnapshot   Decimal?               @db.Decimal(7, 4)
-  suggestedPriceSnapshot      Decimal?               @db.Decimal(14, 6)
-  selectedPriceSnapshot       Decimal?               @db.Decimal(14, 6)
+  /// PRECO TECNICO em `DECIMAL(20,8)` — §58, PREC-P-03. Saida do motor
+  /// (`P = C / (1 - margem - comissao)`), congelada na ativacao. Nao e acordo
+  /// comercial: o fechamento em quatro casas acontece adiante, na linha do
+  /// Orcamento, e de forma explicita.
+  suggestedPriceSnapshot      Decimal?               @db.Decimal(20, 8)
+  selectedPriceSnapshot       Decimal?               @db.Decimal(20, 8)
+  /// TECHNICAL_RESULT ainda em `14,6` — PREC-MIG-D, decisao propria.
   commissionPerUnitSnapshot   Decimal?               @db.Decimal(14, 6)
   commissionTotalSnapshot     Decimal?               @db.Decimal(14, 4)
   grossRevenueSnapshot        Decimal?               @db.Decimal(14, 4)

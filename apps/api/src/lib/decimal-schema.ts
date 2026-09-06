@@ -71,6 +71,22 @@ export const CASAS_CUSTO_UNITARIO = 8;
 export const CASAS_PRECO_UNITARIO = 8;
 
 /**
+ * Casas decimais de um preço unitário COMERCIAL — o scale de `DECIMAL(14,4)`.
+ *
+ * `PRODUCT_RULES.md` §58 e §60. É o outro lado da fronteira: o preço que o
+ * documento congela — `QuoteLine.unitPrice`, `CustomerOrderLine.agreedUnitPrice`
+ * e os dois preços de `BillingLine` — vale quatro casas, por decisão comercial,
+ * e não sobe junto com o técnico.
+ *
+ * A constante existe porque a fronteira precisa ser afirmada nos DOIS sentidos.
+ * Quem escreve preço comercial acima de quatro casas recebe 400: antes disto o
+ * operador digitava `4,05318` numa linha de Orçamento e o PostgreSQL gravava
+ * `4,0532` sem dizer que trocou o número — o mesmo defeito que a fundação
+ * numérica existe para eliminar, só que do lado comercial.
+ */
+export const CASAS_PRECO_COMERCIAL = 4;
+
+/**
  * Casas decimais de um percentual técnico — o scale de `DECIMAL(9,6)`.
  *
  * `PRODUCT_RULES.md` §58, PREC-MIG-C. Vale para pureza e overage. Antes da
@@ -171,4 +187,16 @@ export function mensagemCasasCustoUnitario(): string {
  */
 export function mensagemCasasPercentualTecnico(): string {
   return mensagemCasas(CASAS_PERCENTUAL_TECNICO);
+}
+
+/**
+ * Mesma mensagem para preço COMERCIAL acima do scale — PREC-P-TECH.
+ *
+ * O preço faturado tem forma própria (string vazia limpa o valor, zero é
+ * bonificação legítima e distinta de ausente) e não cabe em
+ * `decimalStringSchema`. O texto do limite, porém, é o mesmo do resto do
+ * sistema: duas redações da mesma regra divergem com o tempo.
+ */
+export function mensagemCasasPrecoComercial(): string {
+  return mensagemCasas(CASAS_PRECO_COMERCIAL);
 }

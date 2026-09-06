@@ -22,6 +22,8 @@ import { getIndustrialCostCalculation } from "../industrial-cost-calculation/sna
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { precoUnitario } from "../../lib/decimal-serialization.js";
+import { fecharPrecoTecnicoPersistido } from "../../lib/technical-price.js";
 import { isUomCompatible } from "../items/uom.js";
 import {
   CalculationProductMismatchError,
@@ -90,8 +92,33 @@ function money(value: Prisma.Decimal): string {
   return value.toFixed(2);
 }
 
+/**
+ * Resultado técnico da precificação ainda em `DECIMAL(14,6)`.
+ *
+ * Continua servindo comissão e contribuição por unidade, e o custo unitário da
+ * faixa. Deixou de servir PREÇO: preço técnico é `DECIMAL(20,8)` desde o
+ * PREC-P-TECH, e uma função só para as duas escalas voltaria a cortar em seis
+ * casas o que a coluna passou a guardar em oito. As colunas que sobraram aqui
+ * pertencem ao PREC-MIG-D e sobem quando o PO decidir.
+ */
 function unitMoney(value: Prisma.Decimal): string {
   return value.toFixed(6);
+}
+
+/**
+ * Preço TÉCNICO da precificação — `DECIMAL(20,8)`, PREC-P-02 e PREC-P-03.
+ *
+ * Preço de faixa informado à mão, preço sugerido pelo motor e preço
+ * selecionado. Oito casas porque é o scale da coluna: o DTO devolve o que o
+ * banco guarda, nem mais nem menos (`PRODUCT_RULES.md` §57). Servir seis seria
+ * a migration desfeita na saída.
+ *
+ * **Não é preço comercial.** O preço do documento — linha de Orçamento, Pedido
+ * e Faturamento — continua em quatro casas, e o fechamento entre os dois é
+ * explícito: `fecharPrecoUnitarioComercial`, §60.
+ */
+function precoTecnico(value: Prisma.Decimal): string {
+  return precoUnitario(value);
 }
 
 function percent(value: Prisma.Decimal): string {
@@ -220,7 +247,7 @@ function toTierDTO(entry: ComputedTier, frozen: boolean): PricingTierDTO {
         ? percent(tier.targetMarginSnapshot)
         : null,
       commissionPercent: percent(tier.commissionPercentSnapshot ?? tier.commissionPercent),
-      manualUnitPrice: tier.manualUnitPrice ? unitMoney(tier.manualUnitPrice) : null,
+      manualUnitPrice: tier.manualUnitPrice ? precoTecnico(tier.manualUnitPrice) : null,
       notes: tier.notes,
       sortOrder: tier.sortOrder,
 
@@ -231,8 +258,10 @@ function toTierDTO(entry: ComputedTier, frozen: boolean): PricingTierDTO {
       costQuality: (tier.costQualitySnapshot ?? "NO_COST") as IndustrialCostQuality,
       batchCount: String(tier.batchCountSnapshot ?? 1),
 
-      suggestedUnitPrice: tier.suggestedPriceSnapshot ? unitMoney(tier.suggestedPriceSnapshot) : null,
-      selectedUnitPrice: tier.selectedPriceSnapshot ? unitMoney(tier.selectedPriceSnapshot) : null,
+      suggestedUnitPrice: tier.suggestedPriceSnapshot
+        ? precoTecnico(tier.suggestedPriceSnapshot)
+        : null,
+      selectedUnitPrice: tier.selectedPriceSnapshot ? precoTecnico(tier.selectedPriceSnapshot) : null,
       commissionPerUnit: tier.commissionPerUnitSnapshot
         ? unitMoney(tier.commissionPerUnitSnapshot)
         : null,
@@ -272,7 +301,7 @@ function liveTierDTO(
       ? percent(tier.targetContributionMarginPercent)
       : null,
     commissionPercent: percent(tier.commissionPercent),
-    manualUnitPrice: tier.manualUnitPrice ? unitMoney(tier.manualUnitPrice) : null,
+    manualUnitPrice: tier.manualUnitPrice ? precoTecnico(tier.manualUnitPrice) : null,
 
     industrialCostTotal: cost.total ? money(cost.total) : null,
     industrialCostPerUnit: cost.perUnit ? unitMoney(cost.perUnit) : null,
@@ -281,8 +310,8 @@ function liveTierDTO(
     costQuality: cost.quality,
     batchCount: cost.batchCount.toString(),
 
-    suggestedUnitPrice: price.suggestedUnitPrice ? unitMoney(price.suggestedUnitPrice) : null,
-    selectedUnitPrice: price.selectedUnitPrice ? unitMoney(price.selectedUnitPrice) : null,
+    suggestedUnitPrice: price.suggestedUnitPrice ? precoTecnico(price.suggestedUnitPrice) : null,
+    selectedUnitPrice: price.selectedUnitPrice ? precoTecnico(price.selectedUnitPrice) : null,
     commissionPerUnit: price.commissionPerUnit ? unitMoney(price.commissionPerUnit) : null,
     commissionTotal: price.commissionTotal ? money(price.commissionTotal) : null,
     grossRevenue: price.grossRevenue ? money(price.grossRevenue) : null,
@@ -513,10 +542,14 @@ export async function getPricingRebasePreview(id: string): Promise<PricingRebase
       uomCode: tier.uomCode,
       costPerUnitFrom: de && de.perUnit ? de.perUnit.toFixed(4) : null,
       costPerUnitTo: para && para.perUnit ? para.perUnit.toFixed(4) : null,
+      // Prévia de REBASE: o preço aqui é técnico, não é o preço de um
+      // documento. Servi-lo em quatro casas cortaria o valor da faixa antes
+      // da fronteira comercial — §60 — e a comparação diria que dois preços
+      // técnicos diferentes são iguais.
       unitPrice: tier.selectedPriceSnapshot
-        ? tier.selectedPriceSnapshot.toFixed(4)
+        ? precoTecnico(tier.selectedPriceSnapshot)
         : tier.manualUnitPrice
-          ? tier.manualUnitPrice.toFixed(4)
+          ? precoTecnico(tier.manualUnitPrice)
           : null,
     });
   }
@@ -1002,8 +1035,25 @@ export async function activatePricingVersion(
           batchCountSnapshot: entry.cost.batchCount.toNumber(),
           targetMarginSnapshot: entry.tier.targetContributionMarginPercent,
           commissionPercentSnapshot: entry.tier.commissionPercent,
-          suggestedPriceSnapshot: entry.price.suggestedUnitPrice,
-          selectedPriceSnapshot: entry.price.selectedUnitPrice,
+          /*
+           * FRONTEIRA DE PERSISTÊNCIA do preço técnico.
+           *
+           * O motor devolve `P = C ÷ (1 − margem − comissão)` em 40 dígitos —
+           * uma dízima cabe inteira ali. A coluna guarda oito casas, e até o
+           * PREC-P-TECH quem reduzia 40 para 6 era o PostgreSQL, sem
+           * `.toFixed()` no código e sem ninguém ter decidido. Agora a redução
+           * é do domínio: o banco recebe um valor que já cabe.
+           *
+           * Não é arredondamento novo — é o mesmo `ROUND_HALF_UP` que o
+           * PostgreSQL aplicava, agora escrito onde dá para ler e testar, e
+           * declarado na chamada em vez de herdado do default do `decimal.js`.
+           */
+          suggestedPriceSnapshot: entry.price.suggestedUnitPrice
+            ? fecharPrecoTecnicoPersistido(entry.price.suggestedUnitPrice)
+            : null,
+          selectedPriceSnapshot: entry.price.selectedUnitPrice
+            ? fecharPrecoTecnicoPersistido(entry.price.selectedUnitPrice)
+            : null,
           commissionPerUnitSnapshot: entry.price.commissionPerUnit,
           commissionTotalSnapshot: entry.price.commissionTotal,
           grossRevenueSnapshot: entry.price.grossRevenue,

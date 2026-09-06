@@ -9,7 +9,8 @@ import { getPrisma } from "../../db/prisma.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
 import { getActivePricingForProduct } from "../pricing/pricing.service.js";
 import { QuoteNotDraftError, QuoteNotFoundError } from "./projects.errors.js";
-import { resultadoTecnico } from "../../lib/decimal-serialization.js";
+import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
+import { fecharPrecoUnitarioComercial } from "../../lib/commercial-price.js";
 
 /**
  * Ligação entre orçamento e precificação.
@@ -151,8 +152,10 @@ export function pricingProvenanceForLine(
         ? quote.pricingTierQuantitySnapshot.toString()
         : null,
       tierUomCode: quote.pricingTierUomSnapshot,
+      // Proveniência TÉCNICA em oito casas — PREC-P-04. Não é o preço do
+      // documento: `QuoteLine.unitPrice` responde por esse, em quatro casas.
       selectedUnitPrice: quote.pricingSelectedUnitPriceSnapshot
-        ? quote.pricingSelectedUnitPriceSnapshot.toFixed(6)
+        ? precoUnitario(quote.pricingSelectedUnitPriceSnapshot)
         : null,
       calculationCode: quote.costCalculationCodeSnapshot,
       costReferenceDate: quote.costReferenceDateSnapshot
@@ -190,7 +193,9 @@ export function pricingProvenanceForLine(
     pricingTierId: tier.id,
     tierQuantity: tier.quantity.toString(),
     tierUomCode: tier.uomCode,
-    selectedUnitPrice: tier.selectedPriceSnapshot ? tier.selectedPriceSnapshot.toFixed(6) : null,
+    selectedUnitPrice: tier.selectedPriceSnapshot
+      ? precoUnitario(tier.selectedPriceSnapshot)
+      : null,
     calculationCode: version.calculationCodeSnapshot,
     costReferenceDate: version.costReferenceDateSnapshot.toISOString(),
     costStructureLabel: version.industrialCostVersionLabelSnapshot,
@@ -286,7 +291,16 @@ export async function applyQuoteLinePricing(
       pricingTierId: tier.id,
       quotedQuantity: tier.quantity,
       uomCode: tier.uomCode,
-      unitPrice: new Prisma.Decimal(tier.selectedPriceSnapshot.toFixed(4)),
+      /*
+       * A FRONTEIRA técnica → comercial, e o único lugar onde ela acontece.
+       *
+       * A faixa guarda `4.05318764`; a linha do Orçamento congela `4.0532`.
+       * A redução não é perda: é o fechamento do acordo, e `PRODUCT_RULES.md`
+       * §60 diz que ele é deliberado, em código de domínio, nunca por scale de
+       * coluna nem por formatter. A proveniência técnica sobrevive inteira ao
+       * lado, em `pricingSelectedUnitPriceSnapshot`.
+       */
+      unitPrice: fecharPrecoUnitarioComercial(tier.selectedPriceSnapshot),
     },
   });
 
