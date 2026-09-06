@@ -688,7 +688,7 @@ describe("a ativação congela o preço do motor sem deixar o banco arredondar",
     await app.close();
   });
 
-  it("comissão e contribuição por unidade continuam em 6 casas — PREC-MIG-D", async () => {
+  it("comissão e contribuição por unidade sobem para 12 casas — PREC-MIG-D", async () => {
     const app = buildTestApp("ADMIN");
     await app.ready();
     const projeto = await criarProjeto(app);
@@ -699,13 +699,13 @@ describe("a ativação congela o preço do motor sem deixar o banco arredondar",
     });
 
     /*
-     * A perda REGISTRADA, não corrigida. Os dois campos saem do mesmo motor
-     * que o preço, mas a categoria é TECHNICAL_RESULT e a decisão é do
-     * PREC-MIG-D. Ampliar por vizinhança de bloco seria escopo sem PO — este
-     * teste existe para que a diferença seja deliberada e visível.
+     * Era a perda REGISTRADA, não corrigida, do PREC-P-TECH: os dois campos
+     * saem do mesmo motor que o preço, mas a categoria é TECHNICAL_RESULT e a
+     * decisão era do PREC-MIG-D. O PO decidiu, e o teste virou de lado — o que
+     * ele guarda agora é que a decisão foi de fato aplicada nos dois campos.
      */
-    expect((ativa.tiers[0].commissionPerUnit as string).split(".")[1]).toHaveLength(6);
-    expect((ativa.tiers[0].contributionPerUnit as string).split(".")[1]).toHaveLength(6);
+    expect((ativa.tiers[0].commissionPerUnit as string).split(".")[1]).toHaveLength(12);
+    expect((ativa.tiers[0].contributionPerUnit as string).split(".")[1]).toHaveLength(12);
 
     await app.close();
   });
@@ -980,6 +980,354 @@ describe("a fronteira técnica → comercial", () => {
       where: { id: orcamento.lineId },
     });
     expect(linha.unitPrice!.equals(decimal("4.0531"))).toBe(true);
+
+    await app.close();
+  });
+});
+
+
+/*
+ * ============================================================================
+ * PREC-MIG-D — RESULTADO TÉCNICO da precificação em `DECIMAL(24,12)`.
+ *
+ * A capability seguinte, sobre a mesma cadeia. O PREC-P-TECH levou os quatro
+ * PREÇOS para `DECIMAL(20,8)` e deixou três colunas para trás de propósito:
+ * `PricingTier.commissionPerUnitSnapshot`, `.contributionPerUnitSnapshot` e
+ * `QuoteLine.contributionPerUnitSnapshot`. Elas saem do mesmo motor e congelam
+ * no mesmo bloco, mas a categoria é outra — resultado derivado por unidade,
+ * não preço acordado — e o alvo é `DECIMAL(24,12)`.
+ *
+ * O que este bloco prova:
+ *
+ * - o valor histórico de seis casas atravessa a migration intacto;
+ * - resultado novo com 8 e com 12 casas sobrevive à gravação e à leitura;
+ * - resultado interno com MAIS de 12 casas é fechado explicitamente em 12,
+ *   pelo domínio, com `ROUND_HALF_UP` declarado — o PostgreSQL não é a
+ *   primeira camada a decidir;
+ * - a cadeia faixa → proveniência congelada no ENVIO carrega as doze casas;
+ * - preço comercial, total de linha, subtotal e total do documento NÃO mudam:
+ *   resultado técnico não é preço documental (#15 e #18 intocados);
+ * - `null` continua `null`, zero continua zero, e contribuição NEGATIVA
+ *   continua sendo persistida como informação, não como erro.
+ *
+ * O fechamento em si — escala, modo e independência do `Decimal.rounding`
+ * global — é provado em `lib/technical-result.test.ts`, sobre a função.
+ * ============================================================================
+ */
+
+/** Um resultado técnico com as doze casas ocupadas — o caso de acceptance. */
+const RESULTADO_12_CASAS = "1.234567890123";
+
+/** Cenário que faz o motor produzir dízima: nada aqui divide redondo. */
+const CENARIO_DIZIMA = {
+  priceMode: "TARGET_MARGIN",
+  materialUnitCost: "3.14159265",
+  targetContributionMarginPercent: "33.3333",
+  commissionPercent: "7.7",
+} as const;
+
+describe("PREC-MIG-D — resultado técnico da faixa preserva 12 casas", () => {
+  it("o motor de 40 dígitos produz mais de 6 casas, e as 12 chegam ao DTO", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    /*
+     * Cenário REAL, pelo motor: custo de material com oito casas, margem alvo
+     * e comissão que não dividem redondo. `P = C ÷ (1 − margem − comissão)`
+     * produz dízima, e comissão e contribuição herdam as casas dela. Nada de
+     * resultado final hardcodado — o que se afirma é o que o motor deu.
+     */
+    const { ativa } = await cadeiaDePrecificacao(app, projeto.id, { ...CENARIO_DIZIMA });
+
+    const faixa = ativa.tiers[0];
+    const comissao = faixa.commissionPerUnit as string;
+    const contribuicao = faixa.contributionPerUnit as string;
+
+    // A prova de que o teste mede alguma coisa: os dois valores TÊM casa
+    // significativa depois da sexta. Antes do PREC-MIG-D isto era cortado.
+    expect(comissao.split(".")[1]).toHaveLength(12);
+    expect(contribuicao.split(".")[1]).toHaveLength(12);
+    expect(comissao.slice(-6).replace(/0+$/, "")).not.toBe("");
+    expect(contribuicao.slice(-6).replace(/0+$/, "")).not.toBe("");
+
+    // E o que a API serve é o que o banco guarda, casa por casa.
+    const gravada = await getPrisma().pricingTier.findUniqueOrThrow({
+      where: { id: faixa.id },
+    });
+    expect(gravada.commissionPerUnitSnapshot!.equals(decimal(comissao))).toBe(true);
+    expect(gravada.contributionPerUnitSnapshot!.equals(decimal(contribuicao))).toBe(true);
+
+    // Resultado técnico viaja como STRING no JSON, nunca como number: um
+    // `1.234567890123` em JSON number perderia casas no parse do cliente.
+    expect(typeof faixa.commissionPerUnit).toBe("string");
+    expect(typeof faixa.contributionPerUnit).toBe("string");
+
+    await app.close();
+  });
+
+  it("a PRÉVIA mostra o que a ativação vai gravar — a fronteira é uma só", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    // Rascunho: a prévia só existe antes de ativar.
+    const { precificacao } = await cadeiaDePrecificacao(app, projeto.id, {
+      ...CENARIO_DIZIMA,
+      ativar: false,
+    });
+
+    const previa = (
+      await app.inject({
+        method: "POST",
+        url: `/pricing-versions/${precificacao.id}/tiers/preview`,
+        payload: {
+          quantity: "700",
+          priceMode: CENARIO_DIZIMA.priceMode,
+          targetContributionMarginPercent: CENARIO_DIZIMA.targetContributionMarginPercent,
+          commissionPercent: CENARIO_DIZIMA.commissionPercent,
+        },
+      })
+    ).json();
+    expect((previa.commissionPerUnit as string).split(".")[1]).toHaveLength(12);
+
+    const ativa = (
+      await app.inject({
+        method: "POST",
+        url: `/pricing-versions/${precificacao.id}/activate`,
+        payload: { confirmIncompleteCost: true },
+      })
+    ).json();
+
+    /*
+     * A faixa gravada tem quantidade 500 e a prévia pediu 700 — comissão e
+     * contribuição POR UNIDADE não dependem da quantidade (dependem do preço,
+     * da comissão e do custo unitário), então os dois números têm de bater.
+     *
+     * Se a prévia servisse o valor de 40 dígitos cortado pelo serializador e a
+     * gravação fechasse por outra regra, discordariam na última casa: a tela
+     * mostraria um número e o `UPDATE` gravaria outro.
+     */
+    expect(previa.commissionPerUnit).toBe(ativa.tiers[0].commissionPerUnit);
+    expect(previa.contributionPerUnit).toBe(ativa.tiers[0].contributionPerUnit);
+
+    await app.close();
+  });
+
+  it.each([
+    ["histórico de 6 casas atravessa intacto", "0.202659", "0.202659000000"],
+    ["8 casas", "0.20265933", "0.202659330000"],
+    ["12 casas", RESULTADO_12_CASAS, RESULTADO_12_CASAS],
+    ["zero técnico continua zero", "0", "0.000000000000"],
+    ["negativo — contribuição abaixo do custo", "-2.444444444444", "-2.444444444444"],
+  ])("a coluna guarda e a API serve: %s", async (_nome, gravado, servido) => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+    const { precificacao, ativa } = await cadeiaDePrecificacao(app, projeto.id);
+
+    /*
+     * Escrita direta DE PROPÓSITO. O caminho pela API está provado acima, com
+     * o motor; aqui o alvo é outro — a coluna e a serialização, com um valor
+     * escolhido casa a casa. `0.202659` é o valor histórico: uma faixa ativada
+     * antes da migration continua valendo exatamente isso.
+     */
+    await getPrisma().pricingTier.update({
+      where: { id: ativa.tiers[0].id },
+      data: {
+        commissionPerUnitSnapshot: decimal(gravado),
+        contributionPerUnitSnapshot: decimal(gravado),
+      },
+    });
+
+    const relida = (
+      await app.inject({ method: "GET", url: `/pricing-versions/${precificacao.id}` })
+    ).json();
+    expect(relida.tiers[0].commissionPerUnit).toBe(servido);
+    expect(relida.tiers[0].contributionPerUnit).toBe(servido);
+
+    await app.close();
+  });
+
+  it("null continua null — ausência de resultado nunca vira zero", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+    const { precificacao, ativa } = await cadeiaDePrecificacao(app, projeto.id);
+
+    await getPrisma().pricingTier.update({
+      where: { id: ativa.tiers[0].id },
+      data: { commissionPerUnitSnapshot: null, contributionPerUnitSnapshot: null },
+    });
+
+    // `null` significa "não é calculável"; `0` significaria "a contribuição é
+    // zero". A migration não pode ter trocado um pelo outro, e o DTO tampouco.
+    const relida = (
+      await app.inject({ method: "GET", url: `/pricing-versions/${precificacao.id}` })
+    ).json();
+    expect(relida.tiers[0].commissionPerUnit).toBeNull();
+    expect(relida.tiers[0].contributionPerUnit).toBeNull();
+
+    const gravada = await getPrisma().pricingTier.findUniqueOrThrow({
+      where: { id: ativa.tiers[0].id },
+    });
+    expect(gravada.commissionPerUnitSnapshot).toBeNull();
+    expect(gravada.contributionPerUnitSnapshot).toBeNull();
+
+    await app.close();
+  });
+
+  /*
+   * O `null` vindo do MOTOR — custo incompleto, sem escrita direta — já é
+   * coberto em `pricing.test.ts` ("não produz preço pela margem e não inventa
+   * margem no preço manual"): a comissão sai (só depende do preço) e a
+   * contribuição fica `null` (`MARGIN_UNAVAILABLE`). Repetir a montagem aqui
+   * duplicaria a cadeia inteira para reafirmar a mesma coisa.
+   */
+
+  it("contribuição NEGATIVA é persistida com 12 casas, e avisada", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    // Preço manual abaixo do custo industrial: contribuição negativa é
+    // informação comercial legítima, e a faixa de negócio não mudou com a
+    // precisão. O motor emite `NEGATIVE_CONTRIBUTION`.
+    const { ativa } = await cadeiaDePrecificacao(app, projeto.id, {
+      priceMode: "MANUAL_PRICE",
+      manualUnitPrice: "0.2",
+      materialUnitCost: "3.14159265",
+      commissionPercent: "7.7",
+    });
+
+    const faixa = ativa.tiers[0];
+    const contribuicao = faixa.contributionPerUnit as string;
+    expect(contribuicao.startsWith("-")).toBe(true);
+    expect(contribuicao.split(".")[1]).toHaveLength(12);
+
+    const gravada = await getPrisma().pricingTier.findUniqueOrThrow({ where: { id: faixa.id } });
+    expect(gravada.contributionPerUnitSnapshot!.isNegative()).toBe(true);
+    expect(gravada.contributionPerUnitSnapshot!.equals(decimal(contribuicao))).toBe(true);
+
+    await app.close();
+  });
+
+  it("resultado interno com MAIS de 12 casas fecha em 12, e não vira 400", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    /*
+     * A distinção que a capability exige: entrada de USUÁRIO acima do scale é
+     * recusada (o preço manual acima de 8 casas continua 400 — PREC-P-TECH);
+     * RESULTADO calculado acima de 12 casas é normal, e a fronteira o fecha.
+     *
+     * `P = C ÷ (1 − 0,333333 − 0,077)` é dízima: comissão e contribuição saem
+     * do motor com muito mais de 12 casas, e a ativação responde 200.
+     */
+    const { ativa } = await cadeiaDePrecificacao(app, projeto.id, { ...CENARIO_DIZIMA });
+    expect(ativa.status).toBe("ACTIVE");
+
+    const gravada = await getPrisma().pricingTier.findUniqueOrThrow({
+      where: { id: ativa.tiers[0].id },
+    });
+    // Fechado em doze — nem mais, nem cortado em seis pelo banco.
+    expect(gravada.commissionPerUnitSnapshot!.decimalPlaces()).toBeLessThanOrEqual(12);
+    expect(gravada.contributionPerUnitSnapshot!.decimalPlaces()).toBeLessThanOrEqual(12);
+    expect((ativa.tiers[0].commissionPerUnit as string).split(".")[1]).toHaveLength(12);
+
+    await app.close();
+  });
+});
+
+describe("PREC-MIG-D — o congelamento do Orçamento carrega as 12 casas", () => {
+  it("o ENVIO copia a contribuição da faixa sem reduzir para 6", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    const cadeia = await cadeiaDePrecificacao(app, projeto.id, { ...CENARIO_DIZIMA });
+    const orcamento = await criarOrcamento(app, projeto.id);
+    const vinculo = await app.inject({
+      method: "POST",
+      url: `/quote-lines/${orcamento.lineId}/apply-pricing`,
+      payload: { pricingTierId: faixaDe(cadeia.ativa).id },
+    });
+    expect(vinculo.statusCode, vinculo.body).toBe(200);
+
+    const daFaixa = cadeia.ativa.tiers[0].contributionPerUnit as string;
+    expect(daFaixa.split(".")[1]).toHaveLength(12);
+
+    // Rascunho: a proveniência é lida da faixa VIVA, já com doze casas.
+    const rascunho = (
+      await app.inject({ method: "GET", url: `/quote-versions/${orcamento.id}` })
+    ).json();
+    expect(rascunho.lines[0].pricing.frozen).toBe(false);
+    expect(rascunho.lines[0].pricing.contributionPerUnit).toBe(daFaixa);
+
+    const enviado = await app.inject({
+      method: "POST",
+      url: `/quote-versions/${orcamento.id}/send`,
+      payload: { confirmIncompleteCost: true },
+    });
+    expect(enviado.statusCode, enviado.body).toBe(200);
+
+    // Congelado: mesmo número, na coluna da linha e no DTO. O congelamento é
+    // cópia, não recálculo — e não perde casa no caminho.
+    const linha = await getPrisma().quoteLine.findUniqueOrThrow({
+      where: { id: orcamento.lineId },
+    });
+    expect(linha.contributionPerUnitSnapshot!.equals(decimal(daFaixa))).toBe(true);
+
+    const depois = (
+      await app.inject({ method: "GET", url: `/quote-versions/${orcamento.id}` })
+    ).json();
+    expect(depois.lines[0].pricing.frozen).toBe(true);
+    expect(depois.lines[0].pricing.contributionPerUnit).toBe(daFaixa);
+
+    await app.close();
+  });
+
+  it("mais precisão técnica NÃO move preço, linha, subtotal nem total", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const projeto = await criarProjeto(app);
+
+    // Preço manual conhecido: o documento tem de fechar no mesmo lugar de
+    // sempre, independentemente de quantas casas a contribuição passou a ter.
+    const cadeia = await cadeiaDePrecificacao(app, projeto.id, {
+      materialUnitCost: "3.14159265",
+      commissionPercent: "7.7",
+    });
+    const orcamento = await criarOrcamento(app, projeto.id);
+    await app.inject({
+      method: "POST",
+      url: `/quote-lines/${orcamento.lineId}/apply-pricing`,
+      payload: { pricingTierId: faixaDe(cadeia.ativa).id },
+    });
+
+    const detalhe = (
+      await app.inject({ method: "GET", url: `/quote-versions/${orcamento.id}` })
+    ).json();
+    const linhaDTO = detalhe.lines[0];
+
+    // Preço COMERCIAL: quatro casas, fechado de `4.05318764` — §60, intocado.
+    expect(linhaDTO.unitPrice).toBe(PRECO_COMERCIAL);
+
+    // Total do documento pela regra #15, sobre o preço comercial. Contribuição
+    // e comissão técnicas não entram no total: são leitura econômica.
+    const esperado = calcularTotaisOrcamento([
+      { quotedQuantity: linhaDTO.quotedQuantity, unitPrice: linhaDTO.unitPrice },
+    ]);
+    expect(linhaDTO.total).toBe(esperado.lineTotals[0]);
+    expect(detalhe.subtotal).toBe(esperado.subtotal);
+    expect((detalhe.subtotal as string).split(".")[1]).toHaveLength(2);
+
+    // E a linha gravada continua com o preço comercial em quatro casas.
+    const linha = await getPrisma().quoteLine.findUniqueOrThrow({
+      where: { id: orcamento.lineId },
+    });
+    expect(linha.unitPrice!.equals(decimal(PRECO_COMERCIAL))).toBe(true);
 
     await app.close();
   });

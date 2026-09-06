@@ -67,12 +67,17 @@ quatro casas** ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §60), e estendeu a recus
 de §58 ao lado comercial: preço de documento acima de 4 casas responde HTTP 400.
 Na aprovação o PO exigiu **um hardening antes do merge — PREC-ROUND-P01,
 RESOLVIDO**: `ROUND_HALF_UP` declarado nas duas fronteiras, sem depender do
-default do `decimal.js` (§60 A/B/C). #19 segue **ABERTO / PARCIAL**; PREC-MIG-D
-**ABERTO** — comissão e contribuição por unidade continuam em `14,6`.
+default do `decimal.js` (§60 A/B/C).
 **Reconciliação monetária da OC — #18, resolvida em 2026-09-06:** o rodapé
 passou a ser a soma das linhas impressas (`40,79`, não `40,78`), regra durável
 em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §61, sem migration e sem histórico
-recalculado. **Seguinte: PREC-MIG-D.**
+recalculado.
+**PREC-MIG-D RESOLVIDO em 2026-09-06** (PREC-D-01, D-02 e D-03): as três colunas
+`14,6` de resultado técnico em `DECIMAL(24,12)`, migration
+`20260925093006_numeric_precision_technical_results_24_12`, sem backfill, com a
+TERCEIRA fronteira de fechamento — 12 casas, `ROUND_HALF_UP` declarado — como
+regra durável ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §62). #19 segue
+**ABERTO / PARCIAL** enquanto o PREC-MIG-E não fechar. **Seguinte: PREC-MIG-E.**
 
 ---
 
@@ -80,8 +85,9 @@ recalculado. **Seguinte: PREC-MIG-D.**
 
 ### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — ABERTO / PARCIAL
 
-**PREC-MIG-A, B, C e P RESOLVIDOS; #19 segue ABERTO** enquanto PREC-MIG-D e E não
-fecharem. O defeito que originou o item está corrigido: as 43 colunas
+**PREC-MIG-A, B, C, P e D RESOLVIDOS; #19 segue ABERTO / PARCIAL** enquanto o
+PREC-MIG-E não fechar — 16 colunas de composição de custo, totais de
+precificação e tarifas continuam em `14,4` e `18,6`, sem alvo decidido. O defeito que originou o item está corrigido: as 43 colunas
 de quantidade e grandeza técnica inequívoca estão em `DECIMAL(24,12)`, e
 `0,000000048` persiste como `0,000000048000` em vez de `0,000000`. Provado
 contra o banco real em
@@ -379,8 +385,8 @@ Aprovada pelo PO em 2026-09-05 sobre
 [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §58; regra de configuração do motor em
 §59; separação armazenamento × apresentação em §57.
 
-**Fundações A, B, C e P entregues** (#20 + PREC-MIG-A/B/C, PREC-P-01 e
-PREC-P-TECH). Falta o residual de PREC-MIG-D, o PREC-MIG-E, PREC-SER-01 e
+**Fundações A, B, C, P e D entregues** (#20 + PREC-MIG-A/B/C, PREC-P-01,
+PREC-P-TECH e PREC-D-01/02/03). Faltam o PREC-MIG-E, o PREC-SER-01 e o
 PREC-FMT-01.
 
 ### Migrations de widening
@@ -390,8 +396,12 @@ PREC-FMT-01.
 | **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **RESOLVIDO** — 43 colunas (39 QUANTITY + 1 FACTOR + 3 TECHNICAL_RESULT), migration `20260925093001_numeric_precision_quantities_24_12` |
 | **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | **RESOLVIDO** — 3 colunas, migration `20260925093002_numeric_precision_unit_cost_20_8` |
 | **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **RESOLVIDO** — 7 colunas, migration `20260925093003_numeric_precision_purity_overage_9_6` |
-| **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL — próxima capability** — 3 campos já entregues no A, ver abaixo |
-| **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
+| **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **RESOLVIDO** — 3 campos entregues no A + 3 no D, migration `20260925093006_numeric_precision_technical_results_24_12`. `14,6` deixou de existir no schema |
+| **PREC-MIG-E** | Campos que ainda exigem decisão individual | **ABERTO — próxima capability candidata.** Inventário fechado no PREC-MIG-D: 15 colunas `14,4` (totais de precificação, composição de custo industrial e de CMV, tarifas) + `QuoteLine.industrialCostPerUnitSnapshot` em `18,6`. Ver §12 de [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) |
+| **PREC-D-01** | `PricingTier.commissionPerUnitSnapshot` `14,6` → `DECIMAL(24,12)` | **RESOLVIDO** — PREC-MIG-D |
+| **PREC-D-02** | `PricingTier.contributionPerUnitSnapshot` `14,6` → `DECIMAL(24,12)` | **RESOLVIDO** — PREC-MIG-D |
+| **PREC-D-03** | `QuoteLine.contributionPerUnitSnapshot` `14,6` → `DECIMAL(24,12)` | **RESOLVIDO** — PREC-MIG-D. Cópia congelada no ENVIO da proposta |
+| **PREC-ROUND-D01** | `ROUND_HALF_UP` explícito na fronteira de persistência do resultado técnico | **RESOLVIDO** — `lib/technical-result.ts`, regra em §62 |
 | **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **RESOLVIDO** — PREC-P-01 e PREC-P-TECH entregues; nenhum UNIT_PRICE pendente |
 | **PREC-P-01** | `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` | **RESOLVIDO** — 1 coluna, migration `20260925093004_numeric_precision_unit_price_20_8` |
 | **PREC-P-02** | `PricingTier.manualUnitPrice` → `DECIMAL(20,8)` | **RESOLVIDO** — PREC-P-TECH. Acima de 8 casas a API recusa, na criação e na edição da faixa |
@@ -489,10 +499,12 @@ O que a migration sozinha não resolveria veio junto:
 `pricingSelectedUnitPriceSnapshot = 4,05318764` e `unitPrice = 4,0532` está
 certa: são duas perguntas diferentes, e as duas têm resposta própria.
 
-**Perda registrada, não corrigida:** `PricingTier.commissionPerUnitSnapshot`,
-`.contributionPerUnitSnapshot` e `QuoteLine.contributionPerUnitSnapshot` seguem
-em `Decimal(14,6)` e continuam cortados pelo PostgreSQL na sétima casa. Saem do
-mesmo motor, mas a categoria é TECHNICAL_RESULT — **PREC-MIG-D**.
+**Perda registrada aqui, CORRIGIDA no PREC-MIG-D:**
+`PricingTier.commissionPerUnitSnapshot`, `.contributionPerUnitSnapshot` e
+`QuoteLine.contributionPerUnitSnapshot` ficaram em `Decimal(14,6)` até
+2026-09-06, cortadas pelo PostgreSQL na sétima casa. Saem do mesmo motor, mas a
+categoria é TECHNICAL_RESULT, e por isso o alvo foi `DECIMAL(24,12)` e não
+`20,8` — §62.
 
 A separação que a capability precisa respeitar: **preço unitário da OC** é
 grandeza técnica de alta precisão; **total monetário da linha e do documento**
@@ -533,32 +545,85 @@ precisão dos operandos.
 **Nenhum resultado ficou estrangulado.** O físico que a pureza produz é gravado
 em `ProductionOrderRequirement.requiredQuantity` e `.theoreticalQuantity`, ambos
 já em `DECIMAL(24,12)` desde o PREC-MIG-A, e o custo industrial por unidade em
-`IndustrialCostCalculation.costPerUnit`, também `24,12`. O residual do
-PREC-MIG-D (`14,4` e `14,6`) é composição de custo e de CMV — não recebe o
-resultado de pureza/overage, e por isso não limita o benefício desta capability.
+`IndustrialCostCalculation.costPerUnit`, também `24,12`. O residual que sobrou
+para o PREC-MIG-E (`14,4` e `18,6`) é composição de custo e de CMV — não recebe
+o resultado de pureza/overage, e por isso não limita o benefício desta
+capability.
 
-**PREC-MIG-D — o que já saiu e o que resta.** Três resultados técnicos que já
-estavam em `Decimal(18,6)` viajaram junto do PREC-MIG-A, porque o alvo deles é o
-mesmo `DECIMAL(24,12)` e separá-los criaria uma segunda migration sobre as
-mesmas tabelas:
+**PREC-MIG-D — ENTREGUE em 2026-09-06, em duas partes.** Três resultados
+técnicos que já estavam em `Decimal(18,6)` viajaram junto do PREC-MIG-A, porque
+o alvo deles é o mesmo `DECIMAL(24,12)` e separá-los criaria uma segunda
+migration sobre as mesmas tabelas:
 
 - `IndustrialCostCalculation.costPerUnit`
 - `PricingTier.costPerUnitSnapshot`
 - `ProductionOrderCostSnapshot.costPerProducedUnit`
 
-**Esses três estão ENTREGUES e não devem reaparecer numa migration futura.**
-O residual do PREC-MIG-D são os resultados técnicos ainda em `Decimal(14,4)` e
-`Decimal(14,6)` — composição do custo industrial, composição do CMV e os totais
-de snapshot da precificação —, que o inventário classifica em §3.1.
+**Esses três estão ENTREGUES no A e NÃO foram remigrados.** As três colunas
+`14,6` que o PREC-P-TECH deixou para trás de propósito subiram agora, migration
+`20260925093006_numeric_precision_technical_results_24_12`, sem backfill:
 
-**O PREC-P-TECH deixou as três colunas `14,6` restantes aqui, de propósito:**
-`PricingTier.commissionPerUnitSnapshot`, `.contributionPerUnitSnapshot` e
-`QuoteLine.contributionPerUnitSnapshot`. Elas saem do mesmo motor que o preço
-técnico e são congeladas no mesmo bloco, mas a **categoria é TECHNICAL_RESULT** e
-o alvo é outro — arrastá-las junto por vizinhança seria escopo sem decisão do PO.
-A perda continua: o PostgreSQL corta na sétima casa, e o teste
-`pricing-technical-precision.test.ts` trava esse comportamento para que a
-diferença fique visível em vez de esquecida.
+- `PricingTier.commissionPerUnitSnapshot` — `preço selecionado × comissão%`
+- `PricingTier.contributionPerUnitSnapshot` — `preço − comissão − custo`
+- `QuoteLine.contributionPerUnitSnapshot` — a mesma contribuição, congelada no
+  ENVIO da proposta; cópia da faixa através do DTO de proveniência, não
+  recálculo
+
+Medido contra o PostgreSQL antes de migrar: `'0.2026593333333333'::decimal(14,6)`
+devolvia `0.202659` e `::decimal(24,12)` devolve `0.202659333333`. **Seis casas.**
+Quem cortava era o banco, no `UPDATE` da ativação, sem `.toFixed()` no código.
+
+O que a migration sozinha não resolveria veio junto:
+
+- **a fronteira de persistência do resultado técnico virou regra durável** —
+  [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §62, a TERCEIRA fronteira depois das
+  duas de §60. `fecharResultadoTecnicoPersistido` (`lib/technical-result.ts`)
+  fecha em doze casas com `ROUND_HALF_UP` **declarado na chamada**;
+- **o banco deixou de ser a primeira camada de arredondamento** nos três pontos
+  de persistência: os dois da ativação (`pricing.service.ts`) e o congelamento
+  da proveniência (`quote-pricing.service.ts`);
+- **serialização técnica em 12 casas** — DTO da faixa, prévia da faixa,
+  proveniência do Orçamento, relatório de precificação, prévia de política de
+  preço e prévia de rebase. A prévia fecha pela MESMA fronteira da ativação, e
+  o teste exige que os dois números sejam iguais;
+- **a matriz perdeu a precisão `14,6`** — `numeric-precision-matrix.test.ts`
+  falha se ela reaparecer.
+
+**Precisão de armazenamento não virou precisão de tela.** A tabela de faixas
+continua mostrando `R$ 0,65` — `formatUnitCost`, apresentação (§57). Comissão e
+contribuição por unidade são resultado DERIVADO: ninguém as digita, e nenhum
+caminho da tela as devolve ao servidor. A ativação manda só as confirmações.
+
+**Nada comercial se moveu.** `QuoteLine.unitPrice` continua em `14,4`, o total
+da linha e o subtotal continuam saindo de §55 sobre o preço comercial, e #15 e
+#18 estão intocados. Resultado técnico é leitura econômica, nunca operando de
+total.
+
+**O residual foi para o PREC-MIG-E, não para o D.** O inventário do PREC-MIG-D
+classificou 107 colunas `Decimal` do schema e encontrou **três** TECHNICAL_RESULT
+residuais inequívocos — exatamente os três que o PO já tinha classificado.
+Ficaram de fora, como `NEEDS_PO_DECISION`:
+
+- **os seis `PricingTier.*Snapshot` de TOTAIS** (`costTotal`, `costPer1000`,
+  `knownSubtotal`, `commissionTotal`, `grossRevenue`, `contributionTotal`), em
+  `14,4`;
+- **`IndustrialCostCalculation.*`** (`directIndustrialCost`, `overheadCost`,
+  `totalIndustrialCost`, `knownSubtotal`, `costPer1000`) e
+  **`ProductionOrderCostSnapshot.*`** (`actualMaterialCostKnown`,
+  `standardAppliedCostKnown`, `knownSubtotal`, `totalIndustrialCost`), em `14,4`
+  — composição do custo industrial e do CMV;
+- **`QuoteLine.industrialCostPerUnitSnapshot`**, em `18,6` — **prioridade alta
+  no E**. É resultado técnico POR UNIDADE, e a sua origem
+  (`PricingTier.costPerUnitSnapshot`) já está em `24,12`: o congelamento copia
+  doze casas para uma coluna de seis. Mas o inventário o registra viajando com o
+  PREC-MIG-B, que fechou como UNIT_COST — alvo conflitante é decisão do PO, não
+  do implementador;
+- **as quatro `rateValue`** — categoria RATE: tarifa é entrada, não resultado.
+
+O motivo comum é o mesmo: a auditoria recomendou `20,8` para eles dentro de um
+PREC-MIG-B que o PO fechou como UNIT_COST, e o alvo ficou **órfão**. Escolher
+entre `20,8` e `24,12` é decisão de categoria, e o handoff do PREC-MIG-D proíbe
+usar D como balde de resto.
 
 Nenhuma dessas migrations faz backfill. Widening preserva o valor gravado e o
 reescreve com zeros à direita; casa que nunca foi persistida não se reconstrói.
@@ -579,7 +644,7 @@ em `18,6` falha o gate.
 
 | Item | Escopo | Status |
 |---|---|---|
-| **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | **ABERTO / PARCIAL A+B+C** — as três famílias já migradas foram auditadas e serializam por `.toString()`/`csvDecimal`, sem corte; o resto segue as dependências de D e P |
+| **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | **ABERTO / PARCIAL A+B+C+P+D** — a fatia do grupo D está fechada (faixa, prévia, proveniência, relatório de precificação, política de preço e rebase servem 12 casas). Continua ABERTO por dois pontos medidos no PREC-MIG-D, ambos fora do grupo: `calculation.service.ts` serve custo unitário de `DECIMAL(20,8)` em 6 casas (família B), e `quote-pricing.service.ts` / `cost-reports.service.ts` servem `QuoteLine.industrialCostPerUnitSnapshot` em 6 — correto para a coluna `18,6`, que aguarda PREC-MIG-E |
 | **PREC-SER-02** | Gravação de preço técnico de 6 casas em coluna de 4 quando **não** for snapshot contratual | **RESOLVIDO** — PREC-P-01 (`purchase-orders.service.ts`, `receiving.service.ts`) e PREC-P-TECH (`pricing.service.ts`, `quote-pricing.service.ts`, `cost-reports.service.ts`, `product-cmv.service.ts`, `pricing-policies.service.ts`). A família UNIT_PRICE inteira está coberta |
 | **PREC-FMT-01** | Eliminar `Number` nos formatters para grandeza técnica de alta precisão | APROVADO — obrigatório antes de qualquer preset acima de 6 casas |
 
@@ -794,8 +859,11 @@ permanece obrigatório no escopo atual.
     2026-09-06:** o total documental passou a ser `Σ round(quantidade × preço,
     2)`, com `ROUND_HALF_UP` declarado, uma conta só para todas as superfícies e
     o operando intocado. Sem migration, sem histórico recalculado, §61.
-12. **PRÓXIMA CAPABILITY: PREC-MIG-D** residual (comissão e contribuição por
-    unidade em `14,6`), depois PREC-SER-01, PREC-FMT-01 e PREC-MIG-E.
+12. **PREC-MIG-D, entregue em 2026-09-06:** as três colunas `14,6` de resultado
+    técnico em `DECIMAL(24,12)`, com a terceira fronteira de fechamento (12
+    casas, `ROUND_HALF_UP` declarado) como regra durável, §62. `14,6` saiu do
+    schema. **PRÓXIMA CAPABILITY: PREC-MIG-E** — 16 colunas sem alvo decidido —,
+    depois PREC-SER-01 e PREC-FMT-01.
 13. **Validação com a Veridi:** #7 + #11.
 14. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
 15. **Rodada técnica isolada:** #14 (Schema Integrity Audit).

@@ -29,8 +29,7 @@ const PRECISOES_DA_MATRIZ = new Map<string, string>([
   ["20,8", "UNIT_COST e UNIT_PRICE técnico/operacional"],
   ["9,6", "PURITY/OVERAGE"],
   // Ainda não migradas. Cada uma tem capability nomeada no BACKLOG, seção E.
-  ["14,4", "UNIT_PRICE contratual, RATE e composição de custo — §58 e PREC-MIG-D"],
-  ["14,6", "TECHNICAL_RESULT de comissão e contribuição por unidade — aguarda PREC-MIG-D"],
+  ["14,4", "UNIT_PRICE contratual, RATE e composição de custo — §58 e PREC-MIG-E"],
   ["18,6", "excluídas do PREC-MIG-A por decisão — ver lista abaixo"],
 ]);
 
@@ -168,18 +167,9 @@ describe("matriz de precisão numérica", () => {
     ]) {
       expect(porChave.get(chave), `${chave} é UNIT_PRICE técnico e deveria ser 20,8`).toBe("20,8");
     }
-    // Comissão e contribuição por unidade saem do MESMO motor e continuam em
-    // 14,6: a categoria é TECHNICAL_RESULT, e a decisão é do PREC-MIG-D.
-    // Arrastá-las junto por vizinhança de bloco seria ampliar escopo sem PO.
-    for (const chave of [
-      "PricingTier.commissionPerUnitSnapshot",
-      "PricingTier.contributionPerUnitSnapshot",
-      "QuoteLine.contributionPerUnitSnapshot",
-    ]) {
-      expect(porChave.get(chave), `${chave} é TECHNICAL_RESULT e pertence ao PREC-MIG-D`).toBe(
-        "14,6",
-      );
-    }
+    // Comissão e contribuição por unidade saem do MESMO motor e NÃO vieram
+    // junto: a categoria é TECHNICAL_RESULT, e o alvo é `24,12`. Elas subiram
+    // uma capability depois, no PREC-MIG-D — teste abaixo.
     // E o preço COMERCIAL fica onde está: §58 mantém o documento assinado na
     // precisão do documento, e PREC-P-05 fechou como MANTER.
     for (const chave of [
@@ -190,6 +180,41 @@ describe("matriz de precisão numérica", () => {
     ]) {
       expect(porChave.get(chave), `${chave} é UNIT_PRICE comercial e fica em 14,4`).toBe("14,4");
     }
+  });
+
+  it("os resultados técnicos do PREC-MIG-D estão em 24,12", () => {
+    // As TRÊS colunas `14,6` residuais, e só elas. Comissão e contribuição por
+    // unidade são resultado DERIVADO por unidade — não preço acordado —, e a
+    // cadeia `PricingTier.contributionPerUnitSnapshot →
+    // QuoteLine.contributionPerUnitSnapshot` é cópia no envio da proposta:
+    // alargar só a faixa trocaria um corte silencioso por outro.
+    const porChave = new Map(colunas.map((c) => [`${c.model}.${c.campo}`, c.precisao]));
+    for (const chave of [
+      "PricingTier.commissionPerUnitSnapshot",
+      "PricingTier.contributionPerUnitSnapshot",
+      "QuoteLine.contributionPerUnitSnapshot",
+    ]) {
+      expect(porChave.get(chave), `${chave} é TECHNICAL_RESULT e deveria ser 24,12`).toBe("24,12");
+    }
+    // O PREC-MIG-D não é balde de resto. O que ficou em `14,4` continua em
+    // `14,4` porque a categoria ainda não tem decisão do PO — a auditoria
+    // recomendou `20,8` dentro de um PREC-MIG-B que fechou como UNIT_COST, e o
+    // alvo ficou órfão. É PREC-MIG-E, campo a campo, e o teste falha se alguém
+    // arrastar um deles junto por vizinhança de bloco.
+    for (const chave of [
+      "PricingTier.contributionTotalSnapshot",
+      "PricingTier.commissionTotalSnapshot",
+      "PricingTier.grossRevenueSnapshot",
+      "PricingTier.costTotalSnapshot",
+      "IndustrialCostCalculation.totalIndustrialCost",
+      "ProductionOrderCostSnapshot.totalIndustrialCost",
+      "IndustrialResourceRate.rateValue",
+    ]) {
+      expect(porChave.get(chave), `${chave} aguarda PREC-MIG-E e fica em 14,4`).toBe("14,4");
+    }
+    // E `14,6` deixou de existir: a matriz não reconhece mais essa precisão, e
+    // uma coluna nova copiada da linha de cima falha antes de chegar aqui.
+    expect(colunas.filter((c) => c.precisao === "14,6")).toEqual([]);
   });
 
   it("a pureza e o overage do PREC-MIG-C estão em 9,6", () => {

@@ -3666,9 +3666,14 @@ UNIT_COST (PREC-MIG-B), PURITY / OVERAGE (PREC-MIG-C), o UNIT_PRICE
 operacional da Ordem de Compra (PREC-MIG-P / PREC-P-01) e o UNIT_PRICE técnico
 da precificação (PREC-P-TECH: `PricingTier.manualUnitPrice`,
 `.suggestedPriceSnapshot`, `.selectedPriceSnapshot` e
-`QuoteLine.pricingSelectedUnitPriceSnapshot`).** O restante pertence às
-capabilities PREC-MIG-D e E — comissão e contribuição por unidade seguem em
-`14,6` como TECHNICAL_RESULT.
+`QuoteLine.pricingSelectedUnitPriceSnapshot`) e o TECHNICAL_RESULT residual da
+precificação (PREC-MIG-D: `PricingTier.commissionPerUnitSnapshot`,
+`.contributionPerUnitSnapshot` e `QuoteLine.contributionPerUnitSnapshot`).** O
+que resta pertence ao PREC-MIG-E: os snapshots de TOTAIS de precificação, a
+composição do custo industrial e do CMV e as tarifas, todos em `14,4`, e
+`QuoteLine.industrialCostPerUnitSnapshot`, em `18,6`. Nenhum deles tem alvo
+decidido — a auditoria recomendou `20,8` dentro de um PREC-MIG-B que fechou como
+UNIT_COST, e o alvo ficou órfão. **`14,6` deixou de existir no schema.**
 
 | Categoria | Tipo aprovado |
 |---|---|
@@ -3855,3 +3860,55 @@ sempre somou.
 
 Onde o valor é **congelado** — Orçamento, Pedido e Faturamento, §55 — a história
 não se move: lá o total é persistido, e regra nova vale da sua data em diante.
+
+## §62 — Resultado técnico persistido fecha em doze casas, e não é preço
+
+Decisão de Product Ownership de 2026-09-06, na aprovação do PREC-MIG-D.
+
+Um **resultado técnico** é valor DERIVADO por unidade — saída de motor, não
+número digitado nem acordo assinado. Comissão por unidade
+(`preço selecionado × comissão%`), contribuição por unidade
+(`preço − comissão − custo industrial`), custo industrial por unidade e CMV por
+unidade produzida são resultados técnicos. Todos guardam **doze casas**,
+`DECIMAL(24,12)`, §58.
+
+**Resultado técnico não é preço, mesmo quando é dinheiro por unidade.** A
+categoria é o PAPEL do valor no domínio, não a sua unidade: uma contribuição de
+`R$ 0,650524111111` por unidade não é um preço acordado nem vira operando de
+total. Por isso ela não desce para `DECIMAL(20,8)` só por ser dinheiro por
+unidade, e o preço técnico não sobe para doze casas só por ser vizinho de bloco.
+
+**A fronteira de persistência é explícita, e é a TERCEIRA.** §60 nomeou duas —
+preço técnico em oito casas e fechamento comercial em quatro. Esta é a mesma
+regra numa escala acima:
+
+- **D.** resultado técnico persistido em 12 casas — `ROUND_HALF_UP`
+  **explícito**, em `fecharResultadoTecnicoPersistido`;
+- o PostgreSQL **nunca** é a primeira camada a decidir 40 dígitos → 12 casas.
+  Era: até o PREC-MIG-D a ativação gravava o valor de 40 dígitos numa coluna de
+  seis, e `0,2026593333333333` virava `0,202659` sem `.toFixed()` no código e
+  sem registro;
+- o modo viaja na chamada, nunca herdado do default do `decimal.js` (§59).
+
+**Entrada de usuário e resultado calculado seguem regras opostas.** Valor
+DIGITADO acima do scale é recusado com HTTP 400 (§58). Resultado CALCULADO com
+mais de doze casas é normal — o motor trabalha em 40 dígitos (§59) — e é fechado
+na fronteira, nunca recusado. Um resultado interno longo não é erro do operador.
+
+**A cadeia move-se inteira.** `PricingTier.contributionPerUnitSnapshot` é
+copiada para `QuoteLine.contributionPerUnitSnapshot` no ENVIO da proposta:
+alargar só a faixa trocaria um corte silencioso por outro, no congelamento.
+
+**Antes do fechamento, ninguém corta.** Motor, faixa, prévia, ativação,
+congelamento da proveniência, CMV e relatórios técnicos trafegam e serializam as
+doze casas, como string — nunca como número JSON. A **tela** continua mostrando
+duas, quatro ou seis casas conforme o formatter: apresentação não é
+armazenamento (§57), e nenhum caminho da tela devolve resultado derivado ao
+servidor.
+
+**Widening não reconstrói o passado.** Uma faixa ativada ou uma proposta enviada
+antes desta capability continua valendo o que valia: `0,202659` passa a ser
+representado como `0,202659000000`, e as casas que nunca foram persistidas não
+existem. Sem backfill, sem recálculo. `null` continua `null` — ausência de
+resultado nunca vira zero — e contribuição **negativa** continua sendo
+informação comercial legítima, persistida com o mesmo sinal e a mesma precisão.

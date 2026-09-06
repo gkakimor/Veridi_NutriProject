@@ -11,6 +11,7 @@ import { getActivePricingForProduct } from "../pricing/pricing.service.js";
 import { QuoteNotDraftError, QuoteNotFoundError } from "./projects.errors.js";
 import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
 import { fecharPrecoUnitarioComercial } from "../../lib/commercial-price.js";
+import { fecharResultadoTecnicoPersistido } from "../../lib/technical-result.js";
 
 /**
  * Ligação entre orçamento e precificação.
@@ -170,8 +171,10 @@ export function pricingProvenanceForLine(
       commissionPercent: quote.commissionPercentSnapshot
         ? quote.commissionPercentSnapshot.toFixed(4)
         : null,
+      // RESULTADO TÉCNICO congelado — `DECIMAL(24,12)`, PREC-D-03. Servia seis
+      // casas; com a coluna em doze isso seria a migration desfeita na saída.
       contributionPerUnit: quote.contributionPerUnitSnapshot
-        ? quote.contributionPerUnitSnapshot.toFixed(6)
+        ? resultadoTecnico(quote.contributionPerUnitSnapshot)
         : null,
       contributionMarginPercent: quote.contributionMarginSnapshot
         ? quote.contributionMarginSnapshot.toFixed(4)
@@ -204,7 +207,7 @@ export function pricingProvenanceForLine(
     costQuality: tier.costQualitySnapshot,
     commissionPercent: (tier.commissionPercentSnapshot ?? tier.commissionPercent).toFixed(4),
     contributionPerUnit: tier.contributionPerUnitSnapshot
-      ? tier.contributionPerUnitSnapshot.toFixed(6)
+      ? resultadoTecnico(tier.contributionPerUnitSnapshot)
       : null,
     contributionMarginPercent: tier.contributionMarginSnapshot
       ? tier.contributionMarginSnapshot.toFixed(4)
@@ -419,8 +422,12 @@ function buildProvenanceSnapshot(
     commissionPercentSnapshot: provenance.commissionPercent
       ? new Prisma.Decimal(provenance.commissionPercent)
       : null,
+    // FRONTEIRA DE PERSISTÊNCIA do resultado técnico — PREC-D-03. A
+    // proveniência chega da faixa já em doze casas; o fechamento explícito
+    // está aqui para que o banco nunca seja a primeira camada a decidir a
+    // escala deste congelamento, mesmo que a origem mude de forma.
     contributionPerUnitSnapshot: provenance.contributionPerUnit
-      ? new Prisma.Decimal(provenance.contributionPerUnit)
+      ? fecharResultadoTecnicoPersistido(new Prisma.Decimal(provenance.contributionPerUnit))
       : null,
     contributionMarginSnapshot: provenance.contributionMarginPercent
       ? new Prisma.Decimal(provenance.contributionMarginPercent)

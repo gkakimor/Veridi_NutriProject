@@ -144,8 +144,10 @@ export async function getPricingByProductReport(
         ? tier.contributionMarginSnapshot.toFixed(4)
         : null,
       markupPercent: tier.markupSnapshot ? tier.markupSnapshot.toFixed(4) : null,
+      // RESULTADO TÉCNICO da faixa — `DECIMAL(24,12)`, PREC-D-02. Relatório
+      // técnico lê o scale da coluna; o formatter da tela mostra menos.
       contributionPerUnit: tier.contributionPerUnitSnapshot
-        ? tier.contributionPerUnitSnapshot.toFixed(6)
+        ? resultadoTecnico(tier.contributionPerUnitSnapshot)
         : null,
       activatedAt: version.activatedAt ? version.activatedAt.toISOString() : null,
     })),

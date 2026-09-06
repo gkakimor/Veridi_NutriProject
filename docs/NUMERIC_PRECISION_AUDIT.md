@@ -105,7 +105,7 @@ Prisma, fora do domínio. Zero Float. Zero Decimal sem precision/scale explícit
 | `Decimal(18,6)` | 46 | QUANTITY, TECHNICAL_VALUE, UOM_CONVERSION |
 | `Decimal(14,4)` | 27 | UNIT_COST, UNIT_PRICE, RATE, custos compostos |
 | `Decimal(7,4)` | 13 | PERCENTAGE |
-| `Decimal(14,6)` | 7 | UNIT_PRICE técnico (precificação) |
+| `Decimal(14,6)` | 7 | UNIT_PRICE técnico (4, **migrados para `20,8` no PREC-P-TECH**) e TECHNICAL_RESULT por unidade (3, **migrados para `24,12` no PREC-MIG-D**). **A precisão `14,6` não existe mais no schema.** |
 | `Decimal(6,3)` | 7 | PERCENTAGE (pureza/overage) — **migrados para `9,6` no PREC-MIG-C** |
 | `Decimal(12,4)` | 4 | RATIO_FACTOR (markup), PHYSICAL_MEASUREMENT (kW) |
 | `Decimal(14,2)` | 2 | COMMERCIAL_DOCUMENT_TOTAL |
@@ -174,7 +174,7 @@ precificação no PREC-MIG-B.
 | ProductionOrderCostSnapshot.* (4 campos) | TECHNICAL_VALUE | 14,4 | composição do CMV | POTENTIAL_RISK | 20,8 | Sim — B |
 | PricingTier.* Snapshot totais (6 campos) | TECHNICAL_VALUE | 14,4 | snapshots de precificação | POTENTIAL_RISK | 20,8 | Sim — B |
 | PricingTier.costPerUnitSnapshot | TECHNICAL_VALUE | 18,6 | custo unitário congelado | OK | 24,12 | Sim — A |
-| PricingTier.contributionPerUnitSnapshot / commissionPerUnitSnapshot | TECHNICAL_VALUE | 14,6 | contribuição e comissão por unidade | OK | 20,8 | Sim — B |
+| PricingTier.contributionPerUnitSnapshot / commissionPerUnitSnapshot | **TECHNICAL_RESULT** | 14,6 | contribuição e comissão por unidade | perdia 6 casas no `UPDATE` da ativação | **24,12** | **Sim — PREC-MIG-D (ENTREGUE)** — a recomendação `20,8` desta linha foi SUPERADA: a categoria é TECHNICAL_RESULT, §62 |
 | QuoteLine.*Snapshot (7 campos) | TECHNICAL_VALUE | 18,6 / 14,6 / 7,4 / 12,4 | proveniência da precificação | OK | acompanha categoria | Sim — B |
 | IndustrialResourceRate.rateValue | RATE | 14,4 | tarifa de recurso | POTENTIAL_RISK | 20,8 | Sim — B |
 | IndustrialCostLine.rateValue / IndustrialCostTemplateAdditionalCost.rateValue | RATE | 14,4 | tarifa de custo adicional | POTENTIAL_RISK | 20,8 | Sim — B |
@@ -933,21 +933,92 @@ uma virou:
   quatro casas passa a ser RECUSADO na fronteira da API, em vez de aceito e
   cortado pelo banco.
 
-**O que continua aberto — PREC-MIG-E.** Os campos que a matriz de §58 não
-resolve sozinha e que exigem decisão individual, caso a caso, no momento em que
-a fundação já estiver no lugar:
+**O que a Fundação D respondeu — PREC-MIG-D. RESPONDIDO e ENTREGUE em
+2026-09-06.** A decisão do PO: `PricingTier.commissionPerUnitSnapshot`,
+`.contributionPerUnitSnapshot` e `QuoteLine.contributionPerUnitSnapshot` vão
+para `DECIMAL(24,12)` — são **resultado técnico derivado por unidade**, não
+preço acordado, e a categoria é o PAPEL do valor no domínio, não a sua unidade.
+Migration `20260925093006_numeric_precision_technical_results_24_12`, sem
+backfill. A regra durável que saiu daí é a **terceira fronteira de fechamento**
+([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §62): resultado técnico persistido fecha
+em doze casas, com `ROUND_HALF_UP` declarado na chamada, antes do banco.
 
+### 12.1 Inventário TECHNICAL_RESULT — classificação final (PREC-MIG-D)
+
+O PREC-MIG-D reclassificou as **107 colunas `Decimal`** do schema pelo PAPEL do
+valor, não pelo nome nem por ser dinheiro. Resultado:
+
+| Model.field | Tipo antes | Categoria | Recomendação |
+|---|---|---|---|
+| PricingTier.commissionPerUnitSnapshot | 14,6 | **TECHNICAL_RESULT** | **24,12 — MIGRADO** |
+| PricingTier.contributionPerUnitSnapshot | 14,6 | **TECHNICAL_RESULT** | **24,12 — MIGRADO** |
+| QuoteLine.contributionPerUnitSnapshot | 14,6 | **TECHNICAL_RESULT** | **24,12 — MIGRADO** |
+| IndustrialCostCalculation.costPerUnit | 24,12 | TECHNICAL_RESULT | ALREADY_DELIVERED (A) — não remigrar |
+| PricingTier.costPerUnitSnapshot | 24,12 | TECHNICAL_RESULT | ALREADY_DELIVERED (A) — não remigrar |
+| ProductionOrderCostSnapshot.costPerProducedUnit | 24,12 | TECHNICAL_RESULT | ALREADY_DELIVERED (A) — não remigrar |
+| QuoteLine.industrialCostPerUnitSnapshot | 18,6 | TECHNICAL_RESULT? / UNIT_COST? | **NEEDS_PO_DECISION — E, prioridade alta** |
+| PricingTier.costTotalSnapshot / .costPer1000Snapshot / .knownSubtotalSnapshot / .commissionTotalSnapshot / .grossRevenueSnapshot / .contributionTotalSnapshot | 14,4 | agregado derivado | **NEEDS_PO_DECISION — E** |
+| IndustrialCostCalculation.directIndustrialCost / .overheadCost / .totalIndustrialCost / .knownSubtotal / .costPer1000 | 14,4 | composição de custo industrial | **NEEDS_PO_DECISION — E** |
+| ProductionOrderCostSnapshot.actualMaterialCostKnown / .standardAppliedCostKnown / .knownSubtotal / .totalIndustrialCost | 14,4 | composição do CMV | **NEEDS_PO_DECISION — E** |
+| IndustrialResourceRate.rateValue, IndustrialCostLine.rateValue, IndustrialCostResourceUsage.rateValueSnapshot, IndustrialCostTemplateAdditionalCost.rateValue | 14,4 | **RATE** | NOT_TECHNICAL_RESULT — tarifa é entrada, não resultado |
+| QuoteLine.unitPrice, CustomerOrderLine.agreedUnitPrice, BillingLine.agreedUnitPrice / .unitPrice | 14,4 | **COMMERCIAL_CONTRACT** | NOT_TECHNICAL_RESULT — MANTER, §58 e PREC-P-05 |
+| CustomerOrder.agreedSubtotalAmount / .agreedTotalAmount | 14,2 | **COMMERCIAL_TOTAL** | NOT_TECHNICAL_RESULT — MANTER |
+| QuoteLine.contributionMarginSnapshot / .commissionPercentSnapshot, PricingTier.*Percent* | 7,4 | **PERCENTAGE** | NOT_TECHNICAL_RESULT — MANTER |
+| QuoteLine.markupSnapshot / PricingTier.markupSnapshot | 12,4 | **RATIO_FACTOR** | NOT_TECHNICAL_RESULT — MANTER |
+| FormulationComponent.legacyTotalQuantity / .legacyBatchUnits | 18,6 | dado do legado | NOT_RELEVANT — ninguém calcula sobre eles |
+
+**Por que os `14,4` de composição NÃO entraram no D.** Não é hesitação: é alvo
+**órfão**. A tabela de §3.1 recomendou `20,8` para eles, com a marca "Sim — B" —
+e o PO fechou o PREC-MIG-B como **UNIT_COST**, três colunas, sem eles. Sobrou um
+campo com recomendação de `20,8` e categoria que hoje pede `24,12`. Escolher
+entre os dois é decisão de categoria do PO, e o handoff do PREC-MIG-D é
+explícito: *"Se houver dúvida: NEEDS_PO_DECISION. NÃO migrar"* e *"Não usar D
+como balde de resto"*.
+
+**O caso mais caro do E — `QuoteLine.industrialCostPerUnitSnapshot`.** É custo
+industrial POR UNIDADE, e a sua origem — `PricingTier.costPerUnitSnapshot` — já
+está em `DECIMAL(24,12)` desde o PREC-MIG-A. O congelamento da proveniência no
+ENVIO da proposta copia doze casas para uma coluna de **seis**: a perda é ativa,
+hoje, contra um campo já migrado. Mesmo assim ficou fora do D porque o
+inventário o registra viajando com o PREC-MIG-B (§3.1 e
+`numeric-precision-matrix.test.ts`, `EXCECOES_18_6`) — alvo conflitante. Além
+disso, o `.toFixed(6)` que serve esse campo em `quote-pricing.service.ts` e em
+`cost-reports.service.ts` está **correto para a coluna** e deixa de estar no dia
+em que a coluna mudar: os dois andam juntos.
+
+**O que continua aberto — PREC-MIG-E.** Os campos que a matriz de §58 não
+resolve sozinha e que exigem decisão individual, caso a caso, com a fundação já
+no lugar:
+
+- **16 colunas com alvo órfão**, na tabela acima: os seis totais de
+  `PricingTier`, os cinco de `IndustrialCostCalculation`, os quatro de
+  `ProductionOrderCostSnapshot` e `QuoteLine.industrialCostPerUnitSnapshot`;
 - `IndustrialResource.powerKw` e `powerKwSnapshot` — `Decimal(12,4)` hoje;
   ampliar só se a medição de energia passar a exigir;
-- `PricingTier.*Snapshot` de totais em `Decimal(14,4)` — são snapshot de
-  precificação, e a fronteira entre resultado técnico e valor congelado precisa
-  ser dita campo a campo;
+- as quatro `rateValue` em `Decimal(14,4)` — categoria RATE; ampliar só se
+  tarifa passar a ser negociada com mais casas;
 - `FormulationComponent.legacyTotalQuantity` e `legacyBatchUnits` — dado
   importado do legado, `NOT_APPLICABLE` enquanto ninguém calcular sobre eles;
 - percentuais comerciais em `Decimal(7,4)` — mantidos, mas revisitar se margem
   ou comissão passarem a ser negociadas com mais casas.
 
-Nenhum deles bloqueia PREC-MIG-A nem foi tocado pelo PREC-MIG-P.
+Nenhum deles bloqueia PREC-MIG-A nem foi tocado pelo PREC-MIG-P ou pelo
+PREC-MIG-D.
+
+### 12.2 Serialização técnica — o que o PREC-MIG-D fechou e o que sobrou
+
+Fechado (serve 12 casas, o scale da coluna): DTO da faixa de precificação,
+prévia da faixa, proveniência do Orçamento (viva e congelada), relatório de
+precificação por produto, prévia de política de preço e prévia de rebase.
+
+Aberto, **medido** e fora do grupo D:
+
+| Ponto | O que corta | Por quê fica |
+|---|---|---|
+| `industrial-cost-calculation/calculation.service.ts`, `unitMoney` | custo unitário de material, de coluna `DECIMAL(20,8)`, servido em 6 casas | família UNIT_COST — PREC-SER-01, fora do D |
+| `projects/quote-pricing.service.ts:168` e `reports/cost-reports.service.ts:273` | `QuoteLine.industrialCostPerUnitSnapshot` em 6 casas | **correto para a coluna `18,6`**; muda junto com PREC-MIG-E |
+
+`PREC-SER-01` fica portanto **PARCIAL**, não resolvido.
 
 ---
 
