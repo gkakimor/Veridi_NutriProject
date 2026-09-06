@@ -20,20 +20,26 @@ resolvidos; #15, #16 e #17 abertos como achados.
 **Rodada 4 aprovada e publicada em 2026-09-05**: #15 e #16 resolvidos; #18
 aberto como achado, por decisão do PO. #17 segue aberto. **Seguinte, quando o
 PO autorizar:** #8E, #8F e #8G.
-**Auditoria PREC-01 (2026-09-05)**, só documentação, sem migration e sem
-mudança de regra: **PREC-01 resolvido**; #19, #20 e #21 abertos como achados;
-**PREC-15 permanece bloqueado até revisão do PO**. Relatório em
-[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md).
+**Auditoria PREC-01 aprovada e publicada em 2026-09-05**, só documentação, sem
+migration e sem mudança de regra: **PREC-01 resolvido**; #19, #20 e #21 abertos
+como achados. Relatório em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md); decisões do PO em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57, §58 e §59 e na seção E deste
+arquivo. **#18 desbloqueado**, para depois da fundação. **PREC-15 permanece
+bloqueado até revisão do PO.** **Próxima capability:** #20 + primeiro grupo
+seguro de #19 (PREC-MIG-A).
 
 ---
 
 ## A. Defeitos abertos
 
-### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — HIGH
+### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — HIGH / URGENTE
 
-**ABERTO. Achado da auditoria PREC-01 (2026-09-05), com dado real do banco
-local.** Componente `MP-000147`, `FIXED_BASIS` `0,000048 kg` sobre base 1000,
-item estocado em kg: produzir de 1 a 10 unidades dá necessidade física de
+**ABERTO — PRÓXIMA CAPABILITY, junto de #20.** Prioridade elevada para
+**HIGH / URGENTE** por decisão do PO em 2026-09-05: perda real de informação em
+Formulação e Produção é inaceitável. Achado da auditoria PREC-01, com dado real
+do banco local. Componente `MP-000147`, `FIXED_BASIS` `0,000048 kg` sobre base
+1000, item estocado em kg: produzir de 1 a 10 unidades dá necessidade física de
 `4,8e-8` a `4,8e-7 kg`, e `ProductionOrderRequirement.requiredQuantity`
 **persiste `0,000000`** — a OP afirma que não precisa do material. A 100
 unidades grava `0,000005` contra `0,0000048` reais, erro de +4,2%. Com scale 12
@@ -52,26 +58,41 @@ unidade de estoque, 1 já zerando. Dói em amostra, piloto e lote pequeno.
 `InventoryMovement.quantity`, `RecipeWeighing.plannedQuantitySnapshot`,
 `SampleConsumption.quantity`.
 
-**Não implementar sem o gate do PO.** Exige migration de widening e, no mesmo
-passo, `Decimal.set({ precision: … })` — ver #20. Sem backfill: casa nunca
-persistida não se reconstrói. Perguntas de domínio em
-[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.
+**Alvo aprovado pelo PO:** QUANTITY e grandeza inequivocamente técnica em
+`DECIMAL(24,12)`; fator de conversão idem ([`PRODUCT_RULES.md`](PRODUCT_RULES.md)
+§58). O primeiro widening prioriza `requiredQuantity`, `theoreticalQuantity`,
+quantidades de Formulação, `SampleConsumption.quantity`,
+`InventoryMovement.quantity`, quantidades de estoque e de produção, fatores de
+conversão e as demais QUANTITY inequivocamente técnicas. **A lista que vale é a
+do inventário** de [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md)
+§3.1 — nenhuma lista nova.
 
-### 20. `decimal.js` roda em 20 dígitos significativos — HIGH estrutural
+Exige migration de widening e, no mesmo passo ou antes, a precisão canônica de
+#20. Sem backfill: casa nunca persistida não se reconstrói. Perguntas de domínio
+remanescentes em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.
 
-**ABERTO. Achado da auditoria PREC-01 (2026-09-05).** `Decimal.precision = 20`,
-default, nunca reconfigurado em nenhum ponto do repositório. Medido:
+### 20. `decimal.js` roda em 20 dígitos significativos — HIGH / NEXT
+
+**ABERTO — PRÓXIMA CAPABILITY, antes ou junto de #19.** Achado da auditoria
+PREC-01 (2026-09-05). `Decimal.precision = 20`, default, nunca reconfigurado em
+nenhum ponto do repositório. Medido:
 `new Decimal("123456789012.123456789012").times(1)` devolve
 `123456789012.12345679`.
 
 É um teto de JavaScript **independente da coluna**: ampliar scale sem ampliar
 `Decimal.precision` cria coluna que o sistema não consegue preencher. Bloqueia
-#19 e qualquer hipótese de `DECIMAL(30,12)`. **Ordem obrigatória:**
-`Decimal.set` antes ou junto do widening, com teste que prove o dígito extra.
+#19 e foi o motivo de `DECIMAL(30,12)` ser recusado como baseline.
+
+**Decisão do PO (2026-09-05):** elevar para **40 dígitos significativos**, em
+**uma configuração canônica** — nada de `Decimal.set()` espalhado por módulo.
+Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §59. **Ordem
+obrigatória:** antes ou junto do primeiro widening, com teste que prove o dígito
+extra.
 
 ### 21. Seis serializações de DTO entregam menos casas do que a coluna guarda — MEDIUM
 
-**ABERTO. Achado da auditoria PREC-01 (2026-09-05).** `toFixed(N)` com `N`
+**ABERTO.** Desdobrado pelo PO em 2026-09-05 nos itens PREC-SER-01, PREC-SER-02
+e PREC-FMT-01 (seção E). Achado da auditoria PREC-01: `toFixed(N)` com `N`
 menor que o scale da coluna. Cinco são exibição; uma grava:
 `projects/quote-pricing.service.ts:288` aplica faixa de precificação a linha de
 orçamento convertendo preço de 6 casas em 4 — perda da coluna
@@ -91,7 +112,13 @@ Lista completa em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md)
 
 ### 18. Consistência monetária da Ordem de Compra — MEDIUM
 
-**ABERTO. Registrado por decisão do PO em 2026-09-05; capability própria.**
+**ABERTO — DESBLOQUEADO em 2026-09-05, capability própria, depois da fundação
+de precisão.** A auditoria exigida pelo PO está cumprida e a direção está
+aprovada: o total documental da OC passa a reconciliar com as linhas exibidas,
+`Σ round(total monetário da linha, 2)` em vez de `round(Σ valores brutos)`.
+**Não implementar antes de #20 e do primeiro grupo de #19** — mexer na
+aritmética monetária enquanto a fundação numérica está em movimento cria duas
+mudanças concorrentes no mesmo número.
 
 Achado da Rodada 4. `calcularTotaisOrdemCompra` soma as linhas em precisão
 cheia e arredonda só na saída — `round(Σ valores brutos das linhas)` —,
@@ -156,8 +183,8 @@ conta vem da **mesma função** que a API usa, `CalcHint` mostra a aritmética,
 premissa ausente vira travessão. Hoje no padrão: Faturamento, Formulação, CMV
 e a prévia de política de preço.
 
-- **#8A, #8B, #8C — RESOLVIDOS na Rodada 2** (ver F).
-- **#8D, #8H — RESOLVIDOS na Rodada 3** (ver F).
+- **#8A, #8B, #8C — RESOLVIDOS na Rodada 2** (ver G).
+- **#8D, #8H — RESOLVIDOS na Rodada 3** (ver G).
 - **#8E — LOW — Recebimento, custo efetivo.** Mostrar total e comparação com o
   custo previsto quando aplicável.
 - **#8F — LOW — Ficha de Pesagem.** Mostrar a diferença antes da confirmação.
@@ -238,7 +265,70 @@ relevante. O Git guarda o detalhe. Não misturar com capability de negócio.
 
 ---
 
-## E. Observação
+## E. Fundação de precisão numérica — decomposição aprovada
+
+Aprovada pelo PO em 2026-09-05 sobre
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md). Matriz de tipos em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §58; regra de configuração do motor em
+§59; separação armazenamento × apresentação em §57.
+
+**Nenhum destes itens foi implementado.** Nenhuma migration existe.
+
+### Migrations de widening
+
+| Item | Escopo | Status |
+|---|---|---|
+| **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **APROVADO — NEXT**, junto de #20 |
+| **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | APROVADO — depois de A |
+| **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | APROVADO — depois de A |
+| **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | APROVADO — depois de A |
+| **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
+
+**PREC-MIG-B — motivo do PO.** `ReceiptLine.actualUnitCost` é a fonte de custo
+real e alimenta custo de aquisição, média ponderada, estoque, CMV e todo custo
+posterior. Arredondamento visual é independente disso.
+
+**PREC-MIG-C — motivo do PO.** `99,9995%` não pode ser persistido em silêncio
+como `100,000`. A tela pode mostrar menos casas; a persistência preserva o
+valor.
+
+Nenhuma dessas migrations faz backfill. Widening preserva o valor gravado e o
+reescreve com zeros à direita; casa que nunca foi persistida não se reconstrói.
+
+### Serialização e formatação
+
+| Item | Escopo | Status |
+|---|---|---|
+| **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | APROVADO — segue as dependências reais do widening |
+| **PREC-SER-02** | Gravação de preço técnico de 6 casas em coluna de 4 quando **não** for snapshot contratual | APROVADO — idem |
+| **PREC-FMT-01** | Eliminar `Number` nos formatters para grandeza técnica de alta precisão | APROVADO — obrigatório antes de qualquer preset acima de 6 casas |
+
+Ocorrências mapeadas em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §5 e §7.
+A correção do float de `print/documents.tsx:353` (#21) é independente de
+migration e cabe em qualquer rodada.
+
+### Preferências de exibição — roadmap aprovado, depois da fundação
+
+| Item | Escopo |
+|---|---|
+| **PREC-UI-01** | Preferência visual por usuário |
+| **PREC-UI-02** | Presets Compacta / Padrão / Técnica / Máxima |
+| **PREC-UI-03** | Configuração por categoria |
+| **PREC-UI-04** | Override temporário de sessão |
+| **PREC-UI-05** | Modo de edição revela precisão integral |
+| **PREC-UI-06** | Salvar sem alterar preserva casas não exibidas |
+| **PREC-UI-07** | Totais documentais seguem o domínio, não o perfil |
+| **PREC-UI-08** | Preferência visual nunca grava nem recalcula |
+
+Desenho em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §11;
+invariantes duráveis em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57.
+**Não implementar antes da fundação** — PREC-UI-05 e PREC-UI-06 já são o
+comportamento atual e precisam ser preservados, não reconstruídos.
+
+---
+
+## F. Observação
 
 ### 1. `pnpm test` — `ERR_IPC_CHANNEL_CLOSED` ocasional no encerramento — LOW
 
@@ -259,7 +349,7 @@ próximo reset canônico da base local/E2E. **ADIADO / MANUTENÇÃO LOCAL.**
 
 ---
 
-## F. Resolvidos recentes (2026-09-04 e 2026-09-05)
+## G. Resolvidos recentes (2026-09-04 e 2026-09-05)
 
 - **#15 Integridade comercial Orçamento → Pedido** (2026-09-05, Rodada 4).
   O Pedido gerado de uma proposta aceita congela o subtotal da PROPOSTA:
@@ -381,7 +471,7 @@ próximo reset canônico da base local/E2E. **ADIADO / MANUTENÇÃO LOCAL.**
   nenhuma limpeza manual de `_prisma_migrations` é necessária. Detalhe em
   [`TECH_BASELINE.md`](TECH_BASELINE.md), *Migration order*.
 
-## G. Roadmap
+## H. Roadmap
 
 Escopo futuro não fica aqui. **Produto próprio Veridi** (Product sem cliente
 obrigatório, estoque próprio de PA, venda do mesmo PA a vários clientes) vive
@@ -398,20 +488,27 @@ permanece obrigatório no escopo atual.
 3. **Rodada 3 — aprovada e publicada:** #8D + #8H resolvidos.
 4. **Rodada 4 — aprovada e publicada:** #15 + #16 resolvidos; #18 registrado;
    #8E, #8F e #8G quando o PO autorizar.
-5. **Auditoria PREC-01 — concluída em 2026-09-05**, só documentação. #19, #20 e
-   #21 registrados; a auditoria exigida por #18 está cumprida. **PREC-15 segue
-   bloqueado até revisão do PO.**
-6. **Validação com a Veridi:** #7 + #11.
-7. **Manutenção:** #10 e #17. #18 é capability própria — a auditoria matemática
-   já foi feita e a decisão está liberada. #1 e #2 permanecem
-   observação/adiados.
-8. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
-9. **Roadmap:** produto próprio Veridi.
+5. **Auditoria PREC-01 — aprovada e publicada em 2026-09-05**, só documentação.
+   #19, #20 e #21 registrados; a auditoria exigida por #18 está cumprida e #18
+   desbloqueado; decomposição PREC-MIG/SER/FMT/UI aprovada na seção E.
+6. **PRÓXIMA CAPABILITY — fundação de precisão:** #20 (`Decimal` canônico em 40
+   dígitos) + primeiro grupo seguro de #19 (**PREC-MIG-A**: QUANTITY e fatores
+   técnicos em `DECIMAL(24,12)`), com preservação ponta a ponta e migration
+   segura. **Começa em conversa nova.**
+7. **Depois da fundação:** PREC-MIG-B, C, D; PREC-SER-01/02; PREC-FMT-01; #18;
+   PREC-MIG-E conforme as respostas de domínio.
+8. **Validação com a Veridi:** #7 + #11.
+9. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
+10. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
+11. **Roadmap:** preferências de exibição (PREC-UI-01 a 08) e produto próprio
+    Veridi.
 
 **Precisão numérica — ordem obrigatória.** #20 antes ou junto de #19: ampliar
 scale sem ampliar `Decimal.precision` cria coluna que o sistema não consegue
-preencher. #21 depois de #19 e #20, para que o `toFixed` já espelhe o scale
-novo. A parte do `print` de #21 é independente e cabe em qualquer rodada.
+preencher. PREC-SER e PREC-FMT depois do widening, para que a serialização já
+espelhe o scale novo. PREC-UI só depois da fundação inteira. A parte do `print`
+de #21 é independente e cabe em qualquer rodada. **#18 não entra junto de
+nenhuma delas** — duas mudanças concorrentes no mesmo número não se auditam.
 
 ## Próximo gate
 
