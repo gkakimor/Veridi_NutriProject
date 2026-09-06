@@ -269,7 +269,7 @@ describe("Custo estimado da Formulação — seleção canônica da fonte", () =
     const dto = await estimate(app, versionId);
     const linha = componentOf(dto, item.id);
     expect(linha.costSource).toBe("WEIGHTED_AVG_30D");
-    expect(linha.unitCost).toBe("175.0000");
+    expect(linha.unitCost).toBe("175.00000000");
     expect(linha.estimatedComponentCost).toBe("350.00");
     expect(dto.quality).toBe("ESTIMATED");
     expect(dto.estimatedMaterialCost).toBe("350.00");
@@ -286,7 +286,7 @@ describe("Custo estimado da Formulação — seleção canônica da fonte", () =
 
     const linha = componentOf(await estimate(app, versionId), item.id);
     expect(linha.costSource).toBe("WEIGHTED_AVG_90D");
-    expect(linha.unitCost).toBe("80.0000");
+    expect(linha.unitCost).toBe("80.00000000");
     await app.close();
   });
 
@@ -300,7 +300,7 @@ describe("Custo estimado da Formulação — seleção canônica da fonte", () =
 
     const linha = componentOf(await estimate(app, versionId), item.id);
     expect(linha.costSource).toBe("LAST_REAL");
-    expect(linha.unitCost).toBe("70.0000");
+    expect(linha.unitCost).toBe("70.00000000");
     await app.close();
   });
 
@@ -315,7 +315,7 @@ describe("Custo estimado da Formulação — seleção canônica da fonte", () =
 
     const linha = componentOf(await estimate(app, versionId), item.id);
     expect(linha.costSource).toBe("SUPPLIER_OFFER_SINGLE_APPROVED");
-    expect(linha.unitCost).toBe("50.0000");
+    expect(linha.unitCost).toBe("50.00000000");
     expect(linha.estimatedComponentCost).toBe("150.00");
     await app.close();
   });
@@ -333,7 +333,7 @@ describe("Custo estimado da Formulação — seleção canônica da fonte", () =
     const linha = componentOf(await estimate(app, versionId), item.id);
     expect(linha.costSource).toBe("SUPPLIER_OFFER_PREFERRED");
     // Nunca o mais barato por conta própria.
-    expect(linha.unitCost).toBe("55.0000");
+    expect(linha.unitCost).toBe("55.00000000");
     await app.close();
   });
 
@@ -389,7 +389,7 @@ describe("Custo estimado da Formulação — seleção canônica da fonte", () =
     const dto = await estimate(app, versionId);
     const linha = componentOf(dto, item.id);
     expect(linha.costSource).toBe("MANUAL_REFERENCE");
-    expect(linha.unitCost).toBe("80.0000");
+    expect(linha.unitCost).toBe("80.00000000");
     expect(linha.estimatedComponentCost).toBe("200.00");
     expect(linha.costSourceDetails).toMatch(/Referência manual de custo/);
     expect(dto.quality).toBe("ESTIMATED");
@@ -453,10 +453,10 @@ describe("Custo estimado da Formulação — seleção canônica da fonte", () =
 
     const historico = componentOf(await estimate(app, versionId, new Date(Date.now() - 10 * DAY_MS)), item.id);
     expect(historico.costSource).toBe("WEIGHTED_AVG_30D");
-    expect(historico.unitCost).toBe("10.0000");
+    expect(historico.unitCost).toBe("10.00000000");
 
     const hoje = componentOf(await estimate(app, versionId), item.id);
-    expect(hoje.unitCost).toBe("54.5000");
+    expect(hoje.unitCost).toBe("54.50000000");
     await app.close();
   });
 

@@ -48,8 +48,17 @@ function normalizarDecimal(texto: string): string {
  */
 export const CASAS_QUANTIDADE = 12;
 
+/**
+ * Casas decimais de um custo unitário — o scale de `DECIMAL(20,8)`.
+ *
+ * `PRODUCT_RULES.md` §58, PREC-MIG-B. Mesma regra da quantidade e pelo mesmo
+ * motivo: a fronteira recusa acima do que a coluna guarda, em vez de deixar o
+ * PostgreSQL arredondar sem dizer.
+ */
+export const CASAS_CUSTO_UNITARIO = 8;
+
 /** Quantas casas decimais o texto declara. */
-function casasDecimais(valor: string): number {
+export function casasDecimais(valor: string): number {
   const ponto = valor.indexOf(".");
   return ponto === -1 ? 0 : valor.length - ponto - 1;
 }
@@ -114,4 +123,15 @@ export function quantityDecimalSchema(options: { allowZero?: boolean } = {}) {
 /** A mesma regra para campo que pode ficar em branco. */
 export function optionalQuantityDecimalSchema() {
   return optionalDecimalStringSchema({ maxDecimals: CASAS_QUANTIDADE });
+}
+
+/**
+ * Mensagem única para custo unitário acima do scale — PREC-MIG-B.
+ *
+ * Dois schemas de custo têm forma própria (string vazia limpa o valor, zero é
+ * válido e distinto de ausente) e não cabem em `decimalStringSchema`. Em vez de
+ * duplicar o texto, ambos usam esta mensagem e `casasDecimais`.
+ */
+export function mensagemCasasCustoUnitario(): string {
+  return mensagemCasas(CASAS_CUSTO_UNITARIO);
 }

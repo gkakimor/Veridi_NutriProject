@@ -12,6 +12,12 @@ import {
   selectItemCostSource,
 } from "../../lib/cost-source-selection.js";
 import { isUomCompatible } from "./uom.js";
+import { custoUnitario } from "../../lib/decimal-serialization.js";
+import {
+  CASAS_CUSTO_UNITARIO,
+  casasDecimais,
+  mensagemCasasCustoUnitario,
+} from "../../lib/decimal-schema.js";
 import {
   CostReferenceUnitIncompatibleError,
   InvalidCostReferenceError,
@@ -73,6 +79,12 @@ async function prepareReferenceData(
   }
   if (!unitCost.isFinite() || unitCost.lessThan(0)) {
     throw new InvalidCostReferenceError("Custo de referência não pode ser negativo.");
+  }
+  // A coluna guarda 8 casas (`DECIMAL(20,8)`, PREC-MIG-B). Aceitar mais e
+  // deixar o PostgreSQL arredondar gravaria um custo diferente do informado,
+  // em silêncio — e este valor é uma das fontes do seletor canônico.
+  if (casasDecimais(raw.replace(",", ".")) > CASAS_CUSTO_UNITARIO) {
+    throw new InvalidCostReferenceError(mensagemCasasCustoUnitario());
   }
 
   const uomCode = input.uomCode?.trim() || item.unitCode;
@@ -159,7 +171,7 @@ export async function listItemCostReferences(
     current: current ? toDTO(current, current.id) : null,
     history: rows.map((row) => toDTO(row, current?.id ?? null)),
     automatic: {
-      unitCost: automatic.unitCost ? automatic.unitCost.toFixed(6) : null,
+      unitCost: automatic.unitCost ? custoUnitario(automatic.unitCost) : null,
       unitCode: item.unitCode,
       source: automatic.source,
       details: automatic.details,

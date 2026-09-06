@@ -30,9 +30,12 @@ bloqueado até revisão do PO.**
 **Fundação numérica A (2026-09-05):** **#20 RESOLVIDO** (motor canônico em 40
 dígitos, nos DOIS construtores) e **PREC-MIG-A RESOLVIDO** — 43 colunas em
 `DECIMAL(24,12)` (39 QUANTITY + 1 FACTOR + 3 TECHNICAL_RESULT), migration
-`20260925093001_numeric_precision_quantities_24_12`, sem backfill. #19 segue
+`20260925093001_numeric_precision_quantities_24_12`, sem backfill.
+**Fundação numérica B (2026-09-05):** **PREC-MIG-B RESOLVIDO** — 3 colunas
+UNIT_COST em `DECIMAL(20,8)`, migration
+`20260925093002_numeric_precision_unit_cost_20_8`, sem backfill. #19 segue
 **ABERTO / PARCIAL** e PREC-MIG-D **ABERTO / PARCIAL**. **Seguinte:**
-PREC-MIG-B.
+PREC-MIG-C.
 
 ---
 
@@ -320,14 +323,31 @@ implementação.
 | Item | Escopo | Status |
 |---|---|---|
 | **PREC-MIG-A** | QUANTITY e grandezas inequivocamente técnicas → `DECIMAL(24,12)`, incluindo fatores de conversão | **RESOLVIDO** — 43 colunas (39 QUANTITY + 1 FACTOR + 3 TECHNICAL_RESULT), migration `20260925093001_numeric_precision_quantities_24_12` |
-| **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | **ABERTO / NEXT** |
-| **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | ABERTO — depois de B |
+| **PREC-MIG-B** | UNIT_COST e `ReceiptLine.actualUnitCost` → `DECIMAL(20,8)` | **RESOLVIDO** — 3 colunas, migration `20260925093002_numeric_precision_unit_cost_20_8` |
+| **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **ABERTO / NEXT** |
 | **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL** — 3 campos já entregues no A, ver abaixo |
 | **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
 
-**PREC-MIG-B — motivo do PO.** `ReceiptLine.actualUnitCost` é a fonte de custo
-real e alimenta custo de aquisição, média ponderada, estoque, CMV e todo custo
-posterior. Arredondamento visual é independente disso.
+**PREC-MIG-B — entregue em 2026-09-05.** `ReceiptLine.actualUnitCost` é a fonte
+de custo real e alimenta custo de aquisição, média ponderada, estoque, CMV e
+todo custo posterior; arredondamento visual é independente disso. Três colunas
+saíram de `Decimal(14,4)` para `DECIMAL(20,8)` — a família UNIT_COST inteira do
+inventário:
+
+- `ReceiptLine.actualUnitCost` — custo efetivo de aquisição
+- `ItemCostReference.unitCost` — referência manual
+- `SupplierItemOffer.unitPrice` — oferta consumida como custo pelo seletor
+  (`cost-source-selection.ts` a lê como `unitCost`; vale a categoria do
+  inventário, não o nome do campo)
+
+**O que NÃO foi junto, e por quê.** `PurchaseOrderLine.unitPrice` aparece como
+"Sim — B" no inventário, mas sua **categoria é UNIT_PRICE** — o Grupo B da
+auditoria agrupava custo, tarifa e preço, enquanto o PREC-MIG-B do PO é
+UNIT_COST. Onde os dois discordam vale a categoria. Pelo mesmo motivo ficaram
+fora os preços contratuais (`QuoteLine`, `CustomerOrderLine`, `BillingLine`),
+as tarifas `rateValue` (RATE) e os preços técnicos da precificação em `14,6`.
+`scripts/numeric-precision-matrix.test.ts` trava isso: o teste falha se alguém
+arrastar um `unitPrice` documental junto por semelhança de nome.
 
 **PREC-MIG-C — motivo do PO.** `99,9995%` não pode ser persistido em silêncio
 como `100,000`. A tela pode mostrar menos casas; a persistência preserva o
@@ -561,7 +581,10 @@ permanece obrigatório no escopo atual.
 6. **Fundação de precisão A — entregue em 2026-09-05:** #20 (motor canônico em
    40 dígitos) + **PREC-MIG-A** (QUANTITY e fatores técnicos em
    `DECIMAL(24,12)`), com preservação ponta a ponta e migration sem backfill.
-7. **PRÓXIMA CAPABILITY:** PREC-MIG-B. Depois: C, D residual, PREC-SER-01/02,
+7. **Fundação de precisão B — entregue em 2026-09-05:** **PREC-MIG-B**
+   (UNIT_COST em `DECIMAL(20,8)`), com o custo real de 8 casas preservado do
+   banco até o seletor canônico e a média ponderada.
+8. **PRÓXIMA CAPABILITY:** PREC-MIG-C. Depois: D residual, PREC-SER-01/02,
    PREC-FMT-01, #18 e PREC-MIG-E conforme as respostas de domínio.
 8. **Validação com a Veridi:** #7 + #11.
 9. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.

@@ -321,12 +321,12 @@ describe("Custo de aquisição no recebimento", () => {
       payload: { unitCost: "0" },
     });
     expect(zero.statusCode).toBe(200);
-    expect(zero.json().lines[0].actualUnitCost).toBe("0.0000");
+    expect(zero.json().lines[0].actualUnitCost).toBe("0.00000000");
 
     // Zero é um custo real informado — não é "desconhecido".
     const reference = await getCostReference(app, item.id);
     expect(reference.source).toBe("ESTIMATED_30D");
-    expect(reference.unitCost).toBe("0.0000");
+    expect(reference.unitCost).toBe("0.00000000");
 
     await app.close();
   });
@@ -350,7 +350,7 @@ describe("Custo de aquisição no recebimento", () => {
       payload: { unitCost: "31.50", note: "Nota do fornecedor chegou depois" },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json().lines[0].actualUnitCost).toBe("31.5000");
+    expect(updated.json().lines[0].actualUnitCost).toBe("31.50000000");
     expect(updated.json().lines[0].costNote).toBe("Nota do fornecedor chegou depois");
     expect(updated.json().lines[0].costUpdatedAt).not.toBeNull();
     // Quantidade física intocada.
@@ -382,14 +382,14 @@ describe("Custo de aquisição no recebimento", () => {
       quantity: "100",
       unitCost: "20",
     });
-    expect(receipt.lines[0].actualUnitCost).toBe("20.0000");
+    expect(receipt.lines[0].actualUnitCost).toBe("20.00000000");
 
     const corrected = await app.inject({
       method: "PUT",
       url: `/receipt-lines/${receipt.lines[0].id}/acquisition-cost`,
       payload: { unitCost: "25", note: "Correção" },
     });
-    expect(corrected.json().lines[0].actualUnitCost).toBe("25.0000");
+    expect(corrected.json().lines[0].actualUnitCost).toBe("25.00000000");
 
     const cleared = await app.inject({
       method: "PUT",
@@ -414,7 +414,7 @@ describe("Referência de custo — média ponderada e fallback", () => {
 
     const reference = await getCostReference(app, item.id);
     expect(reference.source).toBe("ESTIMATED_30D");
-    expect(reference.unitCost).toBe("19.0000");
+    expect(reference.unitCost).toBe("19.00000000");
     expect(Number(reference.unitCost)).not.toBe(15);
 
     await app.close();
@@ -437,7 +437,7 @@ describe("Referência de custo — média ponderada e fallback", () => {
     });
     const ref90 = await getCostReference(app, item90.id);
     expect(ref90.source).toBe("ESTIMATED_90D");
-    expect(ref90.unitCost).toBe("12.0000");
+    expect(ref90.unitCost).toBe("12.00000000");
 
     // Só histórico de 200 dias atrás → último custo real.
     const itemLast = await createItem("RAW_MATERIAL");
@@ -450,7 +450,7 @@ describe("Referência de custo — média ponderada e fallback", () => {
     });
     const refLast = await getCostReference(app, itemLast.id);
     expect(refLast.source).toBe("LAST_REAL_COST");
-    expect(refLast.unitCost).toBe("8.0000");
+    expect(refLast.unitCost).toBe("8.00000000");
 
     // Nenhum histórico → sem custo.
     const itemNone = await createItem("RAW_MATERIAL");
@@ -481,11 +481,11 @@ describe("Referência de custo — média ponderada e fallback", () => {
 
     // Referência histórica: só enxerga o que já existia naquele momento.
     const historical = await getCostReference(app, item.id, new Date(Date.now() - 5 * DAY_MS));
-    expect(historical.unitCost).toBe("10.0000");
+    expect(historical.unitCost).toBe("10.00000000");
 
     // Hoje: já considera as duas compras (média ponderada 54.5).
     const today = await getCostReference(app, item.id);
-    expect(today.unitCost).toBe("54.5000");
+    expect(today.unitCost).toBe("54.50000000");
 
     await app.close();
   });
@@ -513,7 +513,7 @@ describe("Referência de custo — média ponderada e fallback", () => {
     const meiaNoite = new Date(tarde);
     meiaNoite.setUTCHours(0, 0, 0, 0);
     const noDia = await getCostReference(app, item.id, meiaNoite);
-    expect(noDia.unitCost).toBe("180.0000");
+    expect(noDia.unitCost).toBe("180.00000000");
     expect(noDia.source).toBe("ESTIMATED_30D");
 
     // A véspera continua sem enxergar nada: o dia seguinte não vaza para trás.
@@ -568,7 +568,7 @@ describe("Custo estimado da formulação", () => {
     // Embalagem entra normalmente no custo material.
     expect(estimate.estimatedMaterialCost).toBe("28.65");
     // Unitário usa basisQuantity (10).
-    expect(estimate.estimatedMaterialUnitCost).toBe("2.8650");
+    expect(estimate.estimatedMaterialUnitCost).toBe("2.86500000");
 
     await app.close();
   });
@@ -652,7 +652,7 @@ describe("Custo de materiais da Ordem de Produção", () => {
     expect(cost.consumptions).toHaveLength(1);
     expect(cost.consumptions[0].lotId).toBe(lotB);
     expect(cost.consumptions[0].costSource).toBe("REAL");
-    expect(cost.consumptions[0].unitCost).toBe("30.0000");
+    expect(cost.consumptions[0].unitCost).toBe("30.00000000");
     // 10 kg × R$ 30 = R$ 300 — nunca a média do item (R$ 20) nem LT-A.
     expect(cost.consumptions[0].materialCost).toBe("300.00");
     expect(cost.totalMaterialCost).toBe("300.00");
@@ -686,7 +686,7 @@ describe("Custo de materiais da Ordem de Produção", () => {
     expect(cost.totalMaterialCost).toBe("8910.00");
     expect(cost.producedQuantity).toBe("990");
     // 8910 / 990 = 9,00 — divisor é a produção real, refletindo a perda.
-    expect(cost.materialUnitCost).toBe("9.0000");
+    expect(cost.materialUnitCost).toBe("9.00000000");
 
     await app.close();
   });
@@ -728,7 +728,7 @@ describe("Custo de materiais da Ordem de Produção", () => {
     const cost = await getMaterialCost(app, orderId);
     expect(cost.consumptions[0].lotId).toBe(semCusto.lines[0].lotId);
     expect(cost.consumptions[0].costSource).toBe("ESTIMATED_30D");
-    expect(cost.consumptions[0].unitCost).toBe("20.0000");
+    expect(cost.consumptions[0].unitCost).toBe("20.00000000");
     expect(cost.quality).toBe("ESTIMATED");
     expect(cost.totalMaterialCost).toBe("200.00");
 
@@ -830,8 +830,9 @@ describe("Custo de materiais da Ordem de Produção", () => {
     await receiveWithCost(app, { supplierId: supplier.id, itemId: item.id, quantity: "2", unitCost: "0.2" });
 
     const reference = await getCostReference(app, item.id);
-    // (1×0,1 + 2×0,2) / 3 = 0,5/3 = 0,166666...
-    const expected = new Prisma.Decimal("0.5").dividedBy(3).toFixed(4);
+    // (1×0,1 + 2×0,2) / 3 = 0,5/3 = 0,166666... — dízima, servida com as 8
+    // casas da coluna desde o PREC-MIG-B.
+    const expected = new Prisma.Decimal("0.5").dividedBy(3).toFixed(8);
     expect(reference.unitCost).toBe(expected);
 
     await app.close();

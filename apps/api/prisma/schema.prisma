@@ -1633,7 +1633,7 @@ model SupplierItemOffer {
 
   /// Sempre informado: preco desconhecido nao gera oferta. Zero e zero
   /// explicito, nunca "nao sei".
-  unitPrice    Decimal @db.Decimal(14, 4)
+  unitPrice    Decimal @db.Decimal(20, 8)
   currencyCode String  @db.VarChar(3)
 
   /// Unidade a que o preco se refere (R$ 120/kg, R$ 0,15/un).
@@ -1954,7 +1954,7 @@ model ItemCostReference {
   item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   /// Custo por `uomCode`. Zero e zero explicito; desconhecido nao gera linha.
-  unitCost     Decimal @db.Decimal(14, 4)
+  unitCost     Decimal @db.Decimal(20, 8)
   currencyCode String  @default("BRL") @db.VarChar(3)
 
   /// Unidade a que o valor se refere (R$ 1.200,00 / kg). Mesma dimensao da
@@ -2587,7 +2587,7 @@ model ReceiptLine {
   /// explicitamente informado, nunca reinterpretado como desconhecido.
   /// Nomeado "de aquisicao" para no futuro comportar mercadoria + frete +
   /// despesas diretamente atribuiveis, sem quebrar o schema.
-  actualUnitCost Decimal?  @db.Decimal(14, 4)
+  actualUnitCost Decimal?  @db.Decimal(20, 8)
   costUpdatedAt  DateTime?
   costUpdatedBy  String?
   costNote       String?

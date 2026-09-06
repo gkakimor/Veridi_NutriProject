@@ -157,10 +157,10 @@ precificação no PREC-MIG-B.
 | ProductionOrderRequirement.overagePercent | PERCENTAGE | 6,3 | congelado na OP | POTENTIAL_RISK | 9,6 | Sim — B |
 | FormulationTemplateComponent.purityPercentApplied | PERCENTAGE | 6,3 | template | POTENTIAL_RISK | 9,6 | Sim — B |
 | FormulationTemplateComponent.overagePercent | PERCENTAGE | 6,3 | template | POTENTIAL_RISK | 9,6 | Sim — B |
-| ItemCostReference.unitCost | UNIT_COST | 14,4 | referência manual de custo | POTENTIAL_RISK | 20,8 | Sim — B |
-| ReceiptLine.actualUnitCost | UNIT_COST | 14,4 | custo efetivo de aquisição — origem de toda média | **NEEDS_DOMAIN_DECISION** | 20,8 | **Sim — B** |
-| SupplierItemOffer.unitPrice | UNIT_COST | 14,4 | oferta de fornecedor | POTENTIAL_RISK | 20,8 | Sim — B |
-| PurchaseOrderLine.unitPrice | UNIT_PRICE | 14,4 | preço da OC | NEEDS_DOMAIN_DECISION | 20,8 | Sim — B |
+| ItemCostReference.unitCost | UNIT_COST | 14,4 | referência manual de custo | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
+| ReceiptLine.actualUnitCost | UNIT_COST | 14,4 | custo efetivo de aquisição — origem de toda média | decidido pelo PO | 20,8 | **Sim — B (ENTREGUE)** |
+| SupplierItemOffer.unitPrice | UNIT_COST | 14,4 | oferta de fornecedor, lida como custo pelo seletor | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
+| PurchaseOrderLine.unitPrice | UNIT_PRICE | 14,4 | preço da OC | NEEDS_DOMAIN_DECISION | 20,8 | Não — categoria UNIT_PRICE, fora do PREC-MIG-B |
 | **QuoteLine.unitPrice** | UNIT_PRICE | 14,4 | preço da linha do orçamento | **NEEDS_DOMAIN_DECISION** | 20,6 ou manter | **Decisão do PO** |
 | CustomerOrderLine.agreedUnitPrice | UNIT_PRICE | 14,4 | preço acordado — contratual | DOCUMENTAL, ver §6 | manter 14,4 | Não |
 | BillingLine.agreedUnitPrice / unitPrice | UNIT_PRICE | 14,4 | preço faturado — emitido | DOCUMENTAL, ver §6 | manter 14,4 | Não |
@@ -257,7 +257,7 @@ fator não decimal — libra→kg é `0.45359237`, oito casas — truncaria para
 `0.453592` e contaminaria toda quantidade convertida. Não é defeito atual; é
 fragilidade estrutural que a primeira unidade imperial ou volumétrica ativa.
 
-### R4 — Custo efetivo de aquisição em `Decimal(14,4)` — ALTO
+### R4 — Custo efetivo de aquisição em `Decimal(14,4)` — RESOLVIDO na Fundação B
 
 `ReceiptLine.actualUnitCost` é a **única origem** de custo real do sistema: a
 média ponderada 30d/90d, o último custo real e o custo do lote consumido saem
@@ -560,12 +560,18 @@ truncaria. Por isso a decisão de scale precisa nascer certa, e por isso 12 e n�
    do PREC-MIG-D, que fica só com os de `14,4` e `14,6`. Migration
    `20260925093001_numeric_precision_quantities_24_12`, sem backfill: 371
    valores existentes conferidos antes e depois, zero divergência matemática.
-2. **PREC-MIG-B, C e D** — custo em `DECIMAL(20,8)`, pureza e overage em
-   `DECIMAL(9,6)`, demais resultados técnicos.
-3. **PREC-SER-01, PREC-SER-02 e PREC-FMT-01** — não são migration de schema, mas
+2. **PREC-MIG-B** — **ENTREGUE em 2026-09-05.** As três colunas UNIT_COST em
+   `DECIMAL(20,8)`: `ReceiptLine.actualUnitCost`, `ItemCostReference.unitCost` e
+   `SupplierItemOffer.unitPrice`. Migration
+   `20260925093002_numeric_precision_unit_cost_20_8`, sem backfill.
+   `PurchaseOrderLine.unitPrice` ficou fora: a linha do inventário diz "Sim — B",
+   mas a **categoria** é UNIT_PRICE, e o PREC-MIG-B do PO é UNIT_COST.
+3. **PREC-MIG-C e D** — pureza e overage em `DECIMAL(9,6)`, demais resultados
+   técnicos.
+4. **PREC-SER-01, PREC-SER-02 e PREC-FMT-01** — não são migration de schema, mas
    precisam entrar depois do widening para que a serialização já espelhe o scale
    novo. `PREC-FMT-01` é pré-requisito de qualquer preset acima de seis casas.
-4. **PREC-MIG-E** — o que exigir decisão individual, caso a caso.
+5. **PREC-MIG-E** — o que exigir decisão individual, caso a caso.
 
 **Ordem obrigatória:** `Decimal.precision` **antes ou junto** do widening. Ampliar
 a coluna sem ampliar o motor cria coluna que o sistema não consegue preencher.
