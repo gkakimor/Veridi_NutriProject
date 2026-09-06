@@ -29,23 +29,25 @@ const PRECISOES_DA_MATRIZ = new Map<string, string>([
   ["20,8", "UNIT_COST e UNIT_PRICE técnico/operacional"],
   ["9,6", "PURITY/OVERAGE"],
   // Ainda não migradas. Cada uma tem capability nomeada no BACKLOG, seção E.
-  ["14,4", "UNIT_PRICE contratual, RATE e composição de custo — §58 e PREC-MIG-E"],
+  ["14,4", "UNIT_PRICE contratual, RATE e TECHNICAL_TOTAL — §58 e §63"],
   ["18,6", "excluídas do PREC-MIG-A por decisão — ver lista abaixo"],
 ]);
 
 /**
- * As únicas colunas que podem permanecer em `18,6` depois do PREC-MIG-A.
+ * As únicas colunas que podem permanecer em `18,6`.
  *
  * Não é uma lista de tolerância: é a decisão registrada. Os dois campos
  * `legacy*` são dado importado sobre o qual ninguém calcula
- * (`NOT_APPLICABLE` no inventário da auditoria), e
- * `QuoteLine.industrialCostPerUnitSnapshot` viaja com os demais snapshots de
- * precificação da mesma linha, no PREC-MIG-B — separá-lo quebraria a família.
+ * (`NOT_APPLICABLE` no inventário da auditoria).
+ *
+ * `QuoteLine.industrialCostPerUnitSnapshot` SAIU desta lista no PREC-MIG-E: o
+ * inventário o registrava viajando com o PREC-MIG-B, que o PO fechou como
+ * UNIT_COST, e o alvo ficou órfão. A classificação semântica do E desfez o
+ * conflito — é TECHNICAL_RESULT derivado, `DECIMAL(24,12)`.
  */
 const EXCECOES_18_6 = new Set([
   "FormulationComponent.legacyTotalQuantity",
   "FormulationComponent.legacyBatchUnits",
-  "QuoteLine.industrialCostPerUnitSnapshot",
 ]);
 
 interface Coluna {
@@ -215,6 +217,42 @@ describe("matriz de precisão numérica", () => {
     // E `14,6` deixou de existir: a matriz não reconhece mais essa precisão, e
     // uma coluna nova copiada da linha de cima falha antes de chegar aqui.
     expect(colunas.filter((c) => c.precisao === "14,6")).toEqual([]);
+  });
+
+  it("o custo industrial por unidade do PREC-MIG-E está em 24,12", () => {
+    // A ÚNICA coluna que o PREC-MIG-E migrou. `QuoteLine`
+    // .industrialCostPerUnitSnapshot é TECHNICAL_RESULT derivado — cópia de
+    // `PricingTier.costPerUnitSnapshot`, que já é `24,12` —, e não custo de
+    // aquisição informado. Medido antes de migrar: `1000,00 ÷ 300` valia
+    // `3.333333333333` na faixa e `3.333333` na linha congelada.
+    const porChave = new Map(colunas.map((c) => [`${c.model}.${c.campo}`, c.precisao]));
+    expect(porChave.get("QuoteLine.industrialCostPerUnitSnapshot")).toBe("24,12");
+    expect(porChave.get("PricingTier.costPerUnitSnapshot")).toBe("24,12");
+    expect(porChave.get("IndustrialCostCalculation.costPerUnit")).toBe("24,12");
+
+    // Os TOTAIS ficam em `14,4` — decisão do PO em 2026-09-06, §63. Não é
+    // pendência: nenhum consumidor deles recebe mais de duas casas, e o que
+    // faltava era fronteira, não escala. O teste falha se alguém ampliar um
+    // por vizinhança de bloco.
+    for (const chave of [
+      "PricingTier.costTotalSnapshot",
+      "PricingTier.costPer1000Snapshot",
+      "PricingTier.knownSubtotalSnapshot",
+      "PricingTier.commissionTotalSnapshot",
+      "PricingTier.grossRevenueSnapshot",
+      "PricingTier.contributionTotalSnapshot",
+      "IndustrialCostCalculation.directIndustrialCost",
+      "IndustrialCostCalculation.overheadCost",
+      "IndustrialCostCalculation.totalIndustrialCost",
+      "IndustrialCostCalculation.knownSubtotal",
+      "IndustrialCostCalculation.costPer1000",
+      "ProductionOrderCostSnapshot.actualMaterialCostKnown",
+      "ProductionOrderCostSnapshot.standardAppliedCostKnown",
+      "ProductionOrderCostSnapshot.knownSubtotal",
+      "ProductionOrderCostSnapshot.totalIndustrialCost",
+    ]) {
+      expect(porChave.get(chave), `${chave} é TECHNICAL_TOTAL e fica em 14,4`).toBe("14,4");
+    }
   });
 
   it("a pureza e o overage do PREC-MIG-C estão em 9,6", () => {

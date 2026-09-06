@@ -4,13 +4,12 @@
 
 ## Onde estamos
 
-**`main` @ `6c5c146`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `8a40b52`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9, #3,
 #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**,
-as **Fundações numéricas A, B, C e P**, o **PREC-P-TECH** e o **#18**, todos
-aprovados pelo PO. **Produção:** Railway, deploy automático da `main`; health
-200, banco up, 55 migrations sem pendência, smoke autenticado passando, sem dado
-de negócio.
+as **Fundações numéricas A, B, C, P e D** e o **#18**, todos aprovados pelo PO.
+**Produção:** Railway, deploy automático da `main`; health 200, banco up, 55
+migrations sem pendência, smoke autenticado passando, sem dado de negócio.
 
 MVP operacional **validado internamente**, blocos A a G fechados — de cadastros e
 compras a produção rastreada, expedição, faturamento, custos, cockpit,
@@ -19,43 +18,54 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
 ## Última capability — aguardando PO review
 
-**PREC-MIG-D — resultado técnico da precificação em `DECIMAL(24,12)`**, na branch
-`feat/numeric-precision-technical-results`, **não mergeada**. Três colunas de
-`Decimal(14,6)`, migration `20260925093006_numeric_precision_technical_results_24_12`,
-sem backfill: `PricingTier.commissionPerUnitSnapshot`,
-`.contributionPerUnitSnapshot` e `QuoteLine.contributionPerUnitSnapshot`. Medido
-contra o PostgreSQL antes de migrar: `'0.2026593333333333'::decimal(14,6)`
-devolvia `0.202659` — **seis casas perdidas**, cortadas pelo banco no `UPDATE` da
-ativação, sem `.toFixed()` no código.
+**PREC-MIG-E — a matriz de §58 aplicada ao schema inteiro.** Branch
+`feat/numeric-precision-technical-results-e`. As 16 colunas de alvo órfão foram
+classificadas pelo PAPEL do valor, e a decisão do PO separou o que parecia igual.
 
-**A decisão durável é a TERCEIRA fronteira** ([`PRODUCT_RULES.md`](PRODUCT_RULES.md)
-§62): resultado técnico persistido fecha em **doze casas** com `ROUND_HALF_UP`
-declarado na chamada, em `fecharResultadoTecnicoPersistido`. Resultado técnico
-não é preço, mesmo sendo dinheiro por unidade — a categoria é o PAPEL do valor,
-não a unidade; por isso `24,12` e não os `20,8` do preço técnico. Entrada de
-usuário acima do scale continua sendo HTTP 400 (§58); resultado CALCULADO com
-mais de doze casas é normal e é fechado, nunca recusado.
+**PREC-E-01 — uma migration, uma coluna.**
+`QuoteLine.industrialCostPerUnitSnapshot` de `Decimal(18,6)` para
+`DECIMAL(24,12)`, migration `…093007`, sem backfill. É TECHNICAL_RESULT derivado
+— `total ÷ quantidade da faixa` —, cópia de `PricingTier.costPerUnitSnapshot`,
+que já era `24,12`. Medido antes de migrar: `(1000,00 ÷ 300)` vale
+`3,333333333333` e a coluna guardava `3,333333`. O congelamento passou a fechar
+por `fecharResultadoTecnicoPersistido`.
 
-**A cadeia moveu-se inteira** — a contribuição da faixa é copiada para a linha do
-Orçamento no ENVIO da proposta, e alargar só a faixa trocaria um corte silencioso
-por outro. Serialização em 12 casas na faixa, prévia, proveniência, relatório de
-precificação, política de preço e prévia de rebase; a prévia fecha pela MESMA
-fronteira da ativação, com teste exigindo números iguais. **Nada comercial se
-moveu:** `QuoteLine.unitPrice` em `14,4`, total e subtotal por §55, #15 e #18
-intocados, e a tela continua mostrando `R$ 0,65` — apresentação não é
-armazenamento (§57), e nenhum caminho da tela devolve resultado derivado.
+**PREC-E-02 — zero migration.** Os seis totais de `PricingTier` **mantêm**
+`DECIMAL(14,4)`: nenhum consumidor recebe mais de duas casas, e ampliar guardaria
+precisão que a própria saída corta. Faltava **fronteira** —
+`fecharTotalTecnicoPersistido`, quatro casas, `ROUND_HALF_UP` declarado. A
+categoria **TECHNICAL_TOTAL** virou regra durável (§63), com o princípio que a
+sustenta: a escala acompanha o papel do valor e o alcance real do dado, não a
+escala da coluna vizinha. São agora **quatro fronteiras nomeadas** — 12 casas
+para resultado técnico (§62), 8 para preço técnico (§60 A), 4 para total técnico
+(§63) e 4 para o fechamento comercial (§60 B).
 
-**O residual foi para o PREC-MIG-E, não para o D.** O inventário classificou as
-107 colunas `Decimal` do schema e achou exatamente **três** TECHNICAL_RESULT
-residuais inequívocos. Ficaram `NEEDS_PO_DECISION` 16 colunas de **alvo órfão** —
-totais de `PricingTier`, composição de `IndustrialCostCalculation` e de
-`ProductionOrderCostSnapshot`, e `QuoteLine.industrialCostPerUnitSnapshot` em
-`18,6`, que hoje recebe doze casas numa coluna de seis. A auditoria recomendou
-`20,8` para elas dentro de um PREC-MIG-B que fechou como UNIT_COST, e o alvo
-ficou sem dono. Detalhe em
-[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.1.
+**F-2 e F-3 viraram §64.** `total persistido ÷ quantidade` não devolve o
+`costPerUnit` gravado, e `porUnidade × quantidade` não devolve o total gravado:
+fronteiras diferentes não se reproduzem entre si, e isso é regra, não defeito.
+Com o limite explícito — a assimetria vive DENTRO da fronteira, e divergência
+**visível** entre duas telas para a mesma grandeza comercial continua proibida.
+
+**Nove colunas intocadas, e não por dúvida:** `IndustrialCostCalculation` e
+`ProductionOrderCostSnapshot` já recebem o valor fechado em duas casas pelo
+motor. Quatro delas não são lidas de volta — `CURRENTLY_REDUNDANT`, **não**
+candidatas a remoção; apagar coluna é outra decisão.
+
+**Higiene DEV, autorizada pelo PO.** Banco local reconstruído do zero pelo
+caminho oficial (`local-db-reset.mjs`): backup verificado antes do drop (3,0 MB,
+723 objetos), migrations do repositório reaplicadas, seed só de infraestrutura. O
+inventário provou que nada de negócio existia — 7718 de 7719 usuários e todos os
+itens eram massa de suíte. Efeito colateral desejado: o `_prisma_migrations`
+local voltou a bater com o repositório e a linha órfã `20260926090000_...`
+desapareceu **sem edição manual do ledger**.
 
 ## Antes dela
+
+**PREC-MIG-D** (`8a40b52`). As três colunas `14,6` de resultado técnico da
+precificação em `DECIMAL(24,12)` — comissão e contribuição por unidade na faixa,
+e a contribuição congelada na linha do Orçamento —, sem backfill. Regra durável:
+a **terceira fronteira** (§62), doze casas com `ROUND_HALF_UP` declarado.
+Resultado técnico não é preço, mesmo sendo dinheiro por unidade.
 
 **#18** (`34a5424`). O rodapé da Ordem de Compra virou a soma das linhas
 impressas — `40,53 + 0,13 + 0,13` fecha `40,79`, não `40,78` (§61) —, com
@@ -64,12 +74,10 @@ superfícies. Zero migration; a OC não persiste dinheiro, então mudou a conta 
 deriva, não o dado.
 
 **PREC-P-TECH** (`b358fd8`). Os quatro preços técnicos da precificação em
-`DECIMAL(20,8)`, sem backfill. A regra durável é a **fronteira** (§60): preço
+`DECIMAL(20,8)`, sem backfill. Regra durável: a **fronteira** (§60) — preço
 técnico (8 casas) e preço comercial (4) são dois números, e a passagem é
-fechamento explícito — `fecharPrecoUnitarioComercial` e
-`fecharPrecoTecnicoPersistido`, com `ROUND_HALF_UP` declarado.
-`QuoteLine.unitPrice` fica em `14,4` por decisão do PO, e preço acima do scale é
-recusado dos dois lados.
+fechamento explícito. `QuoteLine.unitPrice` fica em `14,4` por decisão do PO, e
+preço acima do scale é recusado dos dois lados.
 
 **P, C, B e A** (`e94971f`, `e7656ab`, `b5f6089`, `5f855cd`). O preço da OC em
 `DECIMAL(20,8)` (`4.05318764::decimal(14,4)` devolvia `4.0532`), servido também
@@ -80,7 +88,7 @@ do scale como regra de produto** (§58). Custo unitário em `DECIMAL(20,8)`, com
 decimal em 40 dígitos numa configuração única — existem DOIS construtores nesta
 base e o Prisma roda no dele — com 43 colunas em `DECIMAL(24,12)`. Antes disso,
 **auditoria PREC-01** (`0305704`) e **Rodadas 1 a 4** — #15 e #16 (`33ee1cd`),
-#8D e #8H (`b89f9a4`), #8A–#8C (`dfb2673`). Regras §53 a §62; detalhe em
+#8D e #8H (`b89f9a4`), #8A–#8C (`dfb2673`). Regras §53 a §64; detalhe em
 [`BACKLOG.md`](BACKLOG.md), seção G.
 
 ## Estado operacional do repositório
@@ -89,16 +97,18 @@ base e o Prisma roda no dele — com 43 colunas em `DECIMAL(24,12)`. Antes disso
 históricas foram aposentadas — 51 scripts, ≈35 mil linhas —, com cada regra
 mapeada em [`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md) numa camada menor e
 determinística; infraestrutura em `scripts/e2e/lib/`, plano em
-[`E2E_STRATEGY.md`](E2E_STRATEGY.md). **Reconstrução do banco do zero:** as 55
+[`E2E_STRATEGY.md`](E2E_STRATEGY.md). **Reconstrução do banco do zero:** as 56
 migrations aplicam num banco vazio só com o repositório —
 `scripts/migration-order.test.ts` em `pnpm test` e
 `pnpm validate:migrations:fresh`; regra em [`TECH_BASELINE.md`](TECH_BASELINE.md).
 
 ## Próxima capability
 
-**PREC-MIG-E** — as 16 colunas de alvo órfão do inventário D, campo a campo.
-Depois: PREC-SER-01 (PARCIAL — dois pontos medidos, ambos fora do grupo D) e
-PREC-FMT-01.
+**PREC-SER-01** — resta **um** ponto medido, e fora de toda a cadeia da
+precificação: `industrial-cost-calculation/calculation.service.ts:41` serve em
+seis casas o custo unitário de MATERIAL, que vem de colunas `DECIMAL(20,8)` —
+corta duas casas da família UNIT_COST. Uma linha, com helper que já existe
+(`custoUnitario`). Depois: **PREC-FMT-01**.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11) — não bloqueia os itens internos já decididos pelo PO.
@@ -107,8 +117,9 @@ Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 ## Backlog aberto
 
 [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#20 e #18
-resolvidos; #19 ABERTO / PARCIAL** com PREC-MIG-A, B, C, P e D entregues.
-**Seguinte:** PREC-MIG-E, PREC-SER-01 e PREC-FMT-01. **Roadmap:** PREC-UI-01 a
+resolvidos; #19 ABERTO / PARCIAL — a parte de migrations está completa**, com
+PREC-MIG-A, B, C, P, D e E entregues. Fechar o item depende de PREC-SER-01 e
+PREC-FMT-01, e é decisão do PO. **Seguinte:** PREC-SER-01 e PREC-FMT-01. **Roadmap:** PREC-UI-01 a
 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
 **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não determinística sob
 paralelismo — uma falha isolada em `finished-goods.test.ts` nesta rodada, não

@@ -270,7 +270,10 @@ export async function getQuotePricingAuditReport(
       costQuality: frozen
         ? line.costQualitySnapshot
         : (line.pricingTier?.costQualitySnapshot ?? null),
-      industrialCostPerUnit: costPerUnit ? costPerUnit.toFixed(6) : null,
+      // RESULTADO TÉCNICO — doze casas, PREC-E-01. As duas origens deste
+      // campo (o snapshot congelado da linha e o `costPerUnitSnapshot` da
+      // faixa viva) estão agora na MESMA escala; servir seis cortaria as duas.
+      industrialCostPerUnit: costPerUnit ? resultadoTecnico(costPerUnit) : null,
       contributionMarginPercent: contribution ? contribution.toFixed(4) : null,
       sentAt: quote.sentAt ? quote.sentAt.toISOString() : null,
       acceptedAt: quote.acceptedAt ? quote.acceptedAt.toISOString() : null,

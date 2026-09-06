@@ -25,6 +25,7 @@ import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
 import { fecharPrecoTecnicoPersistido } from "../../lib/technical-price.js";
 import { fecharResultadoTecnicoPersistido } from "../../lib/technical-result.js";
+import { fecharTotalTecnicoPersistido } from "../../lib/technical-total.js";
 import { isUomCompatible } from "../items/uom.js";
 import {
   CalculationProductMismatchError,
@@ -1041,10 +1042,25 @@ export async function activatePricingVersion(
       await tx.pricingTier.update({
         where: { id: entry.tier.id },
         data: {
-          costTotalSnapshot: entry.cost.total,
+          /*
+           * FRONTEIRA DE PERSISTÊNCIA do TOTAL TÉCNICO — PREC-E-02.
+           *
+           * O motor soma e divide em 40 dígitos; estas colunas guardam quatro
+           * casas, e até aqui quem reduzia 40 para quatro era o PostgreSQL, no
+           * `update`. A escala permanece `DECIMAL(14,4)` por decisão do PO —
+           * nenhum consumidor destes campos recebe mais de duas casas —, mas
+           * quem decide o corte passa a ser o domínio, com `ROUND_HALF_UP`
+           * declarado (`PRODUCT_RULES.md` §63).
+           *
+           * `costPerUnitSnapshot` NÃO passa por aqui: é resultado POR UNIDADE,
+           * `DECIMAL(24,12)`, e tem fronteira própria em doze casas (§62).
+           */
+          costTotalSnapshot: entry.cost.total ? fecharTotalTecnicoPersistido(entry.cost.total) : null,
           costPerUnitSnapshot: entry.cost.perUnit,
-          costPer1000Snapshot: entry.cost.per1000,
-          knownSubtotalSnapshot: entry.cost.knownSubtotal,
+          costPer1000Snapshot: entry.cost.per1000
+            ? fecharTotalTecnicoPersistido(entry.cost.per1000)
+            : null,
+          knownSubtotalSnapshot: fecharTotalTecnicoPersistido(entry.cost.knownSubtotal),
           costQualitySnapshot: entry.cost.quality,
           batchCountSnapshot: entry.cost.batchCount.toNumber(),
           targetMarginSnapshot: entry.tier.targetContributionMarginPercent,
@@ -1084,12 +1100,18 @@ export async function activatePricingVersion(
           commissionPerUnitSnapshot: entry.price.commissionPerUnit
             ? fecharResultadoTecnicoPersistido(entry.price.commissionPerUnit)
             : null,
-          commissionTotalSnapshot: entry.price.commissionTotal,
-          grossRevenueSnapshot: entry.price.grossRevenue,
+          commissionTotalSnapshot: entry.price.commissionTotal
+            ? fecharTotalTecnicoPersistido(entry.price.commissionTotal)
+            : null,
+          grossRevenueSnapshot: entry.price.grossRevenue
+            ? fecharTotalTecnicoPersistido(entry.price.grossRevenue)
+            : null,
           contributionPerUnitSnapshot: entry.price.contributionPerUnit
             ? fecharResultadoTecnicoPersistido(entry.price.contributionPerUnit)
             : null,
-          contributionTotalSnapshot: entry.price.contributionTotal,
+          contributionTotalSnapshot: entry.price.contributionTotal
+            ? fecharTotalTecnicoPersistido(entry.price.contributionTotal)
+            : null,
           contributionMarginSnapshot: entry.price.contributionMarginPercent,
           markupSnapshot: entry.price.markupPercent,
           warningsSnapshot: [

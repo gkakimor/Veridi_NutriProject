@@ -3666,14 +3666,19 @@ UNIT_COST (PREC-MIG-B), PURITY / OVERAGE (PREC-MIG-C), o UNIT_PRICE
 operacional da Ordem de Compra (PREC-MIG-P / PREC-P-01) e o UNIT_PRICE técnico
 da precificação (PREC-P-TECH: `PricingTier.manualUnitPrice`,
 `.suggestedPriceSnapshot`, `.selectedPriceSnapshot` e
-`QuoteLine.pricingSelectedUnitPriceSnapshot`) e o TECHNICAL_RESULT residual da
+`QuoteLine.pricingSelectedUnitPriceSnapshot`), o TECHNICAL_RESULT residual da
 precificação (PREC-MIG-D: `PricingTier.commissionPerUnitSnapshot`,
-`.contributionPerUnitSnapshot` e `QuoteLine.contributionPerUnitSnapshot`).** O
-que resta pertence ao PREC-MIG-E: os snapshots de TOTAIS de precificação, a
-composição do custo industrial e do CMV e as tarifas, todos em `14,4`, e
-`QuoteLine.industrialCostPerUnitSnapshot`, em `18,6`. Nenhum deles tem alvo
-decidido — a auditoria recomendou `20,8` dentro de um PREC-MIG-B que fechou como
-UNIT_COST, e o alvo ficou órfão. **`14,6` deixou de existir no schema.**
+`.contributionPerUnitSnapshot` e `QuoteLine.contributionPerUnitSnapshot`) e o
+último elo estreito da cadeia técnica (PREC-MIG-E / PREC-E-01:
+`QuoteLine.industrialCostPerUnitSnapshot`).** A matriz está **aplicada ao schema
+inteiro**: `14,6` deixou de existir, e o único `18,6` que sobrou é o dado
+importado do legado sobre o qual ninguém calcula.
+
+**As colunas em `DECIMAL(14,4)` não são pendência.** Decisão de Product
+Ownership de 2026-09-06, na aprovação do PREC-MIG-E: os totais de precificação,
+a composição do custo industrial e do CMV **permanecem** em `14,4`, como
+TECHNICAL_TOTAL (§63). O que faltava ali era fronteira de fechamento, não
+escala. Preço contratual e tarifa continuam em `14,4` por suas próprias regras.
 
 | Categoria | Tipo aprovado |
 |---|---|
@@ -3686,6 +3691,7 @@ UNIT_COST, e o alvo ficou órfão. **`14,6` deixou de existir no schema.**
 | FACTOR / conversão de unidade | `DECIMAL(24,12)` |
 | MARKUP / fator comercial | precisão atual enquanto suficiente |
 | TECHNICAL_RESULT persistido | `DECIMAL(24,12)` |
+| TECHNICAL_TOTAL persistido | `DECIMAL(14,4)` |
 | COMMERCIAL_TOTAL fechado | `DECIMAL(14,2)` |
 
 **UNIT_PRICE contratual não é ampliado automaticamente.** Snapshot histórico de
@@ -3912,3 +3918,86 @@ representado como `0,202659000000`, e as casas que nunca foram persistidas não
 existem. Sem backfill, sem recálculo. `null` continua `null` — ausência de
 resultado nunca vira zero — e contribuição **negativa** continua sendo
 informação comercial legítima, persistida com o mesmo sinal e a mesma precisão.
+
+## §63 — Total técnico fecha em quatro casas, e a escala é a do consumidor
+
+Decisão de Product Ownership de 2026-09-06, na aprovação do PREC-MIG-E.
+
+Um **total técnico** é o valor econômico AGREGADO de um cenário: custo total da
+faixa, custo por mil, subtotal conhecido, receita bruta, comissão total,
+contribuição total, e a composição do custo industrial e do CMV. Ele é lido e
+conferido; **nunca é operando de outro cálculo**. Guarda **quatro casas**,
+`DECIMAL(14,4)`, §58.
+
+**Quatro, e não doze — e o motivo é o consumidor, não o número.** Ampliar essas
+colunas para `DECIMAL(24,12)` guardaria doze casas que a própria API corta em
+duas na saída: o DTO da faixa e o do cálculo de custo servem todos esses campos
+em moeda. Precisão que nenhum consumidor recebe não é precisão, é ruído com
+custo de migration. **A escala de uma coluna acompanha o papel do valor e o
+alcance real do dado, não a escala da coluna vizinha.**
+
+**O que faltava era FRONTEIRA.** Até o PREC-MIG-E a ativação da precificação
+gravava o resultado de 40 dígitos do motor direto numa coluna de quatro casas, e
+quem decidia o corte era o `UPDATE` — o mesmo defeito de forma que §60 e §62
+corrigiram nas outras duas escalas. Agora:
+
+- **E.** total técnico persistido em 4 casas — `ROUND_HALF_UP` **explícito**, em
+  `fecharTotalTecnicoPersistido`;
+- o PostgreSQL **nunca** é a primeira camada a decidir 40 dígitos → 4 casas;
+- o modo viaja na chamada, nunca herdado do default do `decimal.js` (§59).
+
+São agora **quatro fronteiras nomeadas**, uma por categoria: resultado técnico
+em doze casas (§62), preço técnico em oito (§60 A), total técnico em quatro
+(esta), e o fechamento comercial em quatro (§60 B). O número de casas do total
+técnico coincide com o do preço comercial; a regra, não. Categorias diferentes
+não compartilham função só porque a escala coincide hoje.
+
+**Armazenamento não é exibição.** A coluna guarda quatro casas e o DTO serve
+duas: `123,4567` armazenado aparece como `R$ 123,46`. Nenhuma das duas escalas
+deve ser mudada por causa da outra — §57.
+
+**Nove colunas ficaram intocadas de propósito.** `IndustrialCostCalculation` e
+`ProductionOrderCostSnapshot` já recebem o valor **fechado em duas casas pelo
+próprio motor**, antes de o banco vê-lo. A coluna de quatro casas recebe um
+número de duas: não há corte a corrigir e widening não recuperaria nada. Quatro
+delas nem sequer são lidas de volta — o DTO vem do JSON do snapshot. Estão
+registradas como `CURRENTLY_REDUNDANT`, **não** como candidatas a remoção:
+apagar coluna é outra decisão, com outra rodada.
+
+## §64 — Fronteiras diferentes não se reproduzem entre si, e isso é a regra
+
+Decisão de Product Ownership de 2026-09-06, na aprovação do PREC-MIG-E.
+Formaliza os achados **F-2** e **F-3** da auditoria.
+
+Grandezas de categorias diferentes fecham em escalas diferentes. Portanto, **um
+valor persistido não precisa ser reproduzível a partir de outro valor
+persistido, casa por casa, depois da fronteira**. Isso é comportamento
+esperado, não defeito, e as duas ocorrências conhecidas são:
+
+**F-2 — o resultado por unidade não sai de dividir o total persistido.**
+`IndustrialCostCalculation.costPerUnit` (`24,12`) é calculado pelo motor a
+partir do total em **precisão interna cheia**, antes do fechamento monetário; a
+coluna `totalIndustrialCost` guarda esse total já fechado em centavos. Dividir a
+coluna pela quantidade de referência devolve um número **próximo**, não
+idêntico. O caminho preciso é o do motor; o total persistido existe para ser
+lido.
+
+**F-3 — por unidade vezes quantidade não reproduz o total persistido.**
+`PricingTier.contributionPerUnitSnapshot` guarda doze casas (§62) e
+`.contributionTotalSnapshot` guarda quatro (§63). Logo
+`contribuiçãoPorUnidade × quantidade` diverge de `contribuiçãoTotal` além da
+quarta casa. O mesmo vale para comissão e receita bruta.
+
+**O que NÃO é permitido: divergência VISÍVEL.** A assimetria é técnica e vive
+dentro da fronteira. Na precisão em que o número é **apresentado**, tudo tem de
+reconciliar: a mesma grandeza comercial final não pode aparecer como
+`R$ 100,00` numa tela e `R$ 100,01` em outra. Se isso acontecer, o defeito é
+real e não se explica por esta regra — §55 e §61 continuam valendo, e a
+diferença de fronteira nunca pode ser usada para justificar um documento que não
+fecha.
+
+**Por que escrever isto.** Uma auditoria futura que compare colunas duas a duas
+encontrará essas diferenças e as tratará como erro de arredondamento, e a
+"correção" seria reduzir a precisão do valor por unidade — apagando exatamente o
+que as fundações A a E construíram. A divergência é a consequência de uma
+decisão, e uma consequência que ninguém registrou volta como bug.
