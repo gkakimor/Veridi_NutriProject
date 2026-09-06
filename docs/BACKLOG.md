@@ -208,6 +208,12 @@ nenhum: `PurchaseOrder` e `PurchaseOrderLine` não têm coluna de total, e o
 valor é derivado na leitura. Não existe documento congelado para reconciliar —
 a leitura de toda OC, nova ou antiga, passa a bater com a própria página.
 
+**Consequência histórica ratificada pelo PO na aprovação:** uma OC antiga que
+mostrava `R$ 40,78` pode passar a mostrar `R$ 40,79`. É intencional e **não é
+mutação de dado histórico** — zero `UPDATE`, zero snapshot recalculado, zero
+backfill; o total nunca esteve gravado. Registrado em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §61.
+
 **#15 intocado.** `calcularTotaisOrcamento` e `calcularTotaisFaturamento` não
 foram tocados; a OC tem função própria. O que mudou foi a OC alcançar a mesma
 FORMA de fechamento dos documentos comerciais, não passar a usar a função

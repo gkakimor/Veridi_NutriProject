@@ -3842,7 +3842,16 @@ preço da compra. Média ponderada, custo do lote, CMV e precificação continua
 lendo operandos precisos, nunca o valor fechado do documento.
 
 **A OC não persiste dinheiro.** Não há coluna de total em `PurchaseOrder` nem
-em `PurchaseOrderLine`: o valor é sempre derivado na leitura. Por isso a regra
-nova vale para toda OC, inclusive as antigas — não existe documento congelado
-para reconciliar, nem backfill possível. O que muda é a leitura, e ela passa a
-bater com a página.
+em `PurchaseOrderLine`: o valor é sempre derivado na leitura.
+
+**Consequência histórica, aprovada pelo PO em 2026-09-06.** Uma Ordem de Compra
+antiga que aparecia como `R$ 40,78` pode passar a aparecer como `R$ 40,79`,
+quando as suas linhas somadas documentalmente derem `40,79`. **Isso é
+intencional e NÃO é mutação de dado histórico:** nenhum registro foi alterado no
+banco, nenhum snapshot foi recalculado, nenhum backfill foi executado. O total
+nunca esteve gravado — ele é derivado a cada leitura, e o que mudou foi a conta
+que o deriva. Documento antigo passa a exibir o número que a própria página
+sempre somou.
+
+Onde o valor é **congelado** — Orçamento, Pedido e Faturamento, §55 — a história
+não se move: lá o total é persistido, e regra nova vale da sua data em diante.

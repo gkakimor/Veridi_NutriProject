@@ -19,9 +19,8 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
 ## Última capability
 
-**Reconciliação monetária da Ordem de Compra — #18**, na branch
-`feat/purchase-order-monetary-reconciliation`, aguardando revisão do PO.
-**Zero migration, zero mudança de schema.** O rodapé da OC somava as linhas em
+**Reconciliação monetária da Ordem de Compra — #18**, aprovada pelo PO e
+publicada em 2026-09-06. **Zero migration, zero mudança de schema.** O rodapé da OC somava as linhas em
 precisão cheia e arredondava no fim, enquanto a página imprimia cada linha já
 fechada em dois centavos: `10 × 4,05318764`, `1 × 0,125` e `5 × 0,025` imprimem
 `40,53 + 0,13 + 0,13`, a coluna soma `40,79` e o rodapé dizia **`40,78`**. Quem
@@ -45,7 +44,9 @@ recebimento deixa o item em `NO_COST`. **#15 intocado** — a OC tem função
 própria; o que ela alcançou foi a mesma FORMA de fechamento, não a função dos
 documentos comerciais. **Sem histórico para reconciliar:** a OC não persiste
 dinheiro nenhum, o valor é derivado na leitura, e a regra nova vale para toda OC
-sem backfill possível nem necessário.
+sem backfill possível nem necessário. O PO ratificou a consequência: uma OC
+antiga pode passar a exibir `R$ 40,79` onde exibia `R$ 40,78` — a conta que
+deriva mudou, o dado histórico não (§61).
 
 ## Antes dela
 
