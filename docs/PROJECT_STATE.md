@@ -4,11 +4,11 @@
 
 ## Onde estamos
 
-**`main` @ `370fc18`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `e94971f`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9,
 #3, #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria de
-precisão numérica PREC-01** (só documentação) e as **Fundações numéricas A, B e
-C**, as três com migration e aprovadas pelo PO.
+precisão numérica PREC-01** (só documentação) e as **Fundações numéricas A, B, C
+e P**, as quatro com migration e aprovadas pelo PO.
 **Produção:** Railway, deploy automático da `main`; health 200, banco up, smoke
 autenticado passando, sem dado de negócio.
 
@@ -21,7 +21,7 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 ## Última capability
 
 **Fundação numérica P — PREC-MIG-P / PREC-P-01**, aprovada pelo PO e publicada
-em 2026-09-06. **UMA coluna:**
+em 2026-09-06, merge `e94971f`. **UMA coluna:**
 `PurchaseOrderLine.unitPrice`, de `Decimal(14,4)` para `DECIMAL(20,8)`.
 Migration `20260925093004_numeric_precision_unit_price_20_8`, só `ALTER COLUMN
 ... SET DATA TYPE`, **sem backfill**. Medido contra o PostgreSQL antes de
