@@ -4,12 +4,12 @@
 
 ## Onde estamos
 
-**`main` @ `4a6a102`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `e7656ab`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9,
 #3, #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria de
 precisão numérica PREC-01** (só documentação) e as **Fundações numéricas A**
-(#20 + PREC-MIG-A) e **B** (PREC-MIG-B), ambas com migration. Todas aprovadas
-pelo PO.
+(#20 + PREC-MIG-A), **B** (PREC-MIG-B) e **C** (PREC-MIG-C), as três com
+migration. Todas aprovadas pelo PO.
 **Produção:** Railway, deploy automático da `main`; health 200, banco up, smoke
 autenticado passando, sem dado de negócio.
 
@@ -24,7 +24,7 @@ casos profundos do legado rodaram ponta a ponta contra a interface publicada
 ## Última capability
 
 **Fundação numérica C — PREC-MIG-C**, aprovada pelo PO e publicada em
-2026-09-06. Pureza e overage em `DECIMAL(9,6)`.
+2026-09-06, merge `e7656ab`. Pureza e overage em `DECIMAL(9,6)`.
 
 Sete colunas, a família PERCENTAGE inteira do inventário:
 `Item.defaultPurityPercent`, `FormulationComponent.purityPercentApplied` e
