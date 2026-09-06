@@ -36,9 +36,14 @@ UNIT_COST em `DECIMAL(20,8)`, migration
 `20260925093002_numeric_precision_unit_cost_20_8`, sem backfill. Na aprovação o
 PO confirmou a exclusão de `PurchaseOrderLine.unitPrice` e abriu **PREC-MIG-P**
 (UNIT_PRICE de alta precisão, ABERTO / HIGH).
-**Fundação numérica C (2026-09-06):** **PREC-MIG-C RESOLVIDO** — 7 colunas
-PURITY/OVERAGE em `DECIMAL(9,6)`, migration
-`20260925093003_numeric_precision_purity_overage_9_6`, sem backfill. #19 segue
+**Fundação numérica C aprovada pelo PO e publicada em 2026-09-06:**
+**PREC-MIG-C RESOLVIDO** — 7 colunas PURITY/OVERAGE em `DECIMAL(9,6)`, migration
+`20260925093003_numeric_precision_purity_overage_9_6`, sem backfill. Na
+aprovação o PO **registrou como regra de produto** a recusa explícita acima de
+seis casas: pureza/overage com mais de 6 casas respondem HTTP 400 em vez de
+serem aceitos e arredondados em silêncio pelo PostgreSQL. O PO também nomeou
+**PREC-P-01** (`PurchaseOrderLine.unitPrice → DECIMAL(20,8)`, DECIDIDO /
+PENDENTE) dentro do PREC-MIG-P. #19 segue
 **ABERTO / PARCIAL** e PREC-MIG-D **ABERTO / PARCIAL**. **Seguinte:**
 **PREC-MIG-P** (HIGH, com PREC-SER-02), depois o D residual.
 
@@ -332,7 +337,8 @@ implementação.
 | **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **RESOLVIDO** — 7 colunas, migration `20260925093003_numeric_precision_purity_overage_9_6` |
 | **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL** — 3 campos já entregues no A, ver abaixo |
 | **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
-| **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **ABERTO / NEXT, HIGH** — `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` já aprovado |
+| **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **ABERTO / NEXT, HIGH** — contém **PREC-P-01** |
+| **PREC-P-01** | `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` | **DECIDIDO / PENDENTE** — alvo aprovado pelo PO em 2026-09-05, sem implementação |
 
 **PREC-MIG-B — entregue em 2026-09-05.** `ReceiptLine.actualUnitCost` é a fonte
 de custo real e alimenta custo de aquisição, média ponderada, estoque, CMV e
@@ -361,11 +367,12 @@ Apesar do nome, no domínio atual o campo participa diretamente da seleção
 canônica de custo — `cost-source-selection.ts` o lê como `unitCost`. Vale o uso
 real, não o nome.
 
-**PREC-MIG-P — UNIT_PRICE de alta precisão. ABERTO / HIGH.** Decisão do PO de
-2026-09-05: um preço unitário de compra pode legitimamente ter mais de quatro
+**PREC-MIG-P — UNIT_PRICE de alta precisão. ABERTO / NEXT, HIGH.** Decisão do PO
+de 2026-09-05: um preço unitário de compra pode legitimamente ter mais de quatro
 casas — `4,05318764` —, e o banco deve preservar o valor preciso mesmo quando a
-tela mostra menos. **`PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` está
-aprovado**; os demais UNIT_PRICE entram na avaliação da capability.
+tela mostra menos. **PREC-P-01 — `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)`
+— está DECIDIDO e PENDENTE de implementação**; os demais UNIT_PRICE entram na
+avaliação da capability.
 
 A separação que a capability precisa respeitar: **preço unitário da OC** é
 grandeza técnica de alta precisão; **total monetário da linha e do documento**
@@ -443,7 +450,7 @@ em `18,6` falha o gate.
 
 | Item | Escopo | Status |
 |---|---|---|
-| **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | APROVADO — segue as dependências reais do widening |
+| **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | **ABERTO / PARCIAL A+B+C** — as três famílias já migradas foram auditadas e serializam por `.toString()`/`csvDecimal`, sem corte; o resto segue as dependências de D e P |
 | **PREC-SER-02** | Gravação de preço técnico de 6 casas em coluna de 4 quando **não** for snapshot contratual | APROVADO — anda junto do **PREC-MIG-P**, a família UNIT_PRICE |
 | **PREC-FMT-01** | Eliminar `Number` nos formatters para grandeza técnica de alta precisão | APROVADO — obrigatório antes de qualquer preset acima de 6 casas |
 

@@ -3662,8 +3662,10 @@ unitário, a quantidade, o custo, o CMV ou os fatores que o produziram.
 ## §58 — Matriz de precisão numérica por categoria
 
 Decisão de Product Ownership de 2026-09-05, derivada da auditoria. É a
-referência para toda coluna numérica nova e para o widening futuro. **Ainda não
-aplicada ao schema** — a implementação pertence às capabilities PREC-MIG-A a E.
+referência para toda coluna numérica nova e para o widening futuro. **Aplicada
+ao schema em QUANTITY, FACTOR, TECHNICAL_RESULT persistido (PREC-MIG-A),
+UNIT_COST (PREC-MIG-B) e PURITY / OVERAGE (PREC-MIG-C).** O restante pertence às
+capabilities PREC-MIG-D, E e P.
 
 | Categoria | Tipo aprovado |
 |---|---|
@@ -3689,6 +3691,22 @@ decisão nenhuma.
 **`DECIMAL(30,12)` foi recusado como baseline.** Não por excesso de casas
 decimais, mas por excesso de parte inteira e por incompatibilidade com o motor:
 ver §59.
+
+**Precisão acima do scale é RECUSADA, nunca arredondada em silêncio.** Decisão
+de Product Ownership de 2026-09-06, na aprovação do PREC-MIG-C, e vale para toda
+categoria já migrada. Até o scale da coluna, o valor é aceito e preservado
+inteiro; acima dele a fronteira da API responde **HTTP 400** com a mensagem
+`Valor com precisão acima do suportado: no máximo N casas decimais.` Aceitar e
+deixar o PostgreSQL arredondar é o defeito que a fundação numérica existe para
+eliminar — o operador digitava um número e o banco gravava outro sem dizer.
+A mudança visível é intencional: um valor mais longo que a coluna passa a falhar
+onde antes passava calado.
+
+**Precisão de armazenamento e faixa de negócio são regras independentes.**
+`DECIMAL(9,6)` suporta 999,999999 e isso não autoriza pureza acima de 100:
+pureza segue `0 < x <= 100` e overage segue `>= 0`. Ampliar uma coluna nunca
+amplia um limite de domínio, e nenhuma migration de precisão altera unidade ou
+semântica — `98` continua significando 98%, jamais 0,98.
 
 ## §59 — Uma configuração canônica de Decimal
 

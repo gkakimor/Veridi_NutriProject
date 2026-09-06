@@ -23,8 +23,8 @@ casos profundos do legado rodaram ponta a ponta contra a interface publicada
 
 ## Última capability
 
-**Fundação numérica C — PREC-MIG-C**, entregue em 2026-09-06, aguardando review
-do PO. Pureza e overage em `DECIMAL(9,6)`.
+**Fundação numérica C — PREC-MIG-C**, aprovada pelo PO e publicada em
+2026-09-06. Pureza e overage em `DECIMAL(9,6)`.
 
 Sete colunas, a família PERCENTAGE inteira do inventário:
 `Item.defaultPurityPercent`, `FormulationComponent.purityPercentApplied` e
@@ -50,8 +50,13 @@ não é autorização de negócio: pureza segue `0 < x <= 100`, overage segue
 sem `dosesPerPackage` segue fail-closed. O que mudou é a precisão dos
 operandos.
 
-**PREC-MIG-C entregue. #19 e PREC-MIG-D seguem ABERTOS / PARCIAIS. PREC-MIG-P
-é o próximo, HIGH.**
+Na aprovação o PO **registrou a recusa acima de seis casas como regra de
+produto** ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §58): pureza/overage mais
+longos que o scale respondem HTTP 400 em vez de serem arredondados em silêncio
+pelo banco — a mudança visível é intencional.
+
+**PREC-MIG-C RESOLVIDO. #19 e PREC-MIG-D seguem ABERTOS / PARCIAIS. PREC-MIG-P
+é o próximo, HIGH, com PREC-P-01 já decidido.**
 
 ## Antes dela
 
@@ -93,8 +98,10 @@ banco vazio só com o repositório — `scripts/migration-order.test.ts` em
 
 ## Próxima capability
 
-**PREC-MIG-P** — UNIT_PRICE de alta precisão (HIGH, junto de PREC-SER-02).
-Depois: o PREC-MIG-D residual, PREC-SER-01, PREC-FMT-01, #18 e PREC-MIG-E.
+**PREC-MIG-P** — UNIT_PRICE de alta precisão (HIGH, junto de PREC-SER-02),
+contendo **PREC-P-01** (`PurchaseOrderLine.unitPrice → DECIMAL(20,8)`, decidido
+e pendente). Depois: o PREC-MIG-D residual, PREC-SER-01, PREC-FMT-01, #18 e
+PREC-MIG-E.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do
 processo real do cliente (#7, #11) — não bloqueia os itens internos já decididos
