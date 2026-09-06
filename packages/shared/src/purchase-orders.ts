@@ -11,21 +11,39 @@ export interface LinhaParaTotalDaOrdem {
 }
 
 export interface TotaisDaOrdemDeCompra {
-  /** `orderedQuantity × unitPrice` por linha, 2 casas; `null` sem preço ou sem quantidade. */
+  /** `round(orderedQuantity × unitPrice, 2)`; `null` sem preço ou sem quantidade. */
   lineTotals: (string | null)[];
-  /** Soma das linhas com preço, 2 casas só na saída; `null` se nenhuma tiver preço. */
+  /** Soma dos `lineTotals` já fechados; `null` se nenhuma linha tiver preço. */
   orderTotal: string | null;
 }
+
+/** Escala do dinheiro no documento — duas casas, o que se confere no papel. */
+const ESCALA_MONETARIA = 2;
 
 /**
  * A conta do total previsto da OC — uma só, para a API e para a tela.
  *
- * A tela somava `Number(qty) * Number(price)` enquanto a API somava em
- * `Decimal`, e o rodapé de uma OC gravada mostrava o `orderTotal` do último
- * salvamento ao lado de linhas recalculadas ao vivo: número vivo ao lado de
- * número velho. Agora a prévia e o documento passam pela mesma função. Nada é
- * arredondado antes da soma; as 2 casas entram só na saída, como o total em
- * dinheiro sempre foi.
+ * **O rodapé fecha com as linhas que estão na página.** `PRODUCT_RULES.md`
+ * §61, BACKLOG #18:
+ *
+ *     lineTotal  = round(quantidade × preço unitário, 2)
+ *     orderTotal = Σ lineTotal
+ *
+ * e nunca `round(Σ valores brutos, 2)`. Com preço de oito casas as duas contas
+ * divergem em centavos: `10 × 4,05318764` mais `1 × 0,125` mais `5 × 0,025`
+ * imprime `40,53 + 0,13 + 0,13`, que quem confere soma como `40,79` — e a
+ * conta antiga fechava `40,78`. Um rodapé que não bate com a soma da página
+ * destrói a confiança no documento inteiro, e a pessoa que confere está certa.
+ *
+ * O operando NÃO é arredondado: a multiplicação usa o preço íntegro de
+ * `DECIMAL(20,8)` e a quantidade de `DECIMAL(24,12)`. O único fechamento é o
+ * da LINHA, que é o número impresso. Precisão do operando não é precisão do
+ * total — `PRODUCT_RULES.md` §57.
+ *
+ * A prévia da tela e o documento da API passam por aqui, pela mesma função:
+ * a tela já somou `Number(qty) * Number(price)` por conta própria, e o rodapé
+ * de uma OC gravada mostrava o total do último salvamento ao lado de linhas
+ * recalculadas ao vivo. Uma regra só, num lugar só.
  */
 export function calcularTotaisOrdemCompra(lines: LinhaParaTotalDaOrdem[]): TotaisDaOrdemDeCompra {
   let orderTotal: DecimalInstance | null = null;
@@ -35,21 +53,33 @@ export function calcularTotaisOrdemCompra(lines: LinhaParaTotalDaOrdem[]): Totai
       lineTotals.push(null);
       continue;
     }
-    let total: DecimalInstance;
+    let bruto: DecimalInstance;
     try {
-      total = new Decimal(line.orderedQuantity).times(line.unitPrice);
+      bruto = new Decimal(line.orderedQuantity).times(line.unitPrice);
     } catch {
       lineTotals.push(null);
       continue;
     }
-    if (!total.isFinite()) {
+    if (!bruto.isFinite()) {
       lineTotals.push(null);
       continue;
     }
-    orderTotal = orderTotal === null ? total : orderTotal.plus(total);
-    lineTotals.push(total.toFixed(2));
+    /*
+     * `ROUND_HALF_UP` DECLARADO, não herdado do default do `decimal.js` —
+     * mesma disciplina de §60: o critério que decide o centavo de um documento
+     * não pode depender de uma configuração global que outra capability pode
+     * trocar de carona. Meio centavo sobe: `0,125` vira `0,13`.
+     */
+    const fechado = bruto.toDecimalPlaces(ESCALA_MONETARIA, Decimal.ROUND_HALF_UP);
+    orderTotal = orderTotal === null ? fechado : orderTotal.plus(fechado);
+    lineTotals.push(fechado.toFixed(ESCALA_MONETARIA));
   }
-  return { lineTotals, orderTotal: orderTotal === null ? null : orderTotal.toFixed(2) };
+  // A soma de valores que já têm duas casas já tem duas casas; o `toFixed`
+  // final é normalização de formato, não um segundo arredondamento.
+  return {
+    lineTotals,
+    orderTotal: orderTotal === null ? null : orderTotal.toFixed(ESCALA_MONETARIA),
+  };
 }
 
 export type PurchaseOrderStatus =
