@@ -33,9 +33,10 @@ dígitos, nos DOIS construtores) e **PREC-MIG-A RESOLVIDO** — 43 colunas em
 `20260925093001_numeric_precision_quantities_24_12`, sem backfill.
 **Fundação numérica B (2026-09-05):** **PREC-MIG-B RESOLVIDO** — 3 colunas
 UNIT_COST em `DECIMAL(20,8)`, migration
-`20260925093002_numeric_precision_unit_cost_20_8`, sem backfill. #19 segue
-**ABERTO / PARCIAL** e PREC-MIG-D **ABERTO / PARCIAL**. **Seguinte:**
-PREC-MIG-C.
+`20260925093002_numeric_precision_unit_cost_20_8`, sem backfill. Na aprovação o
+PO confirmou a exclusão de `PurchaseOrderLine.unitPrice` e abriu **PREC-MIG-P**
+(UNIT_PRICE de alta precisão, ABERTO / HIGH). #19 segue **ABERTO / PARCIAL** e
+PREC-MIG-D **ABERTO / PARCIAL**. **Seguinte:** PREC-MIG-C.
 
 ---
 
@@ -327,6 +328,7 @@ implementação.
 | **PREC-MIG-C** | Pureza e overage → `DECIMAL(9,6)` | **ABERTO / NEXT** |
 | **PREC-MIG-D** | Resultados técnicos persistidos → `DECIMAL(24,12)` onde aplicável | **ABERTO / PARCIAL** — 3 campos já entregues no A, ver abaixo |
 | **PREC-MIG-E** | Campos que ainda exigem decisão individual | ABERTO — perguntas em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12 |
+| **PREC-MIG-P** | UNIT_PRICE que precisa preservar alta precisão | **ABERTO / HIGH** — `PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` já aprovado |
 
 **PREC-MIG-B — entregue em 2026-09-05.** `ReceiptLine.actualUnitCost` é a fonte
 de custo real e alimenta custo de aquisição, média ponderada, estoque, CMV e
@@ -343,11 +345,32 @@ inventário:
 **O que NÃO foi junto, e por quê.** `PurchaseOrderLine.unitPrice` aparece como
 "Sim — B" no inventário, mas sua **categoria é UNIT_PRICE** — o Grupo B da
 auditoria agrupava custo, tarifa e preço, enquanto o PREC-MIG-B do PO é
-UNIT_COST. Onde os dois discordam vale a categoria. Pelo mesmo motivo ficaram
+UNIT_COST. Onde os dois discordam vale a categoria. **O PO confirmou a exclusão
+em 2026-09-05** e abriu o **PREC-MIG-P** para o campo. Pelo mesmo motivo ficaram
 fora os preços contratuais (`QuoteLine`, `CustomerOrderLine`, `BillingLine`),
 as tarifas `rateValue` (RATE) e os preços técnicos da precificação em `14,6`.
 `scripts/numeric-precision-matrix.test.ts` trava isso: o teste falha se alguém
 arrastar um `unitPrice` documental junto por semelhança de nome.
+
+**`SupplierItemOffer.unitPrice` fica em B, e isso foi confirmado pelo PO.**
+Apesar do nome, no domínio atual o campo participa diretamente da seleção
+canônica de custo — `cost-source-selection.ts` o lê como `unitCost`. Vale o uso
+real, não o nome.
+
+**PREC-MIG-P — UNIT_PRICE de alta precisão. ABERTO / HIGH.** Decisão do PO de
+2026-09-05: um preço unitário de compra pode legitimamente ter mais de quatro
+casas — `4,05318764` —, e o banco deve preservar o valor preciso mesmo quando a
+tela mostra menos. **`PurchaseOrderLine.unitPrice` → `DECIMAL(20,8)` está
+aprovado**; os demais UNIT_PRICE entram na avaliação da capability.
+
+A separação que a capability precisa respeitar: **preço unitário da OC** é
+grandeza técnica de alta precisão; **total monetário da linha e do documento**
+segue regra documental própria. São conceitos independentes — um preço de
+`4,05318764` pode produzir um total apresentado em duas casas, e isso **não**
+autoriza reduzir o preço unitário armazenado. Widening não recalcula OC
+histórica: `4,0531` continua matematicamente `4,0531`, apenas representado como
+`4,05310000`. Sem backfill, sem recálculo documental. **PREC-SER-02** trata a
+serialização desses preços e anda junto desta família.
 
 **PREC-MIG-C — motivo do PO.** `99,9995%` não pode ser persistido em silêncio
 como `100,000`. A tela pode mostrar menos casas; a persistência preserva o
@@ -387,7 +410,7 @@ em `18,6` falha o gate.
 | Item | Escopo | Status |
 |---|---|---|
 | **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | APROVADO — segue as dependências reais do widening |
-| **PREC-SER-02** | Gravação de preço técnico de 6 casas em coluna de 4 quando **não** for snapshot contratual | APROVADO — idem |
+| **PREC-SER-02** | Gravação de preço técnico de 6 casas em coluna de 4 quando **não** for snapshot contratual | APROVADO — anda junto do **PREC-MIG-P**, a família UNIT_PRICE |
 | **PREC-FMT-01** | Eliminar `Number` nos formatters para grandeza técnica de alta precisão | APROVADO — obrigatório antes de qualquer preset acima de 6 casas |
 
 Ocorrências mapeadas em
@@ -584,8 +607,9 @@ permanece obrigatório no escopo atual.
 7. **Fundação de precisão B — entregue em 2026-09-05:** **PREC-MIG-B**
    (UNIT_COST em `DECIMAL(20,8)`), com o custo real de 8 casas preservado do
    banco até o seletor canônico e a média ponderada.
-8. **PRÓXIMA CAPABILITY:** PREC-MIG-C. Depois: D residual, PREC-SER-01/02,
-   PREC-FMT-01, #18 e PREC-MIG-E conforme as respostas de domínio.
+8. **PRÓXIMA CAPABILITY:** PREC-MIG-C. Depois: **PREC-MIG-P** (HIGH, com
+   PREC-SER-02), D residual, PREC-SER-01, PREC-FMT-01, #18 e PREC-MIG-E
+   conforme as respostas de domínio.
 8. **Validação com a Veridi:** #7 + #11.
 9. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
 10. **Rodada técnica isolada:** #14 (Schema Integrity Audit).

@@ -44,10 +44,14 @@ inteira no motor de 40 dígitos; o corte só acontece na saída.
 
 **`PurchaseOrderLine.unitPrice` ficou de fora, de propósito.** A linha do
 inventário diz "Sim — B", mas a **categoria** é UNIT_PRICE, e o PREC-MIG-B do PO
-é UNIT_COST. Onde os dois discordam vale a categoria. Pelo mesmo motivo ficaram
-fora preços contratuais, tarifas `rateValue` e os preços técnicos em `14,6`.
+é UNIT_COST. Onde os dois discordam vale a categoria. O PO confirmou a exclusão
+e abriu o **PREC-MIG-P** para a família UNIT_PRICE, com
+`PurchaseOrderLine.unitPrice → DECIMAL(20,8)` já aprovado: um preço de compra
+pode legitimamente ter mais de quatro casas, e o total documental da linha segue
+regra própria — os dois conceitos são independentes.
 
-**PREC-MIG-B RESOLVIDO. #19 e PREC-MIG-D seguem ABERTOS / PARCIAIS.**
+**PREC-MIG-B RESOLVIDO. #19 e PREC-MIG-D seguem ABERTOS / PARCIAIS.
+PREC-MIG-P aberto, HIGH.**
 
 ## Antes dela
 
@@ -109,8 +113,8 @@ banco vazio só com o repositório — `scripts/migration-order.test.ts` em
 ## Próxima capability
 
 **PREC-MIG-C** — pureza e overage em `DECIMAL(9,6)`, para que `99,9995%` não
-seja persistido como `100,000`. Depois: PREC-MIG-D residual (composição de custo
-e de CMV ainda em `14,4` e `14,6`).
+seja persistido como `100,000`. Depois: **PREC-MIG-P** (UNIT_PRICE de alta
+precisão, HIGH, junto de PREC-SER-02) e o PREC-MIG-D residual.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do
 processo real do cliente (#7, #11) — não bloqueia os itens internos já decididos
@@ -123,8 +127,9 @@ final em `Guia_Fluxo_Comercial_Veridi.docx`, não versionado.
 [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL. **#20 resolvido; #19 aberto** com
 PREC-MIG-A e PREC-MIG-B entregues — microdosagem e custo unitário fechados.
 **Rodadas 1 a 4 e PREC-01 publicadas** (#12, #9, #3, #5, #4 com residual aceito;
-#8A–#8C; #8D, #8H; #15, #16; auditoria). **Seguinte:** PREC-MIG-C e D residual, depois
-PREC-SER-01/02, PREC-FMT-01, **#18** (desbloqueado) e PREC-MIG-E. **Roadmap:**
+#8A–#8C; #8D, #8H; #15, #16; auditoria). **Seguinte:** PREC-MIG-C, depois **PREC-MIG-P** (HIGH),
+D residual, PREC-SER-01, PREC-FMT-01, **#18** (desbloqueado) e PREC-MIG-E.
+**Roadmap:**
 PREC-UI-01 a 08. **Quando autorizada:**
 #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11. **Manutenção:** #10 e #14.
 **Abertos:** #17 (suíte da API não determinística sob paralelismo, não observado

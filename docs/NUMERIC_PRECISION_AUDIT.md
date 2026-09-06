@@ -160,7 +160,7 @@ precificação no PREC-MIG-B.
 | ItemCostReference.unitCost | UNIT_COST | 14,4 | referência manual de custo | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
 | ReceiptLine.actualUnitCost | UNIT_COST | 14,4 | custo efetivo de aquisição — origem de toda média | decidido pelo PO | 20,8 | **Sim — B (ENTREGUE)** |
 | SupplierItemOffer.unitPrice | UNIT_COST | 14,4 | oferta de fornecedor, lida como custo pelo seletor | POTENTIAL_RISK | 20,8 | **Sim — B (ENTREGUE)** |
-| PurchaseOrderLine.unitPrice | UNIT_PRICE | 14,4 | preço da OC | NEEDS_DOMAIN_DECISION | 20,8 | Não — categoria UNIT_PRICE, fora do PREC-MIG-B |
+| PurchaseOrderLine.unitPrice | UNIT_PRICE | 14,4 | preço da OC | decidido pelo PO | **20,8** | **Sim — PREC-MIG-P** (aprovado, não implementado) |
 | **QuoteLine.unitPrice** | UNIT_PRICE | 14,4 | preço da linha do orçamento | **NEEDS_DOMAIN_DECISION** | 20,6 ou manter | **Decisão do PO** |
 | CustomerOrderLine.agreedUnitPrice | UNIT_PRICE | 14,4 | preço acordado — contratual | DOCUMENTAL, ver §6 | manter 14,4 | Não |
 | BillingLine.agreedUnitPrice / unitPrice | UNIT_PRICE | 14,4 | preço faturado — emitido | DOCUMENTAL, ver §6 | manter 14,4 | Não |
@@ -565,7 +565,10 @@ truncaria. Por isso a decisão de scale precisa nascer certa, e por isso 12 e n�
    `SupplierItemOffer.unitPrice`. Migration
    `20260925093002_numeric_precision_unit_cost_20_8`, sem backfill.
    `PurchaseOrderLine.unitPrice` ficou fora: a linha do inventário diz "Sim — B",
-   mas a **categoria** é UNIT_PRICE, e o PREC-MIG-B do PO é UNIT_COST.
+   mas a **categoria** é UNIT_PRICE, e o PREC-MIG-B do PO é UNIT_COST. O PO
+   confirmou a exclusão e abriu o **PREC-MIG-P** para a família UNIT_PRICE, com
+   `PurchaseOrderLine.unitPrice → DECIMAL(20,8)` aprovado: preço unitário de
+   compra é grandeza técnica; o total documental da linha segue regra própria.
 3. **PREC-MIG-C e D** — pureza e overage em `DECIMAL(9,6)`, demais resultados
    técnicos.
 4. **PREC-SER-01, PREC-SER-02 e PREC-FMT-01** — não são migration de schema, mas
