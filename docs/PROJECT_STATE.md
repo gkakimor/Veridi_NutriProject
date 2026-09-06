@@ -4,13 +4,14 @@
 
 ## Onde estamos
 
-**`main` @ `5f855cd`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `b5f6089`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodada 1** (#12, #9, #3,
 #5; #4 com residual aceito), **Rodada 2** (#8A, #8B, #8C, merge `dfb2673`),
 **Rodada 3** (#8D, #8H, merge `b89f9a4`), **Rodada 4** (#15, #16, merge
 `33ee1cd`), a **auditoria de precisão numérica PREC-01** (merge `0305704`, só
-documentação) e a **Fundação numérica A** (#20 + PREC-MIG-A, merge `5f855cd`,
-com migration), todas aprovadas pelo PO.
+documentação), a **Fundação numérica A** (#20 + PREC-MIG-A, merge `5f855cd`) e a
+**Fundação numérica B** (PREC-MIG-B, merge `b5f6089`), ambas com migration,
+todas aprovadas pelo PO.
 **Produção:** Railway, deploy automático da `main`; health 200, banco up, smoke
 autenticado passando, sem dado de negócio.
 
@@ -24,9 +25,8 @@ casos profundos do legado rodaram ponta a ponta contra a interface publicada
 
 ## Última capability
 
-**Fundação numérica B — PREC-MIG-B**, em revisão do PO na branch
-`feat/numeric-precision-foundation-b-unit-cost`. Custo unitário em
-`DECIMAL(20,8)`.
+**Fundação numérica B — PREC-MIG-B**, aprovada pelo PO e publicada em
+2026-09-05, merge `b5f6089`. Custo unitário em `DECIMAL(20,8)`.
 
 Três colunas, a família UNIT_COST inteira do inventário:
 `ReceiptLine.actualUnitCost` (a origem de TODO custo real — média ponderada
