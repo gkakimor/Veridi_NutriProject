@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@veridi/shared";
+// Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
+import "../../lib/decimal.js";
 
 export interface UnitOfMeasureLike {
   code: string;

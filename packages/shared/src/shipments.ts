@@ -6,7 +6,7 @@
  * pedida/reservada/planejada.
  */
 
-import Decimal from "decimal.js";
+import { Decimal } from "./decimal-config.js";
 import type { ShipmentBillingStatus } from "./billings.js";
 
 export const SHIPMENT_CODE_PREFIX = "EXP";

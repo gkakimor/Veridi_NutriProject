@@ -7,6 +7,8 @@ import type {
 import { Decimal as SharedDecimal } from "decimal.js";
 import { aplicarAjustes } from "@veridi/shared";
 import { convertUomDecimal } from "../modules/items/uom.js";
+// Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
+import "./decimal.js";
 
 /**
  * Matemática da Formulação Industrial v2 — **fonte única** do cálculo de

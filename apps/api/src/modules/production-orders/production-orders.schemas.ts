@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 
 const statusEnum = z.enum([
   "DRAFT",
@@ -36,7 +36,7 @@ const numberOfPartsSchema = z.coerce
 export const createProductionOrderSchema = z.object({
   productId: z.string().trim().min(1, "Produto é obrigatório"),
   formulationVersionId: z.string().trim().min(1).optional(),
-  plannedQuantity: decimalStringSchema().optional(),
+  plannedQuantity: quantityDecimalSchema().optional(),
   notes: z.string().trim().max(2000).optional(),
   origin: originEnum.optional(),
   numberOfParts: numberOfPartsSchema.optional(),
@@ -46,7 +46,7 @@ export const createProductionOrderSchema = z.object({
 export const updateProductionOrderSchema = z.object({
   productId: z.string().trim().min(1).optional(),
   formulationVersionId: z.string().trim().min(1).optional(),
-  plannedQuantity: decimalStringSchema().optional(),
+  plannedQuantity: quantityDecimalSchema().optional(),
   notes: optionalNullableText(2000),
   numberOfParts: numberOfPartsSchema.optional(),
   labelInstructions: optionalNullableText(2000),

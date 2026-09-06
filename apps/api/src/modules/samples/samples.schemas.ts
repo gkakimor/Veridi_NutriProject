@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
 
 export const createSampleSchema = z.object({
@@ -18,12 +18,12 @@ export const registerSampleConsumptionSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
   /** Aceita `LT-…` ou o payload do QR do lote — mesma normalização do Picking. */
   lotCode: z.string().trim().min(1).optional(),
-  quantity: decimalStringSchema(),
+  quantity: quantityDecimalSchema(),
   notes: z.string().trim().max(500).optional(),
 });
 
 export const produceSampleSchema = z.object({
-  outputQuantity: decimalStringSchema(),
+  outputQuantity: quantityDecimalSchema(),
   outputUomCode: z.string().trim().min(1, "Unidade é obrigatória"),
   productionNotes: optionalNullableText(2000),
   // Confirmação consciente para amostra sem consumo registrado.

@@ -5,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
+// Precisão canônica do motor decimal antes de qualquer rota montar.
+import "./lib/decimal.js";
 import { env } from "./config/env.js";
 import { authenticationHook } from "./lib/current-user.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";

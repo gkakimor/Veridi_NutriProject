@@ -40,8 +40,26 @@ function normalizarDecimal(texto: string): string {
  * Duas implementações da mesma regra divergem por definição — a que está
  * fora do caminho principal é a que fica para trás. Uma só.
  */
-export function optionalDecimalStringSchema() {
-  return z
+/**
+ * Casas decimais de uma grandeza técnica — o scale de `DECIMAL(24,12)`.
+ *
+ * `PRODUCT_RULES.md` §58. Quem valida quantidade usa `quantityDecimalSchema`,
+ * que recusa acima disto em vez de deixar o PostgreSQL arredondar em silêncio.
+ */
+export const CASAS_QUANTIDADE = 12;
+
+/** Quantas casas decimais o texto declara. */
+function casasDecimais(valor: string): number {
+  const ponto = valor.indexOf(".");
+  return ponto === -1 ? 0 : valor.length - ponto - 1;
+}
+
+function mensagemCasas(maximo: number): string {
+  return `Valor com precisão acima do suportado: no máximo ${maximo} casas decimais.`;
+}
+
+export function optionalDecimalStringSchema(options: { maxDecimals?: number } = {}) {
+  const schema = z
     .union([z.string(), z.number(), z.null()])
     .optional()
     .transform((value) => {
@@ -53,10 +71,16 @@ export function optionalDecimalStringSchema() {
     .refine((value) => value === undefined || value === null || /^\d+(\.\d+)?$/.test(value), {
       message: `Valor decimal inválido. ${AJUDA}`,
     });
+  const maximo = options.maxDecimals;
+  if (maximo === undefined) return schema;
+  return schema.refine(
+    (value) => value === undefined || value === null || casasDecimais(value) <= maximo,
+    { message: mensagemCasas(maximo) },
+  );
 }
 
-export function decimalStringSchema(options: { allowZero?: boolean } = {}) {
-  return z
+export function decimalStringSchema(options: { allowZero?: boolean; maxDecimals?: number } = {}) {
+  const schema = z
     .union([z.string(), z.number()])
     .transform((value) => normalizarDecimal(String(value).trim()))
     .refine((value) => /^\d+(\.\d+)?$/.test(value), {
@@ -67,4 +91,27 @@ export function decimalStringSchema(options: { allowZero?: boolean } = {}) {
         ? "Valor não pode ser negativo"
         : "Valor deve ser maior que zero",
     });
+  const maximo = options.maxDecimals;
+  if (maximo === undefined) return schema;
+  return schema.refine((value) => casasDecimais(value) <= maximo, {
+    message: mensagemCasas(maximo),
+  });
+}
+
+/**
+ * Quantidade física ou grandeza técnica: até 12 casas, recusando acima.
+ *
+ * Antes do PREC-MIG-A a coluna guardava seis casas e o PostgreSQL arredondava
+ * a sétima em silêncio — o operador digitava um número e o banco gravava
+ * outro, sem dizer. Ampliar o scale para doze mudaria só o ponto onde o
+ * silêncio acontece. A fronteira agora recusa e explica: perda de precisão em
+ * quantidade é resposta errada, não formatação.
+ */
+export function quantityDecimalSchema(options: { allowZero?: boolean } = {}) {
+  return decimalStringSchema({ ...options, maxDecimals: CASAS_QUANTIDADE });
+}
+
+/** A mesma regra para campo que pode ficar em branco. */
+export function optionalQuantityDecimalSchema() {
+  return optionalDecimalStringSchema({ maxDecimals: CASAS_QUANTIDADE });
 }

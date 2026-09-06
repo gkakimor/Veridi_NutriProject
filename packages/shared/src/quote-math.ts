@@ -12,7 +12,7 @@
  * saldo devedor. Sem juros, é a divisão simples.
  */
 
-import Decimal from "decimal.js";
+import { Decimal, type DecimalInstance } from "./decimal-config.js";
 import type {
   QuoteInstallmentDTO,
   QuotePaymentMethod,
@@ -23,7 +23,7 @@ const CEM = new Decimal(100);
 const CENTAVO = new Decimal("0.01");
 const TRINTA_DIAS = new Decimal(30);
 
-function dinheiro(value: Decimal): Decimal {
+function dinheiro(value: DecimalInstance): DecimalInstance {
   return value.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 }
 
@@ -55,7 +55,7 @@ export function calcularTotaisOrcamento(
       lineTotals.push(null);
       continue;
     }
-    let total: Decimal;
+    let total: DecimalInstance;
     try {
       total = new Decimal(line.quotedQuantity).times(line.unitPrice);
     } catch {
@@ -89,7 +89,7 @@ export interface PlanoDePagamentoInput {
  * trouxe (ou que veio inválido) não pode derrubar o render inteiro. Ausência
  * é ausência, e o plano segue sem ela.
  */
-function percentualOuNulo(valor: string | null | undefined): Decimal | null {
+function percentualOuNulo(valor: string | null | undefined): DecimalInstance | null {
   if (valor === null || valor === undefined || valor === "") return null;
   try {
     const numero = new Decimal(valor);
@@ -107,7 +107,7 @@ function percentualOuNulo(valor: string | null | undefined): Decimal | null {
  * mantém o juro equivalente — dividir por 30 e multiplicar pelos dias daria
  * um número diferente do que o cliente pagaria de fato.
  */
-function taxaDoPeriodo(mensal: Decimal, dias: number): Decimal {
+function taxaDoPeriodo(mensal: DecimalInstance, dias: number): DecimalInstance {
   if (mensal.isZero()) return new Decimal(0);
   const taxa = mensal.dividedBy(CEM);
   if (dias === 30) return taxa;
@@ -116,7 +116,7 @@ function taxaDoPeriodo(mensal: Decimal, dias: number): Decimal {
 }
 
 /** Price: PMT = PV × i / (1 − (1+i)^−n). Sem juros, PV / n. */
-function parcelaPrice(financiado: Decimal, taxa: Decimal, parcelas: number): Decimal {
+function parcelaPrice(financiado: DecimalInstance, taxa: DecimalInstance, parcelas: number): DecimalInstance {
   if (taxa.isZero()) return financiado.dividedBy(parcelas);
   const fator = taxa.plus(1).pow(-parcelas);
   return financiado.times(taxa).dividedBy(new Decimal(1).minus(fator));

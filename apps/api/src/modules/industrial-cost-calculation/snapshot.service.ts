@@ -10,6 +10,7 @@ import { INDUSTRIAL_COST_CALCULATION_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { calculateIndustrialCost } from "./calculation.service.js";
+import { resultadoTecnico } from "../../lib/decimal-serialization.js";
 import {
   CalculationBlockedByFormulationError,
   CalculationInUseError,
@@ -136,7 +137,7 @@ function toSummaryDTO(
     quality: row.quality,
     totalIndustrialCost: row.totalIndustrialCost ? row.totalIndustrialCost.toFixed(2) : null,
     knownSubtotal: row.knownSubtotal.toFixed(2),
-    costPerUnit: row.costPerUnit ? row.costPerUnit.toFixed(6) : null,
+    costPerUnit: row.costPerUnit ? resultadoTecnico(row.costPerUnit) : null,
     costPer1000: row.costPer1000 ? row.costPer1000.toFixed(2) : null,
   };
 }

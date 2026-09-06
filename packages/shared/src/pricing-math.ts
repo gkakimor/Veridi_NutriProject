@@ -1,4 +1,4 @@
-import Decimal from "decimal.js";
+import { Decimal, type DecimalInstance } from "./decimal-config.js";
 import type { IndustrialCostWarningDTO } from "./industrial-cost-calculation.js";
 import type { PriceMode } from "./pricing.js";
 
@@ -49,7 +49,7 @@ export interface PriceComputationResult {
   warnings: IndustrialCostWarningDTO[];
 }
 
-const texto = (value: Decimal | null): string | null => (value === null ? null : value.toString());
+const texto = (value: DecimalInstance | null): string | null => (value === null ? null : value.toString());
 
 export function computePrice(input: PriceComputationInput): PriceComputationResult {
   const warnings: IndustrialCostWarningDTO[] = [];
@@ -59,7 +59,7 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
   const commissionFraction = new Decimal(input.commissionPercent).dividedBy(HUNDRED);
   const manualUnitPrice = input.manualUnitPrice === null ? null : new Decimal(input.manualUnitPrice);
 
-  let suggestedUnitPrice: Decimal | null = null;
+  let suggestedUnitPrice: DecimalInstance | null = null;
   if (input.priceMode === "TARGET_MARGIN" && targetMargin) {
     if (!costPerUnit) {
       warnings.push({
@@ -132,7 +132,7 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
     ? contributionPerUnit.dividedBy(selectedUnitPrice).times(HUNDRED)
     : null;
 
-  let markupPercent: Decimal | null = null;
+  let markupPercent: DecimalInstance | null = null;
   if (costPerUnit.greaterThan(0)) {
     markupPercent = selectedUnitPrice.dividedBy(costPerUnit).minus(1).times(HUNDRED);
   } else {

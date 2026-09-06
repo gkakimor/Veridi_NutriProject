@@ -5,6 +5,9 @@ migration e sem mudança de regra. As decisões tomadas sobre ela viraram regra
 durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57, §58 e §59, e trabalho
 nomeado na seção E de [`BACKLOG.md`](BACKLOG.md). Este documento continua sendo
 a **evidência**: o inventário, as medições e o porquê de cada decisão.
+**Implementação:** a **Fundação A** (#20 + PREC-MIG-A) foi entregue em
+2026-09-05 — 43 colunas em `DECIMAL(24,12)` e o motor decimal em 40 dígitos. As
+demais capabilities seguem pendentes; o inventário abaixo marca o que já mudou.
 **Branch:** `audit/global-numeric-precision`, a partir de `main @ 4b9df47`.
 **Escopo:** todo o domínio numérico mensurável — estoque, itens, lotes, compras,
 recebimentos, fornecedores, formulações, templates, ordens de produção, pesagem,
@@ -114,6 +117,15 @@ representa grandeza mensurável fracionária. **Nenhuma recomendação de mudan�
 
 ### 3.1 Tabela de inventário — campos com decisão
 
+A coluna **Atual** descreve o estado da auditoria (2026-09-05, antes da
+implementação). As 43 linhas marcadas **Sim — A** já estão em `DECIMAL(24,12)`
+desde a Fundação A; a tabela é mantida como registro do que foi medido, não como
+retrato do schema. O estado corrente do schema é conferido por
+`scripts/numeric-precision-matrix.test.ts`. Três colunas `18,6` ficaram
+deliberadamente fora — os dois campos `legacy*` de `FormulationComponent` e
+`QuoteLine.industrialCostPerUnitSnapshot`, que viaja com os demais snapshots de
+precificação no PREC-MIG-B.
+
 | Model.Field | Categoria | Atual | Uso | Risco | Recomendação | Migration? |
 |---|---|---|---|---|---|---|
 | ProductionOrderRequirement.requiredQuantity | QUANTITY | 18,6 | necessidade física persistida, em unidade de estoque | **INSUFFICIENT_SCALE** | 24,12 | **Sim — A** |
@@ -137,7 +149,7 @@ representa grandeza mensurável fracionária. **Nenhuma recomendação de mudan�
 | ProductionOrder.plannedQuantity | QUANTITY | 18,6 | quantidade planejada | OK | 24,12 | Sim — A |
 | FormulationVersion.basisQuantity | QUANTITY | 18,6 | base da versão (divisor) | POTENTIAL_RISK | 24,12 | Sim — A |
 | ProjectSample.outputQuantity | QUANTITY | 18,6 | piloto — lote pequeno | POTENTIAL_RISK | 24,12 | Sim — A |
-| **UnitOfMeasure.toBaseFactor** | UOM_CONVERSION | 18,6 | fator de conversão, multiplica e divide toda quantidade | **NEEDS_DOMAIN_DECISION** | **24,12** | **Sim — B** |
+| **UnitOfMeasure.toBaseFactor** | UOM_CONVERSION | 18,6 | fator de conversão, multiplica e divide toda quantidade | decidido pelo PO | **24,12** | **Sim — A (ENTREGUE)** |
 | Item.defaultPurityPercent | PERCENTAGE | 6,3 | pureza padrão | POTENTIAL_RISK | 9,6 | Sim — B |
 | FormulationComponent.purityPercentApplied | PERCENTAGE | 6,3 | pureza aplicada (divisor) | POTENTIAL_RISK | 9,6 | Sim — B |
 | FormulationComponent.overagePercent | PERCENTAGE | 6,3 | overage aplicado | POTENTIAL_RISK | 9,6 | Sim — B |
@@ -211,7 +223,18 @@ fração de `mg`, e é aí que o piso aparece.
 **Onde dói:** amostra, piloto e lote pequeno — exatamente `ProjectSample`,
 `SampleConsumption` e OPs de baixa tiragem.
 
-### R2 — `decimal.js` limita a 20 dígitos significativos — CRÍTICO para a decisão de baseline
+### R2 — `decimal.js` limita a 20 dígitos significativos — RESOLVIDO na Fundação A
+
+**A auditoria contou um construtor; existem dois.** A implementação de #20
+descobriu que o Prisma empacota a própria cópia do `decimal.js`:
+`Prisma.Decimal !== Decimal`, configuração independente, e é `Prisma.Decimal`
+que roda quase todo o cálculo de domínio da API. Um `Decimal.set()` apenas em
+`@veridi/shared` — que era o que este relatório sugeria — teria deixado a API
+inteira em 20 dígitos, e nenhum teste do pacote compartilhado perceberia. A
+configuração canônica alcança os dois, e `apps/api/src/lib/decimal.test.ts`
+prova ambos por comportamento.
+
+O diagnóstico abaixo continua correto e é o motivo da decisão:
 
 `Decimal.precision = 20`, `rounding = 4` (ROUND_HALF_UP), nunca reconfigurado em
 nenhum ponto do repositório. Consequência medida:
@@ -226,7 +249,7 @@ coluna guardaria um número que o motor nunca é capaz de produzir. Qualquer
 ampliação de scale exige, no mesmo passo, `Decimal.set({ precision: N })` em
 `@veridi/shared` e em `apps/api`, com N coberto por teste.
 
-### R3 — Fator de conversão de unidade em `Decimal(18,6)` — ALTO
+### R3 — Fator de conversão de unidade em `Decimal(18,6)` — RESOLVIDO na Fundação A
 
 `UnitOfMeasure.toBaseFactor` multiplica e divide **toda** conversão de
 quantidade do sistema. Hoje os fatores são `1`, `1000` e `0.001`: exatos. Um
@@ -252,6 +275,19 @@ o banco tem, e um deles grava.
 ## 5. Pontos de perda
 
 ### 5.1 Serialização API — `toFixed(N)` abaixo do scale da coluna
+
+**Nenhuma das seis linhas abaixo foi corrigida na Fundação A**, e isso é
+deliberado: todas serializam coluna do PREC-MIG-B ou preço contratual, que o PO
+decidiu não ampliar. PREC-SER-01 segue integralmente aberto.
+
+A Fundação A ajustou **outros cinco** pontos — os que serializavam coluna que
+passou a `DECIMAL(24,12)` e continuariam cortando em seis casas o que o banco
+guarda em doze: `costPerUnit` do cálculo industrial
+(`calculation.service.ts`, `snapshot.service.ts`), `costPerProducedUnit`
+(`production-cost.service.ts`) e `costPerUnitSnapshot` da faixa
+(`quote-pricing.service.ts`, `cost-reports.service.ts`). Todos passam por
+`apps/api/src/lib/decimal-serialization.ts`, que tem uma função por escala em
+uso — a escala pertence à categoria do campo, não a quem chama.
 
 | Arquivo:linha | Campo | Scale | `toFixed` | Classificação |
 |---|---|---|---|---|
@@ -489,8 +525,11 @@ de R1.
 `Decimal(14,4)` → `Decimal(20,8)` para custo, tarifa e preço técnico (**~25
 colunas**); `Decimal(6,3)` → `Decimal(9,6)` para pureza e overage (**7
 colunas**); `Decimal(14,6)` → `Decimal(20,8)` para preço de precificação (**7
-colunas**); `UnitOfMeasure.toBaseFactor` → `Decimal(24,12)` (**1 coluna**).
-Perguntas em §12.
+colunas**). Perguntas em §12.
+
+`UnitOfMeasure.toBaseFactor` **saiu deste grupo**: o PO o colocou no PREC-MIG-A
+e ele foi entregue lá. Quantidade com doze casas não adianta se a conversão
+perder precisão antes dela.
 
 ### Grupo C — manter 2 casas
 `CustomerOrder.agreedSubtotalAmount`, `CustomerOrder.agreedTotalAmount`.
@@ -514,9 +553,13 @@ truncaria. Por isso a decisão de scale precisa nascer certa, e por isso 12 e n�
 
 ### Sequência aprovada
 
-1. **#20 + PREC-MIG-A** — a precisão canônica em 40 dígitos (§59) e o widening
-   de QUANTITY, fatores e resultado técnico para `DECIMAL(24,12)`, com os testes
-   de §13 que provam R1 resolvido. **É a próxima capability.**
+1. **#20 + PREC-MIG-A** — **ENTREGUE em 2026-09-05.** Precisão canônica em 40
+   dígitos (§59) nos dois construtores, e widening de 43 colunas —
+   39 QUANTITY, 1 FACTOR (`toBaseFactor`) e 3 TECHNICAL_RESULT que já estavam em
+   `18,6` — para `DECIMAL(24,12)`. Os três resultados técnicos saem do residual
+   do PREC-MIG-D, que fica só com os de `14,4` e `14,6`. Migration
+   `20260925093001_numeric_precision_quantities_24_12`, sem backfill: 371
+   valores existentes conferidos antes e depois, zero divergência matemática.
 2. **PREC-MIG-B, C e D** — custo em `DECIMAL(20,8)`, pureza e overage em
    `DECIMAL(9,6)`, demais resultados técnicos.
 3. **PREC-SER-01, PREC-SER-02 e PREC-FMT-01** — não são migration de schema, mas

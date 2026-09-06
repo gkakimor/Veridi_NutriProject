@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 
 const applyFulfillmentPlanLineSchema = z.object({
   customerOrderLineId: z.string().trim().min(1, "Linha do pedido é obrigatória"),
-  reserveQuantity: decimalStringSchema({ allowZero: true }),
-  produceQuantity: decimalStringSchema({ allowZero: true }),
+  reserveQuantity: quantityDecimalSchema({ allowZero: true }),
+  produceQuantity: quantityDecimalSchema({ allowZero: true }),
 });
 
 export const applyFulfillmentPlanSchema = z.object({
@@ -17,7 +17,7 @@ export const applyFulfillmentPlanSchema = z.object({
  */
 export const createRemainderOrderSchema = z.object({
   customerOrderLineId: z.string().trim().min(1, "Linha do pedido é obrigatória"),
-  quantity: decimalStringSchema().optional(),
+  quantity: quantityDecimalSchema().optional(),
 });
 
 export type CreateRemainderOrderInput = z.infer<typeof createRemainderOrderSchema>;

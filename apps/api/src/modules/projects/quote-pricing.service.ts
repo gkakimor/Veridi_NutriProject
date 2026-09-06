@@ -9,6 +9,7 @@ import { getPrisma } from "../../db/prisma.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
 import { getActivePricingForProduct } from "../pricing/pricing.service.js";
 import { QuoteNotDraftError, QuoteNotFoundError } from "./projects.errors.js";
+import { resultadoTecnico } from "../../lib/decimal-serialization.js";
 
 /**
  * Ligação entre orçamento e precificação.
@@ -194,7 +195,7 @@ export function pricingProvenanceForLine(
     costReferenceDate: version.costReferenceDateSnapshot.toISOString(),
     costStructureLabel: version.industrialCostVersionLabelSnapshot,
     formulationVersionNumber: version.formulationVersionNumberSnapshot,
-    industrialCostPerUnit: tier.costPerUnitSnapshot ? tier.costPerUnitSnapshot.toFixed(6) : null,
+    industrialCostPerUnit: tier.costPerUnitSnapshot ? resultadoTecnico(tier.costPerUnitSnapshot) : null,
     costQuality: tier.costQualitySnapshot,
     commissionPercent: (tier.commissionPercentSnapshot ?? tier.commissionPercent).toFixed(4),
     contributionPerUnit: tier.contributionPerUnitSnapshot

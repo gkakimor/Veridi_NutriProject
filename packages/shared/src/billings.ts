@@ -1,4 +1,4 @@
-import Decimal from "decimal.js";
+import { Decimal, type DecimalInstance } from "./decimal-config.js";
 
 /**
  * Contratos de Faturamento (Billing) — documento COMERCIAL/OPERACIONAL,
@@ -207,7 +207,7 @@ export function calcularTotaisFaturamento(
       lineTotals.push(null);
       continue;
     }
-    let total: Decimal;
+    let total: DecimalInstance;
     try {
       total = new Decimal(line.quantity).times(line.unitPrice);
     } catch {

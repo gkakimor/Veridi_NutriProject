@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
 
 const receiptLineInputSchema = z.object({
   purchaseOrderLineId: z.string().trim().min(1, "Linha da OC é obrigatória"),
-  receivedQuantity: decimalStringSchema(),
+  receivedQuantity: quantityDecimalSchema(),
   supplierLot: z.string().trim().max(100).optional(),
   expiryDate: requiredDateSchema.optional(),
   location: z.string().trim().max(200).optional(),
@@ -53,7 +53,7 @@ export type ListReceiptsQuery = z.infer<typeof listReceiptsQuerySchema>;
  */
 const customerSuppliedLineSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
-  receivedQuantity: decimalStringSchema(),
+  receivedQuantity: quantityDecimalSchema(),
   supplierLot: z.string().trim().max(100).optional(),
   expiryDate: requiredDateSchema.optional(),
   location: z.string().trim().max(200).optional(),

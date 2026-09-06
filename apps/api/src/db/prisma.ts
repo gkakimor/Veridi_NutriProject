@@ -1,4 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+// Configura `Prisma.Decimal` na precisão canônica (`PRODUCT_RULES.md` §59)
+// antes de qualquer acesso ao banco. Efeito de import, de propósito.
+import "../lib/decimal.js";
 
 let client: PrismaClient | null = null;
 

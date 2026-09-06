@@ -18,6 +18,9 @@ import {
   money,
   unitMoney,
 } from "./calculation.service.js";
+// Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
+import "../../lib/decimal.js";
+import { resultadoTecnico } from "../../lib/decimal-serialization.js";
 
 type PrismaOrTx = PrismaClient | PrismaTypes.TransactionClient;
 
@@ -325,7 +328,7 @@ async function computeProductionOrderCost(
 
     totalIndustrialCost: totalIndustrialCost ? money(totalIndustrialCost) : null,
     knownSubtotal: money(knownSubtotal),
-    costPerProducedUnit: costPerProducedUnit ? unitMoney(costPerProducedUnit) : null,
+    costPerProducedUnit: costPerProducedUnit ? resultadoTecnico(costPerProducedUnit) : null,
 
     quality,
     // Produção em andamento ainda pode consumir e produzir mais.

@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
-import { decimalStringSchema } from "../../lib/decimal-schema.js";
+import { decimalStringSchema, quantityDecimalSchema } from "../../lib/decimal-schema.js";
 import { optionalNullableDateSchema, requiredDateSchema } from "../../lib/date-schema.js";
 
 const purchaseOrderLineInputSchema = z.object({
   itemId: z.string().trim().min(1, "Item é obrigatório"),
-  orderedQuantity: decimalStringSchema(),
+  orderedQuantity: quantityDecimalSchema(),
   unitPrice: decimalStringSchema({ allowZero: true }).optional(),
 });
 
