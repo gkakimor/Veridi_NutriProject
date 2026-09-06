@@ -4,12 +4,13 @@
 
 ## Onde estamos
 
-**`main` @ `0305704`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `5f855cd`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodada 1** (#12, #9, #3,
 #5; #4 com residual aceito), **Rodada 2** (#8A, #8B, #8C, merge `dfb2673`),
 **Rodada 3** (#8D, #8H, merge `b89f9a4`), **Rodada 4** (#15, #16, merge
-`33ee1cd`) e a **auditoria de precisão numérica PREC-01** (merge `0305704`,
-só documentação), todas aprovadas pelo PO.
+`33ee1cd`), a **auditoria de precisão numérica PREC-01** (merge `0305704`, só
+documentação) e a **Fundação numérica A** (#20 + PREC-MIG-A, merge `5f855cd`,
+com migration), todas aprovadas pelo PO.
 **Produção:** Railway, deploy automático da `main`; health 200, banco up, smoke
 autenticado passando, sem dado de negócio.
 
@@ -23,9 +24,9 @@ casos profundos do legado rodaram ponta a ponta contra a interface publicada
 
 ## Última capability
 
-**Fundação numérica A — #20 + PREC-MIG-A**, em revisão do PO na branch
-`feat/numeric-precision-foundation-a`. Primeira implementação sobre a auditoria
-PREC-01.
+**Fundação numérica A — #20 + PREC-MIG-A**, aprovada pelo PO e publicada em
+2026-09-05, merge `5f855cd`. Primeira implementação sobre a auditoria PREC-01, e
+a primeira capability com migration desde então.
 
 **#20 — motor decimal canônico em 40 dígitos.** A auditoria contou um
 construtor; a implementação achou dois. O Prisma empacota a própria cópia do
