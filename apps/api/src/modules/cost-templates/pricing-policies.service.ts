@@ -25,6 +25,11 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { createPricingTier, createPricingVersion, getPricingVersion } from "../pricing/pricing.service.js";
 import { PricingVersionNotFoundError } from "../pricing/pricing.errors.js";
 import {
+  normalizarQuantidadeDeFaixa,
+  quantidadesDeFaixaEquivalentes,
+  unidadeCanonicaDaFaixa,
+} from "../pricing/tier-quantity.js";
+import {
   PricingPolicyCalculationRequiredError,
   PricingPolicyEmptyError,
   PricingPolicyNotFoundError,
@@ -518,28 +523,51 @@ export async function applyPricingPolicyToProduct(
   });
 
   /*
+   * A identidade da faixa é a quantidade FÍSICA na unidade do produto acabado
+   * — PREC-CMP-02. Carregadas uma vez, fora do laço: são as mesmas para todas
+   * as faixas desta aplicação.
+   */
+  const produto = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { finishedProductItem: { select: { unitCode: true } } },
+  });
+  const unidadeCanonica = unidadeCanonicaDaFaixa(produto?.finishedProductItem?.unitCode);
+  const unidades = await prisma.unitOfMeasure.findMany();
+
+  /*
    * Faixas exatamente como a política declara — sem interpolar. Uma política
    * com 500/1000/3000 gera 500/1000/3000: inventar 750 criaria uma faixa que
    * ninguém aprovou, e o orçamento exige quantidade exata.
    */
   for (const tier of policy.tiers) {
     /*
-     * IGUALDADE DECIMAL, não igualdade de `Number` — PREC-CMP-01.
+     * IGUALDADE DE QUANTIDADE FÍSICA, na unidade do produto acabado —
+     * PREC-CMP-01 e PREC-CMP-02.
      *
-     * Quantidade de faixa é `DECIMAL(24,12)`: doze dígitos inteiros e doze
-     * casas. Um `double` guarda ~15 dígitos significativos, e
-     * `999999999999,000000000001` e `999999999999,000000000002` viram os dois
-     * `999999999999` na conversão. A comparação diria "já existe" e o
-     * `continue` **pularia em silêncio uma faixa que a política declarou** —
-     * a versão nasceria com menos faixas do que foi aprovado.
+     * Decimal, e não `Number`: quantidade de faixa é `DECIMAL(24,12)` e um
+     * `double` guarda ~15 dígitos significativos, então
+     * `999999999999,000000000001` e `...002` viravam o mesmo número; a
+     * comparação dizia "já existe" e o `continue` **pulava em silêncio uma
+     * faixa que a política declarou**.
      *
-     * `Decimal.equals` é numérico e não textual: `"1000"`,
-     * `"1000.0"` e `"1000.000000000000"` continuam sendo a mesma faixa. É o
-     * mesmo critério que `createPricingTier` usa para recusar duplicata.
+     * E com a UNIDADE dentro da pergunta: `1 kg` e `1000 g` são a mesma faixa,
+     * `500 g` e `500 kg` são duas. Comparar a quantidade crua errava nos dois
+     * sentidos — duplicava a mesma quantidade física e fundia quantidades
+     * diferentes. É o mesmo critério que `createPricingTier` usa para recusar
+     * duplicata, na mesma função.
      */
-    const quantidadeDaPolitica = new Prisma.Decimal(tier.quantity);
+    const quantidadeDaPolitica = normalizarQuantidadeDeFaixa(
+      { quantity: new Prisma.Decimal(tier.quantity), uomCode: tier.uomCode },
+      unidadeCanonica,
+      unidades,
+    );
     const existente = version.tiers.find((atual) =>
-      new Prisma.Decimal(atual.quantity).equals(quantidadeDaPolitica),
+      quantidadesDeFaixaEquivalentes(
+        { quantity: new Prisma.Decimal(atual.quantity), uomCode: atual.uomCode },
+        quantidadeDaPolitica,
+        unidadeCanonica,
+        unidades,
+      ),
     );
     if (existente) continue;
     await createPricingTier(

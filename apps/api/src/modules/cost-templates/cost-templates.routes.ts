@@ -4,7 +4,7 @@ import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireRole } from "../../lib/current-user.js";
 import { ProductNotFoundError } from "../formulations/formulations.errors.js";
 import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industrial-costs.errors.js";
-import { PricingVersionNotFoundError } from "../pricing/pricing.errors.js";
+import { InvalidTierQuantityError, PricingVersionNotFoundError } from "../pricing/pricing.errors.js";
 import {
   CostDraftInUseError,
   CostTemplateEmptyError,
@@ -129,6 +129,15 @@ function mapDomainError(
   }
   if (error instanceof PricingPolicyCalculationRequiredError) {
     return { status: 400, body: { error: "calculation_required", message: error.message } };
+  }
+  /*
+   * Aplicar uma política cria faixas pelo motor de precificação, e ele recusa
+   * unidade incompatível com o produto acabado — PREC-CMP-02. Sem este mapa a
+   * recusa virava 500 e a tela dizia "erro inesperado" para um problema de
+   * cadastro que a pessoa consegue resolver.
+   */
+  if (error instanceof InvalidTierQuantityError) {
+    return { status: 400, body: { error: "invalid_quantity", message: error.message } };
   }
   return null;
 }

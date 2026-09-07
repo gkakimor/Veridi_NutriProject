@@ -18,44 +18,49 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
 ## Última capability
 
-**#21 — o documento impresso não recalcula a receita**, aprovado pelo PO e
-publicado em 2026-09-06, merge `0be565c`, deploy Railway verde — o `preDeploy`
-respondeu "No pending migrations to apply" e o smoke autenticado passou. Era o
-último ponto conhecido em que um `Decimal` de domínio virava `Number` para
-produzir número, e o único dentro de um documento controlado.
+**PREC-CMP-02 — a faixa de precificação é a quantidade FÍSICA**, decidido pelo
+PO e publicado em 2026-09-07, merge `MERGE_SHA`, deploy Railway verde — o
+`preDeploy` respondeu "No pending migrations to apply" e o smoke autenticado
+passou.
 
-**O float era a metade menor do achado.** A coluna "Por parte" da Ordem de
-Produção impressa fazia `(Number(requiredQuantity) / numberOfParts).toFixed(6)`
-e escrevia `X × N` — afirmando N partes iguais. A produção nunca dividiu assim:
-`splitDecimal` trunca as N-1 primeiras na escala 6 com `ROUND_DOWN` e dá o resto
-à última, para a soma fechar com o total. Com 2 kg em 3 partes o plano é
-0,666666 / 0,666666 / 0,666668 e o papel dizia 0,666667 nas três — um valor que
-parte nenhuma seria pesada, somando 2,000001. A Folha de Receita, que é onde a
-pesagem acontece, trazia os números do motor: **dois documentos GMP da mesma
-ordem discordavam.**
+O PREC-CMP-01 tirou o `Number` da comparação de faixa; faltava a UNIDADE entrar
+na pergunta. Comparar a `quantity` crua errava nos dois sentidos: `1 kg` e
+`1000 g` viravam duas faixas para a mesma quantidade de produto acabado, e
+`500 g` e `500 kg` viravam uma só — quinhentas vezes mais produto tratado como
+repetição.
 
-A correção foi de LUGAR, não de fórmula: `splitDecimal`/`partShare` subiram para
-`@veridi/shared`, a API delega e o impresso reusa a mesma função — o padrão que
-`formulation-quantity.ts` já tinha estabelecido. Zero migration, zero mudança de
-regra, nenhuma casa a mais exibida. Regra durável:
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §67.
+**Identidade = quantidade física normalizada na unidade do Item de produto
+acabado** (§68). Uma função canônica — `tier-quantity.ts` — valida a
+compatibilidade, converte pela conversão oficial e compara em `Decimal`; ela
+serve aplicação de política, criação manual e edição, para a regra não ter dois
+pesos. A faixa nasce NA UNIDADE DO PRODUTO (`1 kg` num produto em gramas grava
+`1000 g`) e o template continua declarando `1 kg`: aplicar é copiar e adaptar,
+não reescrever a biblioteca. Unidade de outra dimensão é recusada com mensagem
+em português — o mapa de erro que faltava fazia isso virar 500.
 
-**Provado no fluxo real de impressão**, PDF gerado da OP `OP-002300` do banco
-local: `0,166666 × 2 + 0,166668` e `0,002419 × 2 + 0,00242`. **Varredura de
-`src/print/` e `pages/print/`:** zero `Number(`, `parseFloat`, `Math.round`,
-`toFixed` e zero divisão — as barras restantes são rótulo ("Cidade / UF"). Três
-comparações de `Decimal` contra zero passaram a `Decimal.greaterThan` (§66), e
-um teste de fonte trava a reintrodução.
+**Reproduzido antes de fechar**, revertendo a regra: 5 dos 6 testes de serviço
+falham com a comparação antiga, e o pior deles grava `1 g` onde a política pedia
+`1 kg`. Zero migration: a unique `(pricingVersionId, quantity)` continua fiel
+porque toda faixa passa a nascer na unidade canônica. DEV e PROD não têm faixa
+nenhuma — nada histórico a normalizar.
 
 ## Antes dela
+
+**#21** (`0be565c`). O documento impresso da OP dividia a necessidade pelas
+partes em float e escrevia `X × N`, afirmando N partes iguais — a produção
+trunca as N-1 primeiras e dá o resto à última. `splitDecimal` subiu para
+`@veridi/shared`; a API delega e o impresso reusa (§67).
+
+**PREC-CMP-01** (`8f1016e`). Aplicar uma política decidia "esta faixa já
+existe?" com `Number(a) === Number(b)` sobre `DECIMAL(24,12)`. O dano não era
+visual, era de decisão: a versão nascia com uma faixa onde a política declarava
+duas. `Decimal.equals` (§66).
 
 **PREC-CMP-01** (`8f1016e`). Aplicar uma política de precificação decidia "esta
 faixa já existe?" com `Number(a) === Number(b)` sobre `DECIMAL(24,12)`. O dano
 não era visual, era de decisão: reproduzido no serviço real, a versão nascia com
 uma faixa onde a política declarava duas. `Decimal.equals` — o mesmo critério que
 `createPricingTier` já usava. Achado registrado, não corrigido: a comparação
-ignora `uomCode`, e virou **PREC-CMP-02** (§66).
-
 **PREC-FMT-01** (`29f1df8`). A formatação deixou de passar por `Number`:
 `9007199254740993,12` aparecia como `...994,00` porque o `double` já tinha
 perdido o dígito antes de formatar. `lib/decimal-format.ts` formata sobre os
@@ -104,9 +109,9 @@ migrations aplicam num banco vazio só com o repositório —
 
 ## Próxima capability
 
-**PREC-CMP-02** — a comparação de faixa de precificação ignora a unidade de
-medida: `1 kg` e `1000 g` são a mesma faixa física e seriam tratadas como duas.
-Aguarda decisão do PO.
+**Nenhuma capability de precisão numérica em aberto.** A fila volta ao roadmap
+de exibição (PREC-UI-01 a 08) e às melhorias já aprovadas, quando o PO
+autorizar.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11) — não bloqueia os itens internos já decididos pelo PO.
@@ -116,8 +121,8 @@ Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 
 [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#18, #19, #20
 e #21 RESOLVIDOS — a fundação numérica está completa**, de PREC-MIG-A a
-PREC-FMT-01, com PREC-CMP-01 fechando a comparação e o #21 o impresso.
-**Seguinte:** PREC-CMP-02. **Roadmap:** PREC-UI-01 a 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
+PREC-FMT-01, com PREC-CMP-01 e PREC-CMP-02 fechando a comparação e o #21 o
+impresso. **Roadmap:** PREC-UI-01 a 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
 **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não determinística sob
 paralelismo — não reapareceu nesta rodada). **Observação:** #1, #2.
 
