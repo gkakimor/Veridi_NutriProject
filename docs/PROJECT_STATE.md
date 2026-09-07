@@ -4,7 +4,7 @@
 
 ## Onde estamos
 
-**`main` @ `140769c`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `29f1df8`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9, #3,
 #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**,
 as **Fundações numéricas A, B, C, P, D e E** e o **#18**, todos aprovados pelo
@@ -16,10 +16,13 @@ compras a produção rastreada, expedição, faturamento, custos, cockpit,
 relatórios, projetos, orçamentos e precificação. Três casos profundos do legado
 rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
-## Última capability — aguardando PO review
+## Última capability
 
-**PREC-FMT-01 — a formatação decide as casas, e o float não decide nada.**
-Branch `fix/numeric-precision-formatting-final`. Era o último trecho da cadeia:
+**PREC-FMT-01 — a formatação decide as casas, e o float não decide nada**,
+aprovado pelo PO e publicado em 2026-09-06, merge `29f1df8`, deploy Railway
+verde — o `preDeploy` respondeu "No pending migrations to apply", o bundle
+servido é o desta capability e o smoke autenticado passou em treze telas. Era o
+último trecho da cadeia:
 o dado chegava à tela com toda a precisão e passava por `Number` antes de virar
 texto. Um `double` tem 53 bits de mantissa, e `9007199254740993,12` não existe
 lá dentro — a tela mostrava `9.007.199.254.740.994,00`. **O erro era na parte
