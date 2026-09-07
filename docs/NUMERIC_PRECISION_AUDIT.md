@@ -1130,11 +1130,21 @@ Aberto, **medido** e fora do grupo D:
 
 | Ponto | O que corta | Por quê fica |
 |---|---|---|
-| `industrial-cost-calculation/calculation.service.ts`, `unitMoney` | custo unitário de material, de coluna `DECIMAL(20,8)`, servido em 6 casas | família UNIT_COST — PREC-SER-01, fora do D |
+| ~~`industrial-cost-calculation/calculation.service.ts`, `unitMoney`~~ | ~~custo unitário de material, de coluna `DECIMAL(20,8)`, servido em 6 casas~~ | **FECHADO em 2026-09-06** — `unitMoney` removido; os quatro pontos passaram a `custoUnitario` (8 casas) |
 | ~~`projects/quote-pricing.service.ts` e `reports/cost-reports.service.ts`~~ | ~~`QuoteLine.industrialCostPerUnitSnapshot` em 6 casas~~ | **FECHADO no PREC-MIG-E** — a coluna virou `24,12` e os dois pontos passaram a servir doze |
 
-`PREC-SER-01` fica portanto **PARCIAL** — **um** ponto restante, o custo
-unitário de material, fora de toda a cadeia da precificação.
+`PREC-SER-01` está **RESOLVIDO** desde 2026-09-06. Varredura global: zero
+`.toFixed(6)` na API, nenhum `parseFloat`, e o único `toNumber()` é sobre uma
+coluna `Int`. A matriz completa por categoria — storage, API, display e helper
+canônico — está em [`BACKLOG.md`](BACKLOG.md), seção E.
+
+**Achado registrado sem ação, de outra categoria:**
+`cost-templates/pricing-policies.service.ts` compara quantidade de faixa por
+`Number(a) === Number(b)` ao aplicar uma política. As quantidades são
+`DECIMAL(24,12)` e os valores reais de faixa (500, 1000, 3000) são exatos em
+`double`, mas uma faixa com casas decimais poderia colidir ou separar-se por
+erro de ponto flutuante. **Não é serialização** — nenhum valor servido ou
+persistido perde precisão por isso —, é comparação de idempotência.
 
 ---
 

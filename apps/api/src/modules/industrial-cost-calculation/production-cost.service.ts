@@ -12,15 +12,10 @@ import { getPrisma } from "../../db/prisma.js";
 import { getConsumedLotCostReference } from "../../lib/cost-reference.js";
 import { convertUomDecimal } from "../items/uom.js";
 import { ProductionOrderNotFoundError } from "../production-orders/production-orders.errors.js";
-import {
-  computeManualLine,
-  computeResourceCosts,
-  money,
-  unitMoney,
-} from "./calculation.service.js";
+import { computeManualLine, computeResourceCosts, money } from "./calculation.service.js";
 // Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
 import "../../lib/decimal.js";
-import { resultadoTecnico } from "../../lib/decimal-serialization.js";
+import { custoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
 
 type PrismaOrTx = PrismaClient | PrismaTypes.TransactionClient;
 
@@ -152,7 +147,9 @@ async function computeProductionOrderCost(
       unitCode: consumption.item.unitCode,
       consumedAt: consumption.consumedAt.toISOString(),
       customerSupplied: false,
-      unitCost: reference.unitCost ? unitMoney(reference.unitCost) : null,
+      // UNIT_COST do lote consumido — oito casas, PREC-SER-01. A fonte é
+      // `ReceiptLine.actualUnitCost`, `DECIMAL(20,8)`.
+      unitCost: reference.unitCost ? custoUnitario(reference.unitCost) : null,
       costSource: reference.source,
       subtotal: subtotal ? money(subtotal) : null,
     });

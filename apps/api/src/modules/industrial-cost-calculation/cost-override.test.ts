@@ -290,8 +290,8 @@ describe("Referência manual forçada — por cálculo e por componente", () => 
     expect(automatico.status).toBe(200);
     const linha = automatico.body.materials[0];
     expect(linha.costSource).toBe("WEIGHTED_AVG_30D");
-    expect(linha.unitCost).toBe("1050.000000");
-    expect(linha.manualReference?.unitCost).toBe("1200.000000");
+    expect(linha.unitCost).toBe("1050.00000000");
+    expect(linha.manualReference?.unitCost).toBe("1200.00000000");
     expect(linha.override).toBeNull();
 
     // Prévia forçada sem motivo: permitida, para ver o impacto antes de justificar.
@@ -299,10 +299,10 @@ describe("Referência manual forçada — por cálculo e por componente", () => 
     expect(forcado.status, JSON.stringify(forcado.body)).toBe(200);
     const forcada = forcado.body.materials[0];
     expect(forcada.costSource).toBe("MANUAL_REFERENCE_FORCED");
-    expect(forcada.unitCost).toBe("1200.000000");
+    expect(forcada.unitCost).toBe("1200.00000000");
     expect(forcada.subtotal).toBe("2400.00");
     expect(forcada.override.automaticSource).toBe("WEIGHTED_AVG_30D");
-    expect(forcada.override.automaticUnitCost).toBe("1050.000000");
+    expect(forcada.override.automaticUnitCost).toBe("1050.00000000");
     expect(forcada.override.automaticSubtotal).toBe("2100.00");
     // (1200 − 1050) × 2 — mesma aritmética da linha, sem segundo motor.
     expect(forcada.override.impact).toBe("300.00");
@@ -349,7 +349,7 @@ describe("Referência manual forçada — por cálculo e por componente", () => 
       await app.inject({ method: "POST", url: `/industrial-costs/${version.id}/calculations`, payload: {} })
     ).json();
     expect(salvo.materials[0].costSource).toBe("MANUAL_REFERENCE");
-    expect(salvo.materials[0].unitCost).toBe("1200.000000");
+    expect(salvo.materials[0].unitCost).toBe("1200.00000000");
 
     // J. Referência muda depois.
     await setManualReference(app, material.id, "9999");
@@ -360,13 +360,13 @@ describe("Referência manual forçada — por cálculo e por componente", () => 
       await app.inject({ method: "GET", url: `/industrial-cost-calculations/${salvo.id}` })
     ).json();
     expect(relido.materials[0].costSource).toBe("MANUAL_REFERENCE");
-    expect(relido.materials[0].unitCost).toBe("1200.000000");
+    expect(relido.materials[0].unitCost).toBe("1200.00000000");
     expect(relido.totalIndustrialCost).toBe(salvo.totalIndustrialCost);
 
     // Um cálculo NOVO pode usar a fonte nova — a compra real vence.
     const novo = await preview(app, version.id);
     expect(novo.body.materials[0].costSource).toBe("WEIGHTED_AVG_30D");
-    expect(novo.body.materials[0].unitCost).toBe("800.000000");
+    expect(novo.body.materials[0].unitCost).toBe("800.00000000");
     await app.close();
   });
 
@@ -418,7 +418,7 @@ describe("Referência manual forçada — por cálculo e por componente", () => 
     const linha = automatico.body.materials[0];
     expect(linha.costSource).toBe("AMBIGUOUS_SUPPLIER_REFERENCE");
     expect(linha.unitCost).toBeNull();
-    expect(linha.manualReference?.unitCost).toBe("1000.000000");
+    expect(linha.manualReference?.unitCost).toBe("1000.00000000");
     expect(automatico.body.quality).toBe("PARTIAL");
     const aviso = automatico.body.warnings.find(
       (warning: { code: string }) => warning.code === "AMBIGUOUS_SUPPLIER_REFERENCE",
@@ -430,7 +430,7 @@ describe("Referência manual forçada — por cálculo e por componente", () => 
     expect(forcado.status, JSON.stringify(forcado.body)).toBe(200);
     const forcada = forcado.body.materials[0];
     expect(forcada.costSource).toBe("MANUAL_REFERENCE_FORCED");
-    expect(forcada.unitCost).toBe("1000.000000");
+    expect(forcada.unitCost).toBe("1000.00000000");
     expect(forcada.override.automaticSource).toBe("AMBIGUOUS_SUPPLIER_REFERENCE");
     expect(forcada.override.automaticUnitCost).toBeNull();
     expect(forcada.override.impact).toBeNull();

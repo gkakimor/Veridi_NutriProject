@@ -72,6 +72,11 @@ default do `decimal.js` (§60 A/B/C).
 passou a ser a soma das linhas impressas (`40,79`, não `40,78`), regra durável
 em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §61, sem migration e sem histórico
 recalculado.
+**PREC-SER-01 RESOLVIDO em 2026-09-06:** o último `.toFixed(6)` técnico saiu da
+API — custo unitário de material passou a servir as oito casas da sua coluna, e
+a varredura global provou que não há mais nenhum caminho reduzindo precisão de
+forma incompatível com a sua categoria. **#19 segue ABERTO / PARCIAL enquanto o
+PREC-FMT-01 estiver aberto.**
 **PREC-MIG-E RESOLVIDO em 2026-09-06** (PREC-E-01 e PREC-E-02): uma coluna em
 `DECIMAL(24,12)`, migration `20260925093007_numeric_precision_quote_industrial_cost_24_12`,
 e a categoria **TECHNICAL_TOTAL** formalizada em `14,4` com fronteira explícita
@@ -98,9 +103,8 @@ proposta aguarda o PO — nenhuma migration foi criada.**
 de MIGRATIONS está completa.** A matriz de §58 está aplicada ao schema inteiro:
 nenhuma coluna numérica de domínio ficou sem categoria decidida. O que permanece
 em `14,4` é TECHNICAL_TOTAL, preço contratual e tarifa, por decisão registrada;
-o único `18,6` restante é o dado importado do legado. **Fechar o item é decisão
-do PO** e depende do último ponto de PREC-SER-01 (custo unitário de material
-servido em 6 casas de uma coluna `20,8`) e do PREC-FMT-01. O defeito que
+o único `18,6` restante é o dado importado do legado. **PREC-SER-01 fechou em
+2026-09-06; fechar o item é decisão do PO** e depende apenas do PREC-FMT-01. O defeito que
 originou o item está corrigido: as 43 colunas
 de quantidade e grandeza técnica inequívoca estão em `DECIMAL(24,12)`, e
 `0,000000048` persiste como `0,000000048000` em vez de `0,000000`. Provado
@@ -726,9 +730,51 @@ voltarem como defeito.
 
 | Item | Escopo | Status |
 |---|---|---|
-| **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | **ABERTO / PARCIAL A+B+C+P+D+E** — toda a cadeia da precificação está fechada: faixa, prévia, proveniência (viva e congelada), relatório de precificação, R-20, política de preço e rebase servem o scale da coluna. Resta **UM** ponto, medido e fora de toda família E: `industrial-cost-calculation/calculation.service.ts:41` (`unitMoney`) serve em 6 casas o custo unitário de MATERIAL, que vem de colunas `DECIMAL(20,8)` — corta 2 casas da família UNIT_COST (PREC-MIG-B). Uma linha, um helper que já existe (`custoUnitario`); fora do escopo do E por decisão de não ampliar |
+| **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | **RESOLVIDO** — 2026-09-06. `unitMoney` (6 casas) eliminado; os quatro pontos de custo unitário de material passaram a `custoUnitario` (8). Varredura global: zero `.toFixed(6)` na API, e todo `.toFixed(4)`/`(2)` restante é o scale da própria categoria |
 | **PREC-SER-02** | Gravação de preço técnico de 6 casas em coluna de 4 quando **não** for snapshot contratual | **RESOLVIDO** — PREC-P-01 (`purchase-orders.service.ts`, `receiving.service.ts`) e PREC-P-TECH (`pricing.service.ts`, `quote-pricing.service.ts`, `cost-reports.service.ts`, `product-cmv.service.ts`, `pricing-policies.service.ts`). A família UNIT_PRICE inteira está coberta |
 | **PREC-FMT-01** | Eliminar `Number` nos formatters para grandeza técnica de alta precisão | APROVADO — obrigatório antes de qualquer preset acima de 6 casas |
+
+**PREC-SER-01 — FECHADO em 2026-09-06.** O último residual era
+`unitMoney` (`toFixed(6)`) em `industrial-cost-calculation/calculation.service.ts`,
+usado em quatro pontos, todos custo unitário de MATERIAL: o custo resolvido pelo
+seletor canônico, a fonte automática de um override, a referência manual e o
+custo do lote consumido no CMV. As três fontes — `ReceiptLine.actualUnitCost`,
+`ItemCostReference.unitCost` e a oferta lida como custo — são `DECIMAL(20,8)`
+desde o PREC-MIG-B, e o que chega ali ainda pode ter passado por média
+ponderada ou conversão de unidade, duas divisões.
+
+**Não era só apresentação.** Esse DTO é o `result` gravado no snapshot do CALC:
+o corte de duas casas ficava **congelado no documento histórico**, não na tela.
+A função foi removida e os quatro pontos passaram a `custoUnitario` — oito
+casas, o helper canônico da família, que já servia todos os outros caminhos de
+UNIT_COST. Zero mudança de fórmula, de schema ou de persistência.
+
+**Matriz de serialização, revalidada por varredura global:**
+
+| Categoria | Storage | API | Display | Helper canônico |
+|---|---|---|---|---|
+| QUANTITY / FACTOR | `24,12` | íntegro | conforme formatter | `.toString()` |
+| TECHNICAL_RESULT | `24,12` | 12 casas | 2 a 6 | `resultadoTecnico` |
+| UNIT_COST | `20,8` | 8 casas | 2 a 6 | `custoUnitario` |
+| UNIT_PRICE técnico | `20,8` | 8 casas | 2 a 4 | `precoUnitario` |
+| TECHNICAL_TOTAL | `14,4` | 2 ou 4 casas | 2 | `money` local / `toFixed(4)` |
+| UNIT_PRICE comercial | `14,4` | 4 casas | 2 a 4 | `toFixed(4)` / `csvUnitPrice` |
+| COMMERCIAL_TOTAL | `14,2` | 2 casas | 2 | `toFixed(2)` |
+| PERCENT | `7,4` | 4 casas | 2 a 4 | `toFixed(4)` |
+| RATE | `14,4` | íntegro | 2 | `.toString()` |
+
+**Zero `.toFixed(6)` na API.** Os três em `scripts/` são texto de diagnóstico do
+corpus do legado e o `overagePercent` do importador — este último em `9,6`, que
+é o scale da coluna. Todo `.toFixed(4)` restante é percentual, preço comercial
+ou total técnico; todo `.toFixed(2)` é total comercial fechado. Nenhum
+`parseFloat`, e o único `toNumber()` da API é `batchCountSnapshot`, coluna
+`Int`.
+
+**PREC-FMT-01 continua ABERTO e separado.** `formatUnitCost` e `formatBRL`
+seguem usando `Number` para apresentação; a auditoria confirmou que **nenhum**
+caminho da tela recalcula negócio a partir disso — `CalcHint` refaz a conta
+apenas para conferir a explicação contra o valor que o servidor mandou, com
+tolerância derivada das casas exibidas.
 
 Ocorrências mapeadas em
 [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §5 e §7.
