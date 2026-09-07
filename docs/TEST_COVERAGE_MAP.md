@@ -241,6 +241,8 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Endereço legado decomposto de forma conservadora | `scripts/veridi-data/legacy-address.test.ts` |
 | Oferta com unidade incompatível exige override explícito | `scripts/veridi-import/importer.test.ts` |
 | Toda migration só usa tabela, tipo e coluna criados por migration de nome menor ou igual; banco vazio reconstrói só com o repositório | `scripts/migration-order.test.ts` · `pnpm validate:migrations:fresh` (Postgres local descartável) |
+| O banco que as migrations constroem do zero **é** o `schema.prisma` — `migrate diff` entre os dois sai vazio | `pnpm validate:migrations:fresh` (Postgres local descartável) |
+| Cada uma das 197 FKs declara no modelo a mesma ação de `ON DELETE` que a migration escreveu; relação opcional não herda `SetNull` por omissão (#14) | `scripts/schema-fk-actions.test.ts` |
 
 ## O que foi aposentado, e por quê
 

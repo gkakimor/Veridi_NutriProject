@@ -121,7 +121,12 @@ Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 e #21 RESOLVIDOS — a fundação numérica está completa**, de PREC-MIG-A a
 PREC-FMT-01, com PREC-CMP-01 e PREC-CMP-02 fechando a comparação e o #21 o
 impresso. **Roadmap:** PREC-UI-01 a 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
-**Manutenção:** #10 e #14. **#17 RESOLVIDO** — a listagem de Produto Acabado
+**Manutenção:** #10. **#14 RESOLVIDO** — o drift `schema.prisma` × migrations
+era do repositório, não dos bancos: DEV, produção e um banco reconstruído do
+zero são a mesma estrutura, e o modelo passou a declarar as 27 ações
+`onDelete: Restrict`, os 26 nomes de constraint/índice e os 6 índices que as
+migrations já tinham criado. Sem migration, sem alteração de banco.
+**#17 RESOLVIDO** — a listagem de Produto Acabado
 deixou de cair quando uma Ordem de Produção some entre a leitura dos lotes e a
 do custo. **Observação:** #1, #2.
 

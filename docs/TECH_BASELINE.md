@@ -115,10 +115,15 @@ real order. Rules:
 
   Historical migrations already published are never renamed to tidy the
   sequence;
-- `pnpm validate:migrations:fresh` proves the rebuild against a throwaway
-  database on the local Postgres. It goes through `scripts/local-db-guard.mjs`
-  (local host only, never Railway) and drops the database at the end. Run it
-  before merging any migration;
+- `pnpm validate:migrations:fresh` proves two things against a throwaway
+  database on the local Postgres: that the migrations rebuild an empty
+  database, and that the database they build **is** `schema.prisma` —
+  `prisma migrate diff` between the two must come out empty. It goes through
+  `scripts/local-db-guard.mjs` (local host only, never Railway) and drops the
+  database at the end. Run it before merging any migration, and after any
+  change to `schema.prisma`. `migrate deploy` and `migrate status` do not
+  compare structure against the model: this command is the only barrier that
+  fails on drift;
 - never edit the SQL of a migration production already applied. To repair
   ordering, rename the folder to a name after its dependency and make its
   statements idempotent (`IF NOT EXISTS`) so it applies as a no-op where the
@@ -127,12 +132,20 @@ real order. Rules:
   migration that really ran on that database: keep it. Never delete it and
   never `migrate resolve` it away (Product Ownership decision, 2026-09-04);
 - a new migration contains only the deliberate changes of its capability.
-  `schema.prisma` and the database carry known drift (BACKLOG #14: 27 foreign
-  keys `RESTRICT` in the database vs `SET NULL` in the schema, index and
-  constraint names). Review every generated SQL line by line and strip
-  anything that comes from that drift — `RESTRICT → SET NULL`, renamed
-  indexes or constraints, unrelated creates or drops. A large Prisma-generated
-  diff is never approved as-is.
+  Review every generated SQL line by line; a large Prisma-generated diff is
+  never approved as-is. The permanent drift that used to poison every diff is
+  gone (BACKLOG #14, 2026-09-07): `schema.prisma` now declares the 27
+  `onDelete: Restrict` the migrations had written, the 26 constraint and index
+  names they had chosen (`map:`) and the 6 indexes they had created. Anything
+  that reappears in a diff is real, and `pnpm validate:migrations:fresh`
+  fails on it;
+- migration SQL is committed with LF. `.gitattributes` pins it, because the
+  checksum Prisma stores in `_prisma_migrations` is the SHA-256 of the file
+  bytes: the same migration applied from a Windows working copy and from the
+  Railway clone lands two different checksums in the ledger. Twenty-four
+  production rows still carry that difference from before the rule; it is
+  cosmetic (`migrate deploy` and `migrate status` ignore checksums of applied
+  rows) and no row was rewritten to tidy it.
 
 Repair record (2026-09-04): `20260904093000_template_component_quantity_mode`
 renamed to `20260921093000_…` because it depended on
