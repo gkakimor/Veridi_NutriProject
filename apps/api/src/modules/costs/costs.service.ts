@@ -195,10 +195,17 @@ export async function getFormulationCostEstimate(
  * formulacao planejada. Cada consumo usa o custo do LOTE efetivamente
  * consumido quando ele existe (`REAL`); caso contrario, fallback
  * historico do Item na data do proprio consumo.
+ *
+ * `null` quando a OP nao existe. Esta e a porta para quem ja LISTOU as OPs
+ * antes de pedir o custo: entre a leitura da lista e a resolucao do custo a
+ * OP pode ter deixado de existir, e para uma listagem isso e uma linha
+ * obsoleta — nunca motivo para a tela inteira falhar. Quem pede o custo de
+ * UMA OP identificada usa `getProductionOrderMaterialCost`, que continua
+ * respondendo 404.
  */
-export async function getProductionOrderMaterialCost(
+export async function findProductionOrderMaterialCost(
   productionOrderId: string,
-): Promise<ProductionOrderMaterialCostDTO> {
+): Promise<ProductionOrderMaterialCostDTO | null> {
   const prisma = getPrisma();
   const order = await prisma.productionOrder.findUnique({
     where: { id: productionOrderId },
@@ -210,7 +217,7 @@ export async function getProductionOrderMaterialCost(
       outputs: true,
     },
   });
-  if (!order) throw new ProductionOrderNotFoundError(productionOrderId);
+  if (!order) return null;
 
   const consumptions: ProductionConsumptionCostDTO[] = [];
   const missingCostItems: string[] = [];
@@ -308,4 +315,18 @@ export async function getProductionOrderMaterialCost(
     materialUnitCost: materialUnitCost ? formatUnitCost(materialUnitCost) : null,
     missingCostItems,
   };
+}
+
+/**
+ * Custo de materiais de UMA Ordem de Producao identificada — 404 quando ela
+ * nao existe. Contrato do detalhe (`GET /production-orders/:id/material-cost`)
+ * e de qualquer chamador que ja sabe qual OP quer. Listagens usam
+ * `findProductionOrderMaterialCost`.
+ */
+export async function getProductionOrderMaterialCost(
+  productionOrderId: string,
+): Promise<ProductionOrderMaterialCostDTO> {
+  const cost = await findProductionOrderMaterialCost(productionOrderId);
+  if (!cost) throw new ProductionOrderNotFoundError(productionOrderId);
+  return cost;
 }

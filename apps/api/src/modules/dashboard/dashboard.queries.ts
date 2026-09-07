@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { DashboardPurchasingStateDTO } from "@veridi/shared";
 import { getAvailableByItems, getOnHandByLots, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
-import { getProductionOrderMaterialCost } from "../costs/costs.service.js";
+import { findProductionOrderMaterialCost } from "../costs/costs.service.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -142,7 +142,9 @@ export async function getProductionOrdersWithIncompleteCost(
 
   const results = await Promise.all(
     orders.map(async (order) => {
-      const cost = await getProductionOrderMaterialCost(order.id);
+      const cost = await findProductionOrderMaterialCost(order.id);
+      // OP que sumiu entre as duas leituras nao e custo pendente de ninguem.
+      if (!cost) return null;
       return cost.quality === "PARTIAL" || cost.quality === "NO_COST" ? order : null;
     }),
   );

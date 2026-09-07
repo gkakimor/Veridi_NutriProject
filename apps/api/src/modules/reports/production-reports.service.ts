@@ -12,7 +12,7 @@ import { getPrisma } from "../../db/prisma.js";
 import { getConsumedByReservationLines, isLotExpired } from "../../lib/inventory-ledger.js";
 import { computeRequirementAvailability } from "../../lib/requirement-availability.js";
 import { getConsumedLotCostReference } from "../../lib/cost-reference.js";
-import { getProductionOrderMaterialCost } from "../costs/costs.service.js";
+import { findProductionOrderMaterialCost } from "../costs/costs.service.js";
 import { requirementOwnerScope } from "../production-orders/production-orders.service.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
@@ -174,7 +174,10 @@ export async function getPlannedActualReport(
   if (query.includeCost) {
     await Promise.all(
       orders.map(async (order) => {
-        const cost = await getProductionOrderMaterialCost(order.id);
+        const cost = await findProductionOrderMaterialCost(order.id);
+        // OP que sumiu entre as duas leituras sai sem custo, como qualquer
+        // linha sem custo resolvido — o relatorio inteiro nao cai por ela.
+        if (!cost) return;
         costByOrder.set(order.id, { unitCost: cost.materialUnitCost, quality: cost.quality });
       }),
     );
