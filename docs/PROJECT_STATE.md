@@ -4,7 +4,7 @@
 
 ## Onde estamos
 
-**`main` @ `56b563c`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `140769c`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9, #3,
 #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**,
 as **Fundações numéricas A, B, C, P, D e E** e o **#18**, todos aprovados pelo
@@ -18,8 +18,9 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
 ## Última capability
 
-**PREC-SER-01 — a serialização técnica fechada.** Branch
-`fix/numeric-precision-serialization-final`. O último `.toFixed(6)` técnico da
+**PREC-SER-01 — a serialização técnica fechada**, aprovado pelo PO e publicado
+em 2026-09-06, merge `140769c`, deploy Railway verde — o `preDeploy` respondeu
+"No pending migrations to apply" e o smoke autenticado passou. O último `.toFixed(6)` técnico da
 API era `unitMoney`, em quatro pontos de custo unitário de MATERIAL: o custo
 resolvido pelo seletor canônico, a fonte automática de um override, a
 referência manual e o custo do lote consumido no CMV. As três fontes são
