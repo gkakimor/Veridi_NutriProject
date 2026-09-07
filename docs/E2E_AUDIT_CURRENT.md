@@ -855,3 +855,112 @@ tenha. Recarregado: DEV 293 e produção 293, conferidos item a item.
 **Regra que fica:** carga que identifica registro por código interno grava no
 registro errado assim que atravessa ambientes. A chave entre ambientes é o
 código de origem, nunca o código gerado.
+
+---
+
+# Triagem do PO — 2026-09-07
+
+Feita depois da auditoria, sobre esta mesma evidência, com leitura de código.
+**Nada acima foi alterado**: a evidência original fica como foi registrada,
+inclusive onde a triagem a contradiz. A severidade do auditor não é a
+severidade final — esta seção diz qual prevaleceu e por quê.
+
+Backlog operacional resultante em [`BACKLOG.md`](BACKLOG.md), seção A.
+
+## Disposição, achado a achado
+
+| ID | Auditor | Final | Disposição | Motivo |
+|---|---|---|---|---|
+| F-08-1 | HIGH | **HIGH · P0** | ACCEPT | Severidade mantida; **escopo corrigido** — alcança 125 das 212 formulações ativas (59 %), não apenas as com pureza/overage |
+| F-02-2 | MEDIUM | **HIGH · P0** | RECLASSIFIED ↑ | Não é rótulo divergente: a aritmética do bloco está errada. Subestima 60× num produto de 60 doses, na direção perigosa |
+| F-08-2 | MEDIUM | **HIGH · P1** | RECLASSIFIED ↑ | Atinge 164 dos 214 produtos aprovados (77 %) e afirma um defeito de cadastro que não existe |
+| F-06-1 | UX | **MEDIUM · P1** | RECLASSIFIED ↑ | Não é clareza: é validação ausente. O servidor é a única barreira, e só depois do diálogo de irreversibilidade |
+| F-06-3 | OBSERVATION | **LOW · P2** | RECLASSIFIED ↑ | Defeito real com correção provada no próprio repositório (`products.service.ts:314`) |
+| F-09-1 | MEDIUM | **MEDIUM · P1** | ACCEPT | — |
+| F-03-1 | MEDIUM | **MEDIUM · P1** | ACCEPT | Viola §54 ao pé da letra |
+| F-02-1 | MEDIUM | **MEDIUM · P1** | ACCEPT | — |
+| F-07-1 | MEDIUM | **MEDIUM · P1** | ACCEPT | — |
+| F-06-2 | LOW | **LOW · P1** | ACCEPT | Sobe de prioridade, não de severidade: mesmo arquivo e mesmo mecanismo de F-06-1 |
+| F-03-2 | LOW | **LOW · P2** | ACCEPT | — |
+| F-08-3 | LOW | **LOW · P2** | ACCEPT | — |
+| F-04-1 | LOW | **LOW · P3** | ACCEPT | Tamanho maior que a severidade sugere: a mesma condição está escrita três vezes |
+| F-01-1 | MEDIUM | **UX · P2** | RECLASSIFIED ↓ | Os dois números estão certos para o que representam; o defeito é o rótulo |
+| F-07-2 | MEDIUM | **UX · P2** | RECLASSIFIED ↓ | Divergência deliberada e documentada em `requirement-availability.ts:44` |
+| F-01-2 | UX | **UX · P2** | ACCEPT | — |
+| F-04-2 | UX | **UX · P2** | ACCEPT | Enunciado corrigido — ver abaixo |
+| F-05-1 | UX | **UX · P3** | ACCEPT | — |
+| F-01-3 | UX | **UX · P3** | RECLASSIFIED ↓ | Premissa do achado é falsa — ver abaixo |
+| F-01-4 | UX | **DEFER** | DEFER | Ordem do menu é deliberada e justificada em `navigation.ts:4` |
+| F-02-3 | UX | **DUPLICATE** | DUPLICATE | É o BACKLOG #4, aceito com residual pelo PO em 2026-09-04 |
+| F-01-5 | OBSERVATION | **CLOSED** | CLOSED | Sem ação possível |
+| F-10-1 | (nota) | **DUPLICATE** | DUPLICATE | É o próprio F-01-1 reconfirmado após a aprovação |
+
+## Onde a triagem contradiz a auditoria
+
+**F-01-3 — a premissa é falsa.** A auditoria registrou que "código e nome não
+são clicáveis". `CustomersPage.tsx:212` aplica `table--clickable-rows` e
+`:236-244` tem `<tr onClick>` com `tabIndex={0}` e Enter. A linha é clicável,
+com teclado, e abre a edição — que contém o link "Consulta completa"
+(`customer-form.tsx:369-391`). `git log` confirma que o arquivo não mudou desde
+`0134674`: é o mesmo código que a auditoria rodou. Sobra um resíduo legítimo e
+menor: a Consulta 360° só é alcançável de dentro do modal de edição.
+
+**F-04-2 — o enunciado estava impreciso.** Não é "estrutura não confirma, as
+outras duas confirmam". Estrutura (`IndustrialCostPage.tsx:611`) e Precificação
+(`PricingPage.tsx:709`) confirmam **apenas quando o dado está incompleto**, e o
+diálogo fala só da pendência. Formulação (`FormulationVersionPage.tsx:1007`)
+confirma **sempre** e nomeia o congelamento e o impacto. No caminho comum — dado
+completo — duas das três ações irreversíveis não confirmam nada.
+
+**F-02-3 — não é achado novo.** É o BACKLOG #4, medido em 117 px de rolagem
+residual e aceito pelo PO em 2026-09-04; a auditoria mediu 131 px na mesma
+tabela. Reabrir é rever uma decisão, não corrigir um defeito.
+
+**F-08-1 — a causa não é a que a auditoria supôs.** Não é conflito entre seis e
+doze casas: é a **direção** do arredondamento. `formatQuantity` usa
+`ROUND_HALF_UP`, correto para dinheiro e errado para um **teto** — arredondar um
+limite para cima produz um número exibido maior que o real. O servidor recusaria
+igual (`picking.service.ts:432` compara em `Prisma.Decimal` exato): `6,122449` é
+genuinamente maior que `6,122448979592`. Não há erro de float em lugar nenhum.
+
+## O que a triagem descobriu além dos achados
+
+**A premissa do roadmap está errada.** `ROADMAP_POST_MVP.md` afirma que
+"PREC-UI-05 e PREC-UI-06 já são o comportamento atual" — "modo de edição revela
+precisão integral" e "salvar sem alterar preserva casas não exibidas". F-08-1
+prova o contrário na tela de consumo. Qualquer trabalho de PREC-UI construído
+sobre essa premissa herdaria o defeito.
+
+**O comentário que justifica o corte envelheceu.** `quantity.ts:6` diz "o
+domínio guarda quantidade como `Decimal(18,6)`: seis casas é a precisão que o
+sistema realmente tem", e `:16` conclui "o corte é em seis casas porque é o que
+o banco guarda". Desde o PREC-MIG-A o banco guarda `DECIMAL(24,12)` —
+`schema.prisma:3080`. O corte em si continua sendo boa decisão de produto; a
+justificativa é que precisa ser reescrita, e o efeito colateral em campo de
+entrada é que precisa ser corrigido.
+
+**O mesmo padrão de comparação está em três telas**, uma delas já remendada:
+
+```
+apps/web/src/pages/production-orders/ProductionOrderPage.tsx:419
+apps/web/src/pages/shipments/ShipmentPage.tsx:626
+apps/web/src/pages/customer-orders/CustomerOrderPage.tsx:871   ← com "+ 1e-6"
+```
+
+O `1e-6` é a tolerância que `reconciliation.ts:18` recusa por escrito: "NÃO HÁ
+TOLERÂNCIA, e isso é deliberado". §66 proíbe a comparação por `Number` para
+quantidade. Corrigir só a Ordem de Produção deixaria duas irmãs vivas.
+
+**Três motores para a mesma conta.** "Quantidade por base" tem implementação em
+`packages/shared/src/formulation-quantity.ts`, outra à mão em
+`apps/api/src/lib/formulation-math.ts`, e um terceiro caminho que usa
+`convertUomDecimal` cru como se fosse a conta. O comentário do pacote
+compartilhado diz o porquê de isso ser proibido: "duas contas para o mesmo
+número acabam discordando, e a que aparece na tela seria a que ninguém usa". G2
+é o primeiro sintoma.
+
+## Correção de contagem
+
+O consolidado acima traz o cabeçalho "UX — 5" sobre uma tabela de **sete**
+linhas. São sete. O total dos achados é **22**: 1 HIGH, 8 MEDIUM, 4 LOW, 7 UX,
+2 observações.

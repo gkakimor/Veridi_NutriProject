@@ -18,28 +18,28 @@ interface, contra a base recarregada com os dados reais da Veridi.** Os dez
 passaram. Trinta e nove conferências numéricas independentes bateram sem uma
 diferença, e a precisão foi demonstrada preservada ponta a ponta (o preço
 sugerido saiu R$ 16,44 do custo cheio `10,68903`, não R$ 16,45 do custo
-arredondado). Achados em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md): **1
-HIGH, 8 MEDIUM, 4 LOW, 7 UX, 2 observações, zero CRITICAL.** Nada foi corrigido
-— a rodada era auditoria, e o PO decide o que vira backlog.
+arredondado). Achados em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md): 22 no total, zero
+CRITICAL. **Triados em 2026-09-07 com leitura de código:** 3 HIGH, 4 MEDIUM,
+4 LOW, 7 UX, 2 duplicados, 1 encerrado, 1 adiado. Auditoria e triagem não
+corrigem — nenhuma linha de produto mudou.
 
-**A fundação de precisão numérica está completa e fechada.** A cadeia inteira —
+**A fundação de precisão numérica está completa no armazenamento.** A cadeia inteira —
 schema, persistência, serialização, formatação e comparação — respeita a matriz
 de tipos de [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §58, com quatro fronteiras de
 fechamento nomeadas (§60, §62, §63), a assimetria entre elas declarada (§64) e o
-motor decimal em 40 dígitos numa configuração canônica (§59). O único HIGH da
-auditoria é de EXIBIÇÃO, não de cálculo: a quantidade reservada é mostrada
-arredondada para cima e a validação compara com o valor cheio, então o operador
-não consegue digitar o número que a própria tela mostra.
+motor decimal em 40 dígitos numa configuração canônica (§59). A **exibição** ficou
+para trás: o corte de seis casas da tela foi escrito quando o banco guardava
+seis, e desde o PREC-MIG-A ele guarda doze. Os dois P0 da triagem saem daí.
 
 **`schema.prisma` e as migrations estão em sincronia** desde o #14: um banco
 reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 
 ## O que está aberto
 
-[`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero blocker**. O que sobra:
+[`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. O que sobra:
 
-- **achados da auditoria de 2026-09-07**, ainda não triados pelo PO:
-  [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
+- **achados triados da auditoria de 2026-09-07** — seção A do
+  [`BACKLOG.md`](BACKLOG.md): 2 P0, 7 P1, 7 P2, 3 P3;
 - **melhorias aprovadas, aguardando autorização do PO:** #8E, #8F, #8G;
 - **aguardando validação com a Veridi:** #7 e #11;
 - **manutenção:** #10;
@@ -49,9 +49,19 @@ Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 
 ## Próxima prioridade
 
-**Triagem dos achados da auditoria pelo PO** — o que vira backlog e em que
-ordem. O F-08-1 (HIGH) trava o consumo de produção para toda formulação com
-correção de pureza ou overage.
+**FIX-01 — a precisão exibida virou limite de entrada.** `formatQuantity` corta
+em seis casas com `ROUND_HALF_UP`, e arredondar um **teto** para cima produz um
+limite maior que o real: o consumo de produção recusa exatamente a quantidade que
+a tela mostra (F-08-1), em 125 das 212 formulações ativas. O mesmo padrão de
+comparação está em Expedição e no Plano de Atendimento — este já remendado com um
+`1e-6` que `reconciliation.ts` recusa por escrito. Corrigir as três juntas.
+
+Depois: FIX-02 (custo estimado da Formulação usando a quantidade por dose,
+F-02-2) e a fila P1 da seção A.
+
+**Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
+são o comportamento atual". F-08-1 prova que não — construir sobre essa premissa
+herdaria o defeito.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11). Roteiro em
