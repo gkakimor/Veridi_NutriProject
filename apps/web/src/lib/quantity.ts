@@ -1,3 +1,5 @@
+import { abaixoDaMenorCasa, formatarDecimalTexto } from "./decimal-format";
+
 /**
  * Quantidade para leitura humana.
  *
@@ -24,16 +26,25 @@ const CASAS = 6;
 export function formatQuantity(valor: string | number | null | undefined): string {
   if (valor === null || valor === undefined || valor === "") return "—";
 
-  const numero = Number(valor);
-  if (!Number.isFinite(numero)) return String(valor);
+  /*
+   * A API entrega quantidade como STRING — `DECIMAL(24,12)` desde o
+   * PREC-MIG-A. O `number` na assinatura sobrou de chamadores antigos e é
+   * convertido para texto sem passar por aritmética; quem entrega `number` já
+   * perdeu o que houvesse a perder antes de chegar aqui.
+   */
+  const texto = typeof valor === "number" ? String(valor) : valor;
 
   /*
    * Um valor pequeno o bastante para sumir com seis casas vira "≈ 0" em vez de
    * "0": dizer zero para material que existe seria mentir na direção perigosa,
    * já que zero significa "não precisa de material".
+   *
+   * A pergunta é feita sobre os dígitos, e é de MAGNITUDE, não de
+   * arredondamento: `0,0000005` arredondaria para `0,000001`, mas é menor que
+   * `10^-6` e o sistema não guarda essa casa em quantidade nenhuma.
    */
-  if (numero !== 0 && Math.abs(numero) < 10 ** -CASAS) {
-    return numero > 0 ? "≈ 0" : "≈ -0";
+  if (abaixoDaMenorCasa(texto, CASAS)) {
+    return texto.trim().startsWith("-") ? "≈ -0" : "≈ 0";
   }
 
   /*
@@ -48,11 +59,12 @@ export function formatQuantity(valor: string | number | null | undefined): strin
    * precisa poder copiar o que vê. Dinheiro é outro caso e tem formatador
    * próprio, onde o agrupamento ajuda e ninguém copia de volta.
    */
-  return numero.toLocaleString("pt-BR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: CASAS,
-    useGrouping: false,
+  const corpo = formatarDecimalTexto(texto, {
+    minimo: 0,
+    maximo: CASAS,
+    agruparMilhar: false,
   });
+  return corpo ?? String(valor);
 }
 
 /** A mesma quantidade com a unidade colada, que é como ela deve ser lida. */

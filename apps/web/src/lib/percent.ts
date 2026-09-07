@@ -1,3 +1,5 @@
+import { formatarDecimalTexto } from "./decimal-format";
+
 /**
  * Percentual na tela.
  *
@@ -8,10 +10,12 @@
  *
  * Duas casas é o teto: margem de contribuição com quatro decimais não muda
  * decisão nenhuma e só atrapalha a leitura.
+ *
+ * Formata por TEXTO desde o PREC-FMT-01 — mesmo contrato visual, sem `Number`.
  */
 export function formatPercent(value: string | null | undefined): string {
   if (value === null || value === undefined) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  return `${number.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+  const corpo = formatarDecimalTexto(value, { minimo: 0, maximo: 2 });
+  if (corpo === null) return "—";
+  return `${corpo}%`;
 }

@@ -11,6 +11,12 @@ import {
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
 import { formatBRL } from "../lib/currency";
+import {
+  comSimboloReal,
+  formatarDecimalTexto,
+  sinalEModulo,
+  sumiriaAoExibir,
+} from "../lib/decimal-format";
 import { formatDateTime } from "../lib/dates";
 import { EntityLink } from "./EntityLink";
 import { CostWarnings } from "./CostWarnings";
@@ -26,18 +32,21 @@ import { CalcHint } from "./help/CalcHint";
  * A exceção é o valor pequeno demais para dois centavos: mostrar R$ 0,00 para
  * uma cápsula a R$ 0,0032 diria que ela é de graça. Aí, e só aí, o formato
  * abre casas até o número aparecer.
+ *
+ * O custo unitário é `DECIMAL(20,8)` e a API serve as oito casas desde o
+ * PREC-SER-01. **Mostrar duas continua sendo a política**, e desde o
+ * PREC-FMT-01 essa redução é decisão do formatter, sobre os dígitos — não a
+ * sobra de um `double` que já tinha arredondado sozinho.
  */
 export function formatUnitCost(value: string | null): string {
   if (value === null) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  const desapareceria = number !== 0 && Math.abs(number) < 0.005;
-  return number.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: desapareceria ? 6 : 2,
-  });
+  // "Some ao exibir" é perguntado sobre os dígitos: o valor não é zero e vira
+  // zero com duas casas. Era `Math.abs(n) < 0.005`, e dá no mesmo — com
+  // `ROUND_HALF_UP`, `0,005` já não some.
+  const casas = sumiriaAoExibir(value, 2) ? 6 : 2;
+  const corpo = formatarDecimalTexto(value, { minimo: 2, maximo: casas });
+  if (corpo === null) return "—";
+  return comSimboloReal(corpo);
 }
 
 export function qualityBadgeClass(quality: string): string {
@@ -129,8 +138,8 @@ export function CostBreakdown({
                         <div>
                           Impacto neste cálculo:{" "}
                           <b>
-                            {Number(material.override.impact) >= 0 ? "+ " : "− "}
-                            {formatBRL(String(Math.abs(Number(material.override.impact))))}
+                            {sinalEModulo(material.override.impact).negativo ? "− " : "+ "}
+                            {formatBRL(sinalEModulo(material.override.impact).modulo)}
                           </b>
                         </div>
                       )}

@@ -2,6 +2,7 @@ import type { IndustrialMaterialCostLineDTO } from "@veridi/shared";
 import { INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS } from "@veridi/shared";
 import { formatUnitCost } from "./CostBreakdown";
 import { formatBRL } from "../lib/currency";
+import { sinalEModulo } from "../lib/decimal-format";
 import { formatDate } from "../lib/dates";
 
 /**
@@ -138,8 +139,8 @@ export function MaterialCostSourceChooser({
                   <p className="field__hint">
                     Impacto neste cálculo:{" "}
                     <b>
-                      {Number(material.override.impact) >= 0 ? "+ " : "− "}
-                      {formatBRL(String(Math.abs(Number(material.override.impact))))}
+                      {sinalEModulo(material.override.impact).negativo ? "− " : "+ "}
+                      {formatBRL(sinalEModulo(material.override.impact).modulo)}
                     </b>{" "}
                     em relação à seleção automática.
                   </p>

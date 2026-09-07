@@ -4001,3 +4001,59 @@ encontrará essas diferenças e as tratará como erro de arredondamento, e a
 "correção" seria reduzir a precisão do valor por unidade — apagando exatamente o
 que as fundações A a E construíram. A divergência é a consequência de uma
 decisão, e uma consequência que ninguém registrou volta como bug.
+
+## §65 — A apresentação decide as casas; o float não decide nada
+
+Decisão de Product Ownership de 2026-09-06, na aprovação do PREC-FMT-01.
+Fecha a fundação numérica: schema, persistência, serialização e agora
+formatação.
+
+**Formatação é escolha, não sobra.** Quantas casas o usuário vê é decisão de
+apresentação, e ela é legítima: um custo de `DECIMAL(20,8)` pode e deve
+aparecer como `R$ 3,14`. O que não pode é a redução acontecer **antes** de
+alguém decidi-la — e era o que acontecia, porque todo formatter convertia o
+decimal para `Number` antes de formatar.
+
+Um `double` tem 53 bits de mantissa. `9007199254740993,12` não existe lá
+dentro: vira `9007199254740994`. A tela mostrava um número que o banco nunca
+guardou, e nenhuma casa decimal estava envolvida — o erro era na parte
+inteira.
+
+**A regra:** decimal chega do servidor como **string** e vira texto sem passar
+por número de ponto flutuante. Arredondar para exibir usa `ROUND_HALF_UP`
+sobre os dígitos, o mesmo critério das quatro fronteiras de persistência (§60,
+§62, §63). Nada de `Number`, `parseFloat`, `Math.round` ou `Intl.NumberFormat`
+no caminho de um valor.
+
+**Armazenamento, transporte e exibição são três escalas independentes** (§57), e
+a de exibição é a única que pode ser menor sem perder nada — desde que a
+escolha seja do formatter.
+
+| Categoria | Storage | API | Display | Arredondamento |
+|---|---|---|---|---|
+| QUANTITY / FACTOR | `24,12` | íntegro | até 6, sem milhar | HALF_UP; abaixo de `10^-6` mostra `≈ 0` |
+| TECHNICAL_RESULT | `24,12` | 12 casas | 2, ou até 6 se sumir | HALF_UP |
+| UNIT_COST | `20,8` | 8 casas | 2, ou até 6 se sumir | HALF_UP |
+| UNIT_PRICE técnico | `20,8` | 8 casas | 2 a 4 | HALF_UP |
+| TECHNICAL_TOTAL | `14,4` | 2 ou 4 casas | 2 | HALF_UP |
+| UNIT_PRICE comercial | `14,4` | 4 casas | 2 a 4 | HALF_UP |
+| COMMERCIAL_TOTAL | `14,2` | 2 casas | 2 | HALF_UP |
+| PERCENT | `7,4` | 4 casas | até 2 | HALF_UP |
+| RATE | `14,4` | íntegro | 2 | HALF_UP |
+
+**Quantidade não agrupa milhar, e isso é decisão.** `1.000 un` é o português
+correto e é veneno para copiar: o campo decimal deste sistema lê um separador
+único como casa decimal. Quantidade é número que se confere contra balança e se
+redigita. Dinheiro agrupa, porque ninguém o copia de volta.
+
+**Desconhecido não é zero, na tela também.** `null` aparece como `—`, nunca
+como `R$ 0,00`. E um valor pequeno demais para a escala de exibição abre casas
+até aparecer, em vez de virar zero: dizer `R$ 0,00` para uma cápsula de
+`R$ 0,0032` afirmaria que ela é de graça.
+
+**Conferência de apresentação pode usar `Number`.** `CalcHint` refaz a conta
+escrita na tela para comparar com o valor que o servidor mandou, dentro de uma
+tolerância derivada das casas exibidas. Ele nunca produz o valor mostrado nem
+o valor salvo — é alarme, não motor. Uso classificado como
+`SAFE_PRESENTATION_CHECK`; qualquer `Number` que **produza** um valor exibido,
+enviado ou persistido continua proibido.

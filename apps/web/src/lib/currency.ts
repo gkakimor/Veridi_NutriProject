@@ -1,3 +1,5 @@
+import { comSimboloReal, formatarDecimalTexto } from "./decimal-format";
+
 /**
  * TOTAL em dinheiro: sempre 2 casas.
  *
@@ -5,12 +7,16 @@
  * consolidado. Para PREÇO UNITÁRIO use `formatUnitPriceBRL`: o preço tem
  * precisão própria, e cortá-lo aqui foi o que fez um documento de faturamento
  * deixar de fechar na conferência manual.
+ *
+ * Formata por TEXTO desde o PREC-FMT-01: `Number` perdia dígitos da parte
+ * inteira antes de a formatação começar — `9007199254740993.12` virava
+ * `...994` no `double`. O contrato visual é o mesmo de antes.
  */
 export function formatBRL(value: string | null): string {
   if (value === null) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  return number.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const corpo = formatarDecimalTexto(value, { minimo: 2, maximo: 2 });
+  if (corpo === null) return "—";
+  return comSimboloReal(corpo);
 }
 
 /**
@@ -34,12 +40,7 @@ export function formatBRL(value: string | null): string {
  */
 export function formatUnitPriceBRL(value: string | null): string {
   if (value === null) return "—";
-  const number = Number(value);
-  if (Number.isNaN(number)) return "—";
-  return number.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  });
+  const corpo = formatarDecimalTexto(value, { minimo: 2, maximo: 4 });
+  if (corpo === null) return "—";
+  return comSimboloReal(corpo);
 }

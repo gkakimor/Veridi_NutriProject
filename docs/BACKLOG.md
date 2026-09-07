@@ -72,24 +72,28 @@ default do `decimal.js` (§60 A/B/C).
 passou a ser a soma das linhas impressas (`40,79`, não `40,78`), regra durável
 em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §61, sem migration e sem histórico
 recalculado.
+**PREC-FMT-01 RESOLVIDO em 2026-09-06 — e com ele o #19.** A formatação deixou
+de passar por `Number`: `9007199254740993,12` aparecia como
+`9.007.199.254.740.994,00` porque o `double` já tinha perdido o dígito antes de
+a formatação começar. `lib/decimal-format.ts` formata sobre os dígitos, com
+`ROUND_HALF_UP`, e o contrato visual é exatamente o de antes — medido caso a
+caso contra o `Intl` e provado por 826 testes web. Regra durável:
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §65. **A cadeia inteira — schema,
+persistência, serialização e apresentação — está fechada.**
 **PREC-SER-01 RESOLVIDO em 2026-09-06:** o último `.toFixed(6)` técnico saiu da
 API — custo unitário de material passou a servir as oito casas da sua coluna, e
 a varredura global provou que não há mais nenhum caminho reduzindo precisão de
-forma incompatível com a sua categoria. **#19 segue ABERTO / PARCIAL enquanto o
-PREC-FMT-01 estiver aberto.**
+forma incompatível com a sua categoria.
 **PREC-MIG-E RESOLVIDO em 2026-09-06** (PREC-E-01 e PREC-E-02): uma coluna em
 `DECIMAL(24,12)`, migration `20260925093007_numeric_precision_quote_industrial_cost_24_12`,
 e a categoria **TECHNICAL_TOTAL** formalizada em `14,4` com fronteira explícita
-(§63). F-2 e F-3 viraram §64. **A matriz de §58 está aplicada ao schema
-inteiro; #19 fica ABERTO / PARCIAL até PREC-SER-01 e PREC-FMT-01, e fechá-lo é
-decisão do PO.**
+(§63). F-2 e F-3 viraram §64. **A matriz de §58 está aplicada ao schema inteiro.**
 **PREC-MIG-D RESOLVIDO e PUBLICADO em 2026-09-06** (PREC-D-01, D-02 e D-03),
 merge `8a40b52`, deploy Railway verde — o `preDeploy` aplicou
 `20260925093006_numeric_precision_technical_results_24_12` em produção. As três
 colunas `14,6` de resultado técnico em `DECIMAL(24,12)`, sem backfill, com a
 TERCEIRA fronteira de fechamento — 12 casas, `ROUND_HALF_UP` declarado — como
-regra durável ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §62). #19 segue
-**ABERTO / PARCIAL** enquanto o PREC-MIG-E não fechar. **PREC-MIG-E: a
+regra durável ([`PRODUCT_RULES.md`](PRODUCT_RULES.md) §62). **PREC-MIG-E: a
 classificação semântica das 16 colunas está concluída (§12.3 da auditoria) e a
 proposta aguarda o PO — nenhuma migration foi criada.**
 
@@ -97,55 +101,25 @@ proposta aguarda o PO — nenhuma migration foi criada.**
 
 ## A. Defeitos abertos
 
-### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — ABERTO / PARCIAL
+### 19. `Decimal(18,6)` zera quantidade física derivada em microdosagem — RESOLVIDO
 
-**PREC-MIG-A, B, C, P, D e E RESOLVIDOS. #19 segue ABERTO / PARCIAL — a parte
-de MIGRATIONS está completa.** A matriz de §58 está aplicada ao schema inteiro:
-nenhuma coluna numérica de domínio ficou sem categoria decidida. O que permanece
-em `14,4` é TECHNICAL_TOTAL, preço contratual e tarifa, por decisão registrada;
-o único `18,6` restante é o dado importado do legado. **PREC-SER-01 fechou em
-2026-09-06; fechar o item é decisão do PO** e depende apenas do PREC-FMT-01. O defeito que
-originou o item está corrigido: as 43 colunas
-de quantidade e grandeza técnica inequívoca estão em `DECIMAL(24,12)`, e
-`0,000000048` persiste como `0,000000048000` em vez de `0,000000`. Provado
-contra o banco real em
+**RESOLVIDO em 2026-09-06.** Uma necessidade de `0,000000048 kg` era gravada
+como `0,000000` e sumia da Ordem de Produção — microdosagem em dose pequena
+zerava a linha inteira, sem erro visível. Hoje persiste como
+`0,000000048000`, provado contra o banco em
 `apps/api/src/modules/inventory/precision-round-trip.test.ts`.
 
-Prioridade elevada para **HIGH / URGENTE** por decisão do PO em 2026-09-05:
-perda real de informação em Formulação e Produção é inaceitável. Achado da
-auditoria PREC-01, com dado real
-do banco local. Componente `MP-000147`, `FIXED_BASIS` `0,000048 kg` sobre base
-1000, item estocado em kg: produzir de 1 a 10 unidades dá necessidade física de
-`4,8e-8` a `4,8e-7 kg`, e `ProductionOrderRequirement.requiredQuantity`
-**persiste `0,000000`** — a OP afirma que não precisa do material. A 100
-unidades grava `0,000005` contra `0,0000048` reais, erro de +4,2%. Com scale 12
-todos os casos são exatos.
+O item só fechou quando a cadeia inteira ficou coberta, e cada capability
+respondeu por um trecho dela: **#20** ampliou o motor decimal para 40 dígitos;
+**PREC-MIG-A a E** aplicaram a matriz de
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §58 ao schema inteiro, com quatro
+fronteiras de fechamento nomeadas (§60, §62, §63) e a assimetria entre elas
+declarada (§64); **PREC-SER-01** tirou o último corte da serialização; e
+**PREC-FMT-01** tirou o float da formatação (§65). Nenhuma migration fez
+backfill: casa nunca persistida não se reconstrói.
 
-O motor de Formulação está correto: ele calcula em `Decimal` sem arredondar. A
-perda é do scale da coluna, aplicada na gravação — reintroduzindo exatamente o
-"não precisa de material" que `formulation-quantity.ts` foi escrito para evitar.
-
-**Alcance medido:** 1991 componentes de formulação, 142 abaixo de `0,001` na
-unidade de estoque, 1 já zerando. Dói em amostra, piloto e lote pequeno.
-
-**Colunas afetadas** (todas `Decimal(18,6)`, quantidade derivada persistida):
-`ProductionOrderRequirement.requiredQuantity` e `.theoreticalQuantity`,
-`MaterialReservationLine.quantity`, `ProductionConsumption.quantity`,
-`InventoryMovement.quantity`, `RecipeWeighing.plannedQuantitySnapshot`,
-`SampleConsumption.quantity`.
-
-**Alvo aprovado pelo PO:** QUANTITY e grandeza inequivocamente técnica em
-`DECIMAL(24,12)`; fator de conversão idem ([`PRODUCT_RULES.md`](PRODUCT_RULES.md)
-§58). O primeiro widening prioriza `requiredQuantity`, `theoreticalQuantity`,
-quantidades de Formulação, `SampleConsumption.quantity`,
-`InventoryMovement.quantity`, quantidades de estoque e de produção, fatores de
-conversão e as demais QUANTITY inequivocamente técnicas. **A lista que vale é a
-do inventário** de [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md)
-§3.1 — nenhuma lista nova.
-
-Exige migration de widening e, no mesmo passo ou antes, a precisão canônica de
-#20. Sem backfill: casa nunca persistida não se reconstrói. Perguntas de domínio
-remanescentes em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.
+Detalhe por capability na seção E; inventário e achados em
+[`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §12.
 
 ### 20. `decimal.js` roda em 20 dígitos significativos — RESOLVIDO
 
@@ -732,7 +706,8 @@ voltarem como defeito.
 |---|---|---|
 | **PREC-SER-01** | DTOs cuja serialização com `.toFixed()` corta a precisão técnica antes da UI | **RESOLVIDO** — 2026-09-06. `unitMoney` (6 casas) eliminado; os quatro pontos de custo unitário de material passaram a `custoUnitario` (8). Varredura global: zero `.toFixed(6)` na API, e todo `.toFixed(4)`/`(2)` restante é o scale da própria categoria |
 | **PREC-SER-02** | Gravação de preço técnico de 6 casas em coluna de 4 quando **não** for snapshot contratual | **RESOLVIDO** — PREC-P-01 (`purchase-orders.service.ts`, `receiving.service.ts`) e PREC-P-TECH (`pricing.service.ts`, `quote-pricing.service.ts`, `cost-reports.service.ts`, `product-cmv.service.ts`, `pricing-policies.service.ts`). A família UNIT_PRICE inteira está coberta |
-| **PREC-FMT-01** | Eliminar `Number` nos formatters para grandeza técnica de alta precisão | APROVADO — obrigatório antes de qualquer preset acima de 6 casas |
+| **PREC-FMT-01** | Eliminar `Number` nos formatters para grandeza técnica de alta precisão | **RESOLVIDO** — 2026-09-06. `lib/decimal-format.ts` formata por texto; `formatBRL`, `formatUnitCost`, `formatUnitPriceBRL`, `formatPercent` e `formatQuantity` não passam mais por float, e o contrato visual não mudou (826 testes web verdes). Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §65 |
+| **PREC-CMP-01** | Comparação de quantidade `Decimal` via JavaScript `Number` em política/faixa | **ABERTO** — `cost-templates/pricing-policies.service.ts` usa `Number(a) === Number(b)` para casar quantidade de faixa (`DECIMAL(24,12)`). Não é formatação nem serialização: é igualdade/idempotência. Capability separada |
 
 **PREC-SER-01 — FECHADO em 2026-09-06.** O último residual era
 `unitMoney` (`toFixed(6)`) em `industrial-cost-calculation/calculation.service.ts`,
