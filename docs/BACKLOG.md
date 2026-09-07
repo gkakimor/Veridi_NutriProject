@@ -160,7 +160,9 @@ extra.
 
 ### 21. Seis serializações de DTO entregam menos casas do que a coluna guarda — RESOLVIDO
 
-**RESOLVIDO / PUBLICADO em 2026-09-06.** Desdobrado pelo PO em 2026-09-05 em
+**RESOLVIDO / PUBLICADO em 2026-09-06** (merge `0be565c`, deploy Railway verde;
+`prisma migrate deploy` respondeu "No pending migrations to apply" — nenhuma
+migration nova, como esperado). Desdobrado pelo PO em 2026-09-05 em
 PREC-SER-01, PREC-SER-02 e PREC-FMT-01 (seção E), todos fechados; o resíduo
 final era o documento impresso.
 

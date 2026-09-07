@@ -19,7 +19,7 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 ## Última capability
 
 **#21 — o documento impresso não recalcula a receita**, aprovado pelo PO e
-publicado em 2026-09-06, merge `MERGE_SHA`, deploy Railway verde — o `preDeploy`
+publicado em 2026-09-06, merge `0be565c`, deploy Railway verde — o `preDeploy`
 respondeu "No pending migrations to apply" e o smoke autenticado passou. Era o
 último ponto conhecido em que um `Decimal` de domínio virava `Number` para
 produzir número, e o único dentro de um documento controlado.
