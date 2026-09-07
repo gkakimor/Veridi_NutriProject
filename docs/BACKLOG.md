@@ -9,15 +9,131 @@ cada regra é protegida em [`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md), e o
 detalhe de cada entrega no Git. Escopo futuro vive só em
 [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 
-**Zero CRITICAL. Zero blocker.** A fundação de precisão numérica está completa
-e fechada — schema, persistência, serialização, formatação e comparação —, e
-`schema.prisma` está em sincronia com as migrations.
+**Zero CRITICAL. Zero BLOCKER.** A fundação de precisão numérica está completa
+no ARMAZENAMENTO — schema, persistência, serialização e comparação de domínio —,
+e `schema.prisma` está em sincronia com as migrations. A auditoria de 2026-09-07
+mostrou que a **exibição** ainda não acompanhou: o corte de seis casas da tela
+nasceu quando o banco guardava seis, e hoje ele guarda doze. É de onde saem os
+dois P0.
 
 ---
 
 ## A. Defeitos abertos
 
-Nenhum.
+Triados em 2026-09-07 sobre a auditoria de produto. Evidência, passos e
+conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
+aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
+a do auditor.
+
+**Zero CRITICAL, zero BLOCKER.** Três HIGH, quatro MEDIUM, quatro LOW.
+
+### P0 — antes de qualquer outra capability
+
+| ID | Título | Sev. | Tam. | Grupo |
+|---|---|---|---|---|
+| **F-08-1** | Consumo de produção recusa exatamente a quantidade que a tela mostra | HIGH | S | G1 |
+| **F-02-2** | Custo estimado da Formulação usa a quantidade por dose — subestima em 60× num produto de 60 doses | HIGH | L | G2 |
+
+**F-08-1.** A reserva vale `6,122448979592 kg`; `formatQuantity` corta em 6 casas
+com `ROUND_HALF_UP` e exibe `6,122449`. Arredondar um **teto para cima** produz
+um limite exibido maior que o real, e é o real que valida — cliente
+(`ProductionOrderPage.tsx:419`) e servidor (`picking.service.ts:432`) recusam.
+Não é erro de float: `6,122449` é genuinamente maior. Digitar menos deixa
+resíduo, e `reconciliation.ts` **não tem tolerância, por decisão** — a OP não
+conclui sem justificar variância de um micrograma. Alcança **125 das 212
+formulações ativas (59 %)**, não só as com pureza/overage.
+
+**F-02-2.** `costs.service.ts:122` converte a unidade da quantidade
+**declarada** e nunca aplica base, doses, pureza ou overage — o comentário
+acima da linha afirma reusar a conta dos Requirements, e reusa só metade dela.
+O motor autoritativo (`calculation.service.ts:485`) está correto, então CMV e
+precificação não são contaminados: o dano é de decisão, na tela onde se julga
+se a fórmula fecha.
+
+### P1 — próximas correções
+
+| ID | Título | Sev. | Tam. | Grupo |
+|---|---|---|---|---|
+| **F-08-2** | OP em rascunho afirma "Produto sem item de produto acabado válido" para produto com PA válido | HIGH | S | — |
+| **F-09-1** | Pedido mostra "Disponível agora 0" e botão morto sem dizer que o lote aguarda a Qualidade | MEDIUM | S | G3 |
+| **F-06-1** | Recebimento só recusa o excesso na confirmação, depois do diálogo de irreversibilidade | MEDIUM | S | G4 |
+| **F-06-2** | O alerta de excesso do Recebimento não some quando a quantidade é corrigida | LOW | XS | G4 |
+| **F-03-1** | Custo estimado da Formulação não atualiza ao salvar e não se identifica como prévia nem como gravado | MEDIUM | XS | — |
+| **F-02-1** | "Equivalente estoque" muda de significado entre rascunho e versão ativa | MEDIUM | XS | G2 |
+| **F-07-1** | Sugestão de compra imprime `6.122448979592` com ponto decimal | MEDIUM | S | G1 |
+
+**F-08-2** atinge **164 dos 214 produtos aprovados (77 %)**: a tela carrega só os
+50 primeiros por código (`ProductionOrderPage.tsx:294`) e o produto da OP, fora
+dessa página, não é encontrado — a frase dispara em `!selectedProduct?.
+finishedProductItem`, onde `undefined` vira "inválido".
+
+**F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
+momentos diferentes sem dizer qual é qual".
+
+### P2 — depois da estabilização
+
+| ID | Título | Sev. | Tam. |
+|---|---|---|---|
+| **F-06-3** | `nextval` chamado fora da transação: recusa consome número de documento em cinco módulos | LOW | S |
+| **F-03-2** | Coluna ORIGEM do histórico de versões vazia para versão criada de template | LOW | XS |
+| **F-08-3** | Campos "Consumir agora" sem rótulo acessível | LOW | XS |
+| **F-01-1** | "Produto" nomeia dois fatos diferentes na Consulta de Cliente | UX | S |
+| **F-07-2** | "Disponível" na OP inclui a reserva própria; na Posição de Estoque, não | UX | XS |
+| **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
+| **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
+
+**F-01-1 e F-07-2 foram rebaixados**: os dois números estão certos para o que
+representam — `Project.productId` (produto resultante) contra `project_products`
+(produtos em desenvolvimento), e "disponível incluindo a reserva desta OP"
+(`requirement-availability.ts:44`) contra disponível global. O defeito é o
+rótulo, não o dado.
+
+**F-06-3 foi elevado de observação a defeito**: o padrão correto já existe em
+`products.service.ts:314`, com comentário nomeando exatamente este problema —
+`nextSequenceCode(tx, …)` como primeira linha **dentro** da transação.
+
+### P3 — baixo impacto
+
+| ID | Título | Sev. | Tam. |
+|---|---|---|---|
+| **F-04-1** | "atinge 100%" exibido quando margem + comissão passa de 100 % | LOW | M |
+| **F-05-1** | R$ 0,04 entre Precificação e Orçamento (fronteira §60) sem explicação em nenhuma das telas | UX | XS |
+| **F-01-3** | "Consulta completa" só é alcançável de dentro do modal de edição | UX | S |
+
+### Encerrados na triagem, sem trabalho
+
+| ID | Disposição | Por quê |
+|---|---|---|
+| **F-01-5** | CLOSED | `clientes.csv` não tem coluna de data e `MappedCustomer` não tem o campo. "Cadastrado em" mostra a única data que existe |
+| **F-02-3** | DUPLICATE | É o **#4**, aceito com residual pelo PO em 2026-09-04: 117 px medidos então, 131 px agora. Mesma tabela, mesma causa |
+| **F-10-1** | DUPLICATE | É o próprio F-01-1 reconfirmado depois da aprovação do projeto |
+| **F-01-4** | DEFER | A ordem do menu é deliberada e está justificada em `navigation.ts:4` ("cadastro e configuração ficam no fim: não são operação diária"). Mudar é decisão de produto, não correção |
+
+**F-01-3 é parcialmente NOT_A_BUG.** A auditoria afirmou que código e nome do
+cliente não são clicáveis; `CustomersPage.tsx:212,236` mostra
+`table--clickable-rows` e `<tr onClick>` com `tabIndex`. A linha é clicável e
+abre a edição, que contém o link "Consulta completa". Sobra só o resíduo em P3.
+
+### Grupos de causa raiz — o que se corrige junto
+
+| Grupo | Achados | Causa | Por que junto |
+|---|---|---|---|
+| **G1** | F-08-1, F-07-1 | Precisão exibida e precisão validada não se reconciliam | O mesmo `Number(digitado) > Number(limite)` está em `ProductionOrderPage.tsx:419`, `ShipmentPage.tsx:626` e `CustomerOrderPage.tsx:871` — este último já remendado com `+ 1e-6`. Corrigir só a OP deixa duas irmãs vivas, e §66 proíbe a comparação por `Number` |
+| **G2** | F-02-2, F-02-1 | Quantidade **declarada** usada como se fosse a física | `convertUomDecimal` chamado com os mesmos argumentos em `formulations.service.ts:71` e `costs.service.ts:122`, sem o motor de necessidade. Mesmo atalho, dois lugares |
+| **G3** | F-09-1, F-07-2 | "Disponível" composto ad-hoc por tela | Três serviços envolvem `getAvailableByItems` de três jeitos; só o Estoque chama o irmão `getUnavailabilityByItems`, que é o que explica o zero |
+| **G4** | F-06-1, F-06-2 | `fieldErrors` só nasce da resposta do servidor e só reseta no próximo envio | Mesmo arquivo, mesmo mecanismo: o conserto de um resolve o outro |
+| **G5** | F-06-3 | `nextval` antes da transação | Cinco módulos, mesmo diff, revisão mecânica de uma vez |
+
+### Achado estrutural, sem item próprio
+
+Existem **três implementações independentes** da conta "quantidade por base":
+`packages/shared/src/formulation-quantity.ts` (`fatorDaBase`),
+`apps/api/src/lib/formulation-math.ts` (`basisFactor`, reimplementado à mão) e o
+`convertUomDecimal` cru usado como se fosse a conta. O comentário do próprio
+pacote compartilhado diz que isso é o que o domínio proíbe: *"duas contas para o
+mesmo número acabam discordando, e a que aparece na tela seria a que ninguém
+usa."* G2 é o primeiro sintoma; consolidar os três motores é candidato a
+capability própria, não a correção de finding.
 
 ---
 
