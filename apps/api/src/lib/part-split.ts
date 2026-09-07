@@ -1,31 +1,28 @@
 import { Prisma } from "@prisma/client";
+import {
+  partShare as rateioDaParte,
+  splitDecimal as ratearEmPartes,
+} from "@veridi/shared";
 // Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
 import "./decimal.js";
 
 /**
- * Divisão determinística de uma quantidade em N partes, em Decimal.
+ * Divisão determinística de uma quantidade em N partes.
  *
- * Nunca float: 10 kg em 3 partes não pode virar 3.3333333333333335. Cada
- * parte é arredondada para a escala operacional e a ÚLTIMA absorve o resto,
- * de modo que a soma das partes seja EXATAMENTE o total planejado.
+ * DELEGA para `@veridi/shared`, e não repete a conta. O documento impresso da
+ * Ordem de Produção precisa do MESMO rateio que a execução usa, e dividir de
+ * novo no navegador criaria um segundo motor — que foi exatamente o defeito do
+ * #21. A regra (escala 6, `ROUND_DOWN`, última parte absorvendo o resto) está
+ * no pacote compartilhado, uma vez só.
+ *
+ * O que sobra aqui é a fronteira de tipo: a API fala `Prisma.Decimal`, o
+ * pacote compartilhado fala `decimal.js`. São construtores diferentes da mesma
+ * biblioteca, com a mesma precisão canônica, e a travessia é por texto.
  */
-const SCALE = 6;
-
 export function splitDecimal(total: Prisma.Decimal, parts: number): Prisma.Decimal[] {
-  if (parts <= 1) return [total];
-
-  const per = total.dividedBy(parts).toDecimalPlaces(SCALE, Prisma.Decimal.ROUND_DOWN);
-  const result: Prisma.Decimal[] = [];
-  let allocated = new Prisma.Decimal(0);
-
-  for (let index = 0; index < parts - 1; index += 1) {
-    result.push(per);
-    allocated = allocated.plus(per);
-  }
-  // A última parte fecha a conta: o resto da divisão vive aqui, sempre.
-  result.push(total.minus(allocated));
-
-  return result;
+  return ratearEmPartes(total.toString(), parts).map(
+    (parte) => new Prisma.Decimal(parte.toString()),
+  );
 }
 
 /** Quantidade planejada de UMA parte específica (1-based). */
@@ -34,6 +31,5 @@ export function partShare(
   parts: number,
   partNumber: number,
 ): Prisma.Decimal {
-  const shares = splitDecimal(total, parts);
-  return shares[partNumber - 1] ?? new Prisma.Decimal(0);
+  return new Prisma.Decimal(rateioDaParte(total.toString(), parts, partNumber).toString());
 }

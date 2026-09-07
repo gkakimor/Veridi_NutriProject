@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type {
@@ -6,7 +8,7 @@ import type {
   ProductionOrderDTO,
   ProductionOrderMaterialCostDTO,
 } from "@veridi/shared";
-import { BILLING_NON_FISCAL_NOTICE } from "@veridi/shared";
+import { BILLING_NON_FISCAL_NOTICE, Decimal, splitDecimal } from "@veridi/shared";
 import {
   BillingPrintDocument,
   CustomerOrderPrintDocument,
@@ -319,5 +321,167 @@ describe("Pedido do Cliente impresso", () => {
     render(<CustomerOrderPrintDocument order={customerOrderBase} />);
     expect(screen.getByText("Faturado")).toBeInTheDocument();
     expect(screen.getByText("Falta expedir")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Rateio por parte na Ordem de Produção impressa — #21.
+ *
+ * A coluna "Por parte" dividia sozinha, em `Number`, e anunciava N partes
+ * iguais. O motor da produção nunca dividiu assim: as N-1 primeiras são
+ * truncadas em seis casas e a última absorve o resto, para que a soma feche
+ * com o total. Os dois documentos da MESMA ordem — este e a Folha de Receita,
+ * que é onde a pesagem acontece — diziam números diferentes.
+ */
+function materiaPrima(requiredQuantity: string) {
+  return {
+    id: "req-1",
+    itemId: "item-mp-1",
+    itemCode: "MP-000001",
+    itemName: "Óxido de magnésio",
+    itemType: "RAW_MATERIAL",
+    formulaQuantity: requiredQuantity,
+    formulaUnitCode: "kg",
+    supplyResponsibility: "VERIDI",
+    eligibleOwnerType: "VERIDI",
+    eligibleOwnerCustomerId: null,
+    eligibleOwnerCustomerName: null,
+    requiredQuantity,
+    stockUnitCode: "kg",
+    position: 0,
+    onHand: "0",
+    reserved: "0",
+    available: "0",
+    onOrder: "0",
+    shortage: "0",
+    availabilityStatus: "AVAILABLE",
+    suggestedAllocations: [],
+    allocatedQuantity: "0",
+    consumedQuantity: "0",
+    remainingReservedQuantity: "0",
+    reservationLines: [],
+    reconciliationStatus: "PENDING",
+    unreconciledQuantity: "0",
+    varianceReason: null,
+    varianceAcceptedBy: null,
+    varianceAcceptedAt: null,
+  };
+}
+
+function ordemFracionada(requiredQuantity: string, numberOfParts: number): ProductionOrderDTO {
+  return {
+    ...productionOrderBase,
+    numberOfParts,
+    requirements: [materiaPrima(requiredQuantity)],
+  } as unknown as ProductionOrderDTO;
+}
+
+/** A célula "Por parte" da linha da matéria-prima. */
+function celulaPorParte(container: HTMLElement): string {
+  const linha = container.querySelector("tbody tr")!;
+  return linha.querySelectorAll("td")[5]!.textContent!;
+}
+
+describe("Ordem de Produção impressa — rateio por parte (#21)", () => {
+  it("não anuncia mais um valor que parte nenhuma seria pesada", () => {
+    // 2 kg em 3 partes. O motor planeja 0,666666 / 0,666666 / 0,666668.
+    const { container } = render(
+      <ProductionOrderPrintDocument order={ordemFracionada("2", 3)} cost={null} />,
+    );
+
+    expect(celulaPorParte(container)).toBe("0,666666 × 2 + 0,666668");
+    // O número que o documento inventava — `(2/3).toFixed(6)` — sumiu.
+    expect(container.textContent).not.toContain("0,666667");
+    expect(container.textContent).not.toContain("0.666667");
+  });
+
+  it("as parcelas impressas somam exatamente o total da ordem", () => {
+    const { container } = render(
+      <ProductionOrderPrintDocument order={ordemFracionada("10", 3)} cost={null} />,
+    );
+
+    const celula = celulaPorParte(container);
+    expect(celula).toBe("3,333333 × 2 + 3,333334");
+    // 3,333333 × 2 + 3,333334 = 10 — o mesmo "Necessário" da própria linha.
+    const soma = splitDecimal("10", 3).reduce(
+      (total, parte) => total.plus(parte),
+      new Decimal(0),
+    );
+    expect(soma.toString()).toBe("10");
+  });
+
+  it("divisão exata mantém a forma curta do documento antigo", () => {
+    const { container } = render(
+      <ProductionOrderPrintDocument order={ordemFracionada("9", 3)} cost={null} />,
+    );
+    expect(celulaPorParte(container)).toBe("3 × 3");
+  });
+
+  it("parte única continua sem rateio", () => {
+    const { container } = render(
+      <ProductionOrderPrintDocument order={ordemFracionada("10", 1)} cost={null} />,
+    );
+    expect(celulaPorParte(container)).toBe("—");
+  });
+
+  it("quantidade que não cabe num double sai íntegra no papel", () => {
+    // `DECIMAL(24,12)`: 24 dígitos significativos contra os ~15 do float.
+    const { container } = render(
+      <ProductionOrderPrintDocument
+        order={ordemFracionada("999999999999.000000000003", 3)}
+        cost={null}
+      />,
+    );
+    expect(celulaPorParte(container)).toBe("333333333333 × 2 + 333333333333");
+    expect(container.textContent).toContain("999999999999");
+  });
+
+  it("nenhum NaN, Infinity ou [object Object] no documento", () => {
+    const { container } = render(
+      <ProductionOrderPrintDocument order={ordemFracionada("2", 3)} cost={null} />,
+    );
+    for (const lixo of ["NaN", "Infinity", "[object Object]", "undefined", "null"]) {
+      expect(container.textContent).not.toContain(lixo);
+    }
+  });
+
+  it("a unidade da coluna é a mesma antes e depois da divisão", () => {
+    // Dividir por uma CONTAGEM não muda a unidade: kg dividido em 3 partes
+    // continua kg. A coluna "Unidade" da linha é a única que a declara.
+    const { container } = render(
+      <ProductionOrderPrintDocument order={ordemFracionada("2", 3)} cost={null} />,
+    );
+    const colunas = container.querySelectorAll("tbody tr")[0]!.querySelectorAll("td");
+    expect(colunas[2]!.textContent).toBe("kg");
+  });
+});
+
+describe("impressos não recalculam Decimal de domínio por Number", () => {
+  it("a fonte de `src/print/` prova", () => {
+    /*
+     * Gate de fonte: um teste de saída sozinho não pega a reintrodução de um
+     * float que só erra em valor grande ou em divisão inexata. O documento não
+     * decide regra e não inventa precisão — ele lê o resultado autoritativo.
+     */
+    for (const arquivo of [
+      "src/print/documents.tsx",
+      "src/print/PrintLayout.tsx",
+      "src/print/PrintSheet.tsx",
+      "src/lib/part-share.ts",
+    ]) {
+      const fonte = readFileSync(join(process.cwd(), arquivo), "utf8");
+      const corpo = fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      expect(corpo, `${arquivo} converte Decimal para Number`).not.toMatch(/Number\(/);
+      expect(corpo, `${arquivo} usa parseFloat`).not.toContain("parseFloat");
+      expect(corpo, `${arquivo} usa Math.round`).not.toContain("Math.round");
+      expect(corpo, `${arquivo} usa toFixed`).not.toContain("toFixed");
+      /*
+       * `toLocaleString` NÃO entra no gate: em `PrintLayout` ele formata
+       * `Date`, que é o uso legítimo. O que o documento não pode fazer é
+       * aritmética de Decimal — e nenhum valor decimal chega aqui como
+       * `number`, então não há caminho para formatá-lo por locale sem antes
+       * passar por um `Number(`, que o gate acima já barra.
+       */
+    }
   });
 });

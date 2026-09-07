@@ -4083,3 +4083,30 @@ resolveria o float e criaria um erro pior.
 
 `Number` continua legítimo sobre `Int` — contadores, número de parte, contagem
 de lotes — e em verificação de apresentação (§65).
+
+## §67 — Documento impresso não recalcula; reusa a fonte autoritativa
+
+Decisão de Product Ownership de 2026-09-06, no fechamento do #21.
+
+**Documentos e impressos não recalculam valor `Decimal` de domínio por
+JavaScript `Number`.** Eles reusam o resultado autoritativo que o servidor já
+entrega ou, quando a transformação é documental e inevitável, a aritmética
+`Decimal` canônica — a mesma função que a operação executa, nunca uma cópia.
+
+O documento **não decide regra e não inventa precisão**: escolhe casas para
+leitura (§65) e nada mais. Cálculo e formatação são duas etapas — `Decimal`
+exato primeiro, formatador depois.
+
+**A cópia da fórmula é o defeito, não o float.** A Ordem de Produção impressa
+dividia a necessidade pelas partes por conta própria e anunciava `X × N`. O
+motor da produção nunca dividiu assim: ele trunca as N-1 primeiras partes na
+escala operacional e dá o resto à última, para a soma fechar com o total. Com
+2 kg em 3 partes o plano é 0,666666 / 0,666666 / 0,666668, e o papel dizia
+0,666667 nas três — um valor que parte nenhuma seria pesada. A Folha de Receita
+trazia os números certos, e os dois documentos GMP da mesma ordem discordavam.
+
+**Onde os dois lados precisam da mesma conta, a função sobe para
+`@veridi/shared`** e a API delega para ela — como já acontece com a quantidade
+física do componente. Não é cópia sincronizada: é a mesma função. Duas contas
+para o mesmo número acabam discordando, e a que aparece no papel é a que
+ninguém consegue conferir.

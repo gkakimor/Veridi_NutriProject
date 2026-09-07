@@ -806,3 +806,77 @@ describe("Folha de Receita", () => {
     await app.close();
   });
 });
+
+/**
+ * O rateio por parte é UM só — #21.
+ *
+ * A Folha de Receita é o documento de execução: o que ela chama de
+ * `plannedQuantity` é o que a balança vai perseguir. A Ordem de Produção
+ * impressa mostra o mesmo rateio na coluna "Por parte", e por muito tempo o
+ * fazia com uma divisão própria, em `Number`. Este teste fixa o lado
+ * autoritativo: o que o servidor serve é `splitDecimal`, inclusive quando a
+ * divisão não é exata.
+ */
+describe("Rateio por parte — a fonte autoritativa", () => {
+  it("a Folha de Receita serve exatamente o rateio do motor, com a sobra na última parte", async () => {
+    const app = buildTestApp("PRODUCTION");
+    await app.ready();
+    await createAuthenticatedUser("PRODUCTION");
+
+    const ingredient = await createItem("RAW_MATERIAL");
+    await receiveStock(ingredient.id, "50");
+    const { product } = await createProductWithFormulation(app, [
+      { itemId: ingredient.id, quantity: "1", unitCode: "kg" },
+    ]);
+    // 10 kg em 3 partes: divisão que não fecha em seis casas.
+    const order = await createReleasedOrder(app, product.id, "10", 3);
+
+    const recipe = (
+      await app.inject({ method: "GET", url: `/production-orders/${order.id}/recipe` })
+    ).json();
+
+    const planejado = recipe.parts.map(
+      (part: { requirements: { plannedQuantity: string }[] }) =>
+        part.requirements[0]!.plannedQuantity,
+    );
+    // As duas primeiras truncam; a terceira absorve o resto.
+    expect(planejado).toEqual(["3.333333", "3.333333", "3.333334"]);
+    expect(planejado).toEqual(splitDecimal(new Prisma.Decimal("10"), 3).map((p) => p.toString()));
+
+    // E a soma fecha com a necessidade da ordem — nada some, nada sobra.
+    const soma = planejado.reduce(
+      (total: Prisma.Decimal, valor: string) => total.plus(new Prisma.Decimal(valor)),
+      new Prisma.Decimal(0),
+    );
+    expect(soma.toString()).toBe("10");
+
+    // O valor que o impresso anunciava — `(10/3).toFixed(6)` repetido três
+    // vezes — não é nenhuma das partes reais, e somava 9,999999.
+    expect(planejado).not.toEqual(["3.333333", "3.333333", "3.333333"]);
+
+    await app.close();
+  });
+
+  it("o número de partes é inteiro e nunca zero — não existe divisão por zero a proteger", async () => {
+    const app = buildTestApp("PRODUCTION");
+    await app.ready();
+    await createAuthenticatedUser("PRODUCTION");
+
+    const ingredient = await createItem("RAW_MATERIAL");
+    await receiveStock(ingredient.id, "50");
+    const { product } = await createProductWithFormulation(app, [
+      { itemId: ingredient.id, quantity: "1", unitCode: "kg" },
+    ]);
+
+    for (const numberOfParts of [0, -1, 1.5, 100]) {
+      const resposta = await app.inject({
+        method: "POST",
+        url: "/production-orders",
+        payload: { productId: product.id, plannedQuantity: "10", numberOfParts },
+      });
+      expect(resposta.statusCode, `numberOfParts=${numberOfParts}`).toBe(400);
+    }
+
+    await app.close();
+  });
+});
