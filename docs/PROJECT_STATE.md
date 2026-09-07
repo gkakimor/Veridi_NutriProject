@@ -18,34 +18,43 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
 ## Última capability
 
-**PREC-CMP-01 — igualdade de quantidade é decimal, nunca de `Number`**,
-aprovado pelo PO e publicado em 2026-09-06, merge `8f1016e`, deploy Railway
-verde — o `preDeploy` respondeu "No pending migrations to apply" e o smoke
-autenticado passou. Aplicar uma política de precificação decide
-"esta faixa já existe?" antes de criar cada faixa, e a comparação era
-`Number(a) === Number(b)`. Quantidade de faixa é `DECIMAL(24,12)` — vinte e
-quatro dígitos significativos; um `double` guarda quinze.
+**#21 — o documento impresso não recalcula a receita**, aprovado pelo PO e
+publicado em 2026-09-06, merge `MERGE_SHA`, deploy Railway verde — o `preDeploy`
+respondeu "No pending migrations to apply" e o smoke autenticado passou. Era o
+último ponto conhecido em que um `Decimal` de domínio virava `Number` para
+produzir número, e o único dentro de um documento controlado.
 
-**O dano não era visual, era de decisão.** Reproduzido no serviço real antes de
-corrigir: com uma faixa de `999999999999,000000000001` já no rascunho, uma
-política trazendo `...000000000002` tinha a faixa **pulada em silêncio** pelo
-`continue`, e a versão ficava com uma faixa onde a política declarava duas.
+**O float era a metade menor do achado.** A coluna "Por parte" da Ordem de
+Produção impressa fazia `(Number(requiredQuantity) / numberOfParts).toFixed(6)`
+e escrevia `X × N` — afirmando N partes iguais. A produção nunca dividiu assim:
+`splitDecimal` trunca as N-1 primeiras na escala 6 com `ROUND_DOWN` e dá o resto
+à última, para a soma fechar com o total. Com 2 kg em 3 partes o plano é
+0,666666 / 0,666666 / 0,666668 e o papel dizia 0,666667 nas três — um valor que
+parte nenhuma seria pesada, somando 2,000001. A Folha de Receita, que é onde a
+pesagem acontece, trazia os números do motor: **dois documentos GMP da mesma
+ordem discordavam.**
 
-A correção é `Decimal.equals` — o mesmo critério que `createPricingTier` já
-usava para recusar duplicata; o repositório tem 82 comparações canônicas e esta
-era a exceção. Zero migration, zero mudança de API, zero formatação tocada.
-Regra durável: [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §66.
+A correção foi de LUGAR, não de fórmula: `splitDecimal`/`partShare` subiram para
+`@veridi/shared`, a API delega e o impresso reusa a mesma função — o padrão que
+`formulation-quantity.ts` já tinha estabelecido. Zero migration, zero mudança de
+regra, nenhuma casa a mais exibida. Regra durável:
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §67.
 
-**Varredura da mesma classe no backend:** nenhum outro
-`UNSAFE_DECIMAL_COMPARISON`. Os `Number` restantes são sobre `Int` (contadores,
-número de parte, contagem de lotes), validação de limite contra constante e
-ordenação de booleano. Nenhuma ordenação de `Decimal` via `Number`.
-
-**Achado registrado, não corrigido:** a mesma comparação ignora `uomCode` —
-`1 kg` e `1000 g` são a mesma faixa física e seriam tratadas como duas.
-Converter antes de comparar é decisão de domínio, e virou **PREC-CMP-02**.
+**Provado no fluxo real de impressão**, PDF gerado da OP `OP-002300` do banco
+local: `0,166666 × 2 + 0,166668` e `0,002419 × 2 + 0,00242`. **Varredura de
+`src/print/` e `pages/print/`:** zero `Number(`, `parseFloat`, `Math.round`,
+`toFixed` e zero divisão — as barras restantes são rótulo ("Cidade / UF"). Três
+comparações de `Decimal` contra zero passaram a `Decimal.greaterThan` (§66), e
+um teste de fonte trava a reintrodução.
 
 ## Antes dela
+
+**PREC-CMP-01** (`8f1016e`). Aplicar uma política de precificação decidia "esta
+faixa já existe?" com `Number(a) === Number(b)` sobre `DECIMAL(24,12)`. O dano
+não era visual, era de decisão: reproduzido no serviço real, a versão nascia com
+uma faixa onde a política declarava duas. `Decimal.equals` — o mesmo critério que
+`createPricingTier` já usava. Achado registrado, não corrigido: a comparação
+ignora `uomCode`, e virou **PREC-CMP-02** (§66).
 
 **PREC-FMT-01** (`29f1df8`). A formatação deixou de passar por `Number`:
 `9007199254740993,12` aparecia como `...994,00` porque o `double` já tinha
@@ -57,21 +66,14 @@ unitário de MATERIAL, servido em seis casas de colunas `DECIMAL(20,8)` — e o 
 é o `result` gravado no snapshot do CALC, então o corte ficava congelado no
 documento histórico. Quatro pontos passaram a `custoUnitario`. Zero migration.
 
-**PREC-MIG-E** (`56b563c`). A matriz de §58 aplicada ao schema inteiro. As 16
-colunas de alvo órfão classificadas pelo PAPEL do valor: **PREC-E-01** migrou
-uma — `QuoteLine.industrialCostPerUnitSnapshot` para `DECIMAL(24,12)`, porque
-`(1000,00 ÷ 300)` vale `3,333333333333` e a coluna guardava `3,333333`;
-**PREC-E-02** manteve os seis totais de `PricingTier` em `14,4` e deu a eles a
-**fronteira** que faltava (§63, TECHNICAL_TOTAL). F-2 e F-3 viraram §64. Nove
-colunas ficaram intocadas porque o motor já as fecha em duas casas antes de
-gravar. Junto, higiene DEV autorizada: banco local reconstruído pelo caminho
-oficial, com backup antes do drop, e o `_prisma_migrations` voltou a bater com o
-repositório sem edição manual.
-
-**PREC-MIG-D** (`8a40b52`). As três colunas `14,6` de resultado técnico da
-precificação em `DECIMAL(24,12)`, sem backfill — a **terceira fronteira** (§62),
-doze casas com `ROUND_HALF_UP` declarado. Resultado técnico não é preço, mesmo
-sendo dinheiro por unidade.
+**PREC-MIG-E** (`56b563c`) e **PREC-MIG-D** (`8a40b52`). A matriz de §58
+aplicada ao schema inteiro: das 16 colunas de alvo órfão, só
+`QuoteLine.industrialCostPerUnitSnapshot` migrou para `DECIMAL(24,12)`; os seis
+totais de `PricingTier` ficaram em `14,4` e ganharam a **fronteira** que faltava
+(§63). Antes, as três colunas `14,6` de resultado técnico foram para `24,12`, a
+**terceira fronteira** (§62) — resultado técnico não é preço, mesmo sendo
+dinheiro por unidade. Nenhum backfill. Junto, higiene DEV autorizada: banco
+local reconstruído pelo caminho oficial, com backup antes do drop.
 
 **#18** (`34a5424`). O rodapé da Ordem de Compra virou a soma das linhas
 impressas — `40,79`, não `40,78` (§61) —, com o operando intocado e uma conta só
@@ -102,11 +104,9 @@ migrations aplicam num banco vazio só com o repositório —
 
 ## Próxima capability
 
-**#21** — `print/documents.tsx:353` divide em float para exibir a parte da
-receita. É o último ponto do impresso fora da regra de §65.
-
-**PREC-CMP-02** — a comparação de faixa ignora a unidade de medida. Aberto
-nesta rodada, aguarda decisão do PO.
+**PREC-CMP-02** — a comparação de faixa de precificação ignora a unidade de
+medida: `1 kg` e `1000 g` são a mesma faixa física e seriam tratadas como duas.
+Aguarda decisão do PO.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11) — não bloqueia os itens internos já decididos pelo PO.
@@ -114,14 +114,12 @@ Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 
 ## Backlog aberto
 
-[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#18, #19 e #20
-RESOLVIDOS — a fundação numérica está completa**, de PREC-MIG-A a PREC-FMT-01,
-com PREC-CMP-01 fechando a comparação. **Seguinte:** #21 e PREC-CMP-02. **Roadmap:** PREC-UI-01 a
-08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
+[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#18, #19, #20
+e #21 RESOLVIDOS — a fundação numérica está completa**, de PREC-MIG-A a
+PREC-FMT-01, com PREC-CMP-01 fechando a comparação e o #21 o impresso.
+**Seguinte:** PREC-CMP-02. **Roadmap:** PREC-UI-01 a 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
 **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não determinística sob
-paralelismo — uma falha isolada em `finished-goods.test.ts` nesta rodada, não
-reproduzida na re-execução nem no arquivo isolado) e #21.
-**Observação:** #1, #2.
+paralelismo — não reapareceu nesta rodada). **Observação:** #1, #2.
 
 ## Mapa de documentos
 

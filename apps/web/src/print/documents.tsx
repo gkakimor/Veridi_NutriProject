@@ -1,4 +1,8 @@
 import { formatQuantity } from "../lib/quantity";
+import { formatPartShare } from "../lib/part-share";
+// `Decimal` do pacote compartilhado: comparação de Decimal de domínio é do
+// próprio Decimal, nunca por `Number` — `PRODUCT_RULES.md` §66.
+import { Decimal } from "@veridi/shared";
 import type {
   BillingDTO,
   CustomerOrderDTO,
@@ -348,10 +352,13 @@ export function ProductionOrderPrintDocument({
                 <td>{requirement.stockUnitCode}</td>
                 <td>{SUPPLY_RESPONSIBILITY_LABELS[requirement.supplyResponsibility]}</td>
                 <td>{printOrDash(requirement.eligibleOwnerCustomerName)}</td>
+                {/*
+                  O rateio é o MESMO que a produção executa — `splitDecimal`,
+                  do pacote compartilhado. O documento não divide por conta
+                  própria: a Folha de Receita pesa por este número.
+                */}
                 <td className="is-number">
-                  {order.numberOfParts > 1
-                    ? `${(Number(requirement.requiredQuantity) / order.numberOfParts).toFixed(6)} × ${order.numberOfParts}`
-                    : "—"}
+                  {formatPartShare(requirement.requiredQuantity, order.numberOfParts)}
                 </td>
               </tr>
             ))}
@@ -868,7 +875,9 @@ export function RecipeSheetPrintDocument({ sheet }: { sheet: RecipeSheetDTO }) {
             dizer por qual caminho o material foi baixado.
           */}
           {part.weighings.length === 0 &&
-            part.requirements.some((requirement) => Number(requirement.consumedQuantity) > 0) && (
+            part.requirements.some((requirement) =>
+              new Decimal(requirement.consumedQuantity).greaterThan(0),
+            ) && (
               <p>
                 <strong>Material registrado via Consumo Real da OP.</strong> A pesagem por partes
                 não foi utilizada nesta ordem; o consumo de cada material está na Ordem de
@@ -996,7 +1005,7 @@ export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
               <td className="is-number">{line.total ? formatBRL(line.total) : "—"}</td>
             </tr>
           ))}
-          {plano && Number(plano.discountAmount) > 0 && (
+          {plano && new Decimal(plano.discountAmount).greaterThan(0) && (
             <>
               <tr>
                 <td colSpan={5}>Subtotal</td>
@@ -1025,7 +1034,7 @@ export function QuotePrintDocument({ quote }: { quote: QuoteVersionDTO }) {
               isEmpty={false}
               emptyMessage=""
             >
-              {Number(plano.downPayment ?? 0) > 0 && (
+              {new Decimal(plano.downPayment ?? 0).greaterThan(0) && (
                 <tr>
                   <td>Entrada ({formatPercent(plano.downPaymentPercent)})</td>
                   <td className="is-number">{formatBRL(plano.downPayment)}</td>

@@ -327,7 +327,7 @@ perda **reversível por leitura** e reduz a urgência.
 |---|---|---|
 | `customer-orders/CustomerOrderPage.tsx:201` `complementoDaLinha` | `Math.max(Number(pedido) − Number(valor), 0).toString()` vira o conteúdo do campo *Produzir*, que é enviado | **FLOAT_RISK** |
 | `inventory/StockCountPage.tsx:145` | diferença de contagem em float — só exibida e usada como booleano; o valor enviado é a string digitada | DISPLAY_ONLY |
-| `print/documents.tsx:353` | `(Number(requiredQuantity) / numberOfParts).toFixed(6)` no documento impresso da OP | **PREMATURE_ROUNDING** |
+| `print/documents.tsx:353` | `(Number(requiredQuantity) / numberOfParts).toFixed(6)` no documento impresso da OP | **PREMATURE_ROUNDING** — RESOLVIDO em 2026-09-06 (#21) |
 
 `complementoDaLinha`, medido:
 
@@ -342,10 +342,15 @@ partir de `1e10`, e a partir daí a sexta casa é destruída de fato —
 `10000000000.000002 − 0.000001` devolve `10000000000`. Abaixo de ≈9×10⁹ a
 escala 6 é exatamente representável em double.
 
-`print/documents.tsx:353` diverge do domínio: a API divide as partes com
+`print/documents.tsx:353` divergia do domínio: a API divide as partes com
 `splitDecimal` (`ROUND_DOWN` na escala 6, resto absorvido pela última parte, soma
-exata). O documento impresso mostra `total/partes` em float como `X × N`, que não
+exata). O documento impresso mostrava `total/partes` em float como `X × N`, que não
 fecha com o total quando a divisão não é exata — num documento de execução GMP.
+
+**Resolvido em 2026-09-06 (#21).** `splitDecimal` subiu para `@veridi/shared`; a
+API delega e o impresso reusa a MESMA função. O papel passou a dizer
+`0,666666 × 2 + 0,666668` onde antes dizia `0,666667 × 3`. Regra durável em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §67.
 
 ### 5.3 O que **não** perde precisão
 
@@ -1178,15 +1183,53 @@ decidir se um bloco aparece.
 
 **Fora de escopo, registrados:**
 
-- **#21** — `print/documents.tsx:353` divide em float para exibir a parte da
+- **#21** — `print/documents.tsx:353` dividia em float para exibir a parte da
   receita (`Number(requiredQuantity) / numberOfParts`). Item próprio, anterior a
-  esta capability;
+  esta capability; **resolvido em 2026-09-06**, §12.5;
 - **PREC-CMP-01** — `pricing-policies.service.ts` compara quantidade de faixa
   por `Number(a) === Number(b)`. Igualdade e idempotência, não formatação.
 
 **Com isso o #19 fecha.** Schema, persistência, serialização e apresentação
 estão cobertos, e nenhuma perda incompatível com a categoria de cada valor
 sobrou entre eles.
+
+
+## 12.5 Fechamento — o #21 e o documento impresso (2026-09-06)
+
+O último ponto conhecido em que um `Decimal` de domínio virava `Number` para
+produzir número, e o único deles dentro de um documento controlado.
+
+**O achado era duplo, e o float era a metade menor.** A coluna "Por parte" da
+Ordem de Produção impressa fazia
+`(Number(requiredQuantity) / numberOfParts).toFixed(6)` e escrevia `X × N` —
+afirmando N partes iguais. A produção nunca executou assim: `splitDecimal`
+trunca as N-1 primeiras na escala 6 com `ROUND_DOWN` e dá o resto à última,
+para a soma fechar exatamente com o total. Com 2 kg em 3 partes o plano é
+0,666666 / 0,666666 / 0,666668, e o papel dizia 0,666667 nas três — um valor que
+parte nenhuma seria pesada, somando 2,000001. Com 10 kg em 3 o erro ia para o
+outro lado: 9,999999. A Folha de Receita (R.COQ.003) trazia os números do motor,
+e os dois documentos GMP da mesma ordem discordavam.
+
+**A correção foi de lugar, não de fórmula.** `splitDecimal`/`partShare` subiram
+de `apps/api/src/lib/part-split.ts` para `packages/shared/src/part-split.ts`; a
+API delega e o impresso reusa a MESMA função — o padrão que
+`formulation-quantity.ts` já tinha estabelecido. Nenhuma migration, nenhuma
+mudança de regra, nenhuma casa a mais exibida.
+
+**Medido no fluxo real de impressão**, sobre a OP `OP-002300` do banco local
+(produto `PROD-001514`, 3 partes): `0,166666 × 2 + 0,166668` para uma
+necessidade de 0,5 kg, e `0,002419 × 2 + 0,00242` para `0,007258063333` kg — o
+resto que o `toFixed(6)` descartava. Sem `NaN`, sem `Infinity`, sem
+`[object Object]`, console limpo, layout intacto.
+
+**Varredura de `src/print/` e `pages/print/`:** zero `Number(`, `parseFloat`,
+`Math.round`, `toFixed`, `Math.abs` e zero operador de divisão — todas as
+ocorrências de `/` são barra dentro de rótulo ("Cidade / UF", "Imprimir /
+Salvar PDF"). Três comparações de `Decimal` contra zero que ainda passavam por
+`Number` foram trocadas por `Decimal.greaterThan` (§66). Um teste de fonte trava
+a reintrodução.
+
+Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §67.
 
 ---
 

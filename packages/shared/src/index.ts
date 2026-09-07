@@ -55,3 +55,4 @@ export * from "./product-cmv.js";
 export * from "./customer-consultation.js";
 export * from "./formulation-quantity.js";
 export * from "./quote-math.js";
+export * from "./part-split.js";

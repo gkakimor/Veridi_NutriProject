@@ -158,26 +158,23 @@ Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §59. **Ordem
 obrigatória:** antes ou junto do primeiro widening, com teste que prove o dígito
 extra.
 
-### 21. Seis serializações de DTO entregam menos casas do que a coluna guarda — MEDIUM
+### 21. Seis serializações de DTO entregam menos casas do que a coluna guarda — RESOLVIDO
 
-**ABERTO.** Desdobrado pelo PO em 2026-09-05 nos itens PREC-SER-01, PREC-SER-02
-e PREC-FMT-01 (seção E). Achado da auditoria PREC-01: `toFixed(N)` com `N`
-menor que o scale da coluna. Cinco são exibição; uma grava:
-`projects/quote-pricing.service.ts:288` aplica faixa de precificação a linha de
-orçamento convertendo preço de 6 casas em 4 — perda da coluna
-(`QuoteLine.unitPrice` é `Decimal(14,4)`), não do código, e recuperável por
-leitura via `pricingSelectedUnitPriceSnapshot` (14,6).
+**RESOLVIDO / PUBLICADO em 2026-09-06.** Desdobrado pelo PO em 2026-09-05 em
+PREC-SER-01, PREC-SER-02 e PREC-FMT-01 (seção E), todos fechados; o resíduo
+final era o documento impresso.
 
-Junto: a mesma média ponderada de custo sai com 4 casas em
-`costs/costs.service.ts` e 6 em `items/item-cost-references.service.ts:162` —
-`11,6586` contra `11,658585`, duas telas mostrando números diferentes do mesmo
-dado. E `print/documents.tsx:353` imprime `requiredQuantity / numberOfParts` em
-float no documento da OP, enquanto a API divide com `splitDecimal`
-(`ROUND_DOWN` + resto na última parte): num total não divisível o `X × N`
-impresso não fecha, num documento de execução GMP.
+`print/documents.tsx:353` dividia `requiredQuantity / numberOfParts` em float e
+imprimia `X × N` — duas afirmações erradas. A do float era a menor: a grave era
+"N partes iguais", que a produção nunca executa. `splitDecimal` trunca as N-1
+primeiras em seis casas, `ROUND_DOWN`, e dá o resto à última, para a soma fechar
+com o total. Com 2 kg em 3 partes o motor planeja 0,666666 / 0,666666 / 0,666668
+e o papel anunciava 0,666667 nas três — um valor que parte nenhuma seria pesada,
+somando 2,000001. A Folha de Receita, que é onde a pesagem acontece, mostrava os
+números certos: dois documentos GMP da mesma ordem discordavam.
 
-Lista completa em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md)
-§5. A correção do `print` é independente de migration e cabe em qualquer rodada.
+O motor subiu para `@veridi/shared`; a API delega e o impresso reusa. Regra
+durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §67.
 
 ### 18. Consistência monetária da Ordem de Compra — RESOLVIDO / PUBLICADO
 
