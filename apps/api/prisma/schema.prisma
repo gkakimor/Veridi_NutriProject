@@ -1,11 +1,16 @@
 // Veridi Nutrition — schema Prisma
 
-/// ATENCAO: as acoes de ON DELETE que valem sao as das migrations, nao a
-/// opcionalidade dos campos deste arquivo. Relacao opcional (`Tipo?`) sem
-/// `onDelete:` sugere SET NULL, mas boa parte delas virou ON DELETE RESTRICT
-/// no banco. Antes de escrever script de manutencao ou raciocinar sobre
-/// cascata, confira a acao real: `node scripts/maintenance/fk-order.mjs` le
-/// `pg_constraint`, imprime a ordem de remocao e lista cada divergencia.
+/// As acoes de ON DELETE deste arquivo sao as do banco. Ate a capability 14
+/// nao eram: 27 relacoes opcionais nao declaravam `onDelete:`, o Prisma
+/// assumia SET NULL e as migrations tinham escrito ON DELETE RESTRICT, o que
+/// deixava `prisma migrate diff` acusando 86 comandos de drift permanente.
+/// Cada uma delas passou a declarar `onDelete: Restrict` — o banco nao mudou,
+/// o modelo e que passou a dizer a verdade. Trocar RESTRICT por SET NULL em
+/// qualquer uma continua sendo decisao de dominio, fora desta capability.
+///
+/// `pnpm validate:migrations:fresh` prova que este arquivo e o banco que as
+/// migrations constroem do zero sao a mesma estrutura. Para inspecionar as
+/// acoes reais de um banco existente: `node scripts/maintenance/fk-order.mjs`.
 
 generator client {
   provider = "prisma-client-js"
@@ -573,19 +578,19 @@ model Attachment {
   /// Exatamente UM contexto (CHECK no banco): lote, recebimento ou
   /// produto. `projectId` entra na capacidade 38 como migration simples.
   lotId String?
-  lot   Lot?    @relation(fields: [lotId], references: [id])
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   receiptId String?
-  receipt   Receipt? @relation(fields: [receiptId], references: [id])
+  receipt   Receipt? @relation(fields: [receiptId], references: [id], onDelete: Restrict)
 
   productId String?
-  product   Product? @relation(fields: [productId], references: [id])
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   projectId String?
-  project   Project? @relation(fields: [projectId], references: [id])
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
   projectSampleId String?
-  projectSample   ProjectSample? @relation(fields: [projectSampleId], references: [id])
+  projectSample   ProjectSample? @relation(fields: [projectSampleId], references: [id], onDelete: Restrict)
 
   originalFileName String
   mimeType         String
@@ -1173,10 +1178,10 @@ model IndustrialCostResourceUsage {
   id String @id @default(uuid())
 
   industrialCostVersionId String
-  industrialCostVersion   IndustrialCostVersion @relation(fields: [industrialCostVersionId], references: [id], onDelete: Cascade)
+  industrialCostVersion   IndustrialCostVersion @relation(fields: [industrialCostVersionId], references: [id], onDelete: Cascade, map: "industrial_cost_resource_usages_versionId_fkey")
 
   industrialResourceId String
-  industrialResource   IndustrialResource @relation(fields: [industrialResourceId], references: [id])
+  industrialResource   IndustrialResource @relation(fields: [industrialResourceId], references: [id], map: "industrial_cost_resource_usages_resourceId_fkey")
 
   usageBasis    IndustrialResourceUsageBasis @default(FIXED_PER_REFERENCE_BATCH)
   usageQuantity Decimal                      @db.Decimal(24, 12)
@@ -1201,9 +1206,9 @@ model IndustrialCostResourceUsage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([industrialCostVersionId, industrialResourceId])
-  @@index([industrialCostVersionId])
-  @@index([industrialResourceId])
+  @@unique([industrialCostVersionId, industrialResourceId], map: "industrial_cost_resource_usages_version_resource_key")
+  @@index([industrialCostVersionId], map: "industrial_cost_resource_usages_versionId_idx")
+  @@index([industrialResourceId], map: "industrial_cost_resource_usages_resourceId_idx")
   @@map("industrial_cost_resource_usages")
 }
 
@@ -1551,7 +1556,7 @@ model SampleConsumption {
   item   Item   @relation(fields: [itemId], references: [id])
 
   lotId String?
-  lot   Lot?    @relation(fields: [lotId], references: [id])
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   quantity Decimal @db.Decimal(24, 12)
   uomCode  String
@@ -1668,7 +1673,7 @@ model SupplierItemOffer {
   /// nao informado — nunca zero.
   minimumOrderQuantity Decimal?       @db.Decimal(24, 12)
   minimumOrderUomCode  String?
-  minimumOrderUom      UnitOfMeasure? @relation("OfferMoqUom", fields: [minimumOrderUomCode], references: [code])
+  minimumOrderUom      UnitOfMeasure? @relation("OfferMoqUom", fields: [minimumOrderUomCode], references: [code], onDelete: Restrict)
 
   /// `null` = observacao historica de preco, NAO preco vigente. Oferta sem
   /// vigencia nunca vira Current Offer.
@@ -2200,7 +2205,7 @@ model Product {
   /// dose pode ser diferente da unidade de estoque do Finished Item.
   doseAmount  Decimal?       @db.Decimal(24, 12)
   doseUomCode String?
-  doseUom     UnitOfMeasure? @relation("ProductDoseUom", fields: [doseUomCode], references: [code])
+  doseUom     UnitOfMeasure? @relation("ProductDoseUom", fields: [doseUomCode], references: [code], onDelete: Restrict)
 
   dosesPerPackage     Int?
   unitsPerShippingBox Int?
@@ -2259,6 +2264,8 @@ model Product {
 
   @@index([active])
   @@index([customerId])
+  @@index([lifecycle])
+  @@index([originProjectId])
   @@map("products")
 }
 
@@ -2348,6 +2355,7 @@ model FormulationVersion {
   @@index([productId])
   @@index([status])
   @@index([originTemplateVersionId])
+  @@index([sourceVersionId])
   @@map("formulation_versions")
 }
 
@@ -2463,7 +2471,7 @@ model PurchaseOrder {
   /// segue o fluxo normal (nunca ORDERED automatico). Vinculo permite
   /// navegar Pedido -> OC e OC -> Pedido.
   customerOrderId String?
-  customerOrder   CustomerOrder? @relation(fields: [customerOrderId], references: [id])
+  customerOrder   CustomerOrder? @relation(fields: [customerOrderId], references: [id], onDelete: Restrict)
 
   orderedAt DateTime?
   orderedBy String?
@@ -2542,15 +2550,15 @@ model Receipt {
   /// Preenchidos so quando sourceType=PURCHASE_ORDER — recebimento de
   /// material do cliente nao inventa OC nem fornecedor.
   purchaseOrderId String?
-  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
 
   supplierId String?
-  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
 
   /// Obrigatorio quando sourceType=CUSTOMER_SUPPLIED — dono do material
   /// recebido (CHECK no banco).
   customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id])
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
   receivedAt        DateTime
   invoiceNumber     String?
@@ -2582,7 +2590,7 @@ model ReceiptLine {
   /// Null em recebimento de material do cliente — a linha e direta, sem
   /// OC. Para linhas de OC continua obrigatorio na pratica.
   purchaseOrderLineId String?
-  purchaseOrderLine   PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
+  purchaseOrderLine   PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
 
   itemId String
   item   Item   @relation(fields: [itemId], references: [id])
@@ -2630,6 +2638,7 @@ model ReceiptLine {
 
   @@index([purchaseOrderLineId])
   @@index([itemId])
+  @@index([itemId, actualUnitCost])
   @@map("receipt_lines")
 }
 
@@ -2656,7 +2665,7 @@ model Lot {
   /// Obrigatorio para origin=RECEIPT; sempre null para origin=PRODUCTION —
   /// nunca fornecedor fake so para preencher a coluna.
   supplierId String?
-  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
 
   /// DONO do estoque fisico — independente de Supplier (quem vendeu) e de
   /// quem enviou. VERIDI exige ownerCustomerId null; CUSTOMER exige
@@ -2664,14 +2673,14 @@ model Lot {
   /// nao existe troca de propriedade nesta fase.
   ownerType       InventoryOwnerType @default(VERIDI)
   ownerCustomerId String?
-  ownerCustomer   Customer?          @relation(fields: [ownerCustomerId], references: [id])
+  ownerCustomer   Customer?          @relation(fields: [ownerCustomerId], references: [id], onDelete: Restrict)
 
   receiptLine ReceiptLine?
 
   /// Preenchido so para origin=PRODUCTION — a OP que produziu este lote.
   /// Nunca junto com supplierId.
   productionOrderId String?
-  productionOrder   ProductionOrder? @relation(fields: [productionOrderId], references: [id])
+  productionOrder   ProductionOrder? @relation(fields: [productionOrderId], references: [id], onDelete: Restrict)
 
   /// Lote comercial/Veridi — informado pelo usuario ao criar um lote de
   /// producao, permanece historico (nunca sobrescrito). Nunca substitui
@@ -2813,7 +2822,7 @@ model ProductionOrder {
   /// durante DRAFT (para prever Requirements); PLAN exige que a versao
   /// esteja ACTIVE no momento.
   formulationVersionId String?
-  formulationVersion   FormulationVersion? @relation(fields: [formulationVersionId], references: [id])
+  formulationVersion   FormulationVersion? @relation(fields: [formulationVersionId], references: [id], onDelete: Restrict)
 
   /// Estrutura de custos congelada no RELEASE, quando existe uma ACTIVE
   /// compativel com a formulacao da OP. Null e situacao legitima: producao
@@ -2832,10 +2841,10 @@ model ProductionOrder {
   /// causa da origem. customerOrderLineId identifica a linha especifica
   /// atendida (uma OP por linha nesta fase).
   customerOrderId String?
-  customerOrder   CustomerOrder? @relation(fields: [customerOrderId], references: [id])
+  customerOrder   CustomerOrder? @relation(fields: [customerOrderId], references: [id], onDelete: Restrict)
 
   customerOrderLineId String?
-  customerOrderLine   CustomerOrderLine? @relation(fields: [customerOrderLineId], references: [id])
+  customerOrderLine   CustomerOrderLine? @relation(fields: [customerOrderLineId], references: [id], onDelete: Restrict)
 
   notes String?
 
@@ -2845,7 +2854,7 @@ model ProductionOrder {
   productName String?
 
   finishedItemId   String?
-  finishedItem     Item?   @relation("ProductionOrderFinishedItem", fields: [finishedItemId], references: [id])
+  finishedItem     Item?   @relation("ProductionOrderFinishedItem", fields: [finishedItemId], references: [id], onDelete: Restrict)
   finishedItemCode String?
   finishedItemName String?
 
@@ -2944,6 +2953,7 @@ model ProductionOrder {
   @@index([productId])
   @@index([customerOrderId])
   @@index([customerId])
+  @@index([industrialCostVersionId])
   @@map("production_orders")
 }
 
@@ -3065,7 +3075,7 @@ model MaterialReservationLine {
 
   /// Null quando o item nao controla lote.
   lotId String?
-  lot   Lot?    @relation(fields: [lotId], references: [id])
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   quantity Decimal @db.Decimal(24, 12)
 
@@ -3102,7 +3112,7 @@ model MaterialReservationLine {
   /// ORIGINAL que ela substitui — preserva a genealogia completa (nunca
   /// sobrescreve lotId apagando o lote originalmente reservado).
   replacesLineId String?                  @unique
-  replacesLine   MaterialReservationLine? @relation("ReservationLineSubstitution", fields: [replacesLineId], references: [id])
+  replacesLine   MaterialReservationLine? @relation("ReservationLineSubstitution", fields: [replacesLineId], references: [id], onDelete: Restrict)
   replacedByLine MaterialReservationLine? @relation("ReservationLineSubstitution")
 
   createdAt DateTime @default(now())
@@ -3139,7 +3149,7 @@ model ProductionConsumption {
 
   /// Null quando o item nao controla lote.
   lotId String?
-  lot   Lot?    @relation(fields: [lotId], references: [id])
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   quantity Decimal @db.Decimal(24, 12)
 
@@ -3174,7 +3184,7 @@ model ProductionOutput {
   /// acabado), mantido nullable no schema por simetria com os demais
   /// movimentos que tambem preveem item sem lote.
   lotId String?
-  lot   Lot?    @relation(fields: [lotId], references: [id])
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   quantity Decimal @db.Decimal(24, 12)
 
@@ -3406,7 +3416,7 @@ model CustomerOrderReservationLine {
   item   Item   @relation(fields: [itemId], references: [id])
 
   lotId String?
-  lot   Lot?    @relation(fields: [lotId], references: [id])
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   quantity Decimal @db.Decimal(24, 12)
 
@@ -3432,6 +3442,7 @@ model CustomerOrderReservationLine {
 
   @@index([itemId])
   @@index([lotId])
+  @@index([replacesLineId])
   @@map("customer_order_reservation_lines")
 }
 
@@ -3501,7 +3512,7 @@ model ShipmentLine {
   /// Nullable por simetria com as demais linhas do sistema, mas o service
   /// exige lote real — Finished Product do MVP sempre controla lote.
   lotId String?
-  lot   Lot?    @relation(fields: [lotId], references: [id])
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   quantity Decimal @db.Decimal(24, 12)
   unitCode String
@@ -3618,7 +3629,7 @@ model BillingLine {
   item   Item   @relation(fields: [itemId], references: [id])
 
   lotId String?
-  lot   Lot?    @relation(fields: [lotId], references: [id])
+  lot   Lot?    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   /// Snapshot historico — congelado na criacao do Billing.
   productCode       String
@@ -3748,8 +3759,8 @@ model FormulationTemplateVersion {
   /// mudanca de volta.
   derivedFormulationVersions FormulationVersion[]
 
-  @@unique([formulationTemplateId, versionNumber])
-  @@index([formulationTemplateId])
+  @@unique([formulationTemplateId, versionNumber], map: "formulation_template_versions_templateId_versionNumber_key")
+  @@index([formulationTemplateId], map: "formulation_template_versions_templateId_idx")
   @@index([status])
   @@map("formulation_template_versions")
 }
@@ -3763,7 +3774,7 @@ model FormulationTemplateComponent {
   id String @id @default(uuid())
 
   formulationTemplateVersionId String
-  formulationTemplateVersion   FormulationTemplateVersion @relation(fields: [formulationTemplateVersionId], references: [id], onDelete: Cascade)
+  formulationTemplateVersion   FormulationTemplateVersion @relation(fields: [formulationTemplateVersionId], references: [id], onDelete: Cascade, map: "formulation_template_components_versionId_fkey")
 
   itemId String
   item   Item   @relation(fields: [itemId], references: [id])
@@ -3785,9 +3796,9 @@ model FormulationTemplateComponent {
   /// junto com pureza e overage, para que aplicar o template reproduza a
   /// intencao tecnica e nao so os numeros. A quantidade fisica da instancia e
   /// recalculada na versao nova — template nao congela resultado de calculo.
-  quantityMode FormulationComponentQuantityMode @default(PHYSICAL_DIRECT)
-  applyPurityAdjustment  Boolean @default(false)
-  applyOverageAdjustment Boolean @default(false)
+  quantityMode           FormulationComponentQuantityMode @default(PHYSICAL_DIRECT)
+  applyPurityAdjustment  Boolean                          @default(false)
+  applyOverageAdjustment Boolean                          @default(false)
 
   notes String?
 
@@ -3798,7 +3809,7 @@ model FormulationTemplateComponent {
   updatedAt DateTime @updatedAt
 
   /// Mesmo item nao aparece duas vezes na mesma versao.
-  @@unique([formulationTemplateVersionId, itemId])
+  @@unique([formulationTemplateVersionId, itemId], map: "formulation_template_components_versionId_itemId_key")
   @@map("formulation_template_components")
 }
 
@@ -3838,7 +3849,7 @@ model IndustrialCostTemplateVersion {
   id String @id @default(uuid())
 
   industrialCostTemplateId String
-  industrialCostTemplate   IndustrialCostTemplate @relation(fields: [industrialCostTemplateId], references: [id], onDelete: Cascade)
+  industrialCostTemplate   IndustrialCostTemplate @relation(fields: [industrialCostTemplateId], references: [id], onDelete: Cascade, map: "industrial_cost_template_versions_templateId_fkey")
 
   versionNumber Int
   status        TemplateVersionStatus @default(DRAFT)
@@ -3846,7 +3857,7 @@ model IndustrialCostTemplateVersion {
   /// Base de producao SUGERIDA. O produto pode adotar outra ao aplicar.
   referenceOutputQuantity Decimal       @db.Decimal(24, 12)
   referenceOutputUomCode  String
-  referenceOutputUom      UnitOfMeasure @relation("CostTemplateOutputUom", fields: [referenceOutputUomCode], references: [code])
+  referenceOutputUom      UnitOfMeasure @relation("CostTemplateOutputUom", fields: [referenceOutputUomCode], references: [code], map: "industrial_cost_template_versions_uom_fkey")
 
   /// Modo de energia como CONFIGURACAO. `FROM_EQUIPMENT` continua sendo
   /// "derive dos equipamentos" — nunca um resultado em kWh ou em reais.
@@ -3875,8 +3886,8 @@ model IndustrialCostTemplateVersion {
   /// Estruturas de custo COPIADAS desta versao — proveniencia, nunca canal.
   derivedCostVersions IndustrialCostVersion[]
 
-  @@unique([industrialCostTemplateId, versionNumber])
-  @@index([industrialCostTemplateId])
+  @@unique([industrialCostTemplateId, versionNumber], map: "industrial_cost_template_versions_templateId_versionNumber_key")
+  @@index([industrialCostTemplateId], map: "industrial_cost_template_versions_templateId_idx")
   @@index([status])
   @@map("industrial_cost_template_versions")
 }
@@ -3888,10 +3899,10 @@ model IndustrialCostTemplateResourceUsage {
   id String @id @default(uuid())
 
   industrialCostTemplateVersionId String
-  industrialCostTemplateVersion   IndustrialCostTemplateVersion @relation(fields: [industrialCostTemplateVersionId], references: [id], onDelete: Cascade)
+  industrialCostTemplateVersion   IndustrialCostTemplateVersion @relation(fields: [industrialCostTemplateVersionId], references: [id], onDelete: Cascade, map: "industrial_cost_template_resource_usages_versionId_fkey")
 
   industrialResourceId String
-  industrialResource   IndustrialResource @relation("CostTemplateResourceUsage", fields: [industrialResourceId], references: [id])
+  industrialResource   IndustrialResource @relation("CostTemplateResourceUsage", fields: [industrialResourceId], references: [id], map: "industrial_cost_template_resource_usages_resourceId_fkey")
 
   usageBasis    IndustrialResourceUsageBasis @default(FIXED_PER_REFERENCE_BATCH)
   usageQuantity Decimal                      @db.Decimal(24, 12)
@@ -3903,8 +3914,8 @@ model IndustrialCostTemplateResourceUsage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([industrialCostTemplateVersionId, industrialResourceId])
-  @@index([industrialCostTemplateVersionId])
+  @@unique([industrialCostTemplateVersionId, industrialResourceId], map: "industrial_cost_template_resource_usages_versionId_resource_key")
+  @@index([industrialCostTemplateVersionId], map: "industrial_cost_template_resource_usages_versionId_idx")
   @@map("industrial_cost_template_resource_usages")
 }
 
@@ -3917,7 +3928,7 @@ model IndustrialCostTemplateAdditionalCost {
   id String @id @default(uuid())
 
   industrialCostTemplateVersionId String
-  industrialCostTemplateVersion   IndustrialCostTemplateVersion @relation(fields: [industrialCostTemplateVersionId], references: [id], onDelete: Cascade)
+  industrialCostTemplateVersion   IndustrialCostTemplateVersion @relation(fields: [industrialCostTemplateVersionId], references: [id], onDelete: Cascade, map: "industrial_cost_template_additional_costs_versionId_fkey")
 
   category    IndustrialCostCategory
   description String
@@ -3931,7 +3942,7 @@ model IndustrialCostTemplateAdditionalCost {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([industrialCostTemplateVersionId])
+  @@index([industrialCostTemplateVersionId], map: "industrial_cost_template_additional_costs_versionId_idx")
   @@map("industrial_cost_template_additional_costs")
 }
 
@@ -3970,7 +3981,7 @@ model PricingPolicyTemplateVersion {
   id String @id @default(uuid())
 
   pricingPolicyTemplateId String
-  pricingPolicyTemplate   PricingPolicyTemplate @relation(fields: [pricingPolicyTemplateId], references: [id], onDelete: Cascade)
+  pricingPolicyTemplate   PricingPolicyTemplate @relation(fields: [pricingPolicyTemplateId], references: [id], onDelete: Cascade, map: "pricing_policy_template_versions_templateId_fkey")
 
   versionNumber Int
   status        TemplateVersionStatus @default(DRAFT)
@@ -3995,8 +4006,8 @@ model PricingPolicyTemplateVersion {
   /// Precificacoes COPIADAS desta politica — proveniencia, nunca canal.
   derivedPricingVersions PricingVersion[]
 
-  @@unique([pricingPolicyTemplateId, versionNumber])
-  @@index([pricingPolicyTemplateId])
+  @@unique([pricingPolicyTemplateId, versionNumber], map: "pricing_policy_template_versions_templateId_versionNumber_key")
+  @@index([pricingPolicyTemplateId], map: "pricing_policy_template_versions_templateId_idx")
   @@index([status])
   @@map("pricing_policy_template_versions")
 }
@@ -4013,11 +4024,11 @@ model PricingPolicyTemplateTier {
   id String @id @default(uuid())
 
   pricingPolicyTemplateVersionId String
-  pricingPolicyTemplateVersion   PricingPolicyTemplateVersion @relation(fields: [pricingPolicyTemplateVersionId], references: [id], onDelete: Cascade)
+  pricingPolicyTemplateVersion   PricingPolicyTemplateVersion @relation(fields: [pricingPolicyTemplateVersionId], references: [id], onDelete: Cascade, map: "pricing_policy_template_tiers_versionId_fkey")
 
   quantity Decimal       @db.Decimal(24, 12)
   uomCode  String
-  uom      UnitOfMeasure @relation("PricingPolicyTierUom", fields: [uomCode], references: [code])
+  uom      UnitOfMeasure @relation("PricingPolicyTierUom", fields: [uomCode], references: [code], map: "pricing_policy_template_tiers_uom_fkey")
 
   /// So TARGET_MARGIN nesta fase — ver o comentario do modelo.
   priceMode PriceMode @default(TARGET_MARGIN)
@@ -4031,7 +4042,7 @@ model PricingPolicyTemplateTier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([pricingPolicyTemplateVersionId, quantity])
-  @@index([pricingPolicyTemplateVersionId])
+  @@unique([pricingPolicyTemplateVersionId, quantity], map: "pricing_policy_template_tiers_versionId_quantity_key")
+  @@index([pricingPolicyTemplateVersionId], map: "pricing_policy_template_tiers_versionId_idx")
   @@map("pricing_policy_template_tiers")
 }

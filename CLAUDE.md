@@ -112,7 +112,10 @@ No raw feature-level hex colors. Use design tokens.
 - Important multi-record operations must be transactional.
 - A migration contains only the deliberate changes of its capability. Never
   commit a Prisma-generated diff carrying unrelated drift (see BACKLOG #14 and
-  `docs/TECH_BASELINE.md`, "Migration order").
+  `docs/TECH_BASELINE.md`, "Migration order"). `schema.prisma` and the
+  migrations are in sync since #14: run `pnpm validate:migrations:fresh` after
+  touching either — it fails when the database the migrations build is no
+  longer the model.
 
 ## Delivery style
 For each requested feature:

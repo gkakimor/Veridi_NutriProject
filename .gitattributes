@@ -1,0 +1,10 @@
+# O checksum que o Prisma grava em `_prisma_migrations` e o SHA-256 dos BYTES
+# do `migration.sql`. Com CRLF na copia de trabalho do Windows e LF no clone do
+# Railway, a MESMA migration entra no ledger com dois checksums diferentes: 24
+# das 56 linhas de producao divergem do arquivo por isso, e so por isso
+# (levantado no BACKLOG #14; `migrate deploy` e `migrate status` toleram, mas
+# `migrate dev` acusa "migrations have been modified").
+#
+# Fixar LF aqui faz todo clone novo — Windows, Linux, CI — aplicar os mesmos
+# bytes e gravar o mesmo checksum. Nao reescreve o historico ja aplicado.
+apps/api/prisma/migrations/**/migration.sql text eol=lf

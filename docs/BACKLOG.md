@@ -356,25 +356,46 @@ Perguntas regulatórias abertas: [`BLOCK_H_VALIDATION.md`](BLOCK_H_VALIDATION.md
 
 ## D. Manutenção técnica
 
-### 14. Drift `schema.prisma` × banco/migrations — LOW técnico, risco estrutural
+### 14. Drift `schema.prisma` × banco/migrations — **RESOLVIDO** em 2026-09-07
 
-`prisma migrate diff` do banco (novo ou produção, idênticos) para o
-`schema.prisma` gera 86 comandos: 0 tabelas, 0 colunas e 0 tipos funcionais
-divergentes; 27 chaves estrangeiras que o banco aplica com `ON DELETE
-RESTRICT` e o schema declara `SET NULL` (`attachments.lotId`,
-`lots.ownerCustomerId`, `production_orders.customerOrderId`,
-`billing_lines.lotId`…); ≈32 índices e constraints com divergência nominal.
-O banco é o lado mais restritivo.
+Os 86 comandos que `prisma migrate diff` gerava eram do **repositório**, não
+dos bancos. Um banco criado do zero só com as 56 migrations oficiais foi
+comparado com DEV e com produção: as três estruturas são **idênticas**, campo a
+campo — 65 tabelas, 59 enums, 197 FKs, 24 sequences, 24 CHECK, 14 índices
+parciais, zero diferença, inclusive de nome. O que divergia era o
+`schema.prisma`, em três classes:
 
-**Decisão de PO:** não corrigir automaticamente. Cada FK exige decisão de
-domínio — bloquear a exclusão, desassociar o relacionamento, ou arquivar em vez
-de excluir. Fazer em rodada isolada: **"Schema Integrity Audit"**.
+- **27 FKs** em relações opcionais que não declaravam `onDelete:`. O Prisma
+  assume `SetNull` nesse caso; as migrations tinham escrito `ON DELETE
+  RESTRICT`. As 27 passaram a declarar `onDelete: Restrict`;
+- **26 constraints e índices** que as migrations nomearam fora da convenção do
+  Prisma (`…_versionId_fkey` em vez de `…_industrialCostVersionId_fkey`, entre
+  outros). Os nomes reais entraram no modelo via `map:`;
+- **6 índices** criados por migration que o modelo nunca declarou
+  (`products_lifecycle_idx`, `receipt_lines_itemId_actualUnitCost_idx`…).
+  Viraram `@@index`.
 
-**Regra de segurança já vigente** ([`TECH_BASELINE.md`](TECH_BASELINE.md),
-*Migration order*, e `CLAUDE.md`): migration nova não carrega drift incidental —
-nem `RESTRICT → SET NULL`, nem renomeação de índice ou constraint, nem criação
-ou remoção alheia. Todo SQL gerado é revisado linha a linha; diff gigante do
-Prisma não se aprova. **ABERTO.**
+**Nenhum banco foi alterado. Nenhuma migration foi criada.** O diff
+`banco → schema.prisma` saiu vazio contra fresh, DEV e produção. A decisão de
+PO que sobra continua de pé e **fora** desta capability: trocar `RESTRICT` por
+`SET NULL` em alguma dessas FKs é decisão de domínio (bloquear a exclusão,
+desassociar, ou arquivar) e exige a migration que faça a troca no banco — não
+acontece mais por omissão no modelo.
+
+**Por que passou despercebido:** `migrate deploy` aplica o que falta e
+`migrate status` compara o ledger; nenhum dos dois compara a estrutura com o
+modelo. `pnpm validate:migrations:fresh` agora exige `migrate diff` vazio entre
+o banco reconstruído e o `schema.prisma` — reprovou com 86 comandos no schema
+anterior. `scripts/schema-fk-actions.test.ts` cobre a classe estaticamente em
+`pnpm test`: lê o SQL das migrations, apura a ação final de cada uma das 197
+FKs e cobra a declaração correspondente (27 divergências no schema anterior).
+
+**Ledger** (não é drift de schema, fica registrado): 24 das 56 linhas de
+`_prisma_migrations` em produção têm checksum diferente do arquivo — line
+ending, e só. `.gitattributes` fixa LF no SQL das migrations para novos clones.
+Produção também mantém a linha órfã `20260904093000_template_component_quantity_mode`,
+tolerada por decisão de 2026-09-04 ([`TECH_BASELINE.md`](TECH_BASELINE.md)).
+Nada foi reescrito em `_prisma_migrations`.
 
 ### 10. Compactar `archive/DELIVERY_HISTORY.md` — MANUTENÇÃO / LOW
 
@@ -985,8 +1006,7 @@ permanece obrigatório no escopo atual.
     depois PREC-SER-01 e PREC-FMT-01.
 13. **Validação com a Veridi:** #7 + #11.
 14. **Manutenção:** #10. #1 e #2 permanecem observação/adiados.
-15. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
-16. **Roadmap:** preferências de exibição (PREC-UI-01 a 08) e produto próprio
+15. **Roadmap:** preferências de exibição (PREC-UI-01 a 08) e produto próprio
     Veridi.
 
 **Precisão numérica — ordem obrigatória.** #20 antes ou junto de #19: ampliar
