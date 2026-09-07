@@ -34,6 +34,7 @@ import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-in
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { ModalDialog } from "../../components/ModalDialog";
 import { formatQuantity } from "../../lib/quantity";
+import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
 
 /**
  * ⓘ de cabeçalho de coluna. O texto mora em `help-content`: “Reservado
@@ -265,8 +266,10 @@ function ProductGroup({
                         ).trim();
                         const legivel = parseDecimalInput(digitado);
                         const ilegivel = digitado !== "" && legivel === null;
-                        const teto = Number(line.reservedRemaining);
-                        const excede = legivel !== null && Number(legivel) > teto;
+                        /* O teto exibido é resumido e o real tem doze casas:
+                           digitar o número que a tela mostra é pedir tudo o
+                           que está reservado, não passar dele. */
+                        const excede = excedeLimiteExibido(digitado, line.reservedRemaining);
                         return (
                           <>
                             <input
@@ -424,6 +427,26 @@ export function ShipmentPage() {
 
   const isDraft = shipment?.status === "DRAFT";
 
+  /* As três gravações da expedição montam a mesma lista, e ela precisa ser a
+     mesma conta: quem digitou o reservado que a tela mostra está expedindo a
+     reserva INTEIRA, então vai o valor canônico, com toda a precisão. Enviar
+     o texto resumido criaria expedição a mais ou a menos por arredondamento
+     de exibição. */
+  function linhasParaEnvio(): { customerOrderReservationLineId: string; quantity: string }[] {
+    if (!shipment) return [];
+    return shipment.lines.map((line) => {
+      const digitado = quantities[line.customerOrderReservationLineId] ?? "0";
+      const resolvido = resolverQuantidadeContraLimite(digitado, line.reservedRemaining);
+      return {
+        customerOrderReservationLineId: line.customerOrderReservationLineId,
+        quantity:
+          resolvido.status === "ok"
+            ? resolvido.valorCanonico
+            : (exigirDecimalOpcional(digitado, "Quantidade") ?? "0"),
+      };
+    });
+  }
+
   async function handleSave() {
     if (!id || !shipment) return;
     setSaving(true);
@@ -431,14 +454,7 @@ export function ShipmentPage() {
     try {
       const updated = await updateShipment(id, {
         notes: notes.trim(),
-        lines: shipment.lines.map((line) => ({
-          customerOrderReservationLineId: line.customerOrderReservationLineId,
-          quantity:
-            exigirDecimalOpcional(
-              quantities[line.customerOrderReservationLineId] ?? "0",
-              "Quantidade",
-            ) ?? "0",
-        })),
+        lines: linhasParaEnvio(),
       });
       syncFromServer(updated);
     } catch (err) {
@@ -458,14 +474,7 @@ export function ShipmentPage() {
       if (shipment) {
         await updateShipment(id, {
           notes: notes.trim(),
-          lines: shipment.lines.map((line) => ({
-            customerOrderReservationLineId: line.customerOrderReservationLineId,
-            quantity:
-              exigirDecimalOpcional(
-                quantities[line.customerOrderReservationLineId] ?? "0",
-                "Quantidade",
-              ) ?? "0",
-          })),
+          lines: linhasParaEnvio(),
         });
       }
       const confirmed = await confirmShipment(id);
@@ -508,10 +517,7 @@ export function ShipmentPage() {
     try {
       const saved = await updateShipment(id, {
         notes: notes.trim(),
-        lines: shipment.lines.map((current) => ({
-          customerOrderReservationLineId: current.customerOrderReservationLineId,
-          quantity: (quantities[current.customerOrderReservationLineId] ?? "0").trim() || "0",
-        })),
+        lines: linhasParaEnvio(),
       });
       const target = saved.lines.find(
         (current) => current.customerOrderReservationLineId === reservationLineId,
@@ -618,13 +624,12 @@ export function ShipmentPage() {
 
   /* Confirmar não corrige silenciosamente para o teto: enquanto houver
      linha acima do reservado, a ação fica bloqueada e a linha diz por quê. */
-  const linhasAcimaDoReservado = shipment.lines.filter((line) => {
-    const digitado = (quantities[line.customerOrderReservationLineId] ?? "").trim();
-    if (digitado === "") return false;
-    const legivel = parseDecimalInput(digitado);
-    if (legivel === null) return false;
-    return Number(legivel) > Number(line.reservedRemaining);
-  });
+  const linhasAcimaDoReservado = shipment.lines.filter((line) =>
+    excedeLimiteExibido(
+      quantities[line.customerOrderReservationLineId] ?? "",
+      line.reservedRemaining,
+    ),
+  );
 
   return (
     <>

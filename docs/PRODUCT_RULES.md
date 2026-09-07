@@ -3657,6 +3657,25 @@ nunca o perfil do usuário: um Pedido com Total acordado de `R$ 172,84` continua
 casas por regra de acordo — §55 — não autoriza reduzir a duas casas o preço
 unitário, a quantidade, o custo, o CMV ou os fatores que o produziram.
 
+**Campo com teto: o número exibido tem que poder ser redigitado.** Decisão de
+Product Ownership de 2026-09-07, sobre o F-08-1. Quando a tela mostra um limite
+— reserva remanescente, saldo reservado, disponível — ela mostra o valor
+arredondado, que pode ficar acima ou abaixo do real. Comparar o que foi digitado
+diretamente contra o limite exato faz a tela recusar o próprio número que
+imprimiu.
+
+A regra é de **ida e volta**: digitar exatamente o valor exibido significa "usar
+todo o limite", e o que vai ao servidor é o valor **canônico**, íntegro. Digitar
+menos continua sendo uso parcial e vai como foi digitado; acima do exibido é
+recusado.
+
+Arredondar o teto para baixo **não** é alternativa: consumir menos que a reserva
+deixa resíduo, e a reconciliação de material não tem tolerância, por decisão.
+Epsilon, `1e-6` e `Math.abs` continuam proibidos — a folga é de leitura, na
+borda da interface, e nunca no domínio. A comparação canônica é
+`resolverQuantidadeContraLimite`, em `apps/web/src/lib/quantity-limit.ts`;
+`Number(digitado) > Number(limite)` na tela reabre o defeito e viola §66.
+
 ## §58 — Matriz de precisão numérica por categoria
 
 Decisão de Product Ownership de 2026-09-05, derivada da auditoria. É a

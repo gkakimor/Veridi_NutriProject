@@ -13,8 +13,13 @@ detalhe de cada entrega no Git. Escopo futuro vive só em
 no ARMAZENAMENTO — schema, persistência, serialização e comparação de domínio —,
 e `schema.prisma` está em sincronia com as migrations. A auditoria de 2026-09-07
 mostrou que a **exibição** ainda não acompanhou: o corte de seis casas da tela
-nasceu quando o banco guardava seis, e hoje ele guarda doze. É de onde saem os
-dois P0.
+nasceu quando o banco guardava seis, e hoje ele guarda doze.
+
+O primeiro sintoma dessa defasagem — o campo com teto que recusava o próprio
+número impresso — foi corrigido em FIX-01 (2026-09-07): campo com limite agora
+resolve o que foi digitado contra o limite por `quantity-limit.ts`, e digitar o
+valor exibido significa "usar todo o limite". O que sobra da defasagem é
+exibição sem entrada (F-07-1) e o P0 de custo da Formulação.
 
 ---
 
@@ -25,23 +30,13 @@ conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
-**Zero CRITICAL, zero BLOCKER.** Três HIGH, quatro MEDIUM, quatro LOW.
+**Zero CRITICAL, zero BLOCKER.** Dois HIGH, quatro MEDIUM, quatro LOW.
 
 ### P0 — antes de qualquer outra capability
 
 | ID | Título | Sev. | Tam. | Grupo |
 |---|---|---|---|---|
-| **F-08-1** | Consumo de produção recusa exatamente a quantidade que a tela mostra | HIGH | S | G1 |
 | **F-02-2** | Custo estimado da Formulação usa a quantidade por dose — subestima em 60× num produto de 60 doses | HIGH | L | G2 |
-
-**F-08-1.** A reserva vale `6,122448979592 kg`; `formatQuantity` corta em 6 casas
-com `ROUND_HALF_UP` e exibe `6,122449`. Arredondar um **teto para cima** produz
-um limite exibido maior que o real, e é o real que valida — cliente
-(`ProductionOrderPage.tsx:419`) e servidor (`picking.service.ts:432`) recusam.
-Não é erro de float: `6,122449` é genuinamente maior. Digitar menos deixa
-resíduo, e `reconciliation.ts` **não tem tolerância, por decisão** — a OP não
-conclui sem justificar variância de um micrograma. Alcança **125 das 212
-formulações ativas (59 %)**, não só as com pureza/overage.
 
 **F-02-2.** `costs.service.ts:122` converte a unidade da quantidade
 **declarada** e nunca aplica base, doses, pureza ou overage — o comentário
@@ -118,7 +113,7 @@ abre a edição, que contém o link "Consulta completa". Sobra só o resíduo em
 
 | Grupo | Achados | Causa | Por que junto |
 |---|---|---|---|
-| **G1** | F-08-1, F-07-1 | Precisão exibida e precisão validada não se reconciliam | O mesmo `Number(digitado) > Number(limite)` está em `ProductionOrderPage.tsx:419`, `ShipmentPage.tsx:626` e `CustomerOrderPage.tsx:871` — este último já remendado com `+ 1e-6`. Corrigir só a OP deixa duas irmãs vivas, e §66 proíbe a comparação por `Number` |
+| **G1** | F-07-1 | Precisão exibida e precisão validada não se reconciliam | As três comparações `Number(digitado) > Number(limite)` — OP, Expedição e Pedido, esta última remendada com `+ 1e-6` — foram substituídas por `quantity-limit.ts` em FIX-01. Sobra F-07-1, que é exibição sem campo de entrada: o mesmo valor sai formatado numa tela e cru na outra |
 | **G2** | F-02-2, F-02-1 | Quantidade **declarada** usada como se fosse a física | `convertUomDecimal` chamado com os mesmos argumentos em `formulations.service.ts:71` e `costs.service.ts:122`, sem o motor de necessidade. Mesmo atalho, dois lugares |
 | **G3** | F-09-1, F-07-2 | "Disponível" composto ad-hoc por tela | Três serviços envolvem `getAvailableByItems` de três jeitos; só o Estoque chama o irmão `getUnavailabilityByItems`, que é o que explica o zero |
 | **G4** | F-06-1, F-06-2 | `fieldErrors` só nasce da resposta do servidor e só reseta no próximo envio | Mesmo arquivo, mesmo mecanismo: o conserto de um resolve o outro |
