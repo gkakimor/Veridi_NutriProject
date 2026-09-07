@@ -41,6 +41,25 @@ Arquivos esperados: `fornecedores`, `clientes`, `itens`,
 `amostras`, `precos_fornecedores`, `estoque_saldos`,
 `compras_recebimentos`, `cmv_*`, `in28_limites`.
 
+### Cargas complementares, no mesmo diretório local
+
+Duas cargas nasceram depois do importador e seguem a mesma política — código
+no Git, dado fora dele:
+
+| Onde | O quê |
+| --- | --- |
+| `.local-data/veridi/market-reference/` | `market-prices.csv` e `tier3-web-findings.tsv`, lidos por `pnpm veridi:market-reference`. A maior parte das linhas é oferta de fornecedor homologado — preço negociado da Veridi. Nunca versionar |
+| `.local-data/veridi/cargaExemplo/` | Pacote sintético de recursos, tarifas e templates, lido por `pnpm veridi:examples`. Não tem dado do cliente, mas fica junto do resto por coerência |
+
+`VERIDI_MARKET_REFERENCE_DIR` e `VERIDI_CORPUS_DIR` sobrescrevem os caminhos
+quando o material estiver em outro lugar.
+
+**Chave entre ambientes é `externalCode`, nunca `Item.code`.** O código interno
+(`MP-000372`) sai de uma sequence do Postgres e cada banco corre a sua: o mesmo
+código nomeia itens diferentes em DEV e em produção. Carga que resolve registro
+por código interno grava no registro errado — aconteceu uma vez, em produção, e
+por isso `veridi-market-reference/load.ts` recusa a linha sem `external_code`.
+
 ## 3. Validate
 
 ```

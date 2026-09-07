@@ -237,3 +237,30 @@ O que for construído precisa manter as regras §35 e §36 intactas: cada
 aplicação continua sendo cópia independente, nenhuma tarifa entra em template
 de custo, nenhum preço entra em política, e nada propaga de volta para artefato
 que já existe.
+
+---
+
+## Preferências de exibição de precisão numérica (PREC-UI-01 a 08)
+
+Promovido para cá em 2026-09-07, quando a fundação numérica fechou e o backlog
+operacional foi reduzido ao que continua aberto. Aprovado em desenho pelo PO,
+**não** em escopo: nenhuma destas linhas é trabalho autorizado.
+
+| Item | Escopo |
+|---|---|
+| **PREC-UI-01** | Preferência visual por usuário |
+| **PREC-UI-02** | Presets Compacta / Padrão / Técnica / Máxima |
+| **PREC-UI-03** | Configuração por categoria |
+| **PREC-UI-04** | Override temporário de sessão |
+| **PREC-UI-05** | Modo de edição revela precisão integral |
+| **PREC-UI-06** | Salvar sem alterar preserva casas não exibidas |
+| **PREC-UI-07** | Totais documentais seguem o domínio, não o perfil |
+| **PREC-UI-08** | Preferência visual nunca grava nem recalcula |
+
+Desenho em [`NUMERIC_PRECISION_AUDIT.md`](NUMERIC_PRECISION_AUDIT.md) §11;
+invariantes duráveis em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §57.
+
+**PREC-UI-05 e PREC-UI-06 já são o comportamento atual.** Quem implementar o
+resto preserva os dois; reconstruí-los é regressão, não entrega. E a separação
+de §57 é a linha que não se atravessa: preferência de exibição nunca grava,
+nunca recalcula e nunca muda um total documental.

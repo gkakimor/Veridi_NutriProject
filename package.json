@@ -28,6 +28,8 @@
     "veridi:import:verify": "dotenv -e .env -- tsx scripts/veridi-import/verify.ts",
     "veridi:opening-stock:validate": "dotenv -e .env -- tsx scripts/veridi-import/opening-stock.ts",
     "veridi:opening-stock:apply": "dotenv -e .env -- tsx scripts/veridi-import/opening-stock.ts --apply",
+    "veridi:examples": "dotenv -e .env -- tsx scripts/veridi-examples/load.ts",
+    "veridi:market-reference": "dotenv -e .env -- tsx scripts/veridi-market-reference/load.ts",
     "veridi:data:validate": "dotenv -e .env -- tsx scripts/veridi-data/validate.ts",
     "veridi:data:seed": "dotenv -e .env -- tsx scripts/veridi-data/seed.ts",
     "db:demo": "pnpm --filter @veridi/api db:demo",
