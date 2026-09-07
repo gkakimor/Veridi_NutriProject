@@ -38,8 +38,9 @@ export async function analyzeCommercialTrace(
       versionNumber: true,
       status: true,
       source: true,
-      priceSource: true,
-      costQualitySnapshot: true,
+      // `priceSource` e `costQualitySnapshot` moram na LINHA, não na versão:
+      // uma proposta pode misturar linha vinda de faixa e linha de exceção.
+      lines: { select: { priceSource: true, costQualitySnapshot: true } },
       project: { select: { code: true, productId: true } },
     },
   });
@@ -51,9 +52,17 @@ export async function analyzeCommercialTrace(
 
   for (const quote of quotes) {
     const label = `${quote.code} · V${quote.versionNumber}`;
-    if (quote.priceSource === "PRICING_TIER") {
+    // Uma versão conta como "vinda de precificação" quando ALGUMA linha veio
+    // de faixa; o resto continua sendo exceção comercial legítima.
+    const linhasDeFaixa = quote.lines.filter((line) => line.priceSource === "PRICING_TIER");
+    if (linhasDeFaixa.length > 0) {
       quotesFromPricing += 1;
-      if (quote.costQualitySnapshot === "PARTIAL" || quote.costQualitySnapshot === "NO_COST") {
+      if (
+        linhasDeFaixa.some(
+          (line) =>
+            line.costQualitySnapshot === "PARTIAL" || line.costQualitySnapshot === "NO_COST",
+        )
+      ) {
         quotesWithPartialCost += 1;
         findings.add(
           "QUOTE_PRICING_COST_PARTIAL",

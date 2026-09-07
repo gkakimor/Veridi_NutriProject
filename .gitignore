@@ -35,6 +35,13 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
+# Dataset de referência de preço: a maior parte das linhas é oferta de
+# fornecedor homologado da Veridi (preço negociado, nome do fornecedor).
+# O dado vive em `.local-data/veridi/market-reference/`; estas linhas são a
+# rede de segurança para o dia em que alguém regerar o arquivo no lugar errado.
+scripts/veridi-market-reference/*.csv
+scripts/veridi-market-reference/*.tsv
+
 # Dados reais das planilhas Veridi (clientes, CNPJ, formulacoes, precos).
 # Nunca versionar.
 .local-data/
