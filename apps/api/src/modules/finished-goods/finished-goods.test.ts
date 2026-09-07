@@ -411,4 +411,91 @@ describe("Produto Acabado — visão operacional", () => {
 
     await app.close();
   });
+
+  /*
+   * A tela lista a tabela INTEIRA de lotes de produção e só depois resolve o
+   * custo de cada OP — duas leituras separadas no tempo. Entre elas, uma OP
+   * lida na primeira pode ter deixado de existir (na suíte, o `afterAll` de
+   * outro arquivo; em produção, qualquer remoção de massa). A listagem tratava
+   * isso como 404 e devolvia 500 — a tela inteira caía por uma linha obsoleta
+   * de outra pessoa, e quem lia via `rows` indefinido.
+   *
+   * A janela é forçada de propósito: a OP some exatamente entre a leitura dos
+   * lotes e a do custo. O que se prova é a resposta, não o instante.
+   */
+  it("a listagem sobrevive a uma OP que some entre a leitura dos lotes e a do custo", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const supplier = await createSupplier();
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await receiveWithCost(app, {
+      supplierId: supplier.id,
+      itemId: rawMaterial.id,
+      quantity: "1000",
+      unitCost: "10",
+    });
+    const { product } = await createProductWithFormulation(app, rawMaterial.id, "10");
+    const efemera = await produceLot(app, product.id, "5", "5", "VD-FG-SUMICO");
+
+    const prisma = getPrisma();
+    // A janela real: depois de a listagem ler os lotes, antes de resolver o
+    // custo por OP. O saldo do ledger é lido exatamente aí.
+    // O tipo genérico de `groupBy` não se reescreve à mão, e aqui ele nem
+    // importa: o que se faz é ENVELOPAR a chamada. A troca atravessa uma vista
+    // mínima do delegate, e o original volta no `finally`.
+    type LeituraDoLedger = { groupBy: (args: unknown) => Promise<unknown> };
+    const ledger = prisma.inventoryMovement as unknown as LeituraDoLedger;
+    const original = ledger.groupBy.bind(prisma.inventoryMovement);
+    let jaApagou = false;
+    ledger.groupBy = async (args: unknown) => {
+      const resultado = await original(args);
+      if (!jaApagou) {
+        jaApagou = true;
+        // Mesma ordem de limpeza do `afterAll` deste arquivo — é o cleanup de
+        // um vizinho que se está simulando, não uma remoção inventada.
+        await prisma.productionOutput.deleteMany({
+          where: { productionOrderId: efemera.orderId },
+        });
+        await prisma.productionConsumption.deleteMany({
+          where: { productionOrderId: efemera.orderId },
+        });
+        const reservas = await prisma.materialReservation.findMany({
+          where: { productionOrderId: efemera.orderId },
+          select: { id: true },
+        });
+        const reservaIds = reservas.map((r) => r.id);
+        if (reservaIds.length > 0) {
+          await prisma.materialReservationLine.deleteMany({
+            where: { reservationId: { in: reservaIds } },
+          });
+          await prisma.materialReservation.deleteMany({ where: { id: { in: reservaIds } } });
+        }
+        await prisma.lot.deleteMany({ where: { productionOrderId: efemera.orderId } });
+        await prisma.productionOrder.deleteMany({ where: { id: efemera.orderId } });
+      }
+      return resultado;
+    };
+
+    try {
+      // Consulta escopada na própria massa: o que se prova é a resposta, e ela
+      // não pode depender de quantos lotes o banco tem no momento.
+      const resposta = await app.inject({
+        method: "GET",
+        url: `/finished-goods?productionOrderId=${efemera.orderId}`,
+      });
+      expect(resposta.statusCode).toBe(200);
+      const corpo = resposta.json();
+      // A linha obsoleta ainda aparece — ela existia no retrato lido — e sai
+      // sem custo, como qualquer lote cuja OP não responde por um.
+      expect(corpo.rows).toHaveLength(1);
+      expect(corpo.rows[0].lotId).toBe(efemera.lotId);
+      expect(corpo.rows[0].costQuality).toBe("NO_COST");
+      expect(corpo.rows[0].materialUnitCost).toBeNull();
+    } finally {
+      ledger.groupBy = original;
+    }
+
+    await app.close();
+  });
 });

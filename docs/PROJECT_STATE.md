@@ -18,33 +18,31 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
 ## Última capability
 
-**PREC-CMP-02 — a faixa de precificação é a quantidade FÍSICA**, decidido pelo
-PO e publicado em 2026-09-07, merge `d7b150f`, deploy Railway verde — o
-`preDeploy` respondeu "No pending migrations to apply" e o smoke autenticado
-passou.
+**#17 — a listagem de Produto Acabado não cai mais por linha de outro
+registro**, entregue em 2026-09-07. Sem migration, sem mudança de regra.
 
-O PREC-CMP-01 tirou o `Number` da comparação de faixa; faltava a UNIDADE entrar
-na pergunta. Comparar a `quantity` crua errava nos dois sentidos: `1 kg` e
-`1000 g` viravam duas faixas para a mesma quantidade de produto acabado, e
-`500 g` e `500 kg` viravam uma só — quinhentas vezes mais produto tratado como
-repetição.
+A tela monta a listagem em duas leituras separadas no tempo — primeiro os lotes
+de produção, depois o custo de cada Ordem de Produção — e tratava uma OP que
+deixou de existir entre as duas como 404: a listagem inteira respondia 500 e o
+consumidor recebia `rows` indefinido. Era o que aparecia como "suíte não
+determinística".
 
-**Identidade = quantidade física normalizada na unidade do Item de produto
-acabado** (§68). Uma função canônica — `tier-quantity.ts` — valida a
-compatibilidade, converte pela conversão oficial e compara em `Decimal`; ela
-serve aplicação de política, criação manual e edição, para a regra não ter dois
-pesos. A faixa nasce NA UNIDADE DO PRODUTO (`1 kg` num produto em gramas grava
-`1000 g`) e o template continua declarando `1 kg`: aplicar é copiar e adaptar,
-não reescrever a biblioteca. Unidade de outra dimensão é recusada com mensagem
-em português — o mapa de erro que faltava fazia isso virar 500.
+O custo por OP passou a ter dois contratos: o detalhe continua respondendo 404;
+as LISTAGENS (Produto Acabado, painel, relatório de produção, que compartilhavam
+o defeito) usam `findProductionOrderMaterialCost`, e a linha obsoleta sai sem
+custo. A leitura dos lotes virou um retrato único (`RepeatableRead`), o que
+também fez `total` e `rows` deixarem de vir de instantes diferentes.
 
-**Reproduzido antes de fechar**, revertendo a regra: 5 dos 6 testes de serviço
-falham com a comparação antiga, e o pior deles grava `1 g` onde a política pedia
-`1 kg`. Zero migration: a unique `(pricingVersionId, quantity)` continua fiel
-porque toda faixa passa a nascer na unidade canônica. DEV e PROD não têm faixa
-nenhuma — nada histórico a normalizar.
+**Reproduzido antes de fechar**, fora do runner: ~30% de falha em 400 leituras
+sob três gravadores. Depois, 2.300 leituras sob cinco gravadores sem falha, e a
+suíte da API completa dez vezes verde.
 
 ## Antes dela
+
+**PREC-CMP-02** (`d7b150f`). A faixa de precificação passou a ser identificada
+pela quantidade FÍSICA normalizada na unidade do Item de produto acabado (§68):
+`1 kg` e `1000 g` eram duas faixas para a mesma quantidade, `500 g` e `500 kg`
+eram uma só. Função canônica em `tier-quantity.ts`, sem migration.
 
 **#21** (`0be565c`). O documento impresso da OP dividia a necessidade pelas
 partes em float e escrevia `X × N`, afirmando N partes iguais — a produção
@@ -123,8 +121,9 @@ Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 e #21 RESOLVIDOS — a fundação numérica está completa**, de PREC-MIG-A a
 PREC-FMT-01, com PREC-CMP-01 e PREC-CMP-02 fechando a comparação e o #21 o
 impresso. **Roadmap:** PREC-UI-01 a 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
-**Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não determinística sob
-paralelismo — não reapareceu nesta rodada). **Observação:** #1, #2.
+**Manutenção:** #10 e #14. **#17 RESOLVIDO** — a listagem de Produto Acabado
+deixou de cair quando uma Ordem de Produção some entre a leitura dos lotes e a
+do custo. **Observação:** #1, #2.
 
 ## Mapa de documentos
 

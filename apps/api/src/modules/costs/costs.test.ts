@@ -256,6 +256,31 @@ async function getMaterialCost(app: App, productionOrderId: string) {
   ).json();
 }
 
+describe("Custo de materiais de uma OP identificada", () => {
+  /*
+   * O custo por OP tem dois chamadores de natureza diferente. Quem pede o
+   * custo de UMA OP identificada precisa saber que ela não existe — 404. Já as
+   * LISTAGENS (Produto Acabado, painel, relatório de produção) resolvem o
+   * custo depois de já terem lido as linhas, e uma OP que sumiu nesse intervalo
+   * é linha obsoleta, não erro da tela inteira; para elas existe
+   * `findProductionOrderMaterialCost`, que devolve `null`. Este caso guarda o
+   * lado 404 da separação.
+   */
+  it("o detalhe responde 404 quando a OP não existe", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const resposta = await app.inject({
+      method: "GET",
+      url: "/production-orders/00000000-0000-4000-8000-000000000000/material-cost",
+    });
+    expect(resposta.statusCode).toBe(404);
+    expect(resposta.json().error).toBe("not_found");
+
+    await app.close();
+  });
+});
+
 describe("Custo de aquisição no recebimento", () => {
   it("recebimento funciona sem custo; custo desconhecido é null, nunca 0", async () => {
     const app = buildTestApp();

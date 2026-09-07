@@ -255,26 +255,42 @@ comportamento antigo — para que a correção fosse uma mudança visível e
 deliberada, não efeito colateral. Esta capability virou aquele teste para o
 comportamento novo, no mesmo arquivo e com a diferença explicada.
 
-### 17. Suíte da API não é determinística sob paralelismo no banco local — LOW técnico
+### 17. Listagem de Produto Acabado caía por linha de outro registro — RESOLVIDO
 
-**ABERTO.** Em execuções completas de `pnpm test`, um teste de
-`modules/production-orders` falha esporadicamente (visto em
-`consumption.test.ts` e em `picking.test.ts`, ambos medindo agregados de
-estoque). Isolado e em reexecução da suíte completa, passa. O paralelismo do
-Vitest sobre o mesmo banco de desenvolvimento é a origem provável.
+**RESOLVIDO em 2026-09-07.** O que parecia falta de determinismo da suíte era
+um defeito de leitura. A tela de Produto Acabado monta a listagem em duas
+leituras separadas no tempo — primeiro os lotes de produção, depois o custo de
+cada Ordem de Produção — e tratava uma OP que deixou de existir entre as duas
+como 404. Bastava outro registro sumir nesse intervalo para a listagem inteira
+responder 500 e o consumidor receber `rows` indefinido
+(`Cannot read properties of undefined (reading 'map')`, o sintoma registrado).
 
-Custo real: um gate verde exige reexecutar, e uma falha assim se parece com
-regressão de quem está lendo. Rodada posterior — candidato natural a entrar
-junto de #10 (manutenção).
+Reproduzido fora do runner, com um leitor chamando a listagem enquanto três
+gravadores criavam e apagavam lotes de produção: **133 e 121 falhas em 400
+leituras** (~30%). Depois da correção, **2.300 leituras sob cinco gravadores,
+zero falhas**.
 
-**Observado de novo na Fundação A (2026-09-05), com um arquivo novo:**
-`modules/finished-goods/finished-goods.test.ts` > "lista apenas lotes origin
-PRODUCTION" falhou com `Cannot read properties of undefined (reading 'map')` —
-o `listFinishedGoods` devolveu resposta sem `rows`. Isolado passa (5/5) e a
-reexecução completa passou (80 arquivos, 1026 testes). Confirma que o item não
-é só de `production-orders`: alcança qualquer teste que meça agregado de
-estoque sob paralelismo no mesmo banco. **Não corrigido nesta branch**, por
-escopo.
+Duas correções, ambas do lado da leitura:
+
+- **custo por OP tem dois contratos.** O detalhe
+  (`GET /production-orders/:id/material-cost`) continua respondendo 404. As
+  LISTAGENS — Produto Acabado, painel e relatório de produção, que
+  compartilhavam o mesmo defeito — usam `findProductionOrderMaterialCost`, que
+  reporta ausência: linha obsoleta sai sem custo, a tela não cai por ela;
+- **a leitura dos lotes é um retrato único** (`RepeatableRead`). Relação
+  obrigatória (`item`) é buscada pelo Prisma em consulta separada e podia já
+  não existir (`Field item is required to return data, got null`); no mesmo
+  movimento `total` e `rows` deixaram de poder vir de instantes diferentes.
+
+Nenhuma expectativa foi afrouxada, nenhum `retry`, nenhum `skip`, nenhum
+arquivo novo em série. Os episódios antigos de `consumption.test.ts` e
+`picking.test.ts` não reapareceram.
+
+**Resíduo, sem defeito conhecido:** a ocorrência única de
+`pricing-technical-precision.test.ts` > "round-trip" não reproduziu em 16
+suítes completas nem em 15 execuções do grupo de precificação. Sem causa
+identificada e sem sintoma para investigar; se reaparecer, capturar a resposta
+da chamada que falhou antes de mexer em qualquer coisa.
 
 ---
 
@@ -968,7 +984,7 @@ permanece obrigatório no escopo atual.
     schema. **PRÓXIMA CAPABILITY: PREC-MIG-E** — 16 colunas sem alvo decidido —,
     depois PREC-SER-01 e PREC-FMT-01.
 13. **Validação com a Veridi:** #7 + #11.
-14. **Manutenção:** #10 e #17. #1 e #2 permanecem observação/adiados.
+14. **Manutenção:** #10. #1 e #2 permanecem observação/adiados.
 15. **Rodada técnica isolada:** #14 (Schema Integrity Audit).
 16. **Roadmap:** preferências de exibição (PREC-UI-01 a 08) e produto próprio
     Veridi.

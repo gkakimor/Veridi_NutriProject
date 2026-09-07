@@ -131,6 +131,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Pedido originado de proposta aceita congela o subtotal, o total e o plano DA PROPOSTA, pela mesma função; proposta e Pedido históricos não são recalculados nem sofrem backfill | `quote-to-order` tinha a própria soma — segundo motor sobre o mesmo acordo | `modules/projects/project-integration.test.ts` |
 | Resumo do Faturamento dentro do Pedido usa `calcularTotaisFaturamento` — mesmo número do documento | resumo somava sem arredondar: R$ 1.927,42 no Pedido × R$ 1.927,41 no Faturamento | `modules/billings/billing-price.test.ts` |
 | Ausência de precificação vigente responde 200 com `{ pricing: null }`; 404 é só linha inexistente; 403 e erro interno seguem distintos e não viram estado vazio | 404 para estado normal deixava `console.error` em toda consulta de tela sã | `modules/projects/project-integration.test.ts`, `web lib/quote-pricing-options.test.ts` |
+| Custo por OP tem dois contratos: o DETALHE responde 404 quando a OP não existe; a LISTAGEM, que resolve o custo depois de já ter lido as linhas, trata OP sumida como linha sem custo e continua respondendo 200 | BACKLOG #17 — a listagem importava o 404 do detalhe: uma OP removida entre as duas leituras derrubava a tela inteira com 500 e o consumidor recebia `rows` indefinido | `modules/costs/costs.test.ts`, `modules/finished-goods/finished-goods.test.ts` |
 
 ## Precisão numérica
 

@@ -9,7 +9,7 @@ import {
   isLotAvailableForUse,
   isLotExpired,
 } from "../../lib/inventory-ledger.js";
-import { getProductionOrderMaterialCost } from "../costs/costs.service.js";
+import { findProductionOrderMaterialCost } from "../costs/costs.service.js";
 import type { ListFinishedGoodsQuery } from "./finished-goods.schemas.js";
 
 /**
@@ -53,19 +53,29 @@ export async function listFinishedGoods(
     ];
   }
 
-  const [lots, total] = await Promise.all([
-    prisma.lot.findMany({
-      where,
-      include: {
-        item: true,
-        productionOutputs: { orderBy: { producedAt: "asc" } },
-        productionOrder: { include: { product: true } },
-      },
-      orderBy: { code: "desc" },
-      ...pageArgs(pagination),
-    }),
-    prisma.lot.count({ where }),
-  ]);
+  // Um retrato so. A tela le a tabela inteira de lotes de producao, e cada
+  // linha traz relacoes OBRIGATORIAS (`item`) que o Prisma busca em consultas
+  // separadas. Fora de uma transacao cada consulta enxerga um instante
+  // diferente do banco: uma linha lida no primeiro instante e apagada antes do
+  // segundo derruba a listagem inteira ("Field item is required to return
+  // data, got `null`"). `RepeatableRead` fixa o snapshot — e faz `total`
+  // concordar com `rows`, que antes podiam vir de instantes distintos.
+  const [lots, total] = await prisma.$transaction(
+    [
+      prisma.lot.findMany({
+        where,
+        include: {
+          item: true,
+          productionOutputs: { orderBy: { producedAt: "asc" } },
+          productionOrder: { include: { product: true } },
+        },
+        orderBy: { code: "desc" },
+        ...pageArgs(pagination),
+      }),
+      prisma.lot.count({ where }),
+    ],
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+  );
 
   const lotIds = lots.map((lot) => lot.id);
   const [onHandByLot, reservedByLot] = await Promise.all([
@@ -82,7 +92,10 @@ export async function listFinishedGoods(
   const costByOrder = new Map<string, { unitCost: string | null; quality: CostQuality; source: CostSource | null }>();
   await Promise.all(
     productionOrderIds.map(async (orderId) => {
-      const cost = await getProductionOrderMaterialCost(orderId);
+      const cost = await findProductionOrderMaterialCost(orderId);
+      // A OP pode ter deixado de existir entre a leitura dos lotes e esta:
+      // linha obsoleta fica sem custo, a tela inteira nao cai por causa dela.
+      if (!cost) return;
       // Origem predominante: so faz sentido anunciar uma quando o custo e
       // utilizavel; em PARTIAL/NO_COST o valor nem e apresentado.
       const sources = new Set(cost.consumptions.map((consumption) => consumption.costSource));
