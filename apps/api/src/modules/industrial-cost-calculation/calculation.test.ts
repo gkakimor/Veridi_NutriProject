@@ -535,7 +535,7 @@ describe("Custo padrão — referência de material", () => {
     const result = await calculate(app, version.id);
 
     // (10×100 + 20×130) / 30 = 120 — nunca a média simples 115.
-    expect(result.materials[0].unitCost).toBe("120.000000");
+    expect(result.materials[0].unitCost).toBe("120.00000000");
     expect(result.materials[0].costSource).toBe("WEIGHTED_AVG_30D");
     // 1 kg por unidade × 1000 unidades × 120.
     expect(result.materials[0].subtotal).toBe("120000.00");
@@ -562,7 +562,7 @@ describe("Custo padrão — referência de material", () => {
     });
     const result90 = await calculate(app, structure90.version.id);
     expect(result90.materials[0].costSource).toBe("WEIGHTED_AVG_90D");
-    expect(result90.materials[0].unitCost).toBe("50.000000");
+    expect(result90.materials[0].unitCost).toBe("50.00000000");
 
     const old = await createItem("RAW_MATERIAL");
     await receiveWithCost(app, {
@@ -577,7 +577,7 @@ describe("Custo padrão — referência de material", () => {
     });
     const resultOld = await calculate(app, structureOld.version.id);
     expect(resultOld.materials[0].costSource).toBe("LAST_REAL");
-    expect(resultOld.materials[0].unitCost).toBe("70.000000");
+    expect(resultOld.materials[0].unitCost).toBe("70.00000000");
 
     await app.close();
   });
@@ -605,7 +605,7 @@ describe("Custo padrão — referência de material", () => {
     expect(before.materials[0].costSource).toBe("NO_COST");
 
     const after = await calculate(app, version.id);
-    expect(after.materials[0].unitCost).toBe("80.000000");
+    expect(after.materials[0].unitCost).toBe("80.00000000");
 
     await app.close();
   });
@@ -634,7 +634,7 @@ describe("Custo padrão — oferta de fornecedor como estimativa", () => {
 
     // Preferencial vence o mais barato: homologação é decisão comercial.
     expect(result.materials[0].costSource).toBe("SUPPLIER_OFFER_PREFERRED");
-    expect(result.materials[0].unitCost).toBe("40.000000");
+    expect(result.materials[0].unitCost).toBe("40.00000000");
     expect(result.quality).toBe("COMPLETE_WITH_ESTIMATES");
 
     await app.close();
@@ -653,7 +653,7 @@ describe("Custo padrão — oferta de fornecedor como estimativa", () => {
     });
     const result = await calculate(app, version.id);
     expect(result.materials[0].costSource).toBe("SUPPLIER_OFFER_SINGLE_APPROVED");
-    expect(result.materials[0].unitCost).toBe("25.000000");
+    expect(result.materials[0].unitCost).toBe("25.00000000");
 
     await app.close();
   });
@@ -950,7 +950,7 @@ describe("Cálculos salvos", () => {
       })
     ).json();
     expect(saved.code.startsWith("CALC-")).toBe(true);
-    expect(saved.materials[0].unitCost).toBe("10.000000");
+    expect(saved.materials[0].unitCost).toBe("10.00000000");
     expect(saved.structureStatusAtCalculation).toBe("DRAFT");
 
     // Nova compra muda a referência de hoje em diante.
@@ -964,10 +964,10 @@ describe("Cálculos salvos", () => {
     const reread = (
       await app.inject({ method: "GET", url: `/industrial-cost-calculations/${saved.id}` })
     ).json();
-    expect(reread.materials[0].unitCost).toBe("10.000000");
+    expect(reread.materials[0].unitCost).toBe("10.00000000");
 
     const recalculated = await calculate(app, version.id);
-    expect(recalculated.materials[0].unitCost).toBe("20.000000");
+    expect(recalculated.materials[0].unitCost).toBe("20.00000000");
 
     const history = (
       await app.inject({ method: "GET", url: `/products/${product.id}/cost-calculations` })
@@ -1331,4 +1331,155 @@ describe("R-18 — custo industrial por produto", () => {
 
     await app.close();
   });
+});
+
+
+/*
+ * ============================================================================
+ * PREC-SER-01 — o custo unitário de MATERIAL chega ao DTO com oito casas.
+ *
+ * O último residual da serialização técnica. `ReceiptLine.actualUnitCost`,
+ * `ItemCostReference.unitCost` e a oferta lida como custo são `DECIMAL(20,8)`
+ * desde o PREC-MIG-B, e o seletor canônico ainda divide sobre elas — média
+ * ponderada e conversão de unidade. Mas o DTO do cálculo industrial servia
+ * SEIS casas: a migration desfeita na saída.
+ *
+ * Pior que apresentação: esse DTO é o `result` gravado no snapshot do CALC.
+ * O corte não ficava na tela, ficava congelado no documento histórico.
+ *
+ * Agora o caminho inteiro serve `custoUnitario` — oito casas, o scale da
+ * coluna, §57. Formatação visual continua sendo outra coisa e outro item
+ * (PREC-FMT-01).
+ * ============================================================================
+ */
+
+/** O custo de acceptance: 7ª e 8ª casas significativas, e nenhuma delas zero. */
+const CUSTO_8_CASAS_SER = "3.14159265";
+
+describe("PREC-SER-01 — custo unitário de material preserva 8 casas no DTO", () => {
+  it("3,14159265 atravessa o cálculo inteiro sem virar 3,141593", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const material = await createItem("RAW_MATERIAL");
+    await receiveWithCost(app, {
+      supplierId: (await createSupplier()).id,
+      itemId: material.id,
+      quantity: "100",
+      unitCost: CUSTO_8_CASAS_SER,
+    });
+    const { version } = await createStructure(app, {
+      components: [{ itemId: material.id, quantity: "1", unitCode: "kg" }],
+      referenceOutputQuantity: "100",
+    });
+
+    const result = await calculate(app, version.id);
+    const linha = result.materials[0];
+
+    // Inteiro, casa por casa — e não `3.141593`, que era o que saía antes.
+    expect(linha.unitCost).toBe(CUSTO_8_CASAS_SER);
+    expect(linha.unitCost).not.toBe("3.141593");
+
+    // A 7ª e a 8ª casas chegam ao DTO, e são significativas.
+    const decimais = (linha.unitCost as string).split(".")[1]!;
+    expect(decimais).toHaveLength(8);
+    expect(decimais[6]).toBe("6");
+    expect(decimais[7]).toBe("5");
+
+    // Contrato de transporte: string decimal, nunca número JSON.
+    expect(typeof linha.unitCost).toBe("string");
+
+    await app.close();
+  });
+
+  it("o valor cortado ficava CONGELADO no snapshot, não só na tela", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const material = await createItem("RAW_MATERIAL");
+    await receiveWithCost(app, {
+      supplierId: (await createSupplier()).id,
+      itemId: material.id,
+      quantity: "100",
+      unitCost: CUSTO_8_CASAS_SER,
+    });
+    const { version } = await createStructure(app, {
+      components: [{ itemId: material.id, quantity: "1", unitCode: "kg" }],
+      referenceOutputQuantity: "100",
+    });
+    await app.inject({
+      method: "POST",
+      url: `/industrial-costs/${version.id}/activate`,
+      payload: { confirmIncomplete: true },
+    });
+
+    /*
+     * O `result` do CALC é gravado como JSON e relido sem recalcular — é o
+     * documento que embasou a decisão. Enquanto o DTO servia seis casas, era
+     * um custo de oito casas que ficava congelado com seis, para sempre.
+     */
+    const salvo = (
+      await app.inject({
+        method: "POST",
+        url: `/industrial-costs/${version.id}/calculations`,
+        payload: {},
+      })
+    ).json();
+    expect(salvo.materials[0].unitCost).toBe(CUSTO_8_CASAS_SER);
+
+    const relido = (
+      await app.inject({ method: "GET", url: `/industrial-cost-calculations/${salvo.id}` })
+    ).json();
+    expect(relido.materials[0].unitCost).toBe(CUSTO_8_CASAS_SER);
+
+    await app.close();
+  });
+
+  it("sem custo conhecido o DTO devolve null — desconhecido nunca é zero", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    // Material sem compra e sem referência: o seletor devolve NO_COST.
+    const material = await createItem("RAW_MATERIAL");
+    const { version } = await createStructure(app, {
+      components: [{ itemId: material.id, quantity: "1", unitCode: "kg" }],
+      referenceOutputQuantity: "100",
+    });
+
+    const result = await calculate(app, version.id);
+    expect(result.materials[0].unitCost).toBeNull();
+    expect(result.materials[0].unitCost).not.toBe("0.00000000");
+
+    await app.close();
+  });
+
+  it("zero REAL continua zero, e é distinto de desconhecido", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    // Compra a custo zero é informação: brinde, amostra, bonificação.
+    const material = await createItem("RAW_MATERIAL");
+    await receiveWithCost(app, {
+      supplierId: (await createSupplier()).id,
+      itemId: material.id,
+      quantity: "100",
+      unitCost: "0",
+    });
+    const { version } = await createStructure(app, {
+      components: [{ itemId: material.id, quantity: "1", unitCode: "kg" }],
+      referenceOutputQuantity: "100",
+    });
+
+    const result = await calculate(app, version.id);
+    expect(result.materials[0].unitCost).toBe("0.00000000");
+    expect(result.materials[0].unitCost).not.toBeNull();
+
+    await app.close();
+  });
+
+  /*
+   * Sem caso negativo: custo unitário não é grandeza com sinal neste domínio.
+   * A entrada de custo recusa o sinal na fronteira e a média ponderada nasce
+   * de quantidades e custos não negativos. NOT_APPLICABLE.
+   */
 });

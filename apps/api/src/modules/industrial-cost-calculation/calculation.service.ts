@@ -18,6 +18,7 @@ import { FormulationContextIncompleteError } from "../../lib/formulation-math.js
 import { pickCurrentRate } from "../industrial-resources/industrial-resources.service.js";
 import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industrial-costs.errors.js";
 import { diaDaVigencia, resolveManualReference, selectItemCostSource } from "../../lib/cost-source-selection.js";
+import { custoUnitario } from "../../lib/decimal-serialization.js";
 import {
   ManualReferenceMissingError,
   OverrideNotApplicableError,
@@ -32,13 +33,16 @@ type PrismaOrTx = PrismaClient | PrismaTypes.TransactionClient;
 const THOUSAND = new Prisma.Decimal(1000);
 const HUNDRED = new Prisma.Decimal(100);
 
-/** Dinheiro composto com 2 casas; custo unitário mantém 6. */
+/**
+ * Dinheiro COMPOSTO do cálculo industrial: subtotais e totais, 2 casas.
+ *
+ * Total técnico fecha em quatro casas na coluna (§63) e é apresentado em duas;
+ * aqui o valor nasce e é congelado no `result` do CALC já em duas, que é a
+ * precisão do que se lê e confere. O operando não passa por aqui — custo
+ * unitário de material é UNIT_COST e sai por `custoUnitario`, em oito casas.
+ */
 export function money(value: Prisma.Decimal): string {
   return value.toFixed(2);
-}
-
-export function unitMoney(value: Prisma.Decimal): string {
-  return value.toFixed(6);
 }
 
 const versionInclude = {
@@ -566,7 +570,7 @@ export async function calculateIndustrialCost(
       override = {
         reason,
         automaticSource: automatic.source,
-        automaticUnitCost: automatic.unitCost ? unitMoney(automatic.unitCost) : null,
+        automaticUnitCost: automatic.unitCost ? custoUnitario(automatic.unitCost) : null,
         automaticDetails: automatic.details,
         automaticSubtotal: automaticSubtotal ? money(automaticSubtotal) : null,
         // Mesma aritmética da linha (quantidade × custo), nunca um segundo motor.
@@ -609,14 +613,22 @@ export async function calculateIndustrialCost(
       requiredQuantity: requirement.requiredQuantity.toString(),
       unitCode: requirement.stockUnitCode,
       customerSupplied: false,
-      unitCost: resolution.unitCost ? unitMoney(resolution.unitCost) : null,
+      /*
+       * UNIT_COST — oito casas, PREC-SER-01. As três fontes do seletor
+       * canônico (`ReceiptLine.actualUnitCost`, `ItemCostReference.unitCost` e
+       * a oferta lida como custo) são `DECIMAL(20,8)` desde o PREC-MIG-B, e o
+       * que chega aqui pode ainda ter passado por média ponderada ou conversão
+       * de unidade — duas divisões. Servia seis casas: a migration desfeita na
+       * saída, e congelada no `result` do CALC, que é snapshot histórico.
+       */
+      unitCost: resolution.unitCost ? custoUnitario(resolution.unitCost) : null,
       costSource: resolution.source,
       costSourceDetails: resolution.details,
       subtotal: subtotal ? money(subtotal) : null,
       manualReference: manual
         ? {
             referenceId: manual.referenceId,
-            unitCost: unitMoney(manual.unitCost),
+            unitCost: custoUnitario(manual.unitCost),
             declaredUnitCost: manual.declaredUnitCost.toString(),
             declaredUomCode: manual.declaredUomCode,
             effectiveFrom: manual.effectiveFrom.toISOString(),

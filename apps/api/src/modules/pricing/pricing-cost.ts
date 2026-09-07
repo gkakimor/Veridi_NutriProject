@@ -14,7 +14,6 @@ import {
   money,
   scaledUsageQuantity,
   shippingBoxes,
-  unitMoney,
 } from "../industrial-cost-calculation/calculation.service.js";
 // Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
 import "../../lib/decimal.js";
@@ -489,4 +488,4 @@ export async function costForOutputQuantity(
   };
 }
 
-export { HUNDRED, THOUSAND, money, unitMoney, shippingBoxes };
+export { HUNDRED, THOUSAND, money, shippingBoxes };
