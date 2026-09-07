@@ -19,7 +19,7 @@ rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 ## Última capability
 
 **PREC-CMP-02 — a faixa de precificação é a quantidade FÍSICA**, decidido pelo
-PO e publicado em 2026-09-07, merge `MERGE_SHA`, deploy Railway verde — o
+PO e publicado em 2026-09-07, merge `d7b150f`, deploy Railway verde — o
 `preDeploy` respondeu "No pending migrations to apply" e o smoke autenticado
 passou.
 
