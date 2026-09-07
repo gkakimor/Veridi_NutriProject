@@ -4,7 +4,7 @@
 
 ## Onde estamos
 
-**`main` @ `29f1df8`:** baseline v2 + referência manual de custo, revisão do
+**`main` @ `8f1016e`:** baseline v2 + referência manual de custo, revisão do
 "Como funciona", reparo da reconstrução do banco, **Rodadas 1 a 4** (#12, #9, #3,
 #5 com residual aceito em #4; #8A–#8C; #8D, #8H; #15, #16), a **auditoria PREC-01**,
 as **Fundações numéricas A, B, C, P, D e E** e o **#18**, todos aprovados pelo
@@ -16,10 +16,12 @@ compras a produção rastreada, expedição, faturamento, custos, cockpit,
 relatórios, projetos, orçamentos e precificação. Três casos profundos do legado
 rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
-## Última capability — aguardando PO review
+## Última capability
 
-**PREC-CMP-01 — igualdade de quantidade é decimal, nunca de `Number`.** Branch
-`fix/decimal-quantity-comparison`. Aplicar uma política de precificação decide
+**PREC-CMP-01 — igualdade de quantidade é decimal, nunca de `Number`**,
+aprovado pelo PO e publicado em 2026-09-06, merge `8f1016e`, deploy Railway
+verde — o `preDeploy` respondeu "No pending migrations to apply" e o smoke
+autenticado passou. Aplicar uma política de precificação decide
 "esta faixa já existe?" antes de criar cada faixa, e a comparação era
 `Number(a) === Number(b)`. Quantidade de faixa é `DECIMAL(24,12)` — vinte e
 quatro dígitos significativos; um `double` guarda quinze.
