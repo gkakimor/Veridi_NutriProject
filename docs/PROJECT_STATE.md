@@ -16,84 +16,81 @@ compras a produção rastreada, expedição, faturamento, custos, cockpit,
 relatórios, projetos, orçamentos e precificação. Três casos profundos do legado
 rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
-## Última capability
+## Última capability — aguardando PO review
 
-**PREC-SER-01 — a serialização técnica fechada**, aprovado pelo PO e publicado
-em 2026-09-06, merge `140769c`, deploy Railway verde — o `preDeploy` respondeu
-"No pending migrations to apply" e o smoke autenticado passou. O último `.toFixed(6)` técnico da
-API era `unitMoney`, em quatro pontos de custo unitário de MATERIAL: o custo
-resolvido pelo seletor canônico, a fonte automática de um override, a
-referência manual e o custo do lote consumido no CMV. As três fontes são
-`DECIMAL(20,8)` desde o PREC-MIG-B, e o valor ainda passa por média ponderada
-ou conversão de unidade. **Não era só apresentação:** esse DTO é o `result`
-gravado no snapshot do CALC, então o corte ficava congelado no documento
-histórico. A função saiu e os quatro pontos passaram a `custoUnitario` — oito
-casas, o helper que já servia todo o resto da família. Zero mudança de fórmula,
-schema ou persistência; zero migration. A varredura global fechou a matriz por
-categoria e não encontrou mais nenhum caminho reduzindo precisão de forma
-incompatível.
+**PREC-FMT-01 — a formatação decide as casas, e o float não decide nada.**
+Branch `fix/numeric-precision-formatting-final`. Era o último trecho da cadeia:
+o dado chegava à tela com toda a precisão e passava por `Number` antes de virar
+texto. Um `double` tem 53 bits de mantissa, e `9007199254740993,12` não existe
+lá dentro — a tela mostrava `9.007.199.254.740.994,00`. **O erro era na parte
+inteira**, não nas casas decimais.
+
+`lib/decimal-format.ts` formata sobre os dígitos: lê o decimal em string
+(inclusive em notação científica), arredonda com `ROUND_HALF_UP`, agrupa o
+milhar e monta o texto. `formatBRL`, `formatUnitCost`, `formatUnitPriceBRL`,
+`formatPercent` e `formatQuantity` passaram a usá-lo, e o impacto de override
+deixou de fazer `String(Math.abs(Number(x)))`.
+
+**O contrato visual não mudou** — cada caso foi medido contra o
+`Intl.NumberFormat` que estava no lugar, e os **826 testes de tela continuam
+passando sem alteração nenhuma**. `R$ 4,0531`, `R$ 4,05`, `5%`, `0,006122`,
+`≈ 0` e `—` seguem iguais. O que mudou é que a redução de casas passou a ser
+decisão do formatter.
+
+A regra durável é [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §65, com a **matriz
+final** das nove categorias — storage, API, display e arredondamento. Varredura
+do web: zero `Intl.NumberFormat`, zero `parseFloat`, e todo `toLocaleString`
+restante é sobre data. Impressos usam os mesmos formatters, então tela e PDF não
+divergem; o CSV é gerado no backend sobre `Prisma.Decimal`.
+
+**`Number` que fica, classificado:** `CalcHint` refaz a conta escrita na tela
+para conferir contra o valor que o servidor mandou — alarme, não motor,
+`SAFE_PRESENTATION_CHECK`. Nenhum caminho formatado alimenta cálculo, payload ou
+persistência.
+
+**Com isso o #19 fecha.** A fundação numérica está completa: schema,
+persistência, serialização e apresentação. Quatro fronteiras de fechamento
+nomeadas (§60, §62, §63), a assimetria entre elas declarada (§64) e a
+apresentação sem float (§65).
 
 ## Antes dela
 
-**PREC-MIG-E** (`56b563c`, publicado em 2026-09-06). A matriz de §58 aplicada ao
-schema inteiro. As 16 colunas de alvo órfão foram classificadas pelo PAPEL do
-valor, e a decisão do PO separou o que parecia igual:
+**PREC-SER-01** (`140769c`). O último `.toFixed(6)` técnico da API era o custo
+unitário de MATERIAL, servido em seis casas de colunas `DECIMAL(20,8)` — e o DTO
+é o `result` gravado no snapshot do CALC, então o corte ficava congelado no
+documento histórico. Quatro pontos passaram a `custoUnitario`. Zero migration.
 
-- **PREC-E-01, uma migration, uma coluna.**
-  `QuoteLine.industrialCostPerUnitSnapshot` de `Decimal(18,6)` para
-  `DECIMAL(24,12)`, sem backfill. É TECHNICAL_RESULT derivado — `total ÷
-  quantidade da faixa` —, cópia de `PricingTier.costPerUnitSnapshot`, que já era
-  `24,12`. Medido antes de migrar: `(1000,00 ÷ 300)` vale `3,333333333333` e a
-  coluna guardava `3,333333`;
-- **PREC-E-02, zero migration.** Os seis totais de `PricingTier` **mantêm**
-  `DECIMAL(14,4)` — nenhum consumidor recebe mais de duas casas, e ampliar
-  guardaria precisão que a própria saída corta. Faltava **fronteira**:
-  `fecharTotalTecnicoPersistido`, quatro casas, `ROUND_HALF_UP` declarado. A
-  categoria **TECHNICAL_TOTAL** virou regra durável (§63), com o princípio que a
-  sustenta — a escala acompanha o papel do valor e o alcance real do dado, não a
-  escala da coluna vizinha. São **quatro fronteiras nomeadas**: 12 casas para
-  resultado técnico (§62), 8 para preço técnico (§60 A), 4 para total técnico
-  (§63) e 4 para o fechamento comercial (§60 B);
-- **F-2 e F-3 viraram §64** — fronteiras diferentes não se reproduzem entre si, e
-  isso é regra, não defeito. Com o limite: a assimetria vive DENTRO da fronteira,
-  e divergência **visível** entre duas telas para a mesma grandeza comercial
-  continua proibida;
-- **nove colunas intocadas, e não por dúvida** — `IndustrialCostCalculation` e
-  `ProductionOrderCostSnapshot` já recebem o valor fechado em duas casas pelo
-  motor. Quatro delas não são lidas de volta: `CURRENTLY_REDUNDANT`, **não**
-  candidatas a remoção.
-
-Junto, **higiene DEV autorizada pelo PO**: banco local reconstruído pelo caminho
-oficial (`local-db-reset.mjs`), backup verificado antes do drop, e o
-`_prisma_migrations` voltou a bater com o repositório — a linha órfã
-`20260926090000_...` desapareceu **sem edição manual do ledger**.
+**PREC-MIG-E** (`56b563c`). A matriz de §58 aplicada ao schema inteiro. As 16
+colunas de alvo órfão classificadas pelo PAPEL do valor: **PREC-E-01** migrou
+uma — `QuoteLine.industrialCostPerUnitSnapshot` para `DECIMAL(24,12)`, porque
+`(1000,00 ÷ 300)` vale `3,333333333333` e a coluna guardava `3,333333`;
+**PREC-E-02** manteve os seis totais de `PricingTier` em `14,4` e deu a eles a
+**fronteira** que faltava (§63, TECHNICAL_TOTAL). F-2 e F-3 viraram §64. Nove
+colunas ficaram intocadas porque o motor já as fecha em duas casas antes de
+gravar. Junto, higiene DEV autorizada: banco local reconstruído pelo caminho
+oficial, com backup antes do drop, e o `_prisma_migrations` voltou a bater com o
+repositório sem edição manual.
 
 **PREC-MIG-D** (`8a40b52`). As três colunas `14,6` de resultado técnico da
-precificação em `DECIMAL(24,12)` — comissão e contribuição por unidade na faixa,
-e a contribuição congelada na linha do Orçamento —, sem backfill. Regra durável:
-a **terceira fronteira** (§62), doze casas com `ROUND_HALF_UP` declarado.
-Resultado técnico não é preço, mesmo sendo dinheiro por unidade.
+precificação em `DECIMAL(24,12)`, sem backfill — a **terceira fronteira** (§62),
+doze casas com `ROUND_HALF_UP` declarado. Resultado técnico não é preço, mesmo
+sendo dinheiro por unidade.
 
 **#18** (`34a5424`). O rodapé da Ordem de Compra virou a soma das linhas
-impressas — `40,53 + 0,13 + 0,13` fecha `40,79`, não `40,78` (§61) —, com
-`ROUND_HALF_UP` declarado, operando intocado e uma conta só para todas as
-superfícies. Zero migration; a OC não persiste dinheiro, então mudou a conta que
-deriva, não o dado.
+impressas — `40,79`, não `40,78` (§61) —, com o operando intocado e uma conta só
+para todas as superfícies. Zero migration.
 
 **PREC-P-TECH e as fundações P, C, B e A** (`b358fd8`, `e94971f`, `e7656ab`,
-`b5f6089`, `5f855cd`). Os quatro preços técnicos da precificação em
-`DECIMAL(20,8)`, com a **fronteira** de §60 como regra durável: preço técnico
-(8 casas) e preço comercial (4) são dois números, e a passagem é fechamento
-explícito — `QuoteLine.unitPrice` fica em `14,4` por decisão do PO, e preço
-acima do scale é recusado dos dois lados. Antes: o preço da OC em `20,8`
-(`4.05318764::decimal(14,4)` devolvia `4.0532`), servido também no Recebimento;
+`b5f6089`, `5f855cd`). Os quatro preços técnicos em `DECIMAL(20,8)`, com a
+**fronteira** de §60: preço técnico (8 casas) e preço comercial (4) são dois
+números, e a passagem é fechamento explícito. Antes: o preço da OC em `20,8`;
 pureza e overage em `DECIMAL(9,6)`, de onde saiu a **recusa acima do scale como
 regra de produto** (§58); custo unitário em `DECIMAL(20,8)`, com
 `ReceiptLine.actualUnitCost` como origem de TODO custo real; e a base — motor
 decimal em 40 dígitos numa configuração única, com 43 colunas em
 `DECIMAL(24,12)`. Antes disso, **auditoria PREC-01** (`0305704`) e **Rodadas 1 a
 4** — #15 e #16 (`33ee1cd`), #8D e #8H (`b89f9a4`), #8A–#8C (`dfb2673`). Regras
-§53 a §64; detalhe em [`BACKLOG.md`](BACKLOG.md), seção G.
+§53 a §65; detalhe em [`BACKLOG.md`](BACKLOG.md), seção G.
 
 ## Estado operacional do repositório
 
@@ -108,10 +105,10 @@ migrations aplicam num banco vazio só com o repositório —
 
 ## Próxima capability
 
-**PREC-FMT-01** — `formatUnitCost` e `formatBRL` usam `Number` para apresentação.
-A auditoria do PREC-SER-01 confirmou que **nenhum** caminho da tela recalcula
-negócio a partir disso: `CalcHint` refaz a conta só para conferir a explicação
-contra o valor que o servidor mandou. É o último item aberto de #19.
+**PREC-CMP-01** — `pricing-policies.service.ts` compara quantidade de faixa por
+`Number(a) === Number(b)`. Igualdade e idempotência sobre `DECIMAL(24,12)`, não
+formatação: os valores reais de faixa são exatos em `double`, mas uma faixa com
+casas decimais poderia colidir. Item novo, aberto nesta rodada.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11) — não bloqueia os itens internos já decididos pelo PO.
@@ -119,10 +116,9 @@ Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 
 ## Backlog aberto
 
-[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#20 e #18
-resolvidos; #19 ABERTO / PARCIAL** — migrations (A, B, C, P, D, E) e
-serialização (PREC-SER-01) completas. Fechar o item depende só do PREC-FMT-01,
-e é decisão do PO. **Seguinte:** PREC-FMT-01. **Roadmap:** PREC-UI-01 a
+[`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#18, #19 e #20
+RESOLVIDOS — a fundação numérica está completa**, de PREC-MIG-A a
+PREC-FMT-01. **Seguinte:** PREC-CMP-01. **Roadmap:** PREC-UI-01 a
 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
 **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não determinística sob
 paralelismo — uma falha isolada em `finished-goods.test.ts` nesta rodada, não

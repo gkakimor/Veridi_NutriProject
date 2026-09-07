@@ -1148,6 +1148,48 @@ persistido perde precisão por isso —, é comparação de idempotência.
 
 ---
 
+## 12.4 Fechamento — PREC-FMT-01 e o #19 (2026-09-06)
+
+O último trecho da cadeia era da API até o pixel. Todo formatter de dinheiro,
+percentual e quantidade convertia o decimal para `Number` antes de
+`toLocaleString`, e um `double` de 53 bits não representa
+`9007199254740993,12` — vira `9007199254740994`. Não era questão de casas
+decimais: a **parte inteira** mudava.
+
+`apps/web/src/lib/decimal-format.ts` formata sobre os dígitos: lê o decimal em
+string (inclusive em notação científica), arredonda com `ROUND_HALF_UP`, agrupa
+o milhar e monta o texto. `formatBRL`, `formatUnitCost`, `formatUnitPriceBRL`,
+`formatPercent` e `formatQuantity` passaram a usá-lo. **O contrato visual não
+mudou** — cada caso foi medido contra o `Intl.NumberFormat` que estava no lugar,
+e os 826 testes de tela continuam passando sem alteração. Regra durável:
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §65, com a matriz final por categoria.
+
+Varredura global do web: zero `Intl.NumberFormat`, zero `parseFloat`, e todo
+`toLocaleString` restante é sobre **data**. Os impressos usam os mesmos
+formatters, então tela e PDF continuam consistentes; o CSV é gerado no backend
+sobre `Prisma.Decimal`, sem conversão.
+
+**Usos de `Number` que permanecem, classificados como
+`SAFE_PRESENTATION_CHECK`:** `CalcHint` refaz a conta escrita na tela para
+comparar com o valor que o servidor mandou, dentro de uma tolerância derivada
+das casas exibidas — é alarme, não motor, e nunca produz valor exibido, enviado
+ou persistido. Os demais são comparações de limite para habilitar controle ou
+decidir se um bloco aparece.
+
+**Fora de escopo, registrados:**
+
+- **#21** — `print/documents.tsx:353` divide em float para exibir a parte da
+  receita (`Number(requiredQuantity) / numberOfParts`). Item próprio, anterior a
+  esta capability;
+- **PREC-CMP-01** — `pricing-policies.service.ts` compara quantidade de faixa
+  por `Number(a) === Number(b)`. Igualdade e idempotência, não formatação.
+
+**Com isso o #19 fecha.** Schema, persistência, serialização e apresentação
+estão cobertos, e nenhuma perda incompatível com a categoria de cada valor
+sobrou entre eles.
+
+---
+
 ## 13. Plano de testes obrigatório da capability de implementação
 
 Nenhum widening entra sem estes testes. A auditoria mediu o comportamento atual;
