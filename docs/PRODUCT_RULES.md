@@ -4057,3 +4057,29 @@ tolerância derivada das casas exibidas. Ele nunca produz o valor mostrado nem
 o valor salvo — é alarme, não motor. Uso classificado como
 `SAFE_PRESENTATION_CHECK`; qualquer `Number` que **produza** um valor exibido,
 enviado ou persistido continua proibido.
+
+## §66 — Decimal de domínio não se compara por `Number`
+
+Decisão de Product Ownership de 2026-09-06, na aprovação do PREC-CMP-01.
+
+**Igualdade e ordenação de valor `Decimal` de domínio usam a comparação do
+próprio `Decimal`** — `equals`, `comparedTo`, `greaterThan` —, nunca conversão
+para `Number`. Vale para quantidade, custo, preço, resultado técnico e total: a
+regra é da representação, não da categoria.
+
+Um `double` guarda ~15 dígitos significativos, e uma quantidade
+`DECIMAL(24,12)` tem vinte e quatro. `999999999999,000000000001` e
+`999999999999,000000000002` são duas quantidades diferentes que viram o mesmo
+`999999999999` na conversão.
+
+**O dano não é visual, é de decisão.** Onde a comparação responde "este já
+existe?", a colisão faz o sistema pular em silêncio um registro que deveria
+criar — foi o que acontecia ao aplicar uma política de precificação: a política
+declarava duas faixas e a versão nascia com uma.
+
+**A comparação é numérica, não textual.** `"1000"`, `"1000.0"` e
+`"1000.000000000000"` são o mesmo número e a mesma faixa. Comparar strings
+resolveria o float e criaria um erro pior.
+
+`Number` continua legítimo sobre `Int` — contadores, número de parte, contagem
+de lotes — e em verificação de apresentação (§65).

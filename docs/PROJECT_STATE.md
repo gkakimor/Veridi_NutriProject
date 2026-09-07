@@ -16,47 +16,39 @@ compras a produção rastreada, expedição, faturamento, custos, cockpit,
 relatórios, projetos, orçamentos e precificação. Três casos profundos do legado
 rodaram ponta a ponta contra a interface publicada (VAL-LEG-01 a 03, PASS).
 
-## Última capability
+## Última capability — aguardando PO review
 
-**PREC-FMT-01 — a formatação decide as casas, e o float não decide nada**,
-aprovado pelo PO e publicado em 2026-09-06, merge `29f1df8`, deploy Railway
-verde — o `preDeploy` respondeu "No pending migrations to apply", o bundle
-servido é o desta capability e o smoke autenticado passou em treze telas. Era o
-último trecho da cadeia:
-o dado chegava à tela com toda a precisão e passava por `Number` antes de virar
-texto. Um `double` tem 53 bits de mantissa, e `9007199254740993,12` não existe
-lá dentro — a tela mostrava `9.007.199.254.740.994,00`. **O erro era na parte
-inteira**, não nas casas decimais.
+**PREC-CMP-01 — igualdade de quantidade é decimal, nunca de `Number`.** Branch
+`fix/decimal-quantity-comparison`. Aplicar uma política de precificação decide
+"esta faixa já existe?" antes de criar cada faixa, e a comparação era
+`Number(a) === Number(b)`. Quantidade de faixa é `DECIMAL(24,12)` — vinte e
+quatro dígitos significativos; um `double` guarda quinze.
 
-`lib/decimal-format.ts` formata sobre os dígitos: lê o decimal em string
-(inclusive em notação científica), arredonda com `ROUND_HALF_UP`, agrupa o
-milhar e monta o texto. `formatBRL`, `formatUnitCost`, `formatUnitPriceBRL`,
-`formatPercent` e `formatQuantity` passaram a usá-lo, e o impacto de override
-deixou de fazer `String(Math.abs(Number(x)))`.
+**O dano não era visual, era de decisão.** Reproduzido no serviço real antes de
+corrigir: com uma faixa de `999999999999,000000000001` já no rascunho, uma
+política trazendo `...000000000002` tinha a faixa **pulada em silêncio** pelo
+`continue`, e a versão ficava com uma faixa onde a política declarava duas.
 
-**O contrato visual não mudou** — cada caso foi medido contra o
-`Intl.NumberFormat` que estava no lugar, e os **826 testes de tela continuam
-passando sem alteração nenhuma**. `R$ 4,0531`, `R$ 4,05`, `5%`, `0,006122`,
-`≈ 0` e `—` seguem iguais. O que mudou é que a redução de casas passou a ser
-decisão do formatter.
+A correção é `Decimal.equals` — o mesmo critério que `createPricingTier` já
+usava para recusar duplicata; o repositório tem 82 comparações canônicas e esta
+era a exceção. Zero migration, zero mudança de API, zero formatação tocada.
+Regra durável: [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §66.
 
-A regra durável é [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §65, com a **matriz
-final** das nove categorias — storage, API, display e arredondamento. Varredura
-do web: zero `Intl.NumberFormat`, zero `parseFloat`, e todo `toLocaleString`
-restante é sobre data. Impressos usam os mesmos formatters, então tela e PDF não
-divergem; o CSV é gerado no backend sobre `Prisma.Decimal`.
+**Varredura da mesma classe no backend:** nenhum outro
+`UNSAFE_DECIMAL_COMPARISON`. Os `Number` restantes são sobre `Int` (contadores,
+número de parte, contagem de lotes), validação de limite contra constante e
+ordenação de booleano. Nenhuma ordenação de `Decimal` via `Number`.
 
-**`Number` que fica, classificado:** `CalcHint` refaz a conta escrita na tela
-para conferir contra o valor que o servidor mandou — alarme, não motor,
-`SAFE_PRESENTATION_CHECK`. Nenhum caminho formatado alimenta cálculo, payload ou
-persistência.
-
-**Com isso o #19 fecha.** A fundação numérica está completa: schema,
-persistência, serialização e apresentação. Quatro fronteiras de fechamento
-nomeadas (§60, §62, §63), a assimetria entre elas declarada (§64) e a
-apresentação sem float (§65).
+**Achado registrado, não corrigido:** a mesma comparação ignora `uomCode` —
+`1 kg` e `1000 g` são a mesma faixa física e seriam tratadas como duas.
+Converter antes de comparar é decisão de domínio, e virou **PREC-CMP-02**.
 
 ## Antes dela
+
+**PREC-FMT-01** (`29f1df8`). A formatação deixou de passar por `Number`:
+`9007199254740993,12` aparecia como `...994,00` porque o `double` já tinha
+perdido o dígito antes de formatar. `lib/decimal-format.ts` formata sobre os
+dígitos, com o contrato visual inalterado (§65). **Com ele o #19 fechou.**
 
 **PREC-SER-01** (`140769c`). O último `.toFixed(6)` técnico da API era o custo
 unitário de MATERIAL, servido em seis casas de colunas `DECIMAL(20,8)` — e o DTO
@@ -108,10 +100,11 @@ migrations aplicam num banco vazio só com o repositório —
 
 ## Próxima capability
 
-**PREC-CMP-01** — `pricing-policies.service.ts` compara quantidade de faixa por
-`Number(a) === Number(b)`. Igualdade e idempotência sobre `DECIMAL(24,12)`, não
-formatação: os valores reais de faixa são exatos em `double`, mas uma faixa com
-casas decimais poderia colidir. Item novo, aberto nesta rodada.
+**#21** — `print/documents.tsx:353` divide em float para exibir a parte da
+receita. É o último ponto do impresso fora da regra de §65.
+
+**PREC-CMP-02** — a comparação de faixa ignora a unidade de medida. Aberto
+nesta rodada, aguarda decisão do PO.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11) — não bloqueia os itens internos já decididos pelo PO.
@@ -120,8 +113,8 @@ Roteiro em [`ROTEIRO_VALIDACAO_CLIENTE.md`](ROTEIRO_VALIDACAO_CLIENTE.md).
 ## Backlog aberto
 
 [`BACKLOG.md`](BACKLOG.md). Zero CRITICAL, zero blocker. **#18, #19 e #20
-RESOLVIDOS — a fundação numérica está completa**, de PREC-MIG-A a
-PREC-FMT-01. **Seguinte:** PREC-CMP-01. **Roadmap:** PREC-UI-01 a
+RESOLVIDOS — a fundação numérica está completa**, de PREC-MIG-A a PREC-FMT-01,
+com PREC-CMP-01 fechando a comparação. **Seguinte:** #21 e PREC-CMP-02. **Roadmap:** PREC-UI-01 a
 08. **Quando autorizada:** #8E, #8F, #8G. **Aguardando a Veridi:** #7 e #11.
 **Manutenção:** #10 e #14. **Abertos:** #17 (suíte da API não determinística sob
 paralelismo — uma falha isolada em `finished-goods.test.ts` nesta rodada, não

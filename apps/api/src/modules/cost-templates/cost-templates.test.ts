@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
+import { Prisma } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
+import "../../lib/decimal.js";
 
 /**
  * Bibliotecas de Estrutura de Custos e de Política de Precificação.
@@ -1518,6 +1520,153 @@ describe("Aplicar política — o preço nasce do custo do produto", () => {
 
     await producao.close();
   });
+
+  /*
+   * ==========================================================================
+   * PREC-CMP-01 — igualdade de quantidade é decimal, nunca de `Number`.
+   *
+   * Aplicar uma política sobre uma versão que já tem faixas precisa decidir
+   * "esta faixa já existe?". A comparação era `Number(a) === Number(b)`, e
+   * quantidade de faixa é `DECIMAL(24,12)`: doze dígitos inteiros e doze
+   * casas — vinte e quatro dígitos significativos. Um `double` guarda cerca de
+   * quinze.
+   *
+   * O efeito não é visual: quando dois valores distintos colidem na conversão,
+   * o `continue` **pula em silêncio uma faixa que a política declarou**, e a
+   * versão nasce com menos faixas do que foi aprovado.
+   * ==========================================================================
+   */
+
+  /** Duas quantidades distintas em `DECIMAL(24,12)` que o `double` iguala. */
+  const COLIDEM_EM_NUMBER = ["999999999999.000000000001", "999999999999.000000000002"];
+
+  it("PREC-CMP-01: o `Number` colide onde o Decimal distingue — a classe do erro", () => {
+    const [a, b] = COLIDEM_EM_NUMBER;
+
+    // Os dois cabem em `DECIMAL(24,12)` e são valores diferentes.
+    expect(a).not.toBe(b);
+    expect(new Prisma.Decimal(a!).equals(new Prisma.Decimal(b!))).toBe(false);
+
+    // E o `double` diz que são o mesmo número: as doze casas somem inteiras.
+    expect(Number(a)).toBe(Number(b));
+    expect(Number(a)).toBe(999999999999);
+
+    // A comparação canônica também acerta a igualdade que importa: o mesmo
+    // valor escrito de formas diferentes continua sendo a mesma faixa.
+    expect(new Prisma.Decimal("1000").equals(new Prisma.Decimal("1000.000000000000"))).toBe(true);
+    expect(new Prisma.Decimal("1000").equals(new Prisma.Decimal("1000.0"))).toBe(true);
+    expect(new Prisma.Decimal("0").equals(new Prisma.Decimal("0.000000000000"))).toBe(true);
+
+    // E distingue a menor diferença que a coluna consegue guardar.
+    expect(
+      new Prisma.Decimal("1000.000000000001").equals(new Prisma.Decimal("1000.000000000002")),
+    ).toBe(false);
+
+    /*
+     * Sobre `MAX_SAFE_INTEGER`: o maior INTEIRO que cabe em `DECIMAL(24,12)` é
+     * `999999999999` — doze dígitos —, e ele está bem abaixo do limite do
+     * `double`. Por isso a colisão desta família nunca vem do inteiro sozinho:
+     * vem da soma dos vinte e quatro dígitos significativos, que é o caso
+     * acima. Um exemplo com `9007199254740993` não caberia na coluna.
+     */
+    expect(Number.isSafeInteger(999999999999)).toBe(true);
+    expect(999999999999).toBeLessThan(Number.MAX_SAFE_INTEGER);
+  });
+
+  it("PREC-CMP-01: a faixa que só difere na 12ª casa NÃO é tomada por existente", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const [a, b] = COLIDEM_EM_NUMBER;
+
+    /*
+     * O cenário que exercita a comparação de verdade: o rascunho já TEM uma
+     * faixa, e a política traz outra que colide com ela na conversão para
+     * `Number`. Sem faixa prévia o `find` nunca acha nada e a linha não é
+     * exercitada — foi por isso que o defeito sobreviveu.
+     */
+    const { product, calc } = await produtoComCusto(app, "6");
+    const primeira = await criarPolitica(app, [{ quantity: a!, margem: "35" }]);
+    const rascunho = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/pricing/from-policy`,
+      payload: {
+        pricingPolicyVersionId: primeira.activeVersion.id,
+        industrialCostCalculationId: calc.id,
+      },
+    });
+    expect(rascunho.statusCode, rascunho.body).toBe(201);
+    expect(rascunho.json().tiers).toHaveLength(1);
+
+    // Segunda política, quantidade diferente só na décima segunda casa.
+    const segunda = await criarPolitica(app, [{ quantity: b!, margem: "32" }]);
+    const resposta = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/pricing/from-policy`,
+      payload: {
+        pricingPolicyVersionId: segunda.activeVersion.id,
+        industrialCostCalculationId: calc.id,
+      },
+    });
+    expect(resposta.statusCode, resposta.body).toBe(201);
+
+    /*
+     * Com `Number(a) === Number(b)` a segunda faixa seria tomada por existente
+     * e o `continue` a pularia em silêncio: a versão ficaria com UMA faixa,
+     * e a quantidade que a política declarou simplesmente não existiria.
+     */
+    const quantidades = (resposta.json().tiers as { quantity: string }[])
+      .map((t) => new Prisma.Decimal(t.quantity))
+      .sort((x, y) => x.comparedTo(y));
+    expect(quantidades, "a faixa nova foi pulada por colisão de Number").toHaveLength(2);
+    expect(quantidades[0]!.equals(new Prisma.Decimal(a!))).toBe(true);
+    expect(quantidades[1]!.equals(new Prisma.Decimal(b!))).toBe(true);
+
+    await app.close();
+  });
+
+  it("PREC-CMP-01: a mesma quantidade escrita de outro jeito não duplica", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    // A política declara `1000.000000000000`; a versão nasce da anterior, que
+    // já tem `1000`. É o mesmo número, e a faixa não pode ser criada de novo.
+    const { activeVersion } = await criarPolitica(app, [
+      { quantity: "1000.000000000000", margem: "35" },
+    ]);
+    const { product, calc } = await produtoComCusto(app, "6");
+
+    const primeira = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/pricing/from-policy`,
+      payload: { pricingPolicyVersionId: activeVersion.id, industrialCostCalculationId: calc.id },
+    });
+    expect(primeira.statusCode, primeira.body).toBe(201);
+    const rascunho = primeira.json();
+    expect(rascunho.tiers).toHaveLength(1);
+
+    /*
+     * Aplicar de novo devolve o MESMO rascunho — `createPricingVersion` recusa
+     * abrir um segundo — e a faixa não é recriada. É a idempotência que a
+     * comparação decide, e ela precisa valer para representações diferentes do
+     * mesmo número.
+     */
+    const segunda = await app.inject({
+      method: "POST",
+      url: `/products/${product.id}/pricing/from-policy`,
+      payload: { pricingPolicyVersionId: activeVersion.id, industrialCostCalculationId: calc.id },
+    });
+    expect(segunda.statusCode, segunda.body).toBe(201);
+    const relido = segunda.json();
+    expect(relido.id).toBe(rascunho.id);
+    expect(relido.tiers).toHaveLength(1);
+    expect(new Prisma.Decimal(relido.tiers[0].quantity).equals(new Prisma.Decimal("1000"))).toBe(
+      true,
+    );
+
+    await app.close();
+  });
+
 });
 
 describe("Nenhum documento operacional aponta para as matrizes", () => {
