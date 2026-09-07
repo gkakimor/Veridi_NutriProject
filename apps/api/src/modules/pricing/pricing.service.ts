@@ -26,7 +26,11 @@ import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization
 import { fecharPrecoTecnicoPersistido } from "../../lib/technical-price.js";
 import { fecharResultadoTecnicoPersistido } from "../../lib/technical-result.js";
 import { fecharTotalTecnicoPersistido } from "../../lib/technical-total.js";
-import { isUomCompatible } from "../items/uom.js";
+import {
+  normalizarQuantidadeDeFaixa,
+  quantidadesDeFaixaEquivalentes,
+  unidadeCanonicaDaFaixa,
+} from "./tier-quantity.js";
 import {
   CalculationProductMismatchError,
   CalculationRequiredError,
@@ -837,17 +841,26 @@ async function resolveTierInput(
   const quantity = new Prisma.Decimal(input.quantity);
   if (quantity.lessThanOrEqualTo(0)) throw new InvalidTierQuantityError();
 
-  const finishedUnit = version.product.finishedProductItem?.unitCode ?? "un";
+  const finishedUnit = unidadeCanonicaDaFaixa(version.product.finishedProductItem?.unitCode);
   const uomCode = input.uomCode ?? finishedUnit;
   const units = await prisma.unitOfMeasure.findMany();
-  if (!isUomCompatible(uomCode, finishedUnit, units)) {
-    throw new InvalidTierQuantityError(
-      `Unidade ${uomCode} não é compatível com a unidade do produto acabado (${finishedUnit}).`,
-    );
-  }
 
-  const duplicated = version.tiers.find((tier) => tier.quantity.equals(quantity));
-  if (duplicated) throw new DuplicatedTierQuantityError(quantity.toString());
+  /*
+   * A faixa é identificada pela QUANTIDADE FÍSICA na unidade do produto
+   * acabado — PREC-CMP-02. `normalizarQuantidadeDeFaixa` recusa unidade de
+   * outra dimensão com a mesma mensagem de antes e converte o resto pela
+   * conversão oficial.
+   */
+  const quantidadeCanonica = normalizarQuantidadeDeFaixa(
+    { quantity, uomCode },
+    finishedUnit,
+    units,
+  );
+
+  const duplicated = version.tiers.find((tier) =>
+    quantidadesDeFaixaEquivalentes(tier, quantidadeCanonica, finishedUnit, units),
+  );
+  if (duplicated) throw new DuplicatedTierQuantityError(quantidadeCanonica.toString());
 
   const targetMargin =
     input.targetContributionMarginPercent != null
@@ -857,8 +870,15 @@ async function resolveTierInput(
   assertPercents(input.priceMode === "TARGET_MARGIN" ? targetMargin : null, commission);
 
   return {
-    quantity,
-    uomCode,
+    /*
+     * A faixa nasce NA UNIDADE CANÔNICA DO PRODUTO, não na unidade textual que
+     * a entrada usou — decisão de PO no PREC-CMP-02. Pedir `1 kg` num produto
+     * que trabalha em `g` grava `1000 g`: a versão inteira passa a falar uma
+     * língua só, e "qual faixa é esta?" deixa de depender de conversão na
+     * leitura. A prévia mostra exatamente o que será gravado.
+     */
+    quantity: quantidadeCanonica,
+    uomCode: finishedUnit,
     priceMode: input.priceMode,
     targetContributionMarginPercent: targetMargin,
     commissionPercent: commission,
@@ -925,11 +945,27 @@ export async function updatePricingTier(
 
   const quantity = input.quantity ? new Prisma.Decimal(input.quantity) : tier.quantity;
   if (quantity.lessThanOrEqualTo(0)) throw new InvalidTierQuantityError();
-  if (
-    input.quantity &&
-    version.tiers.some((other) => other.id !== tierId && other.quantity.equals(quantity))
-  ) {
-    throw new DuplicatedTierQuantityError(quantity.toString());
+  if (input.quantity) {
+    /*
+     * Mesma identidade da criação — PREC-CMP-02. A quantidade editada vem NA
+     * UNIDADE DA PRÓPRIA FAIXA (é o que a tela mostra ao lado do número), e a
+     * comparação com as irmãs acontece na unidade do produto acabado. A edição
+     * não reescreve a unidade da faixa: mudar unidade em silêncio numa faixa
+     * existente seria outra operação.
+     */
+    const unidadeCanonica = unidadeCanonicaDaFaixa(version.product.finishedProductItem?.unitCode);
+    const units = await prisma.unitOfMeasure.findMany();
+    const quantidadeCanonica = normalizarQuantidadeDeFaixa(
+      { quantity, uomCode: tier.uomCode },
+      unidadeCanonica,
+      units,
+    );
+    const duplicada = version.tiers.some(
+      (other) =>
+        other.id !== tierId &&
+        quantidadesDeFaixaEquivalentes(other, quantidadeCanonica, unidadeCanonica, units),
+    );
+    if (duplicada) throw new DuplicatedTierQuantityError(quantidadeCanonica.toString());
   }
 
   const priceMode = input.priceMode ?? tier.priceMode;

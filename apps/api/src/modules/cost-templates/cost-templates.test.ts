@@ -178,7 +178,14 @@ async function criarRecurso(
 }
 
 /** Produto com formulação ativa — a estrutura precisa de uma receita. */
-async function criarProduto(app: App) {
+/**
+ * `unidadeDoAcabado` existe por causa do PREC-CMP-02: a unidade canônica da
+ * faixa é a do Item de produto acabado, e um produto vendido a granel (`g`,
+ * `kg`) é configuração legítima do domínio — todas as unidades de massa estão
+ * em `units_of_measure`. Sem o parâmetro não haveria como exercitar duas
+ * unidades compatíveis num produto real.
+ */
+async function criarProduto(app: App, unidadeDoAcabado = "un") {
   const prisma = getPrisma();
   const m = marker();
   const acabado = await prisma.item.create({
@@ -186,7 +193,7 @@ async function criarProduto(app: App) {
       type: "FINISHED_PRODUCT",
       code: `PA-TEC-${m}`,
       name: `Acabado TEC ${m}`,
-      unitCode: "un",
+      unitCode: unidadeDoAcabado,
       controlsLot: true,
       controlsExpiry: false,
       requiresQualityRelease: false,
@@ -1056,7 +1063,7 @@ describe("Biblioteca de políticas de precificação", () => {
 describe("Aplicar política — o preço nasce do custo do produto", () => {
   async function criarPolitica(
     app: App,
-    faixas: { quantity: string; margem: string; comissao?: string }[],
+    faixas: { quantity: string; margem: string; comissao?: string; uom?: string }[],
   ) {
     const policy = (
       await app.inject({
@@ -1072,6 +1079,7 @@ describe("Aplicar política — o preço nasce do custo do produto", () => {
       payload: {
         tiers: faixas.map((f) => ({
           quantity: f.quantity,
+          ...(f.uom ? { uomCode: f.uom } : {}),
           targetContributionMarginPercent: f.margem,
           commissionPercent: f.comissao ?? "5",
         })),
@@ -1084,10 +1092,10 @@ describe("Aplicar política — o preço nasce do custo do produto", () => {
     return { policy, activeVersion: ativa.json() };
   }
 
-  async function produtoComCusto(app: App, horas: string) {
+  async function produtoComCusto(app: App, horas: string, unidadeDoAcabado = "un") {
     const mao = await criarRecurso(app, "LABOR", "40");
     const energia = await criarRecurso(app, "ENERGY", "0.92");
-    const { product } = await criarProduto(app);
+    const { product } = await criarProduto(app, unidadeDoAcabado);
     const ec = (
       await app.inject({
         method: "POST",
@@ -1663,6 +1671,195 @@ describe("Aplicar política — o preço nasce do custo do produto", () => {
     expect(new Prisma.Decimal(relido.tiers[0].quantity).equals(new Prisma.Decimal("1000"))).toBe(
       true,
     );
+
+    await app.close();
+  });
+
+  /*
+   * PREC-CMP-02 — a faixa é identificada pela QUANTIDADE FÍSICA na unidade do
+   * produto acabado.
+   *
+   * O PREC-CMP-01 tirou o `Number` da comparação; faltava a unidade entrar na
+   * pergunta. Comparar `quantity` crua errava nos dois sentidos: `1 kg` e
+   * `1000 g` viravam duas faixas para a mesma quantidade de produto, e `500 g`
+   * e `500 kg` viravam uma só — quinhentas vezes mais produto tratado como
+   * repetição.
+   *
+   * O produto destes testes é vendido a granel, em gramas. Todas as unidades
+   * usadas existem em `units_of_measure`; nenhuma é inventada para o teste.
+   */
+  async function aplicar(app: App, productId: string, versionId: string, calcId: string) {
+    return app.inject({
+      method: "POST",
+      url: `/products/${productId}/pricing/from-policy`,
+      payload: { pricingPolicyVersionId: versionId, industrialCostCalculationId: calcId },
+    });
+  }
+
+  it("PREC-CMP-02: a faixa nasce na unidade canônica do produto — 1 kg vira 1000 g", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { product, calc } = await produtoComCusto(app, "6", "g");
+    const { activeVersion, policy } = await criarPolitica(app, [
+      { quantity: "1", margem: "35", uom: "kg" },
+    ]);
+
+    const resposta = await aplicar(app, product.id, activeVersion.id, calc.id);
+    expect(resposta.statusCode, resposta.body).toBe(201);
+    const tiers = resposta.json().tiers as { quantity: string; uomCode: string }[];
+
+    expect(tiers).toHaveLength(1);
+    expect(tiers[0]!.uomCode, "a faixa deve nascer na unidade do produto").toBe("g");
+    expect(new Prisma.Decimal(tiers[0]!.quantity).equals(new Prisma.Decimal("1000"))).toBe(true);
+
+    /*
+     * O TEMPLATE não é reescrito: ele continua declarando `1 kg`, que é a
+     * intenção comercial de quem o escreveu. Aplicar é copiar e adaptar ao
+     * contexto do produto, não alterar a biblioteca.
+     */
+    const relida = await app.inject({ method: "GET", url: `/pricing-policies/${policy.id}` });
+    const faixaDoTemplate = relida.json().activeVersion.tiers[0];
+    expect(faixaDoTemplate.uomCode).toBe("kg");
+    expect(new Prisma.Decimal(faixaDoTemplate.quantity).equals(new Prisma.Decimal("1"))).toBe(true);
+
+    await app.close();
+  });
+
+  it("PREC-CMP-02: 1 kg não duplica uma faixa de 1000 g que já existe", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { product, calc } = await produtoComCusto(app, "6", "g");
+    // O rascunho nasce com 1000 g.
+    const emGramas = await criarPolitica(app, [{ quantity: "1000", margem: "35", uom: "g" }]);
+    const primeira = await aplicar(app, product.id, emGramas.activeVersion.id, calc.id);
+    expect(primeira.statusCode, primeira.body).toBe(201);
+    expect(primeira.json().tiers).toHaveLength(1);
+
+    // Outra política declara a MESMA quantidade física, escrita em quilos.
+    const emQuilos = await criarPolitica(app, [{ quantity: "1", margem: "32", uom: "kg" }]);
+    const segunda = await aplicar(app, product.id, emQuilos.activeVersion.id, calc.id);
+    expect(segunda.statusCode, segunda.body).toBe(201);
+
+    // Uma faixa, não duas: é a mesma quantidade de produto acabado.
+    expect(segunda.json().tiers, "1 kg criou faixa nova ao lado de 1000 g").toHaveLength(1);
+
+    await app.close();
+  });
+
+  it("PREC-CMP-02: 1001 g é faixa nova ao lado de 1000 g — diferença real", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { product, calc } = await produtoComCusto(app, "6", "g");
+    const mil = await criarPolitica(app, [{ quantity: "1000", margem: "35", uom: "g" }]);
+    expect((await aplicar(app, product.id, mil.activeVersion.id, calc.id)).statusCode).toBe(201);
+
+    // 1001 g é 1,001 kg — quantidade física diferente, mesmo perto.
+    const milEUm = await criarPolitica(app, [{ quantity: "1.001", margem: "32", uom: "kg" }]);
+    const resposta = await aplicar(app, product.id, milEUm.activeVersion.id, calc.id);
+    expect(resposta.statusCode, resposta.body).toBe(201);
+
+    const quantidades = (resposta.json().tiers as { quantity: string }[])
+      .map((t) => new Prisma.Decimal(t.quantity))
+      .sort((x, y) => x.comparedTo(y));
+    expect(quantidades).toHaveLength(2);
+    expect(quantidades[0]!.equals(new Prisma.Decimal("1000"))).toBe(true);
+    expect(quantidades[1]!.equals(new Prisma.Decimal("1001"))).toBe(true);
+
+    await app.close();
+  });
+
+  it("PREC-CMP-02: diferença na décima segunda casa sobrevive à conversão", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { product, calc } = await produtoComCusto(app, "6", "g");
+    // 1,000000000001 kg = 1000,000000001 g — cabe em DECIMAL(24,12).
+    const a = await criarPolitica(app, [{ quantity: "1.000000000001", margem: "35", uom: "kg" }]);
+    expect((await aplicar(app, product.id, a.activeVersion.id, calc.id)).statusCode).toBe(201);
+
+    const b = await criarPolitica(app, [{ quantity: "1.000000000002", margem: "32", uom: "kg" }]);
+    const resposta = await aplicar(app, product.id, b.activeVersion.id, calc.id);
+    expect(resposta.statusCode, resposta.body).toBe(201);
+
+    const quantidades = (resposta.json().tiers as { quantity: string }[])
+      .map((t) => new Prisma.Decimal(t.quantity))
+      .sort((x, y) => x.comparedTo(y));
+    expect(quantidades, "a conversão apagou a décima segunda casa").toHaveLength(2);
+    expect(quantidades[0]!.equals(new Prisma.Decimal("1000.000000001"))).toBe(true);
+    expect(quantidades[1]!.equals(new Prisma.Decimal("1000.000000002"))).toBe(true);
+
+    await app.close();
+  });
+
+  it("PREC-CMP-02: política em unidade incompatível é recusada com erro claro", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    // Produto vendido por unidade; política escrita em quilos. `kg` existe no
+    // catálogo, mas compatibilidade é com a unidade DO PRODUTO.
+    const { product, calc } = await produtoComCusto(app, "6", "un");
+    const { activeVersion } = await criarPolitica(app, [{ quantity: "1", margem: "35", uom: "kg" }]);
+
+    const resposta = await aplicar(app, product.id, activeVersion.id, calc.id);
+    expect(resposta.statusCode, resposta.body).toBe(400);
+    expect(resposta.json().error).toBe("invalid_quantity");
+    // Mensagem em português, sem enum técnico — é cadastro que a pessoa resolve.
+    expect(resposta.json().message).toMatch(/não é compatível com a unidade do produto acabado/);
+    expect(resposta.json().message).toContain("kg");
+    expect(resposta.json().message).toContain("un");
+
+    await app.close();
+  });
+
+  it("PREC-CMP-02: a criação manual usa a MESMA identidade — 1 kg duplica 1000 g", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { product, calc } = await produtoComCusto(app, "6", "g");
+    const { activeVersion } = await criarPolitica(app, [
+      { quantity: "1000", margem: "35", uom: "g" },
+    ]);
+    const rascunho = (await aplicar(app, product.id, activeVersion.id, calc.id)).json();
+    expect(rascunho.tiers).toHaveLength(1);
+
+    /*
+     * Sem isto a regra teria dois pesos: aplicar política normalizaria e a API
+     * manual aceitaria a duplicata pela porta dos fundos.
+     */
+    const duplicada = await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${rascunho.id}/tiers`,
+      payload: {
+        quantity: "1",
+        uomCode: "kg",
+        priceMode: "TARGET_MARGIN",
+        targetContributionMarginPercent: "30",
+        commissionPercent: "5",
+      },
+    });
+    expect(duplicada.statusCode, duplicada.body).toBe(409);
+    expect(duplicada.json().error).toBe("duplicated_tier");
+
+    // E uma quantidade física realmente diferente continua entrando.
+    const aceita = await app.inject({
+      method: "POST",
+      url: `/pricing-versions/${rascunho.id}/tiers`,
+      payload: {
+        quantity: "2",
+        uomCode: "kg",
+        priceMode: "TARGET_MARGIN",
+        targetContributionMarginPercent: "30",
+        commissionPercent: "5",
+      },
+    });
+    expect(aceita.statusCode, aceita.body).toBe(201);
+    const criadas = (aceita.json().tiers as { quantity: string; uomCode: string }[])
+      .map((t) => `${new Prisma.Decimal(t.quantity).toString()} ${t.uomCode}`)
+      .sort();
+    expect(criadas).toEqual(["1000 g", "2000 g"]);
 
     await app.close();
   });

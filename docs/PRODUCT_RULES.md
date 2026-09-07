@@ -4110,3 +4110,38 @@ trazia os números certos, e os dois documentos GMP da mesma ordem discordavam.
 física do componente. Não é cópia sincronizada: é a mesma função. Duas contas
 para o mesmo número acabam discordando, e a que aparece no papel é a que
 ninguém consegue conferir.
+
+## §68 — Faixa de precificação é identificada pela quantidade física
+
+Decisão de Product Ownership de 2026-09-07, no PREC-CMP-02.
+
+**Faixas de precificação são identificadas pela quantidade física normalizada
+na unidade canônica do Produto.** Representações equivalentes em unidades
+compatíveis não criam faixas distintas: `1 kg` e `1000 g` são a mesma faixa, e
+`0,5 kg` e `500 g` também. `500 g` e `500 kg` são duas.
+
+A identidade **não** é a `quantity` isolada, **não** é `quantity` + `uomCode`
+como texto e **não** é `Number(quantity)` (§66).
+
+**A unidade canônica é a do Item de produto acabado do Produto** — não qualquer
+unidade válida do catálogo. Uma política em `kg` não se aplica a um produto
+vendido por unidade só porque `kg` existe no ERP; a recusa é erro de domínio com
+mensagem em português, nunca faixa ignorada em silêncio, convertida para zero ou
+gravada inconsistente. Produto sem Item de produto acabado usa `un`.
+
+**Compatível não é igual.** Compatibilidade responde "posso converter?";
+igualdade responde "depois de converter, é a mesma quantidade física?". São duas
+perguntas, e a segunda só é feita quando a primeira responde sim. Massa e volume
+não se convertem: o domínio não guarda densidade.
+
+**O template preserva a sua unidade; a aplicação adapta a cópia para a unidade
+canônica do Produto.** Uma política que declara `1 kg` continua declarando
+`1 kg` na biblioteca — é a intenção comercial de quem a escreveu —, e num
+produto que trabalha em gramas ela nasce como `1000 g`. Assim a versão inteira
+fala uma língua só, e "qual faixa é esta?" deixa de depender de conversão na
+leitura. Faixa histórica não é recalculada.
+
+A conversão é a oficial (`convertUomDecimal`, sobre o `toBaseFactor` da
+`UnitOfMeasure`), em `Decimal` de ponta a ponta e sem truncar antes de comparar:
+uma diferença na décima segunda casa é uma faixa diferente. Nenhum fator de
+conversão vive fora da `UnitOfMeasure`.
