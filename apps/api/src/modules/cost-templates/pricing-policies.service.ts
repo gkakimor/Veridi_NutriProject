@@ -523,8 +523,23 @@ export async function applyPricingPolicyToProduct(
    * ninguém aprovou, e o orçamento exige quantidade exata.
    */
   for (const tier of policy.tiers) {
-    const existente = version.tiers.find(
-      (atual) => Number(atual.quantity) === Number(tier.quantity),
+    /*
+     * IGUALDADE DECIMAL, não igualdade de `Number` — PREC-CMP-01.
+     *
+     * Quantidade de faixa é `DECIMAL(24,12)`: doze dígitos inteiros e doze
+     * casas. Um `double` guarda ~15 dígitos significativos, e
+     * `999999999999,000000000001` e `999999999999,000000000002` viram os dois
+     * `999999999999` na conversão. A comparação diria "já existe" e o
+     * `continue` **pularia em silêncio uma faixa que a política declarou** —
+     * a versão nasceria com menos faixas do que foi aprovado.
+     *
+     * `Decimal.equals` é numérico e não textual: `"1000"`,
+     * `"1000.0"` e `"1000.000000000000"` continuam sendo a mesma faixa. É o
+     * mesmo critério que `createPricingTier` usa para recusar duplicata.
+     */
+    const quantidadeDaPolitica = new Prisma.Decimal(tier.quantity);
+    const existente = version.tiers.find((atual) =>
+      new Prisma.Decimal(atual.quantity).equals(quantidadeDaPolitica),
     );
     if (existente) continue;
     await createPricingTier(
