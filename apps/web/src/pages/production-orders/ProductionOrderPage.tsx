@@ -43,6 +43,7 @@ import {
 import { ExtraConsumptionDialog } from "../../components/ExtraConsumptionDialog";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { parseDecimalInput } from "../../lib/decimal-input";
+import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
 import { getItem } from "../../lib/items-api";
@@ -410,13 +411,13 @@ export function ProductionOrderPage() {
 
   /* Consumir acima do reservado sempre foi recusado pelo servidor; o botão
      só ficava habilitado até o 400 chegar. Aqui a tela antecipa o limite —
-     sem tirar a autoridade do domínio. */
+     sem tirar a autoridade do domínio.
+
+     A comparação vive em `quantity-limit.ts` porque o teto exibido é resumido
+     e o teto real tem doze casas: digitar o número que a tela mostra é pedir
+     a reserva inteira, não excedê-la. */
   function excedeReserva(line: MaterialReservationLineDTO): boolean {
-    const pedido = (consumeQuantities[line.id] ?? "").trim();
-    if (pedido === "") return false;
-    const normalizado = parseDecimalInput(pedido);
-    if (normalizado === null) return false;
-    return Number(normalizado) > Number(line.remainingQuantity);
+    return excedeLimiteExibido(consumeQuantities[line.id] ?? "", line.remainingQuantity);
   }
 
   /* Quanto ainda cabe apontar nesta ordem. O servidor sempre recusou o
@@ -616,11 +617,22 @@ export function ProductionOrderPage() {
     const quantity = (consumeQuantities[lineId] ?? "").trim();
     if (!quantity) return;
 
+    /* Quem digitou o teto que a tela mostra pediu a reserva INTEIRA, e é o
+       valor canônico que vai — não o texto resumido. Enviar o resumido faria
+       o servidor recusar; enviar menos deixaria resíduo, e a reconciliação
+       não tem tolerância. */
+    const linha = activeReservationLines.find((line) => line.id === lineId);
+    const resolvido = linha
+      ? resolverQuantidadeContraLimite(quantity, linha.remainingQuantity)
+      : null;
+    const quantidadeParaEnviar =
+      resolvido?.status === "ok" ? resolvido.valorCanonico : exigirDecimal(quantity, "Consumir agora");
+
     setConsumingLineId(lineId);
     setError(null);
     try {
       const updated = await recordConsumption(id, [
-        { reservationLineId: lineId, quantity: exigirDecimal(quantity, "Consumir agora") },
+        { reservationLineId: lineId, quantity: quantidadeParaEnviar },
       ]);
       setProductionOrder(updated);
       setConsumeQuantities((prev) => ({ ...prev, [lineId]: "" }));

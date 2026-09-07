@@ -493,3 +493,114 @@ describe("Consumo real — concorrência", () => {
     await app.close();
   });
 });
+
+/**
+ * F-08-1 — o outro lado do contrato de round-trip.
+ *
+ * A tela mostra a reserva com seis casas; o dado tem doze. Digitar o número
+ * exibido passou a significar "usar todo o limite", e a interface envia o valor
+ * CANÔNICO (`quantity-limit.ts`, em `apps/web`). Aqui se prova a metade que
+ * fecha a conta: esse valor canônico zera a reserva e libera a conclusão, sem
+ * resíduo de microgramas — e o valor arredondado que a tela mostrava, não.
+ *
+ * `6 kg` de ativo para uma base de `0,98` (pureza de 98 %) dá
+ * `6,122448979591836…`, gravado como `6.122448979592`. É o caso real da
+ * Taurina que originou o defeito.
+ */
+describe("Consumo real — precisão exibida × limite exato", () => {
+  const CANONICO = "6.122448979592";
+  /** O que `formatQuantity` escreve na tela: seis casas, ROUND_HALF_UP. */
+  const EXIBIDO = "6.122449";
+
+  async function ordemComReservaDeDozeCasas(app: App) {
+    const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: false });
+    await receiveStockNoLot(app, rawMaterial.id, "10");
+    const { product } = await createProductWithActiveFormulation(
+      app,
+      [{ itemId: rawMaterial.id, quantity: "6", unitCode: "kg" }],
+      { basisQuantity: "0.98" },
+    );
+    const order = await createReleasedOrder(app, product.id, "1");
+    const lineId = order.requirements[0].reservationLines[0].id;
+    await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/picking/${lineId}/confirm`,
+      payload: {},
+    });
+    return { order, lineId };
+  }
+
+  it("a reserva nasce com doze casas — mais do que a tela consegue mostrar", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const { order } = await ordemComReservaDeDozeCasas(app);
+
+    expect(order.requirements[0].requiredQuantity).toBe(CANONICO);
+    expect(order.requirements[0].reservationLines[0].remainingQuantity).toBe(CANONICO);
+
+    await app.close();
+  });
+
+  it("consumir o valor canônico zera a reserva e libera a conclusão", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const { order, lineId } = await ordemComReservaDeDozeCasas(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/consumptions`,
+      payload: { entries: [{ reservationLineId: lineId, quantity: CANONICO }] },
+    });
+    expect(response.statusCode).toBe(201);
+
+    const body = response.json();
+    expect(body.requirements[0].remainingReservedQuantity).toBe("0");
+    expect(body.requirements[0].unreconciledQuantity).toBe("0");
+    expect(body.requirements[0].reconciliationStatus).toBe("RECONCILED");
+    expect(body.materialReconciliation.pendingRequirements).toBe(0);
+    expect(body.materialReconciliation.canComplete).toBe(true);
+
+    await app.close();
+  });
+
+  it("consumir o valor EXIBIDO é recusado — arredondar para cima não é caminho", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const { order, lineId } = await ordemComReservaDeDozeCasas(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/consumptions`,
+      payload: { entries: [{ reservationLineId: lineId, quantity: EXIBIDO }] },
+    });
+    expect(response.statusCode).toBe(400);
+
+    await app.close();
+  });
+
+  it("consumir o exibido truncado deixa resíduo e trava a OP — o custo de arredondar para baixo", async () => {
+    const app = buildTestApp();
+    await app.ready();
+    const { order, lineId } = await ordemComReservaDeDozeCasas(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/production-orders/${order.id}/consumptions`,
+      payload: { entries: [{ reservationLineId: lineId, quantity: "6.122448" }] },
+    });
+    expect(response.statusCode).toBe(201);
+
+    const body = response.json();
+    // Menos de um miligrama de sobra, e mesmo assim a OP não fecha: é
+    // deliberado que `reconciliation.ts` não tenha tolerância.
+    //
+    // A notação exponencial no valor abaixo é do serializador de Decimal, não
+    // desta regra — resíduo pequeno o bastante sai como `9.79592e-7`. Fica
+    // registrado aqui porque é o que a API realmente devolve; tratar isso na
+    // exibição é outro assunto, fora do escopo deste conserto.
+    expect(body.requirements[0].unreconciledQuantity).toBe("9.79592e-7");
+    expect(body.materialReconciliation.canComplete).toBe(false);
+
+    await app.close();
+  });
+});

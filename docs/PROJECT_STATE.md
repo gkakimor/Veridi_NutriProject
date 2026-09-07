@@ -39,7 +39,7 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 [`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. O que sobra:
 
 - **achados triados da auditoria de 2026-09-07** — seção A do
-  [`BACKLOG.md`](BACKLOG.md): 2 P0, 7 P1, 7 P2, 3 P3;
+  [`BACKLOG.md`](BACKLOG.md): 1 P0, 7 P1, 7 P2, 3 P3 (F-08-1 fechado em FIX-01);
 - **melhorias aprovadas, aguardando autorização do PO:** #8E, #8F, #8G;
 - **aguardando validação com a Veridi:** #7 e #11;
 - **manutenção:** #10;
@@ -47,21 +47,31 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 
+## Campo com teto — o contrato de ida e volta (FIX-01, 2026-09-07)
+
+`formatQuantity` corta em seis casas com `ROUND_HALF_UP`; o dado tem doze. Num
+**teto**, esse arredondamento produzia um limite exibido diferente do real, e a
+validação comparava com o real — o consumo de produção recusava exatamente a
+quantidade impressa na tela (F-08-1), em 125 das 212 formulações ativas.
+
+A regra agora é o **round-trip**: digitar o valor exibido significa "usar todo o
+limite", e o que vai ao servidor é o valor canônico, com as doze casas. Está em
+[`quantity-limit.ts`](../apps/web/src/lib/quantity-limit.ts) e é a única forma
+de comparar quantidade digitada com teto — Consumo Real, Expedição e Plano de
+Atendimento passaram a usá-la, e o `+ 1e-6` do Plano saiu. Domínio e
+`reconciliation.ts` seguem exatos, sem tolerância.
+
+**Campo novo com teto usa o helper.** Comparar `Number(digitado) >
+Number(limite)` na tela reabre o mesmo defeito e viola §66.
+
 ## Próxima prioridade
 
-**FIX-01 — a precisão exibida virou limite de entrada.** `formatQuantity` corta
-em seis casas com `ROUND_HALF_UP`, e arredondar um **teto** para cima produz um
-limite maior que o real: o consumo de produção recusa exatamente a quantidade que
-a tela mostra (F-08-1), em 125 das 212 formulações ativas. O mesmo padrão de
-comparação está em Expedição e no Plano de Atendimento — este já remendado com um
-`1e-6` que `reconciliation.ts` recusa por escrito. Corrigir as três juntas.
-
-Depois: FIX-02 (custo estimado da Formulação usando a quantidade por dose,
-F-02-2) e a fila P1 da seção A.
+**FIX-02** — custo estimado da Formulação usando a quantidade por dose (F-02-2),
+depois a fila P1 da seção A.
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
-são o comportamento atual". F-08-1 prova que não — construir sobre essa premissa
-herdaria o defeito.
+são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo
+com teto, não a exibição em geral.
 
 **Gate paralelo:** validação com a Veridi para as regras que dependem do processo
 real do cliente (#7, #11). Roteiro em

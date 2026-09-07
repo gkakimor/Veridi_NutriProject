@@ -15,6 +15,7 @@ import type {
   SupplierDTO,
 } from "@veridi/shared";
 import {
+  Decimal,
   BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
@@ -47,6 +48,7 @@ import {
 } from "../../lib/shipments-api";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp, InfoHint } from "../../components/help";
@@ -844,8 +846,11 @@ export function CustomerOrderPage() {
       const reservado = parseDecimalInput(adjustment.reserve.trim() || "0");
       const produzido = parseDecimalInput(adjustment.produce.trim() || "0");
       if (reservado === null || produzido === null) return false;
-      const sum = Number(reservado) + Number(produzido);
-      return Math.abs(sum - Number(line.orderedQuantity)) < 1e-6;
+      /* A soma fecha ou não fecha: sem folga de `1e-6`. A tolerância existia
+         porque a conta passava por `Number`, e em `Decimal` ela não é
+         necessária — §66. O domínio também não a reconhece: um plano que só
+         "quase" fecha é um plano que não fecha. */
+      return new Decimal(reservado).plus(produzido).equals(new Decimal(line.orderedQuantity));
     });
   }, [plan, planAdjustments]);
 
@@ -863,13 +868,16 @@ export function CustomerOrderPage() {
    */
   const linhasComReservaAcimaDoDisponivel = useMemo(() => {
     if (!plan) return [];
-    return plan.lines.filter((line) => {
-      const ajuste = planAdjustments[line.customerOrderLineId];
-      if (!ajuste) return false;
-      const reservado = parseDecimalInput(ajuste.reserve.trim() || "0");
-      if (reservado === null) return false;
-      return Number(reservado) > Number(line.finishedGoodsAvailable) + 1e-6;
-    });
+    /* Havia aqui uma folga de `1e-6` — a tolerância que o domínio recusa por
+       escrito. Ela existia para contornar o mesmo problema que o helper
+       resolve de verdade: o disponível exibido é resumido, o real tem doze
+       casas, e digitar o número da tela não pode virar "acima do limite". */
+    return plan.lines.filter((line) =>
+      excedeLimiteExibido(
+        planAdjustments[line.customerOrderLineId]?.reserve ?? "",
+        line.finishedGoodsAvailable,
+      ),
+    );
   }, [plan, planAdjustments]);
 
   /*
@@ -898,10 +906,20 @@ export function CustomerOrderPage() {
       const updated = await applyFulfillmentPlan(id, {
         lines: plan.lines.map((line) => {
           const adjustment = planAdjustments[line.customerOrderLineId]!;
+          /* Reservar o disponível que a tela mostra é reservar TUDO o que
+             existe: vai o valor canônico, não o texto resumido — senão a
+             validação da tela aprova e o servidor recusa o mesmo número. */
+          const reserva = resolverQuantidadeContraLimite(
+            adjustment.reserve,
+            line.finishedGoodsAvailable,
+          );
           return {
             customerOrderLineId: line.customerOrderLineId,
             reserveQuantity:
-              exigirDecimalOpcional(adjustment.reserve, `Reservar de ${line.productCode}`) ?? "0",
+              reserva.status === "ok"
+                ? reserva.valorCanonico
+                : (exigirDecimalOpcional(adjustment.reserve, `Reservar de ${line.productCode}`) ??
+                  "0"),
             produceQuantity:
               exigirDecimalOpcional(adjustment.produce, `Produzir de ${line.productCode}`) ?? "0",
           };

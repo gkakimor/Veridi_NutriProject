@@ -964,3 +964,48 @@ número acabam discordando, e a que aparece na tela seria a que ninguém usa". G
 O consolidado acima traz o cabeçalho "UX — 5" sobre uma tabela de **sete**
 linhas. São sete. O total dos achados é **22**: 1 HIGH, 8 MEDIUM, 4 LOW, 7 UX,
 2 observações.
+
+---
+
+# FIX-01 — F-08-1 corrigido (2026-09-07)
+
+Registrado depois da triagem. **Nada acima foi alterado.**
+
+**O que era.** A reserva vale `6,122448979592 kg`; a tela mostra `6,122449`
+(seis casas, `ROUND_HALF_UP`) e a validação comparava com o valor cheio. O
+número impresso era o único que o operador não podia digitar.
+
+**O que se decidiu não fazer.** Arredondar o teto exibido para baixo resolveria
+o campo e quebraria a OP: consumir menos que a reserva deixa resíduo, e
+`reconciliation.ts` não tem tolerância — a ordem não fecharia sem justificar
+variância de microgramas.
+
+**A regra que ficou.** Round-trip: digitar o valor exibido significa "usar todo
+o limite", e o que vai ao servidor é o valor **canônico**, com as doze casas.
+Implementada em `apps/web/src/lib/quantity-limit.ts` e usada nas três telas que
+comparavam quantidade digitada com teto — Consumo Real, Expedição e Plano de
+Atendimento do Pedido. O `+ 1e-6` do Plano de Atendimento saiu. Domínio, API e
+`reconciliation.ts` continuam exatos.
+
+**Verificação pela interface, na OP-001157** (`PROD-000031`, quantidade 3):
+
+| Passo | Observado |
+|---|---|
+| Reserva de `MP-000057` | RESTANTE exibe **`1,529842`** (real `1.529841916500`) |
+| Digitar `1,529842` em CONSUMIR AGORA | campo aceito, sem alerta de máximo |
+| "Confirmar consumo" | habilitado |
+| Depois de confirmar | CONSUMIDO `1,529842` · RESTANTE **`0`** |
+| Reconciliação | "0 de 2" → "1 de 2" → "2 de 2 materiais reconciliados" |
+| Concluir OP | diálogo diz "Todos os materiais estão reconciliados"; OP **Concluída** |
+
+Sem resíduo, sem variância justificada, sem tolerância no domínio.
+
+**Observações colhidas no caminho, fora do escopo do conserto:**
+
+- a API serializa resíduo pequeno em notação exponencial (`9.79592e-7`); a tela
+  de quantidade não é preparada para esse formato — não é F-08-1 e não foi
+  tocado;
+- a lista de alertas de custo repete a chave React de um item consumido de dois
+  lotes (`MATERIAL_COST_UNKNOWN-ME-000024`), gerando aviso de chave duplicada no
+  console durante a OP acima. Defeito de apresentação preexistente, também não
+  tocado.
