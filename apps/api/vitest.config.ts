@@ -14,8 +14,14 @@ export default defineConfig(({ mode }) => ({
     // falham por infraestrutura.
     maxWorkers: 3,
     minWorkers: 1,
-    // Agregado do banco inteiro não se mede com vizinho escrevendo ao lado.
+    // Agregado do banco inteiro não se mede com vizinho escrevendo ao lado, e
+    // revisão de documento controlado é ATIVA por tipo — uma só, global.
     // Esses arquivos rodam em seguida, sozinhos — ver `vitest.serial.config.ts`.
-    exclude: ["node_modules/**", "dist/**", "src/modules/dashboard/dashboard.test.ts"],
+    exclude: [
+      "node_modules/**",
+      "dist/**",
+      "src/modules/dashboard/dashboard.test.ts",
+      "src/modules/production-orders/gmp-execution.test.ts",
+    ],
   },
 }));
