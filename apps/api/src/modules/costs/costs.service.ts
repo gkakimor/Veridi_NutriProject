@@ -12,7 +12,8 @@ import { getPrisma } from "../../db/prisma.js";
 import { getConsumedLotCostReference, getItemCostReference } from "../../lib/cost-reference.js";
 import { selectItemCostSource } from "../../lib/cost-source-selection.js";
 import type { CostSourceResolution } from "../../lib/cost-source-selection.js";
-import { convertUomDecimal } from "../items/uom.js";
+import { FormulationContextIncompleteError } from "../../lib/formulation-math.js";
+import { computeFormulationRequirements } from "../production-orders/requirement-calc.js";
 import { ItemNotFoundError } from "../inventory/inventory.errors.js";
 import { FormulationVersionNotFoundError } from "./costs.errors.js";
 import { ProductionOrderNotFoundError } from "../production-orders/production-orders.errors.js";
@@ -72,6 +73,17 @@ export async function getItemCostReferenceDTO(
  *
  * `referenceDate` é explícita: quem decide que "hoje" é a data é a borda
  * (rota), nunca o domínio.
+ *
+ * A QUANTIDADE que multiplica cada custo unitário vem de
+ * `computeFormulationRequirements` — o mesmo motor da Ordem de Produção, do
+ * cálculo industrial, do plano de atendimento e da tela da Formulação
+ * (PRODUCT_RULES §52). Esta função tinha a sua própria conta: quantidade
+ * declarada passada por `convertUomDecimal`, e nada mais. Isso deixava de fora
+ * o fator da base — doses por embalagem, base fixa, unidade acabada — e os
+ * ajustes de pureza e overage. Num produto de 60 doses o material saía 60 vezes
+ * menor que o que a fábrica separa, ao lado da própria tela que mostrava a
+ * quantidade certa. Conversão de unidade é uma ETAPA da matemática, não a
+ * matemática inteira, e a estimativa deixou de ter uma.
  */
 export async function getFormulationCostEstimate(
   formulationVersionId: string,
@@ -80,19 +92,33 @@ export async function getFormulationCostEstimate(
   const prisma: PrismaOrTx = getPrisma();
   const version = await prisma.formulationVersion.findUnique({
     where: { id: formulationVersionId },
-    include: { components: { include: { item: true }, orderBy: { position: "asc" } } },
   });
   if (!version) throw new FormulationVersionNotFoundError(formulationVersionId);
 
   const units = await prisma.unitOfMeasure.findMany();
+
+  /*
+   * A base da estimativa é a base da versão — é dela que sai o custo por
+   * unidade logo abaixo. Sem premissa para quantificar, a estimativa falha
+   * FECHADA: nenhuma linha, nenhum total. Uma lista de componentes com a
+   * quantidade declarada, ou pior, com zero, seria um custo plausível e errado.
+   */
+  let requirements: Awaited<ReturnType<typeof computeFormulationRequirements>> = [];
+  let missingContext: FormulationCostEstimateDTO["missingContext"] = null;
+  try {
+    requirements = await computeFormulationRequirements(prisma, version.id, version.basisQuantity);
+  } catch (error) {
+    if (!(error instanceof FormulationContextIncompleteError)) throw error;
+    missingContext = error.missing;
+  }
 
   // Uma seleção por componente Veridi, em paralelo — a mesma função resolvida
   // N vezes, sem cache nem cópia da regra. Material do cliente não pergunta
   // nada: não tem custo de aquisição Veridi, e uma referência manual no item
   // não muda isso.
   const resolutions = await Promise.all(
-    version.components.map((component) =>
-      component.supplyResponsibility === "CUSTOMER"
+    requirements.map((requirement) =>
+      requirement.supplyResponsibility === "CUSTOMER"
         ? Promise.resolve<CostSourceResolution>({
             unitCost: null,
             source: "EXCLUDED_CUSTOMER_SUPPLIED",
@@ -100,7 +126,11 @@ export async function getFormulationCostEstimate(
           })
         : selectItemCostSource(
             prisma,
-            { itemId: component.itemId, itemUnitCode: component.item.unitCode, referenceDate },
+            {
+              itemId: requirement.itemId,
+              itemUnitCode: requirement.stockUnitCode,
+              referenceDate,
+            },
             units,
           ),
     ),
@@ -114,15 +144,13 @@ export async function getFormulationCostEstimate(
   let veridiWithCost = 0;
   let customerSupplied = 0;
 
-  version.components.forEach((component, index) => {
-    const item = component.item;
+  requirements.forEach((requirement, index) => {
     const resolution = resolutions[index]!;
-    // Reaproveita a MESMA conversao de UOM ja usada pelos Requirements —
-    // nunca uma segunda implementacao.
-    const normalized = convertUomDecimal(component.quantity, component.unitCode, item.unitCode, units);
     const isCustomerSupplied = resolution.source === "EXCLUDED_CUSTOMER_SUPPLIED";
 
-    const componentCost = resolution.unitCost ? normalized.times(resolution.unitCost) : null;
+    const componentCost = resolution.unitCost
+      ? requirement.requiredQuantity.times(resolution.unitCost)
+      : null;
     if (isCustomerSupplied) {
       customerSupplied += 1;
     } else {
@@ -133,20 +161,20 @@ export async function getFormulationCostEstimate(
       } else if (resolution.source === "AMBIGUOUS_SUPPLIER_REFERENCE") {
         // Ofertas existem, falta escolher — a lista separa isso de "sem
         // fonte nenhuma", porque a solução é outra.
-        ambiguousCostItems.push(item.code);
+        ambiguousCostItems.push(requirement.itemCode);
       } else {
-        missingCostItems.push(item.code);
+        missingCostItems.push(requirement.itemCode);
       }
     }
 
     components.push({
-      itemId: item.id,
-      itemCode: item.code,
-      itemName: item.name,
-      formulaQuantity: component.quantity.toString(),
-      formulaUnitCode: component.unitCode,
-      normalizedQuantity: normalized.toString(),
-      stockUnitCode: item.unitCode,
+      itemId: requirement.itemId,
+      itemCode: requirement.itemCode,
+      itemName: requirement.itemName,
+      formulaQuantity: requirement.formulaQuantity.toString(),
+      formulaUnitCode: requirement.formulaUnitCode,
+      requiredQuantity: requirement.requiredQuantity.toString(),
+      stockUnitCode: requirement.stockUnitCode,
       unitCost: resolution.unitCost ? formatUnitCost(resolution.unitCost) : null,
       costSource: resolution.source,
       costSourceDetails: resolution.details,
@@ -186,6 +214,7 @@ export async function getFormulationCostEstimate(
     missingCostItems,
     ambiguousCostItems,
     hasCustomerSuppliedMaterials: customerSupplied > 0,
+    missingContext,
   };
 }
 

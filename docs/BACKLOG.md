@@ -22,7 +22,9 @@ valor exibido significa "usar todo o limite". O FIX-01b (2026-09-08) fechou os
 dois resíduos que o próprio FIX-01 encontrou: o apontamento de produção, que
 recalculava o restante por `Number`, e o complemento do Plano de Atendimento,
 que ia no payload calculado em ponto flutuante. O que sobra da defasagem é
-exibição sem entrada (F-07-1, W7) e o P0 de custo da Formulação.
+exibição sem entrada (F-07-1, W7). O P0 de custo da Formulação foi fechado no
+FIX-02 (2026-09-08): quantidade física canônica na estimativa e um único
+"Equivalente estoque" entre rascunho e versão ativa.
 
 ---
 
@@ -33,20 +35,17 @@ conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
-**Zero CRITICAL, zero BLOCKER.** Dois HIGH, quatro MEDIUM, quatro LOW.
+**Zero CRITICAL, zero BLOCKER.** Um HIGH, três MEDIUM, quatro LOW — F-02-2 e
+F-02-1 fechados no FIX-02 (2026-09-08).
 
 ### P0 — antes de qualquer outra capability
 
-| ID | Título | Sev. | Tam. | Grupo |
-|---|---|---|---|---|
-| **F-02-2** | Custo estimado da Formulação usa a quantidade por dose — subestima em 60× num produto de 60 doses | HIGH | L | G2 |
-
-**F-02-2.** `costs.service.ts:122` converte a unidade da quantidade
-**declarada** e nunca aplica base, doses, pureza ou overage — o comentário
-acima da linha afirma reusar a conta dos Requirements, e reusa só metade dela.
-O motor autoritativo (`calculation.service.ts:485`) está correto, então CMV e
-precificação não são contaminados: o dano é de decisão, na tela onde se julga
-se a fórmula fecha.
+Vazio. **F-02-2 foi fechado no FIX-02 (2026-09-08)**: a estimativa passou a
+chamar `computeFormulationRequirements`, o mesmo motor da OP e do cálculo
+industrial, em vez de converter a unidade da quantidade declarada e parar aí.
+Em `CAFEÍNA PT 60 CAPS THE KING` o material foi de R$ 0,15 para R$ 9,10 —
+exatamente as 60 doses que faltavam. Sem doses por embalagem a estimativa falha
+fechada, com o motivo na tela. Nada havia sido persistido por esse caminho.
 
 ### P1 — próximas correções
 
@@ -57,7 +56,6 @@ se a fórmula fecha.
 | **F-06-1** | Recebimento só recusa o excesso na confirmação, depois do diálogo de irreversibilidade | MEDIUM | S | G4 |
 | **F-06-2** | O alerta de excesso do Recebimento não some quando a quantidade é corrigida | LOW | XS | G4 |
 | **F-03-1** | Custo estimado da Formulação não atualiza ao salvar e não se identifica como prévia nem como gravado | MEDIUM | XS | — |
-| **F-02-1** | "Equivalente estoque" muda de significado entre rascunho e versão ativa | MEDIUM | XS | G2 |
 | **F-07-1** | Sugestão de compra imprime `6.122448979592` com ponto decimal | MEDIUM | S | G1 |
 
 **F-08-2** atinge **164 dos 214 produtos aprovados (77 %)**: a tela carrega só os
@@ -117,7 +115,7 @@ abre a edição, que contém o link "Consulta completa". Sobra só o resíduo em
 | Grupo | Achados | Causa | Por que junto |
 |---|---|---|---|
 | **G1** | F-07-1 | Precisão exibida e precisão validada não se reconciliam | As três comparações `Number(digitado) > Number(limite)` — OP, Expedição e Pedido, esta última remendada com `+ 1e-6` — foram substituídas por `quantity-limit.ts` em FIX-01. Sobra F-07-1, que é exibição sem campo de entrada: o mesmo valor sai formatado numa tela e cru na outra |
-| **G2** | F-02-2, F-02-1 | Quantidade **declarada** usada como se fosse a física | `convertUomDecimal` chamado com os mesmos argumentos em `formulations.service.ts:71` e `costs.service.ts:122`, sem o motor de necessidade. Mesmo atalho, dois lugares |
+| **G2** | ~~F-02-2, F-02-1~~ — fechado no FIX-02 | Quantidade **declarada** usada como se fosse a física | `convertUomDecimal` era chamado com os mesmos argumentos em `formulations.service.ts` e `costs.service.ts`, sem o motor de necessidade. Mesmo atalho, dois lugares. Os dois chamam o motor agora, e o campo `stockEquivalentQuantity` deixou de existir |
 | **G3** | F-09-1, F-07-2 | "Disponível" composto ad-hoc por tela | Três serviços envolvem `getAvailableByItems` de três jeitos; só o Estoque chama o irmão `getUnavailabilityByItems`, que é o que explica o zero |
 | **G4** | F-06-1, F-06-2 | `fieldErrors` só nasce da resposta do servidor e só reseta no próximo envio | Mesmo arquivo, mesmo mecanismo: o conserto de um resolve o outro |
 | **G5** | F-06-3 | `nextval` antes da transação | Cinco módulos, mesmo diff, revisão mecânica de uma vez |

@@ -69,7 +69,6 @@ function componente(): FormulationComponentDTO {
     legacyBatchUnits: null,
     theoreticalPerUnit: null,
     physicalPerUnit: null,
-    stockEquivalentQuantity: "0.0002",
     stockUnitCode: "kg",
     notes: null,
     position: 0,

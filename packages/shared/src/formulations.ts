@@ -122,11 +122,18 @@ export interface FormulationComponentDTO {
   legacyTotalQuantity: string | null;
   legacyTotalUnitCode: string | null;
   legacyBatchUnits: string | null;
-  /** Só exibição — equivalente na unidade de estoque do Item; nunca fonte de verdade. */
-  stockEquivalentQuantity: string;
   stockUnitCode: string;
-  /** Necessidade teórica para uma unidade acabada, antes de pureza/overage. */
-  /** `null` quando a versão ainda não tem premissa para quantificar. Nunca zero. */
+  /**
+   * Necessidade teórica para uma unidade acabada, na unidade de estoque, antes
+   * de pureza/overage. `null` quando a versão ainda não tem premissa para
+   * quantificar. Nunca zero.
+   *
+   * É este o "equivalente estoque" que a tela mostra. Existia ao lado dele um
+   * `stockEquivalentQuantity` que era a quantidade declarada apenas convertida
+   * de unidade, sem o fator da base: num componente de 60 doses os dois campos
+   * diferiam por 60, e a mesma célula da mesma tela mostrava um ou outro
+   * conforme a versão estivesse em rascunho ou ativa. Um campo só, do motor.
+   */
   theoreticalPerUnit: string | null;
   /** Necessidade física para uma unidade acabada, já com pureza/overage. */
   /** `null` quando a versão ainda não tem premissa para quantificar. Nunca zero. */

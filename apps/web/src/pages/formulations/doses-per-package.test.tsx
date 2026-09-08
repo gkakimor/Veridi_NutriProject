@@ -54,7 +54,6 @@ function componente(basis: FormulationVersionDTO["components"][number]["basis"])
     legacyBatchUnits: null,
     theoreticalPerUnit: null,
     physicalPerUnit: null,
-    stockEquivalentQuantity: "0.0002",
     stockUnitCode: "kg",
     notes: null,
     position: 0,

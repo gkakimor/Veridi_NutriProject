@@ -42,6 +42,12 @@ existem para impedir:
 6. **Poucas, completas e determinísticas.** Quatro suítes vivas valem mais que
    quarenta roteiros mortos.
 
+## Suítes vivas
+
+| Suíte | O que prova |
+|---|---|
+| `formulacao-quantidade-fisica-e-custo.mjs` | a quantidade que a tela mostra, a que o custo estimado multiplica e a que o motor calcula são a MESMA — em versão ativa e em rascunho (FIX-02, F-02-2 e F-02-1) |
+
 ## `lib/`
 
 | Arquivo | O que dá |

@@ -161,7 +161,7 @@ describe("Formulations — versionamento", () => {
     await app.close();
   });
 
-  it("adiciona componente RAW_MATERIAL e PACKAGING, calcula equivalente de estoque (g → kg)", async () => {
+  it("adiciona componente RAW_MATERIAL e PACKAGING, calcula o teórico por unidade (g → kg)", async () => {
     const app = buildTestApp();
     await app.ready();
 
@@ -196,13 +196,17 @@ describe("Formulations — versionamento", () => {
     const rawComponent = body.components.find((c: { itemId: string }) => c.itemId === rawMaterial.id);
     expect(rawComponent.quantity).toBe("500");
     expect(rawComponent.unitCode).toBe("g");
-    expect(rawComponent.stockEquivalentQuantity).toBe("0.5");
+    // POR UNIDADE ACABADA, não para a base: 500 g produzem 1000 unidades, então
+    // cada unidade leva 0,5 g = 0,0005 kg. A conversão de unidade é uma etapa da
+    // conta; o fator da base é a outra, e ler só a conversão dava 0,5 kg — mil
+    // vezes o que a fábrica separa por unidade.
+    expect(rawComponent.theoreticalPerUnit).toBe("0.0005");
     expect(rawComponent.stockUnitCode).toBe("kg");
 
     const packagingComponent = body.components.find(
       (c: { itemId: string }) => c.itemId === packaging.id,
     );
-    expect(packagingComponent.stockEquivalentQuantity).toBe("1000");
+    expect(packagingComponent.theoreticalPerUnit).toBe("1");
 
     await app.close();
   });
@@ -228,7 +232,9 @@ describe("Formulations — versionamento", () => {
       payload: { components: [{ itemId: rawMaterial.id, quantity: "250000", unitCode: "mg" }] },
     });
 
-    expect(response.json().components[0].stockEquivalentQuantity).toBe("0.25");
+    // Base 1 (default da versão nova): a quantidade por unidade acabada é a
+    // própria quantidade declarada, convertida — 250 000 mg = 0,25 kg.
+    expect(response.json().components[0].theoreticalPerUnit).toBe("0.25");
 
     await app.close();
   });

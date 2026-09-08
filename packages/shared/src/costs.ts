@@ -59,11 +59,21 @@ export interface FormulationCostComponentDTO {
   itemId: string;
   itemCode: string;
   itemName: string;
-  /** Quantidade/unidade originais da fórmula. */
+  /** Quantidade/unidade DECLARADAS na fórmula — nunca a que multiplica o custo. */
   formulaQuantity: string;
   formulaUnitCode: string;
-  /** Já convertida para a unidade de estoque do item. */
-  normalizedQuantity: string;
+  /**
+   * Quantidade FÍSICA para produzir `basisQuantity` do acabado, na unidade de
+   * estoque — a mesma grandeza e o mesmo nome do `requiredQuantity` do cálculo
+   * de custo industrial, porque é o mesmo número saído do mesmo motor
+   * (PRODUCT_RULES §52).
+   *
+   * Antes chamava-se `normalizedQuantity` e era só a quantidade declarada
+   * convertida de unidade: o fator da base ficava de fora, e num produto de 60
+   * doses a estimativa subestimava o material em 60 vezes. Conversão de unidade
+   * é uma ETAPA da matemática da formulação, não a matemática inteira.
+   */
+  requiredQuantity: string;
   stockUnitCode: string;
   unitCost: string | null;
   /**
@@ -77,7 +87,7 @@ export interface FormulationCostComponentDTO {
   costSourceDetails: string | null;
   /** `true` quando o componente é fornecido pelo cliente — fora do custo. */
   customerSupplied: boolean;
-  /** `normalizedQuantity × unitCost`; `null` quando o componente não tem custo. */
+  /** `requiredQuantity × unitCost`; `null` quando o componente não tem custo. */
   estimatedComponentCost: string | null;
 }
 
@@ -110,6 +120,14 @@ export interface FormulationCostEstimateDTO {
   ambiguousCostItems: string[];
   /** `true` quando ao menos um componente é material do cliente. */
   hasCustomerSuppliedMaterials: boolean;
+  /**
+   * Premissa da versão que impede quantificar os componentes. Quando presente,
+   * `components` vem VAZIO e não há total: a estimativa falha fechada, do mesmo
+   * jeito que o cálculo de custo industrial. Uma lista de linhas a R$ 0,00
+   * seria a resposta mais perigosa, porque "não precisa de material" é
+   * plausível e ninguém confere.
+   */
+  missingContext: "DOSES_PER_PACKAGE" | null;
 }
 
 export interface ProductionConsumptionCostDTO {

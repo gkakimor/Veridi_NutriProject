@@ -39,7 +39,8 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 [`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. O que sobra:
 
 - **achados triados da auditoria de 2026-09-07** — seção A do
-  [`BACKLOG.md`](BACKLOG.md): 1 P0, 7 P1, 7 P2, 3 P3 (F-08-1 fechado em FIX-01);
+  [`BACKLOG.md`](BACKLOG.md): 1 P0, 7 P1, 7 P2, 3 P3 (F-08-1 fechado em FIX-01;
+  F-02-2 e F-02-1 em FIX-02);
 - **melhorias aprovadas, aguardando autorização do PO:** #8E, #8F, #8G;
 - **aguardando validação com a Veridi:** #7 e #11;
 - **manutenção:** #10;
@@ -76,10 +77,44 @@ exponencial. Nas três telas do FIX-01 não sobrou nenhum `Number` sobre
 quantidade que alcance payload ou validação — o que resta é sinal (`> 0`) e
 soma de exibição, listado abaixo.
 
+## A quantidade física tem um motor só (FIX-02, 2026-09-08)
+
+A estimativa de custo da Formulação multiplicava o custo unitário pela
+quantidade **declarada apenas convertida de unidade** —
+`convertUomDecimal(component.quantity, …)` e nada mais. Ficavam de fora o fator
+da base (doses por embalagem, base fixa, unidade acabada) e os ajustes de pureza
+e overage. Em `CAFEÍNA PT 60 CAPS THE KING`, 60 doses por embalagem, o material
+saía **R$ 0,15** onde a fábrica gasta **R$ 9,10**: sessenta vezes menos, na mesma
+tela que mostrava a quantidade certa logo acima (F-02-2).
+
+A estimativa passou a chamar `computeFormulationRequirements` — o motor da Ordem
+de Produção, do cálculo industrial, do plano de atendimento e da precificação
+(PRODUCT_RULES §52, agora com seis consumidores). Nenhuma segunda fórmula foi
+escrita, nenhuma política de preço mudou: o que mudou foi a QUANTIDADE. Sem
+doses por embalagem a estimativa falha fechada — nenhuma linha e nenhum total,
+com o motivo na tela, em vez de uma lista de R$ 0,00.
+
+O mesmo defeito alimentava a coluna "Equivalente estoque" (F-02-1): o DTO já
+trazia `theoreticalPerUnit`, mas `rowFromDTO` o descartava e a versão gravada
+caía em `stockEquivalentQuantity` — a mesma conta incompleta. Rascunho mostrava
+`0,012 kg` e versão ativa `0,0002 kg` na MESMA célula. O campo defeituoso saiu do
+DTO; a tela usa o campo autoritativo, e nada de pureza, overage, doses ou
+conversão é reconstruído no navegador.
+
+**Contrato protegido:** para a mesma versão, a quantidade do motor e a
+quantidade que alimenta o custo são iguais **no Decimal**, antes de qualquer
+apresentação —
+[`custo-estimado-quantidade-fisica.test.ts`](../apps/api/src/modules/costs/custo-estimado-quantidade-fisica.test.ts).
+Pela interface:
+[`formulacao-quantidade-fisica-e-custo.mjs`](../scripts/e2e/formulacao-quantidade-fisica-e-custo.mjs).
+
+Nada foi persistido pelo caminho defeituoso — a estimativa é lida a cada
+abertura e nunca gravada —, então não houve backfill nem toque em dado
+histórico.
+
 ## Próxima prioridade
 
-**FIX-02** — custo estimado da Formulação usando a quantidade por dose (F-02-2),
-depois a fila P1 da seção A.
+**FIX-03** — F-08-2, depois a fila P1 da seção A.
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo
