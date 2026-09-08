@@ -80,6 +80,15 @@ mais. F-07-2 saiu junto por ser o mesmo G3 pelo outro lado: a coluna da OP passo
 a se chamar "Disponível para esta OP", com a ⓘ explicando por que a Posição de
 Estoque mostra menos. **Cálculo intocado nas duas pontas.**
 
+**Os dois achados abertos pelo FIX-05 foram fechados no FIX-05b (2026-09-08).**
+Ordem de Produção CANCELADA deixou de prender o Pedido — a contagem passou a usar
+um conjunto explícito de estados que prendem, com COMPLETED dentro dele de
+propósito —, e a ação de cancelar passou a existir na tela para pedido em
+atendimento, que é onde a regra do domínio sempre valeu. `CustomerMismatchError`
+deixou de escapar de `apply-fulfillment-plan` como 500: virou
+`400 customer_mismatch`, o mesmo par que o módulo de Projetos já usava. Nenhuma
+OP é apagada; a cancelada continua no histórico.
+
 **F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
 momentos diferentes sem dizer qual é qual".
 

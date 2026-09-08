@@ -49,7 +49,8 @@ existem para impedir:
 | `formulacao-quantidade-fisica-e-custo.mjs` | a quantidade que a tela mostra, a que o custo estimado multiplica e a que o motor calcula são a MESMA — em versão ativa e em rascunho (FIX-02, F-02-2 e F-02-1) |
 | `ordem-de-producao-produto-fora-da-primeira-pagina.mjs` | uma OP de produto fora da primeira página da listagem abre com o produto certo, sem bloqueio falso, e planeja (FIX-03, F-08-2) |
 | `recebimento-validacao-viva.mjs` | o Recebimento recusa o excesso ANTES de enviar, o erro some ao corrigir e a rede prova que a tentativa inválida não virou requisição (FIX-04, F-06-1 e F-06-2) |
-| `disponibilidade-comercial-explicada.mjs` | a reserva de produto acabado continua bloqueada, e diz por quê com as palavras que a Posição de Estoque usa para o mesmo item — retenção e ausência de estoque recebem explicações diferentes, e o link leva ao item (FIX-05, F-09-1). Deixa **um Pedido em atendimento** por execução: aplicar o Plano gera OP, e o domínio recusa cancelar pedido que já gerou OP |
+| `disponibilidade-comercial-explicada.mjs` | a reserva de produto acabado continua bloqueada, e diz por quê com as palavras que a Posição de Estoque usa para o mesmo item — retenção e ausência de estoque recebem explicações diferentes, e o link leva ao item (FIX-05, F-09-1) |
+| `cancelamento-de-pedido-com-op-cancelada.mjs` | com a OP viva o Pedido recusa cancelamento **com 400 e motivo**; cancelada a OP, o Pedido cancela pela interface e a OP continua no histórico (FIX-05b) |
 
 ## `lib/`
 

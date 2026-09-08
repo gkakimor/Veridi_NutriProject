@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { requireCurrentUser } from "../../lib/current-user.js";
+import { CustomerMismatchError } from "../production-orders/production-orders.errors.js";
 import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
 import {
   applyFulfillmentPlan,
@@ -58,6 +59,18 @@ function mapDomainError(
   }
   if (error instanceof ProductNoLongerValidForProductionError) {
     return { status: 400, body: { error: "product_no_longer_valid", message: error.message } };
+  }
+  /*
+   * Nasce em `resolveOrderCustomerId`, dentro do `createDraftProductionOrderInTx`
+   * que este endpoint chama: o Produto pertence a um cliente e o Pedido a outro.
+   * É recusa de regra de negócio causada pelo que foi pedido — a mensagem chegava
+   * certa à tela e o status dizia "erro do servidor", o que sujava o console e
+   * reprovava suíte E2E. Mesmo status e mesmo código do irmão do módulo de
+   * Projetos (`ProjectProductCustomerMismatchError`), que já respondia
+   * `400 customer_mismatch`.
+   */
+  if (error instanceof CustomerMismatchError) {
+    return { status: 400, body: { error: "customer_mismatch", message: error.message } };
   }
   return null;
 }

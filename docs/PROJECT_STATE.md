@@ -235,6 +235,53 @@ Pela interface:
 [`disponibilidade-comercial-explicada.mjs`](../scripts/e2e/disponibilidade-comercial-explicada.mjs),
 que lê a frase na Posição de Estoque e exige que o Pedido diga aquilo.
 
+## Dependência resolvida devolve o documento (FIX-05b, 2026-09-08)
+
+Dois achados nascidos no FIX-05, os dois no mesmo domínio.
+
+**Ordem de Produção cancelada prendia o Pedido para sempre.** Cancelar Pedido
+em atendimento exige que não sobre obrigação operacional, e a checagem contava
+Ordens de Produção **sem olhar status** — a verificação de reserva, na linha de
+cima, já filtrava por `ACTIVE`. Cancelar a OP pelo caminho oficial não devolvia
+o Pedido: ele ficava em atendimento sem saída pela interface, e cada execução do
+E2E do FIX-05 deixava um preso no DEV.
+
+A contagem passou a usar um conjunto explícito de estados que **prendem**:
+DRAFT, PLANNED, RELEASED, IN_PRODUCTION, COMPLETED, BLOCKED. Só CANCELLED saiu.
+Deliberadamente **não** é `OPEN_PRODUCTION_ORDER_STATUSES`: aquele conjunto
+responde "o que está em aberto" e deixa COMPLETED de fora, enquanto aqui
+COMPLETED prende — ordem concluída produziu produto acabado para este Pedido, e
+desfazer isso é decisão de quem opera, nunca efeito colateral de um
+cancelamento. Duas perguntas diferentes, dois conjuntos. Um teste falha se um
+status novo nascer sem essa decisão ser tomada, e o padrão para o desconhecido é
+prender.
+
+A tela também escondia a ação: `isCancellable` só valia para DRAFT e CONFIRMED,
+embora o domínio sempre tenha permitido IN_FULFILLMENT sob condição. Resolver as
+dependências não tinha efeito visível. A ação passou a existir em atendimento —
+o servidor continua sendo a autoridade e recusa com o motivo quando ainda houver
+dependência. Expedição confirmada segue fora: ali a saída física não se desfaz
+com um cancelamento simples. **Nada é apagado em cascata**: a OP cancelada
+continua no histórico, só deixa de contar.
+
+**Erro de negócio vestido de falha de servidor.** `CustomerMismatchError` —
+produto de um cliente num Pedido de outro — nasce dentro do
+`createDraftProductionOrderInTx` que `apply-fulfillment-plan` chama, e a rota não
+a mapeava: HTTP 500. A mensagem chegava certa à tela por acidente, e o preço era
+um erro de servidor no console para uma recusa que o próprio pedido causou.
+Mapeada para `400 customer_mismatch`, o mesmo status e o mesmo código que o irmão
+do módulo de Projetos já usava. Contrato preservado: mensagem em português,
+`{ error, message }`, sem stack.
+
+Protegido por
+[`cancelamento-op-cancelada.test.ts`](../apps/api/src/modules/customer-orders/cancelamento-op-cancelada.test.ts)
+(uma cancelada, uma ativa, cancelada + ativa, todas canceladas, reserva ativa sem
+OP viva, guarda de exaustividade de status, e o 400 do mismatch),
+[`erro-de-dominio-na-tela.test.ts`](../apps/web/src/lib/erro-de-dominio-na-tela.test.ts)
+(o texto que a faixa mostra) e, pela interface,
+[`cancelamento-de-pedido-com-op-cancelada.mjs`](../scripts/e2e/cancelamento-de-pedido-com-op-cancelada.mjs),
+que percorre recusa → cancelar OP → cancelar Pedido sem deixar resíduo.
+
 ## Próxima prioridade
 
 **FIX-06** — a fila P1 da seção A (F-03-1, F-07-1).
@@ -266,12 +313,14 @@ importador em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md).
 
 **Resíduos de laboratório declarados**, para a próxima reconstrução planejada —
 nenhum é apagado por SQL, e nenhum estorno foi inventado para removê-los:
-`OC-006794` e `OC-006795` recebidas pelo E2E do FIX-04; a V2 em rascunho de
-`PROD-000158`; e os Pedidos em atendimento que o E2E do FIX-05 deixa, um por
-execução (`PED-003985`, `PED-003986`). O Pedido fica porque aplicar o Plano gera
-Ordem de Produção e o domínio recusa cancelar pedido que já gerou OP — inclusive
-quando a OP foi cancelada depois, já que a checagem conta ordens sem olhar
-status. As OPs em rascunho a própria suíte cancela pelo fluxo oficial.
+`OC-006794` e `OC-006795` recebidas pelo E2E do FIX-04, e a V2 em rascunho de
+`PROD-000158`.
+
+Os Pedidos que o E2E do FIX-05 deixava presos (`PED-003985`, `PED-003986`)
+**deixaram de ser resíduo no FIX-05b**: foram cancelados pela interface, pelo
+fluxo oficial, depois que a OP cancelada parou de prender. As suítes de E2E
+comerciais passaram a encerrar a própria massa — cancelam as OPs que geraram e
+depois o Pedido, nessa ordem.
 
 ## Produção
 

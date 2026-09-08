@@ -30,6 +30,7 @@ import type {
   CustomerOrderReservationDTO,
   CustomerOrderReservationLineDTO,
   CustomerOrderShipmentSummaryDTO,
+  ProductionOrderStatus,
   QuotePaymentScheduleDTO,
 } from "@veridi/shared";
 import {
@@ -798,10 +799,42 @@ export async function confirmCustomerOrder(id: string): Promise<CustomerOrderDTO
 }
 
 /**
+ * Ordem de Producao que ainda PRENDE o Pedido.
+ *
+ * A checagem contava ordens sem olhar status, e uma OP CANCELADA continuava
+ * impedindo: cancelar a OP pelo fluxo oficial nao devolvia o Pedido, que
+ * ficava em atendimento para sempre sem caminho canonico de saida. Ordem
+ * cancelada nao e obrigacao nenhuma — e a unica que nao e.
+ *
+ * NAO e `OPEN_PRODUCTION_ORDER_STATUSES`, de proposito. Aquele conjunto
+ * responde "o que esta em aberto" e por isso deixa COMPLETED de fora; aqui
+ * COMPLETED PRENDE, porque ordem concluida ja produziu produto acabado para
+ * este Pedido — existe compromisso fisico, e desfaze-lo e decisao de quem
+ * opera, nunca efeito colateral de um cancelamento. Duas perguntas
+ * diferentes, dois conjuntos; conflatar seria criar a segunda definicao de
+ * "ativo" que este codigo evita.
+ *
+ * `BLOCKED` entra porque o dominio ainda nao o alcanca: se um dia alcancar,
+ * o padrao seguro e prender. `cancelamento-op-cancelada.test.ts` falha se
+ * um status novo nascer sem que esta decisao seja tomada.
+ */
+const BLOCKING_PRODUCTION_ORDER_STATUSES = [
+  "DRAFT",
+  "PLANNED",
+  "RELEASED",
+  "IN_PRODUCTION",
+  "COMPLETED",
+  "BLOCKED",
+] as const satisfies readonly ProductionOrderStatus[];
+
+export { BLOCKING_PRODUCTION_ORDER_STATUSES };
+
+/**
  * DRAFT/CONFIRMED podem cancelar livremente. IN_FULFILLMENT so cancela se
- * nao houver Finished Goods Reservation ACTIVE nem OP gerada — ja existem
- * compromissos operacionais, resolver as dependencias primeiro (nunca
- * cancela/libera nada em cascata automaticamente).
+ * nao houver Finished Goods Reservation ACTIVE nem OP que ainda prenda —
+ * ja existem compromissos operacionais, resolver as dependencias primeiro
+ * (nunca cancela/libera nada em cascata automaticamente). Nada e apagado:
+ * a OP cancelada continua no historico, so deixa de contar.
  */
 export async function cancelCustomerOrder(id: string, reason: string): Promise<CustomerOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
@@ -820,13 +853,18 @@ export async function cancelCustomerOrder(id: string, reason: string): Promise<C
     }
 
     if (current.status === "IN_FULFILLMENT") {
-      const [activeReservation, generatedOrderCount] = await Promise.all([
+      const [activeReservation, blockingOrderCount] = await Promise.all([
         tx.customerOrderReservation.findFirst({ where: { customerOrderId: id, status: "ACTIVE" } }),
-        tx.productionOrder.count({ where: { customerOrderId: id } }),
+        tx.productionOrder.count({
+          where: {
+            customerOrderId: id,
+            status: { in: [...BLOCKING_PRODUCTION_ORDER_STATUSES] },
+          },
+        }),
       ]);
-      if (activeReservation || generatedOrderCount > 0) {
+      if (activeReservation || blockingOrderCount > 0) {
         throw new CancellationBlockedError(
-          "Pedido em atendimento possui reserva de produto acabado e/ou Ordens de Produção geradas — resolva essas dependências antes de cancelar.",
+          "Pedido em atendimento possui reserva de produto acabado e/ou Ordens de Produção ativas — resolva essas dependências antes de cancelar.",
         );
       }
     }

@@ -77,7 +77,7 @@ const botaoReservar = (pagina) => secaoReserva(pagina).getByRole("button", { nam
 /** URLs desta execução — o `finally` precisa delas para limpar. */
 let urlDoPedido = null;
 
-/** Cancela as OPs em rascunho que o Plano gerou, pelo fluxo oficial. */
+/** Cancela as OPs em rascunho que o Plano gerou e, depois, o próprio Pedido. */
 async function cancelarOpsGeradas(pagina) {
   if (!urlDoPedido) return;
   try {
@@ -99,6 +99,33 @@ async function cancelarOpsGeradas(pagina) {
     }
   } catch {
     console.log("  limpeza: não foi possível cancelar alguma OP desta execução — verifique manualmente.");
+  }
+}
+
+/**
+ * Cancela o Pedido desta execução, pela interface.
+ *
+ * Enquanto a checagem de cancelamento contava OP sem olhar status, isto era
+ * impossível: cancelar as OPs não devolvia o Pedido, e cada execução deixava
+ * um em atendimento no DEV. Corrigido no FIX-05b — a suíte passou a encerrar
+ * a própria massa.
+ */
+async function cancelarPedidoDaExecucao(pagina) {
+  if (!urlDoPedido) return;
+  try {
+    await pagina.goto(urlDoPedido, { waitUntil: "networkidle" });
+    const cancelar = pagina.getByRole("button", { name: "Cancelar pedido" }).first();
+    if ((await cancelar.count()) === 0) {
+      console.log("  limpeza: o Pedido desta execução não oferece cancelamento — verifique manualmente.");
+      return;
+    }
+    await cancelar.click();
+    await pagina.locator("#co-cancel-reason").fill(`Massa de E2E ${run.runId} — FIX-05`);
+    await pagina.locator(".confirm-dialog__actions").getByRole("button", { name: "Cancelar pedido" }).click();
+    await pagina.getByText("Cancelado", { exact: true }).first().waitFor({ timeout: 15000 });
+    console.log("  limpeza: Pedido desta execução cancelado pelo fluxo oficial.");
+  } catch {
+    console.log("  limpeza: não foi possível cancelar o Pedido desta execução — verifique manualmente.");
   }
 }
 
@@ -251,13 +278,11 @@ async function main() {
     afirmar("console limpo", erros.length === 0, erros.slice(0, 5).join(" | "));
   } finally {
     /*
-     * As OPs em rascunho são canceláveis e voltam ao lugar. O Pedido não: o
-     * domínio recusa cancelar pedido em atendimento que já gerou OP, e não
-     * existe estorno canônico. Ele fica como resíduo declarado desta rodada,
-     * como as OCs do FIX-04 — apagar por SQL seria pior.
+     * Nesta ordem: as OPs primeiro, o Pedido depois. Enquanto sobrar OP viva
+     * o domínio recusa cancelar o Pedido — e é assim que tem de ser.
      */
     await cancelarOpsGeradas(pagina);
-    if (urlDoPedido) console.log(`  resíduo declarado: pedido ${urlDoPedido} em atendimento (E2E ${run.runId}).`);
+    await cancelarPedidoDaExecucao(pagina);
     await fechar();
   }
 
