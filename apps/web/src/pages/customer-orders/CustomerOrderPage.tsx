@@ -458,7 +458,20 @@ export function CustomerOrderPage() {
    */
   const origemComercial = customerOrder?.commercialOrigin ?? null;
   const linhasEditaveis = isDraft && origemComercial === null;
-  const isCancellable = !isNew && (status === "DRAFT" || status === "CONFIRMED");
+  /*
+   * IN_FULFILLMENT entra aqui porque o domínio SEMPRE permitiu cancelar
+   * nesse estado — desde que não sobre reserva de produto acabado ativa nem
+   * Ordem de Produção viva (`cancelCustomerOrder`). A tela escondia a ação,
+   * então resolver as dependências pelo caminho oficial não devolvia o
+   * Pedido: ele ficava em atendimento para sempre, sem saída pela interface.
+   *
+   * O servidor continua sendo a autoridade e recusa com o motivo quando
+   * ainda houver dependência — oferecer a ação não é liberá-la. Expedição
+   * confirmada (PARTIALLY_SHIPPED/SHIPPED) segue fora: ali a saída física
+   * não se desfaz com um cancelamento simples.
+   */
+  const isCancellable =
+    !isNew && (status === "DRAFT" || status === "CONFIRMED" || status === "IN_FULFILLMENT");
   const isConfirmable = !isNew && status === "DRAFT" && lines.length > 0;
   /*
    * Quem grava a "Entrega prevista".

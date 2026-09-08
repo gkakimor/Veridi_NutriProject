@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
+import { PRODUCTION_ORDER_STATUSES } from "@veridi/shared";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
+import { BLOCKING_PRODUCTION_ORDER_STATUSES } from "./customer-orders.service.js";
 
 const fixtureCustomerOrderIds: string[] = [];
 const fixtureProductIds: string[] = [];
@@ -145,7 +147,7 @@ async function receiveFinishedStock(
 async function createProductWithFormulation(
   app: App,
   components: { itemId: string; quantity: string; unitCode: string }[],
-  overrides: { basisQuantity?: string; finishedControlsExpiry?: boolean } = {},
+  overrides: { basisQuantity?: string; finishedControlsExpiry?: boolean; customerId?: string } = {},
 ) {
   const finishedItem = await createItem("FINISHED_PRODUCT", {
     ...(overrides.finishedControlsExpiry !== undefined ? { controlsExpiry: overrides.finishedControlsExpiry } : {}),
@@ -153,7 +155,13 @@ async function createProductWithFormulation(
   const productResp = await app.inject({
     method: "POST",
     url: "/products",
-    payload: { customerId: await fixtureCustomerId(), name: `Produto Plano Teste ${marker()}`, finishedProductItemId: finishedItem.id },
+    payload: {
+      // `customerId` explícito só no teste de cliente inconsistente: o resto
+      // usa o cliente das fixtures, que é o mesmo do Pedido.
+      customerId: overrides.customerId ?? (await fixtureCustomerId()),
+      name: `Produto Plano Teste ${marker()}`,
+      finishedProductItemId: finishedItem.id,
+    },
   });
   const product = productResp.json();
   fixtureProductIds.push(product.id);
@@ -540,5 +548,209 @@ describe("Plano de Atendimento — aplicação", () => {
     expect(cancel.json().error).toBe("cancellation_blocked");
 
     await app.close();
+  });
+});
+
+/**
+ * Ordem de Produção CANCELADA não prende mais o Pedido.
+ *
+ * O cancelamento de Pedido em atendimento contava Ordens de Produção sem
+ * olhar status — `productionOrder.count({ where: { customerOrderId } })`.
+ * Cancelar a OP pelo fluxo oficial não devolvia o Pedido: ele ficava em
+ * atendimento para sempre, sem caminho canônico de saída, e cada execução do
+ * E2E do FIX-05 deixava um preso no DEV. A verificação de reserva, na linha
+ * de cima, já filtrava por `ACTIVE`; a de OP não filtrava nada.
+ *
+ * Mora neste arquivo porque é a mesma cadeia que ele já monta: confirmar,
+ * aplicar o Plano, deixar nascer a OP. O bloco logo acima — "cancelar em
+ * atendimento é bloqueado" — é a outra metade da mesma regra.
+ */
+describe("Plano de Atendimento — cancelar o Pedido depois", () => {
+  /*
+   * UMA app e UM catálogo para o bloco inteiro.
+   *
+   * A suíte roda em três workers contra um Postgres só, e cadastrar produto
+   * com formulação ativa custa quatro requisições mais o cálculo de
+   * necessidade a cada Plano aplicado. O que cada cenário precisa de próprio
+   * é o PEDIDO — o catálogo é pano de fundo, e cinco cópias dele só somariam
+   * disputa por um banco que a suíte inteira compartilha.
+   */
+  const app = buildTestApp();
+  let produtoA: { id: string };
+  let produtoB: { id: string };
+  let itemAcabadoA: { id: string };
+
+  beforeAll(async () => {
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await receiveRawStock(rawMaterial.id, "100000");
+    const componentes = [{ itemId: rawMaterial.id, quantity: "1", unitCode: "kg" }];
+    const a = await createProductWithFormulation(app, componentes);
+    const b = await createProductWithFormulation(app, componentes);
+    produtoA = a.product;
+    itemAcabadoA = a.finishedItem;
+    produtoB = b.product;
+  });
+
+  /** Reserva `reserve` de cada linha e produz o resto: uma OP por linha com produção. */
+  async function orderInFulfillment(
+    app: App,
+    linhas: { productId: string; ordered: string; reserve: string }[],
+  ) {
+    const order = await createConfirmedOrder(
+      app,
+      await fixtureCustomerId(),
+      linhas.map((linha) => ({ productId: linha.productId, orderedQuantity: linha.ordered })),
+    );
+    const applied = await app.inject({
+      method: "POST",
+      url: `/customer-orders/${order.id}/apply-fulfillment-plan`,
+      payload: {
+        lines: order.lines.map((line: { id: string }, indice: number) => ({
+          customerOrderLineId: line.id,
+          reserveQuantity: linhas[indice]!.reserve,
+          produceQuantity: (
+            Number(linhas[indice]!.ordered) - Number(linhas[indice]!.reserve)
+          ).toString(),
+        })),
+      },
+    });
+    expect(applied.statusCode).toBe(200);
+    return applied.json();
+  }
+
+  const cancelarOp = (app: App, id: string) =>
+    app.inject({
+      method: "POST",
+      url: `/production-orders/${id}/cancel`,
+      payload: { reason: "Massa de teste — cancelamento de Pedido" },
+    });
+
+  const cancelarPedido = (app: App, id: string) =>
+    app.inject({
+      method: "POST",
+      url: `/customer-orders/${id}/cancel`,
+      payload: { reason: "Cancelamento após resolver dependências" },
+    });
+
+  it("OP cancelada deixa de prender; enquanto viva, a recusa nomeia a dependência", async () => {
+
+    // Reserva 0 e produz tudo: uma OP DRAFT, nenhuma reserva ACTIVE.
+    const order = await orderInFulfillment(app, [
+      { productId: produtoA.id, ordered: "100", reserve: "0" },
+    ]);
+    expect(order.status).toBe("IN_FULFILLMENT");
+    expect(order.generatedProductionOrders).toHaveLength(1);
+
+    const antes = await cancelarPedido(app, order.id);
+    expect(antes.statusCode).toBe(400);
+    expect(antes.json().error).toBe("cancellation_blocked");
+    expect(antes.json().message).toMatch(/Ordens de Produção ativas/i);
+
+    const opId = order.generatedProductionOrders[0].id;
+    expect((await cancelarOp(app, opId)).statusCode).toBe(200);
+
+    const depois = await cancelarPedido(app, order.id);
+    expect(depois.statusCode).toBe(200);
+    expect(depois.json().status).toBe("CANCELLED");
+
+    // Cancelar Pedido não apaga histórico: a OP continua lá, cancelada.
+    const op = await getPrisma().productionOrder.findUnique({ where: { id: opId } });
+    expect(op?.status).toBe("CANCELLED");
+    expect(op?.customerOrderId).toBe(order.id);
+  });
+
+  it("duas OPs: cancelar uma não basta; cancelar as duas libera", async () => {
+
+    const order = await orderInFulfillment(app, [
+      { productId: produtoA.id, ordered: "100", reserve: "0" },
+      { productId: produtoB.id, ordered: "100", reserve: "0" },
+    ]);
+    expect(order.generatedProductionOrders).toHaveLength(2);
+
+    expect((await cancelarOp(app, order.generatedProductionOrders[0].id)).statusCode).toBe(200);
+    const parcial = await cancelarPedido(app, order.id);
+    expect(parcial.statusCode).toBe(400);
+    expect(parcial.json().error).toBe("cancellation_blocked");
+
+    expect((await cancelarOp(app, order.generatedProductionOrders[1].id)).statusCode).toBe(200);
+    const cancelado = await cancelarPedido(app, order.id);
+    expect(cancelado.statusCode).toBe(200);
+    expect(cancelado.json().status).toBe("CANCELLED");
+  });
+
+  it("reserva ativa sem OP viva continua impedindo — a regra da reserva não mudou", async () => {
+
+    await receiveFinishedStock(itemAcabadoA.id, "60");
+
+    // Reserva 60 do que existe e produz 40: sobra reserva ACTIVE e uma OP.
+    const order = await orderInFulfillment(app, [
+      { productId: produtoA.id, ordered: "100", reserve: "60" },
+    ]);
+    expect(order.generatedProductionOrders).toHaveLength(1);
+    expect((await cancelarOp(app, order.generatedProductionOrders[0].id)).statusCode).toBe(200);
+
+    const recusa = await cancelarPedido(app, order.id);
+    expect(recusa.statusCode).toBe(400);
+    expect(recusa.json().error).toBe("cancellation_blocked");
+  });
+
+  it("só CANCELLED deixa de prender — status novo nasce prendendo", () => {
+    /*
+     * Guarda de exaustividade. Se um status novo entrar em
+     * `PRODUCTION_ORDER_STATUSES` sem alguém decidir se prende o Pedido, este
+     * teste falha — em vez de o status novo silenciosamente liberar
+     * cancelamento de Pedido com obrigação viva.
+     */
+    const naoPrendem = PRODUCTION_ORDER_STATUSES.filter(
+      (status) => !BLOCKING_PRODUCTION_ORDER_STATUSES.includes(status as never),
+    );
+    expect(naoPrendem).toEqual(["CANCELLED"]);
+    // COMPLETED prende: ordem concluída produziu produto acabado para o Pedido.
+    expect(BLOCKING_PRODUCTION_ORDER_STATUSES).toContain("COMPLETED");
+  });
+
+  it("cliente inconsistente recusa com 400 customer_mismatch, nunca 500", async () => {
+
+    const prisma = getPrisma();
+    const outroCliente = await prisma.customer.create({
+      data: {
+        code: `CLI-FP-${marker()}`,
+        legalName: `Outro cliente ${marker()}`,
+        tradeName: "Outro",
+        active: true,
+      },
+    });
+    fixtureCustomerIds.push(outroCliente.id);
+
+    const rawMaterial = await createItem("RAW_MATERIAL");
+    await receiveRawStock(rawMaterial.id, "1000");
+    const { product } = await createProductWithFormulation(
+      app,
+      [{ itemId: rawMaterial.id, quantity: "1", unitCode: "kg" }],
+      { customerId: outroCliente.id },
+    );
+
+    // Produto de um cliente num Pedido de outro: `resolveOrderCustomerId`
+    // recusa dentro do `createDraftProductionOrderInTx`, e a rota precisa
+    // traduzir isso — antes escapava sem mapeamento e virava 500.
+    const order = await createConfirmedOrder(app, await fixtureCustomerId(), [
+      { productId: product.id, orderedQuantity: "100" },
+    ]);
+    const aplicado = await app.inject({
+      method: "POST",
+      url: `/customer-orders/${order.id}/apply-fulfillment-plan`,
+      payload: {
+        lines: [
+          { customerOrderLineId: order.lines[0].id, reserveQuantity: "0", produceQuantity: "100" },
+        ],
+      },
+    });
+
+    expect(aplicado.statusCode).toBe(400);
+    expect(aplicado.json().error).toBe("customer_mismatch");
+    expect(aplicado.json().message).toMatch(/Cliente inconsistente/i);
+    expect(aplicado.json().message).toContain(outroCliente.legalName);
+    // Contrato da API: só `error` e `message`, sem stack.
+    expect(Object.keys(aplicado.json()).sort()).toEqual(["error", "message"]);
   });
 });
