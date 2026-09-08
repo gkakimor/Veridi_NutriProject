@@ -12,6 +12,7 @@ import {
   updateProductionOrder,
 } from "./production-orders.service.js";
 import {
+  CustomerMismatchError,
   FormulationVersionNotFoundError,
   FormulationVersionProductMismatchError,
   InactiveProductError,
@@ -73,6 +74,19 @@ function mapDomainError(
   }
   if (error instanceof ReleaseValidationError) {
     return { status: 400, body: { error: "release_validation_failed", message: error.message } };
+  }
+  /*
+   * Nasce em `resolveOrderCustomerId`: o Produto pertence a um cliente e o
+   * Pedido da OP a outro. Chega aqui pelo PATCH (trocar de produto resolve o
+   * cliente de novo) e pelo /plan (OP que ainda não tem cliente resolvido).
+   * É recusa de regra de negócio, e saía como 500 — a mensagem certa aparecia
+   * por acidente, porque o handler genérico do Fastify também carrega
+   * `message`. Mesmo status e mesmo código já usados pelos dois irmãos:
+   * `apply-fulfillment-plan` (a mesma classe) e o módulo de Projetos
+   * (`ProjectProductCustomerMismatchError`).
+   */
+  if (error instanceof CustomerMismatchError) {
+    return { status: 400, body: { error: "customer_mismatch", message: error.message } };
   }
   return null;
 }
