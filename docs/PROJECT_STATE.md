@@ -338,15 +338,30 @@ suíte da API. O arquivo foi para `vitest.serial.config.ts` pelo critério que j
 estava escrito lá — estado global inevitável —, e nenhuma expectativa mudou.
 Custo: ~5 s a mais na suíte da API.
 
+## Recusa de negócio tem o status de recusa de negócio (PROD-ERR-01, 2026-09-08)
+
+`CustomerMismatchError` — produto de um cliente numa OP de outro — nasce em
+`resolveOrderCustomerId` e é chamada de três lugares. O FIX-05b mapeou a rota do
+Plano de Atendimento; as duas do próprio módulo de Produção ficaram sem
+tratamento, e o mesmo erro de domínio saía como **HTTP 500** no `PATCH
+/production-orders/:id` e no `POST /production-orders/:id/plan`. A mensagem
+certa chegava à tela por acidente: o handler genérico do Fastify também carrega
+`message`. Agora as três rotas respondem `400 customer_mismatch`, com a mensagem
+do domínio intacta e o corpo só com `{ error, message }` — a mesma convenção do
+módulo de Projetos (`ProjectProductCustomerMismatchError`). **Só o mapeamento
+mudou:** nenhum service, nenhuma regra de detecção, nenhuma tela.
+
+**A auditoria da rota achou o alcance real de cada uma.** Pelo PATCH, o caminho
+é o fluxo normal — trocar o produto de uma OP nascida de Pedido resolve o dono
+do material de novo. Pelo `/plan`, não: o serviço só resolve o cliente quando a
+OP ainda não tem um (`order.customerId ?? resolveOrderCustomerId(…)`), e nenhuma
+escrita atual grava `customerOrderId` sem gravar o cliente junto. A rota
+continua coberta porque uma linha anterior ao preenchimento da coluna tem essa
+forma — e era exatamente ela que produzia o 500.
+
 ## Próxima prioridade
 
-**PROD-ERR-01** — `CustomerMismatchError` escapa como HTTP 500 em
-`PATCH /production-orders/:id` e `POST /production-orders/:id/plan`. A classe é
-lançada em `production-orders.service.ts` e só está mapeada em
-`fulfillment-plan.routes.ts` (feito no FIX-05b); `production-orders.routes.ts`
-não a trata. Mesma correção do irmão: `400 customer_mismatch`.
-
-**Depois: FIX-06** — a fila P1 da seção A (F-03-1, F-07-1).
+**FIX-06** — a fila P1 da seção A (F-03-1, F-07-1).
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo

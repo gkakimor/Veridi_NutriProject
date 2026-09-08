@@ -35,10 +35,10 @@ conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
-**Zero CRITICAL, zero BLOCKER.** Três MEDIUM, três LOW — F-02-2 e F-02-1
+**Zero CRITICAL, zero BLOCKER.** Dois MEDIUM, três LOW — F-02-2 e F-02-1
 fechados no FIX-02, F-08-2 no FIX-03, F-06-1 + F-06-2 no FIX-04 e F-09-1 +
-F-07-2 no FIX-05 (2026-09-08). PROD-ERR-01 não vem da auditoria: nasceu da
-leitura de código do FIX-05b.
+F-07-2 no FIX-05 (2026-09-08). PROD-ERR-01 não veio da auditoria — nasceu da
+leitura de código do FIX-05b — e está **RESOLVIDO** (2026-09-08).
 
 ### P0 — antes de qualquer outra capability
 
@@ -53,15 +53,13 @@ fechada, com o motivo na tela. Nada havia sido persistido por esse caminho.
 
 | ID | Título | Sev. | Tam. | Grupo |
 |---|---|---|---|---|
-| **PROD-ERR-01** | `CustomerMismatchError` escapa como HTTP 500 em `PATCH /production-orders/:id` e `POST /production-orders/:id/plan` | MEDIUM | XS | — |
 | **F-03-1** | Custo estimado da Formulação não atualiza ao salvar e não se identifica como prévia nem como gravado | MEDIUM | XS | — |
 | **F-07-1** | Sugestão de compra imprime `6.122448979592` com ponto decimal | MEDIUM | S | G1 |
 
-**PROD-ERR-01.** A classe é lançada em `production-orders.service.ts` e só está
-mapeada em `fulfillment-plan.routes.ts` — o FIX-05b tratou a rota do Plano de
-Atendimento e não a do próprio módulo. Recusa de negócio (produto de um cliente
-numa OP de outro) vira erro de servidor no console. Mesma correção do irmão:
-`400 customer_mismatch`, mensagem em português, `{ error, message }`.
+**PROD-ERR-01 foi fechado em 2026-09-08.** `mapDomainError` de
+`production-orders.routes.ts` ganhou a mesma linha que os dois irmãos já tinham
+— `400 customer_mismatch`, mensagem do domínio intacta, corpo só com
+`{ error, message }`. Nenhum service, nenhuma regra e nenhuma tela mudaram.
 
 **F-08-2 foi fechado no FIX-03 (2026-09-08).** Atingia **164 dos 214 produtos
 aprovados (77 %)**: a tela carregava 50 produtos por código e procurava o produto
