@@ -39,8 +39,8 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 [`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. O que sobra:
 
 - **achados triados da auditoria de 2026-09-07** — seção A do
-  [`BACKLOG.md`](BACKLOG.md): 1 P0, 7 P1, 7 P2, 3 P3 (F-08-1 fechado em FIX-01;
-  F-02-2 e F-02-1 em FIX-02);
+  [`BACKLOG.md`](BACKLOG.md): 6 P1, 7 P2, 3 P3 (F-08-1 fechado em FIX-01;
+  F-02-2 e F-02-1 em FIX-02; F-08-2 em FIX-03);
 - **melhorias aprovadas, aguardando autorização do PO:** #8E, #8F, #8G;
 - **aguardando validação com a Veridi:** #7 e #11;
 - **manutenção:** #10;
@@ -112,9 +112,44 @@ Nada foi persistido pelo caminho defeituoso — a estimativa é lida a cada
 abertura e nunca gravada —, então não houve backfill nem toque em dado
 histórico.
 
+## Identidade não se resolve por página de listagem (FIX-03, 2026-09-08)
+
+A tela da Ordem de Produção carregava **uma página de 50 produtos** para
+alimentar o campo de escolha e depois procurava o produto da própria ordem
+dentro dessa página. Com 214 produtos aprovados, 164 deles — **77 %** — ficam
+fora dessa página sob a ordenação por código: abrir a OP de qualquer um deles
+deixava o campo Produto **em branco** e a tela concluía "Produto sem item de
+produto acabado válido" para uma ordem válida (F-08-2). `undefined` virava
+veredito de domínio.
+
+Uma tela de detalhe conhece a entidade por **identidade**. O DTO da OP já traz
+`productId`, `productCode`, `productName` e `finishedItemId` — este último lido
+no servidor do mesmo `product.finishedProductItem` que o gate de planejamento
+consulta. Enquanto o formulário aponta para o produto da ordem, ele é a fonte;
+quando a pessoa escolhe outro, a fonte é o registro que ela acabou de escolher,
+vindo da busca no servidor. **Nenhum endpoint novo, nenhuma alteração de DTO,
+nenhuma requisição adicional** — e nada de `pageSize` inflado, que só adia o
+mesmo defeito.
+
+**A listagem continua servindo ao que ela é:** as opções do campo. O que saiu
+foi o seu uso como fonte de verdade.
+
+A frase só aparece quando o produto foi resolvido e realmente não tem item de
+produto acabado — o bloqueio legítimo segue de pé. LOADING, NOT_FOUND e falha de
+rede deixaram de ser a mesma resposta: "não consegui falar com o sistema" tem
+tela própria, com nova tentativa, em vez de virar "ordem não encontrada".
+
+**Contrato protegido:**
+[`production-order-product-resolution.test.tsx`](../apps/web/src/pages/production-orders/production-order-product-resolution.test.tsx)
+— alvo na posição 51 e na 214, alvo dentro da página, troca de produto, produto
+sem PA, carregando, não encontrado e erro de rede. Pela interface:
+[`ordem-de-producao-produto-fora-da-primeira-pagina.mjs`](../scripts/e2e/ordem-de-producao-produto-fora-da-primeira-pagina.mjs).
+
+Nenhum dado foi tocado: o defeito era de leitura de tela, nunca chegou a gravar.
+
 ## Próxima prioridade
 
-**FIX-03** — F-08-2, depois a fila P1 da seção A.
+**FIX-04** — F-06-1 + F-06-2, depois a fila P1 da seção A.
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo

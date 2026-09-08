@@ -35,8 +35,8 @@ conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
-**Zero CRITICAL, zero BLOCKER.** Um HIGH, três MEDIUM, quatro LOW — F-02-2 e
-F-02-1 fechados no FIX-02 (2026-09-08).
+**Zero CRITICAL, zero BLOCKER.** Três MEDIUM, quatro LOW — F-02-2 e F-02-1
+fechados no FIX-02 e F-08-2 no FIX-03 (2026-09-08).
 
 ### P0 — antes de qualquer outra capability
 
@@ -51,17 +51,17 @@ fechada, com o motivo na tela. Nada havia sido persistido por esse caminho.
 
 | ID | Título | Sev. | Tam. | Grupo |
 |---|---|---|---|---|
-| **F-08-2** | OP em rascunho afirma "Produto sem item de produto acabado válido" para produto com PA válido | HIGH | S | — |
 | **F-09-1** | Pedido mostra "Disponível agora 0" e botão morto sem dizer que o lote aguarda a Qualidade | MEDIUM | S | G3 |
 | **F-06-1** | Recebimento só recusa o excesso na confirmação, depois do diálogo de irreversibilidade | MEDIUM | S | G4 |
 | **F-06-2** | O alerta de excesso do Recebimento não some quando a quantidade é corrigida | LOW | XS | G4 |
 | **F-03-1** | Custo estimado da Formulação não atualiza ao salvar e não se identifica como prévia nem como gravado | MEDIUM | XS | — |
 | **F-07-1** | Sugestão de compra imprime `6.122448979592` com ponto decimal | MEDIUM | S | G1 |
 
-**F-08-2** atinge **164 dos 214 produtos aprovados (77 %)**: a tela carrega só os
-50 primeiros por código (`ProductionOrderPage.tsx:294`) e o produto da OP, fora
-dessa página, não é encontrado — a frase dispara em `!selectedProduct?.
-finishedProductItem`, onde `undefined` vira "inválido".
+**F-08-2 foi fechado no FIX-03 (2026-09-08).** Atingia **164 dos 214 produtos
+aprovados (77 %)**: a tela carregava 50 produtos por código e procurava o produto
+da OP dentro dessa página, onde `undefined` virava "inválido" — e o campo Produto
+abria em branco. A ordem passou a ser resolvida por identidade, pelo DTO que ela
+já traz; nenhum endpoint novo, nenhuma requisição a mais.
 
 **F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
 momentos diferentes sem dizer qual é qual".

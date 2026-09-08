@@ -47,6 +47,7 @@ existem para impedir:
 | Suíte | O que prova |
 |---|---|
 | `formulacao-quantidade-fisica-e-custo.mjs` | a quantidade que a tela mostra, a que o custo estimado multiplica e a que o motor calcula são a MESMA — em versão ativa e em rascunho (FIX-02, F-02-2 e F-02-1) |
+| `ordem-de-producao-produto-fora-da-primeira-pagina.mjs` | uma OP de produto fora da primeira página da listagem abre com o produto certo, sem bloqueio falso, e planeja (FIX-03, F-08-2) |
 
 ## `lib/`
 

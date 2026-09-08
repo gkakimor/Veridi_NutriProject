@@ -46,7 +46,12 @@ import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/q
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
 import { getItem } from "../../lib/items-api";
-import { ApiValidationError, LotMismatchApiError } from "../../lib/api-errors";
+import {
+  ApiValidationError,
+  LotMismatchApiError,
+  NotFoundApiError,
+  apiErrorMessage,
+} from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp } from "../../components/help";
 import { helpTopics } from "../../help/help-content";
@@ -178,6 +183,64 @@ function productionOrderFlowSteps(order: ProductionOrderDTO): FlowStep[] {
 }
 
 /**
+ * O produto que o formulário aponta, com o que a tela precisa saber dele.
+ *
+ * `temItemDeProdutoAcabado` é a única pergunta de domínio que a tela faz ao
+ * produto, e ela tem que ser respondida por quem sabe — nunca pela ausência
+ * de um registro numa lista carregada por página.
+ */
+interface ProdutoDaOrdem {
+  id: string;
+  code: string;
+  name: string;
+  temItemDeProdutoAcabado: boolean;
+}
+
+/**
+ * Resolve o produto do formulário por IDENTIDADE.
+ *
+ * A tela carrega uma página de 50 produtos para alimentar o campo de escolha.
+ * Isso é carga de OPÇÕES, não fonte de verdade. Com 214 produtos aprovados,
+ * 164 deles ficam fora dessa página sob a ordenação por código — e resolver o
+ * produto da OP com um `find` nessa lista devolvia `undefined` para 77% do
+ * catálogo: o campo abria vazio e a tela concluía "Produto sem item de produto
+ * acabado válido" para uma ordem perfeitamente válida.
+ *
+ * A OP já conhece o próprio produto: `productId`, `productCode`, `productName`
+ * e `finishedItemId` vêm no DTO dela, e enquanto ela é rascunho esse
+ * `finishedItemId` é lido ao vivo do mesmo `product.finishedProductItem` que o
+ * gate de planejamento consulta no servidor. Enquanto o formulário aponta para
+ * o produto da ordem, ele é a fonte. Quando a pessoa escolhe outro produto, a
+ * fonte passa a ser o registro que ela acabou de escolher — que veio da busca
+ * no servidor e por isso está carregado.
+ */
+function resolverProdutoDoFormulario(
+  productId: string,
+  order: ProductionOrderDTO | null,
+  carregados: ProductDTO[],
+): ProdutoDaOrdem | null {
+  if (!productId) return null;
+
+  if (order && order.productId === productId) {
+    return {
+      id: order.productId,
+      code: order.productCode,
+      name: order.productName,
+      temItemDeProdutoAcabado: order.finishedItemId !== null,
+    };
+  }
+
+  const escolhido = carregados.find((product) => product.id === productId);
+  if (!escolhido) return null;
+  return {
+    id: escolhido.id,
+    code: escolhido.code,
+    name: escolhido.name,
+    temItemDeProdutoAcabado: escolhido.finishedProductItem !== null,
+  };
+}
+
+/**
  * Documento transacional — página própria, não FullWorkspaceModal (mesmo
  * padrão de Ordem de Compra). Atende `/producao/ordens/nova` (sem :id) e
  * `/producao/ordens/:id`.
@@ -190,6 +253,9 @@ export function ProductionOrderPage() {
   const [productionOrder, setProductionOrder] = useState<ProductionOrderDTO | null>(null);
   const [loading, setLoading] = useState(!isNew);
   const [notFound, setNotFound] = useState(false);
+  // "A ordem não existe" e "não consegui falar com o sistema" são respostas
+  // diferentes: a primeira encerra a busca, a segunda pede outra tentativa.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [productId, setProductId] = useState("");
   const [formulationVersionId, setFormulationVersionId] = useState("");
@@ -280,12 +346,16 @@ export function ProductionOrderPage() {
     if (isNew || !id) return;
     setLoading(true);
     setNotFound(false);
+    setLoadError(null);
     getProductionOrder(id)
       .then((order) => {
         setProductionOrder(order);
         syncFormFromServer(order);
       })
-      .catch(() => setNotFound(true))
+      .catch((erro) => {
+        if (erro instanceof NotFoundApiError) setNotFound(true);
+        else setLoadError(apiErrorMessage(erro, "Tente novamente em instantes."));
+      })
       .finally(() => setLoading(false));
   }, [id, isNew, syncFormFromServer]);
 
@@ -384,7 +454,24 @@ export function ProductionOrderPage() {
   const isReleasable = !isNew && status === "PLANNED";
   const hasShortage = (productionOrder?.shortageItemCount ?? 0) > 0;
 
-  const selectedProduct = activeProducts.find((product) => product.id === productId) ?? null;
+  const selectedProduct = resolverProdutoDoFormulario(productId, productionOrder, activeProducts);
+  /*
+   * O campo mostra o rótulo do valor escolhido a partir das opções. Sem o
+   * produto da própria ordem entre elas, uma OP de produto fora da primeira
+   * página abria com o campo em branco — que lê como "não salvou".
+   */
+  const productOptions: EntityOption[] = activeProducts.map((product) => ({
+    id: product.id,
+    code: product.code,
+    name: product.name,
+  }));
+  if (selectedProduct && !activeProducts.some((product) => product.id === selectedProduct.id)) {
+    productOptions.unshift({
+      id: selectedProduct.id,
+      code: selectedProduct.code,
+      name: selectedProduct.name,
+    });
+  }
   const hasNoActiveFormulation =
     isDraft && productId.length > 0 && !formulationOptions.some((version) => version.status === "ACTIVE");
 
@@ -733,6 +820,20 @@ export function ProductionOrderPage() {
     );
   }
 
+  if (!isNew && loadError) {
+    return (
+      <div className="page__header">
+        <div>
+          <h1 className="page__title">Não foi possível carregar a ordem de produção</h1>
+          <p className="page__subtitle">{loadError}</p>
+          <button type="button" className="btn btn--ghost" onClick={() => navigate(0)}>
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="doc-header">
@@ -904,11 +1005,7 @@ export function ProductionOrderPage() {
                   onChange={(selectedId) => handleProductChange(selectedId)}
                   placeholder="Digite código ou nome do produto…"
                   onSearch={buscarProdutos}
-options={activeProducts.map((product) => ({
-                    id: product.id,
-                    code: product.code,
-                    name: product.name,
-                  }))}
+                  options={productOptions}
                 />
               ) : (
                 <p className="field-readonly-value">
@@ -916,7 +1013,12 @@ options={activeProducts.map((product) => ({
                 </p>
               )}
               {fieldErrors["productId"] && <p className="field__error">{fieldErrors["productId"]}</p>}
-              {isDraft && productId && !selectedProduct?.finishedProductItem && (
+              {/*
+                * Só o domínio autoriza esta frase: o produto foi resolvido e
+                * ele realmente não tem item de produto acabado. Produto ainda
+                * não resolvido não é produto inválido.
+                */}
+              {isDraft && selectedProduct && !selectedProduct.temItemDeProdutoAcabado && (
                 <p className="field__hint">Produto sem item de produto acabado válido.</p>
               )}
               {hasNoActiveFormulation && (
