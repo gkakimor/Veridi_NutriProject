@@ -35,9 +35,10 @@ conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
-**Zero CRITICAL, zero BLOCKER.** Dois MEDIUM, três LOW — F-02-2 e F-02-1
+**Zero CRITICAL, zero BLOCKER.** Três MEDIUM, três LOW — F-02-2 e F-02-1
 fechados no FIX-02, F-08-2 no FIX-03, F-06-1 + F-06-2 no FIX-04 e F-09-1 +
-F-07-2 no FIX-05 (2026-09-08).
+F-07-2 no FIX-05 (2026-09-08). PROD-ERR-01 não vem da auditoria: nasceu da
+leitura de código do FIX-05b.
 
 ### P0 — antes de qualquer outra capability
 
@@ -52,8 +53,15 @@ fechada, com o motivo na tela. Nada havia sido persistido por esse caminho.
 
 | ID | Título | Sev. | Tam. | Grupo |
 |---|---|---|---|---|
+| **PROD-ERR-01** | `CustomerMismatchError` escapa como HTTP 500 em `PATCH /production-orders/:id` e `POST /production-orders/:id/plan` | MEDIUM | XS | — |
 | **F-03-1** | Custo estimado da Formulação não atualiza ao salvar e não se identifica como prévia nem como gravado | MEDIUM | XS | — |
 | **F-07-1** | Sugestão de compra imprime `6.122448979592` com ponto decimal | MEDIUM | S | G1 |
+
+**PROD-ERR-01.** A classe é lançada em `production-orders.service.ts` e só está
+mapeada em `fulfillment-plan.routes.ts` — o FIX-05b tratou a rota do Plano de
+Atendimento e não a do próprio módulo. Recusa de negócio (produto de um cliente
+numa OP de outro) vira erro de servidor no console. Mesma correção do irmão:
+`400 customer_mismatch`, mensagem em português, `{ error, message }`.
 
 **F-08-2 foi fechado no FIX-03 (2026-09-08).** Atingia **164 dos 214 produtos
 aprovados (77 %)**: a tela carregava 50 produtos por código e procurava o produto
@@ -234,10 +242,16 @@ relevante. O Git guarda o detalhe. Não misturar com capability de negócio.
 Não é backlog operacional. Cada item é verdadeiro hoje e não tem trabalho
 definido. Se algum voltar com sintoma novo, aí vira item da seção A.
 
+**W2 saiu (2026-09-08).** Voltou com sintoma novo — 8 falhas em 10 `pnpm test` —,
+foi medido, teve causa (a suíte da API e a da web disputando a CPU no runner
+oficial) e correção. Está em
+[`PROJECT_STATE.md`](PROJECT_STATE.md), "O runner oficial não disputa a máquina
+consigo mesmo". **W1 continua sem ocorrência**: `ERR_IPC_CHANNEL_CLOSED` não
+apareceu em nenhuma das 40 execuções completas dessa medição.
+
 | # | O quê | Por que não é backlog |
 |---|---|---|
 | **W1** | `pnpm test` — `ERR_IPC_CHANNEL_CLOSED` ocasional no encerramento dos workers do vitest | Nenhuma asserção falha, sem reprodução recente. **Decisão de PO:** não investigar preventivamente. Se reaparecer, capturar versão do Node, worker/processo, ordem de shutdown, árvore de processos, frequência e stack completa **antes** de mexer no runner |
-| **W2** | `pricing-technical-precision.test.ts` > "round-trip" — ocorrência única | Não reproduziu em 16 suítes completas nem em 15 execuções do grupo. Sem causa e sem sintoma. Se reaparecer, capturar a resposta da chamada que falhou antes de mexer em qualquer coisa |
 | **W3** | 24 das 56 linhas de `_prisma_migrations` em produção com checksum diferente do arquivo | Line ending, e só. `.gitattributes` fixa LF no SQL das migrations para novos clones. Nada foi reescrito no ledger |
 | **W4** | Linha órfã `20260904093000_template_component_quantity_mode` em produção | Tolerada por decisão de 2026-09-04 ([`TECH_BASELINE.md`](TECH_BASELINE.md)). Reescrever `_prisma_migrations` à mão é pior que a linha |
 | **W5** | Dois diretórios de migration com o mesmo timestamp `20260904090000` (`_component_quantity_mode` e `_gmp_production_execution`) | A ordenação é pelo nome completo do diretório, então continua determinística e igual em todo ambiente. Sem impacto observado; renomear diretório aplicado é que quebraria o ledger |

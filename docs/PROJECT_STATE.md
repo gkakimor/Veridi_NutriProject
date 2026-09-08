@@ -282,9 +282,71 @@ OP viva, guarda de exaustividade de status, e o 400 do mismatch),
 [`cancelamento-de-pedido-com-op-cancelada.mjs`](../scripts/e2e/cancelamento-de-pedido-com-op-cancelada.mjs),
 que percorre recusa → cancelar OP → cancelar Pedido sem deixar resíduo.
 
+## O runner oficial não disputa a máquina consigo mesmo (2026-09-08)
+
+`pnpm test` chama `pnpm -r test`, e a concorrência padrão do pnpm é **4**: a
+suíte da API e a da web subiam ao mesmo tempo. A API tem teto de três workers;
+a web não tinha teto nenhum, e o padrão do Vitest é `núcleos − 1` — quinze
+processos com jsdom. Dezoito forks mais os supervisores em dezesseis núcleos
+lógicos: CPU em 100 % e fila de execução do Windows entre 7 e 23 threads
+prontas esperando núcleo.
+
+**Nada quebrava. Tudo ficava lento na mesma proporção.** As **903 requisições**
+de `pricing-technical-precision.test.ts` são exatamente as mesmas nas duas
+condições — mediana de **8,2 ms** sozinho e **23–29 ms** sob a web, p95 de 17 ms
+para 68–107 ms. Não há corrida, espera, retry nem trabalho a mais: há a mesma
+sequência, mais devagar. O teste `round-trip` encadeia **72 chamadas HTTP**
+(quatro valores × a cadeia inteira de precificação, do recebimento com custo à
+faixa de preço), e essa soma ia de **0,69 s** para **~5,0 s**.
+
+O orçamento de 5 s do Vitest não estava errado — estava **empatado**. Em dez
+`pnpm test` completos a mediana do teste caiu em cima da linha, 5014 ms, e por
+isso o mesmo código passava e falhava sem nada mudar.
+
+O runner oficial passou a rodar os workspaces **em sequência**
+(`pnpm -r --workspace-concurrency=1 test`). Cada suíte recebe a máquina inteira
+na sua vez. **Nenhuma suíte virou serial por dentro**: a API continua em três
+workers e a web no padrão dela. Nenhum timeout foi alterado, nenhum retry
+existe, nenhum `.skip`, nenhuma cobertura saiu.
+
+| `round-trip` sob `pnpm test` | mediana | p95 | máx | falhas |
+|---|---|---|---|---|
+| antes | 5014 ms | 5032 ms | 5041 ms | **8/10** |
+| depois | 956 ms | 965 ms | 965 ms | **0/10** |
+
+**Não é o banco.** Pico de 36 conexões (limite 100), no máximo **3 ativas**
+simultâneas e **zero** esperas de lock em 24 amostras. **Não é fixture nem
+sequence.** A concorrência que divide o banco — a própria API, três workers,
+mesmas tabelas, mesmo `FOR UPDATE` da numeração — leva o teste de 694 ms a
+928 ms. Quem o leva a 4347 ms é a web, que não toca o banco.
+
+**Ao mexer no runner, mexer no runner.** Reduzir workers da web ou aumentar o
+timeout do arquivo trataria o sintoma e precisaria de reajuste a cada arquivo
+novo de teste. A concorrência também não estava pagando: execução completa que
+passava custava 151–157 s concorrente e custa 146–147 s em sequência.
+
+**A faixa serial ganhou um segundo arquivo.** Com a API deixando de disputar a
+CPU, os três workers dela passaram a se sobrepor de verdade, e apareceu uma
+colisão que a lentidão escondia: `gmp-execution.test.ts` cria revisões de
+documento controlado e as **ativa** — "revisão ativa" é uma só por tipo, para o
+banco inteiro —, e o RELEASE de qualquer Ordem de Produção congela o id da
+revisão vigente dentro da transação. Quando a limpeza do GMP apagava a revisão
+entre a leitura e a escrita de um vizinho, o release estourava
+`P2003 production_orders_productionOrderRevisionId_fkey`, num arquivo diferente
+a cada vez (`costs`, `picking`, `consumption`): **3 falhas em 22 execuções** da
+suíte da API. O arquivo foi para `vitest.serial.config.ts` pelo critério que já
+estava escrito lá — estado global inevitável —, e nenhuma expectativa mudou.
+Custo: ~5 s a mais na suíte da API.
+
 ## Próxima prioridade
 
-**FIX-06** — a fila P1 da seção A (F-03-1, F-07-1).
+**PROD-ERR-01** — `CustomerMismatchError` escapa como HTTP 500 em
+`PATCH /production-orders/:id` e `POST /production-orders/:id/plan`. A classe é
+lançada em `production-orders.service.ts` e só está mapeada em
+`fulfillment-plan.routes.ts` (feito no FIX-05b); `production-orders.routes.ts`
+não a trata. Mesma correção do irmão: `400 customer_mismatch`.
+
+**Depois: FIX-06** — a fila P1 da seção A (F-03-1, F-07-1).
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo
