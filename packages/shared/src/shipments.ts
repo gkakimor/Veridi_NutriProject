@@ -8,6 +8,7 @@
 
 import { Decimal } from "./decimal-config.js";
 import type { ShipmentBillingStatus } from "./billings.js";
+import type { InventoryUnavailableReasonDTO } from "./inventory.js";
 
 export const SHIPMENT_CODE_PREFIX = "EXP";
 
@@ -228,6 +229,17 @@ export interface ReservationStatusLineDTO {
   currentAvailable: string;
   /** `min(stillToReserve, currentAvailable)`. */
   suggestedAdditionalReserve: string;
+  /** `stillToReserve - currentAvailable`, nunca negativo — o que falta para reservar tudo. */
+  missingQuantity: string;
+  /**
+   * Por que o disponível do produto acabado é menor que o físico — a MESMA
+   * decomposição da Posição de Estoque (`getUnavailabilityByItems`), nunca
+   * uma segunda leitura montada na tela.
+   *
+   * Vazio quando não há retenção: aí o disponível é baixo porque o material
+   * não existe, não porque está preso. Nunca é inferido de `available === 0`.
+   */
+  unavailable: InventoryUnavailableReasonDTO[];
 }
 
 export interface ReservationStatusDTO {

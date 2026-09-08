@@ -11,12 +11,14 @@ import type {
   PlanPurchaseSourcingDTO,
   PurchaseSuggestionDTO,
   ReservationStatusDTO,
+  ReservationStatusLineDTO,
   ShipmentStatus,
   SupplierDTO,
 } from "@veridi/shared";
 import {
   Decimal,
   BILLING_STATUS_LABELS,
+  INVENTORY_UNAVAILABLE_REASON_LABELS,
   CUSTOMER_ORDER_BILLING_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
   PRODUCTION_ORDER_STATUS_LABELS,
@@ -192,6 +194,47 @@ function temValorParaEnviar(texto: string | undefined): boolean {
 }
 
 /**
+ * O que a linha da Reserva Complementar responde sobre disponibilidade.
+ *
+ * DERIVADO da resposta do servidor a cada render, nunca guardado: estado
+ * que mora em `useState` sobrevive à correção do fato que o criou — foi
+ * assim que o alerta do recebimento ficou preso na tela (F-06-2).
+ *
+ * `COBERTA` não é "indisponível": a linha simplesmente não tem mais nada a
+ * reservar, e cobrá-la de estoque seria alarme falso.
+ */
+type DisponibilidadeDaLinha =
+  | "COBERTA"
+  | "DISPONIVEL"
+  | "PARCIAL"
+  | "INDISPONIVEL";
+
+function disponibilidadeDaLinha(line: ReservationStatusLineDTO): DisponibilidadeDaLinha {
+  const falta = new Decimal(line.stillToReserve);
+  if (falta.lessThanOrEqualTo(0)) return "COBERTA";
+  const disponivel = new Decimal(line.currentAvailable);
+  if (disponivel.lessThanOrEqualTo(0)) return "INDISPONIVEL";
+  return disponivel.greaterThanOrEqualTo(falta) ? "DISPONIVEL" : "PARCIAL";
+}
+
+/**
+ * "1.000 un aguardando liberação da Qualidade · 20 un vencido".
+ *
+ * As causas são as do domínio (`getUnavailabilityByItems`), as MESMAS que a
+ * Posição de Estoque escreve — a tela traduz o código para português e não
+ * inventa uma segunda leitura. Lista vazia significa que nada está retido,
+ * o que é um fato diferente de "não sabemos".
+ */
+function explicarRetencao(line: ReservationStatusLineDTO): string {
+  return line.unavailable
+    .map(
+      (linha) =>
+        `${formatQuantity(linha.quantity)} ${line.unitCode} ${INVENTORY_UNAVAILABLE_REASON_LABELS[linha.reason]}`,
+    )
+    .join(" · ");
+}
+
+/**
  * O complemento de uma linha do Plano: o que não é reservado é produzido.
  *
  * Campo em branco continua valendo zero — o complemento vira o pedido
@@ -304,6 +347,15 @@ export function CustomerOrderPage() {
   const [generating, setGenerating] = useState(false);
 
   const [reservationStatus, setReservationStatus] = useState<ReservationStatusDTO | null>(null);
+  /**
+   * Consulta que falhou não é estoque que falta.
+   *
+   * A seção inteira sumia da tela quando `getReservationStatus` rejeitava —
+   * o mesmo `null` do "ainda não carregou". Quem tentasse reservar depois de
+   * uma falha de rede via o assunto desaparecer, e a leitura óbvia ("não há
+   * o que reservar") é justamente a que o sistema não sabe afirmar.
+   */
+  const [reservationStatusError, setReservationStatusError] = useState(false);
   const [reserveInputs, setReserveInputs] = useState<Record<string, string>>({});
   const [reserving, setReserving] = useState(false);
   const [reallocatingLineId, setReallocatingLineId] = useState<string | null>(null);
@@ -547,6 +599,7 @@ export function CustomerOrderPage() {
     if (!id) return;
     getReservationStatus(id)
       .then((result) => {
+        setReservationStatusError(false);
         setReservationStatus(result);
         setReserveInputs((prev) => {
           const next: Record<string, string> = {};
@@ -557,14 +610,19 @@ export function CustomerOrderPage() {
           return next;
         });
       })
-      .catch(() => setReservationStatus(null));
+      .catch(() => {
+        setReservationStatus(null);
+        setReservationStatusError(true);
+      });
   }, [id]);
 
   useEffect(() => {
     if (!isOperational || !id) {
       setReservationStatus(null);
+      setReservationStatusError(false);
       return;
     }
+    setReservationStatusError(false);
     reloadReservationStatus();
   }, [isOperational, id, reloadReservationStatus]);
 
@@ -1865,9 +1923,23 @@ options={optionsForRow(line).map((product) => ({
           </FormSection>
         )}
 
-        {isOperational && reservationStatus && (() => {
-          const temAlgoReservado = reservationStatus.lines.some(
+        {isOperational && (() => {
+          const linhas = reservationStatus?.lines ?? [];
+          const temAlgoReservado = linhas.some(
             (line) => Number(line.reservedRemaining) > 0,
+          );
+          /* Linha que ainda precisa de produto e nao tem tudo agora. Sai da
+             resposta do servidor, nao de `available === 0`. */
+          const travadas = linhas.filter((line) => {
+            const estado = disponibilidadeDaLinha(line);
+            return estado === "INDISPONIVEL" || estado === "PARCIAL";
+          });
+          const nadaDisponivel =
+            linhas.length > 0 &&
+            linhas.every((line) => disponibilidadeDaLinha(line) !== "DISPONIVEL" &&
+              disponibilidadeDaLinha(line) !== "PARCIAL");
+          const semValorDigitado = linhas.every(
+            (line) => !temValorParaEnviar(reserveInputs[line.customerOrderLineId]),
           );
           return (
           <FormSection
@@ -1878,6 +1950,27 @@ options={optionsForRow(line).map((product) => ({
             title="Reservar Produto Acabado"
             subtitle="Produto produzido depois do Plano precisa ser explicitamente reservado antes de poder ser expedido."
           >
+            {/*
+              Falha de consulta e ausência de estoque são fatos diferentes e
+              a tela precisa dizer qual dos dois aconteceu. Sumir com a seção
+              deixava a pessoa concluir o pior.
+            */}
+            {reservationStatusError && (
+              <p className="form-alert" role="alert">
+                Não foi possível verificar a disponibilidade do produto acabado. Isto não
+                significa que falta estoque — a consulta não respondeu. Atualize a página para
+                tentar de novo.
+              </p>
+            )}
+
+            {!reservationStatus && !reservationStatusError && (
+              <p className="field__hint" role="status">
+                Verificando a disponibilidade do produto acabado…
+              </p>
+            )}
+
+            {reservationStatus && (
+            <>
             <div className="table-container">
               <table className="table">
                 <thead>
@@ -1892,7 +1985,7 @@ options={optionsForRow(line).map((product) => ({
                   </tr>
                 </thead>
                 <tbody>
-                  {reservationStatus.lines.map((line) => (
+                  {linhas.map((line) => (
                     <tr key={line.customerOrderLineId}>
                       <td>
                         <EntityLink kind="product" id={line.productId} code={line.productCode} name={line.productName} />
@@ -1903,7 +1996,17 @@ options={optionsForRow(line).map((product) => ({
                       <td className="is-numeric">{formatQuantity(line.shippedQuantity)}</td>
                       <td className="is-numeric">{line.reservedRemaining}</td>
                       <td className="is-numeric">{line.stillToReserve}</td>
-                      <td className="is-numeric">{line.currentAvailable}</td>
+                      <td className="is-numeric">
+                        {line.currentAvailable}
+                        {/*
+                            Mil unidades produzidas e "0" na coluna ao lado é a
+                            linha que alguém pergunta. A causa vem dos lotes
+                            reais, pelo mesmo mecanismo da Posição de Estoque.
+                        */}
+                        {line.unavailable.length > 0 && (
+                          <span className="cell-sub cell-sub--wrap">{explicarRetencao(line)}</span>
+                        )}
+                      </td>
                       <td>
                         <input
                           type="text"
@@ -1925,15 +2028,51 @@ options={optionsForRow(line).map((product) => ({
               </table>
             </div>
 
+            {/*
+              O botão continua desabilitado quando não há o que reservar — a
+              correção não é liberar a ação, é dizer POR QUE ela não avança e
+              para onde ir. Quantidade que falta e motivo saem do servidor;
+              nada aqui recalcula disponibilidade.
+            */}
+            {travadas.length > 0 && (
+              <div className="callout">
+                <p>
+                  <strong>
+                    {travadas.length === 1
+                      ? "1 produto sem disponibilidade suficiente para reservar."
+                      : travadas.length + " produtos sem disponibilidade suficiente para reservar."}
+                  </strong>{" "}
+                  A reserva só alcança o que está livre agora.
+                </p>
+                <ul>
+                  {travadas.map((line) => (
+                    <li key={line.customerOrderLineId}>
+                      {line.productCode} — {line.productName}: faltam{" "}
+                      {formatQuantity(line.missingQuantity)} {line.unitCode} de{" "}
+                      {formatQuantity(line.stillToReserve)} {line.unitCode}
+                      {" — "}
+                      {line.unavailable.length > 0
+                        ? explicarRetencao(line)
+                        : "nada retido em estoque: a quantidade que falta ainda não foi produzida nem recebida"}
+                      .{" "}
+                      <Link to={`/estoque/${line.itemId}`}>Ver disponibilidade</Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="line-actions">
               <button
                 type="button"
                 className="btn btn--secondary btn--sm"
-                disabled={
-                  reserving ||
-                  reservationStatus.lines.every(
-                    (line) => !temValorParaEnviar(reserveInputs[line.customerOrderLineId]),
-                  )
+                disabled={reserving || semValorDigitado}
+                title={
+                  reserving || !semValorDigitado
+                    ? undefined
+                    : nadaDisponivel
+                      ? "Nenhuma linha tem produto disponível para reservar agora — o motivo está acima."
+                      : "Informe a quantidade a reservar em pelo menos uma linha."
                 }
                 onClick={handleReserveAvailable}
               >
@@ -1959,6 +2098,8 @@ options={optionsForRow(line).map((product) => ({
                 {preparingShipment ? "Preparando…" : "Preparar Expedição"}
               </button>
             </div>
+            </>
+            )}
           </FormSection>
           );
         })()}

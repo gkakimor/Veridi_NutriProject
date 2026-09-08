@@ -555,6 +555,19 @@ export const producaoTopics = {
  * tabela virar parágrafo e o painel virar glossário.
  */
 export const producaoHints = {
+  /*
+   * "Disponível" na ordem NÃO é o disponível da Posição de Estoque, e os dois
+   * números aparecerem juntos numa auditoria foi o que revelou o rótulo mudo:
+   * Físico 15, Reservado 12, e Disponível 15 aqui contra 3 lá, no mesmo
+   * instante. Os dois estão certos — a pergunta é que é outra. O rótulo passou
+   * a dizer para quem, e o texto abaixo, por quê.
+   */
+  "ordemProducao.disponivelParaEstaOP": {
+    module: "producao",
+    label: "Disponível para esta OP",
+    text: "Saldo que ESTA ordem pode consumir: o disponível do estoque mais o que ela própria já reservou. Uma ordem não compete contra a própria reserva, senão o compromisso dela viraria falta. Na Posição de Estoque o mesmo item aparece menor — lá a reserva desta ordem está descontada, porque a pergunta é o que sobra para os outros.",
+  },
+
   "producao.picking.conferencia": {
     module: "producao",
     label: "Picking",
