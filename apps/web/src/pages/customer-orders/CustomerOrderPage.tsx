@@ -48,6 +48,7 @@ import {
 } from "../../lib/shipments-api";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { complementoDeQuantidade } from "../../lib/quantity-complement";
 import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { FormSection } from "../../components/FormSection";
@@ -187,7 +188,7 @@ function temValorParaEnviar(texto: string | undefined): boolean {
   const limpo = (texto ?? "").trim();
   if (limpo === "") return false;
   const valor = parseDecimalInput(limpo);
-  return valor === null || Number(valor) > 0;
+  return valor === null || new Decimal(valor).greaterThan(0);
 }
 
 /**
@@ -196,11 +197,16 @@ function temValorParaEnviar(texto: string | undefined): boolean {
  * Campo em branco continua valendo zero — o complemento vira o pedido
  * inteiro, como sempre foi. O que muda é `2,5`: era `NaN` e apagava o outro
  * campo sem explicar; agora é dois e meio.
+ *
+ * A subtração é em `Decimal` porque este número **é enviado**: passar
+ * quantidade por `Number` aqui devolveria ao servidor um complemento com
+ * ruído de ponto flutuante, e `10.000000000001 - 3` deixaria de fechar com o
+ * pedido na décima segunda casa — §66. Zero é zero, nunca `-0`.
  */
 function complementoDaLinha(pedido: string, digitado: string): string {
   const valor = digitado.trim() === "" ? "0" : parseDecimalInput(digitado);
   if (valor === null) return "";
-  return Math.max(Number(pedido) - Number(valor), 0).toString();
+  return complementoDeQuantidade(pedido, valor);
 }
 
 function situationLabel(situation: string): string {
@@ -1009,7 +1015,7 @@ export function CustomerOrderPage() {
               `Reservar de ${line.productCode}`,
             ) ?? "0",
         }))
-        .filter((line) => Number(line.quantity) > 0);
+        .filter((line) => new Decimal(line.quantity).greaterThan(0));
       if (lines.length === 0) return;
 
       const updated = await reserveAvailable(id, { lines });

@@ -18,8 +18,11 @@ nasceu quando o banco guardava seis, e hoje ele guarda doze.
 O primeiro sintoma dessa defasagem — o campo com teto que recusava o próprio
 número impresso — foi corrigido em FIX-01 (2026-09-07): campo com limite agora
 resolve o que foi digitado contra o limite por `quantity-limit.ts`, e digitar o
-valor exibido significa "usar todo o limite". O que sobra da defasagem é
-exibição sem entrada (F-07-1) e o P0 de custo da Formulação.
+valor exibido significa "usar todo o limite". O FIX-01b (2026-09-08) fechou os
+dois resíduos que o próprio FIX-01 encontrou: o apontamento de produção, que
+recalculava o restante por `Number`, e o complemento do Plano de Atendimento,
+que ia no payload calculado em ponto flutuante. O que sobra da defasagem é
+exibição sem entrada (F-07-1, W7) e o P0 de custo da Formulação.
 
 ---
 
@@ -214,6 +217,7 @@ definido. Se algum voltar com sintoma novo, aí vira item da seção A.
 | **W3** | 24 das 56 linhas de `_prisma_migrations` em produção com checksum diferente do arquivo | Line ending, e só. `.gitattributes` fixa LF no SQL das migrations para novos clones. Nada foi reescrito no ledger |
 | **W4** | Linha órfã `20260904093000_template_component_quantity_mode` em produção | Tolerada por decisão de 2026-09-04 ([`TECH_BASELINE.md`](TECH_BASELINE.md)). Reescrever `_prisma_migrations` à mão é pior que a linha |
 | **W5** | Dois diretórios de migration com o mesmo timestamp `20260904090000` (`_component_quantity_mode` e `_gmp_production_execution`) | A ordenação é pelo nome completo do diretório, então continua determinística e igual em todo ambiente. Sem impacto observado; renomear diretório aplicado é que quebraria o ledger |
+| **W7** | Quantidade ainda passa por `Number` em pontos de **exibição** das telas de OP e Pedido: teste de sinal (`> 0`, `<= 0`) em `badge`/`disabled`, a diferença `onHand - reserved - available` renderizada (`ProductionOrderPage.tsx:1157`) e os totais somados na tela (`CustomerOrderPage.tsx:2020-2032`). O Pedido também imprime `reservedRemaining` e `stillToReserve` crus, sem `formatQuantity` (`1904`, `1905`, `2192`) | Classificado no FIX-01b e deliberadamente **não corrigido**: nenhum alcança payload nem validação. Teste de sinal sobre valor ≥ 10⁻¹² é seguro em `double`; o que é defeito de verdade — soma e diferença exibidas em ponto flutuante, e valor cru na tela — é da mesma família de F-07-1 e pertence ao PREC-UI, não a um remendo pontual |
 | **W6** | Decisão de domínio pendente: trocar `RESTRICT` por `SET NULL` em alguma das 27 FKs opcionais | Não acontece mais por omissão no modelo (#14). Cada troca é decisão de domínio própria — bloquear a exclusão, desassociar ou arquivar — e exige a migration que a faça no banco |
 
 ---

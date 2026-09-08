@@ -64,6 +64,18 @@ Atendimento passaram a usá-la, e o `+ 1e-6` do Plano saiu. Domínio e
 **Campo novo com teto usa o helper.** Comparar `Number(digitado) >
 Number(limite)` na tela reabre o mesmo defeito e viola §66.
 
+**FIX-01b (2026-09-08) fechou os dois resíduos que o próprio FIX-01 encontrou.**
+O apontamento de produção recalculava `planejado - produzido` por `Number` e
+comparava o digitado contra esse número: passou a usar o `remainingQuantity`
+que o servidor já entrega, com o mesmo round-trip do Consumo Real. E o
+complemento do Plano de Atendimento — que **vai no payload** — saiu de
+`Math.max(Number(a) - Number(b), 0)` para
+[`quantity-complement.ts`](../apps/web/src/lib/quantity-complement.ts), em
+`Decimal` e em notação decimal comum, porque a fronteira do servidor recusa
+exponencial. Nas três telas do FIX-01 não sobrou nenhum `Number` sobre
+quantidade que alcance payload ou validação — o que resta é sinal (`> 0`) e
+soma de exibição, listado abaixo.
+
 ## Próxima prioridade
 
 **FIX-02** — custo estimado da Formulação usando a quantidade por dose (F-02-2),

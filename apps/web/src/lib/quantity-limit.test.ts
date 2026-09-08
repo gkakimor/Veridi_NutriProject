@@ -148,3 +148,27 @@ describe("excedeLimiteExibido", () => {
     expect(excedeLimiteExibido("abc", RESERVA)).toBe(false);
   });
 });
+
+describe("resolverQuantidadeContraLimite — notação do que vai no payload", () => {
+  /* A API serializa Decimal pequeno em notação exponencial (`9.79592e-7` foi
+     medido em `unreconciledQuantity`). O servidor, do outro lado, recusa
+     exponencial por regex. O valor canônico não pode sair daqui nesse
+     formato. */
+  it("teto exponencial vira decimal comum no valor canônico", () => {
+    // `1.23e-5` é `0,0000123`: exibido com seis casas vira `0,000012`.
+    const LIMITE_EXPONENCIAL = "1.23e-5";
+    expect(formatQuantity(LIMITE_EXPONENCIAL)).toBe("0,000012");
+
+    const resultado = resolverQuantidadeContraLimite("0,000012", LIMITE_EXPONENCIAL);
+    expect(resultado).toMatchObject({ status: "ok", usouTodoOLimite: true });
+    if (resultado.status !== "ok") throw new Error("esperado ok");
+    expect(resultado.valorCanonico).toBe("0.0000123");
+    expect(resultado.valorCanonico).toMatch(/^\d+(\.\d+)?$/);
+  });
+
+  it("teto comum continua saindo como sempre saiu", () => {
+    expect(resolverQuantidadeContraLimite(EXIBIDO, RESERVA)).toMatchObject({
+      valorCanonico: RESERVA,
+    });
+  });
+});

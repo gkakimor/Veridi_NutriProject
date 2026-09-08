@@ -8,6 +8,7 @@ import type {
   ShipmentStatus,
 } from "@veridi/shared";
 import {
+  Decimal,
   SHIPMENT_BILLING_STATUS_LABELS,
   SHIPMENT_PRODUCT_STATUS_LABELS,
   SHIPMENT_STATUS_LABELS,
@@ -613,7 +614,10 @@ export function ShipmentPage() {
       quantities,
     ),
   );
-  const algoAEnviar = previasPorProduto.some((previa) => Number(previa.expedindoAgora) > 0);
+  /* Gate do envio: quantidade é comparada em `Decimal`, não por `Number` — §66. */
+  const algoAEnviar = previasPorProduto.some((previa) =>
+    new Decimal(previa.expedindoAgora).greaterThan(0),
+  );
   const produtosAcimaDoQueFalta = previasPorProduto.filter((previa) => previa.acimaDoQueFalta);
 
   /* Quantidade que a tela não consegue ler não vira zero em silêncio. */
