@@ -3406,10 +3406,22 @@ Pureza ausente nunca vira 100%, pureza zero não divide, e overage ausente nunca
 vira zero implícito — ausência de premissa é cálculo inválido, não resultado
 conveniente.
 
-A matemática vive em **um lugar só** e os cinco consumidores — plano de
-atendimento, tela da Formulação, cálculo industrial, custo da precificação e
-Ordem de Produção — a chamam. Explicação na tela mostra essa conta; nunca
-recalcula por conta própria, senão passa a poder discordar do número que manda.
+A matemática vive em **um lugar só** e os seis consumidores — plano de
+atendimento, tela da Formulação, cálculo industrial, custo da precificação,
+estimativa de custo da Formulação e Ordem de Produção — a chamam. Explicação na
+tela mostra essa conta; nunca recalcula por conta própria, senão passa a poder
+discordar do número que manda.
+
+**Conversão de unidade não substitui o motor.** Converter `mg` para `kg` é uma
+ETAPA da matemática, e quem para nela fica sem o fator da base e sem os ajustes.
+A estimativa de custo da Formulação fazia exatamente isso: multiplicava o custo
+unitário pela quantidade declarada convertida, e num produto de 60 doses
+anunciava um material sessenta vezes menor que o que a Ordem de Produção separa
+— na mesma tela que mostrava a quantidade certa logo acima. Onde duas telas
+representam a MESMA grandeza, o número nasce da mesma chamada; onde representam
+grandezas diferentes — por unidade acabada e para a base da versão —, o rótulo
+diz qual é qual, porque duas colunas que divergem sem explicação são lidas como
+erro mesmo quando as duas estão certas.
 
 Esse lugar é `packages/shared/src/formulation-quantity.ts`, e
 `apps/api/src/lib/formulation-math.ts` delega para ele. A conta subiu para o

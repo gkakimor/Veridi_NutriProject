@@ -64,7 +64,6 @@ function componente(overrides: Partial<FormulationComponentDTO> = {}): Formulati
     legacyBatchUnits: null,
     theoreticalPerUnit: null,
     physicalPerUnit: null,
-    stockEquivalentQuantity: null,
     stockUnitCode: "kg",
     notes: null,
     position: 0,

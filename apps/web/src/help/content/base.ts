@@ -34,7 +34,7 @@ export const baseTopics = {
       },
       {
         term: "Quantidade informada × equivalente estoque × físico por unidade",
-        text: "Três números da mesma linha. A quantidade informada é o que você digitou, na unidade que escolheu. Equivalente estoque é essa quantidade convertida para a unidade em que o item é comprado e estocado. Físico por unidade é o que sai do estoque por unidade acabada, já com os ajustes que a linha autoriza — é este que a ordem de produção reserva e consome.",
+        text: "Três números da mesma linha. A quantidade informada é o que você digitou, na unidade que escolheu — e o que ela significa depende da base da linha. Equivalente estoque e físico por unidade estão ambos POR UNIDADE ACABADA e na unidade em que o item é comprado e estocado: o equivalente é antes dos ajustes, o físico é depois dos que a linha autoriza. A diferença entre os dois é exatamente pureza e overage; é o físico que a ordem de produção reserva e consome.",
       },
       {
         term: "Ajustes da quantidade: o que a quantidade informada significa",
@@ -714,7 +714,7 @@ export const baseHints = {
   "formulacao.equivalenteEstoque": {
     module: "producao",
     label: "Equivalente estoque",
-    text: "Quanto sai do estoque por unidade acabada, com os ajustes que ESTE componente autoriza. É o número que a ordem de produção reserva e consome, e ele fica congelado na ordem: ativar uma versão nova da formulação não recalcula ordem que já existe.",
+    text: "Quanto a receita pede por unidade acabada, na unidade de estoque do item, ANTES dos ajustes — já com a base da linha aplicada (numa fórmula por dose, já multiplicado pelas doses da embalagem). Ao lado dele, o físico por unidade é o mesmo número depois dos ajustes que ESTE componente autoriza, e é o físico que a ordem de produção reserva e consome. O valor fica congelado na ordem: ativar uma versão nova da formulação não recalcula ordem que já existe.",
   },
 } satisfies Record<string, HelpHint>;
 

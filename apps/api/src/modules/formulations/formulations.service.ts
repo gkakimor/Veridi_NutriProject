@@ -25,7 +25,7 @@ import {
 } from "../../lib/formulation-math.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
-import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
+import { isUomCompatible } from "../items/uom.js";
 import {
   ComponentItemNotFoundError,
   DuplicateComponentItemError,
@@ -66,14 +66,6 @@ function toComponentDTO(
   version: { basisQuantity: Prisma.Decimal; dosesPerPackage: number | null },
 ): FormulationComponentDTO {
   const item = component.item;
-  let stockEquivalentQuantity: Prisma.Decimal;
-  try {
-    stockEquivalentQuantity = convertUomDecimal(component.quantity, component.unitCode, item.unitCode, units);
-  } catch {
-    // Defensivo: nao deveria acontecer (unidade validada ao salvar), mas
-    // nunca deixa a leitura quebrar por causa so do calculo de exibicao.
-    stockEquivalentQuantity = component.quantity;
-  }
 
   // Previa por UNIDADE acabada — mesma matematica do Requirement da OP,
   // nunca uma conta paralela so para a tela.
@@ -121,7 +113,6 @@ function toComponentDTO(
     // componente. Nunca zero: zero seria "não precisa de material".
     theoreticalPerUnit: perUnit ? perUnit.theoreticalQuantity.toString() : null,
     physicalPerUnit: perUnit ? perUnit.requiredQuantity.toString() : null,
-    stockEquivalentQuantity: stockEquivalentQuantity.toString(),
     stockUnitCode: item.unitCode,
     notes: component.notes,
     position: component.position,

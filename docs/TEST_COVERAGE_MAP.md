@@ -30,7 +30,9 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Modo viaja no payload de gravação | omissão revertia componente teórico ao padrão, em silêncio | `web pages/formulations/modo-quantidade.test.tsx` |
 | Ativar grava o rascunho antes | ativar descartava a edição da tela | `web pages/formulations/ativar-com-rascunho.test.tsx` |
 | Versão ativa é imutável; nova versão não reescreve OP | CMV salvo mudaria sem decisão | `modules/formulations/historico-versao-e-op.test.ts` |
-| Tela e OP chegam ao MESMO físico | motor único, cinco consumidores | `modules/formulations/historico-versao-e-op.test.ts` |
+| Tela e OP chegam ao MESMO físico | motor único, seis consumidores | `modules/formulations/historico-versao-e-op.test.ts` |
+| Estimativa de custo usa a MESMA quantidade física dos Requirements | estimativa multiplicava o custo pela quantidade declarada só convertida; 60 doses = material 60× menor | `modules/costs/custo-estimado-quantidade-fisica.test.ts` |
+| "Equivalente estoque" é a mesma grandeza em rascunho e em versão ativa | ativa caía em `stockEquivalentQuantity`, rascunho na prévia do motor: 60× na mesma célula | `web pages/formulations/equivalente-estoque.test.tsx` |
 | Aritmética exibida reconstrói o número exibido | explicação omitia base e conversão de unidade | `web components/help/calc-hint.test.tsx` |
 | Campo inválido nomeia componente e campo, marca `aria-invalid`/`aria-describedby`; salvar e ativar levam ao primeiro erro e abrem o painel; digitar não rola; recusa do servidor cai no campo | erro só no topo, linha a procurar | `web pages/formulations/validacao-inline.test.tsx` |
 | Rótulos dos modos: "Quantidade física informada" / "Calcular quantidade física"; sem ajuste marcado nada é corrigido | "já ajustada"/"automaticamente" sugeriam correção ativa | `web pages/formulations/modo-quantidade.test.tsx` |

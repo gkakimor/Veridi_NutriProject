@@ -113,7 +113,13 @@ interface ComponentRow {
   applyPurityAdjustment: boolean;
   applyOverageAdjustment: boolean;
   notes: string;
-  stockEquivalentQuantity: string;
+  /**
+   * Grandezas AUTORITATIVAS do servidor, por unidade acabada e na unidade de
+   * estoque. Nada aqui é recalculado a partir de pureza, overage, doses ou
+   * conversão: a prévia do rascunho chama a mesma função do motor, e a versão
+   * gravada usa o que a API já respondeu.
+   */
+  theoreticalPerUnit: string | null;
   physicalPerUnit: string | null;
 }
 
@@ -221,7 +227,7 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
     applyPurityAdjustment: component.applyPurityAdjustment,
     applyOverageAdjustment: component.applyOverageAdjustment,
     notes: component.notes ?? "",
-    stockEquivalentQuantity: component.stockEquivalentQuantity,
+    theoreticalPerUnit: component.theoreticalPerUnit,
     physicalPerUnit: component.physicalPerUnit,
   };
 }
@@ -731,7 +737,9 @@ export function FormulationVersionPage() {
         applyPurityAdjustment: false,
         applyOverageAdjustment: false,
         notes: "",
-        stockEquivalentQuantity: "",
+        // Linha em branco não tem grandeza calculada: `null` vira travessão,
+        // e a prévia assume assim que houver item e quantidade.
+        theoreticalPerUnit: null,
         physicalPerUnit: null,
       },
     ]);
@@ -1349,8 +1357,17 @@ export function FormulationVersionPage() {
                       )
                     : null;
                   const aberto = ajustesAbertos[row.key] === true;
+                  /*
+                    Rascunho e versão gravada mostram a MESMA grandeza: teórico
+                    e físico por unidade acabada, na unidade de estoque. O
+                    fallback da versão gravada era `stockEquivalentQuantity` —
+                    a quantidade declarada só convertida de unidade —, e numa
+                    fórmula de 60 doses a mesma célula da mesma tela mudava de
+                    valor por um fator 60 conforme a versão estivesse em
+                    rascunho ou ativa.
+                  */
                   const fisicoExibido = previa?.fisico ?? row.physicalPerUnit;
-                  const equivalenteExibido = previa?.teorico ?? row.stockEquivalentQuantity;
+                  const equivalenteExibido = previa?.teorico ?? row.theoreticalPerUnit;
                   const nomeDoItem = row.itemCode || "componente";
                   /** Atributos de erro de um campo desta linha, quando há erro. */
                   const erroDe = (campo: CampoDoComponente) => fieldErrors[chaveDeErro(row.key, campo)];
@@ -1818,14 +1835,32 @@ export function FormulationVersionPage() {
         {costEstimate && (
           <FormSection
             title="Custo estimado de materiais"
-            subtitle="Estimativa de HOJE, com a MESMA escolha de fonte do cálculo de custo e do CMV: compra real dos últimos 30 dias, depois 90 dias, depois a última compra, depois oferta válida de fornecedor, depois referência manual. Lida a cada abertura e nunca gravada na versão — o CMV e a precificação leem a base CONGELADA do cálculo salvo, e é ele que vale como documento."
+            subtitle="Estimativa de HOJE, com a MESMA escolha de fonte do cálculo de custo e do CMV: compra real dos últimos 30 dias, depois 90 dias, depois a última compra, depois oferta válida de fornecedor, depois referência manual. Lida a cada abertura e nunca gravada na versão — o CMV e a precificação leem a base CONGELADA do cálculo salvo, e é ele que vale como documento. A quantidade é a mesma que a Ordem de Produção separa."
           >
+            {/*
+              Premissa faltando não vira lista de zeros: sem doses por embalagem
+              não há quantidade física, e sem quantidade não há custo. O campo
+              que resolve está logo acima, nesta mesma tela.
+            */}
+            {costEstimate.missingContext === "DOSES_PER_PACKAGE" && (
+              <p className="field__hint">
+                Informe as doses por embalagem para estimar o custo — há componentes calculados
+                por dose. Enquanto isso o custo de material não existe; não é zero.
+              </p>
+            )}
             <div className="table-container">
               <table className="table table--custo-estimado">
                 <thead>
                   <tr>
                     <th>Componente</th>
-                    <th className="is-numeric">Quantidade</th>
+                    {/*
+                      "para a base" no rótulo, não subentendido. Esta coluna e a
+                      da tabela de componentes têm denominadores diferentes — uma
+                      é por unidade acabada, outra é para a base inteira da
+                      versão —, e sem dizer qual é qual duas colunas da mesma
+                      tela divergem sem explicação.
+                    */}
+                    <th className="is-numeric">Quantidade física para a base</th>
                     <th className="is-numeric">Referência unitária</th>
                     <th>Origem</th>
                     <th className="is-numeric">Custo estimado</th>
@@ -1838,7 +1873,7 @@ export function FormulationVersionPage() {
                         <EntityLink kind="item" id={component.itemId} code={component.itemCode} name={component.itemName} />
                       </td>
                       <td className="is-numeric">
-                        {formatQuantity(component.normalizedQuantity)} {component.stockUnitCode}
+                        {formatQuantity(component.requiredQuantity)} {component.stockUnitCode}
                         <br />
                         <span className="field__hint">
                           {formatQuantity(component.formulaQuantity)} {component.formulaUnitCode}

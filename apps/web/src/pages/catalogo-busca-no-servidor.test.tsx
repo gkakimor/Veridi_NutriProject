@@ -289,7 +289,6 @@ function componenteDTO(): FormulationVersionDTO["components"][number] {
     legacyBatchUnits: null,
     theoreticalPerUnit: null,
     physicalPerUnit: null,
-    stockEquivalentQuantity: "200",
     stockUnitCode: "kg",
     notes: null,
     position: 0,
