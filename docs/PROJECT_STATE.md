@@ -39,8 +39,9 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 [`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. O que sobra:
 
 - **achados triados da auditoria de 2026-09-07** — seção A do
-  [`BACKLOG.md`](BACKLOG.md): 4 P1, 7 P2, 3 P3 (F-08-1 fechado em FIX-01;
-  F-02-2 e F-02-1 em FIX-02; F-08-2 em FIX-03; F-06-1 e F-06-2 em FIX-04);
+  [`BACKLOG.md`](BACKLOG.md): 2 P1, 6 P2, 3 P3 (F-08-1 fechado em FIX-01;
+  F-02-2 e F-02-1 em FIX-02; F-08-2 em FIX-03; F-06-1 e F-06-2 em FIX-04;
+  F-09-1 e F-07-2 em FIX-05);
 - **melhorias aprovadas, aguardando autorização do PO:** #8E, #8F, #8G;
 - **aguardando validação com a Veridi:** #7 e #11;
 - **manutenção:** #10;
@@ -188,9 +189,55 @@ mesma validação. Pela interface:
 [`recebimento-validacao-viva.mjs`](../scripts/e2e/recebimento-validacao-viva.mjs),
 que observa a rede: a tentativa inválida não produz requisição.
 
+## O zero também tem causa (FIX-05, 2026-09-08)
+
+Com mil unidades recém-produzidas, a linha do Pedido mostrava "Falta reservar
+1000 · **Disponível agora 0**" e o botão "Reservar disponível" desabilitado, sem
+uma palavra sobre o porquê (F-09-1). A causa era legítima — o lote de produto
+acabado nasce "Aguardando liberação" quando o produto exige liberação da
+Qualidade — e o domínio já a conhecia: a Posição de Estoque escrevia "aguardando
+liberação da Qualidade" na própria linha, pelo `getUnavailabilityByItems`. O
+Pedido resolvia só o irmão `getAvailableByItems` e parava aí.
+
+**A correção não habilita a ação.** Se o domínio diz indisponível, indisponível
+continua — o que mudou é que a tela diz o motivo, a quantidade que falta e o
+caminho até a posição do item. `getReservationStatus` passou a resolver o escopo
+de itens **uma vez** e a consultar disponibilidade e indisponibilidade em lote
+sobre ele; a linha ganhou `missingQuantity` e `unavailable`, e a tela traduz os
+códigos de causa com o mesmo dicionário do Estoque. Nenhum endpoint novo, nenhuma
+requisição a mais, nenhuma conta de disponibilidade no frontend.
+
+Três fatos que a tela passou a distinguir, porque confundi-los é o que produz
+diagnóstico falso:
+
+- **retido** — o material existe e está preso (Qualidade, laudo, bloqueio,
+  validade, reserva de outra demanda), com a quantidade de cada causa;
+- **inexistente** — nada retido, a quantidade que falta ainda não foi produzida
+  nem recebida;
+- **desconhecido** — a consulta está em curso, ou falhou. Antes, falha de rede
+  fazia a seção inteira sumir, e a leitura óbvia ("não há o que reservar") era
+  justamente a que o sistema não podia afirmar.
+
+F-07-2 saiu junto por ser o mesmo grupo pelo outro lado. A coluna DISPONÍVEL da
+OP mostrava 15 onde a Posição de Estoque mostrava 3, no mesmo instante — e os
+dois estavam certos: uma ordem **não compete contra a própria reserva**
+(`requirement-availability.ts:44`), senão o compromisso dela viraria falta. O
+defeito era o rótulo chamar duas perguntas pelo mesmo nome. A coluna passou a se
+chamar "Disponível para esta OP", com a ⓘ dizendo por que o Estoque mostra menos.
+**Nenhum cálculo de disponibilidade foi alterado nas duas pontas.**
+
+Protegido por [`disponibilidade-reserva-explicada.test.tsx`](../apps/web/src/pages/customer-orders/disponibilidade-reserva-explicada.test.tsx)
+(bloqueado com motivo, disponível, parcial, multilinha, carregando, erro),
+[`disponivel-para-esta-op.test.tsx`](../apps/web/src/pages/production-orders/disponivel-para-esta-op.test.tsx)
+(semântica do rótulo, nunca igualdade numérica) e `shipments.test.ts`, que prova
+a transição real: liberado o lote pela Qualidade, a causa some e a falta zera.
+Pela interface:
+[`disponibilidade-comercial-explicada.mjs`](../scripts/e2e/disponibilidade-comercial-explicada.mjs),
+que lê a frase na Posição de Estoque e exige que o Pedido diga aquilo.
+
 ## Próxima prioridade
 
-**FIX-05** — F-09-1, depois a fila P1 da seção A.
+**FIX-06** — a fila P1 da seção A (F-03-1, F-07-1).
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo
@@ -216,6 +263,15 @@ Caminho canônico, nesta ordem:
 
 Nunca `db push`, nunca edição manual de `_prisma_migrations`. Runbook do
 importador em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md).
+
+**Resíduos de laboratório declarados**, para a próxima reconstrução planejada —
+nenhum é apagado por SQL, e nenhum estorno foi inventado para removê-los:
+`OC-006794` e `OC-006795` recebidas pelo E2E do FIX-04; a V2 em rascunho de
+`PROD-000158`; e os Pedidos em atendimento que o E2E do FIX-05 deixa, um por
+execução (`PED-003985`, `PED-003986`). O Pedido fica porque aplicar o Plano gera
+Ordem de Produção e o domínio recusa cancelar pedido que já gerou OP — inclusive
+quando a OP foi cancelada depois, já que a checagem conta ordens sem olhar
+status. As OPs em rascunho a própria suíte cancela pelo fluxo oficial.
 
 ## Produção
 

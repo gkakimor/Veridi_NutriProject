@@ -687,6 +687,13 @@ describe("Reserva complementar", () => {
     expect(blocked.lines[0].stillToReserve).toBe("400");
     expect(blocked.lines[0].currentAvailable).toBe("0");
     expect(blocked.lines[0].suggestedAdditionalReserve).toBe("0");
+    // F-09-1: o zero vem explicado. Quanto falta e por que esta preso saem
+    // daqui — a tela nunca deduz a causa de `currentAvailable === 0`.
+    expect(blocked.lines[0].missingQuantity).toBe("400");
+    expect(blocked.lines[0].unavailable).toEqual([
+      { reason: "AWAITING_QUALITY_RELEASE", quantity: "400" },
+      { reason: "RESERVED", quantity: "600" },
+    ]);
 
     const rejected = await app.inject({
       method: "POST",
@@ -704,6 +711,12 @@ describe("Reserva complementar", () => {
     ).json();
     expect(afterRelease.lines[0].currentAvailable).toBe("400");
     expect(afterRelease.lines[0].suggestedAdditionalReserve).toBe("400");
+    // Liberado o lote, some a causa e some a falta. O que continua retido e a
+    // reserva que este mesmo Pedido ja tem — e isso e dito, nao escondido.
+    expect(afterRelease.lines[0].missingQuantity).toBe("0");
+    expect(afterRelease.lines[0].unavailable).toEqual([
+      { reason: "RESERVED", quantity: "600" },
+    ]);
 
     const beforeReserve = await getInventory(app, finishedItem.id);
     const movementsBefore = (

@@ -2,7 +2,11 @@ import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { CustomerOrderDTO, ReservationStatusDTO, ReservationStatusLineDTO } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import { getAvailableByItems, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
+import {
+  getAvailableByItems,
+  getUnavailabilityByItems,
+  isLotAvailableForUse,
+} from "../../lib/inventory-ledger.js";
 import { getAllocationSuggestion } from "../inventory/allocation.service.js";
 import { CustomerOrderNotFoundError } from "../customer-orders/customer-orders.errors.js";
 import { getCustomerOrderById } from "../customer-orders/customer-orders.service.js";
@@ -67,6 +71,12 @@ async function reservedRemainingByOrderLine(
  * ledger e ja respeita Quality/validade: lote AWAITING_RELEASE aparece em
  * On Hand mas contribui 0 aqui, e volta a contar apos a liberacao — sem
  * nenhuma integracao especial.
+ *
+ * O ZERO tambem vem explicado. Quem acabou de produzir mil unidades e le
+ * "disponivel 0" precisa saber onde elas estao presas, e o dominio ja sabe:
+ * `getUnavailabilityByItems` — o mesmo irmao que a Posicao de Estoque usa —
+ * devolve a retencao a partir dos lotes reais. A tela le a causa; nunca a
+ * deduz de `available === 0`.
  */
 export async function getReservationStatus(customerOrderId: string): Promise<ReservationStatusDTO> {
   const prisma = getPrisma();
@@ -78,8 +88,13 @@ export async function getReservationStatus(customerOrderId: string): Promise<Res
   assertOrderOperational(order.status);
 
   const finishedItemIds = [...new Set(order.lines.map((line) => line.finishedItemId!))];
-  const [availableByItem, shippedByLine, remainingByOrderLine] = await Promise.all([
-    getAvailableByItems(prisma, await itemScopesFor(prisma, finishedItemIds)),
+  // Um unico escopo resolvido para os dois lados da mesma pergunta: quanto
+  // esta disponivel e por que o resto nao esta. Sem segunda resolucao e sem
+  // uma consulta por linha do Pedido.
+  const itemScopes = await itemScopesFor(prisma, finishedItemIds);
+  const [availableByItem, unavailableByItem, shippedByLine, remainingByOrderLine] = await Promise.all([
+    getAvailableByItems(prisma, itemScopes),
+    getUnavailabilityByItems(prisma, itemScopes),
     getShippedByOrderLines(
       prisma,
       order.lines.map((line) => line.id),
@@ -96,6 +111,7 @@ export async function getReservationStatus(customerOrderId: string): Promise<Res
     );
     const currentAvailable = availableByItem.get(line.finishedItemId!) ?? new Prisma.Decimal(0);
     const suggested = Prisma.Decimal.min(stillToReserve, currentAvailable);
+    const missing = Prisma.Decimal.max(stillToReserve.minus(currentAvailable), 0);
 
     return {
       customerOrderLineId: line.id,
@@ -110,6 +126,11 @@ export async function getReservationStatus(customerOrderId: string): Promise<Res
       stillToReserve: stillToReserve.toString(),
       currentAvailable: currentAvailable.toString(),
       suggestedAdditionalReserve: suggested.toString(),
+      missingQuantity: missing.toString(),
+      unavailable: (unavailableByItem.get(line.finishedItemId!) ?? []).map((linha) => ({
+        reason: linha.reason,
+        quantity: linha.quantity.toString(),
+      })),
     };
   });
 

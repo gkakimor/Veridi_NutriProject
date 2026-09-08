@@ -53,8 +53,8 @@ import {
   apiErrorMessage,
 } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
-import { ContextHelp } from "../../components/help";
-import { helpTopics } from "../../help/help-content";
+import { ContextHelp, InfoHint } from "../../components/help";
+import { helpHints, helpTopics } from "../../help/help-content";
 import { formatUnitCost } from "../../components/CostBreakdown";
 import { getProductionOrderCost } from "../../lib/cost-calculation-api";
 import { FlowContext } from "../../components/FlowContext";
@@ -1163,7 +1163,12 @@ export function ProductionOrderPage() {
                       <>
                         <th className="is-numeric">Físico</th>
                         <th className="is-numeric">Reservado</th>
-                        <th className="is-numeric">Disponível</th>
+                        <th className="is-numeric">
+                          Disponível para esta OP{" "}
+                          <InfoHint label={helpHints["ordemProducao.disponivelParaEstaOP"].label}>
+                            {helpHints["ordemProducao.disponivelParaEstaOP"].text}
+                          </InfoHint>
+                        </th>
                         <th className="is-numeric">Em Compra</th>
                         <th className="is-numeric">Falta</th>
                       </>

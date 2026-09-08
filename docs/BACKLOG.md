@@ -36,7 +36,8 @@ aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre �
 a do auditor.
 
 **Zero CRITICAL, zero BLOCKER.** Dois MEDIUM, três LOW — F-02-2 e F-02-1
-fechados no FIX-02, F-08-2 no FIX-03 e F-06-1 + F-06-2 no FIX-04 (2026-09-08).
+fechados no FIX-02, F-08-2 no FIX-03, F-06-1 + F-06-2 no FIX-04 e F-09-1 +
+F-07-2 no FIX-05 (2026-09-08).
 
 ### P0 — antes de qualquer outra capability
 
@@ -51,7 +52,6 @@ fechada, com o motivo na tela. Nada havia sido persistido por esse caminho.
 
 | ID | Título | Sev. | Tam. | Grupo |
 |---|---|---|---|---|
-| **F-09-1** | Pedido mostra "Disponível agora 0" e botão morto sem dizer que o lote aguarda a Qualidade | MEDIUM | S | G3 |
 | **F-03-1** | Custo estimado da Formulação não atualiza ao salvar e não se identifica como prévia nem como gravado | MEDIUM | XS | — |
 | **F-07-1** | Sugestão de compra imprime `6.122448979592` com ponto decimal | MEDIUM | S | G1 |
 
@@ -68,6 +68,18 @@ na tela depois de a quantidade ser corrigida. O veredito por linha passou a ser
 DERIVADO — erro que mora em estado é erro que sobrevive à correção. O servidor
 continua recusando igual.
 
+**F-09-1 e F-07-2 foram fechados no FIX-05 (2026-09-08).** `getReservationStatus`
+resolvia `getAvailableByItems` e parava aí: a tela do Pedido sabia que o
+disponível era zero e não sabia por quê, enquanto a Posição de Estoque já
+escrevia "aguardando liberação da Qualidade" na própria linha pelo irmão
+`getUnavailabilityByItems`. Os dois passaram a sair da mesma resolução, em lote,
+e a tela do Pedido repete a frase do Estoque em vez de montar a sua. A ação
+continua bloqueada — o que mudou é que ela diz o motivo, a quantidade que falta
+e o caminho até a posição do item. Nenhum endpoint novo, nenhuma requisição a
+mais. F-07-2 saiu junto por ser o mesmo G3 pelo outro lado: a coluna da OP passou
+a se chamar "Disponível para esta OP", com a ⓘ explicando por que a Posição de
+Estoque mostra menos. **Cálculo intocado nas duas pontas.**
+
 **F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
 momentos diferentes sem dizer qual é qual".
 
@@ -79,7 +91,6 @@ momentos diferentes sem dizer qual é qual".
 | **F-03-2** | Coluna ORIGEM do histórico de versões vazia para versão criada de template | LOW | XS |
 | **F-08-3** | Campos "Consumir agora" sem rótulo acessível | LOW | XS |
 | **F-01-1** | "Produto" nomeia dois fatos diferentes na Consulta de Cliente | UX | S |
-| **F-07-2** | "Disponível" na OP inclui a reserva própria; na Posição de Estoque, não | UX | XS |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
 
@@ -87,7 +98,8 @@ momentos diferentes sem dizer qual é qual".
 representam — `Project.productId` (produto resultante) contra `project_products`
 (produtos em desenvolvimento), e "disponível incluindo a reserva desta OP"
 (`requirement-availability.ts:44`) contra disponível global. O defeito é o
-rótulo, não o dado.
+rótulo, não o dado. **F-07-2 foi fechado no FIX-05** por isso mesmo: só o rótulo
+mudou.
 
 **F-06-3 foi elevado de observação a defeito**: o padrão correto já existe em
 `products.service.ts:314`, com comentário nomeando exatamente este problema —
@@ -121,7 +133,7 @@ abre a edição, que contém o link "Consulta completa". Sobra só o resíduo em
 |---|---|---|---|
 | **G1** | F-07-1 | Precisão exibida e precisão validada não se reconciliam | As três comparações `Number(digitado) > Number(limite)` — OP, Expedição e Pedido, esta última remendada com `+ 1e-6` — foram substituídas por `quantity-limit.ts` em FIX-01. Sobra F-07-1, que é exibição sem campo de entrada: o mesmo valor sai formatado numa tela e cru na outra |
 | **G2** | ~~F-02-2, F-02-1~~ — fechado no FIX-02 | Quantidade **declarada** usada como se fosse a física | `convertUomDecimal` era chamado com os mesmos argumentos em `formulations.service.ts` e `costs.service.ts`, sem o motor de necessidade. Mesmo atalho, dois lugares. Os dois chamam o motor agora, e o campo `stockEquivalentQuantity` deixou de existir |
-| **G3** | F-09-1, F-07-2 | "Disponível" composto ad-hoc por tela | Três serviços envolvem `getAvailableByItems` de três jeitos; só o Estoque chama o irmão `getUnavailabilityByItems`, que é o que explica o zero |
+| **G3** | ~~F-09-1, F-07-2~~ — fechado no FIX-05 | "Disponível" composto ad-hoc por tela | O Pedido passou a chamar `getUnavailabilityByItems` junto com `getAvailableByItems`, na mesma resolução de escopo, e a exibir o motivo com as palavras do Estoque. A OP continua com o cálculo próprio — que é legítimo e está documentado em `requirement-availability.ts:44` — e agora diz isso no rótulo |
 | **G4** | ~~F-06-1, F-06-2~~ — fechado no FIX-04 | `fieldErrors` só nascia da resposta do servidor e só resetava no próximo envio | Mesmo arquivo, mesmo mecanismo: o conserto de um resolveu o outro. O veredito da quantidade é derivado, e a chave de `fieldErrors` deixou de ser a posição no array |
 | **G5** | F-06-3 | `nextval` antes da transação | Cinco módulos, mesmo diff, revisão mecânica de uma vez |
 
