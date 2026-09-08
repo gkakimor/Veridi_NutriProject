@@ -39,8 +39,8 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 [`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. O que sobra:
 
 - **achados triados da auditoria de 2026-09-07** — seção A do
-  [`BACKLOG.md`](BACKLOG.md): 6 P1, 7 P2, 3 P3 (F-08-1 fechado em FIX-01;
-  F-02-2 e F-02-1 em FIX-02; F-08-2 em FIX-03);
+  [`BACKLOG.md`](BACKLOG.md): 4 P1, 7 P2, 3 P3 (F-08-1 fechado em FIX-01;
+  F-02-2 e F-02-1 em FIX-02; F-08-2 em FIX-03; F-06-1 e F-06-2 em FIX-04);
 - **melhorias aprovadas, aguardando autorização do PO:** #8E, #8F, #8G;
 - **aguardando validação com a Veridi:** #7 e #11;
 - **manutenção:** #10;
@@ -147,9 +147,50 @@ sem PA, carregando, não encontrado e erro de rede. Pela interface:
 
 Nenhum dado foi tocado: o defeito era de leitura de tela, nunca chegou a gravar.
 
+## A tela avisa antes de enviar, e o aviso responde à correção (FIX-04, 2026-09-08)
+
+O Recebimento escrevia "Pedido: 50 kg · Recebido: 0 kg · **Aberto: 50 kg**" logo
+acima do campo e não usava esse número para nada. Digitar 80 não produzia aviso:
+a pessoa preenchia lote, validade e custo, passava pelo diálogo de
+irreversibilidade e só então era recusada pelo servidor (F-06-1). Depois da
+recusa, corrigir a quantidade não limpava o alerta — ele ficava na tela contando
+uma história que já não era verdade, até a submissão seguinte (F-06-2). Mesmo
+arquivo, mesma causa: **o veredito morava em estado, e só o servidor o escrevia**.
+
+Agora o veredito é **derivado** de cada linha a cada render — `onChange`, botão e
+envio leem do mesmo `validarQuantidadeRecebida`. Erro que não é guardado não
+sobrevive à correção, e não existe a possibilidade de a tela bloquear por um
+problema que já foi resolvido.
+
+O teto vem de [`quantity-limit.ts`](../apps/web/src/lib/quantity-limit.ts), o
+mesmo round-trip do FIX-01: o saldo tem doze casas, a tela mostra seis, e digitar
+o número exibido significa "receber tudo o que está em aberto" — o que vai ao
+servidor é o saldo canônico. Sem isso o único valor impossível de digitar seria
+justamente o que está escrito na frente do operador. Nada passa por `Number`.
+
+**O servidor não cedeu autoridade.** `receiving.service.ts` recalcula o saldo
+dentro da transação, contra os recebimentos confirmados naquele instante, e
+recusa igual — o saldo pode ter mudado desde que a página abriu. A tela antecipa
+só o que ela já sabe com certeza.
+
+Dois resíduos do mesmo mecanismo saíram junto: a chave de `fieldErrors` deixou de
+ser a POSIÇÃO no array (`lines.0.receivedQuantity` indexa o payload, não a lista
+da tela — com uma linha em branco antes, o erro do servidor pousava na linha
+errada) e passou a ser o id da linha; e uma resposta que chega depois de a pessoa
+já ter editado o formulário é descartada, em vez de reinstalar erro sobre valor
+novo.
+
+**Contrato protegido:**
+[`receiving-live-validation.test.tsx`](../apps/web/src/pages/receiving/receiving-live-validation.test.tsx)
+— acima do saldo, saldo exato, parcial, zero, ilegível, décima segunda casa,
+limpeza escopada em duas linhas, erro de servidor na linha certa e envio pela
+mesma validação. Pela interface:
+[`recebimento-validacao-viva.mjs`](../scripts/e2e/recebimento-validacao-viva.mjs),
+que observa a rede: a tentativa inválida não produz requisição.
+
 ## Próxima prioridade
 
-**FIX-04** — F-06-1 + F-06-2, depois a fila P1 da seção A.
+**FIX-05** — F-09-1, depois a fila P1 da seção A.
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo

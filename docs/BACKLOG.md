@@ -35,8 +35,8 @@ conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
-**Zero CRITICAL, zero BLOCKER.** Três MEDIUM, quatro LOW — F-02-2 e F-02-1
-fechados no FIX-02 e F-08-2 no FIX-03 (2026-09-08).
+**Zero CRITICAL, zero BLOCKER.** Dois MEDIUM, três LOW — F-02-2 e F-02-1
+fechados no FIX-02, F-08-2 no FIX-03 e F-06-1 + F-06-2 no FIX-04 (2026-09-08).
 
 ### P0 — antes de qualquer outra capability
 
@@ -52,8 +52,6 @@ fechada, com o motivo na tela. Nada havia sido persistido por esse caminho.
 | ID | Título | Sev. | Tam. | Grupo |
 |---|---|---|---|---|
 | **F-09-1** | Pedido mostra "Disponível agora 0" e botão morto sem dizer que o lote aguarda a Qualidade | MEDIUM | S | G3 |
-| **F-06-1** | Recebimento só recusa o excesso na confirmação, depois do diálogo de irreversibilidade | MEDIUM | S | G4 |
-| **F-06-2** | O alerta de excesso do Recebimento não some quando a quantidade é corrigida | LOW | XS | G4 |
 | **F-03-1** | Custo estimado da Formulação não atualiza ao salvar e não se identifica como prévia nem como gravado | MEDIUM | XS | — |
 | **F-07-1** | Sugestão de compra imprime `6.122448979592` com ponto decimal | MEDIUM | S | G1 |
 
@@ -62,6 +60,13 @@ aprovados (77 %)**: a tela carregava 50 produtos por código e procurava o produ
 da OP dentro dessa página, onde `undefined` virava "inválido" — e o campo Produto
 abria em branco. A ordem passou a ser resolvida por identidade, pelo DTO que ela
 já traz; nenhum endpoint novo, nenhuma requisição a mais.
+
+**F-06-1 e F-06-2 foram fechados no FIX-04 (2026-09-08).** O saldo em aberto já
+estava escrito acima do campo e a tela não o usava: digitar 80 contra 50 só era
+recusado pelo servidor, depois do diálogo de irreversibilidade, e o alerta ficava
+na tela depois de a quantidade ser corrigida. O veredito por linha passou a ser
+DERIVADO — erro que mora em estado é erro que sobrevive à correção. O servidor
+continua recusando igual.
 
 **F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
 momentos diferentes sem dizer qual é qual".
@@ -117,7 +122,7 @@ abre a edição, que contém o link "Consulta completa". Sobra só o resíduo em
 | **G1** | F-07-1 | Precisão exibida e precisão validada não se reconciliam | As três comparações `Number(digitado) > Number(limite)` — OP, Expedição e Pedido, esta última remendada com `+ 1e-6` — foram substituídas por `quantity-limit.ts` em FIX-01. Sobra F-07-1, que é exibição sem campo de entrada: o mesmo valor sai formatado numa tela e cru na outra |
 | **G2** | ~~F-02-2, F-02-1~~ — fechado no FIX-02 | Quantidade **declarada** usada como se fosse a física | `convertUomDecimal` era chamado com os mesmos argumentos em `formulations.service.ts` e `costs.service.ts`, sem o motor de necessidade. Mesmo atalho, dois lugares. Os dois chamam o motor agora, e o campo `stockEquivalentQuantity` deixou de existir |
 | **G3** | F-09-1, F-07-2 | "Disponível" composto ad-hoc por tela | Três serviços envolvem `getAvailableByItems` de três jeitos; só o Estoque chama o irmão `getUnavailabilityByItems`, que é o que explica o zero |
-| **G4** | F-06-1, F-06-2 | `fieldErrors` só nasce da resposta do servidor e só reseta no próximo envio | Mesmo arquivo, mesmo mecanismo: o conserto de um resolve o outro |
+| **G4** | ~~F-06-1, F-06-2~~ — fechado no FIX-04 | `fieldErrors` só nascia da resposta do servidor e só resetava no próximo envio | Mesmo arquivo, mesmo mecanismo: o conserto de um resolveu o outro. O veredito da quantidade é derivado, e a chave de `fieldErrors` deixou de ser a posição no array |
 | **G5** | F-06-3 | `nextval` antes da transação | Cinco módulos, mesmo diff, revisão mecânica de uma vez |
 
 ### Achado estrutural, sem item próprio
