@@ -42,7 +42,6 @@ import {
 } from "../../lib/production-orders-api";
 import { ExtraConsumptionDialog } from "../../components/ExtraConsumptionDialog";
 import { exigirDecimal } from "../../lib/decimal-field";
-import { parseDecimalInput } from "../../lib/decimal-input";
 import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
 import { listProducts } from "../../lib/products-api";
 import { listFormulationVersionsByProduct } from "../../lib/formulations-api";
@@ -422,16 +421,15 @@ export function ProductionOrderPage() {
 
   /* Quanto ainda cabe apontar nesta ordem. O servidor sempre recusou o
      excesso (`output_exceeds_planned`); o que faltava era a tela dizer o
-     limite antes do envio. */
-  const restanteParaProduzir = productionOrder
-    ? Math.max(Number(productionOrder.plannedQuantity) - Number(productionOrder.producedQuantity), 0)
-    : 0;
-  const producaoAcimaDoPlanejado = (() => {
-    const digitado = outputQuantity.trim();
-    if (digitado === "") return false;
-    const normalizado = parseDecimalInput(digitado);
-    return normalizado !== null && Number(normalizado) > restanteParaProduzir;
-  })();
+     limite antes do envio.
+
+     O restante vem PRONTO do servidor — `plannedQuantity - producedQuantity`,
+     nunca negativo, calculado em Decimal. Recalcular aqui era refazer em
+     ponto flutuante uma conta que já existia certa, e §66 proíbe passar
+     quantidade por `Number`. E é um TETO exibido resumido: a comparação é a
+     mesma do Consumo Real. */
+  const restanteParaProduzir = productionOrder?.remainingQuantity ?? "0";
+  const producaoAcimaDoPlanejado = excedeLimiteExibido(outputQuantity, restanteParaProduzir);
 
   function handleProductChange(nextProductId: string) {
     setProductId(nextProductId);
@@ -648,12 +646,22 @@ export function ProductionOrderPage() {
     const quantity = outputQuantity.trim();
     if (!quantity) return;
 
+    /* Digitar o restante que a tela mostra é apontar TODA a produção que
+       falta, não um número aproximado dele: o que vai ao servidor é o
+       restante canônico, com as doze casas. Apontar menos continua sendo
+       produção parcial e vai como foi digitado. */
+    const resolvido = resolverQuantidadeContraLimite(quantity, restanteParaProduzir);
+    const quantidadeParaEnviar =
+      resolvido.status === "ok"
+        ? resolvido.valorCanonico
+        : exigirDecimal(quantity, "Quantidade produzida");
+
     setRegisteringOutput(true);
     setError(null);
     setFieldErrors({});
     try {
       const updated = await registerProductionOutput(id, {
-        quantity: exigirDecimal(quantity, "Quantidade produzida"),
+        quantity: quantidadeParaEnviar,
         destination: outputDestination,
         ...(outputDestination === "EXISTING_LOT" ? { lotId: outputLotId } : {}),
         ...(outputDestination === "NEW_LOT" ? { businessLotNumber: outputBusinessLotNumber.trim() } : {}),
@@ -1591,8 +1599,8 @@ options={activeProducts.map((product) => ({
                         o botão aceso e o operador descobria no envio. */}
                     {producaoAcimaDoPlanejado && (
                       <p className="field__error">
-                        Máximo {restanteParaProduzir} {productionOrder.outputUnitCode} — produzido
-                        nunca ultrapassa o planejado desta ordem.
+                        Máximo {formatQuantity(restanteParaProduzir)} {productionOrder.outputUnitCode} —
+                        produzido nunca ultrapassa o planejado desta ordem.
                       </p>
                     )}
                     {fieldErrors["quantity"] && <p className="field__error">{fieldErrors["quantity"]}</p>}

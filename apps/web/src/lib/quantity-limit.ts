@@ -60,7 +60,11 @@ export function resolverQuantidadeContraLimite(
   // copiado de volta —, então o mesmo parser de entrada o entende.
   const limiteExibido = parseDecimalInput(formatQuantity(limiteCanonico));
   if (limiteExibido !== null && valor.equals(new Decimal(limiteExibido))) {
-    return { status: "ok", valorCanonico: limite.toString(), usouTodoOLimite: true };
+    /* `toFixed()` e não `toString()`: teto pequeno o bastante volta da API
+       como `9.79592e-7`, e `toString()` manteria a notação exponencial que a
+       fronteira do servidor recusa por regex (`decimal-schema.ts`). O valor é
+       o mesmo; o que muda é caber no formato que o outro lado aceita. */
+    return { status: "ok", valorCanonico: limite.toFixed(), usouTodoOLimite: true };
   }
 
   if (valor.greaterThan(limite)) return { status: "acima" };

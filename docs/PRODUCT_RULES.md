@@ -4103,6 +4103,21 @@ resolveria o float e criaria um erro pior.
 `Number` continua legítimo sobre `Int` — contadores, número de parte, contagem
 de lotes — e em verificação de apresentação (§65).
 
+**A aritmética que produz payload também é `Decimal`.** Decisão de Product
+Ownership de 2026-09-08, no FIX-01b. A regra não alcança só a comparação: onde
+a tela CALCULA uma quantidade que será enviada — o complemento de um plano, o
+restante de uma ordem —, a conta é `Decimal` do começo ao fim. `Math.max(
+Number(pedido) - Number(digitado), 0)` devolvia ao servidor um número com ruído
+na décima sexta casa, e o plano deixava de fechar com o pedido por um dígito
+que ninguém digitou. Quando o servidor já entrega o número pronto — como
+`remainingQuantity` —, refazê-lo na tela é errado duas vezes: em ponto
+flutuante e em duplicidade.
+
+**E sai em notação decimal comum.** `Decimal.toString()` escreve `1e-12` abaixo
+de certa magnitude, e a fronteira do servidor recusa exponencial por regex
+(`decimal-schema.ts`). Quantidade que vai no corpo da requisição usa
+`toFixed()`: mesmo valor, formato que o outro lado aceita.
+
 ## §67 — Documento impresso não recalcula; reusa a fonte autoritativa
 
 Decisão de Product Ownership de 2026-09-06, no fechamento do #21.
