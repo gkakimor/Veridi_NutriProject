@@ -22,6 +22,7 @@ import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
 import {
   DeliveryAlreadyCancelledError,
   DeliveryAlreadyFulfilledError,
+  DeliveryHasDraftShipmentError,
   DeliveryNotFoundError,
   DuplicateDeliveryLineError,
   EmptyDeliveryError,
@@ -94,6 +95,23 @@ function atendidoDaLinha(linha: DeliveryRow["lines"][number]): Prisma.Decimal {
       shipmentLine.shipment.status === "CONFIRMED" ? soma.plus(shipmentLine.quantity) : soma,
     ZERO,
   );
+}
+
+/**
+ * As Expedições em RASCUNHO que já estão separando esta entrega.
+ *
+ * Elas não atendem nada — só a confirmação atende —, mas trancam a promessa:
+ * alterar o compromisso por baixo de uma separação em andamento deixaria quem
+ * está conferindo lote apontando para uma promessa que mudou de forma.
+ */
+function separacoesEmAndamento(delivery: DeliveryRow): string[] {
+  const codigos = new Set<string>();
+  for (const linha of delivery.lines) {
+    for (const shipmentLine of linha.shipmentLines) {
+      if (shipmentLine.shipment.status === "DRAFT") codigos.add(shipmentLine.shipment.code);
+    }
+  }
+  return [...codigos].sort();
 }
 
 function toLineDTO(linha: DeliveryRow["lines"][number]): DeliveryScheduleLineDTO {
@@ -402,6 +420,11 @@ export async function cancelDeliverySchedule(
     const delivery = await carregarEntrega(tx, deliveryId);
     if (delivery.cancelledAt) throw new DeliveryAlreadyCancelledError(delivery.sequence);
 
+    const emAndamento = separacoesEmAndamento(delivery);
+    if (emAndamento.length > 0) {
+      throw new DeliveryHasDraftShipmentError(delivery.sequence, emAndamento);
+    }
+
     const pendente = delivery.lines.reduce(
       (soma, linha) => soma.plus(saldoDaLinhaProgramada(linha.quantity, atendidoDaLinha(linha))),
       ZERO,
@@ -446,6 +469,11 @@ export async function rescheduleDelivery(
   const customerOrderId = await prisma.$transaction(async (tx) => {
     const delivery = await carregarEntrega(tx, deliveryId);
     if (delivery.cancelledAt) throw new DeliveryAlreadyCancelledError(delivery.sequence);
+
+    const emAndamento = separacoesEmAndamento(delivery);
+    if (emAndamento.length > 0) {
+      throw new DeliveryHasDraftShipmentError(delivery.sequence, emAndamento);
+    }
 
     const pendentes = delivery.lines
       .map((linha) => ({

@@ -49,6 +49,8 @@ function linha(overrides: Partial<ShipmentLineDTO> = {}): ShipmentLineDTO {
     requiresVerification: false,
     verifiedAt: null,
     verifiedBy: null,
+    deliverySequence: null,
+    deliveryScheduledDate: null,
     ...overrides,
   };
 }

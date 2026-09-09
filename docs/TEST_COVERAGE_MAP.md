@@ -257,6 +257,12 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Reprogramar preserva a original e copia só o pendente; cadeia A→B→C legível | substituta nascendo com a quantidade cheia | `api customer-orders/delivery-schedule.test.ts`, `scripts/e2e/entregas-programadas-do-pedido.mjs` |
 | Duas programações simultâneas nunca excedem o Pedido | validação só no navegador | `api customer-orders/delivery-schedule.test.ts` |
 | Pedido com desconto + várias entregas continua fechando em `agreedTotalAmount` | matemática comercial paralela | `api billings/billing-reconciliation.test.ts` |
+| Quantidade expedida atravessa promessas: 500 contra 400+600 vira 400+100 | linha só vinculada quando cabia inteira; cronograma jurava que nada saiu | `shared customer-order-deliveries.test.ts`, `api customer-orders/delivery-schedule.test.ts`, `scripts/e2e/expedicao-geral-entre-entregas.mjs` |
+| O que passa das promessas sai sem vínculo, e a expedição segue válida | exigir cronograma completo para expedir | `api customer-orders/delivery-schedule.test.ts` |
+| Separação aberta PELA entrega não consome a anterior e recusa o excesso | CTA de novembro consumindo outubro por ser mais antigo | `api customer-orders/delivery-schedule.test.ts` |
+| Promessas do mesmo dia são servidas por `sequence` | ordem instável entre entregas da mesma data | `api customer-orders/delivery-schedule.test.ts` |
+| Entrega com expedição em rascunho não cancela nem reprograma; confirmada não bloqueia | alterar a promessa por baixo de uma separação em curso | `api customer-orders/delivery-schedule.test.ts` |
+| Confirmação recusa quando a promessa encolheu, e não realoca a linha | realocação silenciosa apagando a evidência do que se preparava | `api customer-orders/delivery-schedule.test.ts` |
 
 ## Permissões
 

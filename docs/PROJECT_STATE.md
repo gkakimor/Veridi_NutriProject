@@ -441,6 +441,16 @@ nascendo de Expedição confirmada, e a regressão prova: Pedido com desconto
 global, duas entregas, duas expedições e dois faturamentos continua fechando
 exatamente em `agreedTotalAmount`.
 
+**COM-04b endureceu a alocação.** A quantidade expedida ATRAVESSA promessas:
+500 contra entregas de 400 e 600 atende 400 na primeira e 100 na segunda, em
+duas linhas do mesmo lote e da mesma reserva — antes a linha só ganhava vínculo
+quando cabia inteira numa promessa, e o cronograma jurava que nada tinha sido
+entregue. Separação aberta PELA ENTREGA não atravessa: ela representa aquela
+promessa, e a origem virou coluna (`Shipment.originDeliveryId`) porque deduzi-la
+dos vínculos confundiria os dois fluxos. Entrega com separação em rascunho
+deixou de aceitar cancelamento e reprogramação — o que bloqueia é o que está em
+preparação, nunca o que já saiu.
+
 ## Próxima prioridade
 
 **PLAN-DATE-01** — usar as datas e quantidades das entregas programadas para

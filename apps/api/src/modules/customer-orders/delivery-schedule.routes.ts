@@ -5,6 +5,7 @@ import { CustomerOrderNotFoundError } from "./customer-orders.errors.js";
 import {
   DeliveryAlreadyCancelledError,
   DeliveryAlreadyFulfilledError,
+  DeliveryHasDraftShipmentError,
   DeliveryNotFoundError,
   DuplicateDeliveryLineError,
   EmptyDeliveryError,
@@ -65,6 +66,9 @@ function mapDomainError(
   }
   if (error instanceof DeliveryAlreadyFulfilledError) {
     return { status: 400, body: { error: "delivery_already_fulfilled", message: error.message } };
+  }
+  if (error instanceof DeliveryHasDraftShipmentError) {
+    return { status: 400, body: { error: "delivery_has_draft_shipment", message: error.message } };
   }
   return null;
 }

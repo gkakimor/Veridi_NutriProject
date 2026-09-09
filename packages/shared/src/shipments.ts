@@ -96,6 +96,15 @@ export interface ShipmentLineDTO {
   /** Conferência física do lote — auditoria, nunca movimento de estoque. */
   verifiedAt: string | null;
   verifiedBy: string | null;
+  /**
+   * A entrega programada que esta linha atende, quando existe.
+   *
+   * `null` em Pedido sem cronograma e na parte da quantidade que nenhuma
+   * promessa esperava — expedir não exige cronograma completo.
+   */
+  deliverySequence: number | null;
+  /** Data civil `YYYY-MM-DD` da promessa atendida. */
+  deliveryScheduledDate: string | null;
 }
 
 /**

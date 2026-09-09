@@ -4527,16 +4527,57 @@ inventar história. A coluna é anulável — Pedido anterior a esta capacidade,
 Pedido sem cronograma e Expedição que não corresponde a promessa nenhuma
 continuam válidos.
 
-**A alocação é cronológica**: a promessa em aberto mais antiga é servida
-primeiro. Isso não é regra comercial, é o que mantém as duas contas do Pedido
-coerentes — sem ela, expedir por fora do cronograma deixaria "falta expedir
-150" convivendo com "prometido 400 em aberto". Uma Expedição preparada A PARTIR
-de uma entrega serve só aquela entrega, e nasce limitada ao que ela prometia.
+### Dois fluxos de Expedição, duas regras de alocação
+
+**Separação aberta pela ENTREGA** (`Shipment.originDeliveryId` preenchido).
+Aquela Expedição REPRESENTA aquela promessa. A proposta nasce limitada ao que
+ela pedia, e passar disso é **recusa** — nunca transbordo para a promessa
+seguinte, mesmo que exista saldo nela. Quem precisa expedir mais abre outra
+separação. A origem é **persistida**, nunca deduzida dos vínculos das linhas:
+uma separação geral que coubesse inteira numa promessa só seria confundida com
+esta.
+
+**Separação aberta pelo PEDIDO** (sem origem). A quantidade **atravessa
+promessas**, na ordem em que elas foram prometidas: expedir 500 contra uma
+entrega de 400 e outra de 600 atende 400 na primeira e 100 na segunda. Tratar
+isso como excesso da primeira recusaria uma expedição que o Pedido comporta, e
+deixar tudo sem vínculo faria o cronograma jurar que nada foi entregue.
+
+A ordem é `scheduledDate`, depois `sequence`, depois `id`. Os dois primeiros são
+semânticos — a promessa mais antiga primeiro, empate do mesmo dia pela ordem em
+que foram feitas. O `id` entra só para o resultado ser estável, e `createdAt`
+não entra: "quando alguém digitou" não decide o que o cliente recebe primeiro.
+
+**O que sobra depois de esgotar as promessas fica sem vínculo, e isso é
+legítimo**: o Pedido pode ter saldo real sem promessa para ele. Expedir não
+exige cronograma completo.
+
+**Uma linha de lote pode virar DUAS linhas de Expedição** quando a quantidade
+atravessa promessas — mesmo lote, mesma reserva, dois compromissos atendidos. É
+a única representação possível com um vínculo por linha. A tela reagrupa por
+reserva: quem separa vê um lote e um número, com a associação de lado.
 
 **O teto da promessa é revalidado na CONFIRMAÇÃO da Expedição**, dentro da
 transação que trava o Pedido. Validar só na criação do rascunho não bastaria:
-entre separar e confirmar, outra Expedição pode ter sido confirmada contra a
-mesma promessa.
+entre separar e confirmar, o saldo da promessa pode ter encolhido.
+
+**A confirmação NUNCA realoca em silêncio.** Se a promessa não comporta mais o
+que estava separado, a confirmação é recusada com o saldo que restou. Mover a
+linha para a promessa seguinte apagaria a evidência do que estava sendo
+preparado, e quem confirma assinaria uma entrega diferente da que tinha na
+frente.
+
+### Separação em andamento tranca a promessa
+
+**Entrega com Expedição em RASCUNHO ligada a ela não se cancela nem se
+reprograma.** O rascunho não atende nada — só a confirmação atende —, mas
+alterar o compromisso por baixo de uma separação em curso deixaria quem está
+conferindo lote apontando para uma promessa que mudou de forma. A ordem é a
+inversa: confirmar ou cancelar a Expedição primeiro.
+
+**Expedição CONFIRMADA não tranca**: ela é história física, e uma entrega
+parcialmente atendida continua cancelável. O que bloqueia são as quantidades em
+preparação, nunca as já entregues.
 
 ### A situação é derivada; o único estado gravado é o cancelamento
 

@@ -51,6 +51,7 @@ export const entregasProgramadas = {
   automations: [
     "O sistema calcula a situação de cada entrega pelo que as Expedições confirmadas entregaram — não existe marcar como atendida.",
     "O sistema só chama de atrasada a entrega cujo dia passou e ainda tem saldo. No próprio dia ela não está atrasada.",
+    "Quando a expedição é preparada pelo Pedido, sem escolher uma entrega, o sistema atende primeiro as entregas programadas mais antigas.",
   ],
   process: {
     before: ["Pedido confirmado"],
@@ -75,6 +76,7 @@ export const entregasProgramadas = {
     "Cancelar uma entrega não desfaz Expedição confirmada nem Faturamento emitido.",
     "Reprogramar não apaga a promessa anterior: ela fica no histórico com o que já entregou.",
     "Entrega inteiramente atendida não se cancela nem se reprograma — não há saldo.",
+    "Entrega com expedição em preparação não se cancela nem se reprograma: resolva a expedição primeiro.",
   ],
   learnMore: [
     { concept: "reserva-consumo" },
