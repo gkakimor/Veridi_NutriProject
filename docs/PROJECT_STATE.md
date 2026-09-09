@@ -493,7 +493,37 @@ fonte que o motor usaria HOJE para o item — porque "serve de referência" não
 **Sem migration.** O índice parcial único e o CHECK de preferencial já
 existiam desde `20260908090000_supplier_items`.
 
+## O walkthrough real mudou a fila (2026-09-09)
+
+Acompanhar alguém da Veridi usando o sistema produziu seis itens que nenhuma
+varredura de código tinha produzido, e a fila viva de
+[`BACKLOG.md`](BACKLOG.md) foi reconciliada com eles no mesmo dia. Zero runtime,
+zero migration nesta rodada.
+
+**Os dois P0 vieram de uso, não de auditoria.** ORDER-CUSTOMER-PRODUCT-01: a
+tela do Pedido lista produto sem filtrar por cliente, e `customer-orders.service`
+não compara `product.customerId` com o do Pedido nem ao montar a linha nem no
+`confirm` — a única recusa é na Ordem de Produção. Um Pedido CONFIRMADO carrega a
+combinação impossível. COST-BASIS-UX-01: base de produção 300, tela destacando
+"custo por 1.000", e a usuária sem saber qual dos dois o sistema calculou. A
+leitura de código diz que `per1000 = perUnit × 1000` — equivalência linear, não o
+custo de produzir 1.000 sobre quatro lotes —, mas a prova em 200/300/500/1.000
+com recurso fixo, proporcional e derivado vem ANTES de mexer na tela: se a conta
+de 300 estiver errada, deixa de ser UX.
+
+**Duas suspeitas foram reclassificadas pela auditoria, não aceitas como vieram.**
+A vigência de tarifa industrial já respeita `referenceDate` (agosto usa a tarifa
+de janeiro, setembro usa a de setembro) e os snapshots seguem intocados — o que
+sobra é a mesma assimetria de dia civil que §76 corrigiu para a oferta, do lado
+do `validUntil`, e em exibição. E "duplicar orçamento" já existe como "nova
+versão", copiando condições comerciais e linhas; o que o pedido tem de novo é
+escolher a versão de origem — e um **conflito com §74**, porque copiar preço é
+exatamente o que COM-PRICE removeu.
+
 ## Próxima prioridade
+
+**P0 da fila viva** — ORDER-CUSTOMER-PRODUCT-01 e COST-BASIS-UX-01, nesta ordem.
+Nenhum dos dois depende de gate de negócio.
 
 **COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
 mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum

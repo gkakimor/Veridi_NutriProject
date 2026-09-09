@@ -28,6 +28,30 @@ FIX-02 (2026-09-08): quantidade física canônica na estimativa e um único
 
 ---
 
+## Fila viva — a ordem, num lugar só
+
+Reconciliada em 2026-09-09 com o walkthrough real da Veridi. O detalhe de cada
+item fica na sua seção; aqui fica só a ORDEM, porque ela é a pergunta que se
+faz primeiro e estava espalhada por cinco lugares.
+
+| # | Item | Seção | Por que nesta posição |
+|---|---|---|---|
+| **P0-1** | ORDER-CUSTOMER-PRODUCT-01 | A · P0 | Pedido CONFIRMADO pode carregar produto de outro cliente. Não é "acusa tarde": a recusa só existe na Ordem de Produção |
+| **P0-2** | COST-BASIS-UX-01 | A · P0 | A usuária não soube dizer se o sistema calculou 300 ou 1.000. Enquanto a dúvida existe, nenhum número de custo sustenta decisão |
+| **P1-1** | INDUSTRIAL-RATE-VALIDITY-01 | A · P1 | Mesma família de vigência que COST-SOURCE-01 acabou de fechar, no outro lado do custo |
+| **P1-2** | CUSTOMER-CEP-02 | A · P1 | Decisão de PO já fechada, e tem corrida real de rede |
+| **P1-3** | PROJECT-CUSTOMER-CONTACT-01 | A · P1 | Leitura, sem duplicar dado |
+| **P1-4** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
+| **P1-5** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-6** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente |
+| depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 | — | Nenhum deles muda de prioridade por causa desta reunião |
+
+Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01, SUPPLIER-MODE-01,
+ASSET-01 (seção G). Brainstorm: tributos e custo de aquisição (seção F).
+
+---
+
 ## A. Defeitos abertos
 
 Triados em 2026-09-07 sobre a auditoria de produto. Evidência, passos e
@@ -35,7 +59,13 @@ conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
-**Zero CRITICAL, zero BLOCKER, zero MEDIUM.** Sobram três LOW e a fila de UX —
+**Zero BLOCKER.** Da auditoria de produto sobram três LOW e a fila de UX; o que
+reabriu P0 e P1 veio de outro lugar — o **walkthrough real da Veridi de
+2026-09-09**, reconciliado aqui no mesmo dia. Dois P0 (ORDER-CUSTOMER-PRODUCT-01
+e COST-BASIS-UX-01) e quatro P1 entraram por observação de uso, não por
+varredura de código: é a diferença entre o que o sistema faz errado e o que ele
+faz de um jeito que ninguém entende.
+
 F-02-2 e F-02-1 fechados no FIX-02, F-08-2 no FIX-03, F-06-1 + F-06-2 no FIX-04,
 F-09-1 + F-07-2 no FIX-05 e F-03-1 + F-07-1 no FIX-06 (2026-09-08). PROD-ERR-01
 não veio da auditoria — nasceu da leitura de código do FIX-05b — e está
@@ -118,8 +148,9 @@ e da mesma reserva. Separação aberta pela ENTREGA não atravessa: ela represen
 aquela promessa, e passar do que ela pedia é recusa. A origem virou coluna
 (`Shipment.originDeliveryId`, migration 60) porque deduzi-la dos vínculos
 confundiria os dois fluxos. Entrega com separação em RASCUNHO deixou de aceitar
-cancelamento e reprogramação. **Próximo item de produto: a definir com o PO** —
-PLAN-DATE-01 está registrado abaixo e não é sequência automática.
+cancelamento e reprogramação. PLAN-DATE-01 está registrado abaixo e não é
+sequência automática — o próximo item de produto passou a ser o P0 da fila viva,
+definido pelo walkthrough de 2026-09-09.
 
 **COST-SOURCE-01 fechado em 2026-09-09** (§76): a oferta de fornecedor virou
 fonte operacional de custo. Oferta NOVA exige "válida a partir de" (a coluna
@@ -141,16 +172,106 @@ zero dado reescrito — os mesmos lotes passaram a ser lidos corretamente.
 
 ### P0 — antes de qualquer outra capability
 
-Vazio. **F-02-2 foi fechado no FIX-02 (2026-09-08)**: a estimativa passou a
+#### ORDER-CUSTOMER-PRODUCT-01 — Pedido aceita produto de outro cliente até a Produção
+
+Vindo do walkthrough real (2026-09-09). Auditado no código em 2026-09-09, e o
+sintoma relatado é **mais grave** do que "acusa mismatch tarde":
+
+- a tela do Pedido chama `listProducts({ active: true, lifecycle: "APPROVED",
+  pageSize: 50 })` — `CustomerOrderPage.tsx:399,430` — **sem `customerId`**,
+  embora a API já aceite esse filtro (`products.service.ts:210`). O seletor
+  oferece produto de qualquer cliente;
+- o Cliente não é pré-requisito do Produto na tela: as duas escolhas são
+  independentes;
+- `customer-orders.service.ts` **não compara** `product.customerId` com
+  `order.customerId` — nem ao montar a linha, nem no `confirm`, que valida
+  cliente ativo, produto ativo, produto operacional e item de produto acabado,
+  e nada mais;
+- a única recusa existente é `CustomerMismatchError`, levantada por
+  `resolveOrderCustomerId` em `production-orders.service.ts` — isto é, no
+  Plano de Atendimento / Ordem de Produção.
+
+Consequência: um Pedido **CONFIRMADO** pode carregar a combinação impossível, e
+ela só aparece quando alguém tenta produzir. Confirmar é o ponto em que o
+documento vira compromisso; deixar passar ali é deixar passar.
+
+Regra desejada pelo PO: **Cliente obrigatório antes de Produto**, produto
+filtrado no SERVIDOR pelo cliente do Pedido, e o backend recusando a combinação
+no seu próprio limite — filtro de tela não é regra. A recusa a jusante continua
+existindo; ela deixa de ser a primeira.
+
+**F-02-2 foi fechado no FIX-02 (2026-09-08)**: a estimativa passou a
 chamar `computeFormulationRequirements`, o mesmo motor da OP e do cálculo
 industrial, em vez de converter a unidade da quantidade declarada e parar aí.
 Em `CAFEÍNA PT 60 CAPS THE KING` o material foi de R$ 0,15 para R$ 9,10 —
 exatamente as 60 doses que faltavam. Sem doses por embalagem a estimativa falha
 fechada, com o motivo na tela. Nada havia sido persistido por esse caminho.
 
+#### COST-BASIS-UX-01 — "custo por 1.000" ao lado de uma base de 300 — AUDITAR PRIMEIRO
+
+Vindo do walkthrough real (2026-09-09). A base de produção do produto era **300
+unidades** e a tela destacou **custo por 1.000 unidades**. A usuária não soube
+dizer se o sistema havia calculado 300 ou 1.000 — e essa dúvida, sozinha, já
+invalida o número como apoio de decisão.
+
+**Antes de mexer em UI, provar o motor** em 200, 300, 500 e 1.000, com recurso
+fixo por lote, recurso proporcional e recurso derivado de equipamento. Se a
+conta de 300 estiver certa, é UX. Se estiver errada, isto deixa de ser UX e
+vira **P0 bug de custo**.
+
+O que a leitura de código já estabeleceu, e que a prova precisa confirmar com
+número: `per1000 = perUnit × 1000` e `perUnit = total ÷ quantidade`
+(`pricing-cost.ts`). Ou seja, o "por 1.000" é uma **equivalência unitária
+extrapolada linearmente**, não o custo de produzir 1.000 — produzir 1.000 sobre
+base 300 são 4 lotes, e custo fixo por lote, caixa inteira e recurso por lote
+de referência não diluem linearmente (§5.12). Se a prova confirmar isso, os
+dois números estão corretos e o defeito é apresentá-los com o mesmo peso, sem
+dizer que um é total e o outro é razão — o que §54 já proíbe para prévia ×
+gravado e aqui aparece na mesma família.
+
+Hierarquia desejada pelo PO, em ordem de destaque:
+
+1. **Quantidade calculada: 300 un** — o que o documento está respondendo;
+2. **Custo total para 300 un**;
+3. **Custo por unidade**;
+4. secundário, rotulado como equivalência: **por 1.000 un**.
+
+Onde aparece hoje: `CostBreakdown.tsx:320` ("Custo por 1.000 unidades"),
+`ProductCmvPage.tsx:497` ("CMV por 1.000") e as três telas de impressão
+(`CmvPrintPage`, `CostCalculationPrintPage`, `PricingPrintPage`). A base de
+referência é escrita só no detalhe do CALC (`CostCalculationPage.tsx:101`).
+
 ### P1 — próximas correções
 
-Vazia. **F-03-1 e F-07-1 foram fechados no FIX-06 (2026-09-08).** O bloco de
+#### INDUSTRIAL-RATE-VALIDITY-01 — vigência de tarifa industrial
+
+Vindo do walkthrough real (2026-09-09) como suspeita de **bug de histórico
+econômico**. A auditoria de código de 2026-09-09 **não confirma o bug de
+histórico**, e confirma dois resíduos menores. Registrado com a classificação
+corrigida, não com a suposta:
+
+**A invariante exigida já vale.** Com tarifa A (`effectiveAt` 01/01/2026,
+`validUntil` nulo) e tarifa B (`effectiveAt` 01/09/2026), `isRateCurrent` +
+`pickCurrentRate` (`industrial-resources.service.ts:72,79`) respondem: agosto
+usa A (B ainda não começou) e setembro usa B (vence o `effectiveAt` mais
+recente, com desempate por `createdAt`). Snapshots continuam intocados — a
+estrutura congela `rateIdSnapshot`/`rateValueSnapshot`/`rateEffectiveAtSnapshot`
+na ativação, e o CALC congela o valor no `result`.
+
+**Resíduo 1 — defeito real, de exibição.** `isRateCurrent` compara instantes
+crus: `validUntil < reference`. `toResourceDTO` usa `reference = new Date()`,
+um relógio. Tarifa com `validUntil` no dia corrente aparece como NÃO vigente a
+partir da primeira hora do próprio dia impresso nela. É exatamente a assimetria
+de dia civil que COST-SOURCE-01 corrigiu para `SupplierItemOffer` (§76) — mesma
+forma, outro lado do custo, e a correção conhecida.
+
+**Resíduo 2 — decisão de negócio, não código.** Criar B **não encerra** A:
+`validUntil` de A continua nulo, as duas ficam vigentes em setembro e a tela
+marca as duas como vigentes sem dizer qual ganha. É o mesmo desenho de
+SUPPLIER-OFFER-OVERLAP-01, e as duas perguntas devem ser respondidas juntas:
+nova vigência encerra a anterior, apenas alerta, ou sobreposição é deliberada?
+
+**F-03-1 e F-07-1 foram fechados no FIX-06 (2026-09-08).** O bloco de
 custo da Formulação dependia de `version?.components.length` para recarregar:
 mudar a quantidade de um componente e salvar não muda o tamanho da lista, então
 a tela seguia mostrando o custo anterior até um F5. Agora quem salva pede a
@@ -201,6 +322,81 @@ OP é apagada; a cancelada continua no histórico.
 
 **F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
 momentos diferentes sem dizer qual é qual".
+
+#### CUSTOMER-CEP-02 — trocar o CEP tem de trocar o endereço inteiro
+
+Vindo do walkthrough real (2026-09-09). **Decisão de PO já fechada**, então não
+é gate: trocar o CEP por OUTRO limpa logradouro, número, complemento, bairro,
+cidade e UF, e só depois consulta o CEP novo.
+
+Comportamento atual (`customer-form.tsx:187`): a consulta preenche o campo vazio
+e substitui **apenas** o que a consulta anterior havia posto — o que alguém
+digitou à mão sobrevive à troca de CEP. Era deliberado para não apagar digitação;
+o efeito real é um endereço híbrido de dois CEPs, e o número da casa antiga
+colado na rua nova é o pior caso porque parece plausível.
+
+Duas exigências que vêm junto:
+
+- **falha do ViaCEP não restaura o endereço anterior.** Os campos ficam limpos e
+  manuais — voltar o endereço velho afirmaria que ele pertence ao CEP novo;
+- **corrida de rede.** Hoje `handleZipLookup` é um `await` sem sequência: CEP A →
+  CEP B → a resposta atrasada de A ainda preenche os campos de B. Precisa de
+  guarda por requisição (o resultado que chega fora de ordem é descartado), não
+  de debounce maior.
+
+#### PROJECT-CUSTOMER-CONTACT-01 — contato do cliente visível no Projeto
+
+Vindo do walkthrough real (2026-09-09). Quick win de leitura.
+
+Hoje `ProjectDetailPage.tsx:234` mostra `Cliente` com `EntityLink` (código e
+nome) — o **link já existe**. Não existem telefone, e-mail nem contato
+principal, e quem está no Projeto sai dele para ligar para o cliente.
+
+Exibir em leitura, **sempre resolvido a partir de `Customer`**: telefone,
+e-mail, contato principal quando existir, e o link que já está lá. Nenhum campo
+novo em `Project` — duplicar contato criaria dois endereços de verdade para o
+mesmo fato, e o do Projeto envelheceria calado.
+
+#### QUOTE-DUPLICATE-01 — "duplicar como nova versão" — CONFLITO A RESOLVER
+
+Vindo do walkthrough real (2026-09-09). A auditoria de código mostra que **a
+maior parte disto já existe**, e que um dos comportamentos pedidos foi
+deliberadamente REMOVIDO por COM-PRICE (§74). Registrado como reconciliação, não
+como build.
+
+`createQuoteVersion` (`quotes.service.ts:271`) já cria a versão nova em `DRAFT`
+e já copia, da versão anterior: moeda, observações comerciais, condições de
+pagamento, prazo de entrega, desconto, método de pagamento, entrada, número e
+intervalo de parcelas, juros — e as linhas com produto, quantidade, unidade e
+ordem. Não copia status, não recalcula CMV, não rebaseia precificação (cada
+proposta confirma a própria base econômica) e sugere a validade quando a
+condição inteira é herdada.
+
+O que o pedido traz de NOVO, e vale trabalho:
+
+- **duplicar uma versão ESCOLHIDA.** Hoje a fonte é sempre
+  `project.quoteVersions[0]` — a de maior `versionNumber`. Com V5 existindo não
+  há como partir da V3;
+- **a ação não se chama duplicar.** A entrada é "nova versão", e a pessoa que
+  quer V4 a partir da V3 não encontra o caminho;
+- **rascunho aberto intercepta.** Havendo `DRAFT`, a função devolve esse
+  rascunho em vez de criar — correto para não multiplicar negociação paralela,
+  mas é o que alguém pedindo "duplicar" leria como ação ignorada.
+
+**O conflito.** O handoff pede "copiar preços". §74 decidiu o contrário: preço
+só nasce preenchido no único caso seguro — condição ACEITA do mesmo projeto e
+produto, ainda vigente, mesma quantidade física — e aí com proveniência
+(`INHERITED_AGREEMENT`). Copiar `unitPrice` em silêncio era exatamente o defeito
+que COM-PRICE corrigiu: "a proposta nova saía com o preço da anterior sem que
+ninguém tivesse decidido mantê-lo". Duplicar a partir de uma versão **SENT**,
+como no exemplo V3 → V4, agrava: proposta enviada e não aceita não é acordo.
+
+Decisão necessária do PO antes de implementar: duplicar traz o preço como
+`MANUAL` sem proveniência (reabre o buraco de §74), ou traz sem preço e a pessoa
+decide por linha (mantém §74 e torna "duplicar" um atalho de condições
+comerciais, não de preço)? Também **não alterar V3** precisa ser lido junto com
+§70: aceitar uma versão nova supera as aceitas em aberto, e isso é mudança de
+status na anterior — legítima e já decidida, mas é "alterar V3" em algum sentido.
 
 ### P2 — depois da estabilização
 
@@ -463,6 +659,120 @@ não piora a medida — e pertence ao endurecimento responsivo.
 
 ---
 
+## G. Discovery — descobrir antes de construir
+
+Nenhum destes tem escopo definido. O trabalho de cada um é **responder uma
+pergunta**; desenhar solução antes da resposta é o que produz módulo que ninguém
+usa.
+
+Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
+(COST-RESOURCE-MULTIPLIER-01 em P1-6, SUPPLIER-ADDRESS-01 em P1-7) — mas a
+posição é da DESCOBERTA, não de uma implementação autorizada. Os outros três
+esperam a pergunta virar decisão.
+
+### SUPPLIER-OFFER-OVERLAP-01 — vigências sobrepostas de oferta
+
+Finding do COST-SOURCE-01 (2026-09-09), registrado sem decisão.
+
+Hoje duas ofertas do MESMO fornecedor podem ter vigências que se sobrepõem:
+criar uma oferta nova **não encerra** a anterior. O motor resolve de forma
+determinística e testada — `effectiveAt` mais recente, desempate por
+`createdAt` — então não há ambiguidade no cálculo.
+
+O problema é de leitura: as duas aparecem como **"Serve de referência"** na tela
+da relação, sem dizer qual efetivamente vence. Quem corrige um preço digitado
+errado no mesmo mês vê dois números válidos e nenhuma pista de qual está no CMV.
+
+Quatro caminhos, nenhum escolhido: (A) permitir e só explicar qual vence;
+(B) ao criar vigência nova, encerrar a anterior automaticamente; (C) permitir e
+alertar; (D) permitir sobreposição deliberada como recurso de negócio. Decidir
+junto com o resíduo 2 de INDUSTRIAL-RATE-VALIDITY-01 — é o mesmo desenho nos
+dois lados do custo, e responder diferente nos dois seria inventar duas regras
+para a mesma pergunta.
+
+**Contexto que NÃO é tarefa:** as 602 ofertas `LEGACY_IMPORT` seguem sem
+`effectiveAt` e sem `preferred`, e isso é **dado do usuário**. Não existe item
+para "corrigir as 602": informar vigência sem definir preferencial rebaixaria
+90 itens para `AMBIGUOUS_SUPPLIER_REFERENCE` (ver COST-BASELINE-01). Nenhum
+backfill, nem em DEV nem em PROD.
+
+### COST-RESOURCE-MULTIPLIER-01 — multiplicador de recurso
+
+Vindo do walkthrough real (2026-09-09). Exemplos dados: 1 operador × 2 h,
+2 operadores × 2 h, 3 equipamentos iguais.
+
+A hipótese do handoff — que isso pertence à **linha do recurso na Estrutura de
+Custos**, não à Formulação — é confirmada pelo modelo:
+`IndustrialCostResourceUsage` tem `usageQuantity` + `usageUom` + `usageBasis` e
+`@@unique([industrialCostVersionId, industrialResourceId])`, com o comentário do
+schema dizendo o desenho em voz alta: *"Uma linha por recurso: sem
+roteiro/operações nesta fase, o mesmo equipamento usado em duas etapas soma o
+tempo."*
+
+Ou seja: 2 operadores × 2 h **já é representável** hoje, como `usageQuantity =
+4 h`. O que se perde é a informação de QUANTOS — o custo fecha, a leitura não:
+ninguém consegue responder "quantas pessoas" a partir de 4 h, e replanejar
+exige refazer a multiplicação de cabeça.
+
+Perguntas a responder com a Natália antes de qualquer campo novo: o
+multiplicador é informação de CUSTO (só para explicar o número) ou de
+CAPACIDADE (quantas pessoas/máquinas a fábrica precisa alocar)? Se for
+capacidade, isto encosta em roteiro/operações, que está fora desta fase por
+decisão. **Não implementar antes de auditar o modelo e confirmar o uso real.**
+
+### SUPPLIER-ADDRESS-01 — endereço do Fornecedor
+
+Vindo do walkthrough real (2026-09-09).
+
+`Supplier` hoje tem código, razão social, nome fantasia, CNPJ, e-mail, telefone
+e notas — **nenhum campo de endereço**. `Customer` tem os seis
+(`zipCode`, `street`, `number`, `complement`, `district`, `city`, `state`) com a
+consulta de CEP já funcionando em `lib/cep-api.ts`.
+
+Restrição durável: **reusar a mesma fundação de endereço e CEP do Cliente**. Não
+existe um segundo ViaCEP, não existe uma segunda máscara e não existe uma segunda
+regra de "CEP incompleto não consulta". Se CUSTOMER-CEP-02 mudar o comportamento
+de troca de CEP, o Fornecedor nasce já com o comportamento novo — motivo
+suficiente para CUSTOMER-CEP-02 vir antes.
+
+Exige migration (colunas novas em `suppliers`), e por isso é capability, não
+quick win.
+
+### SUPPLIER-MODE-01 — "Fornecedor — Virtual / Físico"
+
+Vindo do walkthrough real (2026-09-09). **Não criar enum.**
+
+A expressão apareceu na reunião sem definição, e as leituras possíveis levam a
+modelos incompatíveis: classifica o FORNECEDOR (uma distribuidora sem estoque
+próprio?), o ESTABELECIMENTO/endereço (loja física × operação online), o CANAL
+DE COMPRA (portal × presencial), ou é outra coisa que o termo do dia a dia
+esconde? Cada resposta muda onde o campo mora — `Supplier`, o endereço de
+SUPPLIER-ADDRESS-01, ou a `SupplierItem`.
+
+Descobrir o que a Veridi decide com essa informação. Um enum criado antes da
+resposta ficaria preenchido e inútil.
+
+### ASSET-01 — "Cadastro de Ativos"
+
+Vindo do walkthrough real (2026-09-09). **Não criar módulo.**
+
+Auditar primeiro o que já existe: `IndustrialResource` (com tipo
+`LABOR`/`EQUIPMENT`/`ENERGY`, potência em kW e tarifas versionadas),
+`IndustrialResourceRate` e o uso planejado por estrutura de custo.
+
+A pergunta é qual dos quatro significados está em jogo: ativo IMOBILIZADO
+(patrimônio, depreciação, valor contábil — que o ROADMAP lista como futuro),
+MÁQUINA no sentido de equipamento produtivo (já é `IndustrialResource`
+`EQUIPMENT`), RECURSO industrial (idem), ou apenas a flag **Ativo/Inativo** de um
+cadastro qualquer — que é o falso amigo mais provável em português, e que já
+existe em todo cadastro.
+
+Se for imobilizado com depreciação, é capability de custeio e encosta em
+CMV-TAX/landed cost. Se for qualquer um dos outros três, provavelmente não há
+trabalho.
+
+---
+
 ## F. Roadmap — fora do backlog
 
 Escopo futuro não fica aqui. Vive em
@@ -477,12 +787,37 @@ Escopo futuro não fica aqui. Vive em
   próprio de Produto Acabado, venda do mesmo PA a vários clientes.
   `Product.customerId` permanece obrigatório no escopo atual.
 
+**Tributos, frete e demais custos de aquisição permanecem BRAINSTORM**, e o
+brainstorm já existe — não se abre item novo para ele. O escopo discutido
+(tributo recuperável × não recuperável, percentual × fixo, base de incidência,
+vigência, frete e transporte, e em que momento o encargo entra: aquisição,
+produção ou venda) está coberto por duas fontes que já estão escritas:
+
+- `ROADMAP_POST_MVP.md`, **Landed cost** — "rateio de frete, impostos e demais
+  custos de aquisição" — e a seção "Custeio / CMV — o que ainda falta";
+- [`archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md)
+  §21, que mapeia os **pontos de extensão possíveis** com o efeito de cada um no
+  CMV: oferta, linha de OC, `ReceiptLine.actualUnitCost`, `ReceiptLine` com
+  colunas separadas, documento fiscal, `ItemCostReference` e linha manual da
+  estrutura.
+
+A direção registrada ali é `ReceiptLine` — o campo se chama *custo efetivo de
+aquisição* por causa disso —, e a escolha entre "somar dentro de
+`actualUnitCost`" e "colunas separadas" é rodada própria. Nada a decidir aqui, e
+nada a implementar.
+
 ---
 
 ## Próximo gate
 
 A validação com a Veridi (#7, #11) é gate só para as regras que dependem do
 processo real do cliente. Não impede #8E, #8F e #8G quando o PO autorizar.
+
+**Dois gates nasceram do walkthrough de 2026-09-09**, e os dois são de decisão,
+não de código: a pergunta de preço em QUOTE-DUPLICATE-01 (copiar preço reabre
+§74) e a pergunta de sobreposição de vigência, que vale ao mesmo tempo para
+SUPPLIER-OFFER-OVERLAP-01 e para o resíduo 2 de INDUSTRIAL-RATE-VALIDITY-01. As
+duas primeiras posições da fila (P0) **não dependem de nenhum dos dois**.
 
 Material pronto: `Guia_Fluxo_Comercial_Veridi.docx` (36 capítulos, não
 versionado por política) e
