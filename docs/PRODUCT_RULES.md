@@ -4496,3 +4496,101 @@ o documento novo descrever a economia de um documento velho.
 **COM-03 intocado.** Depois do envio e do aceite, precificação nova, custo novo
 ou proposta nova não mexem no que foi acordado: Pedido e Faturamento continuam
 congelados.
+
+## §75 — Entrega programada é promessa; Expedição é execução
+
+**A entrega programada registra QUANDO cada parte do Pedido foi prometida ao
+cliente. Ela não move nada.** Criar uma programação não reserva estoque, não
+escolhe lote, não gera movimento de estoque, não abre Ordem de Produção, não
+cria Expedição e não fatura. Cada uma dessas ações continua acontecendo no
+fluxo que já era dono dela.
+
+Um Pedido de 3.000 com 1.000 em outubro, novembro e dezembro passa a ser
+representável: um Orçamento, um Pedido, um preço e três promessas com data. Não
+é pedido recorrente — não existe agendador, assinatura nem geração automática.
+
+**O Plano de Atendimento não muda.** Ele continua cobrindo o Pedido inteiro de
+uma vez, e a reserva continua sendo dele. O cronograma informa a dimensão
+temporal e não divide o Plano: dois motores de reserva seriam duas verdades
+sobre o mesmo saldo.
+
+### Quem executa é a Expedição CONFIRMADA, e o vínculo é explícito
+
+**A quantidade atendida de uma entrega programada é a soma das linhas de
+Expedição CONFIRMADA ligadas a ela** — `ShipmentLine.customerOrderDeliveryLineId`.
+Rascunho de Expedição é separação em curso e não atende nada; Expedição
+cancelada nunca atendeu.
+
+O vínculo é uma coluna, nunca uma dedução: duas Expedições do mesmo produto no
+mesmo Pedido podem servir promessas diferentes, e adivinhar qual delas seria
+inventar história. A coluna é anulável — Pedido anterior a esta capacidade,
+Pedido sem cronograma e Expedição que não corresponde a promessa nenhuma
+continuam válidos.
+
+**A alocação é cronológica**: a promessa em aberto mais antiga é servida
+primeiro. Isso não é regra comercial, é o que mantém as duas contas do Pedido
+coerentes — sem ela, expedir por fora do cronograma deixaria "falta expedir
+150" convivendo com "prometido 400 em aberto". Uma Expedição preparada A PARTIR
+de uma entrega serve só aquela entrega, e nasce limitada ao que ela prometia.
+
+**O teto da promessa é revalidado na CONFIRMAÇÃO da Expedição**, dentro da
+transação que trava o Pedido. Validar só na criação do rascunho não bastaria:
+entre separar e confirmar, outra Expedição pode ter sido confirmada contra a
+mesma promessa.
+
+### A situação é derivada; o único estado gravado é o cancelamento
+
+Programada, Parcialmente atendida, Atendida e Atrasada são LEITURAS, calculadas
+a cada consulta a partir de `quantity` e do que as Expedições confirmadas
+entregaram. Nenhuma coluna as guarda, nenhuma rotina as carimba.
+
+**Atraso é data civil** (§72, §73): a entrega está atrasada quando o dia
+prometido JÁ PASSOU e ainda há saldo pendente. No próprio dia da promessa ela
+não está atrasada — o dia inteiro vale. Entrega inteiramente atendida nunca
+vira atrasada depois.
+
+### Saldo programável: o expedido e o prometido são descontos diferentes
+
+Por linha do Pedido:
+
+```
+saldo programável = quantidade pedida
+                  − expedido em Expedições confirmadas
+                  − pendente das entregas ainda ATIVAS
+```
+
+O expedido vem da mesma fonte que o resto do sistema usa; programação não
+inaugura uma segunda contagem do que saiu.
+
+### Cancelar não apaga execução
+
+**Uma entrega parcialmente atendida PODE ser cancelada.** O cancelamento libera
+o SALDO PENDENTE e nada mais: as linhas de Expedição já confirmadas continuam
+apontando para ela, e a entrega continua mostrando o que entregou antes de ser
+cancelada. Motivo é obrigatório.
+
+Entrega de 400 com 250 confirmadas e depois cancelada devolve **150** ao saldo
+programável — nunca os 400. O que saiu continua descontado do Pedido; o que
+restava deixa de ocupar programação.
+
+**Entrega inteiramente atendida não se cancela nem se reprograma**: não há
+saldo, e marcá-la de outro jeito reescreveria uma expedição que já ocorreu.
+
+### Reprogramar é cancelar e substituir, nunca editar a data
+
+**Mudar a data prometida encerra a entrega atual e cria uma substituta com os
+saldos AINDA PENDENTES**, na data nova, apontando para a original por
+`replacesDeliveryId`. Não existe correção de data no lugar, nem para erro de
+digitação: editar apagaria a evidência de que 15/10 foi prometido antes de
+15/11, e é essa evidência que explica o atraso ao cliente.
+
+A cadeia A → B → C fica legível inteira, cada elo com o seu motivo. Linha já
+inteiramente atendida não é copiada para a substituta.
+
+### O que o cronograma nunca toca
+
+Preço. Uma entrega programada não tem preço próprio e não consulta precificação,
+CMV nem oferta de fornecedor: o Pedido já congelou a condição comercial (§60,
+§74). O Faturamento continua nascendo de Expedição confirmada, e a reconciliação
+comercial do Pedido (§ BILL-DISCOUNT) continua fechando em
+`agreedTotalAmount` — programar não cria matemática comercial paralela.

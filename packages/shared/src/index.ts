@@ -44,6 +44,7 @@ export * from "./cost-pricing-templates.js";
 export * from "./production-orders.js";
 export * from "./traceability.js";
 export * from "./customer-orders.js";
+export * from "./customer-order-deliveries.js";
 export * from "./fulfillment-plan.js";
 export * from "./purchase-suggestion.js";
 export * from "./shipments.js";

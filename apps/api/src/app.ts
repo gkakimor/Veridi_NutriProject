@@ -42,6 +42,7 @@ import { pickingRoutes } from "./modules/production-orders/picking.routes.js";
 import { recipeRoutes } from "./modules/production-orders/recipe.routes.js";
 import { productionRoutes } from "./modules/production-orders/production.routes.js";
 import { customerOrdersRoutes } from "./modules/customer-orders/customer-orders.routes.js";
+import { deliveryScheduleRoutes } from "./modules/customer-orders/delivery-schedule.routes.js";
 import { fulfillmentPlanRoutes } from "./modules/customer-orders/fulfillment-plan.routes.js";
 import { purchaseSuggestionRoutes } from "./modules/customer-orders/purchase-suggestion.routes.js";
 import { shipmentsRoutes } from "./modules/shipments/shipments.routes.js";
@@ -115,6 +116,7 @@ export function buildApp() {
   app.register(productionRoutes);
   app.register(customerOrdersRoutes);
   app.register(fulfillmentPlanRoutes);
+  app.register(deliveryScheduleRoutes);
   app.register(purchaseSuggestionRoutes);
   app.register(shipmentsRoutes);
   app.register(billingsRoutes);
