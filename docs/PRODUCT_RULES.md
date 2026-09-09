@@ -4264,3 +4264,41 @@ horário de verão voltaria a errar em silêncio.
 **Aceita não vence retroativamente.** A validade controla o ACEITE; depois do
 "sim" existe acordo. O Pedido pode ser materializado semanas depois, com o preço
 intacto — `createOrderFromAcceptedQuote` não consulta `validUntil`.
+
+## §72 — O fuso operacional é `America/Sao_Paulo`
+
+**Salvo quando uma regra de domínio disser explicitamente o contrário, toda
+interpretação humana e de negócio de data/hora usa `America/Sao_Paulo`.** Vale
+para "hoje" e "ontem", início e fim do dia, filtros por período, KPIs, validade,
+aceite, aprovação, recebimento, estoque, produção, expedição, faturamento,
+auditoria e documento impresso.
+
+Isso **não** significa converter o que está guardado. Três conceitos, e só três:
+
+1. **Instante** — `createdAt`, `acceptedAt`, `shippedAt`. Continua persistido em
+   UTC; a LEITURA é no fuso operacional. `2026-09-09T01:30:00Z` aparece como
+   `08/09/2026 22:30`.
+2. **Data civil** — `validUntil`, data de documento, vigência, validade de lote.
+   É `YYYY-MM-DD` e não ganha semântica de instante: a meia-noite UTC gravada é
+   o MARCADOR do dia, e o dia são os seus componentes UTC (§71).
+3. **Dia comercial** — o dia civil da Veridi e os instantes que o limitam. É o
+   que "hoje" significa numa consulta: de 00:00:00.000 a 23:59:59.999 em São
+   Paulo.
+
+**Uma definição no monorepo** — `packages/shared/src/business-timezone.ts`.
+Nenhum outro arquivo escreve o nome do fuso, e nenhuma tela escolhe o seu.
+
+**Offset fixo é proibido**: `-03:00`, `UTC-3`, somar ou subtrair três horas. O
+Brasil já teve horário de verão e pode ter de novo; quem decide o deslocamento
+de cada data é a base de fusos do `Intl`.
+
+**O comportamento não depende do relógio da máquina.** `new Date().getDate()`,
+`getFullYear()` e afins leem o fuso do processo — em Railway, UTC. Onde a
+pergunta for de negócio, o dia vem do dia comercial, nunca dos componentes
+locais.
+
+**Cálculo com semântica explicitamente UTC continua em UTC** e fica dito no
+código: a janela de referência de custo, a vigência de referência manual e a
+aritmética de meses trabalham sobre datas civis lidas em UTC, de propósito.
+Log técnico do servidor também continua em UTC — a regra é de produto, não de
+observabilidade.

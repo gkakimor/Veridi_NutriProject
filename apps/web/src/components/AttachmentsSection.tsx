@@ -9,15 +9,12 @@ import {
   listAttachments,
   uploadAttachment,
 } from "../lib/attachments-api";
+import { formatDateTime } from "../lib/dates";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("pt-BR");
 }
 
 /**

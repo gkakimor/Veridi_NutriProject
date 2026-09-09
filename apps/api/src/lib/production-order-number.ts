@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-
+import { anoComercial } from "@veridi/shared";
 /**
  * Numeração OFICIAL anual da Ordem de Produção — `023/26`.
  *
@@ -17,11 +17,22 @@ export interface OfficialNumber {
   sequence: number;
 }
 
+/** O ano do documento — o ano em que o ato aconteceu PARA A VERIDI. */
+export function nextOfficialNumberYear(releasedAt: Date): number {
+  return anoComercial(releasedAt);
+}
+
 export async function nextOfficialNumber(
   tx: Prisma.TransactionClient,
   releasedAt: Date,
 ): Promise<OfficialNumber> {
-  const year = releasedAt.getFullYear();
+  /*
+   * O ano do documento é o ano em que o ato aconteceu PARA A VERIDI.
+   * `getFullYear()` lê o relógio da máquina: uma OP liberada em 31/12 às 22h
+   * receberia o número do ano seguinte — e consumiria a sequência 1 de um ano
+   * que ainda não começou. Numeração oficial é rastreabilidade.
+   */
+  const year = nextOfficialNumberYear(releasedAt);
 
   await tx.$executeRaw`
     INSERT INTO production_order_number_counters ("year", "lastNumber")

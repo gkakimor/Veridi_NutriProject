@@ -27,7 +27,7 @@ import { PERIOD_PRESET_LABELS, dateInputValueOffset, resolvePeriodBounds } from 
 import { formatBRL } from "../lib/currency";
 import { useAuth } from "../app/AuthProvider";
 import "./dashboard.css";
-import { formatDate } from "../lib/dates";
+import { formatDate, formatDateTime } from "../lib/dates";
 
 function severityBadgeClass(severity: AttentionSeverity): string {
   switch (severity) {
@@ -40,10 +40,6 @@ function severityBadgeClass(severity: AttentionSeverity): string {
   }
 }
 
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("pt-BR");
-}
 
 function attentionPath(kind: AttentionTargetKind, id: string): string {
   switch (kind) {

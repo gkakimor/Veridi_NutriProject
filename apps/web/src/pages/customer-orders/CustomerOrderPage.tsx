@@ -62,7 +62,7 @@ import { FlowContext } from "../../components/FlowContext";
 import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
@@ -112,11 +112,6 @@ function toDateInputValue(iso: string | null): string {
 function toIsoOrEmpty(dateInputValue: string): string {
   if (!dateInputValue) return "";
   return new Date(dateInputValue).toISOString();
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR");
 }
 
 let rowKeySeq = 0;

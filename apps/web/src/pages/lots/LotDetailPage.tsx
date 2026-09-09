@@ -29,7 +29,7 @@ import { approveCoa, rejectCoa } from "../../lib/attachments-api";
 import { useAuth } from "../../app/AuthProvider";
 import { QrCode } from "../../components/QrCode";
 import { EntityLink } from "../../components/EntityLink";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
@@ -42,11 +42,6 @@ function DicaDoCampo({ id }: { id: HelpHintId }) {
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
 }
 
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("pt-BR");
-}
 
 function statusBadgeClass(status: LotDTO["status"], isExpired: boolean): string {
   if (isExpired) return "badge badge--err";
@@ -1006,7 +1001,7 @@ export function LotDetailPage() {
                       <td className="is-numeric">
                         {formatQuantity(usage.consumedQuantity)} {usage.unitCode}
                       </td>
-                      <td>{new Date(usage.consumedAt).toLocaleString("pt-BR")}</td>
+                      <td>{formatDateTime(usage.consumedAt)}</td>
                     </tr>
                   ))}
                   {traceability.usedInSamples.length === 0 && (

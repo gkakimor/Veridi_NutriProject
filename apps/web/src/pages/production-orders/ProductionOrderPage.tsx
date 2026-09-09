@@ -62,7 +62,7 @@ import type { FlowStep } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { LotScanner } from "../../components/LotScanner";
 import { EntityLink } from "../../components/EntityLink";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
@@ -145,11 +145,6 @@ function SituacaoReconciliacao({
       )}
     </>
   );
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR");
 }
 
 /**
@@ -1458,7 +1453,7 @@ export function ProductionOrderPage() {
                             <div className="field__hint">
                               {line.pickedBy}
                               {line.pickedAt
-                                ? ` · ${new Date(line.pickedAt).toLocaleString("pt-BR")}`
+                                ? ` · ${formatDateTime(line.pickedAt)}`
                                 : ""}
                             </div>
                           )}

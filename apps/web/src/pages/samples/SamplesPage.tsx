@@ -9,6 +9,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { formatDateTime } from "../../lib/dates";
 
 const PAGE_SIZE = 20;
 
@@ -36,10 +37,6 @@ export function sampleStatusBadgeClass(status: ProjectSampleStatus): string {
     default:
       return "badge badge--neutral";
   }
-}
-
-function formatDateTime(value: string | null): string {
-  return value ? new Date(value).toLocaleString("pt-BR") : "—";
 }
 
 /**

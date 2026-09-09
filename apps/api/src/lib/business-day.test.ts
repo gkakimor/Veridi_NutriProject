@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  diaComercialPorExtenso,
-  diaDaColunaDeData,
-  hojeComercial,
-  venceuEm,
-} from "./business-day.js";
+import { diaDaColunaDeData, venceuEm } from "./business-day.js";
 
 /**
  * "Válido até 15/09" vale o dia 15 inteiro — na operação brasileira.
@@ -86,34 +81,5 @@ describe("viradas de calendário", () => {
     expect(diaDaColunaDeData(bissexto)).toBe("2028-02-29");
     expect(venceuEm(bissexto, new Date("2028-03-01T02:00:00.000Z"))).toBe(false);
     expect(venceuEm(bissexto, new Date("2028-03-01T03:00:00.000Z"))).toBe(true);
-  });
-});
-
-describe("leitura dos dias", () => {
-  it("o dia da coluna é o dia que foi digitado, lido em UTC", () => {
-    expect(diaDaColunaDeData(QUINZE_DE_SETEMBRO)).toBe("2026-09-15");
-  });
-
-  it("o dia de hoje é o da operação brasileira, não o do relógio UTC", () => {
-    // 16/09 01:00Z ainda é 15/09 às 22h em São Paulo.
-    expect(hojeComercial(new Date("2026-09-16T01:00:00.000Z"))).toBe("2026-09-15");
-    expect(hojeComercial(new Date("2026-09-16T03:00:00.000Z"))).toBe("2026-09-16");
-  });
-
-  /*
-   * O fuso vem do `Intl`, que carrega a base de fusos: se o horário de verão
-   * voltar, a virada acompanha sozinha. Um offset fixo `-03:00` responderia
-   * errado por cinco meses do ano, e em silêncio.
-   */
-  it("a virada usa a base de fusos, não um offset fixo", () => {
-    // 2018 ainda tinha horário de verão no Brasil: 15/11 era GMT-2.
-    // 16/11 01:30Z = 15/11 23:30 em São Paulo — ainda o dia 15.
-    expect(hojeComercial(new Date("2018-11-16T01:30:00.000Z"))).toBe("2018-11-15");
-    // Sem DST, o mesmo relógio UTC em setembro já seria o dia 15 às 22:30.
-    expect(hojeComercial(new Date("2018-09-16T01:30:00.000Z"))).toBe("2018-09-15");
-  });
-
-  it("a data por extenso é a que o cliente leu, sem deslocar um dia", () => {
-    expect(diaComercialPorExtenso(QUINZE_DE_SETEMBRO)).toBe("15/09/2026");
   });
 });

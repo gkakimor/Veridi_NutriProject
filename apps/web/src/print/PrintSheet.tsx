@@ -4,6 +4,7 @@ import { useOptionalAuth } from "../app/AuthProvider";
 import { BrandLogo } from "../components/BrandLogo";
 import { PrintActions } from "./PrintLayout";
 import "./print.css";
+import { formatDateTime } from "../lib/dates";
 
 /**
  * Folha operacional impressa (FO-xx).
@@ -58,7 +59,7 @@ export function PrintSheet({
           <div className="print-doc__header-right">
             <div className="print-doc__doc-code">{sheetCode}</div>
             <div className="print-doc__status">
-              Gerado em {new Date().toLocaleString("pt-BR")}
+              Gerado em {formatDateTime(new Date().toISOString())}
             </div>
             {/* Quem gerou a IMPRESSÃO — não substitui os snapshots de quem
                 executou/aprovou cada ato no sistema. */}
@@ -92,7 +93,7 @@ export function PrintSheet({
 
         <footer className="print-doc__foot">
           Veridi Nutrition · documento gerado pelo sistema em{" "}
-          {new Date().toLocaleString("pt-BR")} · {sheetCode}
+          {formatDateTime(new Date().toISOString())} · {sheetCode}
         </footer>
 
         {/*

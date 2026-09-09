@@ -14,6 +14,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { formatDateTime } from "../../lib/dates";
 
 type TypeFilter = InventoryMovementType | "all";
 
@@ -23,10 +24,6 @@ const PAGE_SIZE = 20;
 function DicaDaColuna({ id }: { id: HelpHintId }) {
   const dica = helpHints[id];
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
-}
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("pt-BR");
 }
 
 /** Estoque → Movimentações — ledger histórico, somente leitura. */

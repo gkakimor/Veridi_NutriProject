@@ -16,6 +16,7 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { formatQuantity } from "../../lib/quantity";
+import { formatDateTime } from "../../lib/dates";
 
 /**
  * ⓘ de um conceito da folha, lido do registro central.
@@ -27,11 +28,6 @@ import { formatQuantity } from "../../lib/quantity";
 function Dica({ id }: { id: HelpHintId }) {
   const dica = helpHints[id];
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
-}
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("pt-BR");
 }
 
 function partBadgeClass(status: RecipeSheetPartDTO["status"]): string {

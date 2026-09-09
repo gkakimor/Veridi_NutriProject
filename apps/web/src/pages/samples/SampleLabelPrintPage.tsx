@@ -6,10 +6,7 @@ import { QrCode } from "../../components/QrCode";
 import { getSample } from "../../lib/samples-api";
 import "./sample-label-print.css";
 import { formatQuantity } from "../../lib/quantity";
-
-function formatDateTime(value: string | null): string {
-  return value ? new Date(value).toLocaleString("pt-BR") : "—";
-}
+import { formatDateTime } from "../../lib/dates";
 
 /**
  * Etiqueta da amostra (A6).

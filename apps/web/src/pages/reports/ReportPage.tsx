@@ -8,6 +8,7 @@ import { useOptionalAuth } from "../../app/AuthProvider";
 import type { ReportFilters } from "../../lib/reports-api";
 import "./reports.css";
 import "../../print/print.css";
+import { formatDateTime } from "../../lib/dates";
 
 /**
  * Estrutura comum dos relatórios: título, filtros, resumo e tabela — nesta
@@ -98,7 +99,7 @@ export function ReportPage({
           <div className="print-doc__kind">{title}</div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div className="print-doc__status">Gerado em {new Date().toLocaleString("pt-BR")}</div>
+          <div className="print-doc__status">Gerado em {formatDateTime(new Date().toISOString())}</div>
           {/* Quem gerou a IMPRESSÃO — não substitui os snapshots de quem
               executou cada ato no sistema. */}
           <div className="print-doc__status">Gerado por {user?.name ?? "—"}</div>

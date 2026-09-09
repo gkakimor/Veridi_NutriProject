@@ -234,6 +234,34 @@ do Faturamento não muda nenhum dos dois.
 `validUntil` e os status existentes. Investigação em
 [`archive/SPIKE_COM_NEW_QUOTES.md`](archive/SPIKE_COM_NEW_QUOTES.md).
 
+## O fuso da operação é um só (SYS-TZ-01, 2026-09-09)
+
+**`America/Sao_Paulo` é o fuso operacional oficial (§72)**, definido uma vez em
+[`business-timezone.ts`](../packages/shared/src/business-timezone.ts) e
+importado pela API e pela web. Instante continua persistido em UTC; o que muda é
+a LEITURA. Três conceitos e só três: instante, data civil e dia comercial.
+
+**A auditoria transversal achou três defeitos que só aparecem entre 21h e a
+meia-noite** — o horário em que ninguém confere:
+
+- o KPI "hoje" do painel resolvia o dia pelos componentes locais do servidor.
+  Em Railway isso é UTC: o dia começava às 21h da véspera;
+- a numeração oficial da Ordem de Produção usava `getFullYear()` do servidor.
+  Uma OP liberada em 31/12 às 22h levaria o número do ANO SEGUINTE, e consumiria
+  a sequência 1 de um ano que não começou;
+- o código do lote (`LT-YYYYMMDD-…`) usava o dia UTC do recebimento: material
+  recebido às 21h de 31/12 saía etiquetado como 01/01.
+
+Os três passaram a usar o dia comercial. Presentação: vinte telas tinham a
+própria cópia de `formatDateTime`, e a API formatava CSV, alertas e textos no
+fuso da máquina — tudo passou pelos helpers canônicos, e o filtro de período
+resolve o dia da Veridi em vez do dia do navegador.
+
+**Fica aberto, com decisão do PO:** `isLotExpired` compara validade de lote
+(data civil) com um instante e recusa o lote a partir das 21h da véspera —
+`TZ-LOTE-01` no [`BACKLOG.md`](BACKLOG.md). Não foi mexido porque muda
+disponibilidade de material.
+
 ## Próxima prioridade
 
 **COM-PRICE** — herança de preço entre ciclos: reajuste percentual, "manter

@@ -1,3 +1,5 @@
+import { FUSO_COMERCIAL } from "@veridi/shared";
+
 /**
  * Datas do Veridi na tela.
  *
@@ -36,12 +38,30 @@ export function formatDate(value: string | null | undefined): string {
   return date.toLocaleDateString("pt-BR", isDateOnly(value) ? { timeZone: "UTC" } : {});
 }
 
-/** Instante: fica no fuso de quem lê, porque é isso que ele significa. */
+/**
+ * Carimbo de tempo: o instante lido no FUSO DA OPERAÇÃO.
+ *
+ * "Criado em", "aceito em", "expedido em" são instantes, e quem os lê está na
+ * Veridi. Sem fuso explícito quem decidia era o relógio de quem abriu a tela —
+ * no operador brasileiro dava no mesmo por acaso, e num navegador em qualquer
+ * outro fuso a mesma expedição mudava de hora, e às vezes de dia.
+ *
+ * Vinte telas tinham a própria cópia de três linhas desta função. Uma cópia é
+ * uma decisão de fuso a mais para alguém esquecer.
+ */
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("pt-BR");
+  return date.toLocaleString("pt-BR", { timeZone: FUSO_COMERCIAL });
+}
+
+/** O mesmo instante, sem as horas — para tabela apertada. */
+export function formatEventDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("pt-BR", { timeZone: FUSO_COMERCIAL });
 }
 
 /** Valor para `<input type="date">` — mesmo dia gravado, sem passar pelo fuso. */

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { BrandLogo } from "../components/BrandLogo";
 import type { ControlledDocumentRevisionDTO } from "@veridi/shared";
 import "./print.css";
-import { formatDate } from "../lib/dates";
+import { formatDate, formatDateTime } from "../lib/dates";
 
 /**
  * Esqueleto de impressão (documentos e relatórios).
@@ -103,7 +103,7 @@ export function PrintLayout({
       {children}
 
       <footer className="print-doc__foot">
-        Gerado pelo sistema em {new Date().toLocaleString("pt-BR")}
+        Gerado pelo sistema em {formatDateTime(new Date().toISOString())}
         {generatedFor ? ` · ${generatedFor}` : ""}
         {/* Carimbo de geração — NÃO é assinatura digital. */}
       </footer>
@@ -202,9 +202,9 @@ export function formatPrintDate(value: string | null | undefined): string {
   return formatDate(value);
 }
 
+/** Documento impresso usa o mesmo carimbo da tela — um fuso só no sistema. */
 export function formatPrintDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("pt-BR");
+  return formatDateTime(value);
 }
 
 /** Valor ausente aparece como "—"; custo/preço desconhecido nunca vira zero. */

@@ -40,13 +40,8 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
   const dica = helpHints[id];
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
 }
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("pt-BR");
-}
 
 /**
  * Documento do projeto: resumo, pipeline, orçamentos versionados,

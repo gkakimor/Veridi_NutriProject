@@ -44,7 +44,7 @@ import {
   INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
-import { csvBoolean, csvCode, csvDate, csvDateTime, csvDecimal, csvMoney, csvText, csvUnitPrice } from "../../lib/csv.js";
+import { csvBoolean, csvCode, csvDate, csvDateTime, csvDecimal, csvEventDate, csvMoney, csvText, csvUnitPrice } from "../../lib/csv.js";
 import { ALL_ROWS } from "../../lib/pagination.js";
 import { listCustomers } from "../customers/customers.service.js";
 import { listSuppliers } from "../suppliers/suppliers.service.js";
@@ -498,7 +498,7 @@ const formulationsExport = defineCsvExport({
     { header: "Item de produto acabado", value: (row: FormulationSummaryDTO) => csvCode(row.finishedProductItemCode) },
     { header: "Versão ativa", value: (row: FormulationSummaryDTO) => csvText(row.activeVersionLabel) },
     { header: "Possui formulação", value: (row: FormulationSummaryDTO) => csvBoolean(row.hasFormulation) },
-    { header: "Atualizada em", value: (row: FormulationSummaryDTO) => csvDate(row.updatedAt) },
+    { header: "Atualizada em", value: (row: FormulationSummaryDTO) => csvEventDate(row.updatedAt) },
   ],
 });
 
@@ -519,8 +519,8 @@ const productionOrdersExport = defineCsvExport({
     { header: "Unidade", value: (row: ProductionOrderDTO) => csvText(row.outputUnitCode) },
     { header: "Itens com falta", value: (row: ProductionOrderDTO) => String(row.shortageItemCount) },
     { header: "Pedido do cliente", value: (row: ProductionOrderDTO) => csvCode(row.customerOrderCode) },
-    { header: "Início", value: (row: ProductionOrderDTO) => csvDate(row.startedAt) },
-    { header: "Conclusão", value: (row: ProductionOrderDTO) => csvDate(row.completedAt) },
+    { header: "Início", value: (row: ProductionOrderDTO) => csvEventDate(row.startedAt) },
+    { header: "Conclusão", value: (row: ProductionOrderDTO) => csvEventDate(row.completedAt) },
   ],
 });
 
@@ -535,7 +535,7 @@ const finishedGoodsExport = defineCsvExport({
     { header: "Lote Veridi", value: (row: FinishedGoodRowDTO) => csvCode(row.businessLotNumber) },
     { header: "Lote interno", value: (row: FinishedGoodRowDTO) => csvCode(row.lotCode) },
     { header: "OP", value: (row: FinishedGoodRowDTO) => csvCode(row.productionOrderCode) },
-    { header: "Data de produção", value: (row: FinishedGoodRowDTO) => csvDate(row.producedAt) },
+    { header: "Data de produção", value: (row: FinishedGoodRowDTO) => csvEventDate(row.producedAt) },
     { header: "Produzido", value: (row: FinishedGoodRowDTO) => csvDecimal(row.producedQuantity) },
     { header: "On Hand", value: (row: FinishedGoodRowDTO) => csvDecimal(row.onHand) },
     { header: "Reservado", value: (row: FinishedGoodRowDTO) => csvDecimal(row.reserved) },
