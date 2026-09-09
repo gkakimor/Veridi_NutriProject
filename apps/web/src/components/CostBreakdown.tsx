@@ -1,6 +1,8 @@
 import { formatQuantity } from "../lib/quantity";
 import type { IndustrialCostCalculationDTO } from "@veridi/shared";
 import {
+  COST_PER_1000_EXPLANATION,
+  COST_PER_1000_LABEL,
   COST_SOURCE_AUTO_SELECTION_TEXT,
   INDUSTRIAL_COST_BASIS_LABELS,
   INDUSTRIAL_COST_CATEGORY_LABELS,
@@ -21,6 +23,7 @@ import { formatDateTime } from "../lib/dates";
 import { EntityLink } from "./EntityLink";
 import { CostWarnings } from "./CostWarnings";
 import { CalcHint } from "./help/CalcHint";
+import { InfoHint } from "./help";
 
 /**
  * Dinheiro na tela é real brasileiro com dois centavos.
@@ -75,6 +78,8 @@ export function CostBreakdown({
   structureLocked?: boolean | undefined;
 }) {
   const partial = result.totalIndustrialCost === null;
+  /** A base que este cálculo respondeu — escrita junto do total, não três telas acima. */
+  const base = `${formatQuantity(result.referenceOutputQuantity)} ${result.referenceOutputUomCode}`;
 
   return (
     <>
@@ -303,9 +308,17 @@ export function CostBreakdown({
         </dd>
         <dt>Overhead</dt>
         <dd>{formatBRL(result.overheadSubtotalKnown)}</dd>
+        {/* A pergunta que o resumo responde é "quanto custa produzir a
+            quantidade que eu pedi?". Sem a base ao lado do total, quem lia
+            "por 1.000" logo abaixo não sabia dizer se o cálculo foi feito
+            para 300 ou para 1.000 — foi o que aconteceu no walkthrough. */}
+        <dt>Quantidade calculada</dt>
+        <dd>
+          {formatQuantity(result.referenceOutputQuantity)} {result.referenceOutputUomCode}
+        </dd>
         {partial ? (
           <>
-            <dt>Subtotal conhecido</dt>
+            <dt>Subtotal conhecido para {base}</dt>
             <dd>
               {formatBRL(result.knownSubtotal)}
               <span className="field__hint"> Existem custos não informados.</span>
@@ -313,12 +326,17 @@ export function CostBreakdown({
           </>
         ) : (
           <>
-            <dt>Custo industrial total</dt>
+            <dt>Custo industrial total para {base}</dt>
             <dd>{formatBRL(result.totalIndustrialCost)}</dd>
             <dt>Custo por unidade</dt>
             <dd>{formatUnitCost(result.costPerUnit)}</dd>
-            <dt>Custo por 1.000 unidades</dt>
-            <dd>{formatBRL(result.costPer1000)}</dd>
+            {/* Comparativo, e por isso secundário: é razão derivada do custo
+                por unidade, não o custo de uma produção de 1.000. */}
+            <dt className="is-secondary">
+              {COST_PER_1000_LABEL}{" "}
+              <InfoHint label={COST_PER_1000_LABEL}>{COST_PER_1000_EXPLANATION}</InfoHint>
+            </dt>
+            <dd className="is-secondary">{formatBRL(result.costPer1000)}</dd>
           </>
         )}
       </dl>

@@ -477,6 +477,15 @@
   margin: 0;
 }
 
+/* Linha COMPARATIVA de uma lista de totais — o equivalente por 1.000, por
+   exemplo. Continua legível, mas não disputa o lugar do número que responde
+   "quanto custa a quantidade que eu pedi". */
+.definition-list dt.is-secondary,
+.definition-list dd.is-secondary {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
 /* ---------------- Responsivo ---------------- */
 
 /* Tablet/mobile: mesmo mecanismo de recolher, sem overlay separado. */

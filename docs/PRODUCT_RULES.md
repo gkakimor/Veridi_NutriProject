@@ -4780,3 +4780,46 @@ Não se corrige por backfill. Continua abrindo, mostra o aviso com as linhas
 inconsistentes (`CustomerOrderLineDTO.productCustomerMismatch`) e **não
 confirma**. Trocar o cliente, trocar o produto ou apagar a linha por SQL
 reescreveria história comercial que ninguém decidiu.
+
+## §78 — O custo é da quantidade calculada; "por 1.000" é razão, não execução
+
+No walkthrough real de 2026-09-09 a base de produção do produto era **300
+unidades** e a tela destacava **"custo por 1.000"**. A usuária não soube dizer
+se o sistema havia calculado 300 ou 1.000. Enquanto essa dúvida existe, nenhum
+número de custo sustenta decisão — e a dúvida era legítima: os dois números
+apareciam com o mesmo peso, sem nada dizendo qual é total e qual é razão.
+
+**A matemática estava certa.** A auditoria do motor em 200, 300, 500 e 1.000 —
+com recurso fixo por lote, recurso proporcional, energia, múltiplos lotes e
+caixa inteira — confirmou que `perUnit = total ÷ quantidade` e
+`per1000 = perUnit × 1.000`, e que o total é sempre o da quantidade pedida (a
+base de referência, no CALC; a quantidade simulada, no CMV e nas faixas). Não
+houve correção de cálculo: o defeito era de apresentação.
+
+**`per1000` é NORMALIZAÇÃO, e a distinção não é acadêmica.** Sobre uma base de
+300, produzir 1.000 são quatro lotes, e custo fixo por lote, recurso por lote de
+referência e caixa de expedição inteira não diluem proporcionalmente (§5.12). Na
+prova: uma execução de 300 a R$ 201,00 tem R$ 670,00 de equivalente por 1.000,
+enquanto o cálculo real de 1.000 dá R$ 767,00 — 14% acima. Chamar os dois de
+"custo por 1.000" faz o comparativo parecer o custo de uma produção que ninguém
+calculou.
+
+**A hierarquia responde primeiro "quanto custa a quantidade que eu pedi".** Em
+ordem de destaque: quantidade calculada, custo total DAQUELA quantidade, custo
+por unidade e, secundário e rotulado como equivalência, o valor por 1.000. O
+rótulo é **"Equivalente por 1.000 un"**, com a ressalva de que não representa um
+novo cálculo de produção — texto único em `@veridi/shared`
+(`COST_PER_1000_LABEL`, `COST_PER_1000_EXPLANATION`), porque a mesma
+equivalência é impressa em seis superfícies e copiá-la seria deixá-la divergir.
+
+**A quantidade acompanha o total, e não fica três telas acima.** O rótulo do
+total carrega a quantidade ("Custo industrial total para 300 un"), e o
+detalhamento, o CMV, os três impressos e o relatório de custo industrial por
+produto trazem a base ao lado do número que ela explica.
+
+**No papel a ressalva vem impressa.** Não há ⓘ para abrir num documento, e quem
+o recebe não estava na conversa em que a base foi escolhida.
+
+**Nada de domínio mudou.** Nenhum snapshot foi recalculado, nenhum campo
+renomeado (`costPer1000`, `costPer1000Snapshot` seguem com o nome técnico) e
+nenhuma migration nasceu disto: é copy e hierarquia.

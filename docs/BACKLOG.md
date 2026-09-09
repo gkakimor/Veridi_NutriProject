@@ -36,8 +36,7 @@ faz primeiro e estava espalhada por cinco lugares.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P0-1** | COST-BASIS-UX-01 | A · P0 | A usuária não soube dizer se o sistema calculou 300 ou 1.000. Enquanto a dúvida existe, nenhum número de custo sustenta decisão |
-| **P1-1** | INDUSTRIAL-RATE-VALIDITY-01 | A · P1 | Mesma família de vigência que COST-SOURCE-01 acabou de fechar, no outro lado do custo |
+| **P1-1** | INDUSTRIAL-RATE-VALIDITY-01 | A · P1 | Mesma família de vigência que COST-SOURCE-01 acabou de fechar, no outro lado do custo. **Primeiro da fila** desde que COST-BASIS-UX-01 fechou |
 | **P1-2** | CUSTOMER-CEP-02 | A · P1 | Decisão de PO já fechada, e tem corrida real de rede |
 | **P1-3** | PROJECT-CUSTOMER-CONTACT-01 | A · P1 | Leitura, sem duplicar dado |
 | **P1-4** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
@@ -60,10 +59,11 @@ conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
-**Zero BLOCKER.** Da auditoria de produto sobram três LOW e a fila de UX; o que
-reabriu P0 e P1 veio de outro lugar — o **walkthrough real da Veridi de
-2026-09-09**, reconciliado aqui no mesmo dia. Dois P0 (ORDER-CUSTOMER-PRODUCT-01
-— **fechado no mesmo 2026-09-09** — e COST-BASIS-UX-01) e cinco P1 entraram por
+**Zero BLOCKER e zero P0.** Da auditoria de produto sobram três LOW e a fila de
+UX; o que reabriu P0 e P1 veio de outro lugar — o **walkthrough real da Veridi
+de 2026-09-09**, reconciliado aqui no mesmo dia. Os dois P0
+(ORDER-CUSTOMER-PRODUCT-01 e COST-BASIS-UX-01) **fecharam no mesmo
+2026-09-09**; cinco P1 entraram por
 observação de uso, não por varredura de código: é a diferença entre o que o
 sistema faz errado e o que ele faz de um jeito que ninguém entende. A mesma leva trouxe uma decisão de produto
 nova — CUSTOMER-COMMERCIAL-STATUS-01 — e um discovery de contrato.
@@ -172,7 +172,7 @@ por fora: liberação da Qualidade, painel de atenção, KPI do painel e relató
 de validade (inclusive `daysToExpiry`, agora em dias civis). Zero migration,
 zero dado reescrito — os mesmos lotes passaram a ser lidos corretamente.
 
-### P0 — antes de qualquer outra capability
+### P0 — antes de qualquer outra capability (os dois fechados em 2026-09-09)
 
 #### ORDER-CUSTOMER-PRODUCT-01 — Pedido aceita produto de outro cliente até a Produção — **RESOLVIDO em 2026-09-09**
 
@@ -225,39 +225,54 @@ Em `CAFEÍNA PT 60 CAPS THE KING` o material foi de R$ 0,15 para R$ 9,10 —
 exatamente as 60 doses que faltavam. Sem doses por embalagem a estimativa falha
 fechada, com o motivo na tela. Nada havia sido persistido por esse caminho.
 
-#### COST-BASIS-UX-01 — "custo por 1.000" ao lado de uma base de 300 — AUDITAR PRIMEIRO
+#### COST-BASIS-UX-01 — "custo por 1.000" ao lado de uma base de 300 — **RESOLVIDO em 2026-09-09**
 
-Vindo do walkthrough real (2026-09-09). A base de produção do produto era **300
-unidades** e a tela destacou **custo por 1.000 unidades**. A usuária não soube
-dizer se o sistema havia calculado 300 ou 1.000 — e essa dúvida, sozinha, já
-invalida o número como apoio de decisão.
+Fechado em 2026-09-09. Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md),
+**§78**.
 
-**Antes de mexer em UI, provar o motor** em 200, 300, 500 e 1.000, com recurso
-fixo por lote, recurso proporcional e recurso derivado de equipamento. Se a
-conta de 300 estiver certa, é UX. Se estiver errada, isto deixa de ser UX e
-vira **P0 bug de custo**.
+**A auditoria do motor veio primeiro, e absolveu a matemática.** A prova rodou o
+motor real (`costForOutputQuantity`, pela rota de CMV) sobre uma estrutura de
+base 300 que reúne todas as formas de escala do domínio — material proporcional,
+mão de obra fixa por lote, equipamento com potência, energia derivada, premissa
+fixa por lote, premissa por unidade, premissa por 1.000 e caixa de expedição
+inteira — em 200, 300, 500 e 1.000, com conta independente em Decimal:
 
-O que a leitura de código já estabeleceu, e que a prova precisa confirmar com
-número: `per1000 = perUnit × 1000` e `perUnit = total ÷ quantidade`
-(`pricing-cost.ts`). Ou seja, o "por 1.000" é uma **equivalência unitária
-extrapolada linearmente**, não o custo de produzir 1.000 — produzir 1.000 sobre
-base 300 são 4 lotes, e custo fixo por lote, caixa inteira e recurso por lote
-de referência não diluem linearmente (§5.12). Se a prova confirmar isso, os
-dois números estão corretos e o defeito é apresentá-los com o mesmo peso, sem
-dizer que um é total e o outro é razão — o que §54 já proíbe para prévia ×
-gravado e aqui aparece na mesma família.
+| Quantidade | Lotes | Caixas | Total | Por unidade | Equivalente por 1.000 |
+|---|---|---|---|---|---|
+| 200 un | 1 | 2 | R$ 183,00 | R$ 0,915 | R$ 915,00 |
+| 300 un | 1 | 3 | R$ 201,00 | R$ 0,67 | R$ 670,00 |
+| 500 un | 2 | 5 | R$ 384,00 | R$ 0,768 | R$ 768,00 |
+| 1.000 un | 4 | 9 | R$ 767,00 | R$ 0,767 | R$ 767,00 |
 
-Hierarquia desejada pelo PO, em ordem de destaque:
+`perUnit = total ÷ quantidade` e `per1000 = perUnit × 1.000` em todos os casos,
+e o total é sempre o da quantidade pedida. **Classificação A — matemática
+correta, defeito exclusivamente de UX.** Zero recálculo, zero snapshot alterado,
+zero migration, zero dado PROD tocado.
 
-1. **Quantidade calculada: 300 un** — o que o documento está respondendo;
-2. **Custo total para 300 un**;
-3. **Custo por unidade**;
-4. secundário, rotulado como equivalência: **por 1.000 un**.
+**A prova semântica que faltava.** O equivalente por 1.000 da execução de 300 é
+R$ 670,00; o cálculo REAL de 1.000 sobre a mesma base é R$ 767,00 — quatro
+lotes, 14% acima. Os dois números são corretos e não são a mesma coisa, e era
+apresentá-los com o mesmo peso que produzia a dúvida.
 
-Onde aparece hoje: `CostBreakdown.tsx:320` ("Custo por 1.000 unidades"),
-`ProductCmvPage.tsx:497` ("CMV por 1.000") e as três telas de impressão
-(`CmvPrintPage`, `CostCalculationPrintPage`, `PricingPrintPage`). A base de
-referência é escrita só no detalhe do CALC (`CostCalculationPage.tsx:101`).
+**O que mudou é hierarquia e copy.** A quantidade calculada passou a acompanhar
+o total ("Custo industrial total para 300 un", "CMV total para 300 un"), e o
+"por 1.000" virou **"Equivalente por 1.000 un"**, secundário, com a ressalva de
+que não representa um novo cálculo de produção. Texto único em `@veridi/shared`
+(`COST_PER_1000_LABEL`, `COST_PER_1000_EXPLANATION`).
+
+**Seis superfícies, não cinco.** Além de `CostBreakdown.tsx`,
+`ProductCmvPage.tsx` e dos três impressos (`CmvPrintPage`,
+`CostCalculationPrintPage`, `PricingPrintPage`), a varredura por `per1000`
+achou o relatório R-18 (`CostReports.tsx` e o CSV de exportação), que mostrava
+"Custo total" e "Custo/1.000" lado a lado **sem nenhuma quantidade na linha**.
+Ganhou a coluna "Quantidade calculada" — `IndustrialCostCalculationSummaryDTO` e
+`IndustrialCostByProductRowDTO` passaram a carregar a base, que já estava
+persistida.
+
+**Finding aberto — vocabulário da base.** O mesmo conceito tem três nomes na
+interface: "Base de produção" (campo de entrada), "Base de referência" (leitura)
+e "Base de produção sugerida" (template). Registrado, não varrido: sweep de
+nomenclatura sem necessidade não é parte desta capability.
 
 ### P1 — próximas correções
 

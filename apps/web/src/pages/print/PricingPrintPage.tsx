@@ -5,6 +5,8 @@ import type { PricingVersionDTO } from "@veridi/shared";
 import {
   COMMISSION_BASE_DESCRIPTION,
   CONTRIBUTION_DEFINITION,
+  COST_PER_1000_EXPLANATION,
+  COST_PER_1000_LABEL,
   INDUSTRIAL_COST_QUALITY_LABELS,
   PRICE_MODE_LABELS,
   PRICING_VERSION_STATUS_LABELS,
@@ -136,7 +138,13 @@ export function PricingPrintPage() {
 
       <PrintSection title="Custo por faixa">
         <PrintTable
-          columns={["Quantidade", "Lotes de referência", "Custo total", "Custo/1.000", "Qualidade"]}
+          columns={[
+            "Quantidade",
+            "Lotes de referência",
+            "Custo total da faixa",
+            COST_PER_1000_LABEL,
+            "Qualidade",
+          ]}
           isEmpty={pricing.tiers.length === 0}
           emptyMessage=""
         >
@@ -158,6 +166,10 @@ export function PricingPrintPage() {
             </tr>
           ))}
         </PrintTable>
+        {/* Cada faixa é recalculada para a SUA quantidade — a coluna de custo
+            total é dela. A última coluna é comparação entre faixas, e no papel
+            a ressalva precisa vir escrita. */}
+        <p className="print-doc__status">{COST_PER_1000_EXPLANATION}</p>
       </PrintSection>
 
       {(pricing.warnings.length > 0 || pricing.tiers.some((tier) => tier.warnings.length > 0)) && (

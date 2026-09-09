@@ -162,6 +162,16 @@
   color: var(--ink-2);
 }
 
+/* Ressalva de uma linha do documento. No papel não há ⓘ para abrir, então o
+   que a tela guarda atrás de um ícone precisa vir impresso — é o caso do
+   equivalente por 1.000, que sem isso parece uma produção de 1.000. */
+.print-note {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  color: var(--ink-2);
+}
+
 .print-detail div {
   display: flex;
   gap: 4px;

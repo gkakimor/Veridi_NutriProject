@@ -4,6 +4,8 @@ import { useParams, useSearchParams } from "react-router-dom";
 import type { CmvGroup, ProductCmvResponse } from "@veridi/shared";
 import {
   CMV_GROUP_LABELS,
+  COST_PER_1000_EXPLANATION,
+  COST_PER_1000_LABEL,
   INDUSTRIAL_COST_QUALITY_LABELS,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
   INDUSTRIAL_RATE_UOM_LABELS,
@@ -180,7 +182,7 @@ export function CmvPrintPage() {
         <PrintSection title="Resultado">
           <PrintTable columns={["Medida", "Valor"]} isEmpty={false} emptyMessage="">
             <tr>
-              <td>Quantidade simulada</td>
+              <td>Quantidade calculada</td>
               <td className="is-number">
                 {formatQuantity(simulation.quantity)} {simulation.uomCode}
               </td>
@@ -190,7 +192,10 @@ export function CmvPrintPage() {
               <td className="is-number">{simulation.batchCount}</td>
             </tr>
             <tr>
-              <td>{parcial ? "Subtotal conhecido" : "CMV total"}</td>
+              <td>
+                {parcial ? "Subtotal conhecido" : "CMV total"} para{" "}
+                {formatQuantity(simulation.quantity)} {simulation.uomCode}
+              </td>
               <td className="is-number">
                 {formatBRL(parcial ? simulation.knownSubtotal : simulation.totalCost!)}
               </td>
@@ -201,8 +206,13 @@ export function CmvPrintPage() {
                 {simulation.costPerUnit ? formatBRL(simulation.costPerUnit) : "—"}
               </td>
             </tr>
+            {/* No papel não há ⓘ para abrir: a explicação vai impressa junto,
+                senão o comparativo volta a parecer produção de 1.000. */}
             <tr>
-              <td>CMV por 1.000 unidades</td>
+              <td>
+                {COST_PER_1000_LABEL}
+                <div className="print-note">{COST_PER_1000_EXPLANATION}</div>
+              </td>
               <td className="is-number">
                 {simulation.costPer1000 ? formatBRL(simulation.costPer1000) : "—"}
               </td>

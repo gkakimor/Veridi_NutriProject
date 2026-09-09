@@ -2,6 +2,7 @@ import { formatQuantity } from "../../lib/quantity";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  COST_PER_1000_LABEL,
   INDUSTRIAL_COST_QUALITY_LABELS,
   PRICE_MODE_LABELS,
   QUOTE_PRICE_SOURCE_LABELS,
@@ -68,9 +69,10 @@ export function IndustrialCostByProductReportPage() {
           "Último cálculo",
           "Referência",
           "Qualidade",
+          "Quantidade calculada",
           "Custo total",
           "Custo/unidade",
-          "Custo/1.000",
+          COST_PER_1000_LABEL,
         ]}
         emptyMessage="Nenhum produto encontrado."
         rows={data?.rows.map((row) => (
@@ -94,6 +96,13 @@ export function IndustrialCostByProductReportPage() {
               {formatDate(row.costReferenceDate)}
             </td>
             <td>{row.quality ? INDUSTRIAL_COST_QUALITY_LABELS[row.quality] : "—"}</td>
+            {/* A base vem antes do total: sem ela, "Custo total" não diz de
+                quanto é, e a última coluna parece a quantidade produzida. */}
+            <td>
+              {row.referenceOutputQuantity
+                ? `${formatQuantity(row.referenceOutputQuantity)} ${row.referenceOutputUomCode ?? ""}`.trim()
+                : "—"}
+            </td>
             <td>
               {row.totalIndustrialCost
                 ? formatBRL(row.totalIndustrialCost)

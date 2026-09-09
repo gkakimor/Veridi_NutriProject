@@ -74,6 +74,8 @@ export async function getIndustrialCostByProductReport(
       costReferenceDate: calculation?.costReferenceDate ?? null,
       calculatedAt: calculation?.calculatedAt ?? null,
       quality: calculation?.quality ?? null,
+      referenceOutputQuantity: calculation?.referenceOutputQuantity ?? null,
+      referenceOutputUomCode: calculation?.referenceOutputUomCode ?? null,
       totalIndustrialCost: calculation?.totalIndustrialCost ?? null,
       knownSubtotal: calculation?.knownSubtotal ?? null,
       costPerUnit: calculation?.costPerUnit ?? null,

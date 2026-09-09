@@ -42,6 +42,20 @@
   background: var(--selected-bg);
 }
 
+/* Cartão COMPARATIVO — o equivalente por 1.000. Fica legível e conferível,
+   mas nunca é o maior número da fileira: quem responde "quanto custa a
+   quantidade que eu pedi" é o CMV total, e foi confundir os dois que deixou a
+   usuária sem saber se o cálculo era de 300 ou de 1.000. */
+.cmv-card--secondary {
+  background: transparent;
+}
+
+.cmv-card--secondary .cmv-card__value {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+}
+
 .cmv-card__label {
   font-size: var(--fs-xs);
   color: var(--ink-2);
