@@ -2,7 +2,7 @@ import { formatQuantity } from "../lib/quantity";
 import { formatPartShare } from "../lib/part-share";
 // `Decimal` do pacote compartilhado: comparação de Decimal de domínio é do
 // próprio Decimal, nunca por `Number` — `PRODUCT_RULES.md` §66.
-import { Decimal } from "@veridi/shared";
+import { Decimal, sinalDoValorComercial } from "@veridi/shared";
 import type {
   BillingDTO,
   CustomerOrderDTO,
@@ -603,12 +603,34 @@ export function BillingPrintDocument({ billing }: { billing: BillingDTO }) {
           ))}
         </PrintTable>
         {/* Total só com precificação completa — parcial nunca vira total. */}
-        <p>
-          <strong>Valor total:</strong>{" "}
-          {billing.hasCompletePricing && billing.totalAmount
-            ? formatBRL(billing.totalAmount)
-            : "Precificação incompleta — total não disponível"}
-        </p>
+        {billing.hasCompletePricing && billing.totalAmount ? (
+          <>
+            <p>
+              <strong>Subtotal bruto:</strong> {formatBRL(billing.grossAmount ?? billing.totalAmount)}
+            </p>
+            {!sinalDoValorComercial(billing.discountAmount).zero && (
+              <p>
+                <strong>Desconto comercial:</strong> −{" "}
+                {formatBRL(sinalDoValorComercial(billing.discountAmount).absoluto)}
+              </p>
+            )}
+            {/* Só aparece quando existe: ajuste zero é ruído no papel. */}
+            {!sinalDoValorComercial(billing.commercialAdjustmentAmount).zero && (
+              <p>
+                <strong>Ajuste de fechamento:</strong>{" "}
+                {sinalDoValorComercial(billing.commercialAdjustmentAmount).negativo ? "− " : "+ "}
+                {formatBRL(sinalDoValorComercial(billing.commercialAdjustmentAmount).absoluto)}
+              </p>
+            )}
+            <p>
+              <strong>Valor total:</strong> {formatBRL(billing.totalAmount)}
+            </p>
+          </>
+        ) : (
+          <p>
+            <strong>Valor total:</strong> Precificação incompleta — total não disponível
+          </p>
+        )}
       </PrintSection>
     </PrintLayout>
   );

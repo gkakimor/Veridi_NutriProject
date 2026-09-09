@@ -105,7 +105,24 @@ export interface BillingDTO {
   notes: string | null;
   lines: BillingLineDTO[];
   totalQuantity: string;
-  /** Só existe quando TODAS as linhas têm preço — nunca somar parcialmente. */
+  /** Soma das linhas do documento; `null` quando falta preço em alguma. */
+  grossAmount: string | null;
+  /**
+   * Percentual acordado no Pedido, congelado na criação. `null` = não havia
+   * condição com desconto; `"0.0000"` = desconto explicitamente zero.
+   */
+  discountPercentSnapshot: string | null;
+  /** Desconto do Pedido apropriado NESTE documento — cabeçalho, nunca linha. */
+  discountAmount: string | null;
+  /**
+   * Correção de arredondamento que só o documento de FECHAMENTO carrega.
+   * Positiva, zero ou negativa. Não é desconto.
+   */
+  commercialAdjustmentAmount: string | null;
+  /**
+   * `grossAmount − discountAmount + commercialAdjustmentAmount` — o valor do
+   * documento. Só existe quando TODAS as linhas têm preço.
+   */
   totalAmount: string | null;
   /** `false` quando alguma linha está sem preço; a UI mostra "Valores incompletos". */
   hasCompletePricing: boolean;
@@ -223,4 +240,219 @@ export function calcularTotaisFaturamento(
         .toFixed(2)
     : null;
   return { lineTotals, hasCompletePricing, totalAmount };
+}
+
+/* ------------------------------------------------------------------ *
+ * Apropriação comercial — desconto global e fechamento do Pedido
+ * ------------------------------------------------------------------ */
+
+/** Condição comercial CONGELADA do Pedido. Nunca a condição viva. */
+export interface CondicaoComercialDoPedido {
+  /** `CustomerOrder.agreedSubtotalAmount` — bruto acordado, 2 casas. */
+  agreedSubtotalAmount: string | null;
+  /** `CustomerOrder.agreedTotalAmount` — líquido acordado, 2 casas. */
+  agreedTotalAmount: string | null;
+}
+
+/** Um Faturamento ATIVO já emitido deste Pedido, como está gravado. */
+export interface FaturamentoAtivoAnterior {
+  grossAmount: string | null;
+  discountAmount: string | null;
+  totalAmount: string | null;
+}
+
+export interface ApropriacaoComercialInput {
+  pedido: CondicaoComercialDoPedido;
+  /** Emitidos e NÃO cancelados. Cancelado nunca entra. */
+  anteriores: FaturamentoAtivoAnterior[];
+  /** Σ das linhas deste documento, já em 2 casas. `null` = preço incompleto. */
+  grossAmount: string | null;
+  /** Este documento completa as quantidades do Pedido? */
+  fechaOPedido: boolean;
+  /**
+   * Σ `quantidade × (unitPrice − agreedUnitPrice)` de TODAS as linhas ativas
+   * (anteriores emitidas + este documento), 2 casas.
+   *
+   * Override de preço é EXCEÇÃO COMERCIAL DELIBERADA, e a diferença entre o
+   * acordado e o faturado é a evidência dela (`PRODUCT_RULES.md` §34). Puxar
+   * o total de volta ao acordado apagaria justamente essa evidência: o alvo
+   * do fechamento anda com o override, e o ajuste continua absorvendo só
+   * arredondamento. Sem override isto é `"0.00"` e o alvo é o acordado.
+   */
+  overrideDelta: string;
+}
+
+export interface ApropriacaoComercial {
+  /** Desconto apropriado NESTE documento. Nunca rateado nas linhas. */
+  discountAmount: string | null;
+  /** Correção de arredondamento; só o documento de fechamento a carrega. */
+  commercialAdjustmentAmount: string | null;
+  /** `grossAmount − discountAmount + commercialAdjustmentAmount`. */
+  totalAmount: string | null;
+}
+
+function dinheiroComercial(valor: DecimalInstance): DecimalInstance {
+  return valor.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+}
+
+/** Decimal a partir de string opcional; ausente ou ilegível vira `null`. */
+function valorOuNulo(valor: string | null | undefined): DecimalInstance | null {
+  if (valor === null || valor === undefined || valor === "") return null;
+  try {
+    const numero = new Decimal(valor);
+    return numero.isFinite() ? numero : null;
+  } catch {
+    return null;
+  }
+}
+
+function somar(valores: (string | null)[]): DecimalInstance {
+  return valores.reduce((soma, valor) => {
+    const parcela = valorOuNulo(valor);
+    return parcela ? soma.plus(parcela) : soma;
+  }, new Decimal(0));
+}
+
+/**
+ * COMO O DESCONTO GLOBAL DO PEDIDO CHEGA AO FATURAMENTO.
+ *
+ * O desconto é do CABEÇALHO, nunca das linhas: `agreedUnitPrice` continua
+ * sendo o preço que o cliente aceitou, e nenhuma linha ganha um preço
+ * líquido que ninguém negociou (`PRODUCT_RULES.md` §34).
+ *
+ * DOCUMENTO INTERMEDIÁRIO — apropriação CUMULATIVA, não proporcional
+ * isolada. Aplicar `round(bruto × percentual)` em cada documento acumula
+ * resíduo: cem faturamentos de R$ 0,01 com 50% dariam R$ 1,00 de desconto
+ * sobre R$ 1,00, quando o acordado eram R$ 0,50. Aqui cada documento
+ * pergunta quanto desconto o Pedido JÁ deveria ter apropriado até este
+ * bruto acumulado, e aplica só a diferença. O erro nunca soma.
+ *
+ * DOCUMENTO DE FECHAMENTO — aquele que completa as quantidades do Pedido
+ * (não "o último no tempo"): apropria todo o desconto que sobrou e recebe o
+ * `commercialAdjustmentAmount`, a diferença entre o que os documentos já
+ * somam e a condição acordada.
+ *
+ * O ajuste NÃO é desconto e não se esconde dentro dele. Ele existe porque
+ * cada linha fecha em dois decimais: partir uma linha de `3 × 33,3333` em
+ * três documentos dá `33,33 × 3 = 99,99` contra os `100,00` do Pedido — e
+ * isso acontece mesmo com desconto ZERO. Uma reconciliação só, para as duas
+ * fontes.
+ *
+ * Função PURA: não lê banco, não conhece Prisma, não decide se o documento
+ * fecha — quem chama informa.
+ */
+export function calcularApropriacaoComercialDoFaturamento(
+  input: ApropriacaoComercialInput,
+): ApropriacaoComercial {
+  const bruto = valorOuNulo(input.grossAmount);
+  // Sem bruto não há documento com valor: precificação incompleta.
+  if (bruto === null) {
+    return { discountAmount: null, commercialAdjustmentAmount: null, totalAmount: null };
+  }
+
+  const subtotalAcordado = valorOuNulo(input.pedido.agreedSubtotalAmount);
+  const totalAcordado = valorOuNulo(input.pedido.agreedTotalAmount);
+
+  /*
+   * Pedido digitado direto não tem condição comercial congelada: não existe
+   * desconto para apropriar nem alvo para reconciliar, e o documento vale o
+   * que suas linhas somam — exatamente como antes desta capacidade.
+   */
+  if (subtotalAcordado === null || totalAcordado === null) {
+    return {
+      discountAmount: "0.00",
+      commercialAdjustmentAmount: "0.00",
+      totalAmount: dinheiroComercial(bruto).toFixed(2),
+    };
+  }
+
+  /*
+   * O desconto acordado sai da SUBTRAÇÃO dos dois valores já congelados e
+   * fechados, nunca de recalcular `subtotal × percentual`: foram esses dois
+   * números que o cliente viu na proposta.
+   */
+  const descontoAcordado = Decimal.max(dinheiroComercial(subtotalAcordado.minus(totalAcordado)), 0);
+  const descontoJaApropriado = somar(input.anteriores.map((b) => b.discountAmount));
+  const descontoRestante = Decimal.max(descontoAcordado.minus(descontoJaApropriado), 0);
+
+  let desconto: DecimalInstance;
+  if (input.fechaOPedido) {
+    desconto = descontoRestante;
+  } else if (descontoAcordado.isZero() || subtotalAcordado.isZero()) {
+    desconto = new Decimal(0);
+  } else {
+    const brutoAcumulado = somar(input.anteriores.map((b) => b.grossAmount)).plus(bruto);
+    const alvoAcumulado = dinheiroComercial(
+      descontoAcordado.times(brutoAcumulado).dividedBy(subtotalAcordado),
+    );
+    // Nunca apropriar mais do que o acordado, nem devolver desconto já dado.
+    desconto = Decimal.min(
+      Decimal.max(alvoAcumulado.minus(descontoJaApropriado), 0),
+      descontoRestante,
+    );
+  }
+
+  const preliminar = dinheiroComercial(bruto.minus(desconto));
+
+  if (!input.fechaOPedido) {
+    return {
+      discountAmount: desconto.toFixed(2),
+      commercialAdjustmentAmount: "0.00",
+      totalAmount: preliminar.toFixed(2),
+    };
+  }
+
+  const totalJaFaturado = somar(input.anteriores.map((b) => b.totalAmount));
+  const override = valorOuNulo(input.overrideDelta) ?? new Decimal(0);
+  const alvoRestante = dinheiroComercial(totalAcordado.plus(override).minus(totalJaFaturado));
+  const ajuste = dinheiroComercial(alvoRestante.minus(preliminar));
+
+  return {
+    discountAmount: desconto.toFixed(2),
+    commercialAdjustmentAmount: ajuste.toFixed(2),
+    totalAmount: dinheiroComercial(preliminar.plus(ajuste)).toFixed(2),
+  };
+}
+
+/**
+ * O SINAL de um valor comercial, sem passar por `Number`.
+ *
+ * O ajuste de fechamento é o único valor do documento que pode ser negativo,
+ * e a tela precisa dele como "− R$ 0,03", não "R$ -0,03". Converter para
+ * `Number` só para descobrir o sinal reintroduziria ponto flutuante num
+ * caminho que o `documents.test.tsx` proíbe no impresso — e por bom motivo.
+ */
+export function sinalDoValorComercial(valor: string | null | undefined): {
+  zero: boolean;
+  negativo: boolean;
+  /** O mesmo valor sem o sinal. `"0.00"` quando ilegível. */
+  absoluto: string;
+} {
+  const numero = valorOuNulo(valor ?? null);
+  if (numero === null) return { zero: true, negativo: false, absoluto: "0.00" };
+  return {
+    zero: numero.isZero(),
+    negativo: numero.isNegative(),
+    absoluto: numero.abs().toFixed(2),
+  };
+}
+
+/**
+ * `bruto − desconto + ajuste`, em duas casas.
+ *
+ * A tela precisa da conta para mostrar a PRÉVIA do rascunho enquanto o
+ * preço está sendo digitado: o bruto muda a cada tecla, e o desconto vem do
+ * servidor, que é quem conhece os outros faturamentos do Pedido. Uma
+ * subtração só, aqui, em vez de `Number` na página.
+ */
+export function totalDoFaturamento(
+  grossAmount: string | null,
+  discountAmount: string | null,
+  commercialAdjustmentAmount: string | null,
+): string | null {
+  const bruto = valorOuNulo(grossAmount);
+  if (bruto === null) return null;
+  const desconto = valorOuNulo(discountAmount) ?? new Decimal(0);
+  const ajuste = valorOuNulo(commercialAdjustmentAmount) ?? new Decimal(0);
+  return dinheiroComercial(bruto.minus(desconto).plus(ajuste)).toFixed(2);
 }

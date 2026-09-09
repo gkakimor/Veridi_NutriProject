@@ -82,6 +82,10 @@ function faturamento(overrides: Partial<BillingDTO> = {}): BillingDTO {
     externalReference: null,
     notes: null,
     totalQuantity: lines.reduce((sum, line) => sum + Number(line.quantity), 0).toString(),
+    grossAmount: totalAmount,
+    discountPercentSnapshot: null,
+    discountAmount: null,
+    commercialAdjustmentAmount: null,
     totalAmount,
     hasCompletePricing: totalAmount !== null,
     issuedAt: null,
@@ -199,7 +203,7 @@ describe("#8D — preço de faturamento em edição mostra o total resultante", 
       expect(screen.queryByRole("heading", { name: "Alterar preço de faturamento" })).toBeNull(),
     );
     expect(overrideBillingPrice).not.toHaveBeenCalled();
-    expect(rodape()).toContain("Valor total (prévia): R$ 1.250,00");
+    expect(rodape()).toContain("Total faturado (prévia): R$ 1.250,00");
   });
 
   it("H. confirmar envia o preço que gerou a prévia, com motivo", async () => {
@@ -217,7 +221,7 @@ describe("#8D — preço de faturamento em edição mostra o total resultante", 
     const [, , payload] = vi.mocked(overrideBillingPrice).mock.calls[0]!;
     expect(payload.unitPrice).toBe("13.25");
     // O documento passa a valer o que a prévia mostrava.
-    await waitFor(() => expect(rodape()).toContain("Valor total (prévia): R$ 1.325,00"));
+    await waitFor(() => expect(rodape()).toContain("Total faturado (prévia): R$ 1.325,00"));
   });
 
   it("I. erro do servidor mantém a prévia separada do salvo", async () => {
@@ -237,7 +241,7 @@ describe("#8D — preço de faturamento em edição mostra o total resultante", 
     expect(screen.queryByRole("button", { name: "Alterar preço de faturamento" })).toBeNull();
     // Fora do rascunho o rodapé é o valor do documento, não uma prévia.
     expect(rodape()).not.toContain("prévia");
-    expect(rodape()).toContain("Valor total: R$ 1.250,00");
+    expect(rodape()).toContain("Total faturado: R$ 1.250,00");
   });
 
   it("K. preço inválido não vira total falso e trava a confirmação", async () => {
@@ -270,12 +274,12 @@ describe("#8D — rodapé do faturamento diz prévia ou gravado", () => {
         lines: [linha({ agreedUnitPrice: null, unitPrice: null, lineTotal: null })],
       }),
     );
-    expect(rodape()).toContain("Valor total (prévia): Valores incompletos");
+    expect(rodape()).toContain("Total faturado (prévia): Valores incompletos");
 
     fireEvent.change(screen.getByLabelText(/Preço faturado de PROD-000001/), {
       target: { value: "13,25" },
     });
-    expect(rodape()).toContain("Valor total (prévia): R$ 1.325,00");
+    expect(rodape()).toContain("Total faturado (prévia): R$ 1.325,00");
   });
 
   it("prévia diferente do salvo mostra o gravado, nomeado", async () => {
@@ -287,7 +291,7 @@ describe("#8D — rodapé do faturamento diz prévia ou gravado", () => {
     fireEvent.change(screen.getByLabelText(/Preço faturado de PROD-000001/), {
       target: { value: "13,25" },
     });
-    expect(screen.getByText(/Valor total gravado: R\$ 1\.250,00/)).toBeTruthy();
+    expect(screen.getByText(/Subtotal gravado: R\$ 1\.250,00/)).toBeTruthy();
   });
 
   it("preço ilegível não vira zero: o rodapé fica sem total", async () => {
@@ -299,7 +303,7 @@ describe("#8D — rodapé do faturamento diz prévia ou gravado", () => {
     fireEvent.change(screen.getByLabelText(/Preço faturado de PROD-000001/), {
       target: { value: "1.2.3" },
     });
-    expect(rodape()).toContain("Valor total (prévia): Valores incompletos");
+    expect(rodape()).toContain("Total faturado (prévia): Valores incompletos");
     expect(
       (screen.getByRole("button", { name: "Emitir faturamento" }) as HTMLButtonElement).disabled,
     ).toBe(true);

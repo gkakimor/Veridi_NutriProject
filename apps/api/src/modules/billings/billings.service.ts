@@ -8,7 +8,12 @@ import type {
   BillingListResponse,
   ShipmentBillingStatus,
 } from "@veridi/shared";
-import { BILLING_CODE_PREFIX, calcularTotaisFaturamento } from "@veridi/shared";
+import {
+  BILLING_CODE_PREFIX,
+  calcularApropriacaoComercialDoFaturamento,
+  calcularTotaisFaturamento,
+} from "@veridi/shared";
+import type { ApropriacaoComercial } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -39,11 +44,20 @@ const CODE_SEQUENCE = "billing_code_seq";
 /** Um Billing "ativo" ocupa a vaga da Expedicao; CANCELLED libera a vaga. */
 const ACTIVE_BILLING_STATUSES = ["DRAFT", "ISSUED"] as const;
 
-type BillingWithLines = Billing & { lines: BillingLine[]; customerOrder: { customerId: string } };
+type BillingWithLines = Billing & {
+  lines: BillingLine[];
+  customerOrder: {
+    customerId: string;
+    agreedSubtotalAmount: Prisma.Decimal | null;
+    agreedTotalAmount: Prisma.Decimal | null;
+  };
+};
 
 const billingInclude = {
   lines: { orderBy: { position: "asc" as const } },
-  customerOrder: { select: { customerId: true } },
+  customerOrder: {
+    select: { customerId: true, agreedSubtotalAmount: true, agreedTotalAmount: true },
+  },
 } as const;
 
 
@@ -91,6 +105,170 @@ function toBillingLineDTO(line: BillingLine, lineTotal: string | null): BillingL
   };
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Apropriacao comercial — desconto do Pedido e fechamento do documento
+ * ------------------------------------------------------------------ */
+
+type LinhaParaApropriacao = Pick<
+  BillingLine,
+  "customerOrderLineId" | "quantity" | "unitPrice" | "agreedUnitPrice"
+>;
+
+/** O bruto do documento: a MESMA soma que o documento imprime. */
+function brutoDoDocumento(lines: LinhaParaApropriacao[]): string | null {
+  return calcularTotaisFaturamento(
+    lines.map((line) => ({
+      quantity: line.quantity.toString(),
+      unitPrice: line.unitPrice !== null ? line.unitPrice.toString() : null,
+    })),
+  ).totalAmount;
+}
+
+/**
+ * Quanto o override de preco afastou o documento do acordo.
+ *
+ * Por linha e em duas casas, na mesma ordem de arredondamento do bruto:
+ * `round(qtd x faturado) - round(qtd x acordado)`. Assim
+ * `bruto - delta` e exatamente o bruto que existiria sem excecao nenhuma, e
+ * o fechamento reconcilia contra o acordo sem engolir a decisao comercial.
+ */
+function deltaDeOverride(lines: LinhaParaApropriacao[]): string {
+  let delta = new Prisma.Decimal(0);
+  for (const line of lines) {
+    if (line.unitPrice === null || line.agreedUnitPrice === null) continue;
+    const faturado = line.quantity.times(line.unitPrice).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    const acordado = line.quantity
+      .times(line.agreedUnitPrice)
+      .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    delta = delta.plus(faturado.minus(acordado));
+  }
+  return delta.toFixed(2);
+}
+
+interface ContextoComercial {
+  pedido: { agreedSubtotalAmount: string | null; agreedTotalAmount: string | null };
+  /** Emitidos e nao cancelados, exceto o proprio candidato. */
+  anteriores: { grossAmount: string | null; discountAmount: string | null; totalAmount: string | null }[];
+  /** Quantidade ja faturada por linha do Pedido, so de documentos ATIVOS. */
+  faturadoPorLinha: Map<string, Prisma.Decimal>;
+  /** Linhas do Pedido e o que foi contratado em cada uma. */
+  linhasDoPedido: { id: string; orderedQuantity: Prisma.Decimal }[];
+  /** Delta de override dos documentos ativos anteriores. */
+  deltaAnterior: Prisma.Decimal;
+}
+
+/**
+ * O estado COMERCIAL ATIVO do Pedido, do ponto de vista de um candidato.
+ *
+ * "Ativo" e EMITIDO e nao cancelado — a mesma base de `billedQuantity`.
+ * Rascunho nao conta (ainda nao faturou nada) e cancelado sai do conjunto,
+ * entao o documento que voltar a completar as quantidades assume o
+ * fechamento sem que nenhum documento anterior seja reescrito.
+ */
+async function carregarContextoComercial(
+  prisma: PrismaOrTx,
+  customerOrderId: string,
+  excluirBillingId: string | null,
+): Promise<ContextoComercial> {
+  const [order, emitidos] = await Promise.all([
+    prisma.customerOrder.findUnique({
+      where: { id: customerOrderId },
+      select: {
+        agreedSubtotalAmount: true,
+        agreedTotalAmount: true,
+        lines: { select: { id: true, orderedQuantity: true } },
+      },
+    }),
+    prisma.billing.findMany({
+      where: {
+        customerOrderId,
+        status: "ISSUED",
+        ...(excluirBillingId ? { id: { not: excluirBillingId } } : {}),
+      },
+      include: { lines: true },
+      orderBy: { issuedAt: "asc" },
+    }),
+  ]);
+
+  const faturadoPorLinha = new Map<string, Prisma.Decimal>();
+  let deltaAnterior = new Prisma.Decimal(0);
+  for (const billing of emitidos) {
+    for (const line of billing.lines) {
+      const atual = faturadoPorLinha.get(line.customerOrderLineId) ?? new Prisma.Decimal(0);
+      faturadoPorLinha.set(line.customerOrderLineId, atual.plus(line.quantity));
+    }
+    deltaAnterior = deltaAnterior.plus(deltaDeOverride(billing.lines));
+  }
+
+  return {
+    pedido: {
+      agreedSubtotalAmount: order?.agreedSubtotalAmount?.toFixed(2) ?? null,
+      agreedTotalAmount: order?.agreedTotalAmount?.toFixed(2) ?? null,
+    },
+    anteriores: emitidos.map((billing) => ({
+      grossAmount: billing.grossAmount?.toFixed(2) ?? null,
+      discountAmount: billing.discountAmount?.toFixed(2) ?? null,
+      totalAmount: billing.totalAmount?.toFixed(2) ?? null,
+    })),
+    faturadoPorLinha,
+    linhasDoPedido: order?.lines ?? [],
+    deltaAnterior,
+  };
+}
+
+/**
+ * Este documento FECHA comercialmente o Pedido?
+ *
+ * Nao e "o ultimo no tempo", nao e contagem de Expedicoes e nao e o status
+ * do Pedido: e a cobertura. Somando o que os documentos ATIVOS ja faturaram
+ * mais este candidato, toda linha do Pedido alcanca a quantidade
+ * contratada?
+ */
+function fechaOPedido(contexto: ContextoComercial, candidato: LinhaParaApropriacao[]): boolean {
+  if (contexto.linhasDoPedido.length === 0) return false;
+  const faturado = new Map(contexto.faturadoPorLinha);
+  for (const line of candidato) {
+    const atual = faturado.get(line.customerOrderLineId) ?? new Prisma.Decimal(0);
+    faturado.set(line.customerOrderLineId, atual.plus(line.quantity));
+  }
+  return contexto.linhasDoPedido.every((linha) =>
+    (faturado.get(linha.id) ?? new Prisma.Decimal(0)).greaterThanOrEqualTo(linha.orderedQuantity),
+  );
+}
+
+/** A apropriacao deste documento contra o estado ativo do Pedido. */
+async function apropriacaoDe(
+  prisma: PrismaOrTx,
+  billing: { id: string; customerOrderId: string; lines: LinhaParaApropriacao[] },
+): Promise<ApropriacaoComercial> {
+  const contexto = await carregarContextoComercial(prisma, billing.customerOrderId, billing.id);
+  return calcularApropriacaoComercialDoFaturamento({
+    pedido: contexto.pedido,
+    anteriores: contexto.anteriores,
+    grossAmount: brutoDoDocumento(billing.lines),
+    fechaOPedido: fechaOPedido(contexto, billing.lines),
+    overrideDelta: contexto.deltaAnterior.plus(deltaDeOverride(billing.lines)).toFixed(2),
+  });
+}
+
+/**
+ * Previa para RASCUNHO: o que este documento apropriaria se fosse emitido
+ * agora. Documento emitido nunca passa por aqui — ele ja tem os valores
+ * congelados, e recalcular seria reescrever historico.
+ */
+async function previasDeRascunho(
+  prisma: PrismaOrTx,
+  billings: BillingWithLines[],
+): Promise<Map<string, ApropriacaoComercial>> {
+  const rascunhos = billings.filter((billing) => billing.status === "DRAFT");
+  const previas = new Map<string, ApropriacaoComercial>();
+  for (const rascunho of rascunhos) {
+    previas.set(rascunho.id, await apropriacaoDe(prisma, rascunho));
+  }
+  return previas;
+}
+
 /**
  * Valor total so existe quando TODAS as linhas tem preco — somar apenas
  * algumas e apresentar como total do documento seria enganoso. Essa
@@ -98,7 +276,10 @@ function toBillingLineDTO(line: BillingLine, lineTotal: string | null): BillingL
  * faturada" (sempre confiavel) de "valor faturado" (so com pricing
  * completo).
  */
-function toBillingDTO(billing: BillingWithLines): BillingDTO {
+function toBillingDTO(
+  billing: BillingWithLines,
+  previa?: ApropriacaoComercial,
+): BillingDTO {
   const totalQuantity = billing.lines.reduce((sum, line) => sum.plus(line.quantity), new Prisma.Decimal(0));
   /*
    * Total de linha e total do documento saem de `calcularTotaisFaturamento`,
@@ -114,6 +295,24 @@ function toBillingDTO(billing: BillingWithLines): BillingDTO {
     })),
   );
   const hasCompletePricing = totais.hasCompletePricing;
+  const grossAmount = totais.totalAmount;
+
+  /*
+   * EMITIDO le o que ficou congelado; RASCUNHO mostra a previa (o que
+   * apropriaria se fosse emitido agora). Documento sem apropriacao — o
+   * rascunho cancelado, ou o legado anterior a esta capacidade — vale o que
+   * as linhas somam, exatamente como antes.
+   */
+  const apropriado: ApropriacaoComercial =
+    billing.totalAmount !== null
+      ? {
+          discountAmount: billing.discountAmount?.toFixed(2) ?? null,
+          commercialAdjustmentAmount: billing.commercialAdjustmentAmount?.toFixed(2) ?? null,
+          totalAmount: billing.totalAmount.toFixed(2),
+        }
+      : billing.status === "DRAFT" && previa
+        ? previa
+        : { discountAmount: null, commercialAdjustmentAmount: null, totalAmount: grossAmount };
 
   return {
     id: billing.id,
@@ -133,7 +332,11 @@ function toBillingDTO(billing: BillingWithLines): BillingDTO {
     notes: billing.notes,
     lines: billing.lines.map((line, indice) => toBillingLineDTO(line, totais.lineTotals[indice] ?? null)),
     totalQuantity: totalQuantity.toString(),
-    totalAmount: totais.totalAmount,
+    grossAmount,
+    discountPercentSnapshot: billing.discountPercentSnapshot?.toFixed(4) ?? null,
+    discountAmount: apropriado.discountAmount,
+    commercialAdjustmentAmount: apropriado.commercialAdjustmentAmount,
+    totalAmount: apropriado.totalAmount,
     hasCompletePricing,
     issuedAt: billing.issuedAt ? billing.issuedAt.toISOString() : null,
     issuedBy: billing.issuedBy,
@@ -237,15 +440,19 @@ export async function listBillings(
     prisma.billing.count({ where }),
   ]);
 
+  const previas = await previasDeRascunho(prisma, billings);
   return {
-    billings: billings.map(toBillingDTO),
+    billings: billings.map((billing) => toBillingDTO(billing, previas.get(billing.id))),
     ...pageMeta(pagination, total),
   };
 }
 
 export async function getBillingById(id: string): Promise<BillingDTO | null> {
-  const billing = await getPrisma().billing.findUnique({ where: { id }, include: billingInclude });
-  return billing ? toBillingDTO(billing) : null;
+  const prisma = getPrisma();
+  const billing = await prisma.billing.findUnique({ where: { id }, include: billingInclude });
+  if (!billing) return null;
+  const previa = billing.status === "DRAFT" ? await apropriacaoDe(prisma, billing) : undefined;
+  return toBillingDTO(billing, previa);
 }
 
 /**
@@ -347,6 +554,13 @@ export async function createBilling(
     const agreedByOrderLine = new Map(orderLines.map((line) => [line.id, line.agreedUnitPrice]));
 
     const order = shipment.customerOrder;
+    /*
+     * O percentual acordado e congelado JA NA CRIACAO — e proveniencia da
+     * condicao comercial, e o Pedido nao a altera mais. NULL ("nao havia
+     * desconto") e 0 ("desconto explicitamente zero") continuam distintos:
+     * `Prisma.Decimal(0)` e um objeto, entao o zero atravessa.
+     */
+    const descontoAcordado = order.agreedDiscountPercent;
     const billing = await tx.billing.create({
       data: {
         code,
@@ -360,6 +574,7 @@ export async function createBilling(
         customerOrderCode: order.code,
         shipmentCode: shipment.code,
         shipmentDate: shipment.shipmentDate,
+        ...(descontoAcordado !== null ? { discountPercentSnapshot: descontoAcordado } : {}),
         createdBy: actor?.name ?? SYSTEM_ACTOR,
       },
     });
@@ -510,6 +725,15 @@ export async function issueBilling(
   actor?: { id: string; name: string },
 ): Promise<BillingDTO> {
   await getPrisma().$transaction(async (tx) => {
+    const alvo = await tx.billing.findUnique({ where: { id }, select: { customerOrderId: true } });
+    if (!alvo) throw new BillingNotFoundError(id);
+    /*
+     * Trava o PEDIDO, nao so este documento: quem decide o fechamento e a
+     * cobertura das linhas do Pedido, e duas emissoes simultaneas de
+     * Expedicoes diferentes poderiam ambas se julgar intermediarias e
+     * deixar o total final errado. Ordem de lock sempre Pedido -> Billing.
+     */
+    await tx.$queryRaw`SELECT id FROM customer_orders WHERE id = ${alvo.customerOrderId} FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM billings WHERE id = ${id} FOR UPDATE`;
 
     const billing = await tx.billing.findUnique({ where: { id }, include: { lines: true } });
@@ -528,9 +752,25 @@ export async function issueBilling(
       );
     }
 
+    /*
+     * A APROPRIACAO E CONGELADA AQUI, e nunca mais recalculada. Emitir e o
+     * unico momento em que o documento sabe contra qual conjunto ativo ele
+     * fecha; recalcular depois reescreveria um historico que o cliente ja
+     * recebeu.
+     */
+    const apropriacao = await apropriacaoDe(tx, billing);
+
     await tx.billing.update({
       where: { id },
-      data: { status: "ISSUED", issuedAt: new Date(), issuedBy: actor?.name ?? SYSTEM_ACTOR },
+      data: {
+        status: "ISSUED",
+        issuedAt: new Date(),
+        issuedBy: actor?.name ?? SYSTEM_ACTOR,
+        grossAmount: brutoDoDocumento(billing.lines),
+        discountAmount: apropriacao.discountAmount,
+        commercialAdjustmentAmount: apropriacao.commercialAdjustmentAmount,
+        totalAmount: apropriacao.totalAmount,
+      },
     });
   });
 

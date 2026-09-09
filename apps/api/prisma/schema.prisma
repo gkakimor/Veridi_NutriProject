@@ -3620,6 +3620,45 @@ model Billing {
   externalReference String?
   notes             String?
 
+  /// A APROPRIACAO COMERCIAL DESTE DOCUMENTO, congelada na EMISSAO.
+  ///
+  /// O desconto global do Pedido e do CABECALHO, nunca das linhas:
+  /// `BillingLine.agreedUnitPrice` continua sendo o preco que o cliente
+  /// aceitou, e nenhuma linha ganha preco liquido que ninguem negociou
+  /// (PRODUCT_RULES.md §34).
+  ///
+  /// Enquanto DRAFT sao nulos de proposito: um rascunho ainda nao apropriou
+  /// nada, e a apropriacao depende de quais documentos estao ATIVOS no
+  /// momento da emissao. A tela mostra previa pela mesma funcao pura.
+  ///
+  /// `grossAmount` e a soma das linhas ja arredondadas — o mesmo numero de
+  /// `calcularTotaisFaturamento`, nunca um segundo calculo.
+  grossAmount Decimal? @db.Decimal(14, 2)
+
+  /// Snapshot de `CustomerOrder.agreedDiscountPercent`. NULL e "nao havia
+  /// condicao com desconto"; 0 e "desconto explicitamente zero" — os dois
+  /// nunca se confundem, e nao se colapsam para simplificar leitura.
+  discountPercentSnapshot Decimal? @db.Decimal(7, 4)
+
+  /// Desconto apropriado NESTE documento. Cumulativo, nunca
+  /// `round(bruto x percentual)` isolado: aplicar o percentual documento a
+  /// documento acumula residuo (cem faturamentos de R$ 0,01 com 50% dariam
+  /// R$ 1,00 de desconto sobre R$ 1,00). Ver
+  /// `calcularApropriacaoComercialDoFaturamento`.
+  discountAmount Decimal? @db.Decimal(14, 2)
+
+  /// A correcao de arredondamento que o documento de FECHAMENTO carrega —
+  /// positiva, zero ou negativa. NAO e desconto e nao se esconde dentro
+  /// dele: existe porque cada linha fecha em dois decimais, e partir
+  /// `3 x 33,3333` em tres documentos da 99,99 contra os 100,00 do Pedido,
+  /// mesmo com desconto ZERO. Uma reconciliacao so, para as duas fontes.
+  commercialAdjustmentAmount Decimal? @db.Decimal(14, 2)
+
+  /// `grossAmount - discountAmount + commercialAdjustmentAmount`: o valor do
+  /// documento. Com o Pedido inteiramente faturado por documentos ativos, a
+  /// soma destes bate EXATAMENTE com `CustomerOrder.agreedTotalAmount`.
+  totalAmount Decimal? @db.Decimal(14, 2)
+
   /// Snapshot historico do cliente/documentos de origem, congelado na
   /// criacao — reaproveita os snapshots ja existentes em CustomerOrder/
   /// Shipment, nunca um framework generico.
