@@ -4191,3 +4191,68 @@ A conversão é a oficial (`convertUomDecimal`, sobre o `toBaseFactor` da
 `UnitOfMeasure`), em `Decimal` de ponta a ponta e sem truncar antes de comparar:
 uma diferença na décima segunda casa é uma faixa diferente. Nenhum fator de
 conversão vive fora da `UnitOfMeasure`.
+
+## §69 — Projeto aprovado continua vendendo, e cada compra é um orçamento novo
+
+`Project.APPROVED` significa que o **desenvolvimento técnico e comercial
+inicial** foi aprovado — não que a relação com o cliente terminou. O projeto
+segue recebendo novas propostas para os produtos que ele aprovou. Recompra não
+abre projeto: quem comprou em janeiro e volta em março negocia no MESMO projeto,
+com a mesma história técnica, os mesmos custos e a mesma formulação.
+
+`Project.CANCELLED` continua fechado. Ali a negociação acabou.
+
+**Todo novo compromisso de compra tem a sua própria QuoteVersion.** Primeira
+compra, recompra, cliente que compra todo mês, compra avulsa depois de um ano —
+todas passam pelo mesmo caminho: proposta nova, enviada, aceita. Não existe
+"pedido recorrente" no sentido de agendamento: nada gera Pedido sozinho no dia
+X.
+
+Num projeto já aprovado, a proposta nova só usa produtos com
+`ProjectProduct.APPROVED`. O que ficou `OUT_OF_SCOPE` na aprovação não volta
+por uma linha de orçamento — voltaria sem passar pela decisão que o excluiu.
+
+## §70 — Proposta aceita que virou Pedido nunca é superada
+
+Aceitar uma versão continua superando as versões **aceitas em aberto** do mesmo
+projeto: proposta aceita e ainda não materializada é oferta viva, e a versão
+nova a substitui.
+
+Mas a aceita que **já gerou Pedido** permanece `ACCEPTED`. Ela é a origem
+daquele Pedido, e marcá-la `SUPERSEDED` porque o cliente comprou de novo
+reescreveria a história do que já foi vendido. A evidência de materialização é a
+relação existente com o `CustomerOrder` (`sourcedCustomerOrder`) — não um status
+novo.
+
+Consequência: um projeto pode ter várias versões `ACCEPTED` ao mesmo tempo, cada
+uma ligada ao seu Pedido. Onde a tela mostrar "o orçamento aceito" do projeto,
+ela mostra o **último** — os anteriores continuam legíveis no histórico, com o
+Pedido que originaram.
+
+A cardinalidade não muda: uma QuoteVersion gera no máximo um CustomerOrder
+(`sourceQuoteVersionId` é único), e gerar duas vezes devolve o mesmo Pedido.
+
+## §71 — A validade fecha a janela de aceite, e o dia inteiro conta
+
+`validUntil` deixa de ser decoração:
+
+- **rascunho** pode não ter validade — é trabalho em andamento;
+- **enviar exige validade**. Documento comercial sem prazo é oferta que nunca
+  vence, e o preço nele foi calculado sobre o custo de uma data;
+- **proposta enviada e vencida não é aceita.** A recusa é erro de domínio em
+  português, nunca 500 e nunca aceite silencioso. O caminho é uma versão nova,
+  com preço e validade revistos.
+
+**"Vencida" é estado derivado**, calculado a cada leitura: `validUntil` menor que
+o dia corrente. Não existe status `EXPIRED`, nada varre o banco à meia-noite, e
+o documento vencido continua inteiro no histórico.
+
+**"Válido até 15/09" vale o dia 15 inteiro.** As colunas de data-só guardam a
+meia-noite UTC do dia escolhido; a comparação usa o FIM desse dia
+(`lib/business-day.ts`), que é a mesma convenção da referência de custo e do
+CMV. Comparar contra o primeiro instante venceria a proposta antes de o dia dela
+começar.
+
+**Aceita não vence retroativamente.** A validade controla o ACEITE; depois do
+"sim" existe acordo. O Pedido pode ser materializado semanas depois, com o preço
+intacto — `createOrderFromAcceptedQuote` não consulta `validUntil`.

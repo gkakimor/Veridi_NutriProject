@@ -279,7 +279,15 @@ describe("Sugestão de faixa na linha do orçamento", () => {
 });
 
 describe("Projeto fechado e proposta nova", () => {
-  it("projeto aprovado não oferece criar versão — e diz por quê", async () => {
+  /*
+   * Esta expectativa foi INVERTIDA no COM-CORE, de propósito.
+   *
+   * Ela protegia a regra antiga — projeto aprovado é histórico e manda criar um
+   * projeto novo para o mesmo cliente. A regra do PO agora é a oposta (§69):
+   * aprovado significa que o desenvolvimento inicial foi aprovado, e a recompra
+   * acontece ali mesmo. Só o projeto CANCELADO continua sem a ação.
+   */
+  it("projeto aprovado oferece a próxima negociação, sem mandar abrir outro projeto", async () => {
     vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([]));
     render(
       <MemoryRouter>
@@ -292,10 +300,29 @@ describe("Projeto fechado e proposta nova", () => {
       </MemoryRouter>,
     );
 
-    // A recusa vinha depois do clique, no fim de um caminho já percorrido.
-    expect(screen.queryByRole("button", { name: /Criar nova versão|Abrir rascunho/ })).toBeNull();
-    expect(screen.getByText(/Projeto aprovado é histórico/)).toBeInTheDocument();
-    expect(screen.getByText(/crie um projeto novo/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Novo orçamento" })).toBeInTheDocument();
+    expect(screen.queryByText(/Projeto aprovado é histórico/)).toBeNull();
+    expect(screen.queryByText(/crie um projeto novo/i)).toBeNull();
+  });
+
+  it("projeto cancelado continua sem a ação, e diz por quê", async () => {
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([]));
+    render(
+      <MemoryRouter>
+        <QuoteVersionsSection
+          project={project([quote({ status: "ACCEPTED" })])}
+          canEdit
+          projectStatus="CANCELLED"
+          onChanged={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    // A recusa continua vindo ANTES do clique: ação impossível não é oferecida.
+    expect(
+      screen.queryByRole("button", { name: /Novo orçamento|Criar nova versão|Abrir rascunho/ }),
+    ).toBeNull();
+    expect(screen.getByText(/Projeto cancelado é histórico/)).toBeInTheDocument();
   });
 
   it("projeto em negociação continua oferecendo a versão nova", () => {

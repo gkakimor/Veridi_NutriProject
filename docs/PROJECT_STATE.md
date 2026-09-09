@@ -8,7 +8,7 @@ cronológico vive no Git e em [`archive/`](archive/).
 
 ## Onde estamos
 
-**`main` @ `0134674`.** MVP operacional validado internamente, blocos A a G
+**MVP operacional validado internamente.** Blocos A a G
 fechados: cadastros, compras, recebimento, qualidade, produção rastreada,
 expedição, faturamento, custo industrial, cockpit, relatórios, projetos,
 orçamentos e precificação.
@@ -29,7 +29,8 @@ de tipos de [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §58, com quatro fronteiras d
 fechamento nomeadas (§60, §62, §63), a assimetria entre elas declarada (§64) e o
 motor decimal em 40 dígitos numa configuração canônica (§59). A **exibição** ficou
 para trás: o corte de seis casas da tela foi escrito quando o banco guardava
-seis, e desde o PREC-MIG-A ele guarda doze. Os dois P0 da triagem saem daí.
+seis, e desde o PREC-MIG-A ele guarda doze. Os P0 da triagem saíram daí, e o
+resíduo de exibição é o W7.
 
 **`schema.prisma` e as migrations estão em sincronia** desde o #14: um banco
 reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
@@ -39,9 +40,9 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 [`BACKLOG.md`](BACKLOG.md) — **zero CRITICAL, zero BLOCKER**. O que sobra:
 
 - **achados triados da auditoria de 2026-09-07** — seção A do
-  [`BACKLOG.md`](BACKLOG.md): 2 P1, 6 P2, 3 P3 (F-08-1 fechado em FIX-01;
-  F-02-2 e F-02-1 em FIX-02; F-08-2 em FIX-03; F-06-1 e F-06-2 em FIX-04;
-  F-09-1 e F-07-2 em FIX-05);
+  [`BACKLOG.md`](BACKLOG.md): **P0 e P1 vazias**, 6 P2 e 3 P3 (F-08-1 fechado em
+  FIX-01; F-02-2 e F-02-1 em FIX-02; F-08-2 em FIX-03; F-06-1 e F-06-2 em
+  FIX-04; F-09-1 e F-07-2 em FIX-05; F-03-1 e F-07-1 em FIX-06);
 - **melhorias aprovadas, aguardando autorização do PO:** #8E, #8F, #8G;
 - **aguardando validação com a Veridi:** #7 e #11;
 - **manutenção:** #10;
@@ -49,239 +50,51 @@ reconstruído do zero, DEV e produção são a mesma estrutura, campo a campo.
 
 Escopo futuro vive só em [`ROADMAP_POST_MVP.md`](ROADMAP_POST_MVP.md).
 
-## Campo com teto — o contrato de ida e volta (FIX-01, 2026-09-07)
+## Correções da auditoria de produto (FIX-01 a FIX-05b, 2026-09-07/08)
 
-`formatQuantity` corta em seis casas com `ROUND_HALF_UP`; o dado tem doze. Num
-**teto**, esse arredondamento produzia um limite exibido diferente do real, e a
-validação comparava com o real — o consumo de produção recusava exatamente a
-quantidade impressa na tela (F-08-1), em 125 das 212 formulações ativas.
+Sete achados fechados. A regra durável de cada um está em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) e o teste que a protege em
+[`TEST_COVERAGE_MAP.md`](TEST_COVERAGE_MAP.md); aqui fica só o que ainda orienta
+decisão.
 
-A regra agora é o **round-trip**: digitar o valor exibido significa "usar todo o
-limite", e o que vai ao servidor é o valor canônico, com as doze casas. Está em
+**Campo com teto usa o round-trip (FIX-01/01b, F-08-1).** `formatQuantity` corta
+em seis casas e o dado tem doze: digitar o valor exibido significa "usar todo o
+limite", e o que vai ao servidor é o canônico. Está em
 [`quantity-limit.ts`](../apps/web/src/lib/quantity-limit.ts) e é a única forma
-de comparar quantidade digitada com teto — Consumo Real, Expedição e Plano de
-Atendimento passaram a usá-la, e o `+ 1e-6` do Plano saiu. Domínio e
-`reconciliation.ts` seguem exatos, sem tolerância.
+de comparar quantidade digitada com teto — `Number(digitado) > Number(limite)`
+na tela reabre o defeito e viola §66. O complemento do Plano de Atendimento, que
+vai no payload, usa
+[`quantity-complement.ts`](../apps/web/src/lib/quantity-complement.ts). O que
+sobra da defasagem é exibição sem entrada (W7).
 
-**Campo novo com teto usa o helper.** Comparar `Number(digitado) >
-Number(limite)` na tela reabre o mesmo defeito e viola §66.
+**Quantidade física tem um motor só (FIX-02, F-02-2/F-02-1).** A estimativa de
+custo da Formulação chama `computeFormulationRequirements` — o mesmo motor da
+OP, do cálculo industrial, do plano e da precificação (§52, seis consumidores).
+Sem doses por embalagem ela falha fechada, com o motivo na tela, em vez de uma
+lista de R$ 0,00. Nada foi persistido pelo caminho defeituoso.
 
-**FIX-01b (2026-09-08) fechou os dois resíduos que o próprio FIX-01 encontrou.**
-O apontamento de produção recalculava `planejado - produzido` por `Number` e
-comparava o digitado contra esse número: passou a usar o `remainingQuantity`
-que o servidor já entrega, com o mesmo round-trip do Consumo Real. E o
-complemento do Plano de Atendimento — que **vai no payload** — saiu de
-`Math.max(Number(a) - Number(b), 0)` para
-[`quantity-complement.ts`](../apps/web/src/lib/quantity-complement.ts), em
-`Decimal` e em notação decimal comum, porque a fronteira do servidor recusa
-exponencial. Nas três telas do FIX-01 não sobrou nenhum `Number` sobre
-quantidade que alcance payload ou validação — o que resta é sinal (`> 0`) e
-soma de exibição, listado abaixo.
+**Tela de detalhe resolve a entidade por IDENTIDADE (FIX-03, F-08-2).** A OP
+procurava o próprio produto entre os 50 da primeira página da listagem e
+acusava 164 dos 214 produtos aprovados de estarem sem item de produto acabado.
+Listagem serve às opções do campo; nunca é fonte de verdade. Carregando, não
+encontrado e falha de rede deixaram de ser a mesma resposta.
 
-## A quantidade física tem um motor só (FIX-02, 2026-09-08)
+**A tela recusa o que já sabe que o servidor recusaria (FIX-04, F-06-1/F-06-2).**
+No Recebimento o excesso é barrado antes do diálogo de irreversibilidade, o
+veredito é derivado (nunca guardado em estado) e a limpeza do erro é escopada à
+linha editada. O servidor continua recusando igual.
 
-A estimativa de custo da Formulação multiplicava o custo unitário pela
-quantidade **declarada apenas convertida de unidade** —
-`convertUomDecimal(component.quantity, …)` e nada mais. Ficavam de fora o fator
-da base (doses por embalagem, base fixa, unidade acabada) e os ajustes de pureza
-e overage. Em `CAFEÍNA PT 60 CAPS THE KING`, 60 doses por embalagem, o material
-saía **R$ 0,15** onde a fábrica gasta **R$ 9,10**: sessenta vezes menos, na mesma
-tela que mostrava a quantidade certa logo acima (F-02-2).
+**Ação bloqueada por disponibilidade diz POR QUÊ (FIX-05, F-09-1/F-07-2).** A
+causa vem de `getUnavailabilityByItems`, o mesmo mecanismo da Posição de
+Estoque, com as mesmas palavras. "Disponível" da OP e do Estoque podem divergir
+legitimamente — a ordem não compete contra a própria reserva — e o RÓTULO diz de
+quem é o número (`requirement-availability.ts:44`).
 
-A estimativa passou a chamar `computeFormulationRequirements` — o motor da Ordem
-de Produção, do cálculo industrial, do plano de atendimento e da precificação
-(PRODUCT_RULES §52, agora com seis consumidores). Nenhuma segunda fórmula foi
-escrita, nenhuma política de preço mudou: o que mudou foi a QUANTIDADE. Sem
-doses por embalagem a estimativa falha fechada — nenhuma linha e nenhum total,
-com o motivo na tela, em vez de uma lista de R$ 0,00.
-
-O mesmo defeito alimentava a coluna "Equivalente estoque" (F-02-1): o DTO já
-trazia `theoreticalPerUnit`, mas `rowFromDTO` o descartava e a versão gravada
-caía em `stockEquivalentQuantity` — a mesma conta incompleta. Rascunho mostrava
-`0,012 kg` e versão ativa `0,0002 kg` na MESMA célula. O campo defeituoso saiu do
-DTO; a tela usa o campo autoritativo, e nada de pureza, overage, doses ou
-conversão é reconstruído no navegador.
-
-**Contrato protegido:** para a mesma versão, a quantidade do motor e a
-quantidade que alimenta o custo são iguais **no Decimal**, antes de qualquer
-apresentação —
-[`custo-estimado-quantidade-fisica.test.ts`](../apps/api/src/modules/costs/custo-estimado-quantidade-fisica.test.ts).
-Pela interface:
-[`formulacao-quantidade-fisica-e-custo.mjs`](../scripts/e2e/formulacao-quantidade-fisica-e-custo.mjs).
-
-Nada foi persistido pelo caminho defeituoso — a estimativa é lida a cada
-abertura e nunca gravada —, então não houve backfill nem toque em dado
-histórico.
-
-## Identidade não se resolve por página de listagem (FIX-03, 2026-09-08)
-
-A tela da Ordem de Produção carregava **uma página de 50 produtos** para
-alimentar o campo de escolha e depois procurava o produto da própria ordem
-dentro dessa página. Com 214 produtos aprovados, 164 deles — **77 %** — ficam
-fora dessa página sob a ordenação por código: abrir a OP de qualquer um deles
-deixava o campo Produto **em branco** e a tela concluía "Produto sem item de
-produto acabado válido" para uma ordem válida (F-08-2). `undefined` virava
-veredito de domínio.
-
-Uma tela de detalhe conhece a entidade por **identidade**. O DTO da OP já traz
-`productId`, `productCode`, `productName` e `finishedItemId` — este último lido
-no servidor do mesmo `product.finishedProductItem` que o gate de planejamento
-consulta. Enquanto o formulário aponta para o produto da ordem, ele é a fonte;
-quando a pessoa escolhe outro, a fonte é o registro que ela acabou de escolher,
-vindo da busca no servidor. **Nenhum endpoint novo, nenhuma alteração de DTO,
-nenhuma requisição adicional** — e nada de `pageSize` inflado, que só adia o
-mesmo defeito.
-
-**A listagem continua servindo ao que ela é:** as opções do campo. O que saiu
-foi o seu uso como fonte de verdade.
-
-A frase só aparece quando o produto foi resolvido e realmente não tem item de
-produto acabado — o bloqueio legítimo segue de pé. LOADING, NOT_FOUND e falha de
-rede deixaram de ser a mesma resposta: "não consegui falar com o sistema" tem
-tela própria, com nova tentativa, em vez de virar "ordem não encontrada".
-
-**Contrato protegido:**
-[`production-order-product-resolution.test.tsx`](../apps/web/src/pages/production-orders/production-order-product-resolution.test.tsx)
-— alvo na posição 51 e na 214, alvo dentro da página, troca de produto, produto
-sem PA, carregando, não encontrado e erro de rede. Pela interface:
-[`ordem-de-producao-produto-fora-da-primeira-pagina.mjs`](../scripts/e2e/ordem-de-producao-produto-fora-da-primeira-pagina.mjs).
-
-Nenhum dado foi tocado: o defeito era de leitura de tela, nunca chegou a gravar.
-
-## A tela avisa antes de enviar, e o aviso responde à correção (FIX-04, 2026-09-08)
-
-O Recebimento escrevia "Pedido: 50 kg · Recebido: 0 kg · **Aberto: 50 kg**" logo
-acima do campo e não usava esse número para nada. Digitar 80 não produzia aviso:
-a pessoa preenchia lote, validade e custo, passava pelo diálogo de
-irreversibilidade e só então era recusada pelo servidor (F-06-1). Depois da
-recusa, corrigir a quantidade não limpava o alerta — ele ficava na tela contando
-uma história que já não era verdade, até a submissão seguinte (F-06-2). Mesmo
-arquivo, mesma causa: **o veredito morava em estado, e só o servidor o escrevia**.
-
-Agora o veredito é **derivado** de cada linha a cada render — `onChange`, botão e
-envio leem do mesmo `validarQuantidadeRecebida`. Erro que não é guardado não
-sobrevive à correção, e não existe a possibilidade de a tela bloquear por um
-problema que já foi resolvido.
-
-O teto vem de [`quantity-limit.ts`](../apps/web/src/lib/quantity-limit.ts), o
-mesmo round-trip do FIX-01: o saldo tem doze casas, a tela mostra seis, e digitar
-o número exibido significa "receber tudo o que está em aberto" — o que vai ao
-servidor é o saldo canônico. Sem isso o único valor impossível de digitar seria
-justamente o que está escrito na frente do operador. Nada passa por `Number`.
-
-**O servidor não cedeu autoridade.** `receiving.service.ts` recalcula o saldo
-dentro da transação, contra os recebimentos confirmados naquele instante, e
-recusa igual — o saldo pode ter mudado desde que a página abriu. A tela antecipa
-só o que ela já sabe com certeza.
-
-Dois resíduos do mesmo mecanismo saíram junto: a chave de `fieldErrors` deixou de
-ser a POSIÇÃO no array (`lines.0.receivedQuantity` indexa o payload, não a lista
-da tela — com uma linha em branco antes, o erro do servidor pousava na linha
-errada) e passou a ser o id da linha; e uma resposta que chega depois de a pessoa
-já ter editado o formulário é descartada, em vez de reinstalar erro sobre valor
-novo.
-
-**Contrato protegido:**
-[`receiving-live-validation.test.tsx`](../apps/web/src/pages/receiving/receiving-live-validation.test.tsx)
-— acima do saldo, saldo exato, parcial, zero, ilegível, décima segunda casa,
-limpeza escopada em duas linhas, erro de servidor na linha certa e envio pela
-mesma validação. Pela interface:
-[`recebimento-validacao-viva.mjs`](../scripts/e2e/recebimento-validacao-viva.mjs),
-que observa a rede: a tentativa inválida não produz requisição.
-
-## O zero também tem causa (FIX-05, 2026-09-08)
-
-Com mil unidades recém-produzidas, a linha do Pedido mostrava "Falta reservar
-1000 · **Disponível agora 0**" e o botão "Reservar disponível" desabilitado, sem
-uma palavra sobre o porquê (F-09-1). A causa era legítima — o lote de produto
-acabado nasce "Aguardando liberação" quando o produto exige liberação da
-Qualidade — e o domínio já a conhecia: a Posição de Estoque escrevia "aguardando
-liberação da Qualidade" na própria linha, pelo `getUnavailabilityByItems`. O
-Pedido resolvia só o irmão `getAvailableByItems` e parava aí.
-
-**A correção não habilita a ação.** Se o domínio diz indisponível, indisponível
-continua — o que mudou é que a tela diz o motivo, a quantidade que falta e o
-caminho até a posição do item. `getReservationStatus` passou a resolver o escopo
-de itens **uma vez** e a consultar disponibilidade e indisponibilidade em lote
-sobre ele; a linha ganhou `missingQuantity` e `unavailable`, e a tela traduz os
-códigos de causa com o mesmo dicionário do Estoque. Nenhum endpoint novo, nenhuma
-requisição a mais, nenhuma conta de disponibilidade no frontend.
-
-Três fatos que a tela passou a distinguir, porque confundi-los é o que produz
-diagnóstico falso:
-
-- **retido** — o material existe e está preso (Qualidade, laudo, bloqueio,
-  validade, reserva de outra demanda), com a quantidade de cada causa;
-- **inexistente** — nada retido, a quantidade que falta ainda não foi produzida
-  nem recebida;
-- **desconhecido** — a consulta está em curso, ou falhou. Antes, falha de rede
-  fazia a seção inteira sumir, e a leitura óbvia ("não há o que reservar") era
-  justamente a que o sistema não podia afirmar.
-
-F-07-2 saiu junto por ser o mesmo grupo pelo outro lado. A coluna DISPONÍVEL da
-OP mostrava 15 onde a Posição de Estoque mostrava 3, no mesmo instante — e os
-dois estavam certos: uma ordem **não compete contra a própria reserva**
-(`requirement-availability.ts:44`), senão o compromisso dela viraria falta. O
-defeito era o rótulo chamar duas perguntas pelo mesmo nome. A coluna passou a se
-chamar "Disponível para esta OP", com a ⓘ dizendo por que o Estoque mostra menos.
-**Nenhum cálculo de disponibilidade foi alterado nas duas pontas.**
-
-Protegido por [`disponibilidade-reserva-explicada.test.tsx`](../apps/web/src/pages/customer-orders/disponibilidade-reserva-explicada.test.tsx)
-(bloqueado com motivo, disponível, parcial, multilinha, carregando, erro),
-[`disponivel-para-esta-op.test.tsx`](../apps/web/src/pages/production-orders/disponivel-para-esta-op.test.tsx)
-(semântica do rótulo, nunca igualdade numérica) e `shipments.test.ts`, que prova
-a transição real: liberado o lote pela Qualidade, a causa some e a falta zera.
-Pela interface:
-[`disponibilidade-comercial-explicada.mjs`](../scripts/e2e/disponibilidade-comercial-explicada.mjs),
-que lê a frase na Posição de Estoque e exige que o Pedido diga aquilo.
-
-## Dependência resolvida devolve o documento (FIX-05b, 2026-09-08)
-
-Dois achados nascidos no FIX-05, os dois no mesmo domínio.
-
-**Ordem de Produção cancelada prendia o Pedido para sempre.** Cancelar Pedido
-em atendimento exige que não sobre obrigação operacional, e a checagem contava
-Ordens de Produção **sem olhar status** — a verificação de reserva, na linha de
-cima, já filtrava por `ACTIVE`. Cancelar a OP pelo caminho oficial não devolvia
-o Pedido: ele ficava em atendimento sem saída pela interface, e cada execução do
-E2E do FIX-05 deixava um preso no DEV.
-
-A contagem passou a usar um conjunto explícito de estados que **prendem**:
-DRAFT, PLANNED, RELEASED, IN_PRODUCTION, COMPLETED, BLOCKED. Só CANCELLED saiu.
-Deliberadamente **não** é `OPEN_PRODUCTION_ORDER_STATUSES`: aquele conjunto
-responde "o que está em aberto" e deixa COMPLETED de fora, enquanto aqui
-COMPLETED prende — ordem concluída produziu produto acabado para este Pedido, e
-desfazer isso é decisão de quem opera, nunca efeito colateral de um
-cancelamento. Duas perguntas diferentes, dois conjuntos. Um teste falha se um
-status novo nascer sem essa decisão ser tomada, e o padrão para o desconhecido é
-prender.
-
-A tela também escondia a ação: `isCancellable` só valia para DRAFT e CONFIRMED,
-embora o domínio sempre tenha permitido IN_FULFILLMENT sob condição. Resolver as
-dependências não tinha efeito visível. A ação passou a existir em atendimento —
-o servidor continua sendo a autoridade e recusa com o motivo quando ainda houver
-dependência. Expedição confirmada segue fora: ali a saída física não se desfaz
-com um cancelamento simples. **Nada é apagado em cascata**: a OP cancelada
-continua no histórico, só deixa de contar.
-
-**Erro de negócio vestido de falha de servidor.** `CustomerMismatchError` —
-produto de um cliente num Pedido de outro — nasce dentro do
-`createDraftProductionOrderInTx` que `apply-fulfillment-plan` chama, e a rota não
-a mapeava: HTTP 500. A mensagem chegava certa à tela por acidente, e o preço era
-um erro de servidor no console para uma recusa que o próprio pedido causou.
-Mapeada para `400 customer_mismatch`, o mesmo status e o mesmo código que o irmão
-do módulo de Projetos já usava. Contrato preservado: mensagem em português,
-`{ error, message }`, sem stack.
-
-Protegido por
-[`cancelamento-op-cancelada.test.ts`](../apps/api/src/modules/customer-orders/cancelamento-op-cancelada.test.ts)
-(uma cancelada, uma ativa, cancelada + ativa, todas canceladas, reserva ativa sem
-OP viva, guarda de exaustividade de status, e o 400 do mismatch),
-[`erro-de-dominio-na-tela.test.ts`](../apps/web/src/lib/erro-de-dominio-na-tela.test.ts)
-(o texto que a faixa mostra) e, pela interface,
-[`cancelamento-de-pedido-com-op-cancelada.mjs`](../scripts/e2e/cancelamento-de-pedido-com-op-cancelada.mjs),
-que percorre recusa → cancelar OP → cancelar Pedido sem deixar resíduo.
-
+**Dependência resolvida devolve o documento (FIX-05b).** Cancelar Pedido conta
+Ordens de Produção por um conjunto explícito de status que prendem; OP cancelada
+não prende mais, e nada é apagado. `CustomerMismatchError` virou
+`400 customer_mismatch` — o mesmo par que o módulo de Projetos já usava —, e o
+PROD-ERR-01 estendeu o mapeamento às duas rotas do módulo de Produção.
 ## O runner oficial não disputa a máquina consigo mesmo (2026-09-08)
 
 `pnpm test` chama `pnpm -r test`, e a concorrência padrão do pnpm é **4**: a
@@ -378,10 +191,45 @@ número escrito `6,122449 kg` na tabela de cima. Passaram por `formatQuantity`, 
 das colunas vizinhas. **Nenhum payload mudou** — o cru continua íntegro no DTO,
 e o formatador nunca alimenta escrita.
 
+## O mesmo projeto vende de novo (COM-CORE, 2026-09-09)
+
+**Projeto aprovado deixou de ser fim de linha comercial.** `APPROVED` diz que o
+desenvolvimento inicial foi aprovado; o projeto segue recebendo propostas para
+os produtos que ele aprovou, e recompra não abre cadastro novo. Cancelado
+continua fechado. Todo novo compromisso de compra tem a sua própria
+QuoteVersion — não existe geração automática por data (§69).
+
+**O invariante "uma aceita por projeto" caiu com a premissa que o sustentava.**
+Aceitar continua superando as aceitas **em aberto**; a aceita que já virou
+Pedido permanece `ACCEPTED`, porque é a origem daquele Pedido. A evidência é a
+relação `sourcedCustomerOrder` — nenhum status novo foi criado (§70). A
+cardinalidade não mudou: uma proposta gera no máximo um Pedido, e gerar duas
+vezes devolve o mesmo.
+
+**A validade passou a valer (§71).** Rascunho pode não ter; enviar exige;
+proposta enviada e vencida não é aceita — erro de domínio em português, nunca
+500. "Vencida" é derivado, calculado na leitura, sem status `EXPIRED` e sem
+varredura noturna. "Válido até 15/09" cobre o dia 15 inteiro: a comparação usa o
+fim do dia em [`business-day.ts`](../apps/api/src/lib/business-day.ts), a mesma
+convenção da referência de custo. Aceita não vence retroativamente — o Pedido
+pode nascer depois, com o preço intacto.
+
+**COM-03 deixou de ser prova por composição.** A cadeia `QuoteLine.unitPrice →
+CustomerOrderLine.agreedUnitPrice → BillingLine.agreedUnitPrice →
+BillingLine.unitPrice` agora é percorrida inteira num teste só, e a pergunta é
+feita na direção perigosa: precificação nova ativada DEPOIS do Pedido e DEPOIS
+do Faturamento não muda nenhum dos dois.
+
+**Zero migration.** O schema já tinha tudo — `sourcedCustomerOrder`,
+`validUntil` e os status existentes. Investigação em
+[`archive/SPIKE_COM_NEW_QUOTES.md`](archive/SPIKE_COM_NEW_QUOTES.md).
+
 ## Próxima prioridade
 
-**Comercial recorrente — COM-01/02/03**: ciclo de orçamento recorrente, validade
-e congelamento comercial.
+**COM-PRICE** — herança de preço entre ciclos: reajuste percentual, "manter
+condição anterior", proveniência da herança. É o que falta para a recompra
+propor sozinha um ponto de partida econômico; hoje a versão nova nasce com o
+preço da anterior como texto, sem dizer de onde ele veio.
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo
