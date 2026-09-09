@@ -9,16 +9,20 @@ import type {
 import { QUOTE_CODE_PREFIX, calcularTotaisOrcamento } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
+import { diaComercialPorExtenso, venceuEm } from "../../lib/business-day.js";
 import {
   IncompleteQuoteError,
   ProjectLockedError,
   ProjectNotFoundError,
+  ProjectProductNotInApprovedScopeError,
+  QuoteExpiredError,
   QuoteLineDuplicateError,
   QuoteLineNotFoundError,
   QuoteLineProductNotInProjectError,
   QuoteNotDraftError,
   QuoteNotFoundError,
   QuoteNotSentError,
+  QuoteWithoutValidUntilError,
 } from "./projects.errors.js";
 import { getProjectById } from "./projects.service.js";
 import { buildPaymentSchedule } from "./quote-payment.js";
@@ -151,6 +155,13 @@ export function toQuoteVersionDTO(
     source: quote.source,
     quoteDate: quote.quoteDate.toISOString(),
     validUntil: quote.validUntil ? quote.validUntil.toISOString() : null,
+    /*
+     * Vencida é estado DERIVADO, calculado a cada leitura — nada varre o banco
+     * à meia-noite e nenhum status `EXPIRED` existe. Só vale enquanto a
+     * proposta está ENVIADA: a validade fecha a janela de aceite, e aceita que
+     * virou acordo não vence retroativamente por causa do calendário.
+     */
+    expired: quote.status === "SENT" && venceuEm(quote.validUntil, new Date()),
     currencyCode: quote.currencyCode,
     lines,
     total,
@@ -222,6 +233,32 @@ async function requireQuoteWithLines(id: string): Promise<QuoteWithLines> {
  * Os dados comerciais da última versão são copiados como ponto de partida;
  * status, timestamps e auditoria nunca são.
  */
+/**
+ * Esta versão pode virar histórico quando outra a substitui?
+ *
+ * SENT sim, sempre: proposta apresentada e não fechada é rascunho de
+ * negociação. ACEITA depende do que ela produziu — e a evidência é o Pedido,
+ * não um status novo.
+ *
+ * Uma proposta aceita que JÁ GEROU PEDIDO é o acordo que originou aquele
+ * Pedido. Marcá-la SUPERSEDED porque o cliente comprou de novo em março
+ * reescreveria a origem do que foi vendido em janeiro: o Pedido apontaria para
+ * um documento que o próprio sistema chama de superado. Aceita que ainda não
+ * virou Pedido é outra coisa — é oferta em aberto, e a versão nova a substitui.
+ */
+async function superseder(
+  tx: Prisma.TransactionClient,
+  quoteVersionId: string,
+  status: string,
+): Promise<boolean> {
+  if (status !== "ACCEPTED") return true;
+  const pedido = await tx.customerOrder.findUnique({
+    where: { sourceQuoteVersionId: quoteVersionId },
+    select: { id: true },
+  });
+  return pedido === null;
+}
+
 export async function createQuoteVersion(
   projectId: string,
   actor: User,
@@ -232,7 +269,19 @@ export async function createQuoteVersion(
     include: { quoteVersions: { orderBy: { versionNumber: "desc" } } },
   });
   if (!project) throw new ProjectNotFoundError(projectId);
-  if (project.status === "APPROVED" || project.status === "CANCELLED") {
+  /*
+   * Projeto APROVADO recebe orçamento novo.
+   *
+   * `APPROVED` diz que o desenvolvimento técnico e comercial inicial foi
+   * aprovado — não que a relação com o cliente acabou. Todo novo compromisso
+   * de compra é uma nova proposta, e o cliente que volta a comprar em março o
+   * que fechou em janeiro negocia dentro do MESMO projeto: mesmos produtos,
+   * mesma história técnica. Abrir projeto novo a cada recompra multiplicaria
+   * o cadastro pelo calendário.
+   *
+   * Cancelado continua fechado: ali a negociação acabou de verdade.
+   */
+  if (project.status === "CANCELLED") {
     throw new ProjectLockedError(project.status);
   }
 
@@ -307,10 +356,13 @@ export async function createQuoteVersion(
       }
     }
 
-    // A versão anterior formalmente apresentada passa a ser histórico.
-    // Recusada e arquivada permanecem como estão.
+    // A versão anterior formalmente apresentada passa a ser histórico —
+    // exceto a aceita que JÁ VIROU PEDIDO. Recusada e arquivada permanecem
+    // como estão. Ver `superseder`.
     if (previous && (previous.status === "SENT" || previous.status === "ACCEPTED")) {
-      await tx.quoteVersion.update({ where: { id: previous.id }, data: { status: "SUPERSEDED" } });
+      if (await superseder(tx, previous.id, previous.status)) {
+        await tx.quoteVersion.update({ where: { id: previous.id }, data: { status: "SUPERSEDED" } });
+      }
     }
 
     return quote;
@@ -459,6 +511,23 @@ export async function addQuoteLine(
   }
 
   /*
+   * Num projeto já aprovado, a recompra negocia o ESCOPO APROVADO.
+   *
+   * A aprovação separou o que o cliente fechou (`APPROVED`) do que ficou em
+   * desenvolvimento (`OUT_OF_SCOPE`). Deixar o produto fora do escopo entrar
+   * numa proposta nova o traria de volta pela porta lateral — sem passar pela
+   * aprovação que o excluiu. Antes da aprovação nada muda: `ACTIVE` é o estado
+   * normal de quem ainda está sendo desenvolvido.
+   */
+  const projeto = await prisma.project.findUniqueOrThrow({
+    where: { id: quote.projectId },
+    select: { status: true },
+  });
+  if (projeto.status === "APPROVED" && link.status !== "APPROVED") {
+    throw new ProjectProductNotInApprovedScopeError(link.product.code);
+  }
+
+  /*
    * A unidade vem do item de produto acabado.
    *
    * O sistema já sabe em que unidade aquele produto é vendido; pedir que a
@@ -545,6 +614,12 @@ export async function sendQuoteVersion(
   });
   if (!quote) throw new QuoteNotFoundError(id);
   if (quote.status !== "DRAFT") throw new QuoteNotDraftError(quote.status);
+  /*
+   * Rascunho pode não ter validade — é trabalho em andamento. O documento que
+   * vai ao cliente, não: o preço nele foi calculado sobre o custo de uma data,
+   * e uma oferta sem prazo é uma oferta que nunca vence.
+   */
+  if (!quote.validUntil) throw new QuoteWithoutValidUntilError();
   // Proposta sem produto não é proposta; e linha sem quantidade, unidade ou
   // preço não pode virar documento do cliente.
   if (quote.lines.length === 0) throw new IncompleteQuoteError();
@@ -603,13 +678,36 @@ export async function acceptQuoteVersion(id: string, actor: User): Promise<Quote
   const quote = await prisma.quoteVersion.findUnique({ where: { id } });
   if (!quote) throw new QuoteNotFoundError(id);
   if (quote.status !== "SENT") throw new QuoteNotSentError(quote.status);
+  /*
+   * A validade controla a janela de ACEITE, e só ela. Depois de aceita, a
+   * proposta virou acordo: o Pedido pode ser materializado semanas depois sem
+   * que o preço mude — ver `createOrderFromAcceptedQuote`, que não olha
+   * `validUntil`.
+   */
+  if (venceuEm(quote.validUntil, new Date())) {
+    throw new QuoteExpiredError(diaComercialPorExtenso(quote.validUntil!));
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
-    // No máximo uma versão aceita vigente por projeto.
-    await tx.quoteVersion.updateMany({
+    /*
+     * O invariante "uma aceita por projeto" caiu com o ciclo único.
+     *
+     * Enquanto um projeto tinha uma negociação só, toda aceita anterior era
+     * uma versão superada da MESMA proposta. Com recompra no mesmo projeto,
+     * V1 aceita em janeiro (que virou PED-001) e V2 aceita em março (que vai
+     * virar PED-002) são dois acordos diferentes, e os dois valeram. Segue
+     * caindo o que ainda não virou Pedido: oferta em aberto substituída pela
+     * versão nova.
+     */
+    const aceitas = await tx.quoteVersion.findMany({
       where: { projectId: quote.projectId, status: "ACCEPTED", id: { not: id } },
-      data: { status: "SUPERSEDED" },
+      select: { id: true },
     });
+    for (const aceita of aceitas) {
+      if (await superseder(tx, aceita.id, "ACCEPTED")) {
+        await tx.quoteVersion.update({ where: { id: aceita.id }, data: { status: "SUPERSEDED" } });
+      }
+    }
 
     return tx.quoteVersion.update({
       where: { id },

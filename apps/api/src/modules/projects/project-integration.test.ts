@@ -5,6 +5,28 @@ import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 
 /**
+ * Enviar exige validade desde COM-02 — proposta sem prazo não vai ao cliente.
+ *
+ * A massa dos testes ganha uma data futura logo antes do envio, então o que
+ * cada caso mede continua sendo o que ele sempre mediu. Casos que testam a
+ * própria regra da validade chamam `/send` diretamente.
+ */
+const VALIDADE_DA_PROPOSTA = "2099-12-31";
+
+async function enviarProposta(
+  app: ReturnType<typeof buildTestApp>,
+  quoteVersionId: string,
+  payload: Record<string, unknown> = {},
+) {
+  await app.inject({
+    method: "PATCH",
+    url: `/quote-versions/${quoteVersionId}`,
+    payload: { validUntil: VALIDADE_DA_PROPOSTA },
+  });
+  return app.inject({ method: "POST", url: `/quote-versions/${quoteVersionId}/send`, payload });
+}
+
+/**
  * Capacidade 47 — Projeto → Orçamento → Custo/Preço.
  *
  * O que estes testes protegem: produto técnico existe para engenharia e
@@ -758,11 +780,7 @@ describe("Orçamento com precificação", () => {
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
 
-    const sent = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${quote.id}/send`,
-      payload: {},
-    });
+    const sent = await enviarProposta(app, quote.id);
     expect(sent.statusCode).toBe(200);
 
     const detail = (
@@ -836,19 +854,11 @@ describe("Orçamento com precificação", () => {
     expect(projectQuote.lines[0].pricing).not.toBeNull();
     expect(projectQuote.lines[0].pricing.costQuality).toBe("PARTIAL");
 
-    const refused = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${quote.id}/send`,
-      payload: {},
-    });
+    const refused = await enviarProposta(app, quote.id);
     expect(refused.statusCode).toBe(409);
     expect(refused.json().error).toBe("incomplete_cost");
 
-    const confirmed = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${quote.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    const confirmed = await enviarProposta(app, quote.id, { confirmIncompleteCost: true });
     expect(confirmed.statusCode).toBe(200);
 
     const detail = (
@@ -903,7 +913,7 @@ describe("Orçamento com precificação", () => {
       url: `/quote-lines/${v1.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
-    await app.inject({ method: "POST", url: `/quote-versions/${v1.id}/send`, payload: {} });
+    await enviarProposta(app, v1.id);
 
     const v2 = await createQuote(app, project.id);
     expect(v2.versionNumber).toBe(2);
@@ -1129,11 +1139,7 @@ describe("Proposta aceita → Pedido", () => {
         monthlyInterestPercent: "1.5",
       },
     });
-    const enviado = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${quote.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    const enviado = await enviarProposta(app, quote.id, { confirmIncompleteCost: true });
     expect(enviado.statusCode, enviado.body).toBe(200);
     await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
     if (options.aprovar !== false) {
@@ -1298,11 +1304,7 @@ describe("Proposta aceita → Pedido", () => {
       url: `/quote-lines/${quote.lineId}`,
       payload: { quotedQuantity: "500", uomCode: "un", unitPrice: "31.50" },
     });
-    await app.inject({
-      method: "POST",
-      url: `/quote-versions/${quote.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    await enviarProposta(app, quote.id, { confirmIncompleteCost: true });
     await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
     await app.inject({ method: "POST", url: `/projects/${project.id}/approve`, payload: {} });
 
@@ -1565,11 +1567,7 @@ describe("Proposta aceita → Pedido", () => {
         payload: { pricingTierId: cadeia.pricing.tiers[0].id },
       });
     }
-    await app.inject({
-      method: "POST",
-      url: `/quote-versions/${quote.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    await enviarProposta(app, quote.id, { confirmIncompleteCost: true });
     await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
     await app.inject({ method: "POST", url: `/projects/${project.id}/approve`, payload: {} });
 
@@ -1643,11 +1641,7 @@ describe("Proposta aceita → Pedido", () => {
   }
 
   async function aceitarEAprovar(app: App, projectId: string, quoteId: string) {
-    const enviado = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${quoteId}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    const enviado = await enviarProposta(app, quoteId, { confirmIncompleteCost: true });
     expect(enviado.statusCode, enviado.body).toBe(200);
     const aceito = await app.inject({ method: "POST", url: `/quote-versions/${quoteId}/accept` });
     expect(aceito.statusCode, aceito.body).toBe(200);
@@ -1831,11 +1825,7 @@ describe("Proposta aceita → Pedido", () => {
       url: `/quote-lines/${linhaDentro.id}/apply-pricing`,
       payload: { pricingTierId: dentro.pricing.tiers[0].id },
     });
-    await app.inject({
-      method: "POST",
-      url: `/quote-versions/${quote.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    await enviarProposta(app, quote.id, { confirmIncompleteCost: true });
     await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
     await app.inject({ method: "POST", url: `/projects/${project.id}/approve`, payload: {} });
 
@@ -1946,7 +1936,7 @@ describe("Aprovação do projeto", () => {
       url: `/quote-lines/${quote.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
-    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send`, payload: {} });
+    await enviarProposta(app, quote.id);
     await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
 
     const before = await prisma.product.findUniqueOrThrow({ where: { id: chain.productId } });
@@ -1994,7 +1984,7 @@ describe("Aprovação do projeto", () => {
       url: `/quote-lines/${q1.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
-    await app.inject({ method: "POST", url: `/quote-versions/${q1.id}/send`, payload: {} });
+    await enviarProposta(app, q1.id);
     await app.inject({ method: "POST", url: `/quote-versions/${q1.id}/accept` });
     const aprovado1 = (
       await app.inject({ method: "POST", url: `/projects/${primeiro.id}/approve`, payload: {} })
@@ -2043,11 +2033,7 @@ describe("Aprovação do projeto", () => {
       url: `/quote-lines/${linha.lines[0].id}`,
       payload: { quotedQuantity: "100", unitPrice: "10", uomCode: "un" },
     });
-    await app.inject({
-      method: "POST",
-      url: `/quote-versions/${q2.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    await enviarProposta(app, q2.id, { confirmIncompleteCost: true });
     await app.inject({ method: "POST", url: `/quote-versions/${q2.id}/accept` });
 
     const resposta = await app.inject({
@@ -2087,11 +2073,7 @@ describe("Aprovação do projeto", () => {
       await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
     ).json();
 
-    const withoutLines = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${empty.id}/send`,
-      payload: {},
-    });
+    const withoutLines = await enviarProposta(app, empty.id);
     expect(withoutLines.statusCode).toBe(400);
     expect(withoutLines.json().error).toBe("incomplete_quote");
 
@@ -2116,7 +2098,7 @@ describe("Aprovação do projeto", () => {
       url: `/quote-lines/${quoteWithLine.lines[0].id}`,
       payload: { quotedQuantity: "1000", uomCode: "un", unitPrice: "12" },
     });
-    await app.inject({ method: "POST", url: `/quote-versions/${empty.id}/send`, payload: {} });
+    await enviarProposta(app, empty.id);
     await app.inject({ method: "POST", url: `/quote-versions/${empty.id}/accept` });
 
     const approved = (
@@ -2151,7 +2133,7 @@ describe("Aprovação do projeto", () => {
       url: `/quote-lines/${quote.lineId}/apply-pricing`,
       payload: { pricingTierId: chain.pricing.tiers[0].id },
     });
-    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send`, payload: {} });
+    await enviarProposta(app, quote.id);
 
     const manualProject = await createProject(app);
     // Proposta precisa de produto: o preço mora na linha.

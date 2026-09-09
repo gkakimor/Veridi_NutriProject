@@ -78,6 +78,55 @@ export class IncompleteQuoteError extends Error {
   }
 }
 
+/**
+ * Proposta sem validade não vai ao cliente.
+ *
+ * O campo sempre existiu, gravava e imprimia — e nada o exigia. Um documento
+ * comercial sem prazo é uma oferta que não expira nunca, e o preço nele foi
+ * calculado sobre um custo de uma data.
+ */
+export class QuoteWithoutValidUntilError extends Error {
+  constructor() {
+    super("Informe a validade da proposta antes de enviar ao cliente.");
+    this.name = "QuoteWithoutValidUntilError";
+  }
+}
+
+/**
+ * A janela de aceite fechou.
+ *
+ * "Vencida" é estado DERIVADO — `validUntil` menor que o dia corrente —, nunca
+ * um status gravado: nada varre o banco à meia-noite, e o documento continua
+ * inteiro no histórico. Aceitar mesmo assim congelaria um preço que a Veridi
+ * não sustenta mais; o caminho é uma versão nova, com preço e validade
+ * revistos.
+ */
+export class QuoteExpiredError extends Error {
+  constructor(validUntil: string) {
+    super(
+      `Proposta vencida em ${validUntil} — crie uma nova versão com preço e validade atualizados.`,
+    );
+    this.name = "QuoteExpiredError";
+  }
+}
+
+/**
+ * Produto fora do escopo comercial aprovado do Projeto.
+ *
+ * A aprovação separou o que o cliente fechou (`APPROVED`) do que ficou em
+ * desenvolvimento (`OUT_OF_SCOPE`). Uma recompra negocia o que foi aprovado;
+ * trazer de volta o que ficou fora exigiria um novo ciclo de aprovação, não
+ * uma linha de orçamento.
+ */
+export class ProjectProductNotInApprovedScopeError extends Error {
+  constructor(productCode: string) {
+    super(
+      `${productCode} ficou fora do escopo aprovado deste projeto e não entra em um novo orçamento.`,
+    );
+    this.name = "ProjectProductNotInApprovedScopeError";
+  }
+}
+
 export class QuoteLineNotFoundError extends Error {
   constructor(id: string) {
     super(`Linha de orçamento ${id} não encontrada.`);

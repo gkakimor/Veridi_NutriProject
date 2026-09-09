@@ -6,6 +6,28 @@ import { buildPaymentSchedule, calcularTotaisOrcamento } from "@veridi/shared";
 import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
 
 /**
+ * Enviar exige validade desde COM-02 — proposta sem prazo não vai ao cliente.
+ *
+ * A massa dos testes ganha uma data futura logo antes do envio, então o que
+ * cada caso mede continua sendo o que ele sempre mediu. Casos que testam a
+ * própria regra da validade chamam `/send` diretamente.
+ */
+const VALIDADE_DA_PROPOSTA = "2099-12-31";
+
+async function enviarProposta(
+  app: ReturnType<typeof buildTestApp>,
+  quoteVersionId: string,
+  payload: Record<string, unknown> = {},
+) {
+  await app.inject({
+    method: "PATCH",
+    url: `/quote-versions/${quoteVersionId}`,
+    payload: { validUntil: VALIDADE_DA_PROPOSTA },
+  });
+  return app.inject({ method: "POST", url: `/quote-versions/${quoteVersionId}/send`, payload });
+}
+
+/**
  * Capacidade 38 — Projetos e Orçamentos versionados. Fixtures sintéticas:
  * nada depende do corpus real nem dos projetos importados.
  */
@@ -159,7 +181,7 @@ async function sendQuote(app: App, projectId: string, price = "12.3456") {
     uomCode: "un",
     unitPrice: price,
   });
-  return (await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send` })).json();
+  return (await enviarProposta(app, quote.id)).json();
 }
 
 describe("Projeto — cadastro e pipeline", () => {
@@ -350,7 +372,7 @@ describe("Orçamento versionado", () => {
       uomCode: "un",
       unitPrice: "10",
     });
-    await app.inject({ method: "POST", url: `/quote-versions/${v1.id}/send` });
+    await enviarProposta(app, v1.id);
 
     const v2 = (
       await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
@@ -450,7 +472,7 @@ describe("Orçamento versionado", () => {
       await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
     ).json();
 
-    const incomplete = await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send` });
+    const incomplete = await enviarProposta(app, quote.id);
     expect(incomplete.statusCode).toBe(400);
     expect(incomplete.json().error).toBe("incomplete_quote");
 
@@ -461,7 +483,7 @@ describe("Orçamento versionado", () => {
       unitPrice: "12.3456",
     });
     const sent = (
-      await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send` })
+      await enviarProposta(app, quote.id)
     ).json();
 
     expect(sent.status).toBe("SENT");
@@ -515,7 +537,7 @@ describe("Orçamento versionado", () => {
       uomCode: "un",
       unitPrice: "5",
     });
-    await app.inject({ method: "POST", url: `/quote-versions/${draft.id}/send` });
+    await enviarProposta(app, draft.id);
 
     const accepted = (
       await app.inject({ method: "POST", url: `/quote-versions/${draft.id}/accept` })
@@ -665,7 +687,7 @@ describe("Aprovação do projeto", () => {
       uomCode: "un",
       unitPrice: "10",
     });
-    await app.inject({ method: "POST", url: `/quote-versions/${draft.id}/send` });
+    await enviarProposta(app, draft.id);
     await app.inject({ method: "POST", url: `/quote-versions/${draft.id}/accept` });
     const approved = (
       await app.inject({ method: "POST", url: `/projects/${project.id}/approve` })
