@@ -520,6 +520,19 @@ versão", copiando condições comerciais e linhas; o que o pedido tem de novo �
 escolher a versão de origem — e um **conflito com §74**, porque copiar preço é
 exatamente o que COM-PRICE removeu.
 
+**Duas decisões de produto saíram da mesma conversa.** Prospect e Cliente NÃO se
+separam em cadastros: `Customer` continua sendo uma entidade só, e a situação
+comercial (Prospect · Cliente ativo · Inativo) será **derivada** da história e
+das datas, não um campo que alguém mantém —
+CUSTOMER-COMMERCIAL-STATUS-01, P1. Conversão é histórica: quem teve Projeto
+aprovado não regride por falta de atividade, e Inativo volta a Prospect sozinho
+quando um Projeto novo abre, sem botão "Reativar". O gate é o que PROVA conversão:
+`CustomerOrder` não exige Projeto nem Orçamento (`sourceQuoteVersionId` é
+opcional e não existe `projectId`), então "Projeto aprovado" sozinho marcaria
+como Inativo quem comprou direto. E contrato entrou como discovery P2
+(COM-CONTRACT-01) com uma fronteira já decidida: **contrato não dirige a situação
+comercial**.
+
 ## Próxima prioridade
 
 **P0 da fila viva** — ORDER-CUSTOMER-PRODUCT-01 e COST-BASIS-UX-01, nesta ordem.

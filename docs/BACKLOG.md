@@ -42,13 +42,15 @@ faz primeiro e estava espalhada por cinco lugares.
 | **P1-2** | CUSTOMER-CEP-02 | A · P1 | Decisão de PO já fechada, e tem corrida real de rede |
 | **P1-3** | PROJECT-CUSTOMER-CONTACT-01 | A · P1 | Leitura, sem duplicar dado |
 | **P1-4** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
-| **P1-5** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-6** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente |
-| depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 | — | Nenhum deles muda de prioridade por causa desta reunião |
+| **P1-5** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-6** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-7** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-8** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente |
+| depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01, SUPPLIER-MODE-01,
-ASSET-01 (seção G). Brainstorm: tributos e custo de aquisição (seção F).
+ASSET-01, COM-CONTRACT-01 (seção G). Brainstorm: tributos e custo de aquisição
+(seção F).
 
 ---
 
@@ -62,9 +64,10 @@ a do auditor.
 **Zero BLOCKER.** Da auditoria de produto sobram três LOW e a fila de UX; o que
 reabriu P0 e P1 veio de outro lugar — o **walkthrough real da Veridi de
 2026-09-09**, reconciliado aqui no mesmo dia. Dois P0 (ORDER-CUSTOMER-PRODUCT-01
-e COST-BASIS-UX-01) e quatro P1 entraram por observação de uso, não por
+e COST-BASIS-UX-01) e cinco P1 entraram por observação de uso, não por
 varredura de código: é a diferença entre o que o sistema faz errado e o que ele
-faz de um jeito que ninguém entende.
+faz de um jeito que ninguém entende. A mesma leva trouxe uma decisão de produto
+nova — CUSTOMER-COMMERCIAL-STATUS-01 — e um discovery de contrato.
 
 F-02-2 e F-02-1 fechados no FIX-02, F-08-2 no FIX-03, F-06-1 + F-06-2 no FIX-04,
 F-09-1 + F-07-2 no FIX-05 e F-03-1 + F-07-1 no FIX-06 (2026-09-08). PROD-ERR-01
@@ -398,6 +401,103 @@ comerciais, não de preço)? Também **não alterar V3** precisa ser lido junto 
 §70: aceitar uma versão nova supera as aceitas em aberto, e isso é mudança de
 status na anterior — legítima e já decidida, mas é "alterar V3" em algum sentido.
 
+#### CUSTOMER-COMMERCIAL-STATUS-01 — situação comercial viva do Cliente
+
+Decisão de produto de 2026-09-09, vinda do walkthrough real.
+
+**Uma entidade só.** Prospect e Cliente NÃO se separam em cadastros diferentes:
+continua existindo `Customer`, e a situação comercial é uma LEITURA dele. Criar
+um cadastro de Prospect obrigaria a migrar o registro na conversão, e migrar
+registro perde história — o mesmo motivo pelo qual Pedido não é um Orçamento
+reescrito.
+
+**Estado DERIVADO, não campo mantido à mão.** A situação sai da história
+comercial e das datas; ninguém atualiza um campo. Um `select` que alguém precisa
+lembrar de mexer envelhece calado, e um cliente marcado "ativo" há dois anos não
+é informação — é um rótulo. **Não criar job** só para virar uma coluna de
+`PROSPECT` para `INACTIVE` à meia-noite antes de provar que a persistência é
+necessária: derivar na leitura é mais barato e não pode ficar dessincronizado.
+
+**Três situações**, com o rótulo de tela em pt-BR:
+
+| Estado | UI | Significado |
+|---|---|---|
+| `PROSPECT` | Prospect | Relacionamento comercial em formação, sem conversão |
+| `ACTIVE` | Cliente ativo | Já estabeleceu relacionamento comercial efetivo |
+| `INACTIVE` | Inativo | Sem oportunidade aberta e fora da janela |
+
+**Não confundir com `Customer.active`.** O booleano que já existe no schema é
+operacional — diz se o cadastro pode ser usado em documento novo — e é decidido
+por gente. A situação comercial é derivada e responde outra pergunta. Os dois
+coexistem e nenhum substitui o outro. Mesma cautela com a palavra "prospect" na
+casa: `PRODUCT_RULES.md` §53 e o schema usam **prospectivo** para CUSTO (o que se
+espera pagar, contra o custo real). Nada a ver.
+
+**As regras decididas:**
+
+- **nascimento** — `Customer` novo, sem evidência de relacionamento anterior:
+  Prospect;
+- **janela de 15 dias** — nunca houve conversão, não existe Projeto
+  comercialmente aberto, e passaram mais de 15 dias desde a última atividade
+  comercial relevante: Inativo. **15 dias é decisão de PO de hoje**; avaliar no
+  discovery se vira constante ou configuração. **Não criar configuração nesta
+  rodada**;
+- **sem Projeto** — criado em D0, nenhum `Project`: Prospect de D0 a D+15,
+  Inativo depois. A inclusão exata da data-limite usa a semântica de **dia
+  civil** do projeto (§71, §73, `lib/business-day.ts`), nunca um instante
+  fabricado;
+- **Projeto em andamento** — havendo pelo menos um Projeto comercialmente
+  aberto, o cliente sem conversão **continua Prospect**. Não vira Inativo só
+  porque `Customer.createdAt` passou de 15 dias;
+- **Projeto cancelado** — a última atividade relevante passa a ser o
+  encerramento; 15 dias de Prospect e depois Inativo, se nada novo surgir;
+- **conversão** — teve em QUALQUER momento um Projeto aprovado: **Cliente
+  ativo**, e isso é histórico. **Não regride** por falta de atividade recente;
+- **reativação sem botão** — Inativo com Projeto novo aberto volta a Prospect
+  sozinho; convertendo depois, Cliente ativo. Não existe ação "Reativar
+  cliente": a atividade comercial conduz a situação.
+
+**`ACTIVE` não significa recência.** Cliente ativo é quem já estabeleceu
+relacionamento efetivo, não quem comprou nos últimos N dias. Medir compra
+recente, cliente dormente e risco de churn é OUTRA dimensão, e misturá-la aqui
+produziria um estado que responde duas perguntas e mente nas duas.
+
+**O status devolve o MOTIVO.** Read model, não frase persistida: "Projeto X em
+andamento", "Sem oportunidade aberta há mais de 15 dias", "Primeiro
+relacionamento aprovado em 18/03/2025". Um estado derivado que não explica de
+onde veio é indistinguível de um campo errado.
+
+**GATE antes de implementar — o que prova conversão.** A regra mínima do PO é
+"Projeto aprovado", e o schema mostra que ela é INCOMPLETA:
+`CustomerOrder.customerId` é obrigatório, `sourceQuoteVersionId` é **opcional** e
+não existe `projectId` em `CustomerOrder`. Logo um Pedido confirmado, expedido e
+faturado pode existir sem Projeto nenhum e sem Orçamento — em DEV, 13 de 42
+linhas de Pedido não têm origem em orçamento. Com a regra mínima, **quem já
+comprou direto seria classificado Inativo em 15 dias.** Auditar e levar ao PO:
+Orçamento ACEITO, `CustomerOrder` `CONFIRMED` em diante, e qualquer outro caminho
+que o domínio já permita. Decisão de PO quando a capability for executada, não
+agora.
+
+**Segunda pergunta do discovery:** quais `ProjectStatus` contam como
+"comercialmente aberto". Os valores reais são `WAITING`, `SAMPLE`, `APPROVED`,
+`CANCELLED` e `STAND_BY` — e `STAND_BY` é justamente o ambíguo. As datas para
+derivar já existem: `Project.approvedAt`, `Project.cancelledAt` e
+`ProjectStatusHistory.changedAt`.
+
+**Escopo de UX, a implementar com a capability:** filtro na listagem de Clientes
+— Clientes ativos · Prospects · Inativos · Todos —, com **Clientes ativos** como
+padrão. Na Consulta do Cliente: situação, motivo, "cliente desde" quando
+derivável, e resumo de Projetos. **Não é CRM**: sem funil, sem etapa, sem
+atividade agendada.
+
+**Fronteira com Projeto.** Situação do `Customer` e situação do `Project` não se
+misturam. Um Cliente ativo pode ter ao mesmo tempo Projeto aprovado, Projeto em
+desenvolvimento e Projeto cancelado, e **Projeto novo de cliente antigo não o
+devolve a Prospect**.
+
+**Contrato não dirige situação** — ver COM-CONTRACT-01. Cliente pode ser ativo
+sem contrato cadastrado; os conceitos são independentes.
+
 ### P2 — depois da estabilização
 
 | ID | Título | Sev. | Tam. |
@@ -666,8 +766,8 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-6, SUPPLIER-ADDRESS-01 em P1-7) — mas a
-posição é da DESCOBERTA, não de uma implementação autorizada. Os outros três
+(COST-RESOURCE-MULTIPLIER-01 em P1-7, SUPPLIER-ADDRESS-01 em P1-8) — mas a
+posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 
 ### SUPPLIER-OFFER-OVERLAP-01 — vigências sobrepostas de oferta
@@ -737,6 +837,45 @@ suficiente para CUSTOMER-CEP-02 vir antes.
 
 Exige migration (colunas novas em `suppliers`), e por isso é capability, não
 quick win.
+
+### COM-CONTRACT-01 — registro leve de contrato comercial — P2
+
+Vindo do walkthrough real (2026-09-09). **P2 · discovery: não precede bug nem
+quick win**, e não entra na fila viva acima.
+
+Não existe nada de contrato no modelo hoje — a busca por `contract`/`contrato` em
+`schema.prisma` e em `packages/shared` não devolve nada. O que existe e NÃO é
+isto: `ControlledDocumentRevision` (documento controlado da Qualidade) e
+`Attachment` (anexo genérico).
+
+**A decisão já tomada é negativa, e é a mais importante:** contrato **não dirige**
+a situação comercial do Cliente. Cliente pode ser ativo sem contrato cadastrado,
+e um Prospect pode eventualmente ter documento preliminar se o domínio futuro
+permitir. Amarrar os dois faria a situação comercial depender de alguém anexar um
+PDF.
+
+Escopo a AUDITAR quando a rodada acontecer — lista de partida, não modelo
+aprovado: número/referência, `Customer`, `Project` de origem opcional, data
+inicial, validade, encerramento, situação, observação e anexo/documento.
+
+**Preferir derivar a situação do contrato por DATAS** — Vigente, Encerrado,
+Vencido — em vez de um status manual redundante, pelo mesmo motivo de
+CUSTOMER-COMMERCIAL-STATUS-01 e de §71: "vencida" já é estado derivado na
+proposta, e nada varre o banco à meia-noite. Não decidido nesta rodada.
+
+**Não confundir com o que já existe.** As cinco coisas são separadas e a
+separação é a regra:
+
+| Conceito | O que é |
+|---|---|
+| `Customer` | a empresa e o relacionamento |
+| `Project` | a oportunidade / o desenvolvimento |
+| `QuoteVersion` | a proposta |
+| `CustomerOrder` | o compromisso operacional de compra |
+| Contrato | a evidência jurídico-comercial do acordo, **quando existir** |
+
+**Não criar módulo grande antecipadamente.** Um contrato com ciclo de aprovação,
+alçada e versionamento é outra capability; o que a reunião pediu foi registro.
 
 ### SUPPLIER-MODE-01 — "Fornecedor — Virtual / Físico"
 
@@ -813,11 +952,17 @@ nada a implementar.
 A validação com a Veridi (#7, #11) é gate só para as regras que dependem do
 processo real do cliente. Não impede #8E, #8F e #8G quando o PO autorizar.
 
-**Dois gates nasceram do walkthrough de 2026-09-09**, e os dois são de decisão,
-não de código: a pergunta de preço em QUOTE-DUPLICATE-01 (copiar preço reabre
-§74) e a pergunta de sobreposição de vigência, que vale ao mesmo tempo para
-SUPPLIER-OFFER-OVERLAP-01 e para o resíduo 2 de INDUSTRIAL-RATE-VALIDITY-01. As
-duas primeiras posições da fila (P0) **não dependem de nenhum dos dois**.
+**Três gates nasceram do walkthrough de 2026-09-09**, e os três são de decisão,
+não de código:
+
+- a pergunta de preço em QUOTE-DUPLICATE-01 — copiar preço reabre §74;
+- a pergunta de sobreposição de vigência, que vale ao mesmo tempo para
+  SUPPLIER-OFFER-OVERLAP-01 e para o resíduo 2 de INDUSTRIAL-RATE-VALIDITY-01;
+- **o que prova conversão** em CUSTOMER-COMMERCIAL-STATUS-01: "Projeto
+  aprovado" sozinho classificaria como Inativo quem comprou direto, porque
+  `CustomerOrder` não exige Projeto nem Orçamento.
+
+As duas primeiras posições da fila (P0) **não dependem de nenhum dos três**.
 
 Material pronto: `Guia_Fluxo_Comercial_Veridi.docx` (36 capítulos, não
 versionado por política) e
