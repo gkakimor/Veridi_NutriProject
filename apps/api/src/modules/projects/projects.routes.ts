@@ -41,6 +41,9 @@ import {
   MissingCancelDetailsError,
   MissingFinishedUnitError,
   ProjectLockedError,
+  ProjectProductNotInApprovedScopeError,
+  QuoteExpiredError,
+  QuoteWithoutValidUntilError,
   ProjectNotFoundError,
   QuoteNotDraftError,
   QuoteNotFoundError,
@@ -153,6 +156,17 @@ function mapDomainError(
   }
   if (error instanceof QuoteNotDraftError) {
     return { status: 409, body: { error: "quote_not_draft", message: error.message } };
+  }
+  // Recusa de regra comercial, não falha do servidor: 400 com a mensagem do
+  // domínio, como o resto do módulo.
+  if (error instanceof QuoteWithoutValidUntilError) {
+    return { status: 400, body: { error: "quote_without_valid_until", message: error.message } };
+  }
+  if (error instanceof QuoteExpiredError) {
+    return { status: 400, body: { error: "quote_expired", message: error.message } };
+  }
+  if (error instanceof ProjectProductNotInApprovedScopeError) {
+    return { status: 400, body: { error: "product_out_of_approved_scope", message: error.message } };
   }
   if (error instanceof PricingTierNotFoundForQuoteError) {
     return { status: 404, body: { error: "not_found", message: error.message } };

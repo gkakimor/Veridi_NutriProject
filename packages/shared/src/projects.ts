@@ -238,6 +238,14 @@ export interface QuoteVersionDTO {
   source: ProjectSource;
   quoteDate: string;
   validUntil: string | null;
+  /**
+   * A janela de aceite fechou — derivado, nunca gravado.
+   *
+   * Só é `true` em proposta ENVIADA cuja validade já passou: o dia inteiro da
+   * validade conta, e proposta aceita não vence retroativamente. O servidor é
+   * a autoridade; a tela desenha, não decide.
+   */
+  expired: boolean;
   currencyCode: string;
   /** Uma linha por produto. O cabeçalho não guarda quantidade nem preço. */
   lines: QuoteLineDTO[];

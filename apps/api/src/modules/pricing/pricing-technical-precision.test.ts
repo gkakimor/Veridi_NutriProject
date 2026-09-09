@@ -7,6 +7,28 @@ import { buildTestApp } from "../../test-support/authenticated-app.js";
 import "../../lib/decimal.js";
 
 /**
+ * Enviar exige validade desde COM-02 — proposta sem prazo não vai ao cliente.
+ *
+ * A massa dos testes ganha uma data futura logo antes do envio, então o que
+ * cada caso mede continua sendo o que ele sempre mediu. Casos que testam a
+ * própria regra da validade chamam `/send` diretamente.
+ */
+const VALIDADE_DA_PROPOSTA = "2099-12-31";
+
+async function enviarProposta(
+  app: ReturnType<typeof buildTestApp>,
+  quoteVersionId: string,
+  payload: Record<string, unknown> = {},
+) {
+  await app.inject({
+    method: "PATCH",
+    url: `/quote-versions/${quoteVersionId}`,
+    payload: { validUntil: VALIDADE_DA_PROPOSTA },
+  });
+  return app.inject({ method: "POST", url: `/quote-versions/${quoteVersionId}/send`, payload });
+}
+
+/**
  * Preço TÉCNICO da precificação em alta precisão — PREC-P-TECH.
  *
  * A cadeia começa num motor de 40 dígitos e termina num documento comercial de
@@ -755,11 +777,7 @@ describe("a fronteira técnica → comercial", () => {
     await app.ready();
 
     const { orcamento } = await cenarioFechado(app);
-    const enviado = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${orcamento.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    const enviado = await enviarProposta(app, orcamento.id, { confirmIncompleteCost: true });
     expect(enviado.statusCode, enviado.body).toBe(200);
 
     const linha = await getPrisma().quoteLine.findUniqueOrThrow({
@@ -814,11 +832,7 @@ describe("a fronteira técnica → comercial", () => {
     const prisma = getPrisma();
 
     const { projeto, orcamento } = await cenarioFechado(app);
-    await app.inject({
-      method: "POST",
-      url: `/quote-versions/${orcamento.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    await enviarProposta(app, orcamento.id, { confirmIncompleteCost: true });
     await app.inject({ method: "POST", url: `/quote-versions/${orcamento.id}/accept` });
     await app.inject({ method: "POST", url: `/projects/${projeto.id}/approve`, payload: {} });
 
@@ -1265,11 +1279,7 @@ describe("PREC-MIG-D — o congelamento do Orçamento carrega as 12 casas", () =
     expect(rascunho.lines[0].pricing.frozen).toBe(false);
     expect(rascunho.lines[0].pricing.contributionPerUnit).toBe(daFaixa);
 
-    const enviado = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${orcamento.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    const enviado = await enviarProposta(app, orcamento.id, { confirmIncompleteCost: true });
     expect(enviado.statusCode, enviado.body).toBe(200);
 
     // Congelado: mesmo número, na coluna da linha e no DTO. O congelamento é
@@ -1395,11 +1405,7 @@ describe("PREC-MIG-E — custo industrial por unidade congelado em 12 casas", ()
     expect(rascunho.lines[0].pricing.frozen).toBe(false);
     expect(rascunho.lines[0].pricing.industrialCostPerUnit).toBe(daFaixa);
 
-    const enviado = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${orcamento.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    const enviado = await enviarProposta(app, orcamento.id, { confirmIncompleteCost: true });
     expect(enviado.statusCode, enviado.body).toBe(200);
 
     // Congelado: a COLUNA guarda o mesmo número, sem o corte da sétima casa.
@@ -1437,11 +1443,7 @@ describe("PREC-MIG-E — custo industrial por unidade congelado em 12 casas", ()
       url: `/quote-lines/${orcamento.lineId}/apply-pricing`,
       payload: { pricingTierId: faixaDe(cadeia.ativa).id },
     });
-    await app.inject({
-      method: "POST",
-      url: `/quote-versions/${orcamento.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    await enviarProposta(app, orcamento.id, { confirmIncompleteCost: true });
 
     /*
      * Escrita direta DE PROPÓSITO: a cadeia real está provada acima, com o
@@ -1474,11 +1476,7 @@ describe("PREC-MIG-E — custo industrial por unidade congelado em 12 casas", ()
       url: `/quote-lines/${orcamento.lineId}/apply-pricing`,
       payload: { pricingTierId: faixaDe(cadeia.ativa).id },
     });
-    await app.inject({
-      method: "POST",
-      url: `/quote-versions/${orcamento.id}/send`,
-      payload: { confirmIncompleteCost: true },
-    });
+    await enviarProposta(app, orcamento.id, { confirmIncompleteCost: true });
 
     await getPrisma().quoteLine.update({
       where: { id: orcamento.lineId },

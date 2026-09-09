@@ -41,6 +41,13 @@ F-09-1 + F-07-2 no FIX-05 e F-03-1 + F-07-1 no FIX-06 (2026-09-08). PROD-ERR-01
 não veio da auditoria — nasceu da leitura de código do FIX-05b — e está
 **RESOLVIDO**.
 
+**COM-CORE fechado em 2026-09-09.** Projeto aprovado passou a receber novos
+orçamentos (§69), aceita que já virou Pedido deixou de ser superada (§70) e a
+validade da proposta passou a valer (§71). Zero migration. **Próximo item de
+produto: COM-PRICE** — herança de preço entre ciclos (reajuste percentual,
+"manter condição anterior", proveniência da herança), que o COM-CORE
+deliberadamente não fez.
+
 ### P0 — antes de qualquer outra capability
 
 Vazio. **F-02-2 foi fechado no FIX-02 (2026-09-08)**: a estimativa passou a

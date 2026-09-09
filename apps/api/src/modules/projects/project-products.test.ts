@@ -4,6 +4,28 @@ import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
 
 /**
+ * Enviar exige validade desde COM-02 — proposta sem prazo não vai ao cliente.
+ *
+ * A massa dos testes ganha uma data futura logo antes do envio, então o que
+ * cada caso mede continua sendo o que ele sempre mediu. Casos que testam a
+ * própria regra da validade chamam `/send` diretamente.
+ */
+const VALIDADE_DA_PROPOSTA = "2099-12-31";
+
+async function enviarProposta(
+  app: ReturnType<typeof buildTestApp>,
+  quoteVersionId: string,
+  payload: Record<string, unknown> = {},
+) {
+  await app.inject({
+    method: "PATCH",
+    url: `/quote-versions/${quoteVersionId}`,
+    payload: { validUntil: VALIDADE_DA_PROPOSTA },
+  });
+  return app.inject({ method: "POST", url: `/quote-versions/${quoteVersionId}/send`, payload });
+}
+
+/**
  * Projeto multiproduto e orçamento multilinha.
  *
  * Uma negociação real cobre mais de um produto: a mesma linha em três sabores
@@ -256,11 +278,7 @@ describe("Orçamento multilinha", () => {
     expect(quote.lines[1].total).toBeNull();
     expect(quote.total).toBeNull();
 
-    const send = await app.inject({
-      method: "POST",
-      url: `/quote-versions/${quote.id}/send`,
-      payload: {},
-    });
+    const send = await enviarProposta(app, quote.id);
     expect(send.statusCode).toBe(400);
     expect(send.json().error).toBe("incomplete_quote");
 
@@ -342,7 +360,7 @@ describe("Orçamento multilinha", () => {
     const quote = await createQuoteWithLines(app, project.id, [
       { projectProductId: a.id, quotedQuantity: "100", unitPrice: "5" },
     ]);
-    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send`, payload: {} });
+    await enviarProposta(app, quote.id);
 
     const lineId = quote.lines[0].id;
     const edit = await app.inject({
@@ -378,7 +396,7 @@ describe("Orçamento multilinha", () => {
       { projectProductId: a.id, quotedQuantity: "1000", unitPrice: "10" },
       { projectProductId: b.id, quotedQuantity: "500", unitPrice: "20" },
     ]);
-    await app.inject({ method: "POST", url: `/quote-versions/${v1.id}/send`, payload: {} });
+    await enviarProposta(app, v1.id);
 
     const v2 = (
       await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
@@ -477,7 +495,7 @@ describe("Aprovação com escopo comercial", () => {
       { projectProductId: a.id, quotedQuantity: "1000", unitPrice: "10" },
       { projectProductId: b.id, quotedQuantity: "500", unitPrice: "20" },
     ]);
-    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send`, payload: {} });
+    await enviarProposta(app, quote.id);
     await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
 
     const approved = (
@@ -517,7 +535,7 @@ describe("Aprovação com escopo comercial", () => {
     const quote = await createQuoteWithLines(app, project.id, [
       { projectProductId: aceito.id, quotedQuantity: "100", unitPrice: "5" },
     ]);
-    await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/send`, payload: {} });
+    await enviarProposta(app, quote.id);
     await app.inject({ method: "POST", url: `/quote-versions/${quote.id}/accept` });
     await app.inject({ method: "POST", url: `/projects/${project.id}/approve`, payload: {} });
 

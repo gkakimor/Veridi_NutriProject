@@ -84,12 +84,16 @@ export function QuoteVersionsSection({
   onChanged: () => void;
 }) {
   /*
-   * Projeto aprovado ou cancelado é histórico e não recebe proposta nova.
-   * O botão existia mesmo assim, e a recusa só aparecia DEPOIS do clique —
-   * no fim de um caminho em que a pessoa já tinha conferido custo e preço.
-   * Ação impossível não deve ser oferecida; a explicação toma o lugar dela.
+   * Projeto APROVADO recebe negociação nova; cancelado, não.
+   *
+   * Aprovado significa que o desenvolvimento inicial foi aprovado — não que a
+   * relação com o cliente acabou. Quem comprou em janeiro e volta em março
+   * negocia no mesmo projeto, com os mesmos produtos. Cancelado continua
+   * fechado, e a explicação toma o lugar do botão: ação impossível não deve
+   * ser oferecida, e a recusa depois do clique chegava no fim de um caminho em
+   * que a pessoa já tinha conferido custo e preço.
    */
-  const projectOpen = projectStatus !== "APPROVED" && projectStatus !== "CANCELLED";
+  const projectOpen = projectStatus !== "CANCELLED";
   const versions = project.quoteVersions;
   const draft = versions.find((quote) => quote.status === "DRAFT") ?? null;
 
@@ -427,11 +431,21 @@ export function QuoteVersionsSection({
                 <td>{formatDate(quote.quoteDate)}</td>
                 <td>{quote.lines.length}</td>
                 <td className="is-numeric">{quote.total ? formatBRL(quote.total) : "—"}</td>
-                <td>{formatDate(quote.validUntil)}</td>
+                <td>
+                  {formatDate(quote.validUntil)}
+                  {/* Vencida é estado derivado, dito pelo servidor. Sem isto a
+                      linha some no meio das outras e alguem tenta aceitar. */}
+                  {quote.expired && <span className="badge badge--warn"> Vencido</span>}
+                </td>
                 <td>
                   <span className={quoteBadgeClass(quote.status)}>
                     {QUOTE_STATUS_LABELS[quote.status]}
                   </span>
+                  {/* Com varias aceitas no mesmo projeto, o que diferencia uma
+                      da outra e o Pedido que cada uma originou. */}
+                  {quote.sourcedOrder && (
+                    <span className="field__hint"> · originou {quote.sourcedOrder.code}</span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -452,17 +466,25 @@ export function QuoteVersionsSection({
               })
             }
           >
-            {draft ? "Abrir rascunho" : "Criar nova versão"}
+            {draft
+              ? "Abrir rascunho"
+              : projectStatus === "APPROVED"
+                ? "Novo orçamento"
+                : "Criar nova versão"}
           </button>
         )}
       </div>
 
-      {canEdit && !projectOpen && (
+      {canEdit && projectOpen && projectStatus === "APPROVED" && !draft && (
         <p className="field__hint">
-          {projectStatus === "APPROVED"
-            ? "Projeto aprovado é histórico: a proposta aceita ficou registrada como está. Para propor de novo ao mesmo cliente, crie um projeto novo."
-            : "Projeto cancelado é histórico e não recebe proposta nova."}
+          Cada nova compra deste cliente é um orçamento novo, aqui mesmo — os produtos aprovados
+          deste projeto continuam disponíveis, e as propostas anteriores permanecem no histórico
+          com os pedidos que originaram.
         </p>
+      )}
+
+      {canEdit && !projectOpen && (
+        <p className="field__hint">Projeto cancelado é histórico e não recebe proposta nova.</p>
       )}
 
       {open && (
@@ -871,7 +893,14 @@ export function QuoteVersionsSection({
               <button
                 type="button"
                 className="btn btn--accent"
-                disabled={saving || open.lines.length === 0}
+                /* Rascunho pode nao ter validade; documento do cliente, nao.
+                   A tela previne, e o servidor continua sendo a autoridade. */
+                disabled={saving || open.lines.length === 0 || !open.validUntil}
+                title={
+                  !open.validUntil
+                    ? "Informe a validade da proposta antes de enviar ao cliente."
+                    : undefined
+                }
                 onClick={() => void trySend(open)}
               >
                 Enviar ao cliente
@@ -883,7 +912,12 @@ export function QuoteVersionsSection({
                 <button
                   type="button"
                   className="btn btn--secondary"
-                  disabled={saving}
+                  disabled={saving || open.expired}
+                  title={
+                    open.expired
+                      ? `Proposta vencida em ${formatDate(open.validUntil)} — crie uma nova versão.`
+                      : undefined
+                  }
                   onClick={() => void run(() => acceptQuoteVersion(open.id))}
                 >
                   Registrar aceite
@@ -899,6 +933,19 @@ export function QuoteVersionsSection({
               </>
             )}
           </div>
+
+          {editable && !open.validUntil && (
+            <p className="field__hint">
+              Informe a validade da proposta antes de enviar ao cliente.
+            </p>
+          )}
+
+          {open.expired && (
+            <p className="field__hint" role="alert">
+              Proposta vencida em {formatDate(open.validUntil)}: a janela de aceite fechou. Crie uma
+              nova versão com preço e validade atualizados — o documento continua no histórico.
+            </p>
+          )}
 
           {/* O que falta depois do "sim" do cliente. */}
           <QuoteClosingSection

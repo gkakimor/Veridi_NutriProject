@@ -131,7 +131,16 @@ export function toProjectDTO(project: ProjectWithRelations, includePricing = fal
     toQuoteVersionDTO(quote, includePricing),
   );
   const latest = quotes[quotes.length - 1] ?? null;
-  const accepted = quotes.find((quote) => quote.status === "ACCEPTED") ?? null;
+  /*
+   * A ÚLTIMA aceita, não a primeira.
+   *
+   * Enquanto um projeto tinha uma negociação só, as duas eram a mesma. Com
+   * recompra no mesmo projeto o rótulo "Orçamento aceito" ficaria preso em V1
+   * para sempre, e a lista de projetos anunciaria como acordo vigente um
+   * documento de meses atrás. As aceitas anteriores continuam no histórico,
+   * cada uma ligada ao Pedido que originou.
+   */
+  const accepted = [...quotes].reverse().find((quote) => quote.status === "ACCEPTED") ?? null;
 
   return {
     id: project.id,
