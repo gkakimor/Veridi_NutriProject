@@ -336,6 +336,20 @@ nunca aplica, faz deploy ou reseta — aplicar continua sendo `pnpm db:migrate`.
 carimbo de verdade e evita gravar `…093060` no histórico. Nenhuma migration
 histórica foi renomeada. Zero migration nova, zero schema.
 
+**Criar e aplicar deixaram de ser o mesmo comando (MIG-ORDER-01b).** `pnpm
+db:migrate` ainda era `prisma migrate dev`, que aplica **e** cria: bastava
+`--name`, ou uma edição pendente em `schema.prisma`, para nascer uma pasta
+carimbada com o relógio real — a porta que o `01` só havia fechado com
+documentação. Agora é `prisma migrate deploy` embrulhado em
+`scripts/apply-migrations.mjs`, que recusa qualquer argumento antes de o Prisma
+vê-lo e passa pelo mesmo guarda de banco local. `migrate deploy` sequer possui
+a opção `--name`: não existe caminho de criação por ali. Schema alterado sem
+migration correspondente passou a ser **avisado**, com o comando certo na tela,
+e nunca resolvido às escondidas. Produção continua em `pnpm deploy:prod`.
+
+Os três comandos, e só eles: **criar** `pnpm migration:create <nome>`,
+**aplicar** `pnpm db:migrate`, **provar** `pnpm validate:migrations:fresh`.
+
 ## Próxima prioridade
 
 **BILL-DISCOUNT-01** — o desconto global do Pedido não chega ao Faturamento.

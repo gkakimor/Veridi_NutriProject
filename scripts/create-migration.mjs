@@ -1,9 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { readdirSync, renameSync, statSync } from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { exigirBancoLocal } from "./local-db-guard.mjs";
+import { API, MIGRATIONS, PRISMA_BIN } from "./prisma-bin.mjs";
 import {
   PADRAO_PASTA,
   maiorPrefixo,
@@ -37,24 +36,6 @@ import {
  * faz deploy, nao apaga banco e nao renomeia nenhuma migration historica.
  * Aplicar continua sendo `pnpm db:migrate`, um comando separado e consciente.
  */
-
-const RAIZ = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const API = path.join(RAIZ, "apps", "api");
-const MIGRATIONS = path.join(API, "prisma", "migrations");
-
-/*
- * O CLI do Prisma chamado direto pelo Node, e nao por `pnpm exec` num shell.
- * `pnpm` no Windows e um `.cmd`, o que obrigaria `shell: true` — e com shell
- * os argumentos sao concatenados em vez de escapados (DEP0190). Resolvendo o
- * `build/index.js` do proprio workspace da API nao existe shell no caminho, e
- * o binario e o MESMO que `pnpm exec prisma` usaria.
- */
-const requireFromApi = createRequire(path.join(API, "package.json"));
-const PRISMA_BIN = path.join(
-  path.dirname(requireFromApi.resolve("prisma/package.json")),
-  "build",
-  "index.js",
-);
 
 const USO = "uso: pnpm migration:create <nome_em_snake_case>";
 
