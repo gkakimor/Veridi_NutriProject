@@ -198,7 +198,13 @@ export const suprimentosTopics = {
           {
             label: "Vigente",
             detail:
-              "Preço atual é a oferta mais recente que já entrou em vigência e ainda não expirou. Preço importado da planilha antiga não tem vigência e aparece marcado como referência.",
+              "Preço atual é a oferta mais recente que já entrou em vigência e ainda não expirou. Preço importado da planilha antiga não tem vigência e aparece marcado como referência — fica no histórico e não entra no custo.",
+          },
+          {
+            label: "Válida a partir de",
+            detail:
+              "Obrigatória na oferta nova, e sugerida como hoje. É a data em que o preço passou a valer, não a data em que alguém o cadastrou: preço acertado na sexta e digitado na segunda vale desde sexta. Sem ela a oferta é só histórico.",
+            tone: "accent",
           },
           {
             label: "Corrigir é nova oferta",
@@ -214,13 +220,15 @@ export const suprimentosTopics = {
           {
             label: "Preferencial",
             detail:
-              "No máximo um por item, e só entre os aprovados e ativos. Bloquear ou desativar a relação tira o preferencial; ficar mais caro que outro nunca tira.",
+              "No máximo um por item, e só entre os aprovados e ativos. Bloquear ou desativar a relação tira o preferencial; ficar mais caro que outro nunca tira. Com um fornecedor só não é preciso marcar nada; com dois ou mais, é o preferencial que diz qual oferta o custo usa.",
           },
         ],
       },
     ],
     notes: [
-      "Preço aqui é referência comercial do fornecedor. O custo real do material continua vindo do recebimento — uma oferta nunca vira custo do item nem da formulação.",
+      "Oferta de fornecedor é referência PROSPECTIVA, nunca custo realizado nem valor pago. Ela entra no custo do item só depois da compra real: primeiro a média das compras dos últimos 30 e 90 dias, depois a última compra real, e só então a oferta válida.",
+      "Sem “válida a partir de”, a oferta não participa do custo. É o caso de todo preço importado da planilha antiga, que veio sem data de cotação — o número continua no histórico e nada é inventado no lugar dele.",
+      "Dois fornecedores homologados com oferta válida e nenhum preferencial deixam o material SEM custo, e a tela diz isso. O sistema não escolhe o mais barato, o mais novo nem o primeiro: escolher seria decidir a compra.",
       "Preferencial não quer dizer mais barato. O sistema nunca troca o preferencial sozinho porque outra oferta ficou menor.",
       "Pedido mínimo é recomendação, não bloqueio. Quando as unidades são comparáveis, a sugestão de compra usa o maior entre a falta e o mínimo; quando não são, o mínimo aparece na unidade original e nada é ajustado sozinho.",
       "Moedas são registradas, não convertidas: não existe conversão de câmbio nem comparação de 'mais barato' entre moedas diferentes.",

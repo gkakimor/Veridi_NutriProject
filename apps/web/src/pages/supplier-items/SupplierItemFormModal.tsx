@@ -6,6 +6,7 @@ import type {
   SupplierItemDetailDTO,
   UnitOfMeasureDTO,
 } from "@veridi/shared";
+import { hojeComercial } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
@@ -95,7 +96,8 @@ export function SupplierItemFormModal({
   const [priceUomCode, setPriceUomCode] = useState("");
   const [minimumOrderQuantity, setMinimumOrderQuantity] = useState("");
   const [minimumOrderUomCode, setMinimumOrderUomCode] = useState("");
-  const [effectiveAt, setEffectiveAt] = useState("");
+  /** Sugestão visível e editável — nunca um "hoje" assumido pelo servidor. */
+  const [effectiveAt, setEffectiveAt] = useState(hojeComercial());
   const [validUntil, setValidUntil] = useState("");
   const [offerNotes, setOfferNotes] = useState("");
 
@@ -146,7 +148,7 @@ export function SupplierItemFormModal({
       setPriceUomCode(draft.priceUomCode ?? "");
       setMinimumOrderQuantity(draft.minimumOrderQuantity ?? "");
       setMinimumOrderUomCode(draft.minimumOrderUomCode ?? "");
-      setEffectiveAt(draft.effectiveAt ?? "");
+      setEffectiveAt(draft.effectiveAt || hojeComercial());
       setValidUntil(draft.validUntil ?? "");
       setOfferNotes(draft.offerNotes ?? "");
     },
@@ -262,7 +264,7 @@ export function SupplierItemFormModal({
                       minimumOrderUomCode: minimumOrderUomCode || selectedItem?.unitCode || "",
                     }
                   : {}),
-                ...(effectiveAt ? { effectiveAt } : {}),
+                effectiveAt,
                 ...(validUntil ? { validUntil } : {}),
                 ...(offerNotes.trim() ? { notes: offerNotes.trim() } : {}),
               },
@@ -300,7 +302,7 @@ export function SupplierItemFormModal({
               type="submit"
               form="supplier-item-form"
               className="btn btn--accent"
-              disabled={saving || !itemId || !supplierId}
+              disabled={saving || !itemId || !supplierId || (preencheuOferta && !effectiveAt)}
             >
               {saving ? "Criando…" : "Criar relação"}
             </button>
@@ -525,15 +527,21 @@ export function SupplierItemFormModal({
             </div>
 
             <div className="field">
-              <label htmlFor="supplier-item-effective">Vigência a partir de</label>
+              <label htmlFor="supplier-item-effective">Válida a partir de *</label>
               <input
                 id="supplier-item-effective"
                 type="date"
+                required
                 value={effectiveAt}
                 onChange={(event) => setEffectiveAt(event.target.value)}
                 disabled={!preencheuOferta}
               />
-              <span className="field__hint">Vazio = vale a partir de agora.</span>
+              {/* Era "Vazio = vale a partir de agora" — e "agora" era o
+                  instante do POST. A data comercial de um preço é do
+                  negócio, não do relógio de quem cadastrou. */}
+              <span className="field__hint">
+                Sugerida como hoje. Sem esta data o preço não entra no custo.
+              </span>
             </div>
 
             <div className="field">

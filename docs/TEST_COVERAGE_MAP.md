@@ -115,6 +115,13 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Referência manual respeita a data de referência e a unidade; ausência nunca vira zero | — | `lib/cost-source-selection.test.ts` |
 | Ofertas válidas: uma → ela; várias com um preferencial → ele; sem preferencial ou com vários → seleção necessária, sem cair para a manual | primeira versão caía para a referência manual | `lib/cost-source-selection.test.ts` |
 | Mesmo "válido desde": a criada por último vence; empate total é estável | leitura dependente da ordem física | `lib/cost-source-selection.test.ts` |
+| Oferta sem vigência é histórico, nunca custo — e oferta nova exige "válida a partir de" | 602 ofertas legadas sem data, e o servidor assumindo `new Date()` quando o campo faltava | `lib/cost-source-selection.test.ts` · `modules/supplier-items/supplier-items.test.ts` |
+| Vigência da oferta é dia civil nas duas bordas; futura não vale hoje e vale na data futura; vencida cai para o fallback | início comparado com o instante cru da `referenceDate` | `lib/cost-source-selection.test.ts` |
+| Só BRL alimenta custo — na oferta E na referência manual do item; o filtro é parte da escolha da vigente | `ItemCostReference.currencyCode` não era filtrado: dólar entrava como real | `lib/cost-source-selection.test.ts` |
+| Preferencial e vigência são independentes: preferencial sem oferta vigente não cria custo | — | `lib/cost-source-selection.test.ts` · `modules/supplier-items/supplier-items.test.ts` |
+| Preferencial único por item, troca transacional, concorrência não deixa dois | — | `modules/supplier-items/supplier-items.test.ts` |
+| Cada oferta diz POR QUE não serve; "serve de referência" ≠ "está sendo usada" | tela mostrava cinco preços e o CMV dizia "sem custo", sem ligação | `modules/supplier-items/supplier-items.test.ts` · `pages/supplier-items/fonte-de-custo.test.tsx` |
+| A cadeia inteira pela interface: ambiguidade → preferencial → referência do item | — | `scripts/e2e/oferta-de-fornecedor-vira-custo.mjs` |
 | Ambiguidade + referência forçada: fonte automática congelada como ambígua, impacto nulo, motivo ao salvar | — | `modules/industrial-cost-calculation/cost-override.test.ts` |
 | Alterar referência cria vigência nova; unidade incompatível e negativo recusados; papel COMMERCIAL/ADMIN | — | `modules/items/item-cost-references.test.ts` |
 | Item com referência inicial nasce atômico — recusada, nada fica pela metade | — | `modules/items/item-cost-references.test.ts` |

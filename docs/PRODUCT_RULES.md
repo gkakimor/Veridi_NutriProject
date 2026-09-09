@@ -4635,3 +4635,101 @@ CMV nem oferta de fornecedor: o Pedido já congelou a condição comercial (§60
 §74). O Faturamento continua nascendo de Expedição confirmada, e a reconciliação
 comercial do Pedido (§ BILL-DISCOUNT) continua fechando em
 `agreedTotalAmount` — programar não cria matemática comercial paralela.
+
+## §76 — A oferta do fornecedor só participa do custo com vigência, e só uma por item
+
+O degrau 4 de §53 — "oferta válida de fornecedor homologado" — existia na
+regra e não existia na operação: as 602 ofertas da base vieram da planilha
+sem data de cotação, e sem vigência uma oferta é observação histórica. Quem
+cadastrava cinco preços e abria o CMV via "sem custo conhecido", sem nada
+ligando as duas telas.
+
+**A hierarquia de §53 não muda.** Compra real continua vencendo oferta;
+oferta continua vencendo referência manual; ausência continua sendo `NO_COST`
+e nunca zero. O que passa a existir é a possibilidade de o degrau 4 acontecer,
+e a obrigação de a tela explicar quando ele não acontece.
+
+### Vigência é requisito da oferta nova, não da coluna
+
+**Oferta criada pela interface exige "válida a partir de".** A tela sugere o
+dia de hoje, visível e editável; o domínio recebe uma data explícita. O
+servidor não assume mais `new Date()` quando o campo não vem — a data
+comercial de um preço é afirmação de quem negocia, não o relógio de quem
+gravou.
+
+**A coluna continua aceitando nulo.** Preço legado sem data é histórico
+legítimo, e preenchê-lo por inferência — `createdAt`, data da importação,
+hoje — escreveria uma condição comercial que ninguém negociou. Na tela ele
+aparece como "Importada sem vigência", nunca como inválido e nunca escondido.
+
+**A oferta segue imutável** (§5.3): preço, MOQ, moeda, unidade ou vigência
+diferentes criam oferta NOVA. Não existe edição no lugar.
+
+### A vigência é dia civil nas duas bordas
+
+Uma oferta que passa a valer no dia D **vale o dia D inteiro**; uma que vale
+até o dia D **ainda vale o dia D inteiro**. As duas comparações olham o DIA da
+pergunta, nunca o instante — a mesma semântica de §71 e §73. Antes disso o
+início da vigência era comparado com o instante cru da `referenceDate`
+enquanto compra real e referência manual já usavam o dia inteiro; a assimetria
+não tinha efeito visível porque a borda sempre mandava meia-noite, e uma
+assimetria latente numa fronteira de custo é dívida, não detalhe.
+
+Consequência direta, e é a que interessa ao negócio: uma oferta com vigência
+FUTURA não é usada hoje, e um cálculo com `referenceDate` naquele dia futuro
+**já a enxerga**. Previsão de custo não precisa de motor novo — precisa de
+vigência informada.
+
+### Um fornecedor não precisa de preferencial; dois precisam
+
+- **exatamente um homologado com oferta válida** → é ele
+  (`SUPPLIER_OFFER_SINGLE_APPROVED`). Não se exige marcar nada;
+- **vários, com exatamente um preferencial** → é o preferencial
+  (`SUPPLIER_OFFER_PREFERRED`);
+- **vários sem preferencial**, ou mais de um preferencial → **material sem
+  custo** (`AMBIGUOUS_SUPPLIER_REFERENCE`). O sistema não escolhe o mais
+  barato, o mais novo, o primeiro, o de maior MOQ nem a ordem alfabética:
+  escolher seria decidir a compra no lugar de quem compra.
+
+**Preferencial e vigência são independentes.** Marcar o fornecedor
+preferencial não torna válida uma oferta sem vigência, e um preferencial sem
+oferta vigente não cria custo nenhum — o motor segue o fallback.
+
+A unicidade do preferencial por item é do BANCO (índice parcial único
+`supplier_items_preferred_per_item_key`, mais o CHECK que exige relação ativa
+e homologada), e a troca acontece na mesma transação. Duas requisições
+simultâneas terminam com no máximo um preferencial.
+
+### Só reais entram no custo, em qualquer fonte
+
+Não existe conversão cambial nesta fase. Oferta em moeda estrangeira é
+referência comercial e **nunca** vira custo em reais — isso já valia. Passa a
+valer também para a **referência manual do item**: `ItemCostReference` tem
+`currencyCode` desde sempre, e a seleção de fonte não o filtrava. Uma
+referência em dólar seria tratada como se fosse real, produzindo um número
+plausível e errado — o pior tipo de erro de custo, porque ninguém confere o
+que parece certo. O filtro é parte da ESCOLHA da vigente, não um descarte
+posterior: uma referência em dólar mais recente não esconde uma em real mais
+antiga.
+
+Nenhum dado foi alterado por essa correção. As 293 referências existentes são
+todas BRL; a proteção vale para o que vier.
+
+### MOQ não escolhe oferta e não muda custo
+
+Continua como em §5.3: pedido mínimo é condição daquele preço, aparece na
+oferta, orienta a Sugestão de Compra como recomendação — e nunca participa da
+escolha da oferta nem do custo unitário.
+
+### A tela diz por que uma oferta não serve
+
+Cada oferta carrega um diagnóstico derivado da MESMA condição do motor, nunca
+de uma segunda regra: serve de referência, sem vigência, ainda não vigente,
+vencida, moeda estrangeira, fornecedor não homologado, unidade incompatível.
+O enum é do contrato; o usuário lê a frase.
+
+**"Serve de referência" não é "está sendo usada".** Uma compra real recente
+vence qualquer oferta, e confundir as duas coisas é a leitura errada mais
+provável da tela. Por isso o detalhe da relação mostra também a fonte que o
+motor usaria HOJE para aquele ITEM, resolvida uma vez pelo seletor canônico —
+não uma por linha da grade.

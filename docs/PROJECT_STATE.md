@@ -451,7 +451,60 @@ dos vínculos confundiria os dois fluxos. Entrega com separação em rascunho
 deixou de aceitar cancelamento e reprogramação — o que bloqueia é o que está em
 preparação, nunca o que já saiu.
 
+## A oferta do fornecedor virou fonte real de custo (COST-SOURCE-01, 2026-09-09)
+
+**O degrau 4 de §53 existia na regra e não existia na operação.** A auditoria
+COST-VAR-01 mediu: 602 `SupplierItemOffer`, todas `LEGACY_IMPORT` sem
+`effectiveAt`, zero válidas, zero preferenciais, 90 itens com vários
+fornecedores homologados. Sem vigência, oferta é observação histórica — quem
+cadastrava cinco preços abria o CMV e lia "sem custo conhecido", sem nada
+ligando as duas telas.
+
+**Nenhum backfill.** As 602 continuam sem vigência, sem preferencial e sem
+data inferida de `createdAt`, da importação ou de hoje. O que mudou é a porta
+de entrada: **oferta nova exige "válida a partir de"**, a tela sugere hoje de
+forma visível e editável, e o servidor deixou de assumir `new Date()` quando o
+campo não vinha — era um "hoje implícito" dentro da única fronteira que não
+pode ter um. A coluna segue anulável porque o legado é legítimo.
+
+**A vigência virou dia civil nas duas bordas** (§76): vale o dia inteiro do
+início e o dia inteiro do fim, como §71 e §73. Consequência que o negócio
+pediu: oferta com vigência FUTURA não é usada hoje e **é** usada num cálculo
+com `referenceDate` naquele dia — previsão de custo sem motor novo.
+
+**Ambiguidade continua sendo ausência de custo.** Um homologado com oferta
+válida dispensa preferencial; vários sem preferencial deixam o material sem
+custo e a tela diz o que fazer, em português. O sistema não escolhe o mais
+barato, o mais novo nem o primeiro. A unicidade do preferencial é do banco
+(índice parcial já existente) e a troca é transacional.
+
+**Bug real corrigido na mesma fronteira:** `ItemCostReference.currencyCode`
+existia e a seleção de fonte não o filtrava — uma referência em dólar entraria
+como se fosse real. Só BRL alimenta custo, e o filtro é parte da ESCOLHA da
+vigente: uma referência em dólar mais recente não esconde uma em real mais
+antiga. Nenhum dado alterado; as 293 existentes são BRL.
+
+**A tela passou a explicar.** Cada oferta carrega o diagnóstico da MESMA
+condição do motor (serve / sem vigência / ainda não vigente / vencida / moeda
+estrangeira / não homologado / unidade incompatível), e o detalhe mostra a
+fonte que o motor usaria HOJE para o item — porque "serve de referência" não é
+"está sendo usada", e uma compra real recente vence qualquer oferta.
+
+**Sem migration.** O índice parcial único e o CHECK de preferencial já
+existiam desde `20260908090000_supplier_items`.
+
 ## Próxima prioridade
+
+**COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
+mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum
+`IndustrialCostCalculation` e nenhuma `PricingVersion`, e por isso **nenhuma
+`QuoteLine` tem CMV congelado**. Enquanto isso não existir, qualquer comparação
+"custo do orçamento × custo de hoje" não tem o primeiro termo. Registrado no
+[`BACKLOG.md`](BACKLOG.md), **sem implementar**.
+
+**COST-VAR-02** (comparação de CMV e proteção de margem) segue BLOQUEADO
+aguardando as sete decisões do PO em
+[`archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md).
 
 **PLAN-DATE-01** — usar as datas e quantidades das entregas programadas para
 melhorar a Sugestão de Compra e a leitura da necessidade de produção. Registrado

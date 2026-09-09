@@ -136,16 +136,31 @@ async function receiveWithCost(
   fixtureReceiptIds.push(receipt.id);
 }
 
+/** Marcador de um dia civil — a mesma forma que a coluna guarda. */
+function dia(iso: string): Date {
+  return new Date(`${iso}T00:00:00.000Z`);
+}
+
 async function approveSupplierWithOffer(
   itemId: string,
-  params: { supplierId: string; unitPrice: string; priceUomCode?: string; preferred?: boolean },
+  params: {
+    supplierId: string;
+    unitPrice: string;
+    priceUomCode?: string;
+    preferred?: boolean;
+    currencyCode?: string;
+    /** `null` reproduz a oferta legada: preço sem data comercial. */
+    effectiveAt?: Date | null;
+    validUntil?: Date | null;
+    qualificationStatus?: "PENDING" | "APPROVED" | "BLOCKED";
+  },
 ) {
   const prisma = getPrisma();
   const supplierItem = await prisma.supplierItem.create({
     data: {
       itemId,
       supplierId: params.supplierId,
-      qualificationStatus: "APPROVED",
+      qualificationStatus: params.qualificationStatus ?? "APPROVED",
       preferred: params.preferred ?? false,
       active: true,
     },
@@ -154,12 +169,15 @@ async function approveSupplierWithOffer(
     data: {
       supplierItemId: supplierItem.id,
       unitPrice: params.unitPrice,
-      currencyCode: "BRL",
+      currencyCode: params.currencyCode ?? "BRL",
       priceUomCode: params.priceUomCode ?? "kg",
-      effectiveAt: new Date(Date.now() - DAY_MS),
+      effectiveAt:
+        params.effectiveAt === undefined ? new Date(Date.now() - DAY_MS) : params.effectiveAt,
+      validUntil: params.validUntil ?? null,
       source: "MANUAL",
     },
   });
+  return supplierItem;
 }
 
 async function setManualReference(
@@ -389,6 +407,279 @@ describe("Seleção automática da fonte de custo — ordem canônica", () => {
 
     const result = await select(item.id, "kg");
     expect(result.source).toBe("NO_COST");
+    await app.close();
+  });
+});
+
+/**
+ * A oferta de fornecedor como fonte OPERACIONAL de custo — COST-SOURCE-01.
+ *
+ * O degrau 4 da hierarquia existia e nunca tinha sido exercitado por data:
+ * todas as ofertas dos testes nasciam válidas desde ontem e sem fim. As 602
+ * ofertas reais são o oposto — importadas, sem vigência nenhuma —, e o que
+ * decide se uma delas participa do custo é exatamente a vigência. Estes
+ * casos cobrem a condição inteira: dia civil nas duas bordas, moeda, e as
+ * ausências que precisam continuar sendo ausência.
+ */
+describe("Oferta de fornecedor: vigência, moeda e ambiguidade", () => {
+  it("E. oferta sem vigência é histórico, nunca custo — mesmo sendo o único número existente", async () => {
+    const item = await createItem();
+    const supplier = await createSupplier();
+    await approveSupplierWithOffer(item.id, {
+      supplierId: supplier.id,
+      unitPrice: "900",
+      effectiveAt: null,
+    });
+
+    const result = await select(item.id, "kg");
+    expect(result.source).toBe("NO_COST");
+    expect(result.unitCost).toBeNull();
+  });
+
+  it("F. a oferta substituída em 01/10: 30/09 usa a antiga, 01/10 usa a nova", async () => {
+    const item = await createItem();
+    const antigo = await createSupplier();
+    const novo = await createSupplier();
+    await approveSupplierWithOffer(item.id, {
+      supplierId: antigo.id,
+      unitPrice: "800",
+      effectiveAt: dia("2026-09-01"),
+      validUntil: dia("2026-09-30"),
+    });
+    await approveSupplierWithOffer(item.id, {
+      supplierId: novo.id,
+      unitPrice: "1000",
+      effectiveAt: dia("2026-10-01"),
+    });
+
+    // Em 30/09 só a antiga está no ar — a nova ainda não começou, e por isso
+    // não existe ambiguidade nenhuma para resolver.
+    const emTrinta = await select(item.id, "kg", dia("2026-09-30"));
+    expect(emTrinta.source).toBe("SUPPLIER_OFFER_SINGLE_APPROVED");
+    expect(emTrinta.unitCost?.toString()).toBe("800");
+
+    // Em 01/10 a antiga já venceu e a nova entrou. A troca é limpa: continua
+    // havendo exatamente uma candidata.
+    const emPrimeiro = await select(item.id, "kg", dia("2026-10-01"));
+    expect(emPrimeiro.source).toBe("SUPPLIER_OFFER_SINGLE_APPROVED");
+    expect(emPrimeiro.unitCost?.toString()).toBe("1000");
+  });
+
+  it("F. o dia inteiro conta nas DUAS bordas — a hora do instante perguntado não muda a resposta", async () => {
+    const item = await createItem();
+    const supplier = await createSupplier();
+    await approveSupplierWithOffer(item.id, {
+      supplierId: supplier.id,
+      unitPrice: "640",
+      effectiveAt: dia("2026-09-15"),
+      validUntil: dia("2026-09-20"),
+    });
+
+    // Primeiro instante do primeiro dia, último instante do último dia, e um
+    // horário qualquer no meio: os três perguntam pelo mesmo DIA.
+    for (const instante of [
+      new Date("2026-09-15T00:00:00.000Z"),
+      new Date("2026-09-15T23:59:59.999Z"),
+      new Date("2026-09-20T00:00:00.000Z"),
+      new Date("2026-09-20T18:30:00.000Z"),
+      new Date("2026-09-20T23:59:59.999Z"),
+    ]) {
+      const result = await select(item.id, "kg", instante);
+      expect(result.source, instante.toISOString()).toBe("SUPPLIER_OFFER_SINGLE_APPROVED");
+      expect(result.unitCost?.toString(), instante.toISOString()).toBe("640");
+    }
+
+    // Um dia antes e um dia depois, a oferta não existe.
+    expect((await select(item.id, "kg", dia("2026-09-14"))).source).toBe("NO_COST");
+    expect((await select(item.id, "kg", dia("2026-09-21"))).source).toBe("NO_COST");
+  });
+
+  it("F. oferta com vigência futura não é usada hoje, e é usada na data futura — previsão sem motor novo", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const item = await createItem();
+    const supplier = await createSupplier();
+    await setManualReference(app, item.id, { unitCost: "500" });
+    await approveSupplierWithOffer(item.id, {
+      supplierId: supplier.id,
+      unitPrice: "1400",
+      effectiveAt: new Date(Date.now() + 30 * DAY_MS),
+    });
+
+    // Hoje a oferta futura não existe: cai para a referência manual.
+    const hoje = await select(item.id, "kg");
+    expect(hoje.source).toBe("MANUAL_REFERENCE");
+    expect(hoje.unitCost?.toString()).toBe("500");
+
+    // Na data em que ela passa a valer, o CMV daquele dia já a enxerga.
+    const futuro = await select(item.id, "kg", new Date(Date.now() + 31 * DAY_MS));
+    expect(futuro.source).toBe("SUPPLIER_OFFER_SINGLE_APPROVED");
+    expect(futuro.unitCost?.toString()).toBe("1400");
+    await app.close();
+  });
+
+  it("G. oferta vencida é ignorada e o motor cai para a referência manual — nunca para a oferta anterior", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const item = await createItem();
+    const supplier = await createSupplier();
+    await setManualReference(app, item.id, { unitCost: "500" });
+    await approveSupplierWithOffer(item.id, {
+      supplierId: supplier.id,
+      unitPrice: "1400",
+      effectiveAt: new Date(Date.now() - 60 * DAY_MS),
+      validUntil: new Date(Date.now() - 5 * DAY_MS),
+    });
+
+    const result = await select(item.id, "kg");
+    expect(result.source).toBe("MANUAL_REFERENCE");
+    expect(result.unitCost?.toString()).toBe("500");
+    await app.close();
+  });
+
+  it("H. oferta em moeda estrangeira não vira custo em reais — não existe câmbio", async () => {
+    const item = await createItem();
+    const supplier = await createSupplier();
+    await approveSupplierWithOffer(item.id, {
+      supplierId: supplier.id,
+      unitPrice: "120",
+      currencyCode: "USD",
+    });
+
+    const result = await select(item.id, "kg");
+    expect(result.source).toBe("NO_COST");
+    expect(result.unitCost).toBeNull();
+  });
+
+  it("H. USD ao lado de BRL: a oferta em real é a única candidata, e não há ambiguidade", async () => {
+    const item = await createItem();
+    const gringo = await createSupplier();
+    const local = await createSupplier();
+    await approveSupplierWithOffer(item.id, { supplierId: gringo.id, unitPrice: "120", currencyCode: "USD" });
+    await approveSupplierWithOffer(item.id, { supplierId: local.id, unitPrice: "780" });
+
+    const result = await select(item.id, "kg");
+    expect(result.source).toBe("SUPPLIER_OFFER_SINGLE_APPROVED");
+    expect(result.unitCost?.toString()).toBe("780");
+  });
+
+  it("D. fornecedor preferencial SEM oferta vigente não cria custo — o motor segue o fallback", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const item = await createItem();
+    const supplier = await createSupplier();
+    await setManualReference(app, item.id, { unitCost: "410" });
+    // Preferencial é decisão da relação; vigência é condição da oferta. As
+    // duas são independentes, e marcar uma não supre a outra.
+    await approveSupplierWithOffer(item.id, {
+      supplierId: supplier.id,
+      unitPrice: "999",
+      preferred: true,
+      effectiveAt: null,
+    });
+
+    const result = await select(item.id, "kg");
+    expect(result.source).toBe("MANUAL_REFERENCE");
+    expect(result.unitCost?.toString()).toBe("410");
+    await app.close();
+  });
+
+  it("relação não homologada com oferta válida não entra — homologação é condição, não detalhe", async () => {
+    const item = await createItem();
+    const supplier = await createSupplier();
+    await approveSupplierWithOffer(item.id, {
+      supplierId: supplier.id,
+      unitPrice: "700",
+      qualificationStatus: "PENDING",
+    });
+
+    const result = await select(item.id, "kg");
+    expect(result.source).toBe("NO_COST");
+  });
+
+  it("vigências sobrepostas do MESMO fornecedor: vale a de início mais recente", async () => {
+    const item = await createItem();
+    const supplier = await createSupplier();
+    const relacao = await approveSupplierWithOffer(item.id, {
+      supplierId: supplier.id,
+      unitPrice: "500",
+      effectiveAt: dia("2026-09-01"),
+      validUntil: dia("2026-12-31"),
+    });
+    // Correção de preço no meio da vigência anterior: oferta NOVA, sem
+    // encerrar a antiga. O comportamento hoje é determinístico e é este.
+    await getPrisma().supplierItemOffer.create({
+      data: {
+        supplierItemId: relacao.id,
+        unitPrice: "560",
+        currencyCode: "BRL",
+        priceUomCode: "kg",
+        effectiveAt: dia("2026-09-10"),
+        source: "MANUAL",
+      },
+    });
+
+    const antes = await select(item.id, "kg", dia("2026-09-05"));
+    expect(antes.unitCost?.toString()).toBe("500");
+
+    const depois = await select(item.id, "kg", dia("2026-09-20"));
+    expect(depois.unitCost?.toString()).toBe("560");
+  });
+
+  it("I/J. referência manual em moeda estrangeira é ignorada, e a em real vence", async () => {
+    const item = await createItem();
+    const prisma = getPrisma();
+    // Escrita direta: a rota só grava BRL, e o cenário a proteger é o de uma
+    // referência não-BRL chegar ao banco por importação ou capacidade futura.
+    await prisma.itemCostReference.create({
+      data: { itemId: item.id, unitCost: "80", currencyCode: "USD", uomCode: "kg", effectiveFrom: dia("2026-09-01") },
+    });
+
+    // Só a referência em dólar: custo DESCONHECIDO. Tratá-la como real
+    // devolveria 80 — um número plausível e errado, o pior tipo de erro de
+    // custo, porque ninguém confere o que parece certo.
+    const soDolar = await select(item.id, "kg", dia("2026-09-05"));
+    expect(soDolar.source).toBe("NO_COST");
+    expect(soDolar.unitCost).toBeNull();
+
+    await prisma.itemCostReference.create({
+      data: { itemId: item.id, unitCost: "430", currencyCode: "BRL", uomCode: "kg", effectiveFrom: dia("2026-09-02") },
+    });
+
+    const comReal = await select(item.id, "kg", dia("2026-09-05"));
+    expect(comReal.source).toBe("MANUAL_REFERENCE");
+    expect(comReal.unitCost?.toString()).toBe("430");
+  });
+
+  it("a referência em dólar mais NOVA não esconde a em real mais antiga", async () => {
+    const item = await createItem();
+    const prisma = getPrisma();
+    await prisma.itemCostReference.create({
+      data: { itemId: item.id, unitCost: "300", currencyCode: "BRL", uomCode: "kg", effectiveFrom: dia("2026-09-01") },
+    });
+    await prisma.itemCostReference.create({
+      data: { itemId: item.id, unitCost: "90", currencyCode: "USD", uomCode: "kg", effectiveFrom: dia("2026-09-10") },
+    });
+
+    // A vigência mais recente é a de dólar. Filtrar DEPOIS de escolher a
+    // vigente devolveria "sem custo"; o filtro é parte da escolha.
+    const result = await select(item.id, "kg", dia("2026-09-20"));
+    expect(result.source).toBe("MANUAL_REFERENCE");
+    expect(result.unitCost?.toString()).toBe("300");
+  });
+
+  it("compra real recente continua vencendo a oferta válida — a hierarquia não mudou", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+    const item = await createItem();
+    const supplier = await createSupplier();
+    const outro = await createSupplier();
+    await approveSupplierWithOffer(item.id, { supplierId: outro.id, unitPrice: "300" });
+    await receiveWithCost(app, { supplierId: supplier.id, itemId: item.id, quantity: "10", unitCost: "1050", daysAgo: 3 });
+
+    const result = await select(item.id, "kg");
+    expect(result.source).toBe("WEIGHTED_AVG_30D");
+    expect(result.unitCost?.toString()).toBe("1050");
     await app.close();
   });
 });

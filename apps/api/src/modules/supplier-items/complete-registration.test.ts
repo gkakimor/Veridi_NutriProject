@@ -39,6 +39,11 @@ function marca(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Vigência explícita — oferta nova não nasce mais com um "agora" assumido. */
+function hoje(): string {
+  return new Date().toISOString();
+}
+
 async function criarItem(app: App) {
   const item = (
     await app.inject({
@@ -91,7 +96,7 @@ describe("Item × Fornecedor — cadastro completo em uma ação", () => {
         payload: {
           itemId: item.id,
           supplierId: supplier.id,
-          initialOffer: { unitPrice: "272", priceUomCode: "kg" },
+          initialOffer: { unitPrice: "272", priceUomCode: "kg", effectiveAt: hoje() },
         },
       })
     ).json();
@@ -121,6 +126,7 @@ describe("Item × Fornecedor — cadastro completo em uma ação", () => {
             priceUomCode: "kg",
             minimumOrderQuantity: "25",
             minimumOrderUomCode: "kg",
+            effectiveAt: hoje(),
           },
         },
       })
@@ -211,7 +217,7 @@ describe("Item × Fornecedor — cadastro completo em uma ação", () => {
         itemId: item.id,
         supplierId: supplier.id,
         // Unidade de tempo não converte para a unidade de massa do item.
-        initialOffer: { unitPrice: "10", priceUomCode: "un" },
+        initialOffer: { unitPrice: "10", priceUomCode: "un", effectiveAt: hoje() },
       },
     });
     expect(recusa.statusCode).toBeGreaterThanOrEqual(400);
@@ -230,7 +236,7 @@ describe("Item × Fornecedor — cadastro completo em uma ação", () => {
         payload: {
           itemId: item.id,
           supplierId: supplier.id,
-          initialOffer: { unitPrice: "272", priceUomCode: "kg" },
+          initialOffer: { unitPrice: "272", priceUomCode: "kg", effectiveAt: hoje() },
         },
       })
     ).json();
@@ -238,7 +244,7 @@ describe("Item × Fornecedor — cadastro completo em uma ação", () => {
     const segunda = await app.inject({
       method: "POST",
       url: `/supplier-items/${criada.id}/offers`,
-      payload: { unitPrice: "290", priceUomCode: "kg" },
+      payload: { unitPrice: "290", priceUomCode: "kg", effectiveAt: hoje() },
     });
     expect(segunda.statusCode).toBe(201);
     const depois = segunda.json();

@@ -56,6 +56,7 @@ function relacao(overrides: Partial<SupplierItemDetailDTO> = {}): SupplierItemDe
     currentOffer: null,
     latestLegacyOffer: null,
     offerCount: 1,
+    costSourceAmbiguous: false,
     createdAt: "2026-08-19T22:52:07.000Z",
     createdByName: "Admin (demo)",
     updatedAt: "2026-08-19T23:22:54.000Z",
@@ -76,9 +77,17 @@ function relacao(overrides: Partial<SupplierItemDetailDTO> = {}): SupplierItemDe
         createdAt: "2026-08-19T22:52:07.000Z",
         createdByName: "Admin (demo)",
         isCurrent: false,
+        eligibility: "NO_VALIDITY",
       },
     ],
     qualificationHistory: [],
+    costSourceToday: {
+      source: "NO_COST",
+      unitCost: null,
+      unitCode: "kg",
+      details: null,
+      referenceDate: "2026-08-19T22:52:07.000Z",
+    },
     ...overrides,
   };
 }

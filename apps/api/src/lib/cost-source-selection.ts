@@ -69,6 +69,36 @@ function fimDoDia(date: Date): Date {
 }
 
 /**
+ * O primeiro instante do dia da pergunta.
+ *
+ * Par de `fimDoDia`, e existe pelo lado de FORA da vigência: "válida até
+ * 30/09" vale o dia 30 inteiro. Comparar `validUntil >= referenceDate` já
+ * respondia certo enquanto a data chegava como meia-noite, mas amarrava a
+ * regra ao formato da entrada — bastava a borda mandar um instante do meio
+ * do dia para uma oferta que vence hoje sumir no meio da tarde. A pergunta
+ * é sobre o DIA, e os dois lados da vigência precisam concordar com isso.
+ */
+function inicioDoDia(date: Date): Date {
+  const inicio = new Date(date);
+  inicio.setUTCHours(0, 0, 0, 0);
+  return inicio;
+}
+
+/**
+ * Enquanto não existe conversão cambial, custo em reais só pode ser
+ * construído com preço em reais.
+ *
+ * Vale para as DUAS fontes prospectivas — a oferta do fornecedor e a
+ * referência manual do item. A oferta já filtrava; a referência manual não,
+ * e a coluna `currencyCode` existe desde sempre com default `BRL`. Uma
+ * referência gravada em USD entraria no cálculo como se fosse real, e o
+ * número resultante seria plausível e errado — o pior tipo de erro de
+ * custo. Ignorar é a mesma decisão já tomada para a oferta: moeda é
+ * registrada, nunca convertida.
+ */
+const MOEDA_DO_CUSTO = "BRL";
+
+/**
  * Ordem CANÔNICA de vigência das referências de um item — a mais recente
  * primeiro. Uma só, usada pela seleção e pelo histórico da tela.
  *
@@ -100,6 +130,28 @@ export async function getManualCostReference(prisma: PrismaOrTx, itemId: string,
   });
 }
 
+/**
+ * A referência manual vigente que pode virar CUSTO — só em reais.
+ *
+ * Separada de `getManualCostReference` de propósito: a tela do item mostra
+ * o histórico inteiro, inclusive uma referência em moeda estrangeira, e
+ * escondê-la seria perder registro. Quem não pode vê-la é o cálculo.
+ */
+async function getManualCostReferenceForCosting(
+  prisma: PrismaOrTx,
+  itemId: string,
+  referenceDate: Date,
+) {
+  return prisma.itemCostReference.findFirst({
+    where: {
+      itemId,
+      currencyCode: MOEDA_DO_CUSTO,
+      effectiveFrom: { lte: fimDoDia(referenceDate) },
+    },
+    orderBy: [...COST_REFERENCE_VALIDITY_ORDER],
+  });
+}
+
 export interface ManualReferenceResolution {
   referenceId: string;
   /** Na unidade do item. */
@@ -114,16 +166,22 @@ export interface ManualReferenceResolution {
 /**
  * Referência manual vigente, já convertida para a unidade do item.
  *
- * `null` quando não há referência ou quando a unidade declarada não
- * converte para a do item — um número em unidade incompatível não é custo,
- * e inventar equivalência seria pior que "não informado".
+ * `null` quando não há referência em reais, ou quando a unidade declarada
+ * não converte para a do item — um número em unidade incompatível não é
+ * custo, e inventar equivalência seria pior que "não informado". Moeda
+ * estrangeira cai no mesmo lugar e pelo mesmo motivo: inventar câmbio é
+ * inventar equivalência.
  */
 export async function resolveManualReference(
   prisma: PrismaOrTx,
   params: ItemCostSelectionParams,
   units: readonly UnitLike[],
 ): Promise<ManualReferenceResolution | null> {
-  const reference = await getManualCostReference(prisma, params.itemId, params.referenceDate);
+  const reference = await getManualCostReferenceForCosting(
+    prisma,
+    params.itemId,
+    params.referenceDate,
+  );
   if (!reference) return null;
   if (!isUomCompatible(reference.uomCode, params.itemUnitCode, units)) return null;
 
@@ -198,6 +256,25 @@ export async function selectItemCostSource(
 }
 
 /**
+ * A vigência de uma oferta, em DIA CIVIL — a condição, num lugar só.
+ *
+ * Exportada porque a tela de Item × Fornecedor precisa dizer POR QUE uma
+ * oferta não serve de referência, e a única forma honesta de dizer isso é
+ * perguntando à mesma condição que o motor usa. Duas cópias divergiriam, e
+ * a tela passaria a explicar uma regra que o cálculo não segue.
+ *
+ * Os dois lados olham o DIA da pergunta, não o instante: uma oferta que
+ * passa a valer hoje já vale hoje, e uma que vale até hoje ainda vale hoje.
+ */
+export function offerValidityWhere(referenceDate: Date): Prisma.SupplierItemOfferWhereInput {
+  return {
+    currencyCode: MOEDA_DO_CUSTO,
+    effectiveAt: { not: null, lte: fimDoDia(referenceDate) },
+    OR: [{ validUntil: null }, { validUntil: { gte: inicioDoDia(referenceDate) } }],
+  };
+}
+
+/**
  * Oferta vigente de um fornecedor homologado. Regras rígidas de
  * elegibilidade — relação e fornecedor ativos, item homologado, preço em BRL
  * (sem câmbio nesta fase), vigência válida na data de referência e unidade
@@ -219,11 +296,7 @@ async function resolveSupplierOfferCost(
     include: {
       supplier: { select: { legalName: true } },
       offers: {
-        where: {
-          currencyCode: "BRL",
-          effectiveAt: { not: null, lte: params.referenceDate },
-          OR: [{ validUntil: null }, { validUntil: { gte: params.referenceDate } }],
-        },
+        where: offerValidityWhere(params.referenceDate),
         orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
       },
     },
