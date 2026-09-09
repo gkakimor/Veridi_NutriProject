@@ -1,42 +1,71 @@
 /**
- * Dia de calendário no domínio — uma fonte só para "até quando vale".
+ * Dia civil comercial — a fonte única de "até quando vale".
  *
- * As colunas de data-só do sistema (`validUntil`, `effectiveFrom`,
- * `costReferenceDate`) guardam a MEIA-NOITE UTC do dia escolhido: o campo
- * `<input type="date">` manda `2026-09-15`, `z.coerce.date()` produz
- * `2026-09-15T00:00:00.000Z`, e a tela formata de volta com
- * `{ timeZone: "UTC" }` (`web lib/dates.ts`). Ler esse instante como um ponto
- * no tempo é o que produz o erro de um dia: em `America/Sao_Paulo` ele é 15/09
- * às 21h do dia 14.
+ * `QuoteVersion.validUntil` é uma DATA CIVIL, não um instante. O campo é um
+ * `<input type="date">`: a pessoa escolhe 15/09/2026 e nunca escolhe hora. O
+ * valor viaja como `2026-09-15`, `z.coerce.date()` o materializa em
+ * `2026-09-15T00:00:00.000Z` e a coluna `TIMESTAMP(3)` guarda essa meia-noite
+ * UTC como MARCADOR do dia — não como o momento em que algo aconteceu. A tela
+ * lê de volta pelos componentes UTC (`web lib/dates.ts`), e por isso 15/09
+ * continua 15/09 em qualquer fuso.
  *
- * A convenção — já usada pela referência de custo e pelo CMV — é que **o dia
- * inteiro conta**. "Válido até 15/09" vale durante todo o dia 15; a proposta
- * só vence quando o dia 15 acaba. É a mesma pergunta que `fimDoDia` responde
- * naqueles módulos, com o mesmo cálculo, agora com nome e casa próprios para
- * não virar uma quarta cópia.
+ * A pergunta do domínio é: **o dia 15/09 já acabou na operação da Veridi?**
+ * Ela se responde comparando DIAS, não instantes. A tentativa anterior
+ * transformava a validade num instante artificial — o fim do dia em UTC — e
+ * com isso a proposta vencia às 21h de São Paulo do próprio dia impresso nela,
+ * três horas antes da hora. O erro não era o fuso do servidor: era comparar um
+ * marcador de dia com um relógio.
  *
- * Não há literal de fuso aqui de propósito: o sistema não tem, hoje, conceito
- * explícito de fuso de negócio, e inventar um em cima de colunas gravadas em
- * UTC criaria um segundo motor de data divergindo do primeiro. Quando esse
- * conceito existir, ele nasce NESTE arquivo — e só nele.
+ * Aqui não existe fim de dia. Existe "que dia é hoje na Veridi" e "que dia está
+ * escrito na proposta", os dois em `YYYY-MM-DD`, e o resto é uma comparação de
+ * texto — que para datas ISO é a mesma coisa que uma comparação cronológica.
  */
 
-/** O último instante do dia de calendário de `dia`. */
-export function fimDoDiaComercial(dia: Date): Date {
-  const fim = new Date(dia);
-  fim.setUTCHours(23, 59, 59, 999);
-  return fim;
+/**
+ * O fuso da operação. **Uma ocorrência no sistema inteiro** — nenhum outro
+ * arquivo escreve este nome, e nenhum lugar codifica `-03:00`. Offset fixo
+ * quebraria no dia em que o horário de verão voltar, e voltaria a errar em
+ * silêncio.
+ */
+const FUSO_COMERCIAL = "America/Sao_Paulo";
+
+/** `YYYY-MM-DD` de um instante, lido em `fuso`. */
+function diaCivil(instante: Date, fuso: string): string {
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: fuso,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instante);
+  const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
+  return `${parte("year")}-${parte("month")}-${parte("day")}`;
+}
+
+/** Que dia é hoje para quem opera a Veridi. */
+export function hojeComercial(agora: Date = new Date()): string {
+  return diaCivil(agora, FUSO_COMERCIAL);
 }
 
 /**
- * `agora` já passou do fim do dia de `validUntil`?
+ * O dia escrito numa coluna de data-só.
+ *
+ * Lido em UTC porque é assim que ele foi gravado: a meia-noite UTC é o
+ * marcador do dia escolhido, e seus componentes UTC são exatamente esse dia.
+ * Ler no fuso comercial devolveria o dia anterior.
+ */
+export function diaDaColunaDeData(valor: Date): string {
+  return diaCivil(valor, "UTC");
+}
+
+/**
+ * O dia da validade já passou?
  *
  * Sem validade não há vencimento: `null` nunca vence. Quem exige a validade é
  * a regra de envio, não esta função.
  */
 export function venceuEm(validUntil: Date | null | undefined, agora: Date): boolean {
   if (!validUntil) return false;
-  return agora.getTime() > fimDoDiaComercial(validUntil).getTime();
+  return hojeComercial(agora) > diaDaColunaDeData(validUntil);
 }
 
 /** `15/09/2026` — o dia como o cliente o leu na proposta. */

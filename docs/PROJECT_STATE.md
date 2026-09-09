@@ -95,6 +95,7 @@ Ordens de Produção por um conjunto explícito de status que prendem; OP cancel
 não prende mais, e nada é apagado. `CustomerMismatchError` virou
 `400 customer_mismatch` — o mesmo par que o módulo de Projetos já usava —, e o
 PROD-ERR-01 estendeu o mapeamento às duas rotas do módulo de Produção.
+
 ## O runner oficial não disputa a máquina consigo mesmo (2026-09-08)
 
 `pnpm test` chama `pnpm -r test`, e a concorrência padrão do pnpm é **4**: a
@@ -209,10 +210,19 @@ vezes devolve o mesmo.
 **A validade passou a valer (§71).** Rascunho pode não ter; enviar exige;
 proposta enviada e vencida não é aceita — erro de domínio em português, nunca
 500. "Vencida" é derivado, calculado na leitura, sem status `EXPIRED` e sem
-varredura noturna. "Válido até 15/09" cobre o dia 15 inteiro: a comparação usa o
-fim do dia em [`business-day.ts`](../apps/api/src/lib/business-day.ts), a mesma
-convenção da referência de custo. Aceita não vence retroativamente — o Pedido
-pode nascer depois, com o preço intacto.
+varredura noturna. Aceita não vence retroativamente — o Pedido pode nascer
+depois, com o preço intacto.
+
+**A validade é DATA CIVIL, e isso custou uma correção (COM-CORE-TZ).** A
+primeira versão reusou o `fimDoDia` do domínio de custo — fim do dia em UTC — e
+com isso a proposta vencia às **21h de São Paulo do próprio dia impresso nela**.
+O `fimDoDia` responde certo lá: a pergunta é sobre uma janela de referência em
+UTC. Aqui a pergunta é "o dia 15 já acabou na Veridi?", e ela se responde
+comparando DIAS, não instantes.
+[`business-day.ts`](../apps/api/src/lib/business-day.ts) compara o dia de hoje
+em `America/Sao_Paulo` com o dia escrito na proposta, os dois em `YYYY-MM-DD`.
+O fuso aparece uma vez no sistema inteiro, e não há offset fixo — horário de
+verão volta a existir sem quebrar nada.
 
 **COM-03 deixou de ser prova por composição.** A cadeia `QuoteLine.unitPrice →
 CustomerOrderLine.agreedUnitPrice → BillingLine.agreedUnitPrice →

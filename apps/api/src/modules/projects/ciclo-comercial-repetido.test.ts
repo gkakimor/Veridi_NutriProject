@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { UomDimension } from "@prisma/client";
-import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
+import { acceptQuoteVersion, getQuoteById } from "./quotes.service.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -451,6 +452,91 @@ describe("COM-02 — a validade da proposta passa a valer", () => {
     expect(recusado.statusCode).toBe(400);
     expect(recusado.json().error).toBe("quote_expired");
     expect(recusado.json().message).toMatch(/vencida em 31\/01\/2020/i);
+    expect((await lerOrcamento(app, quote.id)).status).toBe("SENT");
+
+    await app.close();
+  });
+
+  it("15/09 digitado continua 15/09 na volta — a data não desloca um dia", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { project } = await criarProjeto(app);
+    const quote = await criarOrcamento(app, project.id);
+    const salvo = await definirValidade(app, quote.id, "2026-09-15");
+
+    /*
+     * A cadeia inteira: `<input type="date">` manda `2026-09-15`,
+     * `z.coerce.date()` materializa a meia-noite UTC, a coluna guarda esse
+     * marcador e o DTO o devolve igual. É o que a tela lê pelos componentes
+     * UTC — nem 14, nem 16.
+     */
+    expect(salvo.json().validUntil).toBe("2026-09-15T00:00:00.000Z");
+    expect((await lerOrcamento(app, quote.id)).validUntil).toBe("2026-09-15T00:00:00.000Z");
+
+    const gravado = await getPrisma().quoteVersion.findUniqueOrThrow({
+      where: { id: quote.id },
+      select: { validUntil: true },
+    });
+    expect(gravado.validUntil?.toISOString()).toBe("2026-09-15T00:00:00.000Z");
+
+    await app.close();
+  });
+
+  /*
+   * L e M controlam o relógio e falam com o SERVIÇO, não com a rota.
+   *
+   * A fronteira do dia pertence ao domínio, e a rota já está provada no caso K
+   * — ela traduz `QuoteExpiredError` em 400. Ir pela rota aqui exigiria mover o
+   * relógio uma semana à frente, e a sessão do teste vence antes: o que
+   * falharia seria a autenticação, não a validade. Só o `Date` é falsificado,
+   * para Prisma e Fastify continuarem inteiros.
+   */
+  it("L · às 23:59 do dia da validade, no horário da Veridi, ainda aceita", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { project } = await criarProjeto(app);
+    const quote = await criarOrcamento(app, project.id);
+    await definirValidade(app, quote.id, "2026-09-15");
+    expect((await enviar(app, quote.id)).statusCode).toBe(200);
+
+    const { user } = await createAuthenticatedUser("ADMIN");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // 15/09 23:59 em São Paulo é 16/09 02:59 em UTC: o dia UTC já virou.
+      vi.setSystemTime(new Date("2026-09-16T02:59:00.000Z"));
+      expect((await getQuoteById(quote.id, true))?.expired).toBe(false);
+      const aceita = await acceptQuoteVersion(quote.id, user);
+      expect(aceita.status).toBe("ACCEPTED");
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await app.close();
+  });
+
+  it("M · à meia-noite do dia seguinte, na Veridi, já não aceita", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { project } = await criarProjeto(app);
+    const quote = await criarOrcamento(app, project.id);
+    await definirValidade(app, quote.id, "2026-09-15");
+    expect((await enviar(app, quote.id)).statusCode).toBe(200);
+
+    const { user } = await createAuthenticatedUser("ADMIN");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // 16/09 00:00 em São Paulo = 16/09 03:00 em UTC.
+      vi.setSystemTime(new Date("2026-09-16T03:00:00.000Z"));
+      expect((await getQuoteById(quote.id, true))?.expired).toBe(true);
+      await expect(acceptQuoteVersion(quote.id, user)).rejects.toThrow(/vencida em 15\/09\/2026/i);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // Nada foi gravado: o documento continua enviado, no histórico.
     expect((await lerOrcamento(app, quote.id)).status).toBe("SENT");
 
     await app.close();
