@@ -337,6 +337,9 @@ export interface IndustrialCostCalculationSummaryDTO {
   calculatedAt: string;
   calculatedByName: string | null;
   quality: IndustrialCostQuality;
+  /** A quantidade que este cálculo respondeu — sem ela, o total é ambíguo. */
+  referenceOutputQuantity: string;
+  referenceOutputUomCode: string;
   totalIndustrialCost: string | null;
   knownSubtotal: string;
   costPerUnit: string | null;
@@ -422,3 +425,27 @@ export interface ProductionOrderCostDTO {
   snapshotId: string | null;
   snapshotCreatedAt: string | null;
 }
+
+/**
+ * "Por 1.000" é RAZÃO, nunca execução.
+ *
+ * O motor calcula o custo da quantidade pedida — a base de referência da
+ * estrutura, no CALC, e a quantidade simulada, no CMV e nas faixas. Depois
+ * disso, `custo por unidade × 1.000` é uma normalização para comparar
+ * produtos e faixas entre si, e nada mais.
+ *
+ * A distinção não é acadêmica: com base 300, produzir 1.000 são quatro lotes,
+ * e custo fixo por lote, recurso por lote de referência e caixa de expedição
+ * inteira não diluem proporcionalmente. Uma execução de 300 a R$ 201,00 dá
+ * R$ 670,00 de equivalente por 1.000, enquanto o cálculo real de 1.000 dá
+ * R$ 767,00 — 14% acima. Rotular os dois como "custo por 1.000" faz o número
+ * comparativo parecer o custo de uma produção que ninguém calculou.
+ *
+ * Estes dois textos existem em um lugar só porque a mesma equivalência é
+ * impressa em seis superfícies (detalhamento do CALC, CMV do produto, três
+ * impressos e o relatório de custos). Copiá-los seria deixá-los divergir.
+ */
+export const COST_PER_1000_LABEL = "Equivalente por 1.000 un";
+
+export const COST_PER_1000_EXPLANATION =
+  "Valor normalizado a partir do custo por unidade (custo por unidade × 1.000) para facilitar comparações. Não representa um novo cálculo de produção para 1.000 unidades: produzir 1.000 pode exigir mais lotes, e custo fixo por lote e caixa inteira não diluem proporcionalmente.";

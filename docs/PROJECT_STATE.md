@@ -505,12 +505,9 @@ zero migration nesta rodada.
 sem filtrar por cliente, com `customer-orders.service` sem comparar
 `product.customerId` com o do Pedido nem ao montar a linha nem no `confirm`: a
 única recusa era na Ordem de Produção, e um Pedido CONFIRMADO carregava a
-combinação impossível. COST-BASIS-UX-01: base de produção 300, tela destacando
-"custo por 1.000", e a usuária sem saber qual dos dois o sistema calculou. A
-leitura de código diz que `per1000 = perUnit × 1000` — equivalência linear, não o
-custo de produzir 1.000 sobre quatro lotes —, mas a prova em 200/300/500/1.000
-com recurso fixo, proporcional e derivado vem ANTES de mexer na tela: se a conta
-de 300 estiver errada, deixa de ser UX.
+combinação impossível. COST-BASIS-UX-01 — **fechado em 2026-09-09**, ver
+abaixo — nasceu de uma base de produção 300 com a tela destacando "custo por
+1.000", e a usuária sem saber qual dos dois o sistema calculou.
 
 **Duas suspeitas foram reclassificadas pela auditoria, não aceitas como vieram.**
 A vigência de tarifa industrial já respeita `referenceDate` (agosto usa a tarifa
@@ -566,9 +563,39 @@ Zero migration, zero dado corrigido. Legado auditado: DEV com duas linhas
 inconsistentes (PED-003984 CANCELADO, PED-026585 CONFIRMADO — nenhum com
 expedição, OP, reserva ou faturamento); PROD sem nenhum Pedido.
 
+## A base calculada manda; "por 1.000" é razão (2026-09-09)
+
+**COST-BASIS-UX-01 fechado. Regra durável: §78.** A auditoria do motor veio
+antes de qualquer mudança de tela e **absolveu a matemática**: rodando o motor
+real sobre uma estrutura de base 300 com material proporcional, mão de obra fixa
+por lote, equipamento com potência, energia derivada, premissa fixa por lote,
+premissa por unidade, premissa por 1.000 e caixa inteira, os quatro casos
+fecharam com a conta independente em Decimal — 200 un R$ 183,00 · 300 un
+R$ 201,00 · 500 un R$ 384,00 (2 lotes) · 1.000 un R$ 767,00 (4 lotes).
+`perUnit = total ÷ quantidade` e `per1000 = perUnit × 1.000` em todos.
+**Classificação A: defeito exclusivamente de UX.**
+
+A prova que a copy precisava: o equivalente por 1.000 da execução de 300 é
+R$ 670,00, e produzir 1.000 de verdade custa R$ 767,00. Os dois números estão
+certos e não são a mesma coisa — custo fixo por lote e caixa inteira não diluem.
+
+Na apresentação: a quantidade calculada acompanha o total ("Custo industrial
+total para 300 un", "CMV total para 300 un"), e o "por 1.000" virou
+**"Equivalente por 1.000 un"**, secundário, com a ressalva impressa de que não
+representa um novo cálculo de produção — texto único em `@veridi/shared`. A
+varredura por `per1000` achou uma **sexta** superfície além das cinco mapeadas:
+o relatório R-18 e o CSV, que exibiam "Custo total" e "Custo/1.000" lado a lado
+sem quantidade nenhuma na linha; ganharam a coluna da base, que já estava
+persistida no cálculo.
+
+Zero migration, zero snapshot recalculado, zero dado PROD. **Finding aberto:**
+"Base de produção", "Base de referência" e "Base de produção sugerida" nomeiam o
+mesmo conceito em três telas — registrado no BACKLOG, sem sweep.
+
 ## Próxima prioridade
 
-**P0 da fila viva** — COST-BASIS-UX-01. Não depende de gate de negócio.
+**P1 da fila viva** — INDUSTRIAL-RATE-VALIDITY-01, primeiro da fila desde que
+COST-BASIS-UX-01 fechou. Não depende de gate de negócio.
 
 **COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
 mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum

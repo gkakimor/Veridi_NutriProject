@@ -207,6 +207,10 @@ export const baseTopics = {
         text: "Quando existe precificação ativa para o produto, a tela mostra a faixa cuja quantidade bate EXATAMENTE com a simulada: preço, margem de contribuição, comissão e markup, já calculados pela precificação. Faixa não se interpola: 750 entre 500 e 1.000 não tem preço vigente.",
       },
       {
+        term: "Quantidade calculada × equivalente por 1.000",
+        text: "A quantidade calculada é a que se pediu, e o CMV total é dela. O “equivalente por 1.000 un” é só o custo por unidade multiplicado por 1.000, para comparar produtos e faixas — não é um novo cálculo de produção. Exemplo: um cálculo para 300 un que dá R$ 201,00 tem custo por unidade de R$ 0,67 e equivalente por 1.000 de R$ 670,00; calcular 1.000 de verdade sobre uma base de 300 são quatro lotes e custa R$ 767,00, porque custo fixo por lote e caixa inteira não diluem.",
+      },
+      {
         term: "Subtotal conhecido",
         text: "O que dá para somar quando algum custo falta. Aparece rotulado como subtotal, ao lado de “CMV indisponível” — nunca no lugar do total e nunca como R$ 0,00. Zero informado é valor real; desconhecido não é.",
       },

@@ -135,6 +135,8 @@ function toSummaryDTO(
     calculatedAt: row.calculatedAt.toISOString(),
     calculatedByName: row.calculatedByNameSnapshot,
     quality: row.quality,
+    referenceOutputQuantity: row.referenceOutputQuantity.toString(),
+    referenceOutputUomCode: row.referenceOutputUomCode,
     totalIndustrialCost: row.totalIndustrialCost ? row.totalIndustrialCost.toFixed(2) : null,
     knownSubtotal: row.knownSubtotal.toFixed(2),
     costPerUnit: row.costPerUnit ? resultadoTecnico(row.costPerUnit) : null,

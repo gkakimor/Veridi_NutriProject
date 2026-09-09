@@ -528,6 +528,12 @@ export interface IndustrialCostByProductRowDTO {
   costReferenceDate: string | null;
   calculatedAt: string | null;
   quality: IndustrialCostQuality | null;
+  /**
+   * Base do cálculo. Sem ela a coluna de custo total não diz de QUANTO ela é,
+   * e a coluna de equivalente por 1.000 ao lado passa a parecer a base.
+   */
+  referenceOutputQuantity: string | null;
+  referenceOutputUomCode: string | null;
   /** `null` em cálculo parcial — o subtotal conhecido vai separado. */
   totalIndustrialCost: string | null;
   knownSubtotal: string | null;

@@ -89,6 +89,7 @@ import type {
   QuotePricingAuditRowDTO,
 } from "@veridi/shared";
 import {
+  COST_PER_1000_LABEL,
   INDUSTRIAL_COST_QUALITY_LABELS,
   PRICE_MODE_LABELS,
   QUOTE_PRICE_SOURCE_LABELS,
@@ -501,6 +502,15 @@ const r18 = defineCsvExport({
       value: (row: IndustrialCostByProductRowDTO) =>
         row.quality ? INDUSTRIAL_COST_QUALITY_LABELS[row.quality] : "",
     },
+    // A base do cálculo vem ANTES do total: é ela que diz de quanto ele é.
+    {
+      header: "Quantidade calculada",
+      value: (row: IndustrialCostByProductRowDTO) => csvDecimal(row.referenceOutputQuantity),
+    },
+    {
+      header: "Unidade da base",
+      value: (row: IndustrialCostByProductRowDTO) => csvText(row.referenceOutputUomCode),
+    },
     // Parcial deixa o total vazio: subtotal conhecido vai na coluna própria.
     {
       header: "Custo industrial total",
@@ -515,7 +525,7 @@ const r18 = defineCsvExport({
       value: (row: IndustrialCostByProductRowDTO) => csvDecimal(row.costPerUnit),
     },
     {
-      header: "Custo/1.000",
+      header: COST_PER_1000_LABEL,
       value: (row: IndustrialCostByProductRowDTO) => csvMoney(row.costPer1000),
     },
   ],

@@ -87,6 +87,7 @@ export const estruturaCustos = {
     { term: "Cálculo padrão", text: "O resultado que a tela mostra agora, com a data de referência escolhida. Muda quando o custo muda; não é documento." },
     { term: "Fonte do custo por material", text: "De onde veio o preço de cada item: compra real, oferta de fornecedor, custo de referência ou referência manual forçada." },
     { term: "Cálculos salvos", text: "Os documentos imutáveis já gravados. É desta lista que a precificação nasce." },
+    { term: "Equivalente por 1.000 un", text: "Custo por unidade × 1.000, só para comparar. O cálculo é da base de referência, não de 1.000: produzir 1.000 sobre base 300 são quatro lotes, e custo fixo por lote e caixa inteira não diluem." },
   ],
   states: [
     { name: "Rascunho", allows: "Edita base, recursos e premissas." },

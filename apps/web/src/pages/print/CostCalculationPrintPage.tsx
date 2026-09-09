@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { IndustrialCostCalculationSnapshotDTO } from "@veridi/shared";
 import {
+  COST_PER_1000_EXPLANATION,
+  COST_PER_1000_LABEL,
   INDUSTRIAL_COST_BASIS_LABELS,
   INDUSTRIAL_COST_CATEGORY_LABELS,
   INDUSTRIAL_COST_QUALITY_LABELS,
@@ -50,6 +52,8 @@ export function CostCalculationPrintPage() {
   if (!calculation) return <div className="print-screen">Carregando…</div>;
 
   const partial = calculation.totalIndustrialCost === null;
+  /** A quantidade que este documento respondeu — repetida junto do total. */
+  const base = `${formatQuantity(calculation.referenceOutputQuantity)} ${calculation.referenceOutputUomCode}`;
 
   return (
     <PrintSheet
@@ -63,8 +67,8 @@ export function CostCalculationPrintPage() {
         { label: "Estrutura", value: calculation.industrialCostVersionLabel },
         { label: "Formulação", value: `V${calculation.formulationVersionNumber}` },
         {
-          label: "Base de referência",
-          value: `${formatQuantity(calculation.referenceOutputQuantity)} ${calculation.referenceOutputUomCode}`,
+          label: "Quantidade calculada",
+          value: base,
         },
         {
           label: "Data de referência de custo",
@@ -213,8 +217,17 @@ export function CostCalculationPrintPage() {
             <td>Overhead</td>
             <td className="is-number">{formatBRL(calculation.overheadSubtotalKnown)}</td>
           </tr>
+          {/* A base do cálculo já está no cabeçalho, mas quem lê um resumo
+              financeiro lê a linha do total — e é ali que a quantidade
+              precisa estar, ao lado do número que ela explica. */}
           <tr>
-            <td>{partial ? "Subtotal conhecido" : "Custo industrial total"}</td>
+            <td>Quantidade calculada</td>
+            <td className="is-number">{base}</td>
+          </tr>
+          <tr>
+            <td>
+              {partial ? "Subtotal conhecido" : "Custo industrial total"} para {base}
+            </td>
             <td className="is-number">
               {partial
                 ? formatBRL(calculation.knownSubtotal)
@@ -225,8 +238,12 @@ export function CostCalculationPrintPage() {
             <td>Custo por unidade</td>
             <td className="is-number">{formatUnitCost(calculation.costPerUnit)}</td>
           </tr>
+          {/* No papel não há ⓘ para abrir: a ressalva vai impressa junto. */}
           <tr>
-            <td>Custo por 1.000 unidades</td>
+            <td>
+              {COST_PER_1000_LABEL}
+              <div className="print-note">{COST_PER_1000_EXPLANATION}</div>
+            </td>
             <td className="is-number">
               {calculation.costPer1000 === null ? "—" : formatBRL(calculation.costPer1000)}
             </td>

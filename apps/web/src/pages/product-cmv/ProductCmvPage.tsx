@@ -11,6 +11,8 @@ import type {
 } from "@veridi/shared";
 import {
   CMV_GROUP_LABELS,
+  COST_PER_1000_EXPLANATION,
+  COST_PER_1000_LABEL,
   COST_SOURCE_AUTO_SELECTION_TEXT,
   INDUSTRIAL_COST_BASIS_LABELS,
   INDUSTRIAL_COST_QUALITY_HINTS,
@@ -442,7 +444,12 @@ export function ProductCmvPage() {
                 </div>
 
                 <div className="cmv-card cmv-card--strong">
-                  <div className="cmv-card__label">CMV total</div>
+                  {/* O total precisa dizer DE QUANTO ele é. Sem a quantidade
+                      no próprio rótulo, o cartão de equivalência ao lado
+                      passava a ser lido como a base econômica. */}
+                  <div className="cmv-card__label">
+                    CMV total para {formatQuantity(simulation.quantity)} {simulation.uomCode}
+                  </div>
                   {simulation.totalCost ? (
                     <div className="cmv-card__value">{formatBRL(simulation.totalCost)}</div>
                   ) : (
@@ -493,20 +500,37 @@ export function ProductCmvPage() {
                   )}
                 </div>
 
-                <div className="cmv-card">
-                  <div className="cmv-card__label">CMV por 1.000</div>
+                {/* Comparativo entre produtos e faixas — não é o custo de
+                    produzir 1.000, e o cartão precisa dizer isso sem obrigar
+                    ninguém a abrir a explicação. */}
+                <div className="cmv-card cmv-card--secondary">
+                  {/* A ressalva viaja na nota do CalcHint abaixo, não num ⓘ
+                      próprio: dois ícones com o mesmo nome acessível no mesmo
+                      cartão são dois destinos idênticos para quem navega por
+                      teclado ou leitor de tela. */}
+                  <div className="cmv-card__label">{COST_PER_1000_LABEL}</div>
                   <div className="cmv-card__value">
                     {simulation.costPer1000 ? formatBRL(simulation.costPer1000) : "—"}
                   </div>
                   {simulation.costPerUnit && simulation.costPer1000 && (
                     <CalcHint
-                      label="CMV por 1.000"
+                      label={COST_PER_1000_LABEL}
                       operandos={[
-                        { valor: formatBRL(simulation.costPerUnit), papel: "CMV por unidade" },
-                        { valor: "1.000", papel: "unidades" },
+                        {
+                          valor: formatBRL(simulation.costPerUnit),
+                          papel: "CMV por unidade",
+                          numero: Number(simulation.costPerUnit),
+                        },
+                        {
+                          valor: "1.000",
+                          papel: "unidades",
+                          operador: "×",
+                          numero: 1000,
+                        },
                       ]}
                       resultado={formatBRL(simulation.costPer1000)}
                       esperado={Number(simulation.costPerUnit) * 1000}
+                      nota={COST_PER_1000_EXPLANATION}
                     />
                   )}
                 </div>
