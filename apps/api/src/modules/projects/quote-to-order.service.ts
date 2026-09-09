@@ -5,6 +5,7 @@ import { CUSTOMER_ORDER_CODE_PREFIX, calcularTotaisOrcamento } from "@veridi/sha
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
+import { assertProductBelongsToCustomer } from "../../lib/product-customer-ownership.js";
 import { getCustomerOrderById } from "../customer-orders/customer-orders.service.js";
 import {
   ProjectNotApprovedForOrderError,
@@ -39,7 +40,15 @@ import { buildPaymentSchedule } from "./quote-payment.js";
 const CODE_SEQUENCE = "customer_order_code_seq";
 
 const quoteForOrderInclude = {
-  project: { select: { id: true, code: true, status: true, customerId: true } },
+  project: {
+    select: {
+      id: true,
+      code: true,
+      status: true,
+      customerId: true,
+      customer: { select: { id: true, legalName: true } },
+    },
+  },
   sourcedCustomerOrder: { select: { id: true } },
   lines: {
     orderBy: { sortOrder: "asc" as const },
@@ -128,6 +137,14 @@ export async function createOrderFromAcceptedQuote(
 
   for (const line of linhas) {
     assertProductOperational(line.product, line.product.code);
+    /*
+     * O Pedido nasce com o cliente do PROJETO. O vínculo Produto↔Projeto já
+     * recusa produto de outro cliente, mas a proposta pode ser antiga e o
+     * dono do Produto pode ter mudado depois: gerar o Pedido assim mesmo
+     * criaria o documento inconsistente que ninguém mais consegue confirmar.
+     * A proveniência comercial não muda — a geração simplesmente falha.
+     */
+    await assertProductBelongsToCustomer(prisma, line.product, quote.project.customer);
     const unidadeDoProduto = line.product.finishedProductItem?.unitCode;
     if (!unidadeDoProduto) {
       throw new QuoteOrderUomMismatchError(line.product.code, line.uomCode ?? "—", "—");

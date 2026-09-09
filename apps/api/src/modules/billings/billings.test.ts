@@ -122,24 +122,31 @@ async function stockFinishedLot(itemId: string, quantity: string) {
   return lot;
 }
 
-async function createProduct(app: App, finishedItemId: string) {
+async function createProduct(app: App, finishedItemId: string, customerId?: string) {
   const response = await app.inject({
     method: "POST",
     url: "/products",
-    payload: { customerId: await fixtureCustomerId(), name: `Produto Faturamento Teste ${marker()}`, finishedProductItemId: finishedItemId },
+    payload: { customerId: customerId ?? (await fixtureCustomerId()), name: `Produto Faturamento Teste ${marker()}`, finishedProductItemId: finishedItemId },
   });
   const product = response.json();
   fixtureProductIds.push(product.id);
   return product;
 }
 
-/** Pedido CONFIRMED + Plano aplicado reservando tudo -> IN_FULFILLMENT. */
+/**
+ * Pedido CONFIRMED + Plano aplicado reservando tudo -> IN_FULFILLMENT.
+ *
+ * O Pedido nasce do cliente DONO do produto: produto pertence a um cliente, e
+ * um Pedido de outro cliente é recusado com `customer_mismatch`. Faturamento
+ * não é o assunto deste arquivo — o pano de fundo só precisa ser íntegro.
+ */
 async function createOrderInFulfillment(app: App, productId: string, orderedQuantity: string, reserve: string) {
-  const customer = await createCustomer();
+  const produto = await getPrisma().product.findUniqueOrThrow({ where: { id: productId } });
+  const customerId = produto.customerId ?? (await createCustomer()).id;
   const created = await app.inject({
     method: "POST",
     url: "/customer-orders",
-    payload: { customerId: customer.id, lines: [{ productId, orderedQuantity }] },
+    payload: { customerId, lines: [{ productId, orderedQuantity }] },
   });
   const orderId = created.json().id;
   fixtureCustomerOrderIds.push(orderId);
@@ -236,16 +243,25 @@ describe("Faturamento — criação", () => {
     const app = buildTestApp();
     await app.ready();
 
-    const finishedItem = await createFinishedItem();
-    await stockFinishedLot(finishedItem.id, "400");
-    const product = await createProduct(app, finishedItem.id);
+    /*
+     * Dois clientes distintos, um faturamento cada — e um produto para cada
+     * um: produto pertence a um cliente, então o mesmo produto não pode ser
+     * pedido pelos dois.
+     */
+    const clienteA = await createCustomer();
+    const clienteB = await createCustomer();
+    const itemA = await createFinishedItem();
+    await stockFinishedLot(itemA.id, "400");
+    const produtoA = await createProduct(app, itemA.id, clienteA.id);
+    const itemB = await createFinishedItem();
+    await stockFinishedLot(itemB.id, "400");
+    const produtoB = await createProduct(app, itemB.id, clienteB.id);
 
-    // Dois clientes distintos, um faturamento cada.
-    const orderA = await createOrderInFulfillment(app, product.id, "100", "100");
+    const orderA = await createOrderInFulfillment(app, produtoA.id, "100", "100");
     const shipmentA = await shipQuantity(app, orderA.id);
     const billingA = (await createBilling(app, shipmentA.id)).json();
 
-    const orderB = await createOrderInFulfillment(app, product.id, "100", "100");
+    const orderB = await createOrderInFulfillment(app, produtoB.id, "100", "100");
     const shipmentB = await shipQuantity(app, orderB.id);
     const billingB = (await createBilling(app, shipmentB.id)).json();
 

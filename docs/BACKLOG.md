@@ -36,8 +36,7 @@ faz primeiro e estava espalhada por cinco lugares.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P0-1** | ORDER-CUSTOMER-PRODUCT-01 | A · P0 | Pedido CONFIRMADO pode carregar produto de outro cliente. Não é "acusa tarde": a recusa só existe na Ordem de Produção |
-| **P0-2** | COST-BASIS-UX-01 | A · P0 | A usuária não soube dizer se o sistema calculou 300 ou 1.000. Enquanto a dúvida existe, nenhum número de custo sustenta decisão |
+| **P0-1** | COST-BASIS-UX-01 | A · P0 | A usuária não soube dizer se o sistema calculou 300 ou 1.000. Enquanto a dúvida existe, nenhum número de custo sustenta decisão |
 | **P1-1** | INDUSTRIAL-RATE-VALIDITY-01 | A · P1 | Mesma família de vigência que COST-SOURCE-01 acabou de fechar, no outro lado do custo |
 | **P1-2** | CUSTOMER-CEP-02 | A · P1 | Decisão de PO já fechada, e tem corrida real de rede |
 | **P1-3** | PROJECT-CUSTOMER-CONTACT-01 | A · P1 | Leitura, sem duplicar dado |
@@ -64,9 +63,9 @@ a do auditor.
 **Zero BLOCKER.** Da auditoria de produto sobram três LOW e a fila de UX; o que
 reabriu P0 e P1 veio de outro lugar — o **walkthrough real da Veridi de
 2026-09-09**, reconciliado aqui no mesmo dia. Dois P0 (ORDER-CUSTOMER-PRODUCT-01
-e COST-BASIS-UX-01) e cinco P1 entraram por observação de uso, não por
-varredura de código: é a diferença entre o que o sistema faz errado e o que ele
-faz de um jeito que ninguém entende. A mesma leva trouxe uma decisão de produto
+— **fechado no mesmo 2026-09-09** — e COST-BASIS-UX-01) e cinco P1 entraram por
+observação de uso, não por varredura de código: é a diferença entre o que o
+sistema faz errado e o que ele faz de um jeito que ninguém entende. A mesma leva trouxe uma decisão de produto
 nova — CUSTOMER-COMMERCIAL-STATUS-01 — e um discovery de contrato.
 
 F-02-2 e F-02-1 fechados no FIX-02, F-08-2 no FIX-03, F-06-1 + F-06-2 no FIX-04,
@@ -175,10 +174,10 @@ zero dado reescrito — os mesmos lotes passaram a ser lidos corretamente.
 
 ### P0 — antes de qualquer outra capability
 
-#### ORDER-CUSTOMER-PRODUCT-01 — Pedido aceita produto de outro cliente até a Produção
+#### ORDER-CUSTOMER-PRODUCT-01 — Pedido aceita produto de outro cliente até a Produção — **RESOLVIDO em 2026-09-09**
 
 Vindo do walkthrough real (2026-09-09). Auditado no código em 2026-09-09, e o
-sintoma relatado é **mais grave** do que "acusa mismatch tarde":
+sintoma relatado era **mais grave** do que "acusa mismatch tarde":
 
 - a tela do Pedido chama `listProducts({ active: true, lifecycle: "APPROVED",
   pageSize: 50 })` — `CustomerOrderPage.tsx:399,430` — **sem `customerId`**,
@@ -202,6 +201,22 @@ Regra desejada pelo PO: **Cliente obrigatório antes de Produto**, produto
 filtrado no SERVIDOR pelo cliente do Pedido, e o backend recusando a combinação
 no seu próprio limite — filtro de tela não é regra. A recusa a jusante continua
 existindo; ela deixa de ser a primeira.
+
+**Resolvido em 2026-09-09.** A comparação virou uma só —
+`lib/product-customer-ownership.ts`, que também passou a hospedar o
+`CustomerMismatchError` que `production-orders` reexporta — e é chamada em cada
+porta de entrada de linha: criar Pedido, salvar linhas do rascunho, trocar o
+cliente do rascunho, confirmar o Pedido e gerar Pedido a partir de proposta
+aceita. Sempre `400 customer_mismatch`, nunca 500. `resolveOrderCustomerId`
+continua onde estava, agora como defesa em profundidade. Na tela, o seletor de
+Produto só abre depois do Cliente, o catálogo é consultado no servidor com
+`customerId` (busca e paginação inclusive), trocar de cliente com produto no
+Pedido é bloqueado com o motivo — nunca apagando linha — e a resposta atrasada
+do cliente anterior não aparece no seletor do novo. Pedido herdado inconsistente
+continua abrindo, com aviso, e não confirma. Zero migration, zero dado
+corrigido. Legado auditado: DEV com 2 linhas inconsistentes (PED-003984
+CANCELADO e PED-026585 CONFIRMADO, ambos sem expedição, OP, reserva ou
+faturamento); PROD sem nenhum Pedido.
 
 **F-02-2 foi fechado no FIX-02 (2026-09-08)**: a estimativa passou a
 chamar `computeFormulationRequirements`, o mesmo motor da OP e do cálculo

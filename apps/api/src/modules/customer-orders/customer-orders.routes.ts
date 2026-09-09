@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
+import { CustomerMismatchError } from "../../lib/product-customer-ownership.js";
 import type { ZodError } from "zod";
 import {
   cancelCustomerOrder,
@@ -46,6 +47,14 @@ function mapDomainError(
   }
   if (error instanceof CustomerNotFoundError) {
     return { status: 400, body: { error: "customer_not_found", message: error.message } };
+  }
+  /*
+   * Produto de um cliente dentro do Pedido de outro. Recusa de NEGOCIO, com o
+   * mesmo `customer_mismatch` que Ordem de Producao, Plano de Atendimento e
+   * Projetos ja devolviam — uma semantica, um codigo, nunca 500.
+   */
+  if (error instanceof CustomerMismatchError) {
+    return { status: 400, body: { error: "customer_mismatch", message: error.message } };
   }
   if (error instanceof InactiveCustomerError) {
     return { status: 400, body: { error: "inactive_customer", message: error.message } };

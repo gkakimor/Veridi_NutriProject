@@ -96,6 +96,15 @@ export interface CustomerOrderLineDTO {
    * de orçamento — nesse caso não existe preço acordado a preservar.
    */
   agreedPrice: CustomerOrderLineAgreedPriceDTO | null;
+  /**
+   * O produto desta linha pertence a OUTRO cliente.
+   *
+   * Sempre `false` em linha nova: incluir produto de outro cliente é recusado
+   * com `customer_mismatch`. Existe pelo legado — linha gravada antes da
+   * regra continua abrindo, com aviso na tela, e a confirmação é recusada.
+   * Produto sem cliente não conta como inconsistência.
+   */
+  productCustomerMismatch: boolean;
 }
 
 export interface CustomerOrderReservationLineDTO {

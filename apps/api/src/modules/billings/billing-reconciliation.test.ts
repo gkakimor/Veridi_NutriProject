@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
-import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -138,18 +137,6 @@ async function pedidoAcordado(
   },
 ) {
   const item = await itemAcabadoComEstoque(acordo.quantidade);
-  const product = (
-    await app.inject({
-      method: "POST",
-      url: "/products",
-      payload: {
-        customerId: await fixtureCustomerId(),
-        name: `Produto Reconciliação ${marca()}`,
-        finishedProductItemId: item.id,
-      },
-    })
-  ).json();
-  fixtureProductIds.push(product.id);
 
   const prisma = getPrisma();
   const m = marca();
@@ -157,6 +144,21 @@ async function pedidoAcordado(
     data: { code: `CLI-REC-${m}`, legalName: `Cliente Reconciliação ${m}` },
   });
   fixtureCustomerIds.push(customer.id);
+
+  // O produto é DESTE cliente: produto pertence a um cliente, e o Pedido de
+  // outro é recusado com `customer_mismatch`.
+  const product = (
+    await app.inject({
+      method: "POST",
+      url: "/products",
+      payload: {
+        customerId: customer.id,
+        name: `Produto Reconciliação ${marca()}`,
+        finishedProductItemId: item.id,
+      },
+    })
+  ).json();
+  fixtureProductIds.push(product.id);
 
   const criado = (
     await app.inject({

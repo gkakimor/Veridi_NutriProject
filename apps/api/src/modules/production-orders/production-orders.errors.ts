@@ -74,12 +74,9 @@ export class ReleaseValidationError extends Error {
  * Inconsistência de cliente: o Produto pertence a um cliente e o Pedido a
  * outro. Nunca se escolhe um "vencedor" silencioso — sem cliente
  * inequívoco não se pode usar material de propriedade do cliente.
+ *
+ * A classe passou a morar em `lib/product-customer-ownership.ts` quando o
+ * Pedido do Cliente ganhou a mesma recusa: a semântica é uma só, então o
+ * tipo também. Reexportada daqui para quem já a importava deste módulo.
  */
-export class CustomerMismatchError extends Error {
-  constructor(productCustomer: string, orderCustomer: string) {
-    super(
-      `Cliente inconsistente: o produto pertence a ${productCustomer} e o pedido a ${orderCustomer}.`,
-    );
-    this.name = "CustomerMismatchError";
-  }
-}
+export { CustomerMismatchError } from "../../lib/product-customer-ownership.js";

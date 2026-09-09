@@ -182,7 +182,11 @@ describe("Cadastros v2 — Cliente com endereço", () => {
     const finishedItem = (
       await createItem(app, { type: "FINISHED_PRODUCT", name: `PA Snapshot ${marker()}` })
     ).json();
-    const product = (await createProduct(app, { finishedProductItemId: finishedItem.id })).json();
+    // Produto DO cliente do pedido: propriedade cruzada é recusada com
+    // `customer_mismatch` desde ORDER-CUSTOMER-PRODUCT-01.
+    const product = (
+      await createProduct(app, { customerId: customer.id, finishedProductItemId: finishedItem.id })
+    ).json();
 
     const order = (
       await app.inject({

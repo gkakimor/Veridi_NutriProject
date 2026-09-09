@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
+import { CustomerMismatchError } from "../../lib/product-customer-ownership.js";
 import { createOrderFromAcceptedQuote } from "./quote-to-order.service.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import {
@@ -130,6 +131,13 @@ function mapDomainError(
     return { status: 400, body: { error: "product_not_in_project", message: error.message } };
   }
   if (error instanceof ProjectProductCustomerMismatchError) {
+    return { status: 400, body: { error: "customer_mismatch", message: error.message } };
+  }
+  /*
+   * Mesma semântica, mesmo código: a geração do Pedido recusa produto cujo
+   * dono deixou de ser o cliente do projeto (`quote-to-order.service.ts`).
+   */
+  if (error instanceof CustomerMismatchError) {
     return { status: 400, body: { error: "customer_mismatch", message: error.message } };
   }
   if (error instanceof QuoteNotAcceptedForOrderError) {

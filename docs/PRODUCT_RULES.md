@@ -4733,3 +4733,50 @@ vence qualquer oferta, e confundir as duas coisas é a leitura errada mais
 provável da tela. Por isso o detalhe da relação mostra também a fonte que o
 motor usaria HOJE para aquele ITEM, resolvida uma vez pelo seletor canônico —
 não uma por linha da grade.
+## §77 — O produto de um documento comercial é do cliente daquele documento
+
+Produto pertence a um Cliente. Um Pedido do Cliente A com produto do Cliente B
+é uma combinação impossível — e era aceita: a tela oferecia o catálogo inteiro,
+o service não comparava nada, e o Pedido chegava a **CONFIRMADO**. A primeira
+recusa vinha muito depois, ao gerar a Ordem de Produção, com o compromisso
+comercial já assumido.
+
+**A comparação é uma só.** `Product.customerId × CustomerOrder.customerId` vive
+em `lib/product-customer-ownership.ts`, junto do `CustomerMismatchError` que já
+existia — mesma semântica, mesmo tipo, mesmo `400 customer_mismatch` em toda
+rota que o alcança (§ do erro de domínio: recusa de negócio nunca é 5xx).
+
+**Toda porta chama a mesma comparação:** criar Pedido, salvar as linhas do
+rascunho, trocar o cliente do rascunho, **confirmar** o Pedido e gerar Pedido a
+partir de proposta aceita. Confirmar é o momento em que o documento vira
+compromisso — dali para a frente reserva, Ordem de Produção e expedição assumem
+que ele é íntegro —, então a validação da inclusão não dispensa a do CONFIRM:
+linha legada, importação antiga ou caminho futuro que escreva por fora esbarram
+ali.
+
+**A recusa a jusante continua.** `resolveOrderCustomerId` não foi removido:
+deixou de ser a primeira linha e passou a ser defesa em profundidade.
+
+**Produto sem cliente não é inconsistência.** A base traz produtos importados do
+legado sem dono resolvido, e tanto a Ordem de Produção quanto o vínculo
+Produto↔Projeto sempre os aceitaram. Recusá-los seria mudar o modelo de Product.
+
+### Cliente primeiro, produto depois
+
+Na tela, o seletor de Produto só abre depois do Cliente, e o catálogo é
+consultado **no servidor** com `customerId` — busca e paginação inclusive.
+Filtrar no navegador não serve: a página carregada é um teto, e o produto
+elegível além dele sumiria sem aviso. Filtro de tela também não é regra: o
+backend recusa por conta própria.
+
+**Trocar de cliente com produto no Pedido é bloqueado**, com o motivo. As duas
+saídas automáticas são piores: apagar as linhas descarta trabalho em silêncio, e
+mantê-las cria a mistura de propriedade. Sem linhas, a troca é livre e o catálogo
+acompanha.
+
+### Pedido herdado inconsistente
+
+Não se corrige por backfill. Continua abrindo, mostra o aviso com as linhas
+inconsistentes (`CustomerOrderLineDTO.productCustomerMismatch`) e **não
+confirma**. Trocar o cliente, trocar o produto ou apagar a linha por SQL
+reescreveria história comercial que ninguém decidiu.

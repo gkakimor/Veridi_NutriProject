@@ -399,16 +399,17 @@ describe("Exportação CSV — relatórios", () => {
 
     const finishedItem = await createItem("FINISHED_PRODUCT");
     await stockLot(finishedItem.id, "100");
+    // O produto é do MESMO cliente do pedido: produto pertence a um cliente, e
+    // um pedido de outro cliente é recusado com `customer_mismatch`.
+    const customer = await createCustomer();
     const product = (
       await app.inject({
         method: "POST",
         url: "/products",
-        payload: { customerId: await fixtureCustomerId(), name: `Produto Exportação ${marker()}`, finishedProductItemId: finishedItem.id },
+        payload: { customerId: customer.id, name: `Produto Exportação ${marker()}`, finishedProductItemId: finishedItem.id },
       })
     ).json();
     fixtureProductIds.push(product.id);
-
-    const customer = await createCustomer();
     const order = (
       await app.inject({
         method: "POST",
