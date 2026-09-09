@@ -94,18 +94,44 @@ Do not hide critical history only in JSON blobs.
 `prisma migrate deploy` applies pending migrations in folder-name order. On
 an existing database that order is invisible — only what is missing gets
 applied, in the order the folders arrived. On an empty database it is the
-real order. Rules:
+real order.
+
+Creating, applying and proving are three different commands, and only one of
+them can write a migration:
+
+| | command | what it does |
+|---|---|---|
+| **create** | `pnpm migration:create <name_in_snake_case>` | writes the migration, does **not** apply it |
+| **apply** | `pnpm db:migrate` | applies what exists locally, can **never** create |
+| **prove** | `pnpm validate:migrations:fresh` | rebuilds an empty database from the chain and compares it to `schema.prisma` |
+
+The normal cycle is: edit `schema.prisma` → `pnpm migration:create <name>` →
+review the generated `migration.sql` line by line → `pnpm db:migrate` →
+`pnpm validate:migrations:fresh`.
+
+Rules:
 
 - **create migrations only with `pnpm migration:create <name_in_snake_case>`.**
-  Never call `prisma migrate dev --name ...` directly: it stamps the folder
-  with the real clock, and the chain's tip is already *ahead* of it, so the new
-  folder sorts before migrations it depends on. The command runs
+  Never call `prisma migrate dev` directly: it stamps the folder with the real
+  clock, and the chain's tip is already *ahead* of it, so the new folder sorts
+  before migrations it depends on. The command runs
   `prisma migrate dev --create-only` (writes the SQL, does **not** apply it),
   then renumbers the folder to the smallest free identifier after the tip and
   proves the result is the tip. It refuses anything but a local database
-  (`scripts/local-db-guard.mjs`) and never applies, deploys or resets. Applying
-  stays a separate, deliberate `pnpm db:migrate`. Algorithm and its tests:
-  `scripts/migration-prefix.mjs`, `scripts/migration-prefix.test.ts`;
+  (`scripts/local-db-guard.mjs`) and never applies, deploys or resets.
+  Algorithm and its tests: `scripts/migration-prefix.mjs`,
+  `scripts/migration-prefix.test.ts`;
+- **`pnpm db:migrate` applies and nothing else** (MIG-ORDER-01b, 2026-09-09).
+  It used to be `prisma migrate dev`, which applies *and* creates — one
+  `--name`, or a pending edit in `schema.prisma`, and a folder was born with
+  the real clock on it. The barrier is now technical, not documental:
+  `scripts/apply-migrations.mjs` rejects every argument (with `--name` named
+  explicitly, pointing at `migration:create`), goes through the local-database
+  guard, and runs `prisma migrate deploy` — a subcommand that has no `--name`
+  and no creation path at all. When `schema.prisma` carries a change with no
+  migration, it says so and stops; it never invents the migration. Production
+  is untouched: deploying there stays `pnpm deploy:prod`. Tests:
+  `scripts/apply-migrations.test.ts`;
 - a migration may only reference tables, types and columns created by a
   migration with a smaller-or-equal name. `scripts/migration-order.test.ts`
   checks this statically as part of `pnpm test`;

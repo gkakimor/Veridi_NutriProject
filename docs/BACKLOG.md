@@ -57,7 +57,17 @@ mão. A convenção existia em `TECH_BASELINE.md` desde 2026-09-05 e dependia de
 alguém lembrar dela. Agora existe um caminho oficial — `pnpm migration:create` —
 que escreve a migration sem aplicar, renumera para o menor prefixo livre depois
 da ponta e prova o resultado. Zero migration, zero schema, zero renomeação de
-histórico. **Próximo item de produto: BILL-DISCOUNT-01** — o desconto global do
+histórico.
+
+**MIG-ORDER-01b fechado em 2026-09-09.** O `01` deu o caminho de criação, mas
+`pnpm db:migrate` continuava sendo `prisma migrate dev`, que aplica **e** cria:
+um `--name`, ou uma edição pendente em `schema.prisma`, e nascia uma pasta com
+o carimbo do relógio. A barreira era documental. Agora é técnica —
+`pnpm db:migrate` é `prisma migrate deploy` embrulhado
+(`scripts/apply-migrations.mjs`), recusa qualquer argumento antes de o Prisma
+vê-lo, e `migrate deploy` sequer conhece `--name`. Schema alterado sem
+migration passou a ser **avisado**, nunca criado. Zero migration, zero schema.
+**Próximo item de produto: BILL-DISCOUNT-01** — o desconto global do
 Pedido (`agreedDiscountPercent`/`agreedTotalAmount`) nunca chega ao Faturamento:
 `calcularTotaisFaturamento` é `Σ(quantidade × preço)` e nenhum Billing o aplica.
 Um Pedido de 30.000 com 10% acordado fatura 30.000, não 27.000 — hoje, já com
@@ -281,6 +291,15 @@ reduzir contexto histórico vivo. Consolidar para ≈200–400 linhas com só da
 capability, release/commit importante, decisão durável e breaking change
 relevante. O Git guarda o detalhe. Não misturar com capability de negócio.
 
+### 12. `validate-migrations-fresh.mjs` ainda chama o Prisma por shell — LOW
+
+`execFileSync("pnpm", […], { shell: true })` imprime o `DeprecationWarning
+DEP0190` do Node a cada execução, num comando rodado antes de todo merge com
+migration. Sem impacto funcional e sem risco real (os argumentos são
+constantes). `scripts/prisma-bin.mjs`, criado no MIG-ORDER-01b, já resolve o
+binário do Prisma sem shell — a correção é trocar a chamada por ele. Ficou
+fora daquela capability de propósito, para não aumentar escopo.
+
 ---
 
 ## E. Watchlist — observado, sem ação conhecida
@@ -300,7 +319,7 @@ apareceu em nenhuma das 40 execuções completas dessa medição.
 | **W1** | `pnpm test` — `ERR_IPC_CHANNEL_CLOSED` ocasional no encerramento dos workers do vitest | Nenhuma asserção falha, sem reprodução recente. **Decisão de PO:** não investigar preventivamente. Se reaparecer, capturar versão do Node, worker/processo, ordem de shutdown, árvore de processos, frequência e stack completa **antes** de mexer no runner |
 | **W3** | 24 das 56 linhas de `_prisma_migrations` em produção com checksum diferente do arquivo | Line ending, e só. `.gitattributes` fixa LF no SQL das migrations para novos clones. Nada foi reescrito no ledger |
 | **W4** | Linha órfã `20260904093000_template_component_quantity_mode` em produção | Tolerada por decisão de 2026-09-04 ([`TECH_BASELINE.md`](TECH_BASELINE.md)). Reescrever `_prisma_migrations` à mão é pior que a linha |
-| **W5** | Dois diretórios de migration com o mesmo timestamp `20260904090000` (`_component_quantity_mode` e `_gmp_production_execution`) | A ordenação é pelo nome completo do diretório, então continua determinística e igual em todo ambiente. Sem impacto observado; renomear diretório aplicado é que quebraria o ledger |
+| **W5** | Dois diretórios de migration com o mesmo timestamp `20260904090000` (`_component_quantity_mode` e `_gmp_production_execution`) | A ordenação é pelo nome completo do diretório, então continua determinística e igual em todo ambiente. Sem impacto observado; renomear diretório aplicado é que quebraria o ledger. Um empate **novo** não nasce mais: `proximoPrefixoLivre` pula prefixo ocupado, e `migration-prefix.test.ts` reprova qualquer duplicata além desta |
 | **W7** | Quantidade ainda passa por `Number` em pontos de **exibição** das telas de OP e Pedido: teste de sinal (`> 0`, `<= 0`) em `badge`/`disabled`, a diferença `onHand - reserved - available` renderizada (`ProductionOrderPage.tsx:1157`) e o total somado na tela (`CustomerOrderPage.tsx:2178`). O Pedido também imprime `reservedRemaining` e `stillToReserve` crus, sem `formatQuantity` (`2014`, `2015`, `2350`) | Classificado no FIX-01b e deliberadamente **não corrigido**: nenhum alcança payload nem validação. Teste de sinal sobre valor ≥ 10⁻¹² é seguro em `double`; o que é defeito de verdade — soma e diferença exibidas em ponto flutuante, e valor cru na tela — é da mesma família de F-07-1 e pertence ao PREC-UI, não a um remendo pontual |
 | **W6** | Decisão de domínio pendente: trocar `RESTRICT` por `SET NULL` em alguma das 27 FKs opcionais | Não acontece mais por omissão no modelo (#14). Cada troca é decisão de domínio própria — bloquear a exclusão, desassociar ou arquivar — e exige a migration que a faça no banco |
 
