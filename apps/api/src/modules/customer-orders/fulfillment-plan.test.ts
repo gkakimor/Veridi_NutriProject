@@ -724,18 +724,28 @@ describe("Plano de Atendimento — cancelar o Pedido depois", () => {
 
     const rawMaterial = await createItem("RAW_MATERIAL");
     await receiveRawStock(rawMaterial.id, "1000");
-    const { product } = await createProductWithFormulation(
-      app,
-      [{ itemId: rawMaterial.id, quantity: "1", unitCode: "kg" }],
-      { customerId: outroCliente.id },
-    );
+    const { product } = await createProductWithFormulation(app, [
+      { itemId: rawMaterial.id, quantity: "1", unitCode: "kg" },
+    ]);
 
-    // Produto de um cliente num Pedido de outro: `resolveOrderCustomerId`
-    // recusa dentro do `createDraftProductionOrderInTx`, e a rota precisa
-    // traduzir isso — antes escapava sem mapeamento e virava 500.
+    /*
+     * DEFESA EM PROFUNDIDADE, e é isto que este teste protege.
+     *
+     * O Pedido nasce íntegro e é confirmado — hoje nem chegaria a existir
+     * inconsistente, porque `customer-orders.service` recusa produto de outro
+     * cliente na inclusão e na confirmação. Aqui o dono do PRODUTO muda
+     * depois, direto no banco: é como o dado legado e o bug anterior
+     * deixaram a base. `resolveOrderCustomerId` continua recusando dentro do
+     * `createDraftProductionOrderInTx`, e a rota traduz — antes escapava sem
+     * mapeamento e virava 500.
+     */
     const order = await createConfirmedOrder(app, await fixtureCustomerId(), [
       { productId: product.id, orderedQuantity: "100" },
     ]);
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { customerId: outroCliente.id },
+    });
     const aplicado = await app.inject({
       method: "POST",
       url: `/customer-orders/${order.id}/apply-fulfillment-plan`,

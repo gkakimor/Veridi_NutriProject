@@ -135,11 +135,11 @@ async function createItem(type: "RAW_MATERIAL" | "FINISHED_PRODUCT") {
   return item;
 }
 
-async function createProduct(app: App, finishedProductItemId: string) {
+async function createProduct(app: App, finishedProductItemId: string, customerId?: string) {
   const response = await app.inject({
     method: "POST",
     url: "/products",
-    payload: { customerId: await fixtureCustomerId(), name: `Produto Rastreabilidade Teste ${marker()}`, finishedProductItemId },
+    payload: { customerId: customerId ?? (await fixtureCustomerId()), name: `Produto Rastreabilidade Teste ${marker()}`, finishedProductItemId },
   });
   fixtureProductIds.push(response.json().id);
   return response.json();
@@ -177,8 +177,9 @@ async function createReleasedOrder(
   rawMaterialId: string,
   rawQuantityPerBasis: string,
   plannedQuantity: string,
+  productCustomerId?: string,
 ) {
-  const product = await createProduct(app, finishedItemId);
+  const product = await createProduct(app, finishedItemId, productCustomerId);
   const created = await app.inject({
     method: "POST",
     url: `/products/${product.id}/formulation-versions`,
@@ -469,7 +470,25 @@ describe("Rastreabilidade bidirecional (backward/forward)", () => {
     const rawMaterial = await createItem("RAW_MATERIAL");
     const rawLot = await receiveStock(rawMaterial.id, "50", "FORN-LOTE-FUNG");
     const finishedItem = await createItem("FINISHED_PRODUCT");
-    const ordem = await createReleasedOrder(app, finishedItem.id, rawMaterial.id, "20", "1");
+
+    /*
+     * O produto é do cliente do Pedido B — o pedido que passa pelo service.
+     * Produto pertence a um cliente, e o Pedido de outro é recusado com
+     * `customer_mismatch`. O que este teste prova é o LOTE atravessando dois
+     * PEDIDOS, não dois clientes.
+     */
+    const clienteB = await prisma.customer.create({
+      data: { code: `CLI-TB-${marcador}`, legalName: `Cliente Destino ${marcador}` },
+    });
+    fixtureCustomerIds.push(clienteB.id);
+    const ordem = await createReleasedOrder(
+      app,
+      finishedItem.id,
+      rawMaterial.id,
+      "20",
+      "1",
+      clienteB.id,
+    );
 
     // ── Pedido A: a ORIGEM. A OP nasce dele. ──────────────────────────────
     const clienteA = await prisma.customer.create({
@@ -510,11 +529,6 @@ describe("Rastreabilidade bidirecional (backward/forward)", () => {
     const loteAcabadoId = saida.json().outputs[0].lotId;
 
     // ── Pedido B: o DESTINO. Reserva o mesmo lote e expede. ───────────────
-    const clienteB = await prisma.customer.create({
-      data: { code: `CLI-TB-${marcador}`, legalName: `Cliente Destino ${marcador}` },
-    });
-    fixtureCustomerIds.push(clienteB.id);
-
     const pedidoB = (
       await app.inject({
         method: "POST",

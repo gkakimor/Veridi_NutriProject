@@ -395,11 +395,55 @@ export function CustomerOrderPage() {
     listCustomers({ active: true, pageSize: 50 })
       .then((result) => setActiveCustomers(result.customers))
       .catch(() => setActiveCustomers([]));
-    // Produto técnico de projeto não é opção operacional.
-    listProducts({ active: true, lifecycle: "APPROVED", pageSize: 50 })
-      .then((result) => setActiveProducts(result.products))
-      .catch(() => setActiveProducts([]));
   }, []);
+
+  /**
+   * Qual cliente as respostas de produto em voo estão servindo.
+   *
+   * Trocar de cliente durante a busca é rápido, e a resposta do anterior chega
+   * depois. Sem esta comparação o catálogo de A apareceria no seletor de B —
+   * exatamente o produto que o backend recusaria no salvamento.
+   */
+  const clienteDoCatalogo = useRef("");
+
+  /*
+   * O catálogo de produtos é o DO CLIENTE, resolvido no servidor.
+   *
+   * Produto pertence a um cliente. Enquanto a tela pedia o catálogo inteiro,
+   * ela oferecia produto de qualquer cliente dentro do documento de um só —
+   * e a recusa só aparecia muito depois, na Ordem de Produção. Filtrar no
+   * navegador não serve: a página carregada é um teto, e o produto elegível
+   * que estivesse além dele sumiria sem aviso. Quem filtra é o banco.
+   */
+  useEffect(() => {
+    clienteDoCatalogo.current = customerId;
+    // Sem cliente não há catálogo — e o seletor de produto está desabilitado.
+    setActiveProducts([]);
+    if (!customerId) return;
+    const doPedido = customerId;
+    // Produto técnico de projeto não é opção operacional.
+    listProducts({ active: true, lifecycle: "APPROVED", customerId: doPedido, pageSize: 50 })
+      .then((result) => {
+        if (clienteDoCatalogo.current !== doPedido) return;
+        setActiveProducts((atual) => {
+          /*
+           * A página do catálogo ENTRA, não substitui. O que já está no estado
+           * depois da troca de cliente é deste cliente — o produto recém
+           * cadastrado na tela oficial, que volta pelo id — e substituir aqui
+           * o apagava quando esta resposta chegasse depois dele.
+           */
+          const naPagina = new Set(result.products.map((produto) => produto.id));
+          return [
+            ...result.products,
+            ...atual.filter((produto) => !naPagina.has(produto.id)),
+          ];
+        });
+      })
+      .catch(() => {
+        if (clienteDoCatalogo.current !== doPedido) return;
+        setActiveProducts([]);
+      });
+  }, [customerId]);
 
   /*
    * Busca no SERVIDOR, com os MESMOS filtros da carga inicial: achar nao e o
@@ -427,7 +471,19 @@ export function CustomerOrderPage() {
    * com "+ Novo" logo acima convidando a duplicar.
    */
   async function buscarProdutos(termo: string): Promise<EntityOption[]> {
-    const resultado = await listProducts({ active: true, lifecycle: "APPROVED", search: termo, pageSize: 50 });
+    // Sem cliente o campo está desabilitado; a guarda existe para que nenhum
+    // caminho futuro consiga buscar no catálogo inteiro por aqui.
+    if (!customerId) return [];
+    const doPedido = customerId;
+    const resultado = await listProducts({
+      active: true,
+      lifecycle: "APPROVED",
+      customerId: doPedido,
+      search: termo,
+      pageSize: 50,
+    });
+    // Chegou depois de o cliente mudar: nem entra no catálogo, nem na lista.
+    if (clienteDoCatalogo.current !== doPedido) return [];
     const novos = resultado.products;
     setActiveProducts((atual) => {
       const conhecidos = new Set(atual.map((x) => x.id));
@@ -454,6 +510,22 @@ export function CustomerOrderPage() {
    */
   const origemComercial = customerOrder?.commercialOrigin ?? null;
   const linhasEditaveis = isDraft && origemComercial === null;
+  /*
+   * Cliente e produtos do pedido andam juntos: o produto pertence a um
+   * cliente. Com produto escolhido, trocar o cliente deixaria o documento
+   * inconsistente — e as duas saídas automáticas são piores que o bloqueio:
+   * apagar as linhas descartaria trabalho em silêncio, e mantê-las criaria a
+   * mistura de propriedade. Quem decide é quem opera, removendo as linhas.
+   */
+  const clienteTravadoPorLinhas = lines.some((line) => line.productId !== "");
+  /*
+   * Linhas herdadas de antes desta regra — produto de outro cliente dentro
+   * deste pedido. Nada é corrigido aqui: o documento continua abrindo, o
+   * aviso aparece, e o servidor recusa a confirmação.
+   */
+  const linhasInconsistentes = (customerOrder?.lines ?? []).filter(
+    (line) => line.productCustomerMismatch,
+  );
   /*
    * IN_FULFILLMENT entra aqui porque o domínio SEMPRE permitiu cancelar
    * nesse estado — desde que não sobre reserva de produto acabado ativa nem
@@ -677,14 +749,25 @@ export function CustomerOrderPage() {
     ];
   }, [activeCustomers, customerOrder]);
 
-  function optionsForRow(row: LineRow): ProductDTO[] {
+  function optionsForRow(row: LineRow): EntityOption[] {
     const usedByOtherRows = new Set(lines.filter((l) => l.key !== row.key).map((l) => l.productId));
-    const base = activeProducts.filter((product) => !usedByOtherRows.has(product.id) && product.finishedProductItem);
-    if (row.productId && !base.some((product) => product.id === row.productId)) {
-      const known = activeProducts.find((product) => product.id === row.productId);
-      if (known) return [...base, known];
-    }
-    return base;
+    const base = activeProducts
+      .filter((product) => !usedByOtherRows.has(product.id) && product.finishedProductItem)
+      .map((product) => ({ id: product.id, code: product.code, name: product.name }));
+    if (!row.productId || base.some((option) => option.id === row.productId)) return base;
+    /*
+     * O produto já escolhido nesta linha não está no catálogo do cliente.
+     *
+     * Acontece em pedido herdado de antes da regra de propriedade: o catálogo
+     * é do cliente do documento e o produto é de outro. A opção sintética
+     * existe para o campo continuar LEGÍVEL — o aviso de inconsistência está
+     * logo acima e a confirmação é recusada pelo servidor. Esconder o nome só
+     * deixaria a linha em branco, parecendo que nada foi escolhido.
+     */
+    return [
+      ...base,
+      { id: row.productId, code: row.productCode, name: row.productName },
+    ];
   }
 
   /**
@@ -1234,7 +1317,12 @@ export function CustomerOrderPage() {
                   id="co-customer"
                   value={customerId}
                   onChange={(selectedId) => setCustomerId(selectedId)}
-                  placeholder="Digite código ou nome do cliente…"
+                  disabled={clienteTravadoPorLinhas}
+                  placeholder={
+                    clienteTravadoPorLinhas
+                      ? "Remova os produtos para trocar o cliente"
+                      : "Digite código ou nome do cliente…"
+                  }
                   onSearch={buscarClientes}
 options={customerOptions.map((customer) => ({
                     id: customer.id,
@@ -1262,6 +1350,12 @@ options={customerOptions.map((customer) => ({
               ) : (
                 <p className="field-readonly-value">
                   {customerOrder?.customerCode} — {customerOrder?.customerName}
+                </p>
+              )}
+              {isDraft && clienteTravadoPorLinhas && (
+                <p className="field__hint" id="co-customer-locked" role="status">
+                  Remova os produtos do pedido antes de alterar o cliente — cada produto
+                  pertence a um cliente.
                 </p>
               )}
               {fieldErrors["customerId"] && (
@@ -1306,6 +1400,33 @@ options={customerOptions.map((customer) => ({
               : "Um produto por pedido — a unidade vem do item de produto acabado."
           }
         >
+          {/*
+            Pedido herdado de antes da regra: produto de um cliente dentro do
+            documento de outro. Nada é corrigido sozinho — o pedido continua
+            abrindo e o aviso diz por que a confirmação vai ser recusada.
+          */}
+          {linhasInconsistentes.length > 0 && (
+            <p className="form-alert" role="alert">
+              {linhasInconsistentes.length === 1
+                ? "Este pedido tem um produto que pertence a outro cliente"
+                : `Este pedido tem ${linhasInconsistentes.length} produtos que pertencem a outro cliente`}
+              {" — "}
+              {linhasInconsistentes.map((line) => `${line.productCode} ${line.productName}`).join("; ")}.
+              Enquanto essas linhas existirem, o pedido não pode ser confirmado. Remova-as e
+              escolha produtos do cliente deste pedido.
+            </p>
+          )}
+
+          {/*
+            Cliente primeiro, produto depois: o catálogo oferecido é o do
+            cliente do pedido, então antes dele não há o que escolher.
+          */}
+          {linhasEditaveis && !customerId && (
+            <p className="field__hint" role="status">
+              Selecione o cliente primeiro — o sistema mostra apenas os produtos vinculados a ele.
+            </p>
+          )}
+
           <div className="table-container">
             {/* Produto é a coluna de decisão: fica com o espaço, e a busca
                 dentro dela precisa de largura para nomes longos. */}
@@ -1327,16 +1448,24 @@ options={customerOptions.map((customer) => ({
                     <td>
                       {linhasEditaveis ? (
                         <SearchableEntitySelect
+                          /*
+                           * A identidade do campo inclui o cliente: trocar de
+                           * cliente monta um campo novo, e nem o texto digitado
+                           * nem o resultado da busca anterior sobrevivem à troca.
+                           */
+                          key={`${line.key}-${customerId}`}
                           id={`pedido-produto-${line.key}`}
                           value={line.productId}
                           onChange={(productId) => handleLineProductChange(line.key, productId)}
-                          placeholder="Digite código ou nome do produto…"
+                          disabled={!customerId}
+                          placeholder={
+                            customerId
+                              ? "Digite código ou nome do produto…"
+                              : "Selecione o cliente primeiro."
+                          }
+                          noOptionsMessage="Este cliente ainda não possui produtos disponíveis para pedido."
                           onSearch={buscarProdutos}
-options={optionsForRow(line).map((product) => ({
-                            id: product.id,
-                            code: product.code,
-                            name: product.name,
-                          }))}
+                          options={optionsForRow(line)}
                           canCreate
                           createLabel="Novo produto"
                           onCreateNew={() =>
@@ -1421,7 +1550,13 @@ options={optionsForRow(line).map((product) => ({
 
           {linhasEditaveis && (
             <div className="line-actions">
-              <button type="button" className="btn btn--secondary btn--sm" onClick={handleAddLine}>
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                // Sem cliente a linha nasceria com um seletor desabilitado.
+                disabled={!customerId}
+                onClick={handleAddLine}
+              >
                 + Adicionar produto
               </button>
             </div>

@@ -54,6 +54,7 @@ existem para impedir:
 | `projeto-aprovado-vende-de-novo.mjs` | um projeto novo percorre o primeiro ciclo até o Pedido e, JÁ APROVADO, recebe um segundo orçamento que vira um segundo Pedido — sem projeto novo, com a primeira aceita ainda aceita e ligada ao seu Pedido; e a proposta vencida não é aceita (COM-CORE) |
 | `desconto-do-pedido-chega-ao-faturamento.mjs` | o desconto global acordado no orçamento atravessa aceite, Pedido, expedição e chega ao Faturamento: subtotal bruto, desconto comercial e total faturado batem com a condição acordada, na tela e no impresso, sem tocar o preço unitário da linha (BILL-DISCOUNT-01b) |
 | `cancelamento-de-pedido-com-op-cancelada.mjs` | com a OP viva o Pedido recusa cancelamento **com 400 e motivo**; cancelada a OP, o Pedido cancela pela interface e a OP continua no histórico (FIX-05b) |
+| `produto-do-cliente-do-pedido.mjs` | o Pedido só oferece produto DO cliente do Pedido: sem cliente não há o que escolher, toda consulta de catálogo leva `customerId`, o produto de outro cliente não é encontrado nem pelo código, e com produto no Pedido trocar o cliente é bloqueado sem apagar linha (ORDER-CUSTOMER-PRODUCT-01) |
 
 ## `lib/`
 

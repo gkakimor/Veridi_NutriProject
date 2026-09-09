@@ -254,7 +254,14 @@ describe("Produto Acabado — visão operacional", () => {
     const { product } = await createProductWithFormulation(app, rawMaterial.id, "10");
     const produced = await produceLot(app, product.id, "5", "5", "VD-FG-1");
 
-    const result = await listFinishedGoods(app, "?pageSize=100");
+    /*
+     * Filtra pelo produto do próprio teste. Sem isso a asserção dependia de o
+     * lote recém-produzido caber nos cem primeiros da base inteira — e no
+     * banco de desenvolvimento, com mais de cem lotes de produção
+     * acumulados, ele não cabia. O que se mede é a origem do lote, nunca o
+     * tamanho da base.
+     */
+    const result = await listFinishedGoods(app, `?productId=${product.id}&pageSize=100`);
     const lotIds = result.rows.map((row: { lotId: string }) => row.lotId);
     expect(lotIds).toContain(produced.lotId);
     // Lote de recebimento nunca aparece nesta tela.

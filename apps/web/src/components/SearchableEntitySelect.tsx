@@ -46,6 +46,7 @@ export function SearchableEntitySelect({
   disabled,
   required,
   emptyMessage = "Nenhum resultado.",
+  noOptionsMessage,
   canCreate = false,
   createLabel = "Cadastrar novo",
   onCreateNew,
@@ -61,6 +62,16 @@ export function SearchableEntitySelect({
   disabled?: boolean;
   required?: boolean;
   emptyMessage?: string;
+  /**
+   * Catálogo vazio: não há o que escolher, e não é por causa do que foi
+   * digitado.
+   *
+   * Diferente de `emptyMessage`, que responde "a busca não achou". Aqui a
+   * resposta é sobre o próprio conjunto — o Pedido usa isto para dizer que o
+   * cliente escolhido ainda não tem produtos, em vez de deixar a lista muda e
+   * só oferecer "+ Novo". Sem esta prop o comportamento não muda.
+   */
+  noOptionsMessage?: string;
   /**
    * Criação no contexto: quando o que a pessoa procura não existe, cadastrar
    * ali mesmo evita abandonar o formulário pela metade. Só aparece quando o
@@ -548,11 +559,15 @@ export function SearchableEntitySelect({
                 Não foi possível buscar agora. Tente de novo.
               </li>
             )}
-            {!buscando && !erroBusca && options.length === 0 && filtered.length === 0 && !canCreate && (
-              <li role="presentation" className="entity-select__empty">
-                Nada disponível para escolher.
-              </li>
-            )}
+            {!buscando &&
+              !erroBusca &&
+              options.length === 0 &&
+              filtered.length === 0 &&
+              (!canCreate || noOptionsMessage !== undefined) && (
+                <li role="presentation" className="entity-select__empty">
+                  {noOptionsMessage ?? "Nada disponível para escolher."}
+                </li>
+              )}
             {!buscando && !erroBusca && filtered.length === 0 && options.length > 0 && (
               <li role="presentation" className="entity-select__empty">
                 {emptyMessage}

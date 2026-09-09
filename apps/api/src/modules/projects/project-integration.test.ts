@@ -1206,6 +1206,39 @@ describe("Proposta aceita → Pedido", () => {
     await app.close();
   });
 
+  it("recusa quando o produto deixou de ser do cliente do projeto", async () => {
+    const app = buildTestApp("ADMIN");
+    await app.ready();
+
+    const { chain, quote } = await cenarioFechado(app);
+
+    /*
+     * O vínculo Produto↔Projeto já recusa produto de outro cliente. Mas a
+     * proposta pode ser antiga e o dono do Produto pode ter mudado depois —
+     * gerar o Pedido assim mesmo criaria o documento inconsistente que
+     * ninguém consegue confirmar. A proveniência comercial não muda: a
+     * geração simplesmente falha, com o mesmo `customer_mismatch` do resto.
+     */
+    const outroCliente = await createCustomer();
+    await getPrisma().product.update({
+      where: { id: chain.productId },
+      data: { customerId: outroCliente.id },
+    });
+
+    const recusado = await gerar(app, quote.id);
+    expect(recusado.statusCode).toBe(400);
+    expect(recusado.json().error).toBe("customer_mismatch");
+    expect(recusado.json().message).toContain(outroCliente.legalName);
+    expect(JSON.stringify(recusado.json())).not.toMatch(/CustomerMismatchError|Prisma|at .*\.ts:/);
+
+    // Nada foi gravado: nenhum pedido nasceu desta proposta.
+    expect(
+      await getPrisma().customerOrder.count({ where: { sourceQuoteVersionId: quote.id } }),
+    ).toBe(0);
+
+    await app.close();
+  });
+
   it("gera o pedido com cliente, quantidade, preço e origem do acordo", async () => {
     const app = buildTestApp("ADMIN");
     await app.ready();

@@ -40,6 +40,10 @@ import {
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { assertProductOperational } from "../../lib/product-lifecycle.js";
+import {
+  assertProductBelongsToCustomer,
+  productBelongsToCustomer,
+} from "../../lib/product-customer-ownership.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -148,6 +152,7 @@ export function billedByOrderLine(billings: BillingWithLines[]): Map<string, Pri
 
 function toLineDTO(
   line: LineWithProduct,
+  orderCustomerId: string,
   shippedByLine: Map<string, Prisma.Decimal>,
   billedByLine: Map<string, Prisma.Decimal>,
   pendingProductionByLine: Map<string, Prisma.Decimal>,
@@ -177,6 +182,12 @@ function toLineDTO(
     unbilledShippedQuantity: unbilledShipped.toString(),
     sourceQuoteLineId: line.sourceQuoteLineId,
     agreedPrice: agreedPriceOf(line),
+    /*
+     * Linha herdada de antes da regra de propriedade — o Pedido continua
+     * abrindo, e a tela mostra o aviso em vez de esconder o problema. Nenhum
+     * dado e corrigido aqui: quem confirmar o Pedido recebe a recusa.
+     */
+    productCustomerMismatch: !productBelongsToCustomer(line.product, orderCustomerId),
   };
 }
 
@@ -491,7 +502,9 @@ function toCustomerOrderDTO(order: OrderWithRelations): CustomerOrderDTO {
     requestedDeliveryDate: order.requestedDeliveryDate ? order.requestedDeliveryDate.toISOString() : null,
     status: order.status,
     notes: order.notes,
-    lines: order.lines.map((line) => toLineDTO(line, shippedByLine, billedByLine, pendingProductionByLine)),
+    lines: order.lines.map((line) =>
+      toLineDTO(line, order.customerId, shippedByLine, billedByLine, pendingProductionByLine),
+    ),
     commercialOrigin: commercialOriginOf(order),
     reservation: reservation ? toReservationDTO(reservation, shippedByResLine) : null,
     generatedProductionOrders: order.productionOrders.map(toGeneratedProductionOrderDTO),
@@ -543,8 +556,18 @@ interface ValidatedLine {
   product: ProductWithFinishedItem;
 }
 
-/** Valida duplicidade dentro do array e cada produto individualmente. */
-async function validateLines(lines: CustomerOrderLineInput[]): Promise<ValidatedLine[]> {
+/**
+ * Valida duplicidade dentro do array, cada produto individualmente e a
+ * PROPRIEDADE de cada produto contra o Cliente do documento.
+ *
+ * O cliente e parametro, e nao lido do Pedido salvo, porque um PATCH pode
+ * trocar cliente e linhas na mesma requisicao: o que vale e o cliente com que
+ * o Pedido vai FICAR.
+ */
+async function validateLines(
+  lines: CustomerOrderLineInput[],
+  customer: Customer,
+): Promise<ValidatedLine[]> {
   const seen = new Set<string>();
   for (const line of lines) {
     if (seen.has(line.productId)) throw new DuplicateLineProductError(line.productId);
@@ -554,6 +577,7 @@ async function validateLines(lines: CustomerOrderLineInput[]): Promise<Validated
   const validated: ValidatedLine[] = [];
   for (const line of lines) {
     const product = await assertLineProductValid(line.productId);
+    await assertProductBelongsToCustomer(getPrisma(), product, customer);
     validated.push({ input: line, product });
   }
   return validated;
@@ -615,7 +639,7 @@ export async function getCustomerOrderById(id: string): Promise<CustomerOrderDTO
 
 export async function createCustomerOrder(input: CreateCustomerOrderInput): Promise<CustomerOrderDTO> {
   const customer = await assertCustomerActive(input.customerId);
-  const validatedLines = input.lines ? await validateLines(input.lines) : [];
+  const validatedLines = input.lines ? await validateLines(input.lines, customer) : [];
 
   const prisma = getPrisma();
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, CUSTOMER_ORDER_CODE_PREFIX);
@@ -689,9 +713,25 @@ export async function updateCustomerOrder(
     customer = await assertCustomerActive(input.customerId);
   }
 
+  /*
+   * Com quem o Pedido FICA depois deste PATCH. Validar contra o cliente
+   * antigo aceitaria a troca A -> B mantendo produtos de A, que e exatamente
+   * a inconsistencia que esta capacidade fecha.
+   */
+  const finalCustomer = customer ?? current.customer;
+
   let validatedLines: ValidatedLine[] | null = null;
   if (current.status === "DRAFT" && input.lines !== undefined) {
-    validatedLines = await validateLines(input.lines);
+    validatedLines = await validateLines(input.lines, finalCustomer);
+  } else if (customer !== null) {
+    /*
+     * Trocar de cliente sem reenviar as linhas: as que ja estao no Pedido
+     * passam a pertencer ao cliente novo e precisam ser dele. Falha cedo, com
+     * o motivo — nunca apaga linha em cascata nem deixa a mistura passar.
+     */
+    for (const line of current.lines) {
+      await assertProductBelongsToCustomer(getPrisma(), line.product, finalCustomer);
+    }
   }
 
   await getPrisma().$transaction(async (tx) => {
@@ -724,6 +764,9 @@ export async function updateCustomerOrder(
  * (nunca confia so na validacao de saves anteriores) e congela snapshot
  * historico no Pedido e em cada linha. Nunca reserva estoque — so habilita
  * o Plano de Atendimento.
+ *
+ * Revalida tambem a PROPRIEDADE de cada produto contra o Cliente do Pedido:
+ * ver `assertProductBelongsToCustomer` no laco abaixo.
  */
 export async function confirmCustomerOrder(id: string): Promise<CustomerOrderDTO> {
   await getPrisma().$transaction(async (tx) => {
@@ -761,6 +804,15 @@ export async function confirmCustomerOrder(id: string): Promise<CustomerOrderDTO
       ) {
         throw new MissingFinishedItemError(line.productId);
       }
+      /*
+       * Defesa final. A inclusao ja recusa produto de outro cliente, e esta
+       * checagem continua existindo para o que a inclusao nao alcanca: linha
+       * gravada antes desta regra, importacao antiga, ou qualquer caminho
+       * futuro que escreva a linha por fora. Confirmar e o momento em que o
+       * Pedido vira compromisso — dali para a frente OP, reserva e expedicao
+       * assumem que o documento e integro.
+       */
+      await assertProductBelongsToCustomer(tx, product, customer);
       productByLineId.set(line.id, product);
     }
 

@@ -305,13 +305,21 @@ async function completeProductionOrder(app: App, productId: string, quantity: st
   return orderId;
 }
 
+/**
+ * O Pedido nasce do cliente DONO do produto.
+ *
+ * Produto pertence a um cliente, e um Pedido de outro cliente é recusado com
+ * `customer_mismatch`. As métricas do painel não são sobre propriedade — o
+ * pano de fundo só precisa ser íntegro.
+ */
 async function createOrderInFulfillment(app: App, productId: string, quantity: string) {
-  const customer = await createCustomer();
+  const produto = await getPrisma().product.findUniqueOrThrow({ where: { id: productId } });
+  const customerId = produto.customerId ?? (await createCustomer()).id;
   const orderId = (
     await app.inject({
       method: "POST",
       url: "/customer-orders",
-      payload: { customerId: customer.id, lines: [{ productId, orderedQuantity: quantity }] },
+      payload: { customerId, lines: [{ productId, orderedQuantity: quantity }] },
     })
   ).json().id;
   fixtureCustomerOrderIds.push(orderId);

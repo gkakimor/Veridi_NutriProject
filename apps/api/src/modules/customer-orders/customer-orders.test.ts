@@ -82,9 +82,18 @@ async function createFinishedItem(overrides: { active?: boolean } = {}) {
   return item;
 }
 
+/**
+ * Produto do cliente informado — e do cliente de fixture quando o teste nao
+ * se importa com propriedade.
+ *
+ * Passou a ser parametro quando o Pedido comecou a exigir que o Produto
+ * pertenca ao Cliente do documento: antes todo produto nascia do cliente de
+ * fixture, e os testes montavam sem querer exatamente o Pedido inconsistente
+ * que a regra existe para impedir.
+ */
 async function createProduct(
   app: App,
-  overrides: { finishedItemId?: string | null; active?: boolean } = {},
+  overrides: { finishedItemId?: string | null; active?: boolean; customerId?: string } = {},
 ) {
   const finishedItem = overrides.finishedItemId === undefined ? await createFinishedItem() : null;
   const finishedProductItemId = overrides.finishedItemId === undefined ? finishedItem!.id : overrides.finishedItemId;
@@ -92,7 +101,7 @@ async function createProduct(
   const response = await app.inject({
     method: "POST",
     url: "/products",
-    payload: { customerId: await fixtureCustomerId(),
+    payload: { customerId: overrides.customerId ?? (await fixtureCustomerId()),
       name: `Produto Pedido Teste ${marker()}`,
       ...(finishedProductItemId ? { finishedProductItemId } : {}),
     },
@@ -175,9 +184,12 @@ describe("CustomerOrder — CRUD e transições", () => {
     await app.ready();
 
     const customer = await createCustomer();
-    const productWithoutFinishedItem = await createProduct(app, { finishedItemId: null });
-    const inactiveProduct = await createProduct(app, { active: false });
-    const validProduct = await createProduct(app);
+    const productWithoutFinishedItem = await createProduct(app, {
+      finishedItemId: null,
+      customerId: customer.id,
+    });
+    const inactiveProduct = await createProduct(app, { active: false, customerId: customer.id });
+    const validProduct = await createProduct(app, { customerId: customer.id });
 
     const missingFinishedItem = await app.inject({
       method: "POST",
@@ -214,7 +226,7 @@ describe("CustomerOrder — CRUD e transições", () => {
     await app.ready();
 
     const customer = await createCustomer();
-    const product = await createProduct(app);
+    const product = await createProduct(app, { customerId: customer.id });
 
     const response = await app.inject({
       method: "POST",
@@ -239,8 +251,10 @@ describe("CustomerOrder — CRUD e transições", () => {
 
     const customer = await createCustomer();
     const otherCustomer = await createCustomer();
-    const productA = await createProduct(app);
-    const productB = await createProduct(app);
+    const productA = await createProduct(app, { customerId: customer.id });
+    // Trocar de cliente E de linhas na mesma requisicao: o produto novo e do
+    // cliente novo, que e o unico jeito de a troca ser integra.
+    const productB = await createProduct(app, { customerId: otherCustomer.id });
     const order = await createDraftOrder(app, customer.id, [{ productId: productA.id, orderedQuantity: "10" }]);
 
     const updated = await app.inject({
@@ -268,7 +282,7 @@ describe("CustomerOrder — CRUD e transições", () => {
     await app.ready();
 
     const customer = await createCustomer();
-    const product = await createProduct(app);
+    const product = await createProduct(app, { customerId: customer.id });
     const empty = await createDraftOrder(app, customer.id);
 
     const emptyConfirm = await app.inject({ method: "POST", url: `/customer-orders/${empty.id}/confirm` });
@@ -293,7 +307,7 @@ describe("CustomerOrder — CRUD e transições", () => {
     await app.ready();
 
     const customer = await createCustomer();
-    const product = await createProduct(app);
+    const product = await createProduct(app, { customerId: customer.id });
     const order = await createDraftOrder(app, customer.id, [{ productId: product.id, orderedQuantity: "10" }]);
     await app.inject({ method: "POST", url: `/customer-orders/${order.id}/confirm` });
 
@@ -321,7 +335,7 @@ describe("CustomerOrder — CRUD e transições", () => {
     await app.ready();
 
     const customer = await createCustomer();
-    const product = await createProduct(app);
+    const product = await createProduct(app, { customerId: customer.id });
     const order = await createDraftOrder(app, customer.id, [{ productId: product.id, orderedQuantity: "10" }]);
     await app.inject({ method: "POST", url: `/customer-orders/${order.id}/confirm` });
 
@@ -342,7 +356,7 @@ describe("CustomerOrder — CRUD e transições", () => {
     await app.ready();
 
     const customer = await createCustomer();
-    const product = await createProduct(app);
+    const product = await createProduct(app, { customerId: customer.id });
     const draft = await createDraftOrder(app, customer.id, [{ productId: product.id, orderedQuantity: "10" }]);
 
     const withoutReason = await app.inject({

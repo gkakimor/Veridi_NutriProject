@@ -34,13 +34,15 @@ export const pedido = {
 
   prerequisites: [
     { text: "Cliente ativo e produtos aprovados — produto em desenvolvimento é recusado.", href: "/cadastros/produtos" },
+    { text: "Escolha primeiro o cliente. O sistema mostra apenas os produtos vinculados a ele." },
     { text: "Para o Plano: o pedido precisa estar confirmado." },
     { text: "Para expedir: produto acabado reservado a este pedido, no passo 6." },
   ],
   steps: [
     {
-      you: 'Informe cliente, datas e produtos e clique em "Salvar rascunho".',
-      system: "O sistema guarda sem prometer nada. Em rascunho tudo se edita.",
+      you: 'Escolha o cliente, informe as datas, adicione os produtos e clique em "Salvar rascunho".',
+      system:
+        "O sistema guarda sem prometer nada. Em rascunho tudo se edita. O seletor de produto só abre depois do cliente e oferece apenas os produtos dele; com produto já no pedido, trocar o cliente exige remover as linhas primeiro.",
     },
     {
       you: 'Clique em "Confirmar pedido".',

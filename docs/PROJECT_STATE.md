@@ -500,10 +500,11 @@ varredura de código tinha produzido, e a fila viva de
 [`BACKLOG.md`](BACKLOG.md) foi reconciliada com eles no mesmo dia. Zero runtime,
 zero migration nesta rodada.
 
-**Os dois P0 vieram de uso, não de auditoria.** ORDER-CUSTOMER-PRODUCT-01: a
-tela do Pedido lista produto sem filtrar por cliente, e `customer-orders.service`
-não compara `product.customerId` com o do Pedido nem ao montar a linha nem no
-`confirm` — a única recusa é na Ordem de Produção. Um Pedido CONFIRMADO carrega a
+**Os dois P0 vieram de uso, não de auditoria.** ORDER-CUSTOMER-PRODUCT-01 —
+**fechado em 2026-09-09**, ver abaixo — nasceu da tela do Pedido listando produto
+sem filtrar por cliente, com `customer-orders.service` sem comparar
+`product.customerId` com o do Pedido nem ao montar a linha nem no `confirm`: a
+única recusa era na Ordem de Produção, e um Pedido CONFIRMADO carregava a
 combinação impossível. COST-BASIS-UX-01: base de produção 300, tela destacando
 "custo por 1.000", e a usuária sem saber qual dos dois o sistema calculou. A
 leitura de código diz que `per1000 = perUnit × 1000` — equivalência linear, não o
@@ -533,10 +534,41 @@ como Inativo quem comprou direto. E contrato entrou como discovery P2
 (COM-CONTRACT-01) com uma fronteira já decidida: **contrato não dirige a situação
 comercial**.
 
+## O produto do Pedido é do cliente do Pedido (2026-09-09)
+
+**ORDER-CUSTOMER-PRODUCT-01 fechado.** A comparação
+`Product.customerId × CustomerOrder.customerId` passou a existir num lugar só —
+`apps/api/src/lib/product-customer-ownership.ts`, que também hospeda o
+`CustomerMismatchError` (reexportado por `production-orders.errors.ts`, para que
+`instanceof` continue sendo o mesmo tipo em todos os pontos de captura). Ela é
+chamada em cada porta por onde uma Product entra num Pedido: criar Pedido,
+salvar as linhas do rascunho, trocar o cliente do rascunho, **confirmar** o
+Pedido e gerar Pedido a partir de proposta aceita. A resposta é sempre
+`400 customer_mismatch` — o mesmo código que Ordem de Produção, Plano de
+Atendimento e Projetos já devolviam —, nunca 500.
+`resolveOrderCustomerId` continua onde estava: virou defesa em profundidade,
+não a primeira linha.
+
+Produto **sem** cliente continua aceito em qualquer Pedido. É o que
+`resolveOrderCustomerId` e o vínculo Produto↔Projeto sempre fizeram, e a base
+traz produtos importados do legado sem dono resolvido; recusá-los seria mudar o
+modelo de Product, que é outra capacidade.
+
+Na tela: o seletor de Produto só abre depois do Cliente e diz por quê; o
+catálogo vem do servidor com `customerId` (busca e paginação inclusive, nunca
+filtragem no navegador); trocar de cliente com produto no Pedido é bloqueado com
+o motivo — **nunca** apagando linha; e a resposta atrasada de um cliente não
+aparece no seletor do seguinte. Cliente sem produtos ganha estado vazio próprio.
+Pedido herdado com produto de outro cliente continua abrindo, mostra o aviso e
+não confirma — `CustomerOrderLineDTO.productCustomerMismatch`.
+
+Zero migration, zero dado corrigido. Legado auditado: DEV com duas linhas
+inconsistentes (PED-003984 CANCELADO, PED-026585 CONFIRMADO — nenhum com
+expedição, OP, reserva ou faturamento); PROD sem nenhum Pedido.
+
 ## Próxima prioridade
 
-**P0 da fila viva** — ORDER-CUSTOMER-PRODUCT-01 e COST-BASIS-UX-01, nesta ordem.
-Nenhum dos dois depende de gate de negócio.
+**P0 da fila viva** — COST-BASIS-UX-01. Não depende de gate de negócio.
 
 **COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
 mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum
