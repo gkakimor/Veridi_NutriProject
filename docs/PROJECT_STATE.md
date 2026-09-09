@@ -359,9 +359,29 @@ escrita atual grava `customerOrderId` sem gravar o cliente junto. A rota
 continua coberta porque uma linha anterior ao preenchimento da coluna tem essa
 forma — e era exatamente ela que produzia o 500.
 
+## Número derivado diz de que momento ele é (FIX-06, 2026-09-08)
+
+**F-03-1.** O bloco de custo da Formulação vem do servidor, e o efeito que o
+buscava dependia de `version?.components.length`: mudar a quantidade de um
+componente e salvar não muda o tamanho da lista, então a tela seguia mostrando o
+custo anterior até um F5. Agora **quem salva pede a estimativa nova**, com o
+mesmo guarda de geração da busca de entidades — resposta atrasada não
+sobrescreve a seguinte. **Nada é recalculado no navegador**: a quantidade física
+e a estimativa continuam autoritativas no servidor (§52). Salvamento que falha
+não promove custo nenhum. E, com edição pendente, o bloco **se identifica** —
+"Custo do último salvamento" —, que é a segunda opção do §54, a mesma que o
+Faturamento usa pelo outro lado.
+
+**F-07-1.** Cinco células da Sugestão de Compra imprimiam a string da API direto
+no JSX: a necessidade saía `6.122448979592`, com PONTO decimal, ao lado do mesmo
+número escrito `6,122449 kg` na tabela de cima. Passaram por `formatQuantity`, o
+das colunas vizinhas. **Nenhum payload mudou** — o cru continua íntegro no DTO,
+e o formatador nunca alimenta escrita.
+
 ## Próxima prioridade
 
-**FIX-06** — a fila P1 da seção A (F-03-1, F-07-1).
+**Comercial recorrente — COM-01/02/03**: ciclo de orçamento recorrente, validade
+e congelamento comercial.
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo

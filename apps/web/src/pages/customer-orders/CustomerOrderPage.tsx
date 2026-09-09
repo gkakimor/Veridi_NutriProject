@@ -1803,15 +1803,19 @@ options={optionsForRow(line).map((product) => ({
                                   </div>
                                 )}
                             </td>
+                            {/* Quantidade da API é DECIMAL(24,12) em string: sem
+                                `formatQuantity` a necessidade sai `6.122448979592`,
+                                com ponto decimal, ao lado do mesmo número
+                                formatado na tabela de cima (F-07-1). */}
                             <td className="is-numeric">
-                              {row.remainingRequired} {row.unitCode}
+                              {formatQuantity(row.remainingRequired)} {row.unitCode}
                             </td>
-                            <td>{row.ownReserved}</td>
+                            <td>{formatQuantity(row.ownReserved)}</td>
                             <td className="is-numeric">{formatQuantity(row.available)}</td>
                             <td className="is-numeric">{formatQuantity(row.onOrder)}</td>
-                            <td>{row.operationalShortage}</td>
+                            <td>{formatQuantity(row.operationalShortage)}</td>
                             <td>{formatQuantity(row.draftPurchaseQuantity)}</td>
-                            <td>{row.newSuggestedPurchase}</td>
+                            <td>{formatQuantity(row.newSuggestedPurchase)}</td>
                             <td>
                               <input
                                 type="text"
@@ -1914,7 +1918,7 @@ options={optionsForRow(line).map((product) => ({
                           </td>
                           <td>{row.customerName ?? "—"}</td>
                           <td className="is-numeric">
-                            {row.remainingRequired} {row.unitCode}
+                            {formatQuantity(row.remainingRequired)} {row.unitCode}
                           </td>
                           <td>{formatQuantity(row.available)}</td>
                           <td className="is-numeric">

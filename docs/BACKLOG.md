@@ -22,7 +22,7 @@ valor exibido significa "usar todo o limite". O FIX-01b (2026-09-08) fechou os
 dois resíduos que o próprio FIX-01 encontrou: o apontamento de produção, que
 recalculava o restante por `Number`, e o complemento do Plano de Atendimento,
 que ia no payload calculado em ponto flutuante. O que sobra da defasagem é
-exibição sem entrada (F-07-1, W7). O P0 de custo da Formulação foi fechado no
+exibição sem entrada (W7) — F-07-1 saiu no FIX-06. O P0 de custo da Formulação foi fechado no
 FIX-02 (2026-09-08): quantidade física canônica na estimativa e um único
 "Equivalente estoque" entre rascunho e versão ativa.
 
@@ -35,10 +35,11 @@ conferência numérica ficam em [`E2E_AUDIT_CURRENT.md`](E2E_AUDIT_CURRENT.md);
 aqui fica só o que exige trabalho, com a severidade **do PO**, que nem sempre é
 a do auditor.
 
-**Zero CRITICAL, zero BLOCKER.** Dois MEDIUM, três LOW — F-02-2 e F-02-1
-fechados no FIX-02, F-08-2 no FIX-03, F-06-1 + F-06-2 no FIX-04 e F-09-1 +
-F-07-2 no FIX-05 (2026-09-08). PROD-ERR-01 não veio da auditoria — nasceu da
-leitura de código do FIX-05b — e está **RESOLVIDO** (2026-09-08).
+**Zero CRITICAL, zero BLOCKER, zero MEDIUM.** Sobram três LOW e a fila de UX —
+F-02-2 e F-02-1 fechados no FIX-02, F-08-2 no FIX-03, F-06-1 + F-06-2 no FIX-04,
+F-09-1 + F-07-2 no FIX-05 e F-03-1 + F-07-1 no FIX-06 (2026-09-08). PROD-ERR-01
+não veio da auditoria — nasceu da leitura de código do FIX-05b — e está
+**RESOLVIDO**.
 
 ### P0 — antes de qualquer outra capability
 
@@ -51,10 +52,15 @@ fechada, com o motivo na tela. Nada havia sido persistido por esse caminho.
 
 ### P1 — próximas correções
 
-| ID | Título | Sev. | Tam. | Grupo |
-|---|---|---|---|---|
-| **F-03-1** | Custo estimado da Formulação não atualiza ao salvar e não se identifica como prévia nem como gravado | MEDIUM | XS | — |
-| **F-07-1** | Sugestão de compra imprime `6.122448979592` com ponto decimal | MEDIUM | S | G1 |
+Vazia. **F-03-1 e F-07-1 foram fechados no FIX-06 (2026-09-08).** O bloco de
+custo da Formulação dependia de `version?.components.length` para recarregar:
+mudar a quantidade de um componente e salvar não muda o tamanho da lista, então
+a tela seguia mostrando o custo anterior até um F5. Agora quem salva pede a
+estimativa nova ao servidor — nada é recalculado no navegador — e, enquanto
+houver edição pendente, o bloco se identifica como o do último salvamento
+(§54). Na Sugestão de Compra, cinco células imprimiam a string da API direto no
+JSX; passaram por `formatQuantity`, o mesmo das colunas vizinhas. O dado cru não
+mudou: a correção é de exibição.
 
 **PROD-ERR-01 foi fechado em 2026-09-08.** `mapDomainError` de
 `production-orders.routes.ts` ganhou a mesma linha que os dois irmãos já tinham
@@ -146,7 +152,7 @@ abre a edição, que contém o link "Consulta completa". Sobra só o resíduo em
 
 | Grupo | Achados | Causa | Por que junto |
 |---|---|---|---|
-| **G1** | F-07-1 | Precisão exibida e precisão validada não se reconciliam | As três comparações `Number(digitado) > Number(limite)` — OP, Expedição e Pedido, esta última remendada com `+ 1e-6` — foram substituídas por `quantity-limit.ts` em FIX-01. Sobra F-07-1, que é exibição sem campo de entrada: o mesmo valor sai formatado numa tela e cru na outra |
+| **G1** | ~~F-07-1~~ — fechado no FIX-06 | Precisão exibida e precisão validada não se reconciliam | As três comparações `Number(digitado) > Number(limite)` — OP, Expedição e Pedido, esta última remendada com `+ 1e-6` — foram substituídas por `quantity-limit.ts` em FIX-01. Sobra F-07-1, que é exibição sem campo de entrada: o mesmo valor sai formatado numa tela e cru na outra |
 | **G2** | ~~F-02-2, F-02-1~~ — fechado no FIX-02 | Quantidade **declarada** usada como se fosse a física | `convertUomDecimal` era chamado com os mesmos argumentos em `formulations.service.ts` e `costs.service.ts`, sem o motor de necessidade. Mesmo atalho, dois lugares. Os dois chamam o motor agora, e o campo `stockEquivalentQuantity` deixou de existir |
 | **G3** | ~~F-09-1, F-07-2~~ — fechado no FIX-05 | "Disponível" composto ad-hoc por tela | O Pedido passou a chamar `getUnavailabilityByItems` junto com `getAvailableByItems`, na mesma resolução de escopo, e a exibir o motivo com as palavras do Estoque. A OP continua com o cálculo próprio — que é legítimo e está documentado em `requirement-availability.ts:44` — e agora diz isso no rótulo |
 | **G4** | ~~F-06-1, F-06-2~~ — fechado no FIX-04 | `fieldErrors` só nascia da resposta do servidor e só resetava no próximo envio | Mesmo arquivo, mesmo mecanismo: o conserto de um resolveu o outro. O veredito da quantidade é derivado, e a chave de `fieldErrors` deixou de ser a posição no array |
@@ -253,7 +259,7 @@ apareceu em nenhuma das 40 execuções completas dessa medição.
 | **W3** | 24 das 56 linhas de `_prisma_migrations` em produção com checksum diferente do arquivo | Line ending, e só. `.gitattributes` fixa LF no SQL das migrations para novos clones. Nada foi reescrito no ledger |
 | **W4** | Linha órfã `20260904093000_template_component_quantity_mode` em produção | Tolerada por decisão de 2026-09-04 ([`TECH_BASELINE.md`](TECH_BASELINE.md)). Reescrever `_prisma_migrations` à mão é pior que a linha |
 | **W5** | Dois diretórios de migration com o mesmo timestamp `20260904090000` (`_component_quantity_mode` e `_gmp_production_execution`) | A ordenação é pelo nome completo do diretório, então continua determinística e igual em todo ambiente. Sem impacto observado; renomear diretório aplicado é que quebraria o ledger |
-| **W7** | Quantidade ainda passa por `Number` em pontos de **exibição** das telas de OP e Pedido: teste de sinal (`> 0`, `<= 0`) em `badge`/`disabled`, a diferença `onHand - reserved - available` renderizada (`ProductionOrderPage.tsx:1157`) e os totais somados na tela (`CustomerOrderPage.tsx:2020-2032`). O Pedido também imprime `reservedRemaining` e `stillToReserve` crus, sem `formatQuantity` (`1904`, `1905`, `2192`) | Classificado no FIX-01b e deliberadamente **não corrigido**: nenhum alcança payload nem validação. Teste de sinal sobre valor ≥ 10⁻¹² é seguro em `double`; o que é defeito de verdade — soma e diferença exibidas em ponto flutuante, e valor cru na tela — é da mesma família de F-07-1 e pertence ao PREC-UI, não a um remendo pontual |
+| **W7** | Quantidade ainda passa por `Number` em pontos de **exibição** das telas de OP e Pedido: teste de sinal (`> 0`, `<= 0`) em `badge`/`disabled`, a diferença `onHand - reserved - available` renderizada (`ProductionOrderPage.tsx:1157`) e o total somado na tela (`CustomerOrderPage.tsx:2178`). O Pedido também imprime `reservedRemaining` e `stillToReserve` crus, sem `formatQuantity` (`2014`, `2015`, `2350`) | Classificado no FIX-01b e deliberadamente **não corrigido**: nenhum alcança payload nem validação. Teste de sinal sobre valor ≥ 10⁻¹² é seguro em `double`; o que é defeito de verdade — soma e diferença exibidas em ponto flutuante, e valor cru na tela — é da mesma família de F-07-1 e pertence ao PREC-UI, não a um remendo pontual |
 | **W6** | Decisão de domínio pendente: trocar `RESTRICT` por `SET NULL` em alguma das 27 FKs opcionais | Não acontece mais por omissão no modelo (#14). Cada troca é decisão de domínio própria — bloquear a exclusão, desassociar ou arquivar — e exige a migration que a faça no banco |
 
 ---
