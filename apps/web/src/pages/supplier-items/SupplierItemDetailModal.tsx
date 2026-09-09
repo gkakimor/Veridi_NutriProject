@@ -2,8 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import type { SupplierItemDetailDTO, UnitOfMeasureDTO } from "@veridi/shared";
 import {
   DEFAULT_OFFER_CURRENCY,
+  INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
   SUPPLIER_ITEM_OFFER_SOURCE_LABELS,
   SUPPLIER_ITEM_QUALIFICATION_LABELS,
+  SUPPLIER_OFFER_AMBIGUITY_MESSAGE,
+  SUPPLIER_OFFER_ELIGIBILITY_HINTS,
+  SUPPLIER_OFFER_ELIGIBILITY_LABELS,
+  hojeComercial,
 } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
@@ -54,7 +59,15 @@ export function SupplierItemDetailModal({
   const [priceUomCode, setPriceUomCode] = useState("");
   const [moq, setMoq] = useState("");
   const [moqUomCode, setMoqUomCode] = useState("");
-  const [effectiveAt, setEffectiveAt] = useState("");
+  /*
+   * "Válida a partir de" nasce com o dia de hoje — SUGERIDO, visível e
+   * editável. A data é da negociação, não do clique: um preço acertado na
+   * sexta e cadastrado na segunda vale desde sexta, e quem sabe disso é
+   * quem negociou. O que o campo não pode mais ser é invisível: o servidor
+   * assumia "agora" quando ele vinha vazio, e a data comercial do preço
+   * virava o relógio de quem gravou.
+   */
+  const [effectiveAt, setEffectiveAt] = useState(hojeComercial());
   const [validUntil, setValidUntil] = useState("");
   const [offerNotes, setOfferNotes] = useState("");
 
@@ -150,10 +163,47 @@ export function SupplierItemDetailModal({
             </span>
           </dd>
           <dt>Preferencial</dt>
-          <dd>{supplierItem.preferred ? "Sim" : "Não"}</dd>
+          <dd>
+            {supplierItem.preferred ? (
+              <span className="badge badge--active">Fornecedor preferencial</span>
+            ) : (
+              "Não"
+            )}
+          </dd>
           <dt>Situação</dt>
           <dd>{supplierItem.active ? "Ativa" : "Inativa"}</dd>
+          {/*
+              A fonte que o custo do ITEM está usando hoje — não a desta
+              relação. Está aqui porque é a leitura errada mais provável da
+              tela: cadastrar uma oferta válida e concluir que o custo passou
+              a ser o dela. Compra real recente vence qualquer oferta, e
+              quem responde isso é o motor canônico, uma vez, no detalhe.
+          */}
+          <dt>Fonte de custo do item hoje</dt>
+          <dd>
+            <span>{INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS[supplierItem.costSourceToday.source]}</span>
+            {supplierItem.costSourceToday.unitCost && (
+              <>
+                {" · "}
+                <span className="is-numeric">
+                  R$ {supplierItem.costSourceToday.unitCost}
+                </span>
+                {` / ${supplierItem.costSourceToday.unitCode}`}
+              </>
+            )}
+            {supplierItem.costSourceToday.details && (
+              <p className="cell-note">{supplierItem.costSourceToday.details}</p>
+            )}
+          </dd>
         </dl>
+
+        {/* Não é erro nem oferta inválida: é uma escolha que ainda não foi
+            feita, e é literalmente o que `.callout` existe para dizer. */}
+        {supplierItem.costSourceAmbiguous && (
+          <div className="callout">
+            <p>{SUPPLIER_OFFER_AMBIGUITY_MESSAGE}</p>
+          </div>
+        )}
 
         {canPurchase && (
           <>
@@ -395,14 +445,25 @@ export function SupplierItemDetailModal({
                   </td>
                   <td>{formatDate(offer.effectiveAt)}</td>
                   <td>{formatDate(offer.validUntil)}</td>
+                  {/* A situação responde "esta oferta serve de referência de
+                      custo, e se não serve, por quê". "Histórica" dizia o
+                      quê sem dizer o porquê: quem cadastrou cinco preços e
+                      viu o CMV sem custo não tinha como ligar as duas
+                      telas. O motivo é o do motor, não uma segunda regra. */}
                   <td>
-                    {offer.isCurrent ? (
-                      <span className="badge badge--active">Vigente</span>
-                    ) : offer.effectiveAt ? (
-                      <span className="badge badge--neutral">Histórica</span>
-                    ) : (
-                      <span className="badge badge--neutral">Referência sem vigência</span>
-                    )}
+                    <span
+                      className={
+                        offer.eligibility === "ELIGIBLE"
+                          ? "badge badge--active"
+                          : "badge badge--neutral"
+                      }
+                      title={SUPPLIER_OFFER_ELIGIBILITY_HINTS[offer.eligibility]}
+                    >
+                      {SUPPLIER_OFFER_ELIGIBILITY_LABELS[offer.eligibility]}
+                    </span>
+                    <p className="cell-note">
+                      {SUPPLIER_OFFER_ELIGIBILITY_HINTS[offer.eligibility]}
+                    </p>
                   </td>
                   <td>{SUPPLIER_ITEM_OFFER_SOURCE_LABELS[offer.source]}</td>
                   <td>{formatDateTime(offer.createdAt)}</td>
@@ -489,13 +550,17 @@ export function SupplierItemDetailModal({
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="offer-effective">Vigência a partir de</label>
+                <label htmlFor="offer-effective">Válida a partir de *</label>
                 <input
                   id="offer-effective"
                   type="date"
+                  required
                   value={effectiveAt}
                   onChange={(event) => setEffectiveAt(event.target.value)}
                 />
+                <p className="field__hint">
+                  Sem esta data o preço fica só como histórico e não é usado no custo.
+                </p>
               </div>
               <div className="field">
                 <label htmlFor="offer-valid-until">Validade</label>
@@ -521,7 +586,7 @@ export function SupplierItemDetailModal({
               <button
                 type="button"
                 className="btn btn--accent btn--sm"
-                disabled={saving || !price.trim() || !priceUomCode}
+                disabled={saving || !price.trim() || !priceUomCode || !effectiveAt}
                 onClick={() =>
                   void run(
                     () =>
@@ -535,9 +600,7 @@ export function SupplierItemDetailModal({
                               minimumOrderUomCode: moqUomCode,
                             }
                           : {}),
-                        ...(effectiveAt
-                          ? { effectiveAt: new Date(`${effectiveAt}T12:00:00`).toISOString() }
-                          : {}),
+                        effectiveAt: new Date(`${effectiveAt}T12:00:00`).toISOString(),
                         ...(validUntil
                           ? { validUntil: new Date(`${validUntil}T12:00:00`).toISOString() }
                           : {}),
@@ -546,7 +609,9 @@ export function SupplierItemDetailModal({
                     () => {
                       setPrice("");
                       setMoq("");
-                      setEffectiveAt("");
+                      // Volta à sugestão de hoje, não ao vazio: o campo é
+                      // obrigatório, e limpá-lo esconderia o que ele exige.
+                      setEffectiveAt(hojeComercial());
                       setValidUntil("");
                       setOfferNotes("");
                     },

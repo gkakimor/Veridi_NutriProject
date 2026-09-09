@@ -121,6 +121,16 @@ confundiria os dois fluxos. Entrega com separação em RASCUNHO deixou de aceita
 cancelamento e reprogramação. **Próximo item de produto: a definir com o PO** —
 PLAN-DATE-01 está registrado abaixo e não é sequência automática.
 
+**COST-SOURCE-01 fechado em 2026-09-09** (§76): a oferta de fornecedor virou
+fonte operacional de custo. Oferta NOVA exige "válida a partir de" (a coluna
+segue anulável — as 602 importadas continuam sendo histórico legítimo, sem
+backfill e sem data inferida); a vigência passou a ser dia civil nas duas
+bordas, o que habilita CMV com `referenceDate` futura antecipando um aumento
+já cotado; e `ItemCostReference.currencyCode` passou a ser filtrado — uma
+referência em dólar entrava no custo como se fosse real. Ambiguidade entre
+fornecedores continua sendo ausência de custo, e a tela passou a dizer por quê.
+Sem migration: o índice parcial único do preferencial já existia.
+
 **TZ-LOTE-01 fechado em 2026-09-08** (§73). O PO decidiu a leitura (a): a
 validade do lote é DATA CIVIL INCLUSIVA — o lote vale o dia inteiro e vence às
 00:00 do dia seguinte em São Paulo. `isLotExpired` passou a responder pelo
@@ -375,6 +385,35 @@ não de uso.
 Onde se corrige, quando valer: a serialização, num lugar só — `toFixed` na
 escala da categoria (§58), nunca `toString`. Encontrado em COM-04, fora do
 escopo dele e do COM-04b.
+
+### 16. COST-BASELINE-01 — prontidão real de custo e precificação — HIGH
+
+A auditoria COST-VAR-01 mediu o problema de fundo, e ele não é de código.
+
+Em produção: **zero recebimentos**, zero `IndustrialCostCalculation`, zero
+`PricingVersion`, zero `PricingTier`. Metade das matérias-primas (288 de 581)
+não tem nenhuma fonte de custo. Todo o custo que existe vem das 293
+`ItemCostReference` — o degrau 5 da hierarquia, o mais baixo, e o único
+classificado como estimativa.
+
+Consequência que atravessa o comercial: **nenhuma `QuoteLine`, em DEV ou em
+PROD, tem CMV congelado**. As colunas existem e `buildLineSnapshots` as
+preenche, mas só quando a linha vem de faixa ou existe precificação ativa com
+a mesma quantidade física — e não existe nenhuma.
+
+O que a capability precisa fazer nascer, para produtos reais:
+
+`IndustrialCostCalculation` → `PricingVersion`/`PricingTier` → `QuoteLine` com
+CMV congelado.
+
+**Ordem importa.** COST-SOURCE-01 destravou o degrau 4; informar vigência nas
+ofertas legadas **sem** definir o fornecedor preferencial rebaixaria 90 itens
+de "com custo" para `AMBIGUOUS_SUPPLIER_REFERENCE`. As duas decisões andam
+juntas, e são do usuário: nenhuma escrita de massa comercial em produção foi
+feita nem deve ser feita pelo sistema.
+
+**Bloqueia COST-VAR-02.** Comparar "custo do orçamento × custo de hoje" sem o
+primeiro termo entrega uma tela que responde "—".
 
 ### 14. PLAN-DATE-01 — planejamento temporal pelas entregas programadas — LOW
 

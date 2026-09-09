@@ -4,6 +4,21 @@ import { decimalStringSchema } from "../../lib/decimal-schema.js";
 import { optionalNullableDateSchema } from "../../lib/date-schema.js";
 
 /**
+ * "Válida a partir de" — a única data que uma oferta nova não pode omitir.
+ *
+ * Mensagem própria em vez de `requiredDateSchema` porque as duas falhas são
+ * diferentes para quem está preenchendo: campo em branco pede o que falta,
+ * texto quebrado diz que não é data. "Data inválida" para um campo vazio
+ * manda a pessoa procurar erro num valor que ela nunca digitou.
+ */
+const offerEffectiveAtSchema = z
+  .string({ required_error: "Informe a partir de quando esta oferta vale" })
+  .trim()
+  .min(1, "Informe a partir de quando esta oferta vale")
+  .transform((value) => new Date(value))
+  .refine((value) => !Number.isNaN(value.getTime()), { message: "Data inválida" });
+
+/**
  * Oferta informada junto com a relação.
  *
  * Mesma forma de `createOfferSchema` — a oferta continua sendo entidade
@@ -15,7 +30,18 @@ export const initialOfferSchema = z.object({
   priceUomCode: z.string().trim().min(1, "Unidade do preço é obrigatória"),
   minimumOrderQuantity: decimalStringSchema().optional(),
   minimumOrderUomCode: z.string().trim().min(1).optional(),
-  effectiveAt: optionalNullableDateSchema,
+  /**
+   * Vigência inicial OBRIGATÓRIA — regra de negócio da oferta nova.
+   *
+   * A coluna segue aceitando nulo: a planilha legada não tem data de
+   * cotação, e 602 ofertas importadas continuam sendo histórico legítimo.
+   * O que passa a ser exigido é a porta de entrada. Antes disto o servidor
+   * assumia `new Date()` quando o campo não vinha — um "hoje implícito"
+   * dentro do domínio, exatamente o que a seleção de fonte não pode ter:
+   * a data comercial de um preço é uma afirmação de quem negocia, não do
+   * relógio de quem gravou.
+   */
+  effectiveAt: offerEffectiveAtSchema,
   validUntil: optionalNullableDateSchema,
   notes: optionalNullableText(1000),
 });
@@ -67,7 +93,18 @@ export const createOfferSchema = z.object({
   priceUomCode: z.string().trim().min(1, "Unidade do preço é obrigatória"),
   minimumOrderQuantity: decimalStringSchema().optional(),
   minimumOrderUomCode: z.string().trim().min(1).optional(),
-  effectiveAt: optionalNullableDateSchema,
+  /**
+   * Vigência inicial OBRIGATÓRIA — regra de negócio da oferta nova.
+   *
+   * A coluna segue aceitando nulo: a planilha legada não tem data de
+   * cotação, e 602 ofertas importadas continuam sendo histórico legítimo.
+   * O que passa a ser exigido é a porta de entrada. Antes disto o servidor
+   * assumia `new Date()` quando o campo não vinha — um "hoje implícito"
+   * dentro do domínio, exatamente o que a seleção de fonte não pode ter:
+   * a data comercial de um preço é uma afirmação de quem negocia, não do
+   * relógio de quem gravou.
+   */
+  effectiveAt: offerEffectiveAtSchema,
   validUntil: optionalNullableDateSchema,
   notes: optionalNullableText(1000),
 });

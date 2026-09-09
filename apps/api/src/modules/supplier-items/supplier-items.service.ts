@@ -1,14 +1,24 @@
 import { Prisma } from "@prisma/client";
 import type { Prisma as PrismaTypes, User } from "@prisma/client";
 import type {
+  SupplierItemCostSourceDTO,
   SupplierItemDTO,
   SupplierItemDetailDTO,
   SupplierItemListResponse,
   SupplierItemOfferDTO,
   SupplierItemQualificationEventDTO,
+  SupplierOfferEligibility,
 } from "@veridi/shared";
-import { DEFAULT_OFFER_CURRENCY, isValidCurrencyCode, normalizeCurrencyCode } from "@veridi/shared";
+import {
+  DEFAULT_OFFER_CURRENCY,
+  hojeComercial,
+  isValidCurrencyCode,
+  normalizeCurrencyCode,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { diaDaColunaDeData } from "../../lib/business-day.js";
+import { custoUnitario } from "../../lib/decimal-serialization.js";
+import { offerValidityWhere, selectItemCostSource } from "../../lib/cost-source-selection.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import {
@@ -71,16 +81,85 @@ type OfferRow = SupplierItemWithRelations["offers"][number];
  * Oferta vigente: precisa ter início de vigência real, já iniciado, e não
  * estar expirada. Observação histórica de preço (sem `effectiveAt`) NUNCA
  * é preço atual — é justamente o que a planilha legada tem.
+ *
+ * A comparação é de DIA CIVIL, a mesma do motor de custo: uma oferta que
+ * passa a valer hoje já vale hoje, e uma que vale até hoje ainda vale hoje.
+ * Antes disto a tela comparava contra o relógio — uma oferta com
+ * `validUntil` no dia corrente (marcador de meia-noite UTC) aparecia como
+ * vencida a partir do primeiro minuto do próprio dia impresso nela, e a
+ * tela contradizia o cálculo.
  */
 export function isOfferCurrent(offer: OfferRow, now = new Date()): boolean {
-  if (!offer.effectiveAt) return false;
-  if (offer.effectiveAt.getTime() > now.getTime()) return false;
-  if (offer.validUntil && offer.validUntil.getTime() < now.getTime()) return false;
-  return true;
+  return offerValidityToday(offer, now) === null;
 }
 
-function toOfferDTO(offer: OfferRow, now = new Date()): SupplierItemOfferDTO {
+/**
+ * O que a VIGÊNCIA de uma oferta impede hoje — `null` quando não impede nada.
+ *
+ * Só datas. Moeda é condição separada de propósito: "vigente" responde se o
+ * preço está no ar, e um preço em dólar vigente continua sendo o preço
+ * vigente daquele fornecedor — o que ele não pode é virar custo em reais.
+ * Misturar as duas faria a Sugestão de Compra deixar de enxergar a oferta
+ * atual de um fornecedor estrangeiro, que é outra pergunta e outra tela.
+ */
+function offerValidityToday(offer: OfferRow, now: Date): SupplierOfferEligibility | null {
+  if (!offer.effectiveAt) return "NO_VALIDITY";
+  /*
+   * "Hoje" é o dia de quem OPERA a Veridi, não o dia do relógio UTC do
+   * servidor — às 23h de São Paulo os dois já discordam. O dia gravado na
+   * oferta é lido em UTC porque é assim que um marcador de dia é gravado.
+   * Duas leituras diferentes, de propósito: uma é instante, a outra é dia.
+   */
+  const dia = hojeComercial(now);
+  if (diaDaColunaDeData(offer.effectiveAt) > dia) return "NOT_YET_EFFECTIVE";
+  if (offer.validUntil && diaDaColunaDeData(offer.validUntil) < dia) return "EXPIRED";
+  return null;
+}
+
+/**
+ * O diagnóstico COMPLETO de uma oferta, do jeito que a tela precisa dizer.
+ *
+ * Percorre as mesmas condições de `resolveSupplierOfferCost`. A ordem
+ * importa para a frase, não para o resultado: uma oferta em dólar sem
+ * vigência tem dois problemas, e dizer "sem vigência" mandaria a pessoa
+ * registrar outra oferta em dólar, que também não serviria. A moeda vem
+ * primeiro porque é o impedimento que nenhuma oferta nova resolve.
+ *
+ * O que NÃO está aqui: a ambiguidade entre fornecedores. Ela é do item, e
+ * uma oferta perfeitamente elegível continua elegível quando outra do mesmo
+ * item também é — o que falta ali é uma escolha, não uma condição.
+ */
+function offerEligibility(
+  offer: OfferRow,
+  supplierItem: SupplierItemWithRelations,
+  units: readonly UnitOfMeasureDecimalLike[],
+  now: Date,
+): SupplierOfferEligibility {
+  if (offer.currencyCode !== DEFAULT_OFFER_CURRENCY) return "FOREIGN_CURRENCY";
+
+  const porVigencia = offerValidityToday(offer, now);
+  if (porVigencia) return porVigencia;
+
+  const relacaoServe =
+    supplierItem.active &&
+    supplierItem.qualificationStatus === "APPROVED" &&
+    supplierItem.supplier.active;
+  if (!relacaoServe) return "SUPPLIER_NOT_APPROVED";
+
+  if (convertPriceToUom(offer.unitPrice, offer.priceUomCode, supplierItem.item.unitCode, units) === null) {
+    return "INCOMPATIBLE_UOM";
+  }
+
+  return "ELIGIBLE";
+}
+
+function toOfferDTO(
+  offer: OfferRow,
+  eligibility: SupplierOfferEligibility,
+  now = new Date(),
+): SupplierItemOfferDTO {
   return {
+    eligibility,
     id: offer.id,
     supplierItemId: offer.supplierItemId,
     unitPrice: offer.unitPrice.toString(),
@@ -122,12 +201,29 @@ function pickLatestLegacyOffer(offers: readonly OfferRow[]): OfferRow | null {
   );
 }
 
+/**
+ * Contexto que a linha sozinha não conhece.
+ *
+ * `units` para responder compatibilidade de unidade sem uma consulta por
+ * oferta; `ambiguousItemIds` para responder a ambiguidade do item sem uma
+ * consulta por linha. Os dois são resolvidos uma vez por requisição — a
+ * grade de Item × Fornecedor lista 20 relações e não pode pagar 20 vezes
+ * pela mesma pergunta.
+ */
+interface DTOContext {
+  now: Date;
+  units: readonly UnitOfMeasureDecimalLike[];
+  ambiguousItemIds: ReadonlySet<string>;
+}
+
 export function toSupplierItemDTO(
   supplierItem: SupplierItemWithRelations,
-  now = new Date(),
+  context: DTOContext,
 ): SupplierItemDTO {
+  const { now, units } = context;
   const current = pickCurrentOffer(supplierItem.offers, now);
   const legacy = pickLatestLegacyOffer(supplierItem.offers);
+  const eligibilityOf = (offer: OfferRow) => offerEligibility(offer, supplierItem, units, now);
 
   return {
     id: supplierItem.id,
@@ -147,14 +243,77 @@ export function toSupplierItemDTO(
     preferred: supplierItem.preferred,
     active: supplierItem.active,
     commercialNotes: supplierItem.commercialNotes,
-    currentOffer: current ? toOfferDTO(current, now) : null,
-    latestLegacyOffer: legacy ? toOfferDTO(legacy, now) : null,
+    currentOffer: current ? toOfferDTO(current, eligibilityOf(current), now) : null,
+    latestLegacyOffer: legacy ? toOfferDTO(legacy, eligibilityOf(legacy), now) : null,
     offerCount: supplierItem.offers.length,
+    costSourceAmbiguous: context.ambiguousItemIds.has(supplierItem.itemId),
     createdAt: supplierItem.createdAt.toISOString(),
     createdByName: supplierItem.createdByNameSnapshot,
     updatedAt: supplierItem.updatedAt.toISOString(),
     updatedByName: supplierItem.updatedByNameSnapshot,
   };
+}
+
+/**
+ * Quais destes itens têm mais de um fornecedor com oferta elegível e nenhum
+ * preferencial — o estado em que o motor devolve custo DESCONHECIDO.
+ *
+ * É a mesma condição de `resolveSupplierOfferCost`, feita de uma vez para o
+ * conjunto de itens da página: elegibilidade da relação e da vigência no
+ * `where`, compatibilidade de unidade em memória (o registro de UOM não
+ * cabe num filtro SQL). Uma consulta por página, nunca uma por linha.
+ *
+ * A pergunta é do ITEM, e não do fornecedor: o mesmo fornecedor pode ter a
+ * relação impecável e ainda assim o item ficar sem custo porque o vizinho
+ * também tem oferta.
+ */
+async function resolveAmbiguousItems(
+  itemIds: readonly string[],
+  units: readonly UnitOfMeasureDecimalLike[],
+  now: Date,
+): Promise<Set<string>> {
+  const ambiguous = new Set<string>();
+  if (itemIds.length === 0) return ambiguous;
+
+  const relations = await getPrisma().supplierItem.findMany({
+    where: {
+      itemId: { in: [...new Set(itemIds)] },
+      active: true,
+      qualificationStatus: "APPROVED",
+      supplier: { active: true },
+      offers: { some: offerValidityWhere(now) },
+    },
+    select: {
+      itemId: true,
+      preferred: true,
+      item: { select: { unitCode: true } },
+      offers: {
+        where: offerValidityWhere(now),
+        select: { unitPrice: true, priceUomCode: true },
+      },
+    },
+  });
+
+  const porItem = new Map<string, { candidatos: number; preferenciais: number }>();
+  for (const relation of relations) {
+    const temOfertaUsavel = relation.offers.some(
+      (offer) =>
+        convertPriceToUom(offer.unitPrice, offer.priceUomCode, relation.item.unitCode, units) !== null,
+    );
+    if (!temOfertaUsavel) continue;
+    const atual = porItem.get(relation.itemId) ?? { candidatos: 0, preferenciais: 0 };
+    atual.candidatos += 1;
+    if (relation.preferred) atual.preferenciais += 1;
+    porItem.set(relation.itemId, atual);
+  }
+
+  for (const [itemId, contagem] of porItem) {
+    // Um candidato só nunca é ambíguo — `SUPPLIER_OFFER_SINGLE_APPROVED`
+    // continua respondendo sem exigir preferencial. Mais de um preferencial
+    // é dado inconsistente e o motor trata igual a nenhum: ambíguo.
+    if (contagem.candidatos > 1 && contagem.preferenciais !== 1) ambiguous.add(itemId);
+  }
+  return ambiguous;
 }
 
 export async function getSupplierItemById(id: string): Promise<SupplierItemDetailDTO | null> {
@@ -165,12 +324,33 @@ export async function getSupplierItemById(id: string): Promise<SupplierItemDetai
   });
   if (!supplierItem) return null;
 
-  const history = await prisma.supplierItemQualificationHistory.findMany({
-    where: { supplierItemId: id },
-    orderBy: { changedAt: "asc" },
-  });
-
   const now = new Date();
+  const [history, units] = await Promise.all([
+    prisma.supplierItemQualificationHistory.findMany({
+      where: { supplierItemId: id },
+      orderBy: { changedAt: "asc" },
+    }),
+    prisma.unitOfMeasure.findMany(),
+  ]);
+
+  const [ambiguousItemIds, automatic] = await Promise.all([
+    resolveAmbiguousItems([supplierItem.itemId], units, now),
+    /*
+     * A fonte que o motor usaria HOJE para este item.
+     *
+     * Aqui e não na grade: é uma resolução por item, e responder isso por
+     * linha numa listagem seria o N+1 que a auditoria pediu para evitar. No
+     * detalhe é uma pergunta só, e é exatamente onde ela é feita — quem
+     * acabou de cadastrar uma oferta válida precisa entender por que o custo
+     * do item continua vindo de uma compra real de duas semanas atrás.
+     */
+    selectItemCostSource(
+      prisma,
+      { itemId: supplierItem.itemId, itemUnitCode: supplierItem.item.unitCode, referenceDate: now },
+      units,
+    ),
+  ]);
+
   const qualificationHistory: SupplierItemQualificationEventDTO[] = history.map((event) => ({
     id: event.id,
     fromStatus: event.fromStatus,
@@ -180,10 +360,22 @@ export async function getSupplierItemById(id: string): Promise<SupplierItemDetai
     changedByName: event.changedByNameSnapshot,
   }));
 
+  const context: DTOContext = { now, units, ambiguousItemIds };
+  const costSourceToday: SupplierItemCostSourceDTO = {
+    source: automatic.source,
+    unitCost: automatic.unitCost ? custoUnitario(automatic.unitCost) : null,
+    unitCode: supplierItem.item.unitCode,
+    details: automatic.details,
+    referenceDate: now.toISOString(),
+  };
+
   return {
-    ...toSupplierItemDTO(supplierItem, now),
-    offers: supplierItem.offers.map((offer) => toOfferDTO(offer, now)),
+    ...toSupplierItemDTO(supplierItem, context),
+    offers: supplierItem.offers.map((offer) =>
+      toOfferDTO(offer, offerEligibility(offer, supplierItem, units, now), now),
+    ),
     qualificationHistory,
+    costSourceToday,
   };
 }
 
@@ -232,8 +424,15 @@ export async function listSupplierItems(
   ]);
 
   const now = new Date();
+  const units = await prisma.unitOfMeasure.findMany();
+  const ambiguousItemIds = await resolveAmbiguousItems(
+    rows.map((row) => row.itemId),
+    units,
+    now,
+  );
+  const context: DTOContext = { now, units, ambiguousItemIds };
   return {
-    supplierItems: rows.map((row) => toSupplierItemDTO(row, now)),
+    supplierItems: rows.map((row) => toSupplierItemDTO(row, context)),
     ...pageMeta(pagination, total),
   };
 }
@@ -520,10 +719,19 @@ function prepareOffer(
     throw new InvalidMinimumOrderError("Informe a quantidade do pedido mínimo.");
   }
 
-  // Oferta manual vale a partir de agora, salvo vigência informada.
-  const effectiveAt = input.effectiveAt === undefined ? new Date() : input.effectiveAt;
+  /*
+   * A vigência vem de fora, sempre. O servidor não inventa "agora".
+   *
+   * Antes: `input.effectiveAt === undefined ? new Date() : …`. Uma oferta
+   * cadastrada sem data nascia valendo a partir do INSTANTE do POST, e a
+   * data comercial daquele preço passava a ser o relógio de quem gravou —
+   * um "hoje implícito" dentro do domínio, na única fronteira que não pode
+   * ter um. A tela pré-preenche a data de hoje de forma visível e
+   * editável; a schema exige que ela chegue.
+   */
+  const effectiveAt = input.effectiveAt;
   const validUntil = input.validUntil ?? null;
-  if (effectiveAt && validUntil && validUntil.getTime() < effectiveAt.getTime()) {
+  if (validUntil && validUntil.getTime() < effectiveAt.getTime()) {
     throw new InvalidOfferValidityError();
   }
 

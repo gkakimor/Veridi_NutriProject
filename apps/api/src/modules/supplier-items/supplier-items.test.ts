@@ -91,6 +91,17 @@ async function createRelation(app: App, itemId: string, supplierId: string) {
   return response;
 }
 
+/**
+ * A vigência de uma oferta nova, sempre explícita.
+ *
+ * Antes destes testes o servidor assumia "agora" quando `effectiveAt` não
+ * vinha, e por isso os casos abaixo o omitiam. A ausência deixou de ser
+ * aceita: a data comercial de um preço é afirmação de quem negocia.
+ */
+function hoje(): string {
+  return new Date().toISOString();
+}
+
 /** Homologa usando um app da Qualidade — Compras nunca homologa sozinha. */
 async function approve(supplierItemId: string, note = "Auditoria ok") {
   const quality = buildTestApp("QUALITY");
@@ -275,6 +286,7 @@ describe("Item × Fornecedor — ofertas", () => {
         priceUomCode: "kg",
         minimumOrderQuantity: "25",
         minimumOrderUomCode: "kg",
+        effectiveAt: hoje(),
       },
     });
     expect(first.statusCode).toBe(201);
@@ -285,7 +297,7 @@ describe("Item × Fornecedor — ofertas", () => {
     const second = await app.inject({
       method: "POST",
       url: `/supplier-items/${relation.id}/offers`,
-      payload: { unitPrice: "95", priceUomCode: "kg" },
+      payload: { unitPrice: "95", priceUomCode: "kg", effectiveAt: hoje() },
     });
     expect(second.json().currentOffer.unitPrice).toBe("95");
     // A oferta anterior continua existindo — histórico não é reescrito.
@@ -315,7 +327,7 @@ describe("Item × Fornecedor — ofertas", () => {
     const usd = await app.inject({
       method: "POST",
       url: `/supplier-items/${relation.id}/offers`,
-      payload: { unitPrice: "20", currencyCode: "usd", priceUomCode: "kg" },
+      payload: { unitPrice: "20", currencyCode: "usd", priceUomCode: "kg", effectiveAt: hoje() },
     });
     expect(usd.statusCode).toBe(201);
     expect(usd.json().currentOffer.currencyCode).toBe("USD");
@@ -325,7 +337,7 @@ describe("Item × Fornecedor — ofertas", () => {
     const invalid = await app.inject({
       method: "POST",
       url: `/supplier-items/${relation.id}/offers`,
-      payload: { unitPrice: "20", currencyCode: "R$", priceUomCode: "kg" },
+      payload: { unitPrice: "20", currencyCode: "R$", priceUomCode: "kg", effectiveAt: hoje() },
     });
     expect(invalid.statusCode).toBe(400);
 
@@ -348,6 +360,7 @@ describe("Item × Fornecedor — ofertas", () => {
         priceUomCode: "kg",
         minimumOrderQuantity: "0.25",
         minimumOrderUomCode: "kg",
+        effectiveAt: hoje(),
       },
     });
     expect(precise.statusCode).toBe(201);
@@ -358,7 +371,7 @@ describe("Item × Fornecedor — ofertas", () => {
     const incompatible = await app.inject({
       method: "POST",
       url: `/supplier-items/${relation.id}/offers`,
-      payload: { unitPrice: "5", priceUomCode: "un" },
+      payload: { unitPrice: "5", priceUomCode: "un", effectiveAt: hoje() },
     });
     expect(incompatible.statusCode).toBe(400);
     expect(incompatible.json().error).toBe("incompatible_uom");
@@ -468,6 +481,359 @@ describe("Item × Fornecedor — listagem e exportação", () => {
     expect(csv.body).not.toContain(item.id);
     expect(csv.body).not.toContain(relation.id);
 
+    await app.close();
+  });
+});
+
+/**
+ * COST-SOURCE-01 — a relação Item × Fornecedor como fonte operacional de custo.
+ *
+ * O cadastro sempre existiu; o que faltava era ele conseguir participar do
+ * custo e a tela conseguir dizer por que não participava. Três coisas:
+ * vigência obrigatória na oferta nova, preferencial único e transacional, e
+ * um diagnóstico por oferta que sai da MESMA condição do motor.
+ */
+describe("Item × Fornecedor — prontidão como fonte de custo", () => {
+  it("oferta nova exige vigência; a coluna continua aceitando nulo para o legado", async () => {
+    const app = buildTestApp("PURCHASING");
+    await app.ready();
+    const item = await createItem();
+    const supplier = await createSupplier();
+    const relation = (await createRelation(app, item.id, supplier.id)).json();
+
+    const semVigencia = await app.inject({
+      method: "POST",
+      url: `/supplier-items/${relation.id}/offers`,
+      payload: { unitPrice: "100", priceUomCode: "kg" },
+    });
+    expect(semVigencia.statusCode).toBe(400);
+
+    const vazia = await app.inject({
+      method: "POST",
+      url: `/supplier-items/${relation.id}/offers`,
+      payload: { unitPrice: "100", priceUomCode: "kg", effectiveAt: "" },
+    });
+    expect(vazia.statusCode).toBe(400);
+
+    const comVigencia = await app.inject({
+      method: "POST",
+      url: `/supplier-items/${relation.id}/offers`,
+      payload: { unitPrice: "100", priceUomCode: "kg", effectiveAt: hoje() },
+    });
+    expect(comVigencia.statusCode).toBe(201);
+
+    // O legado continua entrando pelo banco, sem data, e continua legítimo:
+    // são 602 preços de planilha que nunca tiveram data de cotação.
+    const prisma = getPrisma();
+    await prisma.supplierItemOffer.create({
+      data: {
+        supplierItemId: relation.id,
+        unitPrice: "42",
+        currencyCode: "BRL",
+        priceUomCode: "kg",
+        effectiveAt: null,
+        source: "LEGACY_IMPORT",
+        sourceKey: `test-${marker()}`,
+      },
+    });
+    const detalhe = (await app.inject({ method: "GET", url: `/supplier-items/${relation.id}` })).json();
+    expect(detalhe.offers).toHaveLength(2);
+
+    await app.close();
+  });
+
+  it("cada oferta diz POR QUE serve ou não serve de referência de custo", async () => {
+    const app = buildTestApp("PURCHASING");
+    await app.ready();
+    const item = await createItem();
+    const supplier = await createSupplier();
+    const relation = (await createRelation(app, item.id, supplier.id)).json();
+
+    // Relação ainda PENDENTE: mesmo uma oferta impecável não serve.
+    const pendente = (
+      await app.inject({
+        method: "POST",
+        url: `/supplier-items/${relation.id}/offers`,
+        payload: { unitPrice: "80", priceUomCode: "kg", effectiveAt: hoje() },
+      })
+    ).json();
+    expect(pendente.offers[0].eligibility).toBe("SUPPLIER_NOT_APPROVED");
+
+    await approve(relation.id);
+
+    const prisma = getPrisma();
+    await prisma.supplierItemOffer.createMany({
+      data: [
+        {
+          supplierItemId: relation.id,
+          unitPrice: "70",
+          currencyCode: "USD",
+          priceUomCode: "kg",
+          effectiveAt: new Date(),
+          source: "MANUAL",
+        },
+        {
+          supplierItemId: relation.id,
+          unitPrice: "60",
+          currencyCode: "BRL",
+          priceUomCode: "kg",
+          effectiveAt: null,
+          source: "LEGACY_IMPORT",
+          sourceKey: `test-${marker()}`,
+        },
+        {
+          supplierItemId: relation.id,
+          unitPrice: "50",
+          currencyCode: "BRL",
+          priceUomCode: "kg",
+          effectiveAt: new Date(Date.now() + 30 * 86_400_000),
+          source: "MANUAL",
+        },
+        {
+          supplierItemId: relation.id,
+          unitPrice: "40",
+          currencyCode: "BRL",
+          priceUomCode: "kg",
+          effectiveAt: new Date(Date.now() - 60 * 86_400_000),
+          validUntil: new Date(Date.now() - 10 * 86_400_000),
+          source: "MANUAL",
+        },
+      ],
+    });
+
+    const detalhe = (await app.inject({ method: "GET", url: `/supplier-items/${relation.id}` })).json();
+    const porPreco = new Map<string, string>(
+      detalhe.offers.map((offer: { unitPrice: string; eligibility: string }) => [
+        offer.unitPrice,
+        offer.eligibility,
+      ]),
+    );
+    expect(porPreco.get("80")).toBe("ELIGIBLE");
+    expect(porPreco.get("70")).toBe("FOREIGN_CURRENCY");
+    expect(porPreco.get("60")).toBe("NO_VALIDITY");
+    expect(porPreco.get("50")).toBe("NOT_YET_EFFECTIVE");
+    expect(porPreco.get("40")).toBe("EXPIRED");
+
+    await app.close();
+  });
+
+  it("um fornecedor homologado com oferta válida não precisa de preferencial", async () => {
+    const app = buildTestApp("PURCHASING");
+    await app.ready();
+    const item = await createItem();
+    const supplier = await createSupplier();
+    const relation = (await createRelation(app, item.id, supplier.id)).json();
+    await approve(relation.id);
+    await app.inject({
+      method: "POST",
+      url: `/supplier-items/${relation.id}/offers`,
+      payload: { unitPrice: "120", priceUomCode: "kg", effectiveAt: hoje() },
+    });
+
+    const detalhe = (await app.inject({ method: "GET", url: `/supplier-items/${relation.id}` })).json();
+    expect(detalhe.costSourceAmbiguous).toBe(false);
+    expect(detalhe.preferred).toBe(false);
+    // O item tem custo sem ninguém marcar preferencial.
+    expect(detalhe.costSourceToday.source).toBe("SUPPLIER_OFFER_SINGLE_APPROVED");
+    expect(detalhe.costSourceToday.unitCost).not.toBeNull();
+
+    await app.close();
+  });
+
+  it("dois fornecedores homologados sem preferencial: ambíguo, e marcar um resolve", async () => {
+    const app = buildTestApp("PURCHASING");
+    await app.ready();
+    const item = await createItem();
+    const a = await createSupplier();
+    const b = await createSupplier();
+
+    const relacaoA = (await createRelation(app, item.id, a.id)).json();
+    const relacaoB = (await createRelation(app, item.id, b.id)).json();
+    await approve(relacaoA.id);
+    await approve(relacaoB.id);
+    for (const [relacao, preco] of [
+      [relacaoA, "300"],
+      [relacaoB, "260"],
+    ] as const) {
+      await app.inject({
+        method: "POST",
+        url: `/supplier-items/${relacao.id}/offers`,
+        payload: { unitPrice: preco, priceUomCode: "kg", effectiveAt: hoje() },
+      });
+    }
+
+    const ambiguo = (await app.inject({ method: "GET", url: `/supplier-items/${relacaoA.id}` })).json();
+    expect(ambiguo.costSourceAmbiguous).toBe(true);
+    // Custo DESCONHECIDO — nunca o mais barato, nunca o primeiro.
+    expect(ambiguo.costSourceToday.source).toBe("AMBIGUOUS_SUPPLIER_REFERENCE");
+    expect(ambiguo.costSourceToday.unitCost).toBeNull();
+
+    // A ambiguidade é do ITEM: a outra linha da grade diz a mesma coisa.
+    const listagem = (
+      await app.inject({ method: "GET", url: `/supplier-items?itemId=${item.id}` })
+    ).json();
+    expect(listagem.supplierItems).toHaveLength(2);
+    expect(listagem.supplierItems.every((row: { costSourceAmbiguous: boolean }) => row.costSourceAmbiguous)).toBe(
+      true,
+    );
+
+    const resolvido = (
+      await app.inject({
+        method: "POST",
+        url: `/supplier-items/${relacaoB.id}/preferred`,
+        payload: { preferred: true },
+      })
+    ).json();
+    expect(resolvido.costSourceAmbiguous).toBe(false);
+    expect(resolvido.costSourceToday.source).toBe("SUPPLIER_OFFER_PREFERRED");
+    // O preferencial é o de R$ 260 porque ALGUÉM escolheu, não porque é o
+    // mais barato: trocar para o A devolve 300.
+    expect(resolvido.costSourceToday.unitCost).toBe("260.00000000");
+
+    const trocado = (
+      await app.inject({
+        method: "POST",
+        url: `/supplier-items/${relacaoA.id}/preferred`,
+        payload: { preferred: true },
+      })
+    ).json();
+    expect(trocado.costSourceToday.unitCost).toBe("300.00000000");
+
+    // A troca é transacional: o preferencial anterior caiu na mesma operação.
+    const anterior = (await app.inject({ method: "GET", url: `/supplier-items/${relacaoB.id}` })).json();
+    expect(anterior.preferred).toBe(false);
+
+    await app.close();
+  });
+
+  it("marcar preferencial em paralelo deixa no máximo um — a garantia é do banco", async () => {
+    const app = buildTestApp("PURCHASING");
+    await app.ready();
+    const item = await createItem();
+    const relacoes = [];
+    for (let i = 0; i < 3; i += 1) {
+      const supplier = await createSupplier();
+      const relation = (await createRelation(app, item.id, supplier.id)).json();
+      await approve(relation.id);
+      relacoes.push(relation);
+    }
+
+    // Três requisições disputando a preferência do mesmo item. O índice
+    // parcial único garante o invariante; alguma pode falhar, e falhar é
+    // aceitável — dois preferenciais não são.
+    await Promise.allSettled(
+      relacoes.map((relacao) =>
+        app.inject({
+          method: "POST",
+          url: `/supplier-items/${relacao.id}/preferred`,
+          payload: { preferred: true },
+        }),
+      ),
+    );
+
+    const preferenciais = await getPrisma().supplierItem.count({
+      where: { itemId: item.id, preferred: true },
+    });
+    expect(preferenciais).toBeLessThanOrEqual(1);
+
+    await app.close();
+  });
+
+  it("preferencial sem oferta vigente não inventa custo — as duas condições são independentes", async () => {
+    const app = buildTestApp("PURCHASING");
+    await app.ready();
+    const item = await createItem();
+    const supplier = await createSupplier();
+    const relation = (await createRelation(app, item.id, supplier.id)).json();
+    await approve(relation.id);
+
+    const prisma = getPrisma();
+    await prisma.supplierItemOffer.create({
+      data: {
+        supplierItemId: relation.id,
+        unitPrice: "999",
+        currencyCode: "BRL",
+        priceUomCode: "kg",
+        effectiveAt: null,
+        source: "LEGACY_IMPORT",
+        sourceKey: `test-${marker()}`,
+      },
+    });
+    const marcado = (
+      await app.inject({
+        method: "POST",
+        url: `/supplier-items/${relation.id}/preferred`,
+        payload: { preferred: true },
+      })
+    ).json();
+
+    expect(marcado.preferred).toBe(true);
+    expect(marcado.offers[0].eligibility).toBe("NO_VALIDITY");
+    expect(marcado.costSourceToday.source).toBe("NO_COST");
+    expect(marcado.costSourceToday.unitCost).toBeNull();
+
+    await app.close();
+  });
+
+  it("compra real recente aparece como fonte atual mesmo com oferta elegível", async () => {
+    const app = buildTestApp("PURCHASING");
+    await app.ready();
+    const item = await createItem();
+    const supplier = await createSupplier();
+    const relation = (await createRelation(app, item.id, supplier.id)).json();
+    await approve(relation.id);
+    await app.inject({
+      method: "POST",
+      url: `/supplier-items/${relation.id}/offers`,
+      payload: { unitPrice: "300", priceUomCode: "kg", effectiveAt: hoje() },
+    });
+
+    // Compra real pelas rotas oficiais: preço de OC nunca vira custo, e o
+    // que conta é o custo efetivo informado no recebimento.
+    const po = (
+      await app.inject({
+        method: "POST",
+        url: "/purchase-orders",
+        payload: {
+          supplierId: supplier.id,
+          orderDate: new Date().toISOString(),
+          lines: [{ itemId: item.id, orderedQuantity: "10" }],
+        },
+      })
+    ).json();
+    await app.inject({ method: "POST", url: `/purchase-orders/${po.id}/confirm` });
+    const receipt = (
+      await app.inject({
+        method: "POST",
+        url: `/purchase-orders/${po.id}/receipts`,
+        payload: {
+          receivedAt: new Date().toISOString(),
+          lines: [
+            {
+              purchaseOrderLineId: po.lines[0].id,
+              receivedQuantity: "10",
+              supplierLot: `SUP-${marker()}`,
+              actualUnitCost: "1050",
+            },
+          ],
+        },
+      })
+    ).json();
+
+    const detalhe = (await app.inject({ method: "GET", url: `/supplier-items/${relation.id}` })).json();
+    // A oferta continua ELEGÍVEL — "serve de referência" não é "está sendo
+    // usada". Quem responde o que está valendo é a fonte do item.
+    expect(detalhe.offers[0].eligibility).toBe("ELIGIBLE");
+    expect(detalhe.costSourceToday.source).toBe("WEIGHTED_AVG_30D");
+    expect(detalhe.costSourceToday.unitCost).toBe("1050.00000000");
+
+    const prisma = getPrisma();
+    await prisma.inventoryMovement.deleteMany({ where: { itemId: item.id } });
+    await prisma.receiptLine.deleteMany({ where: { receiptId: receipt.id } });
+    await prisma.receipt.delete({ where: { id: receipt.id } });
+    await prisma.lot.deleteMany({ where: { itemId: item.id } });
+    await prisma.purchaseOrderLine.deleteMany({ where: { purchaseOrderId: po.id } });
+    await prisma.purchaseOrder.delete({ where: { id: po.id } });
     await app.close();
   });
 });

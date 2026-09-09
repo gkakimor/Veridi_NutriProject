@@ -7,6 +7,8 @@ import {
   ITEM_FAMILY_LABELS,
   SUPPLIER_ITEM_QUALIFICATION_LABELS,
   SUPPLIER_ITEM_QUALIFICATION_STATUSES,
+  SUPPLIER_OFFER_AMBIGUITY_MESSAGE,
+  SUPPLIER_OFFER_ELIGIBILITY_HINTS,
 } from "@veridi/shared";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
 import { listItems } from "../../lib/items-api";
@@ -69,10 +71,13 @@ export function SupplierItemPriceCell({ row }: { row: SupplierItemDTO }) {
   }
   if (row.latestLegacyOffer) {
     return (
-      <span title="Observação histórica de preço, sem vigência — não é o preço atual.">
+      <span title={SUPPLIER_OFFER_ELIGIBILITY_HINTS[row.latestLegacyOffer.eligibility]}>
         {row.latestLegacyOffer.unitPrice} {row.latestLegacyOffer.currencyCode}/
         {row.latestLegacyOffer.priceUomCode}{" "}
-        <span className="badge badge--neutral">Referência legada</span>
+        {/* Sem vigência não é oferta inválida: é histórico, e some da
+            grade quem o esconder. A frase inteira fica no title e no
+            detalhe — a célula do preço não é lugar de parágrafo. */}
+        <span className="badge badge--neutral">Importada sem vigência</span>
       </span>
     );
   }
@@ -405,7 +410,21 @@ export function SupplierItemsPage() {
                     {SUPPLIER_ITEM_QUALIFICATION_LABELS[row.qualificationStatus]}
                   </span>
                 </td>
-                <td className="col-tight">{row.preferred ? "Sim" : "—"}</td>
+                {/* A ambiguidade é do ITEM e aparece na linha porque é aqui
+                    que ela se resolve: marcar um preferencial é ação de uma
+                    relação. Sem isso, quem cadastrou dois fornecedores certos
+                    via o CMV sem custo e nada explicava a ligação. */}
+                <td className="col-tight">
+                  {row.preferred ? (
+                    <span className="badge badge--active">Sim</span>
+                  ) : row.costSourceAmbiguous ? (
+                    <span className="badge badge--neutral" title={SUPPLIER_OFFER_AMBIGUITY_MESSAGE}>
+                      Definir preferencial
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="col-tight is-numeric">
                   <SupplierItemPriceCell row={row} />
                 </td>
