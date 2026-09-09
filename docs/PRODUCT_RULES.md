@@ -4247,11 +4247,19 @@ A cardinalidade não muda: uma QuoteVersion gera no máximo um CustomerOrder
 o dia corrente. Não existe status `EXPIRED`, nada varre o banco à meia-noite, e
 o documento vencido continua inteiro no histórico.
 
-**"Válido até 15/09" vale o dia 15 inteiro.** As colunas de data-só guardam a
-meia-noite UTC do dia escolhido; a comparação usa o FIM desse dia
-(`lib/business-day.ts`), que é a mesma convenção da referência de custo e do
-CMV. Comparar contra o primeiro instante venceria a proposta antes de o dia dela
-começar.
+**"Válido até 15/09" vale o dia 15 inteiro, na operação brasileira.** A
+validade é uma DATA CIVIL, não um instante: o campo é um `<input type="date">`,
+e a coluna guarda a meia-noite UTC do dia escolhido como MARCADOR do dia. A
+pergunta do domínio — "o dia 15 já acabou na Veridi?" — se responde comparando
+DIAS: o dia de hoje em `America/Sao_Paulo` contra o dia escrito na proposta, os
+dois em `YYYY-MM-DD` (`lib/business-day.ts`).
+
+Nenhum instante é fabricado, e as duas tentativas de fabricar um erraram em
+direções opostas: comparar contra o PRIMEIRO instante do dia vence a proposta um
+dia antes do impresso; comparar contra o FIM DO DIA EM UTC a vence às 21h de São
+Paulo do próprio dia — três horas antes, e só à noite, que é o pior horário para
+descobrir. O fuso vive numa constante só, e nunca como offset fixo `-03:00`: o
+horário de verão voltaria a errar em silêncio.
 
 **Aceita não vence retroativamente.** A validade controla o ACEITE; depois do
 "sim" existe acordo. O Pedido pode ser materializado semanas depois, com o preço
