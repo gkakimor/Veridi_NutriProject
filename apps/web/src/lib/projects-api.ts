@@ -8,7 +8,6 @@ import type {
   ProjectListResponse,
   ProjectProductDTO,
   ProjectStatus,
-  PricingVersionDTO,
   ProjectVocabularyResponse,
   QuoteLinePricingOptionsResponse,
   QuoteVersionDTO,
@@ -183,10 +182,35 @@ export async function prepareTechnicalProduct(
  */
 export async function getQuotePricingOptions(
   lineId: string,
-): Promise<PricingVersionDTO | null> {
+): Promise<QuoteLinePricingOptionsResponse> {
   const response = await apiFetch(`${API_URL}/quote-lines/${lineId}/pricing-options`);
-  const body = (await parseJsonOrThrow(response)) as QuoteLinePricingOptionsResponse;
-  return body.pricing;
+  return (await parseJsonOrThrow(response)) as QuoteLinePricingOptionsResponse;
+}
+
+/**
+ * Manter a condição comercial anterior nesta linha.
+ *
+ * O servidor valida a fonte, mede a quantidade e decide se o motivo é
+ * necessário — a tela pede o motivo quando ele é recusado, nunca o adivinha.
+ */
+export async function inheritQuotePrice(
+  lineId: string,
+  input: { sourceQuoteLineId: string; reason?: string },
+): Promise<QuoteVersionDTO> {
+  return postJson<QuoteVersionDTO>(`/quote-lines/${lineId}/inherit-price`, input);
+}
+
+/**
+ * Reajustar a condição anterior por um percentual.
+ *
+ * O preço final é do SERVIDOR: a tela mostra prévia, e o que fica gravado é o
+ * que volta daqui.
+ */
+export async function adjustQuotePrice(
+  lineId: string,
+  input: { sourceQuoteLineId: string; adjustmentPercent: string; reason?: string },
+): Promise<QuoteVersionDTO> {
+  return postJson<QuoteVersionDTO>(`/quote-lines/${lineId}/adjust-price`, input);
 }
 
 export async function applyQuotePricing(

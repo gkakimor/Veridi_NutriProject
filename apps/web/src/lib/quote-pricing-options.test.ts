@@ -32,16 +32,25 @@ beforeEach(() => {
 
 describe("#16 — opções de precificação da linha do orçamento", () => {
   it("ausência de precificação vigente é 200 e vira ausência, sem erro", async () => {
-    vi.mocked(apiFetch).mockResolvedValue(resposta(200, { pricing: null }));
+    vi.mocked(apiFetch).mockResolvedValue(resposta(200, { pricing: null, agreement: null }));
 
-    await expect(getQuotePricingOptions("ql-1")).resolves.toBeNull();
+    // O envelope traz as DUAS referências que formam preço (§74): a
+    // precificação vigente e a condição acordada anterior. Ausência das duas
+    // é resposta normal, em 200.
+    await expect(getQuotePricingOptions("ql-1")).resolves.toEqual({
+      pricing: null,
+      agreement: null,
+    });
   });
 
   it("precificação vigente chega dentro do envelope", async () => {
     const pricing = { id: "prec-1", code: "PREC-000001", tiers: [] } as unknown as PricingVersionDTO;
-    vi.mocked(apiFetch).mockResolvedValue(resposta(200, { pricing }));
+    vi.mocked(apiFetch).mockResolvedValue(resposta(200, { pricing, agreement: null }));
 
-    await expect(getQuotePricingOptions("ql-1")).resolves.toBe(pricing);
+    await expect(getQuotePricingOptions("ql-1")).resolves.toEqual({
+      pricing,
+      agreement: null,
+    });
   });
 
   it("linha inexistente continua sendo erro — 404 não vira 'sem preço'", async () => {

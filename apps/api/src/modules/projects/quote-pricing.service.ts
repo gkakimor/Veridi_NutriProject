@@ -8,6 +8,11 @@ import type {
 import { getPrisma } from "../../db/prisma.js";
 import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
 import { getActivePricingForProduct } from "../pricing/pricing.service.js";
+import {
+  normalizarQuantidadeDeFaixa,
+  quantidadesDeFaixaEquivalentes,
+  unidadeCanonicaDaFaixa,
+} from "../pricing/tier-quantity.js";
 import { QuoteNotDraftError, QuoteNotFoundError } from "./projects.errors.js";
 import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
 import { fecharPrecoUnitarioComercial } from "../../lib/commercial-price.js";
@@ -141,8 +146,19 @@ export function pricingProvenanceForLine(
   quote: QuoteLinePricingRow,
   quoteVersionStatus: string,
 ): QuotePricingProvenanceDTO | null {
-  if (quote.priceSource !== "PRICING_TIER") return null;
-
+  /*
+   * O snapshot congelado manda, venha o preço de onde vier — §74.
+   *
+   * Desde que a proposta enviada passou a congelar a economia CORRENTE também
+   * para linha sem faixa (preço herdado, reajustado ou manual), exigir
+   * `PRICING_TIER` aqui esconderia o que acabou de ser gravado: a linha ficava
+   * com `pricing: null` sobre um snapshot que existe no banco.
+   *
+   * O que este bloco devolve é a REFERÊNCIA ECONÔMICA do documento, não a
+   * origem do preço. Quem responde "de onde veio este preço" é `priceOrigin`,
+   * e uma linha herdada continua dizendo `INHERITED_AGREEMENT` mesmo tendo
+   * CMV e faixa congelados ao lado.
+   */
   if (quoteVersionStatus !== "DRAFT" && quote.pricingCodeSnapshot) {
     return {
       pricingVersionId: quote.pricingVersionId,
@@ -188,10 +204,21 @@ export function pricingProvenanceForLine(
     };
   }
 
+  // Enquanto é rascunho, a proveniência é a leitura VIVA da faixa vinculada —
+  // e só existe quando a linha foi precificada por faixa.
+  if (quote.priceSource !== "PRICING_TIER") return null;
   const tier = quote.pricingTier;
   const version = quote.pricingVersion;
   if (!tier || !version) return null;
 
+  return provenanceFromTier(version, tier);
+}
+
+/** A leitura viva de uma faixa, no formato da proveniência. */
+function provenanceFromTier(
+  version: PrismaTypes.PricingVersionGetPayload<object>,
+  tier: PrismaTypes.PricingTierGetPayload<object>,
+): QuotePricingProvenanceDTO {
   return {
     pricingVersionId: version.id,
     pricingCode: version.code,
@@ -293,6 +320,16 @@ export async function applyQuoteLinePricing(
     where: { id: lineId },
     data: {
       priceSource: "PRICING_TIER",
+      /*
+       * A decisão comercial deste ciclo — §74. `priceSource` continua
+       * respondendo "tecnicamente veio de faixa?"; `priceOrigin` responde
+       * "qual escolha formou este preço?". Aplicar a faixa apaga qualquer
+       * herança: o preço passou a ser o da precificação atual.
+       */
+      priceOrigin: "CURRENT_PRICING",
+      inheritedFromQuoteLineId: null,
+      adjustmentPercent: null,
+      priceOriginReason: null,
       pricingVersionId: tier.pricingVersionId,
       pricingTierId: tier.id,
       quotedQuantity: tier.quantity,
@@ -331,7 +368,17 @@ export async function useManualQuoteLinePrice(lineId: string, _actor: User): Pro
 
   await prisma.quoteLine.update({
     where: { id: lineId },
-    data: { priceSource: "MANUAL", pricingVersionId: null, pricingTierId: null },
+    data: {
+      priceSource: "MANUAL",
+      // Assumir o preço à mão é uma decisão comercial explícita, e é ela que
+      // fica registrada — §74. Nenhuma herança sobrevive a isto.
+      priceOrigin: "MANUAL",
+      inheritedFromQuoteLineId: null,
+      adjustmentPercent: null,
+      priceOriginReason: null,
+      pricingVersionId: null,
+      pricingTierId: null,
+    },
   });
   return line.quoteVersionId;
 }
@@ -349,6 +396,54 @@ export function assertPriceEditable(
   ) {
     throw new PriceLockedByPricingError();
   }
+}
+
+/**
+ * A faixa da precificação ATIVA que representa a quantidade desta linha.
+ *
+ * Identidade por quantidade FÍSICA normalizada na unidade canônica do produto
+ * — §68, a mesma regra da faixa. `1 kg` e `1000 g` são a mesma faixa; `500 g`
+ * e `500 kg` não são. Sem quantidade na linha não há faixa a escolher, e
+ * escolher "a mais próxima" seria inventar cenário econômico.
+ */
+async function faixaEquivalenteVigente(line: {
+  productId: string;
+  quotedQuantity: Prisma.Decimal | null;
+  uomCode: string | null;
+}): Promise<{
+  version: PrismaTypes.PricingVersionGetPayload<object>;
+  tier: PrismaTypes.PricingTierGetPayload<object>;
+} | null> {
+  if (!line.quotedQuantity || !line.uomCode) return null;
+  const prisma = getPrisma();
+
+  const version = await prisma.pricingVersion.findFirst({
+    where: { productId: line.productId, status: "ACTIVE" },
+    include: { tiers: true, product: { select: { finishedProductItem: { select: { unitCode: true } } } } },
+  });
+  if (!version) return null;
+
+  const units = await prisma.unitOfMeasure.findMany();
+  const unidadeCanonica = unidadeCanonicaDaFaixa(version.product.finishedProductItem?.unitCode);
+  let daLinha: Prisma.Decimal;
+  try {
+    daLinha = normalizarQuantidadeDeFaixa(
+      { quantity: line.quotedQuantity, uomCode: line.uomCode },
+      unidadeCanonica,
+      units,
+    );
+  } catch {
+    // Linha em unidade de outra dimensão não casa com faixa nenhuma.
+    return null;
+  }
+
+  const tier = version.tiers.find((candidata) =>
+    quantidadesDeFaixaEquivalentes(candidata, daLinha, unidadeCanonica, units),
+  );
+  if (!tier) return null;
+
+  const { tiers: _tiers, product: _product, ...versionRow } = version;
+  return { version: versionRow, tier };
 }
 
 /** Snapshot econômico congelado no envio da proposta. */
@@ -379,8 +474,35 @@ export async function buildLineSnapshots(
       productNameSnapshot: product?.name ?? line.productNameSnapshot,
     };
 
+    /*
+     * Preço que NÃO veio de faixa também congela economia — §74.
+     *
+     * O preço de uma linha herdada é o acordo anterior; o CUSTO dela é o de
+     * hoje. Congelar o CMV antigo junto com o preço faria a proposta nova
+     * descrever a economia de um documento passado, e a variação de custo
+     * entre um ciclo e o outro é exatamente o que se quer medir depois.
+     * Congelar nada — que era o comportamento — deixava a proposta enviada sem
+     * base econômica nenhuma.
+     *
+     * A referência atual é a faixa da precificação ATIVA cuja quantidade
+     * física é a mesma da linha (§68): mesma fonte de CMV do resto do sistema,
+     * sem um segundo motor. Sem precificação ativa para aquela quantidade não
+     * há custo corrente a congelar, e a linha segue só com o produto — o preço
+     * do acordo não depende dele para ser válido.
+     *
+     * A confirmação de custo incompleto continua valendo só para quem
+     * PRECIFICOU pela faixa: ali o custo formou o preço. Aqui ele é
+     * referência econômica, e não pode passar a bloquear um envio que hoje
+     * acontece.
+     */
     if (line.priceSource !== "PRICING_TIER") {
-      result.push([line.id, productSnapshot]);
+      const corrente = await faixaEquivalenteVigente(line);
+      result.push([
+        line.id,
+        corrente
+          ? { ...productSnapshot, ...buildProvenanceSnapshot(provenanceFromTier(corrente.version, corrente.tier)) }
+          : productSnapshot,
+      ]);
       continue;
     }
 

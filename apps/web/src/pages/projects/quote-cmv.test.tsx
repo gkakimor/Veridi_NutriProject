@@ -87,6 +87,17 @@ function pricing(tiers: PricingVersionDTO["tiers"]): PricingVersionDTO {
   } as unknown as PricingVersionDTO;
 }
 
+/**
+ * O envelope de opções da linha.
+ *
+ * A tela pede num lugar só as duas referências que formam preço: a
+ * precificação vigente e a condição comercial anterior. Aqui, sem condição —
+ * estes casos são sobre a faixa.
+ */
+function opcoes(tiers: PricingVersionDTO["tiers"]) {
+  return { pricing: pricing(tiers), agreement: null };
+}
+
 function line(overrides: Partial<QuoteLineDTO> = {}): QuoteLineDTO {
   return {
     id: "l-1",
@@ -101,6 +112,10 @@ function line(overrides: Partial<QuoteLineDTO> = {}): QuoteLineDTO {
     unitPrice: null,
     total: null,
     priceSource: "MANUAL",
+    priceOrigin: null,
+    inheritedFromQuoteLineId: null,
+    adjustmentPercent: null,
+    priceOriginReason: null,
     pricing: null,
     ...overrides,
   };
@@ -182,7 +197,7 @@ beforeEach(() => {
 describe("Sugestão de faixa na linha do orçamento", () => {
   it("mostra a faixa vigente quando existe para exatamente aquela quantidade", async () => {
     vi.mocked(getQuotePricingOptions).mockResolvedValue(
-      pricing([tier("t-500", "500", "44.9000"), tier("t-1000", "1000", "38.9000")]),
+      opcoes([tier("t-500", "500", "44.9000"), tier("t-1000", "1000", "38.9000")]),
     );
     renderQuotes([quote()]);
 
@@ -194,7 +209,7 @@ describe("Sugestão de faixa na linha do orçamento", () => {
   });
 
   it("existir faixa não muda o preço sozinho — só o clique aplica", async () => {
-    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([tier("t-1000", "1000", "38.9000")]));
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([tier("t-1000", "1000", "38.9000")]));
     renderQuotes([quote()]);
 
     await screen.findByRole("button", { name: "Aplicar preço calculado" });
@@ -206,7 +221,7 @@ describe("Sugestão de faixa na linha do orçamento", () => {
   });
 
   it("aplicada, a linha passa a ter origem de faixa de precificação", async () => {
-    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([tier("t-1000", "1000", "38.9000")]));
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([tier("t-1000", "1000", "38.9000")]));
     renderQuotes([
       quote({
         lines: [
@@ -233,7 +248,7 @@ describe("Sugestão de faixa na linha do orçamento", () => {
 
   it("sem faixa para a quantidade, diz isso e oferece simular o CMV", async () => {
     vi.mocked(getQuotePricingOptions).mockResolvedValue(
-      pricing([tier("t-500", "500", "44.9000"), tier("t-1000", "1000", "38.9000")]),
+      opcoes([tier("t-500", "500", "44.9000"), tier("t-1000", "1000", "38.9000")]),
     );
     renderQuotes([quote({ lines: [line({ quotedQuantity: "750" })] })]);
 
@@ -246,7 +261,7 @@ describe("Sugestão de faixa na linha do orçamento", () => {
   });
 
   it('"Simular CMV" leva o produto, a quantidade e o contexto do orçamento', async () => {
-    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([tier("t-1000", "1000", "38.9000")]));
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([tier("t-1000", "1000", "38.9000")]));
     renderQuotes([quote()]);
 
     const link = await screen.findByRole("link", { name: "Simular CMV" });
@@ -257,7 +272,7 @@ describe("Sugestão de faixa na linha do orçamento", () => {
   });
 
   it("voltar do CMV reabre a mesma versão, não o rascunho corrente", async () => {
-    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([]));
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([]));
     const v1 = quote({ id: "q1", versionLabel: "ORC-000001 · V1", status: "SENT", lines: [] });
     const v2 = quote({ id: "q2", versionLabel: "ORC-000001 · V2", status: "DRAFT" });
     renderQuotes([v1, v2], "/comercial/projetos/prj-1?quoteVersionId=q1&quoteLineId=l-1");
@@ -269,7 +284,7 @@ describe("Sugestão de faixa na linha do orçamento", () => {
   });
 
   it("versão enviada não oferece aplicar preço — histórico não se renegocia", async () => {
-    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([tier("t-1000", "1000", "38.9000")]));
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([tier("t-1000", "1000", "38.9000")]));
     renderQuotes([quote({ status: "SENT" })]);
 
     await screen.findByText(/Proposta apresentada é histórico/);
@@ -288,7 +303,7 @@ describe("Projeto fechado e proposta nova", () => {
    * acontece ali mesmo. Só o projeto CANCELADO continua sem a ação.
    */
   it("projeto aprovado oferece a próxima negociação, sem mandar abrir outro projeto", async () => {
-    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([]));
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([]));
     render(
       <MemoryRouter>
         <QuoteVersionsSection
@@ -306,7 +321,7 @@ describe("Projeto fechado e proposta nova", () => {
   });
 
   it("projeto cancelado continua sem a ação, e diz por quê", async () => {
-    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([]));
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([]));
     render(
       <MemoryRouter>
         <QuoteVersionsSection
@@ -326,7 +341,7 @@ describe("Projeto fechado e proposta nova", () => {
   });
 
   it("projeto em negociação continua oferecendo a versão nova", () => {
-    vi.mocked(getQuotePricingOptions).mockResolvedValue(pricing([]));
+    vi.mocked(getQuotePricingOptions).mockResolvedValue(opcoes([]));
     render(
       <MemoryRouter>
         <QuoteVersionsSection

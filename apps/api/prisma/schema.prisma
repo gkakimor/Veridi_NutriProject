@@ -945,6 +945,28 @@ model QuoteLine {
   /// Avisos economicos congelados (custo incompleto, contribuicao negativa).
   pricingWarningsSnapshot          Json?
 
+  /// A DECISAO COMERCIAL que formou este preco — §74. `null` e LEGADO: linha
+  /// gravada antes da regra, sem provenance suficiente para classificar. Nao
+  /// se classifica retroativamente por chute.
+  priceOrigin QuotePriceOrigin?
+
+  /// A QuoteLine REAL que serviu de condicao anterior. Aponta para a linha
+  /// efetivamente reutilizada, nao para a origem da origem: se a V3 herdou da
+  /// V2, o vinculo e com a V2 — foi essa a condicao comercial reutilizada, e
+  /// resolver ate a V1 apagaria a negociacao do meio.
+  inheritedFromQuoteLineId String?
+  inheritedFromQuoteLine   QuoteLine?  @relation("QuoteLinePriceInheritance", fields: [inheritedFromQuoteLineId], references: [id])
+  inheritedByQuoteLines    QuoteLine[] @relation("QuoteLinePriceInheritance")
+
+  /// Percentual do reajuste sobre a condicao anterior (8 = 8%). Nunca
+  /// negativo: reajuste que abaixa preco e desconto, e desconto ja tem
+  /// mecanismo proprio.
+  adjustmentPercent Decimal? @db.Decimal(7, 4)
+
+  /// Por que a excecao foi aceita. Obrigatorio quando a condicao anterior e
+  /// reutilizada apesar de quantidade diferente ou de validade vencida.
+  priceOriginReason String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -952,6 +974,7 @@ model QuoteLine {
 
   /// O mesmo produto nao entra duas vezes na mesma versao.
   @@unique([quoteVersionId, productId])
+  @@index([inheritedFromQuoteLineId])
   @@index([quoteVersionId])
   @@index([productId])
   @@map("quote_lines")
@@ -1774,9 +1797,31 @@ enum ProductLifecycle {
 
 /// De onde veio o preco do orcamento: digitado a mao ou de uma faixa de
 /// precificacao ativa (com toda a cadeia PREC -> CALC -> EC -> Formulacao).
+/// De onde o preco veio TECNICAMENTE: digitado ou lido de uma faixa de
+/// precificacao. Nao responde qual DECISAO comercial formou o preco — essa
+/// pergunta e do `QuotePriceOrigin`, e usar um enum so para as duas faria um
+/// preco herdado apontar falsamente para a precificacao atual (§74).
 enum QuotePriceSource {
   MANUAL
   PRICING_TIER
+}
+
+/// Qual DECISAO COMERCIAL formou o preco desta linha neste ciclo — §74.
+///
+/// Pergunta diferente do `QuotePriceSource`, e por isso enum diferente. Um
+/// preco herdado de um acordo anterior e tecnicamente MANUAL (ninguem leu
+/// faixa nenhuma), mas comercialmente ele nao e "preco digitado": ele e a
+/// condicao que o cliente ja aceitou. Sem esta coluna a V2 nascia com o preco
+/// da V1 copiado e nada dizia de onde ele veio.
+enum QuotePriceOrigin {
+  /// Copiado de uma QuoteLine de proposta ACEITA do mesmo Projeto e Produto.
+  INHERITED_AGREEMENT
+  /// A mesma condicao anterior, reajustada por um percentual nao negativo.
+  ADJUSTED_AGREEMENT
+  /// Faixa da precificacao ATIVA aplicada nesta linha.
+  CURRENT_PRICING
+  /// Preco digitado por quem negocia. Excecao comercial legitima.
+  MANUAL
 }
 
 enum PriceMode {

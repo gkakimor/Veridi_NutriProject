@@ -4340,3 +4340,83 @@ manda descartar material que a operação ainda pode usar.
 carimba `EXPIRED`, e nenhuma rotina noturna varre a tabela. O backend é a
 autoridade — a tela apresenta `isExpired` e `daysToExpiry` vindos da API e não
 recalcula vencimento por conta própria.
+
+## §74 — O preço do orçamento novo é FORMADO, e a origem fica registrada
+
+Um projeto aprovado volta a comprar, e a proposta nova precisa dizer de onde
+saiu cada preço. **A decisão é POR LINHA**, e são quatro:
+
+1. **manter a condição acordada** — o preço que o cliente já aceitou;
+2. **reajustar a condição** — a mesma base, mais um percentual;
+3. **usar a precificação atual** — a faixa vigente, com o custo de hoje;
+4. **preço manual** — exceção comercial explícita.
+
+Um mesmo orçamento pode manter o preço do produto A, reajustar o do B, aplicar
+a precificação atual no C e digitar o do D. **Não existe escolha global.**
+
+**A condição anterior é uma QuoteLine de proposta ACEITA** do mesmo Projeto e
+do mesmo Produto — não existe preço no Projeto e não existe tabela de acordo
+comercial. A escolha é determinística: `acceptedAt` mais recente, empate por
+`versionNumber` e depois por `id`. Ter virado Pedido não a invalida como
+histórico: ela É o acordo daquele Pedido.
+
+**Aceita para sempre, vigente por prazo.** Uma proposta aceita vale
+indefinidamente como acordo do Pedido que originou. O que expira é a sua
+utilidade como condição para uma negociação NOVA, e quem responde isso é o
+`validUntil` dela — data civil, dia inteiro em `America/Sao_Paulo` (§71, §73).
+
+**Quantidade é parte da condição.** `10.000 un a R$ 12,50` não é
+silenciosamente `500 un a R$ 12,50`. A comparação é da quantidade FÍSICA
+normalizada na unidade canônica do produto, em `Decimal` exato — a mesma regra
+da faixa de precificação (§68): `1 kg` e `1000 g` são a mesma condição.
+
+**Só um caso vem selecionado**: condição vigente E mesma quantidade física.
+Nesse caso a versão nova nasce com o preço acordado e com a proveniência, e a
+validade da condição vem SUGERIDA no documento novo — sugerida, não imposta: o
+prazo é do documento novo, e COM-CORE continua exigindo validade antes do
+envio. Em qualquer outro caso a linha nasce SEM preço, e quem negocia decide.
+
+**Exceção é permitida, em voz alta.** Manter EXATAMENTE a condição quando a
+quantidade é outra, ou quando ela venceu, exige confirmação e MOTIVO
+obrigatório. O motivo fica gravado na linha. Reajustar não exige motivo em
+nenhum dos dois casos: reajustar não afirma que o acordo antigo vale hoje —
+cria um preço novo usando a condição como base de cálculo.
+
+**Reajuste não abaixa preço.** O percentual é maior ou igual a zero; `0%` é
+aceito e devolve o mesmo preço. Vender abaixo do acordo é preço manual ou o
+desconto comercial do orçamento — mecanismos que já existem, e que aparecem em
+lugares diferentes do documento. `novoPreço = preçoAnterior × (1 + p ÷ 100)`,
+fechado em quatro casas com `ROUND_HALF_UP` pela fronteira comercial (§60). **A
+conta é do servidor**: a tela mostra prévia, nunca autoridade.
+
+**Proveniência obrigatória.** A linha guarda a decisão (`priceOrigin`), a
+QuoteLine reutilizada (`inheritedFromQuoteLineId`), o percentual aplicado e o
+motivo da exceção. O vínculo aponta para a condição EFETIVAMENTE reutilizada —
+se a V3 herdou da V2, é a V2 que fica registrada; resolver até a V1 apagaria a
+negociação do meio. O backend valida a fonte sempre: mesmo Projeto, mesmo
+Produto, proposta ACEITA e com preço. Id que a tela mande sem passar por isso
+gravaria uma frase falsa.
+
+**Dois enums, duas perguntas.** `priceSource` responde "tecnicamente veio de
+faixa ou foi digitado?"; `priceOrigin` responde "qual decisão comercial formou
+este preço neste ciclo?". Preço herdado é `INHERITED_AGREEMENT` com
+`priceSource = MANUAL` — nunca apontando falsamente para a precificação atual.
+`priceOrigin` nulo é LEGADO: linha gravada antes da regra, sem proveniência
+suficiente para classificar, e nada é classificado retroativamente por chute.
+
+**Provenance não mente.** Mudar a quantidade de uma linha herdada ou reajustada
+solta o vínculo E o preço: aquele número era o acordo de outra quantidade, e a
+linha volta a "não precificado" — o envio já recusa linha sem preço. Digitar o
+preço à mão passa a origem para `MANUAL`. Produto nunca herda preço de outro
+produto.
+
+**Preço herdado, custo de hoje.** O envio congela a economia CORRENTE também
+nas linhas que não vieram de faixa: a referência é a faixa da precificação
+ATIVA cuja quantidade física é a mesma da linha. Sem faixa equivalente não há
+custo corrente a congelar, e o envio acontece do mesmo jeito — o preço do
+acordo não depende dele para valer. Copiar o CMV antigo junto com o preço faria
+o documento novo descrever a economia de um documento velho.
+
+**COM-03 intocado.** Depois do envio e do aceite, precificação nova, custo novo
+ou proposta nova não mexem no que foi acordado: Pedido e Faturamento continuam
+congelados.
