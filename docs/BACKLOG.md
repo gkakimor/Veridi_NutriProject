@@ -341,6 +341,35 @@ apareceu em nenhuma das 40 execuções completas dessa medição.
 
 ---
 
+### 13. Ajuda contextual — o que a Fase 1 deixou aberto — LOW
+
+UX-HELP-02 entregou o modelo V2, os sete conceitos compartilhados e os 12
+tópicos P0. **Nenhum destes itens bloqueia nada** — a ajuda funciona por
+inteiro nos dois modelos —, e o próximo passo é decisão do PO, não sequência
+automática:
+
+- **UX-HELP-03** — painel lateral com abas, botão "?" fixo e rota
+  `/ajuda/conceitos/:slug`. O conteúdo V2 migra sem reescrita;
+- **39 tópicos ainda no modelo V1** — migram por tela, no ritmo de quem revisa
+  a regra daquela tela;
+- **Tópicos que servem a várias telas** — Recebimentos (quatro), Lotes (três) e
+  a lista de Precificação continuam com um tópico só. O §45 já permite dividir;
+- **Rótulos de tela na terminologia aprovada** (PO-5, PO-4) — "Situação",
+  "Separação", "Modelo", "Em espera", "Lote comercial". É mudança de interface,
+  fora da capability de ajuda; até lá a ajuda cita o rótulo real de hoje.
+
+Divergências ainda vivas entre rótulo e terminologia alvo: "Status" nas listas
+de expedição, faturamento, projeto e formulação; "Lote Veridi" onde a
+terminologia alvo diz "lote comercial"; "Picking" no caminho
+`/producao/picking`.
+
+**Achado de responsivo, fora de escopo e anterior a esta rodada:** a casca do
+ERP transborda 67px de rolagem horizontal a 390px de largura (`masthead` e
+`workspace` com largura mínima maior que a tela). Não vem da ajuda — o painel
+não piora a medida — e pertence ao endurecimento responsivo.
+
+---
+
 ## F. Roadmap — fora do backlog
 
 Escopo futuro não fica aqui. Vive em

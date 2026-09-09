@@ -381,6 +381,36 @@ segue sendo a evidência.
 EXATAMENTE `CustomerOrder.agreedTotalAmount`, sem epsilon. Uma migration
 estrutural (cinco colunas nullable em `billings`), zero backfill.
 
+## A ajuda começa pela ação (UX-HELP-02, Fase 1, 2026-09-09)
+
+**Modelo de conteúdo V2, aditivo.** `HelpTopicV2` convive com o `HelpTopic`
+original no mesmo registro; o painel reconhece qual está lendo pelo campo
+`version` e a migração é por tela. Dos 51 tópicos, **12 estão no modelo novo**
+— os P0 da auditoria — e 39 continuam no anterior, renderizando como sempre.
+
+**A ordem mudou, e era ela o defeito.** O nível 1 — o que é, quando usar,
+próximo passo — vem primeiro e cabe em 80 palavras; o passo a passo em pares
+"você faz / o sistema faz" vem aberto; termos, situações, ressalvas e exemplo
+nascem recolhidos. O §45 foi revisto para isso: o glossário deixou de abrir a
+ajuda. Interface: opção A da auditoria — o modal atual, reordenado. O painel
+lateral (opção B) **não** foi implementado.
+
+**Os P0 caíram de 8.715 para 6.713 palavras** com três tópicos a mais: média de
+968 para 559. Nenhum acima do teto da classe, nenhum sem próximo passo, nenhum
+link interno morto, dez com exemplo numérico. Sete conceitos compartilhados
+(saldos, reserva × consumo, identidades do lote, versões, prévia × gravado,
+custo desconhecido, material do cliente) passaram a ser escritos uma vez só.
+
+**Três decisões de produto foram registradas, não alteradas:** o Orçamento
+continua dentro do Projeto e ganhou tópico e botão próprios; produzir continua
+não reservando, e a ajuda diz onde reservar; informar pureza continua registrando
+e marcar continua aplicando, agora com exemplo — 100 mg a 80% viram 125 mg com o
+ajuste marcado, e continuam 100 mg sem ele.
+
+Guia de quem escreve: [`UX_HELP_GUIDE.md`](UX_HELP_GUIDE.md). Auditoria de
+origem arquivada em
+[`archive/AUDIT_UX_COMO_FUNCIONA.md`](archive/AUDIT_UX_COMO_FUNCIONA.md).
+
 ## Próxima prioridade
 
 **COM-04** — entregas parceladas: `3 × 1.000`, cronograma e parcelas de entrega.

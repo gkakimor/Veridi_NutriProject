@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { helpHints, helpTopics } from "../help/help-content";
-import type { HelpHintId, HelpTopic, HelpTopicId } from "../help/help-content";
+import { helpHints, helpTopics, isHelpTopicV2 } from "../help/help-content";
+import type { AnyHelpTopic, HelpHintId, HelpTopic, HelpTopicId, HelpTopicV2 } from "../help/help-content";
 
 /**
  * Ajuda contextual das telas de COMPRAS e ESTOQUE — o que se protege aqui é
@@ -56,15 +56,29 @@ function renderRota(url: string, element: React.ReactElement) {
  * uma união de tipos concretos — e `topico.flows` não existe em todos eles.
  * A anotação recoloca a leitura no contrato, que é o que o teste quer.
  */
-function topico(id: HelpTopicId): HelpTopic {
+function topico(id: HelpTopicId): AnyHelpTopic {
   return helpTopics[id];
+}
+
+/** O tópico no modelo ORIGINAL — as verificações de fluxo e glossário são dele. */
+function v1(id: HelpTopicId): HelpTopic {
+  const alvo: AnyHelpTopic = topico(id);
+  if (isHelpTopicV2(alvo)) throw new Error(`${id} está no modelo V2`);
+  return alvo;
+}
+
+/** O tópico já migrado. Falha alto se a chave voltar ao formato antigo. */
+function v2(id: HelpTopicId): HelpTopicV2 {
+  const alvo: AnyHelpTopic = topico(id);
+  if (!isHelpTopicV2(alvo)) throw new Error(`${id} não está no modelo V2`);
+  return alvo;
 }
 
 /** O contrato do painel: nasce fechado, abre com o tópico daquela tela, fecha. */
 async function verificaPainel(id: HelpTopicId, regraEsperada: RegExp) {
   const user = userEvent.setup();
   const esperado = topico(id);
-  const gatilho = screen.getByRole("button", { name: /Como funciona/ });
+  const gatilho = screen.getByRole("button", { name: /^Como funciona$/ });
 
   expect(gatilho).toHaveAttribute("aria-expanded", "false");
   expect(screen.queryByRole("heading", { name: esperado.title })).toBeNull();
@@ -90,7 +104,7 @@ async function verificaPainel(id: HelpTopicId, regraEsperada: RegExp) {
  * caixa 3 tem de destacar a explicação 3.
  */
 function verificaFluxoNumerado(id: HelpTopicId, nomeDoFluxo: string) {
-  const alvo = topico(id);
+  const alvo = v1(id);
   const etapas =
     alvo.flows?.find((fluxo) => fluxo.name === nomeDoFluxo)?.steps ?? alvo.flow ?? [];
 
@@ -104,7 +118,7 @@ function verificaFluxoNumerado(id: HelpTopicId, nomeDoFluxo: string) {
 
 /** O vocabulário da tela é apresentado — e vem ANTES do primeiro fluxo. */
 function verificaGlossarioAntesDoFluxo(id: HelpTopicId) {
-  const conceitos = topico(id).concepts ?? [];
+  const conceitos = v1(id).concepts ?? [];
   expect(conceitos.length).toBeGreaterThanOrEqual(4);
 
   const titulo = screen.getByRole("heading", { name: "Nesta tela" });
@@ -152,43 +166,42 @@ describe("Recebimentos", () => {
 
     await verificaPainel(
       "compras.recebimentos",
-      /não tem edição nem exclusão/,
+      /Recebimento não tem rascunho/,
     );
   });
 
+  /*
+   * A tela migrou para o modelo V2. Os dois caminhos (compra e material do
+   * cliente) deixaram de ser dois fluxos desenhados e viraram a pergunta
+   * "quando usar" — que é onde ela é feita, antes de qualquer etapa.
+   */
   it("separa o caminho da OC do caminho do material do cliente", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
-    // Duas entradas muito diferentes na mesma tela: a pergunta "qual dos dois
-    // é o meu caso?" vem antes de qualquer etapa, e por isso cada caminho tem
-    // nome e condição.
-    expect(
-      screen.getByRole("heading", { name: "Fluxo A · Recebimento de OC" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Fluxo B · Material do cliente, sem OC" }),
-    ).toBeInTheDocument();
-
-    verificaFluxoNumerado("compras.recebimentos", "Fluxo A · Recebimento de OC");
-    verificaFluxoNumerado("compras.recebimentos", "Fluxo B · Material do cliente, sem OC");
+    expect(screen.getAllByText(/Receber OC/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Receber materiais/).length).toBeGreaterThan(0);
   });
 
-  it("apresenta o vocabulário da tela antes do primeiro caminho", async () => {
+  it("responde o que fazer antes de abrir o vocabulário", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
-    verificaGlossarioAntesDoFluxo("compras.recebimentos");
+    const alvo = v2("compras.recebimentos");
+    expect(screen.getByText(alvo.oneLiner)).toBeInTheDocument();
+
+    const termos = screen.getByText(`Termos desta tela (${alvo.terms?.length})`);
+    expect(termos.closest("details")).not.toHaveAttribute("open");
   });
 
   it("diz que recebimento parcial é normal e que a ordem segue aberta", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     expect(
-      screen.getByText(/Recebimento parcial é o normal, não um problema/),
+      screen.getByText(/Receber menos que o saldo é normal/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/a ordem continua aberta pelo saldo/)).toBeInTheDocument();
+    expect(screen.getByText(/continuam em compra/)).toBeInTheDocument();
   });
 });
 
@@ -205,38 +218,42 @@ describe("Lotes", () => {
     await waitFor(() => expect(listLots).toHaveBeenCalled());
   }
 
-  it("explica as duas identidades do lote — e a explicação começa fechada", async () => {
+  it("explica o que o lote é — e a explicação começa fechada", async () => {
     await abrir();
 
     await verificaPainel(
       "estoque.lotes",
-      /O código interno nunca substitui a identificação do fornecedor/,
+      /a menor porção de material que a Veridi rastreia/,
     );
   });
 
-  it("desenha os três caminhos numerados: recebido, produzido e Qualidade", async () => {
+  /*
+   * A tela migrou para o modelo V2. Os três fluxos (recebido, produzido,
+   * decisão) viraram um caminho só — o da Qualidade, que é a decisão mais
+   * sensível — e a origem do lote está em "Onde isto entra".
+   */
+  it("desenha de onde o lote vem e para onde ele vai", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
-    for (const nome of [
-      "Fluxo A · Lote recebido",
-      "Fluxo B · Lote produzido",
-      "Fluxo C · Decisão da Qualidade",
-    ]) {
-      expect(screen.getByRole("heading", { name: nome })).toBeInTheDocument();
-      verificaFluxoNumerado("estoque.lotes", nome);
-    }
+    const processo = v2("estoque.lotes").process!;
+    const esperado = [...processo.before, processo.here, ...processo.after];
+
+    const lista = screen.getByRole("list", { name: "Onde esta tela entra no processo" });
+    expect(
+      Array.from(lista.querySelectorAll("li")).map((item) => item.textContent),
+    ).toEqual(esperado.map((caixa, i) => `${i + 1}${caixa}`));
   });
 
   it("diz que lote aguardando a Qualidade não é usado antes do laudo", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     expect(
-      screen.getByText(/Não entra em FEFO, reserva, separação nem consumo/),
+      screen.getByText(/Não conta como disponível; espera a decisão da Qualidade/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/aprovar o laudo não libera o lote: são duas decisões separadas/),
+      screen.getByText(/Aprovar o laudo não libera o lote; são duas decisões/),
     ).toBeInTheDocument();
   });
 
@@ -283,7 +300,7 @@ describe("Posição de Estoque", () => {
 
   it("mostra o fluxo numerado que vai da movimentação ao Em Compra", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     // Fluxo único: o kit dá a ele o nome padrão.
     verificaFluxoNumerado("estoque.posicao", "Fluxo da tela");
@@ -334,7 +351,7 @@ describe("Materiais de Clientes", () => {
 
   it("mostra o fluxo numerado e o vocabulário da segregação", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     verificaFluxoNumerado("estoque.materiaisCliente", "Fluxo da tela");
     verificaGlossarioAntesDoFluxo("estoque.materiaisCliente");
@@ -347,7 +364,7 @@ describe("Materiais de Clientes", () => {
 
   it("diz que o material entra sem OC e que a falta não vira compra da Veridi", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     expect(
       screen.getByText(/sem ordem de compra e sem fornecedor. Nota fiscal não é obrigatória/),

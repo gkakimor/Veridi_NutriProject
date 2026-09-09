@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { ContextHelp, FlowSteps, InfoHint } from ".";
-import { helpHints, helpTopics } from "../../help/help-content";
-import type { HelpFlow, HelpTopic } from "../../help/help-content";
+import { helpHints, helpTopics, isHelpTopicV2 } from "../../help/help-content";
+import type { AnyHelpTopic, HelpFlow, HelpTopic } from "../../help/help-content";
 import { baseTopics } from "../../help/content/base";
 import { cadastrosTopics } from "../../help/content/cadastros";
 import { comercialTopics } from "../../help/content/comercial";
 import { gestaoTopics } from "../../help/content/gestao";
 import { producaoTopics } from "../../help/content/producao";
 import { suprimentosTopics } from "../../help/content/suprimentos";
+import { topicosV2 } from "../../help/content/v2";
+import { helpConcepts } from "../../help/concepts";
 
 /**
  * O que estes testes protegem não é o texto da ajuda — é a promessa do kit:
@@ -235,6 +238,155 @@ describe("ContextHelp", () => {
   });
 });
 
+/**
+ * O painel lendo um tópico no MODELO V2.
+ *
+ * O que se protege aqui é a ordem, que é a decisão desta rodada: o nível 1
+ * ("Em uma frase", "Quando usar", "Próximo passo") vem antes de tudo, o passo
+ * a passo e as automações vêm abertos logo abaixo, e a consulta — termos,
+ * situações, ressalvas, exemplo — nasce recolhida. Um tópico bom escrito na
+ * ordem errada volta a ser o dicionário que a auditoria reprovou.
+ *
+ * O `<Link>` do roteador exige um Router acima; as telas reais já têm um.
+ */
+describe("ContextHelp com tópico no modelo V2", () => {
+  const topicoV2 = topicosV2["comercial.expedicao"];
+
+  async function abrir() {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <ContextHelp topic={topicoV2} />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: /Como funciona/ }));
+    return user;
+  }
+
+  it("nasce fechado, como o modelo antigo", () => {
+    render(
+      <MemoryRouter>
+        <ContextHelp topic={topicoV2} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: /Como funciona/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByText(topicoV2.oneLiner)).toBeNull();
+  });
+
+  it("mostra o nível 1 primeiro: em uma frase, quando usar e próximo passo", async () => {
+    await abrir();
+
+    const titulo = screen.getByRole("heading", { name: topicoV2.title });
+    const frase = screen.getByText(topicoV2.oneLiner);
+    const quandoUsar = screen.getByRole("heading", { name: "Quando usar" });
+    const proximoPasso = screen.getByRole("heading", { name: "Próximo passo" });
+    const passoAPasso = screen.getByRole("heading", { name: "Passo a passo" });
+
+    // A ordem no documento é a ordem de leitura — é isso que muda em relação
+    // ao modelo antigo, que abria pelo glossário.
+    for (const [antes, depois] of [
+      [titulo, frase],
+      [frase, quandoUsar],
+      [quandoUsar, proximoPasso],
+      [proximoPasso, passoAPasso],
+    ] as [HTMLElement, HTMLElement][]) {
+      expect(antes.compareDocumentPosition(depois)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    }
+
+    for (const caso of topicoV2.whenToUse) {
+      expect(screen.getByText(caso)).toBeInTheDocument();
+    }
+  });
+
+  it("escreve cada passo como você faz e o sistema faz", async () => {
+    await abrir();
+
+    for (const passo of topicoV2.steps) {
+      expect(screen.getByText(passo.you)).toBeInTheDocument();
+      if (passo.system) expect(screen.getByText(passo.system)).toBeInTheDocument();
+    }
+  });
+
+  it("transforma o próximo passo com rota em link navegável", async () => {
+    await abrir();
+
+    const destino = topicoV2.nextSteps.find((passo) => passo.href)!;
+    const link = screen.getByRole("link", { name: destino.label });
+    expect(link).toHaveAttribute("href", destino.href);
+  });
+
+  it("nasce com termos, situações, atenção e exemplo recolhidos", async () => {
+    await abrir();
+
+    for (const titulo of [
+      `Termos desta tela (${topicoV2.terms?.length})`,
+      `Situações (${topicoV2.states?.length})`,
+      `Atenção (${topicoV2.cautions?.length})`,
+      "Exemplo",
+    ]) {
+      const secao = screen.getByText(titulo).closest("details");
+      expect(secao, titulo).not.toBeNull();
+      expect(secao, titulo).not.toHaveAttribute("open");
+    }
+  });
+
+  it("exibe o conceito compartilhado uma vez, com o texto do arquivo do conceito", async () => {
+    await abrir();
+
+    const citado = topicoV2.learnMore!.find((item) => item.concept)!;
+    const conceito = helpConcepts[citado.concept!];
+
+    expect(screen.getByText(conceito.title)).toBeInTheDocument();
+    // O texto vem do conceito, não de uma cópia dentro do tópico: é essa
+    // indireção que impede a mesma ideia de divergir entre oito telas.
+    expect(screen.getByText(new RegExp(conceito.text.slice(0, 40)))).toBeInTheDocument();
+  });
+
+  it("desenha onde a tela entra no processo, com ela em destaque", async () => {
+    await abrir();
+
+    const processo = topicoV2.process!;
+    const lista = screen.getByRole("list", { name: "Onde esta tela entra no processo" });
+    const caixas = Array.from(lista.querySelectorAll("li")).map((item) => item.textContent);
+
+    expect(caixas).toEqual(
+      [...processo.before, processo.here, ...processo.after].map((nome, i) => `${i + 1}${nome}`),
+    );
+    expect(lista.querySelector(".help-flow__box--accent")?.textContent).toContain(processo.here);
+  });
+
+  it("fecha o painel quando a pessoa clica num destino interno", async () => {
+    const user = await abrir();
+
+    const destino = topicoV2.nextSteps.find((passo) => passo.href)!;
+    await user.click(screen.getByRole("link", { name: destino.label }));
+
+    // Navegar por baixo de um modal aberto deixa a tela nova inacessível e
+    // faz o link parecer quebrado. O painel sai da frente.
+    expect(screen.queryByRole("heading", { name: topicoV2.title })).toBeNull();
+  });
+
+  it("continua renderizando um tópico no modelo antigo, sem nada do modelo novo", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <ContextHelp topic={topicoBase} />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: /Como funciona/ }));
+
+    expect(screen.getByText(topicoBase.summary)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Passo a passo" })).toBeInTheDocument();
+    // O nível 1 é do modelo novo: um tópico V1 não ganha seções que ele não tem.
+    expect(screen.queryByRole("heading", { name: "Quando usar" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Próximo passo" })).toBeNull();
+  });
+});
+
 describe("FlowSteps", () => {
   it("mantém as etapas na ordem em que o processo acontece", () => {
     render(
@@ -315,6 +467,9 @@ describe("conteúdo centralizado", () => {
       ["suprimentos", suprimentosTopics],
       ["cadastros", cadastrosTopics],
       ["gestao", gestaoTopics],
+      // Os tópicos já migrados vivem num arquivo por tela, fora dos arquivos
+      // por módulo. A checagem de chave repetida vale para eles também.
+      ["v2", topicosV2],
     ] as const;
 
     const arquivosPorChave = new Map<string, string[]>();
@@ -326,8 +481,20 @@ describe("conteúdo centralizado", () => {
     const chavesRepetidas = [...arquivosPorChave].filter(([, arquivos]) => arquivos.length > 1);
     expect(chavesRepetidas).toEqual([]);
 
-    const topicos: [string, HelpTopic][] = Object.entries(helpTopics);
-    expect(topicos.length).toBe(arquivosPorChave.size);
+    const registro: [string, AnyHelpTopic][] = Object.entries(helpTopics);
+    expect(registro.length).toBe(arquivosPorChave.size);
+
+    /*
+     * As afirmações abaixo são a estrutura do modelo ORIGINAL. Tópico já
+     * migrado tem outra estrutura — nível 1, passo a passo em pares, consulta
+     * recolhida — e é cobrado por ela em `help-editorial.test.ts`. Cobrar o
+     * V2 por `summary` e `concepts` obrigaria a migração a manter campos
+     * mortos só para o teste concordar.
+     */
+    const topicos = registro.filter(
+      (par): par is [string, HelpTopic] => !isHelpTopicV2(par[1]),
+    );
+    expect(topicos.length).toBeGreaterThan(30);
 
     // `[chave, problema]`: a falha diz QUAL tópico e o que falta nele —
     // "esperado 4, recebeu 0" obrigaria a caçar o culpado a mão.

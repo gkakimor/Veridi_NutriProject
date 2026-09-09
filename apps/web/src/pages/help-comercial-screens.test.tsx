@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { helpHints, helpTopics } from "../help/help-content";
-import type { HelpTopic, HelpTopicId } from "../help/help-content";
+import { helpHints, helpTopics, isHelpTopicV2 } from "../help/help-content";
+import type { AnyHelpTopic, HelpTopic, HelpTopicId } from "../help/help-content";
 
 /**
  * Ajuda contextual nas telas do Comercial — Projetos, Amostras, Expedições.
@@ -89,6 +89,22 @@ import { ShipmentsPage } from "./shipments/ShipmentsPage";
 import { ShipmentPage } from "./shipments/ShipmentPage";
 
 /**
+ * O tópico no modelo ORIGINAL, com o tipo estreitado.
+ *
+ * As duas verificações abaixo — glossário antes do fluxo, caixas numeradas
+ * por fluxo nomeado — descrevem o formato V1. Uma tela migrada para o V2 não
+ * tem nem `concepts` nem `flows`, e chamar essas verificações nela precisa
+ * falhar dizendo isso, não comparar duas listas vazias e concordar.
+ */
+function v1(topicoId: HelpTopicId): HelpTopic {
+  const topico: AnyHelpTopic = helpTopics[topicoId];
+  if (isHelpTopicV2(topico)) {
+    throw new Error(`${topicoId} está no modelo V2: verifique o formato novo`);
+  }
+  return topico;
+}
+
+/**
  * O contrato do painel, verificado igual em toda tela: nasce fechado, abre
  * com o tópico DAQUELA tela, mostra a regra e fecha pelo botão do diálogo.
  *
@@ -96,9 +112,9 @@ import { ShipmentPage } from "./shipments/ShipmentPage";
  * de novo não chega nele, e é o "Fechar" do diálogo que encerra.
  */
 async function verificaPainel(topicoId: HelpTopicId, regraEsperada: RegExp) {
-  const topico: HelpTopic = helpTopics[topicoId];
+  const topico: AnyHelpTopic = helpTopics[topicoId];
   const user = userEvent.setup();
-  const gatilho = screen.getByRole("button", { name: /Como funciona/ });
+  const gatilho = screen.getByRole("button", { name: /^Como funciona$/ });
 
   expect(gatilho).toHaveAttribute("aria-expanded", "false");
   expect(screen.queryByRole("heading", { name: topico.title })).toBeNull();
@@ -122,7 +138,7 @@ async function verificaPainel(topicoId: HelpTopicId, regraEsperada: RegExp) {
  * ordem certa, clicar na caixa 3 destaca a explicação errada.
  */
 function verificaFluxoNumerado(topicoId: HelpTopicId, nomeDoFluxo: string) {
-  const topico: HelpTopic = helpTopics[topicoId];
+  const topico = v1(topicoId);
   const etapas =
     topico.flows?.find((fluxo) => fluxo.name === nomeDoFluxo)?.steps ?? topico.flow ?? [];
 
@@ -136,7 +152,7 @@ function verificaFluxoNumerado(topicoId: HelpTopicId, nomeDoFluxo: string) {
 
 /** O vocabulário da tela é apresentado, e vem ANTES do primeiro fluxo. */
 function verificaGlossarioAntesDoFluxo(topicoId: HelpTopicId) {
-  const topico: HelpTopic = helpTopics[topicoId];
+  const topico = v1(topicoId);
   const conceitos = topico.concepts ?? [];
   expect(conceitos.length).toBeGreaterThanOrEqual(4);
 
@@ -194,14 +210,14 @@ describe("Projetos (lista)", () => {
 
   it("apresenta o vocabulário do funil antes de desenhar o caminho", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     verificaGlossarioAntesDoFluxo("comercial.projetos");
   });
 
   it("separa o projeto que avança do projeto que não fecha", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     // Duas situações diferentes na mesma tela: cada uma tem nome, e o
     // stand-by não é lido como uma etapa do caminho feliz.
@@ -282,7 +298,7 @@ describe("Projeto (detalhe)", () => {
 
   it("separa a proposta com faixa da proposta com preço manual", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     verificaGlossarioAntesDoFluxo("comercial.projeto");
     verificaFluxoNumerado("comercial.projeto", "Fluxo A · Preço vindo da precificação");
@@ -291,7 +307,7 @@ describe("Projeto (detalhe)", () => {
 
   it("diz que custo e margem nunca saem no documento do cliente", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     expect(
       screen.getByText(/não entram no documento do cliente, e só perfis comercial/),
@@ -319,7 +335,7 @@ describe("Amostras (lista)", () => {
 
   it("mostra o ciclo da amostra numerado, do rascunho à decisão", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     verificaGlossarioAntesDoFluxo("comercial.amostras");
     // Caminho único: o painel dá a ele o nome genérico, e a numeração é a
@@ -329,7 +345,7 @@ describe("Amostras (lista)", () => {
 
   it("diz que aprovar a amostra não aprova o projeto", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     expect(screen.getByText(/Aprovar a amostra não aprova o projeto/)).toBeInTheDocument();
   });
@@ -391,7 +407,7 @@ describe("Amostra (detalhe)", () => {
 
   it("separa a amostra com consumo da amostra sem consumo registrado", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     verificaGlossarioAntesDoFluxo("comercial.amostra");
     verificaFluxoNumerado("comercial.amostra", "Fluxo A · Amostra com consumo de material");
@@ -430,7 +446,7 @@ describe("Expedições (lista)", () => {
 
   it("mostra o caminho do pedido ao faturamento, numerado", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     verificaGlossarioAntesDoFluxo("comercial.expedicoes");
     verificaFluxoNumerado("comercial.expedicoes", "Fluxo da tela");
@@ -438,7 +454,7 @@ describe("Expedições (lista)", () => {
 
   it("diz que expedição confirmada não se edita nem se cancela", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     expect(
       screen.getByText(/Expedição confirmada não se edita, não se reconfirma e não se cancela/),
@@ -500,24 +516,32 @@ describe("Expedição (detalhe)", () => {
   it("diz que confirmar é o único ato que move estoque — e começa fechado", async () => {
     await abrir();
 
-    await verificaPainel("comercial.expedicao", /Conferir é só auditoria/);
+    await verificaPainel("comercial.expedicao", /Só a confirmação baixa o estoque/);
   });
 
-  it("separa a expedição total da entrega parcial", async () => {
+  /*
+   * A tela migrou para o modelo V2. Os dois fluxos quase idênticos (total e
+   * parcial diferiam em uma etapa) viraram um fluxo só mais o exemplo com
+   * número — que era a lacuna que a auditoria apontou.
+   */
+  it("responde primeiro o que fazer, e guarda a entrega parcial no exemplo", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
-    verificaGlossarioAntesDoFluxo("comercial.expedicao");
-    verificaFluxoNumerado("comercial.expedicao", "Fluxo A · Expedição total do pedido");
-    verificaFluxoNumerado("comercial.expedicao", "Fluxo B · Entrega parcial");
+    const topico = helpTopics["comercial.expedicao"];
+    if (!isHelpTopicV2(topico)) throw new Error("comercial.expedicao não está no modelo V2");
+
+    expect(screen.getByText(topico.oneLiner)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Passo a passo" })).toBeInTheDocument();
+    expect(screen.getByText(/Parcialmente expedido/)).toBeInTheDocument();
   });
 
   it("diz que trocar de lote é realocação explícita, nunca substituição automática", async () => {
     await abrir();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     expect(
-      screen.getByText(/é uma realocação explícita da reserva, feita no Pedido do Cliente/),
+      screen.getByText(/realoque a reserva na tela do Pedido/),
     ).toBeInTheDocument();
   });
 });

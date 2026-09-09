@@ -244,6 +244,11 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Toda tela roteada abre "Como funciona"; tópico tem resumo, vocabulário, caminho e ressalvas; sem termo técnico | tela nova sem ajuda, ajuda que explica o código | `web pages/help-topic-contract.test.ts` |
 | Cada tela principal nomeia os seus componentes relevantes no glossário (piso, não teto) | ajuda que omite o que está na tela | `web pages/help-topic-contract.test.ts` |
 | Cada tela principal abre o tópico da própria área (lista ≠ documento) | Pedido abria a ajuda do Plano | `web pages/help-topic-contract.test.ts`, `pages/help-*-screens.test.tsx` |
+| Tópico V2 tem nível 1 completo e em até 80 palavras | a ajuda abria por glossário e a resposta útil vinha depois | `web pages/help-editorial.test.ts` |
+| Teto de palavras por classe: S 250, M 500, L 800 | tópico de 1.288 palavras para a tela mais difícil | `web pages/help-editorial.test.ts` |
+| `nextSteps` obrigatório e todo link interno resolvendo para rota real | ajuda que termina sem dizer o que fazer depois | `web pages/help-editorial.test.ts` |
+| Inglês de negócio só glosado na primeira aparição; conceito citado existe | "Picking" e "CoA" soltos no texto do usuário final | `web pages/help-editorial.test.ts` |
+| Painel abre o nível 1 antes do passo a passo; consulta recolhida; V1 continua renderizando | reordenação quebrando o modelo antigo | `web components/help/help-kit.test.tsx`, `scripts/e2e/ajuda-contextual-nivel-1.mjs` |
 
 ## Permissões
 
