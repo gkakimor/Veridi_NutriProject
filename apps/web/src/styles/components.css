@@ -2491,6 +2491,49 @@ input.is-invalid {
   line-height: var(--lh-base);
 }
 
+/*
+ * Passo a passo do modelo V2 — uma coluna.
+ *
+ * Cada item é um par "você faz / o sistema faz". Em duas colunas o par se
+ * parte no meio, e o que se perde é exatamente a ligação entre a ação e a
+ * consequência dela, que é a razão de o formato existir.
+ */
+.help-modal__steps--pairs {
+  columns: 1;
+}
+
+/*
+ * Nível 3 — termos, situações, ressalvas, exemplo e "Saiba mais".
+ *
+ * `<details>` nativo, fechado por omissão: é conteúdo de consulta, e mantê-lo
+ * aberto empurrava o passo a passo para fora da primeira tela do modal. O
+ * nativo traz teclado, leitor de tela e a busca do navegador de graça.
+ */
+.help-modal__details {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+.help-modal__details > summary {
+  cursor: pointer;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+
+.help-modal__details > summary:focus-visible {
+  outline: 2px solid var(--v-green-700);
+  outline-offset: 2px;
+}
+
+.help-modal__example {
+  margin-top: var(--sp-3);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+
 .help-modal__doc {
   display: inline-block;
   margin-top: var(--sp-4);

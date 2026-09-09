@@ -4,6 +4,8 @@ import type { BillingDTO, BillingLineDTO } from "@veridi/shared";
 import { calcularTotaisFaturamento } from "@veridi/shared";
 import { ModalDialog } from "../../components/ModalDialog";
 import { CalcHint } from "../../components/help/CalcHint";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { overrideBillingPrice } from "../../lib/billings-api";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { exigirDecimal } from "../../lib/decimal-field";
@@ -103,6 +105,16 @@ export function PriceOverrideDialog({
         O preço acordado no Pedido continua registrado. Faturar outro valor não o apaga — passa a
         constar a diferença, com motivo e autor.
       </p>
+
+      {/*
+        O diálogo altera dinheiro e não tinha ajuda nenhuma. O tópico é curto
+        de propósito: aqui a dúvida é o que a alteração faz com o acordado, e
+        não como o faturamento funciona.
+      */}
+      <ContextHelp
+        topic={helpTopics["faturamento.alterarPreco"]}
+        triggerLabel="Como funciona a alteração"
+      />
 
       <dl className="definition-list">
         <dt>Produto</dt>

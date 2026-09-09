@@ -34,6 +34,8 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink, entityHref } from "../../components/EntityLink";
 import { QuoteClosingSection } from "./QuoteClosingSection";
 import { FormSection } from "../../components/FormSection";
+import { ContextHelp } from "../../components/help";
+import { helpTopics } from "../../help/help-content";
 import { IncompleteCostApiError, apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
@@ -515,6 +517,17 @@ export function QuoteVersionsSection({
       title="Orçamentos"
       subtitle="Cada negociação é uma versão. Enviado congela o snapshot e vira histórico — que continua acessível."
     >
+      {/*
+        O Orçamento tem ajuda PRÓPRIA. Até aqui o único botão da ficha
+        explicava o Projeto inteiro, e quem estava numa linha de proposta lia
+        antes sobre produto técnico, amostra e documento — é nesta seção que
+        o preço é decidido.
+      */}
+      <ContextHelp
+        topic={helpTopics["comercial.orcamento"]}
+        triggerLabel="Como funciona o Orçamento"
+      />
+
       {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">

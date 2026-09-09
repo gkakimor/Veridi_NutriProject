@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { helpHints, helpTopics } from "../help/help-content";
-import type { HelpTopic } from "../help/help-content";
+import { helpHints, helpTopics, isHelpTopicV2 } from "../help/help-content";
+import type { AnyHelpTopic, HelpConcept, HelpTopic } from "../help/help-content";
 
 /**
  * O CONTRATO entre a tela e a ajuda — verificado lendo os arquivos, não
@@ -167,10 +167,44 @@ const TERMOS_PROIBIDOS = [
   /\bMOQ\b/,
 ];
 
+/**
+ * Os termos de um tópico, venha ele do modelo que vier.
+ *
+ * No V1 o vocabulário é `concepts`; no V2 é `terms`, que ainda aceita a chave
+ * de uma dica ⓘ em vez do texto — reaproveitar a dica é o que impede a mesma
+ * coluna de ter duas explicações divergindo com o tempo.
+ */
+function termosDoTopico(topico: AnyHelpTopic): HelpConcept[] {
+  if (!isHelpTopicV2(topico)) return topico.concepts ?? [];
+  return (topico.terms ?? []).map((termo) => {
+    if (typeof termo !== "string") return termo;
+    const dica = helpHints[termo];
+    return { term: dica.label, text: dica.text };
+  });
+}
+
 /** Todo texto de um tópico, concatenado — é o que a pessoa lê. */
-function textoDoTopico(topico: HelpTopic): string[] {
-  const partes: string[] = [topico.title, topico.summary];
-  for (const conceito of topico.concepts ?? []) partes.push(conceito.term, conceito.text);
+function textoDoTopico(topico: AnyHelpTopic): string[] {
+  const partes: string[] = [topico.title];
+  for (const termo of termosDoTopico(topico)) partes.push(termo.term, termo.text);
+
+  if (isHelpTopicV2(topico)) {
+    partes.push(topico.oneLiner, topico.example ?? "");
+    partes.push(...topico.whenToUse);
+    for (const passo of topico.nextSteps) partes.push(passo.label);
+    for (const pre of topico.prerequisites ?? []) partes.push(pre.text);
+    for (const etapa of topico.steps) partes.push(etapa.you, etapa.system ?? "");
+    partes.push(...(topico.automations ?? []));
+    if (topico.process) {
+      partes.push(...topico.process.before, topico.process.here, ...topico.process.after);
+    }
+    for (const situacao of topico.states ?? []) partes.push(situacao.name, situacao.allows);
+    partes.push(...(topico.cautions ?? []));
+    for (const item of topico.learnMore ?? []) partes.push(item.label ?? "");
+    return partes.filter(Boolean);
+  }
+
+  partes.push(topico.summary);
   const fluxos = topico.flows ?? (topico.flow ? [{ name: "", steps: topico.flow }] : []);
   for (const fluxo of fluxos) {
     partes.push(fluxo.name);
@@ -205,7 +239,7 @@ const ESSENCIAIS: Record<string, string[]> = {
   "calculo.comoFunciona": ["Data de referência", "Fonte do custo", "Referência manual forçada", "Qualidade do custo"],
   "precificacao.comoFunciona": ["Faixa de quantidade", "Margem de contribuição", "Comissão", "Markup", "Modo de preço", "Lista de precificações"],
   "comercial.pedido": ["Reserva", "Produzir", "Sugestão de Compra", "Materiais aguardando cliente", "Reservar Produto Acabado", "Preço acordado"],
-  "ordemProducao.comoFunciona": ["Necessidade de materiais", "Liberação", "Consumo extra", "Justificar diferença", "Lote interno × Lote Veridi", "Custo industrial"],
+  "ordemProducao.comoFunciona": ["Necessidade de Materiais", "Liberação", "Consumo extra", "Justificar diferença", "Lote interno × Lote Veridi", "Custo industrial"],
   "estoque.posicao": ["Físico", "Reservado", "Disponível", "Em Compra"],
   "estoque.lotes": ["Lote interno", "Lote do fornecedor", "Situação", "Laudo", "Expedições", "Custo de aquisição", "Destino comercial", "Auditoria"],
   "compras.ordens": ["Rascunho × confirmada", "Quantidade em aberto", "Preço previsto", "Recebimentos"],
@@ -307,9 +341,14 @@ describe("contrato entre tela e ajuda contextual", () => {
     expect(semAjuda).toEqual([]);
   });
 
-  it("todo tópico explica a tela: resumo, vocabulário, caminho e o que costuma pegar", () => {
+  it("todo tópico V1 explica a tela: resumo, vocabulário, caminho e o que costuma pegar", () => {
     const rasos: string[] = [];
-    for (const [id, topico] of Object.entries(helpTopics) as [string, HelpTopic][]) {
+    for (const [id, qualquer] of Object.entries(helpTopics) as [string, AnyHelpTopic][]) {
+      // Tópico migrado tem outra estrutura e é cobrado por ela em
+      // `help-editorial.test.ts`. Exigir `summary` dele obrigaria a migração
+      // a manter campos mortos só para este teste concordar.
+      if (isHelpTopicV2(qualquer)) continue;
+      const topico: HelpTopic = qualquer;
       const etapas =
         (topico.flows ?? []).reduce((soma, fluxo) => soma + fluxo.steps.length, 0) +
         (topico.flow ?? []).length;
@@ -322,8 +361,10 @@ describe("contrato entre tela e ajuda contextual", () => {
   });
 
   it.each(Object.entries(ESSENCIAIS))("%s nomeia os componentes relevantes da tela", (id, termos) => {
-    const topico: HelpTopic = helpTopics[id as keyof typeof helpTopics];
-    const glossario = (topico.concepts ?? []).map((conceito) => `${conceito.term} ${conceito.text}`).join("\n");
+    const topico: AnyHelpTopic = helpTopics[id as keyof typeof helpTopics];
+    const glossario = termosDoTopico(topico)
+      .map((conceito) => `${conceito.term} ${conceito.text}`)
+      .join("\n");
     const faltando = termos.filter((termo) => !glossario.includes(termo));
     expect(faltando).toEqual([]);
   });
@@ -348,9 +389,13 @@ describe("contrato entre tela e ajuda contextual", () => {
   });
 
   it("os tópicos criados para as telas de Gestão existem e estão preenchidos", () => {
+    /*
+     * A Estrutura de custos e a Precificação saíram desta lista porque
+     * migraram para o modelo V2: elas são cobradas por nível 1, teto de
+     * palavras e próximo passo em `help-editorial.test.ts`. As cinco que
+     * continuam aqui seguem no formato original, e é ele que se verifica.
+     */
     const novos = [
-      "estruturaCusto.comoFunciona",
-      "precificacao.comoFunciona",
       "calculo.comoFunciona",
       "templateCusto.comoFunciona",
       "politicaPreco.comoFunciona",
@@ -359,8 +404,9 @@ describe("contrato entre tela e ajuda contextual", () => {
     ] as const;
 
     for (const id of novos) {
-      const topico: HelpTopic = helpTopics[id];
+      const topico: AnyHelpTopic = helpTopics[id];
       expect(topico, id).toBeDefined();
+      if (isHelpTopicV2(topico)) throw new Error(`${id} está no modelo V2`);
       expect(topico.module).toBe("gestao");
       // O vocabulário vem antes do caminho: quem não sabe o que é "base de
       // custo" não aproveita um fluxo que começa por ela.

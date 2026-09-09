@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { helpHints, helpTopics } from "../help/help-content";
+import { helpHints, helpTopics, isHelpTopicV2 } from "../help/help-content";
+import type { HelpTopicV2 } from "../help/help-content";
 
 /**
  * Ajuda contextual nas telas de negócio — o que se protege aqui é a LIGAÇÃO.
@@ -15,6 +16,19 @@ import { helpHints, helpTopics } from "../help/help-content";
  * movimenta estoque físico", "não é Contas a Receber" — sendo reescrita até
  * deixar de dizer o que precisava dizer.
  */
+
+/**
+ * O tópico já migrado, com o tipo estreitado.
+ *
+ * O registro guarda os dois modelos, e o teste que afirma o formato NOVO
+ * precisa falhar alto se a chave voltar ao formato antigo — em vez de
+ * comparar `undefined` com `undefined` e passar.
+ */
+function v2(id: keyof typeof helpTopics): HelpTopicV2 {
+  const topico = helpTopics[id];
+  if (!isHelpTopicV2(topico)) throw new Error(`${id} não está no modelo V2`);
+  return topico;
+}
 
 vi.mock("../app/AuthProvider", () => ({ useAuth: () => ({ user: { role: "ADMIN" } }) }));
 vi.mock("../components/AttachmentsSection", () => ({ AttachmentsSection: () => null }));
@@ -186,46 +200,42 @@ describe("Formulação", () => {
 
     await verificaPainel(
       helpTopics["formulacao.comoFunciona"].title,
-      /depois de ativada ela não se altera/,
+      /É ela que a Ordem de Produção executa/,
     );
   });
 
-  it("mostra cada fluxo numerado, na ordem em que ele acontece", async () => {
+  it("mostra onde a tela entra no processo, em caixas numeradas", async () => {
     await abrir();
 
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
-    // O rótulo acessível nomeia o FLUXO, não a tela: esta tela tem dois
-    // caminhos — montar a versão, e o que a versão ativa dispara depois.
-    // Cada caixa vem numerada, e é o número que casa com o passo a passo.
-    const fluxos = helpTopics["formulacao.comoFunciona"].flows ?? [];
-    expect(fluxos.length).toBeGreaterThan(1);
+    // No modelo novo o desenho responde "antes / esta tela / depois", e a
+    // tela atual é a caixa em destaque. Cada caixa vem numerada.
+    const topico = v2("formulacao.comoFunciona");
+    const processo = topico.process!;
+    const esperado = [...processo.before, processo.here, ...processo.after];
 
-    for (const fluxo of fluxos) {
-      const lista = screen.getByRole("list", { name: `Fluxo: ${fluxo.name}` });
-      expect(
-        Array.from(lista.querySelectorAll("li")).map((item) => item.textContent),
-      ).toEqual(fluxo.steps.map((etapa, i) => `${i + 1}${etapa.label}`));
-    }
+    const lista = screen.getByRole("list", { name: "Onde esta tela entra no processo" });
+    expect(
+      Array.from(lista.querySelectorAll("li")).map((item) => item.textContent),
+    ).toEqual(esperado.map((caixa, i) => `${i + 1}${caixa}`));
   });
 
-  it("explica o que a tela É antes de explicar o caminho", async () => {
+  it("responde o que fazer antes de abrir o glossário", async () => {
     await abrir();
 
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
-    // A queixa que originou isto: a ajuda desenhava a cadeia macro e não
-    // dizia o que uma formulação é. O glossário da tela vem antes do fluxo.
-    const conceitos = helpTopics["formulacao.comoFunciona"].concepts ?? [];
-    expect(conceitos.length).toBeGreaterThan(0);
+    // A queixa que originou a rodada: a ajuda abria por dicionário. Agora a
+    // primeira coisa é o que a tela É, e o vocabulário fica em consulta,
+    // fechado — visível no documento, fora da leitura de quem só quer agir.
+    const topico = v2("formulacao.comoFunciona");
+    expect(screen.getByText(topico.oneLiner)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Quando usar" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Próximo passo" })).toBeInTheDocument();
 
-    // Busca dentro do glossário: "Versão ativa" também é caixa de fluxo, e
-    // uma busca solta acharia as duas.
-    const glossario = screen.getByRole("heading", { name: "Nesta tela" })
-      .nextElementSibling as HTMLElement;
-    expect(
-      Array.from(glossario.querySelectorAll("dt")).map((item) => item.textContent),
-    ).toEqual(conceitos.map((conceito) => conceito.term));
+    const termos = screen.getByText(`Termos desta tela (${topico.terms!.length})`);
+    expect(termos.closest("details")).not.toHaveAttribute("open");
   });
 });
 
@@ -306,7 +316,7 @@ describe("Plano de Atendimento", () => {
     // e sumia justamente em "Em atendimento", quando a tela fica mais dificil.
     await verificaPainel(
       helpTopics["comercial.pedido"].title,
-      /Não há marcar como expedido/,
+      /Não existe marcar como expedido/,
     );
   });
 
@@ -393,16 +403,18 @@ describe("Ordem de Produção", () => {
 
     await verificaPainel(
       helpTopics["ordemProducao.comoFunciona"].title,
-      /Reserva não movimenta estoque físico/,
+      /Liberar não tira material do estoque/,
     );
   });
 
   it("diz que consumo além do reservado exige motivo registrado", async () => {
     await abrir();
 
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
-    expect(screen.getByText(/consumo extra: é um ato à parte, com motivo obrigatório/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Amplia a reserva da linha sobre o saldo livre do lote, com motivo/),
+    ).toBeInTheDocument();
   });
 });
 
@@ -456,7 +468,7 @@ describe("CMV", () => {
   it("diz que material do cliente não entra na aquisição da Veridi", async () => {
     await abrir();
 
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
     expect(screen.getByText(/fica fora da aquisição da Veridi/)).toBeInTheDocument();
   });
@@ -504,16 +516,20 @@ describe("Faturamento", () => {
 
     await verificaPainel(
       helpTopics["faturamento.comoFunciona"].title,
-      /Não é Contas a Receber/,
+      /não gera contas a receber/,
     );
   });
 
   it("diz que o preço vem do pedido e que alterá-lo exige motivo", async () => {
     await abrir();
 
-    await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
-    expect(screen.getByText(/preço unitário é herdado do pedido/)).toBeInTheDocument();
-    expect(screen.getByText(/exige perfil comercial ou administrativo e motivo obrigatório/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/O preço congelado na confirmação do pedido/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/recusa alteração de preço sem motivo ou sem perfil/),
+    ).toBeInTheDocument();
   });
 });

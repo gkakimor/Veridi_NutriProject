@@ -3009,25 +3009,56 @@ resolver — perder de vista de quem se está falando.
 
 ## §45 — Ajuda contextual e rótulos de ação
 
-### A ajuda de uma tela explica a própria tela
+### A ajuda de uma tela explica a própria tela, e começa pela ação
 
 Cada tela do ERP tem uma ajuda alcançável pelo botão "Como funciona", que
-abre um modal. Ela começa pelo **conceito** — o que a tela é, o que a
-entidade guarda, o que ela não é —, apresenta o **vocabulário próprio da
-tela** num glossário, e só então desenha o **caminho**.
+abre um modal. Ela responde, **nesta ordem**:
 
-A ordem não é estética. Uma primeira versão explicava apenas onde a tela
-ficava numa cadeia maior ("Produto › Formulação › Custo › Preço") e foi
-reprovada: quem abre a ajuda não sabe o que a tela na frente dele faz, e o
-desenho da cadeia responde a outra pergunta. O fluxo continua, como terceira
-parte.
+1. o que esta tela faz;
+2. quando usar;
+3. próximo passo;
+4. antes de começar;
+5. passo a passo;
+6. o que o sistema faz sozinho;
+7. atenção;
+8. termos;
+9. exemplo;
+10. saiba mais.
 
-Tela com mais de um caminho nomeia cada um e diz **quando** ele vale — "qual
-desses é o meu caso?" é a pergunta que vem antes de qualquer etapa.
+Os três primeiros itens formam o **nível 1**, sempre visível e limitado a 80
+palavras: é o que responde "o que eu faço aqui?" em cinco segundos. Os itens 4
+a 6 ficam abertos logo abaixo. Do 7 em diante é consulta, recolhida.
 
-O conteúdo vive em `apps/web/src/help/content/`, um arquivo por módulo,
-nunca escrito na tela. Um teste de contrato garante que todo tópico tenha
-resumo, glossário e ao menos um fluxo.
+**Por que esta ordem, e o que ela substitui.** A versão anterior desta regra
+mandava começar pelo conceito e apresentar o glossário antes do caminho. Ela
+corrigiu um defeito real — uma versão ainda mais antiga explicava só onde a
+tela ficava numa cadeia maior ("Produto › Formulação › Custo › Preço") e não
+dizia o que a tela na frente da pessoa fazia. A correção, porém, produziu
+outro defeito: a auditoria UX-HELP-01 mediu 31 mil palavras de ajuda em que a
+resposta útil chegava depois de nove a treze termos de dicionário.
+
+A ordem acima preserva a lição — a **primeira frase** diz o que a tela **é** —
+e move o dicionário para onde ele é consultado em vez de lido. O termo difícil
+continua explicado dentro do passo em que aparece ("Ative a versão — a partir
+daqui ela não muda mais"), e o ⓘ continua no campo.
+
+Tela com mais de um caminho diz **quando** cada um vale — "qual desses é o meu
+caso?" é a pergunta que vem antes de qualquer etapa. No modelo novo isso é
+"Quando usar"; no modelo anterior, fluxos nomeados.
+
+**Tamanho.** Todo tópico declara uma classe: `S` até 250 palavras, `M` até
+500, `L` até 800, e o nível 1 até 80 em qualquer uma. Os tetos são testados.
+
+**Conceito compartilhado.** Ideia que serve a mais de três telas é escrita uma
+vez em `apps/web/src/help/concepts/` e citada, nunca copiada.
+
+O conteúdo vive em `apps/web/src/help/content/`: um arquivo por módulo para os
+tópicos ainda no modelo anterior, um arquivo por tela para os já migrados. Os
+dois modelos convivem e o painel reconhece qual está lendo; a migração é por
+tela. Testes de contrato e de padrão editorial cobram cada modelo pela sua
+estrutura.
+
+Como se escreve um tópico está em [`UX_HELP_GUIDE.md`](UX_HELP_GUIDE.md).
 
 ### Toda tela roteada abre um "Como funciona", e ele descreve a tela que está aberta
 
@@ -3035,6 +3066,19 @@ Cada tela do menu — lista, documento e tela de criação — abre uma ajuda. A
 de criação abre a **mesma** ajuda da lista, porque é o fluxo "cadastrar" dela
 que descreve o formulário. Lista e documento com ações diferentes têm tópicos
 diferentes: a fila de faturamento não emite, a lista de ordens não libera.
+
+Duas exceções, aprovadas em UX-HELP-02:
+
+- **Tela de criação com fluxo próprio ganha tópico próprio.** "Receber
+  material do cliente" não tem ordem de compra, não tem fornecedor e não tem
+  custo; abrir nela a ajuda do recebimento de compra apresenta como primeiro
+  caminho um que não existe ali.
+- **Seção com decisão própria ganha painel próprio**, com rótulo que diz o
+  quê ("Como funciona o Orçamento"). São seções onde a pessoa decide dinheiro
+  ou compromete estoque e cuja explicação não cabe no tópico da tela inteira:
+  o Orçamento dentro do Projeto, "Reservar Produto Acabado" dentro do Pedido,
+  "Alterar preço de faturamento". O painel da tela continua sendo o primeiro
+  do arquivo, e é ele que o teste de contrato confere.
 
 A ajuda cobre os componentes **visíveis** daquela tela — filtros, colunas,
 selos, botões, ações de linha, painéis de cálculo, anexos, histórico — e não

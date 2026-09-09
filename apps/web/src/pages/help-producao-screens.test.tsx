@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { helpHints, helpTopics } from "../help/help-content";
-import type { HelpTopic } from "../help/help-content";
+import { helpHints, helpTopics, isHelpTopicV2 } from "../help/help-content";
+import type { AnyHelpTopic, HelpTopic } from "../help/help-content";
 
 /**
  * Ajuda contextual nas telas de Produção — o que se protege aqui é a LIGAÇÃO.
@@ -82,7 +82,7 @@ function renderRota(path: string, url: string, element: React.ReactElement) {
  */
 async function verificaPainel(tituloEsperado: string, regraEsperada: RegExp) {
   const user = userEvent.setup();
-  const gatilho = screen.getByRole("button", { name: /Como funciona/ });
+  const gatilho = screen.getByRole("button", { name: /^Como funciona$/ });
 
   expect(gatilho).toHaveAttribute("aria-expanded", "false");
   expect(screen.queryByRole("heading", { name: tituloEsperado })).toBeNull();
@@ -103,14 +103,16 @@ async function verificaPainel(tituloEsperado: string, regraEsperada: RegExp) {
 
 /** As caixas numeradas de um fluxo, na ordem — `1Rótulo`, `2Rótulo`, … */
 async function verificaFluxoNumerado(topicoId: keyof typeof helpTopics, nomeDoFluxo: string) {
-  await userEvent.setup().click(screen.getByRole("button", { name: /Como funciona/ }));
+  await userEvent.setup().click(screen.getByRole("button", { name: /^Como funciona$/ }));
 
   // O rótulo acessível nomeia o FLUXO, não a tela: estas telas têm mais de um
   // caminho, e é o número da caixa que casa com o passo a passo abaixo.
   const fluxo = screen.getByRole("list", { name: `Fluxo: ${nomeDoFluxo}` });
-  // `helpTopics` é a união literal de TODOS os tópicos, e nem todos têm
-  // `flows` — a anotação traz a leitura de volta para o contrato comum.
-  const topico: HelpTopic = helpTopics[topicoId];
+  // `helpTopics` é a união literal de TODOS os tópicos, e guarda os dois
+  // modelos de conteúdo. Fluxo nomeado é formato do modelo original; chegar
+  // aqui com um tópico já migrado é erro de teste, e precisa dizer isso.
+  const topico: AnyHelpTopic = helpTopics[topicoId];
+  if (isHelpTopicV2(topico)) throw new Error(`${topicoId} está no modelo V2`);
   const etapas = topico.flows?.find((fluxoDoTopico) => fluxoDoTopico.name === nomeDoFluxo)?.steps ?? [];
 
   expect(etapas.length).toBeGreaterThan(0);

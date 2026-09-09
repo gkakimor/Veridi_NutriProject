@@ -1963,6 +1963,16 @@ options={optionsForRow(line).map((product) => ({
             subtitle="Produto produzido depois do Plano precisa ser explicitamente reservado antes de poder ser expedido."
           >
             {/*
+              Ajuda própria da seção: reservar é o pré-requisito da expedição
+              e ele não aparece em lugar nenhum até a pessoa chegar lá e não
+              encontrar nada para enviar.
+            */}
+            <ContextHelp
+              topic={helpTopics["comercial.reservarProdutoAcabado"]}
+              triggerLabel="Como funciona a reserva"
+            />
+
+            {/*
               Falha de consulta e ausência de estoque são fatos diferentes e
               a tela precisa dizer qual dos dois aconteceu. Sumir com a seção
               deixava a pessoa concluir o pior.
