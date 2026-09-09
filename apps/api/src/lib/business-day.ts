@@ -59,3 +59,40 @@ export function venceuEm(validUntil: Date | null | undefined, agora: Date): bool
 export function diaComercialPorExtenso(dia: Date): string {
   return dia.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
+
+/**
+ * O valor que uma coluna de data-só teria se guardasse `diaISO`.
+ *
+ * É o inverso exato de `diaDaColunaDeData`: o `<input type="date">` manda
+ * `2026-09-15`, `z.coerce.date()` materializa `2026-09-15T00:00:00.000Z` e é
+ * isso que a coluna guarda. Nada aqui é fabricado — não existe "fim do dia",
+ * nem 23:59:59, nem deslocamento somado à mão: o marcador de um dia é o
+ * mesmo, esteja ele vindo do banco ou sendo montado para comparar com ele.
+ *
+ * Serve para o único caso em que a comparação de dias não pode acontecer em
+ * memória: um `where` do Prisma. Comparar dois marcadores é comparar dois
+ * dias civis, porque a ordem dos marcadores é a ordem dos dias.
+ */
+export function marcadorDoDiaCivil(diaISO: string): Date {
+  return new Date(`${diaISO}T00:00:00.000Z`);
+}
+
+/** O marcador do dia comercial de hoje — a fronteira "vencido" de um filtro. */
+export function marcadorDeHojeComercial(agora: Date = new Date()): Date {
+  return marcadorDoDiaCivil(hojeComercial(agora));
+}
+
+/**
+ * Quantos dias civis faltam até a data de uma coluna de data-só.
+ *
+ * `0` é hoje, `-1` é ontem. A conta é entre marcadores — dois instantes de
+ * meia-noite UTC —, e por isso o resultado é inteiro por construção: em UTC
+ * todo dia tem 24 horas, e o horário de verão do fuso comercial não entra na
+ * subtração. Medir a distância até o RELÓGIO daria `-1` às 22h do próprio dia
+ * de validade, e a tela imprimiria "vencido há 1 dia" num lote ainda válido.
+ */
+export function diasCivisAte(valor: Date, agora: Date): number {
+  const UM_DIA_MS = 24 * 60 * 60 * 1000;
+  const alvo = marcadorDoDiaCivil(diaDaColunaDeData(valor));
+  return Math.round((alvo.getTime() - marcadorDeHojeComercial(agora).getTime()) / UM_DIA_MS);
+}

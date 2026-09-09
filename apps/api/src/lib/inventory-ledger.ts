@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import { INVENTORY_MOVEMENT_DIRECTION } from "@veridi/shared";
 import type { InventoryMovementType } from "@veridi/shared";
+import { venceuEm } from "./business-day.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -293,8 +294,25 @@ export async function getOnOrderByItems(
   return map;
 }
 
-export function isLotExpired(lot: { expiryDate: Date | null }): boolean {
-  return lot.expiryDate ? lot.expiryDate.getTime() < Date.now() : false;
+/**
+ * O dia de validade do lote ja passou?
+ *
+ * `expiryDate` e DATA CIVIL, nao instante: o operador escolhe 15/09/2026 num
+ * `<input type="date">` e nunca escolhe hora. A pergunta e "o dia 15/09 ja
+ * acabou na Veridi?", e ela se responde comparando DIAS — nunca o marcador do
+ * dia com o relogio. Comparar com `Date.now()` vencia o lote as 21h de Sao
+ * Paulo do dia 14, porque o marcador guardado e a meia-noite UTC do dia 15.
+ *
+ * A regra e INCLUSIVA: o lote vale o dia 15 inteiro e vence as 00:00 do dia
+ * 16, no fuso comercial. Mesma semantica da validade da proposta, mesma
+ * funcao — `venceuEm` em `business-day.ts` e a unica interpretacao de "ate
+ * quando vale" no sistema.
+ *
+ * Validade NAO e bloqueio antecipado: quem quer impedir consumo antes do
+ * vencimento usa status de Qualidade (BLOCKED/AWAITING_RELEASE), nao a data.
+ */
+export function isLotExpired(lot: { expiryDate: Date | null }, agora: Date = new Date()): boolean {
+  return venceuEm(lot.expiryDate, agora);
 }
 
 /**
@@ -303,13 +321,16 @@ export function isLotExpired(lot: { expiryDate: Date | null }): boolean {
  * junto das outras, para nao existir uma segunda interpretacao espalhada
  * por FEFO/reserva/picking/consumo.
  */
-export function isLotAvailableForUse(lot: {
-  status: string;
-  expiryDate: Date | null;
-  requiresCoaSnapshot?: boolean;
-  coaStatus?: string;
-}): boolean {
-  if (lot.status !== "AVAILABLE" || isLotExpired(lot)) return false;
+export function isLotAvailableForUse(
+  lot: {
+    status: string;
+    expiryDate: Date | null;
+    requiresCoaSnapshot?: boolean;
+    coaStatus?: string;
+  },
+  agora: Date = new Date(),
+): boolean {
+  if (lot.status !== "AVAILABLE" || isLotExpired(lot, agora)) return false;
   if (lot.requiresCoaSnapshot && lot.coaStatus !== "APPROVED") return false;
   return true;
 }
@@ -399,13 +420,16 @@ export interface UnavailableBreakdown {
 }
 
 /** A causa de UM lote não estar disponível, na ordem de precedência. */
-export function unavailableReasonForLot(lot: {
-  status: string;
-  expiryDate: Date | null;
-  requiresCoaSnapshot?: boolean;
-  coaStatus?: string;
-}): UnavailableReason | null {
-  if (isLotExpired(lot)) return "EXPIRED";
+export function unavailableReasonForLot(
+  lot: {
+    status: string;
+    expiryDate: Date | null;
+    requiresCoaSnapshot?: boolean;
+    coaStatus?: string;
+  },
+  agora: Date = new Date(),
+): UnavailableReason | null {
+  if (isLotExpired(lot, agora)) return "EXPIRED";
   if (lot.status === "BLOCKED") return "BLOCKED";
   if (lot.status === "AWAITING_RELEASE") return "AWAITING_QUALITY_RELEASE";
   if (lot.status !== "AVAILABLE") return "BLOCKED";

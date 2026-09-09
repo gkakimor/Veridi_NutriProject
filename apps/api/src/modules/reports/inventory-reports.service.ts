@@ -14,6 +14,7 @@ import {
   isLotAvailableForUse,
   isLotExpired,
 } from "../../lib/inventory-ledger.js";
+import { diasCivisAte, marcadorDeHojeComercial } from "../../lib/business-day.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta, slicePage } from "../../lib/pagination.js";
 import type { ExpiryQuery, InventoryPositionQuery, MovementsQuery } from "./reports.schemas.js";
@@ -165,20 +166,27 @@ export async function getExpiryReport(
 ): Promise<ReportPageDTO<ExpiryRowDTO>> {
   const prisma = getPrisma();
   const now = new Date();
+  /*
+   * Validade e DATA CIVIL, e a janela do relatorio tambem: a fronteira e o
+   * marcador do dia comercial de hoje, nao o instante da consulta. Com o
+   * relogio, "Vencidos" as 22h de 15/09 ja trazia o lote de validade 15/09 —
+   * o mesmo lote que a operacao ainda podia consumir naquele dia.
+   */
+  const hoje = marcadorDeHojeComercial(now);
 
   let expiryFilter: Prisma.DateTimeFilter;
   switch (query.window) {
     case "EXPIRED":
-      expiryFilter = { lt: now };
+      expiryFilter = { lt: hoje };
       break;
     case "D7":
-      expiryFilter = { gte: now, lte: new Date(now.getTime() + 7 * DAY_MS) };
+      expiryFilter = { gte: hoje, lte: new Date(hoje.getTime() + 7 * DAY_MS) };
       break;
     case "D30":
-      expiryFilter = { gte: now, lte: new Date(now.getTime() + 30 * DAY_MS) };
+      expiryFilter = { gte: hoje, lte: new Date(hoje.getTime() + 30 * DAY_MS) };
       break;
     case "D60":
-      expiryFilter = { gte: now, lte: new Date(now.getTime() + 60 * DAY_MS) };
+      expiryFilter = { gte: hoje, lte: new Date(hoje.getTime() + 60 * DAY_MS) };
       break;
     case "CUSTOM":
       expiryFilter = {
@@ -237,7 +245,9 @@ export async function getExpiryReport(
       businessLotNumber: lot.businessLotNumber,
       supplierLot: lot.supplierLot,
       expiryDate: expiryDate.toISOString(),
-      daysToExpiry: Math.ceil((expiryDate.getTime() - now.getTime()) / DAY_MS),
+      // Dias CIVIS: `0` e "vence hoje", `-1` e "venceu ontem". Medir contra o
+      // relogio dava `-1` as 22h do proprio dia de validade.
+      daysToExpiry: diasCivisAte(expiryDate, now),
       onHand: onHand.toString(),
       reserved: reserved.toString(),
       available: available.toString(),

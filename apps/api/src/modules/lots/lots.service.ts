@@ -291,8 +291,13 @@ export async function releaseLot(id: string, actorName?: string): Promise<LotDTO
    * seja: a Qualidade registrava uma liberação, via a confirmação, e o
    * material seguia inutilizável. Recusar aqui é o mesmo princípio do CoA —
    * a liberação afirma que o lote pode ser usado, e um lote vencido não pode.
+   *
+   * "Vencido" é a mesma pergunta do resto do sistema — `isLotExpired`, data
+   * civil inclusiva. Liberar no PRÓPRIO dia da validade é legítimo: o lote
+   * ainda pode ser consumido naquele dia, e nada aqui inventa exceção de
+   * módulo.
    */
-  if (lot.expiryDate && lot.expiryDate.getTime() < Date.now()) {
+  if (isLotExpired(lot)) {
     throw new InvalidLotTransitionError(
       "Lote vencido não pode ser liberado — a validade já impede o uso. Bloqueie o lote ou registre a perda no estoque.",
     );

@@ -79,7 +79,11 @@ export interface ExpiryRowDTO {
   businessLotNumber: string | null;
   supplierLot: string | null;
   expiryDate: string;
-  /** Negativo quando já vencido — a UI apresenta como "Vencido há X dias". */
+  /**
+   * Distância em DIAS CIVIS até a validade, no fuso comercial: `0` é "vence
+   * hoje" (o lote ainda vale o dia inteiro) e negativo é vencido, que a UI
+   * apresenta como "Vencido há X dias". Nunca é a diferença até o relógio.
+   */
   daysToExpiry: number;
   onHand: string;
   reserved: string;

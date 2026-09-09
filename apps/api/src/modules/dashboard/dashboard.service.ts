@@ -12,6 +12,7 @@ import type {
   RecentMovementDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { buildAttentionList } from "./attention.service.js";
 import {
   getOpenPurchaseOrderState,
@@ -87,7 +88,9 @@ async function buildPeriod(prisma: PrismaOrTx, from: Date, to: Date): Promise<Da
  */
 async function buildCurrentState(prisma: PrismaOrTx): Promise<DashboardCurrentStateDTO> {
   const now = new Date();
-  const nearExpiryLimit = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  /* Vencimento se mede em dias civis: a janela sai do marcador de hoje. */
+  const hojeComercialMarcador = marcadorDeHojeComercial(now);
+  const nearExpiryLimit = new Date(hojeComercialMarcador.getTime() + 30 * 24 * 60 * 60 * 1000);
 
   const [
     confirmedOrders,
@@ -116,10 +119,12 @@ async function buildCurrentState(prisma: PrismaOrTx): Promise<DashboardCurrentSt
     prisma.lot.findMany({ where: { status: "AWAITING_RELEASE" }, select: { id: true } }),
     prisma.lot.findMany({ where: { status: "BLOCKED" }, select: { id: true } }),
     // Vencimento e sempre pela data efetiva, nunca so pelo status
-    // persistido (nenhum job marca EXPIRED).
-    prisma.lot.findMany({ where: { expiryDate: { lt: now } }, select: { id: true } }),
+    // persistido (nenhum job marca EXPIRED). A data e CIVIL: a fronteira e o
+    // marcador do dia comercial de hoje, e nao o relogio — lote que vence
+    // hoje conta como proximo do vencimento, nunca como vencido.
+    prisma.lot.findMany({ where: { expiryDate: { lt: hojeComercialMarcador } }, select: { id: true } }),
     prisma.lot.findMany({
-      where: { expiryDate: { gte: now, lte: nearExpiryLimit } },
+      where: { expiryDate: { gte: hojeComercialMarcador, lte: nearExpiryLimit } },
       select: { id: true },
     }),
   ]);

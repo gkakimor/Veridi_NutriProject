@@ -49,12 +49,16 @@ produto: COM-PRICE** — herança de preço entre ciclos (reajuste percentual,
 deliberadamente não fez.
 
 **SYS-TZ-01 fechado em 2026-09-09** (§72): `America/Sao_Paulo` virou o fuso
-operacional oficial, com uma definição em `packages/shared`. Fica UM resíduo,
-e ele precisa de decisão do PO antes de virar código:
+operacional oficial, com uma definição em `packages/shared`. O resíduo que
+ficou — TZ-LOTE-01 — **também está fechado**.
 
-| ID | O quê | Por que não foi feito agora |
-|---|---|---|
-| **TZ-LOTE-01** | `isLotExpired` compara a validade do lote (DATA CIVIL) com um instante: `expiryDate.getTime() < Date.now()`. Um lote com validade 15/09 é recusado a partir de **14/09 às 21h** em São Paulo | Mexer nisso muda DISPONIBILIDADE DE MATERIAL, e há duas leituras defensáveis: (a) o lote vale o dia 15 inteiro, como a proposta comercial (§71) — libera ~27h a mais; (b) vence às 00:00 de 15/09 em São Paulo — corrige as 3h e não estende o dia. É decisão de produto/qualidade, não correção mecânica, e o mesmo comparador aparece em `lots.service.ts` (liberação), no painel de atenção e no relatório de validade |
+**TZ-LOTE-01 fechado em 2026-09-08** (§73). O PO decidiu a leitura (a): a
+validade do lote é DATA CIVIL INCLUSIVA — o lote vale o dia inteiro e vence às
+00:00 do dia seguinte em São Paulo. `isLotExpired` passou a responder pelo
+mesmo `venceuEm` da validade comercial, e com ele os call sites que comparavam
+por fora: liberação da Qualidade, painel de atenção, KPI do painel e relatório
+de validade (inclusive `daysToExpiry`, agora em dias civis). Zero migration,
+zero dado reescrito — os mesmos lotes passaram a ser lidos corretamente.
 
 ### P0 — antes de qualquer outra capability
 
