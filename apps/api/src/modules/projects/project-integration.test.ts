@@ -901,7 +901,17 @@ describe("Orçamento com precificação", () => {
     await production.close();
   });
 
-  it("nova versão não herda o vínculo de precificação", async () => {
+  /*
+   * A proposta ENVIADA e não aceita não é acordo — COM-PRICE, §74.
+   *
+   * O vínculo com a precificação nunca foi herdado, e continua não sendo. O que
+   * mudou é o PREÇO: ele era copiado em silêncio, com `priceSource = MANUAL` e
+   * nenhuma origem, e a versão nova saía afirmando um número que ninguém tinha
+   * decidido manter. Agora o preço só nasce preenchido quando existe condição
+   * ACORDADA vigente e de mesma quantidade — e aí nasce com proveniência. Aqui
+   * a V1 foi apresentada e não aceita: não há acordo, e a V2 pede decisão.
+   */
+  it("nova versão não herda o vínculo de precificação, nem o preço sem acordo", async () => {
     const app = buildTestApp("ADMIN");
     await app.ready();
 
@@ -917,8 +927,11 @@ describe("Orçamento com precificação", () => {
 
     const v2 = await createQuote(app, project.id);
     expect(v2.versionNumber).toBe(2);
-    // Valores comerciais servem de partida; a base econômica é reconfirmada.
-    expect(v2.lines[0].unitPrice).toBe("20.0000");
+    // Quantidade e unidade servem de partida; preço e base econômica não.
+    // A quantidade da faixa aplicada na V1 veio junto — é ponto de partida.
+    expect(v2.lines[0].quotedQuantity).toBe("500");
+    expect(v2.lines[0].unitPrice).toBeNull();
+    expect(v2.lines[0].priceOrigin).toBeNull();
     expect(v2.lines[0].priceSource).toBe("MANUAL");
     expect(v2.lines[0].pricing).toBeNull();
 
@@ -2219,7 +2232,9 @@ describe("Opções de precificação da linha do orçamento", () => {
     });
     expect(resposta.statusCode, resposta.body).toBe(200);
     // O envelope existe e a ausência vem dentro dele — nada de corpo vazio.
-    expect(resposta.json()).toEqual({ pricing: null });
+    // Duas ausências normais no mesmo envelope: sem precificação vigente e sem
+    // condição acordada anterior. Nenhuma das duas é erro — §74.
+    expect(resposta.json()).toEqual({ pricing: null, agreement: null });
 
     await app.close();
   });

@@ -111,6 +111,68 @@ export const QUOTE_PRICE_SOURCE_LABELS: Record<QuotePriceSource, string> = {
   PRICING_TIER: "Faixa de precificação",
 };
 
+/**
+ * Qual DECISÃO COMERCIAL formou o preço desta linha — §74.
+ *
+ * Pergunta diferente de `QuotePriceSource`, que responde "tecnicamente veio de
+ * faixa ou foi digitado?". Preço herdado de um acordo é tecnicamente manual e
+ * comercialmente não é: ele é a condição que o cliente já aceitou.
+ */
+export type QuotePriceOrigin =
+  | "INHERITED_AGREEMENT"
+  | "ADJUSTED_AGREEMENT"
+  | "CURRENT_PRICING"
+  | "MANUAL";
+
+export const QUOTE_PRICE_ORIGIN_LABELS: Record<QuotePriceOrigin, string> = {
+  INHERITED_AGREEMENT: "Condição acordada",
+  ADJUSTED_AGREEMENT: "Condição reajustada",
+  CURRENT_PRICING: "Precificação atual",
+  MANUAL: "Preço manual",
+};
+
+/** `null` é linha legada, gravada antes da regra — não se classifica por chute. */
+export const QUOTE_PRICE_ORIGIN_LEGACY_LABEL = "Origem anterior";
+
+/**
+ * A condição comercial anterior que pode embasar esta linha.
+ *
+ * Sai da QuoteLine de uma proposta ACEITA do mesmo Projeto e Produto, a mais
+ * recente por `acceptedAt`. Ela não deixa de ser história por já ter virado
+ * Pedido; o que decide se pode ser SUGERIDA é a validade da proposta que a
+ * registrou, e se a quantidade negociada é a mesma.
+ */
+export interface QuoteLineAgreementDTO {
+  /** A QuoteLine real usada como base — é este id que o backend aceita. */
+  sourceQuoteLineId: string;
+  quoteVersionId: string;
+  quoteCode: string;
+  quoteVersionNumber: number;
+  acceptedAt: string;
+  /** `validUntil` da proposta que registrou o acordo. */
+  validUntil: string | null;
+  /** A condição está vencida para embasar uma negociação NOVA? */
+  expired: boolean;
+  unitPrice: string;
+  quotedQuantity: string | null;
+  uomCode: string | null;
+  /**
+   * A quantidade desta linha é fisicamente a mesma da condição, na unidade
+   * canônica do produto (§68)? `false` quando a linha ainda não tem
+   * quantidade — sem quantidade não há como afirmar equivalência.
+   */
+  sameQuantity: boolean;
+  /**
+   * Reutilizar exatamente esta condição exige motivo? Verdadeiro quando a
+   * quantidade difere ou quando a condição está vencida.
+   */
+  requiresReason: boolean;
+  /** Pode vir marcada como padrão: vigente e mesma quantidade física. */
+  safeDefault: boolean;
+}
+
+
+
 /** Proveniência econômica do preço — informação interna, nunca do cliente. */
 export interface QuotePricingProvenanceDTO {
   pricingVersionId: string | null;
@@ -158,6 +220,17 @@ export interface QuoteLineDTO {
   total: string | null;
   priceSource: QuotePriceSource;
   /**
+   * A decisão comercial que formou este preço. `null` é linha legada — a UI
+   * mostra "Origem anterior" e não inventa classificação.
+   */
+  priceOrigin: QuotePriceOrigin | null;
+  /** A QuoteLine reutilizada como condição, quando o preço foi herdado. */
+  inheritedFromQuoteLineId: string | null;
+  /** Percentual aplicado sobre a condição anterior (`"8.0000"`). */
+  adjustmentPercent: string | null;
+  /** Por que a exceção foi aceita — quantidade diferente ou condição vencida. */
+  priceOriginReason: string | null;
+  /**
    * Só chega para quem pode ver custo e margem (comercial/administração).
    * O documento do cliente nunca expõe isso.
    */
@@ -174,6 +247,12 @@ export interface QuoteLineDTO {
  */
 export interface QuoteLinePricingOptionsResponse {
   pricing: PricingVersionDTO | null;
+  /**
+   * A condição comercial anterior desta linha. `null` é resposta NORMAL —
+   * primeira compra do produto naquele projeto não tem condição, e a tela
+   * não deve oferecer uma opção falsa de "manter".
+   */
+  agreement: QuoteLineAgreementDTO | null;
 }
 
 export type QuotePaymentMethod = "CASH" | "INSTALLMENTS";

@@ -405,7 +405,11 @@ describe("Orçamento multilinha", () => {
     expect(v2.status).toBe("DRAFT");
     expect(v2.lines).toHaveLength(2);
     expect(v2.lines[0].quotedQuantity).toBe("1000");
-    expect(v2.lines[0].unitPrice).toBe("10.0000");
+    // Quantidade e unidade vêm; o PREÇO não — a V1 foi apresentada e não
+    // aceita, e não existe condição acordada a manter (§74). Copiá-lo em
+    // silêncio era o defeito que a formação de preço por linha corrigiu.
+    expect(v2.lines[0].unitPrice).toBeNull();
+    expect(v2.lines[0].priceOrigin).toBeNull();
     // Herdar o vínculo afirmaria que este preço veio de um cálculo que
     // ninguém conferiu nesta versão.
     expect(v2.lines.every((line: { priceSource: string }) => line.priceSource === "MANUAL")).toBe(

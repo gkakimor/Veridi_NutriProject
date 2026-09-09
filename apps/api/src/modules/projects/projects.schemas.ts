@@ -187,6 +187,40 @@ export const applyQuotePricingSchema = z.object({
   pricingTierId: z.string().trim().min(1, "Selecione a faixa de precificação"),
 });
 
+/**
+ * Manter a condição comercial anterior nesta linha.
+ *
+ * O `sourceQuoteLineId` é conferido no servidor — mesmo Projeto, mesmo
+ * Produto, proposta ACEITA e com preço. O `reason` só é exigido quando a
+ * quantidade difere ou a condição venceu, e quem decide isso é o domínio.
+ */
+export const inheritQuoteLinePriceSchema = z.object({
+  sourceQuoteLineId: z.string().trim().min(1, "Selecione a condição anterior"),
+  reason: z.string().trim().min(1).optional(),
+});
+
+/**
+ * Reajustar a condição anterior por um percentual.
+ *
+ * O percentual chega como texto e o SERVIDOR fecha o preço: a tela mostra
+ * prévia, nunca autoridade. O sinal é aceito aqui de propósito — recusar no
+ * schema devolveria "valor decimal inválido", e a regra tem nome: reajuste não
+ * abaixa preço, e o domínio explica o que usar no lugar.
+ */
+export const adjustQuoteLinePriceSchema = z.object({
+  sourceQuoteLineId: z.string().trim().min(1, "Selecione a condição anterior"),
+  adjustmentPercent: z
+    .union([z.string(), z.number()])
+    .transform((value) => String(value).trim().replace(",", "."))
+    .refine((value) => /^-?\d+(\.\d+)?$/.test(value), {
+      message: "Percentual de reajuste inválido.",
+    })
+    .refine((value) => Math.abs(Number(value)) <= 9999, {
+      message: "Percentual de reajuste fora da faixa aceita.",
+    }),
+  reason: z.string().trim().min(1).optional(),
+});
+
 export const sendQuoteVersionSchema = z.object({
   /** Proposta com custo industrial incompleto é decisão explícita. */
   confirmIncompleteCost: z.boolean().optional(),
@@ -194,4 +228,6 @@ export const sendQuoteVersionSchema = z.object({
 
 export type PrepareTechnicalProductInput = z.infer<typeof prepareTechnicalProductSchema>;
 export type ApplyQuotePricingInput = z.infer<typeof applyQuotePricingSchema>;
+export type InheritQuoteLinePriceInput = z.infer<typeof inheritQuoteLinePriceSchema>;
+export type AdjustQuoteLinePriceInput = z.infer<typeof adjustQuoteLinePriceSchema>;
 export type SendQuoteVersionInput = z.infer<typeof sendQuoteVersionSchema>;

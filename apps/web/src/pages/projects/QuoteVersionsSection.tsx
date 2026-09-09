@@ -1,6 +1,12 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import type { ProjectDTO, ProjectStatus, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
+import type {
+  ProjectDTO,
+  ProjectStatus,
+  QuoteLineAgreementDTO,
+  QuoteLineDTO,
+  QuoteVersionDTO,
+} from "@veridi/shared";
 import {
   QUOTE_STATUS_LABELS,
   QUOTE_PRICE_SOURCE_LABELS,
@@ -10,10 +16,12 @@ import {
 import {
   acceptQuoteVersion,
   addQuoteLine,
+  adjustQuotePrice,
   applyQuotePricing,
   createOrderFromQuote,
   createQuoteVersion,
   getQuotePricingOptions,
+  inheritQuotePrice,
   rejectQuoteVersion,
   removeQuoteLine,
   sendQuoteVersion,
@@ -47,6 +55,25 @@ import { formatQuantity } from "../../lib/quantity";
 function formatDate(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleDateString("pt-BR", { timeZone: "UTC" });
+}
+
+/**
+ * O preço que o reajuste produziria — PRÉVIA, não autoridade.
+ *
+ * Quem fecha o valor gravado é o servidor, pela fronteira comercial de quatro
+ * casas. Isto existe para quem negocia ver o efeito antes de aplicar; se a
+ * conta divergir por um centavo, o número certo é o que voltar da API.
+ * Percentual negativo não tem prévia: ele nem é aceito.
+ */
+function previaDoReajuste(base: string, percentual: string | undefined): string | null {
+  if (!percentual || percentual.trim() === "") return null;
+  const lido = parseDecimalInput(percentual);
+  if (lido === null) return null;
+  const fator = Number(lido);
+  if (!Number.isFinite(fator) || fator < 0) return null;
+  const valor = Number(base) * (1 + fator / 100);
+  if (!Number.isFinite(valor)) return null;
+  return valor.toFixed(4);
 }
 
 /**
@@ -124,6 +151,20 @@ export function QuoteVersionsSection({
   const [pricingOptions, setPricingOptions] = useState<PricingVersionDTO | null>(null);
   /** Precificação ativa por linha — consultada, nunca aplicada sozinha. */
   const [tierByLine, setTierByLine] = useState<Record<string, PricingVersionDTO | null>>({});
+  /** A condição comercial anterior de cada linha — `null` é primeira compra. */
+  const [acordoPorLinha, setAcordoPorLinha] = useState<Record<string, QuoteLineAgreementDTO | null>>(
+    {},
+  );
+  /** Percentual digitado no campo de reajuste, por linha. */
+  const [reajustePorLinha, setReajustePorLinha] = useState<Record<string, string>>({});
+  /**
+   * A exceção que o servidor recusou por falta de motivo, e o motivo sendo
+   * escrito. A tela não decide quando o motivo é necessário: ela pergunta
+   * depois que o domínio disse que é.
+   */
+  const [excecao, setExcecao] = useState<
+    { lineId: string; tipo: "MANTER" | "REAJUSTAR"; sourceQuoteLineId: string; percentual?: string; aviso: string; motivo: string } | null
+  >(null);
   /*
    * O que está sendo digitado nas linhas, antes de gravar.
    *
@@ -172,19 +213,26 @@ export function QuoteVersionsSection({
   useEffect(() => {
     if (!open || open.status !== "DRAFT") {
       setTierByLine({});
+      setAcordoPorLinha({});
       return;
     }
     let active = true;
-    const alvo = open.lines.filter((line) => line.quotedQuantity);
+    /*
+     * Todas as linhas, não só as que já têm quantidade: a CONDIÇÃO ANTERIOR
+     * existe mesmo antes de alguém digitar a quantidade, e é ela que responde
+     * "quanto foi acordado da última vez".
+     */
     void Promise.all(
-      alvo.map(async (line) => {
+      open.lines.map(async (line) => {
         // Sem precificação ativa (ou sem permissão) a resposta é ausência de
         // opção, não erro técnico.
         const options = await getQuotePricingOptions(line.id).catch(() => null);
         return [line.id, options] as const;
       }),
     ).then((pares) => {
-      if (active) setTierByLine(Object.fromEntries(pares));
+      if (!active) return;
+      setTierByLine(Object.fromEntries(pares.map(([id, o]) => [id, o?.pricing ?? null])));
+      setAcordoPorLinha(Object.fromEntries(pares.map(([id, o]) => [id, o?.agreement ?? null])));
     });
     return () => {
       active = false;
@@ -287,6 +335,79 @@ export function QuoteVersionsSection({
     }
   }
 
+  /**
+   * Aplica a decisão e, se o servidor pedir motivo, ABRE a confirmação.
+   *
+   * Quem decide se a exceção precisa ser justificada é o domínio — quantidade
+   * diferente ou condição vencida. A tela não repete essa regra: ela tenta,
+   * e quando o servidor recusa por falta de motivo, pergunta com a frase que
+   * o próprio servidor mandou. Duplicar a condição aqui daria duas respostas
+   * para a mesma pergunta, e uma delas ficaria desatualizada.
+   */
+  async function aplicarComExcecao(
+    pendente: {
+      lineId: string;
+      tipo: "MANTER" | "REAJUSTAR";
+      sourceQuoteLineId: string;
+      percentual?: string;
+    },
+    motivo?: string,
+  ) {
+    setSaving(true);
+    setError(null);
+    try {
+      if (pendente.tipo === "MANTER") {
+        await inheritQuotePrice(pendente.lineId, {
+          sourceQuoteLineId: pendente.sourceQuoteLineId,
+          ...(motivo ? { reason: motivo } : {}),
+        });
+      } else {
+        await adjustQuotePrice(pendente.lineId, {
+          sourceQuoteLineId: pendente.sourceQuoteLineId,
+          adjustmentPercent: pendente.percentual ?? "",
+          ...(motivo ? { reason: motivo } : {}),
+        });
+      }
+      setExcecao(null);
+      onChanged();
+    } catch (err) {
+      const mensagem = apiErrorMessage(err, "Falha na operação");
+      if (mensagem.includes("Informe o motivo")) {
+        setExcecao({ ...pendente, aviso: mensagem, motivo: motivo ?? "" });
+      } else {
+        setError(mensagem);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function manterCondicao(lineId: string, acordo: QuoteLineAgreementDTO) {
+    await aplicarComExcecao({
+      lineId,
+      tipo: "MANTER",
+      sourceQuoteLineId: acordo.sourceQuoteLineId,
+    });
+  }
+
+  async function reajustarCondicao(
+    lineId: string,
+    acordo: QuoteLineAgreementDTO,
+    percentual: string,
+  ) {
+    await aplicarComExcecao({
+      lineId,
+      tipo: "REAJUSTAR",
+      sourceQuoteLineId: acordo.sourceQuoteLineId,
+      percentual: parseDecimalInput(percentual) ?? percentual,
+    });
+  }
+
+  async function confirmarExcecao() {
+    if (!excecao) return;
+    await aplicarComExcecao(excecao, excecao.motivo.trim());
+  }
+
   /** Linhas cujo preço veio de uma faixa com custo industrial incompleto. */
   function incompleteCostLines(quote: QuoteVersionDTO): QuoteLineDTO[] {
     return quote.lines.filter(
@@ -343,7 +464,7 @@ export function QuoteVersionsSection({
     setPricingOptions(null);
     setError(null);
     try {
-      setPricingOptions(await getQuotePricingOptions(line.id));
+      setPricingOptions((await getQuotePricingOptions(line.id)).pricing);
     } catch {
       // Sem precificação ativa para o produto: a mensagem é a ausência de
       // opções, não um erro técnico.
@@ -528,6 +649,7 @@ export function QuoteVersionsSection({
                 {open.lines.map((line, indice) => {
                   const options = tierByLine[line.id] ?? null;
                   const tier = exactTier(options, line.quotedQuantity);
+                  const acordo = acordoPorLinha[line.id] ?? null;
                   /*
                    * O total da linha é o da PRÉVIA em versão editável: sai dos
                    * valores que estão nos campos agora, pela mesma função da
@@ -707,17 +829,126 @@ export function QuoteVersionsSection({
                     )}
                   </tr>
 
-                  {/* Sugestão de preço: informa e oferece: nunca escreve o
-                      preço da linha sozinha. Preço só muda por decisão de
-                      quem negocia — faixa explícita ou manual. */}
-                  {editable && line.quotedQuantity && (
+                  {/* Como formar o preço: informa e OFERECE. Nada aqui escreve
+                      `unitPrice` sozinho — o preço muda por decisão de quem
+                      negocia, e cada decisão vira uma origem gravada. */}
+                  {editable && (
                     <tr className="quote-suggestion">
                       <td colSpan={7}>
-                        {tier && tier.selectedUnitPrice ? (
+                        <p className="field__label">Como formar o preço?</p>
+
+                        {acordo && (
                           <div className="quote-suggestion__row">
                             <span>
-                              Existe uma precificação vigente para {formatQuantity(tier.quantity)} {tier.uomCode}:{" "}
-                              <strong>{formatUnitPriceBRL(tier.selectedUnitPrice)}</strong> / {tier.uomCode}.
+                              <strong>Condição acordada</strong>{" "}
+                              {formatUnitPriceBRL(acordo.unitPrice)}
+                              {acordo.uomCode ? ` / ${acordo.uomCode}` : ""} ·{" "}
+                              <span className="code">{acordo.quoteCode}</span> · V
+                              {acordo.quoteVersionNumber}
+                              {acordo.quotedQuantity
+                                ? ` · ${formatQuantity(acordo.quotedQuantity)} ${acordo.uomCode ?? ""}`
+                                : ""}
+                              {acordo.validUntil
+                                ? acordo.expired
+                                  ? ` · vencida em ${formatDate(acordo.validUntil)}`
+                                  : ` · válida até ${formatDate(acordo.validUntil)}`
+                                : ""}
+                            </span>
+                            <button
+                              type="button"
+                              className={
+                                acordo.safeDefault
+                                  ? "btn btn--secondary btn--sm"
+                                  : "btn btn--ghost btn--sm"
+                              }
+                              disabled={saving}
+                              onClick={() => void manterCondicao(line.id, acordo)}
+                            >
+                              Manter condição
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Os dois avisos que impedem herança silenciosa. Eles
+                            informam; quem decide continua sendo quem negocia. */}
+                        {acordo && !acordo.sameQuantity && line.quotedQuantity && (
+                          <p className="field__hint">
+                            A condição anterior foi negociada para{" "}
+                            {acordo.quotedQuantity
+                              ? `${formatQuantity(acordo.quotedQuantity)} ${acordo.uomCode ?? ""}`
+                              : "outra quantidade"}
+                            . Este orçamento está em {formatQuantity(line.quotedQuantity)}{" "}
+                            {line.uomCode ?? ""}.
+                          </p>
+                        )}
+                        {acordo?.expired && (
+                          <p className="field__hint">
+                            Condição vencida em{" "}
+                            {acordo.validUntil ? formatDate(acordo.validUntil) : "—"} — vale como
+                            referência, não como recomendação.
+                          </p>
+                        )}
+
+                        {acordo && (
+                          <div className="quote-suggestion__row">
+                            <span>
+                              <strong>Reajustar condição</strong> · base{" "}
+                              {formatUnitPriceBRL(acordo.unitPrice)}
+                            </span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              aria-label={`Percentual de reajuste de ${line.productCode}`}
+                              value={reajustePorLinha[line.id] ?? ""}
+                              onChange={(event) =>
+                                setReajustePorLinha((atual) => ({
+                                  ...atual,
+                                  [line.id]: event.target.value,
+                                }))
+                              }
+                            />
+                            <span>%</span>
+                            {/* Prévia, nunca autoridade: quem fecha o valor é o
+                                servidor, pela mesma fronteira comercial. */}
+                            {previaDoReajuste(acordo.unitPrice, reajustePorLinha[line.id]) && (
+                              <span>
+                                Novo preço{" "}
+                                <strong>
+                                  {formatUnitPriceBRL(
+                                    previaDoReajuste(acordo.unitPrice, reajustePorLinha[line.id])!,
+                                  )}
+                                </strong>
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              disabled={saving || !(reajustePorLinha[line.id] ?? "").trim()}
+                              onClick={() =>
+                                void reajustarCondicao(
+                                  line.id,
+                                  acordo,
+                                  reajustePorLinha[line.id] ?? "",
+                                )
+                              }
+                            >
+                              Aplicar reajuste
+                            </button>
+                          </div>
+                        )}
+
+                        {line.quotedQuantity && tier && tier.selectedUnitPrice ? (
+                          <div className="quote-suggestion__row">
+                            {/* O código da PREC já aparece na coluna de origem
+                                da linha — repeti-lo aqui só duplicaria. */}
+                            <span>
+                              <strong>Usar precificação atual</strong>
+                            </span>
+                            <span>
+                              Existe uma precificação vigente para {formatQuantity(tier.quantity)}{" "}
+                              {tier.uomCode}:{" "}
+                              <strong>{formatUnitPriceBRL(tier.selectedUnitPrice)}</strong> /{" "}
+                              {tier.uomCode}.
                             </span>
                             <button
                               type="button"
@@ -733,12 +964,63 @@ export function QuoteVersionsSection({
                           </div>
                         ) : (
                           <div className="quote-suggestion__row">
-                            <span>
-                              Não existe precificação vigente para esta quantidade.
-                            </span>
+                            <span>Não existe precificação vigente para esta quantidade.</span>
                             <Link className="btn btn--ghost btn--sm" to={cmvHref}>
                               Simular CMV
                             </Link>
+                          </div>
+                        )}
+
+                        {/* Preço manual continua sendo o campo da própria linha:
+                            não há dois lugares para digitar o mesmo número. */}
+                        {line.priceSource !== "MANUAL" && (
+                          <div className="quote-suggestion__row">
+                            <span>
+                              <strong>Preço manual</strong> — assumir o valor à mão nesta linha.
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              disabled={saving}
+                              onClick={() => void run(() => useManualQuotePrice(line.id))}
+                            >
+                              Usar preço manual
+                            </button>
+                          </div>
+                        )}
+
+                        {/* A exceção comercial é permitida — em voz alta. O
+                            servidor recusou por falta de motivo, e é o motivo
+                            que a tela pede aqui. */}
+                        {excecao?.lineId === line.id && (
+                          <div className="quote-suggestion__row">
+                            <span>{excecao.aviso}</span>
+                            <input
+                              type="text"
+                              aria-label={`Motivo para a condição de ${line.productCode}`}
+                              value={excecao.motivo}
+                              onChange={(event) =>
+                                setExcecao((atual) =>
+                                  atual ? { ...atual, motivo: event.target.value } : atual,
+                                )
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="btn btn--secondary btn--sm"
+                              disabled={saving || excecao.motivo.trim() === ""}
+                              onClick={() => void confirmarExcecao()}
+                            >
+                              Confirmar
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              disabled={saving}
+                              onClick={() => setExcecao(null)}
+                            >
+                              Cancelar
+                            </button>
                           </div>
                         )}
                       </td>

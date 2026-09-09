@@ -19,6 +19,15 @@ import {
   useManualQuoteLinePrice,
 } from "./quote-pricing.service.js";
 import {
+  QuoteAdjustmentNegativeError,
+  QuoteAgreementReasonRequiredError,
+  QuoteAgreementSourceInvalidError,
+  QuoteAgreementSourceNotFoundError,
+  adjustQuoteLinePrice,
+  getQuoteLineAgreement,
+  inheritQuoteLinePrice,
+} from "./quote-price-origin.service.js";
+import {
   addProjectProduct,
   listProjectProducts,
   removeProjectProduct,
@@ -54,7 +63,9 @@ import {
   QuoteWithoutOrderableLinesError,
 } from "./projects.errors.js";
 import {
+  adjustQuoteLinePriceSchema,
   applyQuotePricingSchema,
+  inheritQuoteLinePriceSchema,
   approveProjectSchema,
   prepareTechnicalProductSchema,
   sendQuoteVersionSchema,
@@ -186,6 +197,20 @@ function mapDomainError(
     error instanceof QuoteUomIncompatibleError
   ) {
     return { status: 409, body: { error: "quantity_mismatch", message: error.message } };
+  }
+  if (error instanceof QuoteAgreementSourceNotFoundError) {
+    return { status: 404, body: { error: "not_found", message: error.message } };
+  }
+  if (error instanceof QuoteAgreementSourceInvalidError) {
+    return { status: 400, body: { error: "invalid_agreement_source", message: error.message } };
+  }
+  // A exceção comercial é permitida, mas não em silêncio: 409 com o motivo
+  // que falta, para a tela abrir a confirmação em vez de engolir.
+  if (error instanceof QuoteAgreementReasonRequiredError) {
+    return { status: 409, body: { error: "agreement_reason_required", message: error.message } };
+  }
+  if (error instanceof QuoteAdjustmentNegativeError) {
+    return { status: 400, body: { error: "adjustment_negative", message: error.message } };
   }
   if (error instanceof PriceLockedByPricingError) {
     return { status: 409, body: { error: "price_locked", message: error.message } };
@@ -481,7 +506,17 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
        * de uma tela sã deixava um erro no console do navegador. O 404 aqui
        * volta a significar só o que deve: a LINHA não existe.
        */
-      return reply.send({ pricing: await getQuoteLinePricingOptions(id) });
+      /*
+       * Duas referências, uma chamada: a precificação vigente e a CONDIÇÃO
+       * ACORDADA anterior (§74). Quem forma preço decide entre as duas na
+       * mesma linha, e buscar cada uma num endpoint faria a tela desenhar
+       * metade das opções antes da outra chegar.
+       */
+      const [pricing, agreement] = await Promise.all([
+        getQuoteLinePricingOptions(id),
+        getQuoteLineAgreement(id),
+      ]);
+      return reply.send({ pricing, agreement });
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
@@ -500,6 +535,51 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
       const quoteVersionId = await applyQuoteLinePricing(id, parsed.data.pricingTierId, actor);
+      return reply.send(await getQuoteById(quoteVersionId, canSeePricingProvenance(actor.role)));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  /*
+   * Manter e reajustar são OPERAÇÕES DE DOMÍNIO, não preenchimento de campo.
+   * A tela manda a condição escolhida e, quando for o caso, o motivo; o
+   * servidor valida a fonte, mede a quantidade, calcula o preço e grava a
+   * proveniência. Uma rota que só aceitasse o preço já calculado devolveria o
+   * problema que o §74 corrigiu.
+   */
+  app.post("/quote-lines/:id/inherit-price", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = inheritQuoteLinePriceSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      const quoteVersionId = await inheritQuoteLinePrice(id, parsed.data);
+      return reply.send(await getQuoteById(quoteVersionId, canSeePricingProvenance(actor.role)));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  app.post("/quote-lines/:id/adjust-price", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = adjustQuoteLinePriceSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      const quoteVersionId = await adjustQuoteLinePrice(id, parsed.data);
       return reply.send(await getQuoteById(quoteVersionId, canSeePricingProvenance(actor.role)));
     } catch (error) {
       const mapped = mapDomainError(error);

@@ -404,6 +404,16 @@ describe("Orçamento versionado", () => {
     const v2 = (
       await app.inject({ method: "POST", url: `/projects/${project.id}/quote-versions` })
     ).json();
+    /*
+     * A linha copiada nasce sem preço: a V1 foi apresentada e não aceita, então
+     * não existe condição acordada para manter (§74). Quem monta a V2 decide o
+     * preço — aqui, repetindo o mesmo valor à mão.
+     */
+    await app.inject({
+      method: "PATCH",
+      url: `/quote-lines/${v2.lines[0].id}`,
+      payload: { unitPrice: "10" },
+    });
     const segunda = await addProjectProduct(app, project.id);
     await addQuoteLine(app, v2.id, segunda.id, {
       quotedQuantity: "100",

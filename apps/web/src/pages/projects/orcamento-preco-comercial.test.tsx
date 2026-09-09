@@ -62,6 +62,10 @@ function linha(overrides: Partial<QuoteLineDTO> = {}): QuoteLineDTO {
     unitPrice: PRECO_COMERCIAL,
     total: "2026.55",
     priceSource: "MANUAL",
+    priceOrigin: null,
+    inheritedFromQuoteLineId: null,
+    adjustmentPercent: null,
+    priceOriginReason: null,
     pricing: null,
     ...overrides,
   };

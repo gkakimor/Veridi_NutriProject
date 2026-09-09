@@ -52,6 +52,13 @@ deliberadamente não fez.
 operacional oficial, com uma definição em `packages/shared`. O resíduo que
 ficou — TZ-LOTE-01 — **também está fechado**.
 
+**COM-PRICE fechado em 2026-09-09** (§74): a formação de preço do orçamento
+novo passou a ser uma DECISÃO por linha — manter a condição acordada,
+reajustá-la, usar a precificação atual ou digitar — com proveniência gravada.
+A auditoria confirmou o que o PO suspeitava: `createQuoteVersion` já copiava
+`unitPrice` da versão anterior, em silêncio e sem origem. **Próximo item de
+produto: COM-04** — entregas parceladas e cronograma.
+
 **TZ-LOTE-01 fechado em 2026-09-08** (§73). O PO decidiu a leitura (a): a
 validade do lote é DATA CIVIL INCLUSIVA — o lote vale o dia inteiro e vence às
 00:00 do dia seguinte em São Paulo. `isLotExpired` passou a responder pelo

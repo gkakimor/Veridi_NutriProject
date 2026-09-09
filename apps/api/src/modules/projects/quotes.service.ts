@@ -32,6 +32,11 @@ import {
   linePricingInclude,
   pricingProvenanceForLine,
 } from "./quote-pricing.service.js";
+import {
+  buildAgreementDTO,
+  findAgreementSource,
+  limparOrigemPorQuantidade,
+} from "./quote-price-origin.service.js";
 import type { RejectQuoteInput, UpdateQuoteVersionInput } from "./projects.schemas.js";
 
 /**
@@ -88,6 +93,10 @@ function toQuoteLineDTO(
     unitPrice: line.unitPrice !== null ? line.unitPrice.toFixed(4) : null,
     total,
     priceSource: line.priceSource,
+    priceOrigin: line.priceOrigin,
+    inheritedFromQuoteLineId: line.inheritedFromQuoteLineId,
+    adjustmentPercent: line.adjustmentPercent ? line.adjustmentPercent.toFixed(4) : null,
+    priceOriginReason: line.priceOriginReason,
     pricing,
   };
 }
@@ -330,17 +339,48 @@ export async function createQuoteVersion(
       },
     });
 
-    // As linhas da versão anterior vêm junto: quantidade, unidade e preço como
-    // ponto de partida. O VÍNCULO com a precificação não é herdado — cada
-    // proposta confirma a própria base econômica, então a linha nova nasce
-    // MANUAL até alguém reaplicar a faixa. Herdar a proveniência afirmaria que
-    // este preço veio de um cálculo que ninguém conferiu.
+    /*
+     * As linhas da versão anterior vêm junto — quantidade e unidade como ponto
+     * de partida. O PREÇO é outra história, e foi o que esta capability
+     * corrigiu (§74).
+     *
+     * Antes, `unitPrice` era copiado com `priceSource = MANUAL` e nada dizia
+     * de onde aquele número tinha vindo. Era herança silenciosa: a proposta
+     * nova saía com o preço da anterior sem que ninguém tivesse decidido
+     * mantê-lo, sem conferir se a condição ainda valia e sem notar que ela
+     * tinha sido negociada para outra quantidade.
+     *
+     * Agora o preço só nasce preenchido no ÚNICO caso seguro: existe condição
+     * acordada (proposta ACEITA do mesmo projeto e produto), ela ainda está
+     * vigente, e a quantidade física é a mesma. Aí ele nasce com proveniência
+     * — `INHERITED_AGREEMENT` apontando para a linha reutilizada —, que é o
+     * happy path da recompra. Em qualquer outro caso a linha nasce SEM preço e
+     * quem negocia escolhe: manter mesmo assim, reajustar, usar a precificação
+     * atual ou digitar.
+     *
+     * O vínculo com a precificação continua não sendo herdado: cada proposta
+     * confirma a própria base econômica.
+     */
+    let validadeSugerida: Date | null = null;
+    let todasHerdadas = previous !== null;
     if (previous) {
       const previousLines = await tx.quoteLine.findMany({
         where: { quoteVersionId: previous.id },
         orderBy: { sortOrder: "asc" },
       });
       for (const line of previousLines) {
+        const fonte = await findAgreementSource(tx, projectId, line.productId, quote.id);
+        const acordo = fonte ? await buildAgreementDTO(tx, line, fonte) : null;
+        const herdavel = acordo?.safeDefault === true && fonte !== null;
+
+        if (!herdavel) todasHerdadas = false;
+        else if (validadeSugerida === null) validadeSugerida = fonte!.quoteVersion.validUntil;
+        else if (validadeSugerida.getTime() !== (fonte!.quoteVersion.validUntil?.getTime() ?? -1)) {
+          // Linhas herdadas de propostas com validades diferentes não sugerem
+          // validade nenhuma: escolher uma delas seria arbitrar.
+          todasHerdadas = false;
+        }
+
         await tx.quoteLine.create({
           data: {
             quoteVersionId: quote.id,
@@ -349,9 +389,29 @@ export async function createQuoteVersion(
             sortOrder: line.sortOrder,
             quotedQuantity: line.quotedQuantity,
             uomCode: line.uomCode,
-            unitPrice: line.unitPrice,
             priceSource: "MANUAL",
+            ...(herdavel
+              ? {
+                  unitPrice: fonte!.unitPrice,
+                  priceOrigin: "INHERITED_AGREEMENT" as const,
+                  inheritedFromQuoteLineId: fonte!.id,
+                }
+              : {}),
           },
+        });
+      }
+
+      /*
+       * Validade SUGERIDA, nunca imposta — §74. Quando a proposta nova é a
+       * mesma condição vigente inteira, repetir o prazo dela poupa uma
+       * digitação e é o que quem negocia esperaria ver. O campo continua sendo
+       * do documento novo: dá para trocar, e COM-CORE segue exigindo validade
+       * antes do envio.
+       */
+      if (todasHerdadas && validadeSugerida && previousLines.length > 0) {
+        await tx.quoteVersion.update({
+          where: { id: quote.id },
+          data: { validUntil: validadeSugerida },
         });
       }
     }
@@ -570,16 +630,43 @@ export async function updateQuoteLine(
   // Quantidade, unidade e preço pertencem à faixa enquanto houver vínculo.
   assertPriceEditable(line, input);
 
-  await prisma.quoteLine.update({
-    where: { id: lineId },
-    data: {
-      ...(input.quotedQuantity !== undefined
-        ? { quotedQuantity: input.quotedQuantity as never }
-        : {}),
-      ...(input.uomCode !== undefined ? { uomCode: input.uomCode as never } : {}),
-      ...(input.unitPrice !== undefined ? { unitPrice: input.unitPrice as never } : {}),
-    },
-  });
+  /*
+   * Mudou a quantidade: a origem comercial precisa ser decidida de novo —
+   * §74. Um preço vindo de um acordo de 10.000 un não descreve uma linha que
+   * passou a 500 un, e deixar a proveniência ali seria fazê-la mentir. Ver
+   * `limparOrigemPorQuantidade`: preço manual não é afetado.
+   */
+  const mudouQuantidade = input.quotedQuantity !== undefined || input.uomCode !== undefined;
+  const limpeza = mudouQuantidade ? limparOrigemPorQuantidade(line.priceOrigin) : {};
+
+  /*
+   * Preço digitado à mão É uma decisão comercial, e passa a constar como tal.
+   * Sem isto, editar o valor de uma linha herdada deixaria `priceOrigin` em
+   * `INHERITED_AGREEMENT` sobre um número que o acordo não tem.
+   *
+   * O preço informado vem DEPOIS da limpeza de propósito: quem manda
+   * quantidade e preço na mesma edição está dizendo os dois, e o explícito
+   * ganha do implícito.
+   */
+  const digitouPreco = input.unitPrice !== undefined;
+
+  const data: PrismaTypes.QuoteLineUncheckedUpdateInput = {
+    ...limpeza,
+    ...(input.quotedQuantity !== undefined
+      ? { quotedQuantity: input.quotedQuantity as never }
+      : {}),
+    ...(input.uomCode !== undefined ? { uomCode: input.uomCode as never } : {}),
+    ...(digitouPreco
+      ? {
+          unitPrice: input.unitPrice as never,
+          priceOrigin: "MANUAL" as const,
+          inheritedFromQuoteLineId: null,
+          adjustmentPercent: null,
+          priceOriginReason: null,
+        }
+      : {}),
+  };
+  await prisma.quoteLine.update({ where: { id: lineId }, data });
 
   return (await getQuoteById(line.quoteVersionId)) as QuoteVersionDTO;
 }

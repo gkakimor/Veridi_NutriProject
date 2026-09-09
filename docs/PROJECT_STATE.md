@@ -284,12 +284,43 @@ Qualidade. Backend continua a autoridade; a tela apresenta `isExpired` e
 **Zero migration, zero dado tocado.** O defeito era de interpretação: os mesmos
 lotes passaram a ser lidos corretamente.
 
+## A recompra forma o preço, e diz de onde ele veio (COM-PRICE, 2026-09-09)
+
+**O preço da proposta nova é uma DECISÃO por linha (§74)**: manter a condição
+acordada, reajustá-la por um percentual, usar a precificação atual ou digitar.
+A auditoria confirmou a suspeita do PO: `createQuoteVersion` já copiava
+`unitPrice` da versão anterior com `priceSource = MANUAL`, e nada dizia que
+aquele número tinha sido um acordo — nem se ainda valia, nem para qual
+quantidade fora fechado.
+
+**A condição anterior sai da QuoteLine de uma proposta ACEITA** do mesmo
+Projeto e Produto, a mais recente por `acceptedAt`. Nenhum preço foi criado no
+Projeto e nenhuma tabela de acordo comercial existe.
+
+**Um caso só vem pronto**: condição vigente e mesma quantidade física (§68,
+`Decimal` exato, unidade canônica do produto). Aí a versão nova nasce com o
+preço e com a proveniência, e a validade da condição vem sugerida. Quantidade
+diferente ou condição vencida não herdam sozinhas — manter mesmo assim exige
+motivo, que fica gravado. Reajustar nunca exige motivo: cria preço novo usando
+a condição como base, e o servidor é quem fecha o valor.
+
+**Modelagem aditiva**, tudo nullable: `priceOrigin`, `inheritedFromQuoteLineId`
+(FK para a QuoteLine reutilizada), `adjustmentPercent`, `priceOriginReason`.
+`priceSource` não foi tocado — são duas perguntas diferentes, e um preço
+herdado nunca aponta para a precificação atual. Linha legada fica com origem
+nula: nada é classificado retroativamente.
+
+**O envio passou a congelar o custo CORRENTE também em linha sem faixa.** Antes
+`buildLineSnapshots` saía cedo em toda linha `MANUAL` e congelava só o produto:
+preço herdado ia ao cliente sem base econômica nenhuma. Agora a referência é a
+faixa da precificação ATIVA de mesma quantidade física — preço do acordo, custo
+de hoje. É o que o CMV-VAR vai precisar para medir a variação entre ciclos.
+
 ## Próxima prioridade
 
-**COM-PRICE** — herança de preço entre ciclos: reajuste percentual, "manter
-condição anterior", proveniência da herança. É o que falta para a recompra
-propor sozinha um ponto de partida econômico; hoje a versão nova nasce com o
-preço da anterior como texto, sem dizer de onde ele veio.
+**COM-04** — entregas parceladas: `3 × 1.000`, cronograma e parcelas de
+entrega. É a próxima investigação de domínio do comercial, e COM-PRICE
+deliberadamente não a tocou.
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo
