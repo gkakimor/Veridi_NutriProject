@@ -107,9 +107,19 @@ o achado 2 (cobertura total do Plano). O PO decidiu **1(a) / 2(c) / 3(a)**:
 cancelar uma entrega parcialmente atendida é permitido e preserva o que saiu;
 reprogramar é cancelar e criar substituta com `replacesDeliveryId`; e o Plano de
 Atendimento fica intocado. Duas tabelas, uma coluna anulável em
-`shipment_lines`, uma migration estrutural (59). **Próximo item de produto: a
-definir com o PO** — PLAN-DATE-01 está registrado abaixo e não é sequência
-automática.
+`shipment_lines`, uma migration estrutural (59).
+
+**COM-04b fechado em 2026-09-09** (§75): a quantidade expedida passou a
+ATRAVESSAR entregas programadas. O vínculo só existia quando a linha cabia
+INTEIRA numa promessa — expedir 500 contra entregas de 400 e 600 não cabia em
+nenhuma, ficava sem vínculo, e o cronograma jurava que nada tinha sido entregue.
+Agora 400 vão para a primeira e 100 para a segunda, em duas linhas do mesmo lote
+e da mesma reserva. Separação aberta pela ENTREGA não atravessa: ela representa
+aquela promessa, e passar do que ela pedia é recusa. A origem virou coluna
+(`Shipment.originDeliveryId`, migration 60) porque deduzi-la dos vínculos
+confundiria os dois fluxos. Entrega com separação em RASCUNHO deixou de aceitar
+cancelamento e reprogramação. **Próximo item de produto: a definir com o PO** —
+PLAN-DATE-01 está registrado abaixo e não é sequência automática.
 
 **TZ-LOTE-01 fechado em 2026-09-08** (§73). O PO decidiu a leitura (a): a
 validade do lote é DATA CIVIL INCLUSIVA — o lote vale o dia inteiro e vence às
@@ -350,6 +360,21 @@ apareceu em nenhuma das 40 execuções completas dessa medição.
 | **W6** | Decisão de domínio pendente: trocar `RESTRICT` por `SET NULL` em alguma das 27 FKs opcionais | Não acontece mais por omissão no modelo (#14). Cada troca é decisão de domínio própria — bloquear a exclusão, desassociar ou arquivar — e exige a migration que a faça no banco |
 
 ---
+
+### 15. `Decimal.toString()` pode sair em notação exponencial — LOW
+
+Os DTOs serializam quantidade e dinheiro por `toString()`, e o decimal.js
+devolve notação exponencial abaixo de `1e-7`: uma quantidade de
+`0.000000000001` viaja como `"1e-12"`. A tela e o `parseDecimalInput`
+receberiam um texto que não é o formato esperado.
+
+**Não observado em dado real**: a menor escala do domínio é doze casas, e
+nenhuma quantidade de operação chega perto do limiar. É defeito de fronteira,
+não de uso.
+
+Onde se corrige, quando valer: a serialização, num lugar só — `toFixed` na
+escala da categoria (§58), nunca `toString`. Encontrado em COM-04, fora do
+escopo dele e do COM-04b.
 
 ### 14. PLAN-DATE-01 — planejamento temporal pelas entregas programadas — LOW
 

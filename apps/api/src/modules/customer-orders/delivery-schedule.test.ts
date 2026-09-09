@@ -220,6 +220,32 @@ async function shipFromDelivery(
   return { draftId: draft.id, confirmed };
 }
 
+/** Expede `quantity` pelo fluxo GERAL do Pedido — sem contexto de entrega. */
+async function shipFromOrder(app: App, orderId: string, quantity: string, lotCode: string) {
+  const draft = (
+    await app.inject({ method: "POST", url: `/customer-orders/${orderId}/shipments` })
+  ).json();
+
+  const reservationLineId = draft.lines[0].customerOrderReservationLineId;
+  await app.inject({
+    method: "PATCH",
+    url: `/shipments/${draft.id}`,
+    payload: { lines: [{ customerOrderReservationLineId: reservationLineId, quantity }] },
+  });
+
+  const comLinhas = (await app.inject({ method: "GET", url: `/shipments/${draft.id}` })).json();
+  for (const line of comLinhas.lines) {
+    await app.inject({
+      method: "POST",
+      url: `/shipments/${draft.id}/lines/${line.id}/verify`,
+      payload: { lotCode },
+    });
+  }
+
+  const confirmed = await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
+  return { draftId: draft.id, draft: comLinhas, confirmed };
+}
+
 describe("entregas programadas de um Pedido", () => {
   it("programa o Pedido inteiro em duas datas e zera o saldo programável", async () => {
     const app = buildTestApp();
@@ -808,5 +834,426 @@ describe("fronteira com a Expedição", () => {
     expect(schedule.deliveries).toHaveLength(0);
     expect(schedule.schedulable[0].shippedQuantity).toBe("400");
     expect(schedule.schedulable[0].schedulableQuantity).toBe("0");
+  });
+});
+
+
+/**
+ * COM-04b — a quantidade expedida ATRAVESSA promessas.
+ *
+ * O defeito original: uma linha só ganhava vínculo quando cabia INTEIRA numa
+ * promessa. Expedir 500 contra entregas de 400 e 600 não cabia em nenhuma,
+ * ficava sem vínculo, e o cronograma jurava que nada tinha sido entregue.
+ */
+describe("alocação de expedição geral entre várias entregas", () => {
+  it("500 contra A=400 e B=600 atende 400 em A e 100 em B", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "1000");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "1000", "1000");
+
+    await addDelivery(app, orderId, "2026-10-15", [
+      { customerOrderLineId: lineId, quantity: "400" },
+    ]);
+    await addDelivery(app, orderId, "2026-11-15", [
+      { customerOrderLineId: lineId, quantity: "600" },
+    ]);
+
+    const { draft, confirmed } = await shipFromOrder(app, orderId, "500", lot.code);
+    expect(confirmed.statusCode).toBe(200);
+
+    // A quantidade virou DUAS linhas do mesmo lote e da mesma reserva.
+    expect(draft.lines).toHaveLength(2);
+    expect(new Set(draft.lines.map((l: { lotCode: string }) => l.lotCode)).size).toBe(1);
+    expect(
+      new Set(
+        draft.lines.map((l: { customerOrderReservationLineId: string }) => l.customerOrderReservationLineId),
+      ).size,
+    ).toBe(1);
+
+    const schedule = await getSchedule(app, orderId);
+    const [a, b] = schedule.deliveries;
+    expect(a.totalFulfilledQuantity).toBe("400");
+    expect(a.status).toBe("FULFILLED");
+    expect(b.totalFulfilledQuantity).toBe("100");
+    expect(b.status).toBe("PARTIALLY_FULFILLED");
+  });
+
+  it("a expedição seguinte fecha o que restou da segunda entrega", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "1000");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "1000", "1000");
+
+    await addDelivery(app, orderId, "2026-10-15", [
+      { customerOrderLineId: lineId, quantity: "400" },
+    ]);
+    await addDelivery(app, orderId, "2026-11-15", [
+      { customerOrderLineId: lineId, quantity: "600" },
+    ]);
+
+    await shipFromOrder(app, orderId, "500", lot.code);
+    const segunda = await shipFromOrder(app, orderId, "500", lot.code);
+    expect(segunda.confirmed.statusCode).toBe(200);
+
+    const schedule = await getSchedule(app, orderId);
+    expect(schedule.deliveries.map((d: { status: string }) => d.status)).toEqual([
+      "FULFILLED",
+      "FULFILLED",
+    ]);
+    expect(schedule.deliveries[1].totalFulfilledQuantity).toBe("600");
+    expect(schedule.schedulable[0].schedulableQuantity).toBe("0");
+  });
+
+  it("com saldo parcial em A, 300 fecha A e começa B", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "1000");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "1000", "1000");
+
+    const a = (
+      await addDelivery(app, orderId, "2026-10-15", [
+        { customerOrderLineId: lineId, quantity: "400" },
+      ])
+    ).json().deliveries[0];
+    await addDelivery(app, orderId, "2026-11-15", [
+      { customerOrderLineId: lineId, quantity: "600" },
+    ]);
+
+    // 250 pela entrega A: sobra 150 nela.
+    await shipFromDelivery(app, orderId, a.id, "250", lot.code);
+    // Agora 300 pelo fluxo geral: 150 fecham A e 150 vão para B.
+    await shipFromOrder(app, orderId, "300", lot.code);
+
+    const schedule = await getSchedule(app, orderId);
+    expect(schedule.deliveries[0].totalFulfilledQuantity).toBe("400");
+    expect(schedule.deliveries[0].status).toBe("FULFILLED");
+    expect(schedule.deliveries[1].totalFulfilledQuantity).toBe("150");
+  });
+
+  /*
+   * Expedir não exige cronograma completo: o Pedido tem saldo real, e a parte
+   * que nenhuma promessa esperava sai sem vínculo — não é erro.
+   */
+  it("o que passa das promessas sai sem vínculo, e a expedição segue válida", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "1000");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "1000", "1000");
+
+    await addDelivery(app, orderId, "2026-10-15", [
+      { customerOrderLineId: lineId, quantity: "400" },
+    ]);
+
+    const { draft, confirmed } = await shipFromOrder(app, orderId, "500", lot.code);
+    expect(confirmed.statusCode).toBe(200);
+
+    const comVinculo = draft.lines.filter((l: { deliverySequence: number | null }) => l.deliverySequence !== null);
+    const semVinculo = draft.lines.filter((l: { deliverySequence: number | null }) => l.deliverySequence === null);
+    expect(comVinculo).toHaveLength(1);
+    expect(comVinculo[0].quantity).toBe("400");
+    expect(semVinculo).toHaveLength(1);
+    expect(semVinculo[0].quantity).toBe("100");
+
+    const schedule = await getSchedule(app, orderId);
+    expect(schedule.deliveries[0].status).toBe("FULFILLED");
+    expect(schedule.schedulable[0].shippedQuantity).toBe("500");
+  });
+
+  it("Pedido sem cronograma: nenhuma linha ganha vínculo e nada muda", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "500");
+    const product = await createProduct(app, item.id);
+    const { orderId } = await createOrderInFulfillment(app, product.id, "500", "500");
+
+    const { draft, confirmed } = await shipFromOrder(app, orderId, "500", lot.code);
+    expect(confirmed.statusCode).toBe(200);
+    expect(draft.lines).toHaveLength(1);
+    expect(draft.lines[0].deliverySequence).toBeNull();
+  });
+
+  it("entrega cancelada não recebe alocação nova", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "1000");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "1000", "1000");
+
+    const a = (
+      await addDelivery(app, orderId, "2026-10-15", [
+        { customerOrderLineId: lineId, quantity: "400" },
+      ])
+    ).json().deliveries[0];
+    await addDelivery(app, orderId, "2026-11-15", [
+      { customerOrderLineId: lineId, quantity: "600" },
+    ]);
+
+    await app.inject({
+      method: "POST",
+      url: `/customer-order-deliveries/${a.id}/cancel`,
+      payload: { reason: "Cliente desistiu de outubro" },
+    });
+
+    await shipFromOrder(app, orderId, "400", lot.code);
+
+    const schedule = await getSchedule(app, orderId);
+    const cancelada = schedule.deliveries.find((d: { id: string }) => d.id === a.id);
+    const viva = schedule.deliveries.find((d: { id: string }) => d.id !== a.id);
+    expect(cancelada.totalFulfilledQuantity).toBe("0");
+    expect(viva.totalFulfilledQuantity).toBe("400");
+  });
+
+  it("duas promessas no MESMO dia são servidas pela sequência", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "1000");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "1000", "1000");
+
+    await addDelivery(app, orderId, "2026-10-15", [
+      { customerOrderLineId: lineId, quantity: "100" },
+    ]);
+    await addDelivery(app, orderId, "2026-10-15", [
+      { customerOrderLineId: lineId, quantity: "100" },
+    ]);
+    await addDelivery(app, orderId, "2026-11-15", [
+      { customerOrderLineId: lineId, quantity: "500" },
+    ]);
+
+    await shipFromOrder(app, orderId, "250", lot.code);
+
+    const schedule = await getSchedule(app, orderId);
+    const porSequencia = new Map(
+      schedule.deliveries.map((d: { sequence: number; totalFulfilledQuantity: string }) => [
+        d.sequence,
+        d.totalFulfilledQuantity,
+      ]),
+    );
+    expect(porSequencia.get(1)).toBe("100");
+    expect(porSequencia.get(2)).toBe("100");
+    expect(porSequencia.get(3)).toBe("50");
+  });
+});
+
+/**
+ * O CTA de uma entrega REPRESENTA aquela entrega.
+ *
+ * Uma separação aberta pela promessa de novembro fica em novembro: ela não
+ * consome outubro por ser anterior, e passar do que novembro pedia é recusa —
+ * nunca transbordo para dezembro.
+ */
+describe("separação aberta a partir de uma entrega", () => {
+  it("não consome a entrega anterior, mesmo sendo mais antiga", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "1000");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "1000", "1000");
+
+    const a = (
+      await addDelivery(app, orderId, "2026-10-15", [
+        { customerOrderLineId: lineId, quantity: "400" },
+      ])
+    ).json().deliveries[0];
+    const b = (
+      await addDelivery(app, orderId, "2026-11-15", [
+        { customerOrderLineId: lineId, quantity: "600" },
+      ])
+    ).json().deliveries[1];
+
+    await shipFromDelivery(app, orderId, b.id, "100", lot.code);
+
+    const schedule = await getSchedule(app, orderId);
+    const entregaA = schedule.deliveries.find((d: { id: string }) => d.id === a.id);
+    const entregaB = schedule.deliveries.find((d: { id: string }) => d.id === b.id);
+    expect(entregaA.totalFulfilledQuantity).toBe("0");
+    expect(entregaA.status).toBe("SCHEDULED");
+    expect(entregaB.totalFulfilledQuantity).toBe("100");
+  });
+
+  it("acima do saldo da entrega é recusado, sem vazar para a próxima", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "1000");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "1000", "1000");
+
+    const b = (
+      await addDelivery(app, orderId, "2026-10-15", [
+        { customerOrderLineId: lineId, quantity: "100" },
+      ])
+    ).json().deliveries[0];
+    await addDelivery(app, orderId, "2026-11-15", [
+      { customerOrderLineId: lineId, quantity: "900" },
+    ]);
+
+    const draft = (
+      await app.inject({
+        method: "POST",
+        url: `/customer-orders/${orderId}/shipments`,
+        payload: { deliveryId: b.id },
+      })
+    ).json();
+
+    const recusa = await app.inject({
+      method: "PATCH",
+      url: `/shipments/${draft.id}`,
+      payload: {
+        lines: [
+          {
+            customerOrderReservationLineId: draft.lines[0].customerOrderReservationLineId,
+            quantity: "150",
+          },
+        ],
+      },
+    });
+    expect(recusa.statusCode).toBe(400);
+    expect(recusa.json().error).toBe("exceeds_scheduled_quantity");
+
+    const schedule = await getSchedule(app, orderId);
+    expect(schedule.deliveries[1].totalFulfilledQuantity).toBe("0");
+    expect(lot.code).toBeTruthy();
+  });
+});
+
+/**
+ * Separação em andamento tranca a promessa que ela prepara.
+ *
+ * Não é a execução histórica que bloqueia — 250 já confirmadas continuam
+ * permitindo cancelar o saldo. É o rascunho: alterar o compromisso por baixo de
+ * uma separação em curso deixaria quem confere lote apontando para uma promessa
+ * que mudou de forma.
+ */
+describe("rascunho de expedição tranca a entrega", () => {
+  async function comRascunho() {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "1000");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "1000", "1000");
+
+    const a = (
+      await addDelivery(app, orderId, "2026-10-15", [
+        { customerOrderLineId: lineId, quantity: "400" },
+      ])
+    ).json().deliveries[0];
+
+    const draft = (
+      await app.inject({
+        method: "POST",
+        url: `/customer-orders/${orderId}/shipments`,
+        payload: { deliveryId: a.id },
+      })
+    ).json();
+
+    return { app, orderId, deliveryId: a.id as string, draftId: draft.id as string, lot };
+  }
+
+  it("recusa cancelar e recusa reprogramar enquanto o rascunho existe", async () => {
+    const { app, deliveryId } = await comRascunho();
+
+    const cancelar = await app.inject({
+      method: "POST",
+      url: `/customer-order-deliveries/${deliveryId}/cancel`,
+      payload: { reason: "tentativa" },
+    });
+    expect(cancelar.statusCode).toBe(400);
+    expect(cancelar.json().error).toBe("delivery_has_draft_shipment");
+
+    const reprogramar = await app.inject({
+      method: "POST",
+      url: `/customer-order-deliveries/${deliveryId}/reschedule`,
+      payload: { scheduledDate: "2026-11-15", reason: "tentativa" },
+    });
+    expect(reprogramar.statusCode).toBe(400);
+    expect(reprogramar.json().error).toBe("delivery_has_draft_shipment");
+  });
+
+  it("cancelado o rascunho, a entrega volta a aceitar cancelamento", async () => {
+    const { app, deliveryId, draftId } = await comRascunho();
+
+    const cancelarExpedicao = await app.inject({
+      method: "POST",
+      url: `/shipments/${draftId}/cancel`,
+      payload: { reason: "Separação desfeita" },
+    });
+    expect(cancelarExpedicao.statusCode).toBe(200);
+
+    const cancelar = await app.inject({
+      method: "POST",
+      url: `/customer-order-deliveries/${deliveryId}/cancel`,
+      payload: { reason: "Cliente desistiu" },
+    });
+    expect(cancelar.statusCode).toBe(200);
+    expect(cancelar.json().deliveries[0].status).toBe("CANCELLED");
+  });
+
+  /**
+   * A confirmação NÃO realoca em silêncio.
+   *
+   * O índice de uma separação por Pedido já impede duas separações do mesmo
+   * Pedido disputarem o mesmo saldo. O que sobra é o saldo encolher por outro
+   * caminho entre separar e confirmar — e aí a resposta é recusar, com o
+   * vínculo intacto. Mover a linha para a promessa seguinte apagaria a
+   * evidência do que estava sendo preparado.
+   */
+  it("saldo que encolhe entre separar e confirmar recusa, e não muda o vínculo", async () => {
+    const { app, deliveryId, draftId, lot } = await comRascunho();
+    const prisma = getPrisma();
+
+    const linhaDoRascunho = await prisma.shipmentLine.findFirstOrThrow({
+      where: { shipmentId: draftId },
+    });
+    expect(linhaDoRascunho.customerOrderDeliveryLineId).not.toBeNull();
+
+    // A promessa encolhe por fora: 400 prometidas viram 100.
+    await prisma.customerOrderDeliveryLine.updateMany({
+      where: { deliveryId },
+      data: { quantity: "100" },
+    });
+
+    await app.inject({
+      method: "POST",
+      url: `/shipments/${draftId}/lines/${linhaDoRascunho.id}/verify`,
+      payload: { lotCode: lot.code },
+    });
+
+    const recusa = await app.inject({ method: "POST", url: `/shipments/${draftId}/confirm` });
+    expect(recusa.statusCode).toBe(400);
+    expect(recusa.json().error).toBe("exceeds_scheduled_quantity");
+
+    const depois = await prisma.shipmentLine.findUniqueOrThrow({
+      where: { id: linhaDoRascunho.id },
+    });
+    expect(depois.customerOrderDeliveryLineId).toBe(linhaDoRascunho.customerOrderDeliveryLineId);
+  });
+
+  it("expedição CONFIRMADA não tranca: o parcial continua cancelável", async () => {
+    const app = buildTestApp();
+    const item = await createFinishedItem();
+    const lot = await stockFinishedLot(item.id, "400");
+    const product = await createProduct(app, item.id);
+    const { orderId, lineId } = await createOrderInFulfillment(app, product.id, "400", "400");
+
+    const a = (
+      await addDelivery(app, orderId, "2026-10-15", [
+        { customerOrderLineId: lineId, quantity: "400" },
+      ])
+    ).json().deliveries[0];
+
+    await shipFromDelivery(app, orderId, a.id, "250", lot.code);
+
+    const cancelar = await app.inject({
+      method: "POST",
+      url: `/customer-order-deliveries/${a.id}/cancel`,
+      payload: { reason: "Cliente cancelou o restante" },
+    });
+    expect(cancelar.statusCode).toBe(200);
+    expect(cancelar.json().schedulable[0].schedulableQuantity).toBe("150");
   });
 });

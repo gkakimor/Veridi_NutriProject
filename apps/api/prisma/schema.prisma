@@ -3409,7 +3409,8 @@ model CustomerOrderDelivery {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lines CustomerOrderDeliveryLine[]
+  lines            CustomerOrderDeliveryLine[]
+  originatedShipments Shipment[]              @relation("ShipmentOriginDelivery")
 
   @@unique([customerOrderId, sequence])
   @@index([customerOrderId])
@@ -3603,6 +3604,21 @@ model Shipment {
 
   status ShipmentStatus @default(DRAFT)
 
+  /// A entrega programada que ORIGINOU esta separacao, quando ela nasceu do
+  /// botao daquela entrega.
+  ///
+  /// Persistida, e nao deduzida das linhas: e ela que diz que esta Expedicao
+  /// REPRESENTA aquela promessa. Uma separacao aberta pelo Pedido inteiro
+  /// reparte a quantidade entre as promessas em aberto; uma aberta pela
+  /// entrega de novembro fica em novembro, e passar do que aquela promessa
+  /// pedia e recusa, nunca transbordo para a proxima. Deduzir isso pelos
+  /// vinculos das linhas confundiria os dois casos no momento em que uma
+  /// separacao geral coubesse inteira numa promessa so.
+  ///
+  /// Nulo no fluxo geral e em toda Expedicao anterior a esta capacidade.
+  originDeliveryId String?
+  originDelivery   CustomerOrderDelivery? @relation("ShipmentOriginDelivery", fields: [originDeliveryId], references: [id], onDelete: SetNull)
+
   /// Preenchida na confirmacao — data da saida fisica real.
   shipmentDate DateTime?
   notes        String?
@@ -3623,6 +3639,7 @@ model Shipment {
 
   @@index([customerOrderId])
   @@index([status])
+  @@index([originDeliveryId])
   @@map("shipments")
 }
 

@@ -86,3 +86,21 @@ export class ExceedsScheduledQuantityError extends Error {
     this.name = "ExceedsScheduledQuantityError";
   }
 }
+
+/**
+ * Separação em andamento tranca a promessa que ela está preparando.
+ *
+ * Cancelar ou reprogramar por baixo de um rascunho de Expedição deixaria a
+ * separação apontando para uma promessa que não existe mais — e quem está
+ * conferindo lote na outra tela não teria como saber. A ordem é a inversa:
+ * resolver a expedição primeiro.
+ */
+export class DeliveryHasDraftShipmentError extends Error {
+  constructor(sequence: number, shipmentCodes: string[]) {
+    super(
+      `Existe expedição em preparação para a entrega ${sequence} ` +
+        `(${shipmentCodes.join(", ")}). Confirme ou cancele essa expedição antes de alterar a programação.`,
+    );
+    this.name = "DeliveryHasDraftShipmentError";
+  }
+}

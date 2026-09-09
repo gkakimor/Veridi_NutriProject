@@ -82,22 +82,96 @@ function productStatusBadgeClass(status: ShipmentProductStatus): string {
  * `@veridi/shared`; aqui só se lê o que foi digitado. Quantidade ilegível não
  * entra e é contada — nunca vira zero em silêncio.
  */
+/**
+ * Um LOTE reservado na separação — e as promessas que a saída dele atende.
+ *
+ * Uma quantidade pode atravessar entregas programadas: 500 contra uma entrega
+ * de 400 e outra de 600 atende as duas, e o servidor representa isso em duas
+ * linhas de Expedição do MESMO lote e da MESMA reserva. Quem separa não vê
+ * duas caixas — vê um lote e um número —, então a tela reagrupa por reserva e
+ * mostra a associação de lado, como informação.
+ */
+export interface LoteDaSeparacao {
+  reservationLineId: string;
+  /** Todas as linhas de Expedição deste lote — uma por promessa atendida. */
+  lineIds: string[];
+  lotCode: string | null;
+  businessLotNumber: string | null;
+  expiryDate: string | null;
+  location: string | null;
+  unitCode: string;
+  reservedRemaining: string;
+  /** Soma das linhas: o que sai deste lote nesta expedição. */
+  quantity: string;
+  requiresVerification: boolean;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  /** As entregas programadas atendidas, na ordem em que foram servidas. */
+  deliveries: { sequence: number; scheduledDate: string; quantity: string }[];
+}
+
+export function agruparPorReserva(lines: ShipmentLineDTO[]): LoteDaSeparacao[] {
+  const porReserva = new Map<string, LoteDaSeparacao>();
+  for (const line of lines) {
+    const atual = porReserva.get(line.customerOrderReservationLineId);
+    const entrega =
+      line.deliverySequence !== null && line.deliveryScheduledDate !== null
+        ? {
+            sequence: line.deliverySequence,
+            scheduledDate: line.deliveryScheduledDate,
+            quantity: line.quantity,
+          }
+        : null;
+
+    if (!atual) {
+      porReserva.set(line.customerOrderReservationLineId, {
+        reservationLineId: line.customerOrderReservationLineId,
+        lineIds: [line.id],
+        lotCode: line.lotCode,
+        businessLotNumber: line.businessLotNumber,
+        expiryDate: line.expiryDate,
+        location: line.location,
+        unitCode: line.unitCode,
+        reservedRemaining: line.reservedRemaining,
+        quantity: line.quantity,
+        requiresVerification: line.requiresVerification,
+        verifiedAt: line.verifiedAt,
+        verifiedBy: line.verifiedBy,
+        deliveries: entrega ? [entrega] : [],
+      });
+      continue;
+    }
+
+    atual.lineIds.push(line.id);
+    atual.quantity = new Decimal(atual.quantity).plus(line.quantity).toString();
+    atual.requiresVerification = atual.requiresVerification || line.requiresVerification;
+    // Conferido é o LOTE: a leitura vale para todas as linhas dele, e uma
+    // parte conferida com outra pendente seria uma conferência pela metade.
+    if (!line.verifiedAt) {
+      atual.verifiedAt = null;
+      atual.verifiedBy = null;
+    }
+    if (entrega) atual.deliveries.push(entrega);
+  }
+  return [...porReserva.values()];
+}
+
 function previaDoProduto(
   group: ShipmentProductGroupDTO,
-  lines: ShipmentLineDTO[],
+  lotes: LoteDaSeparacao[],
   quantities: Record<string, string>,
 ) {
   const legiveis: { id: string; reservedRemaining: string; quantity: string }[] = [];
   let ilegiveis = 0;
-  for (const line of lines) {
-    const digitado = (quantities[line.customerOrderReservationLineId] ?? "").trim();
+  for (const line of lotes) {
+    const digitado = (quantities[line.reservationLineId] ?? "").trim();
     const legivel = digitado === "" ? "0" : parseDecimalInput(digitado);
     if (legivel === null) {
       ilegiveis += 1;
       continue;
     }
     legiveis.push({
-      id: line.customerOrderReservationLineId,
+      id: line.reservationLineId,
       reservedRemaining: line.reservedRemaining,
       quantity: legivel,
     });
@@ -111,14 +185,14 @@ function previaDoProduto(
 
 interface ProductGroupProps {
   group: ShipmentProductGroupDTO;
-  lines: ShipmentLineDTO[];
+  lotes: LoteDaSeparacao[];
   isDraft: boolean;
   shipmentStatus: ShipmentStatus;
   quantities: Record<string, string>;
   onQuantityChange: (reservationLineId: string, value: string) => void;
   lotInputs: Record<string, string>;
   onLotInputChange: (reservationLineId: string, value: string) => void;
-  onVerify: (line: ShipmentLineDTO) => void;
+  onVerify: (lote: LoteDaSeparacao) => void;
   verifyingLine: string | null;
   /** Erro por linha (ex.: conferir sem informar o lote) — mostrado ao lado do campo. */
   lotErrors: Record<string, string>;
@@ -133,7 +207,7 @@ interface ProductGroupProps {
  */
 function ProductGroup({
   group,
-  lines,
+  lotes,
   isDraft,
   shipmentStatus,
   quantities,
@@ -167,7 +241,7 @@ function ProductGroup({
       */}
       {isDraft ? (
         (() => {
-          const previa = previaDoProduto(group, lines, quantities);
+          const previa = previaDoProduto(group, lotes, quantities);
           const unidade = group.unitCode;
           return (
             <p className="shipment-product__meta" aria-live="polite">
@@ -212,7 +286,7 @@ function ProductGroup({
         </p>
       )}
 
-      {lines.length === 0 ? (
+      {lotes.length === 0 ? (
         <p className="field__hint">Ainda sem reserva disponível para esta expedição.</p>
       ) : (
         <div className="table-container">
@@ -241,9 +315,22 @@ function ProductGroup({
               </tr>
             </thead>
             <tbody>
-              {lines.map((line) => (
-                <tr key={line.id}>
-                  <td className="is-code">{line.lotCode ?? "—"}</td>
+              {lotes.map((line) => (
+                <tr key={line.reservationLineId}>
+                  <td className="is-code">
+                    {line.lotCode ?? "—"}
+                    {line.deliveries.length > 0 && (
+                      <span className="field__hint">
+                        {" "}
+                        {line.deliveries
+                          .map(
+                            (entrega) =>
+                              `Entrega ${entrega.sequence} · ${formatQuantity(entrega.quantity)}`,
+                          )
+                          .join(" · ")}
+                      </span>
+                    )}
+                  </td>
                   <td>{line.businessLotNumber ?? "—"}</td>
                   <td>{formatDate(line.expiryDate)}</td>
                   <td>{line.location ?? "—"}</td>
@@ -258,7 +345,7 @@ function ProductGroup({
                            na mesma tela, um deles falso. O teto agora é
                            dito antes, não descoberto depois. */
                         const digitado = (
-                          quantities[line.customerOrderReservationLineId] ?? ""
+                          quantities[line.reservationLineId] ?? ""
                         ).trim();
                         const legivel = parseDecimalInput(digitado);
                         const ilegivel = digitado !== "" && legivel === null;
@@ -274,12 +361,9 @@ function ProductGroup({
                               aria-label={`Quantidade do lote ${line.lotCode ?? ""}`}
                               aria-invalid={excede || ilegivel || undefined}
                               className={excede || ilegivel ? "is-invalid" : undefined}
-                              value={quantities[line.customerOrderReservationLineId] ?? ""}
+                              value={quantities[line.reservationLineId] ?? ""}
                               onChange={(event) =>
-                                onQuantityChange(
-                                  line.customerOrderReservationLineId,
-                                  event.target.value,
-                                )
+                                onQuantityChange(line.reservationLineId, event.target.value)
                               }
                             />
                             {ilegivel && (
@@ -311,23 +395,23 @@ function ProductGroup({
                         <div className="lot-scanner__manual-row">
                           <input
                             ref={(element) =>
-                              registerLotInput(line.customerOrderReservationLineId, element)
+                              registerLotInput(line.reservationLineId, element)
                             }
                             type="text"
                             aria-label={`Lote conferido da linha ${line.lotCode ?? ""}`}
                             placeholder="Escaneie ou digite o lote"
                             aria-invalid={
-                              lotErrors[line.customerOrderReservationLineId] ? true : undefined
+                              lotErrors[line.reservationLineId] ? true : undefined
                             }
                             aria-describedby={
-                              lotErrors[line.customerOrderReservationLineId]
-                                ? `lot-error-${line.customerOrderReservationLineId}`
+                              lotErrors[line.reservationLineId]
+                                ? `lot-error-${line.reservationLineId}`
                                 : undefined
                             }
-                            value={lotInputs[line.customerOrderReservationLineId] ?? ""}
+                            value={lotInputs[line.reservationLineId] ?? ""}
                             onChange={(event) =>
                               onLotInputChange(
-                                line.customerOrderReservationLineId,
+                                line.reservationLineId,
                                 event.target.value,
                               )
                             }
@@ -338,23 +422,23 @@ function ProductGroup({
                           <button
                             type="button"
                             className="btn btn--secondary btn--sm"
-                            disabled={verifyingLine === line.customerOrderReservationLineId}
+                            disabled={verifyingLine === line.reservationLineId}
                             onClick={() => onVerify(line)}
                           >
-                            {verifyingLine === line.customerOrderReservationLineId
+                            {verifyingLine === line.reservationLineId
                               ? "Conferindo…"
                               : "Conferir lote"}
                           </button>
                         </div>
                         {/* O erro veio de um clique explícito: precisa ser texto
                             visível, não só tooltip. */}
-                        {lotErrors[line.customerOrderReservationLineId] && (
+                        {lotErrors[line.reservationLineId] && (
                           <p
-                            id={`lot-error-${line.customerOrderReservationLineId}`}
+                            id={`lot-error-${line.reservationLineId}`}
                             className="form-alert form-alert--inline"
                             role="alert"
                           >
-                            {lotErrors[line.customerOrderReservationLineId]}
+                            {lotErrors[line.reservationLineId]}
                           </p>
                         )}
                       </>
@@ -404,9 +488,15 @@ export function ShipmentPage() {
   const syncFromServer = useCallback((next: ShipmentDTO) => {
     setShipment(next);
     setNotes(next.notes ?? "");
+    /* Uma reserva pode ter mais de uma linha quando a quantidade atravessa
+       entregas programadas. O campo é do LOTE, então ele recebe a SOMA — pegar
+       a última linha mostraria 100 onde saem 500. */
     const nextQuantities: Record<string, string> = {};
     for (const line of next.lines) {
-      nextQuantities[line.customerOrderReservationLineId] = line.quantity;
+      const atual = nextQuantities[line.customerOrderReservationLineId];
+      nextQuantities[line.customerOrderReservationLineId] = atual
+        ? new Decimal(atual).plus(line.quantity).toString()
+        : line.quantity;
     }
     setQuantities(nextQuantities);
   }, []);
@@ -430,11 +520,14 @@ export function ShipmentPage() {
      de exibição. */
   function linhasParaEnvio(): { customerOrderReservationLineId: string; quantity: string }[] {
     if (!shipment) return [];
-    return shipment.lines.map((line) => {
-      const digitado = quantities[line.customerOrderReservationLineId] ?? "0";
+    /* Uma entrada por RESERVA, não por linha: o split em duas linhas é
+       representação do servidor, e reenviá-lo como duas entradas duplicaria a
+       quantidade do lote. O servidor reparte de novo a partir do total. */
+    return agruparPorReserva(shipment.lines).map((line) => {
+      const digitado = quantities[line.reservationLineId] ?? "0";
       const resolvido = resolverQuantidadeContraLimite(digitado, line.reservedRemaining);
       return {
-        customerOrderReservationLineId: line.customerOrderReservationLineId,
+        customerOrderReservationLineId: line.reservationLineId,
         quantity:
           resolvido.status === "ok"
             ? resolvido.valorCanonico
@@ -487,9 +580,9 @@ export function ShipmentPage() {
    * conferência valida a quantidade realmente gravada — e como o save
    * recria as linhas, a conferência usa o id devolvido pelo servidor.
    */
-  async function handleVerify(line: ShipmentLineDTO) {
+  async function handleVerify(lote: LoteDaSeparacao) {
     if (!id || !shipment) return;
-    const reservationLineId = line.customerOrderReservationLineId;
+    const reservationLineId = lote.reservationLineId;
     const lotCode = (lotInputs[reservationLineId] ?? "").trim();
 
     // Campo vazio não chama o backend — mas também não pode ser um clique
@@ -515,16 +608,22 @@ export function ShipmentPage() {
         notes: notes.trim(),
         lines: linhasParaEnvio(),
       });
-      const target = saved.lines.find(
+      /* Conferir é do LOTE. Quando a quantidade dele atravessa entregas
+         programadas ele tem mais de uma linha, e conferir só a primeira
+         deixaria a expedição sem confirmar por uma linha invisível. */
+      const alvos = saved.lines.filter(
         (current) => current.customerOrderReservationLineId === reservationLineId,
       );
-      if (!target) {
+      if (alvos.length === 0) {
         syncFromServer(saved);
         setError("Esta linha não está mais na separação — informe a quantidade antes de conferir.");
         return;
       }
 
-      const verified = await verifyShipmentLine(id, target.id, { lotCode });
+      let verified = saved;
+      for (const alvo of alvos) {
+        verified = await verifyShipmentLine(id, alvo.id, { lotCode });
+      }
       syncFromServer(verified);
       setLotInputs((prev) => ({ ...prev, [reservationLineId]: "" }));
     } catch (err) {
@@ -605,7 +704,9 @@ export function ShipmentPage() {
   const previasPorProduto = shipment.products.map((group) =>
     previaDoProduto(
       group,
-      shipment.lines.filter((line) => line.customerOrderLineId === group.customerOrderLineId),
+      agruparPorReserva(
+        shipment.lines.filter((line) => line.customerOrderLineId === group.customerOrderLineId),
+      ),
       quantities,
     ),
   );
@@ -616,16 +717,16 @@ export function ShipmentPage() {
   const produtosAcimaDoQueFalta = previasPorProduto.filter((previa) => previa.acimaDoQueFalta);
 
   /* Quantidade que a tela não consegue ler não vira zero em silêncio. */
-  const linhasIlegiveis = shipment.lines.filter((line) => {
-    const digitado = (quantities[line.customerOrderReservationLineId] ?? "").trim();
+  const linhasIlegiveis = agruparPorReserva(shipment.lines).filter((line) => {
+    const digitado = (quantities[line.reservationLineId] ?? "").trim();
     return digitado !== "" && parseDecimalInput(digitado) === null;
   });
 
   /* Confirmar não corrige silenciosamente para o teto: enquanto houver
      linha acima do reservado, a ação fica bloqueada e a linha diz por quê. */
-  const linhasAcimaDoReservado = shipment.lines.filter((line) =>
+  const linhasAcimaDoReservado = agruparPorReserva(shipment.lines).filter((line) =>
     excedeLimiteExibido(
-      quantities[line.customerOrderReservationLineId] ?? "",
+      quantities[line.reservationLineId] ?? "",
       line.reservedRemaining,
     ),
   );
@@ -760,8 +861,10 @@ export function ShipmentPage() {
             <ProductGroup
               key={group.customerOrderLineId}
               group={group}
-              lines={shipment.lines.filter(
-                (line) => line.customerOrderLineId === group.customerOrderLineId,
+              lotes={agruparPorReserva(
+                shipment.lines.filter(
+                  (line) => line.customerOrderLineId === group.customerOrderLineId,
+                ),
               )}
               isDraft={isDraft}
               shipmentStatus={shipment.status}

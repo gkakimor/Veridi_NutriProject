@@ -219,3 +219,64 @@ export function saldoProgramavel(entrada: {
 }): DecimalInstance {
   return Decimal.max(entrada.pedido.minus(entrada.expedido).minus(entrada.pendenteEmEntregasAtivas), 0);
 }
+
+/* ------------------------------------------------------------------ *
+ * Alocação de uma quantidade expedida entre as promessas em aberto
+ * ------------------------------------------------------------------ */
+
+/** Uma promessa em aberto, já ordenada, com o saldo que ela ainda espera. */
+export interface PromessaPendente {
+  deliveryLineId: string;
+  remaining: DecimalInstance;
+}
+
+/** Um pedaço da quantidade expedida e a promessa que ele atende. */
+export interface AlocacaoDaEntrega {
+  /** `null` quando o pedaço não corresponde a promessa nenhuma. */
+  deliveryLineId: string | null;
+  quantity: DecimalInstance;
+}
+
+/**
+ * Reparte uma quantidade expedida entre as promessas em aberto de UMA linha
+ * do Pedido.
+ *
+ * A quantidade ATRAVESSA promessas: expedir 500 contra uma entrega de 400 e
+ * outra de 600 atende as duas — 400 na primeira e 100 na segunda. Tratar isso
+ * como excesso da primeira seria recusar uma expedição que o Pedido comporta,
+ * e deixar tudo sem vínculo faria o cronograma jurar que nada foi entregue.
+ *
+ * A ordem das promessas é responsabilidade de quem chama, e é ela que decide
+ * quem é servido primeiro: data prometida, depois sequência dentro do Pedido.
+ * Aqui não há critério nenhum — só a repartição.
+ *
+ * O que sobra depois de esgotar as promessas volta com `deliveryLineId` nulo,
+ * e isso é um resultado legítimo: o Pedido pode ter saldo real sem ter
+ * promessa para ele. Expedir não exige cronograma completo.
+ *
+ * Tudo em Decimal, sem arredondamento: a soma dos pedaços é exatamente a
+ * quantidade candidata, em qualquer escala.
+ */
+export function alocarQuantidadeNasEntregasPendentes(
+  candidato: DecimalInstance,
+  promessas: PromessaPendente[],
+): AlocacaoDaEntrega[] {
+  if (candidato.lessThanOrEqualTo(0)) return [];
+
+  const alocacoes: AlocacaoDaEntrega[] = [];
+  let restante = candidato;
+
+  for (const promessa of promessas) {
+    if (restante.lessThanOrEqualTo(0)) break;
+    if (promessa.remaining.lessThanOrEqualTo(0)) continue;
+
+    const pedaco = Decimal.min(restante, promessa.remaining);
+    alocacoes.push({ deliveryLineId: promessa.deliveryLineId, quantity: pedaco });
+    restante = restante.minus(pedaco);
+  }
+
+  if (restante.greaterThan(0)) {
+    alocacoes.push({ deliveryLineId: null, quantity: restante });
+  }
+  return alocacoes;
+}

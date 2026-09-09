@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Decimal } from "./decimal-config.js";
 import {
+  alocarQuantidadeNasEntregasPendentes,
   saldoDaLinhaProgramada,
   saldoProgramavel,
   situacaoDaEntrega,
@@ -179,5 +180,99 @@ describe("saldo programável", () => {
     });
     expect(saldo.equals(d("0.000000000001"))).toBe(true);
     expect(saldo.toFixed(12)).toBe("0.000000000001");
+  });
+});
+
+/**
+ * A repartição de uma quantidade expedida entre as promessas.
+ *
+ * O defeito que originou COM-04b: uma linha só era vinculada quando cabia
+ * INTEIRA numa promessa. Expedir 500 contra entregas de 400 e 600 não cabia em
+ * nenhuma, ficava sem vínculo, e o cronograma jurava que nada tinha sido
+ * entregue. A quantidade atravessa promessas.
+ */
+describe("alocação de uma quantidade entre as promessas", () => {
+  const promessa = (id: string, remaining: string) => ({ deliveryLineId: id, remaining: d(remaining) });
+  const resumo = (alocacoes: ReturnType<typeof alocarQuantidadeNasEntregasPendentes>) =>
+    alocacoes.map((item) => [item.deliveryLineId, item.quantity.toString()]);
+
+  it("atravessa duas promessas: 500 contra 400 e 600 dá 400 e 100", () => {
+    const alocado = alocarQuantidadeNasEntregasPendentes(d("500"), [
+      promessa("A", "400"),
+      promessa("B", "600"),
+    ]);
+    expect(resumo(alocado)).toEqual([
+      ["A", "400"],
+      ["B", "100"],
+    ]);
+  });
+
+  it("respeita o saldo já consumido: A com 150 e B com 600, candidato 300", () => {
+    const alocado = alocarQuantidadeNasEntregasPendentes(d("300"), [
+      promessa("A", "150"),
+      promessa("B", "600"),
+    ]);
+    expect(resumo(alocado)).toEqual([
+      ["A", "150"],
+      ["B", "150"],
+    ]);
+  });
+
+  /*
+   * Expedir não exige cronograma completo: o Pedido pode ter saldo real sem
+   * promessa para ele, e essa parte fica sem vínculo em vez de ser recusada.
+   */
+  it("o que sobra depois das promessas fica sem vínculo", () => {
+    const alocado = alocarQuantidadeNasEntregasPendentes(d("500"), [promessa("A", "400")]);
+    expect(resumo(alocado)).toEqual([
+      ["A", "400"],
+      [null, "100"],
+    ]);
+  });
+
+  it("sem promessa nenhuma, tudo fica sem vínculo", () => {
+    expect(resumo(alocarQuantidadeNasEntregasPendentes(d("500"), []))).toEqual([[null, "500"]]);
+  });
+
+  /*
+   * Promessa cancelada e promessa já cumprida não chegam aqui — quem monta a
+   * fila as descarta. O que este teste fixa é a consequência: uma fila vazia
+   * de saldo não consome nada, e a quantidade inteira sai sem vínculo.
+   */
+  it("promessa sem saldo é ignorada, e a fila segue para a próxima", () => {
+    const alocado = alocarQuantidadeNasEntregasPendentes(d("300"), [
+      promessa("cumprida", "0"),
+      promessa("B", "600"),
+    ]);
+    expect(resumo(alocado)).toEqual([["B", "300"]]);
+  });
+
+  it("a ordem da fila é a ordem em que as promessas são servidas", () => {
+    const alocado = alocarQuantidadeNasEntregasPendentes(d("250"), [
+      promessa("mesmo-dia-seq-1", "100"),
+      promessa("mesmo-dia-seq-2", "100"),
+      promessa("dia-seguinte", "500"),
+    ]);
+    expect(resumo(alocado)).toEqual([
+      ["mesmo-dia-seq-1", "100"],
+      ["mesmo-dia-seq-2", "100"],
+      ["dia-seguinte", "50"],
+    ]);
+  });
+
+  it("candidato zero ou negativo não aloca nada", () => {
+    expect(alocarQuantidadeNasEntregasPendentes(d("0"), [promessa("A", "400")])).toEqual([]);
+  });
+
+  it("reparte na escala de quantidade, sem arredondar", () => {
+    const alocado = alocarQuantidadeNasEntregasPendentes(d("400.000000000001"), [
+      promessa("A", "400"),
+      promessa("B", "600"),
+    ]);
+    expect(alocado[0]!.quantity.toFixed(12)).toBe("400.000000000000");
+    expect(alocado[1]!.quantity.toFixed(12)).toBe("0.000000000001");
+    // A soma dos pedaços é EXATAMENTE o candidato — nenhum epsilon some.
+    const soma = alocado.reduce((total, item) => total.plus(item.quantity), d("0"));
+    expect(soma.equals(d("400.000000000001"))).toBe(true);
   });
 });

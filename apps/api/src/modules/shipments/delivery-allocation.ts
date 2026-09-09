@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
-import { saldoDaLinhaProgramada } from "@veridi/shared";
+import type { AlocacaoDaEntrega, PromessaPendente } from "@veridi/shared";
+import { alocarQuantidadeNasEntregasPendentes, saldoDaLinhaProgramada } from "@veridi/shared";
 
 /**
  * Qual entrega programada cada linha de Expedição ATENDE.
@@ -10,35 +11,43 @@ import { saldoDaLinhaProgramada } from "@veridi/shared";
  * inventar história. `ShipmentLine.customerOrderDeliveryLineId` responde a
  * pergunta, e é dele que sai todo o "atendido" do cronograma.
  *
- * A ALOCAÇÃO é cronológica: a promessa mais antiga em aberto é servida
- * primeiro. Isso não é uma regra comercial nova — é a única leitura que mantém
- * as duas contas do Pedido coerentes. Sem ela, expedir 250 por fora do
- * cronograma deixaria "falta expedir 150" convivendo com "prometido 400 em
- * aberto", e o saldo programável ficaria preso em zero para sempre.
+ * Dois fluxos, duas regras:
  *
- * Expedição preparada a partir de UMA entrega serve só aquela entrega: o
- * `deliveryId` restringe a fila, e a pessoa recebe exatamente o que a promessa
- * daquele dia pedia.
+ * - **Separação aberta pela ENTREGA** (`Shipment.originDeliveryId` preenchido).
+ *   Aquela Expedição representa aquela promessa. A proposta nasce limitada ao
+ *   que ela pedia, e passar disso é RECUSA — nunca transbordo para a promessa
+ *   seguinte. Quem quer expedir mais abre outra separação.
+ * - **Separação aberta pelo PEDIDO** (sem origem). A quantidade atravessa
+ *   promessas na ordem em que elas foram prometidas: 500 contra uma entrega de
+ *   400 e outra de 600 atende 400 na primeira e 100 na segunda. O que sobrar
+ *   depois de esgotá-las fica sem vínculo, e isso é legítimo — o Pedido pode
+ *   ter saldo real sem promessa para ele.
+ *
+ * A ordem é `scheduledDate`, depois `sequence`, depois `id`. Os dois primeiros
+ * são semânticos: a promessa mais antiga é servida primeiro, e duas promessas
+ * do mesmo dia se desempatam pela ordem em que foram feitas. O `id` entra só
+ * para o resultado ser estável, nunca como critério de negócio — e por isso
+ * `createdAt` não aparece aqui: "quando alguém digitou" não decide quem o
+ * cliente recebe primeiro.
  */
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
 const ZERO = new Prisma.Decimal(0);
 
-/** Uma promessa em aberto, na ordem em que ela deve ser servida. */
-export interface PromessaEmAberto {
-  deliveryLineId: string;
+/** Uma promessa em aberto, com a linha do Pedido a que ela pertence. */
+export interface PromessaEmAberto extends PromessaPendente {
   customerOrderLineId: string;
-  /** Quanto ainda falta atender desta linha programada. */
-  remaining: Prisma.Decimal;
 }
 
 /**
- * As promessas em aberto de um Pedido, por linha do Pedido, em ordem
- * cronológica de entrega.
+ * As promessas em aberto de um Pedido, por linha do Pedido, na ordem em que
+ * devem ser servidas.
  *
  * Só entregas NÃO canceladas: uma promessa cancelada não espera mais nada, e
- * uma expedição nova não pode ser atribuída a ela.
+ * uma expedição nova não pode ser atribuída a ela — o que ela já recebeu
+ * continua ligado a ela, como história. Linha sem saldo pendente também sai da
+ * fila: promessa cumprida não recebe duas vezes.
  */
 export async function promessasEmAberto(
   prisma: PrismaOrTx,
@@ -54,10 +63,13 @@ export async function promessasEmAberto(
       },
     },
     include: {
-      delivery: { select: { scheduledDate: true, sequence: true } },
       shipmentLines: { include: { shipment: { select: { status: true } } } },
     },
-    orderBy: [{ delivery: { scheduledDate: "asc" } }, { delivery: { sequence: "asc" } }],
+    orderBy: [
+      { delivery: { scheduledDate: "asc" } },
+      { delivery: { sequence: "asc" } },
+      { id: "asc" },
+    ],
   });
 
   const porOrderLine = new Map<string, PromessaEmAberto[]>();
@@ -81,44 +93,61 @@ export async function promessasEmAberto(
   return porOrderLine;
 }
 
+/** Uma linha a separar: um lote reservado e quanto sai dele. */
+export interface LinhaASeparar {
+  customerOrderLineId: string;
+  quantity: Prisma.Decimal;
+}
+
+/** A mesma linha, repartida entre as promessas que ela atende. */
+export interface LinhaRepartida<T> {
+  origem: T;
+  pedacos: AlocacaoDaEntrega[];
+}
+
 /**
- * Distribui as quantidades de uma Expedição entre as promessas em aberto.
+ * Reparte as linhas de uma separação entre as promessas em aberto.
  *
- * Devolve, para cada linha da Expedição, a linha programada que ela atende —
- * ou `null` quando não há promessa em aberto para aquele produto. Sem promessa
- * o vínculo fica nulo, e é a leitura certa: a Expedição existe, o cronograma
- * não a esperava, e nenhuma entrega ganha um atendimento que não recebeu.
+ * Uma linha de lote pode virar DUAS linhas de Expedição quando a quantidade
+ * atravessa promessas — mesmo lote, mesma reserva, mesma origem física, dois
+ * compromissos atendidos. É a única representação possível com um vínculo por
+ * linha, e o modelo já a suportava: nada impede duas linhas da mesma reserva na
+ * mesma Expedição, e a confirmação já somava o teto por reserva em vez de por
+ * linha.
  *
- * A quantidade da linha NÃO é dividida entre duas promessas: uma linha de
- * Expedição é uma quantidade de um lote, e parti-la aqui criaria uma linha que
- * o operador não separou. Quando a linha é maior que a promessa mais antiga, o
- * excesso fica sem vínculo — e a validação da confirmação recusa o que passar
- * do prometido.
+ * O saldo de cada promessa é consumido ao longo de TODAS as linhas: dois lotes
+ * do mesmo produto disputam a mesma promessa, e servir os dois inteiros
+ * prometeria duas vezes o que o cliente pediu uma.
  */
-export function alocarPromessas<T extends { customerOrderLineId: string; quantity: Prisma.Decimal }>(
+export function repartirNasPromessas<T extends LinhaASeparar>(
   linhas: T[],
   promessas: Map<string, PromessaEmAberto[]>,
-): (string | null)[] {
+): LinhaRepartida<T>[] {
   const restantePorPromessa = new Map<string, Prisma.Decimal>();
   for (const fila of promessas.values()) {
-    for (const promessa of fila) restantePorPromessa.set(promessa.deliveryLineId, promessa.remaining);
+    for (const promessa of fila) {
+      restantePorPromessa.set(promessa.deliveryLineId, promessa.remaining as Prisma.Decimal);
+    }
   }
 
   return linhas.map((linha) => {
-    const fila = promessas.get(linha.customerOrderLineId) ?? [];
-    for (const promessa of fila) {
-      const restante = restantePorPromessa.get(promessa.deliveryLineId) ?? ZERO;
-      if (restante.greaterThanOrEqualTo(linha.quantity) && linha.quantity.greaterThan(0)) {
-        restantePorPromessa.set(promessa.deliveryLineId, restante.minus(linha.quantity));
-        return promessa.deliveryLineId;
-      }
+    const fila = (promessas.get(linha.customerOrderLineId) ?? []).map((promessa) => ({
+      deliveryLineId: promessa.deliveryLineId,
+      remaining: restantePorPromessa.get(promessa.deliveryLineId) ?? ZERO,
+    }));
+
+    const pedacos = alocarQuantidadeNasEntregasPendentes(linha.quantity, fila);
+    for (const pedaco of pedacos) {
+      if (!pedaco.deliveryLineId) continue;
+      const restante = restantePorPromessa.get(pedaco.deliveryLineId) ?? ZERO;
+      restantePorPromessa.set(pedaco.deliveryLineId, restante.minus(pedaco.quantity));
     }
-    return null;
+    return { origem: linha, pedacos };
   });
 }
 
 /**
- * O teto que a programação impõe a uma linha do Pedido nesta Expedição.
+ * O teto que a programação impõe a uma linha do Pedido.
  *
  * Usado quando a Expedição nasce a partir de UMA entrega: propor mais do que
  * aquela promessa pedia transformaria "preparar a entrega de outubro" em
@@ -129,5 +158,5 @@ export function tetoDaPromessa(
   customerOrderLineId: string,
 ): Prisma.Decimal {
   const fila = promessas.get(customerOrderLineId) ?? [];
-  return fila.reduce((soma, promessa) => soma.plus(promessa.remaining), ZERO);
+  return fila.reduce((soma, promessa) => soma.plus(promessa.remaining as Prisma.Decimal), ZERO);
 }

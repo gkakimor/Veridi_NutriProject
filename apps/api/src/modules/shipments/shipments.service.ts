@@ -24,9 +24,10 @@ import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getOnHand, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
+import { diaDaColunaDeData } from "../../lib/business-day.js";
 import { CustomerOrderNotFoundError } from "../customer-orders/customer-orders.errors.js";
 import { ExceedsScheduledQuantityError } from "../customer-orders/delivery-schedule.errors.js";
-import { alocarPromessas, promessasEmAberto, tetoDaPromessa } from "./delivery-allocation.js";
+import { promessasEmAberto, repartirNasPromessas, tetoDaPromessa } from "./delivery-allocation.js";
 import { getBillingStatusByShipments } from "../billings/billings.service.js";
 import {
   DraftShipmentAlreadyExistsError,
@@ -68,6 +69,9 @@ type ShipmentLineWithRelations = ShipmentLine & {
   item: Item;
   lot: Lot | null;
   customerOrderReservationLine: ReservationLineWithRelations;
+  customerOrderDeliveryLine:
+    | { delivery: { sequence: number; scheduledDate: Date } }
+    | null;
 };
 type ShipmentWithRelations = Shipment & {
   customerOrder: CustomerOrder & { customer: Customer; lines: CustomerOrderLine[] };
@@ -82,6 +86,10 @@ const shipmentInclude = {
       item: true,
       lot: true,
       customerOrderReservationLine: { include: { product: true, item: true, lot: true } },
+      // A promessa que a linha atende — a tela mostra a associação, discreta.
+      customerOrderDeliveryLine: {
+        select: { delivery: { select: { sequence: true, scheduledDate: true } } },
+      },
     },
     orderBy: { position: "asc" as const },
   },
@@ -192,6 +200,10 @@ function toShipmentLineDTO(
     requiresVerification: line.lotId !== null && line.quantity.greaterThan(0),
     verifiedAt: line.verifiedAt ? line.verifiedAt.toISOString() : null,
     verifiedBy: line.verifiedBy,
+    deliverySequence: line.customerOrderDeliveryLine?.delivery.sequence ?? null,
+    deliveryScheduledDate: line.customerOrderDeliveryLine
+      ? diaDaColunaDeData(line.customerOrderDeliveryLine.delivery.scheduledDate)
+      : null,
   };
 }
 
@@ -467,24 +479,40 @@ export async function createShipmentDraft(
     if (linesToCreate.length === 0) throw new NothingToShipError();
 
     const shipment = await tx.shipment.create({
-      data: { code, customerOrderId, status: "DRAFT", createdBy: actor?.name ?? SYSTEM_ACTOR },
+      data: {
+        code,
+        customerOrderId,
+        status: "DRAFT",
+        createdBy: actor?.name ?? SYSTEM_ACTOR,
+        // A origem fica GRAVADA: é ela que diz que esta separação representa
+        // aquela promessa, e não os vínculos das linhas — uma separação geral
+        // que coubesse inteira numa promessa só seria confundida com esta.
+        originDeliveryId: options?.deliveryId ?? null,
+      },
     });
-    const promessaDaLinha = alocarPromessas(linesToCreate, promessas);
-
-    await tx.shipmentLine.createMany({
-      data: linesToCreate.map((line, index) => ({
+    /*
+     * Uma linha de lote pode virar DUAS linhas de Expedição quando a
+     * quantidade atravessa promessas — mesmo lote, mesma reserva, dois
+     * compromissos atendidos.
+     */
+    const repartidas = repartirNasPromessas(linesToCreate, promessas);
+    let posicao = 0;
+    const linhasFinais = repartidas.flatMap(({ origem, pedacos }) =>
+      pedacos.map((pedaco) => ({
         shipmentId: shipment.id,
-        customerOrderLineId: line.customerOrderLineId,
-        customerOrderReservationLineId: line.customerOrderReservationLineId,
-        customerOrderDeliveryLineId: promessaDaLinha[index] ?? null,
-        productId: line.productId,
-        itemId: line.itemId,
-        lotId: line.lotId,
-        quantity: line.quantity,
-        unitCode: line.unitCode,
-        position: index,
+        customerOrderLineId: origem.customerOrderLineId,
+        customerOrderReservationLineId: origem.customerOrderReservationLineId,
+        customerOrderDeliveryLineId: pedaco.deliveryLineId,
+        productId: origem.productId,
+        itemId: origem.itemId,
+        lotId: origem.lotId,
+        quantity: pedaco.quantity as Prisma.Decimal,
+        unitCode: origem.unitCode,
+        position: posicao++,
       })),
-    });
+    );
+
+    await tx.shipmentLine.createMany({ data: linhasFinais });
 
     return shipment.id;
   });
@@ -537,26 +565,21 @@ export async function updateShipment(id: string, input: UpdateShipmentInput): Pr
           customerOrderReservationLineId: true,
           verifiedAt: true,
           verifiedBy: true,
-          customerOrderDeliveryLine: { select: { deliveryId: true } },
         },
       });
 
       /*
        * A separação é reescrita a cada save, e com ela o vínculo com a
-       * entrega programada. Realocar sobre as promessas ATUAIS mantém o
-       * vínculo coerente com as quantidades novas — mas restrito às entregas
-       * que este rascunho já servia: um rascunho aberto pela entrega de
-       * novembro não pode migrar sozinho para a de outubro só porque alguém
-       * mudou uma quantidade.
+       * entrega programada. O ESCOPO vem da origem gravada, nunca dos
+       * vínculos atuais: um rascunho aberto pela entrega de novembro fica em
+       * novembro mesmo depois de a quantidade mudar, e um rascunho geral
+       * continua podendo atravessar promessas mesmo tendo cabido numa só.
        */
-      const entregasDoRascunho = [
-        ...new Set(
-          existingLines
-            .map((line) => line.customerOrderDeliveryLine?.deliveryId)
-            .filter((deliveryId): deliveryId is string => Boolean(deliveryId)),
-        ),
-      ];
-      const promessas = await promessasEmAberto(tx, shipment.customerOrderId, entregasDoRascunho);
+      const promessas = await promessasEmAberto(
+        tx,
+        shipment.customerOrderId,
+        shipment.originDeliveryId ? [shipment.originDeliveryId] : undefined,
+      );
       const verificationByReservationLine = new Map(
         existingLines
           .filter((line) => line.verifiedAt !== null)
@@ -568,36 +591,57 @@ export async function updateShipment(id: string, input: UpdateShipmentInput): Pr
 
       await tx.shipmentLine.deleteMany({ where: { shipmentId: id } });
       if (nonZero.length > 0) {
-        const paraAlocar = nonZero.map((line) => {
+        const paraRepartir = nonZero.map((line) => {
           const reservationLine = reservationLinesById.get(line.customerOrderReservationLineId)!;
           return {
+            reservationLine,
             customerOrderLineId: reservationLine.customerOrderLineId,
             quantity: new Prisma.Decimal(line.quantity),
           };
         });
-        const promessaDaLinha = alocarPromessas(paraAlocar, promessas);
+        const repartidas = repartirNasPromessas(paraRepartir, promessas);
 
-        await tx.shipmentLine.createMany({
-          data: nonZero.map((line, index) => {
-            const reservationLine = reservationLinesById.get(line.customerOrderReservationLineId)!;
-            const verification = verificationByReservationLine.get(reservationLine.id);
+        /*
+         * Separação que REPRESENTA uma entrega não transborda. Sobrar
+         * quantidade sem promessa aqui significa que alguém pediu mais do que
+         * aquela entrega prometia — e a resposta é recusar, não empurrar o
+         * excesso para a promessa seguinte nem deixá-lo solto.
+         */
+        if (shipment.originDeliveryId) {
+          for (const { origem, pedacos } of repartidas) {
+            const excedente = pedacos.find((pedaco) => pedaco.deliveryLineId === null);
+            if (!excedente) continue;
+            const disponivel = tetoDaPromessa(promessas, origem.customerOrderLineId);
+            throw new ExceedsScheduledQuantityError(
+              origem.reservationLine.product.code,
+              disponivel.toString(),
+            );
+          }
+        }
+
+        let posicao = 0;
+        const linhasFinais = repartidas.flatMap(({ origem, pedacos }) =>
+          pedacos.map((pedaco) => {
+            const verification = verificationByReservationLine.get(origem.reservationLine.id);
             return {
               shipmentId: id,
-              customerOrderLineId: reservationLine.customerOrderLineId,
-              customerOrderReservationLineId: reservationLine.id,
-              customerOrderDeliveryLineId: promessaDaLinha[index] ?? null,
-              productId: reservationLine.productId,
-              itemId: reservationLine.itemId,
-              lotId: reservationLine.lotId,
-              quantity: new Prisma.Decimal(line.quantity),
-              unitCode: reservationLine.item.unitCode,
-              position: index,
+              customerOrderLineId: origem.reservationLine.customerOrderLineId,
+              customerOrderReservationLineId: origem.reservationLine.id,
+              customerOrderDeliveryLineId: pedaco.deliveryLineId,
+              productId: origem.reservationLine.productId,
+              itemId: origem.reservationLine.itemId,
+              lotId: origem.reservationLine.lotId,
+              quantity: pedaco.quantity as Prisma.Decimal,
+              unitCode: origem.reservationLine.item.unitCode,
+              position: posicao++,
               ...(verification
                 ? { verifiedAt: verification.verifiedAt, verifiedBy: verification.verifiedBy }
                 : {}),
             };
           }),
-        });
+        );
+
+        await tx.shipmentLine.createMany({ data: linhasFinais });
       }
     }
 
@@ -775,10 +819,13 @@ export async function confirmShipment(
      * promessa, e é a confirmação que conta como atendimento. A leitura
      * acontece dentro da transação que já travou o Pedido.
      */
+    const ZERO = new Prisma.Decimal(0);
     const promessasAtivas = await promessasEmAberto(tx, shipment.customerOrderId);
     const restanteDaPromessa = new Map<string, Prisma.Decimal>();
     for (const fila of promessasAtivas.values()) {
-      for (const promessa of fila) restanteDaPromessa.set(promessa.deliveryLineId, promessa.remaining);
+      for (const promessa of fila) {
+        restanteDaPromessa.set(promessa.deliveryLineId, promessa.remaining as Prisma.Decimal);
+      }
     }
 
     // Acumuladores locais — cobrem duas linhas da MESMA expedicao apontando
@@ -828,13 +875,14 @@ export async function confirmShipment(
        * acima.
        */
       if (line.customerOrderDeliveryLineId) {
-        const restante = restanteDaPromessa.get(line.customerOrderDeliveryLineId);
-        if (restante === undefined) {
-          throw new ExceedsScheduledQuantityError(
-            orderLine.productCode ?? orderLine.productId,
-            "0",
-          );
-        }
+        /*
+         * Entre separar e confirmar, outra Expedição pode ter sido confirmada
+         * contra a mesma promessa. Quando isso acontece a resposta é RECUSAR,
+         * nunca mover a linha para a promessa seguinte: realocar em silêncio
+         * apagaria a evidência do que estava sendo preparado, e quem confirma
+         * assinaria uma entrega que não é a que tinha na frente.
+         */
+        const restante = restanteDaPromessa.get(line.customerOrderDeliveryLineId) ?? ZERO;
         if (line.quantity.greaterThan(restante)) {
           throw new ExceedsScheduledQuantityError(
             orderLine.productCode ?? orderLine.productId,
