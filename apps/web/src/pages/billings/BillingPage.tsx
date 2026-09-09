@@ -2,10 +2,16 @@ import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { BillingDTO, BillingStatus } from "@veridi/shared";
-import { BILLING_STATUS_LABELS, calcularTotaisFaturamento } from "@veridi/shared";
+import {
+  BILLING_STATUS_LABELS,
+  calcularTotaisFaturamento,
+  sinalDoValorComercial,
+  totalDoFaturamento,
+} from "@veridi/shared";
 import { cancelBilling, getBilling, issueBilling, updateBilling } from "../../lib/billings-api";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { CalcHint } from "../../components/help/CalcHint";
+import { InfoHint } from "../../components/help/InfoHint";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { FormSection } from "../../components/FormSection";
@@ -188,15 +194,31 @@ export function BillingPage() {
   );
   const totaisDeLinha = totais.lineTotals;
   const previewTotal = totais.totalAmount;
-  const displayTotal = isDraft ? previewTotal : billing.totalAmount;
+  /*
+   * SUBTOTAL BRUTO é a soma das linhas; em rascunho, das linhas como estão
+   * na tela agora. DESCONTO e AJUSTE vêm do servidor, que é quem conhece os
+   * outros faturamentos do Pedido — a tela nunca reparte desconto sozinha.
+   */
+  /* `?? null` protege de resposta antiga em cache: o campo é novo no DTO. */
+  const brutoGravado = billing.grossAmount ?? null;
+  const brutoExibido = isDraft ? previewTotal : brutoGravado;
+  const desconto = sinalDoValorComercial(billing.discountAmount);
+  const ajuste = sinalDoValorComercial(billing.commercialAdjustmentAmount);
+  /*
+   * Em rascunho o total acompanha o que está sendo digitado: bruto da tela
+   * menos o desconto e mais o ajuste que o servidor apurou. Emitido lê o
+   * valor congelado — nunca recalculado.
+   */
+  const displayTotal = isDraft
+    ? totalDoFaturamento(brutoExibido, billing.discountAmount, billing.commercialAdjustmentAmount)
+    : (billing.totalAmount ?? brutoGravado);
   /*
    * Em rascunho o rodapé mostra a PRÉVIA — o total dos preços que estão na
    * tela agora. Quando ela difere do último salvamento, o gravado aparece
    * ao lado, nomeado: dois números de momentos diferentes só podem conviver
    * se estiver dito qual é qual.
    */
-  const totalGravadoDivergente =
-    isDraft && billing.totalAmount !== null && billing.totalAmount !== previewTotal;
+  const totalGravadoDivergente = isDraft && brutoGravado !== null && brutoGravado !== previewTotal;
   /*
    * Emitir é definitivo. Faturar sem preço continua permitido — existe
    * faturamento puramente quantitativo — mas quem confirma precisa saber que
@@ -451,12 +473,29 @@ export function BillingPage() {
             </table>
             <div className="table-foot">
               Quantidade total: {formatQuantity(billing.totalQuantity)} ·{" "}
-              {isDraft ? "Valor total (prévia)" : "Valor total"}:{" "}
-              {displayTotal ? formatBRL(displayTotal) : "Valores incompletos"}
+              {isDraft ? "Subtotal bruto (prévia)" : "Subtotal bruto"}:{" "}
+              {brutoExibido ? formatBRL(brutoExibido) : "Valores incompletos"}
+              {!desconto.zero && <> · Desconto comercial: − {formatBRL(desconto.absoluto)}</>}
+              {!ajuste.zero && (
+                <>
+                  {" "}
+                  · Ajuste de fechamento: {ajuste.negativo ? "−" : "+"}{" "}
+                  {formatBRL(ajuste.absoluto)}{" "}
+                  <InfoHint label="Ajuste de fechamento">
+                    Usado apenas quando necessário para que os faturamentos deste pedido fechem
+                    exatamente com a condição comercial acordada.
+                  </InfoHint>
+                </>
+              )}
+              {" · "}
+              <strong>
+                {isDraft ? "Total faturado (prévia)" : "Total faturado"}:{" "}
+                {displayTotal ? formatBRL(displayTotal) : "Valores incompletos"}
+              </strong>
               {totalGravadoDivergente && (
                 <span className="field__hint">
                   {" "}
-                  · Valor total gravado: {formatBRL(billing.totalAmount)} — salve o rascunho para
+                  · Subtotal gravado: {formatBRL(brutoGravado)} — salve o rascunho para
                   atualizar.
                 </span>
               )}

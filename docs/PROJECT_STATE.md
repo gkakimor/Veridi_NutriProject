@@ -350,14 +350,38 @@ e nunca resolvido às escondidas. Produção continua em `pnpm deploy:prod`.
 Os três comandos, e só eles: **criar** `pnpm migration:create <nome>`,
 **aplicar** `pnpm db:migrate`, **provar** `pnpm validate:migrations:fresh`.
 
-## Próxima prioridade
+## O desconto acordado chega ao Faturamento (BILL-DISCOUNT-01b, 2026-09-09)
 
-**BILL-DISCOUNT-01** — o desconto global do Pedido não chega ao Faturamento.
-`CustomerOrder.agreedDiscountPercent`/`agreedTotalAmount` são gravados pelo
-`quote-to-order.service.ts` e lidos só para exibição; `billings.service.ts` não
-os menciona e `calcularTotaisFaturamento` é `Σ(quantidade × preço)`. Pedido de
-30.000 com 10% acordado fatura 30.000, não 27.000 — já hoje, com uma expedição
-total única.
+**O desconto é do CABEÇALHO do documento, nunca da linha.** `agreedUnitPrice`
+continua sendo o preço que o cliente aceitou: nenhuma linha ganhou preço
+líquido que ninguém negociou. O que mudou é que o desconto agora CHEGA — o
+Faturamento apropria a sua parcela em `discountAmount`, e o documento que
+**fecha comercialmente** o Pedido absorve o saldo.
+
+**"Fecha" é cobertura, não cronologia**: é o documento depois do qual toda
+linha do Pedido alcança a quantidade contratada, contando só Billings ATIVOS
+(emitidos, não cancelados). Calculado na emissão, nunca persistido como flag.
+
+**A apropriação é cumulativa**, jamais `round(bruto × percentual)` por
+documento: cem faturamentos de R$ 0,01 com 50% apropriam R$ 0,50 no total, não
+R$ 1,00. Cada um apropria o que o Pedido já deveria ter apropriado no seu bruto
+acumulado, menos o que os anteriores apropriaram.
+
+**F-C entrou na MESMA reconciliação.** Partir `3 × 33,3333` em três documentos
+dá 99,99 contra os 100,00 do Pedido — **com desconto zero**. O
+`commercialAdjustmentAmount` do fechamento cobre as duas fontes, e aparece
+separado do desconto na tela e no impresso: são conceitos diferentes.
+
+**Override de preço continua sendo exceção comercial deliberada.** A
+reconciliação mira `acordado + delta do override`, então o ajuste absorve
+arredondamento e nunca engole a decisão — a diferença entre acordado e faturado
+segue sendo a evidência.
+
+**Invariante durável:** pedido inteiramente faturado por documentos ativos soma
+EXATAMENTE `CustomerOrder.agreedTotalAmount`, sem epsilon. Uma migration
+estrutural (cinco colunas nullable em `billings`), zero backfill.
+
+## Próxima prioridade
 
 **COM-04** — entregas parceladas: `3 × 1.000`, cronograma e parcelas de entrega.
 Investigado (spike de domínio, 2026-09-09): o `3 × 1.000` já roda na unha — N

@@ -2364,10 +2364,42 @@ navigable in both directions.
 - **MANUAL stays MANUAL.** A line priced by hand keeps `MANUAL` as its origin.
   No pricing version is matched retroactively, because none took part in the
   negotiation.
-- **The global discount is not spread across lines.** The system has no
-  apportionment rule, and inventing one would create a per-line price nobody
-  agreed to. Line prices, discount, subtotal and total are preserved side by
-  side; the deal reproduces from those.
+- **The global discount is not spread across lines, and is appropriated in the
+  billing header** (qualified by Product Ownership, 2026-09-09,
+  BILL-DISCOUNT-01b). `agreedUnitPrice` stays true: no line ever carries a net
+  price nobody agreed to, and line prices, discount, subtotal and total remain
+  side by side on the order. What changed is that the discount now *reaches*
+  the invoice. Each Billing appropriates its share in the header
+  (`discountAmount`), and the Billing that **closes the order commercially**
+  absorbs whatever is left so the active billings reconcile exactly with the
+  agreed net total.
+  - "Closes" is coverage, not chronology: it is the document after which every
+    order line's billed quantity reaches the ordered quantity, counting only
+    ACTIVE billings (ISSUED, not cancelled). It is computed at issue time and
+    never persisted as a flag.
+  - Appropriation is **cumulative**, never `round(gross × percent)` per
+    document: each billing appropriates the discount the order should have
+    reached by its accumulated gross, minus what previous ones already
+    appropriated. A hundred R$ 0,01 invoices at 50% appropriate R$ 0,50 in
+    total, not R$ 1,00.
+  - The closing document also carries `commercialAdjustmentAmount` — positive,
+    zero or negative. It is **not** discount and is never hidden inside it. It
+    exists because every line closes at two decimals: splitting `3 × 33,3333`
+    across three documents yields 99,99 against the order's 100,00 **even with
+    zero discount**. One reconciliation covers both sources.
+  - An ISSUED billing is immutable: its appropriation is frozen and never
+    recomputed when later documents appear. A cancelled billing leaves the
+    active set, and whichever document restores full coverage becomes the new
+    closing one.
+  - A **price override** is a deliberate commercial exception, and the gap
+    between agreed and billed is its evidence. Reconciliation targets
+    `agreed total + override delta`, so the closing adjustment absorbs
+    rounding only — never the decision.
+  - Durable invariant: for an order fully billed by active billings,
+    `Σ Billing.totalAmount == CustomerOrder.agreedTotalAmount`, exactly, with
+    no epsilon. Where the order carries no frozen commercial condition
+    (typed-in order, no quote), nothing is appropriated and the document is
+    worth what its lines sum.
 - **The payment plan is frozen as its result, not its parameters.** The
   parameters live on the quote and no longer change after acceptance, but the
   arithmetic translating them into instalments is code. Recomputing years

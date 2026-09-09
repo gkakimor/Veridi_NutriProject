@@ -74,6 +74,22 @@ Um Pedido de 30.000 com 10% acordado fatura 30.000, não 27.000 — hoje, já co
 uma expedição total única. É pré-requisito econômico do COM-04, que multiplica o
 buraco por cada entrega.
 
+**BILL-DISCOUNT-01 e 01b fechados em 2026-09-09.** O desconto global do Pedido
+morria na Origem comercial: `billings.service.ts` nunca lia
+`agreedDiscountPercent`, e um pedido de R$ 200,00 com 10% acordado faturava
+R$ 200,00. A investigação (01) disparou STOP GATE — não havia regra de rateio,
+e `PRODUCT_RULES.md` §34 proibia espalhar o desconto nas linhas. O PO decidiu a
+opção D e a implementação (01b) apropriou o desconto no CABEÇALHO do
+Faturamento: cada documento apropria a sua parcela de forma cumulativa, e o
+documento que FECHA as quantidades do Pedido absorve o saldo. `agreedUnitPrice`
+segue verdadeiro — nenhuma linha ganhou preço líquido. **F-C entrou na mesma
+reconciliação**: partir uma linha em vários documentos já perdia centavos por
+arredondamento mesmo com desconto zero, e o `commercialAdjustmentAmount` do
+fechamento cobre as duas fontes. Invariante durável: pedido inteiramente
+faturado por documentos ativos soma EXATAMENTE `agreedTotalAmount`. Uma
+migration estrutural (58), zero backfill — DEV e PROD não tinham faturamento
+nenhum.
+
 **SYS-TZ-01 fechado em 2026-09-09** (§72): `America/Sao_Paulo` virou o fuso
 operacional oficial, com uma definição em `packages/shared`. O resíduo que
 ficou — TZ-LOTE-01 — **também está fechado**.

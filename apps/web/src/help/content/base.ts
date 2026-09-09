@@ -599,6 +599,8 @@ export const baseTopics = {
       "O preço unitário é herdado do pedido: é o preço acordado quando o orçamento foi aceito. Precificação nova ou cálculo novo nunca reescrevem o que já foi combinado.",
       "Faturar diferente do acordado é uma alteração de preço: exige perfil comercial ou administrativo e motivo obrigatório, e o preço acordado continua visível ao lado. Voltar ao valor acordado limpa a alteração em vez de registrar uma.",
       "Onde não houve preço acordado, o faturamento quantitativo continua válido e o preço é informado à mão — nada é inventado para preencher a lacuna.",
+      "O desconto acordado no pedido é aplicado no rodapé do documento, nunca no preço das linhas: o preço unitário continua sendo o que foi combinado. Quando o pedido é faturado em partes, cada documento apropria a sua parcela do desconto.",
+      "Ajuste de fechamento só aparece quando existe. É o acerto de centavos do último documento, para que os faturamentos do pedido somem exatamente a condição acordada.",
       "Não é Nota Fiscal: nenhum documento fiscal é emitido aqui. A emissão fiscal é um passo separado, fora do sistema nesta fase.",
       "Não é Contas a Receber: faturar não gera título, não registra pagamento e não movimenta estoque — a saída física já aconteceu na expedição.",
       "A tela do documento tem Observações, Auditoria (quem criou, emitiu ou cancelou, e quando) e Imprimir. Nenhum deles altera valor.",
@@ -624,7 +626,7 @@ export const baseTopics = {
       },
       {
         term: "Valor",
-        text: "Só existe quando todas as linhas têm preço. Faltando alguma, o documento mostra valores incompletos em vez de somar parte — e o faturamento quantitativo continua válido.",
+        text: "O valor do documento: subtotal das linhas menos o desconto acordado no pedido. Só existe quando todas as linhas têm preço — faltando alguma, o documento mostra valores incompletos em vez de somar parte, e o faturamento quantitativo continua válido.",
       },
       {
         term: "Filtros",

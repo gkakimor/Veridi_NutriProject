@@ -246,7 +246,13 @@ function toBillingSummaryDTO(billing: BillingWithLines): CustomerOrderBillingSum
     shipmentCode: billing.shipmentCode ?? "",
     status: billing.status,
     totalQuantity: totalQuantity.toString(),
-    totalAmount: totais.totalAmount,
+    /*
+     * O valor do documento EMITIDO e o que ficou congelado nele — bruto
+     * menos desconto apropriado mais o ajuste de fechamento. Repetir aqui a
+     * soma das linhas faria o resumo do Pedido divergir da tela do
+     * Faturamento justamente onde ha desconto (BILL-DISCOUNT-01b).
+     */
+    totalAmount: billing.totalAmount !== null ? billing.totalAmount.toFixed(2) : totais.totalAmount,
     issuedAt: billing.issuedAt ? billing.issuedAt.toISOString() : null,
   };
 }
