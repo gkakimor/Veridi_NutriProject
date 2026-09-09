@@ -98,8 +98,18 @@ ficou — TZ-LOTE-01 — **também está fechado**.
 novo passou a ser uma DECISÃO por linha — manter a condição acordada,
 reajustá-la, usar a precificação atual ou digitar — com proveniência gravada.
 A auditoria confirmou o que o PO suspeitava: `createQuoteVersion` já copiava
-`unitPrice` da versão anterior, em silêncio e sem origem. **Próximo item de
-produto: COM-04** — entregas parceladas e cronograma.
+`unitPrice` da versão anterior, em silêncio e sem origem.
+
+**COM-04 fechado em 2026-09-09** (§75): entregas programadas viraram documento.
+A investigação disparou STOP GATE em três pontos que o spike não resolvia —
+cancelamento após atendimento parcial, mecanismo de histórico da reprogramação e
+o achado 2 (cobertura total do Plano). O PO decidiu **1(a) / 2(c) / 3(a)**:
+cancelar uma entrega parcialmente atendida é permitido e preserva o que saiu;
+reprogramar é cancelar e criar substituta com `replacesDeliveryId`; e o Plano de
+Atendimento fica intocado. Duas tabelas, uma coluna anulável em
+`shipment_lines`, uma migration estrutural (59). **Próximo item de produto: a
+definir com o PO** — PLAN-DATE-01 está registrado abaixo e não é sequência
+automática.
 
 **TZ-LOTE-01 fechado em 2026-09-08** (§73). O PO decidiu a leitura (a): a
 validade do lote é DATA CIVIL INCLUSIVA — o lote vale o dia inteiro e vence às
@@ -340,6 +350,25 @@ apareceu em nenhuma das 40 execuções completas dessa medição.
 | **W6** | Decisão de domínio pendente: trocar `RESTRICT` por `SET NULL` em alguma das 27 FKs opcionais | Não acontece mais por omissão no modelo (#14). Cada troca é decisão de domínio própria — bloquear a exclusão, desassociar ou arquivar — e exige a migration que a faça no banco |
 
 ---
+
+### 14. PLAN-DATE-01 — planejamento temporal pelas entregas programadas — LOW
+
+COM-04 entregou a promessa; ela ainda não influencia o planejamento. Hoje o
+cronograma é informativo: o Plano de Atendimento continua cobrindo o Pedido
+inteiro de uma vez, e a Sugestão de Compra não sabe que 1.000 saem em outubro e
+1.000 em dezembro.
+
+O que se pode ganhar, quando o PO autorizar:
+
+- **Sugestão de Compra com data** — comprar para a primeira entrega antes de
+  comprar para a terceira;
+- **Necessidade de produção legível no tempo** — o que precisa estar pronto até
+  quando;
+- **Sugestão de divisão temporal de OP** — sugestão, nunca divisão automática.
+
+**Restrição durável:** nada disso pode criar um segundo motor de reserva. A
+reserva continua sendo do Plano de Atendimento (§75). Sem decisão do PO, não
+implementar.
 
 ### 13. Ajuda contextual — o que a Fase 1 deixou aberto — LOW
 

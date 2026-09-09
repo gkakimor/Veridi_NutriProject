@@ -3344,11 +3344,105 @@ model CustomerOrder {
   purchaseOrders   PurchaseOrder[]
   shipments        Shipment[]
   billings         Billing[]
+  deliveries       CustomerOrderDelivery[]
 
   @@index([status])
   @@index([customerId])
   @@index([sourceProjectId])
   @@map("customer_orders")
+}
+
+/// ENTREGA PROGRAMADA — a promessa comercial de quando cada parte do Pedido
+/// sai. NAO e Expedicao: nao reserva estoque, nao escolhe lote, nao gera
+/// movimento, nao fatura. Quem executa continua sendo Shipment CONFIRMED.
+///
+/// Um Pedido de 3.000 com 1.000 em out, nov e dez tem tres registros destes.
+/// Antes desta capacidade so existia `requestedDeliveryDate`, uma data no
+/// cabecalho: o cronograma nao era representavel.
+///
+/// SITUACAO E DERIVADA, sempre. Programada, parcial, atendida e atrasada
+/// saem da comparacao entre `quantity` das linhas e a soma das ShipmentLine
+/// de Expedicao CONFIRMED ligadas a elas — nunca de uma coluna. O UNICO
+/// estado gravado e o cancelamento, porque cancelar e um ato de alguem, com
+/// motivo, e nao a consequencia de uma soma.
+model CustomerOrderDelivery {
+  id String @id @default(uuid())
+
+  customerOrderId String
+  customerOrder   CustomerOrder @relation(fields: [customerOrderId], references: [id], onDelete: Cascade)
+
+  /// Ordem de criacao dentro do Pedido — "Entrega 1", "Entrega 2". Nao e
+  /// codigo global: a entrega nao circula fora do Pedido e nao precisa de
+  /// sequence propria no banco.
+  sequence Int
+
+  /// DATA CIVIL da promessa (§72): o negocio promete um DIA, nunca uma hora.
+  /// Guardada como a meia-noite UTC que marca o dia, igual a `validUntil` e
+  /// a validade de lote. Atraso se responde entre dias, jamais contra o
+  /// instante atual.
+  scheduledDate DateTime
+
+  notes String?
+
+  /// Cancelamento — o unico estado persistido. Motivo obrigatorio no
+  /// service: cancelar uma promessa ao cliente sem dizer por que apaga a
+  /// unica informacao que a torna auditavel.
+  ///
+  /// Cancelar NAO desfaz execucao: as ShipmentLine ja confirmadas continuam
+  /// apontando para as linhas desta entrega, e o historico dela continua
+  /// mostrando o que foi atendido antes do cancelamento. O que o
+  /// cancelamento libera e so o SALDO ainda pendente.
+  cancelledAt  DateTime?
+  cancelledBy  String?
+  cancelReason String?
+
+  /// Reprogramar e cancelar e criar outra, nunca editar a data no lugar.
+  /// A substituta aponta para a original, e a cadeia A -> B -> C fica
+  /// legivel inteira. Mesmo padrao de `CustomerOrderReservationLine.
+  /// replacesLineId`; aqui a relacao e 1:N porque um saldo pendente pode ser
+  /// dividido em varias datas.
+  replacesDeliveryId String?
+  replacesDelivery   CustomerOrderDelivery?  @relation("CustomerOrderDeliveryReschedule", fields: [replacesDeliveryId], references: [id], onDelete: SetNull)
+  replacedByDelivery CustomerOrderDelivery[] @relation("CustomerOrderDeliveryReschedule")
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines CustomerOrderDeliveryLine[]
+
+  @@unique([customerOrderId, sequence])
+  @@index([customerOrderId])
+  @@index([scheduledDate])
+  @@index([replacesDeliveryId])
+  @@map("customer_order_deliveries")
+}
+
+/// Quanto de UM produto do Pedido esta prometido numa entrega. Uma linha por
+/// `CustomerOrderLine`, no maximo — a mesma promessa nao se divide em duas
+/// linhas da mesma entrega (garantido por unique).
+///
+/// A escala e a de `CustomerOrderLine.orderedQuantity`: a promessa e da
+/// mesma natureza que a quantidade pedida, e comparar as duas nao pode
+/// depender de conversao.
+model CustomerOrderDeliveryLine {
+  id String @id @default(uuid())
+
+  deliveryId String
+  delivery   CustomerOrderDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  customerOrderLineId String
+  customerOrderLine   CustomerOrderLine @relation(fields: [customerOrderLineId], references: [id])
+
+  quantity Decimal @db.Decimal(24, 12)
+
+  createdAt DateTime @default(now())
+
+  shipmentLines ShipmentLine[]
+
+  @@unique([deliveryId, customerOrderLineId])
+  @@index([customerOrderLineId])
+  @@map("customer_order_delivery_lines")
 }
 
 /// Linha do Pedido — um Product por Pedido (garantido no banco). DRAFT:
@@ -3410,6 +3504,7 @@ model CustomerOrderLine {
   productionOrders ProductionOrder[]
   shipmentLines    ShipmentLine[]
   billingLines     BillingLine[]
+  deliveryLines    CustomerOrderDeliveryLine[]
 
   @@unique([customerOrderId, productId])
   @@map("customer_order_lines")
@@ -3548,6 +3643,16 @@ model ShipmentLine {
   customerOrderReservationLineId String
   customerOrderReservationLine   CustomerOrderReservationLine @relation(fields: [customerOrderReservationLineId], references: [id])
 
+  /// A entrega programada que esta linha ATENDE — previsto x realizado.
+  ///
+  /// Nullable de proposito: Pedido anterior a esta capacidade, Pedido sem
+  /// cronograma e expedicao que nao corresponde a nenhuma promessa aberta
+  /// continuam validos. O vinculo e EXPLICITO porque atendimento nao se
+  /// infere: duas expedicoes do mesmo produto no mesmo Pedido podem servir
+  /// entregas diferentes, e adivinhar qual delas seria inventar historia.
+  customerOrderDeliveryLineId String?
+  customerOrderDeliveryLine   CustomerOrderDeliveryLine? @relation(fields: [customerOrderDeliveryLineId], references: [id], onDelete: SetNull)
+
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
@@ -3588,6 +3693,7 @@ model ShipmentLine {
   @@index([shipmentId])
   @@index([customerOrderLineId])
   @@index([customerOrderReservationLineId])
+  @@index([customerOrderDeliveryLineId])
   @@index([lotId])
   @@map("shipment_lines")
 }

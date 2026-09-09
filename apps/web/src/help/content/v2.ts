@@ -1,5 +1,6 @@
 import type { HelpTopicV2 } from "../help-content";
 import { alterarPrecoFaturamento } from "./comercial/alterar-preco-faturamento";
+import { entregasProgramadas } from "./comercial/entregas-programadas";
 import { expedicao } from "./comercial/expedicao";
 import { faturamento } from "./comercial/faturamento";
 import { orcamento } from "./comercial/orcamento";
@@ -32,6 +33,7 @@ export const topicosV2 = {
   "comercial.orcamento": orcamento,
   "comercial.pedido": pedido,
   "comercial.reservarProdutoAcabado": reservarProdutoAcabado,
+  "comercial.entregasProgramadas": entregasProgramadas,
   "comercial.expedicao": expedicao,
   "faturamento.comoFunciona": faturamento,
   "faturamento.alterarPreco": alterarPrecoFaturamento,

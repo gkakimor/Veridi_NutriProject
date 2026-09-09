@@ -249,6 +249,14 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | `nextSteps` obrigatório e todo link interno resolvendo para rota real | ajuda que termina sem dizer o que fazer depois | `web pages/help-editorial.test.ts` |
 | Inglês de negócio só glosado na primeira aparição; conceito citado existe | "Picking" e "CoA" soltos no texto do usuário final | `web pages/help-editorial.test.ts` |
 | Painel abre o nível 1 antes do passo a passo; consulta recolhida; V1 continua renderizando | reordenação quebrando o modelo antigo | `web components/help/help-kit.test.tsx`, `scripts/e2e/ajuda-contextual-nivel-1.mjs` |
+| Situação da entrega programada é derivada; entrega do dia não está atrasada; atendida nunca vira atrasada | status gravado envelhecendo no primeiro Shipment | `shared customer-order-deliveries.test.ts` |
+| Saldo programável = pedido − expedido − pendente ativo; cancelar parcial devolve só o pendente | os 400 originais ressuscitando depois do cancelamento | `shared customer-order-deliveries.test.ts`, `api customer-orders/delivery-schedule.test.ts` |
+| Programar não reserva, não produz, não expede e não fatura | programação virando um segundo motor de execução | `api customer-orders/delivery-schedule.test.ts` |
+| Atendimento vem de ShipmentLine ligada a Expedição CONFIRMED; rascunho não atende | atendimento inferido por produto igual | `api customer-orders/delivery-schedule.test.ts` |
+| Confirmar Expedição nunca passa do prometido na entrega ligada | corrida entre duas confirmações contra a mesma promessa | `api customer-orders/delivery-schedule.test.ts` |
+| Reprogramar preserva a original e copia só o pendente; cadeia A→B→C legível | substituta nascendo com a quantidade cheia | `api customer-orders/delivery-schedule.test.ts`, `scripts/e2e/entregas-programadas-do-pedido.mjs` |
+| Duas programações simultâneas nunca excedem o Pedido | validação só no navegador | `api customer-orders/delivery-schedule.test.ts` |
+| Pedido com desconto + várias entregas continua fechando em `agreedTotalAmount` | matemática comercial paralela | `api billings/billing-reconciliation.test.ts` |
 
 ## Permissões
 

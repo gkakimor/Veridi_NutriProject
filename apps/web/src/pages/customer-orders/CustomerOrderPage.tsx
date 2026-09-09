@@ -55,6 +55,7 @@ import { excedeLimiteExibido, resolverQuantidadeContraLimite } from "../../lib/q
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { FormSection } from "../../components/FormSection";
 import { ContextHelp, InfoHint } from "../../components/help";
+import { DeliveryScheduleSection } from "./DeliveryScheduleSection";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { AgreedPriceCell, CommercialOriginSection } from "./CommercialOriginSection";
@@ -489,6 +490,14 @@ export function CustomerOrderPage() {
     customerOrder !== null &&
     requestedDeliveryDate !== toDateInputValue(customerOrder.requestedDeliveryDate);
   const showPlan = !isNew && status === "CONFIRMED";
+  /*
+   * Entregas programadas aparecem a partir da CONFIRMAÇÃO: antes disso não
+   * existe compromisso a prometer, e num pedido cancelado a promessa deixou
+   * de valer — a seção fica em leitura, sem esconder o histórico.
+   */
+  const showDeliverySchedule =
+    !isNew && ["CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED"].includes(status);
+  const deliveryScheduleEditable = ["CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED"].includes(status);
   const showPurchaseSuggestion = !isNew && status === "IN_FULFILLMENT";
 
   /* Falta por responsabilidade: material Veridi se resolve comprando,
@@ -1418,6 +1427,10 @@ options={optionsForRow(line).map((product) => ({
             </div>
           )}
         </FormSection>
+
+        {showDeliverySchedule && id && (
+          <DeliveryScheduleSection customerOrderId={id} editable={deliveryScheduleEditable} />
+        )}
 
         {showPlan && (
           <FormSection

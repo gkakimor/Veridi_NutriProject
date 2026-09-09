@@ -411,13 +411,42 @@ Guia de quem escreve: [`UX_HELP_GUIDE.md`](UX_HELP_GUIDE.md). Auditoria de
 origem arquivada em
 [`archive/AUDIT_UX_COMO_FUNCIONA.md`](archive/AUDIT_UX_COMO_FUNCIONA.md).
 
+## A promessa de entrega virou documento (COM-04, 2026-09-09)
+
+**`3 × 1.000` deixou de rodar na unha.** Um Pedido passa a registrar QUANDO
+cada parte sai: `CustomerOrderDelivery` (data civil, sequência, cancelamento,
+substituição) e `CustomerOrderDeliveryLine` (uma por linha do Pedido). Uma
+migration estrutural, duas tabelas e uma coluna anulável em `shipment_lines`.
+
+**Programar é promessa, não execução** (§75). Criar uma entrega programada não
+reserva estoque, não escolhe lote, não move estoque, não abre OP, não expede e
+não fatura. O Plano de Atendimento **não mudou**: continua cobrindo o Pedido
+inteiro, e a reserva continua sendo dele.
+
+**A situação é derivada, sempre.** Programada, parcial, atendida e atrasada
+saem da comparação entre o prometido e o que as Expedições CONFIRMADAS
+entregaram — o vínculo é a coluna
+`ShipmentLine.customerOrderDeliveryLineId`, nunca "qualquer expedição do mesmo
+produto". Atraso é data civil: no próprio dia a promessa ainda vale, e entrega
+cumprida nunca vira atrasada depois. O único estado gravado é o cancelamento.
+
+**Cancelar não apaga execução, e reprogramar não apaga a promessa anterior.**
+Entrega de 400 com 250 confirmadas e depois cancelada devolve 150 ao saldo
+programável — nunca os 400; as 250 continuam ligadas a ela. Reprogramar é
+cancelar e criar a substituta com o pendente (`replacesDeliveryId`), e a cadeia
+A → B → C fica legível inteira. Não existe edição de data no lugar.
+
+**A matemática comercial não ganhou uma segunda versão.** Faturamento continua
+nascendo de Expedição confirmada, e a regressão prova: Pedido com desconto
+global, duas entregas, duas expedições e dois faturamentos continua fechando
+exatamente em `agreedTotalAmount`.
+
 ## Próxima prioridade
 
-**COM-04** — entregas parceladas: `3 × 1.000`, cronograma e parcelas de entrega.
-Investigado (spike de domínio, 2026-09-09): o `3 × 1.000` já roda na unha — N
-expedições confirmadas por Pedido, parcial com saldo, Billing por expedição com
-preço do acordo. O que falta é representar a agenda antes de expedir. Depende de
-BILL-DISCOUNT-01 e da decisão do PO sobre modelagem.
+**PLAN-DATE-01** — usar as datas e quantidades das entregas programadas para
+melhorar a Sugestão de Compra e a leitura da necessidade de produção. Registrado
+no [`BACKLOG.md`](BACKLOG.md), **sem implementar**: exige decisão do PO e não
+pode virar um segundo motor de reserva.
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo

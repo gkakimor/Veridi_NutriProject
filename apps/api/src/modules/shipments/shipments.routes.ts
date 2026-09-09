@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { requireCurrentUser } from "../../lib/current-user.js";
 import { CustomerOrderNotFoundError } from "../customer-orders/customer-orders.errors.js";
+import { ExceedsScheduledQuantityError } from "../customer-orders/delivery-schedule.errors.js";
 import {
   DraftShipmentAlreadyExistsError,
   EmptyShipmentError,
@@ -56,6 +57,9 @@ function formatZodError(error: ZodError) {
 function mapDomainError(
   error: unknown,
 ): { status: number; body: { error: string; message: string } } | null {
+  if (error instanceof ExceedsScheduledQuantityError) {
+    return { status: 400, body: { error: "exceeds_scheduled_quantity", message: error.message } };
+  }
   if (error instanceof ShipmentNotFoundError) {
     return { status: 404, body: { error: "not_found", message: error.message } };
   }
@@ -152,8 +156,25 @@ export const shipmentsRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/customer-orders/:id/shipments", async (request, reply) => {
     const { id } = request.params as { id: string };
+    /*
+     * `deliveryId` opcional: a separacao aberta a partir de uma entrega
+     * programada ja nasce com as quantidades daquela promessa e ligada a
+     * ela. Sem ele, o comportamento e o de sempre.
+     */
+    const body = (request.body ?? {}) as { deliveryId?: unknown };
+    const deliveryId = typeof body.deliveryId === "string" && body.deliveryId.trim() !== ""
+      ? body.deliveryId.trim()
+      : undefined;
     try {
-      return reply.status(201).send(await createShipmentDraft(id, requireCurrentUser(request)));
+      return reply
+        .status(201)
+        .send(
+          await createShipmentDraft(
+            id,
+            requireCurrentUser(request),
+            deliveryId ? { deliveryId } : undefined,
+          ),
+        );
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);

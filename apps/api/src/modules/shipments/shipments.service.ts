@@ -25,6 +25,8 @@ import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { getOnHand, isLotAvailableForUse } from "../../lib/inventory-ledger.js";
 import { CustomerOrderNotFoundError } from "../customer-orders/customer-orders.errors.js";
+import { ExceedsScheduledQuantityError } from "../customer-orders/delivery-schedule.errors.js";
+import { alocarPromessas, promessasEmAberto, tetoDaPromessa } from "./delivery-allocation.js";
 import { getBillingStatusByShipments } from "../billings/billings.service.js";
 import {
   DraftShipmentAlreadyExistsError,
@@ -369,6 +371,12 @@ export async function getShipmentById(id: string): Promise<ShipmentDTO | null> {
 export async function createShipmentDraft(
   customerOrderId: string,
   actor?: { id: string; name: string },
+  /**
+   * Expedição preparada A PARTIR de uma entrega programada. Restringe a
+   * proposta ao que aquela promessa ainda espera — "preparar a entrega de
+   * outubro" não pode virar "expedir o pedido inteiro".
+   */
+  options?: { deliveryId?: string },
 ): Promise<ShipmentDTO> {
   const prisma = getPrisma();
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, SHIPMENT_CODE_PREFIX);
@@ -402,12 +410,28 @@ export async function createShipmentDraft(
       order.lines.map((line) => line.id),
     );
 
+    /*
+     * As promessas em aberto do cronograma. Quando a Expedição nasce de UMA
+     * entrega, só as linhas dela entram na fila — e viram teto da proposta.
+     */
+    const promessas = await promessasEmAberto(
+      tx,
+      customerOrderId,
+      options?.deliveryId ? [options.deliveryId] : undefined,
+    );
+
     // Teto por linha do Pedido: nunca propor mais do que ainda falta
     // expedir daquele produto, mesmo que haja reserva sobrando.
     const outstandingByOrderLine = new Map<string, Prisma.Decimal>();
     for (const line of order.lines) {
       const shipped = shippedByOrderLine.get(line.id) ?? new Prisma.Decimal(0);
-      outstandingByOrderLine.set(line.id, Prisma.Decimal.max(line.orderedQuantity.minus(shipped), 0));
+      const outstanding = Prisma.Decimal.max(line.orderedQuantity.minus(shipped), 0);
+      outstandingByOrderLine.set(
+        line.id,
+        options?.deliveryId
+          ? Prisma.Decimal.min(outstanding, tetoDaPromessa(promessas, line.id))
+          : outstanding,
+      );
     }
 
     const linesToCreate: {
@@ -445,11 +469,14 @@ export async function createShipmentDraft(
     const shipment = await tx.shipment.create({
       data: { code, customerOrderId, status: "DRAFT", createdBy: actor?.name ?? SYSTEM_ACTOR },
     });
+    const promessaDaLinha = alocarPromessas(linesToCreate, promessas);
+
     await tx.shipmentLine.createMany({
       data: linesToCreate.map((line, index) => ({
         shipmentId: shipment.id,
         customerOrderLineId: line.customerOrderLineId,
         customerOrderReservationLineId: line.customerOrderReservationLineId,
+        customerOrderDeliveryLineId: promessaDaLinha[index] ?? null,
         productId: line.productId,
         itemId: line.itemId,
         lotId: line.lotId,
@@ -506,8 +533,30 @@ export async function updateShipment(id: string, input: UpdateShipmentInput): Pr
       // conferencia naturalmente nao e reaproveitada.
       const existingLines = await tx.shipmentLine.findMany({
         where: { shipmentId: id },
-        select: { customerOrderReservationLineId: true, verifiedAt: true, verifiedBy: true },
+        select: {
+          customerOrderReservationLineId: true,
+          verifiedAt: true,
+          verifiedBy: true,
+          customerOrderDeliveryLine: { select: { deliveryId: true } },
+        },
       });
+
+      /*
+       * A separação é reescrita a cada save, e com ela o vínculo com a
+       * entrega programada. Realocar sobre as promessas ATUAIS mantém o
+       * vínculo coerente com as quantidades novas — mas restrito às entregas
+       * que este rascunho já servia: um rascunho aberto pela entrega de
+       * novembro não pode migrar sozinho para a de outubro só porque alguém
+       * mudou uma quantidade.
+       */
+      const entregasDoRascunho = [
+        ...new Set(
+          existingLines
+            .map((line) => line.customerOrderDeliveryLine?.deliveryId)
+            .filter((deliveryId): deliveryId is string => Boolean(deliveryId)),
+        ),
+      ];
+      const promessas = await promessasEmAberto(tx, shipment.customerOrderId, entregasDoRascunho);
       const verificationByReservationLine = new Map(
         existingLines
           .filter((line) => line.verifiedAt !== null)
@@ -519,6 +568,15 @@ export async function updateShipment(id: string, input: UpdateShipmentInput): Pr
 
       await tx.shipmentLine.deleteMany({ where: { shipmentId: id } });
       if (nonZero.length > 0) {
+        const paraAlocar = nonZero.map((line) => {
+          const reservationLine = reservationLinesById.get(line.customerOrderReservationLineId)!;
+          return {
+            customerOrderLineId: reservationLine.customerOrderLineId,
+            quantity: new Prisma.Decimal(line.quantity),
+          };
+        });
+        const promessaDaLinha = alocarPromessas(paraAlocar, promessas);
+
         await tx.shipmentLine.createMany({
           data: nonZero.map((line, index) => {
             const reservationLine = reservationLinesById.get(line.customerOrderReservationLineId)!;
@@ -527,6 +585,7 @@ export async function updateShipment(id: string, input: UpdateShipmentInput): Pr
               shipmentId: id,
               customerOrderLineId: reservationLine.customerOrderLineId,
               customerOrderReservationLineId: reservationLine.id,
+              customerOrderDeliveryLineId: promessaDaLinha[index] ?? null,
               productId: reservationLine.productId,
               itemId: reservationLine.itemId,
               lotId: reservationLine.lotId,
@@ -708,6 +767,20 @@ export async function confirmShipment(
     );
     const orderLinesById = new Map(order.lines.map((line) => [line.id, line]));
 
+    /*
+     * O teto da PROGRAMAÇÃO, revalidado agora.
+     *
+     * Validar só na criação do rascunho não bastaria: entre separar e
+     * confirmar, outra Expedição pode ter sido confirmada contra a mesma
+     * promessa, e é a confirmação que conta como atendimento. A leitura
+     * acontece dentro da transação que já travou o Pedido.
+     */
+    const promessasAtivas = await promessasEmAberto(tx, shipment.customerOrderId);
+    const restanteDaPromessa = new Map<string, Prisma.Decimal>();
+    for (const fila of promessasAtivas.values()) {
+      for (const promessa of fila) restanteDaPromessa.set(promessa.deliveryLineId, promessa.remaining);
+    }
+
     // Acumuladores locais — cobrem duas linhas da MESMA expedicao apontando
     // para a mesma reserva/linha do Pedido, sem dupla-contar o teto.
     const consumedRemaining = new Map<string, Prisma.Decimal>();
@@ -747,6 +820,29 @@ export async function confirmShipment(
         orderLine.id,
         (consumedOutstanding.get(orderLine.id) ?? new Prisma.Decimal(0)).plus(line.quantity),
       );
+
+      /*
+       * Linha ligada a uma entrega programada nunca entrega mais do que a
+       * promessa pedia. Vínculo nulo passa direto: a Expedição existe, o
+       * cronograma não a esperava, e o teto dela é o do Pedido, já verificado
+       * acima.
+       */
+      if (line.customerOrderDeliveryLineId) {
+        const restante = restanteDaPromessa.get(line.customerOrderDeliveryLineId);
+        if (restante === undefined) {
+          throw new ExceedsScheduledQuantityError(
+            orderLine.productCode ?? orderLine.productId,
+            "0",
+          );
+        }
+        if (line.quantity.greaterThan(restante)) {
+          throw new ExceedsScheduledQuantityError(
+            orderLine.productCode ?? orderLine.productId,
+            Prisma.Decimal.max(restante, 0).toString(),
+          );
+        }
+        restanteDaPromessa.set(line.customerOrderDeliveryLineId, restante.minus(line.quantity));
+      }
 
       // Revalida o lote AGORA — pode ter vencido/sido bloqueado entre a
       // reserva e a saida fisica, independente do que valia antes.

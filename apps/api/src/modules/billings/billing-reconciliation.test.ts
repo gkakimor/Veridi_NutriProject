@@ -50,6 +50,12 @@ afterAll(async () => {
       where: { shipment: { customerOrderId: { in: fixtureCustomerOrderIds } } },
     });
     await prisma.shipment.deleteMany({ where: { customerOrderId: { in: fixtureCustomerOrderIds } } });
+    await prisma.customerOrderDeliveryLine.deleteMany({
+      where: { delivery: { customerOrderId: { in: fixtureCustomerOrderIds } } },
+    });
+    await prisma.customerOrderDelivery.deleteMany({
+      where: { customerOrderId: { in: fixtureCustomerOrderIds } },
+    });
     await prisma.productionOrder.deleteMany({
       where: { customerOrderId: { in: fixtureCustomerOrderIds } },
     });
@@ -566,5 +572,80 @@ describe("override de preço continua sendo exceção comercial, não erro a cor
     expect(emitido.lines[0].agreedUnitPrice).toBe("100.0000");
     expect(emitido.lines[0].unitPrice).toBe("105.0000");
     expect(emitido.lines[0].priceOverridden).toBe(true);
+  });
+});
+
+
+/**
+ * COM-04 — o cronograma de entregas entra sem tocar na matemática comercial.
+ *
+ * A regressão que importa: entregas programadas são uma PROMESSA, e a
+ * reconciliação continua sendo entre Expedições confirmadas e o acordo do
+ * Pedido. Um Pedido com desconto, duas entregas programadas, duas Expedições e
+ * dois Faturamentos precisa fechar exatamente em `agreedTotalAmount` — o mesmo
+ * invariante de BILL-DISCOUNT-01b, agora com o cronograma no meio.
+ */
+describe("entregas programadas não criam matemática comercial paralela", () => {
+  it("1.000 × R$ 10,00 com 10%, em duas entregas, fecha em R$ 9.000,00", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const { orderId, lineId } = await pedidoAcordado(app, {
+      quantidade: "1000",
+      preco: "10",
+      subtotal: "10000.00",
+      total: "9000.00",
+      descontoPercent: "10",
+    });
+
+    const primeira = await app.inject({
+      method: "POST",
+      url: `/customer-orders/${orderId}/deliveries`,
+      payload: {
+        scheduledDate: "2026-10-15",
+        lines: [{ customerOrderLineId: lineId, quantity: "400" }],
+      },
+    });
+    expect(primeira.statusCode).toBe(201);
+
+    const segunda = await app.inject({
+      method: "POST",
+      url: `/customer-orders/${orderId}/deliveries`,
+      payload: {
+        scheduledDate: "2026-11-15",
+        lines: [{ customerOrderLineId: lineId, quantity: "600" }],
+      },
+    });
+    expect(segunda.statusCode).toBe(201);
+
+    // Programar não fatura: nenhum documento nasceu das promessas.
+    const antes = await app.inject({ method: "GET", url: `/billings?customerOrderId=${orderId}` });
+    expect(antes.json().billings ?? []).toHaveLength(0);
+
+    const um = await expedirEFaturar(app, orderId, "400");
+    const dois = await expedirEFaturar(app, orderId, "600");
+
+    // O documento que FECHA as quantidades absorve o saldo — a regra de
+    // BILL-DISCOUNT-01b, intocada.
+    expect(somar([um.totalAmount, dois.totalAmount])).toBe("9000.00");
+    expect(somar([um.grossAmount, dois.grossAmount])).toBe("10000.00");
+    expect(somar([um.discountAmount, dois.discountAmount])).toBe("1000.00");
+
+    // E o preço acordado da linha nunca virou preço líquido.
+    expect(um.lines[0].agreedUnitPrice).toBe("10.0000");
+    expect(dois.lines[0].agreedUnitPrice).toBe("10.0000");
+
+    // As duas promessas ficaram atendidas, cada uma pela sua Expedição.
+    const cronograma = (
+      await app.inject({ method: "GET", url: `/customer-orders/${orderId}/deliveries` })
+    ).json();
+    expect(cronograma.deliveries.map((d: { status: string }) => d.status)).toEqual([
+      "FULFILLED",
+      "FULFILLED",
+    ]);
+    expect(cronograma.schedulable[0].schedulableQuantity).toBe("0");
+    for (const delivery of cronograma.deliveries) {
+      expect(delivery.shipments).toHaveLength(1);
+    }
   });
 });
