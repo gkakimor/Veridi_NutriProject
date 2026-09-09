@@ -13,6 +13,7 @@ import { MAX_INDUSTRIAL_COST_PERCENT, usageUomForResourceType } from "@veridi/sh
 import { INDUSTRIAL_COST_VERSION_CODE_PREFIX } from "@veridi/shared";
 import { pickCurrentRate, toRateDTO } from "../industrial-resources/industrial-resources.service.js";
 import { getPrisma } from "../../db/prisma.js";
+import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { missingFormulationContext } from "../../lib/formulation-math.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { convertUomDecimal, UomDimensionMismatchError, UomNotFoundError } from "../items/uom.js";
@@ -270,7 +271,9 @@ function buildPendencies(
   // Versão congelada é lida pelo que ela congelou: inativar o recurso ou
   // mexer na tarifa hoje não cria pendência num documento já ativado.
   const frozen = version.status !== "DRAFT";
-  const reference = new Date();
+  // "Tem tarifa vigente?" é pergunta sobre o DIA COMERCIAL da Veridi, não
+  // sobre o relógio do processo — em Railway, UTC.
+  const reference = marcadorDeHojeComercial();
   for (const usage of version.resourceUsages) {
     const name = usage.resourceNameSnapshot ?? usage.industrialResource.name;
     if (frozen) {
@@ -440,7 +443,9 @@ function toVersionDTO(
 
     materials: version.formulationVersion.components.map(toMaterialDTO),
     lines: version.lines.map(toLineDTO),
-    resourceUsages: version.resourceUsages.map((usage) => toUsageDTO(usage, new Date())),
+    resourceUsages: version.resourceUsages.map((usage) =>
+      toUsageDTO(usage, marcadorDeHojeComercial()),
+    ),
 
     energyCalculationMode: version.energyCalculationMode,
     energyResourceId: version.energyResourceId,
@@ -1015,8 +1020,10 @@ export async function activateIndustrialCostVersion(
 
   // Congela o que a versão considerou: tarifa e potência do momento da
   // ativação. Reajustar a hora amanhã não pode reescrever custo histórico,
-  // e tarifa ausente continua `null` — nunca zero.
-  const reference = new Date();
+  // e tarifa ausente continua `null` — nunca zero. A tarifa vigente é a do
+  // DIA COMERCIAL da ativação: ativar às 22h de São Paulo não pode congelar
+  // a tarifa que só começa amanhã.
+  const reference = marcadorDeHojeComercial();
   const snapshots = version.resourceUsages.map((usage) => {
     const rate = pickCurrentRate(usage.industrialResource.rates, reference);
     return {

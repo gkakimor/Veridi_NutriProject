@@ -14,6 +14,7 @@ import {
   usageUomForResourceType,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { diaDaColunaDeData, marcadorDeHojeComercial } from "../../lib/business-day.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
@@ -63,16 +64,35 @@ type ResourceWithRates = PrismaTypes.IndustrialResourceGetPayload<{
 type RateRow = ResourceWithRates["rates"][number];
 
 /**
- * Tarifa vigente numa data de referência.
+ * Tarifa vigente numa data de referência — DIA CIVIL, inclusivo nas duas
+ * bordas.
  *
  * Exige `effectiveAt`: valor histórico sem vigência confiável (o caso do
  * legado) é referência, nunca tarifa vigente. `createdAt` sozinho não tem
  * significado econômico.
+ *
+ * `effectiveAt` e `validUntil` são DATAS CIVIS (§71, §72): quem cadastra
+ * escolhe o dia num `<input type="date">` e nunca escolhe hora, e a coluna
+ * guarda a meia-noite UTC como MARCADOR do dia. A pergunta do domínio é "este
+ * DIA está dentro da vigência?" — uma tarifa que passa a valer no dia D vale
+ * o dia D inteiro, e uma que vale até o dia D ainda vale o dia D inteiro.
+ *
+ * Antes disto os dois lados comparavam INSTANTES. O marcador de "válida até
+ * 09/09" é 00:00:00.000, então qualquer relógio depois disso já a declarava
+ * histórica: a tarifa morria durante o próprio dia impresso nela. É a mesma
+ * assimetria que §76 corrigiu para a oferta do fornecedor, do outro lado do
+ * custo, e a correção é a mesma — perguntar pelo dia.
+ *
+ * `reference` é a DATA da pergunta, não um relógio. Quem quer saber "está
+ * vigente agora?" traduz o instante em dia comercial antes de chamar
+ * (`marcadorDeHojeComercial`); às 22h de São Paulo o relógio cru já é o dia
+ * seguinte em UTC, e a resposta sairia um dia adiantada.
  */
 export function isRateCurrent(rate: RateRow, reference: Date): boolean {
   if (!rate.effectiveAt) return false;
-  if (rate.effectiveAt.getTime() > reference.getTime()) return false;
-  if (rate.validUntil && rate.validUntil.getTime() < reference.getTime()) return false;
+  const dia = diaDaColunaDeData(reference);
+  if (diaDaColunaDeData(rate.effectiveAt) > dia) return false;
+  if (rate.validUntil && diaDaColunaDeData(rate.validUntil) < dia) return false;
   return true;
 }
 
@@ -104,9 +124,16 @@ export function toRateDTO(rate: RateRow, reference: Date): IndustrialResourceRat
   };
 }
 
+/**
+ * `reference` é obrigatória de propósito.
+ *
+ * Enquanto ela tinha `new Date()` por padrão, o DTO decidia vigência pelo
+ * relógio do processo — em Railway, UTC — e podia responder um dia diferente
+ * do motor sobre a mesma tarifa. Quem chama diz de que DIA está falando.
+ */
 export function toResourceDTO(
   resource: ResourceWithRates,
-  reference = new Date(),
+  reference: Date,
 ): IndustrialResourceDTO {
   const current = pickCurrentRate(resource.rates, reference);
   return {
@@ -138,7 +165,9 @@ export async function getIndustrialResource(
   });
   if (!resource) return null;
 
-  const reference = new Date();
+  // "Vigente agora" é uma pergunta sobre o DIA COMERCIAL da Veridi, nunca
+  // sobre o relógio do processo.
+  const reference = marcadorDeHojeComercial();
   return {
     ...toResourceDTO(resource, reference),
     rates: resource.rates.map((rate) => toRateDTO(rate, reference)),
@@ -174,7 +203,7 @@ export async function listIndustrialResources(
     prisma.industrialResource.count({ where }),
   ]);
 
-  const reference = new Date();
+  const reference = marcadorDeHojeComercial();
   return {
     resources: rows.map((row) => toResourceDTO(row, reference)),
     ...pageMeta(pagination, total),
@@ -277,10 +306,26 @@ export async function createResourceRate(
     throw new InvalidResourceRateUomError(rateUom, expectedUom);
   }
 
-  // Tarifa manual vale a partir de agora, salvo vigência informada.
-  const effectiveAt = input.effectiveAt === undefined ? new Date() : input.effectiveAt;
+  /*
+   * Tarifa manual vale a partir de HOJE, salvo vigência informada — e "hoje"
+   * é o dia comercial, gravado como MARCADOR de dia civil, igual ao que o
+   * `<input type="date">` manda quando a pessoa escolhe a data.
+   *
+   * Antes era `new Date()`, um instante no meio do dia. A coluna passava a
+   * misturar duas codificações — marcador de dia e carimbo de tempo — e
+   * nenhuma leitura estava certa para as duas: uma tarifa criada às 22h de
+   * São Paulo era gravada com o dia seguinte em UTC e só valeria amanhã.
+   */
+  const effectiveAt =
+    input.effectiveAt === undefined ? marcadorDeHojeComercial() : input.effectiveAt;
   const validUntil = input.validUntil ?? null;
-  if (effectiveAt && validUntil && validUntil.getTime() < effectiveAt.getTime()) {
+  // A comparação é entre DIAS: encerrar a vigência no próprio dia em que ela
+  // começa é legítimo — vale aquele dia inteiro.
+  if (
+    effectiveAt &&
+    validUntil &&
+    diaDaColunaDeData(validUntil) < diaDaColunaDeData(effectiveAt)
+  ) {
     throw new InvalidResourceRateError("A validade não pode ser anterior ao início da vigência.");
   }
 

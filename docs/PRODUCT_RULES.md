@@ -4823,3 +4823,65 @@ o recebe não estava na conversa em que a base foi escolhida.
 **Nada de domínio mudou.** Nenhum snapshot foi recalculado, nenhum campo
 renomeado (`costPer1000`, `costPer1000Snapshot` seguem com o nome técnico) e
 nenhuma migration nasceu disto: é copy e hierarquia.
+
+## §79 — A vigência da tarifa industrial é dia civil, inclusiva nas duas bordas
+
+`IndustrialResourceRate.effectiveAt` e `.validUntil` são **datas civis**, como
+`validUntil` da proposta (§71) e a validade do lote (§73): quem cadastra
+escolhe o dia num `<input type="date">` e nunca escolhe hora, e a coluna guarda
+a meia-noite UTC como MARCADOR do dia. A pergunta do domínio é "este DIA está
+dentro da vigência?".
+
+**Uma tarifa que passa a valer no dia D vale o dia D inteiro; uma que vale até
+o dia D ainda vale o dia D inteiro.** É a mesma semântica que §76 já dera à
+oferta do fornecedor, do outro lado do custo.
+
+**O que estava errado.** `isRateCurrent` comparava INSTANTES: o marcador de
+"válida até 09/09" é `00:00:00.000`, então qualquer relógio depois disso já a
+declarava histórica. A tarifa morria durante o próprio dia impresso nela — e
+`toRateDTO` decidia com `new Date()`, o relógio do processo, que em Railway é
+UTC. Um teste feito de manhã nunca veria o defeito.
+
+**A suspeita original era outra, e estava errada.** O walkthrough relatou
+"agosto deveria usar A e usa B". A auditoria não confirmou: com A vigente desde
+janeiro e B desde setembro, agosto sempre respondeu A e setembro sempre
+respondeu B, e os snapshots econômicos sempre ficaram congelados. O defeito real
+era a borda do dia, e só ela foi corrigida.
+
+**"Vigente agora" é pergunta sobre o DIA COMERCIAL.** Quem quer saber a
+situação de hoje traduz o relógio em dia comercial antes de perguntar
+(`marcadorDeHojeComercial`); às 22h de São Paulo o relógio cru já é o dia
+seguinte em UTC. `toResourceDTO` deixou de aceitar "hoje" implícito: a data de
+referência é obrigatória, e quem chama diz de que dia está falando.
+
+**A data de referência do motor continua explícita** (§5.8). Nada aqui
+introduz "hoje" no cálculo: o que mudou é que, quando a borda não informa data,
+o padrão passou a ser o dia comercial como DATA CIVIL, e não um instante.
+
+**Tarifa registrada sem vigência informada nasce valendo hoje**, gravada como
+marcador de dia civil — não como o instante em que alguém clicou. Antes a
+coluna misturava duas codificações, e nenhuma leitura estava certa para as
+duas.
+
+**Snapshot continua congelado.** `rateIdSnapshot`, `rateValueSnapshot` e
+`rateEffectiveAtSnapshot` seguem intocados; reajustar a hora hoje nunca
+reescreve custo histórico. A ativação passa a congelar a tarifa vigente no DIA
+COMERCIAL da ativação — ativar às 22h não congela a tarifa que só começa
+amanhã.
+
+### Sobreposição de vigências continua em aberto — de propósito
+
+Criar a tarifa B **não encerra** a tarifa A: `validUntil` de A continua nulo, as
+duas ficam vigentes, e o histórico da tela marca as duas como "Vigente" sem
+dizer qual ganha. O motor não fica ambíguo — vence o `effectiveAt` mais
+recente, com desempate por `createdAt` —, mas a leitura fica.
+
+**A política não é decidida aqui**, e não deve ser decidida sozinha: é a mesma
+pergunta de SUPPLIER-OFFER-OVERLAP-01, nos dois lados do custo, e duas
+respostas divergentes seriam pior que nenhuma. As opções em aberto são encerrar
+a anterior automaticamente, bloquear a sobreposição, alertar e permitir, ou
+permitir com prioridade explícita. Até lá, o sistema **não** edita, encerra nem
+apaga a vigência anterior por conta própria.
+
+Nenhuma migration nasceu disto: a semântica é de leitura, e a coluna já era a
+certa.

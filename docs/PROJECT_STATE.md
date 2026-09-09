@@ -592,10 +592,48 @@ Zero migration, zero snapshot recalculado, zero dado PROD. **Finding aberto:**
 "Base de produção", "Base de referência" e "Base de produção sugerida" nomeiam o
 mesmo conceito em três telas — registrado no BACKLOG, sem sweep.
 
+## A vigência da tarifa industrial é do DIA (2026-09-09)
+
+**INDUSTRIAL-RATE-VALIDITY-01 fechado. Regra durável: §79.** A suspeita que
+abriu o item — "agosto deveria usar A e usa B" — **não se confirmou**, e o caso
+ficou travado em teste: com A vigente desde janeiro e B desde setembro, agosto
+responde A e setembro responde B, com snapshots intocados.
+
+O defeito REAL era a borda do dia. `isRateCurrent` comparava instantes crus, e
+o marcador de "válida até 09/09" é `00:00:00.000`: qualquer relógio depois
+disso já declarava a tarifa histórica — ela morria durante o próprio dia
+impresso nela. A comparação passou a ser entre DIAS CIVIS, inclusiva nas duas
+bordas, com o mesmo `diaDaColunaDeData` de §71 e §73. É a mesma assimetria que
+§76 corrigiu para a oferta do fornecedor, do outro lado do custo.
+
+O relógio saiu das decisões de vigência: `toResourceDTO` não aceita mais "hoje"
+implícito, e detalhe, listagem, pendências da estrutura, DTO de uso e o
+congelamento na ativação perguntam pelo **dia comercial**, não pelo relógio do
+processo — em Railway, UTC. Tarifa registrada sem vigência informada passou a
+nascer como marcador de dia civil, e não como o instante do clique.
+
+**Auditoria somente leitura.** PROD: 10 tarifas, **zero** com `validUntil` e
+zero com `effectiveAt` fora do marcador de dia — o defeito era latente lá, e
+nenhuma linha muda de interpretação. DEV: 22 de 125 com `effectiveAt` gravado
+como instante de madrugada pelo padrão antigo, todas de fixture. Zero backfill,
+zero migration, zero snapshot alterado.
+
+**A interface nunca ofereceu "válida até"** — o campo só é lido na coluna do
+histórico. Por isso a borda corrigida só era alcançável por API ou carga, e o
+E2E prova a borda de INÍCIO (a que a tela cria) com as bordas de fim provadas
+de forma determinística em teste de API.
+
+**Sobreposição continua em aberto, e agora é uma decisão só.** Criar B não
+encerra A: as duas ficam vigentes e o histórico marca as duas como "Vigente"
+sem dizer qual vence. **PROD já tem 1 recurso nesse estado.** A pergunta é
+idêntica à de SUPPLIER-OFFER-OVERLAP-01 e foi reconciliada com ela — encerrar a
+anterior, bloquear, alertar, ou permitir com prioridade explícita —, com o
+estado atual travado em teste para que a mudança seja deliberada.
+
 ## Próxima prioridade
 
-**P1 da fila viva** — INDUSTRIAL-RATE-VALIDITY-01, primeiro da fila desde que
-COST-BASIS-UX-01 fechou. Não depende de gate de negócio.
+**P1 da fila viva** — CUSTOMER-CEP-02, primeiro da fila desde que
+INDUSTRIAL-RATE-VALIDITY-01 fechou. Decisão de PO já fechada.
 
 **COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
 mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum

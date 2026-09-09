@@ -36,17 +36,18 @@ faz primeiro e estava espalhada por cinco lugares.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | INDUSTRIAL-RATE-VALIDITY-01 | A · P1 | Mesma família de vigência que COST-SOURCE-01 acabou de fechar, no outro lado do custo. **Primeiro da fila** desde que COST-BASIS-UX-01 fechou |
-| **P1-2** | CUSTOMER-CEP-02 | A · P1 | Decisão de PO já fechada, e tem corrida real de rede |
-| **P1-3** | PROJECT-CUSTOMER-CONTACT-01 | A · P1 | Leitura, sem duplicar dado |
-| **P1-4** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
-| **P1-5** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-6** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-7** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-8** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente |
+| **P1-1** | CUSTOMER-CEP-02 | A · P1 | Decisão de PO já fechada, e tem corrida real de rede. **Primeiro da fila** desde que INDUSTRIAL-RATE-VALIDITY-01 fechou |
+| **P1-2** | PROJECT-CUSTOMER-CONTACT-01 | A · P1 | Leitura, sem duplicar dado |
+| **P1-3** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
+| **P1-4** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-5** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-6** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
-Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01, SUPPLIER-MODE-01,
+Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
+2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma
+pergunta nos dois lados do custo, uma resposta só —, SUPPLIER-MODE-01,
 ASSET-01, COM-CONTRACT-01 (seção G). Brainstorm: tributos e custo de aquisição
 (seção F).
 
@@ -276,33 +277,54 @@ nomenclatura sem necessidade não é parte desta capability.
 
 ### P1 — próximas correções
 
-#### INDUSTRIAL-RATE-VALIDITY-01 — vigência de tarifa industrial
+#### INDUSTRIAL-RATE-VALIDITY-01 — vigência de tarifa industrial — **RESOLVIDO em 2026-09-09**
 
-Vindo do walkthrough real (2026-09-09) como suspeita de **bug de histórico
-econômico**. A auditoria de código de 2026-09-09 **não confirma o bug de
-histórico**, e confirma dois resíduos menores. Registrado com a classificação
-corrigida, não com a suposta:
+Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md), **§79**.
 
-**A invariante exigida já vale.** Com tarifa A (`effectiveAt` 01/01/2026,
-`validUntil` nulo) e tarifa B (`effectiveAt` 01/09/2026), `isRateCurrent` +
-`pickCurrentRate` (`industrial-resources.service.ts:72,79`) respondem: agosto
-usa A (B ainda não começou) e setembro usa B (vence o `effectiveAt` mais
-recente, com desempate por `createdAt`). Snapshots continuam intocados — a
-estrutura congela `rateIdSnapshot`/`rateValueSnapshot`/`rateEffectiveAtSnapshot`
-na ativação, e o CALC congela o valor no `result`.
+**A suspeita original não se confirmou, e a auditoria já tinha dito isso.** Com
+tarifa A (`effectiveAt` 01/01/2026) e B (`effectiveAt` 01/09/2026), agosto
+sempre respondeu A e setembro sempre respondeu B. O caso está travado em teste
+(`rate-validity.test.ts`, caso G, e o cálculo real em `rate-validity-api.test.ts`)
+para não regredir. Snapshots seguem intocados.
 
-**Resíduo 1 — defeito real, de exibição.** `isRateCurrent` compara instantes
-crus: `validUntil < reference`. `toResourceDTO` usa `reference = new Date()`,
-um relógio. Tarifa com `validUntil` no dia corrente aparece como NÃO vigente a
-partir da primeira hora do próprio dia impresso nela. É exatamente a assimetria
-de dia civil que COST-SOURCE-01 corrigiu para `SupplierItemOffer` (§76) — mesma
-forma, outro lado do custo, e a correção conhecida.
+**O defeito REAL era a borda do dia, e foi corrigido.** `isRateCurrent`
+comparava instantes crus: o marcador de "válida até hoje" é `00:00:00.000`, e
+qualquer relógio depois disso já declarava a tarifa histórica — ela morria
+durante o próprio dia impresso nela. A comparação passou a ser entre DIAS
+CIVIS, inclusiva nas duas bordas, com o mesmo `diaDaColunaDeData` que §71 e §73
+já usam. Reprodução antes da correção: o caso F reprovava com
+`expected false to be true`.
 
-**Resíduo 2 — decisão de negócio, não código.** Criar B **não encerra** A:
-`validUntil` de A continua nulo, as duas ficam vigentes em setembro e a tela
-marca as duas como vigentes sem dizer qual ganha. É o mesmo desenho de
-SUPPLIER-OFFER-OVERLAP-01, e as duas perguntas devem ser respondidas juntas:
-nova vigência encerra a anterior, apenas alerta, ou sobreposição é deliberada?
+**O relógio saiu das decisões de vigência.** `toResourceDTO` não aceita mais
+"hoje" implícito — a data de referência é obrigatória —, e os read models
+(detalhe, listagem, pendências da estrutura, DTO de uso, congelamento na
+ativação) perguntam pelo **dia comercial** (`marcadorDeHojeComercial`), não pelo
+relógio do processo, que em Railway é UTC. Tarifa registrada sem vigência
+informada passou a nascer como MARCADOR de dia civil, e não como o instante do
+clique: a coluna deixou de misturar duas codificações.
+
+**Auditoria de dados, somente leitura.** PROD: 9 recursos, 10 tarifas, **zero**
+com `validUntil` e **zero** com `effectiveAt` fora do marcador de dia — o
+defeito era latente lá, e nenhuma linha muda de interpretação com a correção.
+DEV: 125 tarifas, 22 com `effectiveAt` gravado como instante de madrugada (o
+padrão antigo), todas de fixture de suíte. Zero backfill, zero dado alterado.
+
+**A interface nunca ofereceu "válida até".** `validUntil` só é LIDO na coluna
+do histórico; não existe campo para escrevê-lo. Por isso a borda corrigida só
+era alcançável por API ou carga — e por isso o E2E prova a borda de INÍCIO, que
+é a que a tela consegue criar, com as bordas de fim provadas de forma
+determinística em teste de API.
+
+**Sobreposição continua em DISCOVERY, reconciliada com
+SUPPLIER-OFFER-OVERLAP-01.** Criar B não encerra A: as duas ficam sem
+`validUntil`, o histórico marca **as duas** como "Vigente" e só o resumo do topo
+diz qual o motor usa. O banco permite (nenhuma constraint), o service permite
+(nenhuma validação), o desempate é determinístico (`effectiveAt` mais recente,
+depois `createdAt`) — e **PROD já tem 1 recurso nesse estado**. As opções —
+encerrar a anterior, bloquear, alertar, ou permitir com prioridade explícita —
+não foram escolhidas aqui: são a mesma pergunta nos dois lados do custo e
+precisam de uma resposta só. O estado atual está travado em teste, para que a
+mudança de política seja deliberada.
 
 **F-03-1 e F-07-1 foram fechados no FIX-06 (2026-09-08).** O bloco de
 custo da Formulação dependia de `version?.components.length` para recarregar:
@@ -536,6 +558,7 @@ sem contrato cadastrado; os conceitos são independentes.
 | **F-03-2** | Coluna ORIGEM do histórico de versões vazia para versão criada de template | LOW | XS |
 | **F-08-3** | Campos "Consumir agora" sem rótulo acessível | LOW | XS |
 | **F-01-1** | "Produto" nomeia dois fatos diferentes na Consulta de Cliente | UX | S |
+| **VOCAB-01** | Um conceito, três nomes: "Base de produção" (campo), "Base de referência" (leitura) e "Base de produção sugerida" (template) nomeiam a mesma quantidade. Mesma família de F-01-1; sweep só quando houver rodada de nomenclatura | UX | S |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
 
@@ -800,7 +823,7 @@ Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 
-### SUPPLIER-OFFER-OVERLAP-01 — vigências sobrepostas de oferta
+### SUPPLIER-OFFER-OVERLAP-01 — vigências sobrepostas de oferta E de tarifa industrial
 
 Finding do COST-SOURCE-01 (2026-09-09), registrado sem decisão.
 
@@ -815,10 +838,21 @@ errado no mesmo mês vê dois números válidos e nenhuma pista de qual está no
 
 Quatro caminhos, nenhum escolhido: (A) permitir e só explicar qual vence;
 (B) ao criar vigência nova, encerrar a anterior automaticamente; (C) permitir e
-alertar; (D) permitir sobreposição deliberada como recurso de negócio. Decidir
-junto com o resíduo 2 de INDUSTRIAL-RATE-VALIDITY-01 — é o mesmo desenho nos
-dois lados do custo, e responder diferente nos dois seria inventar duas regras
-para a mesma pergunta.
+alertar; (D) permitir sobreposição deliberada como recurso de negócio.
+
+**O escopo desta decisão cresceu em 2026-09-09, e isso é bom.** Quando
+INDUSTRIAL-RATE-VALIDITY-01 fechou a borda de dia civil, a auditoria confirmou
+que `IndustrialResourceRate` tem EXATAMENTE o mesmo desenho: o banco permite
+duas vigências abertas (nenhuma constraint), o service permite (nenhuma
+validação), o desempate é determinístico (`effectiveAt` mais recente, depois
+`createdAt`) e o histórico da tela marca **as duas** como "Vigente" sem dizer
+qual vence. **PROD já tem 1 recurso industrial nesse estado**, além das ofertas.
+
+A decisão é uma só, para os dois lados do custo — oferta de fornecedor e tarifa
+de recurso industrial. Responder diferente nos dois seria inventar duas regras
+para a mesma pergunta, e o estado atual dos dois está travado em teste para que
+a mudança seja deliberada (`rate-validity-api.test.ts`,
+`scripts/e2e/vigencia-de-tarifa-industrial.mjs`).
 
 **Contexto que NÃO é tarefa:** as 602 ofertas `LEGACY_IMPORT` seguem sem
 `effectiveAt` e sem `preferred`, e isso é **dado do usuário**. Não existe item

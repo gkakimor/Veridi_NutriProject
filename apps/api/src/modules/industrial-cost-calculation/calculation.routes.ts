@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
+import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industrial-costs.errors.js";
 import { ProductionOrderNotFoundError } from "../production-orders/production-orders.errors.js";
 import { calculateIndustrialCost } from "./calculation.service.js";
@@ -134,7 +135,10 @@ export const industrialCostCalculationRoutes: FastifyPluginAsync = async (app) =
         throw new InvalidCostReferenceDateError();
       }
       return reply.send(
-        await calculateIndustrialCost(id, costReferenceDate ?? new Date(), {
+        // Sem data informada, a pergunta é sobre HOJE — o dia comercial da
+        // Veridi, como data civil. O relógio cru faria o cálculo da noite
+        // enxergar a vigência do dia seguinte.
+        await calculateIndustrialCost(id, costReferenceDate ?? marcadorDeHojeComercial(), {
           materialOverrides: materialOverrides ?? [],
           requireOverrideReason: false,
           actor,

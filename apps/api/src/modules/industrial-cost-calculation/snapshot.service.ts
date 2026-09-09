@@ -8,6 +8,7 @@ import type {
 } from "@veridi/shared";
 import { INDUSTRIAL_COST_CALCULATION_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { calculateIndustrialCost } from "./calculation.service.js";
 import { resultadoTecnico } from "../../lib/decimal-serialization.js";
@@ -41,7 +42,9 @@ export async function saveIndustrialCostCalculation(
   actor: User,
 ): Promise<IndustrialCostCalculationSnapshotDTO> {
   const prisma = getPrisma();
-  const referenceDate = input.costReferenceDate ?? new Date();
+  // Data civil do dia comercial: um cálculo salvo diz de que DIA ele fala, e
+  // um relógio de 22h em São Paulo já é o dia seguinte em UTC.
+  const referenceDate = input.costReferenceDate ?? marcadorDeHojeComercial();
   // Substituição forçada viaja para dentro do documento: fonte usada, fonte
   // automática que teria sido usada, valores, motivo, quem e quando ficam
   // no `result` congelado. Reproduzir o cálculo nunca depende do item.
