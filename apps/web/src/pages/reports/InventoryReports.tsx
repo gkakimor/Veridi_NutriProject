@@ -255,9 +255,13 @@ export function ExpiryReportPage() {
             <td>{row.lotOrigin === "PRODUCTION" ? "Produção" : "Recebimento"}</td>
             <td>{formatDate(row.expiryDate)}</td>
             <td>
+              {/* `daysToExpiry` vem da API em dias civis: `0` é hoje, e o
+                  lote que vence hoje ainda vale o dia inteiro. */}
               {row.daysToExpiry < 0
                 ? `Vencido há ${Math.abs(row.daysToExpiry)} dias`
-                : `Vence em ${row.daysToExpiry} dias`}
+                : row.daysToExpiry === 0
+                  ? "Vence hoje"
+                  : `Vence em ${row.daysToExpiry} dias`}
             </td>
             <td className="is-number">
               {formatQuantity(row.onHand)} {row.unitCode}

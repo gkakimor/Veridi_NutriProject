@@ -4302,3 +4302,41 @@ código: a janela de referência de custo, a vigência de referência manual e a
 aritmética de meses trabalham sobre datas civis lidas em UTC, de propósito.
 Log técnico do servidor também continua em UTC — a regra é de produto, não de
 observabilidade.
+
+## §73 — A validade do lote é inclusiva: o dia inteiro vale
+
+**Data de validade de lote é inclusiva: o lote permanece válido durante todo o
+dia civil informado e vence no início do dia seguinte, considerando
+`America/Sao_Paulo`.** Um lote com validade 15/09/2026 pode ser consumido até
+23:59:59 de 15/09 e está vencido a partir de 16/09 às 00:00.
+
+`Lot.expiryDate` é DATA CIVIL, como `validUntil` (§71) e pelos mesmos motivos:
+quem recebe o material escolhe o dia num `<input type="date">` e nunca escolhe
+hora; a coluna guarda a meia-noite UTC como MARCADOR do dia. A pergunta do
+domínio é "o dia da validade já acabou na Veridi?", respondida entre DIAS —
+nunca entre o marcador e o relógio. Comparar com o instante atual vencia o lote
+às 21h do dia ANTERIOR ao impresso no rótulo, e o defeito não aparecia em
+teste manual de manhã.
+
+**Uma interpretação, todos os módulos.** A pergunta se responde num lugar só —
+`isLotExpired`, em `lib/inventory-ledger.ts`, sobre o mesmo `venceuEm` da
+validade comercial (`lib/business-day.ts`). Disponibilidade, FEFO, reserva,
+separação, consumo, amostra, expedição, liberação da Qualidade, painel de
+atenção e relatório de validade leem daí. Nenhum módulo inventa exceção: um
+lote elegível numa tela é elegível em todas, no mesmo instante.
+
+**Validade não é bloqueio antecipado.** Quem quiser impedir o consumo antes do
+vencimento usa os estados de Qualidade que já existem — `BLOCKED`,
+`AWAITING_RELEASE`, laudo pendente. Antecipar a data de validade para travar
+material corrompe o dado que vai ao rótulo e à rastreabilidade.
+
+**"Vence hoje" não é "vencido".** No próprio dia da validade o lote continua
+disponível e aparece como proximidade de vencimento — `LOT_NEAR_EXPIRY` no
+painel, `daysToExpiry = 0` no relatório. Só na virada do dia ele passa a
+`LOT_EXPIRED` e entra na janela "Vencidos". Chamar de vencido o lote do dia
+manda descartar material que a operação ainda pode usar.
+
+**"Vencido" continua estado derivado**, calculado a cada leitura: nenhum job
+carimba `EXPIRED`, e nenhuma rotina noturna varre a tabela. O backend é a
+autoridade — a tela apresenta `isExpired` e `daysToExpiry` vindos da API e não
+recalcula vencimento por conta própria.

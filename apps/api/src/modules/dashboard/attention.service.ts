@@ -1,7 +1,8 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { AttentionItemDTO, AttentionSeverity } from "@veridi/shared";
-import { getOnHandByLots } from "../../lib/inventory-ledger.js";
+import { isLotExpired, getOnHandByLots } from "../../lib/inventory-ledger.js";
+import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import {
   OPERATIONAL_ORDER_STATUSES,
   getOrdersAwaitingProductionIds,
@@ -37,7 +38,14 @@ function formatDate(date: Date): string {
  */
 export async function buildAttentionList(prisma: PrismaOrTx): Promise<AttentionItemDTO[]> {
   const now = new Date();
-  const nearExpiryLimit = new Date(now.getTime() + NEAR_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  /*
+   * A fronteira do vencimento é um DIA, não o relógio: vencido é o lote cujo
+   * dia de validade é anterior ao dia comercial de hoje. O marcador de hoje é
+   * o valor que a coluna teria se guardasse hoje, então `lt` compara dias — e
+   * o lote que vence HOJE cai no ramo de proximidade, não no de vencido.
+   */
+  const hoje = marcadorDeHojeComercial(now);
+  const nearExpiryLimit = new Date(hoje.getTime() + NEAR_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
   const [
     problematicLots,
@@ -53,10 +61,10 @@ export async function buildAttentionList(prisma: PrismaOrTx): Promise<AttentionI
     prisma.lot.findMany({
       where: {
         OR: [
-          { expiryDate: { lt: now } },
+          { expiryDate: { lt: hoje } },
           { status: "BLOCKED" },
           { status: "AWAITING_RELEASE" },
-          { expiryDate: { gte: now, lte: nearExpiryLimit } },
+          { expiryDate: { gte: hoje, lte: nearExpiryLimit } },
         ],
       },
       select: {
@@ -112,7 +120,7 @@ export async function buildAttentionList(prisma: PrismaOrTx): Promise<AttentionI
     const onHand = onHandByLot.get(lot.id) ?? new Prisma.Decimal(0);
     if (onHand.lessThanOrEqualTo(0)) continue;
 
-    const expired = lot.expiryDate !== null && lot.expiryDate < now;
+    const expired = isLotExpired(lot, now);
     if (expired) {
       items.push({
         type: "LOT_EXPIRED",

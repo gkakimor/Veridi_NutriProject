@@ -257,10 +257,32 @@ própria cópia de `formatDateTime`, e a API formatava CSV, alertas e textos no
 fuso da máquina — tudo passou pelos helpers canônicos, e o filtro de período
 resolve o dia da Veridi em vez do dia do navegador.
 
-**Fica aberto, com decisão do PO:** `isLotExpired` compara validade de lote
-(data civil) com um instante e recusa o lote a partir das 21h da véspera —
-`TZ-LOTE-01` no [`BACKLOG.md`](BACKLOG.md). Não foi mexido porque muda
-disponibilidade de material.
+## A validade do lote vale o dia inteiro (TZ-LOTE-01, 2026-09-08)
+
+**Validade de lote é DATA CIVIL INCLUSIVA (§73):** o lote vale até 23:59:59 do
+dia impresso e vence às 00:00 do dia seguinte, em `America/Sao_Paulo`.
+`isLotExpired` comparava o marcador do dia com o relógio
+(`expiryDate.getTime() < Date.now()`), e como o marcador é a meia-noite UTC, o
+lote de 15/09 aparecia vencido desde **as 21h de 14/09** — quase um dia antes
+do rótulo, e sempre à noite.
+
+Não há segunda implementação: `isLotExpired` responde pelo mesmo `venceuEm` de
+[`business-day.ts`](../apps/api/src/lib/business-day.ts) que decide a validade
+da proposta. Disponibilidade, FEFO, reserva, separação, consumo, amostra e
+expedição já passavam por `isLotAvailableForUse` e foram corrigidas junto; os
+quatro call sites que comparavam por fora — liberação da Qualidade, painel de
+atenção, KPI do painel e relatório de validade — passaram a usar o marcador do
+dia comercial, e `daysToExpiry` virou distância em DIAS CIVIS (`0` é "vence
+hoje", não `-1`).
+
+**"Vence hoje" ≠ "vencido":** no dia da validade o lote continua disponível e
+sai como `LOT_NEAR_EXPIRY`; só na virada vira `LOT_EXPIRED`. Validade não é
+bloqueio antecipado — quem quer travar consumo antes usa os estados de
+Qualidade. Backend continua a autoridade; a tela apresenta `isExpired` e
+`daysToExpiry` da API e não recalcula.
+
+**Zero migration, zero dado tocado.** O defeito era de interpretação: os mesmos
+lotes passaram a ser lidos corretamente.
 
 ## Próxima prioridade
 

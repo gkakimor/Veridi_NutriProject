@@ -107,7 +107,12 @@ export interface LotDTO {
   /** Lote comercial/Veridi — só para lotes `PRODUCTION`, informado pelo usuário na criação, histórico. */
   businessLotNumber: string | null;
   expiryDate: string | null;
-  /** Calculado (`expiryDate < hoje`), nunca escrito por job — sem scheduler nesta entrega. */
+  /**
+   * Calculado pela API, nunca escrito por job — sem scheduler nesta entrega.
+   * Validade é DATA CIVIL INCLUSIVA: o lote vale o dia inteiro da validade e
+   * só vence às 00:00 do dia seguinte, no fuso comercial. A tela apresenta
+   * este valor; não recalcula vencimento por conta própria.
+   */
   isExpired: boolean;
   /** Quanto entrou no evento que criou o lote (recebimento ou primeira produção) — NÃO é saldo atual. Saldo vem do InventoryMovement ledger. */
   initialReceivedQuantity: string;
