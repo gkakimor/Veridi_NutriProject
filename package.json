@@ -17,6 +17,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @veridi/shared build && pnpm -r --workspace-concurrency=1 test && vitest run --config vitest.scripts.config.ts",
     "db:generate": "pnpm --filter @veridi/api db:generate",
+    "migration:create": "dotenv -e .env -- node scripts/create-migration.mjs",
     "db:migrate": "pnpm --filter @veridi/api db:migrate",
     "db:deploy": "pnpm --filter @veridi/api db:deploy",
     "db:seed": "pnpm --filter @veridi/api db:seed",

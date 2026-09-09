@@ -96,6 +96,16 @@ an existing database that order is invisible — only what is missing gets
 applied, in the order the folders arrived. On an empty database it is the
 real order. Rules:
 
+- **create migrations only with `pnpm migration:create <name_in_snake_case>`.**
+  Never call `prisma migrate dev --name ...` directly: it stamps the folder
+  with the real clock, and the chain's tip is already *ahead* of it, so the new
+  folder sorts before migrations it depends on. The command runs
+  `prisma migrate dev --create-only` (writes the SQL, does **not** apply it),
+  then renumbers the folder to the smallest free identifier after the tip and
+  proves the result is the tip. It refuses anything but a local database
+  (`scripts/local-db-guard.mjs`) and never applies, deploys or resets. Applying
+  stays a separate, deliberate `pnpm db:migrate`. Algorithm and its tests:
+  `scripts/migration-prefix.mjs`, `scripts/migration-prefix.test.ts`;
 - a migration may only reference tables, types and columns created by a
   migration with a smaller-or-equal name. `scripts/migration-order.test.ts`
   checks this statically as part of `pnpm test`;
@@ -112,9 +122,23 @@ real order. Rules:
   further ahead. `20260925093000` was followed by `20260925093001`, not by a new
   invented date. Where the largest identifier is in the past, the real timestamp
   of the session is both correct and monotonic, and stays the rule.
+  `pnpm migration:create` implements exactly this policy, so it no longer
+  depends on anyone remembering it (MIG-ORDER-01, 2026-09-09).
+
+  The increment is **one civil second, with real carry** (`…093059` becomes
+  `…093100`), not `+1` on the 14-digit integer. Both order identically —
+  lexicographic order over fixed-width digits *is* numeric order — but the
+  civil form keeps every identifier readable as a genuine `YYYYMMDDHHMMSS`
+  and keeps `…093060` or a month `13` out of the history. The identifier
+  stays an ordering key; the date shape is preserved only so the two readings
+  never disagree.
 
   Historical migrations already published are never renamed to tidy the
-  sequence;
+  sequence. One legacy pair shares the identifier `20260904090000`
+  (`component_quantity_mode`, `gmp_production_execution`): harmless, because
+  `migrate deploy` orders by the whole folder name, and left alone on
+  purpose. `scripts/migration-prefix.test.ts` records it so a *new* tie
+  fails;
 - `pnpm validate:migrations:fresh` proves two things against a throwaway
   database on the local Postgres: that the migrations rebuild an empty
   database, and that the database they build **is** `schema.prisma` —

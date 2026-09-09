@@ -110,6 +110,13 @@ No raw feature-level hex colors. Use design tokens.
 - Reservation and physical consumption are distinct.
 - Actual confirmed consumption drives final stock deduction.
 - Important multi-record operations must be transactional.
+- Create migrations only with `pnpm migration:create <name_in_snake_case>`.
+  Never run `prisma migrate dev --name ...` (or `pnpm db:migrate`) to create
+  one: the migration chain's tip is already ahead of the real clock, so Prisma's
+  own timestamp sorts *before* migrations the new one depends on and breaks the
+  rebuild from an empty database. The command writes the migration without
+  applying it and renumbers it onto the tip; apply it afterwards with
+  `pnpm db:migrate`.
 - A migration contains only the deliberate changes of its capability. Never
   commit a Prisma-generated diff carrying unrelated drift (see BACKLOG #14 and
   `docs/TECH_BASELINE.md`, "Migration order"). `schema.prisma` and the

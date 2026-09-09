@@ -48,6 +48,22 @@ produto: COM-PRICE** — herança de preço entre ciclos (reajuste percentual,
 "manter condição anterior", proveniência da herança), que o COM-CORE
 deliberadamente não fez.
 
+**MIG-ORDER-01 fechado em 2026-09-09.** A ponta da cadeia de migrations
+(`20260925093008`) está **à frente do relógio real**, então `prisma migrate dev`
+carimbava a pasta nova com uma data que ordena ANTES de migrations das quais ela
+depende — foi assim que a migration do COM-PRICE quebrou a reconstrução de banco
+vazio com `relation "quote_lines" does not exist` e precisou ser renumerada à
+mão. A convenção existia em `TECH_BASELINE.md` desde 2026-09-05 e dependia de
+alguém lembrar dela. Agora existe um caminho oficial — `pnpm migration:create` —
+que escreve a migration sem aplicar, renumera para o menor prefixo livre depois
+da ponta e prova o resultado. Zero migration, zero schema, zero renomeação de
+histórico. **Próximo item de produto: BILL-DISCOUNT-01** — o desconto global do
+Pedido (`agreedDiscountPercent`/`agreedTotalAmount`) nunca chega ao Faturamento:
+`calcularTotaisFaturamento` é `Σ(quantidade × preço)` e nenhum Billing o aplica.
+Um Pedido de 30.000 com 10% acordado fatura 30.000, não 27.000 — hoje, já com
+uma expedição total única. É pré-requisito econômico do COM-04, que multiplica o
+buraco por cada entrega.
+
 **SYS-TZ-01 fechado em 2026-09-09** (§72): `America/Sao_Paulo` virou o fuso
 operacional oficial, com uma definição em `packages/shared`. O resíduo que
 ficou — TZ-LOTE-01 — **também está fechado**.

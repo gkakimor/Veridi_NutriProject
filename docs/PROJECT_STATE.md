@@ -316,11 +316,40 @@ preço herdado ia ao cliente sem base econômica nenhuma. Agora a referência é
 faixa da precificação ATIVA de mesma quantidade física — preço do acordo, custo
 de hoje. É o que o CMV-VAR vai precisar para medir a variação entre ciclos.
 
+## Criar migration virou um comando só (MIG-ORDER-01, 2026-09-09)
+
+**O prefixo de 14 dígitos é uma CHAVE DE ORDENAÇÃO antes de ser data.** A ponta
+da cadeia está em `20260925093008`, à frente do relógio real, então
+`prisma migrate dev` carimbava a pasta nova com um nome que ordena ANTES de
+migrations das quais ela depende — e a reconstrução de banco vazio quebrava.
+Aconteceu de verdade no COM-PRICE (`relation "quote_lines" does not exist`), e
+a correção foi renumerar à mão.
+
+**`pnpm migration:create <nome>` é agora o caminho oficial.** Roda
+`prisma migrate dev --create-only` (escreve, não aplica), renumera para o menor
+prefixo livre depois da ponta e confere que a migration nova ficou lá. Exige
+banco local pelo mesmo `local-db-guard.mjs` do `validate:migrations:fresh`, e
+nunca aplica, faz deploy ou reseta — aplicar continua sendo `pnpm db:migrate`.
+
+**O incremento é de um segundo civil, com carry** (`…093059` → `…093100`), e não
+`+1` no inteiro. As duas ordenam igual; a civil mantém todo prefixo legível como
+carimbo de verdade e evita gravar `…093060` no histórico. Nenhuma migration
+histórica foi renomeada. Zero migration nova, zero schema.
+
 ## Próxima prioridade
 
-**COM-04** — entregas parceladas: `3 × 1.000`, cronograma e parcelas de
-entrega. É a próxima investigação de domínio do comercial, e COM-PRICE
-deliberadamente não a tocou.
+**BILL-DISCOUNT-01** — o desconto global do Pedido não chega ao Faturamento.
+`CustomerOrder.agreedDiscountPercent`/`agreedTotalAmount` são gravados pelo
+`quote-to-order.service.ts` e lidos só para exibição; `billings.service.ts` não
+os menciona e `calcularTotaisFaturamento` é `Σ(quantidade × preço)`. Pedido de
+30.000 com 10% acordado fatura 30.000, não 27.000 — já hoje, com uma expedição
+total única.
+
+**COM-04** — entregas parceladas: `3 × 1.000`, cronograma e parcelas de entrega.
+Investigado (spike de domínio, 2026-09-09): o `3 × 1.000` já roda na unha — N
+expedições confirmadas por Pedido, parcial com saldo, Billing por expedição com
+preço do acordo. O que falta é representar a agenda antes de expedir. Depende de
+BILL-DISCOUNT-01 e da decisão do PO sobre modelagem.
 
 **Antes de qualquer PREC-UI:** o roadmap afirma que PREC-UI-05 e PREC-UI-06 "já
 são o comportamento atual". F-08-1 provou que não — e FIX-01 corrigiu só o campo
