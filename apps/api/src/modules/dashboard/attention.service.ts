@@ -21,8 +21,9 @@ const SEVERITY_WEIGHT: Record<AttentionSeverity, number> = {
   INFO: 2,
 };
 
+/** Validade é DATA CIVIL: o dia gravado, não o dia do relógio da máquina. */
 function formatDate(date: Date): string {
-  return date.toLocaleDateString("pt-BR");
+  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 /**

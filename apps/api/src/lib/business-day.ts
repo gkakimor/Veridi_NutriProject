@@ -1,5 +1,11 @@
+import { diaCivil, hojeComercial } from "@veridi/shared";
+
 /**
- * Dia civil comercial — a fonte única de "até quando vale".
+ * Data civil no domínio — o que "até quando vale" significa.
+ *
+ * Os primitivos do fuso comercial vivem em `@veridi/shared`
+ * (`business-timezone.ts`), uma definição para a API e para a web. Aqui
+ * ficam só as perguntas que são de NEGÓCIO.
  *
  * `QuoteVersion.validUntil` é uma DATA CIVIL, não um instante. O campo é um
  * `<input type="date">`: a pessoa escolhe 15/09/2026 e nunca escolhe hora. O
@@ -21,30 +27,11 @@
  * texto — que para datas ISO é a mesma coisa que uma comparação cronológica.
  */
 
-/**
- * O fuso da operação. **Uma ocorrência no sistema inteiro** — nenhum outro
- * arquivo escreve este nome, e nenhum lugar codifica `-03:00`. Offset fixo
- * quebraria no dia em que o horário de verão voltar, e voltaria a errar em
- * silêncio.
+/*
+ * O fuso vem de `@veridi/shared`: uma definição para a API e para a web.
+ * Nenhum outro arquivo escreve o nome do fuso, e nenhum lugar codifica
+ * `-03:00` — quem decide o deslocamento de cada data é a base do `Intl`.
  */
-const FUSO_COMERCIAL = "America/Sao_Paulo";
-
-/** `YYYY-MM-DD` de um instante, lido em `fuso`. */
-function diaCivil(instante: Date, fuso: string): string {
-  const partes = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: fuso,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instante);
-  const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
-  return `${parte("year")}-${parte("month")}-${parte("day")}`;
-}
-
-/** Que dia é hoje para quem opera a Veridi. */
-export function hojeComercial(agora: Date = new Date()): string {
-  return diaCivil(agora, FUSO_COMERCIAL);
-}
 
 /**
  * O dia escrito numa coluna de data-só.

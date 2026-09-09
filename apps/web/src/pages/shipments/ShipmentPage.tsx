@@ -30,7 +30,7 @@ import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { ModalDialog } from "../../components/ModalDialog";
@@ -58,11 +58,6 @@ function statusBadgeClass(status: ShipmentStatus): string {
   }
 }
 
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("pt-BR");
-}
 
 function productStatusBadgeClass(status: ShipmentProductStatus): string {
   switch (status) {

@@ -55,15 +55,12 @@ import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import { EntityLink } from "../../components/EntityLink";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
+import { formatDateTime } from "../../lib/dates";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
   if (status === "INACTIVE") return "badge badge--neutral";
   return "badge badge--warn";
-}
-
-function formatDateTime(value: string | null): string {
-  return value ? new Date(value).toLocaleString("pt-BR") : "—";
 }
 
 /**

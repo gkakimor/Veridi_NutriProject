@@ -19,14 +19,10 @@ import {
 } from "../../lib/supplier-items-api";
 import { qualificationBadgeClass } from "./SupplierItemsPage";
 import { EntityLink } from "../../components/EntityLink";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { formatQuantity } from "../../lib/quantity";
-
-function formatDateTime(value: string | null): string {
-  return value ? new Date(value).toLocaleString("pt-BR") : "—";
-}
 
 /**
  * Detalhe da relação: dados comerciais, homologação com histórico e as

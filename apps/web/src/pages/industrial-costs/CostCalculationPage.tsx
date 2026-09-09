@@ -10,7 +10,7 @@ import { helpTopics } from "../../help/help-content";
 import { FormSection } from "../../components/FormSection";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { getIndustrialCostCalculation } from "../../lib/cost-calculation-api";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 
 /**
  * Cálculo salvo — somente leitura.
@@ -106,7 +106,7 @@ export function CostCalculationPage() {
             <dd>{formatDate(calculation.costReferenceDate)}</dd>
             <dt>Calculado em</dt>
             <dd>
-              {new Date(calculation.calculatedAt).toLocaleString("pt-BR")} —{" "}
+              {formatDateTime(calculation.calculatedAt)} —{" "}
               {calculation.calculatedByName ?? "—"}
             </dd>
           </dl>

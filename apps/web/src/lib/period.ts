@@ -1,3 +1,9 @@
+import {
+  limitesDeDiasComerciais,
+  limitesDeHojeComercial,
+  limitesDoDiaComercial,
+} from "@veridi/shared";
+
 /**
  * Resolução de período — estratégia ÚNICA de datas do frontend, usada pelo
  * Dashboard e pelos Relatórios. O cliente resolve os limites e envia em ISO,
@@ -19,6 +25,11 @@ export interface PeriodBounds {
   to: string;
 }
 
+/**
+ * Dia do NAVEGADOR — preservado para o que é do calendário de quem digita: o
+ * valor inicial de um campo de data. A resolução do período não passa mais por
+ * aqui; ela é do dia comercial.
+ */
 export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
 }
@@ -40,18 +51,30 @@ export function dateInputValueOffset(offsetDays: number): string {
   return toDateInputValue(date);
 }
 
+/**
+ * Os limites do período, em instantes — resolvidos no FUSO DA OPERAÇÃO.
+ *
+ * "Hoje" é o dia da Veridi, não o dia do relógio de quem abriu a tela: os
+ * limites saem de `limitesDoDiaComercial`, a mesma função que o servidor usa
+ * quando o filtro não vem preenchido. Com os componentes locais do navegador
+ * um operador fora do Brasil filtrava o próprio dia e lia isso como o dia da
+ * fábrica.
+ *
+ * O `<input type="date">` entrega `YYYY-MM-DD` — data civil. `de` é o começo
+ * daquele dia; `até` é o fim do dia escolhido, inclusive.
+ */
 export function resolvePeriodBounds(
   preset: PeriodPreset,
   customFrom: string,
   customTo: string,
 ): PeriodBounds {
-  const now = new Date();
+  const hoje = limitesDeHojeComercial();
   if (preset === "custom") {
-    const from = customFrom ? new Date(`${customFrom}T00:00:00`) : startOfDay(now);
-    const to = customTo ? new Date(`${customTo}T23:59:59.999`) : now;
+    const from = customFrom ? limitesDoDiaComercial(customFrom).inicio : hoje.inicio;
+    const to = customTo ? limitesDoDiaComercial(customTo).fim : hoje.fim;
     return { from: from.toISOString(), to: to.toISOString() };
   }
-  const daysBack = preset === "today" ? 0 : preset === "7d" ? 6 : 29;
-  const from = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack));
-  return { from: from.toISOString(), to: now.toISOString() };
+  const dias = preset === "today" ? 1 : preset === "7d" ? 7 : 30;
+  const janela = limitesDeDiasComerciais(dias);
+  return { from: janela.inicio.toISOString(), to: janela.fim.toISOString() };
 }

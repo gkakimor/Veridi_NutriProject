@@ -139,7 +139,7 @@ export async function getItemCostReference(
       unitCost: lastReal.actualUnitCost,
       source: "LAST_REAL_COST",
       referenceDate,
-      details: `Último custo real conhecido (${lastReal.receipt.code}, ${lastReal.receipt.receivedAt.toLocaleDateString("pt-BR")}).`,
+      details: `Último custo real conhecido (${lastReal.receipt.code}, ${lastReal.receipt.receivedAt.toLocaleDateString("pt-BR", { timeZone: "UTC" })}).`,
     };
   }
 

@@ -18,16 +18,12 @@ import {
   saveIndustrialCostCalculation,
 } from "../../lib/cost-calculation-api";
 import { createPricingVersion } from "../../lib/pricing-api";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 import { UsePricingPolicyDialog } from "../cost-templates/UsePricingPolicyDialog";
 import { applyPricingPolicyToProduct } from "../../lib/cost-pricing-templates-api";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("pt-BR");
 }
 
 /**

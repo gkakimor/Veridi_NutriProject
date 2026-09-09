@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-
+import { instanteComercialPorExtenso } from "@veridi/shared";
 /**
  * Geração de CSV do Veridi.
  *
@@ -56,16 +56,38 @@ export function csvCode(value: string | null | undefined): string {
   return csvText(value);
 }
 
+/**
+ * DATA CIVIL — data de documento, validade, vigência.
+ *
+ * O valor é a meia-noite UTC do dia escolhido, e o dia são os componentes UTC
+ * dele. Sem fuso explícito quem decidia era o relógio da máquina: em Railway,
+ * UTC por acaso; noutra máquina, um dia a menos no arquivo exportado.
+ */
 export function csvDate(value: string | Date | null | undefined): string {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("pt-BR");
+  return Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
+/**
+ * O DIA de um carimbo de tempo — `producedAt`, `completedAt`, `updatedAt`.
+ *
+ * Instante não é data civil: o dia dele é o dia de quem opera. Uma produção
+ * apontada às 22h de 08/09 é do dia 8, não do dia 9.
+ */
+export function csvEventDate(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : instanteComercialPorExtenso(date).split(",")[0]!.trim();
+}
+
+/** Carimbo de tempo completo, no fuso de quem lê o arquivo. */
 export function csvDateTime(value: string | Date | null | undefined): string {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("pt-BR");
+  return Number.isNaN(date.getTime()) ? "" : instanteComercialPorExtenso(date);
 }
 
 /**

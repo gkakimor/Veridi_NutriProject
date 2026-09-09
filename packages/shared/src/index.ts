@@ -11,6 +11,7 @@
 // `@veridi/shared` recebe o construtor já em 40 dígitos. `PRODUCT_RULES.md` §59.
 export * from "./decimal-config.js";
 
+export * from "./business-timezone.js";
 export * from "./health.js";
 export * from "./items.js";
 export * from "./item-cost-reference.js";

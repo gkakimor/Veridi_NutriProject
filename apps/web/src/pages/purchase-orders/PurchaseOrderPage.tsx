@@ -33,7 +33,7 @@ import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { EntityLink } from "../../components/EntityLink";
 import { FormSection } from "../../components/FormSection";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
@@ -1204,7 +1204,3 @@ options={supplierOptions.map((supplier) => ({
   );
 }
 
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR");
-}

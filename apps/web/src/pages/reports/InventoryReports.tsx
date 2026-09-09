@@ -16,14 +16,10 @@ import { DocLink, ReportPage, ReportPagination, ReportTable } from "./ReportPage
 import { useReport } from "./useReport";
 import { dateInputValueOffset } from "../../lib/period";
 import { EntityLink } from "../../components/EntityLink";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 
 const PAGE_SIZE = 25;
 
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("pt-BR");
-}
 
 function lotStatusLabel(status: LotStatus | null, isExpired: boolean): string {
   if (isExpired) return "Vencido";

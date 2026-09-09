@@ -15,7 +15,7 @@ import { FlowContext } from "../../components/FlowContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EntityLink } from "../../components/EntityLink";
 import { PriceOverrideDialog } from "./PriceOverrideDialog";
-import { formatDate } from "../../lib/dates";
+import { formatDate, formatDateTime } from "../../lib/dates";
 import { ModalDialog } from "../../components/ModalDialog";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 
@@ -30,11 +30,6 @@ function statusBadgeClass(status: BillingStatus): string {
   }
 }
 
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("pt-BR");
-}
 
 /**
  * Documento transacional — página própria no workspace. Faturamento
@@ -493,7 +488,7 @@ export function BillingPage() {
                           <td>{line.overriddenBy ?? "—"}</td>
                           <td>
                             {line.overriddenAt
-                              ? new Date(line.overriddenAt).toLocaleString("pt-BR")
+                              ? formatDateTime(line.overriddenAt)
                               : "—"}
                           </td>
                         </tr>

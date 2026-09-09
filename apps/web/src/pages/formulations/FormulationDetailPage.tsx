@@ -18,11 +18,7 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpTopics } from "../../help/help-content";
 import { UseTemplateDialog } from "../formulation-templates/UseTemplateDialog";
 import { applyTemplateToProduct } from "../../lib/formulation-templates-api";
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("pt-BR");
-}
+import { formatDateTime } from "../../lib/dates";
 
 function statusBadgeClass(status: FormulationVersionDTO["status"]): string {
   switch (status) {

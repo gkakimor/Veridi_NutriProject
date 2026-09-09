@@ -33,6 +33,7 @@ import { EntityLink } from "../../components/EntityLink";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { formatDateTime } from "../../lib/dates";
 
 /**
  * ⓘ de rótulo e cabeçalho de coluna. O texto mora em `help-content`: a
@@ -42,10 +43,6 @@ import type { HelpHintId } from "../../help/help-content";
 function DicaDaColuna({ id }: { id: HelpHintId }) {
   const dica = helpHints[id];
   return <InfoHint label={dica.label}>{dica.text}</InfoHint>;
-}
-
-function formatDateTime(value: string | null): string {
-  return value ? new Date(value).toLocaleString("pt-BR") : "—";
 }
 
 /**
