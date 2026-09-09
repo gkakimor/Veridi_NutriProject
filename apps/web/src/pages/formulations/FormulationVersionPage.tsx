@@ -543,14 +543,42 @@ export function FormulationVersionPage() {
     load();
   }, [load]);
 
-  // Fotografia de custo — recarregada sempre que a versão muda (a fórmula
-  // é imutável, mas a referência de custo não).
-  useEffect(() => {
+  /**
+   * Geração da estimativa em curso.
+   *
+   * Dois salvamentos seguidos disparam duas buscas, e a primeira pode voltar
+   * depois da segunda — o custo na tela passaria a ser o do estado anterior,
+   * que é exatamente o defeito que esta busca existe para fechar. Mesmo
+   * mecanismo da busca de entidades (`SearchableEntitySelect`).
+   */
+  const geracaoDoCusto = useRef(0);
+
+  /**
+   * Fotografia de custo do que está GRAVADO — sempre do servidor.
+   *
+   * A dependência era `version?.components.length`: alterar a quantidade de um
+   * componente e salvar não muda o tamanho da lista, então o efeito não
+   * reexecutava e o bloco continuava mostrando o custo anterior até recarregar
+   * a página (F-03-1). Quem sabe que o estado persistido mudou é quem salvou,
+   * então é o salvamento que pede a estimativa nova — nada é recalculado aqui.
+   */
+  const carregarCustoEstimado = useCallback(() => {
     if (!versionId) return;
+    const minha = (geracaoDoCusto.current += 1);
     getFormulationCostEstimate(versionId)
-      .then(setCostEstimate)
-      .catch(() => setCostEstimate(null));
-  }, [versionId, version?.components.length]);
+      .then((dto) => {
+        if (minha !== geracaoDoCusto.current) return;
+        setCostEstimate(dto);
+      })
+      .catch(() => {
+        if (minha !== geracaoDoCusto.current) return;
+        setCostEstimate(null);
+      });
+  }, [versionId]);
+
+  useEffect(() => {
+    carregarCustoEstimado();
+  }, [carregarCustoEstimado]);
 
   useEffect(() => {
     Promise.all([
@@ -984,6 +1012,8 @@ export function FormulationVersionPage() {
       const updated = await updateFormulationVersion(versionId, montarRascunho());
       setVersion(updated);
       syncFromServer(updated);
+      // O estado persistido mudou: a estimativa exibida passa a ser a dele.
+      carregarCustoEstimado();
       return true;
     } catch (err) {
       if (err instanceof ApiValidationError) {
@@ -1053,6 +1083,7 @@ export function FormulationVersionPage() {
       const updated = await activateFormulationVersion(versionId);
       setVersion(updated);
       syncFromServer(updated);
+      carregarCustoEstimado();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao ativar formulação");
     } finally {
@@ -1837,6 +1868,19 @@ export function FormulationVersionPage() {
             title="Custo estimado de materiais"
             subtitle="Estimativa de HOJE, com a MESMA escolha de fonte do cálculo de custo e do CMV: compra real dos últimos 30 dias, depois 90 dias, depois a última compra, depois oferta válida de fornecedor, depois referência manual. Lida a cada abertura e nunca gravada na versão — o CMV e a precificação leem a base CONGELADA do cálculo salvo, e é ele que vale como documento. A quantidade é a mesma que a Ordem de Produção separa."
           >
+            {/*
+              §54: dois números de momentos diferentes só convivem se estiver
+              dito qual é qual. Este bloco é sempre o GRAVADO — vem do servidor,
+              sobre a versão como ela está persistida. Enquanto houver edição
+              não salva na tela, ele diz isso em vez de deixar a pessoa conferir
+              o custo de um estado que ela acabou de mudar.
+            */}
+            {temAlteracaoPendente() && (
+              <p className="field__hint">
+                Custo do último salvamento — há alteração pendente nesta tela. Salve o rascunho
+                para atualizar.
+              </p>
+            )}
             {/*
               Premissa faltando não vira lista de zeros: sem doses por embalagem
               não há quantidade física, e sem quantidade não há custo. O campo
