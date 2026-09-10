@@ -33,19 +33,18 @@ FIX-02 (2026-09-08): quantidade física canônica na estimativa e um único
 Reconciliada em 2026-09-09 com o walkthrough real da Veridi. O detalhe de cada
 item fica na sua seção; aqui fica só a ORDEM, porque ela é a pergunta que se
 faz primeiro e estava espalhada por cinco lugares. Saíram da fila em
-2026-09-10, resolvidos: QUOTE-DRAFT-STATE-01, QUOTE-SEND-DIRTY-01,
-QUOTE-SEND-LINE-DRAFT-01 e QUOTE-LINE-NOOP-BLUR-01 — os três últimos
-promovidos a P0 pelo PO, integridade comercial.
+2026-09-10, resolvidos: QUOTE-DRAFT-STATE-01; QUOTE-SEND-DIRTY-01,
+QUOTE-SEND-LINE-DRAFT-01 e QUOTE-LINE-NOOP-BLUR-01, promovidos a P0 pelo PO
+por integridade comercial; e QUOTE-INT-FIELDS-01, pela mesma razão, em P1.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | QUOTE-INT-FIELDS-01 | A · P1 | Integridade antes de estrutura (PO, 2026-09-10): salvar as condições pode APAGAR um valor gravado em silêncio |
-| **P1-2** | FORM-UOM-01 | A · P1 | Unidade é dado ESTRUTURAL — alimenta conversão, custo e produção. Texto livre ali é risco de integridade; a duplicação de orçamento é produtividade |
-| **P1-3** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
-| **P1-4** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-5** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-6** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | FORM-UOM-01 | A · P1 | Unidade é dado ESTRUTURAL — alimenta conversão, custo e produção. Texto livre ali é risco de integridade; a duplicação de orçamento é produtividade |
+| **P1-2** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
+| **P1-3** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-4** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-5** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-6** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
@@ -391,16 +390,29 @@ quantidade ou de unidade continua soltando o preço herdado ou reajustado, e o
 preço informado junto com ela continua ganhando da limpeza. A trava da faixa
 (`PRICING_TIER`) passou a recusar só o que muda.
 
-#### QUOTE-INT-FIELDS-01 — prazo, parcelas e intervalo aceitam texto e apagam o gravado
+#### QUOTE-INT-FIELDS-01 — prazo, parcelas e intervalo aceitavam texto e apagavam o gravado — **RESOLVIDO em 2026-09-10**
 
-Achado de QUOTE-DRAFT-STATE-01 (2026-09-10), promovido a P1 pelo PO logo depois
-de QUOTE-SEND-DIRTY-01, pela mesma prioridade de integridade. Os três campos
-inteiros das condições (`leadTimeDays`, `installmentCount`,
-`installmentIntervalDays`) não validam o texto: `abc` vira `NaN` em
-`paraEnvio`, o JSON serializa `NaN` como `null`, e salvar APAGA o valor gravado
-em silêncio — a recusa do servidor (`optionalPositiveInt`, "Informe um número
-inteiro maior que zero") nunca chega a ver o texto. Percentual já trava o
-salvamento por `parseDecimalInput`; inteiro, não. **Não iniciado.**
+Achado de QUOTE-DRAFT-STATE-01, promovido a P1 pelo PO pela mesma prioridade de
+integridade e reproduzido antes da correção em três níveis. Pela interface, o
+pedido de "Salvar condições" saiu com `"leadTimeDays":null` e a segunda aba
+mostrou o prazo apagado; no componente, 29 de 33 casos falhavam; na API, o
+texto já era recusado com 400 — o defeito nunca chegava lá, porque
+`Number("abc")` virava `NaN` em `paraEnvio` e o JSON escrevia `null`.
+
+Agora os três inteiros passam por `lerInteiroOpcional` (`lib/integer-input.ts`),
+de resultado discriminado — vazio, válido ou inválido, nunca `NaN`: só dígitos,
+com espaço nas pontas e zero à esquerda. Inválido fica no campo como digitado,
+com o erro ao lado (`aria-invalid` + `aria-describedby`), conta como alteração
+pendente e prende salvar, simular e, pela pendência, o envio — sem requisição
+nenhuma. Vazio continua "não informado" e salva `null`. Os limites saíram de
+uma fonte só, `LIMITES_INTEIROS_DAS_CONDICOES` em `@veridi/shared`, usada pela
+tela e pelo schema da API com os mesmos valores e mensagens de antes. À vista,
+parcelas e intervalo não aparecem nem valem: o texto escondido neles não trava
+e segue como `null` — o servidor grava à vista sem parcelas de qualquer jeito.
+Percentuais, conta do plano e proteções de envio intocados. Regra durável:
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §48. Achados registrados sem corrigir:
+PROJECT-INT-FIELDS-01 (P2) — o mesmo defeito no formulário do Projeto —, e
+API-INT-COERCION-01, QUOTE-PERCENT-FIELDS-01 e QUOTE-CASH-HIDDEN-DIRTY-01 (P3).
 
 #### FORM-UOM-01 — unidade de medida é texto livre no Modelo de Formulação
 
@@ -715,6 +727,7 @@ sem contrato cadastrado; os conceitos são independentes.
 | **VOCAB-01** | Um conceito, três nomes: "Base de produção" (campo), "Base de referência" (leitura) e "Base de produção sugerida" (template) nomeiam a mesma quantidade. Mesma família de F-01-1; sweep só quando houver rodada de nomenclatura | UX | S |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
+| **PROJECT-INT-FIELDS-01** | O defeito de QUOTE-INT-FIELDS-01 em outra tela: "Doses por embalagem" e "Vida útil (meses)" do Projeto são texto livre e saem por `Number(texto)` (`ProjectFormModal.tsx:142,148`) — `abc` vira `NaN`, o JSON escreve `null`, a API aceita `null` e salvar apaga o valor gravado. Por leitura de código, achado em QUOTE-INT-FIELDS-01 e fora do escopo dela; a correção é reusar `lerInteiroOpcional` com erro no campo. Mesma classe do item que o PO promoveu a P1 — promover é decisão do PO | MEDIUM | XS |
 
 **F-01-1 e F-07-2 foram rebaixados**: os dois números estão certos para o que
 representam — `Project.productId` (produto resultante) contra `project_products`
@@ -737,6 +750,9 @@ mudou.
 | **F-11-1** | Sair de um documento por um `EntityLink` de cadastro não deixa caminho de volta | UX | S |
 | **QUOTE-VERSION-SWITCH-DIRTY-01** | Abrir outra versão com condições pendentes descarta o rascunho sem aviso — mantido de propósito em QUOTE-DRAFT-STATE-01. Só existe um rascunho por projeto e as outras versões são somente leitura; avisar, salvar ou descartar é decisão do PO | UX | S |
 | **PROJECT-RELOAD-ERROR-01** | Falha na releitura do Projeto depois de uma mutação bem-sucedida vira "Projeto não encontrado": o `load()` de `ProjectDetailPage` trata qualquer erro como 404 e desmonta a ficha — e com ela o que estava digitado | LOW | XS |
+| **API-INT-COERCION-01** | A API ainda lê inteiro com `Number()` em `optionalPositiveInt`: `"1e2"` é aceito como 100, `"0x1E"` como 30, `"+1"` e `"1.0"` como 1. A tela das condições não manda nada disso desde QUOTE-INT-FIELDS-01 — o risco é de outro cliente da API. O mesmo schema serve `dosesPerPackage` e `shelfLifeMonths` do Projeto | LOW | XS |
+| **QUOTE-PERCENT-FIELDS-01** | Os percentuais das condições não receberam o tratamento dos inteiros: o erro não tem `id` nem `aria-describedby` no campo, e à vista a entrada ou os juros ilegíveis que ficaram escondidos travam "Salvar condições" sem erro visível — `temPercentualIlegivel` não olha a forma de pagamento | UX | XS |
+| **QUOTE-CASH-HIDDEN-DIRTY-01** | Parcela ou intervalo digitado no Parcelado e escondido pela troca para À vista conta como alteração pendente; salvar grava à vista sem parcelas (o servidor limpa), a releitura não muda o gravado e a pendência fica: "Alterações não salvas" e envio preso até "Descartar alterações". Por leitura de código, desde QUOTE-DRAFT-STATE-01 — antes da correção, o mesmo com `NaN`. Decidir se campo escondido conta como pendência | UX | S |
 
 ### Encerrados na triagem, sem trabalho
 
@@ -1086,7 +1102,7 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-6, SUPPLIER-ADDRESS-01 em P1-7) — mas a
+(COST-RESOURCE-MULTIPLIER-01 em P1-5, SUPPLIER-ADDRESS-01 em P1-6) — mas a
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 

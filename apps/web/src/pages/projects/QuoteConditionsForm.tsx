@@ -5,13 +5,15 @@ import type {
   QuoteVersionDTO,
   UpdateQuoteVersionInput,
 } from "@veridi/shared";
-import { QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
+import { LIMITES_INTEIROS_DAS_CONDICOES, QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
 import { formatBRL } from "../../lib/currency";
 import { formatPercent } from "../../lib/percent";
 import { previewQuotePaymentSchedule } from "../../lib/projects-api";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import { erroDeInteiro } from "../../lib/integer-input";
 import {
   type CamposDasCondicoes,
+  type ChaveInteiraDaCondicao,
   condicoesAlteradas,
   hidratarRascunho,
   paraEnvio,
@@ -45,6 +47,32 @@ const PERCENTUAIS: { chave: keyof CamposDasCondicoes; rotulo: string }[] = [
   { chave: "downPaymentPercent", rotulo: "Entrada (%)" },
   { chave: "monthlyInterestPercent", rotulo: "Juros ao mês (%)" },
 ];
+
+/**
+ * Os três inteiros desta tela. O limite de cada um vem da API
+ * (`LIMITES_INTEIROS_DAS_CONDICOES`): a tela recusa o que o servidor recusaria,
+ * ao lado do campo. Parcelas e intervalo só existem no parcelado.
+ */
+const INTEIROS: Record<
+  ChaveInteiraDaCondicao,
+  { rotulo: string; erroId: string; soParcelado: boolean }
+> = {
+  leadTimeDays: {
+    rotulo: "Prazo de entrega (dias)",
+    erroId: "quote-lead-time-error",
+    soParcelado: false,
+  },
+  installmentCount: {
+    rotulo: "Parcelas",
+    erroId: "quote-installments-error",
+    soParcelado: true,
+  },
+  installmentIntervalDays: {
+    rotulo: "Intervalo (dias)",
+    erroId: "quote-interval-error",
+    soParcelado: true,
+  },
+};
 
 interface Props {
   quote: QuoteVersionDTO;
@@ -126,6 +154,34 @@ export function QuoteConditionsForm({
   const temPercentualIlegivel = PERCENTUAIS.some(
     ({ chave }) => erroDoPercentual(chave) !== null,
   );
+  /*
+   * Inteiro ilegível trava do mesmo jeito — e fica na tela como foi digitado.
+   * Antes, `abc` no prazo virava `NaN`, o JSON escrevia `null`, e salvar
+   * apagava o prazo gravado sem aviso (QUOTE-INT-FIELDS-01). Vazio segue: é
+   * "não informado". À vista, parcelas e intervalo não aparecem nem valem.
+   */
+  const erroDoInteiro = (chave: ChaveInteiraDaCondicao): string | null => {
+    const { rotulo, soParcelado } = INTEIROS[chave];
+    if (soParcelado && !parcelado) return null;
+    return erroDeInteiro(rotulo, campos[chave], LIMITES_INTEIROS_DAS_CONDICOES[chave]);
+  };
+  const temInteiroIlegivel = (Object.keys(INTEIROS) as ChaveInteiraDaCondicao[]).some(
+    (chave) => erroDoInteiro(chave) !== null,
+  );
+  const temCondicaoIlegivel = temPercentualIlegivel || temInteiroIlegivel;
+  /** Liga o campo ao seu erro: quem usa leitor de tela ouve a regra junto do campo. */
+  const ariaDoInteiro = (chave: ChaveInteiraDaCondicao) =>
+    erroDoInteiro(chave) === null
+      ? {}
+      : { "aria-invalid": true, "aria-describedby": INTEIROS[chave].erroId };
+  const avisoDoInteiro = (chave: ChaveInteiraDaCondicao) => {
+    const erro = erroDoInteiro(chave);
+    return erro === null ? null : (
+      <p className="field__error" id={INTEIROS[chave].erroId}>
+        {erro}
+      </p>
+    );
+  };
   const plano = quote.paymentSchedule;
 
   function set<K extends keyof CamposDasCondicoes>(chave: K, valor: CamposDasCondicoes[K]) {
@@ -144,6 +200,8 @@ export function QuoteConditionsForm({
   }
 
   async function simular() {
+    // Os botões já ficam presos: o que a tela não lê não sai dela por caminho nenhum.
+    if (temCondicaoIlegivel) return;
     setSimulando(true);
     setErroSimulacao(null);
     try {
@@ -154,6 +212,11 @@ export function QuoteConditionsForm({
     } finally {
       setSimulando(false);
     }
+  }
+
+  function salvar() {
+    if (temCondicaoIlegivel) return;
+    onSave(paraEnvio(campos));
   }
 
   // Simulação na tela vence o gravado: é o que a pessoa está decidindo agora.
@@ -182,7 +245,9 @@ export function QuoteConditionsForm({
             disabled={!editable}
             value={campos.leadTimeDays}
             onChange={(event) => set("leadTimeDays", event.target.value)}
+            {...ariaDoInteiro("leadTimeDays")}
           />
+          {avisoDoInteiro("leadTimeDays")}
         </div>
         <div className="field field--narrow">
           <label htmlFor="quote-discount">Desconto (%)</label>
@@ -243,7 +308,9 @@ export function QuoteConditionsForm({
                 disabled={!editable}
                 value={campos.installmentCount}
                 onChange={(event) => set("installmentCount", event.target.value)}
+                {...ariaDoInteiro("installmentCount")}
               />
+              {avisoDoInteiro("installmentCount")}
             </div>
             <div className="field field--narrow">
               <label htmlFor="quote-interval">Intervalo (dias)</label>
@@ -254,7 +321,9 @@ export function QuoteConditionsForm({
                 disabled={!editable}
                 value={campos.installmentIntervalDays}
                 onChange={(event) => set("installmentIntervalDays", event.target.value)}
+                {...ariaDoInteiro("installmentIntervalDays")}
               />
+              {avisoDoInteiro("installmentIntervalDays")}
               <p className="field__hint">Vazio = 30 dias.</p>
             </div>
             <div className="field field--narrow">
@@ -295,7 +364,7 @@ export function QuoteConditionsForm({
             <button
               type="button"
               className="btn btn--secondary"
-              disabled={simulando || temPercentualIlegivel}
+              disabled={simulando || temCondicaoIlegivel}
               onClick={() => void simular()}
             >
               {simulando ? "Simulando…" : "Simular"}
@@ -304,8 +373,8 @@ export function QuoteConditionsForm({
           <button
             type="button"
             className="btn btn--secondary"
-            disabled={saving || !sujo || temPercentualIlegivel}
-            onClick={() => onSave(paraEnvio(campos))}
+            disabled={saving || !sujo || temCondicaoIlegivel}
+            onClick={salvar}
           >
             Salvar condições
           </button>

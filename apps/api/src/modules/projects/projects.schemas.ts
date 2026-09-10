@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LIMITES_INTEIROS_DAS_CONDICOES } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
 import { CASAS_PRECO_COMERCIAL, optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
@@ -121,13 +122,23 @@ export const updateQuoteVersionSchema = z.object({
   paymentMethod: z.enum(["CASH", "INSTALLMENTS"]).optional(),
   // Entrada de 100% seria a proposta à vista com outro nome.
   downPaymentPercent: optionalPercent(99.99),
+  // Os tetos são os mesmos que a tela aplica: uma fonte só, em @veridi/shared
+  // (QUOTE-INT-FIELDS-01). O mínimo é o `> 0` de `optionalPositiveInt`.
   installmentCount: optionalPositiveInt.refine(
-    (value) => value === undefined || value === null || value <= 120,
-    { message: "No máximo 120 parcelas" },
+    (value) =>
+      value === undefined ||
+      value === null ||
+      value <= LIMITES_INTEIROS_DAS_CONDICOES.installmentCount.maximo,
+    { message: `No máximo ${LIMITES_INTEIROS_DAS_CONDICOES.installmentCount.maximo} parcelas` },
   ),
   installmentIntervalDays: optionalPositiveInt.refine(
-    (value) => value === undefined || value === null || value <= 365,
-    { message: "Intervalo entre parcelas: no máximo 365 dias" },
+    (value) =>
+      value === undefined ||
+      value === null ||
+      value <= LIMITES_INTEIROS_DAS_CONDICOES.installmentIntervalDays.maximo,
+    {
+      message: `Intervalo entre parcelas: no máximo ${LIMITES_INTEIROS_DAS_CONDICOES.installmentIntervalDays.maximo} dias`,
+    },
   ),
   monthlyInterestPercent: optionalPercent(100),
 });

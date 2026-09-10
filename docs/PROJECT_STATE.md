@@ -815,19 +815,27 @@ pendência de envio — e o servidor compara cada campo com o gravado, em
 Mudança real de quantidade ou de unidade continua soltando o preço, como §74
 manda. Zero migration.
 
+## Texto em campo inteiro não apaga o gravado (QUOTE-INT-FIELDS-01, 2026-09-10)
+
+**Integridade antes de estrutura, fechado.** `abc` no prazo virava `NaN`, o
+JSON escrevia `null`, e salvar apagava o prazo gravado sem aviso. Agora prazo,
+parcelas e intervalo passam por uma leitura estrita
+([`integer-input.ts`](../apps/web/src/lib/integer-input.ts)): só dígitos, com
+espaço nas pontas e zero à esquerda. O resto fica no campo como digitado, com o
+erro ao lado, "Alterações não salvas", salvar e simular presos e nenhuma
+requisição — e o envio continua preso pela pendência. Vazio segue sendo "não
+informado". Os limites são os da API, de uma fonte só
+(`LIMITES_INTEIROS_DAS_CONDICOES`, em `@veridi/shared`). Regra durável: §48.
+Zero migration; o servidor já recusava o texto, e continua recusando.
+
 ## Próxima prioridade
 
-**QUOTE-INT-FIELDS-01** — primeiro da fila viva, promovido pelo PO em
-2026-09-10 pela mesma prioridade de integridade: prazo, parcelas e intervalo
-aceitam texto, e salvar pode APAGAR o valor gravado em silêncio. **Não
-iniciado.**
+**FORM-UOM-01** — primeiro da fila viva. A Formulação real já oferece a
+unidade certa — `<select>` filtrado pela dimensão do Item —; o que sobra é o
+**Modelo de Formulação**, onde a unidade ainda é texto livre, e unidade é dado
+estrutural que alimenta conversão, custo e produção. **Não iniciado.**
 
-**FORM-UOM-01** — logo depois. A Formulação real já oferece a unidade certa —
-`<select>` filtrado pela dimensão do Item —; o que sobra é o **Modelo de
-Formulação**, onde a unidade ainda é texto livre, e unidade é dado estrutural
-que alimenta conversão, custo e produção. **Não iniciado.**
-
-**QUOTE-DUPLICATE-01** — terceiro da fila, e o **gate de preço foi resolvido**
+**QUOTE-DUPLICATE-01** — segundo da fila, e o **gate de preço foi resolvido**
 pelo PO em 2026-09-10: sem herança silenciosa de `unitPrice`, com escolha
 explícita entre manter os preços da versão de origem e revisá-los, nenhuma
 opção pré-marcada. O que sobra de trabalho é escolher a versão de ORIGEM

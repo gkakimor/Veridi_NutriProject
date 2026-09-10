@@ -1,5 +1,11 @@
-import type { QuotePaymentMethod, QuoteVersionDTO, UpdateQuoteVersionInput } from "@veridi/shared";
+import type {
+  LIMITES_INTEIROS_DAS_CONDICOES,
+  QuotePaymentMethod,
+  QuoteVersionDTO,
+  UpdateQuoteVersionInput,
+} from "@veridi/shared";
 import { parseDecimalInput } from "../../lib/decimal-input";
+import { lerInteiroOpcional } from "../../lib/integer-input";
 
 /**
  * O rascunho das condições comerciais da proposta — QUOTE-DRAFT-STATE-01.
@@ -38,6 +44,29 @@ export interface CamposDasCondicoes {
 
 export type ChaveDaCondicao = keyof CamposDasCondicoes;
 
+/** Os inteiros das condições — as chaves dos limites que a API aplica. */
+export type ChaveInteiraDaCondicao = keyof typeof LIMITES_INTEIROS_DAS_CONDICOES;
+
+/** Como cada condição é escrita e lida. */
+export type TipoDaCondicao = "data" | "inteiro" | "texto" | "percentual" | "opcao";
+
+/**
+ * A classificação das nove condições, num lugar só. O tipo exige uma entrada
+ * por chave — condição nova sem classificação não compila —, e é esta tabela
+ * que decide como cada campo se compara (QUOTE-INT-FIELDS-01).
+ */
+export const TIPO_DA_CONDICAO: Record<ChaveDaCondicao, TipoDaCondicao> = {
+  validUntil: "data",
+  leadTimeDays: "inteiro",
+  commercialNotes: "texto",
+  discountPercent: "percentual",
+  paymentMethod: "opcao",
+  downPaymentPercent: "percentual",
+  installmentCount: "inteiro",
+  installmentIntervalDays: "inteiro",
+  monthlyInterestPercent: "percentual",
+};
+
 export interface RascunhoDasCondicoes {
   /** A versão a que o rascunho pertence — identidade, nunca o objeto da leitura. */
   versaoId: string;
@@ -67,7 +96,22 @@ export function camposDe(quote: QuoteVersionDTO): CamposDasCondicoes {
 
 export function paraEnvio(campos: CamposDasCondicoes): UpdateQuoteVersionInput {
   const texto = (value: string) => (value.trim() === "" ? null : value.trim());
-  const inteiro = (value: string) => (value.trim() === "" ? null : Number(value));
+  /*
+   * Inteiro passa pela leitura estrita (QUOTE-INT-FIELDS-01). Ilegível não tem
+   * representação no pedido: `Number("abc")` era `NaN`, o JSON escrevia `null`,
+   * e o valor gravado era apagado. Salvar e simular ficam presos enquanto
+   * houver inteiro ilegível na tela — chegar aqui assim é defeito, e falha alto.
+   *
+   * À vista, parcelas e intervalo não aparecem nem valem (o servidor os limpa):
+   * o texto que ficou escondido neles não vai e não trava.
+   */
+  const parcelado = campos.paymentMethod === "INSTALLMENTS";
+  const inteiro = (value: string, emVigor = true) => {
+    const leitura = lerInteiroOpcional(value);
+    if (leitura.tipo === "valido") return leitura.valor;
+    if (leitura.tipo === "vazio" || !emVigor) return null;
+    throw new Error("Inteiro ilegível não vai ao servidor.");
+  };
   /*
    * Percentual passa pelo parser central. O `?? value.trim()` só existe para
    * o caso impossível: os botões ficam desabilitados enquanto algum
@@ -83,38 +127,38 @@ export function paraEnvio(campos: CamposDasCondicoes): UpdateQuoteVersionInput {
     discountPercent: percentual(campos.discountPercent),
     paymentMethod: campos.paymentMethod,
     downPaymentPercent: percentual(campos.downPaymentPercent),
-    installmentCount: inteiro(campos.installmentCount),
-    installmentIntervalDays: inteiro(campos.installmentIntervalDays),
+    installmentCount: inteiro(campos.installmentCount, parcelado),
+    installmentIntervalDays: inteiro(campos.installmentIntervalDays, parcelado),
     monthlyInterestPercent: percentual(campos.monthlyInterestPercent),
   };
 }
 
 /**
- * Cada condição na forma em que se compara: o valor que ela manda ao servidor.
+ * Uma condição na forma em que se compara: o valor que ela mandaria ao
+ * servidor.
  *
  * Percentual viaja como texto decimal, e "7,5", "7.50" e "7.5" são o mesmo
  * desconto — comparar o texto diria que há o que salvar logo depois de salvar,
- * porque o servidor devolve `7.5000`. O retorno exige uma entrada por chave:
- * condição nova que não passe por aqui não compila, e é daqui que a comparação
- * tira a lista do que percorrer.
+ * porque o servidor devolve `7.5000`. Inteiro passa pela leitura estrita:
+ * " 030 " é 30. O ILEGÍVEL — inteiro ou percentual — é um valor próprio, que
+ * nunca empata com vazio nem com número: "abc" sobre um campo vazio continua
+ * sendo alteração (QUOTE-INT-FIELDS-01).
  */
-function comparavel(campos: CamposDasCondicoes): Record<ChaveDaCondicao, unknown> {
-  const envio = paraEnvio(campos);
-  const numero = (valor: string | null | undefined) =>
-    valor !== null && valor !== undefined && parseDecimalInput(valor) !== null
-      ? Number(valor)
-      : valor;
-  return {
-    validUntil: envio.validUntil,
-    leadTimeDays: envio.leadTimeDays,
-    commercialNotes: envio.commercialNotes,
-    discountPercent: numero(envio.discountPercent),
-    paymentMethod: envio.paymentMethod,
-    downPaymentPercent: numero(envio.downPaymentPercent),
-    installmentCount: envio.installmentCount,
-    installmentIntervalDays: envio.installmentIntervalDays,
-    monthlyInterestPercent: numero(envio.monthlyInterestPercent),
-  };
+function valorComparavel(tipo: TipoDaCondicao, texto: string): unknown {
+  // Opção vem do select, e se compara como veio.
+  if (tipo === "opcao") return texto;
+  const limpo = texto.trim();
+  if (tipo === "inteiro") {
+    const leitura = lerInteiroOpcional(texto);
+    if (leitura.tipo === "vazio") return null;
+    return leitura.tipo === "valido" ? leitura.valor : `ilegível:${limpo}`;
+  }
+  if (limpo === "") return null;
+  if (tipo === "percentual") {
+    const lido = parseDecimalInput(limpo);
+    return lido === null ? `ilegível:${limpo}` : Number(lido);
+  }
+  return limpo;
 }
 
 /**
@@ -127,11 +171,10 @@ export function condicoesAlteradas(
   de: CamposDasCondicoes,
   para: CamposDasCondicoes,
 ): ChaveDaCondicao[] {
-  const antes = comparavel(de);
-  const depois = comparavel(para);
-  return (Object.keys(antes) as ChaveDaCondicao[]).filter(
-    (chave) => antes[chave] !== depois[chave],
-  );
+  return (Object.keys(TIPO_DA_CONDICAO) as ChaveDaCondicao[]).filter((chave) => {
+    const tipo = TIPO_DA_CONDICAO[chave];
+    return valorComparavel(tipo, de[chave]) !== valorComparavel(tipo, para[chave]);
+  });
 }
 
 export function rascunhoDe(quote: QuoteVersionDTO): RascunhoDasCondicoes {

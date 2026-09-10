@@ -3287,6 +3287,19 @@ gravado até o gravado alcançar a tela. Pendência é valor contra o gravado, n
 foco: o campo focado com o valor gravado não segura nada. Não se descarta o
 digitado para destravar, e não se salva por conta própria para enviar.
 
+### Entrada inválida nunca equivale a "não informado"
+
+QUOTE-INT-FIELDS-01, 2026-09-10. Campo vazio é "não informado", e limpar um
+campo opcional é decisão legítima. Texto que a tela não consegue ler é outra
+coisa, e **nunca vira vazio, zero, número truncado ou arredondado, nem campo
+omitido**: fica no campo como foi digitado, com o erro ao lado, conta como
+alteração pendente e trava salvar até a pessoa corrigir ou apagar de propósito.
+Antes, `abc` no prazo virava `NaN`, o JSON escrevia `null`, e salvar apagava o
+prazo gravado.
+
+A tela recusa o que o servidor recusaria, com os MESMOS limites, tirados de uma
+fonte só — e o servidor continua recusando por conta própria.
+
 ### Busca de entidade enxerga o conjunto elegível inteiro
 
 Um campo que parece pesquisar o catálogo não pode pesquisar apenas os
