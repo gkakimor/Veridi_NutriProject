@@ -723,10 +723,29 @@ reprovavam antes da correção — os dois defeitos e a data errada no texto da
 última compra; os outros oito são guardas de não-regressão, entre eles a
 não-antecipação do dia seguinte.
 
+**PROJECT-CUSTOMER-CONTACT-01 fechado. Regra durável: §82.** Do walkthrough
+real: para ligar para o cliente, quem estava dentro de um Projeto saía da tela e
+abria o cadastro. O Resumo do Projeto passou a mostrar telefone e e-mail do
+Cliente, ao lado do link que já existia.
+
+É PROJEÇÃO, não cópia: `ProjectDTO` ganhou `customerPhone` e `customerEmail`
+lidos do `Customer` que o `include` do detalhe já trazia — zero consulta a mais,
+zero coluna nova em `Project`, zero snapshot. Trocar o telefone no cadastro muda
+o que o Projeto mostra na leitura seguinte, e é isso que o E2E prova clicando.
+Contraste com o Orçamento, que continua congelando cliente e endereço no envio:
+documento congela, ficha de trabalho projeta.
+
+**"Contato principal" não existe no domínio** — `Customer` tem `phone` e
+`email`, um de cada. Nada foi inventado para preencher a palavra do pedido.
+Sem WhatsApp, sem `mailto:`, sem ação de copiar: o ganho pedido era o número
+estar visível.
+
 ## Próxima prioridade
 
-**P1 da fila viva** — PROJECT-CUSTOMER-CONTACT-01, primeiro da fila desde que
-CUSTOMER-CEP-02 fechou. Leitura, sem duplicar dado. **Não iniciado.**
+**P1 da fila viva** — QUOTE-DUPLICATE-01, primeiro da fila desde que
+PROJECT-CUSTOMER-CONTACT-01 fechou. **Tem gate de PO antes do build:** decidir
+se "duplicar como nova versão" copia `unitPrice` de uma versão SENT não aceita —
+comportamento que §74 removeu de propósito. **Não iniciado.**
 
 **COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
 mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum

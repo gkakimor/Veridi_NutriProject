@@ -127,7 +127,7 @@ export const comercialTopics = {
     module: "comercial",
     title: "O que a ficha do Projeto reúne — e o que a aprovação libera",
     summary:
-      "Esta é a ficha completa de uma negociação: o cliente, os produtos que o projeto desenvolve, a cadeia de custo e preço de cada um, as versões de orçamento e as amostras já feitas. O preço de cada linha da proposta ou vem de uma faixa da precificação ativa do produto, ou é digitado à mão — e a proposta continua editável só enquanto é rascunho. É a proposta aceita que autoriza aprovar o projeto, e é a aprovação que promove o produto de desenvolvimento a produto operacional.",
+      "Esta é a ficha completa de uma negociação: o cliente — com telefone e e-mail lidos do cadastro dele, sempre atuais —, os produtos que o projeto desenvolve, a cadeia de custo e preço de cada um, as versões de orçamento e as amostras já feitas. O preço de cada linha da proposta ou vem de uma faixa da precificação ativa do produto, ou é digitado à mão — e a proposta continua editável só enquanto é rascunho. É a proposta aceita que autoriza aprovar o projeto, e é a aprovação que promove o produto de desenvolvimento a produto operacional.",
     concepts: [
       {
         term: "Produto técnico",
