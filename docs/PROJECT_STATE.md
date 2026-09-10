@@ -761,10 +761,19 @@ Pedido e virou `lib/payment-condition.ts`: uma função, duas telas.
 
 ## Próxima prioridade
 
-**QUOTE-DUPLICATE-01** — primeiro da fila desde que
-PROJECT-COMMERCIAL-SUMMARY-01 fechou. **Gate de PO antes do build:** decidir
-se "duplicar como nova versão" copia `unitPrice` de uma versão SENT não aceita —
-comportamento que §74 removeu de propósito. **Não iniciado.**
+**P1 da fila viva, reordenado em 2026-09-10** — QUOTE-DRAFT-STATE-01 primeiro
+(as condições digitadas e ainda não salvas do Orçamento somem quando uma linha é
+alterada: entrada válida perdida sem aviso, causa já localizada), depois
+FORM-UOM-01 (unidade de medida é texto livre no Modelo de Formulação, e unidade
+é dado estrutural que alimenta conversão, custo e produção). Os dois **não
+iniciados**.
+
+**QUOTE-DUPLICATE-01** — terceiro da fila, e o **gate de preço foi resolvido**
+pelo PO em 2026-09-10: sem herança silenciosa de `unitPrice`, com escolha
+explícita entre manter os preços da versão de origem e revisá-los, nenhuma
+opção pré-marcada. O que sobra de trabalho é escolher a versão de ORIGEM
+(hoje `createQuoteVersion` sempre parte da mais recente) e a confirmação que
+apresenta a escolha. **Não iniciado.**
 
 **COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
 mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum

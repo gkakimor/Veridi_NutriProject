@@ -36,11 +36,13 @@ faz primeiro e estava espalhada por cinco lugares.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
-| **P1-2** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-3** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-4** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-5** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | QUOTE-DRAFT-STATE-01 | A · P1 | Entrada válida do operador some sem aviso. Causa localizada, correção de estado de formulário |
+| **P1-2** | FORM-UOM-01 | A · P1 | Unidade é dado ESTRUTURAL — alimenta conversão, custo e produção. Texto livre ali é risco de integridade; a duplicação de orçamento é produtividade |
+| **P1-3** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
+| **P1-4** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-5** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-6** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
@@ -276,6 +278,89 @@ nomenclatura sem necessidade não é parte desta capability.
 
 ### P1 — próximas correções
 
+#### QUOTE-DRAFT-STATE-01 — condições não salvas do Orçamento somem ao mexer numa linha
+
+Finding de PROJECT-COMMERCIAL-SUMMARY-01 (2026-09-10), encontrado ao escrever o
+E2E: o roteiro só passou depois que a validade foi digitada **depois** de a
+linha assentar. Não é bug de domínio financeiro — é perda silenciosa de entrada
+válida, e o ERP tem de proteger o trabalho em andamento em vez de exigir que o
+operador aprenda a salvar antes de adicionar produto.
+
+**O percurso.** Na proposta em rascunho a pessoa digita a validade (ou o
+desconto, ou o prazo), **não** clica em "Salvar condições" e adiciona ou altera
+uma linha. A mutação da linha recarrega o Projeto inteiro; o formulário de
+condições é remontado a partir do dado que voltou do servidor, e o que estava
+digitado desaparece sem aviso. Pior: "Salvar condições" fica desabilitado logo
+depois, porque o formulário se considera limpo — a tela informa "nada a salvar"
+sobre um valor que a pessoa acabou de escrever.
+
+**A causa, localizada.** `QuoteConditionsForm.tsx:104-116`:
+
+```
+const original = useMemo(() => camposDe(quote), [quote]);
+useEffect(() => { setCampos(original); ... }, [original]);
+```
+
+`quote` é um objeto NOVO a cada recarga, então `original` muda de identidade
+mesmo quando o conteúdo gravado é idêntico, e o efeito descarta o rascunho de
+tela. O comentário ao lado assume "recarregar ou trocar de versão descarta" —
+mas não distingue **a mesma versão recarregada** de **outra versão escolhida**,
+e só o segundo caso justifica descartar.
+
+**São nove campos, não um.** Todos saem do mesmo `Campos` e morrem pelo mesmo
+efeito: `validUntil`, `leadTimeDays`, `commercialNotes`, `discountPercent`,
+`paymentMethod`, `downPaymentPercent`, `installmentCount`,
+`installmentIntervalDays`, `monthlyInterestPercent`. Corrigir só a validade
+deixaria os outros oito com o mesmo defeito.
+
+**Auto-salvar não é a solução assumida.** Gravar as condições por conta própria
+ao adicionar um produto produziria efeito comercial que ninguém pediu. A
+preferência é preservar o estado sujo enquanto a versão aberta for a MESMA;
+trocar de versão de verdade é outra decisão — avisar, salvar ou descartar —, e
+essa fica para o discovery da implementação, sem ampliar o item.
+
+**Prova que a correção precisa passar:** abrir um rascunho, digitar a validade,
+não salvar, adicionar uma linha, e a validade continuar no campo, com o botão
+ainda refletindo que há alteração pendente; salvar e o servidor receber o valor
+digitado.
+
+#### FORM-UOM-01 — unidade de medida é texto livre no Modelo de Formulação
+
+Finding de 2026-09-10. Unidade é conceito ESTRUTURAL: alimenta conversão,
+necessidade, custo e produção. No Modelo de Formulação ela é digitada à mão.
+
+**A auditoria mostrou que o padrão certo já existe — e que só o Modelo ficou
+para trás.** A divergência é entre as duas telas, e é ela que o item fecha:
+
+| | Formulação (versão real) | Modelo de Formulação |
+|---|---|---|
+| Unidade da base | derivada do Item de saída, exibida, não digitável | `<input type="text">` livre (`FormulationTemplateDetailPage.tsx:463`) |
+| Unidade do componente | `<select>` filtrado pela DIMENSÃO do Item (`unitOptionsForRow`, `FormulationVersionPage.tsx:738-742`) | `<input type="text">` livre (`:532`) |
+| Backend | `isUomCompatible(component.unitCode, item.unitCode, units)` em três pontos de `formulations.service.ts` | `z.string().trim().min(1).max(20)` — não confere catálogo nem dimensão |
+| Banco | — | `FormulationTemplateVersion.outputUnitCode` **tem** FK para `UnitOfMeasure`; `FormulationTemplateComponent.unitCode` é `String` **sem** FK |
+
+Ou seja: hoje o componente de um Modelo aceita `KG`, `kgs`, `quilo` ou `abc`, e
+nada recusa antes do banco. A unidade da base é salva por uma FK, então texto
+inválido é recusado — mas pelo erro do banco, não por uma regra que explique.
+
+**A regra proposta:** unidade vem do cadastro oficial de UOM, nunca de texto
+livre, no Modelo **e** na Formulação; e a lista oferecida é filtrada pelo que o
+motor sabe converter — massa oferece `kg`/`g`/`mg`, e um item de contagem como
+uma caixa de papelão não passa a aceitar `kg` só porque `kg` existe no catálogo.
+Não nasce catálogo novo: `UnitOfMeasure` e `isUomCompatible` já são a fundação,
+e a Formulação já as usa.
+
+**A API precisa ficar fail-closed junto.** Dropdown é conveniência; a recusa é
+regra. Hoje a schema do Modelo aceita qualquer string de até 20 caracteres, e
+um cliente que não seja a tela grava o que quiser.
+
+**Migration: AUDITAR, não assumir.** As colunas já guardam código de UOM, e o
+`outputUnitCode` já é FK — o que falta é a FK do `unitCode` do componente. Se a
+implementação concluir que precisa criá-la, é **STOP GATE**: dado legado com
+unidade fora do catálogo travaria a migration, e essa é uma decisão de domínio,
+não um detalhe técnico.
+
+
 #### INDUSTRIAL-RATE-VALIDITY-01 — vigência de tarifa industrial — **RESOLVIDO em 2026-09-09**
 
 Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md), **§79**.
@@ -377,7 +462,7 @@ OP é apagada; a cancelada continua no histórico.
 **F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
 momentos diferentes sem dizer qual é qual".
 
-#### QUOTE-DUPLICATE-01 — "duplicar como nova versão" — CONFLITO A RESOLVER
+#### QUOTE-DUPLICATE-01 — "duplicar como nova versão" — GATE DE PREÇO RESOLVIDO
 
 Vindo do walkthrough real (2026-09-09). A auditoria de código mostra que **a
 maior parte disto já existe**, e que um dos comportamentos pedidos foi
@@ -403,20 +488,46 @@ O que o pedido traz de NOVO, e vale trabalho:
   rascunho em vez de criar — correto para não multiplicar negociação paralela,
   mas é o que alguém pedindo "duplicar" leria como ação ignorada.
 
-**O conflito.** O handoff pede "copiar preços". §74 decidiu o contrário: preço
-só nasce preenchido no único caso seguro — condição ACEITA do mesmo projeto e
-produto, ainda vigente, mesma quantidade física — e aí com proveniência
-(`INHERITED_AGREEMENT`). Copiar `unitPrice` em silêncio era exatamente o defeito
-que COM-PRICE corrigiu: "a proposta nova saía com o preço da anterior sem que
-ninguém tivesse decidido mantê-lo". Duplicar a partir de uma versão **SENT**,
-como no exemplo V3 → V4, agrava: proposta enviada e não aceita não é acordo.
+**O conflito era o preço.** O handoff original pedia "copiar preços". §74
+decidiu o contrário: preço só nasce preenchido no único caso seguro — condição
+ACEITA do mesmo projeto e produto, ainda vigente, mesma quantidade física — e
+aí com proveniência (`INHERITED_AGREEMENT`). Copiar `unitPrice` em silêncio era
+exatamente o defeito que COM-PRICE corrigiu.
 
-Decisão necessária do PO antes de implementar: duplicar traz o preço como
-`MANUAL` sem proveniência (reabre o buraco de §74), ou traz sem preço e a pessoa
-decide por linha (mantém §74 e torna "duplicar" um atalho de condições
-comerciais, não de preço)? Também **não alterar V3** precisa ser lido junto com
-§70: aceitar uma versão nova supera as aceitas em aberto, e isso é mudança de
-status na anterior — legítima e já decidida, mas é "alterar V3" em algum sentido.
+### GATE RESOLVIDO — decisão do PO em 2026-09-10
+
+**Não há herança silenciosa de preço, e passa a haver escolha explícita.** As
+duas coisas ao mesmo tempo: §74 continua de pé porque o silêncio acabou, não
+porque a cópia foi proibida.
+
+A ação abre uma confirmação que mostra a versão de ORIGEM e o estado real dela
+("V3 · Enviado"), e oferece duas opções:
+
+- **Manter os preços da V3** — copia `unitPrice` exatamente da versão escolhida;
+- **Revisar os preços** — a versão nova nasce sem `unitPrice` nas linhas que
+  exigem decisão, seguindo o comportamento canônico de hoje.
+
+**Nenhuma vem pré-marcada, e a confirmação não avança sem escolha.** Um default
+seria a herança silenciosa de volta, com um passo a mais.
+
+**Origem SENT ou REJECTED é REFERÊNCIA, não acordo.** A copy não pode chamar
+aquilo de "preço acordado": proposta enviada e não aceita é o que a Veridi
+ofereceu, não o que o cliente aceitou. Copiar continua permitido — depois da
+escolha. Origem ACCEPTED pode ser descrita como o preço da condição aceita, e
+mesmo assim a versão nova nasce `DRAFT` e o preço segue editável: duplicar não
+transforma nada em acordo.
+
+**Fora deste corte:** nenhuma terceira opção de "atualizar para o preço atual".
+Rebase e reprecificação continuam ação separada e explícita, e nada de
+recalcular CMV, precificação ou preço sugerido por causa da duplicação.
+Snapshot de custo histórico não é copiado como se fosse cálculo corrente — a
+versão nova congela o que for dela no envio, pelo mecanismo que já existe.
+
+**O que sempre copia** continua sendo o que `createQuoteVersion` já copia:
+produtos, quantidades, unidades, ordem, observações, condições de pagamento,
+desconto e prazo. A origem não é alterada — lida junto com §70, que já decidiu
+que aceitar uma versão nova supera as aceitas em aberto, e essa mudança de
+status na anterior é legítima e separada desta ação.
 
 #### CUSTOMER-COMMERCIAL-STATUS-01 — situação comercial viva do Cliente
 
@@ -884,7 +995,7 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-4, SUPPLIER-ADDRESS-01 em P1-5) — mas a
+(COST-RESOURCE-MULTIPLIER-01 em P1-6, SUPPLIER-ADDRESS-01 em P1-7) — mas a
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 
@@ -1082,10 +1193,13 @@ nada a implementar.
 A validação com a Veridi (#7, #11) é gate só para as regras que dependem do
 processo real do cliente. Não impede #8E, #8F e #8G quando o PO autorizar.
 
-**Três gates nasceram do walkthrough de 2026-09-09**, e os três são de decisão,
-não de código:
+**Três gates nasceram do walkthrough de 2026-09-09**, e um deles já foi
+respondido:
 
-- a pergunta de preço em QUOTE-DUPLICATE-01 — copiar preço reabre §74;
+- ~~a pergunta de preço em QUOTE-DUPLICATE-01~~ — **RESOLVIDA em 2026-09-10**:
+  sem herança silenciosa, com escolha explícita entre manter os preços da versão
+  de origem e revisá-los, e nenhuma opção pré-marcada. §74 continua de pé porque
+  o que acabou foi o silêncio, não a possibilidade de copiar;
 - a pergunta de sobreposição de vigência, que vale ao mesmo tempo para
   SUPPLIER-OFFER-OVERLAP-01 e para o resíduo 2 de INDUSTRIAL-RATE-VALIDITY-01;
 - **o que prova conversão** em CUSTOMER-COMMERCIAL-STATUS-01: "Projeto
