@@ -545,6 +545,7 @@ mudou.
 | **F-04-1** | "atinge 100%" exibido quando margem + comissão passa de 100 % | LOW | M |
 | **F-05-1** | R$ 0,04 entre Precificação e Orçamento (fronteira §60) sem explicação em nenhuma das telas | UX | XS |
 | **F-01-3** | "Consulta completa" só é alcançável de dentro do modal de edição | UX | S |
+| **F-11-1** | Sair de um documento por um `EntityLink` de cadastro não deixa caminho de volta | UX | S |
 
 ### Encerrados na triagem, sem trabalho
 
@@ -554,6 +555,20 @@ mudou.
 | **F-02-3** | DUPLICATE | É o **#4**, aceito com residual pelo PO em 2026-09-04: 117 px medidos então, 131 px agora. Mesma tabela, mesma causa |
 | **F-10-1** | DUPLICATE | É o próprio F-01-1 reconfirmado depois da aprovação do projeto |
 | **F-01-4** | DEFER | A ordem do menu é deliberada e está justificada em `navigation.ts:4` ("cadastro e configuração ficam no fim: não são operação diária"). Mudar é decisão de produto, não correção |
+
+**F-11-1 — o rastro que se perde ao clicar no Cliente.** Achado durante
+PROJECT-CUSTOMER-CONTACT-01 (2026-09-09), fora do escopo dela e **não
+corrigido de propósito**. Clicar no Cliente dentro de um Projeto leva a
+`/cadastros/clientes?ids=…&open=…`, onde a tela avisa que a lista está
+reduzida (`RecordContextChip`) e oferece "Limpar filtros" — mas não oferece
+volta ao Projeto. Quem saiu depende do botão do navegador, e o `FlowContext`
+(que existe para dizer de onde um documento veio) não cobre esta ida.
+
+Não é do Projeto: vale para todo `EntityLink` que sai de um documento para um
+CADASTRO. A resposta certa é uma só — o chip de contexto dizer de onde a
+pessoa veio e levar de volta —, e ela pertence à experiência de navegação
+contextual / Consulta do Cliente, não a esta capability. Registrar agora
+evita a correção pontual em uma tela, que é como a inconsistência nasce.
 
 **F-01-3 é parcialmente NOT_A_BUG.** A auditoria afirmou que código e nome do
 cliente não são clicáveis; `CustomersPage.tsx:212,236` mostra
