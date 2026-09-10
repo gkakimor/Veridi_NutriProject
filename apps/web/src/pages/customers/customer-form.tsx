@@ -12,6 +12,7 @@ import {
   maskZipCodeInput,
   formatZipCode,
   normalizeCnpj,
+  normalizeZipCode,
 } from "@veridi/shared";
 import { RelatedLinks } from "../../components/RelatedLinks";
 import { createCustomer, updateCustomer } from "../../lib/customers-api";
@@ -57,9 +58,33 @@ interface FormState {
   notes: string;
 }
 
-/** Campos que a consulta de CEP pode preencher. Número nunca entra. */
-type AddressField = "street" | "district" | "city" | "state";
-const CEP_FILLED_FIELDS: AddressField[] = ["street", "district", "city", "state"];
+/**
+ * O bloco de endereço — os seis campos que pertencem a UM CEP.
+ *
+ * Número e complemento entram na lista mesmo sem a consulta os conhecer, e é
+ * justamente por isso: um número digitado para o CEP anterior não é prova de
+ * nada no CEP novo. Deixá-lo na tela produz o endereço híbrido — a rua e a
+ * cidade de um CEP com o número de outro —, que é pior que o campo vazio,
+ * porque parece preenchido e vai impresso assim.
+ */
+type AddressField =
+  | "street"
+  | "number"
+  | "complement"
+  | "district"
+  | "city"
+  | "state";
+const CEP_OWNED_FIELDS: AddressField[] = [
+  "street",
+  "number",
+  "complement",
+  "district",
+  "city",
+  "state",
+];
+
+/** O subconjunto que a consulta sabe responder. Número nunca entra. */
+const CEP_ANSWERED_FIELDS = ["street", "district", "city", "state"] as const;
 
 type CepStatus = "idle" | "loading" | "found" | "not_found" | "unavailable";
 
@@ -145,15 +170,26 @@ export function useCustomerForm({
   const [cepStatus, setCepStatus] = useState<CepStatus>("idle");
 
   /**
-   * O que a última consulta escreveu, e para qual CEP. Serve à regra de
-   * sobrescrita: o que o operador digitou é dele; o que veio da consulta
-   * anterior pode ser trocado quando o CEP muda. Um `ref` basta — não é
-   * estado de renderização, e uma máquina de estados aqui seria exagero.
+   * Duas identidades de CEP, e só duas.
+   *
+   * `typedZip` é o CEP que está no campo AGORA. `addressZip` é o CEP a que o
+   * bloco de endereço na tela pertence — `""` quando ele não pertence a CEP
+   * nenhum, que é o endereço digitado à mão. Enquanto os dois são iguais, o
+   * endereço é do CEP que está na tela; quando divergem, ele deixou de ser
+   * confiável e some ANTES de qualquer consulta. Esperar a rede para parar de
+   * mostrar o endereço de um CEP debaixo de outro é exibir informação errada
+   * pelo tempo que o ViaCEP levar para responder — e ele pode não responder.
+   *
+   * Comparação por dígitos: `18270-000` e `18270000` são o mesmo CEP, e trocar
+   * a máscara não é trocar de endereço.
+   *
+   * `ref`, não estado: nenhum dos dois se desenha, e a resposta da consulta
+   * precisa ler o valor do instante em que ela VOLTA, não o da renderização em
+   * que ela partiu — ler o valor antigo é exatamente a corrida.
    */
-  const autoFilled = useRef<{ zip: string; values: Partial<Record<AddressField, string>> }>({
-    zip: "",
-    values: {},
-  });
+  const initialZip = normalizeZipCode(customer?.zipCode ?? "");
+  const typedZip = useRef(initialZip);
+  const addressZip = useRef(initialZip);
 
   function setField(field: keyof FormState, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -184,35 +220,73 @@ export function useCustomerForm({
     });
   }
 
+  /**
+   * O CEP mudou no campo. Aplica a máscara e, se o endereço na tela deixou de
+   * pertencer ao que está sendo digitado, apaga o bloco inteiro — aqui, sem
+   * rede no meio.
+   */
+  function setZipCode(raw: string) {
+    const masked = maskZipCodeInput(raw);
+    setField("zipCode", masked);
+
+    const digits = normalizeZipCode(masked);
+    if (digits === typedZip.current) return;
+    typedZip.current = digits;
+    setCepStatus("idle");
+
+    /*
+     * Endereço sem CEP dono é cadastro manual: um CEP digitado depois não o
+     * invalida, ele apenas completa o que estiver vazio. E endereço que ainda
+     * pertence ao CEP digitado continua sendo dele — trocar `18270-000` por
+     * `18270000` não é trocar de endereço.
+     */
+    if (addressZip.current === "" || digits === addressZip.current) return;
+
+    addressZip.current = "";
+    setForm((prev) => {
+      const next = { ...prev };
+      for (const field of CEP_OWNED_FIELDS) next[field] = "";
+      return next;
+    });
+  }
+
   async function handleZipLookup(raw: string) {
-    if (!isCompleteZipCode(raw)) return;
-    const digits = raw.replace(/\D/g, "");
-    // Mesmo CEP já consultado com sucesso: não repete a chamada.
-    if (autoFilled.current.zip === digits && cepStatus === "found") return;
+    const digits = normalizeZipCode(raw);
+    if (!isCompleteZipCode(digits)) return;
+    /*
+     * O endereço na tela já é DESTE CEP: não reconsulta e, sobretudo, não
+     * sobrescreve a correção que o operador fez sobre ele.
+     */
+    if (digits === addressZip.current) return;
 
     setCepStatus("loading");
     const result = await lookupCep(digits);
+
+    /**
+     * A guarda da corrida, antes de QUALQUER escrita — inclusive a do recado
+     * de erro. Entre o pedido e a resposta o operador pode ter digitado outro
+     * CEP, e resposta que não é do CEP atual não preenche campo nem fala na
+     * tela. Vale nos dois sentidos: a resposta atrasada de A não invade B, e a
+     * resposta rápida de A não repovoa o endereço enquanto B é esperado.
+     *
+     * A identidade é o próprio CEP consultado, não a ordem de chegada: duas
+     * respostas fora de ordem para o mesmo CEP dizem a mesma coisa, e a única
+     * pergunta que importa é se esta resposta ainda é sobre o que está na tela.
+     */
+    if (digits !== typedZip.current) return;
 
     if (result.status !== "found") {
       setCepStatus(result.status);
       return;
     }
 
-    /**
-     * Lido ANTES do `setForm`: o updater só roda na renderização seguinte, e
-     * até lá o `ref` já teria o resultado desta consulta — a comparação
-     * passaria a ser contra o valor novo e nada seria substituído.
-     */
-    const previousAuto = autoFilled.current.values;
-    autoFilled.current = { zip: digits, values: { ...result.address } };
-
+    addressZip.current = digits;
     setForm((prev) => {
       const next = { ...prev };
-      for (const field of CEP_FILLED_FIELDS) {
-        const current = prev[field];
-        // Preenche o vazio; substitui apenas o que a consulta anterior pôs.
-        const overwritable = current.trim() === "" || current === previousAuto[field];
-        if (overwritable) next[field] = result.address[field];
+      for (const field of CEP_ANSWERED_FIELDS) {
+        // Só o vazio é preenchido: sob o mesmo CEP o que o operador digitou é
+        // dele. Na TROCA de CEP não há conflito — o bloco já foi apagado.
+        if (prev[field].trim() === "") next[field] = result.address[field];
       }
       return next;
     });
@@ -316,7 +390,7 @@ export function useCustomerForm({
     error,
     fieldErrors,
     cepStatus,
-    setCepStatus,
+    setZipCode,
     handleBlur,
     handleZipLookup,
     handleSubmit,
@@ -333,7 +407,7 @@ export function CustomerFormFields({
   setField,
   error,
   cepStatus,
-  setCepStatus,
+  setZipCode,
   handleBlur,
   handleZipLookup,
   handleSubmit,
@@ -476,8 +550,9 @@ export function CustomerFormFields({
       </FormSection>
 
       {/* Endereço estruturado — usado depois em OP, documentos GMP e
-          expedição. O CEP preenche o que estiver vazio; o operador manda
-          no que digitou. */}
+          expedição. O endereço pertence a UM CEP: sob o mesmo CEP a consulta
+          só preenche o que está vazio e a correção manual manda; trocar o CEP
+          apaga o bloco inteiro, número e complemento inclusive. */}
       <FormSection title="Endereço">
         <div className="field-grid-2">
           <div className="field field--narrow">
@@ -488,11 +563,7 @@ export function CustomerFormFields({
               inputMode="numeric"
               placeholder="00000-000"
               value={form.zipCode}
-              onChange={(event) => {
-                const masked = maskZipCodeInput(event.target.value);
-                setField("zipCode", masked);
-                if (cepStatus !== "idle") setCepStatus("idle");
-              }}
+              onChange={(event) => setZipCode(event.target.value)}
               onBlur={() => {
                 handleBlur("zipCode");
                 void handleZipLookup(form.zipCode);
@@ -502,7 +573,13 @@ export function CustomerFormFields({
                 ? { "aria-describedby": "customer-zipCode-error" }
                 : {})}
             />
-            {fieldError("zipCode")}
+            {fieldError("zipCode") ?? (
+              /* Os campos ficarem em branco de uma vez assusta quem não sabe
+                 por quê. Dizer antes é mais barato que explicar depois. */
+              <p className="field__hint">
+                Trocar o CEP limpa o endereço anterior antes da nova consulta.
+              </p>
+            )}
             {cepStatus !== "idle" && cepStatus !== "found" && (
               <p
                 className={

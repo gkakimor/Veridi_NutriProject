@@ -36,13 +36,12 @@ faz primeiro e estava espalhada por cinco lugares.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | CUSTOMER-CEP-02 | A · P1 | Decisão de PO já fechada, e tem corrida real de rede. **Primeiro da fila** desde que INDUSTRIAL-RATE-VALIDITY-01 fechou |
-| **P1-2** | PROJECT-CUSTOMER-CONTACT-01 | A · P1 | Leitura, sem duplicar dado |
-| **P1-3** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
-| **P1-4** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-5** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-6** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente |
+| **P1-1** | PROJECT-CUSTOMER-CONTACT-01 | A · P1 | Leitura, sem duplicar dado. **Primeiro da fila** desde que CUSTOMER-CEP-02 fechou |
+| **P1-2** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
+| **P1-3** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-4** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-5** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-6** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
@@ -378,27 +377,6 @@ OP é apagada; a cancelada continua no histórico.
 **F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
 momentos diferentes sem dizer qual é qual".
 
-#### CUSTOMER-CEP-02 — trocar o CEP tem de trocar o endereço inteiro
-
-Vindo do walkthrough real (2026-09-09). **Decisão de PO já fechada**, então não
-é gate: trocar o CEP por OUTRO limpa logradouro, número, complemento, bairro,
-cidade e UF, e só depois consulta o CEP novo.
-
-Comportamento atual (`customer-form.tsx:187`): a consulta preenche o campo vazio
-e substitui **apenas** o que a consulta anterior havia posto — o que alguém
-digitou à mão sobrevive à troca de CEP. Era deliberado para não apagar digitação;
-o efeito real é um endereço híbrido de dois CEPs, e o número da casa antiga
-colado na rua nova é o pior caso porque parece plausível.
-
-Duas exigências que vêm junto:
-
-- **falha do ViaCEP não restaura o endereço anterior.** Os campos ficam limpos e
-  manuais — voltar o endereço velho afirmaria que ele pertence ao CEP novo;
-- **corrida de rede.** Hoje `handleZipLookup` é um `await` sem sequência: CEP A →
-  CEP B → a resposta atrasada de A ainda preenche os campos de B. Precisa de
-  guarda por requisição (o resultado que chega fora de ordem é descartado), não
-  de debounce maior.
-
 #### PROJECT-CUSTOMER-CONTACT-01 — contato do cliente visível no Projeto
 
 Vindo do walkthrough real (2026-09-09). Quick win de leitura.
@@ -695,6 +673,37 @@ constantes). `scripts/prisma-bin.mjs`, criado no MIG-ORDER-01b, já resolve o
 binário do Prisma sem shell — a correção é trocar a chamada por ele. Ficou
 fora daquela capability de propósito, para não aumentar escopo.
 
+
+### 17. `pnpm test` da API reprova numa janela diária de 3 horas — MEDIUM
+
+Achado de 2026-09-09, durante CUSTOMER-CEP-02. **Não é defeito de produto, e
+não vem daquela branch:** medido no `d640bf2` limpo, sem nenhuma alteração, o
+resultado é o mesmo — `63 failed | 1349 passed (1412)`, 19 arquivos de
+`apps/api`.
+
+A causa é a asimetria de leitura entre instante e dia, do lado das FIXTURES. O
+helper `hoje()` de `supplier-items.test.ts` (e o mesmo padrão em outros
+arquivos) escreve `new Date().toISOString()` — o INSTANTE — numa coluna que o
+domínio lê como marcador de dia: `offerValidityToday` compara
+`diaDaColunaDeData(effectiveAt)`, que lê em **UTC**, contra `hojeComercial()`,
+que lê em **America/Sao_Paulo**. Entre 00:00 e 03:00 UTC — 21:00 a 23:59 em São
+Paulo — o dia UTC já virou e o comercial não, então uma oferta criada "agora"
+volta `NOT_YET_EFFECTIVE`.
+
+Nesta máquina, que roda em `America/Vancouver`, a janela cai às 17:00–20:00
+locais, que é quando a medição foi feita. Em CI que roda em UTC a janela existe
+igual — só cai em outro horário local.
+
+**O produto não tem esse defeito**: a tela manda `<input type="date">`, que
+materializa `T00:00:00Z` e é lido como o dia certo. Quem afirma o instante é só
+a fixture. A correção é a fixture escrever um marcador de dia comercial
+(`marcadorDeDia(hojeComercial(new Date()))`), não `toISOString()`.
+
+Ficou fora de CUSTOMER-CEP-02 de propósito: são 63 testes em 19 arquivos, do
+lado do custo, e a branch era de runtime do frontend. Enquanto não for
+corrigido, `pnpm test` é confiável fora da janela e enganoso dentro dela — o
+que é pior que falhar sempre.
+
 ---
 
 ## E. Watchlist — observado, sem ação conhecida
@@ -895,9 +904,10 @@ consulta de CEP já funcionando em `lib/cep-api.ts`.
 
 Restrição durável: **reusar a mesma fundação de endereço e CEP do Cliente**. Não
 existe um segundo ViaCEP, não existe uma segunda máscara e não existe uma segunda
-regra de "CEP incompleto não consulta". Se CUSTOMER-CEP-02 mudar o comportamento
-de troca de CEP, o Fornecedor nasce já com o comportamento novo — motivo
-suficiente para CUSTOMER-CEP-02 vir antes.
+regra de "CEP incompleto não consulta". CUSTOMER-CEP-02 fechou em 2026-09-09 e
+mudou esse comportamento: a fundação hoje é a de §80 — o endereço pertence a um
+CEP, e trocar o CEP limpa os seis campos antes da consulta. O Fornecedor nasce
+com ele, não com o anterior.
 
 Exige migration (colunas novas em `suppliers`), e por isso é capability, não
 quick win.

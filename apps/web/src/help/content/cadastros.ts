@@ -275,7 +275,7 @@ export const cadastrosTopics = {
       },
       {
         term: "Endereço",
-        text: "Usado nos documentos impressos. UF precisa ser uma sigla válida e o CEP guarda oito dígitos, sem a máscara. Uma proposta enviada congela o endereço do momento do envio: alterar o cadastro depois não reescreve o que já foi impresso.",
+        text: "Usado nos documentos impressos. UF precisa ser uma sigla válida e o CEP guarda oito dígitos, sem a máscara. O endereço pertence ao CEP: trocar o CEP limpa o endereço anterior — logradouro, número, complemento, bairro, cidade e UF — antes da nova consulta, porque nada disso está provado no CEP novo. Uma proposta enviada congela o endereço do momento do envio: alterar o cadastro depois não reescreve o que já foi impresso.",
       },
       {
         term: "Sufixo do lote comercial",
