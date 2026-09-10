@@ -759,16 +759,36 @@ de uma na data da outra anunciaria um envio que não houve.
 A condição de pagamento por extenso saiu de dentro da Origem Comercial do
 Pedido e virou `lib/payment-condition.ts`: uma função, duas telas.
 
+## O que foi digitado nas condições sobrevive à linha (QUOTE-DRAFT-STATE-01, 2026-09-10)
+
+**Perda silenciosa de entrada, corrigida.** Mexer numa linha do Orçamento
+recarrega o Projeto, e a versão volta como objeto novo com as mesmas condições
+gravadas. O formulário tratava objeto novo como documento novo e apagava o que
+estava digitado — as nove condições, não só a validade — dizendo "Tudo salvo".
+
+Agora ele separa o GRAVADO do DIGITADO e decide pela identidade da versão
+(`quote.id`) e pelo valor de cada campo, em
+[`quote-conditions-draft.ts`](../apps/web/src/pages/projects/quote-conditions-draft.ts):
+mesma versão com alteração preserva o digitado e acompanha o servidor no que
+ninguém tocou; sem alteração, acompanha; outra versão, ou versão que deixou de
+ser rascunho, mostra o gravado dela. "Alterações não salvas" compara VALOR. A
+leitura é absorvida durante o render — com efeito, a E2E viu a V1 desenhada com
+o rascunho da V2. Sem auto-salvar, sem `localStorage`, sem store global, zero
+backend, zero migration.
+
+Trocar de versão continua descartando o rascunho, e enviar com condições
+pendentes envia as gravadas: os dois ficaram no BACKLOG como decisão do PO
+(QUOTE-VERSION-SWITCH-DIRTY-01, QUOTE-SEND-DIRTY-01).
+
 ## Próxima prioridade
 
-**P1 da fila viva, reordenado em 2026-09-10** — QUOTE-DRAFT-STATE-01 primeiro
-(as condições digitadas e ainda não salvas do Orçamento somem quando uma linha é
-alterada: entrada válida perdida sem aviso, causa já localizada), depois
-FORM-UOM-01 (unidade de medida é texto livre no Modelo de Formulação, e unidade
-é dado estrutural que alimenta conversão, custo e produção). Os dois **não
-iniciados**.
+**FORM-UOM-01** — primeiro da fila viva desde que QUOTE-DRAFT-STATE-01 fechou
+(2026-09-10). A Formulação real já oferece a unidade certa — `<select>` filtrado
+pela dimensão do Item —; o que sobra é o **Modelo de Formulação**, onde a
+unidade ainda é texto livre, e unidade é dado estrutural que alimenta conversão,
+custo e produção. **Não iniciado.**
 
-**QUOTE-DUPLICATE-01** — terceiro da fila, e o **gate de preço foi resolvido**
+**QUOTE-DUPLICATE-01** — segundo da fila, e o **gate de preço foi resolvido**
 pelo PO em 2026-09-10: sem herança silenciosa de `unitPrice`, com escolha
 explícita entre manter os preços da versão de origem e revisá-los, nenhuma
 opção pré-marcada. O que sobra de trabalho é escolher a versão de ORIGEM

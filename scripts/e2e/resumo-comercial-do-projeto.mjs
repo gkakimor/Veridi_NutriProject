@@ -165,10 +165,10 @@ async function main() {
     // que o servidor recusou alguma coisa.
     /*
      * Cada campo da linha grava ao sair do campo, e o projeto inteiro é
-     * recarregado depois — o que RESETA o formulário de condições. Digitar a
-     * validade antes disso perderia o valor em silêncio, e o botão de salvar
-     * ficaria desabilitado por "nada a salvar". Só depois que a gravação da
-     * linha assenta é que a validade é digitada.
+     * recarregado depois. A recarga preserva o que estiver digitado nas
+     * condições (QUOTE-DRAFT-STATE-01, provado em
+     * `condicoes-do-orcamento-sobrevivem-a-linha.mjs`); a espera é só para a
+     * gravação da linha assentar antes do salvamento das condições.
      */
     await pagina.waitForTimeout(2000);
     await pagina.locator("#quote-valid-until").first().fill(VALIDADE);
