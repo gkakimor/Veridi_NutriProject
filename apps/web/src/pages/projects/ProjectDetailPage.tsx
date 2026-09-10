@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { ProjectDTO, ProjectSampleDTO } from "@veridi/shared";
 import {
+  formatBrPhone,
   PROJECT_ATTACHMENT_TYPES,
   PROJECT_SAMPLE_STATUS_LABELS,
   PROJECT_CANCEL_REASON_LABELS,
@@ -235,6 +236,15 @@ export function ProjectDetailPage() {
             <dd>
               <EntityLink kind="customer" id={project.customerId} code={project.customerCode} name={project.customerName} />
             </dd>
+            {/* Telefone e e-mail vêm do cadastro do Cliente, e ficam AQUI
+                porque é aqui que a pessoa está quando precisa ligar. Sem
+                cópia no Projeto: mudou no cadastro, muda aqui na próxima
+                leitura. O rótulo aparece mesmo vazio — "—" diz "não
+                preenchido", e esconder a linha diria "não existe". */}
+            <dt>Telefone</dt>
+            <dd>{formatBrPhone(project.customerPhone) || "—"}</dd>
+            <dt>E-mail</dt>
+            <dd>{project.customerEmail || "—"}</dd>
             <dt>Conceito / canal</dt>
             <dd>
               {project.concept ?? "—"} · {project.channel ?? "—"}

@@ -427,6 +427,18 @@ export interface ProjectDTO {
   customerId: string;
   customerCode: string;
   customerName: string;
+  /**
+   * Contato do Cliente, PROJETADO do cadastro atual — nunca copiado nem
+   * congelado no Projeto.
+   *
+   * Quem trabalha dentro de um Projeto precisa ligar para o cliente, e saía
+   * da tela para descobrir o número. O valor é sempre o que está em
+   * `Customer` agora: mudar o telefone no cadastro muda o que o Projeto
+   * mostra na próxima leitura, sem sincronização e sem job. `null` é campo
+   * não preenchido no cadastro, e a tela diz isso — nunca esconde o rótulo.
+   */
+  customerPhone: string | null;
+  customerEmail: string | null;
   name: string;
   concept: string | null;
   channel: string | null;

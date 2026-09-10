@@ -5028,3 +5028,32 @@ da elegibilidade temporal, exportada porque é ela que os testes de borda
 interrogam. Os limites do dia vêm de `limitesDoDiaComercial`, e o deslocamento
 de calendário de `diaCivilDeslocado`, os dois na fundação de `@veridi/shared`.
 Nenhum helper novo de fuso nasceu aqui.
+
+---
+
+## §82 — Documento congela; ficha de trabalho projeta
+
+PROJECT-CUSTOMER-CONTACT-01, 2026-09-09. Do walkthrough real: para ligar para o
+cliente, quem estava dentro de um Projeto saía da tela e abria o cadastro.
+
+O detalhe do Projeto passou a mostrar **telefone e e-mail do Cliente**. A
+palavra é PROJETAR, não copiar: o valor é lido do cadastro a cada leitura, e
+`Project` não ganhou coluna nenhuma. Trocar o telefone no Cliente muda o que o
+Projeto mostra na próxima abertura — sem sincronização, sem job e sem backfill.
+
+**Isto não contradiz o snapshot do Orçamento.** As duas coisas respondem a
+perguntas diferentes, e a diferença é a regra:
+
+- **Documento** — `QuoteVersion` congela cliente e endereço no envio (§55). A
+  impressão que o cliente recebeu não pode mudar depois; ela é prova do que foi
+  apresentado naquele dia.
+- **Ficha de trabalho** — o Projeto é onde se trabalha HOJE. Um telefone
+  congelado ali seria um telefone que envelhece calado, e a pessoa ligaria para
+  o número errado achando que o sistema sabia.
+
+Duplicar o contato em `Project` criaria uma segunda verdade sobre o mesmo fato,
+e a do Projeto seria a errada primeiro. A autoridade é `Customer`, e só ela.
+
+**"Contato principal" não existe no domínio.** O modelo tem `Customer.phone` e
+`Customer.email`, um de cada, e nada foi inventado para preencher a palavra:
+sem entidade de contato, o escopo é telefone, e-mail e o link que já existia.

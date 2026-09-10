@@ -149,6 +149,10 @@ export function toProjectDTO(project: ProjectWithRelations, includePricing = fal
     customerId: project.customerId,
     customerCode: project.customer.code,
     customerName: project.customer.legalName,
+    // Projeção do cadastro atual, não snapshot: `projectInclude` já traz o
+    // Customer inteiro, então nada aqui custa consulta a mais.
+    customerPhone: project.customer.phone,
+    customerEmail: project.customer.email,
     name: project.name,
     concept: project.concept,
     channel: project.channel,

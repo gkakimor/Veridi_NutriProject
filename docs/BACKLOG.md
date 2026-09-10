@@ -36,12 +36,11 @@ faz primeiro e estava espalhada por cinco lugares.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | PROJECT-CUSTOMER-CONTACT-01 | A · P1 | Leitura, sem duplicar dado. **Primeiro da fila** desde que CUSTOMER-CEP-02 fechou |
-| **P1-2** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
-| **P1-3** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-4** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-5** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-6** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
+| **P1-2** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-3** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-4** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-5** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
@@ -376,19 +375,6 @@ OP é apagada; a cancelada continua no histórico.
 
 **F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
 momentos diferentes sem dizer qual é qual".
-
-#### PROJECT-CUSTOMER-CONTACT-01 — contato do cliente visível no Projeto
-
-Vindo do walkthrough real (2026-09-09). Quick win de leitura.
-
-Hoje `ProjectDetailPage.tsx:234` mostra `Cliente` com `EntityLink` (código e
-nome) — o **link já existe**. Não existem telefone, e-mail nem contato
-principal, e quem está no Projeto sai dele para ligar para o cliente.
-
-Exibir em leitura, **sempre resolvido a partir de `Customer`**: telefone,
-e-mail, contato principal quando existir, e o link que já está lá. Nenhum campo
-novo em `Project` — duplicar contato criaria dois endereços de verdade para o
-mesmo fato, e o do Projeto envelheceria calado.
 
 #### QUOTE-DUPLICATE-01 — "duplicar como nova versão" — CONFLITO A RESOLVER
 
@@ -797,7 +783,7 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-5, SUPPLIER-ADDRESS-01 em P1-6) — mas a
+(COST-RESOURCE-MULTIPLIER-01 em P1-4, SUPPLIER-ADDRESS-01 em P1-5) — mas a
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 
