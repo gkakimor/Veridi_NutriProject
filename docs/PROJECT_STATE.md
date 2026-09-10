@@ -740,15 +740,29 @@ documento congela, ficha de trabalho projeta.
 Sem WhatsApp, sem `mailto:`, sem ação de copiar: o ganho pedido era o número
 estar visível.
 
+**PROJECT-COMMERCIAL-SUMMARY-01 fechado. Regra durável: §82.** O espaço vazio
+à direita do bloco Resumo do Projeto virou a coluna **Comercial**: situação do
+projeto, último orçamento, valor da proposta, itens orçados, condição de
+pagamento, envio, validade e última atividade.
+
+Read model puro, e **sem backend**: tudo sai de `ProjectDTO.quoteVersions`, que
+já vinha inteiro no mesmo GET. Nenhum campo novo, nenhuma migration, nenhum
+total recalculado — o valor é `QuoteVersionDTO.total`, que o servidor entrega
+com o desconto aplicado. Layout com o `.field-grid-2` que já existia: duas
+colunas no desktop, empilhadas abaixo de 720px.
+
+A regra que a coluna existe para não quebrar: o último orçamento e a última
+proposta ENVIADA são fatos diferentes. Com `V3 SENT` + `V4 DRAFT`, o valor é da
+V4, "Enviado em" é travessão e a V3 aparece em linha própria — colar o rótulo
+de uma na data da outra anunciaria um envio que não houve.
+
+A condição de pagamento por extenso saiu de dentro da Origem Comercial do
+Pedido e virou `lib/payment-condition.ts`: uma função, duas telas.
+
 ## Próxima prioridade
 
-**P1 da fila viva** — PROJECT-COMMERCIAL-SUMMARY-01, colocado na frente pelo PO
-em 2026-09-10: o resumo comercial do Projeto ocupa o espaço vazio à direita do
-bloco Resumo, é read model puro e a auditoria achou o modelo praticamente
-pronto. Passa na frente de QUOTE-DUPLICATE-01 porque este ainda tem gate de
-preço aberto. **Não iniciado.**
-
-**QUOTE-DUPLICATE-01** — segundo da fila. **Gate de PO antes do build:** decidir
+**QUOTE-DUPLICATE-01** — primeiro da fila desde que
+PROJECT-COMMERCIAL-SUMMARY-01 fechou. **Gate de PO antes do build:** decidir
 se "duplicar como nova versão" copia `unitPrice` de uma versão SENT não aceita —
 comportamento que §74 removeu de propósito. **Não iniciado.**
 

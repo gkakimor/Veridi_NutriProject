@@ -12,6 +12,7 @@ import {
 import { AttachmentsSection } from "../../components/AttachmentsSection";
 import { FormSection } from "../../components/FormSection";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import { ProjectCommercialSummary } from "./ProjectCommercialSummary";
 import { ProjectCostingSection } from "./ProjectCostingSection";
 import { ProjectProductsSection } from "./ProjectProductsSection";
 import { ApprovalPreviewDialog } from "./ApprovalPreviewDialog";
@@ -231,64 +232,73 @@ export function ProjectDetailPage() {
         <ContextHelp topic={helpTopics["comercial.projeto"]} />
 
         <FormSection title="Resumo">
-          <dl className="definition-list">
-            <dt>Cliente</dt>
-            <dd>
-              <EntityLink kind="customer" id={project.customerId} code={project.customerCode} name={project.customerName} />
-            </dd>
-            {/* Telefone e e-mail vêm do cadastro do Cliente, e ficam AQUI
-                porque é aqui que a pessoa está quando precisa ligar. Sem
-                cópia no Projeto: mudou no cadastro, muda aqui na próxima
-                leitura. O rótulo aparece mesmo vazio — "—" diz "não
-                preenchido", e esconder a linha diria "não existe". */}
-            <dt>Telefone</dt>
-            <dd>{formatBrPhone(project.customerPhone) || "—"}</dd>
-            <dt>E-mail</dt>
-            <dd>{project.customerEmail || "—"}</dd>
-            <dt>Conceito / canal</dt>
-            <dd>
-              {project.concept ?? "—"} · {project.channel ?? "—"}
-            </dd>
-            <dt>Entrada</dt>
-            <dd>{formatDate(project.entryDate)}</dd>
-            <dt>Responsável</dt>
-            <dd>{project.responsibleUserName ?? "—"}</dd>
-            <dt>
-              Código legado
-              <DicaDaColuna id="comercial.projetoCodigoLegado" />
-            </dt>
-            <dd>{project.externalCode ?? "—"}</dd>
-            <dt>
-              Origem do registro
-              <DicaDaColuna id="comercial.projetoOrigem" />
-            </dt>
-            <dd>{PROJECT_SOURCE_LABELS[project.source]}</dd>
-            <dt>
-              Produto resultante
-              <DicaDaColuna id="comercial.projetoProduto" />
-            </dt>
-            <dd>
-              {project.productId ? (
-                <EntityLink
-                  kind="product"
-                  id={project.productId}
-                  code={project.productCode}
-                  name={project.productName}
-                />
-              ) : (
-                "— (nasce na aprovação)"
+          {/* Duas colunas no desktop, empilhadas abaixo de 720px pelo
+              `.field-grid-2` que já existe. À esquerda a identificação e o
+              contato; à direita, o lado comercial — o espaço estava vazio, e
+              quem abre o Projeto para falar com o cliente precisava rolar até
+              as versões para saber em que pé está a negociação. */}
+          <div className="field-grid-2">
+            <dl className="definition-list">
+              <dt>Cliente</dt>
+              <dd>
+                <EntityLink kind="customer" id={project.customerId} code={project.customerCode} name={project.customerName} />
+              </dd>
+              {/* Telefone e e-mail vêm do cadastro do Cliente, e ficam AQUI
+                  porque é aqui que a pessoa está quando precisa ligar. Sem
+                  cópia no Projeto: mudou no cadastro, muda aqui na próxima
+                  leitura. O rótulo aparece mesmo vazio — "—" diz "não
+                  preenchido", e esconder a linha diria "não existe". */}
+              <dt>Telefone</dt>
+              <dd>{formatBrPhone(project.customerPhone) || "—"}</dd>
+              <dt>E-mail</dt>
+              <dd>{project.customerEmail || "—"}</dd>
+              <dt>Conceito / canal</dt>
+              <dd>
+                {project.concept ?? "—"} · {project.channel ?? "—"}
+              </dd>
+              <dt>Entrada</dt>
+              <dd>{formatDate(project.entryDate)}</dd>
+              <dt>Responsável</dt>
+              <dd>{project.responsibleUserName ?? "—"}</dd>
+              <dt>
+                Código legado
+                <DicaDaColuna id="comercial.projetoCodigoLegado" />
+              </dt>
+              <dd>{project.externalCode ?? "—"}</dd>
+              <dt>
+                Origem do registro
+                <DicaDaColuna id="comercial.projetoOrigem" />
+              </dt>
+              <dd>{PROJECT_SOURCE_LABELS[project.source]}</dd>
+              <dt>
+                Produto resultante
+                <DicaDaColuna id="comercial.projetoProduto" />
+              </dt>
+              <dd>
+                {project.productId ? (
+                  <EntityLink
+                    kind="product"
+                    id={project.productId}
+                    code={project.productCode}
+                    name={project.productName}
+                  />
+                ) : (
+                  "— (nasce na aprovação)"
+                )}
+              </dd>
+              {project.cancelReason && (
+                <>
+                  <dt>Motivo do cancelamento</dt>
+                  <dd>
+                    {PROJECT_CANCEL_REASON_LABELS[project.cancelReason]}
+                    {project.cancelReasonDetails ? ` — ${project.cancelReasonDetails}` : ""}
+                  </dd>
+                </>
               )}
-            </dd>
-            {project.cancelReason && (
-              <>
-                <dt>Motivo do cancelamento</dt>
-                <dd>
-                  {PROJECT_CANCEL_REASON_LABELS[project.cancelReason]}
-                  {project.cancelReasonDetails ? ` — ${project.cancelReasonDetails}` : ""}
-                </dd>
-              </>
-            )}
-          </dl>
+            </dl>
+
+            <ProjectCommercialSummary project={project} />
+          </div>
 
           {editable && (
             <div className="line-actions">

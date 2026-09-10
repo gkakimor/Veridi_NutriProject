@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import type { CustomerOrderDTO, CustomerOrderLineDTO } from "@veridi/shared";
-import { QUOTE_PAYMENT_METHOD_LABELS } from "@veridi/shared";
+import { condicaoDePagamentoPorExtenso } from "../../lib/payment-condition";
 import { entityHref } from "../../components/EntityLink";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { formatPercent } from "../../lib/percent";
@@ -84,21 +84,9 @@ export function CommercialOriginSection({ order }: { order: CustomerOrderDTO }) 
         {plano && (
           <>
             <dt>Forma de pagamento</dt>
-            <dd>
-              {QUOTE_PAYMENT_METHOD_LABELS[plano.method]}
-              {plano.method === "INSTALLMENTS" && plano.installments.length > 0 && (
-                <>
-                  {" — "}
-                  {Number(plano.downPayment ?? 0) > 0
-                    ? `entrada de ${formatBRL(plano.downPayment)} e `
-                    : ""}
-                  {plano.installments.length}× de {formatBRL(plano.installments[0]!.amount)}
-                  {plano.monthlyInterestPercent
-                    ? `, juros de ${formatPercent(plano.monthlyInterestPercent)} ao mês`
-                    : " sem juros"}
-                </>
-              )}
-            </dd>
+            {/* A frase é a MESMA do resumo comercial do Projeto — uma função,
+                duas telas. Ver `lib/payment-condition.ts`. */}
+            <dd>{condicaoDePagamentoPorExtenso(plano)}</dd>
             {plano.method === "INSTALLMENTS" && (
               <>
                 <dt>Total a prazo</dt>

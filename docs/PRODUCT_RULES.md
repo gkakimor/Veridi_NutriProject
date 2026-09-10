@@ -5057,3 +5057,29 @@ e a do Projeto seria a errada primeiro. A autoridade é `Customer`, e só ela.
 **"Contato principal" não existe no domínio.** O modelo tem `Customer.phone` e
 `Customer.email`, um de cada, e nada foi inventado para preencher a palavra:
 sem entidade de contato, o escopo é telefone, e-mail e o link que já existia.
+
+### A versão corrente e a última ENVIADA são coisas diferentes
+
+PROJECT-COMMERCIAL-SUMMARY-01, 2026-09-10. A mesma ficha ganhou uma coluna
+comercial, e com ela a distinção que o read model precisa impedir de colapsar.
+
+Um projeto pode ter `V3 SENT` e `V4 DRAFT` ao mesmo tempo — é o estado normal
+de uma renegociação em aberto. São **dois fatos distintos**:
+
+- o **último orçamento** é a versão de maior `versionNumber`, e é dela que saem
+  valor, itens e condição de pagamento;
+- a **última proposta enviada** é a de maior `versionNumber` com `sentAt`
+  preenchido, e é a única que o cliente realmente recebeu.
+
+Mostrar o rótulo de uma com a data da outra anuncia um envio que não
+aconteceu. Quando as duas coincidem, a segunda linha não aparece — repetir o
+mesmo documento em duas linhas o faria parecer dois.
+
+**`sentAt` é o único carimbo que responde "foi comunicada".** `createdAt` e
+`updatedAt` dizem quando a linha foi mexida, que é outra pergunta, e derivar
+envio deles inventaria uma data que ninguém registrou.
+
+O valor exibido é `QuoteVersionDTO.total` — subtotal **menos desconto**, como
+o servidor já entrega. Somar linhas na tela produziria um segundo número sobre
+o mesmo fato, e `null` (linha sem preço) nunca vira R$ 0,00: "ainda não há
+total" e "custa zero" são estados diferentes.
