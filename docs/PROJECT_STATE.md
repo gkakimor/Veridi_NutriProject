@@ -789,8 +789,20 @@ indisponível e diz por quê, ao lado do botão. Sem auto-salvar e sem "enviar
 mesmo assim": salvar e enviar são decisões separadas, e salvar libera o envio
 na mesma tela. A pendência é a mesma de "Alterações não salvas"
 (`condicoesAlteradas`), e o envio confere de novo no clique e na confirmação.
-Servidor intocado. Regra durável: §48. O mesmo risco existe na LINHA cujo
-salvamento falhou — registrado, não ampliado (QUOTE-SEND-LINE-DRAFT-01).
+Servidor intocado. Regra durável: §48.
+
+## A linha também (QUOTE-SEND-LINE-DRAFT-01, 2026-09-10)
+
+**O mesmo P0, do lado das linhas.** Quantidade, preço e unidade gravam ao sair
+do campo; se o salvamento falhava, o campo mantinha o digitado e o envio
+congelava o valor antigo — a tela mostrava R$ 12,50 e o cliente recebia
+R$ 10,00. Agora uma linha que mostra o que não foi gravado segura o orçamento
+inteiro: desde a primeira tecla diferente, durante o salvamento e depois da
+falha, até a nova tentativa passar. Pendência por valor (`Decimal`), não por
+foco; condição e linha pendentes somam numa espera só. A unidade, que era
+campo não-controlado, passou a ser acompanhada pela mesma razão. Sem
+auto-salvar, sem descartar o digitado, zero backend. Achado aberto no caminho:
+sair do campo sem mudar nada apaga o preço herdado (QUOTE-LINE-NOOP-BLUR-01).
 
 ## Próxima prioridade
 

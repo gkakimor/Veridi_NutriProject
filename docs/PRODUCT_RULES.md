@@ -3277,6 +3277,16 @@ contra o que o servidor devolveu: `10,0` sobre 10 não é alteração e não
 bloqueia. Salvamento em andamento também bloqueia; salvamento que falha mantém
 o bloqueio.
 
+**A regra vale para as linhas também** (QUOTE-SEND-LINE-DRAFT-01, 2026-09-10).
+Quantidade, preço e unidade da linha gravam ao sair do campo, e o salvamento
+pode falhar. Quando falha, o campo MANTÉM o digitado — a pessoa precisa ver o
+que tentou informar, junto do erro —, e é exatamente por isso que o envio não
+pode acontecer: a tela mostra um valor que o servidor não tem. Uma linha nessa
+situação segura o orçamento inteiro, desde a primeira tecla diferente do
+gravado até o gravado alcançar a tela. Pendência é valor contra o gravado, não
+foco: o campo focado com o valor gravado não segura nada. Não se descarta o
+digitado para destravar, e não se salva por conta própria para enviar.
+
 ### Busca de entidade enxerga o conjunto elegível inteiro
 
 Um campo que parece pesquisar o catálogo não pode pesquisar apenas os
