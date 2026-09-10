@@ -32,17 +32,19 @@ FIX-02 (2026-09-08): quantidade física canônica na estimativa e um único
 
 Reconciliada em 2026-09-09 com o walkthrough real da Veridi. O detalhe de cada
 item fica na sua seção; aqui fica só a ORDEM, porque ela é a pergunta que se
-faz primeiro e estava espalhada por cinco lugares. QUOTE-DRAFT-STATE-01 saiu da
-fila em 2026-09-10, resolvido.
+faz primeiro e estava espalhada por cinco lugares. Saíram da fila em
+2026-09-10, resolvidos: QUOTE-DRAFT-STATE-01 e QUOTE-SEND-DIRTY-01 — este
+promovido a P0 pelo PO, integridade comercial.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | FORM-UOM-01 | A · P1 | Unidade é dado ESTRUTURAL — alimenta conversão, custo e produção. Texto livre ali é risco de integridade; a duplicação de orçamento é produtividade |
-| **P1-2** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
-| **P1-3** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-4** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-5** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-6** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | QUOTE-INT-FIELDS-01 | A · P1 | Integridade antes de estrutura (PO, 2026-09-10): salvar as condições pode APAGAR um valor gravado em silêncio |
+| **P1-2** | FORM-UOM-01 | A · P1 | Unidade é dado ESTRUTURAL — alimenta conversão, custo e produção. Texto livre ali é risco de integridade; a duplicação de orçamento é produtividade |
+| **P1-3** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
+| **P1-4** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-5** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-6** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
@@ -292,8 +294,8 @@ gravado a base nova. A leitura é absorvida durante o render: com efeito, a E2E
 viu a V1 enviada desenhada com o rascunho da V2. "Descartar alterações" passou
 a levar junto a simulação dos valores descartados. Sem auto-salvar, sem
 `localStorage`, sem store global, zero backend. Achados que ela abriu:
-QUOTE-SEND-DIRTY-01 (P2), QUOTE-VERSION-SWITCH-DIRTY-01, PROJECT-RELOAD-ERROR-01
-e QUOTE-INT-FIELDS-01 (P3).
+QUOTE-SEND-DIRTY-01 (resolvido no mesmo dia, abaixo), QUOTE-INT-FIELDS-01
+(promovido a P1), QUOTE-VERSION-SWITCH-DIRTY-01 e PROJECT-RELOAD-ERROR-01 (P3).
 
 Finding de PROJECT-COMMERCIAL-SUMMARY-01 (2026-09-10), encontrado ao escrever o
 E2E: o roteiro só passou depois que a validade foi digitada **depois** de a
@@ -338,6 +340,33 @@ essa fica para o discovery da implementação, sem ampliar o item.
 não salvar, adicionar uma linha, e a validade continuar no campo, com o botão
 ainda refletindo que há alteração pendente; salvar e o servidor receber o valor
 digitado.
+
+#### QUOTE-SEND-DIRTY-01 — enviar com condição alterada e não salva — **RESOLVIDO em 2026-09-10**
+
+Achado de QUOTE-DRAFT-STATE-01, promovido a **P0** pelo PO: a tela podia mostrar
+a condição B enquanto o envio congelava a A, porque o envio usa o que está
+gravado — e isso está certo. O que mudou é a interação: com qualquer uma das
+nove condições alterada e não salva, "Enviar ao cliente" fica indisponível, com
+o motivo escrito ao lado e ligado ao botão ("Salve as alterações das condições
+antes de enviar o orçamento. O envio usa somente as condições já salvas."). Sem
+auto-salvar, sem "enviar mesmo assim", sem bypass. A pendência é a MESMA de
+"Alterações não salvas" — `condicoesAlteradas`, comparação de valor —, avisada
+pelo formulário ao pai antes da pintura; o envio confere de novo no clique e na
+confirmação. Salvar libera o envio na mesma tela; salvar que falha mantém o
+bloqueio. Servidor, snapshot e transição de status intocados. Regra durável:
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §48. O mesmo risco na LINHA cujo
+salvamento falhou ficou registrado, não ampliado: QUOTE-SEND-LINE-DRAFT-01 (P2).
+
+#### QUOTE-INT-FIELDS-01 — prazo, parcelas e intervalo aceitam texto e apagam o gravado
+
+Achado de QUOTE-DRAFT-STATE-01 (2026-09-10), promovido a P1 pelo PO logo depois
+de QUOTE-SEND-DIRTY-01, pela mesma prioridade de integridade. Os três campos
+inteiros das condições (`leadTimeDays`, `installmentCount`,
+`installmentIntervalDays`) não validam o texto: `abc` vira `NaN` em
+`paraEnvio`, o JSON serializa `NaN` como `null`, e salvar APAGA o valor gravado
+em silêncio — a recusa do servidor (`optionalPositiveInt`, "Informe um número
+inteiro maior que zero") nunca chega a ver o texto. Percentual já trava o
+salvamento por `parseDecimalInput`; inteiro, não. **Não iniciado.**
 
 #### FORM-UOM-01 — unidade de medida é texto livre no Modelo de Formulação
 
@@ -652,7 +681,7 @@ sem contrato cadastrado; os conceitos são independentes.
 | **VOCAB-01** | Um conceito, três nomes: "Base de produção" (campo), "Base de referência" (leitura) e "Base de produção sugerida" (template) nomeiam a mesma quantidade. Mesma família de F-01-1; sweep só quando houver rodada de nomenclatura | UX | S |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
-| **QUOTE-SEND-DIRTY-01** | "Enviar ao cliente" com condições digitadas e NÃO salvas envia as GRAVADAS: a confirmação não diz que o documento sai diferente do que está nos campos, e depois do envio o formulário passa a mostrar o gravado. Achado de QUOTE-DRAFT-STATE-01; decisão do PO — bloquear o envio com alteração pendente ou dizê-lo na confirmação | MEDIUM | S |
+| **QUOTE-SEND-LINE-DRAFT-01** | Linha do Orçamento com preço ou quantidade digitados cujo salvamento FALHOU continua mostrando o valor digitado — no campo e no "Total da proposta (prévia)" —, e "Enviar ao cliente" segue disponível: o envio congela o valor GRAVADO da linha. Mesma classe de QUOTE-SEND-DIRTY-01, que cobriu só as condições — o PO mandou registrar antes de ampliar. Sem falha a janela não existe: sair do campo grava, e clicar no botão já tira o foco do campo | MEDIUM | S |
 
 **F-01-1 e F-07-2 foram rebaixados**: os dois números estão certos para o que
 representam — `Project.productId` (produto resultante) contra `project_products`
@@ -675,7 +704,6 @@ mudou.
 | **F-11-1** | Sair de um documento por um `EntityLink` de cadastro não deixa caminho de volta | UX | S |
 | **QUOTE-VERSION-SWITCH-DIRTY-01** | Abrir outra versão com condições pendentes descarta o rascunho sem aviso — mantido de propósito em QUOTE-DRAFT-STATE-01. Só existe um rascunho por projeto e as outras versões são somente leitura; avisar, salvar ou descartar é decisão do PO | UX | S |
 | **PROJECT-RELOAD-ERROR-01** | Falha na releitura do Projeto depois de uma mutação bem-sucedida vira "Projeto não encontrado": o `load()` de `ProjectDetailPage` trata qualquer erro como 404 e desmonta a ficha — e com ela o que estava digitado | LOW | XS |
-| **QUOTE-INT-FIELDS-01** | Prazo, parcelas e intervalo das condições não validam o texto: `abc` vira `NaN` na tela, o JSON serializa `NaN` como `null`, e salvar APAGA o valor gravado em silêncio — a recusa do servidor (`optionalPositiveInt`) nunca chega a ver o texto. Percentual já trava o envio; inteiro, não | LOW | XS |
 
 ### Encerrados na triagem, sem trabalho
 
@@ -1025,7 +1053,7 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-5, SUPPLIER-ADDRESS-01 em P1-6) — mas a
+(COST-RESOURCE-MULTIPLIER-01 em P1-6, SUPPLIER-ADDRESS-01 em P1-7) — mas a
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 

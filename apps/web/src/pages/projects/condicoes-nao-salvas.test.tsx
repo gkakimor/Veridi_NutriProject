@@ -1,6 +1,6 @@
 import { StrictMode, useLayoutEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type {
   ProjectDTO,
@@ -77,11 +77,14 @@ import {
   getProject,
   previewQuotePaymentSchedule,
   removeQuoteLine,
+  sendQuoteVersion,
   updateQuoteLine,
   updateQuoteVersion,
 } from "../../lib/projects-api";
 import { ProjectDetailPage } from "./ProjectDetailPage";
 import { QuoteConditionsForm } from "./QuoteConditionsForm";
+import { QuoteVersionsSection } from "./QuoteVersionsSection";
+import { camposDe } from "./quote-conditions-draft";
 
 const VALIDADE_GRAVADA = "2026-09-15T00:00:00.000Z";
 
@@ -793,5 +796,278 @@ describe("QUOTE-DRAFT-STATE-01 — a ficha do Projeto, com a mutação de linha 
     expect(campo("Validade da proposta").value).toBe("2026-09-20");
     expect(campo("Desconto (%)").value).toBe("7.5");
     expect(botaoSalvar().disabled).toBe(true);
+  });
+
+  /*
+   * QUOTE-SEND-DIRTY-01 pela ficha inteira: o envio congela o GRAVADO, então
+   * ele só pode acontecer quando o gravado é o que está nos campos.
+   */
+  describe("QUOTE-SEND-DIRTY-01 — o envio espera a condição salva", () => {
+    let validadeNoEnvio: string | null | undefined;
+
+    beforeEach(() => {
+      noServidor = comTotais(versao({ lines: [linha()] }));
+      validadeNoEnvio = undefined;
+      vi.mocked(sendQuoteVersion).mockImplementation(async () => {
+        // Como o servidor de verdade: o envio congela o que está gravado.
+        validadeNoEnvio = noServidor.validUntil;
+        noServidor = { ...noServidor, status: "SENT", sentAt: "2026-09-10T12:00:00.000Z" };
+        return noServidor as never;
+      });
+    });
+
+    it("salvar libera o envio sem recarregar a página, e o que vai ao cliente é o salvo", async () => {
+      await abrirFicha();
+      expect(botaoEnviar().disabled).toBe(false);
+
+      digitar("Validade da proposta", "2026-09-20");
+      expect(botaoEnviar().disabled).toBe(true);
+      expect(avisoDeEnvio()).not.toBeNull();
+
+      fireEvent.click(botaoSalvar());
+      await waitFor(() => expect(situacao()).toBe("Tudo salvo"));
+      expect(botaoEnviar().disabled).toBe(false);
+      expect(avisoDeEnvio()).toBeNull();
+
+      fireEvent.click(botaoEnviar());
+      await confirmarEnvio();
+
+      // Enviada, a versão sai do rascunho e o botão some.
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Enviar ao cliente" })).toBeNull(),
+      );
+      expect(sendQuoteVersion).toHaveBeenCalledTimes(1);
+      expect(sendQuoteVersion).toHaveBeenCalledWith("q1", {});
+      expect(validadeNoEnvio).toBe("2026-09-20T00:00:00.000Z");
+      expect(campo("Validade da proposta").value).toBe("2026-09-20");
+      expect(campo("Validade da proposta").disabled).toBe(true);
+    });
+
+    it("salvar que falha mantém o digitado e o envio bloqueado", async () => {
+      vi.mocked(updateQuoteVersion).mockRejectedValueOnce(new Error("Falha de rede ao salvar"));
+      await abrirFicha();
+
+      digitar("Validade da proposta", "2026-09-20");
+      fireEvent.click(botaoSalvar());
+
+      await screen.findByText(/Falha de rede ao salvar/);
+      expect(campo("Validade da proposta").value).toBe("2026-09-20");
+      expect(situacao()).toBe("Alterações não salvas");
+      expect(botaoEnviar().disabled).toBe(true);
+      expect(avisoDeEnvio()).not.toBeNull();
+      expect(sendQuoteVersion).not.toHaveBeenCalled();
+    });
+
+    it("enquanto o salvamento está em andamento, o envio também espera", async () => {
+      let concluir!: () => void;
+      vi.mocked(updateQuoteVersion).mockImplementationOnce(
+        (_id, input) =>
+          new Promise<never>((resolve) => {
+            concluir = () => {
+              noServidor = gravarCondicoes(noServidor, input);
+              resolve(noServidor as never);
+            };
+          }),
+      );
+      await abrirFicha();
+
+      digitar("Validade da proposta", "2026-09-20");
+      fireEvent.click(botaoSalvar());
+      await waitFor(() => expect(botaoSalvar().disabled).toBe(true));
+      expect(botaoEnviar().disabled).toBe(true);
+
+      await act(async () => concluir());
+      await waitFor(() => expect(situacao()).toBe("Tudo salvo"));
+      expect(botaoEnviar().disabled).toBe(false);
+    });
+
+    it("linha adicionada com condição por salvar: o envio continua bloqueado até salvar", async () => {
+      await abrirFicha();
+
+      digitar("Validade da proposta", "2026-09-20");
+      fireEvent.change(screen.getByLabelText("Adicionar produto à proposta"), {
+        target: { value: "pp-2" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+      await screen.findByLabelText("Quantidade de PROD-000002");
+
+      expect(campo("Validade da proposta").value).toBe("2026-09-20");
+      expect(botaoEnviar().disabled).toBe(true);
+      expect(avisoDeEnvio()).not.toBeNull();
+
+      fireEvent.click(botaoSalvar());
+      await waitFor(() => expect(situacao()).toBe("Tudo salvo"));
+      expect(botaoEnviar().disabled).toBe(false);
+    });
+  });
+});
+
+const SALVE_ANTES = "Salve as alterações das condições antes de enviar o orçamento.";
+const USA_O_SALVO = "O envio usa somente as condições já salvas.";
+
+function botaoEnviar(): HTMLButtonElement {
+  // Com a confirmação aberta há dois "Enviar ao cliente"; o da página vem primeiro.
+  return screen.getAllByRole("button", { name: "Enviar ao cliente" })[0] as HTMLButtonElement;
+}
+
+/** O motivo do bloqueio, perto do botão — `null` quando nada bloqueia. */
+function avisoDeEnvio(): HTMLElement | null {
+  return document.getElementById("quote-send-pending");
+}
+
+async function confirmarEnvio() {
+  const dialogo = await screen.findByRole("alertdialog");
+  fireEvent.click(within(dialogo).getByRole("button", { name: "Enviar ao cliente" }));
+}
+
+/** A seção de orçamentos sozinha, com projeto fixo e sem servidor. */
+function abrirSecao(versions: QuoteVersionDTO[]) {
+  render(
+    <StrictMode>
+      <MemoryRouter>
+        <QuoteVersionsSection
+          project={{ ...PROJETO, products: [], quoteVersions: versions }}
+          canEdit
+          projectStatus="WAITING"
+          onChanged={() => {}}
+        />
+      </MemoryRouter>
+    </StrictMode>,
+  );
+}
+
+/** Rascunho pronto para enviar: linha com preço e validade gravada. */
+const pronta = (overrides: Partial<QuoteVersionDTO> = {}) =>
+  versao({ lines: [linha()], subtotal: "12500.00", total: "12500.00", ...overrides });
+
+describe("QUOTE-SEND-DIRTY-01 — o botão de envio respeita a pendência das condições", () => {
+  beforeEach(() => {
+    vi.mocked(sendQuoteVersion).mockReset();
+  });
+
+  it("sem alteração, enviar funciona como antes: sem aviso e sem passo a mais", async () => {
+    abrirSecao([pronta()]);
+
+    expect(botaoEnviar().disabled).toBe(false);
+    expect(avisoDeEnvio()).toBeNull();
+    fireEvent.click(botaoEnviar());
+    await confirmarEnvio();
+
+    await waitFor(() => expect(sendQuoteVersion).toHaveBeenCalledTimes(1));
+    expect(sendQuoteVersion).toHaveBeenCalledWith("q1", {});
+  });
+
+  it("condição alterada bloqueia o envio, diz por quê e não chama o servidor", () => {
+    abrirSecao([pronta()]);
+
+    digitar("Validade da proposta", "2026-09-20");
+
+    const enviar = botaoEnviar();
+    expect(enviar.disabled).toBe(true);
+    expect(enviar.title).toBe(SALVE_ANTES);
+    // O motivo não depende de cor nem de passar o mouse: é texto, ligado ao botão.
+    const aviso = avisoDeEnvio()!;
+    expect(enviar.getAttribute("aria-describedby")).toBe(aviso.id);
+    expect(aviso.textContent).toBe(`${SALVE_ANTES} ${USA_O_SALVO}`);
+
+    fireEvent.click(enviar);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(sendQuoteVersion).not.toHaveBeenCalled();
+  });
+
+  /** Condição gravada completa e parcelada: os nove campos na tela. */
+  const completa = () =>
+    pronta({
+      leadTimeDays: 30,
+      commercialNotes: "Gravada",
+      discountPercent: "5.0000",
+      paymentMethod: "INSTALLMENTS",
+      downPaymentPercent: "10.0000",
+      installmentCount: 2,
+      installmentIntervalDays: 30,
+      monthlyInterestPercent: "1.0000",
+    });
+
+  /** Cada condição, o rótulo que a pessoa vê e um valor que muda o que seria salvo. */
+  const ALTERACOES: [string, string, string][] = [
+    ["validUntil", "Validade da proposta", "2026-09-20"],
+    ["leadTimeDays", "Prazo de entrega (dias)", "15"],
+    ["commercialNotes", "Observações comerciais", "Digitada"],
+    ["discountPercent", "Desconto (%)", "7,5"],
+    ["paymentMethod", "Forma de pagamento", "CASH"],
+    ["downPaymentPercent", "Entrada (%)", "20"],
+    ["installmentCount", "Parcelas", "3"],
+    ["installmentIntervalDays", "Intervalo (dias)", "28"],
+    ["monthlyInterestPercent", "Juros ao mês (%)", "1,5"],
+  ];
+
+  it("a tabela de alterações cobre exatamente as nove condições do formulário", () => {
+    expect(ALTERACOES.map(([chave]) => chave).sort()).toEqual(
+      Object.keys(camposDe(completa())).sort(),
+    );
+  });
+
+  it.each(ALTERACOES)("%s alterado bloqueia o envio", (_chave, rotulo, valor) => {
+    abrirSecao([completa()]);
+    expect(botaoEnviar().disabled).toBe(false);
+
+    digitar(rotulo, valor);
+
+    expect(botaoEnviar().disabled).toBe(true);
+    expect(avisoDeEnvio()).not.toBeNull();
+  });
+
+  it("o mesmo valor escrito de outro jeito não bloqueia o envio", () => {
+    abrirSecao([pronta({ discountPercent: "10.0000" })]);
+    expect(campo("Desconto (%)").value).toBe("10");
+
+    digitar("Desconto (%)", "10,0");
+
+    expect(situacao()).toBe("Tudo salvo");
+    expect(botaoEnviar().disabled).toBe(false);
+    expect(avisoDeEnvio()).toBeNull();
+  });
+
+  it("a confirmação que já estava aberta confere de novo e não envia condição por salvar", async () => {
+    abrirSecao([pronta()]);
+    fireEvent.click(botaoEnviar());
+    const dialogo = await screen.findByRole("alertdialog");
+
+    // Com a confirmação aberta, uma condição muda.
+    digitar("Validade da proposta", "2026-09-20");
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Enviar ao cliente" }));
+
+    expect(sendQuoteVersion).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toBe(`${SALVE_ANTES} ${USA_O_SALVO}`);
+  });
+
+  it("a pendência é da versão: trocar de versão não a leva junto", () => {
+    abrirSecao([
+      pronta(),
+      pronta({
+        id: "q2",
+        code: "ORC-000002",
+        versionNumber: 2,
+        versionLabel: "ORC-000002 · V2",
+        validUntil: "2026-10-01T00:00:00.000Z",
+      }),
+    ]);
+
+    digitar("Validade da proposta", "2026-09-20");
+    expect(botaoEnviar().disabled).toBe(true);
+
+    fireEvent.click(screen.getByText("ORC-000002 · V2", { selector: "td" }));
+
+    expect(campo("Validade da proposta").value).toBe("2026-10-01");
+    expect(botaoEnviar().disabled).toBe(false);
+    expect(avisoDeEnvio()).toBeNull();
+  });
+
+  it("versão já enviada continua sem botão de envio, e sem o aviso", () => {
+    abrirSecao([pronta({ status: "SENT" })]);
+
+    expect(screen.queryByRole("button", { name: "Enviar ao cliente" })).toBeNull();
+    expect(avisoDeEnvio()).toBeNull();
   });
 });

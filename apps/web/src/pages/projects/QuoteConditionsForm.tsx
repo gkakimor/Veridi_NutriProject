@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import type {
   QuotePaymentMethod,
   QuotePaymentScheduleDTO,
@@ -51,9 +51,21 @@ interface Props {
   editable: boolean;
   saving: boolean;
   onSave: (input: UpdateQuoteVersionInput) => void;
+  /**
+   * Avisa se há condição alterada e não salva — a mesma pendência que o
+   * formulário mostra em "Alterações não salvas". Quem envia a proposta
+   * precisa dela: o envio congela o que está GRAVADO (QUOTE-SEND-DIRTY-01).
+   */
+  onPendenciaChange?: (pendente: boolean) => void;
 }
 
-export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) {
+export function QuoteConditionsForm({
+  quote,
+  editable,
+  saving,
+  onSave,
+  onPendenciaChange,
+}: Props) {
   const [rascunho, setRascunho] = useState(() => rascunhoDe(quote));
   const [simulacao, setSimulacao] = useState<QuotePaymentScheduleDTO | null>(null);
   const [simulando, setSimulando] = useState(false);
@@ -87,6 +99,19 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
 
   const { base, campos } = rascunho;
   const sujo = condicoesAlteradas(base, campos).length > 0;
+
+  /*
+   * "Enviar ao cliente" mora fora deste formulário e não pode ficar liberado
+   * enquanto há condição por salvar — o envio congela o gravado, e a tela
+   * estaria mostrando outra coisa. O pai recebe a MESMA pendência daqui, num
+   * efeito de layout: o valor chega antes de a tela ser pintada. Sem
+   * formulário na tela, não há pendência.
+   */
+  useLayoutEffect(() => {
+    onPendenciaChange?.(sujo);
+    return () => onPendenciaChange?.(false);
+  }, [sujo, onPendenciaChange]);
+
   const parcelado = campos.paymentMethod === "INSTALLMENTS";
   /*
    * Percentual que a tela não consegue ler trava simular e salvar. Antes,

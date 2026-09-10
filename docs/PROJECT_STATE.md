@@ -776,19 +776,35 @@ leitura é absorvida durante o render — com efeito, a E2E viu a V1 desenhada c
 o rascunho da V2. Sem auto-salvar, sem `localStorage`, sem store global, zero
 backend, zero migration.
 
-Trocar de versão continua descartando o rascunho, e enviar com condições
-pendentes envia as gravadas: os dois ficaram no BACKLOG como decisão do PO
-(QUOTE-VERSION-SWITCH-DIRTY-01, QUOTE-SEND-DIRTY-01).
+Trocar de versão continua descartando o rascunho — decisão do PO, registrada
+como QUOTE-VERSION-SWITCH-DIRTY-01.
+
+## Enviar só com as condições salvas (QUOTE-SEND-DIRTY-01, 2026-09-10)
+
+**P0 de integridade comercial, fechado.** O envio congela o que está gravado —
+correto —, e a tela deixava enviar com uma condição alterada e não salva: o
+cliente receberia a condição A enquanto a tela mostrava a B. Agora, com
+qualquer uma das nove condições por salvar, "Enviar ao cliente" fica
+indisponível e diz por quê, ao lado do botão. Sem auto-salvar e sem "enviar
+mesmo assim": salvar e enviar são decisões separadas, e salvar libera o envio
+na mesma tela. A pendência é a mesma de "Alterações não salvas"
+(`condicoesAlteradas`), e o envio confere de novo no clique e na confirmação.
+Servidor intocado. Regra durável: §48. O mesmo risco existe na LINHA cujo
+salvamento falhou — registrado, não ampliado (QUOTE-SEND-LINE-DRAFT-01).
 
 ## Próxima prioridade
 
-**FORM-UOM-01** — primeiro da fila viva desde que QUOTE-DRAFT-STATE-01 fechou
-(2026-09-10). A Formulação real já oferece a unidade certa — `<select>` filtrado
-pela dimensão do Item —; o que sobra é o **Modelo de Formulação**, onde a
-unidade ainda é texto livre, e unidade é dado estrutural que alimenta conversão,
-custo e produção. **Não iniciado.**
+**QUOTE-INT-FIELDS-01** — primeiro da fila viva, promovido pelo PO em
+2026-09-10 pela mesma prioridade de integridade: prazo, parcelas e intervalo
+aceitam texto, e salvar pode APAGAR o valor gravado em silêncio. **Não
+iniciado.**
 
-**QUOTE-DUPLICATE-01** — segundo da fila, e o **gate de preço foi resolvido**
+**FORM-UOM-01** — logo depois. A Formulação real já oferece a unidade certa —
+`<select>` filtrado pela dimensão do Item —; o que sobra é o **Modelo de
+Formulação**, onde a unidade ainda é texto livre, e unidade é dado estrutural
+que alimenta conversão, custo e produção. **Não iniciado.**
+
+**QUOTE-DUPLICATE-01** — terceiro da fila, e o **gate de preço foi resolvido**
 pelo PO em 2026-09-10: sem herança silenciosa de `unitPrice`, com escolha
 explícita entre manter os preços da versão de origem e revisá-los, nenhuma
 opção pré-marcada. O que sobra de trabalho é escolher a versão de ORIGEM
