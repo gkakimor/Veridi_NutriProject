@@ -697,15 +697,31 @@ quatro testes de desempate — FEFO, "a criada por último vence", "a tarifa mai
 recente vence" — falham sem nada estar errado. Isso apareceu no andaime de
 MEDIÇÃO e é a razão de ele ter sido andaime, e não solução.
 
-**STOP GATE aberto: COST-COMMERCIAL-DAY-01.** D-17 desenterrou dois pontos de
-RUNTIME com a mesma assimetria, e eles não foram corrigidos aqui de propósito.
-A janela de compras termina no fim do dia UTC do marcador — 20:59 de São Paulo —,
-então recebimento lançado à noite não entra na média do próprio dia; e a
-referência manual de custo sem data explícita nasce com o dia UTC, valendo só
-amanhã. É o terceiro lugar do custo com o problema que §76 e §79 já corrigiram
-nos outros dois. Registrado em [`BACKLOG.md`](BACKLOG.md), **sem implementar** —
-e a suíte deixou de cobrir esses dois caminhos, porque a fixture correta não
-passa por eles.
+**COST-COMMERCIAL-DAY-01 fechado. Regra durável: §81.** Os dois pontos de
+RUNTIME que D-17 desenterrou, corrigidos: a janela de compras terminava no fim do
+dia UTC do marcador — 20:59 de São Paulo — e começava três horas cedo, então
+recebimento lançado à noite ficava fora da média do próprio dia e a noite do dia
+anterior entrava na janela; e a referência manual de custo sem data explícita
+nascia com o dia UTC, valendo só amanhã. As duas bordas passaram a ser dias
+comerciais inteiros (`limitesDaJanelaDeCusto`), e "hoje" implícito virou
+`marcadorDeHojeComercial()` nas bordas que ainda inventavam um instante. É o
+terceiro e último lugar do custo com a assimetria que §76 e §79 corrigiram nos
+outros dois; nada da hierarquia, da matemática ou do filtro de moeda mudou.
+
+Carimbo de tempo continua carimbo de tempo: `receivedAt` e `consumedAt` não
+viraram marcador. O que mudou é a pergunta feita contra eles.
+
+Auditoria de PROD somente leitura, sem nenhuma escrita: 295 `ItemCostReference`,
+todas em marcador de meia-noite UTC, todas BRL, nenhuma na faixa 00:00–03:00 UTC;
+zero `Receipt` e zero `ReceiptLine`; 2 `IndustrialCostCalculation`. Sem backfill,
+sem migration — os dois calculados históricos não tocaram recebimento, porque não
+existe nenhum.
+
+Treze casos determinísticos novos em `lib/custo-no-dia-comercial.test.ts`, com
+instantes absolutos e relógio congelado só onde a borda exige. Cinco deles
+reprovavam antes da correção — os dois defeitos e a data errada no texto da
+última compra; os outros oito são guardas de não-regressão, entre eles a
+não-antecipação do dia seguinte.
 
 ## Próxima prioridade
 

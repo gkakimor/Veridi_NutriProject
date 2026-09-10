@@ -77,9 +77,22 @@ export function marcadorDoDiaCivil(diaISO: string): Date {
   return new Date(`${diaISO}T00:00:00.000Z`);
 }
 
+/**
+ * O marcador do dia civil em que um INSTANTE aconteceu, para a Veridi.
+ *
+ * A ponte entre os dois mundos, num lugar só: de um lado um carimbo de tempo
+ * real (`receivedAt`, `consumedAt`), do outro a pergunta de calendário que o
+ * domínio faz ("o custo do dia 09/09"). Um consumo das 22:30 de São Paulo
+ * pertence ao dia 09/09, embora em UTC já seja 10/09 — e é o dia comercial,
+ * nunca o dia do relógio da máquina, que decide isso.
+ */
+export function marcadorDoDiaComercialDe(instante: Date): Date {
+  return marcadorDoDiaCivil(hojeComercial(instante));
+}
+
 /** O marcador do dia comercial de hoje — a fronteira "vencido" de um filtro. */
 export function marcadorDeHojeComercial(agora: Date = new Date()): Date {
-  return marcadorDoDiaCivil(hojeComercial(agora));
+  return marcadorDoDiaComercialDe(agora);
 }
 
 /**

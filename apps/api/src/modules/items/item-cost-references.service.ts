@@ -7,6 +7,11 @@ import type {
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import {
+  diaDaColunaDeData,
+  marcadorDeHojeComercial,
+  marcadorDoDiaCivil,
+} from "../../lib/business-day.js";
+import {
   COST_REFERENCE_VALIDITY_ORDER,
   getManualCostReference,
   selectItemCostSource,
@@ -52,13 +57,6 @@ function toDTO(row: ItemCostReference, currentId: string | null): ItemCostRefere
   };
 }
 
-/** Dia de calendário em UTC — "válido desde" nunca depende de fuso. */
-function inicioDoDia(date: Date): Date {
-  const inicio = new Date(date);
-  inicio.setUTCHours(0, 0, 0, 0);
-  return inicio;
-}
-
 /**
  * Validação de domínio da referência, compartilhada entre "criar item já
  * com referência" e "alterar referência" — duas portas, uma regra.
@@ -96,17 +94,31 @@ async function prepareReferenceData(
     throw new CostReferenceUnitIncompatibleError(uomCode, item.unitCode);
   }
 
-  const effectiveFrom = input.effectiveFrom ? new Date(input.effectiveFrom) : new Date();
-  if (Number.isNaN(effectiveFrom.getTime())) {
+  /*
+   * "Válido desde" é DATA CIVIL, e a coluna guarda o marcador do dia.
+   *
+   * Vindo da tela, o dia é explícito e passa intacto: `2026-09-15` continua
+   * 15/09, sem releitura pelo relógio de quem gravou. Ausente, o padrão é
+   * HOJE — e "hoje" é o dia comercial de São Paulo, não o dia UTC. Às 22:30
+   * os dois já discordam: a referência criada "a partir de hoje" nascia com
+   * o marcador de amanhã e voltava `NOT_YET_EFFECTIVE` no próprio dia em que
+   * a pessoa a cadastrou. A API não pode depender de a tela sempre mandar a
+   * data — o padrão do serviço é a única defesa de quem chama pela rota.
+   */
+  const informada = input.effectiveFrom ? new Date(input.effectiveFrom) : null;
+  if (informada && Number.isNaN(informada.getTime())) {
     throw new InvalidCostReferenceError("Data de início da vigência inválida.");
   }
+  const effectiveFrom = informada
+    ? marcadorDoDiaCivil(diaDaColunaDeData(informada))
+    : marcadorDeHojeComercial();
 
   return {
     itemId: item.id,
     unitCost,
     currencyCode: "BRL",
     uomCode,
-    effectiveFrom: inicioDoDia(effectiveFrom),
+    effectiveFrom,
     note: input.note?.trim() || null,
     createdByUserId: actor?.id ?? null,
     createdByNameSnapshot: actor?.name ?? null,
@@ -143,7 +155,7 @@ export async function createItemCostReference(
  */
 export async function listItemCostReferences(
   itemId: string,
-  referenceDate: Date = new Date(),
+  referenceDate: Date = marcadorDeHojeComercial(),
 ): Promise<ItemCostReferencesResponse> {
   const prisma = getPrisma();
   const item = await prisma.item.findUnique({ where: { id: itemId } });

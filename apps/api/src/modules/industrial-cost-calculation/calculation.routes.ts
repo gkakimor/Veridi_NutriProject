@@ -53,7 +53,7 @@ const saveCalculationSchema = z.object({
 
 /** Data explícita sempre vence; ausência significa "hoje", nunca no domínio. */
 function parseReferenceDate(raw: unknown): Date {
-  if (raw === undefined || raw === null || raw === "") return new Date();
+  if (raw === undefined || raw === null || raw === "") return marcadorDeHojeComercial();
   const parsed = new Date(String(raw));
   if (Number.isNaN(parsed.getTime())) throw new InvalidCostReferenceDateError();
   return parsed;

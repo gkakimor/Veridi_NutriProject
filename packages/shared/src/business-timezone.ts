@@ -108,14 +108,27 @@ export function limitesDeHojeComercial(agora: Date = new Date()): { inicio: Date
   return limitesDoDiaComercial(hojeComercial(agora));
 }
 
+/**
+ * Um dia civil deslocado em dias INTEIROS — `-30` é trinta dias antes.
+ *
+ * A conta é feita sobre o DIA, em UTC, e nunca sobre o relógio: subtrair
+ * `30 x 24h` de um instante atravessa a meia-noite comercial na hora errada
+ * e, numa mudança de horário de verão, pula ou repete um dia. Em UTC todo dia
+ * tem exatamente 24 horas, então o calendário é aritmética exata — o fuso só
+ * volta a entrar quando este dia vira instante, em `limitesDoDiaComercial`.
+ */
+export function diaCivilDeslocado(diaISO: string, dias: number): string {
+  const [ano, mes, dia] = diaISO.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(ano, mes - 1, dia + dias)).toISOString().slice(0, 10);
+}
+
 /** Janela de `dias` dias comerciais terminando hoje — `1` é só hoje. */
 export function limitesDeDiasComerciais(
   dias: number,
   agora: Date = new Date(),
 ): { inicio: Date; fim: Date } {
   const hoje = hojeComercial(agora);
-  const [ano, mes, dia] = hoje.split("-").map(Number) as [number, number, number];
-  const primeiro = new Date(Date.UTC(ano, mes - 1, dia - (dias - 1))).toISOString().slice(0, 10);
+  const primeiro = diaCivilDeslocado(hoje, -(dias - 1));
   return { inicio: limitesDoDiaComercial(primeiro).inicio, fim: limitesDoDiaComercial(hoje).fim };
 }
 

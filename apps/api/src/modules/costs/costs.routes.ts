@@ -14,6 +14,7 @@ import {
   getItemCostReferenceDTO,
   getProductionOrderMaterialCost,
 } from "./costs.service.js";
+import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { costReferenceQuerySchema, setAcquisitionCostSchema } from "./costs.schemas.js";
 
 function formatZodError(error: ZodError) {
@@ -105,7 +106,10 @@ export const costsRoutes: FastifyPluginAsync = async (app) => {
     try {
       // "Hoje" é decisão da borda: o domínio recebe sempre uma data explícita.
       return reply.send(
-        await getFormulationCostEstimate(id, parsed.data.referenceDate ?? new Date()),
+        await getFormulationCostEstimate(
+          id,
+          parsed.data.referenceDate ?? marcadorDeHojeComercial(),
+        ),
       );
     } catch (error) {
       const mapped = mapDomainError(error);

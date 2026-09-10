@@ -1,28 +1,54 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { CostSource } from "@veridi/shared";
+import { diaCivilDeslocado, diaDoInstantePorExtenso, limitesDoDiaComercial } from "@veridi/shared";
+import {
+  diaDaColunaDeData,
+  marcadorDeHojeComercial,
+  marcadorDoDiaComercialDe,
+} from "./business-day.js";
 // Precisão canônica do motor decimal — `PRODUCT_RULES.md` §59.
 import "./decimal.js";
 
 type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /**
- * `referenceDate` e DIA DE CALENDARIO, nao instante.
+ * A JANELA DE INSTANTES elegível para uma pergunta de custo.
  *
- * Uma data vinda da tela chega como meia-noite. Comparar `receivedAt <= ela`
- * jogava para fora todo recebimento do PROPRIO dia: quem lancava a compra as
- * 20h e perguntava o custo daquela data recebia `NO_COST`, com o custo ja
- * gravado no banco. O dia inteiro conta — quem pergunta por 18/08 esta
- * perguntando pelo dia 18, nao pelo primeiro instante dele.
+ * Duas grandezas diferentes se encontram aqui, e confundi-las era o defeito:
  *
- * A janela de tras nao muda: continua contada a partir da data pedida.
+ * - `referenceDate` é DATA CIVIL — o marcador de meia-noite UTC do dia que a
+ *   pessoa escolheu na tela. Lido em UTC, porque é assim que ele foi gravado.
+ * - `Receipt.receivedAt` é INSTANTE — o momento real em que a carga entrou.
+ *
+ * A ponte entre as duas é o dia comercial de São Paulo, e é o `Intl` que
+ * decide seu deslocamento em cada data — nunca `-03:00` escrito à mão. O dia
+ * 09/09 começa em `2026-09-09T03:00:00.000Z` e termina em
+ * `2026-09-10T02:59:59.999Z`.
+ *
+ * Enquanto o limite de cima era o fim do dia UTC, todo recebimento lançado
+ * entre 21:00 e 23:59 de São Paulo caía FORA do próprio dia: quem lançava a
+ * compra às 22h e perguntava o custo daquela data recebia uma fonte antiga —
+ * ou `NO_COST` —, com o custo real já gravado no banco. A borda de baixo
+ * errava pelo mesmo motivo e no sentido oposto: começava três horas cedo
+ * demais e deixava entrar a noite do dia anterior à janela.
+ *
+ * As duas bordas são dias comerciais inteiros, e a contagem de dias não muda:
+ * `diasParaTras` recua no CALENDÁRIO, nunca no relógio — subtrair `30 x 24h`
+ * de um instante atravessa a meia-noite comercial na hora errada.
+ *
+ * Exportada porque é a definição da elegibilidade temporal, e é ela que os
+ * testes de borda interrogam: uma segunda cópia divergiria em silêncio.
  */
-function fimDoDia(date: Date): Date {
-  const fim = new Date(date);
-  fim.setUTCHours(23, 59, 59, 999);
-  return fim;
+export function limitesDaJanelaDeCusto(
+  referenceDate: Date,
+  diasParaTras: number,
+): { inicio: Date; fim: Date } {
+  const dia = diaDaColunaDeData(referenceDate);
+  return {
+    inicio: limitesDoDiaComercial(diaCivilDeslocado(dia, -diasParaTras)).inicio,
+    fim: limitesDoDiaComercial(dia).fim,
+  };
 }
 
 export interface CostReference {
@@ -90,15 +116,10 @@ async function weightedAverageInWindow(
 export async function getItemCostReference(
   prisma: PrismaOrTx,
   itemId: string,
-  referenceDate: Date = new Date(),
+  referenceDate: Date = marcadorDeHojeComercial(),
 ): Promise<CostReference> {
-  const limite = fimDoDia(referenceDate);
-  const window30 = await weightedAverageInWindow(
-    prisma,
-    itemId,
-    new Date(referenceDate.getTime() - 30 * DAY_MS),
-    limite,
-  );
+  const janela30 = limitesDaJanelaDeCusto(referenceDate, 30);
+  const window30 = await weightedAverageInWindow(prisma, itemId, janela30.inicio, janela30.fim);
   if (window30) {
     return {
       unitCost: window30.unitCost,
@@ -108,12 +129,8 @@ export async function getItemCostReference(
     };
   }
 
-  const window90 = await weightedAverageInWindow(
-    prisma,
-    itemId,
-    new Date(referenceDate.getTime() - 90 * DAY_MS),
-    limite,
-  );
+  const janela90 = limitesDaJanelaDeCusto(referenceDate, 90);
+  const window90 = await weightedAverageInWindow(prisma, itemId, janela90.inicio, janela90.fim);
   if (window90) {
     return {
       unitCost: window90.unitCost,
@@ -123,13 +140,13 @@ export async function getItemCostReference(
     };
   }
 
-  // Ultimo custo real conhecido — sem limite de idade, mas nunca posterior
-  // a referenceDate.
+  // Ultimo custo real conhecido — sem limite de idade, mas nunca de um dia
+  // comercial posterior ao da pergunta. O fim do dia e o MESMO das janelas.
   const lastReal = await prisma.receiptLine.findFirst({
     where: {
       itemId,
       actualUnitCost: { not: null },
-      receipt: { receivedAt: { lte: limite } },
+      receipt: { receivedAt: { lte: janela30.fim } },
     },
     orderBy: { receipt: { receivedAt: "desc" } },
     select: { actualUnitCost: true, receipt: { select: { receivedAt: true, code: true } } },
@@ -139,7 +156,9 @@ export async function getItemCostReference(
       unitCost: lastReal.actualUnitCost,
       source: "LAST_REAL_COST",
       referenceDate,
-      details: `Último custo real conhecido (${lastReal.receipt.code}, ${lastReal.receipt.receivedAt.toLocaleDateString("pt-BR", { timeZone: "UTC" })}).`,
+      // `receivedAt` é INSTANTE: o dia que se lê nele é o dia comercial. Em
+      // UTC, uma compra das 22:30 aparecia com a data do dia seguinte.
+      details: `Último custo real conhecido (${lastReal.receipt.code}, ${diaDoInstantePorExtenso(lastReal.receipt.receivedAt)}).`,
     };
   }
 
@@ -154,7 +173,7 @@ export async function getItemCostReference(
 export async function getItemCostReferences(
   prisma: PrismaOrTx,
   itemIds: string[],
-  referenceDate: Date = new Date(),
+  referenceDate: Date = marcadorDeHojeComercial(),
 ): Promise<Map<string, CostReference>> {
   const unique = [...new Set(itemIds)];
   const entries = await Promise.all(
@@ -192,5 +211,8 @@ export async function getConsumedLotCostReference(
     }
   }
 
-  return getItemCostReference(prisma, params.itemId, params.consumedAt);
+  // `consumedAt` é INSTANTE; a fundação pergunta por DATA CIVIL. O consumo
+  // das 22:30 de São Paulo pertence ao dia comercial em que a pessoa estava
+  // trabalhando, não ao dia UTC que já virou.
+  return getItemCostReference(prisma, params.itemId, marcadorDoDiaComercialDe(params.consumedAt));
 }

@@ -16,7 +16,7 @@ import {
   normalizeCurrencyCode,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
-import { diaDaColunaDeData } from "../../lib/business-day.js";
+import { diaDaColunaDeData, marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { custoUnitario } from "../../lib/decimal-serialization.js";
 import { offerValidityWhere, selectItemCostSource } from "../../lib/cost-source-selection.js";
 import type { Pagination } from "../../lib/pagination.js";
@@ -346,7 +346,13 @@ export async function getSupplierItemById(id: string): Promise<SupplierItemDetai
      */
     selectItemCostSource(
       prisma,
-      { itemId: supplierItem.itemId, itemUnitCode: supplierItem.item.unitCode, referenceDate: now },
+      {
+        itemId: supplierItem.itemId,
+        itemUnitCode: supplierItem.item.unitCode,
+        // O motor pergunta por DIA CIVIL, e `now` é instante: às 22:30 de São
+        // Paulo passar o relógio faria a seleção enxergar o dia seguinte.
+        referenceDate: marcadorDeHojeComercial(now),
+      },
       units,
     ),
   ]);
