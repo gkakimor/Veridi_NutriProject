@@ -33,9 +33,9 @@ FIX-02 (2026-09-08): quantidade física canônica na estimativa e um único
 Reconciliada em 2026-09-09 com o walkthrough real da Veridi. O detalhe de cada
 item fica na sua seção; aqui fica só a ORDEM, porque ela é a pergunta que se
 faz primeiro e estava espalhada por cinco lugares. Saíram da fila em
-2026-09-10, resolvidos: QUOTE-DRAFT-STATE-01, QUOTE-SEND-DIRTY-01 e
-QUOTE-SEND-LINE-DRAFT-01 — os dois últimos promovidos a P0 pelo PO,
-integridade comercial.
+2026-09-10, resolvidos: QUOTE-DRAFT-STATE-01, QUOTE-SEND-DIRTY-01,
+QUOTE-SEND-LINE-DRAFT-01 e QUOTE-LINE-NOOP-BLUR-01 — os três últimos
+promovidos a P0 pelo PO, integridade comercial.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
@@ -373,8 +373,23 @@ com `Decimal` — o campo focado com o valor gravado não segura nada. A unidade
 entrou pela mesma causa: o campo era não-controlado, e o texto de uma falha
 ficava invisível para a tela. Condição e linha pendentes somam numa espera só
 ("Salve as alterações do orçamento antes de enviar."). Sem auto-salvar, sem
-descartar o digitado, sem backend. Achado aberto no caminho:
-QUOTE-LINE-NOOP-BLUR-01 (P2).
+descartar o digitado, sem backend. Achado aberto no caminho, e fechado no
+mesmo dia: QUOTE-LINE-NOOP-BLUR-01, abaixo.
+
+#### QUOTE-LINE-NOOP-BLUR-01 — passar pelo campo sem mudar nada apagava o preço herdado — **RESOLVIDO em 2026-09-10**
+
+Achado de QUOTE-SEND-LINE-DRAFT-01, promovido a **P0** pelo PO e reproduzido
+pela interface antes da correção: um Tab pela quantidade de uma linha herdada
+mandava `{"quotedQuantity":"1000"}`, e `updateQuoteLine` soltava o preço, a
+origem e o vínculo com o acordo — a limpeza de §74 olhava a PRESENÇA da chave
+no pedido, não o valor. Em cascata, o Tab pelo preço já vazio gravava
+`unitPrice: null` com origem `MANUAL`. Duas camadas: a tela não manda o que
+não mudou (a mesma `digitadoIgualAoGravado` da pendência de envio), e o
+servidor compara cada campo com o gravado, em `Decimal`, antes de travar,
+limpar ou gravar — pedido inteiramente igual nem faz UPDATE. Mudança REAL de
+quantidade ou de unidade continua soltando o preço herdado ou reajustado, e o
+preço informado junto com ela continua ganhando da limpeza. A trava da faixa
+(`PRICING_TIER`) passou a recusar só o que muda.
 
 #### QUOTE-INT-FIELDS-01 — prazo, parcelas e intervalo aceitam texto e apagam o gravado
 
@@ -700,7 +715,6 @@ sem contrato cadastrado; os conceitos são independentes.
 | **VOCAB-01** | Um conceito, três nomes: "Base de produção" (campo), "Base de referência" (leitura) e "Base de produção sugerida" (template) nomeiam a mesma quantidade. Mesma família de F-01-1; sweep só quando houver rodada de nomenclatura | UX | S |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
-| **QUOTE-LINE-NOOP-BLUR-01** | Sair do campo de quantidade ou de unidade SEM mudar nada apaga o preço herdado da linha: a tela grava a cada saída de campo, mesmo sem alteração, e `updateQuoteLine` limpa a origem `INHERITED_AGREEMENT`/`ADJUSTED_AGREEMENT` — com o `unitPrice` — sempre que quantidade ou unidade vêm no payload, sem comparar com o valor atual. Um Tab por cima do campo desfaz a decisão "manter condição". Achado de QUOTE-SEND-LINE-DRAFT-01, por leitura de código dos dois lados — não reproduzido em tela. Decisão do PO: a tela não gravar o que não mudou, o serviço comparar antes de limpar, ou os dois | HIGH | S |
 
 **F-01-1 e F-07-2 foram rebaixados**: os dois números estão certos para o que
 representam — `Project.productId` (produto resultante) contra `project_products`

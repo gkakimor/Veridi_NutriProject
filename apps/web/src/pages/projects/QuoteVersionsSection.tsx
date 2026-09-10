@@ -130,6 +130,13 @@ function motivoDaEspera(condicoes: boolean, produtos: boolean) {
 type CampoDaLinha = "quotedQuantity" | "unitPrice" | "uomCode";
 const CAMPOS_DA_LINHA: readonly CampoDaLinha[] = ["quotedQuantity", "unitPrice", "uomCode"];
 
+/** Como cada campo da linha se chama na tela — o nome que o erro de leitura usa. */
+const ROTULO_DO_CAMPO: Record<CampoDaLinha, string> = {
+  quotedQuantity: "Quantidade",
+  unitPrice: "Preço unitário",
+  uomCode: "Unidade",
+};
+
 /**
  * O texto que está no campo da linha É o valor gravado? Por VALOR — `1000,0`
  * e `1000.000000000000` são a mesma quantidade —, e com `Decimal`, nunca
@@ -333,6 +340,43 @@ export function QuoteVersionsSection({
       ...atual,
       [lineId]: { ...atual[lineId], [campo]: valor },
     }));
+  }
+
+  function descartarRascunhoDoCampo(lineId: string, campo: CampoDaLinha) {
+    setRascunhoDeLinha((atual) => {
+      if (atual[lineId]?.[campo] === undefined) return atual;
+      const daLinha = { ...atual[lineId] };
+      delete daLinha[campo];
+      const proximo = { ...atual };
+      if (Object.keys(daLinha).length > 0) proximo[lineId] = daLinha;
+      else delete proximo[lineId];
+      return proximo;
+    });
+  }
+
+  /*
+   * Sair do campo grava — mas só o que MUDOU (QUOTE-LINE-NOOP-BLUR-01).
+   * Gravar o mesmo valor não era inofensivo: o servidor tratava a presença da
+   * quantidade no pedido como mudança e soltava o preço herdado da linha, e um
+   * Tab por cima do campo desfazia a decisão "manter condição". Igual ao
+   * gravado — pelo mesmo critério que decide a pendência do envio —, nada sai
+   * para o servidor, e o campo volta a mostrar o gravado.
+   *
+   * Campo em branco apaga o valor: ausência é resposta legítima. Só o que foi
+   * digitado precisa ser legível.
+   */
+  function sairDoCampoDaLinha(line: QuoteLineDTO, campo: CampoDaLinha, texto: string) {
+    if (digitadoIgualAoGravado(campo, texto, line[campo])) {
+      descartarRascunhoDoCampo(line.id, campo);
+      return;
+    }
+    void run(() => {
+      const valor =
+        campo === "uomCode"
+          ? texto.trim() || null
+          : exigirDecimalOpcional(texto, `${ROTULO_DO_CAMPO[campo]} de ${line.productCode}`);
+      return updateQuoteLine(line.id, { [campo]: valor } as Parameters<typeof updateQuoteLine>[1]);
+    });
   }
 
   /*
@@ -813,17 +857,7 @@ export function QuoteVersionsSection({
                               digitarNaLinha(line.id, "quotedQuantity", event.target.value)
                             }
                             onBlur={(event) =>
-                              void run(() =>
-                                updateQuoteLine(line.id, {
-                                  // Campo em branco apaga a quantidade — ausência
-                                  // é resposta legítima. Só o que foi digitado
-                                  // precisa ser legível.
-                                  quotedQuantity: exigirDecimalOpcional(
-                                    event.target.value,
-                                    `Quantidade de ${line.productCode}`,
-                                  ),
-                                }),
-                              )
+                              sairDoCampoDaLinha(line, "quotedQuantity", event.target.value)
                             }
                           />
                           {campoIlegivel(line, "quotedQuantity") && (
@@ -851,13 +885,7 @@ export function QuoteVersionsSection({
                           onChange={(event) =>
                             digitarNaLinha(line.id, "uomCode", event.target.value)
                           }
-                          onBlur={(event) =>
-                            void run(() =>
-                              updateQuoteLine(line.id, {
-                                uomCode: event.target.value.trim() || null,
-                              }),
-                            )
-                          }
+                          onBlur={(event) => sairDoCampoDaLinha(line, "uomCode", event.target.value)}
                         />
                       ) : (
                         (line.uomCode ?? "—")
@@ -886,14 +914,7 @@ export function QuoteVersionsSection({
                               digitarNaLinha(line.id, "unitPrice", event.target.value)
                             }
                             onBlur={(event) =>
-                              void run(() =>
-                                updateQuoteLine(line.id, {
-                                  unitPrice: exigirDecimalOpcional(
-                                    event.target.value,
-                                    `Preço unitário de ${line.productCode}`,
-                                  ),
-                                }),
-                              )
+                              sairDoCampoDaLinha(line, "unitPrice", event.target.value)
                             }
                           />
                           {campoIlegivel(line, "unitPrice") && (

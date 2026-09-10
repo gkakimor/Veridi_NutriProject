@@ -37,7 +37,11 @@ import {
   findAgreementSource,
   limparOrigemPorQuantidade,
 } from "./quote-price-origin.service.js";
-import type { RejectQuoteInput, UpdateQuoteVersionInput } from "./projects.schemas.js";
+import type {
+  RejectQuoteInput,
+  UpdateQuoteLineInput,
+  UpdateQuoteVersionInput,
+} from "./projects.schemas.js";
 
 /**
  * Orçamentos versionados.
@@ -615,10 +619,20 @@ export async function addQuoteLine(
   return (await getQuoteById(quoteVersionId)) as QuoteVersionDTO;
 }
 
+/**
+ * O valor informado é o gravado? Por VALOR, com `Decimal` — nunca texto nem
+ * `Number` (§66): `1000` e `1000.000000000000` são a mesma quantidade.
+ * Ausência só equivale a ausência.
+ */
+function mesmoDecimal(informado: string | null, gravado: Prisma.Decimal | null): boolean {
+  if (informado === null || gravado === null) return informado === null && gravado === null;
+  return new Prisma.Decimal(informado).equals(gravado);
+}
+
 /** Quantidade, unidade e preço da linha. */
 export async function updateQuoteLine(
   lineId: string,
-  input: { quotedQuantity?: unknown; uomCode?: unknown; unitPrice?: unknown },
+  input: UpdateQuoteLineInput,
 ): Promise<QuoteVersionDTO> {
   const prisma = getPrisma();
   const line = await prisma.quoteLine.findUnique({
@@ -627,8 +641,31 @@ export async function updateQuoteLine(
   });
   if (!line) throw new QuoteLineNotFoundError(lineId);
   if (line.quoteVersion.status !== "DRAFT") throw new QuoteNotDraftError(line.quoteVersion.status);
-  // Quantidade, unidade e preço pertencem à faixa enquanto houver vínculo.
-  assertPriceEditable(line, input);
+  /*
+   * PRESENÇA de campo não é MUDANÇA de negócio (QUOTE-LINE-NOOP-BLUR-01).
+   * Mandar a quantidade que já está gravada — um Tab por cima do campo, na
+   * tela — soltava o preço herdado da linha, porque a limpeza de origem olhava
+   * só para a chave no pedido. Cada campo é comparado com o gravado pelo
+   * VALOR, e só o que mudou de verdade trava, limpa ou grava.
+   */
+  const { quotedQuantity, uomCode, unitPrice } = input;
+  const quantidadeMudou =
+    quotedQuantity !== undefined && !mesmoDecimal(quotedQuantity, line.quotedQuantity);
+  const unidadeMudou = uomCode !== undefined && uomCode !== line.uomCode;
+  const precoMudou = unitPrice !== undefined && !mesmoDecimal(unitPrice, line.unitPrice);
+
+  // Nada mudou: a linha fica exatamente como está, e nem UPDATE acontece.
+  if (!quantidadeMudou && !unidadeMudou && !precoMudou) {
+    return (await getQuoteById(line.quoteVersionId)) as QuoteVersionDTO;
+  }
+
+  // Quantidade, unidade e preço pertencem à faixa enquanto houver vínculo — e
+  // o que a trava recusa é MUDÁ-los.
+  assertPriceEditable(line, {
+    ...(quantidadeMudou ? { quotedQuantity } : {}),
+    ...(unidadeMudou ? { uomCode } : {}),
+    ...(precoMudou ? { unitPrice } : {}),
+  });
 
   /*
    * Mudou a quantidade: a origem comercial precisa ser decidida de novo —
@@ -636,29 +673,29 @@ export async function updateQuoteLine(
    * passou a 500 un, e deixar a proveniência ali seria fazê-la mentir. Ver
    * `limparOrigemPorQuantidade`: preço manual não é afetado.
    */
-  const mudouQuantidade = input.quotedQuantity !== undefined || input.uomCode !== undefined;
-  const limpeza = mudouQuantidade ? limparOrigemPorQuantidade(line.priceOrigin) : {};
+  const limpeza =
+    quantidadeMudou || unidadeMudou ? limparOrigemPorQuantidade(line.priceOrigin) : {};
 
   /*
    * Preço digitado à mão É uma decisão comercial, e passa a constar como tal.
    * Sem isto, editar o valor de uma linha herdada deixaria `priceOrigin` em
-   * `INHERITED_AGREEMENT` sobre um número que o acordo não tem.
+   * `INHERITED_AGREEMENT` sobre um número que o acordo não tem. O MESMO valor
+   * não é decisão nova, e a origem fica.
    *
    * O preço informado vem DEPOIS da limpeza de propósito: quem manda
    * quantidade e preço na mesma edição está dizendo os dois, e o explícito
-   * ganha do implícito.
+   * ganha do implícito — se a limpeza acabou de apagar o preço, o informado
+   * volta, mesmo igual ao que havia.
    */
-  const digitouPreco = input.unitPrice !== undefined;
+  const digitouPreco = unitPrice !== undefined && (precoMudou || "unitPrice" in limpeza);
 
   const data: PrismaTypes.QuoteLineUncheckedUpdateInput = {
     ...limpeza,
-    ...(input.quotedQuantity !== undefined
-      ? { quotedQuantity: input.quotedQuantity as never }
-      : {}),
-    ...(input.uomCode !== undefined ? { uomCode: input.uomCode as never } : {}),
+    ...(quantidadeMudou ? { quotedQuantity } : {}),
+    ...(unidadeMudou ? { uomCode } : {}),
     ...(digitouPreco
       ? {
-          unitPrice: input.unitPrice as never,
+          unitPrice,
           priceOrigin: "MANUAL" as const,
           inheritedFromQuoteLineId: null,
           adjustmentPercent: null,
