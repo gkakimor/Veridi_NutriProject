@@ -2,6 +2,7 @@ import type { UomDimension } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { instanteNoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 
 /**
  * Preço herdado, custo de hoje — COM-PRICE, §74.
@@ -102,7 +103,7 @@ async function receberComCusto(
     method: "POST",
     url: `/purchase-orders/${po.id}/receipts`,
     payload: {
-      receivedAt: new Date().toISOString(),
+      receivedAt: instanteNoDiaComercialDeTeste().toISOString(),
       lines: [
         {
           purchaseOrderLineId: po.lines[0].id,

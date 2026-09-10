@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -171,7 +172,7 @@ async function approvedSupplierFor(
         ...(options.moq
           ? { minimumOrderQuantity: options.moq.quantity, minimumOrderUomCode: options.moq.uomCode }
           : {}),
-        effectiveAt: new Date(Date.now() - 86_400_000),
+        effectiveAt: marcadorDoDiaComercialDeTeste(-1),
         source: "MANUAL",
       },
     });
@@ -447,7 +448,7 @@ describe("Sugestão de Compra — preço na OC rascunho", () => {
         unitPrice: "180",
         currencyCode: "BRL",
         priceUomCode: "kg",
-        effectiveAt: new Date(),
+        effectiveAt: marcadorDoDiaComercialDeTeste(),
         source: "MANUAL",
       },
     });

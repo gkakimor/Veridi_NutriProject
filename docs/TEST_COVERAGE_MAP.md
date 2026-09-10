@@ -286,6 +286,26 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Papel decide quem ajusta estoque, conta inventário, precifica | `modules/inventory/adjustment-audit.test.ts`, `modules/auth/auth.test.ts`, `modules/pricing/pricing.test.ts` |
 | Leitura escopada por Cliente recusa entidade de outro | `modules/customer-consultation/customer-consultation.test.ts` |
 
+## Como as fixtures escrevem data
+
+Regra de TESTE, não de produto — a de produto é o fuso comercial em
+`PRODUCT_RULES.md` (§71, §73, §76, §79).
+
+Um campo de **data civil** (`SupplierItemOffer.effectiveAt` e `.validUntil`,
+`IndustrialResourceRate.effectiveAt`, `ItemCostReference.effectiveFrom`,
+`InventoryLot.expiryDate`, `QuoteVersion.validUntil`, `referenceDate`) guarda a
+meia-noite UTC como MARCADOR do dia. O domínio o lê com `diaDaColunaDeData`, em
+UTC, e compara contra `hojeComercial`, em São Paulo. Fixture que escreve
+`new Date().toISOString()` escreve um INSTANTE: entre 00:00 e 03:00 UTC — 21:00
+às 23:59 em São Paulo — o dia UTC já virou e o comercial não, e a fixture que
+queria dizer "hoje" diz "amanhã".
+
+| Regra | Origem do risco | Proteção canônica |
+|---|---|---|
+| Fixture de campo de DATA CIVIL escreve o marcador do dia COMERCIAL, e "ontem"/"amanhã" andam por DIA, nunca por `Date.now() ± 24h` | D-17 — 63 casos em 19 arquivos reprovavam numa janela de 3 horas por dia e passavam nas outras 21, o que fazia o defeito parecer do produto e intermitente | `test-support/dia-comercial.ts` (`diaComercialDeTeste`, `marcadorDoDiaComercialDeTeste`, `instanteNoDiaComercialDeTeste`) · `test-support/dia-comercial.test.ts` |
+| Fixture de campo de INSTANTE (`receivedAt`, `occurredAt`, `entryDate`, `createdAt`) continua sendo instante — o que muda é ANCORAR a escolha no dia comercial quando o teste quer dizer "isto aconteceu hoje" | D-17 — recebimento em `new Date()` caía fora da janela de custo do próprio dia comercial, e o significado do teste dependia da hora em que ele rodava | `test-support/dia-comercial.ts` (`instanteNoDiaComercialDeTeste`) |
+| O relógio da suíte NÃO é congelado globalmente: só o teste que precisa da borda usa `vi.useFakeTimers({ toFake: ["Date"] })` | congelar o relógio inteiro empata `createdAt` de registros que existem para ser ordenados, e testes de desempate (FEFO, "a criada por último vence", "a tarifa mais recente vence") passam a falhar sem nada estar errado | `lib/dia-comercial-em-uso.test.ts` · `modules/lots/validade-em-uso.test.ts` · `modules/projects/ciclo-comercial-repetido.test.ts` |
+
 ## Migração e importadores
 
 | Regra | Proteção canônica |

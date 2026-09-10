@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../db/prisma.js";
 import { buildTestApp } from "../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../test-support/dia-comercial.js";
 import { selectItemCostSource } from "./cost-source-selection.js";
 
 /**
@@ -503,7 +504,7 @@ describe("Oferta de fornecedor: vigência, moeda e ambiguidade", () => {
     await approveSupplierWithOffer(item.id, {
       supplierId: supplier.id,
       unitPrice: "1400",
-      effectiveAt: new Date(Date.now() + 30 * DAY_MS),
+      effectiveAt: marcadorDoDiaComercialDeTeste(30),
     });
 
     // Hoje a oferta futura não existe: cai para a referência manual.
@@ -527,8 +528,8 @@ describe("Oferta de fornecedor: vigência, moeda e ambiguidade", () => {
     await approveSupplierWithOffer(item.id, {
       supplierId: supplier.id,
       unitPrice: "1400",
-      effectiveAt: new Date(Date.now() - 60 * DAY_MS),
-      validUntil: new Date(Date.now() - 5 * DAY_MS),
+      effectiveAt: marcadorDoDiaComercialDeTeste(-60),
+      validUntil: marcadorDoDiaComercialDeTeste(-5),
     });
 
     const result = await select(item.id, "kg");

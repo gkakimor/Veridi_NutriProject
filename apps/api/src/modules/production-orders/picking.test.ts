@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -358,7 +359,7 @@ describe("Picking — confirmação de lote", () => {
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsExpiry: true });
     const lot = await receiveStock(rawMaterial.id, "30", {
-      expiryDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(1),
     });
     const { product } = await createProductWithActiveFormulation(app, [
       { itemId: rawMaterial.id, quantity: "10", unitCode: "kg" },
@@ -369,7 +370,7 @@ describe("Picking — confirmação de lote", () => {
     // Lote vence DEPOIS do RELEASE, ANTES do Picking.
     await getPrisma().lot.update({
       where: { id: lot.id },
-      data: { expiryDate: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      data: { expiryDate: marcadorDoDiaComercialDeTeste(-1) },
     });
 
     const response = await app.inject({

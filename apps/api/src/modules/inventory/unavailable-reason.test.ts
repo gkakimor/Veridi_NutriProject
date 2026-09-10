@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { Prisma } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -34,8 +35,11 @@ function marca(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-const ONTEM = new Date(Date.now() - 24 * 60 * 60 * 1000);
-const DAQUI_UM_ANO = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+/* Validade de lote é DATA CIVIL: o marcador vem do dia comercial (D-17). */
+const ONTEM = marcadorDoDiaComercialDeTeste(-1);
+const DAQUI_UM_ANO = marcadorDoDiaComercialDeTeste(365);
+/* Movimento de estoque é INSTANTE, e continua sendo um. */
+const ENTRADA_DE_ONTEM = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
 type EstadoLote = {
   status: "AVAILABLE" | "AWAITING_RELEASE" | "BLOCKED";
@@ -86,7 +90,7 @@ async function criarCenario(lotes: EstadoLote[]) {
         lotId: lot.id,
         type: "RECEIPT_IN",
         quantity: new Prisma.Decimal(estado.quantidade),
-        occurredAt: ONTEM,
+        occurredAt: ENTRADA_DE_ONTEM,
         sourceType: "MANUAL_ADJUSTMENT",
         reason: "fixture",
         createdBy: "teste",

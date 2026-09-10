@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import {
+  diaComercialDeTeste,
+  marcadorDoDiaComercialDeTeste,
+} from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -460,7 +464,7 @@ describe("O que a ampliação nunca pode tomar", () => {
 
     await getPrisma().lot.update({
       where: { id: lote.id },
-      data: { expiryDate: new Date(Date.now() - 864e5) },
+      data: { expiryDate: marcadorDoDiaComercialDeTeste(-1) },
     });
 
     const resposta = await app.inject({
@@ -589,7 +593,7 @@ describe("Ampliação e o resto do domínio", () => {
         quantity: "1",
         destination: "NEW_LOT",
         businessLotNumber: `L-${marca()}`,
-        expiryDate: new Date(Date.now() + 730 * 864e5).toISOString().slice(0, 10),
+        expiryDate: diaComercialDeTeste(730),
       },
     });
     if (out.statusCode >= 400) throw new Error(`outputs ${out.statusCode}: ${out.body}`);
@@ -660,7 +664,7 @@ describe("Ampliação e o resto do domínio", () => {
         quantity: "1",
         destination: "NEW_LOT",
         businessLotNumber: `L-${marca()}`,
-        expiryDate: new Date(Date.now() + 730 * 864e5).toISOString().slice(0, 10),
+        expiryDate: diaComercialDeTeste(730),
       },
     });
     if (out.statusCode >= 400) throw new Error(`outputs ${out.statusCode}: ${out.body}`);

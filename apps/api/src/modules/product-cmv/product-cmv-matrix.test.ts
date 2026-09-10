@@ -3,6 +3,10 @@ import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import {
+  instanteNoDiaComercialDeTeste,
+  marcadorDoDiaComercialDeTeste,
+} from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getProductCmv } from "./product-cmv.service.js";
 
@@ -31,14 +35,14 @@ function marker(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`.toUpperCase();
 }
 
-const HOJE = new Date();
-
-/** Dia de calendário deslocado — a base econômica é escolhida por data. */
+/**
+ * Dia de calendário deslocado — a base econômica é escolhida por data.
+ *
+ * Sai do dia COMERCIAL, não do relógio: `new Date()` às 22h de São Paulo já é
+ * o dia seguinte em UTC, e a fixture que dizia "hoje" gravava amanhã (D-17).
+ */
 function dia(offset: number): Date {
-  const data = new Date(HOJE);
-  data.setUTCDate(data.getUTCDate() + offset);
-  data.setUTCHours(0, 0, 0, 0);
-  return data;
+  return marcadorDoDiaComercialDeTeste(offset);
 }
 
 beforeAll(async () => {
@@ -158,7 +162,7 @@ async function receiveWithCost(
       method: "POST",
       url: `/purchase-orders/${po.id}/receipts`,
       payload: {
-        receivedAt: new Date().toISOString(),
+        receivedAt: instanteNoDiaComercialDeTeste().toISOString(),
         lines: [
           {
             purchaseOrderLineId: po.lines[0].id,

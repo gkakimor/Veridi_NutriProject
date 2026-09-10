@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 import { previaDeExpedicaoDoProduto } from "@veridi/shared";
@@ -472,10 +473,10 @@ describe("Expedição — confirmação", () => {
 
     const finishedItem = await createFinishedItem({ controlsExpiry: true });
     const lotA = await stockFinishedLot(finishedItem.id, "400", {
-      expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(10),
     });
     const lotB = await stockFinishedLot(finishedItem.id, "500", {
-      expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(60),
     });
     const product = await createProduct(app, finishedItem.id);
     const order = await createOrderInFulfillment(app, product.id, "600", "600");
@@ -503,7 +504,7 @@ describe("Expedição — confirmação", () => {
 
     const finishedItem = await createFinishedItem({ controlsExpiry: true });
     const lot = await stockFinishedLot(finishedItem.id, "500", {
-      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(30),
     });
     const product = await createProduct(app, finishedItem.id);
     const order = await createOrderInFulfillment(app, product.id, "500", "500");
@@ -515,7 +516,7 @@ describe("Expedição — confirmação", () => {
     // O lote vence DEPOIS da reserva, ANTES da expedição.
     await getPrisma().lot.update({
       where: { id: lot.id },
-      data: { expiryDate: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      data: { expiryDate: marcadorDoDiaComercialDeTeste(-1) },
     });
 
     const expired = await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
@@ -524,7 +525,7 @@ describe("Expedição — confirmação", () => {
 
     await getPrisma().lot.update({
       where: { id: lot.id },
-      data: { expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), status: "AWAITING_RELEASE" },
+      data: { expiryDate: marcadorDoDiaComercialDeTeste(30), status: "AWAITING_RELEASE" },
     });
     const awaiting = await app.inject({ method: "POST", url: `/shipments/${draft.id}/confirm` });
     expect(awaiting.statusCode).toBe(400);
@@ -805,7 +806,7 @@ describe("Realocação de reserva", () => {
 
     const finishedItem = await createFinishedItem({ controlsExpiry: true });
     const lotA = await stockFinishedLot(finishedItem.id, "100", {
-      expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(10),
     });
     const product = await createProduct(app, finishedItem.id);
     const order = await createOrderInFulfillment(app, product.id, "100", "100");
@@ -822,10 +823,10 @@ describe("Realocação de reserva", () => {
     // Lote A vence antes de expedir o restante; chega um lote B novo.
     await getPrisma().lot.update({
       where: { id: lotA.id },
-      data: { expiryDate: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      data: { expiryDate: marcadorDoDiaComercialDeTeste(-1) },
     });
     const lotB = await stockFinishedLot(finishedItem.id, "60", {
-      expiryDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(90),
     });
 
     const realloc = await app.inject({
@@ -865,7 +866,7 @@ describe("Realocação de reserva", () => {
 
     const finishedItem = await createFinishedItem({ controlsExpiry: true });
     const lotA = await stockFinishedLot(finishedItem.id, "100", {
-      expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(10),
     });
     const product = await createProduct(app, finishedItem.id);
     const order = await createOrderInFulfillment(app, product.id, "100", "100");
@@ -875,7 +876,7 @@ describe("Realocação de reserva", () => {
     // Lote vence e não há nenhum outro lote para substituir.
     await getPrisma().lot.update({
       where: { id: lotA.id },
-      data: { expiryDate: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      data: { expiryDate: marcadorDoDiaComercialDeTeste(-1) },
     });
 
     const response = await app.inject({

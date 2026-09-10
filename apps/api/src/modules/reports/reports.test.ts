@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -516,16 +517,16 @@ describe("Relatórios — Estoque", () => {
 
     const item = await createItem("FINISHED_PRODUCT", { controlsExpiry: true });
     const expired = await stockLot(item.id, "10", {
-      expiryDate: new Date(Date.now() - 3 * DAY_MS),
+      expiryDate: marcadorDoDiaComercialDeTeste(-3),
     });
     const inFiveDays = await stockLot(item.id, "20", {
-      expiryDate: new Date(Date.now() + 5 * DAY_MS),
+      expiryDate: marcadorDoDiaComercialDeTeste(5),
     });
     const inFortyDays = await stockLot(item.id, "30", {
-      expiryDate: new Date(Date.now() + 40 * DAY_MS),
+      expiryDate: marcadorDoDiaComercialDeTeste(40),
     });
     // Mesmo vencendo logo, lote zerado não é problema operacional.
-    const zeroed = await stockLot(item.id, "15", { expiryDate: new Date(Date.now() + 3 * DAY_MS) });
+    const zeroed = await stockLot(item.id, "15", { expiryDate: marcadorDoDiaComercialDeTeste(3) });
     await app.inject({
       method: "POST",
       url: "/inventory-adjustments",

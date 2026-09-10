@@ -41,7 +41,8 @@ faz primeiro e estava espalhada por cinco lugares.
 | **P1-3** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
 | **P1-4** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
 | **P1-5** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-6** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-6** | COST-COMMERCIAL-DAY-01 | A · P1 | Achado de D-17. Terceiro lugar do custo com a assimetria instante × dia civil, e a suíte deixou de cobri-lo |
+| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
@@ -377,6 +378,45 @@ OP é apagada; a cancelada continua no histórico.
 **F-03-1 viola §54** ao pé da letra: "é proibido mostrar dois números de
 momentos diferentes sem dizer qual é qual".
 
+#### COST-COMMERCIAL-DAY-01 — o custo de hoje perde as três últimas horas do dia
+
+Encontrado em 2026-09-09 durante D-17, e **não corrigido lá de propósito**: D-17
+era escopo de teste, este é de runtime. É a mesma assimetria que §76 corrigiu
+para a oferta do fornecedor e §79 para a tarifa industrial — o terceiro lugar do
+custo em que INSTANTE e DIA CIVIL ainda são comparados um contra o outro.
+
+São dois pontos, os dois no caminho do custo:
+
+**1. A janela de compras termina cedo demais.**
+`lib/cost-reference.ts:95` calcula `limite = fimDoDia(referenceDate)`, e
+`referenceDate` chega como `marcadorDeHojeComercial()` — `2026-09-09T00:00Z`.
+`fimDoDia` põe o fim do dia **UTC** daquele marcador, `2026-09-09T23:59:59.999Z`,
+que é **20:59:59 em São Paulo**. Mas o dia comercial 09/09 só acaba às 23:59:59
+de São Paulo, isto é, `2026-09-10T02:59:59.999Z`. Um recebimento lançado entre
+21h e meia-noite tem `receivedAt` DEPOIS do limite e não entra na média
+ponderada do próprio dia: quem recebe material à noite e pergunta o CMV recebe
+`NO_COST` ou uma média sem a compra que acabou de registrar. A correção é o fim
+do dia COMERCIAL (`limitesDoDiaComercial(...).fim`) para coluna de instante,
+mantendo `fimDoDia` para coluna de data civil — são espaços diferentes e a
+comparação hoje mistura os dois.
+
+**2. A referência manual nasce valendo amanhã.**
+`modules/items/item-cost-references.service.ts:99` usa `new Date()` quando
+`effectiveFrom` não vem, e a linha 109 grava `inicioDoDia(...)` — a meia-noite do
+dia **UTC**. Às 22h de São Paulo isso é o marcador de AMANHÃ, e a referência
+criada "para hoje" só passa a valer no dia seguinte. É literalmente o padrão que
+§79 tirou de `IndustrialResourceRate`: ali virou `marcadorDeHojeComercial()`,
+aqui ficou.
+
+Janela de exposição: 21:00–23:59 de São Paulo, todo dia. Nenhum dado gravado
+está errado — o que erra é a LEITURA, e por isso não há backfill à vista.
+
+A suíte **não protege mais estes dois pontos**: as fixtures de D-17 passaram a
+ancorar recebimento no começo do dia comercial e a declarar `effectiveFrom`, que
+é o que uma fixture deve fazer, e com isso deixaram de passar pelo caminho
+defeituoso. Quem corrigir precisa escrever o teste da borda junto — o
+instrumental determinístico já existe em `test-support/dia-comercial.ts`.
+
 #### PROJECT-CUSTOMER-CONTACT-01 — contato do cliente visível no Projeto
 
 Vindo do walkthrough real (2026-09-09). Quick win de leitura.
@@ -672,37 +712,6 @@ migration. Sem impacto funcional e sem risco real (os argumentos são
 constantes). `scripts/prisma-bin.mjs`, criado no MIG-ORDER-01b, já resolve o
 binário do Prisma sem shell — a correção é trocar a chamada por ele. Ficou
 fora daquela capability de propósito, para não aumentar escopo.
-
-
-### 17. `pnpm test` da API reprova numa janela diária de 3 horas — MEDIUM
-
-Achado de 2026-09-09, durante CUSTOMER-CEP-02. **Não é defeito de produto, e
-não vem daquela branch:** medido no `d640bf2` limpo, sem nenhuma alteração, o
-resultado é o mesmo — `63 failed | 1349 passed (1412)`, 19 arquivos de
-`apps/api`.
-
-A causa é a asimetria de leitura entre instante e dia, do lado das FIXTURES. O
-helper `hoje()` de `supplier-items.test.ts` (e o mesmo padrão em outros
-arquivos) escreve `new Date().toISOString()` — o INSTANTE — numa coluna que o
-domínio lê como marcador de dia: `offerValidityToday` compara
-`diaDaColunaDeData(effectiveAt)`, que lê em **UTC**, contra `hojeComercial()`,
-que lê em **America/Sao_Paulo**. Entre 00:00 e 03:00 UTC — 21:00 a 23:59 em São
-Paulo — o dia UTC já virou e o comercial não, então uma oferta criada "agora"
-volta `NOT_YET_EFFECTIVE`.
-
-Nesta máquina, que roda em `America/Vancouver`, a janela cai às 17:00–20:00
-locais, que é quando a medição foi feita. Em CI que roda em UTC a janela existe
-igual — só cai em outro horário local.
-
-**O produto não tem esse defeito**: a tela manda `<input type="date">`, que
-materializa `T00:00:00Z` e é lido como o dia certo. Quem afirma o instante é só
-a fixture. A correção é a fixture escrever um marcador de dia comercial
-(`marcadorDeDia(hojeComercial(new Date()))`), não `toISOString()`.
-
-Ficou fora de CUSTOMER-CEP-02 de propósito: são 63 testes em 19 arquivos, do
-lado do custo, e a branch era de runtime do frontend. Enquanto não for
-corrigido, `pnpm test` é confiável fora da janela e enganoso dentro dela — o
-que é pior que falhar sempre.
 
 ---
 

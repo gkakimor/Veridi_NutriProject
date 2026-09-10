@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { PRODUCTION_ORDER_STATUSES } from "@veridi/shared";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 import { BLOCKING_PRODUCTION_ORDER_STATUSES } from "./customer-orders.service.js";
@@ -395,10 +396,10 @@ describe("Plano de Atendimento — aplicação", () => {
       { finishedControlsExpiry: true },
     );
     const lotA = await receiveFinishedStock(finishedItem.id, "400", {
-      expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(10),
     });
     const lotB = await receiveFinishedStock(finishedItem.id, "500", {
-      expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(60),
     });
 
     const customer = await createCustomer();

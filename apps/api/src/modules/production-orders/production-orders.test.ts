@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -806,11 +807,11 @@ describe("Production Orders — disponibilidade, On Order, shortage e FEFO", () 
 
     const earlierLot = await receiveStock(rawMaterial.id, "30", {
       status: "AVAILABLE",
-      expiryDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(5),
     });
     await receiveStock(rawMaterial.id, "40", {
       status: "AVAILABLE",
-      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(30),
     });
 
     const created = await app.inject({

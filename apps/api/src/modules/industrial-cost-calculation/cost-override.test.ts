@@ -2,6 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import {
+  diaComercialDeTeste,
+  instanteNoDiaComercialDeTeste,
+  marcadorDoDiaComercialDeTeste,
+} from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
 /**
@@ -15,7 +20,6 @@ import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
  * referência manual no item.
  */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
@@ -151,7 +155,7 @@ async function receiveWithCost(
       method: "POST",
       url: `/purchase-orders/${po.id}/receipts`,
       payload: {
-        receivedAt: new Date(Date.now() - (params.daysAgo ?? 1) * DAY_MS).toISOString(),
+        receivedAt: instanteNoDiaComercialDeTeste(-(params.daysAgo ?? 1)).toISOString(),
         lines: [
           {
             purchaseOrderLineId: po.lines[0].id,
@@ -167,11 +171,21 @@ async function receiveWithCost(
   fixtureReceiptIds.push(receipt.id);
 }
 
+/**
+ * Referência manual de custo, com a vigência DECLARADA.
+ *
+ * A vigência é data civil, e a fixture diz qual é em vez de deixar o servidor
+ * decidir: omitindo `effectiveFrom` o padrão do runtime é `new Date()`, que às
+ * 22h de São Paulo já é o dia UTC seguinte — a referência criada "para hoje"
+ * nascia valendo só amanhã e o custo respondia `NO_COST` (D-17). O padrão do
+ * runtime está registrado como achado à parte; aqui o teste deixou de depender
+ * dele.
+ */
 async function setManualReference(app: App, itemId: string, unitCost: string) {
   const response = await app.inject({
     method: "POST",
     url: `/items/${itemId}/cost-references`,
-    payload: { unitCost },
+    payload: { unitCost, effectiveFrom: diaComercialDeTeste() },
   });
   expect(response.statusCode, response.body).toBe(201);
 }
@@ -405,7 +419,7 @@ describe("Referência manual forçada — por cálculo e por componente", () => 
           unitPrice: supplier.id === a.id ? "900" : "910",
           currencyCode: "BRL",
           priceUomCode: "kg",
-          effectiveAt: new Date(Date.now() - DAY_MS),
+          effectiveAt: marcadorDoDiaComercialDeTeste(-1),
           source: "MANUAL",
         },
       });
