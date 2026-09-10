@@ -41,6 +41,7 @@ faz primeiro e estava espalhada por cinco lugares.
 | **P1-3** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
 | **P1-4** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
 | **P1-5** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
@@ -604,6 +605,77 @@ calculam ao vivo mas ainda sem `CalcHint`; Custo Industrial e impacto de
 materiais do Pedido ficam em branco até apertar botão, sem dizer que o valor é
 do que está salvo.
 
+
+### 9. OPS-CALENDAR-01 — calendário operacional e dias não úteis — P2
+
+Necessidade trazida pelo PO em 2026-09-09. A Veridi precisa de uma tela onde o
+usuário **declare** feriados, recessos e outros dias sem operação, para que
+esses dias não contem nas futuras contagens de dias úteis de produção e
+planejamento. **Não implementar sem autorização** — o que está aqui é o
+registro da necessidade e das perguntas que precisam de resposta antes do
+build.
+
+**Conceito novo, e o cuidado é não confundi-lo com o que já existe.** O sistema
+já tem DATA CIVIL e DIA COMERCIAL (`hojeComercial`, `America/Sao_Paulo`,
+§72, §81), e eles governam custo, vigência de oferta, tarifa industrial e
+`referenceDate`. Um feriado **não** faz uma oferta deixar de estar vigente, nem
+uma `ItemCostReference` ou uma `IndustrialResourceRate` deixarem de valer, nem
+`referenceDate` deixar de existir. O que nasce aqui é outra coisa:
+
+> **DIA ÚTIL OPERACIONAL** = dia permitido pela semana **E** não cadastrado
+> como dia não útil.
+
+As duas metades dessa definição são independentes, e a primeira ainda não tem
+resposta (ver "o que auditar antes").
+
+**Escopo conceitual inicial.** Calendário GLOBAL da Veridi — um só. Cada
+registro é uma DATA com motivo/descrição, tipo e observação. Tipos candidatos,
+ainda sem enum e sem runtime: `FERIADO`, `RECESSO`, `PARADA_OPERACIONAL`,
+`OUTRO`. Tela provável em Configurações → Calendário operacional; a rota
+definitiva não se decide agora.
+
+Fora do escopo inicial, e só voltam com necessidade real: calendário por
+funcionário, equipamento, recurso, setor, turno ou cliente.
+
+**Feriado é declarado à mão.** Sem integração externa e sem API de feriados —
+importação automática é roadmap. Sem recorrência anual: `25/12/2026` é um
+registro de data, não uma regra "todo 25/12"; decidir recorrência sem cuidado
+produziria regra errada para feriado móvel. Carnaval, Sexta-feira Santa e
+Corpus Christi continuam sendo datas cadastradas no calendário do ano —
+nenhum algoritmo cívico nesta fase.
+
+**O que auditar antes de construir:**
+
+- **Fim de semana.** Auditar como o sistema trata sábado e domingo hoje, sem
+  assumir. Levantamento superficial de 2026-09-09 não encontrou nenhum
+  `getDay()`, nenhuma noção de "dia útil" e nenhum cálculo de prazo por
+  contagem de dias no runtime — o único `leadTimeDays` é `QuoteVersion`, campo
+  informativo digitado na condição comercial, que ninguém soma a data nenhuma.
+  Confirmar isso é parte do discovery, não conclusão dele.
+- **Uma definição por data?** Provável, mas não criar constraint agora: auditar
+  se dois motivos na mesma data precisam coexistir.
+- **Editar, inativar ou excluir?** Definir no discovery, preservando
+  rastreabilidade de uma data que já participou de planejamento calculado.
+
+**Data não útil não reescreve o passado.** Planejamento FUTURO pode recalcular;
+data já prometida, congelada ou histórica não muda em silêncio. Em particular,
+`CustomerOrderDelivery.scheduledDate` é PROMESSA (§75) e este calendário não a
+move: promessa caindo em dia não útil deve virar alerta ou pedido de
+reprogramação explícita — a decisão de UX fica para a implementação.
+
+**Dependências.** É fundação temporal operacional de PLAN-DATE-01 (item 14) e
+deve vir antes da parte dele que passar a CONTAR dias úteis — necessidade de
+compra, lead time, produção e data necessária a partir da promessa de entrega.
+As partes de PLAN-DATE-01 que não dependem de contagem não ficam bloqueadas
+por isto.
+
+Ao construir, auditar onde existem `leadTimeDays`, `plannedDate`,
+`requiredDate`, `dueDate` e equivalentes — **nenhum deles muda agora**.
+
+**Discovery separado:** se o mesmo calendário global vale para prazo de
+planejamento de COMPRA. Não assumir que "dias do fornecedor" seguem o
+calendário da Veridi — lead time de fornecedor pode ter semântica própria.
+
 ---
 
 ## C. Decisões aguardando negócio — gate com a Veridi
@@ -746,6 +818,10 @@ O que se pode ganhar, quando o PO autorizar:
 **Restrição durável:** nada disso pode criar um segundo motor de reserva. A
 reserva continua sendo do Plano de Atendimento (§75). Sem decisão do PO, não
 implementar.
+
+**Dependência temporal:** a parte que passar a CONTAR dias úteis — lead time,
+data necessária, necessidade de compra a partir da promessa — precisa de
+OPS-CALENDAR-01 (B · #9) antes. As demais partes não ficam bloqueadas por isso.
 
 ### 13. Ajuda contextual — o que a Fase 1 deixou aberto — LOW
 
