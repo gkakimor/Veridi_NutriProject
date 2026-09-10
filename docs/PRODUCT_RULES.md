@@ -4885,3 +4885,74 @@ apaga a vigência anterior por conta própria.
 
 Nenhuma migration nasceu disto: a semântica é de leitura, e a coluna já era a
 certa.
+
+---
+
+## §80 — O endereço de um cadastro pertence a UM CEP
+
+CUSTOMER-CEP-02, 2026-09-09. Vindo do walkthrough real: ao trocar o CEP de um
+Cliente, campos do endereço anterior ficavam na tela.
+
+O bloco de endereço — **logradouro, número, complemento, bairro, cidade e UF** —
+pertence ao CEP que está no cadastro. Não é uma coleção de seis campos livres
+que por acaso foi preenchida por uma consulta: é o endereço **daquele** CEP.
+
+### Trocar o CEP invalida o endereço inteiro
+
+No instante em que o CEP digitado deixa de ser o CEP a que o endereço pertence,
+os seis campos são limpos — antes de qualquer consulta, sem esperar rede.
+
+**Número e complemento entram na limpeza**, e é a parte contraintuitiva: o
+ViaCEP não os conhece, então a regra antiga nunca os tocava. Mas eles são do
+endereço anterior tanto quanto a rua, e a consulta do CEP novo não prova que
+continuam válidos. Sobreviver à troca produz o **endereço híbrido** — a rua e a
+cidade de um CEP com o número da casa de outro —, que é pior que o campo vazio
+porque parece plausível, é salvo assim e vai impresso assim.
+
+Limpar antes da consulta, e não depois, é deliberado: esperar a resposta para
+parar de mostrar o endereço errado é mostrá-lo pelo tempo que o ViaCEP levar —
+e ele pode não responder.
+
+### O que NÃO conta como troca
+
+- **máscara.** `18270-000` e `18270000` são o mesmo CEP. A comparação é por
+  dígitos;
+- **CEP incompleto.** Enquanto o CEP novo não tem oito dígitos não há consulta —
+  mas o endereço anterior já foi invalidado, e não volta;
+- **endereço sem CEP dono.** Cadastro manual — o de um cliente salvo sem CEP, ou
+  o que está sendo digitado antes do primeiro CEP — não é apagado por um CEP que
+  chega depois: a primeira consulta apenas completa o que está vazio. Endereço
+  manual sem CEP continua sendo cadastro válido.
+
+### Sob o mesmo CEP, quem manda é o operador
+
+Enquanto o CEP não muda, a correção manual é preservada e a consulta não se
+repete. A tela não reescreve o que a pessoa acabou de corrigir.
+
+Trocar o CEP **depois** da correção manual apaga a correção junto — ela era do
+endereço anterior.
+
+### Falha e ausência não restauram o endereço velho
+
+ViaCEP fora do ar, CEP inexistente, ou resposta sem logradouro: os campos ficam
+vazios e editáveis. Voltar o endereço anterior afirmaria que ele pertence ao CEP
+novo. **A falha da integração nunca impede salvar um endereço digitado à mão** —
+o cadastro não depende de serviço externo.
+
+### A resposta que chega fora de ordem é descartada
+
+A guarda é a **identidade do CEP consultado**, não a ordem de chegada: antes de
+escrever qualquer coisa — inclusive o recado de erro —, a resposta é conferida
+contra o CEP que está na tela naquele instante. Vale nos dois sentidos: a
+resposta atrasada de A não invade B, e a resposta rápida de A não repovoa o
+endereço enquanto B é esperado.
+
+Não é debounce. Tempo maior só diminui a chance da corrida; identidade a elimina.
+
+### Onde a regra vive
+
+`apps/web/src/pages/customers/customer-form.tsx`, no par
+`typedZip`/`addressZip` — o CEP que está sendo digitado e o CEP a que o
+endereço pertence. Duas identidades, e só duas: distinguir isso é a regra
+inteira. Nada disso é de domínio — a API continua aceitando cada campo de
+endereço como opcional e independente, e nenhuma migration nasceu daqui.

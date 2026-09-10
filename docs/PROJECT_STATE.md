@@ -630,10 +630,41 @@ idêntica à de SUPPLIER-OFFER-OVERLAP-01 e foi reconciliada com ela — encerra
 anterior, bloquear, alertar, ou permitir com prioridade explícita —, com o
 estado atual travado em teste para que a mudança seja deliberada.
 
+## O endereço pertence ao CEP (2026-09-09)
+
+**CUSTOMER-CEP-02 fechado. Regra durável: §80.** Do walkthrough real: ao trocar
+o CEP de um Cliente, campos do endereço anterior ficavam na tela.
+
+A causa não era o que parecia. `handleZipLookup` preenchia o campo vazio e
+substituía **apenas** o que a consulta anterior tinha posto — regra deliberada
+para não apagar digitação. O efeito real era pior: o que fora digitado à mão
+sobrevivia à troca de CEP, e número e complemento, que a consulta nunca conhece,
+nunca eram tocados. O E2E reproduziu o defeito antes da correção: `Sala 2`, do
+CEP de São Paulo, salvo debaixo do CEP de Campinas.
+
+**Duas identidades no lugar do mapa de valores auto-preenchidos:** `typedZip`, o
+CEP que está no campo, e `addressZip`, o CEP a que o endereço na tela pertence.
+Enquanto são iguais, o endereço é de quem está na tela e a correção manual manda;
+quando divergem, os seis campos são limpos **antes** da consulta — número e
+complemento inclusive. `""` em `addressZip` é o endereço sem CEP dono: cadastro
+manual, que o primeiro CEP completa em vez de apagar.
+
+**A corrida foi eliminada por identidade, não por tempo.** A resposta é conferida
+contra o CEP que está na tela no instante em que ela volta, antes de qualquer
+escrita — inclusive a do recado de erro. Vale nos dois sentidos: a resposta
+atrasada de A não invade B, e a resposta rápida de A não repovoa o endereço
+enquanto B é esperado. Debounce maior só diminuiria a chance.
+
+**Zero backend, zero schema, zero migration** — a API já aceitava cada campo de
+endereço como opcional e independente, e continua aceitando. Nenhum dado de PROD
+tocado. O achado extra: no cadastro salvo, sair do campo do CEP disparava uma
+consulta redundante (a guarda dependia de `cepStatus`, que nascia `idle`); agora
+o CEP que já é dono do endereço não é reconsultado.
+
 ## Próxima prioridade
 
-**P1 da fila viva** — CUSTOMER-CEP-02, primeiro da fila desde que
-INDUSTRIAL-RATE-VALIDITY-01 fechou. Decisão de PO já fechada.
+**P1 da fila viva** — PROJECT-CUSTOMER-CONTACT-01, primeiro da fila desde que
+CUSTOMER-CEP-02 fechou. Leitura, sem duplicar dado. **Não iniciado.**
 
 **COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
 mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum
