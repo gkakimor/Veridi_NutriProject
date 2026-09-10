@@ -661,6 +661,52 @@ tocado. O achado extra: no cadastro salvo, sair do campo do CEP disparava uma
 consulta redundante (a guarda dependia de `cepStatus`, que nascia `idle`); agora
 o CEP que já é dono do endereço não é reconsultado.
 
+## A fixture passou a falar a língua do domínio (2026-09-09)
+
+**D-17 fechado.** `pnpm test` voltou a ser gate confiável em qualquer horário.
+
+O defeito era da FIXTURE, não do produto. Um campo de data civil —
+`effectiveAt`, `validUntil`, `effectiveFrom`, `expiryDate` — guarda a meia-noite
+UTC como marcador do dia; o domínio o lê em UTC e compara contra o dia
+comercial, em São Paulo. Escrever `new Date().toISOString()` ali escreve um
+INSTANTE, e entre 00:00 e 03:00 UTC — 21:00 às 23:59 em São Paulo — os dois
+calendários discordam: a oferta criada "para hoje" nascia `NOT_YET_EFFECTIVE`, e
+o lote "vencido ontem" ainda estava válido. A suíte da API ficava vermelha três
+horas por dia e verde nas outras vinte e uma, o que fazia o defeito parecer do
+produto.
+
+**Reproduzido antes de corrigir**, e sem depender do relógio da máquina: a mesma
+suíte, com `vi.setSystemTime` em `2026-09-10T01:30Z` (10/09 em UTC, 09/09 na
+Veridi), reprova **63 casos em 19 arquivos** — exatamente os números do
+relatório de CUSTOMER-CEP-02. A 15:00Z, os mesmos 19 arquivos passam. Depois da
+correção: **0 de 1421** na borda, e igual nos dois instantes que limitam o dia
+comercial.
+
+**Um helper, delegando à fundação.** `test-support/dia-comercial.ts` tem três
+funções e nenhum calendário próprio — `hojeComercial`, `marcadorDoDiaCivil` e
+`limitesDoDiaComercial` são os mesmos que o runtime usa. "Ontem" e "amanhã"
+andam por DIA, não por 24 horas de relógio, então horário de verão não pula nem
+repete um dia. Instante continua instante: `createdAt`, `occurredAt` e
+`receivedAt` seguem sendo carimbo de tempo — o que mudou foi ancorar a ESCOLHA
+do instante no dia comercial quando a fixture quer dizer "isto aconteceu hoje".
+
+**O relógio da suíte NÃO foi congelado, e o `TZ` não foi fixado.** As duas coisas
+deixariam a suíte verde sem corrigir nada, e a primeira quebra de verdade: com o
+relógio parado, `createdAt` de registros que existem para ser ordenados empata, e
+quatro testes de desempate — FEFO, "a criada por último vence", "a tarifa mais
+recente vence" — falham sem nada estar errado. Isso apareceu no andaime de
+MEDIÇÃO e é a razão de ele ter sido andaime, e não solução.
+
+**STOP GATE aberto: COST-COMMERCIAL-DAY-01.** D-17 desenterrou dois pontos de
+RUNTIME com a mesma assimetria, e eles não foram corrigidos aqui de propósito.
+A janela de compras termina no fim do dia UTC do marcador — 20:59 de São Paulo —,
+então recebimento lançado à noite não entra na média do próprio dia; e a
+referência manual de custo sem data explícita nasce com o dia UTC, valendo só
+amanhã. É o terceiro lugar do custo com o problema que §76 e §79 já corrigiram
+nos outros dois. Registrado em [`BACKLOG.md`](BACKLOG.md), **sem implementar** —
+e a suíte deixou de cobrir esses dois caminhos, porque a fixture correta não
+passa por eles.
+
 ## Próxima prioridade
 
 **P1 da fila viva** — PROJECT-CUSTOMER-CONTACT-01, primeiro da fila desde que

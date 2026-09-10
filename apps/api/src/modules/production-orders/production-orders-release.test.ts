@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -372,10 +373,10 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: true, controlsExpiry: true });
     const earlyLot = await receiveStock(rawMaterial.id, "30", {
-      expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(10),
     });
     const laterLot = await receiveStock(rawMaterial.id, "50", {
-      expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(60),
     });
 
     const { product } = await createProductWithActiveFormulation(app, [
@@ -401,8 +402,8 @@ describe("Production Orders — RELEASE (PLANNED → RELEASED)", () => {
     await app.ready();
 
     const rawMaterial = await createItem("RAW_MATERIAL", { controlsLot: true, controlsExpiry: true });
-    await receiveStock(rawMaterial.id, "30", { expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000) });
-    await receiveStock(rawMaterial.id, "50", { expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000) });
+    await receiveStock(rawMaterial.id, "30", { expiryDate: marcadorDoDiaComercialDeTeste(10) });
+    await receiveStock(rawMaterial.id, "50", { expiryDate: marcadorDoDiaComercialDeTeste(60) });
 
     const { product: productA } = await createProductWithActiveFormulation(app, [
       { itemId: rawMaterial.id, quantity: "20", unitCode: "kg" },

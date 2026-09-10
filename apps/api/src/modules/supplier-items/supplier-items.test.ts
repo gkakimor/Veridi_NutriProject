@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 
 /**
  * Capacidade 40 — Item × Fornecedor / homologação / MOQ / preços.
@@ -97,9 +98,18 @@ async function createRelation(app: App, itemId: string, supplierId: string) {
  * Antes destes testes o servidor assumia "agora" quando `effectiveAt` não
  * vinha, e por isso os casos abaixo o omitiam. A ausência deixou de ser
  * aceita: a data comercial de um preço é afirmação de quem negocia.
+ *
+ * `effectiveAt` é DATA CIVIL, então o marcador vem do dia comercial e não do
+ * relógio: `new Date().toISOString()` grava o dia UTC, que às 22h de São Paulo
+ * já é o de amanhã, e a oferta "de hoje" nascia `NOT_YET_EFFECTIVE` (D-17).
  */
 function hoje(): string {
-  return new Date().toISOString();
+  return marcadorDoDiaComercialDeTeste().toISOString();
+}
+
+/** Um dia comercial de distância, para as bordas de vigência. */
+function emDias(deslocamento: number): string {
+  return marcadorDoDiaComercialDeTeste(deslocamento).toISOString();
 }
 
 /** Homologa usando um app da Qualidade — Compras nunca homologa sozinha. */
@@ -400,7 +410,7 @@ describe("Item × Fornecedor — ofertas", () => {
     expect(invalidValidity.statusCode).toBe(400);
     expect(invalidValidity.json().error).toBe("invalid_validity");
 
-    const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    const future = emDias(30);
     const futureOffer = await app.inject({
       method: "POST",
       url: `/supplier-items/${relation.id}/offers`,
@@ -414,8 +424,8 @@ describe("Item × Fornecedor — ofertas", () => {
       payload: {
         unitPrice: "60",
         priceUomCode: "kg",
-        effectiveAt: new Date(Date.now() - 60 * 86_400_000).toISOString(),
-        validUntil: new Date(Date.now() - 10 * 86_400_000).toISOString(),
+        effectiveAt: emDias(-60),
+        validUntil: emDias(-10),
       },
     });
     expect(expired.json().currentOffer).toBeNull();
@@ -569,7 +579,7 @@ describe("Item × Fornecedor — prontidão como fonte de custo", () => {
           unitPrice: "70",
           currencyCode: "USD",
           priceUomCode: "kg",
-          effectiveAt: new Date(),
+          effectiveAt: marcadorDoDiaComercialDeTeste(),
           source: "MANUAL",
         },
         {
@@ -586,7 +596,7 @@ describe("Item × Fornecedor — prontidão como fonte de custo", () => {
           unitPrice: "50",
           currencyCode: "BRL",
           priceUomCode: "kg",
-          effectiveAt: new Date(Date.now() + 30 * 86_400_000),
+          effectiveAt: marcadorDoDiaComercialDeTeste(30),
           source: "MANUAL",
         },
         {
@@ -594,8 +604,8 @@ describe("Item × Fornecedor — prontidão como fonte de custo", () => {
           unitPrice: "40",
           currencyCode: "BRL",
           priceUomCode: "kg",
-          effectiveAt: new Date(Date.now() - 60 * 86_400_000),
-          validUntil: new Date(Date.now() - 10 * 86_400_000),
+          effectiveAt: marcadorDoDiaComercialDeTeste(-60),
+          validUntil: marcadorDoDiaComercialDeTeste(-10),
           source: "MANUAL",
         },
       ],

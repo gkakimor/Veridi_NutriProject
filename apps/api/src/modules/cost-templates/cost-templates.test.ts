@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import {
+  instanteNoDiaComercialDeTeste,
+  marcadorDoDiaComercialDeTeste,
+} from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { Prisma } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
@@ -132,7 +136,7 @@ async function receberComCusto(app: App, itemId: string, unitCost: string) {
       method: "POST",
       url: `/purchase-orders/${po.id}/receipts`,
       payload: {
-        receivedAt: new Date().toISOString(),
+        receivedAt: instanteNoDiaComercialDeTeste().toISOString(),
         lines: [
           {
             purchaseOrderLineId: po.lines[0].id,
@@ -559,20 +563,20 @@ describe("Aplicar template de estrutura — configuração, nunca tarifa", () =>
       return Number(linha?.subtotal ?? 0);
     };
 
-    const hoje = new Date();
+    const hoje = marcadorDoDiaComercialDeTeste();
     const antes = await custoDe(hoje);
     // 4 h × R$ 20 = R$ 80.
     expect(antes).toBe(80);
 
     // Tarifa sobe para 25 a partir de amanhã.
-    const amanha = new Date(Date.now() + 86400000);
+    const amanha = marcadorDoDiaComercialDeTeste(1);
     await app.inject({
       method: "POST",
       url: `/industrial-resources/${mist.id}/rates`,
       payload: { rateValue: "25", effectiveAt: amanha.toISOString() },
     });
 
-    const depois = await custoDe(new Date(Date.now() + 2 * 86400000));
+    const depois = await custoDe(marcadorDoDiaComercialDeTeste(2));
     /*
      * O mesmo template, a mesma estrutura, outra data: 4 h × R$ 25 = R$ 100.
      * Se a tarifa tivesse sido congelada na cópia, este número continuaria 80

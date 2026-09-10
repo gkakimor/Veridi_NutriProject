@@ -2,6 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import {
+  diaComercialDeTeste,
+  instanteNoDiaComercialDeTeste,
+  marcadorDoDiaComercialDeTeste,
+} from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
 /**
@@ -17,7 +22,6 @@ import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
  * de origem entre a estimativa e o motor de custo.
  */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
@@ -136,7 +140,7 @@ async function receiveWithCost(
       method: "POST",
       url: `/purchase-orders/${po.id}/receipts`,
       payload: {
-        receivedAt: new Date(Date.now() - params.daysAgo * DAY_MS).toISOString(),
+        receivedAt: instanteNoDiaComercialDeTeste(-params.daysAgo).toISOString(),
         lines: [
           {
             purchaseOrderLineId: po.lines[0].id,
@@ -172,17 +176,27 @@ async function approveSupplierWithOffer(
       unitPrice: params.unitPrice,
       currencyCode: "BRL",
       priceUomCode: "kg",
-      effectiveAt: new Date(Date.now() - DAY_MS),
+      effectiveAt: marcadorDoDiaComercialDeTeste(-1),
       source: "MANUAL",
     },
   });
 }
 
+/**
+ * Referência manual de custo, com a vigência DECLARADA.
+ *
+ * A vigência é data civil, e a fixture diz qual é em vez de deixar o servidor
+ * decidir: omitindo `effectiveFrom` o padrão do runtime é `new Date()`, que às
+ * 22h de São Paulo já é o dia UTC seguinte — a referência criada "para hoje"
+ * nascia valendo só amanhã e o custo respondia `NO_COST` (D-17). O padrão do
+ * runtime está registrado como achado à parte; aqui o teste deixou de depender
+ * dele.
+ */
 async function setManualReference(app: App, itemId: string, unitCost: string, effectiveFrom?: string) {
   const response = await app.inject({
     method: "POST",
     url: `/items/${itemId}/cost-references`,
-    payload: { unitCost, ...(effectiveFrom ? { effectiveFrom } : {}) },
+    payload: { unitCost, effectiveFrom: effectiveFrom ?? diaComercialDeTeste() },
   });
   expect(response.statusCode, response.body).toBe(201);
 }
@@ -451,7 +465,7 @@ describe("Custo estimado da Formulação — seleção canônica da fonte", () =
     await receiveWithCost(app, { supplierId: supplier.id, itemId: item.id, quantity: "10", unitCost: "99", daysAgo: 2 });
     const { versionId } = await createFormulation(app, [{ itemId: item.id, quantity: "1" }]);
 
-    const historico = componentOf(await estimate(app, versionId, new Date(Date.now() - 10 * DAY_MS)), item.id);
+    const historico = componentOf(await estimate(app, versionId, marcadorDoDiaComercialDeTeste(-10)), item.id);
     expect(historico.costSource).toBe("WEIGHTED_AVG_30D");
     expect(historico.unitCost).toBe("10.00000000");
 

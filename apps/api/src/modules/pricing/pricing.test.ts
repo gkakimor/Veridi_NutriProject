@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { instanteNoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
 /**
@@ -143,7 +144,7 @@ async function receiveWithCost(
       method: "POST",
       url: `/purchase-orders/${po.id}/receipts`,
       payload: {
-        receivedAt: new Date().toISOString(),
+        receivedAt: instanteNoDiaComercialDeTeste().toISOString(),
         lines: [
           {
             purchaseOrderLineId: po.lines[0].id,

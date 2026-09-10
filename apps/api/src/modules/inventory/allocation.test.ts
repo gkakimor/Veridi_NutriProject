@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { getPrisma } from "../../db/prisma.js";
 
 const fixtureSupplierIds: string[] = [];
@@ -129,8 +130,8 @@ describe("Allocation suggestion — FEFO", () => {
     await app.ready();
 
     const item = await createTestItem();
-    await createLot(item.id, "30", { expiryDate: new Date(Date.now() + 90 * DAY_MS) });
-    await createLot(item.id, "50", { expiryDate: new Date(Date.now() + 30 * DAY_MS) });
+    await createLot(item.id, "30", { expiryDate: marcadorDoDiaComercialDeTeste(90) });
+    await createLot(item.id, "50", { expiryDate: marcadorDoDiaComercialDeTeste(30) });
 
     const response = await app.inject({
       method: "GET",
@@ -152,8 +153,8 @@ describe("Allocation suggestion — FEFO", () => {
     await app.ready();
 
     const item = await createTestItem();
-    await createLot(item.id, "30", { expiryDate: new Date(Date.now() + 30 * DAY_MS) });
-    await createLot(item.id, "50", { expiryDate: new Date(Date.now() + 90 * DAY_MS) });
+    await createLot(item.id, "30", { expiryDate: marcadorDoDiaComercialDeTeste(30) });
+    await createLot(item.id, "50", { expiryDate: marcadorDoDiaComercialDeTeste(90) });
 
     const response = await app.inject({
       method: "GET",
@@ -176,7 +177,7 @@ describe("Allocation suggestion — FEFO", () => {
     await app.ready();
 
     const item = await createTestItem();
-    await createLot(item.id, "40", { expiryDate: new Date(Date.now() + 30 * DAY_MS) });
+    await createLot(item.id, "40", { expiryDate: marcadorDoDiaComercialDeTeste(30) });
 
     const response = await app.inject({
       method: "GET",
@@ -195,7 +196,7 @@ describe("Allocation suggestion — FEFO", () => {
     await app.ready();
 
     const item = await createTestItem();
-    await createLot(item.id, "70", { expiryDate: new Date(Date.now() + 30 * DAY_MS) });
+    await createLot(item.id, "70", { expiryDate: marcadorDoDiaComercialDeTeste(30) });
 
     const response = await app.inject({
       method: "GET",
@@ -216,7 +217,7 @@ describe("Allocation suggestion — FEFO", () => {
     await app.ready();
 
     const item = await createTestItem();
-    const emptyLot = await createLot(item.id, "20", { expiryDate: new Date(Date.now() + 30 * DAY_MS) });
+    const emptyLot = await createLot(item.id, "20", { expiryDate: marcadorDoDiaComercialDeTeste(30) });
     await getPrisma().inventoryMovement.create({
       data: {
         itemId: item.id,
@@ -229,7 +230,7 @@ describe("Allocation suggestion — FEFO", () => {
         createdBy: "Teste",
       },
     });
-    await createLot(item.id, "15", { expiryDate: new Date(Date.now() + 60 * DAY_MS) });
+    await createLot(item.id, "15", { expiryDate: marcadorDoDiaComercialDeTeste(60) });
 
     const response = await app.inject({
       method: "GET",
@@ -250,10 +251,10 @@ describe("Allocation suggestion — FEFO", () => {
     const item = await createTestItem();
     await createLot(item.id, "20", {
       status: "AWAITING_RELEASE",
-      expiryDate: new Date(Date.now() + 10 * DAY_MS),
+      expiryDate: marcadorDoDiaComercialDeTeste(10),
     });
     const availableLot = await createLot(item.id, "30", {
-      expiryDate: new Date(Date.now() + 60 * DAY_MS),
+      expiryDate: marcadorDoDiaComercialDeTeste(60),
     });
 
     const response = await app.inject({
@@ -273,9 +274,9 @@ describe("Allocation suggestion — FEFO", () => {
     await app.ready();
 
     const item = await createTestItem();
-    await createLot(item.id, "20", { status: "BLOCKED", expiryDate: new Date(Date.now() + 10 * DAY_MS) });
+    await createLot(item.id, "20", { status: "BLOCKED", expiryDate: marcadorDoDiaComercialDeTeste(10) });
     const availableLot = await createLot(item.id, "30", {
-      expiryDate: new Date(Date.now() + 60 * DAY_MS),
+      expiryDate: marcadorDoDiaComercialDeTeste(60),
     });
 
     const response = await app.inject({
@@ -297,9 +298,9 @@ describe("Allocation suggestion — FEFO", () => {
     const item = await createTestItem();
     await createLot(item.id, "20", {
       status: "AVAILABLE",
-      expiryDate: new Date(Date.now() - 5 * DAY_MS),
+      expiryDate: marcadorDoDiaComercialDeTeste(-5),
     });
-    const validLot = await createLot(item.id, "30", { expiryDate: new Date(Date.now() + 60 * DAY_MS) });
+    const validLot = await createLot(item.id, "30", { expiryDate: marcadorDoDiaComercialDeTeste(60) });
 
     const response = await app.inject({
       method: "GET",
@@ -318,7 +319,7 @@ describe("Allocation suggestion — FEFO", () => {
     await app.ready();
 
     const item = await createTestItem();
-    const lot = await createLot(item.id, "50", { expiryDate: new Date(Date.now() + 30 * DAY_MS) });
+    const lot = await createLot(item.id, "50", { expiryDate: marcadorDoDiaComercialDeTeste(30) });
 
     const before = await app.inject({
       method: "GET",
@@ -349,7 +350,7 @@ describe("Allocation suggestion — FEFO", () => {
     await app.ready();
 
     const item = await createTestItem();
-    await createLot(item.id, "70", { expiryDate: new Date(Date.now() + 30 * DAY_MS) });
+    await createLot(item.id, "70", { expiryDate: marcadorDoDiaComercialDeTeste(30) });
     await createOrderedPurchaseOrder(app, [{ itemId: item.id, orderedQuantity: "50" }]);
 
     const response = await app.inject({
@@ -370,8 +371,8 @@ describe("Allocation suggestion — FEFO", () => {
     await app.ready();
 
     const item = await createTestItem();
-    await createLot(item.id, "10.333333", { expiryDate: new Date(Date.now() + 30 * DAY_MS) });
-    await createLot(item.id, "10.333333", { expiryDate: new Date(Date.now() + 60 * DAY_MS) });
+    await createLot(item.id, "10.333333", { expiryDate: marcadorDoDiaComercialDeTeste(30) });
+    await createLot(item.id, "10.333333", { expiryDate: marcadorDoDiaComercialDeTeste(60) });
 
     const response = await app.inject({
       method: "GET",
@@ -394,11 +395,11 @@ describe("Allocation suggestion — FEFO", () => {
     const item = await createTestItem();
     const earlyAwaiting = await createLot(item.id, "20", {
       status: "AWAITING_RELEASE",
-      expiryDate: new Date(Date.now() + 5 * DAY_MS),
+      expiryDate: marcadorDoDiaComercialDeTeste(5),
     });
     const laterAvailable = await createLot(item.id, "20", {
       status: "AVAILABLE",
-      expiryDate: new Date(Date.now() + 30 * DAY_MS),
+      expiryDate: marcadorDoDiaComercialDeTeste(30),
     });
 
     const before = await app.inject({

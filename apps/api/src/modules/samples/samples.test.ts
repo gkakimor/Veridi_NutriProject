@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp, createAuthenticatedUser } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 
 /**
  * Capacidade 39 — Amostras / pilotos / testes Tn.
@@ -435,7 +436,7 @@ describe("Amostra — consumo de material", () => {
     expect((await consume(blocked.code)).json().error).toBe("lot_not_eligible");
 
     const expired = await receiveStock(item.id, "10", {
-      expiryDate: new Date(Date.now() - 86_400_000),
+      expiryDate: marcadorDoDiaComercialDeTeste(-1),
     });
     expect((await consume(expired.code)).json().error).toBe("lot_not_eligible");
 

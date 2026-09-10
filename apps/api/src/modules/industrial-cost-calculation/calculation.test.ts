@@ -2,6 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import {
+  instanteNoDiaComercialDeTeste,
+  marcadorDoDiaComercialDeTeste,
+} from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
 /**
@@ -15,7 +19,6 @@ import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
  * realizado e custo padrão aplicado numa OP.
  */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const fixtureProductIds: string[] = [];
 const fixtureItemIds: string[] = [];
@@ -199,7 +202,7 @@ async function receiveWithCost(
       method: "POST",
       url: `/purchase-orders/${po.id}/receipts`,
       payload: {
-        receivedAt: (params.receivedAt ?? new Date()).toISOString(),
+        receivedAt: (params.receivedAt ?? instanteNoDiaComercialDeTeste()).toISOString(),
         lines: [
           {
             purchaseOrderLineId: po.lines[0].id,
@@ -242,7 +245,8 @@ async function approveSupplierWithOffer(
       unitPrice: params.unitPrice,
       currencyCode: "BRL",
       priceUomCode: params.priceUomCode ?? "kg",
-      effectiveAt: params.effectiveAt === undefined ? new Date(Date.now() - DAY_MS) : params.effectiveAt,
+      effectiveAt:
+        params.effectiveAt === undefined ? marcadorDoDiaComercialDeTeste(-1) : params.effectiveAt,
       source: params.effectiveAt === null ? "LEGACY_IMPORT" : "MANUAL",
     },
   });
@@ -554,7 +558,7 @@ describe("Custo padrão — referência de material", () => {
       itemId: only90.id,
       quantity: "10",
       unitCost: "50",
-      receivedAt: new Date(Date.now() - 45 * DAY_MS),
+      receivedAt: instanteNoDiaComercialDeTeste(-45),
     });
 
     const structure90 = await createStructure(app, {
@@ -570,7 +574,7 @@ describe("Custo padrão — referência de material", () => {
       itemId: old.id,
       quantity: "10",
       unitCost: "70",
-      receivedAt: new Date(Date.now() - 200 * DAY_MS),
+      receivedAt: instanteNoDiaComercialDeTeste(-200),
     });
     const structureOld = await createStructure(app, {
       components: [{ itemId: old.id, quantity: "1", unitCode: "kg" }],
@@ -593,14 +597,14 @@ describe("Custo padrão — referência de material", () => {
       itemId: material.id,
       quantity: "10",
       unitCost: "80",
-      receivedAt: new Date(Date.now() - 10 * DAY_MS),
+      receivedAt: instanteNoDiaComercialDeTeste(-10),
     });
 
     const { version } = await createStructure(app, {
       components: [{ itemId: material.id, quantity: "1", unitCode: "kg" }],
     });
 
-    const before = await calculate(app, version.id, new Date(Date.now() - 20 * DAY_MS));
+    const before = await calculate(app, version.id, marcadorDoDiaComercialDeTeste(-20));
     expect(before.materials[0].unitCost).toBeNull();
     expect(before.materials[0].costSource).toBe("NO_COST");
 

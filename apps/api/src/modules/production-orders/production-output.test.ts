@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -613,7 +614,7 @@ describe("ProductionOutput — registro de produção", () => {
         quantity: "10",
         destination: "NEW_LOT",
         businessLotNumber: "VD-1",
-        expiryDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        expiryDate: marcadorDoDiaComercialDeTeste(-1).toISOString(),
       },
     });
     expect(past.statusCode).toBe(400);

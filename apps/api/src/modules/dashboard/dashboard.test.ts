@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 import { buildAttentionList } from "./attention.service.js";
@@ -597,7 +598,7 @@ describe("Dashboard — precisa de atenção", () => {
     const item = await createItem("FINISHED_PRODUCT");
     const bloqueadoComSaldo = await stockLot(item.id, "10", { status: "BLOCKED" });
     const proximoDoVencimento = await stockLot(item.id, "10", {
-      expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(10),
     });
     // Mesmo problema, sem saldo: não é problema operacional.
     const bloqueadoSemSaldo = await prisma.lot.create({

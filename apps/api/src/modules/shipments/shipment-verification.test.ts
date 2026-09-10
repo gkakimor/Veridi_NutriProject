@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LotStatus, UomDimension } from "@prisma/client";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 import { getPrisma } from "../../db/prisma.js";
 
@@ -340,7 +341,7 @@ describe("Conferência de lote — identidade", () => {
 
     const finishedItem = await createItem("FINISHED_PRODUCT", true);
     const lot = await stockLot(finishedItem.id, "800", {
-      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(30),
     });
     const product = await createProduct(app, finishedItem.id);
 
@@ -369,7 +370,7 @@ describe("Conferência de lote — identidade", () => {
 
     await prisma.lot.update({
       where: { id: lot.id },
-      data: { status: "AVAILABLE", expiryDate: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      data: { status: "AVAILABLE", expiryDate: marcadorDoDiaComercialDeTeste(-1) },
     });
     const expired = await verifyLine(app, draftA.id, draftA.lines[0].id, lot.code);
     expect(expired.statusCode).toBe(400);
@@ -431,10 +432,10 @@ describe("Conferência de lote — confirmação da expedição", () => {
 
     const finishedItem = await createItem("FINISHED_PRODUCT", true);
     const lotA = await stockLot(finishedItem.id, "300", {
-      expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(10),
     });
     const lotB = await stockLot(finishedItem.id, "200", {
-      expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+      expiryDate: marcadorDoDiaComercialDeTeste(60),
     });
     const product = await createProduct(app, finishedItem.id);
     const orderId = await createOrder(app, [

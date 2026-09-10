@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { marcadorDoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import { getPrisma } from "../../db/prisma.js";
 
 /**
@@ -52,7 +53,7 @@ describe("Liberação de lote respeita a validade", () => {
     const app = buildTestApp();
     await app.ready();
 
-    const ontem = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const ontem = marcadorDoDiaComercialDeTeste(-1);
     const lote = await criarLoteAguardando(ontem);
 
     const resposta = await app.inject({ method: "POST", url: `/lots/${lote.id}/release` });
@@ -71,7 +72,7 @@ describe("Liberação de lote respeita a validade", () => {
     const app = buildTestApp();
     await app.ready();
 
-    const daquiUmAno = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    const daquiUmAno = marcadorDoDiaComercialDeTeste(365);
     const lote = await criarLoteAguardando(daquiUmAno);
 
     const resposta = await app.inject({ method: "POST", url: `/lots/${lote.id}/release` });

@@ -4,6 +4,7 @@ import type { UomDimension } from "@prisma/client";
 import { calcularTotaisOrcamento } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import { instanteNoDiaComercialDeTeste } from "../../test-support/dia-comercial.js";
 import "../../lib/decimal.js";
 
 /**
@@ -263,7 +264,7 @@ async function receberComCusto(
       method: "POST",
       url: `/purchase-orders/${oc.id}/receipts`,
       payload: {
-        receivedAt: new Date().toISOString(),
+        receivedAt: instanteNoDiaComercialDeTeste().toISOString(),
         lines: [
           {
             purchaseOrderLineId: oc.lines[0].id,

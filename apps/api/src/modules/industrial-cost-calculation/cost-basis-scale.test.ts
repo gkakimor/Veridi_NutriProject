@@ -3,6 +3,10 @@ import { Prisma } from "@prisma/client";
 import type { UomDimension } from "@prisma/client";
 import { getPrisma } from "../../db/prisma.js";
 import { buildTestApp } from "../../test-support/authenticated-app.js";
+import {
+  diaComercialDeTeste,
+  instanteNoDiaComercialDeTeste,
+} from "../../test-support/dia-comercial.js";
 import { fixtureCustomerId } from "../../test-support/fixture-customer.js";
 
 /**
@@ -239,7 +243,7 @@ async function receiveWithCost(
       method: "POST",
       url: `/purchase-orders/${po.id}/receipts`,
       payload: {
-        receivedAt: new Date().toISOString(),
+        receivedAt: instanteNoDiaComercialDeTeste().toISOString(),
         lines: [
           {
             purchaseOrderLineId: po.lines[0].id,
@@ -396,8 +400,9 @@ async function estruturaBase300(app: App) {
   return { product, version, material, calculation };
 }
 
+/** O DIA da pergunta — o comercial, não o do relógio UTC (D-17). */
 function hoje(): string {
-  return new Date().toISOString().slice(0, 10);
+  return diaComercialDeTeste();
 }
 
 async function cmvPara(app: App, productId: string, quantity: string) {
