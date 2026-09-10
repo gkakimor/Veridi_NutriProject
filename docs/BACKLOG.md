@@ -32,17 +32,17 @@ FIX-02 (2026-09-08): quantidade física canônica na estimativa e um único
 
 Reconciliada em 2026-09-09 com o walkthrough real da Veridi. O detalhe de cada
 item fica na sua seção; aqui fica só a ORDEM, porque ela é a pergunta que se
-faz primeiro e estava espalhada por cinco lugares.
+faz primeiro e estava espalhada por cinco lugares. QUOTE-DRAFT-STATE-01 saiu da
+fila em 2026-09-10, resolvido.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | QUOTE-DRAFT-STATE-01 | A · P1 | Entrada válida do operador some sem aviso. Causa localizada, correção de estado de formulário |
-| **P1-2** | FORM-UOM-01 | A · P1 | Unidade é dado ESTRUTURAL — alimenta conversão, custo e produção. Texto livre ali é risco de integridade; a duplicação de orçamento é produtividade |
-| **P1-3** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
-| **P1-4** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-5** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-6** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | FORM-UOM-01 | A · P1 | Unidade é dado ESTRUTURAL — alimenta conversão, custo e produção. Texto livre ali é risco de integridade; a duplicação de orçamento é produtividade |
+| **P1-2** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
+| **P1-3** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-4** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-5** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-6** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
@@ -278,7 +278,22 @@ nomenclatura sem necessidade não é parte desta capability.
 
 ### P1 — próximas correções
 
-#### QUOTE-DRAFT-STATE-01 — condições não salvas do Orçamento somem ao mexer numa linha
+#### QUOTE-DRAFT-STATE-01 — condições não salvas do Orçamento somem ao mexer numa linha — **RESOLVIDO em 2026-09-10**
+
+**A correção.** O formulário separa o GRAVADO (`base`) do DIGITADO (`campos`), e
+a leitura nova da proposta é decidida pela identidade da versão (`quote.id`) e
+pelo valor de cada campo — nunca pela identidade do objeto: mesma versão com
+alteração local preserva o digitado e acompanha o servidor no que ninguém tocou;
+sem alteração, acompanha o servidor; outra versão, ou versão que deixou de ser
+rascunho, mostra o gravado dela. As nove condições passam por um caminho só
+(`pages/projects/quote-conditions-draft.ts`), "Alterações não salvas" compara
+VALOR (`7,5` digitado e `7.5000` gravado não são pendência) e salvar faz do
+gravado a base nova. A leitura é absorvida durante o render: com efeito, a E2E
+viu a V1 enviada desenhada com o rascunho da V2. "Descartar alterações" passou
+a levar junto a simulação dos valores descartados. Sem auto-salvar, sem
+`localStorage`, sem store global, zero backend. Achados que ela abriu:
+QUOTE-SEND-DIRTY-01 (P2), QUOTE-VERSION-SWITCH-DIRTY-01, PROJECT-RELOAD-ERROR-01
+e QUOTE-INT-FIELDS-01 (P3).
 
 Finding de PROJECT-COMMERCIAL-SUMMARY-01 (2026-09-10), encontrado ao escrever o
 E2E: o roteiro só passou depois que a validade foi digitada **depois** de a
@@ -637,6 +652,7 @@ sem contrato cadastrado; os conceitos são independentes.
 | **VOCAB-01** | Um conceito, três nomes: "Base de produção" (campo), "Base de referência" (leitura) e "Base de produção sugerida" (template) nomeiam a mesma quantidade. Mesma família de F-01-1; sweep só quando houver rodada de nomenclatura | UX | S |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
+| **QUOTE-SEND-DIRTY-01** | "Enviar ao cliente" com condições digitadas e NÃO salvas envia as GRAVADAS: a confirmação não diz que o documento sai diferente do que está nos campos, e depois do envio o formulário passa a mostrar o gravado. Achado de QUOTE-DRAFT-STATE-01; decisão do PO — bloquear o envio com alteração pendente ou dizê-lo na confirmação | MEDIUM | S |
 
 **F-01-1 e F-07-2 foram rebaixados**: os dois números estão certos para o que
 representam — `Project.productId` (produto resultante) contra `project_products`
@@ -657,6 +673,9 @@ mudou.
 | **F-05-1** | R$ 0,04 entre Precificação e Orçamento (fronteira §60) sem explicação em nenhuma das telas | UX | XS |
 | **F-01-3** | "Consulta completa" só é alcançável de dentro do modal de edição | UX | S |
 | **F-11-1** | Sair de um documento por um `EntityLink` de cadastro não deixa caminho de volta | UX | S |
+| **QUOTE-VERSION-SWITCH-DIRTY-01** | Abrir outra versão com condições pendentes descarta o rascunho sem aviso — mantido de propósito em QUOTE-DRAFT-STATE-01. Só existe um rascunho por projeto e as outras versões são somente leitura; avisar, salvar ou descartar é decisão do PO | UX | S |
+| **PROJECT-RELOAD-ERROR-01** | Falha na releitura do Projeto depois de uma mutação bem-sucedida vira "Projeto não encontrado": o `load()` de `ProjectDetailPage` trata qualquer erro como 404 e desmonta a ficha — e com ela o que estava digitado | LOW | XS |
+| **QUOTE-INT-FIELDS-01** | Prazo, parcelas e intervalo das condições não validam o texto: `abc` vira `NaN` na tela, o JSON serializa `NaN` como `null`, e salvar APAGA o valor gravado em silêncio — a recusa do servidor (`optionalPositiveInt`) nunca chega a ver o texto. Percentual já trava o envio; inteiro, não | LOW | XS |
 
 ### Encerrados na triagem, sem trabalho
 
@@ -851,6 +870,17 @@ operacional precisam ser validados com a Veridi. Relacionado ao #7.
 
 ## D. Manutenção técnica
 
+### 17. E2E `projeto-aprovado-vende-de-novo.mjs` parada no ciclo 2 — LOW
+
+Achado de QUOTE-DRAFT-STATE-01 (2026-09-10), **pré-existente**: a suíte reprova
+igual contra o `QuoteConditionsForm` de `1c0aa1f`. No ciclo 2 a versão nova já
+nasce com a validade sugerida da condição vigente (§74, COM-PRICE), o
+`definirValidade` digita a mesma data e clica "Salvar condições" sem conferir se
+há o que salvar — o botão está certo em estar desabilitado, e o clique esgota
+30 s. `formacao-de-preco-do-novo-orcamento.mjs` já trata o mesmo caso
+(`isEnabled()` antes do clique). Enquanto isso, o ciclo 2 e o cenário da
+proposta vencida dessa suíte não rodam. Nenhum defeito de produto envolvido.
+
 ### 10. Compactar `archive/DELIVERY_HISTORY.md` — LOW
 
 ≈5.326 linhas de diário por entrega — contradiz o objetivo do Baseline v2 de
@@ -995,7 +1025,7 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-6, SUPPLIER-ADDRESS-01 em P1-7) — mas a
+(COST-RESOURCE-MULTIPLIER-01 em P1-5, SUPPLIER-ADDRESS-01 em P1-6) — mas a
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 

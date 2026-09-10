@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import type {
   QuotePaymentMethod,
   QuotePaymentScheduleDTO,
@@ -10,6 +10,13 @@ import { formatBRL } from "../../lib/currency";
 import { formatPercent } from "../../lib/percent";
 import { previewQuotePaymentSchedule } from "../../lib/projects-api";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
+import {
+  type CamposDasCondicoes,
+  condicoesAlteradas,
+  hidratarRascunho,
+  paraEnvio,
+  rascunhoDe,
+} from "./quote-conditions-draft";
 
 /**
  * Condições comerciais da proposta.
@@ -32,66 +39,12 @@ import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-in
  * ninguém pediu ainda.
  */
 
-interface Campos {
-  validUntil: string;
-  leadTimeDays: string;
-  commercialNotes: string;
-  discountPercent: string;
-  paymentMethod: QuotePaymentMethod;
-  downPaymentPercent: string;
-  installmentCount: string;
-  installmentIntervalDays: string;
-  monthlyInterestPercent: string;
-}
-
-function camposDe(quote: QuoteVersionDTO): Campos {
-  /** Percentual guardado com 4 casas vira "10" na tela, não "10.0000". */
-  const percent = (value: string | null) => (value === null ? "" : String(Number(value)));
-  return {
-    validUntil: quote.validUntil ? quote.validUntil.slice(0, 10) : "",
-    leadTimeDays: quote.leadTimeDays ? String(quote.leadTimeDays) : "",
-    commercialNotes: quote.commercialNotes ?? "",
-    discountPercent: percent(quote.discountPercent),
-    paymentMethod: quote.paymentMethod,
-    downPaymentPercent: percent(quote.downPaymentPercent),
-    installmentCount: quote.installmentCount ? String(quote.installmentCount) : "",
-    installmentIntervalDays: quote.installmentIntervalDays
-      ? String(quote.installmentIntervalDays)
-      : "",
-    monthlyInterestPercent: percent(quote.monthlyInterestPercent),
-  };
-}
-
 /** Os três percentuais desta tela — o que a leitura da vírgula alcança. */
-const PERCENTUAIS: { chave: keyof Campos; rotulo: string }[] = [
+const PERCENTUAIS: { chave: keyof CamposDasCondicoes; rotulo: string }[] = [
   { chave: "discountPercent", rotulo: "Desconto (%)" },
   { chave: "downPaymentPercent", rotulo: "Entrada (%)" },
   { chave: "monthlyInterestPercent", rotulo: "Juros ao mês (%)" },
 ];
-
-function paraEnvio(campos: Campos): UpdateQuoteVersionInput {
-  const texto = (value: string) => (value.trim() === "" ? null : value.trim());
-  const inteiro = (value: string) => (value.trim() === "" ? null : Number(value));
-  /*
-   * Percentual passa pelo parser central. O `?? value.trim()` só existe para
-   * o caso impossível: os botões ficam desabilitados enquanto algum
-   * percentual for ilegível, e mandar `null` no lugar apagaria o desconto
-   * em silêncio — pior do que deixar o servidor recusar.
-   */
-  const percentual = (value: string) =>
-    value.trim() === "" ? null : (parseDecimalInput(value) ?? value.trim());
-  return {
-    validUntil: texto(campos.validUntil),
-    leadTimeDays: inteiro(campos.leadTimeDays),
-    commercialNotes: texto(campos.commercialNotes),
-    discountPercent: percentual(campos.discountPercent),
-    paymentMethod: campos.paymentMethod,
-    downPaymentPercent: percentual(campos.downPaymentPercent),
-    installmentCount: inteiro(campos.installmentCount),
-    installmentIntervalDays: inteiro(campos.installmentIntervalDays),
-    monthlyInterestPercent: percentual(campos.monthlyInterestPercent),
-  };
-}
 
 interface Props {
   quote: QuoteVersionDTO;
@@ -101,30 +54,45 @@ interface Props {
 }
 
 export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) {
-  const original = useMemo(() => camposDe(quote), [quote]);
-  const [campos, setCampos] = useState<Campos>(original);
+  const [rascunho, setRascunho] = useState(() => rascunhoDe(quote));
   const [simulacao, setSimulacao] = useState<QuotePaymentScheduleDTO | null>(null);
   const [simulando, setSimulando] = useState(false);
   const [erroSimulacao, setErroSimulacao] = useState<string | null>(null);
+  /** A leitura da proposta que o rascunho já absorveu. */
+  const [absorvida, setAbsorvida] = useState({ quote, editable });
 
-  // Recarregar a proposta (ou trocar de versão) descarta o rascunho de tela:
-  // o formulário passa a descrever o que está gravado.
-  useEffect(() => {
-    setCampos(original);
+  /*
+   * Toda leitura da proposta chega como objeto NOVO — inclusive a recarga que
+   * vem depois de adicionar, editar ou remover uma linha, com as condições
+   * gravadas intactas. O objeto só avisa que houve leitura; quem decide o que
+   * fazer com ela é `hidratarRascunho`, pela identidade da versão e pelo valor
+   * de cada campo: outra versão carrega o gravado, a mesma versão preserva o
+   * que foi alterado aqui. Antes, objeto novo refazia o formulário, e o que
+   * estava digitado sumia ao adicionar um produto (QUOTE-DRAFT-STATE-01).
+   *
+   * A leitura é absorvida DURANTE o render, não num efeito. Com efeito, a tela
+   * era desenhada uma vez com a versão nova e o rascunho da anterior — a E2E
+   * viu a validade digitada na V2 dentro da V1 enviada. Aqui o React refaz o
+   * render antes de desenhar, e nenhum quadro mistura as duas.
+   *
+   * A simulação sai em qualquer leitura: ela foi calculada sobre as linhas de
+   * antes, e o subtotal pode ter mudado.
+   */
+  if (absorvida.quote !== quote || absorvida.editable !== editable) {
+    setAbsorvida({ quote, editable });
+    setRascunho((atual) => hidratarRascunho(atual, quote, editable));
     setSimulacao(null);
     setErroSimulacao(null);
-  }, [original]);
+  }
 
-  const sujo = useMemo(
-    () => (Object.keys(original) as (keyof Campos)[]).some((k) => original[k] !== campos[k]),
-    [original, campos],
-  );
+  const { base, campos } = rascunho;
+  const sujo = condicoesAlteradas(base, campos).length > 0;
   const parcelado = campos.paymentMethod === "INSTALLMENTS";
   /*
    * Percentual que a tela não consegue ler trava simular e salvar. Antes,
    * `0,85` seguia como texto e voltava "Erro de validação" sem dizer onde.
    */
-  const erroDoPercentual = (chave: keyof Campos): string | null => {
+  const erroDoPercentual = (chave: keyof CamposDasCondicoes): string | null => {
     const rotulo = PERCENTUAIS.find((campo) => campo.chave === chave)?.rotulo;
     const valor = campos[chave];
     if (!rotulo || valor.trim() === "" || parseDecimalInput(valor) !== null) return null;
@@ -135,10 +103,17 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
   );
   const plano = quote.paymentSchedule;
 
-  function set<K extends keyof Campos>(chave: K, valor: Campos[K]) {
-    setCampos((atual) => ({ ...atual, [chave]: valor }));
+  function set<K extends keyof CamposDasCondicoes>(chave: K, valor: CamposDasCondicoes[K]) {
+    setRascunho((atual) => ({ ...atual, campos: { ...atual.campos, [chave]: valor } }));
     // A simulação anterior descrevia outros números: mantê-la na tela depois
     // de mexer num campo seria a mesma armadilha que ela veio resolver.
+    setSimulacao(null);
+    setErroSimulacao(null);
+  }
+
+  /** Volta ao gravado — e a simulação, que descrevia os valores descartados, sai junto. */
+  function descartar() {
+    setRascunho((atual) => ({ ...atual, campos: atual.base }));
     setSimulacao(null);
     setErroSimulacao(null);
   }
@@ -313,7 +288,7 @@ export function QuoteConditionsForm({ quote, editable, saving, onSave }: Props) 
             type="button"
             className="btn btn--ghost btn--sm"
             disabled={saving || !sujo}
-            onClick={() => setCampos(original)}
+            onClick={descartar}
           >
             Descartar alterações
           </button>
