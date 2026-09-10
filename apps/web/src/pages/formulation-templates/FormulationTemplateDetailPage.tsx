@@ -7,6 +7,7 @@ import type {
   FormulationTemplateDiffDTO,
   FormulationTemplateVersionDTO,
   ItemDTO,
+  UnitOfMeasureDTO,
 } from "@veridi/shared";
 import {
   FORMULATION_CALCULATION_MODE_LABELS,
@@ -23,6 +24,8 @@ import {
   updateFormulationTemplateVersion,
 } from "../../lib/formulation-templates-api";
 import { getItem, listItems } from "../../lib/items-api";
+import { listUnits } from "../../lib/units-api";
+import { unidadesDaDimensao } from "../../lib/uom-options";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { FormSection } from "../../components/FormSection";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
@@ -116,6 +119,7 @@ export function FormulationTemplateDetailPage() {
   const [linhas, setLinhas] = useState<LinhaEditavel[]>([]);
   const [base, setBase] = useState("1");
   const [unidade, setUnidade] = useState("un");
+  const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
   const [diff, setDiff] = useState<FormulationTemplateDiffDTO | null>(null);
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
@@ -167,6 +171,16 @@ export function FormulationTemplateDetailPage() {
     listItems({ pageSize: PRIMEIRA_PAGINA })
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
+  }, []);
+  /*
+   * O catálogo de unidades chega uma vez, para todas as linhas — cada uma só
+   * filtra pela dimensão do seu Item. É a mesma leitura da Formulação real
+   * (FORM-UOM-01).
+   */
+  useEffect(() => {
+    listUnits()
+      .then(setUnits)
+      .catch(() => setUnits([]));
   }, []);
 
   /**
@@ -252,13 +266,63 @@ export function FormulationTemplateDetailPage() {
           setItems((atual) => [item, ...atual.filter((row) => row.id !== item.id)]);
           setLinhas((atual) =>
             atual.map((l) =>
-              l.chave === chave ? { ...l, unitCode: l.unitCode || item.unitCode } : l,
+              l.chave === chave ? { ...l, unitCode: unidadeParaOItem(l.unitCode, item) } : l,
             ),
           );
         })
         .catch(() => undefined);
     },
   });
+
+  /**
+   * A unidade da linha quando o Item muda. A escolhida continua se o Item novo
+   * é da mesma dimensão: trocar pela de estoque dele mudaria o que a quantidade
+   * digitada quer dizer, e quantidade não se converte sozinha. De outra
+   * dimensão, ela não pode ficar — entra a de estoque do Item novo.
+   */
+  function unidadeParaOItem(atual: string, item: ItemDTO | undefined): string {
+    if (!item) return atual;
+    const dimensao = dimensaoDoItem(item);
+    const serve = units.some((unit) => unit.code === atual && unit.dimension === dimensao);
+    return serve ? atual : item.unitCode;
+  }
+
+  /** A dimensão do Item é a da sua unidade de estoque, lida do catálogo — como a API compara. */
+  function dimensaoDoItem(item: ItemDTO): string | undefined {
+    return units.find((unit) => unit.code === item.unitCode)?.dimension;
+  }
+
+  function trocarItem(index: number, itemId: string) {
+    const item = items.find((candidato) => candidato.id === itemId);
+    setLinhas((atual) =>
+      atual.map((l, i) =>
+        i === index
+          ? // Sem Item não há dimensão: a unidade espera por ele.
+            { ...l, itemId, unitCode: itemId ? unidadeParaOItem(l.unitCode, item) : "" }
+          : l,
+      ),
+    );
+  }
+
+  /**
+   * O que a linha oferece e o que ela diz. Só se julga com o Item e o catálogo
+   * na mão: antes disso, "não está na lista" é só "ainda não chegou". Unidade
+   * gravada fora da lista — legado — aparece como está, nunca trocada em
+   * silêncio, e prende o salvar até alguém escolher.
+   */
+  function unidadeDaLinha(linha: LinhaEditavel) {
+    const item = items.find((candidato) => candidato.id === linha.itemId);
+    const dimensao = item ? dimensaoDoItem(item) : undefined;
+    const opcoes = dimensao ? unidadesDaDimensao(units, dimensao) : [];
+    const oferecida = opcoes.some((unit) => unit.code === linha.unitCode);
+    const erro =
+      item && units.length > 0 && !oferecida
+        ? linha.unitCode
+          ? `Unidade inválida ou legada: ${linha.unitCode}. Escolha uma unidade da lista.`
+          : "Escolha a unidade do componente."
+        : null;
+    return { item, opcoes, oferecida, erro };
+  }
 
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
@@ -284,6 +348,7 @@ export function FormulationTemplateDetailPage() {
   const rascunho = template.draftVersion;
   const ativa = template.activeVersion;
   const editavel = canEdit && rascunho !== null;
+  const temUnidadeInvalida = linhas.some((linha) => unidadeDaLinha(linha).erro !== null);
 
   const composicaoDaVersao = (version: FormulationTemplateVersionDTO) => (
     <div className="table-container">
@@ -460,13 +525,23 @@ export function FormulationTemplateDetailPage() {
               </div>
               <div className="field field--narrow">
                 <label htmlFor="template-unidade">Unidade da base</label>
-                <input
+                {/* O modelo não tem Item de saída: a unidade da base é a
+                    dimensão da própria matriz, e o catálogo inteiro vale. */}
+                <select
                   id="template-unidade"
-                  type="text"
                   disabled={!editavel}
                   value={unidade}
                   onChange={(event) => setUnidade(event.target.value)}
-                />
+                >
+                  {unidade && !units.some((unit) => unit.code === unidade) && (
+                    <option value={unidade}>{unidade}</option>
+                  )}
+                  {units.map((unit) => (
+                    <option key={unit.code} value={unit.code}>
+                      {unit.code}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -482,104 +557,126 @@ export function FormulationTemplateDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {linhas.map((linha, index) => (
-                    <tr key={linha.chave}>
-                      <td>
-                        <SearchableEntitySelect
-                          id={`template-item-${linha.chave}`}
-                          value={linha.itemId}
-                          onChange={(itemId) =>
-                            setLinhas((atual) =>
-                              atual.map((l, i) => (i === index ? { ...l, itemId } : l)),
-                            )
-                          }
-                          placeholder="Digite código ou nome do item…"
-                          /* Era o único campo do rascunho sem o `disabled` dos
-                             vizinhos: quem não edita trocava o item na tela e
-                             só descobria a recusa ao salvar. */
-                          disabled={!editavel}
-                          options={items.map(opcaoDoItem)}
-                          onSearch={buscarItens}
-                          canCreate={editavel}
-                          createLabel="Novo item de estoque"
-                          onCreateNew={() =>
-                            origem.goCreate({
-                              route: "/cadastros/itens/novo",
-                              fieldKey: "itemId",
-                              entityType: "item",
-                              // Qual linha pediu — o item volta para ela.
-                              context: { rowKey: linha.chave },
-                            })
-                          }
-                        />
-                      </td>
-                      <td className="is-numeric">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          disabled={!editavel}
-                          value={linha.quantity}
-                          onChange={(event) =>
-                            setLinhas((atual) =>
-                              atual.map((l, i) =>
-                                i === index ? { ...l, quantity: event.target.value } : l,
-                              ),
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          disabled={!editavel}
-                          value={linha.unitCode}
-                          onChange={(event) =>
-                            setLinhas((atual) =>
-                              atual.map((l, i) =>
-                                i === index ? { ...l, unitCode: event.target.value } : l,
-                              ),
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <select
-                          aria-label="Fornecimento padrão"
-                          disabled={!editavel}
-                          value={linha.supplyResponsibility ?? "VERIDI"}
-                          onChange={(event) =>
-                            setLinhas((atual) =>
-                              atual.map((l, i) =>
-                                i === index
-                                  ? {
-                                      ...l,
-                                      supplyResponsibility: event.target.value as "VERIDI" | "CUSTOMER",
-                                    }
-                                  : l,
-                              ),
-                            )
-                          }
-                        >
-                          <option value="VERIDI">Veridi</option>
-                          <option value="CUSTOMER">Cliente</option>
-                        </select>
-                      </td>
-                      <td>
-                        {editavel && (
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
-                            aria-label="Remover componente"
-                            onClick={() =>
-                              setLinhas((atual) => atual.filter((_, i) => i !== index))
+                  {linhas.map((linha, index) => {
+                    const daLinha = unidadeDaLinha(linha);
+                    const erroDaUnidade = `template-unidade-erro-${linha.chave}`;
+                    return (
+                      <tr key={linha.chave}>
+                        <td>
+                          <SearchableEntitySelect
+                            id={`template-item-${linha.chave}`}
+                            value={linha.itemId}
+                            onChange={(itemId) => trocarItem(index, itemId)}
+                            placeholder="Digite código ou nome do item…"
+                            /* Era o único campo do rascunho sem o `disabled` dos
+                               vizinhos: quem não edita trocava o item na tela e
+                               só descobria a recusa ao salvar. */
+                            disabled={!editavel}
+                            options={items.map(opcaoDoItem)}
+                            onSearch={buscarItens}
+                            canCreate={editavel}
+                            createLabel="Novo item de estoque"
+                            onCreateNew={() =>
+                              origem.goCreate({
+                                route: "/cadastros/itens/novo",
+                                fieldKey: "itemId",
+                                entityType: "item",
+                                // Qual linha pediu — o item volta para ela.
+                                context: { rowKey: linha.chave },
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="is-numeric">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            disabled={!editavel}
+                            value={linha.quantity}
+                            onChange={(event) =>
+                              setLinhas((atual) =>
+                                atual.map((l, i) =>
+                                  i === index ? { ...l, quantity: event.target.value } : l,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          {/* Mesma lista da Formulação: o catálogo, na dimensão do
+                              Item. Sem Item, não há dimensão — e não há unidade. */}
+                          <select
+                            aria-label={daLinha.item ? `Unidade de ${daLinha.item.code}` : "Unidade"}
+                            disabled={!editavel || !daLinha.item}
+                            value={linha.unitCode}
+                            onChange={(event) =>
+                              setLinhas((atual) =>
+                                atual.map((l, i) =>
+                                  i === index ? { ...l, unitCode: event.target.value } : l,
+                                ),
+                              )
+                            }
+                            {...(daLinha.erro
+                              ? { "aria-invalid": true, "aria-describedby": erroDaUnidade }
+                              : {})}
+                          >
+                            <option value="">Selecione</option>
+                            {linha.unitCode && !daLinha.oferecida && (
+                              <option value={linha.unitCode} disabled={Boolean(daLinha.item)}>
+                                {linha.unitCode}
+                              </option>
+                            )}
+                            {daLinha.opcoes.map((unit) => (
+                              <option key={unit.code} value={unit.code}>
+                                {unit.code}
+                              </option>
+                            ))}
+                          </select>
+                          {daLinha.erro && (
+                            <p className="field__error" id={erroDaUnidade}>
+                              {daLinha.erro}
+                            </p>
+                          )}
+                        </td>
+                        <td>
+                          <select
+                            aria-label="Fornecimento padrão"
+                            disabled={!editavel}
+                            value={linha.supplyResponsibility ?? "VERIDI"}
+                            onChange={(event) =>
+                              setLinhas((atual) =>
+                                atual.map((l, i) =>
+                                  i === index
+                                    ? {
+                                        ...l,
+                                        supplyResponsibility: event.target.value as "VERIDI" | "CUSTOMER",
+                                      }
+                                    : l,
+                                ),
+                              )
                             }
                           >
-                            ✕
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                            <option value="VERIDI">Veridi</option>
+                            <option value="CUSTOMER">Cliente</option>
+                          </select>
+                        </td>
+                        <td>
+                          {editavel && (
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              aria-label="Remover componente"
+                              onClick={() =>
+                                setLinhas((atual) => atual.filter((_, i) => i !== index))
+                              }
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {linhas.length === 0 && (
                     <tr>
                       <td colSpan={5} className="table__empty">
@@ -603,7 +700,8 @@ export function FormulationTemplateDetailPage() {
                         chave: `nova-${atual.length}-${Date.now()}`,
                         itemId: "",
                         quantity: "",
-                        unitCode: "g",
+                        // A unidade vem do Item: antes dele, não há dimensão.
+                        unitCode: "",
                         supplyResponsibility: "VERIDI",
                       },
                     ])
@@ -614,7 +712,7 @@ export function FormulationTemplateDetailPage() {
                 <button
                   type="button"
                   className="btn btn--secondary btn--sm"
-                  disabled={saving}
+                  disabled={saving || temUnidadeInvalida}
                   onClick={() =>
                     void run(() =>
                       updateFormulationTemplateVersion(rascunho.id, {

@@ -35,17 +35,17 @@ item fica na sua seção; aqui fica só a ORDEM, porque ela é a pergunta que se
 faz primeiro e estava espalhada por cinco lugares. Saíram da fila em
 2026-09-10, resolvidos: QUOTE-DRAFT-STATE-01; QUOTE-SEND-DIRTY-01,
 QUOTE-SEND-LINE-DRAFT-01 e QUOTE-LINE-NOOP-BLUR-01, promovidos a P0 pelo PO
-por integridade comercial; QUOTE-INT-FIELDS-01, pela mesma razão, em P1; e
-PROJECT-INT-FIELDS-01, o mesmo defeito no cadastro do Projeto, promovido a P0.
+por integridade comercial; QUOTE-INT-FIELDS-01, pela mesma razão, em P1;
+PROJECT-INT-FIELDS-01, o mesmo defeito no cadastro do Projeto, promovido a P0;
+e FORM-UOM-01, a unidade controlada no Modelo de Formulação.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | FORM-UOM-01 | A · P1 | Unidade é dado ESTRUTURAL — alimenta conversão, custo e produção. Texto livre ali é risco de integridade; a duplicação de orçamento é produtividade |
-| **P1-2** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
-| **P1-3** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-4** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-5** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-6** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
+| **P1-2** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-3** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-4** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-5** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
@@ -435,13 +435,41 @@ numérico repetido entre as duas pontas. Backend, semântica das doses e da vida
 útil (cópia para o Produto na aprovação, validade sugerida) e Orçamento
 intocados. Regra durável: [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §48.
 
-#### FORM-UOM-01 — unidade de medida é texto livre no Modelo de Formulação
+#### FORM-UOM-01 — unidade de medida era texto livre no Modelo de Formulação — **RESOLVIDO em 2026-09-10**
 
-Finding de 2026-09-10. Unidade é conceito ESTRUTURAL: alimenta conversão,
-necessidade, custo e produção. No Modelo de Formulação ela é digitada à mão.
+Unidade é conceito ESTRUTURAL — alimenta conversão, necessidade, custo e
+produção —, e o Modelo a deixava digitar à mão, na base e no componente,
+enquanto a Formulação real já escolhia do catálogo pela dimensão do Item.
 
-**A auditoria mostrou que o padrão certo já existe — e que só o Modelo ficou
-para trás.** A divergência é entre as duas telas, e é ela que o item fecha:
+**Reproduzido antes da correção, e a auditoria corrigiu o registro abaixo.** A
+tela mandava texto livre: um rascunho salvo com base `abc` e componente
+`quilo` saiu como `{"outputUnitCode":"abc","components":[{"unitCode":"quilo"}]}`.
+Na API, porém, o COMPONENTE já era fail-closed — `validateComponents` roda
+`isUomCompatible` contra o Item antes de gravar, e `abc`, `KG`, `quilo` e
+unidade de outra dimensão já voltavam 400; a linha "Backend" da tabela olhou só
+o schema. O buraco era outro: a BASE fora do catálogo estourava a chave
+estrangeira e voltava **500** com a mensagem crua do Prisma, e **ativar**
+promovia componente legado com unidade inválida, sem a reconferência que a
+ativação da Formulação faz.
+
+**A correção.** Tela: base e componente viraram `<select>` do catálogo
+`UnitOfMeasure`, carregado uma vez. A base oferece o catálogo inteiro — o
+Modelo não tem Item de saída, e a unidade da base é a dimensão da própria
+matriz —; o componente, só a dimensão do seu Item, pela mesma
+`unidadesDaDimensao` que a Formulação passou a usar (`lib/uom-options.ts`). Sem
+Item, sem unidade; escolhido o Item, entra a unidade de estoque dele; trocar de
+Item mantém a unidade que serve ao novo e troca a que não serve — quantidade
+nunca é convertida. Unidade gravada fora da lista aparece como "Unidade
+inválida ou legada: X", ligada ao campo, e prende o salvar até alguém escolher.
+API: base fora do catálogo é 400 com nome (`UomNotFoundError`), antes de
+consumir código da sequência; ativar reconfere cada componente e recusa o
+legado; a API nunca escolhe unidade por quem chama. Auditoria somente leitura:
+DEV 13 componentes e PROD 7, todos em `kg` sobre Item de massa — nenhum fora do
+catálogo, nenhum incompatível. Sem migration; a FK do componente virou
+recomendação (FORM-UOM-FK-01). Regra durável:
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §35.
+
+**O registro de antes da implementação**, mantido como estava:
 
 | | Formulação (versão real) | Modelo de Formulação |
 |---|---|---|
@@ -748,6 +776,7 @@ sem contrato cadastrado; os conceitos são independentes.
 | **VOCAB-01** | Um conceito, três nomes: "Base de produção" (campo), "Base de referência" (leitura) e "Base de produção sugerida" (template) nomeiam a mesma quantidade. Mesma família de F-01-1; sweep só quando houver rodada de nomenclatura | UX | S |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
+| **TEMPLATE-APPLY-BASE-UOM-01** | Aplicar um Modelo a um Produto copia a `basisQuantity` e ignora a `outputUnitCode` do Modelo: a Formulação nasce com a unidade do Item acabado do Produto, sem conferir que é a mesma, nem da mesma dimensão. Base "1 kg" num produto em `un` viraria "1 un" em silêncio. Hoje PROD tem 1 cópia e todas as bases em `un` — nenhuma divergência. Achado em FORM-UOM-01, fora do escopo dela | MEDIUM | S |
 
 **F-01-1 e F-07-2 foram rebaixados**: os dois números estão certos para o que
 representam — `Project.productId` (produto resultante) contra `project_products`
@@ -774,6 +803,10 @@ mudou.
 | **QUOTE-PERCENT-FIELDS-01** | Os percentuais das condições não receberam o tratamento dos inteiros: o erro não tem `id` nem `aria-describedby` no campo, e à vista a entrada ou os juros ilegíveis que ficaram escondidos travam "Salvar condições" sem erro visível — `temPercentualIlegivel` não olha a forma de pagamento | UX | XS |
 | **QUOTE-CASH-HIDDEN-DIRTY-01** | Parcela ou intervalo digitado no Parcelado e escondido pela troca para À vista conta como alteração pendente; salvar grava à vista sem parcelas (o servidor limpa), a releitura não muda o gravado e a pendência fica: "Alterações não salvas" e envio preso até "Descartar alterações". Por leitura de código, desde QUOTE-DRAFT-STATE-01 — antes da correção, o mesmo com `NaN`. Decidir se campo escondido conta como pendência | UX | S |
 | **FORMULATION-DOSES-INPUT-01** | A Formulação lê "Doses por embalagem" com `Number()` só na prévia (`FormulationVersionPage.tsx:707,1386,1824`) e manda o texto cru ao salvar. Não apaga — a API recusa `abc` com "Informe um número inteiro", no campo —, mas a leitura não é a do Orçamento e do Projeto: `1e2` aparece como 100 na prévia e grava 100 (API-INT-COERCION-01). Achado em PROJECT-INT-FIELDS-01, fora do escopo dela | UX | XS |
+| **FORM-UOM-FK-01** | FK física em `FormulationTemplateComponent.unitCode` → `UnitOfMeasure`. A regra já vale sem ela — tela controlada, API fail-closed, ativação reconferida (FORM-UOM-01) —, e a auditoria somente leitura achou DEV 13/13 e PROD 7/7 componentes com unidade do catálogo e compatível: a migration seria trivial. Recomendada como endurecimento físico, **só com autorização do PO** | LOW | XS |
+| **FORMULATION-ITEM-SWAP-UOM-01** | Na Formulação real, trocar o Item de um componente sempre põe a unidade de estoque do Item novo, mesmo quando a escolhida serve: `500` em `mg` vira `500` em `kg`, sem conversão nem aviso — e, antes do Item, a lista oferece o catálogo inteiro. O Modelo (FORM-UOM-01) mantém a unidade compatível e espera o Item; alinhar a Formulação é decisão do PO | UX | S |
+| **API-500-RAW-ERROR-01** | Erro do Prisma que nenhuma rota traduz volta como 500 com a mensagem crua — a chamada, o trecho do código e o caminho do arquivo no servidor (visto com a chave estrangeira da unidade da base antes de FORM-UOM-01). Pede tradução genérica no handler global, sem vazar detalhe interno | LOW | S |
+| **TEMPLATE-ROW-DROP-01** | "Salvar rascunho" do Modelo descarta em silêncio a linha sem Item ou sem quantidade (`filter(linha => linha.itemId && linha.quantity)`): o que foi digitado some sem aviso — a família de QUOTE-DRAFT-STATE-01. Achado em FORM-UOM-01, fora do escopo dela | UX | XS |
 
 ### Encerrados na triagem, sem trabalho
 
@@ -1123,7 +1156,7 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-5, SUPPLIER-ADDRESS-01 em P1-6) — mas a
+(COST-RESOURCE-MULTIPLIER-01 em P1-4, SUPPLIER-ADDRESS-01 em P1-5) — mas a
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 

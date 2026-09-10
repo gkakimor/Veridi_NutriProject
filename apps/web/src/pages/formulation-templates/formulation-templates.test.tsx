@@ -50,6 +50,7 @@ vi.mock("../../lib/formulation-templates-api", () => ({
 vi.mock("../../lib/items-api", () => ({
   listItems: () => Promise.resolve({ items: [] }),
 }));
+vi.mock("../../lib/units-api", () => ({ listUnits: () => Promise.resolve([]) }));
 
 vi.mock("../../app/AuthProvider", () => ({
   useAuth: () => ({ user: { id: "u1", name: "Admin", role: "ADMIN" } }),

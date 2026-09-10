@@ -23,7 +23,7 @@ import {
   hasUsableDosesPerPackage,
   missingFormulationContext,
 } from "../../lib/formulation-math.js";
-import { isUomCompatible } from "../items/uom.js";
+import { isUomCompatible, UomNotFoundError } from "../items/uom.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
@@ -302,11 +302,25 @@ async function validateComponents(
   }
 }
 
+/**
+ * A unidade da base existe no catálogo — FORM-UOM-01.
+ *
+ * O modelo não tem Item de saída: a unidade da base é a própria dimensão da
+ * matriz, e qualquer código do catálogo serve. Fora dele, a recusa tem nome —
+ * antes era o erro cru da chave estrangeira, devolvido como 500.
+ */
+async function exigirUnidadeDoCatalogo(code: string): Promise<void> {
+  const unidade = await getPrisma().unitOfMeasure.findUnique({ where: { code } });
+  if (!unidade) throw new UomNotFoundError(code);
+}
+
 export async function createFormulationTemplate(
   input: CreateFormulationTemplateInput,
   actor: User,
 ): Promise<FormulationTemplateDTO> {
   const prisma = getPrisma();
+  // Antes do código: recusa não consome número da sequência.
+  await exigirUnidadeDoCatalogo(input.outputUnitCode ?? "un");
   const code = await nextSequenceCode(prisma, CODE_SEQUENCE, FORMULATION_TEMPLATE_CODE_PREFIX);
   const modo = input.calculationMode ?? "FIXED_BASIS";
   if (modo === "PER_DOSE" && !input.dosesPerPackage) throw new TemplateDosesRequiredError();
@@ -379,6 +393,7 @@ export async function updateFormulationTemplateVersion(
   const current = await requireTemplateVersion(id);
   // Versão ativa é histórica: para mudar, cria-se uma nova.
   if (current.status !== "DRAFT") throw new TemplateVersionNotDraftError(current.status);
+  if (input.outputUnitCode !== undefined) await exigirUnidadeDoCatalogo(input.outputUnitCode);
 
   const modo = input.calculationMode ?? current.calculationMode;
   const doses = input.dosesPerPackage !== undefined ? input.dosesPerPackage : current.dosesPerPackage;
@@ -474,6 +489,16 @@ export async function activateFormulationTemplateVersion(
   if (missingFormulationContext(current.components, current) === "DOSES_PER_PACKAGE") {
     throw new TemplateDosesRequiredError();
   }
+  /*
+   * A mesma porta da Formulação real (FORM-UOM-01): componente com unidade fora
+   * do catálogo, ou de outra dimensão que a do Item — dado legado, gravado por
+   * fora da API —, não entra na biblioteca como versão pronta para uso.
+   */
+  const units = await getPrisma().unitOfMeasure.findMany();
+  const semUnidadeValida = current.components.find(
+    (component) => !isUomCompatible(component.unitCode, component.item.unitCode, units),
+  );
+  if (semUnidadeValida) throw new IncompatibleComponentUnitError(semUnidadeValida.item.code);
 
   await getPrisma().$transaction(async (tx) => {
     // Uma ativa por template — o índice único parcial no banco garante o
