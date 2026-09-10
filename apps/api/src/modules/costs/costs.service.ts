@@ -9,6 +9,7 @@ import type {
   ProductionOrderMaterialCostDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { getConsumedLotCostReference, getItemCostReference } from "../../lib/cost-reference.js";
 import { selectItemCostSource } from "../../lib/cost-source-selection.js";
 import type { CostSourceResolution } from "../../lib/cost-source-selection.js";
@@ -43,7 +44,13 @@ export async function getItemCostReferenceDTO(
   const item = await prisma.item.findUnique({ where: { id: itemId } });
   if (!item) throw new ItemNotFoundError(itemId);
 
-  const reference = await getItemCostReference(prisma, itemId, referenceDate ?? new Date());
+  // Ausência de data significa HOJE — o dia comercial da Veridi, nunca o
+  // instante do relógio: às 22:30 de São Paulo o dia UTC já virou.
+  const reference = await getItemCostReference(
+    prisma,
+    itemId,
+    referenceDate ?? marcadorDeHojeComercial(),
+  );
   return {
     itemId: item.id,
     itemCode: item.code,

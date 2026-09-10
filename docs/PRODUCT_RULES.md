@@ -4956,3 +4956,75 @@ Não é debounce. Tempo maior só diminui a chance da corrida; identidade a elim
 endereço pertence. Duas identidades, e só duas: distinguir isso é a regra
 inteira. Nada disso é de domínio — a API continua aceitando cada campo de
 endereço como opcional e independente, e nenhuma migration nasceu daqui.
+
+---
+
+## §81 — Quais INSTANTES pertencem ao dia comercial da pergunta
+
+COST-COMMERCIAL-DAY-01, 2026-09-09. Achado durante D-17 e deixado para runtime
+de propósito. É o terceiro lugar do custo com a assimetria que §76 corrigiu na
+oferta do fornecedor e §79 na tarifa industrial — e o primeiro em que os dois
+lados da comparação são de espécies DIFERENTES.
+
+Nos dois casos anteriores, marcador de dia civil era comparado com marcador de
+dia civil. Aqui não: `referenceDate` é DATA CIVIL e `Receipt.receivedAt` é
+INSTANTE. A regra é a que §72 já enuncia, aplicada ao ponto em que as duas se
+encontram:
+
+> **Um instante pertence ao dia comercial D quando cai entre o primeiro e o
+> último milissegundo de D em `America/Sao_Paulo`.**
+
+Para 09/09/2026 isso é `2026-09-09T03:00:00.000Z` a `2026-09-10T02:59:59.999Z`.
+Não é o dia UTC do marcador, que termina às 20:59:59 de São Paulo.
+
+### O que estava errado, nas duas pontas
+
+**A borda de cima terminava cedo.** O limite era o fim do dia UTC do marcador,
+e todo recebimento lançado entre 21:00 e 23:59 de São Paulo caía FORA do próprio
+dia: quem registrava a compra à noite e perguntava o custo daquela data recebia
+uma fonte mais antiga — ou `NO_COST` — com o custo real já gravado no banco.
+
+**A borda de baixo começava cedo pelo mesmo motivo**, e no sentido oposto:
+deixava entrar as três últimas horas do dia anterior à janela. Corrigir só o fim
+teria trocado um erro por outro; as duas bordas são dias comerciais inteiros.
+
+A contagem de dias não mudou: `-30` e `-90` recuam no CALENDÁRIO. Subtrair
+`30 x 24h` de um instante atravessa a meia-noite comercial na hora errada e, em
+mudança de horário de verão, pula ou repete um dia.
+
+### Carimbo de tempo continua carimbo de tempo
+
+`receivedAt`, `consumedAt`, `occurredAt` e `createdAt` **não** viram marcador de
+dia civil. O recebimento aconteceu num instante, e é assim que ele fica
+gravado. O que mudou é a pergunta feita contra ele — quais instantes pertencem
+ao dia D — e a ponte, quando o domínio precisa do dia de um instante, é
+`marcadorDoDiaComercialDe`.
+
+### "Hoje" implícito é sempre o dia comercial
+
+Quando a borda não informa data, o padrão é `marcadorDeHojeComercial()`, nunca
+`new Date()`. Um instante como data de referência quebra a comparação nos dois
+sentidos: às 22:30 de São Paulo ele é o dia UTC seguinte, e a seleção passa a
+enxergar vigências que só começam amanhã.
+
+**Referência manual criada sem `effectiveFrom` nasce valendo HOJE**, gravada
+como o marcador do dia comercial — pelo mesmo motivo e com o mesmo helper que
+§79 aplicou à tarifa industrial. `effectiveFrom` explícito é preservado como
+data civil, sem releitura pelo relógio de quem gravou. A tela já mandava o dia
+certo; a API não pode depender disso.
+
+### O que NÃO mudou
+
+Hierarquia de fontes (§53), fórmula da média ponderada, filtro de moeda BRL,
+`referenceDate` explícita no motor (§5.8) e snapshots já persistidos. A mudança
+é de leitura e de padrão futuro: **nenhum dado gravado estava errado**, e a
+auditoria de produção confirmou — 295 referências, todas em marcador de
+meia-noite UTC, nenhuma na faixa problemática. Sem backfill e sem migration.
+
+### Onde a regra vive
+
+`limitesDaJanelaDeCusto` em `apps/api/src/lib/cost-reference.ts` — a definição
+da elegibilidade temporal, exportada porque é ela que os testes de borda
+interrogam. Os limites do dia vêm de `limitesDoDiaComercial`, e o deslocamento
+de calendário de `diaCivilDeslocado`, os dois na fundação de `@veridi/shared`.
+Nenhum helper novo de fuso nasceu aqui.
