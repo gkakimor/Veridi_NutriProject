@@ -14,6 +14,7 @@ import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimalOpcional } from "../../lib/decimal-field";
+import { erroDeInteiro, lerInteiroOpcional } from "../../lib/integer-input";
 import { listCustomers } from "../../lib/customers-api";
 import { useContextualCreateOrigin } from "../../lib/use-contextual-create";
 import { createProject, getProjectVocabulary, updateProject } from "../../lib/projects-api";
@@ -52,6 +53,34 @@ function initialState(project: ProjectDTO | null): FormState {
     minimumBatchQuantity: project?.minimumBatchQuantity ?? "",
     shelfLifeMonths: project?.shelfLifeMonths ? String(project.shelfLifeMonths) : "",
   };
+}
+
+type ChaveInteira = "dosesPerPackage" | "shelfLifeMonths";
+
+/**
+ * Os dois inteiros do Projeto — contagens: doses e meses não têm casa decimal.
+ *
+ * Saíam por `Number(texto)`: `abc` virava `NaN`, o JSON escrevia `null`, e
+ * salvar apagava o valor gravado (PROJECT-INT-FIELDS-01). Agora passam pela
+ * leitura estrita das condições do Orçamento, e a regra é a da API
+ * (`optionalPositiveInt`): inteiro maior que zero, sem teto.
+ */
+const INTEIROS: Record<ChaveInteira, { rotulo: string; erroId: string }> = {
+  dosesPerPackage: { rotulo: "Doses por embalagem", erroId: "project-doses-error" },
+  shelfLifeMonths: { rotulo: "Vida útil (meses)", erroId: "project-shelf-life-error" },
+};
+const INTEIRO_MAIOR_QUE_ZERO = { minimo: 1, maximo: null } as const;
+
+/**
+ * O inteiro como vai ao servidor. Vazio é `null` — "não informado". O que a
+ * tela não lê não tem forma de envio: salvar fica preso antes, e chegar aqui
+ * com texto ilegível é defeito, que falha alto em vez de apagar o gravado.
+ */
+function inteiroParaEnvio(texto: string): number | null {
+  const leitura = lerInteiroOpcional(texto);
+  if (leitura.tipo === "valido") return leitura.valor;
+  if (leitura.tipo === "vazio") return null;
+  throw new Error("Inteiro ilegível não vai ao servidor.");
 }
 
 /**
@@ -124,7 +153,32 @@ export function ProjectFormModal({
     return novos.map((c) => ({ id: c.id, code: c.code, name: c.tradeName ?? c.legalName }));
   }
 
+  /*
+   * Inteiro ilegível fica no campo como foi digitado, com o erro ao lado, e
+   * prende criar e salvar. Vazio segue: é "não informado".
+   */
+  const erroDoInteiro = (chave: ChaveInteira) =>
+    erroDeInteiro(INTEIROS[chave].rotulo, form[chave], INTEIRO_MAIOR_QUE_ZERO);
+  const temInteiroIlegivel = (Object.keys(INTEIROS) as ChaveInteira[]).some(
+    (chave) => erroDoInteiro(chave) !== null,
+  );
+  /** Liga o campo ao seu erro: quem usa leitor de tela ouve a regra junto do campo. */
+  const ariaDoInteiro = (chave: ChaveInteira) =>
+    erroDoInteiro(chave) === null
+      ? {}
+      : { "aria-invalid": true, "aria-describedby": INTEIROS[chave].erroId };
+  const avisoDoInteiro = (chave: ChaveInteira) => {
+    const erro = erroDoInteiro(chave);
+    return erro === null ? null : (
+      <p className="field__error" id={INTEIROS[chave].erroId}>
+        {erro}
+      </p>
+    );
+  };
+
   async function handleSave() {
+    // O botão já fica preso: o que a tela não lê não sai dela por caminho nenhum.
+    if (temInteiroIlegivel) return;
     setSaving(true);
     setError(null);
     try {
@@ -139,13 +193,12 @@ export function ProjectFormModal({
         dosageForm: (form.dosageForm || null) as never,
         presentationType: (form.presentationType || null) as never,
         doseAmount: form.doseAmount.trim() || null,
-        dosesPerPackage: form.dosesPerPackage.trim() ? Number(form.dosesPerPackage) : null,
+        dosesPerPackage: inteiroParaEnvio(form.dosesPerPackage),
         targetAgeGroup: (form.targetAgeGroup || null) as never,
         // Único decimal do formulário. `dosesPerPackage` e `shelfLifeMonths`
-        // são contagens inteiras — doses e meses não têm casa decimal — e
-        // continuam como estão.
+        // são contagens inteiras e passam pela leitura estrita de inteiro.
         minimumBatchQuantity: exigirDecimalOpcional(form.minimumBatchQuantity, "Lote mínimo"),
-        shelfLifeMonths: form.shelfLifeMonths.trim() ? Number(form.shelfLifeMonths) : null,
+        shelfLifeMonths: inteiroParaEnvio(form.shelfLifeMonths),
       };
 
       const saved = project
@@ -179,7 +232,9 @@ export function ProjectFormModal({
           <button
             type="button"
             className="btn btn--accent"
-            disabled={saving || !form.customerId || form.name.trim().length < 3}
+            disabled={
+              saving || !form.customerId || form.name.trim().length < 3 || temInteiroIlegivel
+            }
             onClick={() => void handleSave()}
           >
             {saving ? "Salvando…" : project ? "Salvar alterações" : "Criar projeto"}
@@ -343,7 +398,9 @@ options={customers.map((customer) => ({
             onChange={(event) =>
               setForm((prev) => ({ ...prev, dosesPerPackage: event.target.value }))
             }
+            {...ariaDoInteiro("dosesPerPackage")}
           />
+          {avisoDoInteiro("dosesPerPackage")}
         </div>
 
         <div className="field field--narrow">
@@ -387,7 +444,9 @@ options={customers.map((customer) => ({
             onChange={(event) =>
               setForm((prev) => ({ ...prev, shelfLifeMonths: event.target.value }))
             }
+            {...ariaDoInteiro("shelfLifeMonths")}
           />
+          {avisoDoInteiro("shelfLifeMonths")}
         </div>
       </FormSection>
 

@@ -3300,6 +3300,10 @@ prazo gravado.
 A tela recusa o que o servidor recusaria, com os MESMOS limites, tirados de uma
 fonte só — e o servidor continua recusando por conta própria.
 
+A regra é de toda tela, não do Orçamento: PROJECT-INT-FIELDS-01 (2026-09-10)
+aplicou a mesma leitura às doses por embalagem e à vida útil do Projeto. Ali o
+limite da API é só "inteiro maior que zero", sem teto numérico a compartilhar.
+
 ### Busca de entidade enxerga o conjunto elegível inteiro
 
 Um campo que parece pesquisar o catálogo não pode pesquisar apenas os

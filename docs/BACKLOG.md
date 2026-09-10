@@ -35,7 +35,8 @@ item fica na sua seção; aqui fica só a ORDEM, porque ela é a pergunta que se
 faz primeiro e estava espalhada por cinco lugares. Saíram da fila em
 2026-09-10, resolvidos: QUOTE-DRAFT-STATE-01; QUOTE-SEND-DIRTY-01,
 QUOTE-SEND-LINE-DRAFT-01 e QUOTE-LINE-NOOP-BLUR-01, promovidos a P0 pelo PO
-por integridade comercial; e QUOTE-INT-FIELDS-01, pela mesma razão, em P1.
+por integridade comercial; QUOTE-INT-FIELDS-01, pela mesma razão, em P1; e
+PROJECT-INT-FIELDS-01, o mesmo defeito no cadastro do Projeto, promovido a P0.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
@@ -411,8 +412,28 @@ parcelas e intervalo não aparecem nem valem: o texto escondido neles não trava
 e segue como `null` — o servidor grava à vista sem parcelas de qualquer jeito.
 Percentuais, conta do plano e proteções de envio intocados. Regra durável:
 [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §48. Achados registrados sem corrigir:
-PROJECT-INT-FIELDS-01 (P2) — o mesmo defeito no formulário do Projeto —, e
-API-INT-COERCION-01, QUOTE-PERCENT-FIELDS-01 e QUOTE-CASH-HIDDEN-DIRTY-01 (P3).
+PROJECT-INT-FIELDS-01 — o mesmo defeito no formulário do Projeto, promovido a P0
+e resolvido no mesmo dia, abaixo —, e API-INT-COERCION-01,
+QUOTE-PERCENT-FIELDS-01 e QUOTE-CASH-HIDDEN-DIRTY-01 (P3).
+
+#### PROJECT-INT-FIELDS-01 — doses e vida útil do Projeto aceitavam texto e apagavam o gravado — **RESOLVIDO em 2026-09-10**
+
+Achado de QUOTE-INT-FIELDS-01, registrado em P2 e promovido a **P0** pelo PO —
+integridade de cadastro. Reproduzido antes da correção: pela interface, `abc`
+sobre doses 60 saiu no PATCH como `"dosesPerPackage":null`, `30abc` sobre vida
+útil 24 como `"shelfLifeMonths":null`, e a segunda aba mostrou os dois apagados
+(11 falhas na E2E); no componente, 20 de 27 casos falhavam; a API já recusava o
+texto com 400, na criação e na edição.
+
+`ProjectFormModal` passou a ler os dois pela mesma `lerInteiroOpcional` do
+Orçamento — sem parser novo. Inválido fica no campo como digitado, com o erro
+ao lado (`aria-invalid` + `aria-describedby`), e prende "Criar projeto" e
+"Salvar alterações" sem requisição nenhuma; vazio continua "não informado" e
+vai como `null`. O limite é o da API, inteiro maior que zero sem teto
+(`optionalPositiveInt`) — sem constante compartilhada, porque não há teto
+numérico repetido entre as duas pontas. Backend, semântica das doses e da vida
+útil (cópia para o Produto na aprovação, validade sugerida) e Orçamento
+intocados. Regra durável: [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §48.
 
 #### FORM-UOM-01 — unidade de medida é texto livre no Modelo de Formulação
 
@@ -727,7 +748,6 @@ sem contrato cadastrado; os conceitos são independentes.
 | **VOCAB-01** | Um conceito, três nomes: "Base de produção" (campo), "Base de referência" (leitura) e "Base de produção sugerida" (template) nomeiam a mesma quantidade. Mesma família de F-01-1; sweep só quando houver rodada de nomenclatura | UX | S |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
-| **PROJECT-INT-FIELDS-01** | O defeito de QUOTE-INT-FIELDS-01 em outra tela: "Doses por embalagem" e "Vida útil (meses)" do Projeto são texto livre e saem por `Number(texto)` (`ProjectFormModal.tsx:142,148`) — `abc` vira `NaN`, o JSON escreve `null`, a API aceita `null` e salvar apaga o valor gravado. Por leitura de código, achado em QUOTE-INT-FIELDS-01 e fora do escopo dela; a correção é reusar `lerInteiroOpcional` com erro no campo. Mesma classe do item que o PO promoveu a P1 — promover é decisão do PO | MEDIUM | XS |
 
 **F-01-1 e F-07-2 foram rebaixados**: os dois números estão certos para o que
 representam — `Project.productId` (produto resultante) contra `project_products`
@@ -750,9 +770,10 @@ mudou.
 | **F-11-1** | Sair de um documento por um `EntityLink` de cadastro não deixa caminho de volta | UX | S |
 | **QUOTE-VERSION-SWITCH-DIRTY-01** | Abrir outra versão com condições pendentes descarta o rascunho sem aviso — mantido de propósito em QUOTE-DRAFT-STATE-01. Só existe um rascunho por projeto e as outras versões são somente leitura; avisar, salvar ou descartar é decisão do PO | UX | S |
 | **PROJECT-RELOAD-ERROR-01** | Falha na releitura do Projeto depois de uma mutação bem-sucedida vira "Projeto não encontrado": o `load()` de `ProjectDetailPage` trata qualquer erro como 404 e desmonta a ficha — e com ela o que estava digitado | LOW | XS |
-| **API-INT-COERCION-01** | A API ainda lê inteiro com `Number()` em `optionalPositiveInt`: `"1e2"` é aceito como 100, `"0x1E"` como 30, `"+1"` e `"1.0"` como 1. A tela das condições não manda nada disso desde QUOTE-INT-FIELDS-01 — o risco é de outro cliente da API. O mesmo schema serve `dosesPerPackage` e `shelfLifeMonths` do Projeto | LOW | XS |
+| **API-INT-COERCION-01** | A API ainda lê inteiro com `Number()` nas duas `optionalPositiveInt` — a de `projects.schemas.ts` e a de `lib/industrial-schema.ts`, da Formulação e dos cadastros industriais: `"1e2"` é aceito como 100, `"0x1E"` como 30, `"+1"` e `"1.0"` como 1. A tela das condições não manda nada disso desde QUOTE-INT-FIELDS-01 — o risco é de outro cliente da API. O mesmo schema serve `dosesPerPackage` e `shelfLifeMonths` do Projeto, cuja tela também recusa essas escritas desde PROJECT-INT-FIELDS-01; a interação está caracterizada em `projeto-inteiros-api.test.ts`, que muda junto quando o achado fechar | LOW | XS |
 | **QUOTE-PERCENT-FIELDS-01** | Os percentuais das condições não receberam o tratamento dos inteiros: o erro não tem `id` nem `aria-describedby` no campo, e à vista a entrada ou os juros ilegíveis que ficaram escondidos travam "Salvar condições" sem erro visível — `temPercentualIlegivel` não olha a forma de pagamento | UX | XS |
 | **QUOTE-CASH-HIDDEN-DIRTY-01** | Parcela ou intervalo digitado no Parcelado e escondido pela troca para À vista conta como alteração pendente; salvar grava à vista sem parcelas (o servidor limpa), a releitura não muda o gravado e a pendência fica: "Alterações não salvas" e envio preso até "Descartar alterações". Por leitura de código, desde QUOTE-DRAFT-STATE-01 — antes da correção, o mesmo com `NaN`. Decidir se campo escondido conta como pendência | UX | S |
+| **FORMULATION-DOSES-INPUT-01** | A Formulação lê "Doses por embalagem" com `Number()` só na prévia (`FormulationVersionPage.tsx:707,1386,1824`) e manda o texto cru ao salvar. Não apaga — a API recusa `abc` com "Informe um número inteiro", no campo —, mas a leitura não é a do Orçamento e do Projeto: `1e2` aparece como 100 na prévia e grava 100 (API-INT-COERCION-01). Achado em PROJECT-INT-FIELDS-01, fora do escopo dela | UX | XS |
 
 ### Encerrados na triagem, sem trabalho
 

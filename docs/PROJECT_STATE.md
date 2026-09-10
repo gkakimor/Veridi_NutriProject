@@ -828,6 +828,16 @@ informado". Os limites são os da API, de uma fonte só
 (`LIMITES_INTEIROS_DAS_CONDICOES`, em `@veridi/shared`). Regra durável: §48.
 Zero migration; o servidor já recusava o texto, e continua recusando.
 
+## O mesmo, no cadastro do Projeto (PROJECT-INT-FIELDS-01, 2026-09-10)
+
+**P0 de integridade de cadastro, fechado.** "Doses por embalagem" e "Vida útil
+(meses)" saíam do formulário do Projeto por `Number(texto)`, e `abc` apagava o
+valor gravado — reproduzido pela interface. Agora passam pela mesma leitura
+estrita do Orçamento: inválido fica no campo com o erro ao lado e prende criar
+e salvar; vazio segue "não informado". Limite da API (inteiro maior que zero,
+sem teto), backend e semântica das doses e da vida útil intocados. Zero
+migration.
+
 ## Próxima prioridade
 
 **FORM-UOM-01** — primeiro da fila viva. A Formulação real já oferece a
