@@ -3259,6 +3259,24 @@ Sem alteração pendente, ativar continua sendo uma operação só. E "pendente"
 mede contra o que o servidor devolveu, não contra "alguém digitou": reeditar
 até o valor original não é alteração.
 
+### Enviar nunca congela o que a tela não mostra
+
+QUOTE-SEND-DIRTY-01, 2026-09-10. O envio do Orçamento congela o que está
+GRAVADO — condições, preços, cliente —, e isso está certo: o servidor não sabe,
+nem deve saber, o que alguém digitou e não salvou. A regra é da interação:
+**enquanto houver condição comercial alterada e não salva, a proposta não se
+envia.** Ninguém pode ver a condição B na tela e mandar ao cliente a A.
+
+Aqui a regra difere de propósito do "ativar" acima: ativar grava o formulário
+como condição da ativação; enviar NÃO grava nada. Salvar e enviar são duas
+decisões comerciais, e o envio não oferece "enviar mesmo assim" nem salva
+sozinho — ele espera o gravado alcançar a tela, e diz isso ao lado do botão.
+
+"Alterada" é a mesma pendência de "Alterações não salvas", medida por VALOR
+contra o que o servidor devolveu: `10,0` sobre 10 não é alteração e não
+bloqueia. Salvamento em andamento também bloqueia; salvamento que falha mantém
+o bloqueio.
+
 ### Busca de entidade enxerga o conjunto elegível inteiro
 
 Um campo que parece pesquisar o catálogo não pode pesquisar apenas os

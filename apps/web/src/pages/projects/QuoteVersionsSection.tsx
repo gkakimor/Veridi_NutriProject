@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type {
   ProjectDTO,
@@ -100,6 +100,13 @@ function quoteBadgeClass(status: QuoteVersionDTO["status"]): string {
   return "badge badge--neutral";
 }
 
+/**
+ * Por que o envio espera. A segunda frase diz o mecanismo, para que "salvar
+ * antes" não pareça uma regra arbitrária.
+ */
+const SALVE_AS_CONDICOES = "Salve as alterações das condições antes de enviar o orçamento.";
+const ENVIO_USA_O_SALVO = "O envio usa somente as condições já salvas.";
+
 export function QuoteVersionsSection({
   project,
   canEdit,
@@ -142,6 +149,20 @@ export function QuoteVersionsSection({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * Condição comercial alterada e ainda não salva, dita pelo formulário de
+   * condições — a mesma pendência de "Alterações não salvas", nunca uma
+   * segunda comparação. Enviar congela o que está GRAVADO: com pendência, a
+   * tela mostraria uma condição e o cliente receberia outra
+   * (QUOTE-SEND-DIRTY-01). O estado desenha o botão; a ref é o que o envio
+   * confere no instante do clique, seja qual for o render que criou o handler.
+   */
+  const [condicoesPendentes, setCondicoesPendentes] = useState(false);
+  const condicoesPendentesRef = useRef(false);
+  const reportarCondicoes = useCallback((pendente: boolean) => {
+    condicoesPendentesRef.current = pendente;
+    setCondicoesPendentes(pendente);
+  }, []);
   const [addProductId, setAddProductId] = useState("");
   const [sendConfirm, setSendConfirm] = useState<{
     quote: QuoteVersionDTO;
@@ -419,6 +440,19 @@ export function QuoteVersionsSection({
   }
 
   /**
+   * Confere a pendência das condições no instante do envio — além do botão
+   * desabilitado. Protege a confirmação que já estava aberta, o clique que
+   * chega entre dois renders e quem um dia ligar o envio por outro caminho.
+   * Bloqueia sem oferecer "enviar mesmo assim": o que se envia é o que se vê.
+   */
+  function condicoesImpedemEnvio(): boolean {
+    if (!condicoesPendentesRef.current) return false;
+    setSendConfirm(null);
+    setError(`${SALVE_AS_CONDICOES} ${ENVIO_USA_O_SALVO}`);
+    return true;
+  }
+
+  /**
    * Envio do orçamento.
    *
    * Enviar é ato comercial com data: a versão sai do rascunho, congela a
@@ -432,6 +466,7 @@ export function QuoteVersionsSection({
    * reabre a confirmação já no tom certo.
    */
   function trySend(quote: QuoteVersionDTO) {
+    if (condicoesImpedemEnvio()) return;
     const incomplete = incompleteCostLines(quote);
     setSendConfirm({ quote, lines: incomplete, incompleteCost: incomplete.length > 0 });
   }
@@ -441,6 +476,7 @@ export function QuoteVersionsSection({
     lines: QuoteLineDTO[];
     incompleteCost: boolean;
   }) {
+    if (condicoesImpedemEnvio()) return;
     setSaving(true);
     setError(null);
     try {
@@ -1173,6 +1209,7 @@ export function QuoteVersionsSection({
             editable={editable}
             saving={saving}
             onSave={(input) => void run(() => updateQuoteVersion(open.id, input))}
+            onPendenciaChange={reportarCondicoes}
           />
 
           <div className="line-actions">
@@ -1189,13 +1226,20 @@ export function QuoteVersionsSection({
                 type="button"
                 className="btn btn--accent"
                 /* Rascunho pode nao ter validade; documento do cliente, nao.
-                   A tela previne, e o servidor continua sendo a autoridade. */
-                disabled={saving || open.lines.length === 0 || !open.validUntil}
-                title={
-                  !open.validUntil
-                    ? "Informe a validade da proposta antes de enviar ao cliente."
-                    : undefined
+                   A tela previne, e o servidor continua sendo a autoridade.
+                   Condição por salvar também bloqueia: o envio congela o
+                   gravado, e o gravado não é o que está nos campos. */
+                disabled={
+                  saving || open.lines.length === 0 || !open.validUntil || condicoesPendentes
                 }
+                title={
+                  condicoesPendentes
+                    ? SALVE_AS_CONDICOES
+                    : !open.validUntil
+                      ? "Informe a validade da proposta antes de enviar ao cliente."
+                      : undefined
+                }
+                aria-describedby={condicoesPendentes ? "quote-send-pending" : undefined}
                 onClick={() => void trySend(open)}
               >
                 Enviar ao cliente
@@ -1229,7 +1273,15 @@ export function QuoteVersionsSection({
             )}
           </div>
 
-          {editable && !open.validUntil && (
+          {/* Uma razão por vez, a que se resolve primeiro: com condição por
+              salvar, "informe a validade" pode estar pedindo o que já foi
+              digitado. */}
+          {editable && condicoesPendentes && (
+            <p className="field__hint" id="quote-send-pending">
+              {SALVE_AS_CONDICOES} {ENVIO_USA_O_SALVO}
+            </p>
+          )}
+          {editable && !condicoesPendentes && !open.validUntil && (
             <p className="field__hint">
               Informe a validade da proposta antes de enviar ao cliente.
             </p>
