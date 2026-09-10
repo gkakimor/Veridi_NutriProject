@@ -838,14 +838,20 @@ e salvar; vazio segue "não informado". Limite da API (inteiro maior que zero,
 sem teto), backend e semântica das doses e da vida útil intocados. Zero
 migration.
 
+## A unidade do Modelo vem do catálogo (FORM-UOM-01, 2026-09-10)
+
+**O Modelo de Formulação alcançou a Formulação real.** Base e componente eram
+texto livre; agora são escolha do catálogo `UnitOfMeasure` — o componente, só
+na dimensão do seu Item, pela mesma lista da Formulação (`lib/uom-options.ts`).
+Trocar de Item não deixa unidade incompatível escondida, e o que já estava
+gravado fora da lista aparece como legado e prende o salvar. Na API, a base
+fora do catálogo passou de 500 cru a 400 com nome, e ativar reconfere as
+unidades — o componente já era recusado antes. DEV e PROD sem nenhum dado fora
+do catálogo. Zero migration.
+
 ## Próxima prioridade
 
-**FORM-UOM-01** — primeiro da fila viva. A Formulação real já oferece a
-unidade certa — `<select>` filtrado pela dimensão do Item —; o que sobra é o
-**Modelo de Formulação**, onde a unidade ainda é texto livre, e unidade é dado
-estrutural que alimenta conversão, custo e produção. **Não iniciado.**
-
-**QUOTE-DUPLICATE-01** — segundo da fila, e o **gate de preço foi resolvido**
+**QUOTE-DUPLICATE-01** — primeiro da fila viva, e o **gate de preço foi resolvido**
 pelo PO em 2026-09-10: sem herança silenciosa de `unitPrice`, com escolha
 explícita entre manter os preços da versão de origem e revisá-los, nenhuma
 opção pré-marcada. O que sobra de trabalho é escolher a versão de ORIGEM

@@ -37,6 +37,7 @@ import {
 } from "../../lib/formulations-api";
 import { getItem, listItems } from "../../lib/items-api";
 import { listUnits } from "../../lib/units-api";
+import { unidadesDaDimensao } from "../../lib/uom-options";
 import { ApiValidationError } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { getFormulationCostEstimate } from "../../lib/costs-api";
@@ -738,7 +739,7 @@ export function FormulationVersionPage() {
   function unitOptionsForRow(row: ComponentRow): UnitOfMeasureDTO[] {
     const selected = activeItems.find((item) => item.id === row.itemId);
     if (!selected) return units;
-    return units.filter((unit) => unit.dimension === selected.unitDimension);
+    return unidadesDaDimensao(units, selected.unitDimension);
   }
 
   function handleAddComponent() {

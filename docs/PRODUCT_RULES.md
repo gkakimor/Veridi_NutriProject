@@ -2465,6 +2465,14 @@ production — the one place where a wrong batch cannot be undone.
 - **Supply responsibility is a suggestion.** Who supplies each material changes
   per customer. The copy carries the template's value as a starting point and
   the product can change it without touching the library.
+- **Units are catalog codes, in the Item's dimension (FORM-UOM-01).** The
+  template's base unit and every component unit are `UnitOfMeasure` codes —
+  never free text. A component unit has the dimension of the Item's stock
+  unit, the same `isUomCompatible` rule the product formulation applies; the
+  template has no output Item, so any catalog code serves as its base. The API
+  refuses the rest by name, activation re-checks every component, and the API
+  never picks a unit for the caller: changing the Item while keeping an
+  incompatible unit is refused, not corrected.
 - **Nothing commercial travels.** No customer, no project, no quote, no cost
   structure, no calculation, no pricing, no order. A matrix meant to be reused
   across customers cannot carry the name of one of them, so the template's name

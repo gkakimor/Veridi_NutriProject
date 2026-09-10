@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireRole } from "../../lib/current-user.js";
+import { UomNotFoundError } from "../items/uom.js";
 import {
   ComponentItemNotFoundError,
   DuplicateComponentItemError,
@@ -114,6 +115,10 @@ function mapDomainError(
     error instanceof IncompatibleComponentUnitError
   ) {
     return { status: 400, body: { error: "invalid_component", message: error.message } };
+  }
+  // Unidade fora do catálogo tem recusa com nome, não erro cru de chave estrangeira.
+  if (error instanceof UomNotFoundError) {
+    return { status: 400, body: { error: "invalid_unit", message: error.message } };
   }
   return null;
 }
