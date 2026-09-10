@@ -13,8 +13,9 @@ import type { ProjectDTO, QuoteLineDTO, QuoteVersionDTO } from "@veridi/shared";
  *
  * O que esta tela precisa provar:
  *
- * - abrir, não editar e salvar devolve as quatro casas intactas. A máscara de
- *   leitura (`formatUnitPriceBRL`, 2 a 4 casas) nunca vira o valor enviado;
+ * - abrir, não editar e sair não manda nada, e as quatro casas ficam intactas.
+ *   A máscara de leitura (`formatUnitPriceBRL`, 2 a 4 casas) nunca vira o
+ *   valor enviado — sem mudança nem há pedido (QUOTE-LINE-NOOP-BLUR-01);
  * - o que a pessoa digita chega ao servidor sem arredondamento local — quem
  *   recusa é a API, com mensagem, não a tela em silêncio;
  * - a linha vinda de uma FAIXA não é editável, e a proveniência técnica de
@@ -172,14 +173,16 @@ describe("preço comercial da linha do Orçamento na tela", () => {
     expect(precoDe("PROD-000001").value).not.toBe("R$ 4,0531");
   });
 
-  it("abrir, não editar e salvar devolve 4,0531 — casa por casa", async () => {
+  it("abrir, não editar e sair não manda nada — 4,0531 fica, casa por casa", () => {
     abrir([versao()]);
     const campo = precoDe("PROD-000001");
 
     fireEvent.blur(campo, { target: { value: campo.value } });
 
-    await waitFor(() => expect(updateQuoteLine).toHaveBeenCalled());
-    expect(enviado().unitPrice).toBe(PRECO_COMERCIAL);
+    // Sem mudança não sai pedido: a máscara de leitura não tem como virar o
+    // valor gravado, e o campo continua com as quatro casas.
+    expect(updateQuoteLine).not.toHaveBeenCalled();
+    expect(precoDe("PROD-000001").value).toBe(PRECO_COMERCIAL);
   });
 
   it("digitar em pt-BR chega ao servidor normalizado, sem arredondar na tela", async () => {

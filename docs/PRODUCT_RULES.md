@@ -4514,6 +4514,12 @@ linha volta a "não precificado" — o envio já recusa linha sem preço. Digita
 preço à mão passa a origem para `MANUAL`. Produto nunca herda preço de outro
 produto.
 
+**Mudar é valor diferente, não campo presente.** Só uma alteração REAL de
+quantidade ou de unidade solta o preço, e só um preço diferente do gravado
+passa a origem para `MANUAL`. A mesma quantidade em outra escrita decimal, a
+mesma unidade ou o mesmo preço — num pedido que apenas os repete — não mudam
+nada na linha: nem preço, nem origem, nem vínculo (QUOTE-LINE-NOOP-BLUR-01).
+
 **Preço herdado, custo de hoje.** O envio congela a economia CORRENTE também
 nas linhas que não vieram de faixa: a referência é a faixa da precificação
 ATIVA cuja quantidade física é a mesma da linha. Sem faixa equivalente não há

@@ -801,8 +801,19 @@ inteiro: desde a primeira tecla diferente, durante o salvamento e depois da
 falha, até a nova tentativa passar. Pendência por valor (`Decimal`), não por
 foco; condição e linha pendentes somam numa espera só. A unidade, que era
 campo não-controlado, passou a ser acompanhada pela mesma razão. Sem
-auto-salvar, sem descartar o digitado, zero backend. Achado aberto no caminho:
-sair do campo sem mudar nada apaga o preço herdado (QUOTE-LINE-NOOP-BLUR-01).
+auto-salvar, sem descartar o digitado, zero backend.
+
+## Passar pelo campo não é mudar (QUOTE-LINE-NOOP-BLUR-01, 2026-09-10)
+
+**O terceiro P0 do dia, reproduzido pela interface antes da correção.** Um Tab
+pela quantidade de uma linha de preço herdado mandava a mesma quantidade ao
+servidor, e `updateQuoteLine` soltava o preço, a origem e o vínculo com o
+acordo: a limpeza de §74 olhava a PRESENÇA do campo no pedido, não o valor.
+Agora a tela não manda o que não mudou — a mesma comparação por valor da
+pendência de envio — e o servidor compara cada campo com o gravado, em
+`Decimal`, antes de qualquer efeito; pedido inteiramente igual nem faz UPDATE.
+Mudança real de quantidade ou de unidade continua soltando o preço, como §74
+manda. Zero migration.
 
 ## Próxima prioridade
 
