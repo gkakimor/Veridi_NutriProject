@@ -8,6 +8,7 @@ import type {
   QuoteVersionDTO,
 } from "@veridi/shared";
 import {
+  Decimal,
   QUOTE_STATUS_LABELS,
   QUOTE_PRICE_SOURCE_LABELS,
   buildPaymentSchedule,
@@ -101,11 +102,51 @@ function quoteBadgeClass(status: QuoteVersionDTO["status"]): string {
 }
 
 /**
- * Por que o envio espera. A segunda frase diz o mecanismo, para que "salvar
- * antes" não pareça uma regra arbitrária.
+ * Por que o envio espera: uma frase diz o que fazer, a outra o mecanismo —
+ * para que "salvar antes" não pareça regra arbitrária. Condições e produtos
+ * têm cada um a sua; os dois pendentes juntos ganham uma só, simples.
  */
-const SALVE_AS_CONDICOES = "Salve as alterações das condições antes de enviar o orçamento.";
-const ENVIO_USA_O_SALVO = "O envio usa somente as condições já salvas.";
+const ESPERA_CONDICOES = {
+  titulo: "Salve as alterações das condições antes de enviar o orçamento.",
+  complemento: "O envio usa somente as condições já salvas.",
+};
+const ESPERA_PRODUTOS = {
+  titulo: "Salve as alterações dos produtos antes de enviar o orçamento.",
+  complemento: "O envio usa somente os valores já salvos.",
+};
+const ESPERA_TUDO = {
+  titulo: "Salve as alterações do orçamento antes de enviar.",
+  complemento: "O envio usa somente o que já está salvo.",
+};
+
+function motivoDaEspera(condicoes: boolean, produtos: boolean) {
+  if (condicoes && produtos) return ESPERA_TUDO;
+  if (condicoes) return ESPERA_CONDICOES;
+  if (produtos) return ESPERA_PRODUTOS;
+  return null;
+}
+
+/** Os campos da linha que se digitam na proposta e gravam ao sair do campo. */
+type CampoDaLinha = "quotedQuantity" | "unitPrice" | "uomCode";
+const CAMPOS_DA_LINHA: readonly CampoDaLinha[] = ["quotedQuantity", "unitPrice", "uomCode"];
+
+/**
+ * O texto que está no campo da linha É o valor gravado? Por VALOR — `1000,0`
+ * e `1000.000000000000` são a mesma quantidade —, e com `Decimal`, nunca
+ * `Number` (§66). Campo vazio é ausência e só equivale a gravado ausente;
+ * texto ilegível não equivale a nada. Unidade é texto, comparado sem os
+ * espaços das pontas, como o salvamento grava.
+ */
+function digitadoIgualAoGravado(
+  campo: CampoDaLinha,
+  digitado: string,
+  gravado: string | null,
+): boolean {
+  if (campo === "uomCode") return (digitado.trim() || null) === gravado;
+  const legivel = parseDecimalInput(digitado);
+  if (legivel === null) return gravado === null && digitado.trim() === "";
+  return gravado !== null && new Decimal(legivel).equals(new Decimal(gravado));
+}
 
 export function QuoteVersionsSection({
   project,
@@ -196,10 +237,12 @@ export function QuoteVersionsSection({
    * continuavam mostrando a conta do salvamento ANTERIOR — número velho
    * apresentado como consequência dos campos atuais. Guardar o texto aqui
    * permite recalcular a prévia com a mesma função que a API usa, sem gravar
-   * nada e sem tirar o foco de quem digita.
+   * nada e sem tirar o foco de quem digita. A unidade entrou aqui também: é
+   * o que deixa a tela saber que o que está no campo ainda não é o gravado
+   * (QUOTE-SEND-LINE-DRAFT-01).
    */
   const [rascunhoDeLinha, setRascunhoDeLinha] = useState<
-    Record<string, { quotedQuantity?: string; unitPrice?: string }>
+    Record<string, Partial<Record<CampoDaLinha, string>>>
   >({});
 
   /*
@@ -285,11 +328,7 @@ export function QuoteVersionsSection({
     return digitado !== undefined && digitado.trim() !== "" && parseDecimalInput(digitado) === null;
   }
 
-  function digitarNaLinha(
-    lineId: string,
-    campo: "quotedQuantity" | "unitPrice",
-    valor: string,
-  ) {
+  function digitarNaLinha(lineId: string, campo: CampoDaLinha, valor: string) {
     setRascunhoDeLinha((atual) => ({
       ...atual,
       [lineId]: { ...atual[lineId], [campo]: valor },
@@ -306,7 +345,10 @@ export function QuoteVersionsSection({
    * salvamento falha.
    */
   const linhasGravadas = (open?.lines ?? [])
-    .map((line) => `${line.id}:${line.quotedQuantity ?? ""}:${line.unitPrice ?? ""}`)
+    .map(
+      (line) =>
+        `${line.id}:${line.quotedQuantity ?? ""}:${line.unitPrice ?? ""}:${line.uomCode ?? ""}`,
+    )
     .join("|");
   useEffect(() => {
     setRascunhoDeLinha((atual) => {
@@ -318,15 +360,11 @@ export function QuoteVersionsSection({
           mudou = true;
           continue;
         }
-        const restante: { quotedQuantity?: string; unitPrice?: string } = {};
-        for (const campo of ["quotedQuantity", "unitPrice"] as const) {
+        const restante: Partial<Record<CampoDaLinha, string>> = {};
+        for (const campo of CAMPOS_DA_LINHA) {
           const digitado = campos[campo];
           if (digitado === undefined) continue;
-          const legivel = parseDecimalInput(digitado);
-          const gravado = line[campo];
-          const iguais =
-            legivel === null ? gravado === null && digitado.trim() === "" : gravado !== null && Number(legivel) === Number(gravado);
-          if (iguais) {
+          if (digitadoIgualAoGravado(campo, digitado, line[campo])) {
             mudou = true;
             continue;
           }
@@ -336,7 +374,7 @@ export function QuoteVersionsSection({
       }
       return mudou ? proximo : atual;
     });
-    // `linhasGravadas` cobre quantidade e preço de cada linha da versão aberta.
+    // `linhasGravadas` cobre quantidade, preço e unidade de cada linha da versão aberta.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open?.id, linhasGravadas]);
 
@@ -344,6 +382,23 @@ export function QuoteVersionsSection({
   useEffect(() => {
     setRascunhoDeLinha({});
   }, [openId]);
+
+  /*
+   * Linhas cujo valor NA TELA ainda não é o gravado: digitado e não salvo, em
+   * salvamento, ou salvamento que falhou e deixou o digitado no campo. Por
+   * valor, não por foco — o campo focado com o valor gravado não está
+   * pendente. É a mesma pergunta que o rodapé e o envio fazem: enviar congela
+   * o gravado, e com linha pendente a tela mostraria um preço e o cliente
+   * receberia outro (QUOTE-SEND-LINE-DRAFT-01).
+   */
+  const linhasPendentes = (open?.lines ?? []).filter((line) =>
+    CAMPOS_DA_LINHA.some((campo) => {
+      const digitado = rascunhoDeLinha[line.id]?.[campo];
+      return digitado !== undefined && !digitadoIgualAoGravado(campo, digitado, line[campo]);
+    }),
+  );
+  /** Por que o envio espera agora — `null` quando nada espera. */
+  const motivo = motivoDaEspera(condicoesPendentes, linhasPendentes.length > 0);
 
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
@@ -440,15 +495,17 @@ export function QuoteVersionsSection({
   }
 
   /**
-   * Confere a pendência das condições no instante do envio — além do botão
-   * desabilitado. Protege a confirmação que já estava aberta, o clique que
-   * chega entre dois renders e quem um dia ligar o envio por outro caminho.
-   * Bloqueia sem oferecer "enviar mesmo assim": o que se envia é o que se vê.
+   * Confere as pendências — condições e linhas — no instante do envio, além
+   * do botão desabilitado. Protege a confirmação que já estava aberta, o
+   * clique que chega entre dois renders e quem um dia ligar o envio por outro
+   * caminho. Bloqueia sem oferecer "enviar mesmo assim": o que se envia é o
+   * que se vê.
    */
-  function condicoesImpedemEnvio(): boolean {
-    if (!condicoesPendentesRef.current) return false;
+  function alteracoesImpedemEnvio(): boolean {
+    const espera = motivoDaEspera(condicoesPendentesRef.current, linhasPendentes.length > 0);
+    if (!espera) return false;
     setSendConfirm(null);
-    setError(`${SALVE_AS_CONDICOES} ${ENVIO_USA_O_SALVO}`);
+    setError(`${espera.titulo} ${espera.complemento}`);
     return true;
   }
 
@@ -466,7 +523,7 @@ export function QuoteVersionsSection({
    * reabre a confirmação já no tom certo.
    */
   function trySend(quote: QuoteVersionDTO) {
-    if (condicoesImpedemEnvio()) return;
+    if (alteracoesImpedemEnvio()) return;
     const incomplete = incompleteCostLines(quote);
     setSendConfirm({ quote, lines: incomplete, incompleteCost: incomplete.length > 0 });
   }
@@ -476,7 +533,7 @@ export function QuoteVersionsSection({
     lines: QuoteLineDTO[];
     incompleteCost: boolean;
   }) {
-    if (condicoesImpedemEnvio()) return;
+    if (alteracoesImpedemEnvio()) return;
     setSaving(true);
     setError(null);
     try {
@@ -542,8 +599,8 @@ export function QuoteVersionsSection({
           monthlyInterestPercent: open.monthlyInterestPercent,
         }).total
       : null;
-  /** Há digitação pendente em alguma linha — o que a tela mostra ainda não foi gravado. */
-  const linhasComEdicaoPendente = Object.keys(rascunhoDeLinha).length > 0;
+  /** Alguma linha mostra o que ainda não foi gravado — a mesma pendência que segura o envio. */
+  const linhasComEdicaoPendente = linhasPendentes.length > 0;
   const alguemIlegivel = (open?.lines ?? []).some(
     (line) => campoIlegivel(line, "quotedQuantity") || campoIlegivel(line, "unitPrice"),
   );
@@ -782,10 +839,18 @@ export function QuoteVersionsSection({
                     <td>
                       {editable ? (
                         <input
-                          key={`uom-${line.uomCode ?? ""}`}
+                          /*
+                           * Controlado pelo rascunho, como quantidade e preço.
+                           * Não-controlado, o texto de um salvamento que falhou
+                           * ficava no campo sem que a tela soubesse — e o envio
+                           * congelaria a unidade gravada.
+                           */
                           type="text"
                           aria-label={`Unidade de ${line.productCode}`}
-                          defaultValue={line.uomCode ?? ""}
+                          value={rascunhoDeLinha[line.id]?.uomCode ?? line.uomCode ?? ""}
+                          onChange={(event) =>
+                            digitarNaLinha(line.id, "uomCode", event.target.value)
+                          }
                           onBlur={(event) =>
                             void run(() =>
                               updateQuoteLine(line.id, {
@@ -1227,19 +1292,17 @@ export function QuoteVersionsSection({
                 className="btn btn--accent"
                 /* Rascunho pode nao ter validade; documento do cliente, nao.
                    A tela previne, e o servidor continua sendo a autoridade.
-                   Condição por salvar também bloqueia: o envio congela o
-                   gravado, e o gravado não é o que está nos campos. */
-                disabled={
-                  saving || open.lines.length === 0 || !open.validUntil || condicoesPendentes
-                }
+                   Condição ou linha por salvar também bloqueia: o envio
+                   congela o gravado, e o gravado não é o que está nos campos. */
+                disabled={saving || open.lines.length === 0 || !open.validUntil || motivo !== null}
                 title={
-                  condicoesPendentes
-                    ? SALVE_AS_CONDICOES
+                  motivo
+                    ? motivo.titulo
                     : !open.validUntil
                       ? "Informe a validade da proposta antes de enviar ao cliente."
                       : undefined
                 }
-                aria-describedby={condicoesPendentes ? "quote-send-pending" : undefined}
+                aria-describedby={motivo ? "quote-send-pending" : undefined}
                 onClick={() => void trySend(open)}
               >
                 Enviar ao cliente
@@ -1273,15 +1336,15 @@ export function QuoteVersionsSection({
             )}
           </div>
 
-          {/* Uma razão por vez, a que se resolve primeiro: com condição por
+          {/* Uma razão por vez, a que se resolve primeiro: com alteração por
               salvar, "informe a validade" pode estar pedindo o que já foi
               digitado. */}
-          {editable && condicoesPendentes && (
+          {editable && motivo && (
             <p className="field__hint" id="quote-send-pending">
-              {SALVE_AS_CONDICOES} {ENVIO_USA_O_SALVO}
+              {motivo.titulo} {motivo.complemento}
             </p>
           )}
-          {editable && !condicoesPendentes && !open.validUntil && (
+          {editable && !motivo && !open.validUntil && (
             <p className="field__hint">
               Informe a validade da proposta antes de enviar ao cliente.
             </p>

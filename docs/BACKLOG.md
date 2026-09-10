@@ -33,8 +33,9 @@ FIX-02 (2026-09-08): quantidade física canônica na estimativa e um único
 Reconciliada em 2026-09-09 com o walkthrough real da Veridi. O detalhe de cada
 item fica na sua seção; aqui fica só a ORDEM, porque ela é a pergunta que se
 faz primeiro e estava espalhada por cinco lugares. Saíram da fila em
-2026-09-10, resolvidos: QUOTE-DRAFT-STATE-01 e QUOTE-SEND-DIRTY-01 — este
-promovido a P0 pelo PO, integridade comercial.
+2026-09-10, resolvidos: QUOTE-DRAFT-STATE-01, QUOTE-SEND-DIRTY-01 e
+QUOTE-SEND-LINE-DRAFT-01 — os dois últimos promovidos a P0 pelo PO,
+integridade comercial.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
@@ -355,7 +356,25 @@ pelo formulário ao pai antes da pintura; o envio confere de novo no clique e na
 confirmação. Salvar libera o envio na mesma tela; salvar que falha mantém o
 bloqueio. Servidor, snapshot e transição de status intocados. Regra durável:
 [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §48. O mesmo risco na LINHA cujo
-salvamento falhou ficou registrado, não ampliado: QUOTE-SEND-LINE-DRAFT-01 (P2).
+salvamento falhou foi registrado sem ampliar, e fechado no mesmo dia:
+QUOTE-SEND-LINE-DRAFT-01, abaixo.
+
+#### QUOTE-SEND-LINE-DRAFT-01 — enviar com linha que a tela mostra e o servidor não tem — **RESOLVIDO em 2026-09-10**
+
+Achado de QUOTE-SEND-DIRTY-01, promovido a **P0** pelo PO. Quantidade, preço e
+unidade da linha gravam ao sair do campo; quando o salvamento falhava, o campo
+continuava com o digitado — certo: a pessoa vê o que tentou informar —, o
+servidor ficava com o valor antigo e o envio congelava o antigo. Agora uma
+linha pendente segura o orçamento inteiro: "Enviar ao cliente" fica
+indisponível desde a primeira tecla diferente do gravado, durante o salvamento
+e depois da falha, até o gravado alcançar a tela ("Salve as alterações dos
+produtos antes de enviar o orçamento."). Pendência é VALOR contra o gravado,
+com `Decimal` — o campo focado com o valor gravado não segura nada. A unidade
+entrou pela mesma causa: o campo era não-controlado, e o texto de uma falha
+ficava invisível para a tela. Condição e linha pendentes somam numa espera só
+("Salve as alterações do orçamento antes de enviar."). Sem auto-salvar, sem
+descartar o digitado, sem backend. Achado aberto no caminho:
+QUOTE-LINE-NOOP-BLUR-01 (P2).
 
 #### QUOTE-INT-FIELDS-01 — prazo, parcelas e intervalo aceitam texto e apagam o gravado
 
@@ -681,7 +700,7 @@ sem contrato cadastrado; os conceitos são independentes.
 | **VOCAB-01** | Um conceito, três nomes: "Base de produção" (campo), "Base de referência" (leitura) e "Base de produção sugerida" (template) nomeiam a mesma quantidade. Mesma família de F-01-1; sweep só quando houver rodada de nomenclatura | UX | S |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
-| **QUOTE-SEND-LINE-DRAFT-01** | Linha do Orçamento com preço ou quantidade digitados cujo salvamento FALHOU continua mostrando o valor digitado — no campo e no "Total da proposta (prévia)" —, e "Enviar ao cliente" segue disponível: o envio congela o valor GRAVADO da linha. Mesma classe de QUOTE-SEND-DIRTY-01, que cobriu só as condições — o PO mandou registrar antes de ampliar. Sem falha a janela não existe: sair do campo grava, e clicar no botão já tira o foco do campo | MEDIUM | S |
+| **QUOTE-LINE-NOOP-BLUR-01** | Sair do campo de quantidade ou de unidade SEM mudar nada apaga o preço herdado da linha: a tela grava a cada saída de campo, mesmo sem alteração, e `updateQuoteLine` limpa a origem `INHERITED_AGREEMENT`/`ADJUSTED_AGREEMENT` — com o `unitPrice` — sempre que quantidade ou unidade vêm no payload, sem comparar com o valor atual. Um Tab por cima do campo desfaz a decisão "manter condição". Achado de QUOTE-SEND-LINE-DRAFT-01, por leitura de código dos dois lados — não reproduzido em tela. Decisão do PO: a tela não gravar o que não mudou, o serviço comparar antes de limpar, ou os dois | HIGH | S |
 
 **F-01-1 e F-07-2 foram rebaixados**: os dois números estão certos para o que
 representam — `Project.productId` (produto resultante) contra `project_products`
