@@ -814,6 +814,22 @@
   }
 }
 
+/* Coluna comercial do Resumo do Projeto. O bloco reusa `.field-grid-2` e
+   `.definition-list`; o que falta é só o cabeçalho da coluna e um pouco de
+   peso no valor da proposta — resumo de ficha, não painel de indicadores. */
+.project-commercial > h4 {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--v-green-700);
+  margin: 0 0 var(--sp-2);
+}
+
+.project-commercial__amount {
+  font-weight: var(--fw-semibold);
+}
+
 /* ---------------- Toggle card ---------------- */
 
 .toggle-row {
