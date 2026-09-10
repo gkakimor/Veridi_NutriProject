@@ -742,8 +742,13 @@ estar visível.
 
 ## Próxima prioridade
 
-**P1 da fila viva** — QUOTE-DUPLICATE-01, primeiro da fila desde que
-PROJECT-CUSTOMER-CONTACT-01 fechou. **Tem gate de PO antes do build:** decidir
+**P1 da fila viva** — PROJECT-COMMERCIAL-SUMMARY-01, colocado na frente pelo PO
+em 2026-09-10: o resumo comercial do Projeto ocupa o espaço vazio à direita do
+bloco Resumo, é read model puro e a auditoria achou o modelo praticamente
+pronto. Passa na frente de QUOTE-DUPLICATE-01 porque este ainda tem gate de
+preço aberto. **Não iniciado.**
+
+**QUOTE-DUPLICATE-01** — segundo da fila. **Gate de PO antes do build:** decidir
 se "duplicar como nova versão" copia `unitPrice` de uma versão SENT não aceita —
 comportamento que §74 removeu de propósito. **Não iniciado.**
 

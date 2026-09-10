@@ -36,11 +36,12 @@ faz primeiro e estava espalhada por cinco lugares.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
-| **P1-2** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-3** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-4** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-5** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | PROJECT-COMMERCIAL-SUMMARY-01 | B · #10 | Quick win: a regra já está definida e o read model já existe. Passa na frente de QUOTE-DUPLICATE-01, que ainda tem gate de preço |
+| **P1-2** | QUOTE-DUPLICATE-01 | A · P1 | **Conflito com §74 a resolver antes** — ver a entrada |
+| **P1-3** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-4** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-5** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-6** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
@@ -621,6 +622,122 @@ materiais do Pedido ficam em branco até apertar botão, sem dizer que o valor �
 do que está salvo.
 
 
+
+### 10. PROJECT-COMMERCIAL-SUMMARY-01 — resumo comercial do Projeto — P1
+
+Decisão do PO em 2026-09-10. Fechado PROJECT-CUSTOMER-CONTACT-01, o bloco
+**Resumo** do detalhe do Projeto passou a mostrar Cliente, Telefone e E-mail —
+e, no desktop, sobra espaço à DIREITA da lista. A decisão é ocupar esse espaço
+com uma visão comercial compacta do projeto. **Não implementar sem
+autorização.**
+
+É **read model puro**: nada de novo em `Project`, nada recalculado, nada
+congelado de novo. O que se mostra já existe.
+
+**A auditoria de 2026-09-10 encontrou o read model quase inteiro pronto**, e é
+por isso que este item é quick win:
+
+- `ProjectDTO.quoteVersions` já traz **todas** as versões do projeto no mesmo
+  GET do detalhe — nenhuma chamada nova no navegador;
+- `QuoteVersionDTO` já tem `versionLabel` ("ORC-000123 · V2"), `versionNumber`,
+  `status`, `sentAt`, `acceptedAt`, `validUntil`, `expired`, `subtotal`
+  (bruto), `total` (**já com o desconto aplicado**), `discountPercent`,
+  `paymentMethod`, `paymentSchedule` e `lines`;
+- `QUOTE_STATUS_LABELS` e `PROJECT_STATUS_LABELS` já dão os rótulos pt-BR;
+- `ProjectDTO` já expõe `latestQuoteLabel`, `latestQuoteStatus` e
+  `acceptedQuoteLabel`, que hoje ninguém mostra no Resumo.
+
+**Layout, sem CSS novo.** `.field-grid-2` já é `1fr 1fr` no desktop e empilha
+em uma coluna abaixo de 720px. Duas `definition-list` dentro dele, no mesmo
+card do Resumo, entregam o desktop em duas colunas e o empilhamento no
+viewport estreito. A coluna esquerda fica como está; a direita ganha o título
+**Comercial**. Não é seção nova, não é aba e não é modal. O finding de shell de
+390px não é tocado.
+
+### A distinção que o read model precisa impedir
+
+A versão MAIS RECENTE e a última EFETIVAMENTE ENVIADA podem ser diferentes:
+`V3 SENT` + `V4 DRAFT` é o caso normal de uma renegociação em aberto. Mostrar
+"V4 · Rascunho" ao lado de "Enviado em: 14/09" — a data da V3 — é a leitura
+errada que este item existe para não produzir.
+
+O modelo separa as duas sem ambiguidade: a mais recente é a de maior
+`versionNumber`; a última enviada é a de maior `versionNumber` com
+`sentAt != null`. **Não derivar envio de `createdAt` nem de `updatedAt`.**
+
+Copy proposta, a confirmar contra o layout real na implementação:
+
+| Campo | Conteúdo |
+|---|---|
+| Situação do projeto | `PROJECT_STATUS_LABELS[status]` — nunca um segundo status |
+| Último orçamento | `V4 · Rascunho` (a de maior `versionNumber`) |
+| Última proposta enviada | `V3 · 14/09/2026` — omitida quando coincide com a de cima |
+| Validade | `validUntil` da versão exibida, congelada; nunca recalculada |
+| Itens orçados | contagem de `lines` |
+| Valor da proposta | `total` da versão relevante |
+| Condição de pagamento | do `paymentSchedule` da mesma versão |
+| Última atividade comercial | o evento mais recente entre enviar, aceitar e recusar |
+
+**"Itens orçados" não tem ambiguidade.** `QuoteLine` tem
+`@@unique([quoteVersionId, productId])` — o mesmo produto não entra duas vezes
+na mesma versão. Contar linhas e contar produtos distintos dá o mesmo número, e
+a preferência do PO por produtos distintos está atendida por construção.
+
+**Quantidade total fica FORA do primeiro escopo.** Somar `1.000 un` com
+`20 kg` é proibido, e a linha do orçamento tem `uomCode` próprio: um total só
+faz sentido se todas as linhas relevantes forem da mesma dimensão, e isso é
+condicional demais para o primeiro corte. A métrica é "Itens orçados".
+
+**Valor é o da proposta, não uma estimativa.** O rótulo é **Valor da
+proposta** — "estimado" se confunde com CMV, custo e precificação. A fonte é
+`QuoteVersionDTO.total`, que já é subtotal menos desconto: mostrar o subtotal
+bruto anunciaria um valor que o cliente não recebeu. Nunca recalcular por
+precificação, CMV ou Product atuais — proposta enviada é condição congelada
+(§55, §74). `total` é `null` enquanto alguma linha não tem preço, e esse
+estado precisa de tratamento próprio: não existe total parcial.
+
+**Condição de pagamento: reusar, não reconstruir.** Já existe renderização
+legível pronta em `apps/web/src/pages/customer-orders/CommercialOriginSection.tsx`
+("Parcelado — entrada de R$ X e 3× de R$ Y, sem juros"), sobre o mesmo
+`paymentSchedule`. Extrair dali; escrever a regra de novo no
+`ProjectDetailPage` criaria duas versões da mesma frase.
+
+**Última atividade comercial** é derivada das versões que já vêm no DTO —
+`sentAt`, `acceptedAt`, `rejectedAt` —, não de um log de atividades. Não nasce
+CRM aqui.
+
+### Estados vazios — a tela não pode parecer quebrada
+
+Projeto sem nenhuma versão mostra o bloco **Comercial** assim mesmo, compacto:
+"Último orçamento: Nenhum", "Enviado em: —", "Itens orçados: 0", "Valor da
+proposta: —". Esconder o bloco inteiro faria parecer defeito, e o vazio é a
+informação: ainda não houve proposta. Projeto só com rascunho mostra
+"V1 · Rascunho" e "Enviado em: —" — rascunho não é proposta enviada.
+
+### Escopo desejável, com custo honesto
+
+Tornar "V3 · Enviado" clicável para abrir a versão **não é trivial hoje**: a
+versão aberta é estado interno de `QuoteVersionsSection` (`openId`), não tem
+endereço, e a única rota de orçamento que existe é
+`/comercial/orcamentos/:id/imprimir`. Fazer o link exigiria elevar essa
+escolha a estado endereçável. Registrado como desejável, **fora do primeiro
+corte**.
+
+### O que NÃO nasce daqui
+
+Nenhum campo novo em `Project` — `lastQuoteValue`, `lastQuoteSentAt`,
+`quoteCount` e afins são snapshot proibido; tudo se deriva das versões que já
+vêm no DTO. **Migration esperada: NO** — concluir que precisa persistir o
+resumo é STOP GATE, e sinal de modelagem errada. Não reabre
+PROJECT-CUSTOMER-CONTACT-01: telefone, e-mail e `EntityLink` continuam na
+coluna esquerda. Não decide situação comercial do Cliente — o resumo poderá
+ALIMENTAR CUSTOMER-COMMERCIAL-STATUS-01 no futuro, mas Prospect/Ativo/Inativo
+não nasce aqui. E não toca QUOTE-DUPLICATE-01: o gate de `unitPrice` de uma
+versão SENT não aceita continua sendo decisão do PO, e não se resolve por
+consequência deste resumo.
+
+---
+
 ### 9. OPS-CALENDAR-01 — calendário operacional e dias não úteis — P2
 
 Necessidade trazida pelo PO em 2026-09-09. A Veridi precisa de uma tela onde o
@@ -874,7 +991,7 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-4, SUPPLIER-ADDRESS-01 em P1-5) — mas a
+(COST-RESOURCE-MULTIPLIER-01 em P1-5, SUPPLIER-ADDRESS-01 em P1-6) — mas a
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 
