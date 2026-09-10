@@ -262,6 +262,18 @@ export const QUOTE_PAYMENT_METHOD_LABELS: Record<QuotePaymentMethod, string> = {
   INSTALLMENTS: "Parcelado",
 };
 
+/**
+ * Os três inteiros das condições comerciais e os limites que a API aplica —
+ * uma fonte só, para a tela recusar exatamente o que o servidor recusaria
+ * (QUOTE-INT-FIELDS-01). `maximo: null` é sem teto; vazio continua sendo "não
+ * informado".
+ */
+export const LIMITES_INTEIROS_DAS_CONDICOES = {
+  leadTimeDays: { minimo: 1, maximo: null },
+  installmentCount: { minimo: 1, maximo: 120 },
+  installmentIntervalDays: { minimo: 1, maximo: 365 },
+} as const satisfies Record<string, { minimo: number; maximo: number | null }>;
+
 /** Uma parcela do plano — valor e vencimento em dias a partir do aceite. */
 export interface QuoteInstallmentDTO {
   number: number;
