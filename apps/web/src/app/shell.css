@@ -475,6 +475,13 @@
 
 .definition-list dd {
   margin: 0;
+  /* Valor sem espaço — e-mail, código legado, identificador — não tem onde
+     quebrar. Sem isto ele empurra a própria coluna do grid: medido em 390px,
+     `contatodepartamentocomercialinternacional@empresadenutricaoindustrialltda.com.br`
+     levava a lista de 383px para 533px e criava rolagem DENTRO da ficha.
+     `anywhere`, e não `break-word`, porque só ele entra no cálculo de
+     min-content — é o que impede a coluna de crescer. */
+  overflow-wrap: anywhere;
 }
 
 /* Linha COMPARATIVA de uma lista de totais — o equivalente por 1.000, por

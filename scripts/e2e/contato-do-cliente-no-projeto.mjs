@@ -16,7 +16,9 @@ import { obterRun } from "./lib/run-id.mjs";
  *   3. telefone e e-mail visíveis no Resumo do Projeto, com máscara;
  *   4. o link "Cliente" que já existia leva ao cadastro certo — e é UM link;
  *   5. o telefone alterado no cadastro, pela tela;
- *   6. de volta ao Projeto, o telefone NOVO — sem sincronização e sem job.
+ *   6. de volta ao Projeto, o telefone NOVO — sem sincronização e sem job;
+ *   7. o bloco cabe em 390px;
+ *   8. e um e-mail longo sem espaço quebra em vez de alargar a ficha.
  *
  * O passo 6 é a prova semântica: o Projeto PROJETA o cadastro, não copia.
  * Se algum dia o valor for gravado no Projeto, é aqui que aparece.
@@ -38,6 +40,12 @@ const NOME_DO_PROJETO = `Projeto Contato ${P}`;
 const TELEFONE_A = "(15) 99999-8888";
 const TELEFONE_B = "(15) 98888-7777";
 const EMAIL = `contato.${run.runId.toLowerCase()}@empresa.com.br`;
+/**
+ * O pior caso de largura: sem espaço e sem hífen, não há onde quebrar.
+ * Medido em 390px antes da correção, este endereço levava o Resumo de 383px
+ * para 533px e criava rolagem DENTRO da ficha.
+ */
+const EMAIL_LONGO = `contatodepartamentocomercial${run.runId.toLowerCase()}@empresadenutricaoindustrialltda.com.br`;
 
 const falhas = [];
 
@@ -204,6 +212,49 @@ async function main() {
     );
     console.log(
       `  nota  rolagem lateral da PÁGINA em 390px: ${resumo?.docScrollW}px — finding de shell (masthead), presente em todas as telas`,
+    );
+
+    // ── 8. e-mail longo, ainda em 390px ────────────────────────────────
+    console.log(`
+[8] E-mail longo em 390px`);
+
+    await pagina.goto(`${WEB}/cadastros/clientes?ids=&open=`);
+    await pagina.goto(urlDoProjeto);
+    await pagina.getByRole("link", { name: new RegExp(RAZAO_SOCIAL) }).first().click();
+    await pagina.locator("#customer-email").first().waitFor({ timeout: 25000 });
+    await pagina.locator("#customer-email").first().fill(EMAIL_LONGO);
+    await pagina.getByRole("button", { name: "Salvar alterações" }).first().click();
+    await pagina.locator("#customer-email").first().waitFor({ state: "detached", timeout: 25000 });
+
+    await pagina.goto(urlDoProjeto);
+    await pagina.getByText("E-mail", { exact: true }).first().waitFor({ timeout: 25000 });
+    afirmar(
+      "o e-mail longo aparece inteiro",
+      (await valorDoResumo("E-mail")) === EMAIL_LONGO,
+      await valorDoResumo("E-mail"),
+    );
+
+    const comLongo = await pagina.evaluate(() => {
+      const lista = document.querySelector(".definition-list");
+      const dd = [...lista.querySelectorAll("dt")]
+        .find((n) => n.textContent.trim() === "E-mail").nextElementSibling;
+      return {
+        largura: Math.round(lista.getBoundingClientRect().width),
+        viewport: document.documentElement.clientWidth,
+        scrollW: lista.scrollWidth,
+        clientW: lista.clientWidth,
+        alturaDoValor: Math.round(dd.getBoundingClientRect().height),
+      };
+    });
+    afirmar(
+      "o e-mail longo não alarga o Resumo",
+      comLongo.largura <= comLongo.viewport && comLongo.scrollW <= comLongo.clientW + 1,
+      `${comLongo.largura}px em ${comLongo.viewport}px, scrollWidth ${comLongo.scrollW}`,
+    );
+    afirmar(
+      "o e-mail longo quebra em mais de uma linha em vez de transbordar",
+      comLongo.alturaDoValor > 30,
+      `${comLongo.alturaDoValor}px de altura`,
     );
 
     afirmar("console limpo", erros.length === 0, erros.slice(0, 3).join(" | "));

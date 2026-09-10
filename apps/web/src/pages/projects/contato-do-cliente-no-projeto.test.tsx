@@ -169,6 +169,19 @@ describe("Resumo do Projeto — contato do Cliente", () => {
     expect(valorDe(resumo, "Cliente")).toContain("G S TEZOTTO");
   });
 
+  it("e-mail longo chega inteiro à tela — quem trunca é o layout, nunca o dado", async () => {
+    // Sem espaço nem hífen: não há onde quebrar, e era este valor que
+    // empurrava a coluna do Resumo em 390px. O CSS resolve com
+    // `overflow-wrap: anywhere`; o que se protege AQUI é que o endereço
+    // chega completo, sem reticências fabricadas no dado. A medida de
+    // largura é do E2E, que tem layout de verdade.
+    const longo = "contatodepartamentocomercialinternacional@empresadenutricaoindustrialltda.com.br";
+    const resumo = await abrirResumo({ customerEmail: longo });
+
+    expect(valorDe(resumo, "E-mail")).toBe(longo);
+    expect(valorDe(resumo, "E-mail")).not.toContain("…");
+  });
+
   it("telefone e e-mail ficam junto do Cliente, não numa seção distante", async () => {
     const resumo = await abrirResumo();
 
