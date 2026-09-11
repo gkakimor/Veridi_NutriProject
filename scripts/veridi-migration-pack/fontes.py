@@ -351,6 +351,14 @@ def _clientes(pac: Pacote, fontes: dict) -> None:
                 CLIENTES, chave, nome, "VALOR_INVALIDO", f"UF \"{registro['UF']}\" não é sigla válida.",
                 "Informar a UF com a sigla de 2 letras.", True,
             )
+        uf_no_endereco = re.search(r"cidade de\s+([^,/]+?)\s*/\s*([A-Za-z]{2})\b", endereco, re.I)
+        if uf_no_endereco and registro["UF"] and uf_no_endereco.group(2).upper() != registro["UF"]:
+            pac.pendencia(
+                CLIENTES, chave, nome, "VALOR_INVALIDO",
+                f"UF da coluna ({registro['UF']}) diverge da UF escrita no endereço "
+                f"({uf_no_endereco.group(1).strip()}/{uf_no_endereco.group(2).upper()}).",
+                "Conferir e corrigir a UF (e a cidade, se for o caso).", False,
+            )
 
     nomes = {c["CHAVE_MIGRACAO"]: c for c in pac.clientes}
     for cnpj, chaves in por_cnpj.items():
@@ -608,7 +616,7 @@ def _itens(pac: Pacote, fontes: dict) -> None:
             achado = R.PADRAO_EMBALAGEM.search(c["nome"])
             if tipo == "MATERIA_PRIMA" and achado:
                 motivos.append(f"o nome sugere embalagem (\"{achado.group(0)}\")")
-            if R.PADRAO_CAPSULA.search(c["nome"]):
+            if tipo == "MATERIA_PRIMA" and R.PADRAO_CAPSULA.search(c["nome"]):
                 motivos.append(
                     "item em forma de cápsula: confirmar se é matéria-prima ou embalagem/insumo e se o "
                     "estoque é controlado em kg ou em unidades"

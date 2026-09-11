@@ -302,7 +302,9 @@ def motivo_semelhanca(a: str, b: str) -> str:
         return "mesmo nome sem espaços"
     if _tokens_prefixos(base_a, base_b) or _tokens_prefixos(base_b, base_a):
         return "um nome contém o outro"
-    if len(comp_a) >= 5 and len(comp_b) >= 5 and levenshtein(comp_a, comp_b) <= 2:
+    # Nome curto aceita uma letra de diferença; nome longo, duas.
+    limite = 2 if max(len(comp_a), len(comp_b)) >= 8 else 1
+    if len(comp_a) >= 5 and len(comp_b) >= 5 and levenshtein(comp_a, comp_b) <= limite:
         return "grafia quase igual"
     comuns = {t for t in set(base_a.split()) & set(base_b.split()) if len(t) >= 6 and t not in PALAVRAS_GENERICAS}
     if comuns:

@@ -104,7 +104,12 @@ class Semelhanca(unittest.TestCase):
         self.assertEqual(R.motivo_semelhanca("DOREMUS", "DOREMUS (amostra grátis)"),
                          "mesmo nome sem a anotação entre parênteses")
 
+    def test_nome_longo_aceita_duas_letras(self):
+        self.assertEqual(R.motivo_semelhanca("PN FARMA", "pn pharma"), "grafia quase igual")
+        self.assertEqual(R.motivo_semelhanca("ALISSUMOS", "ALLINSUMOS"), "grafia quase igual")
+
     def test_nao_junta_empresas_diferentes(self):
+        self.assertEqual(R.motivo_semelhanca("HL CAPS", "INCAPS"), "")
         self.assertEqual(R.motivo_semelhanca("HECAPLAST", "HENRIPLAST"), "")
         self.assertEqual(R.motivo_semelhanca("MUNDIAL EMBALAGENS", "RANDON EMBALAGENS"), "")
         self.assertEqual(R.motivo_semelhanca("NEOVITA INGREDIENTES", "INGREDIENTES ONLINE"), "")
