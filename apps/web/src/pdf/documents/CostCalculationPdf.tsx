@@ -6,7 +6,6 @@ import {
   INDUSTRIAL_COST_CATEGORY_LABELS,
   INDUSTRIAL_COST_QUALITY_LABELS,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
-  INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
 import { formatUnitCost } from "../../components/CostBreakdown";
@@ -23,6 +22,7 @@ import {
   type PdfColumn,
 } from "../components";
 import { formatBRL, formatDate, formatPdfDateTime, formatPercent, formatQuantity, pdfFileName } from "../format";
+import { PdfResourceUsage } from "./resource-usage";
 
 /**
  * Cálculo de custo industrial — documento interno de análise.
@@ -194,7 +194,12 @@ export function CostCalculationPdf({
                 </PdfTd>
                 <PdfTd>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.resourceType]}</PdfTd>
                 <PdfTd>
-                  {formatQuantity(resource.quantity)} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
+                  <PdfResourceUsage
+                    resourceCount={resource.resourceCount}
+                    usageQuantity={resource.quantityPerResource ?? resource.quantity}
+                    totalUsageQuantity={resource.quantity}
+                    usageUom={resource.quantityUom}
+                  />
                 </PdfTd>
                 <PdfTd>{resource.rateValue === null ? "—" : formatBRL(resource.rateValue)}</PdfTd>
                 <PdfTd>{resource.subtotal === null ? "—" : formatBRL(resource.subtotal)}</PdfTd>

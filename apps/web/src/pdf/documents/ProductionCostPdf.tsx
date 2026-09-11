@@ -1,7 +1,6 @@
 import type { ProductionOrderCostDTO } from "@veridi/shared";
 import {
   INDUSTRIAL_COST_QUALITY_LABELS,
-  INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
   REALIZED_COST_STATUS_LABELS,
 } from "@veridi/shared";
@@ -18,6 +17,7 @@ import {
   type PdfColumn,
 } from "../components";
 import { formatBRL, formatPdfDateTime, formatPercent, formatQuantity, pdfFileName } from "../format";
+import { PdfResourceUsage } from "./resource-usage";
 
 /**
  * Custo industrial de uma produção — documento SEPARADO da Ordem de Produção.
@@ -186,7 +186,12 @@ export function ProductionCostPdf({
                 </PdfTd>
                 <PdfTd>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.resourceType]}</PdfTd>
                 <PdfTd>
-                  {formatQuantity(resource.quantity)} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
+                  <PdfResourceUsage
+                    resourceCount={resource.resourceCount}
+                    usageQuantity={resource.quantityPerResource ?? resource.quantity}
+                    totalUsageQuantity={resource.quantity}
+                    usageUom={resource.quantityUom}
+                  />
                 </PdfTd>
                 <PdfTd>{resource.rateValue === null ? "—" : formatBRL(resource.rateValue)}</PdfTd>
                 <PdfTd>{resource.subtotal === null ? "—" : formatBRL(resource.subtotal)}</PdfTd>

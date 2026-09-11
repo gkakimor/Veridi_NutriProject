@@ -551,8 +551,6 @@ describe("impressos não recalculam Decimal de domínio por Number", () => {
     for (const arquivo of [
       ...pdf,
       "src/lib/part-share.ts",
-      "src/print/PrintLayout.tsx",
-      "src/print/PrintSheet.tsx",
     ]) {
       const fonte = readFileSync(join(process.cwd(), arquivo), "utf8");
       const corpo = fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
@@ -561,7 +559,7 @@ describe("impressos não recalculam Decimal de domínio por Number", () => {
       if (corpo.includes("Math.round")) violacoes.push(`${arquivo} usa Math.round`);
       if (corpo.includes("toFixed")) violacoes.push(`${arquivo} usa toFixed`);
       /*
-       * `toLocaleString` NÃO entra no gate: em `PrintLayout` ele formata
+       * `toLocaleString` NÃO entra no gate: nos helpers de data ele formata
        * `Date`, que é o uso legítimo. O que o documento não pode fazer é
        * aritmética de Decimal — e nenhum valor decimal chega aqui como
        * `number`, então não há caminho para formatá-lo por locale sem antes

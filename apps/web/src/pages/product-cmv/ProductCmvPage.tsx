@@ -319,7 +319,7 @@ export function ProductCmvPage() {
                 )
               }
             >
-              Imprimir / Salvar PDF
+              PDF
             </button>
           )}
           {/* Voltar ao orçamento tem prioridade: é de lá que a pessoa veio. */}

@@ -1,5 +1,4 @@
 import { COST_PER_1000_LABEL, hojeComercial } from "@veridi/shared";
-import { COLUNA_NUMERICA } from "../../print/PrintLayout";
 import {
   PdfBlock,
   PdfDataGrid,
@@ -215,6 +214,14 @@ const FORMATO_POR_RELATORIO: Record<string, Record<string, Formato>> = {
   "R-10": { Pedido: QUANTIDADE },
   "R-11": { Pedido: QUANTIDADE },
 };
+
+/**
+ * Cabeçalho de coluna numérica — a mesma nomenclatura que o impresso HTML
+ * usava para alinhar à direita. É ela que decide a coluna que o mapa de
+ * larguras ainda não conhece.
+ */
+const COLUNA_NUMERICA =
+  /^(qtd\.?|quantidade|quant\.|pedido|reservado\/expedido|reservado|expedido|faturado|falta.*|pre[çc]o.*|total.*|subtotal.*|saldo.*|custo.*|valor.*|f[íi]sico|dispon[íi]vel|em compra|recebido.*|produzido.*|planejado.*|consumido.*|percentual|%|margem.*|comiss[ãa]o.*|peso.*|volume.*|unit[áa]rio.*|itens|lotes.*|meses.*|dias.*|m[íi]nimo.*|necess[áa]rio.*)$/i;
 
 /**
  * Coluna do PDF para um cabeçalho do CSV. Coluna que o documento ainda não

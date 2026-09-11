@@ -905,6 +905,31 @@ describe("gerador de PDF — Custo industrial da produção", () => {
     },
     PRAZO,
   );
+
+  it(
+    "recurso com 2 equivalentes sai 2 × uso com o total do servidor; energia sem multiplicador (§87)",
+    async () => {
+      const base = custoHibrido();
+      const [operador, ...demais] = base.standardApplied;
+      // 17,575 h de mão de obra feitas por 2 operadores: 8,7875 h cada — os
+      // dois números vêm prontos do servidor, o PDF não divide nada.
+      const custo = {
+        ...base,
+        standardApplied: [{ ...operador!, resourceCount: 2, quantityPerResource: "8.7875" }, ...demais],
+      };
+      const pdf = await gerar(
+        <ProductionCostPdf cost={custo} generatedAt={GERADO_EM} generatedBy={GERADO_POR} />,
+        amostra(productionCostPdfFileName(custo), "2-operadores"),
+      );
+
+      expect(linhaCom(pdf, "Operador de produção")).toContain("2 × 8,7875 hora");
+      expect(pdf.paginas.join("\n")).toContain("Total: 17,575 hora");
+      const energia = linhaCom(pdf, "Energia elétrica");
+      expect(energia).toContain("kWh");
+      expect(energia).not.toContain("×");
+    },
+    PRAZO,
+  );
 });
 
 describe("gerador de PDF — Simulação de preço e margem", () => {

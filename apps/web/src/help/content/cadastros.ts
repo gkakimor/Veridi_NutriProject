@@ -698,8 +698,8 @@ export const cadastrosTopics = {
         text: "Cada relatório usa a data que faz sentido para o assunto: consumo pela data do consumo, compra pela data do pedido, faturamento pela data de emissão. Nenhum deles usa a data da última alteração do registro.",
       },
       {
-        term: "Exportar e imprimir",
-        text: "Levam exatamente o recorte filtrado, não a base inteira. A impressão escreve no cabeçalho quais filtros foram aplicados, para a folha dizer a que ela se refere.",
+        term: "Exportar e gerar PDF",
+        text: "Levam exatamente o recorte filtrado, não a base inteira. O PDF escreve no cabeçalho quais filtros foram aplicados, para a folha dizer a que ela se refere.",
       },
     ],
     flow: [
@@ -720,7 +720,7 @@ export const cadastrosTopics = {
       },
       {
         label: "Levar",
-        detail: "Exportar em CSV ou imprimir o mesmo recorte, com os filtros no cabeçalho.",
+        detail: "Exportar em CSV ou gerar o PDF do mesmo recorte, com os filtros no cabeçalho.",
       },
     ],
     notes: [

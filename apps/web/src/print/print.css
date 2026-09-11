@@ -1,9 +1,10 @@
 /*
- * Impressão / Salvar como PDF.
+ * CSS de impressão da TELA de relatório (Ctrl+P do navegador).
  *
- * Não existe geração de PDF no backend: o documento é HTML com CSS de
- * impressão e o navegador faz o resto (`window.print()` → imprimir ou
- * salvar como PDF). Só tokens Veridi, sem design system paralelo.
+ * Documento oficial é PDF real, gerado em `src/pdf` — nenhum código chama
+ * `window.print()` para documento. O que resta aqui serve ao cabeçalho
+ * `print-only` das telas de relatório (`ReportPage`), para quem imprime a
+ * própria tela. Só tokens Veridi, sem design system paralelo.
  */
 
 .print-doc {

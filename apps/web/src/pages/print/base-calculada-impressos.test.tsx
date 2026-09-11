@@ -25,11 +25,10 @@ import { PricingPrintPage } from "./PricingPrintPage";
  * custa R$ 201,00 e equivale a R$ 670,00 por 1.000, enquanto calcular 1.000
  * de verdade daria R$ 767,00.
  *
- * Cálculo de custo e precificação saem em PDF (`@react-pdf/renderer`): a
- * página monta o documento sobre a mesma carga de antes e o teste o lê como
- * DOM pelo mock do renderer — o arquivo real é provado em
- * `pdf/documents/cost-documents.test.tsx`. O CMV continua HTML e não passa
- * pelo renderer.
+ * Os três saem em PDF (`@react-pdf/renderer`): a página monta o documento
+ * sobre a mesma carga de antes e o teste o lê como DOM pelo mock do renderer
+ * — o arquivo real é provado em `pdf/documents/cost-documents.test.tsx` e
+ * `pdf/documents/cost-structure-documents.test.tsx`.
  */
 
 vi.mock("../../lib/product-cmv-api", () => ({ getProductCmv: vi.fn() }));
@@ -210,11 +209,6 @@ function precificacao(): PricingVersionDTO {
   } as unknown as PricingVersionDTO;
 }
 
-/** A linha da tabela impressa cujo rótulo bate — para conferir o valor ao lado. */
-function linhaDe(rotulo: RegExp): HTMLElement {
-  return screen.getByText(rotulo).closest("tr") as HTMLElement;
-}
-
 /** O arquivo "sai" sem motor de PDF: a tela recebe um blob e mostra o nome. */
 function prepararPdf() {
   renderPdfBlob.mockReset().mockResolvedValue(new Blob(["%PDF-1.3"], { type: "application/pdf" }));
@@ -234,6 +228,8 @@ function linhaDoPdf(rotulo: RegExp): HTMLElement {
 }
 
 describe("CMV impresso — a base viaja com o total", () => {
+  beforeEach(prepararPdf);
+
   it("imprime quantidade calculada, total daquela quantidade, unitário e equivalência", async () => {
     vi.mocked(getProductCmv).mockResolvedValue(cmvDe300());
     render(
@@ -244,12 +240,17 @@ describe("CMV impresso — a base viaja com o total", () => {
       </MemoryRouter>,
     );
 
-    const quantidade = (await screen.findByText("Quantidade calculada")).closest("tr")!;
-    expect(quantidade.textContent).toContain("300 un");
-    expect(within(linhaDe(/CMV total para 300 un/i)).getByText(/201,00/)).toBeTruthy();
-    expect(within(linhaDe(/^CMV por unidade$/)).getByText(/0,67/)).toBeTruthy();
+    // A página gera o PDF sobre a mesma carga de antes; o arquivo leva
+    // produto, quantidade e data de referência.
+    render(await documentoGerado());
+    expect(getProductCmv).toHaveBeenCalledWith("prod-1", { quantity: "300", referenceDate: "2026-09-09" });
+    expect(await screen.findByTitle("Documento CMV-PROD-000003-300-un-2026-09-09.pdf")).toBeInTheDocument();
 
-    const equivalencia = linhaDe(new RegExp(COST_PER_1000_LABEL, "i"));
+    expect(linhaDoPdf(/^Quantidade calculada$/).textContent).toContain("300 un");
+    expect(within(linhaDoPdf(/CMV total para 300 un/i)).getByText(/201,00/)).toBeTruthy();
+    expect(within(linhaDoPdf(/^CMV por unidade$/)).getByText(/0,67/)).toBeTruthy();
+
+    const equivalencia = linhaDoPdf(new RegExp(COST_PER_1000_LABEL, "i"));
     expect(within(equivalencia).getByText(/670,00/)).toBeTruthy();
     // Sem ⓘ no papel, a ressalva vai impressa.
     expect(within(equivalencia).getByText(RESSALVA)).toBeTruthy();
