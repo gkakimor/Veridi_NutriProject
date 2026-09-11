@@ -55,11 +55,19 @@ export function clienteApi(cookie) {
   };
 }
 
-export async function abrirNavegador({ largura = 1440, altura = 900 } = {}) {
+/**
+ * `fuso` emula o fuso do navegador (`timezoneId` do Playwright). Sem ele vale
+ * o da máquina — que não precisa ser o da operação: quem usa o sistema está
+ * em `America/Sao_Paulo` (§72), a máquina do laboratório pode não estar.
+ */
+export async function abrirNavegador({ largura = 1440, altura = 900, fuso } = {}) {
   const cookie = await autenticar();
   const corte = cookie.indexOf("=");
   const navegador = await chromium.launch();
-  const contexto = await navegador.newContext({ viewport: { width: largura, height: altura } });
+  const contexto = await navegador.newContext({
+    viewport: { width: largura, height: altura },
+    ...(fuso ? { timezoneId: fuso } : {}),
+  });
   await contexto.addCookies([
     {
       name: cookie.slice(0, corte),

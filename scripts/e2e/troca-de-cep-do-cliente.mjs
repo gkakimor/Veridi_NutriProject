@@ -242,8 +242,20 @@ async function main() {
 
     await pagina.locator("#customers-search").first().fill(RAZAO_SOCIAL);
     await pagina.getByText(RAZAO_SOCIAL, { exact: false }).first().waitFor({ timeout: 25000 });
-    await pagina.getByRole("button", { name: "Editar" }).first().click();
+    // "Editar" DA LINHA deste cliente. O primeiro botão da página abria o
+    // cliente que a lista mostrava antes de a busca filtrar — em base com
+    // poucos clientes, outro cadastro, sem endereço, e a suíte lia vazio.
+    await pagina
+      .getByRole("row", { name: new RegExp(RAZAO_SOCIAL) })
+      .first()
+      .getByRole("button", { name: "Editar" })
+      .click();
     await pagina.locator("#customer-zip").first().waitFor({ timeout: 25000 });
+    await pagina.waitForFunction(
+      (nome) => document.querySelector("#customer-legal-name")?.value === nome,
+      RAZAO_SOCIAL,
+      { timeout: 25000 },
+    );
 
     const salvo = await enderecoNaTela();
     afirmar(

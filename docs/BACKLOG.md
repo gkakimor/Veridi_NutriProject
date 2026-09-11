@@ -876,6 +876,22 @@ mudou.
 | **API-500-RAW-ERROR-01** | Erro do Prisma que nenhuma rota traduz volta como 500 com a mensagem crua — a chamada, o trecho do código e o caminho do arquivo no servidor (visto com a chave estrangeira da unidade da base antes de FORM-UOM-01). Pede tradução genérica no handler global, sem vazar detalhe interno | LOW | S |
 | **TEMPLATE-ROW-DROP-01** | "Salvar rascunho" do Modelo descarta em silêncio a linha sem Item ou sem quantidade (`filter(linha => linha.itemId && linha.quantity)`): o que foi digitado some sem aviso — a família de QUOTE-DRAFT-STATE-01. Achado em FORM-UOM-01, fora do escopo dela | UX | XS |
 
+### Achados do FAST-DEVELOPMENT-RESET-02 (2026-09-11)
+
+Golden path private label pela interface, numa base recriada do zero. Dois
+bloqueios apareceram e foram corrigidos na própria rodada: o catálogo de
+unidades só existia onde alguém tinha rodado seed (instalação nova nascia sem
+unidade nenhuma), e RECEIPT-BUSINESS-DAY-01 (todo lote recebido pela interface
+levava a véspera no código). O que sobrou não bloqueia o fluxo. A fila viva
+ficou congelada durante a rodada: posição destes itens é decisão do PO.
+
+| ID | Título | Sev. | Tam. |
+|---|---|---|---|
+| **OPS-BACKUP-01** | Backup de produção: snapshot manual pela API do Railway recusado (`Not Authorized` — plano ou papel da conta), PITR desligado, nenhuma rotina agendada. O backup desta rodada é o lógico JSON (`prod-backup-json.mjs`), com restauração provada linha a linha por `restore-json-backup-check.mjs`. É o item "Backup do banco" de `DEPLOY.md` §7, que bloqueia operação de verdade | HIGH | S |
+| **WEB-DATE-DEFAULT-TZ-01** | Seis telas ainda escolhem "hoje" pelo relógio, contra §72: dia UTC (`toISOString().slice(0,10)`) na data da OC, na referência do cálculo de custo, no resumo de custo do Produto e no impresso do CMV; fuso do navegador no CMV e na referência manual de custo. Entre 21h e meia-noite de São Paulo o cálculo salvo nasce datado de amanhã e o CMV daquele dia responde "não há cálculo salvo"; em navegador fora de São Paulo o CMV abre no dia errado — foi o que reprovou `base-calculada-e-equivalente-por-mil` entre 0h e 4h de SP numa máquina UTC−7. O caminho é o de `lib/receipt-instant.ts` | MEDIUM | S |
+| **E2E-CORPUS-MASS-01** | Sete suítes E2E procuram código fixo do corpus (`CLI-000013`, `PROD-000031`, `MP-000365`…) e três saem sem avaliar quando não há PA disponível: numa base recriada do zero não avaliam nada. Fere a regra 1 do README das suítes, onde está a lista | LOW | M |
+| **COST-MP-EMB-SPLIT-01** | Nem a estimativa da Formulação nem o CMV mostram matéria-prima e embalagem em subtotais separados — o cálculo soma "Materiais e embalagens Veridi" numa linha (`CostBreakdown.tsx`). O total está certo; a separação sai somando pelo código MP-/ME- | UX | S |
+
 ### Encerrados na triagem, sem trabalho
 
 | ID | Disposição | Por quê |
@@ -1068,17 +1084,6 @@ operacional precisam ser validados com a Veridi. Relacionado ao #7.
 ---
 
 ## D. Manutenção técnica
-
-### 17. E2E `projeto-aprovado-vende-de-novo.mjs` parada no ciclo 2 — LOW
-
-Achado de QUOTE-DRAFT-STATE-01 (2026-09-10), **pré-existente**: a suíte reprova
-igual contra o `QuoteConditionsForm` de `1c0aa1f`. No ciclo 2 a versão nova já
-nasce com a validade sugerida da condição vigente (§74, COM-PRICE), o
-`definirValidade` digita a mesma data e clica "Salvar condições" sem conferir se
-há o que salvar — o botão está certo em estar desabilitado, e o clique esgota
-30 s. `formacao-de-preco-do-novo-orcamento.mjs` já trata o mesmo caso
-(`isEnabled()` antes do clique). Enquanto isso, o ciclo 2 e o cenário da
-proposta vencida dessa suíte não rodam. Nenhum defeito de produto envolvido.
 
 ### 10. Compactar `archive/DELIVERY_HISTORY.md` — LOW
 
