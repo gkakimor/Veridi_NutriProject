@@ -274,6 +274,10 @@ export const cadastrosTopics = {
         text: "Opcional, mas único entre clientes: dois não podem ter o mesmo, mesmo que um esteja inativo. Os dígitos verificadores são conferidos, inclusive na forma alfanumérica nova. A conferência é de consistência do número, não de existência da empresa na Receita.",
       },
       {
+        term: "Perfil tributário",
+        text: "Classificação informada pela empresa: Não informado, MEI, Simples Nacional, Lucro Presumido, Lucro Real ou Outro. Não calcula impostos, não é deduzida do CNPJ e não bloqueia projeto, orçamento, pedido nem faturamento. Quem não escolhe fica como Não informado, e retirar uma classificação é escolher Não informado de novo.",
+      },
+      {
         term: "Endereço",
         text: "Usado nos documentos impressos. UF precisa ser uma sigla válida e o CEP guarda oito dígitos, sem a máscara. O endereço pertence ao CEP: trocar o CEP limpa o endereço anterior — logradouro, número, complemento, bairro, cidade e UF — antes da nova consulta, porque nada disso está provado no CEP novo. Uma proposta enviada congela o endereço do momento do envio: alterar o cadastro depois não reescreve o que já foi impresso.",
       },
@@ -290,7 +294,7 @@ export const cadastrosTopics = {
       {
         label: "Identificação",
         detail:
-          "Razão social é obrigatória. CNPJ e nome fantasia entram aqui, e o código é gerado pelo sistema.",
+          "Razão social é obrigatória. CNPJ, nome fantasia e perfil tributário entram aqui, e o código é gerado pelo sistema.",
       },
       {
         label: "Contato e endereço",

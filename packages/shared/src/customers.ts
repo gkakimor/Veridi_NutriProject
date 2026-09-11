@@ -3,6 +3,45 @@
 export const CUSTOMER_CODE_PREFIX = "CLI";
 
 /**
+ * Perfil tributário do Cliente — `PRODUCT_RULES.md` §83.
+ *
+ * Classificação INFORMADA pelo usuário. O sistema não consulta a Receita e não
+ * deduz nada do CNPJ, do porte, do CNAE ou da razão social; não calcula
+ * imposto e não bloqueia fluxo nenhum. O consumidor previsto é o Modelo de
+ * Precificação, para SUGERIR modelos compatíveis — nunca para determinar
+ * imposto.
+ *
+ * `NOT_INFORMED` é o estado explícito de "não definido": o campo nunca é
+ * `null`, e retirar uma classificação é escolher "Não informado" de novo. MEI
+ * é opção independente — nada o converte em Simples Nacional.
+ *
+ * A ordem é a do seletor. O enum do banco (`CustomerTaxProfile`) tem os
+ * mesmos valores, e um teste da API confere as duas listas.
+ */
+export const CUSTOMER_TAX_PROFILES = [
+  "NOT_INFORMED",
+  "MEI",
+  "SIMPLES_NACIONAL",
+  "LUCRO_PRESUMIDO",
+  "LUCRO_REAL",
+  "OTHER",
+] as const;
+
+export type CustomerTaxProfile = (typeof CUSTOMER_TAX_PROFILES)[number];
+
+/** O que recebe o cliente criado sem informar o perfil — o default do banco é o mesmo. */
+export const DEFAULT_CUSTOMER_TAX_PROFILE: CustomerTaxProfile = "NOT_INFORMED";
+
+export const CUSTOMER_TAX_PROFILE_LABELS: Record<CustomerTaxProfile, string> = {
+  NOT_INFORMED: "Não informado",
+  MEI: "MEI",
+  SIMPLES_NACIONAL: "Simples Nacional",
+  LUCRO_PRESUMIDO: "Lucro Presumido",
+  LUCRO_REAL: "Lucro Real",
+  OTHER: "Outro",
+};
+
+/**
  * Endereço estruturado do Cliente. Todos os campos são opcionais: clientes
  * cadastrados antes da capacidade 33 continuam válidos com tudo em `null`.
  * `zipCode` trafega SOMENTE com dígitos; a máscara `00000-000` é da UI.
@@ -25,6 +64,8 @@ export interface CustomerDTO {
   cnpj: string | null;
   email: string | null;
   phone: string | null;
+  /** Nunca `null`: sem classificação é `NOT_INFORMED` (§83). */
+  taxProfile: CustomerTaxProfile;
   street: string | null;
   number: string | null;
   complement: string | null;
@@ -62,6 +103,8 @@ export interface CreateCustomerInput {
   cnpj?: string;
   email?: string;
   phone?: string;
+  /** Ausente vira `NOT_INFORMED`. `null` é recusado — não existe "limpar". */
+  taxProfile?: CustomerTaxProfile;
   street?: string;
   number?: string;
   complement?: string;
@@ -86,6 +129,8 @@ export interface UpdateCustomerInput {
   cnpj?: string;
   email?: string;
   phone?: string;
+  /** Ausente não mexe no perfil gravado. */
+  taxProfile?: CustomerTaxProfile;
   city?: string;
   state?: string;
   notes?: string;

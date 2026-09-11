@@ -5162,3 +5162,40 @@ O valor exibido é `QuoteVersionDTO.total` — subtotal **menos desconto**, como
 o servidor já entrega. Somar linhas na tela produziria um segundo número sobre
 o mesmo fato, e `null` (linha sem preço) nunca vira R$ 0,00: "ainda não há
 total" e "custa zero" são estados diferentes.
+
+---
+
+## §83 — Perfil tributário do Cliente: classificação informada, não motor fiscal
+
+CUSTOMER-TAX-PROFILE-01, 2026-09-11, sobre a decisão do PO de 2026-09-10.
+
+**O Perfil tributário do Cliente é uma classificação informada pelo usuário e
+não determina automaticamente impostos ou regras fiscais.**
+
+**Cliente possui Perfil tributário opcional do ponto de vista operacional,
+representado por "Não informado" quando não definido. O Perfil tributário não
+calcula impostos automaticamente e não bloqueia fluxos comerciais ou
+operacionais.**
+
+Valores: Não informado · MEI · Simples Nacional · Lucro Presumido · Lucro Real
+· Outro. O nome no produto é "Perfil tributário" — nunca "tipo de CNPJ".
+
+- **"Não informado" é valor, não ausência.** `Customer.taxProfile` (enum
+  `CustomerTaxProfile`) é não-nulo com default `NOT_INFORMED`; `NULL` e
+  `NOT_INFORMED` não convivem. Retirar uma classificação é escolher "Não
+  informado" de novo — não existe "limpar", e `null` é recusado.
+- **O sistema não infere.** Nada de consulta à Receita nem dedução pelo número
+  do CNPJ, pelo porte, pelo CNAE ou pela razão social: quem escolhe é o
+  usuário.
+- **MEI é opção independente.** Não existe hierarquia nem conversão
+  MEI → Simples Nacional.
+- **"Outro" basta.** Não há campo livre para descrever outro regime.
+- **Sem efeito em runtime.** Cliente, Projeto, Orçamento, Pedido, Faturamento
+  e Precificação se comportam igual para todos os perfis, e não existe mapa
+  perfil → alíquota. O consumidor previsto é o Modelo de Precificação
+  (PRICING-TEMPLATE-FLEX-01), para SUGERIR modelos compatíveis — nunca para
+  determinar imposto; os percentuais continuam explícitos no Modelo.
+- **Cliente antigo e carga antiga continuam válidos.** A coluna nasceu com
+  default: todo cliente que já existia virou "Não informado", e importador ou
+  API que não mandam o campo recebem o mesmo. PATCH sem o campo não mexe no
+  perfil gravado; valor fora do enum é 400 de validação.

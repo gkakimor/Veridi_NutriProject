@@ -1,8 +1,11 @@
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { CustomerDTO } from "@veridi/shared";
+import type { CustomerDTO, CustomerTaxProfile } from "@veridi/shared";
 import {
   BR_STATE_CODES,
+  CUSTOMER_TAX_PROFILES,
+  CUSTOMER_TAX_PROFILE_LABELS,
+  DEFAULT_CUSTOMER_TAX_PROFILE,
   formatBrPhone,
   isValidBrPhone,
   isValidCnpj,
@@ -48,6 +51,7 @@ interface FormState {
   cnpj: string;
   email: string;
   phone: string;
+  taxProfile: CustomerTaxProfile;
   zipCode: string;
   street: string;
   number: string;
@@ -104,6 +108,7 @@ function initialState(customer: CustomerDTO | null): FormState {
       email: customer.email ?? "",
       // Guardados crus; exibidos com máscara.
       phone: formatBrPhone(customer.phone) ?? "",
+      taxProfile: customer.taxProfile,
       zipCode: formatZipCode(customer.zipCode) ?? "",
       street: customer.street ?? "",
       number: customer.number ?? "",
@@ -120,6 +125,7 @@ function initialState(customer: CustomerDTO | null): FormState {
     cnpj: "",
     email: "",
     phone: "",
+    taxProfile: DEFAULT_CUSTOMER_TAX_PROFILE,
     zipCode: "",
     street: "",
     number: "",
@@ -337,12 +343,21 @@ export function useCustomerForm({
     const state = optionalField(form.state);
     const notes = optionalField(form.notes);
 
+    /*
+     * Perfil tributário (§83) só viaja quando muda o que já vale: no edit, o
+     * gravado; no create, o default do servidor. Não é texto — não existe
+     * "vazio" para limpar, e "Não informado" é um valor como os outros.
+     */
+    const taxProfileInForce = customer?.taxProfile ?? DEFAULT_CUSTOMER_TAX_PROFILE;
+    const taxProfileChanged = form.taxProfile !== taxProfileInForce;
+
     const payload = {
       legalName: form.legalName.trim(),
       ...(tradeName ? { tradeName: tradeName.value } : {}),
       ...(cnpj ? { cnpj: cnpj.value } : {}),
       ...(email ? { email: email.value } : {}),
       ...(phone ? { phone: phone.value } : {}),
+      ...(taxProfileChanged ? { taxProfile: form.taxProfile } : {}),
       ...(zipCode ? { zipCode: zipCode.value } : {}),
       ...(street ? { street: street.value } : {}),
       ...(number ? { number: number.value } : {}),
@@ -513,6 +528,33 @@ export function CustomerFormFields({
             />
             {fieldError("cnpj") ?? (
               <p className="field__hint">Aceita o formato numérico e o alfanumérico.</p>
+            )}
+          </div>
+
+          {/* Perfil tributário (§83): junto da identificação fiscal, nunca
+              na Precificação. `<select>` nativo, porque é enum pequeno
+              (UI_BRAND §15.1) — teclado, foco e leitor de tela vêm do
+              navegador. A dica diz o que o campo NÃO faz. */}
+          <div className="field">
+            <label htmlFor="customer-tax-profile">Perfil tributário</label>
+            <select
+              id="customer-tax-profile"
+              value={form.taxProfile}
+              onChange={(event) => setField("taxProfile", event.target.value)}
+              aria-describedby="customer-tax-profile-hint"
+              {...fieldProps("taxProfile")}
+            >
+              {CUSTOMER_TAX_PROFILES.map((profile) => (
+                <option key={profile} value={profile}>
+                  {CUSTOMER_TAX_PROFILE_LABELS[profile]}
+                </option>
+              ))}
+            </select>
+            {fieldError("taxProfile") ?? (
+              <p className="field__hint" id="customer-tax-profile-hint">
+                Classificação informada pela empresa. Não calcula impostos
+                automaticamente.
+              </p>
             )}
           </div>
         </div>

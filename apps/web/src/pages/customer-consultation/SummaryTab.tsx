@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { formatZipCode } from "@veridi/shared";
+import { CUSTOMER_TAX_PROFILE_LABELS, formatZipCode } from "@veridi/shared";
 import { formatDateTime } from "../../lib/dates";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 
@@ -72,6 +72,9 @@ export function SummaryTab() {
           <dd>{customer.legalName}</dd>
           <dt>Nome Fantasia</dt>
           <dd>{customer.tradeName ?? "—"}</dd>
+          {/* "Não informado" é valor (§83), não ausência: nunca travessão. */}
+          <dt>Perfil tributário</dt>
+          <dd>{CUSTOMER_TAX_PROFILE_LABELS[customer.taxProfile]}</dd>
           <dt>Endereço</dt>
           <dd>{address.length > 0 ? address : "—"}</dd>
           <dt>Situação</dt>

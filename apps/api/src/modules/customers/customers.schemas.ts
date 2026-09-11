@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BR_STATE_CODES } from "@veridi/shared";
+import { BR_STATE_CODES, CUSTOMER_TAX_PROFILES } from "@veridi/shared";
 import { optionalCnpjSchema, optionalNullableText } from "../../lib/cnpj-schema.js";
 import { optionalBrPhoneSchema, optionalEmailSchema } from "../../lib/contact-schema.js";
 import { optionalZipCode } from "../../lib/industrial-schema.js";
@@ -21,12 +21,25 @@ const optionalStateSchema = z
     { message: "UF inválida" },
   );
 
+/**
+ * Perfil tributário (§83): só os valores do enum. Ausente não mexe no PATCH e
+ * vira `NOT_INFORMED` no POST, pelo default do banco. `null` é recusado com
+ * a mesma mensagem — não existe "limpar": retirar a classificação é escolher
+ * `NOT_INFORMED`. Valor desconhecido para aqui, em 400, antes do Prisma.
+ */
+const optionalTaxProfileSchema = z
+  .enum(CUSTOMER_TAX_PROFILES, {
+    errorMap: () => ({ message: "Perfil tributário inválido" }),
+  })
+  .optional();
+
 export const createCustomerSchema = z.object({
   legalName: z.string().trim().min(1, "Razão social é obrigatória").max(200),
   tradeName: optionalNullableText(200),
   cnpj: optionalCnpjSchema,
   email: optionalEmailSchema,
   phone: optionalBrPhoneSchema,
+  taxProfile: optionalTaxProfileSchema,
   street: optionalNullableText(200),
   number: optionalNullableText(20),
   complement: optionalNullableText(100),
@@ -49,6 +62,7 @@ export const updateCustomerSchema = z.object({
   cnpj: optionalCnpjSchema,
   email: optionalEmailSchema,
   phone: optionalBrPhoneSchema,
+  taxProfile: optionalTaxProfileSchema,
   street: optionalNullableText(200),
   number: optionalNullableText(20),
   complement: optionalNullableText(100),
