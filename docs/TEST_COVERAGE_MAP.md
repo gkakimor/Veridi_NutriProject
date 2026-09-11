@@ -48,6 +48,14 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Reserva e consumo físico são distintos | — | `modules/inventory/allocation.test.ts`, `modules/production-orders/consumption.test.ts` |
 | Dois pedidos não over-reservam o mesmo saldo | concorrência | `modules/shipments/shipments.test.ts` |
 | Ajuste grava o usuário real e exige papel | achado adversarial: autoria de sistema | `modules/inventory/adjustment-audit.test.ts` |
+| O dia do lote de recebimento é o dia comercial escolhido na tela: hoje vira agora, outro dia vira o início daquele dia; nunca a meia-noite UTC | RECEIPT-BUSINESS-DAY-01 — todo lote recebido pela interface nascia com a véspera no código (`LT-20260910-…` recebido em 11/09) | `web lib/receipt-instant.test.ts`, `web pages/receiving/receiving-live-validation.test.tsx`, `scripts/e2e/private-label-golden-path.mjs` |
+
+## Instalação e percurso inteiro
+
+| Regra | Origem do risco | Proteção canônica |
+|---|---|---|
+| Uma instalação nova tem o catálogo de unidades (mg, g, kg, un, mL, L) sem seed nenhum | FAST-DEVELOPMENT-RESET-02 — o catálogo só existia onde alguém tinha rodado seed, e produção nunca roda seed | `scripts/validate-migrations-fresh.mjs` (banco novo), migration `20260925093012_reference_units_of_measure` |
+| O negócio private label atravessa de ponta a ponta numa base zerada, pela interface, com custo, estoque, rastreabilidade e faturamento conferidos contra conta independente | golden path do FAST-DEVELOPMENT-RESET-02 | `scripts/e2e/private-label-golden-path.mjs` |
 
 ## Propriedade do material (owner isolation)
 

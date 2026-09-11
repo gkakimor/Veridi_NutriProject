@@ -68,6 +68,25 @@ existem para impedir:
 | `projeto-inteiro-invalido-nao-apaga.mjs` | o Projeto nasce pela interface com doses 60 e vida útil 24; na edição, doses `abc` mostram o erro no próprio campo, ligado por `aria-describedby`, mantêm o texto, prendem "Salvar alterações", e nenhuma gravação do Projeto sai do navegador; uma segunda aba prova que as doses gravadas continuam 60; corrigidas para 90, salvam como inteiro e a edição reaberta mostra 90; a mesma prova para a vida útil — `30abc` recusado, 24 intacto na segunda aba, 36 salvo e reaberto; console limpo (PROJECT-INT-FIELDS-01) |
 | `modelo-formulacao-unidade-controlada.mjs` | com Cliente, insumo em kg e frasco em un criados pela interface, o Modelo novo tem a unidade da base como seleção do catálogo — sem caixa de texto —, salva e volta como escolhida; componente sem Item não tem unidade; escolhido o insumo, a unidade é kg e a lista só tem massa; `g` salva com o código do catálogo e volta; trocar para o frasco leva a unidade para `un` e a lista para contagem; em 390px cada unidade cabe na célula e a tabela rola no próprio cartão (a largura da página é a mesma da lista de Modelos, o finding de shell conhecido); ativado e aplicado a um Produto pelo "Usar template da biblioteca", a Formulação nasce com as unidades do Modelo e a base na mesma grandeza (TEMPLATE-APPLY-BASE-UOM-01); console limpo (FORM-UOM-01) |
 | `modelo-aplicado-preserva-base.mjs` | um Modelo com base 1 kg e 100 g de insumo, criado e ativado pela interface; aplicado pelo "Usar template da biblioteca" a um Produto em g, a Formulação nasce com base 1000 e o componente intacto (100 g); aplicado a um Produto em un, a tela mostra "A unidade da base do Modelo (kg) não é compatível com a unidade do Produto (un).", fica no Produto, e ele continua sem formulação nenhuma; o console só tem o 409 provocado (TEMPLATE-APPLY-BASE-UOM-01) |
+| `formacao-de-preco-do-novo-orcamento.mjs` | a recompra forma o preço clicando: condição vigente na mesma quantidade nasce com o preço acordado e a origem visível até o Pedido; quantidade diferente exige motivo para manter; reajuste de 8% fechado pelo servidor (COM-PRICE, §74) |
+| `ajuda-contextual-nivel-1.mjs` | o painel de ajuda abre o nível 1 antes do passo a passo nas cinco telas, com a consulta recolhida (UX-HELP-02) — abre o primeiro documento de cada lista, então precisa de base com documentos |
+| `entregas-programadas-do-pedido.mjs` | reprogramar preserva a entrega original e copia só o pendente; a cadeia A → B → C fica legível (COM-04) |
+| `expedicao-geral-entre-entregas.mjs` | a quantidade expedida atravessa promessas: 500 contra entregas de 400 e 600 atende 400 + 100 (COM-04b) |
+| `oferta-de-fornecedor-vira-custo.mjs` | dois homologados sem preferencial deixam o custo desconhecido, o preferencial define a referência sem escolher o mais barato, e oferta nova exige vigência (COST-SOURCE-01) |
+| `private-label-golden-path.mjs` | o negócio inteiro numa base que só tem usuário e unidades, pela interface: cadastros; custo dos materiais (Σ quantidade × custo, e componente sem custo nunca vira total); estrutura, cálculo, CMV e precificação; projeto, orçamento, pedido e pedido direto; plano de atendimento, sugestão de compra, OCs, recebimento parcial e completo com o dia do lote no dia comercial; qualidade; OP com número oficial, separação por leitura do lote, consumo reconciliado, produção; PA liberado, reservado e expedido do lote real; faturamento fechando em bruto, desconto, ajuste e total contra o acordado. Checkpoint por etapa, retomável com `--run` e `--desde` (FAST-DEVELOPMENT-RESET-02) |
+
+### Massa: quem ainda depende do corpus
+
+Sete suítes procuram código fixo do corpus da Veridi e não rodam numa base
+recriada do zero: `cancelamento-de-pedido-com-op-cancelada`,
+`custo-estimado-acompanha-o-salvamento`, `disponibilidade-comercial-explicada`,
+`formulacao-quantidade-fisica-e-custo`, `formacao-de-preco-do-novo-orcamento`,
+`ordem-de-producao-produto-fora-da-primeira-pagina` e `recebimento-validacao-viva`
+(esta passa por coincidência quando outra suíte já criou `FOR-000001` e
+`MP-000001`). Três saem sem avaliar quando não há PA disponível no DEV —
+`desconto-do-pedido-chega-ao-faturamento`, `entregas-programadas-do-pedido` e
+`expedicao-geral-entre-entregas`. Todas ferem a regra 1; o item é
+E2E-CORPUS-MASS-01 no BACKLOG.
 
 ## `lib/`
 
