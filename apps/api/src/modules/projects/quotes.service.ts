@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { Prisma as PrismaTypes, User } from "@prisma/client";
+import type { Customer, Prisma as PrismaTypes, Project, User } from "@prisma/client";
 import type {
   DuplicateQuoteVersionInput,
   QuoteLineDTO,
@@ -62,7 +62,77 @@ const CODE_SEQUENCE = "quote_code_seq";
  * A proveniência econômica (PREC/CALC/custo/margem) é INFORMAÇÃO INTERNA:
  * só entra quando quem chamou pode vê-la, e nunca no documento do cliente.
  */
+/**
+ * Cliente e projeto como o cadastro está AGORA — o que o envio congela na
+ * versão e o que o rascunho mostra enquanto nada foi congelado.
+ */
+const cadastroDaPropostaSelect = {
+  select: {
+    code: true,
+    name: true,
+    concept: true,
+    channel: true,
+    customer: {
+      select: {
+        code: true,
+        legalName: true,
+        tradeName: true,
+        cnpj: true,
+        zipCode: true,
+        street: true,
+        number: true,
+        complement: true,
+        district: true,
+        city: true,
+        state: true,
+      },
+    },
+  },
+} as const;
+
+type CadastroDaProposta = Pick<Project, "code" | "name" | "concept" | "channel"> & {
+  customer: Pick<
+    Customer,
+    | "code"
+    | "legalName"
+    | "tradeName"
+    | "cnpj"
+    | "zipCode"
+    | "street"
+    | "number"
+    | "complement"
+    | "district"
+    | "city"
+    | "state"
+  >;
+};
+
+/** Os campos de cliente e projeto do documento, lidos do cadastro. */
+function cadastroDaProposta(project: CadastroDaProposta) {
+  const { customer } = project;
+  return {
+    customerCode: customer.code,
+    customerName: customer.legalName,
+    customerTradeName: customer.tradeName,
+    customerCnpj: customer.cnpj,
+    customerZipCode: customer.zipCode,
+    customerStreet: customer.street,
+    customerNumber: customer.number,
+    customerComplement: customer.complement,
+    customerDistrict: customer.district,
+    customerCity: customer.city,
+    customerState: customer.state,
+    projectCode: project.code,
+    projectName: project.name,
+    projectConcept: project.concept,
+    projectChannel: project.channel,
+  };
+}
+
 export const quoteInclude = {
+  // Rascunho ainda não congelou cliente e projeto: o documento lê o cadastro
+  // atual neste mesmo carregamento — nunca uma consulta por campo.
+  project: cadastroDaPropostaSelect,
   // O Pedido gerado entra no include para a navegação não ser de mão única:
   // quem abre a proposta aceita precisa chegar ao pedido sem buscar por texto.
   sourcedCustomerOrder: {
@@ -159,6 +229,16 @@ export function toQuoteVersionDTO(
         });
   const total = paymentSchedule ? paymentSchedule.total : null;
 
+  /*
+   * Cliente e projeto do documento. O ENVIO congela o snapshot, e dali em
+   * diante o documento nunca relê o cadastro — nem quando o snapshot falta
+   * (versão legada): história não muda porque o cadastro mudou. Antes do
+   * envio não existe snapshot; o rascunho mostra o cadastro atual, o mesmo
+   * que o envio vai congelar — a regra do Pedido e da OP, ao vivo até o
+   * congelamento. Sem isso o rascunho saía com Cliente, CNPJ e Projeto "—".
+   */
+  const parte = quote.status === "DRAFT" ? cadastroDaProposta(quote.project) : quote;
+
   return {
     id: quote.id,
     code: quote.code,
@@ -208,21 +288,21 @@ export function toQuoteVersionDTO(
     rejectedAt: quote.rejectedAt ? quote.rejectedAt.toISOString() : null,
     rejectedByName: quote.rejectedByNameSnapshot,
     rejectionReason: quote.rejectionReason,
-    customerCode: quote.customerCode,
-    customerName: quote.customerName,
-    customerTradeName: quote.customerTradeName,
-    customerCnpj: quote.customerCnpj,
-    customerZipCode: quote.customerZipCode,
-    customerStreet: quote.customerStreet,
-    customerNumber: quote.customerNumber,
-    customerComplement: quote.customerComplement,
-    customerDistrict: quote.customerDistrict,
-    customerCity: quote.customerCity,
-    customerState: quote.customerState,
-    projectCode: quote.projectCode,
-    projectName: quote.projectName,
-    projectConcept: quote.projectConcept,
-    projectChannel: quote.projectChannel,
+    customerCode: parte.customerCode,
+    customerName: parte.customerName,
+    customerTradeName: parte.customerTradeName,
+    customerCnpj: parte.customerCnpj,
+    customerZipCode: parte.customerZipCode,
+    customerStreet: parte.customerStreet,
+    customerNumber: parte.customerNumber,
+    customerComplement: parte.customerComplement,
+    customerDistrict: parte.customerDistrict,
+    customerCity: parte.customerCity,
+    customerState: parte.customerState,
+    projectCode: parte.projectCode,
+    projectName: parte.projectName,
+    projectConcept: parte.projectConcept,
+    projectChannel: parte.projectChannel,
     createdAt: quote.createdAt.toISOString(),
     createdByName: quote.createdByNameSnapshot,
   };
@@ -902,7 +982,6 @@ export async function sendQuoteVersion(
   }
 
   const { project } = quote;
-  const { customer } = project;
 
   // Custo industrial incompleto pode virar proposta — mas nunca por
   // acidente; e o que for enviado fica congelado aqui, LINHA A LINHA: cada
@@ -916,21 +995,8 @@ export async function sendQuoteVersion(
       sentAt: new Date(),
       sentByUserId: actor.id,
       sentByNameSnapshot: actor.name,
-      customerCode: customer.code,
-      customerName: customer.legalName,
-      customerTradeName: customer.tradeName,
-      customerCnpj: customer.cnpj,
-      customerZipCode: customer.zipCode,
-      customerStreet: customer.street,
-      customerNumber: customer.number,
-      customerComplement: customer.complement,
-      customerDistrict: customer.district,
-      customerCity: customer.city,
-      customerState: customer.state,
-      projectCode: project.code,
-      projectName: project.name,
-      projectConcept: project.concept,
-      projectChannel: project.channel,
+      // O mesmo cadastro que o rascunho mostrava — agora congelado.
+      ...cadastroDaProposta(project),
     } as PrismaTypes.QuoteVersionUpdateInput,
   });
 

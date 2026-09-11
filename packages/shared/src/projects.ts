@@ -394,7 +394,11 @@ export interface QuoteVersionDTO {
   rejectedAt: string | null;
   rejectedByName: string | null;
   rejectionReason: string | null;
-  /** Snapshot congelado no envio — a impressão não depende do cadastro atual. */
+  /**
+   * Cliente e projeto do documento. Enviado em diante: o snapshot congelado
+   * no envio — o documento nunca relê o cadastro, nem quando o snapshot falta
+   * (legado). Rascunho: o cadastro atual, o mesmo que o envio vai congelar.
+   */
   customerCode: string | null;
   customerName: string | null;
   customerTradeName: string | null;

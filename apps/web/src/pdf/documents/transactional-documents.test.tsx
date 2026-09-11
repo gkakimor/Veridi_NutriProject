@@ -952,6 +952,8 @@ describe("gerador de PDF — documentos transacionais", () => {
       conferirCabecalhoRepetido(pdf, "Produto de teste", ["PRODUTO", "PEDIDO", "FATURADO", "UNIDADE"]);
       for (const texto of pdf.paginas) expect(texto).toContain("Documento interno");
       expect(pdf.paginas[0]).toContain("Status: Em atendimento");
+      // Paridade com o impresso HTML (PDF-DATA-PARITY-01): o cliente está no papel.
+      expect(pdf.paginas[0]).toContain(CLIENTE);
     },
     TEMPO,
   );
@@ -964,6 +966,8 @@ describe("gerador de PDF — documentos transacionais", () => {
       conferirArquivo(pdf, { titulo: "ORDEM DE COMPRA", codigo: "OC-000012", minimoDePaginas: 2 });
       conferirCabecalhoRepetido(pdf, "Insumo de teste", ["ITEM", "QUANTIDADE", "RECEBIDO", "UNIDADE"]);
       expect(folhaCom(pdf, "VALOR PREVISTO")).toBeGreaterThanOrEqual(folhaCom(pdf, "Insumo de teste 042"));
+      // Paridade com o impresso HTML (PDF-DATA-PARITY-01): o fornecedor está no papel.
+      expect(pdf.paginas[0]).toContain(FORNECEDOR);
     },
     TEMPO,
   );
@@ -979,6 +983,8 @@ describe("gerador de PDF — documentos transacionais", () => {
       for (const linha of dados.lines.filter((l) => l.itemName.startsWith("Insumo recebido") && l.supplierLot)) {
         mesmaFolha(pdf, linha.itemName, linha.supplierLot!);
       }
+      // Paridade com o impresso HTML (PDF-DATA-PARITY-01): o fornecedor está no papel.
+      expect(pdf.paginas[0]).toContain(FORNECEDOR);
     },
     TEMPO,
   );

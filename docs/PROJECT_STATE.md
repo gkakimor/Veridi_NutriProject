@@ -1064,6 +1064,22 @@ Findings de dado registrados, sem correção nesta capability:
 Três suítes E2E passaram a ler o PDF (`scripts/e2e/lib/pdf.mjs`) e ainda não
 rodaram.
 
+## Cliente e projeto no Orçamento em rascunho (PDF-DATA-PARITY-01, 2026-09-11)
+
+O PDF do Orçamento em rascunho saía com Cliente, CNPJ e Projeto "—". Causa:
+o DTO só expunha o snapshot que o envio congela, e rascunho não tem snapshot
+— o impresso HTML lia os mesmos campos e tinha a mesma falha. Agora o
+rascunho traz o cadastro atual de cliente e projeto, carregado no mesmo
+include (sem consulta por campo) e com o mesmo mapeamento que o envio
+congela. Enviado segue só com o snapshot; versão fora de rascunho sem
+snapshot (legado) não relê o cadastro. Sem migration e sem campo novo. A
+auditoria de paridade dos outros 21 PDFs contra o HTML de `7b7a126` não achou
+binding perdido.
+
+Findings sem correção: 9 versões ARCHIVED do legado sem snapshot nem linhas;
+o endereço do cliente existe no DTO do Pedido e nenhum documento o mostra;
+as observações do Recebimento e da Expedição, idem.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
