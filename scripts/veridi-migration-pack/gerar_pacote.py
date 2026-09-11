@@ -252,6 +252,13 @@ def escrever_arquivo(saida: Path, arquivo: str, linhas: list[dict], pac: F.Pacot
     }
 
 
+def contagem(contador: Counter) -> str:
+    ordem = ["OK", "REVISAR", "PENDENTE", "NAO_IMPORTAR", "A_REVISAR", "NAO_NORMALIZAVEL", "SEM_REFERENCIA",
+             "PESQUISA_PENDENTE", "ALTA", "MEDIA", "BAIXA"]
+    chaves = sorted(contador, key=lambda k: (ordem.index(k) if k in ordem else len(ordem), str(k)))
+    return " · ".join(f"{k} {contador[k]}" for k in chaves)
+
+
 def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str, dict]) -> None:
     r = resumo_pesquisa(pac)
     itens = {i["CHAVE_MIGRACAO"]: i for i in pac.itens}
@@ -289,16 +296,16 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
         "",
         "## Registros por cadastro",
         "",
-        f"- Clientes: {len(pac.clientes)} — {dict(resumo[F.CLIENTES]['status'])}",
-        f"- Fornecedores: {len(pac.fornecedores)} — {dict(resumo[F.FORNECEDORES]['status'])}",
-        f"- Matérias-primas: {len(mp)} — {dict(resumo[F.MATERIAS_PRIMAS]['status'])}",
-        f"- Embalagens/insumos: {len(me)} — {dict(resumo[F.EMBALAGENS]['status'])}",
+        f"- Clientes: {len(pac.clientes)} — {contagem(resumo[F.CLIENTES]['status'])}",
+        f"- Fornecedores: {len(pac.fornecedores)} — {contagem(resumo[F.FORNECEDORES]['status'])}",
+        f"- Matérias-primas: {len(mp)} — {contagem(resumo[F.MATERIAS_PRIMAS]['status'])}",
+        f"- Embalagens/insumos: {len(me)} — {contagem(resumo[F.EMBALAGENS]['status'])}",
         f"  - itens do cadastro principal: {fora['CADASTRO']}; só no CMV: {fora['SO_CMV']}; só em preços: {fora['SO_PRECOS']} "
         "(os fora do cadastro entram PENDENTE)",
         f"- Produtos acabados: {len(pac.produtos)} (+ {len(pac.produtos)} itens de produto acabado, 1:1) — "
-        f"{dict(resumo[F.PRODUTOS]['status'])}",
-        f"- Ofertas de fornecedor do legado (07): {len(pac.ofertas)} — {dict(resumo[F.OFERTAS]['status'])}",
-        f"- Duplicidades apontadas: {dict(duplicidades)} (nada fundido automaticamente)",
+        f"{contagem(resumo[F.PRODUTOS]['status'])}",
+        f"- Ofertas de fornecedor do legado (07): {len(pac.ofertas)} — {contagem(resumo[F.OFERTAS]['status'])}",
+        f"- Duplicidades apontadas: {' · '.join(f'{a} {n}' for a, n in sorted(duplicidades.items()))} (nada fundido automaticamente)",
         "",
         "## Fontes",
         "",
@@ -334,7 +341,7 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
     linhas += [
         f"- Itens com preço público: {r['itens_com_preco']} (normalizado para a unidade de estoque: {r['itens_normalizados']}); "
         f"sem referência: {r['itens_sem_referencia']}; pesquisa pendente: {r['itens_pendentes']}.",
-        f"- Confiança das linhas com preço: {dict(r['confianca'])}.",
+        f"- Confiança das linhas com preço: {contagem(r['confianca'])}.",
         "- Preço de mercado ≠ custo real: nada do arquivo 06 vira ItemCostReference, Receipt, LAST_REAL ou custo de aquisição.",
         "",
         "## Regras de chave",
