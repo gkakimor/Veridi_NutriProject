@@ -950,6 +950,22 @@ o rascunho ganhou rádios simples com o valor ao lado (só o do modo escolhido
 habilita), a gestão externa e os perfis; a escolha da política num cálculo diz
 se ela é indicada para o perfil do cliente, sem esconder nem travar.
 
+## Duplicar como nova versão (QUOTE-DUPLICATE-01, 2026-09-11)
+
+**Regra durável: §85.** A auditoria confirmou o BACKLOG: `createQuoteVersion`
+sempre partia da versão mais recente, devolvia o rascunho aberto em vez de
+criar e só trazia preço no caso seguro de §74. Agora cada versão que não é
+rascunho oferece "Duplicar como nova versão": o diálogo mostra a origem ("Nova
+versão baseada na V2 · Enviado"), pergunta como tratar os preços sem opção
+marcada e só libera "Criar nova versão" depois da escolha.
+
+Manter copia `unitPrice` exato, sem vínculo com precificação; revisar deixa a
+linha sem preço. A origem e as demais versões não mudam de status, validade
+vencida não é copiada e rascunho aberto recusa com 409. Uma função nova
+(`duplicateQuoteVersion`) numa transação, provada com falha forçada no meio.
+**Zero migration.** O caminho antigo ("Criar nova versão"/"Novo orçamento")
+continua como estava.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -963,12 +979,12 @@ PRICING-ACTIVATE-CONFIRM-01.
 Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha
 ocultação.
 
-**QUOTE-DUPLICATE-01** — primeiro da fila viva, e o **gate de preço foi resolvido**
-pelo PO em 2026-09-10: sem herança silenciosa de `unitPrice`, com escolha
-explícita entre manter os preços da versão de origem e revisá-los, nenhuma
-opção pré-marcada. O que sobra de trabalho é escolher a versão de ORIGEM
-(hoje `createQuoteVersion` sempre parte da mais recente) e a confirmação que
-apresenta a escolha. **Não iniciado.**
+**QUOTE-DUPLICATE-01 fechado em 2026-09-11** (§85). Dois achados novos no
+BACKLOG, sem posição na fila: QUOTE-NEW-VERSION-PATHS-01 e
+QUOTE-DUPLICATE-ORIGIN-01.
+
+**CUSTOMER-COMMERCIAL-STATUS-01** — primeiro da fila viva: situação comercial
+derivada do Cliente (Prospect · Cliente ativo · Inativo). **Não iniciado.**
 
 **COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
 mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum

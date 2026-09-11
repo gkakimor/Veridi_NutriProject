@@ -1,12 +1,13 @@
 import { Prisma } from "@prisma/client";
 import type { Prisma as PrismaTypes, User } from "@prisma/client";
 import type {
+  DuplicateQuoteVersionInput,
   QuoteLineDTO,
   QuotePaymentScheduleDTO,
   QuotePricingProvenanceDTO,
   QuoteVersionDTO,
 } from "@veridi/shared";
-import { QUOTE_CODE_PREFIX, calcularTotaisOrcamento } from "@veridi/shared";
+import { QUOTE_CODE_PREFIX, QUOTE_STATUS_LABELS, calcularTotaisOrcamento } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { diaComercialPorExtenso, venceuEm } from "../../lib/business-day.js";
@@ -15,6 +16,7 @@ import {
   ProjectLockedError,
   ProjectNotFoundError,
   ProjectProductNotInApprovedScopeError,
+  QuoteDraftExistsError,
   QuoteExpiredError,
   QuoteLineDuplicateError,
   QuoteLineNotFoundError,
@@ -427,6 +429,152 @@ export async function createQuoteVersion(
       if (await superseder(tx, previous.id, previous.status)) {
         await tx.quoteVersion.update({ where: { id: previous.id }, data: { status: "SUPERSEDED" } });
       }
+    }
+
+    return quote;
+  });
+
+  return (await getQuoteById(created.id)) as QuoteVersionDTO;
+}
+
+/**
+ * Duplica uma versão ESCOLHIDA como a próxima — QUOTE-DUPLICATE-01, §85.
+ *
+ * A fonte é a versão que quem negocia está lendo, não a mais recente: com V3
+ * existindo, partir da V1 é pedido legítimo. A versão nova nasce `DRAFT`, com
+ * o próximo número do projeto, os mesmos produtos, quantidades, unidades,
+ * ordem e condições comerciais — e NADA do que é história da origem: status,
+ * envio, aceite, recusa, snapshots de cliente e de custo congelados no envio.
+ *
+ * O PREÇO é a escolha explícita recebida (`priceStrategy`), sem padrão:
+ *
+ * - `KEEP_PRICES` copia `unitPrice` exatamente. Não recalcula, não rebaseia,
+ *   não lê a precificação atual e não cria vínculo com faixa nenhuma. A
+ *   proveniência diz o que aconteceu: de proposta ACEITA é a condição acordada
+ *   (`INHERITED_AGREEMENT`, apontando para a linha real, como §74); de
+ *   qualquer outra é referência que alguém decidiu manter (`MANUAL`), nunca
+ *   "acordo";
+ * - `REVIEW_PRICES` deixa a linha sem preço — o estado canônico de "aguardando
+ *   decisão de preço", o mesmo que a linha nova já tem.
+ *
+ * Nenhuma outra versão muda: nem a origem, nem a enviada mais recente. Tudo
+ * numa transação — ou nasce a versão inteira, ou nada.
+ */
+export async function duplicateQuoteVersion(
+  sourceId: string,
+  input: DuplicateQuoteVersionInput,
+  actor: User,
+): Promise<QuoteVersionDTO> {
+  const prisma = getPrisma();
+  const source = await prisma.quoteVersion.findUnique({
+    where: { id: sourceId },
+    include: {
+      project: { select: { status: true } },
+      lines: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          projectProduct: { select: { status: true } },
+          product: { select: { code: true } },
+        },
+      },
+    },
+  });
+  if (!source) throw new QuoteNotFoundError(sourceId);
+  if (source.project.status === "CANCELLED") throw new ProjectLockedError(source.project.status);
+
+  // Num projeto aprovado a versão nova negocia o ESCOPO APROVADO — a mesma
+  // regra de quem adiciona produto à proposta (`addQuoteLine`).
+  if (source.project.status === "APPROVED") {
+    const fora = source.lines.find(
+      (line) => line.projectProduct !== null && line.projectProduct.status !== "APPROVED",
+    );
+    if (fora) throw new ProjectProductNotInApprovedScopeError(fora.product.code);
+  }
+
+  const rascunhoAberto = async (client: Prisma.TransactionClient | typeof prisma) => {
+    const rascunho = await client.quoteVersion.findFirst({
+      where: { projectId: source.projectId, status: "DRAFT" },
+      select: { versionNumber: true },
+    });
+    if (rascunho) throw new QuoteDraftExistsError(rascunho.versionNumber);
+  };
+  // Antes de consumir número de documento — e de novo dentro da trava.
+  await rascunhoAberto(prisma);
+
+  const agora = new Date();
+  const manter = input.priceStrategy === "KEEP_PRICES";
+  const acordo = source.status === "ACCEPTED";
+  const motivo = acordo
+    ? `Preço mantido da V${source.versionNumber} (condição aceita) ao duplicar a versão.`
+    : `Preço mantido da V${source.versionNumber} (${QUOTE_STATUS_LABELS[source.status]}) ao duplicar a versão — referência, não acordo.`;
+  /*
+   * A validade vem junto enquanto ainda vale. Vencida, a versão nova nasce sem
+   * ela: copiar um prazo que já passou deixaria enviar uma proposta vencida no
+   * mesmo instante, que ninguém conseguiria aceitar — e o envio pede a nova.
+   */
+  const validade = source.validUntil && !venceuEm(source.validUntil, agora) ? source.validUntil : null;
+
+  const code = await nextSequenceCode(prisma, CODE_SEQUENCE, QUOTE_CODE_PREFIX);
+
+  const created = await prisma.$transaction(async (tx) => {
+    // Trava o projeto: número de versão e "um rascunho por projeto" são
+    // decididos com ninguém mais criando versão ao mesmo tempo.
+    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${source.projectId} FOR UPDATE`;
+    await rascunhoAberto(tx);
+
+    const maxVersion = await tx.quoteVersion.aggregate({
+      where: { projectId: source.projectId },
+      _max: { versionNumber: true },
+    });
+
+    const quote = await tx.quoteVersion.create({
+      data: {
+        code,
+        projectId: source.projectId,
+        versionNumber: (maxVersion._max.versionNumber ?? 0) + 1,
+        status: "DRAFT",
+        quoteDate: agora,
+        validUntil: validade,
+        currencyCode: source.currencyCode,
+        commercialNotes: source.commercialNotes,
+        paymentTerms: source.paymentTerms,
+        leadTimeDays: source.leadTimeDays,
+        discountPercent: source.discountPercent,
+        paymentMethod: source.paymentMethod,
+        downPaymentPercent: source.downPaymentPercent,
+        installmentCount: source.installmentCount,
+        installmentIntervalDays: source.installmentIntervalDays,
+        monthlyInterestPercent: source.monthlyInterestPercent,
+        createdByUserId: actor.id,
+        createdByNameSnapshot: actor.name,
+      },
+    });
+
+    if (source.lines.length > 0) {
+      await tx.quoteLine.createMany({
+        data: source.lines.map((line) => {
+          const preco = manter ? line.unitPrice : null;
+          return {
+            quoteVersionId: quote.id,
+            projectProductId: line.projectProductId,
+            productId: line.productId,
+            sortOrder: line.sortOrder,
+            quotedQuantity: line.quotedQuantity,
+            uomCode: line.uomCode,
+            // Nenhum vínculo com faixa: o preço mantido é o histórico, e a
+            // precificação atual não é consultada.
+            priceSource: "MANUAL" as const,
+            ...(preco !== null
+              ? {
+                  unitPrice: preco,
+                  priceOrigin: acordo ? ("INHERITED_AGREEMENT" as const) : ("MANUAL" as const),
+                  inheritedFromQuoteLineId: acordo ? line.id : null,
+                  priceOriginReason: motivo,
+                }
+              : {}),
+          };
+        }),
+      });
     }
 
     return quote;

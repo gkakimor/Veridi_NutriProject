@@ -135,6 +135,27 @@ export const QUOTE_PRICE_ORIGIN_LABELS: Record<QuotePriceOrigin, string> = {
 export const QUOTE_PRICE_ORIGIN_LEGACY_LABEL = "Origem anterior";
 
 /**
+ * Duplicar uma versão do Orçamento como a próxima — QUOTE-DUPLICATE-01, §85.
+ *
+ * O preço é decisão EXPLÍCITA de quem duplica, e não existe padrão: um default
+ * seria a herança silenciosa de volta, com um passo a mais. Manter copia
+ * `unitPrice` exatamente; revisar deixa a linha sem preço, aguardando decisão.
+ * Nenhuma das duas recalcula, rebaseia ou consulta a precificação atual.
+ */
+export const QUOTE_DUPLICATE_PRICE_STRATEGIES = ["KEEP_PRICES", "REVIEW_PRICES"] as const;
+
+export type QuoteDuplicatePriceStrategy = (typeof QUOTE_DUPLICATE_PRICE_STRATEGIES)[number];
+
+export const QUOTE_DUPLICATE_PRICE_STRATEGY_LABELS: Record<QuoteDuplicatePriceStrategy, string> = {
+  KEEP_PRICES: "Manter os preços desta versão",
+  REVIEW_PRICES: "Revisar os preços",
+};
+
+export interface DuplicateQuoteVersionInput {
+  priceStrategy: QuoteDuplicatePriceStrategy;
+}
+
+/**
  * A condição comercial anterior que pode embasar esta linha.
  *
  * Sai da QuoteLine de uma proposta ACEITA do mesmo Projeto e Produto, a mais

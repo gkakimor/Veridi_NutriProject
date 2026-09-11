@@ -9,6 +9,7 @@ import type {
   ProjectProductDTO,
   ProjectStatus,
   ProjectVocabularyResponse,
+  QuoteDuplicatePriceStrategy,
   QuoteLinePricingOptionsResponse,
   QuoteVersionDTO,
   RejectQuoteInput,
@@ -101,6 +102,19 @@ export async function approveProject(
 
 export async function createQuoteVersion(projectId: string): Promise<QuoteVersionDTO> {
   return postJson<QuoteVersionDTO>(`/projects/${projectId}/quote-versions`);
+}
+
+/**
+ * Duplica a versão ESCOLHIDA como a próxima — QUOTE-DUPLICATE-01. A estratégia
+ * de preço vai sempre explícita; o servidor recusa sem ela.
+ */
+export async function duplicateQuoteVersion(
+  quoteVersionId: string,
+  priceStrategy: QuoteDuplicatePriceStrategy,
+): Promise<QuoteVersionDTO> {
+  return postJson<QuoteVersionDTO>(`/quote-versions/${quoteVersionId}/duplicate`, {
+    priceStrategy,
+  });
 }
 
 export async function getQuoteVersion(id: string): Promise<QuoteVersionDTO> {

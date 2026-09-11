@@ -10,6 +10,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   /** "danger" (padrao) para acoes cautelares (Inativar); "accent" para acoes de commit positivas (Confirmar pedido). */
   confirmTone?: "danger" | "accent";
+  /** Confirmar só depois de uma escolha obrigatória feita dentro da mensagem. */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -28,6 +30,7 @@ export function ConfirmDialog({
   confirmLabel = "Confirmar",
   cancelLabel = "Cancelar",
   confirmTone = "danger",
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -60,6 +63,7 @@ export function ConfirmDialog({
           <button
             type="button"
             className={confirmTone === "accent" ? "btn btn--accent" : "btn btn--danger"}
+            disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {confirmLabel}

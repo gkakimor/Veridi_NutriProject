@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LIMITES_INTEIROS_DAS_CONDICOES } from "@veridi/shared";
+import { LIMITES_INTEIROS_DAS_CONDICOES, QUOTE_DUPLICATE_PRICE_STRATEGIES } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { requiredDateSchema } from "../../lib/date-schema.js";
 import { CASAS_PRECO_COMERCIAL, optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
@@ -175,6 +175,22 @@ export const addProjectProductSchema = z.union([
 
 export const rejectQuoteSchema = z.object({
   reason: z.string().trim().max(1000).optional(),
+});
+
+/**
+ * Duplicar como nova versão — QUOTE-DUPLICATE-01, §85.
+ *
+ * A estratégia de preço é OBRIGATÓRIA e não tem padrão: ausente, nula ou
+ * desconhecida é 400 antes de qualquer escrita. Um default aqui seria a
+ * herança silenciosa de volta, só que no servidor.
+ */
+export const duplicateQuoteVersionSchema = z.object({
+  priceStrategy: z.enum(QUOTE_DUPLICATE_PRICE_STRATEGIES, {
+    errorMap: () => ({
+      message:
+        'Escolha como tratar os preços: "Manter os preços desta versão" ou "Revisar os preços".',
+    }),
+  }),
 });
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;

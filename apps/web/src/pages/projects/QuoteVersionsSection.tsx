@@ -21,6 +21,7 @@ import {
   applyQuotePricing,
   createOrderFromQuote,
   createQuoteVersion,
+  duplicateQuoteVersion,
   getQuotePricingOptions,
   inheritQuotePrice,
   rejectQuoteVersion,
@@ -42,6 +43,7 @@ import { exigirDecimalOpcional } from "../../lib/decimal-field";
 import { mensagemDecimalInvalido, parseDecimalInput } from "../../lib/decimal-input";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
 import { QuoteConditionsForm } from "./QuoteConditionsForm";
+import { DuplicateQuoteDialog } from "./DuplicateQuoteDialog";
 import { formatQuantity } from "../../lib/quantity";
 
 /**
@@ -219,6 +221,8 @@ export function QuoteVersionsSection({
     incompleteCost: boolean;
   } | null>(null);
   const [pricingLineId, setPricingLineId] = useState<string | null>(null);
+  /** A versão escolhida para "Duplicar como nova versão" — QUOTE-DUPLICATE-01. */
+  const [duplicando, setDuplicando] = useState<QuoteVersionDTO | null>(null);
   const [pricingOptions, setPricingOptions] = useState<PricingVersionDTO | null>(null);
   /** Precificação ativa por linha — consultada, nunca aplicada sozinha. */
   const [tierByLine, setTierByLine] = useState<Record<string, PricingVersionDTO | null>>({});
@@ -772,6 +776,27 @@ export function QuoteVersionsSection({
                 Proposta apresentada é histórico: os valores são os que o cliente recebeu, não os
                 de hoje. Para renegociar, crie uma nova versão.
               </p>
+            )}
+            {/* Partir DESTA versão, não da mais recente — QUOTE-DUPLICATE-01.
+                Com outro rascunho em edição a ação fica indisponível e diz por
+                quê: o projeto tem uma proposta em edição por vez. */}
+            {canEdit && projectOpen && open.status !== "DRAFT" && (
+              <div className="line-actions">
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  disabled={saving || draft !== null}
+                  onClick={() => setDuplicando(open)}
+                >
+                  Duplicar como nova versão
+                </button>
+                {draft && (
+                  <span className="field__hint">
+                    Já existe a V{draft.versionNumber} em rascunho — continue nela ou envie antes de
+                    duplicar outra versão.
+                  </span>
+                )}
+              </div>
             )}
           </div>
 
@@ -1457,6 +1482,22 @@ export function QuoteVersionsSection({
           const target = sendConfirm;
           setSendConfirm(null);
           if (target) void confirmSend(target);
+        }}
+      />
+
+      <DuplicateQuoteDialog
+        key={duplicando?.id ?? "fechado"}
+        source={duplicando}
+        saving={saving}
+        onCancel={() => setDuplicando(null)}
+        onConfirm={(priceStrategy) => {
+          const origem = duplicando;
+          setDuplicando(null);
+          if (!origem) return;
+          void run(async () => {
+            const created = await duplicateQuoteVersion(origem.id, priceStrategy);
+            setOpenId(created.id);
+          });
         }}
       />
     </FormSection>
