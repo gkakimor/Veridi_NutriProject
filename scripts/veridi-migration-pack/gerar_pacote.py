@@ -265,7 +265,7 @@ def escrever_arquivo(saida: Path, arquivo: str, linhas: list[dict], pac: F.Pacot
                    "(sem campo ou sem vínculo no ERP). Preservada aqui para não se perder.", L.COLUNAS_LEGADO,
                    linhas_legado)
         )
-    salvar_workbook(saida / f"{arquivo}.xlsx", tabelas, listas_de(arquivo, pac), titulo=arquivo)
+    salvar_workbook(saida / f"{arquivo}.xlsx", tabelas, listas_de(arquivo, pac), titulo=f"{L.PACOTE} — {arquivo}")
     return {
         "registros": len(linhas),
         "pendencias": len(pendencias),
@@ -288,7 +288,7 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
          if p["SITUACAO_PESQUISA"] in ("SEM_REFERENCIA", "PESQUISA_PENDENTE") and p["CHAVE_ITEM"] not in com_preco}
     )
     linhas = [
-        "# MANIFESTO — Migração de cadastros para produção (revisão 01)",
+        "# PACOTE DE REVISÃO DA MIGRAÇÃO — manifesto (revisão 01)",
         "",
         f"> **{L.AVISO}**",
         "",

@@ -14,33 +14,41 @@ import fontes as F
 import regras as R
 from planilha import DATA, MOEDA, MOEDA_PRECISA, PERCENTUAL, TEXTO, Coluna
 
-AVISO = "NÃO IMPORTAR AINDA — arquivos aguardam validação da Veridi."
+PACOTE = "PACOTE DE REVISÃO DA MIGRAÇÃO"
+AVISO = PACOTE + " — nenhuma informação é carregada no sistema automaticamente quando o arquivo é devolvido."
 
-LEGENDA = (
-    "* Campo obrigatório para migração.   Cabeçalho CINZA = coluna técnica (não editar).   "
-    "Colunas com lista: use a seta da célula.   Significado das colunas: aba DICIONARIO.   "
-    "O que resolver: aba PENDENCIAS.   STATUS_REVISAO: todos começam REVISAR — depois de conferir, mude para "
-    "OK (entra na carga), PENDENTE (falta resolver) ou NAO_IMPORTAR (fica fora; não apagar linhas)."
+INSTRUCOES = (
+    "1) Revise todos os registros.  2) Corrija só as colunas de cabeçalho verde (cinza = técnica).  "
+    "3) NÃO ALTERE a CHAVE_MIGRACAO (coluna vermelha).  4) Em STATUS_REVISAO marque OK (aprovado para a futura "
+    "carga) ou NAO_IMPORTAR; use PENDENTE se ainda faltar resolver algo.  5) Não apague linhas.  6) Preço de mercado "
+    "é somente referência, não é custo de compra.  7) Nenhuma informação é carregada automaticamente quando você "
+    "devolve o arquivo."
+)
+LEGENDA = INSTRUCOES + (
+    "\n* Campo obrigatório.  Colunas com lista: use a seta da célula.  Significado das colunas: aba DICIONARIO.  "
+    "O que resolver: aba PENDENCIAS."
 )
 
 TITULOS = {
-    F.MAPA: "MAPA DE CHAVES DA MIGRAÇÃO — uma linha por registro candidato. " + AVISO
-    + "  A CHAVE_MIGRACAO é a referência que vale entre os arquivos; o código do ERP só nasce na carga.",
-    F.CLIENTES: "CLIENTES — campos da tela Cliente. " + AVISO + "\n" + LEGENDA,
-    F.FORNECEDORES: "FORNECEDORES — campos da tela Fornecedor. " + AVISO + "\n" + LEGENDA,
-    F.MATERIAS_PRIMAS: "MATÉRIAS-PRIMAS — campos da tela Item, com o custo de referência e todos os preços do item "
-    "(07 e 06) na própria linha. " + AVISO + "\n" + LEGENDA,
-    F.EMBALAGENS: "MATERIAIS DE EMBALAGEM — campos da tela Item, com o custo de referência e todos os preços do item "
-    "(07 e 06) na própria linha. " + AVISO + "\n" + LEGENDA,
-    F.PRODUTOS: "PRODUTOS ACABADOS — campos da tela Produto (Produto ↔ Item de produto acabado, 1:1). " + AVISO
-    + "\n" + LEGENDA,
-    F.PRECOS: "REFERÊNCIA DE MERCADO PARA REVISÃO — preço público de internet. NÃO é custo real de compra, NÃO é "
-    "recebimento e NÃO será importado como custo de aquisição. " + AVISO + "\n"
-    "Cabeçalho CINZA = coluna técnica (não editar). SITUACAO_PESQUISA = resultado da pesquisa. STATUS_REVISAO: todos "
-    "começam REVISAR — a Veridi muda para ACEITA ou REJEITADA.",
-    F.OFERTAS: "FORNECEDORES DO ITEM E OFERTAS DO LEGADO — campos da relação Item × Fornecedor e da oferta de preço. "
-    "Preço das planilhas de CMV, sem data de cotação: observação histórica, não é compra real. " + AVISO + "\n"
+    F.MAPA: PACOTE + " — MAPA DE CHAVES (consulta, não precisa editar). Uma linha por registro candidato. NÃO ALTERE a "
+    "CHAVE_MIGRACAO: é a referência que vale entre os arquivos; o código do ERP só nasce na carga. Nenhuma informação "
+    "é carregada automaticamente quando o arquivo é devolvido.",
+    F.CLIENTES: PACOTE + " — CLIENTES (campos da tela Cliente)\n" + LEGENDA,
+    F.FORNECEDORES: PACOTE + " — FORNECEDORES (campos da tela Fornecedor)\n" + LEGENDA,
+    F.MATERIAS_PRIMAS: PACOTE + " — MATÉRIAS-PRIMAS (campos da tela Item, com o custo de referência e todos os preços "
+    "do item — 07 e 06 — na própria linha)\n" + LEGENDA,
+    F.EMBALAGENS: PACOTE + " — MATERIAIS DE EMBALAGEM (campos da tela Item, com o custo de referência e todos os "
+    "preços do item — 07 e 06 — na própria linha)\n" + LEGENDA,
+    F.PRODUTOS: PACOTE + " — PRODUTOS ACABADOS (campos da tela Produto; Produto ↔ Item de produto acabado, 1:1)\n"
     + LEGENDA,
+    F.PRECOS: PACOTE + " — REFERÊNCIA DE MERCADO: preço público de internet. NÃO é custo real de compra, NÃO é "
+    "recebimento e NÃO será importado como custo de aquisição.\n"
+    "1) Revise as referências.  2) Corrija só as colunas de cabeçalho verde (cinza = técnica).  3) NÃO ALTERE a "
+    "CHAVE_MIGRACAO (coluna vermelha).  4) Em STATUS_REVISAO marque ACEITA ou REJEITADA (SITUACAO_PESQUISA é o "
+    "resultado da pesquisa).  5) Não apague linhas.  6) Preço de mercado é somente referência.  7) Nenhuma informação "
+    "é carregada automaticamente quando você devolve o arquivo.",
+    F.OFERTAS: PACOTE + " — FORNECEDORES DO ITEM E OFERTAS DO LEGADO (campos da relação Item × Fornecedor e da oferta; "
+    "preço das planilhas de CMV, sem data de cotação: observação histórica, não é compra real)\n" + LEGENDA,
 }
 
 PROXIMA_FASE = [
@@ -280,7 +288,8 @@ def _chave(formato: str, origem: str) -> Coluna:
     return Coluna(
         "CHAVE_MIGRACAO", "Chave estável do registro na migração. Liga os arquivos entre si.", obrigatorio=True,
         tecnica=True, tipo="Chave", formato=formato, pode_vazio=False, origem=origem,
-        observacao="Autoritativa. Nunca editar nem apagar. Não é o código do ERP.", numero=TEXTO,
+        observacao="NÃO ALTERAR. Chave de rastreabilidade (de-para da carga); não é o código do ERP.", numero=TEXTO,
+        bloqueada=True,
     )
 
 
@@ -329,7 +338,8 @@ def colunas(arquivo: str) -> list[Coluna]:
                    tecnica=True, pode_vazio=False, origem="planilha legada", numero=TEXTO),
             Coluna("CHAVE_MIGRACAO", "Chave estável do registro na migração.", obrigatorio=True, tecnica=True,
                    tipo="Chave", formato="CLI-LEG-0000, FOR-LEG-NOME, ITEM-LEG-0000, PROD-LEG-0000PL, PA-LEG-0000PL",
-                   pode_vazio=False, origem="migração", observacao="Autoritativa entre os arquivos.", numero=TEXTO),
+                   pode_vazio=False, origem="migração", observacao="NÃO ALTERAR. Autoritativa entre os arquivos.",
+                   numero=TEXTO, bloqueada=True),
             _codigo_previsto("CODIGO_PRODUCAO_PREVISTO", "CLI/FOR/MP/ME/PA/PROD-000000"),
             Coluna("NOME", "Nome para conferência humana.", obrigatorio=True, tecnica=True, pode_vazio=False,
                    origem="planilha legada", quebra=True, largura=45),
@@ -468,7 +478,8 @@ def colunas(arquivo: str) -> list[Coluna]:
         return [
             Coluna("CHAVE_MIGRACAO", "Chave do Produto (CHAVE_PRODUTO).", obrigatorio=True, tecnica=True, tipo="Chave",
                    formato="PROD-LEG-<código>", pode_vazio=False, origem="'PROD-LEG-' + cod_produto",
-                   observacao="Autoritativa. Nunca editar nem apagar.", numero=TEXTO),
+                   observacao="NÃO ALTERAR. Chave de rastreabilidade (de-para da carga).", numero=TEXTO,
+                   bloqueada=True),
             _codigo_previsto("CODIGO_PRODUTO_PREVISTO", "PROD-000000"),
             Coluna("CHAVE_CLIENTE", "Tela Produto › Identificação › Cliente (chave do arquivo 01).", obrigatorio=True,
                    tipo="Lista", lista="CLIENTES", pode_vazio=False, formato="CLI-LEG-0000",

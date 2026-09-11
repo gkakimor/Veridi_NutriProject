@@ -25,6 +25,8 @@ FONTE = "Arial"
 VERDE = "1E5B3A"
 CINZA_CABECALHO = "5F5F5F"
 CINZA_CELULA = "EDEDED"
+VERMELHO = "9C1C1C"
+ROSA = "FBE4E4"
 AMARELO = "FFF4CE"
 LINHA_CABECALHO = 2
 PRIMEIRA_LINHA = 3
@@ -54,6 +56,9 @@ class Coluna:
     numero: str = ""
     quebra: bool = False
     validacao_numero: str = ""
+    # Chave de rastreabilidade: cabeçalho vermelho, célula rosa e digitação
+    # recusada ("NÃO ALTERAR"). Sem proteger a aba — filtro e ordenação seguem.
+    bloqueada: bool = False
 
     def valores_permitidos(self) -> str:
         if self.valores:
@@ -114,6 +119,7 @@ def _largura(coluna: Coluna, tabela: Tabela) -> int:
 def _escrever(ws, tabela: Tabela, listas: dict[str, str]) -> None:
     fonte = Font(name=FONTE, size=10)
     cinza = PatternFill("solid", fgColor=CINZA_CELULA)
+    rosa = PatternFill("solid", fgColor=ROSA)
     n_colunas = len(tabela.colunas)
     ultima = get_column_letter(n_colunas)
 
@@ -134,10 +140,14 @@ def _escrever(ws, tabela: Tabela, listas: dict[str, str]) -> None:
     for indice, coluna in enumerate(tabela.colunas, start=1):
         celula = ws.cell(row=LINHA_CABECALHO, column=indice, value=cabecalho(coluna, tabela))
         celula.font = Font(name=FONTE, size=10, bold=True, color="FFFFFF")
-        celula.fill = PatternFill("solid", fgColor=CINZA_CABECALHO if coluna.tecnica else VERDE)
+        cor = VERMELHO if coluna.bloqueada else CINZA_CABECALHO if coluna.tecnica else VERDE
+        celula.fill = PatternFill("solid", fgColor=cor)
         celula.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center")
         if tabela.comentarios and coluna.descricao:
-            nota = coluna.descricao + (" (Coluna técnica: não editar.)" if coluna.tecnica else "")
+            if coluna.bloqueada:
+                nota = "NÃO ALTERAR — " + coluna.descricao
+            else:
+                nota = coluna.descricao + (" (Coluna técnica: não editar.)" if coluna.tecnica else "")
             celula.comment = Comment(nota, "Migração Veridi", width=320, height=110)
     ws.row_dimensions[LINHA_CABECALHO].height = 34
 
@@ -152,7 +162,9 @@ def _escrever(ws, tabela: Tabela, listas: dict[str, str]) -> None:
             celula.alignment = alinhamentos[coluna.quebra]
             if coluna.numero:
                 celula.number_format = coluna.numero
-            if coluna.tecnica:
+            if coluna.bloqueada:
+                celula.fill = rosa
+            elif coluna.tecnica:
                 celula.fill = cinza
 
     ultima_linha = LINHA_CABECALHO + len(tabela.linhas)
@@ -179,7 +191,15 @@ def _escrever(ws, tabela: Tabela, listas: dict[str, str]) -> None:
         letra = get_column_letter(indice)
         faixa = f"{letra}{PRIMEIRA_LINHA}:{letra}{fim}"
         validacao = None
-        if coluna.valores:
+        if coluna.bloqueada:
+            # Fórmula sempre falsa: qualquer digitação é recusada com o aviso.
+            validacao = DataValidation(type="custom", formula1="FALSE", allow_blank=True)
+            validacao.errorTitle = "NÃO ALTERAR"
+            validacao.error = "A CHAVE_MIGRACAO é a chave de rastreabilidade da migração e não pode ser alterada."
+            validacao.promptTitle = "NÃO ALTERAR"
+            validacao.prompt = "Chave de rastreabilidade da migração — não altere nem apague."
+            validacao.showInputMessage = True
+        elif coluna.valores:
             formula = '"' + ",".join(coluna.valores) + '"'
             if len(formula) > 255:
                 raise ValueError(f"Lista longa demais para validação inline: {coluna.nome}")
@@ -206,7 +226,7 @@ def _escrever(ws, tabela: Tabela, listas: dict[str, str]) -> None:
             validacao = DataValidation(type="date", operator="greaterThan", formula1="36526", allow_blank=True)
             validacao.error = "Informe uma data no formato dd/mm/aaaa."
         if validacao is not None:
-            validacao.errorTitle = "Valor não permitido"
+            validacao.errorTitle = validacao.errorTitle or "Valor não permitido"
             validacao.showErrorMessage = True
             ws.add_data_validation(validacao)
             validacao.add(faixa)

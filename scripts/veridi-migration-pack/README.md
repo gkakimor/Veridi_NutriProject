@@ -57,7 +57,9 @@ foram montadas a partir de um banco DEV; a oferta do legado vem direto de
 
 ## Regras que valem em todos os arquivos
 
-- **CHAVE_MIGRACAO** deriva só do legado e é autoritativa: `CLI-LEG-0000`,
+- **CHAVE_MIGRACAO** (coluna vermelha, digitação recusada com o aviso "NÃO
+  ALTERAR"; a aba não é protegida, para filtro e ordenação continuarem
+  funcionando) deriva só do legado e é autoritativa: `CLI-LEG-0000`,
   `FOR-LEG-<NOME>`, `ITEM-LEG-0000` (a mesma para matéria-prima e embalagem),
   `PROD-LEG-<cód>` / `PA-LEG-<cód>`, `OFE-LEG-…` (chave de idempotência do
   importador), `REF-…`. Nunca UUID, nunca código interno do ERP.
