@@ -16,6 +16,7 @@ import {
   INDUSTRIAL_USAGE_BASIS_LABELS,
 } from "@veridi/shared";
 import { formatUnitCost } from "../../components/CostBreakdown";
+import { descreverTotalDeUso, descreverUsoDeRecurso } from "../../components/ResourceUsageAmount";
 import { PrintSection, PrintTable, formatPrintDateTime } from "../../print/PrintLayout";
 import { PrintSheet } from "../../print/PrintSheet";
 import { getIndustrialCostVersion } from "../../lib/industrial-costs-api";
@@ -174,7 +175,10 @@ export function IndustrialCostPrintPage() {
               </td>
               <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[usage.resourceType]}</td>
               <td className="is-number">
-                {formatQuantity(usage.usageQuantity)} {INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}
+                {/* "2 × 2 hora · Total: 4 hora" — a leitura sobrevive ao papel (§87). */}
+                {[descreverUsoDeRecurso(usage), descreverTotalDeUso(usage)]
+                  .filter(Boolean)
+                  .join(" · ")}
               </td>
               <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
               <td className="is-number">{printRate(usage, version.status)}</td>

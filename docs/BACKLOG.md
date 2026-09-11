@@ -45,12 +45,12 @@ QUOTE-DUPLICATE-01 e CUSTOMER-COMMERCIAL-STATUS-01, com as regras duráveis em
 código: CUSTOMER-ACTIVITY-SCOPE-01, respondido pelo PO (§86), e
 COST-BASELINE-01, absorvido pela fundação de custo que já existe — o que
 faltava era dado real, não código ([`PROJECT_STATE.md`](PROJECT_STATE.md),
-"Próxima prioridade").
+"Próxima prioridade"). E COST-RESOURCE-MULTIPLIER-01, com as decisões do PO:
+quantidade de recursos equivalentes na linha de recurso (§87).
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-2** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião. COST-VAR-02 continua esperando as sete decisões do PO e dado real em produção |
 
@@ -58,7 +58,10 @@ Achados de PRICING-TEMPLATE-FLEX-01, sem posição na fila: PRICING-MODEL-VIEW-0
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 (seção A, na entrada do
 item). Achados de QUOTE-DUPLICATE-01, idem: QUOTE-NEW-VERSION-PATHS-01 e
 QUOTE-DUPLICATE-ORIGIN-01. Achados de CUSTOMER-COMMERCIAL-STATUS-01, idem:
-CUSTOMER-LIST-DEFAULT-E2E-01 e CUSTOMER-FACTS-LOAD-01.
+CUSTOMER-LIST-DEFAULT-E2E-01 e CUSTOMER-FACTS-LOAD-01. Achado de
+COST-RESOURCE-MULTIPLIER-01, idem: **COST-RESOURCE-EDIT-01 (P3, UX)** — a
+linha de recurso da Estrutura de Custos não se edita; trocar a quantidade de
+recursos ou o tempo é remover e declarar de novo, como já era com as horas.
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma
@@ -1241,10 +1244,9 @@ Nenhum destes tem escopo definido. O trabalho de cada um é **responder uma
 pergunta**; desenhar solução antes da resposta é o que produz módulo que ninguém
 usa.
 
-Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-1, SUPPLIER-ADDRESS-01 em P1-2) — mas a
-posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
-esperam a pergunta virar decisão.
+Um tem posição na fila viva porque a pergunta dele já tem dono e prazo
+(SUPPLIER-ADDRESS-01 em P1-1) — mas a posição é da DESCOBERTA, não de uma
+implementação autorizada. Os outros esperam a pergunta virar decisão.
 
 ### SUPPLIER-OFFER-OVERLAP-01 — vigências sobrepostas de oferta E de tarifa industrial
 
@@ -1284,30 +1286,6 @@ carga do corpus for refeita. Não existe item para "corrigir as 602": informar
 vigência sem definir preferencial rebaixaria 90 itens para
 `AMBIGUOUS_SUPPLIER_REFERENCE` (auditoria COST-VAR-01, G4). Nenhum backfill,
 nem em DEV nem em PROD.
-
-### COST-RESOURCE-MULTIPLIER-01 — multiplicador de recurso
-
-Vindo do walkthrough real (2026-09-09). Exemplos dados: 1 operador × 2 h,
-2 operadores × 2 h, 3 equipamentos iguais.
-
-A hipótese do handoff — que isso pertence à **linha do recurso na Estrutura de
-Custos**, não à Formulação — é confirmada pelo modelo:
-`IndustrialCostResourceUsage` tem `usageQuantity` + `usageUom` + `usageBasis` e
-`@@unique([industrialCostVersionId, industrialResourceId])`, com o comentário do
-schema dizendo o desenho em voz alta: *"Uma linha por recurso: sem
-roteiro/operações nesta fase, o mesmo equipamento usado em duas etapas soma o
-tempo."*
-
-Ou seja: 2 operadores × 2 h **já é representável** hoje, como `usageQuantity =
-4 h`. O que se perde é a informação de QUANTOS — o custo fecha, a leitura não:
-ninguém consegue responder "quantas pessoas" a partir de 4 h, e replanejar
-exige refazer a multiplicação de cabeça.
-
-Perguntas a responder com a Natália antes de qualquer campo novo: o
-multiplicador é informação de CUSTO (só para explicar o número) ou de
-CAPACIDADE (quantas pessoas/máquinas a fábrica precisa alocar)? Se for
-capacidade, isto encosta em roteiro/operações, que está fora desta fase por
-decisão. **Não implementar antes de auditar o modelo e confirmar o uso real.**
 
 ### SUPPLIER-ADDRESS-01 — endereço do Fornecedor
 

@@ -68,6 +68,19 @@ export type ActivateIndustrialCostVersionInput = z.infer<
   typeof activateIndustrialCostVersionSchema
 >;
 
+const RESOURCE_COUNT_MESSAGE = "Quantidade de recursos: informe um número inteiro maior que zero.";
+
+/**
+ * Quantidade de recursos equivalentes (§87): inteiro, no mínimo 1. Sem
+ * coerção — "2" como texto, 1,5, zero, negativo e `null` são recusados antes
+ * do domínio. O teto é o do inteiro do banco, não regra de negócio.
+ */
+export const resourceCountSchema = z
+  .number({ invalid_type_error: RESOURCE_COUNT_MESSAGE, required_error: RESOURCE_COUNT_MESSAGE })
+  .int(RESOURCE_COUNT_MESSAGE)
+  .min(1, RESOURCE_COUNT_MESSAGE)
+  .max(2_147_483_647, RESOURCE_COUNT_MESSAGE);
+
 export const createResourceUsageSchema = z.object({
   resourceId: z.string().trim().min(1, "Selecione o recurso"),
   // Recurso que não é usado simplesmente não vira linha — nada de 0 hora.
@@ -75,6 +88,8 @@ export const createResourceUsageSchema = z.object({
   usageBasis: z
     .enum(["FIXED_PER_REFERENCE_BATCH", "PER_OUTPUT_UNIT", "PER_1000_OUTPUT_UNITS"])
     .optional(),
+  // Ausente = 1. Mão de obra e equipamento; energia recusa outro valor.
+  resourceCount: resourceCountSchema.optional(),
   notes: optionalNullableText(1000),
 });
 

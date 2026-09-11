@@ -9,9 +9,9 @@ import {
   INDUSTRIAL_COST_QUALITY_HINTS,
   INDUSTRIAL_COST_QUALITY_LABELS,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
-  INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
 } from "@veridi/shared";
+import { ResourceUsageAmount } from "./ResourceUsageAmount";
 import { formatBRL } from "../lib/currency";
 import {
   comSimboloReal,
@@ -244,7 +244,13 @@ export function CostBreakdown({
                   </td>
                   <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[resource.resourceType]}</td>
                   <td className="is-numeric">
-                    {formatQuantity(resource.quantity)} {INDUSTRIAL_RATE_UOM_LABELS[resource.quantityUom]}
+                    {/* Cálculo salvo antes do campo não tem contagem: lê-se 1 e o número não muda. */}
+                    <ResourceUsageAmount
+                      resourceCount={resource.resourceCount}
+                      usageQuantity={resource.quantityPerResource ?? resource.quantity}
+                      totalUsageQuantity={resource.quantity}
+                      usageUom={resource.quantityUom}
+                    />
                   </td>
                   <td>
                     {resource.rateValue === null ? "—" : formatBRL(resource.rateValue)}

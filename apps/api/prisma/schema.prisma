@@ -1210,6 +1210,14 @@ model IndustrialCostResourceUsage {
   usageQuantity Decimal                      @db.Decimal(24, 12)
   usageUom      IndustrialRateUom
 
+  /// Quantidade de recursos EQUIVALENTES trabalhando juntos — 2 operadores,
+  /// 3 encapsuladoras iguais (PRODUCT_RULES §87). Com ela, `usageQuantity` e
+  /// o uso POR recurso, e o uso efetivo e `resourceCount x usageQuantity`: a
+  /// mesma hora valoriza o recurso e deriva a energia. So mao de obra e
+  /// equipamento passam de 1; energia e sempre 1, porque kWh ja e o total.
+  /// Linha antiga nasce 1 — nenhum custo existente muda. CHECK >= 1 no banco.
+  resourceCount Int @default(1)
+
   notes     String?
   sortOrder Int     @default(0)
 
@@ -4181,6 +4189,10 @@ model IndustrialCostTemplateResourceUsage {
   usageBasis    IndustrialResourceUsageBasis @default(FIXED_PER_REFERENCE_BATCH)
   usageQuantity Decimal                      @db.Decimal(24, 12)
   usageUom      IndustrialRateUom
+
+  /// Mesma quantidade de recursos equivalentes da estrutura (§87): o Modelo
+  /// guarda, aplicar o Modelo copia. CHECK >= 1 no banco.
+  resourceCount Int @default(1)
 
   notes     String?
   sortOrder Int     @default(0)

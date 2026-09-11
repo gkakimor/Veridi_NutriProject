@@ -9,6 +9,7 @@ import {
 } from "@veridi/shared";
 import { getCostTemplate, listCostTemplates } from "../../lib/cost-pricing-templates-api";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
+import { ResourceUsageAmount } from "../../components/ResourceUsageAmount";
 
 /**
  * Escolher um template de estrutura, direto da tela de custos do produto.
@@ -193,7 +194,13 @@ export function UseCostTemplateDialog({ onCancel, onApply, saving }: Props) {
                       <td>
                         {usage.resourceCode} — {usage.resourceName}
                       </td>
-                      <td className="is-numeric">{formatQuantity(usage.usageQuantity)}</td>
+                      <td className="is-numeric">
+                        <ResourceUsageAmount
+                          resourceCount={usage.resourceCount}
+                          usageQuantity={usage.usageQuantity}
+                          totalUsageQuantity={usage.totalUsageQuantity}
+                        />
+                      </td>
                       <td>{INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}</td>
                       <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
                     </tr>

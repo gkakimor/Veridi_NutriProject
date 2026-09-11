@@ -160,9 +160,12 @@ export function CmvPrintPage() {
                       {component.itemId ? `${component.code} — ${component.name}` : component.name}
                     </td>
                     <td className="is-number">
-                      {component.requiredQuantity
-                        ? `${formatQuantity(component.requiredQuantity)} ${describeUnit(component.unitCode)}`
-                        : "—"}
+                      {/* "2 × 4 hora · Total: 8 hora" — a leitura sobrevive ao papel (§87). */}
+                      {!component.requiredQuantity
+                        ? "—"
+                        : (component.resourceCount ?? 1) > 1 && component.quantityPerResource
+                          ? `${component.resourceCount} × ${formatQuantity(component.quantityPerResource)} ${describeUnit(component.unitCode)} · Total: ${formatQuantity(component.requiredQuantity)} ${describeUnit(component.unitCode)}`
+                          : `${formatQuantity(component.requiredQuantity)} ${describeUnit(component.unitCode)}`}
                     </td>
                     <td>{describeOrigin(component.costSource, component.customerSupplied)}</td>
                     <td className="is-number">

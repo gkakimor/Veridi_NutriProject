@@ -20,6 +20,7 @@ import {
   InvalidCostRateError,
   InvalidReferenceOutputError,
   MissingFormulationVersionError,
+  ResourceCountNotAllowedError,
   ResourceNotFoundForUsageError,
   ResourceUsageNotFoundError,
 } from "./industrial-costs.errors.js";
@@ -81,6 +82,10 @@ function mapDomainError(
   }
   if (error instanceof InvalidEnergyResourceError) {
     return { status: 400, body: { error: "invalid_energy_resource", message: error.message } };
+  }
+  if (error instanceof ResourceCountNotAllowedError) {
+    // Energia já é o total do lote: quantidade de recursos é de quem se conta (§87).
+    return { status: 400, body: { error: "invalid_resource_count", message: error.message } };
   }
   if (error instanceof InactiveResourceActivationError) {
     return { status: 409, body: { error: "inactive_resource", message: error.message } };

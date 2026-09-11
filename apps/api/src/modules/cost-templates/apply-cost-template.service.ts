@@ -120,6 +120,7 @@ export async function applyCostTemplateToProduct(
       usageBasis: usage.usageBasis,
       usageQuantity: usage.usageQuantity,
       usageUom: usage.usageUom,
+      resourceCount: usage.resourceCount,
       notes: usage.notes,
       sortOrder: index,
     }));
@@ -248,6 +249,7 @@ export async function compareCostVersionWithTemplate(
       usageQuantity: usage.usageQuantity.toString(),
       usageUom: usage.usageUom,
       usageBasis: usage.usageBasis,
+      resourceCount: usage.resourceCount,
     })),
     costs: version.lines.map((line) => ({
       description: line.description,
@@ -305,6 +307,7 @@ export async function createCostTemplateFromVersion(
         usageBasis: usage.usageBasis,
         usageQuantity: usage.usageQuantity.toString(),
         usageUom: usage.usageUom,
+        resourceCount: usage.resourceCount,
         notes: usage.notes,
       })),
       additionalCosts: version.lines.map((line) => ({

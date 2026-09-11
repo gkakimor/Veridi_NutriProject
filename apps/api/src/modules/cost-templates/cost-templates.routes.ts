@@ -3,7 +3,10 @@ import type { ZodError } from "zod";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireRole } from "../../lib/current-user.js";
 import { ProductNotFoundError } from "../formulations/formulations.errors.js";
-import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industrial-costs.errors.js";
+import {
+  IndustrialCostVersionNotFoundError,
+  ResourceCountNotAllowedError,
+} from "../industrial-costs/industrial-costs.errors.js";
 import {
   InvalidPricingPercentError,
   InvalidTierQuantityError,
@@ -132,6 +135,10 @@ function mapDomainError(
   }
   if (error instanceof CostTemplateEnergyResourceRequiredError) {
     return { status: 400, body: { error: "energy_resource_required", message: error.message } };
+  }
+  if (error instanceof ResourceCountNotAllowedError) {
+    // Mesma recusa da estrutura: energia não tem quantidade de recursos (§87).
+    return { status: 400, body: { error: "invalid_resource_count", message: error.message } };
   }
   if (error instanceof PricingPolicyCalculationRequiredError) {
     return { status: 400, body: { error: "calculation_required", message: error.message } };

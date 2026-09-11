@@ -84,13 +84,48 @@ export function batchCountFor(
 }
 
 /**
- * Consumo de um recurso escalado para uma quantidade de saída.
+ * Uso efetivo de um recurso na BASE: quantidade de recursos equivalentes ×
+ * uso por recurso (§87).
+ *
+ * Junto com `scaledUsageQuantity`, é o único lugar que multiplica a
+ * quantidade de recursos: custo do recurso, energia derivada dos
+ * equipamentos e o total que a tela mostra saem daqui. Energia tem sempre 1 —
+ * o servidor recusa outra na entrada.
+ */
+export function plannedUsageQuantity(usage: {
+  usageQuantity: Prisma.Decimal;
+  resourceCount: number;
+}): Prisma.Decimal {
+  return usage.usageQuantity.times(usage.resourceCount);
+}
+
+/**
+ * Consumo EFETIVO de um recurso para uma quantidade de saída: quantidade de
+ * recursos × uso por recurso × escala da base (§87).
+ *
+ * A quantidade de recursos não é lote — o lote já está na escala. 2
+ * operadores × 2 h por lote, em dois lotes, são 8 h: nunca 16 (contagem
+ * dobrada) nem 4 (lote esquecido).
+ */
+export function scaledUsageQuantity(
+  usage: { usageBasis: string; usageQuantity: Prisma.Decimal; resourceCount: number },
+  outputQuantity: Prisma.Decimal,
+  referenceOutputQuantity: Prisma.Decimal,
+  mode: BatchScalingMode = "PROPORTIONAL",
+): Prisma.Decimal {
+  return scaledUsagePerResource(usage, outputQuantity, referenceOutputQuantity, mode).times(
+    usage.resourceCount,
+  );
+}
+
+/**
+ * Uso POR recurso escalado para uma quantidade de saída.
  *
  * A base declara o que a fábrica planejou: por lote de referência, por
  * unidade acabada ou por mil unidades. Escalar é aritmética da base — não
  * há modelagem de setup versus tempo de máquina nesta fase.
  */
-export function scaledUsageQuantity(
+export function scaledUsagePerResource(
   usage: { usageBasis: string; usageQuantity: Prisma.Decimal },
   outputQuantity: Prisma.Decimal,
   referenceOutputQuantity: Prisma.Decimal,
@@ -291,6 +326,8 @@ export async function computeResourceCosts(
 
   for (const usage of version.resourceUsages) {
     const type = usage.resourceTypeSnapshot ?? usage.industrialResource.type;
+    // Hora EFETIVA — quantidade de recursos × uso por recurso × escala: a
+    // mesma que valoriza o recurso e que deriva a energia logo abaixo (§87).
     const quantity = scaledUsageQuantity(usage, outputQuantity, version.referenceOutputQuantity);
     const { rate, draftReference: isDraftRate } = rateForUsage(usage, frozen, referenceDate);
     if (isDraftRate) draftReference = true;
@@ -325,6 +362,12 @@ export async function computeResourceCosts(
       resourceType: type,
       quantity: quantity.toString(),
       quantityUom: usage.usageUom,
+      resourceCount: usage.resourceCount,
+      quantityPerResource: scaledUsagePerResource(
+        usage,
+        outputQuantity,
+        version.referenceOutputQuantity,
+      ).toString(),
       rateValue: rate ? rate.toString() : null,
       rateIsDraftReference: isDraftRate,
       subtotal: subtotal ? money(subtotal) : null,

@@ -116,6 +116,8 @@ function versao(overrides: Partial<CostTemplateVersionDTO> = {}): CostTemplateVe
         usageBasis: "FIXED_PER_REFERENCE_BATCH",
         usageQuantity: "4",
         usageUom: "HOUR",
+        resourceCount: 1,
+        totalUsageQuantity: "4",
         notes: null,
         sortOrder: 0,
       },

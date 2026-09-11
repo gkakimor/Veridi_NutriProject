@@ -985,6 +985,25 @@ própria ao lado do cadastro; a Consulta mostra situação, motivo, "cliente
 desde" e o resumo de Projetos. Cliente recém-criado chega à lista pelo
 contexto, porque nasce Prospect. **Zero migration.**
 
+## Quantidade de recursos na Estrutura de Custos (COST-RESOURCE-MULTIPLIER-01, 2026-09-11)
+
+**Regra durável: §87.** Com as seis decisões do PO — custo, não capacidade;
+multiplica; só mão de obra e equipamento; entra na energia derivada; inteiro
+≥ 1; uma linha por recurso —, a linha de recurso ganhou `resourceCount` (Int,
+NOT NULL, default 1, CHECK >= 1) na Estrutura de Custos e no Modelo de
+Estrutura. Uma migration aditiva (`20260925093015_cost_resource_count`): toda
+linha existente nasceu 1, e nenhum custo mudou.
+
+A multiplicação vive no helper canônico (`plannedUsageQuantity` /
+`scaledUsageQuantity`), então cálculo, cálculo salvo, CMV, faixa de
+precificação e energia derivada recebem o mesmo efeito sem conta paralela.
+Energia direta recusa quantidade acima de 1 (400); Modelo, aplicar Modelo,
+nova versão e salvar como Modelo copiam o valor. Na tela, "Quantidade de
+recursos" aparece ao lado de "Tempo por recurso" só para mão de obra e
+equipamento, e o uso se lê "2 × 2 hora · Total: 4 hora" na estrutura, no
+impresso, na composição do cálculo, no CMV e no Modelo. Trocar a quantidade é
+refazer a linha: a linha de recurso continua sem edição (COST-RESOURCE-EDIT-01).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -1023,8 +1042,10 @@ atravessou essa cadeia pela interface numa base zerada. O que faltava era dado:
 os números da auditoria (288 de 581 matérias-primas sem custo, 602 ofertas sem
 vigência) eram do corpus que saiu de PROD no reset. Custo de produto real nasce
 do que a Veridi lançar pela interface — compra, oferta com vigência, referência
-manual —, e o sistema não faz escrita de massa. Próximo da fila viva:
-COST-RESOURCE-MULTIPLIER-01, discovery antes de build.
+manual —, e o sistema não faz escrita de massa.
+
+**COST-RESOURCE-MULTIPLIER-01 fechado em 2026-09-11** (§87, seção própria
+acima). Próximo da fila viva: SUPPLIER-ADDRESS-01.
 
 **COST-VAR-02** (comparação de CMV e proteção de margem) segue BLOQUEADO
 aguardando as sete decisões do PO em
@@ -1051,7 +1072,8 @@ Banco local `veridi_dev`. Recriado pelo caminho oficial em 2026-09-11
 (FAST-DEVELOPMENT-RESET-02) — `drop/create` + as 61 migrations + seed de
 infraestrutura — **sem** o corpus da Veridi: as cargas grandes ficam para uma
 rodada própria, decidida pelo PO. A 62ª migration (`customer_tax_profile`) e a
-63ª (`pricing_template_flex`) entraram por `pnpm db:migrate`. Contém só massa carimbada — o último golden path
+63ª (`pricing_template_flex`) entraram por `pnpm db:migrate`, e a 64ª
+(`cost_resource_count`) também. Contém só massa carimbada — o último golden path
 e as E2E focadas.
 
 Caminho canônico, nesta ordem (os passos 2 a 4 só quando o PO pedir a carga):

@@ -5341,3 +5341,45 @@ consulta por Cliente.
 
 **Não é CRM:** sem funil, sem etapa, sem atividade agendada. E contrato não
 dirige a situação (COM-CONTRACT-01).
+
+## §87 — Quantidade de recursos: quantos iguais trabalham juntos, e a mesma hora no custo e na energia
+
+COST-RESOURCE-MULTIPLIER-01, 2026-09-11, sobre as decisões D1–D6 do PO no
+mesmo dia.
+
+**A linha de recurso da Estrutura de Custos — e do Modelo de Estrutura — diz
+QUANTOS recursos equivalentes trabalham juntos (2 operadores, 3 encapsuladoras
+iguais) e quanto tempo CADA um trabalha.** É informação de CUSTO: explica e
+forma o número. Não é capacidade, não calcula duração, não aloca pessoa nem
+máquina e não conversa com calendário.
+
+- **Conta:** uso efetivo = quantidade de recursos × uso por recurso × escala da
+  base (por lote, por unidade ou por mil). 2 operadores × 2 h × R$ 25 = R$ 100;
+  3 equipamentos × 2 h × R$ 85 = R$ 510. A quantidade não é lote: 2 × 2 h por
+  lote, em dois lotes, são 8 h — nem 16, nem 4.
+- **A energia derivada usa a mesma hora efetiva:** 3 equipamentos × 2 h × 5 kW
+  = 30 kWh × R$ 0,80 = R$ 24. Equipamento contado três vezes e energia uma é o
+  erro que a regra existe para impedir.
+- **Quem aceita:** mão de obra e equipamento. Energia informada direto é sempre
+  1 — o kWh já é o total do lote —, o servidor recusa outro valor (400) e a
+  tela nem mostra o campo.
+- **Inteiro, no mínimo 1.** Zero, negativo, fração, texto e nulo são 400 antes
+  do domínio, e o banco tem CHECK >= 1. Campo vazio na tela não vira 1 em
+  silêncio.
+- **Legado:** toda linha existente nasceu 1 na migration, e 1 × uso é o uso de
+  antes — nenhum custo mudou, nenhum cálculo salvo foi reescrito, nenhuma
+  contagem histórica foi inferida. Cálculo salvo antes do campo lê como 1.
+- **Viaja com o plano:** o Modelo guarda, aplicar o Modelo copia, nova versão
+  copia, salvar a estrutura como Modelo leva junto. Não é snapshot econômico:
+  é premissa de como se produz.
+- **Uma linha por recurso continua.** Arranjo misto no mesmo lote — 2 × 2 h na
+  mistura e 1 × 1 h no envase — entra consolidado, com quantidade 1 e 5 h.
+  Roteiro, etapa e várias linhas do mesmo recurso ficam fora desta fase.
+- **Uma conta só:** `plannedUsageQuantity` e `scaledUsageQuantity`
+  (`industrial-cost-calculation/calculation.service.ts`) são os únicos que
+  multiplicam a quantidade. Cálculo da estrutura, cálculo salvo, CMV, faixa de
+  precificação (`costForOutputQuantity`) e energia derivada leem daí; a tela
+  não multiplica — o total chega pronto do servidor.
+- **Leitura:** onde se lia "4 hora" passa a se ler "2 × 2 hora · Total: 4 hora"
+  quando há mais de um recurso — estrutura, impresso, composição do cálculo,
+  CMV e Modelo. Com um recurso, a leitura é a de antes.

@@ -15,6 +15,7 @@ import {
   INDUSTRIAL_RATE_UOM_LABELS,
   INDUSTRIAL_USAGE_BASIS_LABELS,
   TEMPLATE_VERSION_STATUS_LABELS,
+  acceptsResourceCount,
 } from "@veridi/shared";
 import {
   activateCostTemplateVersion,
@@ -34,6 +35,10 @@ import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
+import {
+  ResourceUsageAmount,
+  exigirQuantidadeDeRecursos,
+} from "../../components/ResourceUsageAmount";
 import { useAuth } from "../../app/AuthProvider";
 
 /**
@@ -47,6 +52,8 @@ import { useAuth } from "../../app/AuthProvider";
 
 interface LinhaRecurso extends CostTemplateResourceUsageInput {
   chave: string;
+  /** Texto do campo "Quantidade de recursos" — vira inteiro só ao salvar (§87). */
+  quantidadeDeRecursos: string;
 }
 
 export function CostTemplateDetailPage() {
@@ -88,6 +95,7 @@ export function CostTemplateDetailPage() {
               usageQuantity: usage.usageQuantity,
               usageUom: usage.usageUom,
               usageBasis: usage.usageBasis,
+              quantidadeDeRecursos: String(usage.resourceCount),
             })),
           );
         }
@@ -128,6 +136,11 @@ export function CostTemplateDetailPage() {
   const rascunho = template.draftVersion;
   const ativa = template.activeVersion;
   const editavel = canEdit && rascunho !== null;
+  // Mão de obra e equipamento se contam; energia não — o kWh já é o total (§87).
+  const contaRecursosDaLinha = (industrialResourceId: string) => {
+    const recurso = recursos.find((row) => row.id === industrialResourceId);
+    return recurso ? acceptsResourceCount(recurso.type) : false;
+  };
 
   const composicao = (version: CostTemplateVersionDTO) => (
     <>
@@ -157,7 +170,13 @@ export function CostTemplateDetailPage() {
             {version.resourceUsages.map((usage) => (
               <tr key={usage.id}>
                 <td>{usage.resourceName}</td>
-                <td className="is-numeric">{formatQuantity(usage.usageQuantity)}</td>
+                <td className="is-numeric">
+                  <ResourceUsageAmount
+                    resourceCount={usage.resourceCount}
+                    usageQuantity={usage.usageQuantity}
+                    totalUsageQuantity={usage.totalUsageQuantity}
+                  />
+                </td>
                 <td>{INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}</td>
                 <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
               </tr>
@@ -383,6 +402,7 @@ export function CostTemplateDetailPage() {
                 <thead>
                   <tr>
                     <th>Recurso</th>
+                    <th className="is-numeric">Quantidade de recursos</th>
                     <th className="is-numeric">Uso por lote</th>
                     <th>Unidade</th>
                     <th aria-hidden="true" />
@@ -413,6 +433,26 @@ export function CostTemplateDetailPage() {
                             </option>
                           ))}
                         </select>
+                      </td>
+                      <td className="is-numeric">
+                        {contaRecursosDaLinha(linha.industrialResourceId) ? (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            aria-label="Quantidade de recursos"
+                            disabled={!editavel}
+                            value={linha.quantidadeDeRecursos}
+                            onChange={(event) =>
+                              setLinhas((atual) =>
+                                atual.map((l, i) =>
+                                  i === index ? { ...l, quantidadeDeRecursos: event.target.value } : l,
+                                ),
+                              )
+                            }
+                          />
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="is-numeric">
                         <input
@@ -464,7 +504,7 @@ export function CostTemplateDetailPage() {
                   ))}
                   {linhas.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="table__empty">
+                      <td colSpan={5} className="table__empty">
                         Nenhum recurso ainda.
                       </td>
                     </tr>
@@ -486,6 +526,7 @@ export function CostTemplateDetailPage() {
                         industrialResourceId: "",
                         usageQuantity: "",
                         usageUom: "HOUR",
+                        quantidadeDeRecursos: "1",
                       },
                     ])
                   }
@@ -505,9 +546,13 @@ export function CostTemplateDetailPage() {
                         energyResourceId: modoEnergia === "FROM_EQUIPMENT" ? recursoEnergia : null,
                         resourceUsages: linhas
                           .filter((linha) => linha.industrialResourceId && linha.usageQuantity)
-                          .map(({ chave: _chave, ...resto }) => ({
+                          .map(({ chave: _chave, quantidadeDeRecursos, ...resto }) => ({
                             ...resto,
                             usageQuantity: exigirDecimal(resto.usageQuantity, "Uso por lote"),
+                            // Energia não envia quantidade: para ela o domínio usa 1.
+                            ...(contaRecursosDaLinha(resto.industrialResourceId)
+                              ? { resourceCount: exigirQuantidadeDeRecursos(quantidadeDeRecursos) }
+                              : {}),
                           })),
                       }),
                     )

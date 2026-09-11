@@ -49,6 +49,13 @@ export interface CmvComponentDTO {
    * aquisição Veridi. Não é custo zero nem custo desconhecido.
    */
   customerSupplied: boolean;
+  /**
+   * Recurso industrial: quantidade de recursos equivalentes (§87) e o uso de
+   * cada um, já escalado — `requiredQuantity` continua sendo o total.
+   * Ausentes nas demais linhas.
+   */
+  resourceCount?: number;
+  quantityPerResource?: string;
 }
 
 export interface CmvPricingMatchDTO {
