@@ -249,6 +249,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Regra | Origem do risco | Proteção canônica |
 |---|---|---|
 | Decimal pt-BR: vírgula, sem adivinhar milhar | separador único vira casa decimal | `web lib/decimal-input.test.ts` |
+| Menu por id estável: nove seções na ordem do fluxo; a seção da tela atual abre sozinha sem virar preferência; compacto, seções abertas e favoritos gravados por usuário, sem botão; busca só de telas (Ctrl/Cmd+K); drawer no celular | menu de 32 itens com 41% abaixo da dobra (F-01-4) e preferência que não sobrevivia à troca de computador (NAVIGATION-SIDEBAR-01) | `web app/sidebar-navigation.test.tsx`, `api modules/user-preferences/user-preferences.test.ts` |
 | OC em edição: linha, rodapé e documento pela mesma conta (`calcularTotaisOrdemCompra`); "Total (prévia)" com o gravado rotulado só quando difere; ilegível fora da prévia e contado | rodapé mostrava o total gravado ao lado de linhas vivas | `packages/shared/src/purchase-orders.test.ts`, `modules/purchase-orders/purchase-orders.test.ts`, `web pages/purchase-orders/oc-total-previa.test.tsx` |
 | Quantidade não inventa precisão; pequeno vira `≈ 0`, nunca `0` | zero significa "não precisa de material" | `web lib/quantity` |
 | Campo com teto: digitar o valor EXIBIDO significa "usar todo o limite" e envia o valor canônico de 12 casas; digitar menos continua parcial; acima é recusado sem tolerância | F-08-1 — exibição arredondada virou limite de entrada e a tela recusava o próprio número impresso | `web lib/quantity-limit.test.ts`, `web pages/production-orders/consumo-limite-exibido.test.tsx`, `modules/production-orders/consumption.test.ts` |
@@ -319,6 +320,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 |---|---|
 | Papel decide quem ajusta estoque, conta inventário, precifica | `modules/inventory/adjustment-audit.test.ts`, `modules/auth/auth.test.ts`, `modules/pricing/pricing.test.ts` |
 | Leitura escopada por Cliente recusa entidade de outro | `modules/customer-consultation/customer-consultation.test.ts` |
+| Menu, busca de telas e favoritos escondem só a tela cuja leitura a API já recusa ao perfil (Usuários: ADMIN; Precificação: Comercial, Compras, ADMIN); seção sem tela permitida some; preferência de navegação é sempre a do usuário da sessão | `web app/sidebar-navigation.test.tsx`, `api modules/user-preferences/user-preferences.test.ts` |
 
 ## Como as fixtures escrevem data
 

@@ -70,7 +70,18 @@ papel acompanha. Nada de impresso foi tocado nesta rodada. **FORMULATION-TEMPLAT
 a base de cada componente ao salvar, mas não oferece seletor para mudá-la.
 **FORMULATION-TEMPLATE-PURITY-RANGE-01 (P3)** — a API do Modelo aceita pureza 0,
 a da Formulação exige 0 < x ≤ 100; o painel já aplica a regra da Formulação nos
-dois, falta alinhar o servidor do Modelo.
+dois, falta alinhar o servidor do Modelo. Achados de NAVIGATION-SIDEBAR-01,
+idem: **NAV-PAGE-TITLES-01 (P3, UX)** — o menu diz Visão do Cliente, Modelos
+de Formulação, Modelos de Estrutura de Custo, Produtos Acabados e Lotes de
+Produto Acabado; os títulos das telas, a trilha da Consulta e textos de ajuda
+seguem com os nomes antigos ("Consulta de Cliente", "Templates de…",
+"Produtos", "Produto Acabado"). **QUALITY-DOC-WRITE-01 (P3, decisão do PO)** —
+Documentos controlados agora mora em Qualidade, mas registrar e ativar revisão
+continua só ADMIN na API: o perfil Qualidade vê a ação e recebe recusa. Decidir
+se Qualidade grava (mudança de autorização) ou se a tela esconde a ação de
+quem não pode. **NAV-TWO-SEARCHES-01 (P3, UX)** — convivem "Buscar ou
+escanear lote" no topo e "Buscar telas…" na coluna; unificar é assunto da
+busca global de registros, fora desta fase.
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma
@@ -953,7 +964,7 @@ ficou congelada durante a rodada: posição destes itens é decisão do PO.
 | **F-01-5** | CLOSED | `clientes.csv` não tem coluna de data e `MappedCustomer` não tem o campo. "Cadastrado em" mostra a única data que existe |
 | **F-02-3** | DUPLICATE | É o **#4**, aceito com residual pelo PO em 2026-09-04: 117 px medidos então, 131 px agora. Mesma tabela, mesma causa |
 | **F-10-1** | DUPLICATE | É o próprio F-01-1 reconfirmado depois da aprovação do projeto |
-| **F-01-4** | DEFER | A ordem do menu é deliberada e está justificada em `navigation.ts:4` ("cadastro e configuração ficam no fim: não são operação diária"). Mudar é decisão de produto, não correção |
+| **F-01-4** | CLOSED | Fechado por NAVIGATION-SIDEBAR-01 (2026-09-11): com as seções recolhíveis o menu inteiro cabe sem rolar em 1280×720, Cadastros incluído; a ordem do fluxo ficou, por decisão do PO |
 
 **F-11-1 — o rastro que se perde ao clicar no Cliente.** Achado durante
 PROJECT-CUSTOMER-CONTACT-01 (2026-09-09), fora do escopo dela e **não

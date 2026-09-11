@@ -28,7 +28,10 @@
 
   display: grid;
   grid-template-rows: var(--topbar-h) 1fr;
-  grid-template-columns: var(--sidebar-current-w) 1fr;
+  /* `minmax(0, …)`: a trilha nunca cresce com o conteúdo mínimo do masthead
+     (busca de lote + usuário) — em tela estreita ele encolhe, a página não
+     ganha rolagem horizontal. */
+  grid-template-columns: var(--sidebar-current-w) minmax(0, 1fr);
   grid-template-areas:
     "masthead masthead"
     "sidebar  workspace";
@@ -37,15 +40,9 @@
   transition: grid-template-columns var(--transition);
 }
 
-.shell.shell--nav-collapsed {
-  --sidebar-current-w: 0px;
-}
-
-.shell.shell--nav-collapsed .sidebar__header,
-.shell.shell--nav-collapsed .sidebar__nav,
-.shell.shell--nav-collapsed .sidebar__footer {
-  padding-left: 0;
-  padding-right: 0;
+/* Menu compacto (desktop): a coluna encolhe para o trilho de ícones. */
+.shell.shell--compact {
+  --sidebar-current-w: var(--sidebar-compact-w);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -119,6 +116,10 @@
 .masthead__search-wrap {
   position: relative;
   flex: 1;
+  /* Item flex não encolhe abaixo do próprio conteúdo sem isto: em 390px o
+     campo de lote empurrava o masthead para 457px e a página inteira ganhava
+     rolagem horizontal. */
+  min-width: 0;
   max-width: 460px;
 }
 
@@ -154,6 +155,7 @@
 
 .masthead__search input {
   flex: 1;
+  min-width: 0;
   height: 32px;
   border: none;
   background: none;
@@ -270,13 +272,64 @@
   min-height: 0;
 }
 
-/*
- * Vazio hoje — marca, busca e usuario moram no masthead. Existe para o dia em
- * que algo precisar ficar fixo no topo da navegacao sem que o miolo rolavel
- * precise ser reaberto.
- */
+/* Busca de telas: fixa no topo da coluna — só o miolo rola. */
 .sidebar__header {
   flex: 0 0 auto;
+  padding: var(--sp-3) var(--sp-2) var(--sp-2);
+}
+
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 32px;
+  padding: 0 var(--sp-2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--on-dark-3);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+/* O foco aparece na caixa inteira; o anel global dentro dela sobraria. */
+.sidebar-search:focus-within {
+  border-color: var(--on-dark-2);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-search input:focus-visible {
+  box-shadow: none;
+}
+
+.sidebar-search .nav-icon {
+  flex-shrink: 0;
+}
+
+.sidebar-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: none;
+  color: var(--on-dark);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+
+.sidebar-search input::placeholder {
+  color: var(--on-dark-3);
+}
+
+.sidebar-search__kbd {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  color: var(--on-dark-3);
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 .sidebar__nav {
@@ -289,7 +342,7 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--sp-3) var(--sp-2) var(--sp-6);
+  padding: var(--sp-1) var(--sp-2) var(--sp-6);
   /* Barra discreta: pista secundaria, para quem ja esta com o mouse dentro. */
   scrollbar-width: thin;
   scrollbar-color: var(--on-dark-3) transparent;
@@ -324,28 +377,62 @@
 
 .sidebar__footer {
   flex: 0 0 auto;
+  padding: var(--sp-2);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.sidebar__group {
-  margin-bottom: var(--sp-4);
-}
-
-.sidebar__group-title {
-  padding: 0 var(--sp-2) var(--sp-1);
+.sidebar__collapse {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 6px var(--sp-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
   color: var(--on-dark-3);
-  font-size: 10.5px;
-  font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.sidebar__collapse:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--on-dark);
+}
+
+/* Foco de teclado sobre o verde escuro: contorno claro no lugar do anel
+   padrão (`--focus-ring`), cujo verde some neste fundo. Contorno, e não
+   sombra, para não apagar a barra lima do item ativo. */
+.sidebar a:focus-visible,
+.sidebar button:focus-visible {
+  outline: 2px solid var(--on-dark-2);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+.sidebar .is-active:focus-visible {
+  box-shadow: inset 3px 0 0 var(--v-lime);
+}
+
+/* Título que só recebe foco por programa (espiada dos Favoritos). */
+.sidebar__section-title:focus-visible {
+  box-shadow: none;
+}
+
+.sidebar__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .sidebar__link {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--sp-2);
-  padding: var(--sp-2);
+  min-height: 32px;
+  padding: 6px var(--sp-2);
   border-radius: var(--radius-sm);
   color: var(--on-dark-2);
   font-size: 13.5px;
@@ -364,6 +451,272 @@
   background: var(--v-green-800);
   color: var(--on-dark);
   box-shadow: inset 3px 0 0 var(--v-lime);
+}
+
+.sidebar__link .nav-icon,
+.sidebar__group-toggle .nav-icon,
+.sidebar__section-title .nav-icon {
+  flex-shrink: 0;
+  color: var(--on-dark-3);
+}
+
+.sidebar__link.is-active .nav-icon,
+.sidebar__group-toggle.has-active .nav-icon:first-child {
+  color: var(--v-lime);
+}
+
+/* Cabeçalho de grupo: ícone + nome + seta, no mesmo corpo do item. */
+.sidebar__group-toggle,
+.sidebar__section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 32px;
+  margin: 2px 0 0;
+  padding: 6px var(--sp-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--on-dark-2);
+  font-size: 13.5px;
+  font-weight: var(--fw-semibold);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sidebar__group-toggle {
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.sidebar__group-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--on-dark);
+}
+
+.sidebar__chevron {
+  margin-left: auto;
+  transition: transform var(--transition);
+}
+
+.sidebar__group-toggle[aria-expanded="false"] .sidebar__chevron {
+  transform: rotate(-90deg);
+}
+
+.sidebar__section-title:focus {
+  outline: none;
+}
+
+.sidebar__items {
+  margin: 0 0 var(--sp-1);
+  padding: 0;
+  list-style: none;
+}
+
+/* Item de grupo alinha o texto com o nome do grupo, depois do ícone. */
+.sidebar__items .sidebar__link {
+  padding-left: 34px;
+  padding-right: 32px;
+  font-weight: var(--fw-regular);
+}
+
+.sidebar__row {
+  position: relative;
+}
+
+.sidebar__star {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--on-dark-3);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity var(--transition), color var(--transition), background var(--transition);
+}
+
+.sidebar__row:hover .sidebar__star,
+.sidebar__star:focus-visible,
+.sidebar__star.is-on {
+  opacity: 1;
+}
+
+.sidebar__star:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--on-dark);
+}
+
+.sidebar__star.is-on {
+  color: var(--v-lime);
+}
+
+/* Toque não tem hover: a estrela fica sempre à vista, discreta. */
+@media (hover: none) {
+  .sidebar__star {
+    opacity: 1;
+  }
+}
+
+.sidebar__hint {
+  margin: 0 0 var(--sp-2);
+  padding: 0 var(--sp-2) 0 34px;
+  color: var(--on-dark-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-base);
+  white-space: normal;
+}
+
+/* ---- Busca de telas: resultados no lugar do menu ---- */
+
+.sidebar__results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar__result {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--on-dark-2);
+}
+
+.sidebar__result:hover,
+.sidebar__result.is-highlighted {
+  background: var(--v-green-800);
+  color: var(--on-dark);
+  text-decoration: none;
+}
+
+.sidebar__result.is-highlighted {
+  box-shadow: inset 3px 0 0 var(--v-lime);
+}
+
+.sidebar__result-label {
+  font-size: 13.5px;
+  font-weight: var(--fw-medium);
+}
+
+.sidebar__result-path {
+  color: var(--on-dark-3);
+  font-size: var(--fs-xs);
+}
+
+.sidebar__result-label,
+.sidebar__result-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__empty {
+  margin: 0;
+  padding: var(--sp-2);
+  color: var(--on-dark-3);
+  font-size: var(--fs-sm);
+}
+
+/* ---- Trilho compacto: um ícone por grupo, centrado na coluna estreita ---- */
+
+.sidebar--rail .sidebar__header,
+.sidebar--rail .sidebar__nav,
+.sidebar--rail .sidebar__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.sidebar__rail-btn {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--on-dark-3);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.sidebar__rail-btn:hover {
+  background: var(--v-green-800);
+  color: var(--on-dark);
+  text-decoration: none;
+}
+
+.sidebar__rail-btn.is-active {
+  background: var(--v-green-800);
+  color: var(--v-lime);
+  box-shadow: inset 3px 0 0 var(--v-lime);
+}
+
+/*
+ * Espiada do trilho: o menu inteiro por cima do conteúdo. A coluna estreita
+ * continua no lugar, então a tela de trabalho não salta.
+ */
+.sidebar.is-peek {
+  position: fixed;
+  top: var(--topbar-h);
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  width: var(--sidebar-w);
+  box-shadow: var(--shadow-modal);
+  animation: sidebar-peek-in 120ms ease;
+}
+
+@keyframes sidebar-peek-in {
+  from {
+    opacity: 0.6;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.sidebar-peek-backdrop {
+  position: fixed;
+  inset: var(--topbar-h) 0 0 0;
+  z-index: 55;
+  background: rgba(8, 42, 32, 0.2);
+}
+
+.sidebar-tooltip {
+  position: fixed;
+  z-index: 70;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--v-green-950);
+  color: var(--on-dark);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-1);
+  transform: translateY(-50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar.is-peek {
+    animation: none;
+  }
 }
 
 .sidebar__tag {
@@ -510,7 +863,8 @@
 
   /* Sidebar vira overlay sob demanda — nao espreme o workspace. */
   .shell {
-    grid-template-columns: 1fr;
+    --sidebar-current-w: 0px;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "masthead"
       "workspace";
@@ -528,7 +882,7 @@
     transition: transform var(--transition);
   }
 
-  .shell:not(.shell--nav-collapsed) .sidebar {
+  .shell.shell--nav-open .sidebar {
     transform: translateX(0);
   }
 
