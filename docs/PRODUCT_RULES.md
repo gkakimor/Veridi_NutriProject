@@ -335,11 +335,17 @@ user to clear them to edit unrelated fields.
 
 ## Printing policy
 
-`window.print()` stays the output mechanism (print or save as PDF, in the
-browser — there is no PDF engine in the backend). The **source**, however,
-is always a dedicated print view: the operational screen itself is never
-printed, so paper never carries sidebar, toolbar, filters, pagination or
-buttons.
+Official documents and reports are **real PDF files** generated in the
+browser (`@react-pdf/renderer`, `apps/web/src/pdf`) from the same
+authenticated API data the screen uses — there is no PDF engine in the
+backend and no public document URL. The file is A4, with a controlled
+header, running header and footer ("Página X de Y", generation stamp in the
+operation's time zone) and no browser header, footer, title or URL. The
+document screen offers **Baixar PDF** (direct download, file named after the
+document code) and **Imprimir** (prints that same file). The **source** is
+always a dedicated document route: the operational screen itself is never
+printed. `window.print()` remains only for physical labels (lot and sample
+labels) — PDF-DOCUMENT-SYSTEM-01.
 
 | Content | Output |
 | --- | --- |
@@ -2174,9 +2180,9 @@ the official roadmap ordering.
   - transactional document → print/PDF;
   - traceability → print/PDF;
   - editing surface → no export.
-- FAST MVP implements printing as **print-oriented HTML +
-  `window.print()`** — no PDF library, consistent with the existing lot
-  label print route.
+- Print/PDF output is a **real PDF generated in the browser**
+  (`@react-pdf/renderer`, see Printing policy); only physical labels keep
+  `window.print()`.
 - CSV export always respects the currently applied filters and exports the
   **complete filtered result**, not just the visible page.
 
@@ -2247,9 +2253,9 @@ the official roadmap ordering.
   deterministic.
 - User-provided text is neutralized against spreadsheet formula injection
   on export only — the stored value is never altered.
-- PDF is produced by the browser: print-oriented HTML plus `@media print`
-  and `window.print()`. FAST MVP has no backend PDF engine, no headless
-  browser and no stored PDFs.
+- PDF is generated in the browser by `@react-pdf/renderer` (real A4 file,
+  deterministic layout — see Printing policy). FAST MVP has no backend PDF
+  engine, no headless browser and no stored PDFs.
 - Printed reports carry the whole filtered result, plus the report name,
   the filters actually applied and the generation timestamp. No user name
   is invented while there is no authenticated identity.

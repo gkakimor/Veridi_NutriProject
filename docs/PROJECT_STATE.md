@@ -1024,6 +1024,46 @@ mesmo painel (`pages/formulations/AjustesDaQuantidade.tsx`) serve o Modelo.
 físico por unidade, que já estão na linha. Impressos e PDF não foram tocados
 (branch paralela).
 
+## Documentos oficiais em PDF real (PDF-DOCUMENT-SYSTEM-01, 2026-09-11)
+
+Os 22 impressos A4 deixaram de ser página HTML + `window.print()` — que saía
+com URL, data e título do navegador e com a paginação dele. Agora são PDF
+real, gerado no navegador pelo `@react-pdf/renderer` sobre a mesma API
+autenticada: sem endpoint novo, sem Chromium no servidor, motor carregado sob
+demanda. A fundação vive em `apps/web/src/pdf` — `PdfDocument` (A4,
+cabeçalho, cabeçalho corrido, rodapé com "Página X de Y" e "Gerado em" no
+fuso da operação), seções, grade por significado, tabela com cabeçalho
+repetido e linha que não se divide, bloco de totais. A tela do documento
+mostra o próprio arquivo, com "Baixar PDF" (nome do código real) e
+"Imprimir"; os botões das telas viraram "PDF". O Orçamento é o documento de
+referência. A quantidade de recursos (§87) chega aos PDFs de custo; pureza e
+overage da Estrutura saem como registro, porque o DTO não traz modo nem
+marcas. Etiquetas de lote e de amostra seguem com `window.print()` —
+impressão física. **Zero migration**, nenhuma regra de negócio mudou.
+
+Findings de dado registrados, sem correção nesta capability:
+- OC imprime como "Valor previsto" a soma só das linhas com preço.
+- Preço previsto da OC e do Recebimento (DECIMAL 20,8) sai com até 4 casas;
+  custo unitário da OP, com 2.
+- Pedido fala em "reservado", mas o dado é `shippedQuantity`.
+- Folha de Receita não marca rascunho em OP DRAFT/PLANNED.
+- FO-03 lista todos os lotes (sem `onlyPending`), corta em 100 e ignora
+  vencimento; FO-04 imprime reserva substituída e "Qtd. separar" é
+  `quantity`, não o saldo.
+- Enum cru (FO-01; qualidade em R-05/R-09) e filtros crus nos relatórios;
+  R-18 "Custo/1.000" diverge do CSV; R-14 não imprime reservas; CSV sem
+  milhar nem R$.
+- Unidade no singular nos custos ("18,5 hora").
+- Instante via `formatDate`, no fuso do navegador: FO, R-06, R-14,
+  Recebimento e Precificação.
+- CMV aberto sem `referenceDate` na URL assume a data de hoje em UTC.
+- Nenhum DTO impresso traz o modo nem as marcas de ajuste da Formulação; o da
+  Estrutura traz só os valores de pureza e overage, e Folha de Receita, OP,
+  CMV e Cálculo não trazem nem isso.
+
+Três suítes E2E passaram a ler o PDF (`scripts/e2e/lib/pdf.mjs`) e ainda não
+rodaram.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
