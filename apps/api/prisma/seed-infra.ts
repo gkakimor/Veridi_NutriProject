@@ -1,5 +1,4 @@
 import { PrismaClient } from "@prisma/client";
-import type { UomDimension } from "@prisma/client";
 import { USER_CODE_PREFIX } from "@veridi/shared";
 import { hashPassword } from "../src/lib/password.js";
 import { nextSequenceCode } from "../src/lib/sequence-code.js";
@@ -18,48 +17,35 @@ import { nextSequenceCode } from "../src/lib/sequence-code.js";
  *
  * 1. UNIDADES DE MEDIDA. Não há tela para cadastrá-las e o schema as trata
  *    como tabela de referência: item, formulação e estoque apontam para
- *    `code`. Sem elas nenhum cadastro salva.
+ *    `code`. Sem elas nenhum cadastro salva. O catálogo nasce da migration
+ *    `20260925093012_reference_units_of_measure`, em QUALQUER instalação —
+ *    produção inclusive, que não roda seed. Este seed só confere que ele
+ *    está lá: uma segunda lista aqui seria uma segunda fonte da verdade.
  * 2. UM USUÁRIO. Sem login não há interface para usar, e criar o primeiro
  *    usuário pela interface exigiria estar logado.
  *
- * Sequences de código (CLI-, PROD-, OP-…) não precisam de seed: nascem na
- * primeira chamada de `nextSequenceCode`.
+ * Sequences de código (CLI-, PROD-, OP-…) não precisam de seed: as
+ * migrations as criam, e o primeiro `nextSequenceCode` entrega o 000001.
  *
  *   pnpm exec dotenv -e .env -- pnpm --filter @veridi/api exec tsx prisma/seed-infra.ts
  */
 
 const prisma = new PrismaClient();
 
-interface UnidadeSeed {
-  code: string;
-  label: string;
-  dimension: UomDimension;
-  toBaseFactor: string;
-}
+/** O catálogo que a migration de referência cria. Conferido, nunca semeado aqui. */
+const UNIDADES_DE_REFERENCIA = ["mg", "g", "kg", "un", "mL", "L"];
 
-/** As mesmas de `seed.ts` — a lista é a tabela de referência, não exemplo. */
-const unidades: UnidadeSeed[] = [
-  { code: "mg", label: "Miligrama", dimension: "MASS", toBaseFactor: "0.001" },
-  { code: "g", label: "Grama", dimension: "MASS", toBaseFactor: "1" },
-  { code: "kg", label: "Quilograma", dimension: "MASS", toBaseFactor: "1000" },
-  { code: "un", label: "Unidade", dimension: "COUNT", toBaseFactor: "1" },
-  { code: "mL", label: "Mililitro", dimension: "VOLUME", toBaseFactor: "0.001" },
-  { code: "L", label: "Litro", dimension: "VOLUME", toBaseFactor: "1" },
-];
-
-async function semearUnidades(): Promise<number> {
-  for (const unidade of unidades) {
-    await prisma.unitOfMeasure.upsert({
-      where: { code: unidade.code },
-      update: {
-        label: unidade.label,
-        dimension: unidade.dimension,
-        toBaseFactor: unidade.toBaseFactor,
-      },
-      create: unidade,
-    });
+async function conferirUnidades(): Promise<number> {
+  const existentes = new Set(
+    (await prisma.unitOfMeasure.findMany({ select: { code: true } })).map((u) => u.code),
+  );
+  const faltam = UNIDADES_DE_REFERENCIA.filter((code) => !existentes.has(code));
+  if (faltam.length > 0) {
+    throw new Error(
+      `Catálogo de unidades sem ${faltam.join(", ")}: aplique as migrations antes deste seed.`,
+    );
   }
-  return unidades.length;
+  return existentes.size;
 }
 
 /**
@@ -95,7 +81,7 @@ async function semearUsuario(): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const quantasUnidades = await semearUnidades();
+  const quantasUnidades = await conferirUnidades();
   const email = await semearUsuario();
 
   /*
@@ -110,7 +96,7 @@ async function main(): Promise<void> {
     prisma.product.count(),
   ]);
 
-  console.log(`Unidades de medida: ${quantasUnidades}.`);
+  console.log(`Unidades de medida (da migration): ${quantasUnidades}.`);
   console.log(`Usuário de acesso: ${email}.`);
   console.log(
     `Dado de negócio: clientes ${clientes}, fornecedores ${fornecedores}, ` +
