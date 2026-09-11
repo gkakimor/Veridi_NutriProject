@@ -33,6 +33,16 @@ const componentSchema = z.object({
   supplyResponsibility: z.enum(["VERIDI", "CUSTOMER"]).optional(),
   purityPercentApplied: percentualTecnicoDoTemplate.nullish(),
   overagePercent: percentualTecnicoDoTemplate.nullish(),
+  /*
+   * A MESMA configuração técnica do componente da Formulação real (§52): o que
+   * a quantidade significa e quais ajustes ela autoriza. Sem isto o Modelo
+   * guardava pureza e overage mas não a intenção — e aplicar o Modelo sempre
+   * produzia física direta. Ausente = física direta sem ajuste, que é o que
+   * todo Modelo anterior a estes campos significa.
+   */
+  quantityMode: z.enum(["PHYSICAL_DIRECT", "THEORETICAL_WITH_ADJUSTMENTS"]).optional(),
+  applyPurityAdjustment: z.boolean().optional(),
+  applyOverageAdjustment: z.boolean().optional(),
   notes: optionalNullableText(500),
 });
 

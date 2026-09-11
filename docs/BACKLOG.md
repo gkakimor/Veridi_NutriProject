@@ -62,6 +62,15 @@ CUSTOMER-LIST-DEFAULT-E2E-01 e CUSTOMER-FACTS-LOAD-01. Achado de
 COST-RESOURCE-MULTIPLIER-01, idem: **COST-RESOURCE-EDIT-01 (P3, UX)** — a
 linha de recurso da Estrutura de Custos não se edita; trocar a quantidade de
 recursos ou o tempo é remover e declarar de novo, como já era com as horas.
+Achados de FORMULATION-ADJUSTMENTS-UX-01, idem: **FORMULATION-PRINT-ADJUSTMENTS-01
+(para a branch de PDF)** — nenhum impresso lê o modo da quantidade, a pureza,
+o overage ou o físico por unidade; a tela passou a mostrar os ajustes resumidos
+na linha e "Equivalente estoque" separado de "Físico / unidade". Decidir se o
+papel acompanha. Nada de impresso foi tocado nesta rodada. **FORMULATION-TEMPLATE-BASIS-EDIT-01 (P3)** — a tela do Modelo preserva
+a base de cada componente ao salvar, mas não oferece seletor para mudá-la.
+**FORMULATION-TEMPLATE-PURITY-RANGE-01 (P3)** — a API do Modelo aceita pureza 0,
+a da Formulação exige 0 < x ≤ 100; o painel já aplica a regra da Formulação nos
+dois, falta alinhar o servidor do Modelo.
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma

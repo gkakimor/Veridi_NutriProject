@@ -2768,16 +2768,28 @@ button.help-flow__box:focus-visible {
   border-top: 1px solid var(--line);
 }
 
+/* Aplicar / Cancelar: o fim explícito da edição de um ajuste. */
+.ajuste-quantidade__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--line);
+}
+
 /*
  * Tabela de componentes da Formulação — densidade MEDIDA, não estimada.
  *
  * Antes desta rodada: 1681px em qualquer largura. Em 1440×900 (área útil de
  * 1088px) ajustes, equivalente e físico nasciam fora da tela; em 1280×800 a
- * unidade também. Sete colunas em vez de dez: a unidade de estoque mora sob o
- * item, quantidade e unidade dividem a célula, equivalente e físico dividem
- * outra, cada um com rótulo. Cabeçalho quebra linha; campo não passa da
- * coluna. Continua tabela: editar formulação grande é o uso principal, e
- * cartão por componente mataria isso.
+ * unidade também. A unidade de estoque mora sob o item e quantidade e unidade
+ * dividem a célula. Equivalente e físico voltaram a ter UMA coluna cada
+ * (FORMULATION-ADJUSTMENTS-UX-01): empilhados na mesma célula, o número
+ * ficava longe do cabeçalho que o nomeia. Oito colunas cabem em 1088px com os
+ * mínimos abaixo. Cabeçalho quebra linha; campo não passa da coluna. No
+ * desktop continua tabela — editar formulação grande é o uso principal; em
+ * tela estreita vira cartão (fim desta seção).
  */
 .table--formulacao th,
 .table--formulacao td {
@@ -2797,28 +2809,34 @@ button.help-flow__box:focus-visible {
  * rótulo cortado também. Com mínimos, a tabela cabe em 1440 e 1920 e, em
  * 1280, rola de lado com a ação fixa e cada célula legível.
  */
+/* Item leva a sobra da largura; quantidade e métricas ficam compactas. */
 .table--formulacao .col-item {
-  min-width: 180px;
+  min-width: 200px;
+  width: 26%;
 }
 
 .table--formulacao .col-base {
-  min-width: 150px;
+  min-width: 144px;
 }
 
 .table--formulacao .col-fornecimento {
-  min-width: 100px;
+  min-width: 88px;
 }
 
 .table--formulacao .col-quantidade {
-  min-width: 168px;
+  min-width: 150px;
 }
 
 .table--formulacao .col-ajustes {
-  min-width: 160px;
+  min-width: 144px;
 }
 
-.table--formulacao .col-estoque {
-  min-width: 150px;
+/* Equivalente e físico: cada número na SUA coluna, sob o seu cabeçalho,
+   alinhado à direita, com a unidade colada ao valor. */
+.table--formulacao .col-equivalente,
+.table--formulacao .col-fisico {
+  min-width: 96px;
+  text-align: right;
 }
 
 .table--formulacao td select,
@@ -2855,18 +2873,10 @@ button.help-flow__box:focus-visible {
   opacity: 1;
 }
 
-/* Equivalente e físico: dois números com rótulo, alinhados à direita. */
-.table--formulacao .estoque-valor {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sp-2);
+/* O número e a unidade não se separam em duas linhas. */
+.table--formulacao .estoque-valor__numero {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-
-.table--formulacao .estoque-valor__rotulo {
-  font-size: var(--fs-xs);
-  color: var(--ink-2);
 }
 
 /* Mensagem de erro sob o campo, dentro da coluna — prosa, não célula. */
@@ -2925,6 +2935,83 @@ button.help-flow__box:focus-visible {
 .ajuste-quantidade__descricao {
   font-size: var(--fs-xs);
   color: var(--ink-2);
+}
+
+/*
+ * Tela estreita: a tabela de componentes vira CARTÃO por componente.
+ *
+ * Oito colunas espremidas em 390px não se leem. No mesmo corte em que os
+ * formulários do produto passam a uma coluna, cada valor técnico ganha o seu
+ * rótulo (`data-label`) numa linha própria, o item fica no topo e o painel de
+ * ajustes continua logo abaixo do cartão. Nada de rolagem lateral.
+ */
+@media (max-width: 720px) {
+  .table--formulacao,
+  .table--formulacao tbody,
+  .table--formulacao tr,
+  .table--formulacao td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .table--formulacao thead {
+    display: none;
+  }
+
+  .table--formulacao tbody tr {
+    padding: var(--sp-2) 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .table--formulacao td {
+    border: 0;
+    white-space: normal;
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  /* Rótulo à esquerda, valor à direita — o número continua sob o seu nome. */
+  .table--formulacao td[data-label] {
+    display: grid;
+    grid-template-columns: minmax(7.5rem, 40%) minmax(0, 1fr);
+    column-gap: var(--sp-3);
+    align-items: baseline;
+  }
+
+  .table--formulacao td[data-label]::before {
+    content: attr(data-label);
+    grid-column: 1;
+    font-size: var(--fs-xs);
+    color: var(--ink-2);
+    text-align: left;
+  }
+
+  .table--formulacao td[data-label] > * {
+    grid-column: 2;
+  }
+
+  /*
+   * A ação da linha deixa de ser coluna fixa: fica no fim do cartão. O reset
+   * vale para toda última célula — a do painel de ajustes também é a última da
+   * sua linha, e o `width: 1%` da coluna fixa a espremia em 16px (medido no
+   * smoke em 390px).
+   */
+  .table--formulacao td:last-child,
+  .table--formulacao th:last-child {
+    position: static;
+    width: 100%;
+    white-space: normal;
+    box-shadow: none;
+  }
+
+  .table--formulacao td.col-acoes {
+    text-align: right;
+  }
+
+  .ajuste-quantidade__corpo {
+    min-width: 0;
+  }
 }
 
 /* Fonte do custo por material (cálculo padrão): automático × referência

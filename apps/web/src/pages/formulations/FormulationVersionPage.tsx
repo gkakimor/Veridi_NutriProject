@@ -18,7 +18,6 @@ import {
   FORMULATION_CALCULATION_MODE_LABELS,
   FORMULATION_COMPONENT_BASES,
   FORMULATION_COMPONENT_BASIS_LABELS,
-  FORMULATION_QUANTITY_MODE_DESCRIPTIONS,
   FORMULATION_QUANTITY_MODE_LABELS,
   FORMULATION_VERSION_STATUS_LABELS,
   INDUSTRIAL_MATERIAL_COST_SOURCE_LABELS,
@@ -56,6 +55,15 @@ import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
+import {
+  PainelDeAjustes,
+  errosDosAjustes,
+  idDoBotaoAplicar,
+  normalizarAjustes,
+  resumoDosAjustes,
+  useAjustesEmEdicao,
+} from "./AjustesDaQuantidade";
+import type { AjustesDaQuantidade, CampoDeAjuste } from "./AjustesDaQuantidade";
 
 interface ItemOption {
   id: string;
@@ -166,6 +174,8 @@ type RascunhoVersao = {
   dosesPerPackage: string;
   notes: string;
   components: ComponentRow[];
+  /** Ajustes configurados e ainda não aplicados, por linha. */
+  ajustesEmEdicao?: Record<string, AjustesDaQuantidade>;
 };
 
 /**
@@ -233,6 +243,17 @@ function rowFromDTO(component: FormulationVersionDTO["components"][number]): Com
   };
 }
 
+/** A configuração de ajustes que a linha tem hoje — é dela que o painel parte. */
+function ajustesDaLinha(row: ComponentRow): AjustesDaQuantidade {
+  return {
+    quantityMode: row.quantityMode,
+    purityPercentApplied: row.purityPercentApplied,
+    overagePercent: row.overagePercent,
+    applyPurityAdjustment: row.applyPurityAdjustment,
+    applyOverageAdjustment: row.applyOverageAdjustment,
+  };
+}
+
 /**
  * Validação por CAMPO e por LINHA, antes de qualquer chamada.
  *
@@ -278,19 +299,8 @@ function errosDaLinha(row: ComponentRow): Partial<Record<CampoDoComponente, stri
   }
   if (!row.unitCode) erros.unitCode = `${nome} — Unidade é obrigatória.`;
 
-  if (row.purityPercentApplied.trim() !== "") {
-    const pureza = parseDecimalInput(row.purityPercentApplied);
-    if (pureza === null) erros.purityPercentApplied = `${nome} — ${mensagemDecimalInvalido("Pureza %")}`;
-    else if (Number(pureza) <= 0 || Number(pureza) > 100) {
-      erros.purityPercentApplied = `${nome} — Pureza % deve ser maior que zero e no máximo 100.`;
-    }
-  }
-  if (row.overagePercent.trim() !== "") {
-    const overage = parseDecimalInput(row.overagePercent);
-    if (overage === null) erros.overagePercent = `${nome} — ${mensagemDecimalInvalido("Overage %")}`;
-    else if (Number(overage) < 0) erros.overagePercent = `${nome} — Overage % não pode ser negativo.`;
-  }
-  return erros;
+  // Pureza e overage: as mesmas regras do painel de ajustes, num lugar só.
+  return { ...erros, ...errosDosAjustes(ajustesDaLinha(row), nome) };
 }
 
 /** Cor do selo da origem do custo: o que falta ou exige decisão avisa; o resto informa. */
@@ -473,14 +483,14 @@ export function FormulationVersionPage() {
    * eliminar.
    */
   /*
-   * Quais linhas tem o painel de ajustes aberto.
+   * Quais linhas tem o painel de ajustes aberto, e o RASCUNHO de cada uma.
    *
-   * Era um `<details>` dentro da celula, e o painel herdava a rolagem
-   * horizontal da tabela: numa tela de 1500px o aviso de dupla correcao ficava
-   * 20% visivel, o resto atras da borda. O painel agora e uma LINHA propria,
-   * de largura inteira, entao nao depende de rolar a tabela para o lado.
+   * O painel e uma LINHA propria, de largura inteira: dentro da celula ele
+   * herdava a rolagem horizontal da tabela e o aviso de dupla correcao ficava
+   * 20% visivel. Mexer nele muda o rascunho, nunca a linha — so "Aplicar
+   * ajustes" leva a configuracao para o componente (FORMULATION-ADJUSTMENTS-UX-01).
    */
-  const [ajustesAbertos, setAjustesAbertos] = useState<Record<string, boolean>>({});
+  const ajustes = useAjustesEmEdicao();
 
   /*
    * O campo que a próxima renderização deve focar.
@@ -634,7 +644,16 @@ export function FormulationVersionPage() {
    * pediu, porque sem isso o item criado voltaria para a primeira.
    */
   const origem = useContextualCreateOrigin<RascunhoVersao>({
-    collectDraft: () => ({ basisQuantity, calculationMode, dosesPerPackage, notes, components }),
+    collectDraft: () => ({
+      basisQuantity,
+      calculationMode,
+      dosesPerPackage,
+      notes,
+      components,
+      // Ajuste configurado e não aplicado vai junto: sair para cadastrar um
+      // item não pode descartar em silêncio o que estava em edição.
+      ajustesEmEdicao: ajustes.rascunhos,
+    }),
     restoreDraft: (draft) => {
       // Antes de qualquer `setState`: a carga da versão está a caminho.
       rascunhoRestaurado.current = true;
@@ -645,6 +664,9 @@ export function FormulationVersionPage() {
       const linhas = Array.isArray(draft.components) ? draft.components : [];
       absorverChaves(linhas);
       setComponents(linhas);
+      if (draft.ajustesEmEdicao && typeof draft.ajustesEmEdicao === "object") {
+        ajustes.restaurar(draft.ajustesEmEdicao);
+      }
     },
     onCreated: (result, record) => {
       const chave = lerChaveDaLinha(record.context);
@@ -816,31 +838,89 @@ export function FormulationVersionPage() {
   }
 
   /**
-   * Troca o modo da linha e desliga os ajustes ao sair do modo teórico.
+   * "Aplicar ajustes": o rascunho vira a linha, a prévia segue e o painel
+   * recolhe.
    *
-   * As caixas de pureza e overage só existem na tela sob
-   * `THEORETICAL_WITH_ADJUSTMENTS`. Guardar `applyPurityAdjustment: true`
-   * debaixo de `PHYSICAL_DIRECT` seria estado invisível: o cálculo ignora a
-   * marca hoje, e voltar o modo depois religaria a correção sem ninguém ter
-   * marcado nada nesta sessão — a autorização silenciosa que esta capability
-   * existe para acabar.
-   *
-   * Desmarcar é a perda recuperável: quem voltar ao modo teórico vê as caixas
-   * vazias e remarca. O contrário não se vê.
+   * A normalização é a do domínio — sair do modo teórico desliga as marcas
+   * (§52): guardar `applyPurityAdjustment: true` sob `PHYSICAL_DIRECT` seria
+   * estado invisível, e voltar o modo depois religaria a correção sem ninguém
+   * ter marcado nada. A recusa anterior dos percentuais desta linha sai junto,
+   * porque era sobre o valor que acabou de ser trocado.
    */
-  function trocarModo(key: string, modo: FormulationComponentQuantityMode) {
-    setComponents((prev) =>
-      prev.map((row) =>
-        row.key === key
-          ? {
-              ...row,
-              quantityMode: modo,
-              ...(modo === "PHYSICAL_DIRECT"
-                ? { applyPurityAdjustment: false, applyOverageAdjustment: false }
-                : {}),
-            }
-          : row,
-      ),
+  function aplicarAjustes(row: ComponentRow) {
+    const rascunho = ajustes.rascunhoDe(row.key);
+    if (!rascunho) return;
+    const nome = row.itemCode || row.itemName || "Componente";
+    if (Object.keys(errosDosAjustes(rascunho, nome)).length > 0) return;
+    const aplicado = normalizarAjustes(rascunho);
+    setComponents((prev) => prev.map((r) => (r.key === row.key ? { ...r, ...aplicado } : r)));
+    setFieldErrors((prev) => {
+      const proximo = { ...prev };
+      for (const campo of CAMPOS_DO_PAINEL) delete proximo[chaveDeErro(row.key, campo)];
+      return proximo;
+    });
+    ajustes.fechar(row.key);
+  }
+
+  /** Primeira linha com ajuste configurado e ainda não aplicado. */
+  function ajustePendente(): ComponentRow | undefined {
+    return components.find((row) => ajustes.alterado(row.key, ajustesDaLinha(row)));
+  }
+
+  /**
+   * Salvar e ativar esperam o ajuste aberto ser aplicado ou cancelado.
+   *
+   * Gravar sem ele deixaria a pessoa achando que o que está no painel foi
+   * junto; descartá-lo seria perder o que ela acabou de configurar. A tela diz
+   * qual linha e leva o foco até o "Aplicar ajustes" dela.
+   */
+  function bloqueadoPorAjustePendente(acao: "salvar" | "ativar"): boolean {
+    const pendente = ajustePendente();
+    if (!pendente) return false;
+    const nome = pendente.itemCode || pendente.itemName || "componente";
+    setError(`Aplique ou cancele os ajustes de ${nome} antes de ${acao}.`);
+    ajustes.avisar(pendente.key);
+    setFocoPendente(idDoBotaoAplicar(pendente.key));
+    return true;
+  }
+
+  /**
+   * A conta do físico da linha — ou do rascunho aberto —, pelo motor canônico.
+   *
+   * O painel serve para CONFIGURAR: quantidade informada e físico por unidade
+   * já estão nas colunas da linha, e repeti-los aqui só competia com o que
+   * importa. Fica a explicação da conta e, com alteração por aplicar, o físico
+   * que ela vai dar.
+   */
+  function explicacaoDoFisico(linha: ComponentRow, alterado: boolean) {
+    const doses = dosesPerPackage.trim() === "" ? null : Number(dosesPerPackage);
+    const previa = isDraft ? previaDoComponente(linha, basisQuantity, doses, units) : null;
+    const fisico = previa?.fisico ?? (alterado ? null : linha.physicalPerUnit);
+    if (fisico === null) return null;
+    return (
+      <div className="ajuste-quantidade__resultado">
+        {alterado && (
+          <span>
+            Com estes ajustes, físico por unidade:{" "}
+            <strong>
+              {formatQuantity(fisico)} {linha.stockUnitCode}
+            </strong>{" "}
+            — aplique para usar.
+          </span>
+        )}
+        <CalcHint
+          label="Quantidade física"
+          operandos={operandosDoFisico(linha, basisQuantity, doses, units)}
+          resultado={`${formatQuantity(fisico)} ${linha.stockUnitCode}`}
+          nota={
+            linha.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS"
+              ? "Calculado pelo mesmo motor que a Ordem de Produção e o CMV usam."
+              : linha.purityPercentApplied || linha.overagePercent
+                ? "Quantidade física informada. Pureza e overage estão registrados, não aplicados."
+                : "Quantidade física informada."
+          }
+        />
+      </div>
     );
   }
 
@@ -980,9 +1060,7 @@ export function FormulationVersionPage() {
     for (const row of components) {
       for (const campo of CAMPOS_DO_COMPONENTE) {
         if (!erros[chaveDeErro(row.key, campo)]) continue;
-        if (CAMPOS_DO_PAINEL.includes(campo)) {
-          setAjustesAbertos((prev) => ({ ...prev, [row.key]: true }));
-        }
+        if (CAMPOS_DO_PAINEL.includes(campo)) ajustes.abrir(row.key, ajustesDaLinha(row));
         setFocoPendente(idDoCampo(row.key, campo));
         return;
       }
@@ -1031,6 +1109,7 @@ export function FormulationVersionPage() {
 
   async function handleSaveDraft() {
     if (!versionId || saving) return;
+    if (bloqueadoPorAjustePendente("salvar")) return;
     setSaving(true);
     try {
       await salvarRascunho();
@@ -1045,6 +1124,7 @@ export function FormulationVersionPage() {
    */
   async function abrirDialogoDeAtivacao() {
     if (!versionId) return;
+    if (bloqueadoPorAjustePendente("ativar")) return;
     setActivateDialogOpen(true);
     setImpact(null);
     try {
@@ -1347,12 +1427,13 @@ export function FormulationVersionPage() {
         >
           <div className="table-container">
             {/*
-              Sete colunas, não dez. Medido em 1440×900 antes desta rodada: a
-              tabela tinha 1681px numa área de 1088px, e três colunas — ajustes,
-              equivalente e físico — nasciam fora da tela. A unidade de estoque
-              passou a morar sob o item; quantidade e unidade dividem a célula;
-              equivalente e físico dividem outra, cada um com o seu rótulo. A
-              ação da linha continua fixa à direita.
+              Oito colunas. A unidade de estoque mora sob o item e quantidade e
+              unidade dividem a célula — foi o que trouxe a tabela de 1681px
+              para dentro dos 1088px de 1440×900. Equivalente e físico têm cada
+              um a SUA coluna: empilhados numa célula só, o número ficava longe
+              do cabeçalho que o nomeia. A ação da linha continua fixa à
+              direita; em tela estreita a linha vira cartão, com o rótulo de
+              cada valor (`data-label`).
             */}
             <table className="table table--sticky-actions table--formulacao">
               <thead>
@@ -1366,10 +1447,11 @@ export function FormulationVersionPage() {
                   <th className="col-ajustes">
                     Ajustes da quantidade <Dica id="formulacao.pureza" />
                   </th>
-                  <th className="col-estoque is-numeric">
-                    Equivalente estoque <Dica id="formulacao.equivalenteEstoque" /> e físico por unidade
+                  <th className="col-equivalente is-numeric">
+                    Equivalente estoque <Dica id="formulacao.equivalenteEstoque" />
                   </th>
-                  {isDraft && <th aria-hidden="true" />}
+                  <th className="col-fisico is-numeric">Físico / unidade</th>
+                  {isDraft && <th className="col-acoes" aria-hidden="true" />}
                 </tr>
               </thead>
               <tbody>
@@ -1388,7 +1470,9 @@ export function FormulationVersionPage() {
                         units,
                       )
                     : null;
-                  const aberto = ajustesAbertos[row.key] === true;
+                  const aberto = ajustes.aberto(row.key);
+                  const configuracao = ajustesDaLinha(row);
+                  const rascunhoDeAjuste = ajustes.rascunhoDe(row.key) ?? configuracao;
                   /*
                     Rascunho e versão gravada mostram a MESMA grandeza: teórico
                     e físico por unidade acabada, na unidade de estoque. O
@@ -1416,6 +1500,12 @@ export function FormulationVersionPage() {
                         {erroDe(campo)}
                       </p>
                     ) : null;
+                  /** Recusa já registrada para os percentuais — o painel a mostra no campo. */
+                  const errosDoPainel: Partial<Record<CampoDeAjuste, string>> = {};
+                  for (const campo of ["purityPercentApplied", "overagePercent"] as const) {
+                    const mensagem = erroDe(campo);
+                    if (mensagem) errosDoPainel[campo] = mensagem;
+                  }
                   return (
                   <Fragment key={row.key}>
                   <tr className={CAMPOS_DO_COMPONENTE.some((campo) => erroDe(campo)) ? "is-invalid" : undefined}>
@@ -1451,7 +1541,7 @@ export function FormulationVersionPage() {
                         {!row.itemActive && " · item inativo, mantido pelo histórico"}
                       </span>
                     </td>
-                    <td className="col-base">
+                    <td className="col-base" data-label="Base">
                       {isDraft ? (
                         <select
                           aria-label="Base de cálculo do componente"
@@ -1473,7 +1563,7 @@ export function FormulationVersionPage() {
                         FORMULATION_COMPONENT_BASIS_LABELS[row.basis]
                       )}
                     </td>
-                    <td className="col-fornecimento">
+                    <td className="col-fornecimento" data-label="Fornecimento">
                       {isDraft ? (
                         <select
                           aria-label="Responsabilidade de fornecimento"
@@ -1495,7 +1585,7 @@ export function FormulationVersionPage() {
                         SUPPLY_RESPONSIBILITY_LABELS[row.supplyResponsibility]
                       )}
                     </td>
-                    <td className="col-quantidade is-numeric">
+                    <td className="col-quantidade is-numeric" data-label="Quantidade · unidade">
                       {isDraft ? (
                         <>
                           <div className="quantidade-unidade">
@@ -1551,34 +1641,19 @@ export function FormulationVersionPage() {
                       A célula guarda só o RESUMO do estado; o painel abre numa
                       linha própria, logo abaixo.
                     */}
-                    <td className="col-ajustes">
+                    <td className="col-ajustes" data-label="Ajustes">
                       <button
                         type="button"
                         className="ajuste-quantidade__botao"
                         aria-expanded={aberto}
                         aria-controls={`ajustes-${row.key}`}
-                        onClick={() =>
-                          setAjustesAbertos((prev) => ({ ...prev, [row.key]: !prev[row.key] }))
-                        }
+                        onClick={() => ajustes.alternar(row.key, configuracao)}
                       >
                         <span aria-hidden="true">{aberto ? "▾" : "▸"}</span>{" "}
-                        {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS"
-                          ? row.applyPurityAdjustment || row.applyOverageAdjustment
-                            ? `Calculada${row.applyPurityAdjustment ? " · pureza" : ""}${row.applyOverageAdjustment ? " · overage" : ""}`
-                            : /*
-                                Modo teórico sem ajuste marcado NÃO calcula nada.
-                                Dizer só "Calculada" aqui afirmava uma correção
-                                que não está ligada — o erro contrário ao antigo,
-                                e igualmente silencioso.
-                              */
-                              "Calculada · nenhum ajuste marcado"
-                          : "Física informada"}
-                        {(row.purityPercentApplied || row.overagePercent) &&
-                          row.quantityMode === "PHYSICAL_DIRECT" && (
-                            <span className="ajuste-quantidade__nota">
-                              {" · registrado, não aplicado"}
-                            </span>
-                          )}
+                        {/* O resumo do que a LINHA tem: o rascunho aberto só chega
+                            aqui depois de "Aplicar ajustes". Modo teórico sem
+                            nada marcado diz isso, em vez de só "Calculada". */}
+                        {resumoDosAjustes(configuracao)}
                         {(erroDe("purityPercentApplied") || erroDe("overagePercent")) && (
                           <span className="ajuste-quantidade__nota ajuste-quantidade__nota--erro">
                             {" · corrigir"}
@@ -1586,24 +1661,19 @@ export function FormulationVersionPage() {
                         )}
                       </button>
                     </td>
-                    {/* Dois números, dois rótulos, uma célula: eram as duas
-                        colunas que nasciam fora da tela. */}
-                    <td className="col-estoque is-numeric">
-                      <div className="estoque-valor">
-                        <span className="estoque-valor__rotulo">Equiv.</span>{" "}
-                        <span className="estoque-valor__numero estoque-valor--equivalente">
-                          {formatQuantityWithUnit(equivalenteExibido, row.stockUnitCode)}
-                        </span>
-                      </div>
-                      <div className="estoque-valor">
-                        <span className="estoque-valor__rotulo">Físico/un.</span>{" "}
-                        <span className="estoque-valor__numero estoque-valor--fisico">
-                          {formatQuantityWithUnit(fisicoExibido, row.stockUnitCode)}
-                        </span>
-                      </div>
+                    {/* Cada número na sua coluna, direto sob o seu cabeçalho. */}
+                    <td className="col-equivalente is-numeric" data-label="Equivalente estoque">
+                      <span className="estoque-valor__numero estoque-valor--equivalente">
+                        {formatQuantityWithUnit(equivalenteExibido, row.stockUnitCode)}
+                      </span>
+                    </td>
+                    <td className="col-fisico is-numeric" data-label="Físico / unidade">
+                      <span className="estoque-valor__numero estoque-valor--fisico">
+                        {formatQuantityWithUnit(fisicoExibido, row.stockUnitCode)}
+                      </span>
                     </td>
                     {isDraft && (
-                      <td>
+                      <td className="col-acoes">
                         <button
                           type="button"
                           className="btn btn--ghost btn--sm"
@@ -1627,216 +1697,55 @@ export function FormulationVersionPage() {
                   */}
                   {aberto && (
                     <tr className="ajuste-quantidade__linha">
-                      <td colSpan={isDraft ? 7 : 6} id={`ajustes-${row.key}`}>
-                        <div className="ajuste-quantidade__corpo">
-                          {isDraft ? (
-                            <>
-                              <fieldset className="ajuste-quantidade__modos">
-                                <legend>O que a quantidade informada significa</legend>
-                                {(["PHYSICAL_DIRECT", "THEORETICAL_WITH_ADJUSTMENTS"] as const).map(
-                                  (modo) => (
-                                    <label key={modo} className="ajuste-quantidade__modo">
-                                      <input
-                                        type="radio"
-                                        name={`modo-${row.key}`}
-                                        /* O nome acessível é só o rótulo; a
-                                           descrição vem por `aria-describedby`. */
-                                        aria-label={FORMULATION_QUANTITY_MODE_LABELS[modo]}
-                                        aria-describedby={`modo-${row.key}-${modo}-descricao`}
-                                        checked={row.quantityMode === modo}
-                                        onChange={() => trocarModo(row.key, modo)}
-                                      />
-                                      <span className="ajuste-quantidade__modo-texto">
-                                        <strong>{FORMULATION_QUANTITY_MODE_LABELS[modo]}</strong>
-                                        <span
-                                          className="ajuste-quantidade__descricao"
-                                          id={`modo-${row.key}-${modo}-descricao`}
-                                        >
-                                          {FORMULATION_QUANTITY_MODE_DESCRIPTIONS[modo]}
-                                        </span>
-                                      </span>
-                                    </label>
-                                  ),
-                                )}
-                              </fieldset>
-                              {/*
-                                Trocar o modo não liga ajuste nenhum — de
-                                propósito: marcar é a autorização, e ligar
-                                sozinho seria a aplicação silenciosa que esta
-                                capability tirou do sistema. A frase diz o estado
-                                REAL: com nada marcado, nada é corrigido.
-                              */}
-                              {row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
-                                <>
-                                  <p className="field__hint">
-                                    {row.applyPurityAdjustment || row.applyOverageAdjustment
-                                      ? "O sistema calcula a quantidade física usada em novas Ordens de Produção e no CMV desta versão."
-                                      : "Nenhum ajuste marcado. Marque abaixo o que deve ser corrigido: enquanto nada estiver marcado, a quantidade física continua igual à informada."}
-                                  </p>
-                                  <p className="field__hint ajuste-quantidade__aviso">
-                                    Não marque a correção se a quantidade informada já
-                                    estiver corrigida — ela seria aplicada duas vezes.
-                                  </p>
-                                </>
-                              )}
-                            </>
-                          ) : (
+                      <td colSpan={isDraft ? 8 : 7} id={`ajustes-${row.key}`}>
+                        {isDraft ? (
+                          /*
+                            Rascunho local da linha: o que muda aqui só vale depois
+                            de "Aplicar ajustes"; "Cancelar" volta ao que a linha
+                            tinha quando o painel abriu.
+                          */
+                          <PainelDeAjustes
+                            idBase={row.key}
+                            idDoCampo={(campo) => idDoCampo(row.key, campo)}
+                            nomeDoItem={row.itemCode || row.itemName || "Componente"}
+                            rascunho={rascunhoDeAjuste}
+                            confirmado={configuracao}
+                            onChange={(proximo) => ajustes.mudar(row.key, proximo)}
+                            onAplicar={() => aplicarAjustes(row)}
+                            onCancelar={() => ajustes.fechar(row.key)}
+                            errosExternos={errosDoPainel}
+                            avisoDePendencia={ajustes.aviso(row.key)}
+                          >
+                            {explicacaoDoFisico(
+                              { ...row, ...normalizarAjustes(rascunhoDeAjuste) },
+                              ajustes.alterado(row.key, configuracao),
+                            )}
+                          </PainelDeAjustes>
+                        ) : (
+                          <div className="ajuste-quantidade__corpo">
                             <p className="field__hint">
                               {FORMULATION_QUANTITY_MODE_LABELS[row.quantityMode]} — congelado
                               nesta versão. Mudar exige uma versão nova.
                             </p>
-                          )}
-
-                          {/*
-                            Em modo físico informado os campos de pureza e overage
-                            aparecem SEM caixa de marcar. Sem esta linha, nada
-                            junto deles diz que preencher não aplica — a frase
-                            existia só no ⓘ do cabeçalho da coluna, que quase
-                            ninguém abre. É a regra central desta capability, e
-                            ela precisa estar onde a pessoa digita.
-                          */}
-                          {row.quantityMode === "PHYSICAL_DIRECT" && (
-                            <p className="field__hint">
-                              Pureza e overage aqui são registro de auditoria:
-                              preencher não aplica correção nenhuma.
-                            </p>
-                          )}
-                          <div className="ajuste-quantidade__campos">
-                            <label>
-                              {isDraft && row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
-                                <input
-                                  type="checkbox"
-                                  aria-label="Corrigir pela pureza"
-                                  checked={row.applyPurityAdjustment}
-                                  onChange={(event) =>
-                                    handleComponentFieldChange(
-                                      row.key,
-                                      "applyPurityAdjustment",
-                                      event.target.checked,
-                                    )
-                                  }
-                                />
-                              )}
-                              <span>Pureza %</span>
-                              {isDraft ? (
-                                <input
-                                  id={idDoCampo(row.key, "purityPercentApplied")}
-                                  type="text"
-                                  inputMode="decimal"
-                                  aria-label="Pureza aplicada"
-                                  placeholder="—"
-                                  value={row.purityPercentApplied}
-                                  onChange={(event) =>
-                                    handleComponentFieldChange(
-                                      row.key,
-                                      "purityPercentApplied",
-                                      event.target.value,
-                                    )
-                                  }
-                                  {...marcaDeErro("purityPercentApplied")}
-                                />
-                              ) : (
+                            {row.quantityMode === "PHYSICAL_DIRECT" && (
+                              <p className="field__hint">
+                                Pureza e overage aqui são registro de auditoria:
+                                preencher não aplica correção nenhuma.
+                              </p>
+                            )}
+                            <div className="ajuste-quantidade__campos">
+                              <label>
+                                <span>Pureza %</span>
                                 <strong>{row.purityPercentApplied || "—"}</strong>
-                              )}
-                            </label>
-                            {mensagemDeErro("purityPercentApplied")}
-
-                            <label>
-                              {isDraft && row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS" && (
-                                <input
-                                  type="checkbox"
-                                  aria-label="Aplicar overage"
-                                  checked={row.applyOverageAdjustment}
-                                  onChange={(event) =>
-                                    handleComponentFieldChange(
-                                      row.key,
-                                      "applyOverageAdjustment",
-                                      event.target.checked,
-                                    )
-                                  }
-                                />
-                              )}
-                              <span>Overage %</span>
-                              {isDraft ? (
-                                <input
-                                  id={idDoCampo(row.key, "overagePercent")}
-                                  type="text"
-                                  inputMode="decimal"
-                                  aria-label="Overage do componente"
-                                  placeholder="—"
-                                  value={row.overagePercent}
-                                  onChange={(event) =>
-                                    handleComponentFieldChange(
-                                      row.key,
-                                      "overagePercent",
-                                      event.target.value,
-                                    )
-                                  }
-                                  {...marcaDeErro("overagePercent")}
-                                />
-                              ) : (
+                              </label>
+                              <label>
+                                <span>Overage %</span>
                                 <strong>{row.overagePercent || "—"}</strong>
-                              )}
-                            </label>
-                            {mensagemDeErro("overagePercent")}
-                          </div>
-
-                          {/*
-                            A conta vem do servidor (`physicalPerUnit`), que a
-                            calcula pelo motor canônico. A explicação não pode ser
-                            um segundo motor: se recalculasse aqui, passaria a
-                            poder discordar do número que manda.
-                          */}
-                          {/*
-                            `div`, não `p`: o CalcHint emite parágrafos, e `<p>`
-                            dentro de `<p>` é HTML inválido — o navegador fecha o
-                            de fora antes da hora e o React reclama no console. O
-                            bloco é uma grade de linhas, não um parágrafo.
-                          */}
-                          {fisicoExibido !== null && (
-                            <div className="ajuste-quantidade__resultado">
-                              <span>
-                                Quantidade informada:{" "}
-                                <strong>
-                                  {formatQuantity(row.quantity)} {row.unitCode}
-                                </strong>
-                              </span>
-                              {/*
-                                "POR UNIDADE" no rótulo, não subentendido.
-
-                                As duas linhas ficavam lado a lado com
-                                denominadores diferentes: a informada é para a
-                                base inteira da fórmula, a física é para uma
-                                unidade. Numa base de 300, isso mostrava
-                                "22 kg" acima de "0,091111 kg" sem nada
-                                explicando a razão de 240 vezes entre elas.
-                              */}
-                              <span>
-                                Quantidade física por unidade:{" "}
-                                <strong>
-                                  {formatQuantity(fisicoExibido)} {row.stockUnitCode}
-                                </strong>
-                              </span>
-                              <CalcHint
-                                label="Quantidade física"
-                                operandos={operandosDoFisico(
-                                  row,
-                                  basisQuantity,
-                                  dosesPerPackage.trim() === "" ? null : Number(dosesPerPackage),
-                                  units,
-                                )}
-                                resultado={`${formatQuantity(fisicoExibido)} ${row.stockUnitCode}`}
-                                nota={
-                                  row.quantityMode === "THEORETICAL_WITH_ADJUSTMENTS"
-                                    ? "Calculado pelo mesmo motor que a Ordem de Produção e o CMV usam."
-                                    : row.purityPercentApplied || row.overagePercent
-                                      ? "Quantidade física informada. Pureza e overage estão registrados, não aplicados."
-                                      : "Quantidade física informada."
-                                }
-                              />
+                              </label>
                             </div>
-                          )}
-                        </div>
+                            {explicacaoDoFisico(row, false)}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}
@@ -1846,7 +1755,7 @@ export function FormulationVersionPage() {
 
                 {components.length === 0 && (
                   <tr>
-                    <td colSpan={isDraft ? 7 : 6} className="table__empty">
+                    <td colSpan={isDraft ? 8 : 7} className="table__empty">
                       Nenhum componente adicionado.
                     </td>
                   </tr>

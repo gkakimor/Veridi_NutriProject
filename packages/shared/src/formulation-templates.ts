@@ -14,6 +14,7 @@
 import type {
   FormulationCalculationMode,
   FormulationComponentBasis,
+  FormulationComponentQuantityMode,
 } from "./formulations.js";
 import type { SupplyResponsibility } from "./ownership.js";
 import type { ItemType } from "./items.js";
@@ -52,6 +53,13 @@ export interface FormulationTemplateComponentDTO {
   purityPercentApplied: string | null;
   /** `null` = não informado; nunca inferido. */
   overagePercent: string | null;
+  /**
+   * O que a quantidade significa e quais ajustes ela autoriza — a mesma
+   * configuração do componente da Formulação real (§52), copiada ao aplicar.
+   */
+  quantityMode: FormulationComponentQuantityMode;
+  applyPurityAdjustment: boolean;
+  applyOverageAdjustment: boolean;
   notes: string | null;
   position: number;
 }
@@ -152,6 +160,10 @@ export interface FormulationTemplateComponentInput {
   supplyResponsibility?: SupplyResponsibility;
   purityPercentApplied?: string | null;
   overagePercent?: string | null;
+  /** Ausente = física informada, sem ajuste — o comportamento de todo Modelo antigo. */
+  quantityMode?: FormulationComponentQuantityMode;
+  applyPurityAdjustment?: boolean;
+  applyOverageAdjustment?: boolean;
   notes?: string | null;
 }
 

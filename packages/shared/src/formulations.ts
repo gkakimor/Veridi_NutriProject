@@ -64,7 +64,7 @@ export const FORMULATION_QUANTITY_MODE_DESCRIPTIONS: Record<FormulationComponent
   PHYSICAL_DIRECT:
     "A quantidade digitada já representa o material que será usado. Pureza e overage podem ser registrados, mas não alteram automaticamente a quantidade.",
   THEORETICAL_WITH_ADJUSTMENTS:
-    "Informe a quantidade teórica e escolha quais ajustes de pureza e overage devem ser aplicados.",
+    "A quantidade digitada é teórica: os ajustes selecionados serão aplicados para chegar à quantidade física.",
 };
 
 export const FORMULATION_COMPONENT_BASES: readonly FormulationComponentBasis[] = [
