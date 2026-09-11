@@ -49,11 +49,21 @@ def commit_atual() -> str:
         return "desconhecido"
 
 
+def contagem(contador: Counter) -> str:
+    ordem = ["REVISAR", "OK", "PENDENTE", "NAO_IMPORTAR", "ENCONTRADO", "NAO_NORMALIZAVEL", "SEM_REFERENCIA",
+             "PESQUISA_PENDENTE", "ALTA", "MEDIA", "BAIXA", "OFERTA_FORNECEDOR_LEGADO", "PRECO_MERCADO_PUBLICO"]
+    chaves = sorted(contador, key=lambda k: (ordem.index(k) if k in ordem else len(ordem), str(k)))
+    return " · ".join(f"{k} {contador[k]}" for k in chaves)
+
+
 def linhas_mapa(pac: F.Pacote) -> list[dict]:
-    problemas: dict[str, set[str]] = defaultdict(set)
+    problemas: dict[str, dict[str, bool]] = defaultdict(dict)
     for p in pac.pendencias:
-        problemas[p.chave].add(p.problema)
+        problemas[p.chave][p.problema] = problemas[p.chave].get(p.problema, False) or p.impede_carga
     linhas: list[dict] = []
+
+    def resumo(chave: str) -> str:
+        return ", ".join(f"{codigo} (impede)" if impede else codigo for codigo, impede in sorted(problemas.get(chave, {}).items()))
 
     def incluir(tipo, legado, chave, nome, fonte, status, observacao=None):
         linhas.append(
@@ -65,7 +75,7 @@ def linhas_mapa(pac: F.Pacote) -> list[dict]:
                 "NOME": nome,
                 "FONTE": fonte,
                 "STATUS_VALIDACAO": status,
-                "OBSERVACAO": observacao if observacao is not None else ", ".join(sorted(problemas.get(chave, []))),
+                "OBSERVACAO": observacao if observacao is not None else resumo(chave),
             }
         )
 
@@ -74,11 +84,11 @@ def linhas_mapa(pac: F.Pacote) -> list[dict]:
     for f in pac.fornecedores:
         incluir("FORNECEDOR", f["NOME_PLANILHA"], f["CHAVE_MIGRACAO"], f["_nome"], f["_fonte"], f["STATUS_REVISAO"])
     for i in pac.itens:
-        incluir(i["TIPO_ITEM"], i["CODIGO_PLANILHA"], i["CHAVE_MIGRACAO"], i["DESCRICAO"], i["_fonte"], i["STATUS_REVISAO"])
+        incluir(i["TIPO"], i["CODIGO_PLANILHA"], i["CHAVE_MIGRACAO"], i["NOME"], i["_fonte"], i["STATUS_REVISAO"])
     for p in pac.produtos:
-        incluir("PRODUTO", p["CODIGO_PLANILHA"], p["CHAVE_MIGRACAO"], p["NOME_PRODUTO"], p["_fonte"], p["STATUS_REVISAO"])
+        incluir("PRODUTO", p["_cod"], p["CHAVE_MIGRACAO"], p["NOME_PRODUTO"], p["_fonte"], p["STATUS_REVISAO"])
         incluir(
-            "ITEM_PRODUTO_ACABADO", p["CODIGO_PLANILHA"], p["CHAVE_ITEM_PA"], p["NOME_PRODUTO"],
+            "ITEM_PRODUTO_ACABADO", p["_cod"], p["CHAVE_ITEM_PA"], p["NOME_PRODUTO"],
             f"nasce 1:1 com {p['CHAVE_MIGRACAO']}", p["STATUS_REVISAO"], f"segue o produto {p['CHAVE_MIGRACAO']}",
         )
     return sorted(linhas, key=lambda r: (ORDEM_ENTIDADES.index(r["TIPO_ENTIDADE"]), r["CHAVE_MIGRACAO"]))
@@ -99,7 +109,7 @@ def linhas_por_arquivo(pac: F.Pacote) -> dict[str, list[dict]]:
             key=lambda o: (
                 int(o["_codigo_item"]) if o["_codigo_item"].isdigit() else 10**9,
                 o["FORNECEDOR"],
-                o["PRECO_BRL"] if o["PRECO_BRL"] is not None else -1,
+                o["PRECO"] if o["PRECO"] is not None else -1,
             ),
         ),
     }
@@ -123,25 +133,36 @@ def secao_fonte(uso: str) -> str:
 
 
 def resumo_pesquisa(pac: F.Pacote) -> dict:
-    por_status = Counter(p["STATUS_REVISAO"] for p in pac.precos)
-    itens_com_preco = {p["CHAVE_ITEM"] for p in pac.precos if p["PRECO_PUBLICADO"] is not None}
-    itens_normalizados = {p["CHAVE_ITEM"] for p in pac.precos if p["STATUS_REVISAO"] == "A_REVISAR"}
+    def itens(condicao) -> set[str]:
+        return {p["CHAVE_ITEM"] for p in pac.precos if condicao(p)}
+
+    com_preco = itens(lambda p: p["PRECO_PUBLICADO"] is not None)
     return {
         "linhas": len(pac.precos),
-        "por_status": por_status,
-        "itens_com_preco": len(itens_com_preco),
-        "itens_normalizados": len(itens_normalizados),
-        "itens_sem_referencia": len({p["CHAVE_ITEM"] for p in pac.precos if p["STATUS_REVISAO"] == "SEM_REFERENCIA"}),
-        "itens_pendentes": len({p["CHAVE_ITEM"] for p in pac.precos if p["STATUS_REVISAO"] == "PESQUISA_PENDENTE"}),
+        "por_situacao": Counter(p["SITUACAO_PESQUISA"] for p in pac.precos),
+        "itens_com_preco": len(com_preco),
+        "itens_normalizados": len(itens(lambda p: p["SITUACAO_PESQUISA"] == "ENCONTRADO")),
+        "itens_sem_referencia": len(itens(lambda p: p["SITUACAO_PESQUISA"] == "SEM_REFERENCIA")),
+        "itens_pendentes": len(itens(lambda p: p["SITUACAO_PESQUISA"] == "PESQUISA_PENDENTE")),
         "linhas_reaproveitadas": sum(1 for p in pac.precos if p["_rodada"] == "ANTERIOR" and p["PRECO_PUBLICADO"] is not None),
         "linhas_novas": sum(1 for p in pac.precos if p["_rodada"] == "NOVA" and p["PRECO_PUBLICADO"] is not None),
-        "itens_reaproveitados": len({p["CHAVE_ITEM"] for p in pac.precos if p["_rodada"] == "ANTERIOR" and p["PRECO_PUBLICADO"] is not None}),
-        "itens_novos": len({p["CHAVE_ITEM"] for p in pac.precos if p["_rodada"] == "NOVA" and p["PRECO_PUBLICADO"] is not None}),
+        "itens_reaproveitados": len(itens(lambda p: p["_rodada"] == "ANTERIOR" and p["PRECO_PUBLICADO"] is not None)),
+        "itens_novos": len(itens(lambda p: p["_rodada"] == "NOVA" and p["PRECO_PUBLICADO"] is not None)),
         "confianca": Counter(p["CONFIANCA"] for p in pac.precos if p["CONFIANCA"]),
     }
 
 
-def linhas_origem(arquivo: str, pac: F.Pacote, info: dict, n_registros: int, pendencias: list[F.Pendencia]) -> list[dict]:
+def resumo_custos(itens: list[dict]) -> str:
+    origem = Counter(i["ORIGEM_CUSTO_REFERENCIA"] for i in itens)
+    return (
+        f"{sum(1 for i in itens if i['CUSTO_REFERENCIA'] is not None)} de {len(itens)} itens com custo de referência — "
+        f"{origem.get('OFERTA_FORNECEDOR_LEGADO', 0)} pela mediana das ofertas do legado (07), "
+        f"{origem.get('PRECO_MERCADO_PUBLICO', 0)} pela mediana dos preços públicos (06), "
+        f"{origem.get('SEM_REFERENCIA', 0)} sem referência."
+    )
+
+
+def linhas_origem(arquivo: str, pac: F.Pacote, info: dict, registros: list[dict], pendencias: list[F.Pendencia]) -> list[dict]:
     linhas: list[dict] = []
 
     def incluir(secao, item, detalhe):
@@ -151,7 +172,7 @@ def linhas_origem(arquivo: str, pac: F.Pacote, info: dict, n_registros: int, pen
     incluir("PACOTE", "Identificação", f"PROD-MASTER-MIGRATION-PACK-01 · revisão 01 · {arquivo}")
     incluir("PACOTE", "Gerado em", info["gerado_em"].strftime("%d/%m/%Y %H:%M"))
     incluir("PACOTE", "Gerador", f"scripts/veridi-migration-pack/gerar_pacote.py · commit {info['commit']}")
-    incluir("PACOTE", "Registros na aba DADOS", str(n_registros))
+    incluir("PACOTE", "Registros na aba DADOS", str(len(registros)))
     incluir("PACOTE", "Pendências", f"{len(pendencias)} — {sum(1 for p in pendencias if p.impede_carga)} impedem a carga")
     incluir("CHAVE", "CHAVE_MIGRACAO", L.CHAVES[arquivo])
     incluir("CODIGO_PRODUCAO", "Código previsto", L.CODIGO_PRODUCAO)
@@ -159,6 +180,8 @@ def linhas_origem(arquivo: str, pac: F.Pacote, info: dict, n_registros: int, pen
         incluir("REGRA", item, detalhe)
     for item, detalhe in L.DEFAULTS[arquivo]:
         incluir("DEFAULT_DO_SISTEMA", item, detalhe)
+    if arquivo in (F.MATERIAS_PRIMAS, F.EMBALAGENS):
+        incluir("CUSTO_REFERENCIA", "Cobertura", resumo_custos(registros))
     if arquivo == F.PRECOS:
         r = resumo_pesquisa(pac)
         incluir("PESQUISA", "Pesquisa reaproveitada (07/09/2026)",
@@ -172,8 +195,7 @@ def linhas_origem(arquivo: str, pac: F.Pacote, info: dict, n_registros: int, pen
         incluir("PESQUISA", "Situação por item",
                 f"com preço público: {r['itens_com_preco']} · normalizado: {r['itens_normalizados']} · "
                 f"sem referência: {r['itens_sem_referencia']} · pesquisa pendente: {r['itens_pendentes']}")
-        incluir("PESQUISA", "Confiança das linhas com preço",
-                " · ".join(f"{k}: {v}" for k, v in sorted(r["confianca"].items())) or "—")
+        incluir("PESQUISA", "Confiança das linhas com preço", contagem(r["confianca"]) or "—")
         for descartada in pac.pesquisa.get("descartadas", []):
             incluir("PESQUISA", "Linha descartada", descartada)
     for fonte in pac.fontes:
@@ -229,12 +251,13 @@ def escrever_arquivo(saida: Path, arquivo: str, linhas: list[dict], pac: F.Pacot
         Tabela("DICIONARIO", f"DICIONÁRIO — {arquivo}. OBRIGATORIO = SIM corresponde às colunas com * na aba DADOS. "
                "Colunas cinza são técnicas (não editar).", L.COLUNAS_DICIONARIO, dicionario),
         Tabela("VALORES_PERMITIDOS", "VALORES PERMITIDOS — VALOR é o que aparece na planilha; VALOR_TECNICO_ERP é o que "
-               "a carga grava no sistema. Booleanos sempre SIM / NÃO.", L.COLUNAS_VALORES, L.valores_permitidos(arquivo)),
-        Tabela("PENDENCIAS", f"PENDÊNCIAS — {len(pendencias)} no total, {bloqueantes} impedem a carga (IMPEDE_CARGA = SIM). "
-               "Corrigir na aba DADOS e atualizar STATUS_REVISAO; não apagar linhas.",
+               "a carga grava no sistema; ROTULO_PT é o texto da tela. Booleanos sempre SIM / NÃO.",
+               L.COLUNAS_VALORES, L.valores_permitidos(arquivo)),
+        Tabela("PENDENCIAS", f"PENDÊNCIAS — {len(pendencias)} no total, {bloqueantes} impedem a carga (IMPEDE_CARGA = SIM: "
+               "resolver antes de marcar o registro OK). Corrigir na aba DADOS; não apagar linhas.",
                colunas_pendencias, linhas_pendencias, vazia="Nenhuma pendência."),
         Tabela("ORIGEM", "ORIGEM — fontes usadas, fontes excluídas e critérios de transformação deste arquivo.",
-               L.COLUNAS_ORIGEM, linhas_origem(arquivo, pac, info, len(linhas), pendencias)),
+               L.COLUNAS_ORIGEM, linhas_origem(arquivo, pac, info, linhas, pendencias)),
     ]
     if legado:
         tabelas.append(
@@ -252,25 +275,18 @@ def escrever_arquivo(saida: Path, arquivo: str, linhas: list[dict], pac: F.Pacot
     }
 
 
-def contagem(contador: Counter) -> str:
-    ordem = ["OK", "REVISAR", "PENDENTE", "NAO_IMPORTAR", "A_REVISAR", "NAO_NORMALIZAVEL", "SEM_REFERENCIA",
-             "PESQUISA_PENDENTE", "ALTA", "MEDIA", "BAIXA"]
-    chaves = sorted(contador, key=lambda k: (ordem.index(k) if k in ordem else len(ordem), str(k)))
-    return " · ".join(f"{k} {contador[k]}" for k in chaves)
-
-
 def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str, dict]) -> None:
     r = resumo_pesquisa(pac)
     itens = {i["CHAVE_MIGRACAO"]: i for i in pac.itens}
     fora = Counter(i["_origem"] for i in pac.itens)
-    mp = [i for i in pac.itens if i["TIPO_ITEM"] == "MATERIA_PRIMA"]
-    me = [i for i in pac.itens if i["TIPO_ITEM"] == "EMBALAGEM"]
+    mp = [i for i in pac.itens if i["TIPO"] == "MATERIA_PRIMA"]
+    me = [i for i in pac.itens if i["TIPO"] == "EMBALAGEM"]
     duplicidades = Counter(p.arquivo for p in pac.pendencias if p.problema == "DUPLICIDADE")
-    sem_preco = sorted(
-        {(p["CHAVE_ITEM"], p["STATUS_REVISAO"]) for p in pac.precos if p["STATUS_REVISAO"] in ("SEM_REFERENCIA", "PESQUISA_PENDENTE")}
-    )
     com_preco = {p["CHAVE_ITEM"] for p in pac.precos if p["PRECO_PUBLICADO"] is not None}
-    sem_preco = [(k, s) for k, s in sem_preco if k not in com_preco]
+    sem_preco = sorted(
+        {(p["CHAVE_ITEM"], p["SITUACAO_PESQUISA"]) for p in pac.precos
+         if p["SITUACAO_PESQUISA"] in ("SEM_REFERENCIA", "PESQUISA_PENDENTE") and p["CHAVE_ITEM"] not in com_preco}
+    )
     linhas = [
         "# MANIFESTO — Migração de cadastros para produção (revisão 01)",
         "",
@@ -280,6 +296,8 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
         f"- Gerador: `scripts/veridi-migration-pack/gerar_pacote.py` · commit {info['commit']}",
         f"- Fonte de dados: `{pac.dados}` (corpus real da Veridi, fora do Git)",
         "- Produção: **não lida e não escrita**. Nenhum loader APPLY executado. Nenhum banco consultado.",
+        "- Todos os registros nascem **STATUS_REVISAO = REVISAR**: nada foi aprovado pela geração; só entra na carga o "
+        "que a Veridi marcar OK.",
         "",
         "## Arquivos produzidos",
         "",
@@ -291,21 +309,31 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
         linhas.append(f"| {arquivo}.xlsx | {x['registros']} | {x['pendencias']} | {x['bloqueantes']} | {x['legado']} |")
     linhas += [
         "",
-        "Todos os arquivos têm as abas DADOS, DICIONARIO, VALORES_PERMITIDOS, PENDENCIAS e ORIGEM; "
-        "LEGADO_NAO_IMPORTADO onde há informação real que não cabe na carga.",
+        "Cada arquivo tem as abas DADOS, DICIONARIO, VALORES_PERMITIDOS, PENDENCIAS e ORIGEM; LEGADO_NAO_IMPORTADO "
+        "onde há informação real que não cabe na carga. As colunas de DADOS seguem os campos das telas do ERP "
+        "(Cliente, Fornecedor, Item, Produto e Item × Fornecedor).",
         "",
         "## Registros por cadastro",
         "",
         f"- Clientes: {len(pac.clientes)} — {contagem(resumo[F.CLIENTES]['status'])}",
         f"- Fornecedores: {len(pac.fornecedores)} — {contagem(resumo[F.FORNECEDORES]['status'])}",
         f"- Matérias-primas: {len(mp)} — {contagem(resumo[F.MATERIAS_PRIMAS]['status'])}",
-        f"- Embalagens/insumos: {len(me)} — {contagem(resumo[F.EMBALAGENS]['status'])}",
-        f"  - itens do cadastro principal: {fora['CADASTRO']}; só no CMV: {fora['SO_CMV']}; só em preços: {fora['SO_PRECOS']} "
-        "(os fora do cadastro entram PENDENTE)",
+        f"- Materiais de embalagem: {len(me)} — {contagem(resumo[F.EMBALAGENS]['status'])}",
+        f"  - itens do cadastro principal: {fora['CADASTRO']}; só no CMV: {fora['SO_CMV']}; só em preços: "
+        f"{fora['SO_PRECOS']} (os fora do cadastro têm pendência que impede a carga)",
         f"- Produtos acabados: {len(pac.produtos)} (+ {len(pac.produtos)} itens de produto acabado, 1:1) — "
         f"{contagem(resumo[F.PRODUTOS]['status'])}",
-        f"- Ofertas de fornecedor do legado (07): {len(pac.ofertas)} — {contagem(resumo[F.OFERTAS]['status'])}",
-        f"- Duplicidades apontadas: {' · '.join(f'{a} {n}' for a, n in sorted(duplicidades.items()))} (nada fundido automaticamente)",
+        f"- Fornecedores dos itens e ofertas do legado (07): {len(pac.ofertas)} — {contagem(resumo[F.OFERTAS]['status'])}",
+        f"- Duplicidades apontadas: {' · '.join(f'{a} {n}' for a, n in sorted(duplicidades.items()))} "
+        "(nada fundido automaticamente)",
+        "",
+        "## Custo de referência dos materiais (03, 04)",
+        "",
+        f"- Matérias-primas: {resumo_custos(mp)}",
+        f"- Materiais de embalagem: {resumo_custos(me)}",
+        "- Regra: mediana das ofertas de fornecedor do legado (07) na unidade do item; sem oferta utilizável, mediana "
+        "dos preços públicos (06). Todas as ofertas e preços do item aparecem na própria linha. É referência manual "
+        "(estimativa), não custo real de compra.",
         "",
         "## Fontes",
         "",
@@ -319,7 +347,7 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
         linhas += [f"- {e['fonte']}: {e['registro']} — {e['motivo']}" for e in pac.excluidos]
     linhas += [
         "",
-        "## Preços de referência",
+        "## Preços de referência de mercado (06)",
         "",
         "- Pesquisa antiga encontrada: **SIM** — `.local-data/veridi/market-reference/market-prices.csv` "
         "(linhas PESQUISA_MERCADO, pesquisa pública de 07/09/2026, com loja, URL, apresentação e preço) e os achados "
@@ -342,7 +370,7 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
         f"- Itens com preço público: {r['itens_com_preco']} (normalizado para a unidade de estoque: {r['itens_normalizados']}); "
         f"sem referência: {r['itens_sem_referencia']}; pesquisa pendente: {r['itens_pendentes']}.",
         f"- Confiança das linhas com preço: {contagem(r['confianca'])}.",
-        "- Preço de mercado ≠ custo real: nada do arquivo 06 vira ItemCostReference, Receipt, LAST_REAL ou custo de aquisição.",
+        "- Preço de mercado ≠ custo real: nada do arquivo 06 vira Receipt, LAST_REAL ou custo de aquisição.",
         "",
         "## Regras de chave",
         "",
@@ -354,11 +382,12 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
         "",
         f"Previsíveis: **NÃO**. {L.CODIGO_PRODUCAO}",
         "",
-        "## Campos novos de processo",
+        "## Campos das telas",
         "",
-        "Nenhum campo novo do ERP é exigido: perfil tributário, situação comercial, precificação, custo industrial, "
-        "flags de processo e perfil industrial ficam com o padrão do sistema (lista na seção DEFAULT_DO_SISTEMA de cada "
-        "aba ORIGEM). Nenhum dado foi inventado: o que falta ficou vazio e virou pendência.",
+        "Todos os campos das telas do ERP estão nas planilhas. Nenhum é obrigatório além dos que a tela exige. Campo sem "
+        "dado no legado vem com o padrão do sistema (perfil tributário NAO_INFORMADO, ativo SIM, controles de "
+        "rastreabilidade por tipo, preferencial NÃO…) ou vazio para a Veridi preencher se souber. Nenhum dado foi "
+        "inventado: o que falta ficou vazio e, quando importa, virou pendência.",
         "",
         "## Dados sensíveis e Git",
         "",
@@ -374,12 +403,12 @@ def escrever_manifesto(saida: Path, pac: F.Pacote, info: dict, resumo: dict[str,
     if sem_preco:
         linhas += [
             "",
-            f"## Itens sem preço de referência ({len(sem_preco)})",
+            f"## Itens sem preço de mercado ({len(sem_preco)})",
             "",
             "<details><summary>Lista</summary>",
             "",
         ]
-        linhas += [f"- {k} — {itens[k]['DESCRICAO']} ({s})" for k, s in sem_preco if k in itens]
+        linhas += [f"- {k} — {itens[k]['NOME']} ({s})" for k, s in sem_preco if k in itens]
         linhas += ["", "</details>"]
     (saida / "MANIFESTO_MIGRACAO.md").write_text("\n".join(linhas) + "\n", encoding="utf-8")
 
@@ -408,7 +437,7 @@ def main() -> int:
         resumo[arquivo] = escrever_arquivo(saida, arquivo, linhas, pac, info)
         x = resumo[arquivo]
         print(f"{arquivo}.xlsx: {x['registros']} registros · {x['pendencias']} pendências "
-              f"({x['bloqueantes']} impedem) · legado não importado {x['legado']} · {dict(x['status'])}")
+              f"({x['bloqueantes']} impedem) · legado não importado {x['legado']} · {contagem(x['status'])}")
     escrever_manifesto(saida, pac, info, resumo)
     for aviso in pac.avisos:
         print(f"AVISO: {aviso}")

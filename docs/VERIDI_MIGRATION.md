@@ -242,11 +242,14 @@ rodar e as regras: [`scripts/veridi-migration-pack/README.md`](../scripts/veridi
 - A chave entre os arquivos é a `CHAVE_MIGRACAO`, derivada só do código legado
   (`CLI-LEG-0013`, `ITEM-LEG-0157`, `PROD-LEG-0001PL`…). O código do ERP sai do
   APPLY: nenhum é previsto no pacote.
-- A Veridi devolve os arquivos corrigidos sem apagar linhas (`NAO_IMPORTAR`
-  tira da carga). Depois: `validar_pacote.py --devolucao` → PLAN → relatório de
-  diferenças → aprovação do PO → backup de produção → APPLY → verify
-  (PROD-MASTER-MIGRATION-APPLY-01).
-- Referência de mercado (arquivo 06) nunca entra como custo.
+- As colunas seguem os campos das telas do ERP. Todo registro nasce
+  `REVISAR`; a Veridi devolve os arquivos marcando `OK` (entra na carga),
+  `PENDENTE` ou `NAO_IMPORTAR`, sem apagar linhas. Depois:
+  `validar_pacote.py --devolucao` → PLAN → relatório de diferenças → aprovação
+  do PO → backup de produção → APPLY → verify (PROD-MASTER-MIGRATION-APPLY-01).
+- O custo de referência dos materiais (referência manual) é a mediana das
+  ofertas do legado ou, sem elas, dos preços públicos; a referência de mercado
+  (arquivo 06) nunca entra como custo de aquisição.
 
 Pontos que a carga a partir do Excel precisa decidir (achados na geração):
 

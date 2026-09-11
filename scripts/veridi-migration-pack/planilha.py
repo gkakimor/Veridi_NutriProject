@@ -194,6 +194,9 @@ def _escrever(ws, tabela: Tabela, listas: dict[str, str]) -> None:
         elif coluna.validacao_numero == "nao_negativo":
             validacao = DataValidation(type="decimal", operator="greaterThanOrEqual", formula1="0", allow_blank=True)
             validacao.error = "Informe um número maior ou igual a zero."
+        elif coluna.validacao_numero == "inteiro_positivo":
+            validacao = DataValidation(type="whole", operator="greaterThan", formula1="0", allow_blank=True)
+            validacao.error = "Informe um número inteiro maior que zero."
         elif coluna.validacao_numero == "fracao":
             validacao = DataValidation(
                 type="decimal", operator="between", formula1="0.000001", formula2="1", allow_blank=True

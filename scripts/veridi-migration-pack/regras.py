@@ -258,6 +258,34 @@ PADRAO_EMBALAGEM = re.compile(
     re.I,
 )
 PADRAO_CAPSULA = re.compile(r"\b(caps|c[aá]psulas?|softgel)\b", re.I)
+
+# Subtipo de embalagem sugerido pela PRIMEIRA palavra-chave do nome ("Pote …
+# (tampa …)" é pote). Sugestão para a revisão — nunca decisão silenciosa.
+SUBTIPO_PACOTE_PARA_ERP = {
+    "POTE": "POT", "TAMPA": "CAP", "DOSADOR": "SCOOP", "SELO": "SEAL", "ROTULO": "LABEL", "CAIXA": "BOX",
+    "SACHE_POUCH": "POUCH", "CARTUCHO": "CARTON", "FRASCO": "BOTTLE", "OUTRO": "OTHER",
+}
+_SUBTIPO_POR_PALAVRA = [
+    ("POTE", r"\bpotes?\b"),
+    ("TAMPA", r"\btampas?\b"),
+    ("DOSADOR", r"\b(dosador|dosadora|colher|medidor)\b"),
+    ("SELO", r"\b(lacre|selo)\b"),
+    ("ROTULO", r"\b(r[oó]tulo|rot|etiqueta)\b"),
+    ("CAIXA", r"\bcaixas?\b"),
+    ("SACHE_POUCH", r"\b(sach[eê]s?|sachets?|pouch|stand\s*up|saco)\b"),
+    ("CARTUCHO", r"\bcartucho\b"),
+    ("FRASCO", r"\b(frasco|garrafa)\b"),
+    ("OUTRO", r"\b(lata|fita)\b"),
+]
+
+
+def subtipo_sugerido(nome: str) -> str:
+    achados = []
+    for subtipo, padrao in _SUBTIPO_POR_PALAVRA:
+        encontrado = re.search(padrao, nome or "", re.I)
+        if encontrado:
+            achados.append((encontrado.start(), subtipo))
+    return min(achados)[1] if achados else ""
 PADRAO_PERSONALIZADA = re.compile(r"(^ROT\b|R[OÓ]TULO|(?<!SEM )ETIQUETA|COM ARTE|PERSONALIZ)", re.I)
 
 
@@ -382,6 +410,16 @@ def normalizar_preco(preco: Decimal, quantidade: Decimal, unidade_ref: str, unid
     if DIMENSAO[unidade_ref] != DIMENSAO[unidade_estoque]:
         return None
     valor = preco / quantidade * (FATOR_PARA_BASE[unidade_estoque] / FATOR_PARA_BASE[unidade_ref])
+    return valor.quantize(SEIS_CASAS, rounding=ROUND_HALF_UP)
+
+
+def mediana(valores: list[Decimal]) -> Decimal | None:
+    """Mediana em Decimal (com dois valores do meio, a média deles), 6 casas."""
+    if not valores:
+        return None
+    ordenados = sorted(valores)
+    meio = len(ordenados) // 2
+    valor = ordenados[meio] if len(ordenados) % 2 else (ordenados[meio - 1] + ordenados[meio]) / 2
     return valor.quantize(SEIS_CASAS, rounding=ROUND_HALF_UP)
 
 

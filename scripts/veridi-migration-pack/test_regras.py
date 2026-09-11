@@ -146,6 +146,21 @@ class Preco(unittest.TestCase):
         self.assertEqual(R.classificar_confianca(equivalencia="IGUAL", quantidade_em_unidade_estoque=Decimal(1), **substancia)[0], "ALTA")
 
 
+class Referencia(unittest.TestCase):
+    def test_mediana(self):
+        self.assertEqual(R.mediana([Decimal(1), Decimal(3), Decimal(2)]), Decimal("2.000000"))
+        self.assertEqual(R.mediana([Decimal(1), Decimal(2), Decimal(3), Decimal(4)]), Decimal("2.500000"))
+        self.assertIsNone(R.mediana([]))
+
+    def test_subtipo_pela_primeira_palavra(self):
+        self.assertEqual(R.subtipo_sugerido("Pote HP1200BL Hecaplast (tampa CÓD 487)"), "POTE")
+        self.assertEqual(R.subtipo_sugerido("ETIQUETA RÓTULO PARA SACHÊ"), "ROTULO")
+        self.assertEqual(R.subtipo_sugerido("LACRE SLEEVE TRANSPARENTE TAMPA"), "SELO")
+        self.assertEqual(R.subtipo_sugerido("STAND UP POUCH 1KG (30X46)"), "SACHE_POUCH")
+        self.assertEqual(R.subtipo_sugerido("Lata de Papel Multifoliada e Tampa (73x111)"), "OUTRO")
+        self.assertEqual(R.subtipo_sugerido("SÍLICA GEL BRANCA EM CÁPSULA SG"), "")
+
+
 class Sintetico(unittest.TestCase):
     def test_varredura(self):
         self.assertTrue(R.PADRAO_SINTETICO_CERTO.search("EXEMPLO — Recurso industrial"))

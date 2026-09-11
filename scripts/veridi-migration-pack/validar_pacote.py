@@ -4,8 +4,10 @@ Valida o pacote de revisão da migração — o gerado agora ou o devolvido pela
 
     python scripts/veridi-migration-pack/validar_pacote.py <pasta> [--devolucao] [--relatorio arquivo.txt]
 
-ERRO reprova (exit 1); AVISO só informa. Com --devolucao, as regras que dependem
-da decisão da Veridi (STATUS × pendência, preço normalizado recalculado) viram AVISO.
+ERRO reprova (exit 1); AVISO só informa. Na geração, todo registro nasce com
+STATUS_REVISAO = REVISAR e o custo de referência de cada item tem de bater com
+os preços dos arquivos 06/07. Com --devolucao, o que depende da decisão da
+Veridi (status, custo informado por ela, preço recalculado) vira AVISO.
 Só lê os .xlsx: não conecta em banco nenhum.
 """
 
@@ -35,6 +37,7 @@ COM_LEGADO = {F.MATERIAS_PRIMAS, F.EMBALAGENS, F.PRODUTOS, F.OFERTAS}
 ERRO_EXCEL = re.compile(r"^#(REF!|N/A|VALUE!|DIV/0!|NAME\?|NUM!|NULL!)")
 PROIBIDO_06 = re.compile(r"CUSTO_REAL|LAST_REAL|RECEBIMENTO|ACTUAL_UNIT_COST|CUSTO_AQUISICAO", re.I)
 PROBLEMAS = {codigo for codigo, *_ in L.PROBLEMAS}
+STATUS_INICIAL = "REVISAR"
 
 
 class Relatorio:
@@ -162,24 +165,27 @@ def validar_arquivo(pasta: Path, arquivo: str, rel: Relatorio, devolucao: bool) 
             rel.erro(arquivo, f"CHAVE_MIGRACAO repetida: {chave}")
         chaves.add(chave)
         status = linha.get(coluna_status)
+        if not devolucao and status != STATUS_INICIAL:
+            rel.erro(arquivo, f"{chave}: na geração todo registro nasce {STATUS_INICIAL} (está {status!r})")
         textos = [str(v) for k, v in linha.items() if k != "_linha" and v is not None]
         if any(R.PADRAO_UUID.search(t) for t in textos):
             rel.erro(arquivo, f"linha {numero} ({chave}): UUID técnico no registro")
-        texto = " ".join(str(v) for k, v in linha.items() if k not in ("_linha", "URL_OU_DOCUMENTO") and isinstance(v, str))
+        texto = " ".join(
+            str(v) for k, v in linha.items() if k not in ("_linha", "URL_OU_DOCUMENTO") and isinstance(v, str)
+        )
         if R.PADRAO_SINTETICO_CERTO.search(texto):
             rel.erro(arquivo, f"linha {numero} ({chave}): conteúdo reconhecidamente sintético")
         elif R.marcador_sintetico(texto) and arquivo != F.MAPA:
-            marcado = any(p["PROBLEMA"] == "POSSIVEL_DADO_SINTETICO" for p in pend_por_chave.get(chave, []))
-            if not (marcado and status in ("PENDENTE", "NAO_IMPORTAR")):
+            if not any(p["PROBLEMA"] == "POSSIVEL_DADO_SINTETICO" for p in pend_por_chave.get(chave, [])):
                 rel.erro(arquivo, f"linha {numero} ({chave}): possível dado sintético sem pendência")
 
         for spec in specs:
             valor = linha.get(spec.nome)
             vazio = valor is None or valor == ""
             if spec.obrigatorio and vazio:
-                if status == "NAO_IMPORTAR" or (status == "PENDENTE" and pend_por_chave.get(chave)):
+                if status == "NAO_IMPORTAR" or pend_por_chave.get(chave):
                     continue
-                rel.erro(arquivo, f"linha {numero} ({chave}): obrigatório {spec.nome} vazio")
+                rel.erro(arquivo, f"linha {numero} ({chave}): obrigatório {spec.nome} vazio sem pendência")
                 continue
             if vazio:
                 continue
@@ -187,7 +193,7 @@ def validar_arquivo(pasta: Path, arquivo: str, rel: Relatorio, devolucao: bool) 
                 rel.erro(arquivo, f"linha {numero} ({chave}): {spec.nome} = {valor!r} fora da lista")
             if spec.tipo == "Data" and not isinstance(valor, (date, datetime)):
                 rel.erro(arquivo, f"linha {numero} ({chave}): {spec.nome} não é data")
-            if spec.tipo in ("Moeda", "Número", "Percentual") and not isinstance(valor, (int, float)):
+            if spec.tipo in ("Moeda", "Número", "Percentual", "Inteiro") and not isinstance(valor, (int, float)):
                 rel.erro(arquivo, f"linha {numero} ({chave}): {spec.nome} não é número")
             elif spec.validacao_numero == "positivo" and valor <= 0:
                 rel.erro(arquivo, f"linha {numero} ({chave}): {spec.nome} deve ser maior que zero")
@@ -195,19 +201,28 @@ def validar_arquivo(pasta: Path, arquivo: str, rel: Relatorio, devolucao: bool) 
                 rel.erro(arquivo, f"linha {numero} ({chave}): {spec.nome} não pode ser negativo")
             elif spec.validacao_numero == "fracao" and not (0 < valor <= 1):
                 rel.erro(arquivo, f"linha {numero} ({chave}): {spec.nome} fora de 0–100%")
+            elif spec.validacao_numero == "inteiro_positivo" and (int(valor) != valor or valor <= 0):
+                rel.erro(arquivo, f"linha {numero} ({chave}): {spec.nome} deve ser inteiro maior que zero")
 
-        if arquivo not in (F.MAPA, F.PRECOS):
-            bloqueia = any(p["IMPEDE_CARGA"] == "SIM" for p in pend_por_chave.get(chave, []))
-            if bloqueia and status == "OK":
-                (rel.aviso if devolucao else rel.erro)(arquivo, f"{chave}: STATUS OK com pendência que impede a carga")
-            if not devolucao and status == "PENDENTE" and not bloqueia:
-                rel.erro(arquivo, f"{chave}: PENDENTE sem pendência que impeça a carga")
+        bloqueia = any(p["IMPEDE_CARGA"] == "SIM" for p in pend_por_chave.get(chave, []))
+        if devolucao and bloqueia and status == "OK":
+            rel.aviso(arquivo, f"{chave}: OK com pendência que impedia a carga — conferir se foi resolvida")
         if arquivo == F.CLIENTES and linha.get("CNPJ"):
             digitos = R.so_digitos(str(linha["CNPJ"]))
-            if not R.cnpj_valido(digitos) and status not in ("PENDENTE", "NAO_IMPORTAR"):
-                rel.erro(arquivo, f"{chave}: CNPJ inválido sem estar PENDENTE")
+            if not R.cnpj_valido(digitos) and not any(
+                p["PROBLEMA"] == "DOCUMENTO_INVALIDO" for p in pend_por_chave.get(chave, [])
+            ):
+                (rel.aviso if devolucao else rel.erro)(arquivo, f"{chave}: CNPJ inválido")
         if arquivo == F.PRECOS:
             _validar_preco(arquivo, linha, rel, devolucao)
+        if arquivo == F.OFERTAS:
+            if linha.get("PRECO") not in (None, "") and not (linha.get("UNIDADE_DO_PRECO") and linha.get("MOEDA")):
+                rel.erro(arquivo, f"{chave}: preço sem unidade ou moeda")
+            if linha.get("PEDIDO_MINIMO") not in (None, "") and not linha.get("UNIDADE_PEDIDO_MINIMO"):
+                rel.erro(arquivo, f"{chave}: pedido mínimo sem unidade")
+            inicio, fim = linha.get("VALIDA_A_PARTIR_DE"), linha.get("VALIDADE")
+            if isinstance(inicio, (date, datetime)) and isinstance(fim, (date, datetime)) and fim < inicio:
+                rel.erro(arquivo, f"{chave}: validade anterior à data de início da oferta")
 
     if arquivo != F.MAPA:
         for p in pendencias:
@@ -230,42 +245,49 @@ def validar_arquivo(pasta: Path, arquivo: str, rel: Relatorio, devolucao: bool) 
 
 def _validar_preco(arquivo: str, linha: dict, rel: Relatorio, devolucao: bool) -> None:
     chave = linha["CHAVE_MIGRACAO"]
-    status = linha.get("STATUS_REVISAO")
+    situacao = linha.get("SITUACAO_PESQUISA")
     preco, quantidade = decimal(linha.get("PRECO_PUBLICADO")), decimal(linha.get("QUANTIDADE_REFERENCIA"))
-    unidade, normalizado = linha.get("UNIDADE_REFERENCIA"), decimal(linha.get("PRECO_NORMALIZADO_POR_UNIDADE_ESTOQUE"))
-    if status in ("A_REVISAR", "ACEITA"):
+    unidade = linha.get("UNIDADE_REFERENCIA")
+    normalizado = decimal(linha.get("PRECO_NORMALIZADO_POR_UNIDADE_ESTOQUE"))
+    if situacao == "ENCONTRADO":
         exigidos = ("PRECO_PUBLICADO", "QUANTIDADE_REFERENCIA", "UNIDADE_REFERENCIA",
                     "PRECO_NORMALIZADO_POR_UNIDADE_ESTOQUE", "URL_OU_DOCUMENTO", "DATA_DA_PESQUISA", "CONFIANCA")
         faltam = [c for c in exigidos if linha.get(c) in (None, "")]
         if faltam:
-            rel.erro(arquivo, f"{chave}: {status} sem {', '.join(faltam)}")
-    if status in ("SEM_REFERENCIA", "PESQUISA_PENDENTE") and (preco or normalizado or linha.get("CONFIANCA")):
-        rel.erro(arquivo, f"{chave}: {status} não pode ter preço nem confiança")
+            rel.erro(arquivo, f"{chave}: ENCONTRADO sem {', '.join(faltam)}")
+    if situacao == "NAO_NORMALIZAVEL" and (preco is None or normalizado is not None):
+        rel.erro(arquivo, f"{chave}: NAO_NORMALIZAVEL precisa de preço publicado e não pode ter normalizado")
+    if situacao in ("SEM_REFERENCIA", "PESQUISA_PENDENTE") and (preco or normalizado or linha.get("CONFIANCA")):
+        rel.erro(arquivo, f"{chave}: {situacao} não pode ter preço nem confiança")
     if preco and quantidade and unidade and linha.get("UNIDADE_ESTOQUE"):
         calculado = R.normalizar_preco(preco, quantidade, unidade, linha["UNIDADE_ESTOQUE"])
         if calculado is None and normalizado is not None:
-            rel.erro(arquivo, f"{chave}: preço normalizado sem conversão possível entre {unidade} e {linha['UNIDADE_ESTOQUE']}")
+            rel.erro(arquivo, f"{chave}: normalizado sem conversão possível entre {unidade} e {linha['UNIDADE_ESTOQUE']}")
         elif calculado is not None and normalizado is not None:
             tolerancia = max(Decimal("0.0001"), calculado * Decimal("0.000001"))
             if abs(normalizado - calculado) > tolerancia:
                 (rel.aviso if devolucao else rel.erro)(arquivo, f"{chave}: normalizado {normalizado} ≠ recalculado {calculado}")
 
 
-def validar_relacoes(resultados: dict, rel: Relatorio) -> None:
+def validar_relacoes(resultados: dict, rel: Relatorio, devolucao: bool) -> None:
     def chaves(arquivo: str) -> set[str]:
         return resultados[arquivo]["chaves"] if resultados.get(arquivo) else set()
+
+    def linhas(arquivo: str) -> list[dict]:
+        return (resultados.get(arquivo) or {}).get("linhas", [])
 
     itens_mp, itens_me = chaves(F.MATERIAS_PRIMAS), chaves(F.EMBALAGENS)
     for chave in itens_mp & itens_me:
         rel.erro("RELACOES", f"item {chave} está em 03 e em 04")
     itens = itens_mp | itens_me
+    item_por_chave = {l["CHAVE_MIGRACAO"]: l for l in linhas(F.MATERIAS_PRIMAS) + linhas(F.EMBALAGENS)}
     status_de = {}
     for arquivo in (F.CLIENTES, F.FORNECEDORES, F.MATERIAS_PRIMAS, F.EMBALAGENS, F.PRODUTOS):
-        for linha in (resultados.get(arquivo) or {}).get("linhas", []):
+        for linha in linhas(arquivo):
             status_de[linha["CHAVE_MIGRACAO"]] = linha.get("STATUS_REVISAO")
 
     pa: set[str] = set()
-    for linha in (resultados.get(F.PRODUTOS) or {}).get("linhas", []):
+    for linha in linhas(F.PRODUTOS):
         chave_pa = str(linha.get("CHAVE_ITEM_PA") or "")
         if chave_pa in pa:
             rel.erro(F.PRODUTOS, f"CHAVE_ITEM_PA repetida: {chave_pa} (regra 1:1)")
@@ -278,22 +300,78 @@ def validar_relacoes(resultados: dict, rel: Relatorio) -> None:
         elif cliente and status_de.get(cliente) == "NAO_IMPORTAR" and linha.get("STATUS_REVISAO") != "NAO_IMPORTAR":
             rel.aviso(F.PRODUTOS, f"{linha['CHAVE_MIGRACAO']}: cliente {cliente} marcado NAO_IMPORTAR")
 
+    precos_do_item: dict[str, list[Decimal]] = defaultdict(list)
     cobertos = set()
-    for linha in (resultados.get(F.PRECOS) or {}).get("linhas", []):
+    for linha in linhas(F.PRECOS):
         cobertos.add(linha.get("CHAVE_ITEM"))
         if linha.get("CHAVE_ITEM") not in itens:
             rel.erro(F.PRECOS, f"{linha['CHAVE_MIGRACAO']}: CHAVE_ITEM {linha.get('CHAVE_ITEM')} não existe em 03/04")
+        normalizado = decimal(linha.get("PRECO_NORMALIZADO_POR_UNIDADE_ESTOQUE"))
+        if linha.get("SITUACAO_PESQUISA") == "ENCONTRADO" and normalizado is not None \
+                and linha.get("STATUS_REVISAO") != "REJEITADA":
+            precos_do_item[linha.get("CHAVE_ITEM")].append(normalizado)
     for chave in sorted(itens - cobertos):
         rel.aviso(F.PRECOS, f"item {chave} sem linha de referência de mercado")
 
-    for linha in (resultados.get(F.OFERTAS) or {}).get("linhas", []):
-        if linha.get("CHAVE_FORNECEDOR") not in chaves(F.FORNECEDORES):
-            rel.erro(F.OFERTAS, f"{linha['CHAVE_MIGRACAO']}: CHAVE_FORNECEDOR {linha.get('CHAVE_FORNECEDOR')} não existe em 02")
-        if linha.get("CHAVE_ITEM") not in itens:
-            rel.erro(F.OFERTAS, f"{linha['CHAVE_MIGRACAO']}: CHAVE_ITEM {linha.get('CHAVE_ITEM')} não existe em 03/04")
-        for alvo in (linha.get("CHAVE_FORNECEDOR"), linha.get("CHAVE_ITEM")):
+    ofertas_do_item: dict[str, list[Decimal]] = defaultdict(list)
+    fornecedores_do_item: dict[str, set[str]] = defaultdict(set)
+    pares: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for linha in linhas(F.OFERTAS):
+        fornecedor, chave_item = linha.get("CHAVE_FORNECEDOR"), linha.get("CHAVE_ITEM")
+        if fornecedor not in chaves(F.FORNECEDORES):
+            rel.erro(F.OFERTAS, f"{linha['CHAVE_MIGRACAO']}: CHAVE_FORNECEDOR {fornecedor} não existe em 02")
+        if chave_item not in itens:
+            rel.erro(F.OFERTAS, f"{linha['CHAVE_MIGRACAO']}: CHAVE_ITEM {chave_item} não existe em 03/04")
+        for alvo in (fornecedor, chave_item):
             if status_de.get(alvo) == "NAO_IMPORTAR" and linha.get("STATUS_REVISAO") != "NAO_IMPORTAR":
                 rel.aviso(F.OFERTAS, f"{linha['CHAVE_MIGRACAO']}: aponta para {alvo}, marcado NAO_IMPORTAR")
+        pares[(fornecedor, chave_item)].append(linha)
+        fornecedores_do_item[chave_item].add(str(linha.get("FORNECEDOR") or ""))
+        item = item_por_chave.get(chave_item)
+        preco = decimal(linha.get("PRECO"))
+        if item and preco and preco > 0 and linha.get("STATUS_REVISAO") != "NAO_IMPORTAR":
+            convertido = R.normalizar_preco(preco, Decimal(1), str(linha.get("UNIDADE_DO_PRECO") or ""), str(item.get("UNIDADE") or ""))
+            if convertido is not None:
+                ofertas_do_item[chave_item].append(convertido)
+
+    preferidos: Counter = Counter()
+    for (fornecedor, chave_item), grupo in pares.items():
+        for campo in ("CODIGO_DO_ITEM_NO_FORNECEDOR", "OBSERVACOES_COMERCIAIS", "HOMOLOGACAO",
+                      "OBSERVACAO_DA_DECISAO", "PREFERENCIAL", "RELACAO_ATIVA"):
+            valores = {str(l.get(campo) or "") for l in grupo}
+            if len(valores) > 1:
+                rel.erro(F.OFERTAS, f"par {fornecedor} × {chave_item}: {campo} diferente entre as linhas {sorted(valores)}")
+        if any(l.get("PREFERENCIAL") == "SIM" for l in grupo):
+            preferidos[chave_item] += 1
+            if any(l.get("HOMOLOGACAO") != "HOMOLOGADO" for l in grupo):
+                rel.erro(F.OFERTAS, f"par {fornecedor} × {chave_item}: preferencial exige HOMOLOGADO")
+    for chave_item, quantidade in preferidos.items():
+        if quantidade > 1:
+            rel.erro(F.OFERTAS, f"item {chave_item}: mais de um fornecedor preferencial")
+
+    for chave, item in item_por_chave.items():
+        custo, origem = decimal(item.get("CUSTO_REFERENCIA")), item.get("ORIGEM_CUSTO_REFERENCIA")
+        if devolucao and origem == "INFORMADO_PELA_VERIDI":
+            continue
+        if ofertas_do_item.get(chave):
+            esperado, origem_esperada = R.mediana(ofertas_do_item[chave]), "OFERTA_FORNECEDOR_LEGADO"
+        elif precos_do_item.get(chave):
+            esperado, origem_esperada = R.mediana(precos_do_item[chave]), "PRECO_MERCADO_PUBLICO"
+        else:
+            esperado, origem_esperada = None, "SEM_REFERENCIA"
+        coerente = origem == origem_esperada and (
+            (esperado is None and custo is None)
+            or (esperado is not None and custo is not None and abs(custo - esperado) <= Decimal("0.000001"))
+        )
+        if not coerente:
+            (rel.aviso if devolucao else rel.erro)(
+                "RELACOES", f"{chave}: custo de referência {custo} ({origem}) não bate com 06/07 ({esperado}, {origem_esperada})"
+            )
+        if not devolucao:
+            texto = str(item.get("FORNECEDORES_E_PRECOS_LEGADO") or "")
+            for nome in fornecedores_do_item.get(chave, set()):
+                if nome and nome not in texto:
+                    rel.erro("RELACOES", f"{chave}: oferta de {nome} (07) não aparece em FORNECEDORES_E_PRECOS_LEGADO")
 
     if resultados.get(F.MAPA):
         mapa = chaves(F.MAPA)
@@ -314,7 +392,7 @@ def main() -> int:
 
     rel = Relatorio()
     resultados = {arquivo: validar_arquivo(args.pasta, arquivo, rel, args.devolucao) for arquivo in F.ARQUIVOS}
-    validar_relacoes(resultados, rel)
+    validar_relacoes(resultados, rel, args.devolucao)
 
     saida = [f"VALIDAÇÃO DO PACOTE — {args.pasta}", ""]
     for arquivo, r in resultados.items():

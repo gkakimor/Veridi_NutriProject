@@ -63,11 +63,18 @@ foram montadas a partir de um banco DEV; a oferta do legado vem direto de
   importador), `REF-…`. Nunca UUID, nunca código interno do ERP.
 - **CODIGO_PRODUCAO_PREVISTO = GERADO NA CARGA**: o código real sai da sequence
   no APPLY e depende da lista aprovada — prever seria inventar.
-- **STATUS_REVISAO**: `OK`, `REVISAR` (pendência que não impede), `PENDENTE`
-  (impede a carga), `NAO_IMPORTAR` (decisão da Veridi; a linha não é apagada).
+- **STATUS_REVISAO**: todo registro nasce `REVISAR`. Depois de conferir, a
+  Veridi muda para `OK` (entra na carga), `PENDENTE` (falta resolver) ou
+  `NAO_IMPORTAR` (fica fora; a linha não é apagada). Pendência com
+  `IMPEDE_CARGA = SIM` precisa estar resolvida antes do `OK`.
+- **Colunas = campos das telas do ERP** (Cliente, Fornecedor, Item, Produto,
+  Item × Fornecedor), na ordem das seções. Campo sem dado no legado vem com o
+  padrão do sistema ou vazio; só é obrigatório o que a tela exige.
+- **Custo de referência** (03/04): mediana das ofertas de fornecedor do legado
+  (07) na unidade do item; sem oferta utilizável, mediana dos preços públicos
+  (06). Todas as ofertas e preços do item ficam listados na própria linha.
+  Referência manual — nunca custo real de compra.
 - Nada é inventado nem fundido: o que falta fica vazio e vira pendência.
-- Campo novo do ERP sem equivalente no legado não é pedido; o padrão do sistema
-  está na seção DEFAULT_DO_SISTEMA da aba ORIGEM.
 - Sem fórmula, sem macro; booleanos sempre `SIM`/`NÃO`; datas `dd/mm/aaaa`.
 
 ## Pesquisa de preço
