@@ -616,7 +616,7 @@ export const cadastrosTopics = {
   },
 
   "documentoControlado.comoFunciona": {
-    module: "administracao",
+    module: "qualidade",
     title: "Documento controlado: o cabeçalho da revisão, só isso",
     summary:
       "Esta tela guarda a revisão vigente dos formulários impressos da Veridi — a Ordem de Produção (R.PRO.002) e a Folha de Receita (R.COQ.003). É o cabeçalho que esses papéis precisam carregar: código, revisão, data e responsáveis. Não é um gerenciador de documentos: não se anexa arquivo aqui, não há editor do desenho do formulário, não há assinatura eletrônica, e o sistema não declara conformidade GMP ou ANVISA em lugar nenhum.",
@@ -671,7 +671,7 @@ export const cadastrosTopics = {
       "Só existe uma revisão vigente por tipo. Ativar uma coloca a anterior em histórico automaticamente.",
       "Data da revisão é opcional de propósito: para documento herdado, uma data inventada é pior do que a ausência dela.",
       "Não haver revisão vigente não impede liberar ordem de produção: o cabeçalho sai sem essa informação em vez de travar a operação.",
-      "Criar e ativar revisão são ações do perfil administrador. A leitura é aberta, porque a impressão precisa do cabeçalho.",
+      "Criar e ativar revisão são ações da Qualidade e do administrador; os demais perfis consultam. A leitura é aberta, porque a impressão precisa do cabeçalho.",
     ],
   },
 
@@ -963,12 +963,12 @@ export const cadastrosHints = {
     text: "Usuário nunca é excluído: com registros de GMP atrás dele, apagar seria perder rastreabilidade. Inativar derruba as sessões abertas na hora e mantém tudo o que ele assinou.",
   },
   "documentoControlado.revisao": {
-    module: "administracao",
+    module: "qualidade",
     label: "Revisão",
     text: "O número da versão do formulário, como a Qualidade o numera. É texto livre porque a numeração é da Veridi, e não se repete dentro do mesmo tipo.",
   },
   "documentoControlado.vigente": {
-    module: "administracao",
+    module: "qualidade",
     label: "Situação da revisão",
     text: "Uma revisão vigente por tipo de documento. Ativar uma nova coloca a anterior em histórico — e nunca reescreve documento já emitido.",
   },

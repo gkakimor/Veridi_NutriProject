@@ -219,7 +219,9 @@ async function main() {
       (await rotuloMarcado()) === "Não informado",
       await rotuloMarcado(),
     );
-    await pagina.getByRole("link", { name: "Consulta completa" }).first().click();
+    // O atalho do cadastro leva ao Resumo do cliente; o item "Visão do Cliente"
+    // do menu leva à busca — o `href` separa os dois.
+    await pagina.locator('a[href$="/resumo"]', { hasText: "Visão do Cliente" }).first().click();
     await pagina.waitForURL(/\/consultas\/clientes\/[0-9a-f-]{36}\/resumo/, { timeout: 25000 });
     urlDaConsulta = pagina.url();
     const naConsulta = await perfilNaConsulta(urlDaConsulta);

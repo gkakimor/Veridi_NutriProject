@@ -67,7 +67,7 @@ function CostCell({ row }: { row: FinishedGoodRowDTO }) {
 }
 
 /**
- * Produção → Produto Acabado. Visão operacional somente leitura do que já
+ * Estoque → Lotes de Produto Acabado. Visão operacional somente leitura do que já
  * foi produzido: uma linha por lote com `origin = PRODUCTION`. Não cria nada
  * (produto acabado nasce só de Ordem de Produção com apontamento) e não
  * mantém saldo próprio — On Hand/Reserved/Available vêm do Inventory Ledger.
@@ -139,7 +139,7 @@ export function FinishedGoodsPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Produto Acabado</h1>
+          <h1 className="page__title">Lotes de Produto Acabado</h1>
           <p className="page__subtitle">
             Lotes produzidos nas Ordens de Produção. Consulta operacional — saldo, qualidade e custo
             vêm das fontes originais.

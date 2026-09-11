@@ -460,11 +460,11 @@ export function CustomerFormFields({
             /*
              * Os quatro atalhos abaixo continuam levando ao módulo, como
              * sempre levaram: "quero ir trabalhar em Pedidos deste
-             * cliente". A Consulta completa é a alternativa, não a
+             * cliente". A Visão do Cliente é a alternativa, não a
              * substituta — "quero acompanhar o cliente como contexto".
              */
             {
-              label: "Consulta completa",
+              label: "Visão do Cliente",
               to: `/consultas/clientes/${customer.id}/resumo`,
               highlight: true,
             },

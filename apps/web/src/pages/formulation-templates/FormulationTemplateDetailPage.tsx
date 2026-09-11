@@ -467,7 +467,7 @@ export function FormulationTemplateDetailPage() {
     <div className="doc-page">
       <div className="doc-header">
         <div>
-          <PageBreadcrumbs items={[{ label: "Templates de Formulação", href: "/producao/templates-formulacao" }, { label: "Detalhe" }]} />
+          <PageBreadcrumbs items={[{ label: "Modelos de Formulação", href: "/producao/templates-formulacao" }, { label: "Detalhe" }]} />
           <h1 className="doc-title">
             <code>{template.code}</code> {template.name}
             {template.archived && <span className="badge badge--neutral">Arquivado</span>}

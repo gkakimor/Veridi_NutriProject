@@ -258,7 +258,7 @@ describe("Folha de Receita", () => {
   });
 });
 
-describe("Produto Acabado", () => {
+describe("Lotes de Produto Acabado", () => {
   async function abrir() {
     vi.mocked(listFinishedGoods).mockResolvedValue({
       rows: [],
@@ -270,6 +270,13 @@ describe("Produto Acabado", () => {
     renderRota("/producao/produto-acabado", "/producao/produto-acabado", <FinishedGoodsPage />);
     await waitFor(() => expect(listFinishedGoods).toHaveBeenCalled());
   }
+
+  it("o título é o nome do menu: Lotes de Produto Acabado", async () => {
+    await abrir();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Lotes de Produto Acabado" }),
+    ).toBeInTheDocument();
+  });
 
   it("explica que todo lote vem de um apontamento — e começa fechada", async () => {
     await abrir();
@@ -307,7 +314,7 @@ describe("Produto Acabado", () => {
   });
 });
 
-describe("Templates de Formulação", () => {
+describe("Modelos de Formulação", () => {
   async function abrirLista() {
     vi.mocked(listFormulationTemplates).mockResolvedValue({
       templates: [],
@@ -369,6 +376,21 @@ describe("Templates de Formulação", () => {
     );
     await waitFor(() => expect(screen.getAllByText(/FT-000008/).length).toBeGreaterThan(0));
   }
+
+  it("a lista usa o nome do menu: Modelos de Formulação", async () => {
+    await abrirLista();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Modelos de Formulação" }),
+    ).toBeInTheDocument();
+  });
+
+  it("a trilha do detalhe volta para Modelos de Formulação", async () => {
+    await abrirDetalhe();
+    expect(screen.getByRole("link", { name: "Modelos de Formulação" })).toHaveAttribute(
+      "href",
+      "/producao/templates-formulacao",
+    );
+  });
 
   it("a lista explica que usar um template copia — e começa fechada", async () => {
     await abrirLista();

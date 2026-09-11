@@ -66,7 +66,7 @@ export function ConsultationSearchPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Consulta de Cliente</h1>
+          <h1 className="page__title">Visão do Cliente</h1>
           <p className="page__subtitle">
             Acompanhe projetos, pedidos, materiais e faturamentos de um cliente
             sem precisar saber em qual módulo procurar.

@@ -188,6 +188,13 @@ beforeEach(() => {
 });
 
 describe("Biblioteca de estruturas de custo", () => {
+  it("o título é o nome do menu: Modelos de Estrutura de Custo", async () => {
+    renderizar(<CostTemplatesPage />);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Modelos de Estrutura de Custo" }),
+    ).toBeInTheDocument();
+  });
+
   it("lista o template com base, recursos e versão ativa", async () => {
     renderizar(<CostTemplatesPage />);
     expect(await screen.findByText("TEC-000004")).toBeInTheDocument();
@@ -219,6 +226,15 @@ describe("Biblioteca de estruturas de custo", () => {
 });
 
 describe("Detalhe do template de estrutura", () => {
+  it("a trilha volta para Modelos de Estrutura de Custo", async () => {
+    renderizar(<CostTemplateDetailPage />);
+    await screen.findByText("Cápsulas — Linha padrão");
+    expect(screen.getByRole("link", { name: "Modelos de Estrutura de Custo" })).toHaveAttribute(
+      "href",
+      "/gestao/templates-estrutura",
+    );
+  });
+
   it("mostra o uso do recurso sem nenhum valor de tarifa", async () => {
     renderizar(<CostTemplateDetailPage />);
     await screen.findByText("Cápsulas — Linha padrão");

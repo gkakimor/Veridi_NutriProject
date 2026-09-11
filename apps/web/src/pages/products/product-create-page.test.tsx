@@ -130,7 +130,7 @@ describe("Produto — acesso direto", () => {
 
     expect(await screen.findByRole("heading", { name: "Novo produto" })).toBeInTheDocument();
     // A trilha diz onde o registro MORA, não por onde a pessoa passou.
-    expect(screen.getByRole("link", { name: "Produtos" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Produtos Acabados" })).toHaveAttribute(
       "href",
       "/cadastros/produtos",
     );

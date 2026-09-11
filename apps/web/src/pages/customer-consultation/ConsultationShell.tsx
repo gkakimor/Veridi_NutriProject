@@ -66,7 +66,7 @@ export function ConsultationTrail({ steps }: { steps: TrailStep[] }) {
     <nav className="consult-trail" aria-label="Trilha da consulta">
       <ol>
         <li>
-          <Link to={CONSULTATION_ROOT}>Consulta de Cliente</Link>
+          <Link to={CONSULTATION_ROOT}>Visão do Cliente</Link>
         </li>
         {all.map((step, index) => (
           <li key={`${step.label}-${index}`}>
@@ -154,7 +154,7 @@ export function ConsultationShell() {
     return (
       <div className="page__header">
         <div>
-          <h1 className="page__title">Consulta de Cliente</h1>
+          <h1 className="page__title">Visão do Cliente</h1>
           <p className="form-alert" role="alert">{error}</p>
           <button type="button" className="btn btn--secondary" onClick={reload}>
             Tentar novamente
@@ -168,7 +168,7 @@ export function ConsultationShell() {
     return (
       <div className="page__header">
         <div>
-          <h1 className="page__title">Consulta de Cliente</h1>
+          <h1 className="page__title">Visão do Cliente</h1>
           <p className="page__subtitle">Carregando…</p>
         </div>
       </div>

@@ -223,7 +223,7 @@ export function CostTemplateDetailPage() {
     <div className="doc-page">
       <div className="doc-header">
         <div>
-          <PageBreadcrumbs items={[{ label: "Templates de Estrutura", href: "/gestao/templates-estrutura" }, { label: "Detalhe" }]} />
+          <PageBreadcrumbs items={[{ label: "Modelos de Estrutura de Custo", href: "/gestao/templates-estrutura" }, { label: "Detalhe" }]} />
           <h1 className="doc-title">
             <code>{template.code}</code> {template.name}
             {template.archived && <span className="badge badge--neutral">Arquivado</span>}

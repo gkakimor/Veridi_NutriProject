@@ -53,7 +53,7 @@ export const baseTopics = {
     notes: [
       "Produto sem formulação não é erro da lista: é um produto que ainda não teve receita escrita.",
       "Rascunho não vale para produzir nem custear. Só a ativação fecha a receita.",
-      "A lista não cria produto. Produto novo nasce em Cadastros › Produtos, e é lá que o item acabado é criado junto.",
+      "A lista não cria produto. Produto novo nasce em Cadastros › Produtos Acabados, e é lá que o item acabado é criado junto.",
     ],
   },
   "planoAtendimento.comoFunciona": {

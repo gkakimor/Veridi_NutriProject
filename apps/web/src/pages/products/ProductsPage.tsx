@@ -29,7 +29,7 @@ type ModalState =
 
 const PAGE_SIZE = 20;
 
-/** Cadastros → Produtos. Mesmo padrao de tabela densa + modal de Items. */
+/** Cadastros → Produtos Acabados. Mesmo padrao de tabela densa + modal de Items. */
 export function ProductsPage() {
   const navigate = useNavigate();
   const [products, setProducts] = useState<ProductDTO[]>([]);
@@ -167,7 +167,7 @@ export function ProductsPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Produtos</h1>
+          <h1 className="page__title">Produtos Acabados</h1>
           <p className="page__subtitle">
             Produtos comerciais e industriais fabricados pela Veridi.
           </p>

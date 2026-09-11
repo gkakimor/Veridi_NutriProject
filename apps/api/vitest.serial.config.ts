@@ -31,6 +31,10 @@ import { defineConfig, loadEnv } from "vite";
  * diferente a cada execução — `costs`, `picking`, `consumption`. Nenhuma
  * expectativa mudou aqui também: o arquivo só deixou de ter vizinho.
  *
+ * `controlled-documents.test.ts` (QUALITY-DOC-WRITE-01) entrou pelo mesmo
+ * critério do GMP: provar que a Qualidade ATIVA revisão troca a vigente do
+ * banco inteiro enquanto o teste dura.
+ *
  * Só entra aqui arquivo que dependa de estado global de forma inevitável.
  * Todo o resto continua em paralelo, no `vitest.config.ts`.
  */
@@ -40,6 +44,7 @@ export default defineConfig(({ mode }) => ({
     include: [
       "src/modules/dashboard/dashboard.test.ts",
       "src/modules/production-orders/gmp-execution.test.ts",
+      "src/modules/controlled-documents/controlled-documents.test.ts",
     ],
     // Um worker, um arquivo por vez: nenhum vizinho escrevendo no banco
     // enquanto um agregado global é medido.

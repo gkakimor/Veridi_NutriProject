@@ -10,7 +10,7 @@ import { helpTopics } from "../../help/help-content";
 import { LibraryPagination, LibraryStatus, LibraryToolbar } from "./TemplateLibraryTable";
 
 /**
- * Gestão → Templates de Estrutura de Custos.
+ * Modelos e Parâmetros → Modelos de Estrutura de Custo.
  *
  * Configurações industriais reutilizáveis. Aplicar um template cria uma
  * estrutura própria do produto — e o template nunca carrega tarifa: o que
@@ -76,7 +76,7 @@ export function CostTemplatesPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Templates de Estrutura de Custos</h1>
+          <h1 className="page__title">Modelos de Estrutura de Custo</h1>
           <p className="page__subtitle">
             Configurações industriais reutilizáveis: base de produção, recursos e premissas.
             Aplicar um template cria uma estrutura independente no produto — e as tarifas

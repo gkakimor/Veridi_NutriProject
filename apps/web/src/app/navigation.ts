@@ -211,8 +211,9 @@ export const navGroups: NavGroup[] = [
      *
      * "Documentos controlados" é o registro de revisão dos documentos GMP
      * impressos (R.PRO.002, R.COQ.003: elaborado por, aprovado por,
-     * revisão ativa) — controle documental do sistema da qualidade. Mudou só
-     * de seção: a URL e o gate da API (gravar só ADMIN) seguem iguais.
+     * revisão ativa) — controle documental do sistema da qualidade. Mudou de
+     * seção sem mudar a URL; registrar e ativar revisão é da Qualidade e do
+     * ADMIN (QUALITY-DOC-WRITE-01).
      */
     items: [
       {

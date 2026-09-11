@@ -2,7 +2,7 @@ import type { HelpTopic } from "../help-content";
 
 /**
  * Gestão — custo congelado, preço, bibliotecas reutilizáveis, relatórios e a
- * Consulta de Cliente.
+ * Visão do Cliente.
  *
  * O módulo existe porque estas telas foram, por um tempo, explicadas pela
  * ajuda do CMV: a tela de preço abria um painel que descrevia como o custo
@@ -97,9 +97,9 @@ export const gestaoTopics = {
 
   "templateCusto.comoFunciona": {
     module: "gestao",
-    title: "Templates de Estrutura de Custos: configuração reutilizável, sem tarifa",
+    title: "Modelos de Estrutura de Custo: configuração reutilizável, sem tarifa",
     summary:
-      "Um template de estrutura é a configuração industrial que se repete entre produtos parecidos: qual base de produção, que recursos e por quanto tempo, como a energia entra e quais premissas se aplicam. Ele não guarda tarifa, preço por hora nem custo calculado. Aplicar um template CRIA UMA CÓPIA — uma estrutura de custos própria do produto, que segue a vida dela sozinha.",
+      "Um modelo de estrutura de custo — o template — é a configuração industrial que se repete entre produtos parecidos: qual base de produção, que recursos e por quanto tempo, como a energia entra e quais premissas se aplicam. Ele não guarda tarifa, preço por hora nem custo calculado. Aplicar um template CRIA UMA CÓPIA — uma estrutura de custos própria do produto, que segue a vida dela sozinha.",
     concepts: [
       {
         term: "Template de estrutura",
@@ -301,9 +301,9 @@ export const gestaoTopics = {
 
   "consultaCliente.comoFunciona": {
     module: "gestao",
-    title: "Consulta de Cliente: aqui o cliente é a raiz",
+    title: "Visão do Cliente: aqui o cliente é a raiz",
     summary:
-      "A Consulta reúne sob um cliente só o que já existe espalhado pelos módulos: produtos, projetos, pedidos, produção, estoque e faturamentos. Aqui dentro o cliente é a RAIZ da navegação — abrir um projeto, um pedido ou um faturamento troca de aba sob o mesmo cabeçalho, não troca de assunto. É consulta: nada se cria, se altera ou se cancela por aqui.",
+      "A Visão do Cliente reúne sob um cliente só o que já existe espalhado pelos módulos: produtos, projetos, pedidos, produção, estoque e faturamentos. Aqui dentro o cliente é a RAIZ da navegação — abrir um projeto, um pedido ou um faturamento troca de aba sob o mesmo cabeçalho, não troca de assunto. É consulta: nada se cria, se altera ou se cancela por aqui.",
     concepts: [
       {
         term: "Abas",
@@ -311,11 +311,11 @@ export const gestaoTopics = {
       },
       {
         term: "Trilha",
-        text: "O caminho no topo volta sempre para dentro da consulta: “Projetos” ali são os projetos DESTE cliente, nunca a lista geral.",
+        text: "O caminho no topo volta sempre para dentro da Visão do Cliente: “Projetos” ali são os projetos DESTE cliente, nunca a lista geral.",
       },
       {
         term: "Abrir … completo",
-        text: "A única saída para o módulo operacional, e é sempre uma ação declarada. Nenhum clique comum tira você da consulta.",
+        text: "A única saída para o módulo operacional, e é sempre uma ação declarada. Nenhum clique comum tira você da Visão do Cliente.",
       },
       {
         term: "Trocar cliente",
@@ -330,7 +330,7 @@ export const gestaoTopics = {
       {
         label: "Buscar o cliente",
         detail:
-          "A consulta começa pela busca. O cliente escolhido passa a ser o contexto de tudo o que vem depois.",
+          "A Visão do Cliente começa pela busca. O cliente escolhido passa a ser o contexto de tudo o que vem depois.",
       },
       {
         label: "Ver o resumo",
@@ -349,9 +349,9 @@ export const gestaoTopics = {
       },
     ],
     notes: [
-      "A consulta é somente leitura. Ela não cria, não altera e não cancela nada — é o mesmo dado dos módulos, visto pelo cliente.",
+      "A Visão do Cliente é somente leitura. Ela não cria, não altera e não cancela nada — é o mesmo dado dos módulos, visto pelo cliente.",
       "O cliente escolhido está no endereço da página. Recarregar, abrir em outra aba, mandar o link a alguém e usar voltar e avançar do navegador funcionam sem nenhum ajuste.",
-      "Um documento de outro cliente não abre por aqui, mesmo com o endereço correto: a consulta responde como se ele não existisse. Confirmar que existe já seria vazar a informação que o escopo protege.",
+      "Um documento de outro cliente não abre por aqui, mesmo com o endereço correto: a Visão do Cliente responde como se ele não existisse. Confirmar que existe já seria vazar a informação que o escopo protege.",
       "As listas são as mesmas dos módulos, filtradas por este cliente. Não há uma segunda contagem paralela que possa discordar.",
       "A aba Estoque carrega duas coisas diferentes: o produto acabado que a Veridi fez para este cliente e o material que é propriedade dele.",
     ],

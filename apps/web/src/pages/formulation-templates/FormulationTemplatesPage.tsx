@@ -11,7 +11,7 @@ import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
 
 /**
- * Produção → Templates de Formulação.
+ * Modelos e Parâmetros → Modelos de Formulação.
  *
  * A biblioteca técnica: matrizes reutilizáveis entre clientes. Nada aqui
  * pertence a um cliente — usar um template cria uma cópia independente na
@@ -93,7 +93,7 @@ export function FormulationTemplatesPage() {
     <>
       <div className="page__header">
         <div>
-          <h1 className="page__title">Templates de Formulação</h1>
+          <h1 className="page__title">Modelos de Formulação</h1>
           <p className="page__subtitle">
             Matrizes técnicas reutilizáveis entre clientes. Usar um template cria uma cópia
             independente na formulação do produto — alterar o template depois não muda nenhuma
