@@ -285,6 +285,9 @@ async function main() {
     await assentar();
     const copiadas = await unidadesNaFormulacao.evaluateAll((selects) => selects.map((s) => s.value));
     afirmar("a formulação nasce com as unidades do Modelo", copiadas.join(",") === "un,g", copiadas.join(","));
+    // TEMPLATE-APPLY-BASE-UOM-01: a base também chega na mesma grandeza — 1 un do Modelo, 1 un do Produto.
+    const baseCopiada = await pagina.locator("#version-basis").first().inputValue();
+    afirmar("e a base chega na mesma grandeza física", baseCopiada === "1", baseCopiada);
 
     afirmar("console limpo", erros.length === 0, erros.slice(0, 3).join(" | "));
   } finally {

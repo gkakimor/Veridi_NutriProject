@@ -849,9 +849,32 @@ fora do catálogo passou de 500 cru a 400 com nome, e ativar reconfere as
 unidades — o componente já era recusado antes. DEV e PROD sem nenhum dado fora
 do catálogo. Zero migration.
 
+## Aplicar o Modelo preserva a base (TEMPLATE-APPLY-BASE-UOM-01, 2026-09-10)
+
+**P0 de integridade física, fechado.** Aplicar um Modelo copiava só o número
+da base: 1 kg num Produto em g nascia 1 g, e num Produto em `un` nascia 1 un.
+Agora a mesma unidade copia, a mesma dimensão converte pelo fator do catálogo
+em Decimal (1 kg → 1000 g), e dimensão diferente é recusada sem criar nada. Os
+componentes por base não mudam; o que conta por unidade acabada recusa a troca
+de unidade. Zero migration.
+
 ## Próxima prioridade
 
-**QUOTE-DUPLICATE-01** — primeiro da fila viva, e o **gate de preço foi resolvido**
+**CUSTOMER-TAX-PROFILE-01** — primeiro da fila viva, decisão do PO em
+2026-09-10: o Perfil tributário do Cliente (Não informado, MEI, Simples
+Nacional, Lucro Presumido, Lucro Real, Outro) orienta a escolha do Modelo de
+Precificação, sem calcular imposto e sem bloquear nada. **Não iniciado.**
+
+**PRICING-TEMPLATE-FLEX-01** — segundo: parâmetros opcionais no Modelo de
+Precificação, distinguindo "não considerar" de zero, sem motor fiscal.
+**Não iniciado.**
+
+**Nenhum módulo é ocultado** — decisão da Veridi em 2026-09-10: Precificação,
+Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha
+ocultação.
+
+**QUOTE-DUPLICATE-01** — terceiro da fila viva, depois dos dois itens de
+precificação, e o **gate de preço foi resolvido**
 pelo PO em 2026-09-10: sem herança silenciosa de `unitPrice`, com escolha
 explícita entre manter os preços da versão de origem e revisá-los, nenhuma
 opção pré-marcada. O que sobra de trabalho é escolher a versão de ORIGEM

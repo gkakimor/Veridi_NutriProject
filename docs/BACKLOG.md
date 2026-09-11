@@ -37,15 +37,18 @@ faz primeiro e estava espalhada por cinco lugares. Saíram da fila em
 QUOTE-SEND-LINE-DRAFT-01 e QUOTE-LINE-NOOP-BLUR-01, promovidos a P0 pelo PO
 por integridade comercial; QUOTE-INT-FIELDS-01, pela mesma razão, em P1;
 PROJECT-INT-FIELDS-01, o mesmo defeito no cadastro do Projeto, promovido a P0;
-e FORM-UOM-01, a unidade controlada no Modelo de Formulação.
+FORM-UOM-01, a unidade controlada no Modelo de Formulação; e
+TEMPLATE-APPLY-BASE-UOM-01, promovido a P0 — integridade física da Formulação.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa |
-| **P1-2** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-3** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-4** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-5** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | CUSTOMER-TAX-PROFILE-01 | A · P1 | Decisão do PO, 2026-09-10: o Perfil tributário do Cliente orienta a escolha do Modelo de Precificação — e vem antes da precificação flexível que o usa |
+| **P1-2** | PRICING-TEMPLATE-FLEX-01 | A · P1 | Decisão do PO, 2026-09-10: parâmetros opcionais no Modelo de Precificação, sem obrigar a Veridi a controlar no ERP custos que o financeiro externo gerencia |
+| **P1-3** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa. Depois dos dois itens de precificação, por decisão do PO |
+| **P1-4** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-5** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-6** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-7** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
@@ -500,6 +503,30 @@ unidade fora do catálogo travaria a migration, e essa é uma decisão de domín
 não um detalhe técnico.
 
 
+#### TEMPLATE-APPLY-BASE-UOM-01 — aplicar Modelo reinterpretava a base em outra unidade — **RESOLVIDO em 2026-09-10**
+
+Achado de FORM-UOM-01, promovido a **P0** pelo PO — integridade física da
+Formulação. A Formulação lê a base na unidade do seu Item acabado
+(`outputUnitCode`, retrato do Item na criação da versão), e aplicar copiava só
+o NÚMERO da base do Modelo. Reproduzido antes da correção: 1 kg num Produto em
+g nascia "1" — um grama —, 1 L num Produto em mL nascia "1", e 1 kg num Produto
+em `un` nascia "1 un", com 201. Treze de dezesseis casos falhavam.
+
+**A regra agora.** Mesma unidade copia. Mesma dimensão converte pelo fator do
+catálogo (`convertUomDecimal`, em Decimal; os fatores do seed conferidos em
+teste): 1 kg → 1000 g, 1000 g → 1 kg, 1 L → 1000 mL, 0,001 kg → 1 g. Dimensão
+diferente — massa, contagem, volume — recusa com 409 e "A unidade da base do
+Modelo (kg) não é compatível com a unidade do Produto (un).", sem criar nem
+preencher nada. Os componentes não mudam: por base, descrevem a proporção
+física da base, e 100 g por 1 kg são 100 g por 1000 g. O que conta por UNIDADE
+ACABADA — componente por dose ou por unidade, dose por embalagem — não
+atravessa a troca de unidade sem mudar de tamanho, e recusa também, com
+motivo; converter esses números é decisão futura. Base que passaria de 12
+casas na conversão recusa. A regra vale no rascunho vazio que o Modelo
+preenche e na versão que nasce, dentro da transação. Sem migration: a
+Formulação já guarda a unidade da base. Regra durável:
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §35.
+
 #### INDUSTRIAL-RATE-VALIDITY-01 — vigência de tarifa industrial — **RESOLVIDO em 2026-09-09**
 
 Regra durável em [`PRODUCT_RULES.md`](PRODUCT_RULES.md), **§79**.
@@ -668,6 +695,48 @@ desconto e prazo. A origem não é alterada — lida junto com §70, que já dec
 que aceitar uma versão nova supera as aceitas em aberto, e essa mudança de
 status na anterior é legítima e separada desta ação.
 
+#### CUSTOMER-TAX-PROFILE-01 — Perfil tributário do Cliente — P1-1 (decisão do PO, 2026-09-10)
+
+**Não iniciado.** O Cliente passa a ter um **Perfil tributário**: classificação
+tributária e comercial usada como referência para selecionar ou sugerir
+Modelos de Precificação compatíveis. O nome do produto é "Perfil tributário" —
+nunca "tipo de CNPJ".
+
+Valores candidatos, decisão inicial do PO sujeita à auditoria de modelagem:
+Não informado · MEI · Simples Nacional · Lucro Presumido · Lucro Real · Outro.
+
+**Já decidido:**
+- o perfil **não calcula imposto**. Classifica o Cliente e ajuda a escolher o
+  Modelo de Precificação; os percentuais continuam configurados
+  explicitamente no Modelo;
+- o padrão é **Não informado**, e ele **não bloqueia** Cliente, Projeto,
+  Pedido nem Orçamento.
+
+#### PRICING-TEMPLATE-FLEX-01 — Modelo de Precificação flexível e custos opcionais — P1-2 (decisão do PO, 2026-09-10)
+
+**Não iniciado — e o schema não se congela agora.** O Modelo de Precificação
+passa a aceitar parâmetros opcionais, sem obrigar a Veridi a controlar no ERP
+custos que hoje o financeiro externo gerencia. Componentes a auditar: custo de
+materiais, custo industrial, impostos estimados, custos administrativos e
+financeiros, comissão e margem.
+
+**Direção do PO:**
+- **custo industrial:** não considerar; percentual sobre uma base
+  explicitamente definida; R$ por unidade; R$ total. Nunca "10%" sem dizer
+  10% de quê;
+- **impostos:** não considerar; % sobre um preço ou base comercial definido;
+  R$ por unidade; R$ total. O Perfil tributário do Cliente
+  (CUSTOMER-TAX-PROFILE-01) pode sugerir o Modelo, nunca determina o imposto;
+- **gestão externa:** o Modelo precisa representar custos adicionais que o
+  ERP não gerencia;
+- **"não considerar" não é zero:** valor efetivamente zero e parâmetro fora
+  deste cálculo são estados distintos, e zero não pode ser a única
+  representação do segundo;
+- **desabilitar não apaga:** a linha de custo desligada guarda a configuração
+  para ser religada — a modelar;
+- **sem motor fiscal:** percentuais e regras vêm da Veridi e do financeiro; o
+  ERP não vira motor tributário automático.
+
 #### CUSTOMER-COMMERCIAL-STATUS-01 — situação comercial viva do Cliente
 
 Decisão de produto de 2026-09-09, vinda do walkthrough real.
@@ -776,7 +845,6 @@ sem contrato cadastrado; os conceitos são independentes.
 | **VOCAB-01** | Um conceito, três nomes: "Base de produção" (campo), "Base de referência" (leitura) e "Base de produção sugerida" (template) nomeiam a mesma quantidade. Mesma família de F-01-1; sweep só quando houver rodada de nomenclatura | UX | S |
 | **F-01-2** | "Criar projeto" desabilitado sem dizer o que falta | UX | XS |
 | **F-04-2** | Ativar estrutura e precificação com dado completo não pede confirmação | UX | S |
-| **TEMPLATE-APPLY-BASE-UOM-01** | Aplicar um Modelo a um Produto copia a `basisQuantity` e ignora a `outputUnitCode` do Modelo: a Formulação nasce com a unidade do Item acabado do Produto, sem conferir que é a mesma, nem da mesma dimensão. Base "1 kg" num produto em `un` viraria "1 un" em silêncio. Hoje PROD tem 1 cópia e todas as bases em `un` — nenhuma divergência. Achado em FORM-UOM-01, fora do escopo dela | MEDIUM | S |
 
 **F-01-1 e F-07-2 foram rebaixados**: os dois números estão certos para o que
 representam — `Project.productId` (produto resultante) contra `project_products`
@@ -1156,7 +1224,7 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-4, SUPPLIER-ADDRESS-01 em P1-5) — mas a
+(COST-RESOURCE-MULTIPLIER-01 em P1-6, SUPPLIER-ADDRESS-01 em P1-7) — mas a
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 
