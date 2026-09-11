@@ -85,7 +85,8 @@ requisição cross-origin).
    partir do repositório.
 3. Preencher as variáveis da seção 3.
 4. Deploy. Acompanhar o log: build, depois `prisma migrate deploy`, depois
-   `API ouvindo`.
+   `API ouvindo`. O catálogo de unidades de medida (mg, g, kg, un, mL, L)
+   nasce dessas migrations — nenhum seed é necessário para cadastrar Item.
 5. Abrir a URL do serviço (`*.up.railway.app` serve para validar; domínio
    próprio entra depois, sem mudar nada do código).
 6. Criar o primeiro usuário — **não existe senha padrão no repositório**:

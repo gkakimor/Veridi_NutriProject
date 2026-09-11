@@ -6,16 +6,18 @@ import { descreverDestino, exigirBancoLocal } from "./local-db-guard.mjs";
 
 /**
  * Prova que as migrations reconstroem um banco VAZIO **e que esse banco é o
- * `schema.prisma`**.
+ * `schema.prisma`** — com o dado de referência que uma instalação nova
+ * precisa para funcionar.
  *
  *   pnpm validate:migrations:fresh
  *
  * Cria um banco descartável no MESMO servidor local da `DATABASE_URL`, aplica
  * `prisma migrate deploy` nele do zero, confere `prisma migrate status`,
  * exige que `prisma migrate diff` entre esse banco e o `schema.prisma` saia
- * VAZIO, e derruba o banco no fim — inclusive quando algo falha no meio.
+ * VAZIO, confere o catálogo de referência, e derruba o banco no fim —
+ * inclusive quando algo falha no meio.
  *
- * São dois defeitos distintos, cada um com sua verificação:
+ * São três defeitos distintos, cada um com sua verificação:
  *
  * 1. ORDEM (BACKLOG #13) — uma migration alterava uma tabela criada por outra
  *    de nome maior. Em banco existente o `migrate deploy` só aplica o que
@@ -33,6 +35,12 @@ import { descreverDestino, exigirBancoLocal } from "./local-db-guard.mjs";
  *    estrutura com o modelo. O `migrate diff` daqui compara — e é a única
  *    barreira que reprova esse defeito antes do commit.
  *
+ * 3. INSTALAÇÃO (FAST-DEVELOPMENT-RESET-02) — o catálogo de unidades de
+ *    medida só existia porque alguém tinha rodado seed: produção nunca roda
+ *    seed, e uma instalação nova nascia sem unidade nenhuma — sem Item, sem
+ *    nada. Agora ele nasce da migration, e este banco vazio, que nunca viu
+ *    seed, é a prova.
+ *
  * LOCAL SOMENTE. A `DATABASE_URL` passa por `exigirBancoLocal` (host local,
  * sem marca de banco gerenciado, sem credencial de produção no ambiente) e o
  * banco temporário leva um marcador no nome. Nunca aponta para o Railway.
@@ -44,6 +52,20 @@ const MARCADOR = "veridi_fresh_check_";
 
 const requireFromApi = createRequire(path.join(API, "package.json"));
 const { PrismaClient } = requireFromApi("@prisma/client");
+
+/**
+ * O que uma instalação nova precisa ter sem ninguém cadastrar. Valor
+ * esperado de teste, escrito por extenso de propósito: se a migration mudar
+ * o catálogo, este número tem de mudar junto, conscientemente.
+ */
+const CATALOGO_DE_UNIDADES = [
+  { code: "L", dimension: "VOLUME", fator: "1" },
+  { code: "g", dimension: "MASS", fator: "1" },
+  { code: "kg", dimension: "MASS", fator: "1000" },
+  { code: "mL", dimension: "VOLUME", fator: "0.001" },
+  { code: "mg", dimension: "MASS", fator: "0.001" },
+  { code: "un", dimension: "COUNT", fator: "1" },
+];
 
 function comBanco(url, nome) {
   const u = new URL(url);
@@ -60,6 +82,30 @@ function prisma(args, databaseUrl) {
     // `pnpm` no Windows é um .cmd: sem shell falha com ENOENT.
     shell: process.platform === "win32",
   });
+}
+
+/** `DECIMAL(18,6)` volta com seis casas; "1000.000000" e "1000" são o mesmo fator. */
+const semZerosAMais = (fator) => (fator.includes(".") ? fator.replace(/0+$/, "").replace(/\.$/, "") : fator);
+
+async function conferirCatalogo(databaseUrl) {
+  const banco = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+  try {
+    const linhas = await banco.$queryRawUnsafe(
+      `SELECT code, dimension::text AS dimension, "toBaseFactor"::text AS fator
+       FROM units_of_measure ORDER BY code COLLATE "C"`,
+    );
+    const lido = linhas.map((l) => `${l.code} ${l.dimension} ${semZerosAMais(l.fator)}`);
+    const esperado = CATALOGO_DE_UNIDADES.map((u) => `${u.code} ${u.dimension} ${u.fator}`);
+    if (JSON.stringify(lido) !== JSON.stringify(esperado)) {
+      throw new Error(
+        `catálogo de unidades do banco novo não é o de referência.\n` +
+          `  esperado: ${esperado.join(" · ")}\n  lido:     ${lido.join(" · ") || "(vazio)"}`,
+      );
+    }
+    return lido.length;
+  } finally {
+    await banco.$disconnect();
+  }
 }
 
 async function main() {
@@ -123,6 +169,10 @@ async function main() {
       );
     }
     console.log("  sem drift: as migrations constroem exatamente o schema.prisma");
+
+    console.log("— dado de referência (banco novo, nenhum seed)");
+    const unidades = await conferirCatalogo(tempUrl);
+    console.log(`  units_of_measure: ${unidades} unidades, as de referência — nascem da migration`);
   } catch (erro) {
     falha = erro;
   } finally {
