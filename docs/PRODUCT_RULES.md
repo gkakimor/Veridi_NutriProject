@@ -5069,6 +5069,16 @@ gravado. O que mudou é a pergunta feita contra ele — quais instantes pertence
 ao dia D — e a ponte, quando o domínio precisa do dia de um instante, é
 `marcadorDoDiaComercialDe`.
 
+### A data que a pessoa escolhe vira instante DO DIA escolhido
+
+FAST-DEVELOPMENT-RESET-02, 2026-09-11. "Data do recebimento" é data civil na
+tela, e `receivedAt` é instante no domínio. A conversão é
+`lib/receipt-instant.ts`, a mesma nas duas telas de recebimento: **hoje vira
+agora**; outro dia vira o **início daquele dia comercial**. Nunca a meia-noite
+UTC — `new Date("2026-09-11")` é 21h do dia 10 em São Paulo, e o lote recebido
+no dia 11 nascia `LT-20260910-…`, com o movimento de estoque na véspera. O
+campo abre com o dia comercial de hoje, não com o dia UTC.
+
 ### "Hoje" implícito é sempre o dia comercial
 
 Quando a borda não informa data, o padrão é `marcadorDeHojeComercial()`, nunca
