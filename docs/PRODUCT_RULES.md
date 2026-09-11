@@ -5318,6 +5318,14 @@ reabertura) e a data de cancelamento. Edição de cadastro e login não contam.
 O dia é o **dia civil da Veridi** (`America/Sao_Paulo`, §72), nunca o do
 navegador nem o da máquina.
 
+**O que não é atividade — decisão do PO, 2026-09-11
+(CUSTOMER-ACTIVITY-SCOPE-01):** Pedido em rascunho não conta, e o envio de
+Orçamento, por si só, não reabre a janela. A situação mede o ciclo de
+oportunidade e conversão, não o último contato: a oportunidade é o Projeto, e a
+conversão continua sendo Projeto aprovado ou Pedido confirmado. Consequência
+aceita: Cliente sem conversão cujo único movimento é um Pedido direto em
+rascunho vira Inativo passados os 15 dias.
+
 **"Cliente desde"** é o dia da conversão MAIS ANTIGA — primeiro Projeto
 aprovado ou primeiro Pedido confirmado —, nunca o do último Pedido.
 

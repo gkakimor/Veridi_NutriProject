@@ -1003,20 +1003,34 @@ BACKLOG, sem posição na fila: QUOTE-NEW-VERSION-PATHS-01 e
 QUOTE-DUPLICATE-ORIGIN-01.
 
 **CUSTOMER-COMMERCIAL-STATUS-01 fechado em 2026-09-11** (§86). Achados novos no
-BACKLOG, sem posição na fila: CUSTOMER-LIST-DEFAULT-E2E-01,
-CUSTOMER-FACTS-LOAD-01 e CUSTOMER-ACTIVITY-SCOPE-01. Próximo da fila viva:
-COST-BASELINE-01, logo abaixo.
+BACKLOG, sem posição na fila: CUSTOMER-LIST-DEFAULT-E2E-01 e
+CUSTOMER-FACTS-LOAD-01. O terceiro, CUSTOMER-ACTIVITY-SCOPE-01, o PO respondeu
+no mesmo dia, e a resposta entrou em §86: Pedido em rascunho e envio de
+Orçamento não são atividade comercial — a situação mede o ciclo de oportunidade
+e conversão, não o último contato. Nenhum runtime mudou.
 
-**COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
-mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum
-`IndustrialCostCalculation` e nenhuma `PricingVersion`, e por isso **nenhuma
-`QuoteLine` tem CMV congelado**. Enquanto isso não existir, qualquer comparação
-"custo do orçamento × custo de hoje" não tem o primeiro termo. Registrado no
-[`BACKLOG.md`](BACKLOG.md), **sem implementar**.
+**COST-BASELINE-01 absorvido em 2026-09-11, sem código.** O item pedia que
+nascesse, para produtos reais, `IndustrialCostCalculation` →
+`PricingVersion`/`PricingTier` → `QuoteLine` com CMV congelado, e já dizia que
+o problema não era de código. Cada elo existe e está provado: fonte de custo
+por §53 (`selectItemCostSource`), com oferta e referência manual nunca contadas
+como compra real; matéria-prima e embalagem na mesma conta; componente sem
+custo deixando o total "Indisponível", com o subtotal conhecido rotulado como
+parcial (§5.12); material do Cliente fora da aquisição Veridi; e a linha do
+Orçamento congelando no envio o CMV da faixa ativa da mesma quantidade,
+inclusive a de preço herdado (§74). O golden path do FAST-DEVELOPMENT-RESET-02
+atravessou essa cadeia pela interface numa base zerada. O que faltava era dado:
+os números da auditoria (288 de 581 matérias-primas sem custo, 602 ofertas sem
+vigência) eram do corpus que saiu de PROD no reset. Custo de produto real nasce
+do que a Veridi lançar pela interface — compra, oferta com vigência, referência
+manual —, e o sistema não faz escrita de massa. Próximo da fila viva:
+COST-RESOURCE-MULTIPLIER-01, discovery antes de build.
 
 **COST-VAR-02** (comparação de CMV e proteção de margem) segue BLOQUEADO
 aguardando as sete decisões do PO em
-[`archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md).
+[`archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md`](archive/COST-VAR-01_AUDITORIA_VARIACAO_CMV.md);
+o primeiro termo da comparação só existe quando houver, em produção, cálculo
+salvo e Precificação ativa na quantidade do orçamento.
 
 **PLAN-DATE-01** — usar as datas e quantidades das entregas programadas para
 melhorar a Sugestão de Compra e a leitura da necessidade de produção. Registrado

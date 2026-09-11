@@ -41,22 +41,24 @@ FORM-UOM-01, a unidade controlada no Modelo de Formulação; e
 TEMPLATE-APPLY-BASE-UOM-01, promovido a P0 — integridade física da Formulação.
 Saíram em 2026-09-11: CUSTOMER-TAX-PROFILE-01, PRICING-TEMPLATE-FLEX-01,
 QUOTE-DUPLICATE-01 e CUSTOMER-COMMERCIAL-STATUS-01, com as regras duráveis em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83, §84, §85 e §86.
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83, §84, §85 e §86. No mesmo dia, sem
+código: CUSTOMER-ACTIVITY-SCOPE-01, respondido pelo PO (§86), e
+COST-BASELINE-01, absorvido pela fundação de custo que já existe — o que
+faltava era dado real, não código ([`PROJECT_STATE.md`](PROJECT_STATE.md),
+"Próxima prioridade").
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-2** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-3** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-2** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
-| depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
+| depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião. COST-VAR-02 continua esperando as sete decisões do PO e dado real em produção |
 
 Achados de PRICING-TEMPLATE-FLEX-01, sem posição na fila: PRICING-MODEL-VIEW-01,
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 (seção A, na entrada do
 item). Achados de QUOTE-DUPLICATE-01, idem: QUOTE-NEW-VERSION-PATHS-01 e
 QUOTE-DUPLICATE-ORIGIN-01. Achados de CUSTOMER-COMMERCIAL-STATUS-01, idem:
-CUSTOMER-LIST-DEFAULT-E2E-01, CUSTOMER-FACTS-LOAD-01 e
-CUSTOMER-ACTIVITY-SCOPE-01.
+CUSTOMER-LIST-DEFAULT-E2E-01 e CUSTOMER-FACTS-LOAD-01.
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma
@@ -778,10 +780,6 @@ abaixo fica como histórico.
   Cliente da página, os Projetos com o histórico de status e os Pedidos
   confirmados. Número de consultas constante; volume de linhas cresce com a
   história. Medir quando o corpus real voltar.
-- **CUSTOMER-ACTIVITY-SCOPE-01 — pergunta ao PO, P3.** Pela regra decidida,
-  Pedido em rascunho e envio de Orçamento não são atividade comercial: um
-  Cliente com Pedido direto em rascunho vira Inativo em 15 dias. Confirmar se é
-  intencional.
 
 Decisão de produto de 2026-09-09, vinda do walkthrough real.
 
@@ -1185,35 +1183,6 @@ Onde se corrige, quando valer: a serialização, num lugar só — `toFixed` na
 escala da categoria (§58), nunca `toString`. Encontrado em COM-04, fora do
 escopo dele e do COM-04b.
 
-### 16. COST-BASELINE-01 — prontidão real de custo e precificação — HIGH
-
-A auditoria COST-VAR-01 mediu o problema de fundo, e ele não é de código.
-
-Em produção: **zero recebimentos**, zero `IndustrialCostCalculation`, zero
-`PricingVersion`, zero `PricingTier`. Metade das matérias-primas (288 de 581)
-não tem nenhuma fonte de custo. Todo o custo que existe vem das 293
-`ItemCostReference` — o degrau 5 da hierarquia, o mais baixo, e o único
-classificado como estimativa.
-
-Consequência que atravessa o comercial: **nenhuma `QuoteLine`, em DEV ou em
-PROD, tem CMV congelado**. As colunas existem e `buildLineSnapshots` as
-preenche, mas só quando a linha vem de faixa ou existe precificação ativa com
-a mesma quantidade física — e não existe nenhuma.
-
-O que a capability precisa fazer nascer, para produtos reais:
-
-`IndustrialCostCalculation` → `PricingVersion`/`PricingTier` → `QuoteLine` com
-CMV congelado.
-
-**Ordem importa.** COST-SOURCE-01 destravou o degrau 4; informar vigência nas
-ofertas legadas **sem** definir o fornecedor preferencial rebaixaria 90 itens
-de "com custo" para `AMBIGUOUS_SUPPLIER_REFERENCE`. As duas decisões andam
-juntas, e são do usuário: nenhuma escrita de massa comercial em produção foi
-feita nem deve ser feita pelo sistema.
-
-**Bloqueia COST-VAR-02.** Comparar "custo do orçamento × custo de hoje" sem o
-primeiro termo entrega uma tela que responde "—".
-
 ### 14. PLAN-DATE-01 — planejamento temporal pelas entregas programadas — LOW
 
 COM-04 entregou a promessa; ela ainda não influencia o planejamento. Hoje o
@@ -1273,7 +1242,7 @@ pergunta**; desenhar solução antes da resposta é o que produz módulo que nin
 usa.
 
 Dois têm posição na fila viva porque a pergunta deles já tem dono e prazo
-(COST-RESOURCE-MULTIPLIER-01 em P1-5, SUPPLIER-ADDRESS-01 em P1-6) — mas a
+(COST-RESOURCE-MULTIPLIER-01 em P1-1, SUPPLIER-ADDRESS-01 em P1-2) — mas a
 posição é da DESCOBERTA, não de uma implementação autorizada. Os outros
 esperam a pergunta virar decisão.
 
@@ -1308,11 +1277,13 @@ para a mesma pergunta, e o estado atual dos dois está travado em teste para que
 a mudança seja deliberada (`rate-validity-api.test.ts`,
 `scripts/e2e/vigencia-de-tarifa-industrial.mjs`).
 
-**Contexto que NÃO é tarefa:** as 602 ofertas `LEGACY_IMPORT` seguem sem
-`effectiveAt` e sem `preferred`, e isso é **dado do usuário**. Não existe item
-para "corrigir as 602": informar vigência sem definir preferencial rebaixaria
-90 itens para `AMBIGUOUS_SUPPLIER_REFERENCE` (ver COST-BASELINE-01). Nenhum
-backfill, nem em DEV nem em PROD.
+**Contexto que NÃO é tarefa:** as 602 ofertas `LEGACY_IMPORT` do corpus não
+têm `effectiveAt` nem `preferred`, e isso é **dado do usuário** — DEV e PROD
+não as têm desde o reset de 2026-09-11, e elas voltam, do mesmo jeito, se a
+carga do corpus for refeita. Não existe item para "corrigir as 602": informar
+vigência sem definir preferencial rebaixaria 90 itens para
+`AMBIGUOUS_SUPPLIER_REFERENCE` (auditoria COST-VAR-01, G4). Nenhum backfill,
+nem em DEV nem em PROD.
 
 ### COST-RESOURCE-MULTIPLIER-01 — multiplicador de recurso
 
