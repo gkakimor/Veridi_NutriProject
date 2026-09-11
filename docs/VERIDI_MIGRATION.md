@@ -230,6 +230,38 @@ sobrescrita silenciosa).
 
 ---
 
+## Pacote de revisão de cadastros (produção)
+
+Antes da carga de produção, os cadastros passam por revisão humana em Excel
+(PROD-MASTER-MIGRATION-PACK-01). `scripts/veridi-migration-pack/` gera, a partir
+do mesmo corpus, oito arquivos em `handoff/migracao-producao/revisao-01/`
+(fora do Git): mapa de chaves, clientes, fornecedores, matérias-primas,
+embalagens, produtos acabados, referência de mercado e ofertas do legado. Como
+rodar e as regras: [`scripts/veridi-migration-pack/README.md`](../scripts/veridi-migration-pack/README.md).
+
+- A chave entre os arquivos é a `CHAVE_MIGRACAO`, derivada só do código legado
+  (`CLI-LEG-0013`, `ITEM-LEG-0157`, `PROD-LEG-0001PL`…). O código do ERP sai do
+  APPLY: nenhum é previsto no pacote.
+- A Veridi devolve os arquivos corrigidos sem apagar linhas (`NAO_IMPORTAR`
+  tira da carga). Depois: `validar_pacote.py --devolucao` → PLAN → relatório de
+  diferenças → aprovação do PO → backup de produção → APPLY → verify
+  (PROD-MASTER-MIGRATION-APPLY-01).
+- Referência de mercado (arquivo 06) nunca entra como custo.
+
+Pontos que a carga a partir do Excel precisa decidir (achados na geração):
+
+- `Supplier` não tem `externalCode`: a `CHAVE_MIGRACAO` do fornecedor deriva do
+  nome, e a idempotência hoje é por `legalName`.
+- O importador atual não reconhece a família `MINERAIS` (plural) e gravaria
+  `OTHER_RAW_MATERIAL`; o pacote já propõe `MINERAL`.
+- Há itens com código só no CMV ou só na planilha de preços, e produtos cuja
+  fórmula não tem nenhuma linha com código de item — o importador atual os
+  ignora em silêncio; no pacote eles aparecem como pendência.
+- Preço de fornecedor "por kg" em item contado em unidade só entra com a
+  unidade decidida pela Veridi (`UNIDADE_DO_PRECO`).
+
+---
+
 ## Aliases antigos
 
 `pnpm veridi:data:validate` e `pnpm veridi:data:seed` continuam existindo
