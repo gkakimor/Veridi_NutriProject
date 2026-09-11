@@ -39,23 +39,24 @@ por integridade comercial; QUOTE-INT-FIELDS-01, pela mesma razão, em P1;
 PROJECT-INT-FIELDS-01, o mesmo defeito no cadastro do Projeto, promovido a P0;
 FORM-UOM-01, a unidade controlada no Modelo de Formulação; e
 TEMPLATE-APPLY-BASE-UOM-01, promovido a P0 — integridade física da Formulação.
-Saíram em 2026-09-11: CUSTOMER-TAX-PROFILE-01, PRICING-TEMPLATE-FLEX-01 e
-QUOTE-DUPLICATE-01, com as regras duráveis em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83, §84 e §85.
+Saíram em 2026-09-11: CUSTOMER-TAX-PROFILE-01, PRICING-TEMPLATE-FLEX-01,
+QUOTE-DUPLICATE-01 e CUSTOMER-COMMERCIAL-STATUS-01, com as regras duráveis em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83, §84, §85 e §86.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-2** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-3** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-4** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-2** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-3** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
 Achados de PRICING-TEMPLATE-FLEX-01, sem posição na fila: PRICING-MODEL-VIEW-01,
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 (seção A, na entrada do
 item). Achados de QUOTE-DUPLICATE-01, idem: QUOTE-NEW-VERSION-PATHS-01 e
-QUOTE-DUPLICATE-ORIGIN-01.
+QUOTE-DUPLICATE-ORIGIN-01. Achados de CUSTOMER-COMMERCIAL-STATUS-01, idem:
+CUSTOMER-LIST-DEFAULT-E2E-01, CUSTOMER-FACTS-LOAD-01 e
+CUSTOMER-ACTIVITY-SCOPE-01.
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma
@@ -760,6 +761,28 @@ financeiros, comissão e margem.
 
 #### CUSTOMER-COMMERCIAL-STATUS-01 — situação comercial viva do Cliente
 
+**Fechado em 2026-09-11 — regra durável em `PRODUCT_RULES.md` §86.** Os dois
+gates foram resolvidos pelo PO na execução: **converte** quem teve Projeto
+aprovado OU Pedido confirmado, com semântica histórica (`confirmedAt` vale
+mesmo depois de cancelado; rascunho e cancelado antes da confirmação não
+contam); **Projeto aberto** é aguardando ou amostra — stand-by e cancelado
+abrem a janela de 15 dias civis. Derivado na leitura, zero migration. O registro
+abaixo fica como histórico.
+
+**Achados da entrega (novos, sem posição na fila):**
+- **CUSTOMER-LIST-DEFAULT-E2E-01 — P3.** A lista de Clientes abre em "Clientes
+  ativos"; o recém-criado (Prospect) chega pelo contexto. E2E e golden path que
+  procuram Cliente pela lista sem contexto podem precisar de "Todos" — não
+  verificado nesta rodada (FAST, sem E2E).
+- **CUSTOMER-FACTS-LOAD-01 — watch.** Listagem e exportação carregam, para cada
+  Cliente da página, os Projetos com o histórico de status e os Pedidos
+  confirmados. Número de consultas constante; volume de linhas cresce com a
+  história. Medir quando o corpus real voltar.
+- **CUSTOMER-ACTIVITY-SCOPE-01 — pergunta ao PO, P3.** Pela regra decidida,
+  Pedido em rascunho e envio de Orçamento não são atividade comercial: um
+  Cliente com Pedido direto em rascunho vira Inativo em 15 dias. Confirmar se é
+  intencional.
+
 Decisão de produto de 2026-09-09, vinda do walkthrough real.
 
 **Uma entidade só.** Prospect e Cliente NÃO se separam em cadastros diferentes:
@@ -1457,9 +1480,8 @@ respondido:
   o que acabou foi o silêncio, não a possibilidade de copiar;
 - a pergunta de sobreposição de vigência, que vale ao mesmo tempo para
   SUPPLIER-OFFER-OVERLAP-01 e para o resíduo 2 de INDUSTRIAL-RATE-VALIDITY-01;
-- **o que prova conversão** em CUSTOMER-COMMERCIAL-STATUS-01: "Projeto
-  aprovado" sozinho classificaria como Inativo quem comprou direto, porque
-  `CustomerOrder` não exige Projeto nem Orçamento.
+- ~~**o que prova conversão** em CUSTOMER-COMMERCIAL-STATUS-01~~ — **RESOLVIDA
+  em 2026-09-11**: Projeto aprovado OU Pedido confirmado, históricos (§86).
 
 As duas primeiras posições da fila (P0) **não dependem de nenhum dos três**.
 

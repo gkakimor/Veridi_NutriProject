@@ -966,6 +966,25 @@ vencida não é copiada e rascunho aberto recusa com 409. Uma função nova
 **Zero migration.** O caminho antigo ("Criar nova versão"/"Novo orçamento")
 continua como estava.
 
+## Situação comercial do Cliente (CUSTOMER-COMMERCIAL-STATUS-01, 2026-09-11)
+
+**Regra durável: §86.** Com os dois gates resolvidos pelo PO — o que prova
+conversão (Projeto aprovado OU Pedido confirmado, históricos) e o que é
+Projeto aberto (aguardando e amostra; stand-by não) —, a situação virou uma
+leitura derivada: Cliente ativo para sempre depois da primeira conversão;
+Prospect com Projeto aberto ou até 15 dias civis da última atividade; Inativo
+depois. `Customer.active` não entra, e continua sendo o cadastro.
+
+Uma função canônica (`customers/commercial-status.ts`) deriva cada Cliente, e
+o mesmo critério vira `where` para a listagem filtrar e contar no banco; os
+fatos chegam num `include`, uma consulta por relação para a página inteira —
+provado por teste que nenhum delegado de Projeto, Pedido ou histórico é
+chamado por Cliente. Na tela, a lista de Clientes abre em "Clientes ativos"
+(padrão registrado) com Prospects · Inativos · Todos, e a situação é coluna
+própria ao lado do cadastro; a Consulta mostra situação, motivo, "cliente
+desde" e o resumo de Projetos. Cliente recém-criado chega à lista pelo
+contexto, porque nasce Prospect. **Zero migration.**
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -983,8 +1002,10 @@ ocultação.
 BACKLOG, sem posição na fila: QUOTE-NEW-VERSION-PATHS-01 e
 QUOTE-DUPLICATE-ORIGIN-01.
 
-**CUSTOMER-COMMERCIAL-STATUS-01** — primeiro da fila viva: situação comercial
-derivada do Cliente (Prospect · Cliente ativo · Inativo). **Não iniciado.**
+**CUSTOMER-COMMERCIAL-STATUS-01 fechado em 2026-09-11** (§86). Achados novos no
+BACKLOG, sem posição na fila: CUSTOMER-LIST-DEFAULT-E2E-01,
+CUSTOMER-FACTS-LOAD-01 e CUSTOMER-ACTIVITY-SCOPE-01. Próximo da fila viva:
+COST-BASELINE-01, logo abaixo.
 
 **COST-BASELINE-01** — prontidão real de custo e precificação. A auditoria
 mostrou o problema de fundo: PROD não tem nenhum recebimento, nenhum

@@ -13,6 +13,10 @@
  */
 
 import type { CustomerDTO } from "./customers.js";
+import type {
+  CustomerCommercialStatusDTO,
+  CustomerProjectSummaryDTO,
+} from "./customer-commercial-status.js";
 
 /**
  * Contadores do Resumo.
@@ -53,6 +57,10 @@ export interface CustomerConsultationCountsDTO {
 export interface CustomerConsultationSummaryDTO {
   customer: CustomerDTO;
   counts: CustomerConsultationCountsDTO;
+  /** Situação comercial derivada (§86) — o motivo e o "cliente desde" vêm junto. */
+  commercial: CustomerCommercialStatusDTO;
+  /** Os Projetos que explicam a situação, por status. */
+  projectSummary: CustomerProjectSummaryDTO;
 }
 
 

@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import type { CustomerDTO } from "@veridi/shared";
-import { BR_STATE_CODES, formatBrPhone, formatCnpj } from "@veridi/shared";
+import type { CustomerCommercialStatus, CustomerDTO } from "@veridi/shared";
+import {
+  BR_STATE_CODES,
+  CUSTOMER_COMMERCIAL_STATUS_LABELS,
+  formatBrPhone,
+  formatCnpj,
+} from "@veridi/shared";
+import { commercialStatusBadgeClass } from "./commercial-status-badge";
 import { listCustomers, setCustomerActive } from "../../lib/customers-api";
 import { CustomerFormModal } from "./CustomerFormModal";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -22,6 +28,14 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
 }
 
 type ActiveFilter = "all" | "active" | "inactive";
+
+/**
+ * Situação comercial derivada (§86) — outra pergunta que o cadastro ativo.
+ * "Clientes ativos" é o padrão da lista, decisão registrada no BACKLOG; os
+ * seletores de Cliente das outras telas não filtram nada disso.
+ */
+type CommercialFilter = "ALL" | CustomerCommercialStatus;
+const COMMERCIAL_FILTER_DEFAULT: CommercialFilter = "ACTIVE";
 type ModalState =
   | { mode: "closed" }
   | { mode: "create" }
@@ -41,6 +55,8 @@ export function CustomersPage() {
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [commercialFilter, setCommercialFilter] =
+    useState<CommercialFilter>(COMMERCIAL_FILTER_DEFAULT);
 
   /*
    * "Nada para estes filtros" e "nada cadastrado" sao frases diferentes, e a
@@ -55,6 +71,7 @@ export function CustomersPage() {
     setSearch("");
     setStateFilter("");
     setActiveFilter("all");
+    setCommercialFilter("ALL");
   }
 
   // Chegada por link contextual: `ids` reduz a lista, `open` abre o registro.
@@ -72,7 +89,7 @@ export function CustomersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, stateFilter, activeFilter, contextKey]);
+  }, [search, stateFilter, activeFilter, commercialFilter, contextKey]);
 
   // Filtro antigo somado ao contexto esconderia o próprio registro citado.
   useEffect(() => {
@@ -81,6 +98,7 @@ export function CustomersPage() {
     setSearch("");
     setStateFilter("");
     setActiveFilter("all");
+    setCommercialFilter("ALL");
   }, [contextKey]);
 
   const reload = useCallback(() => {
@@ -92,6 +110,8 @@ export function CustomersPage() {
     if (search) params.search = search;
     if (stateFilter) params.state = stateFilter;
     if (activeFilter !== "all") params.active = activeFilter === "active";
+    // O contexto mostra o registro citado, seja qual for a situação dele.
+    if (commercialFilter !== "ALL" && !contextIds) params.commercialStatus = commercialFilter;
 
     listCustomers(params)
       .then((result) => {
@@ -102,7 +122,7 @@ export function CustomersPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar clientes");
       })
       .finally(() => setLoading(false));
-  }, [page, search, stateFilter, activeFilter, contextKey]);
+  }, [page, search, stateFilter, activeFilter, commercialFilter, contextKey]);
 
   useEffect(() => {
     reload();
@@ -145,7 +165,15 @@ export function CustomersPage() {
         <Link className="btn btn--primary" to="/cadastros/clientes/novo">
           + Novo cliente
         </Link>
-        <ExportCsvButton path="/customers/export.csv" filters={{ search, state: stateFilter, active: activeFilter === "all" ? undefined : activeFilter === "active" }} />
+        <ExportCsvButton
+          path="/customers/export.csv"
+          filters={{
+            search,
+            state: stateFilter,
+            active: activeFilter === "all" ? undefined : activeFilter === "active",
+            commercialStatus: commercialFilter === "ALL" ? undefined : commercialFilter,
+          }}
+        />
 </div>
 
       {/* O cadastro parece só uma agenda até alguém descobrir que ele decide
@@ -183,17 +211,33 @@ export function CustomersPage() {
           ))}
         </select>
 
+        {/* Situação comercial (§86) e cadastro ativo são perguntas diferentes,
+            e cada filtro diz qual está respondendo. */}
+        <label className="sr-only" htmlFor="customers-commercial-filter">
+          Filtrar por situação comercial
+        </label>
+        <select
+          id="customers-commercial-filter"
+          value={commercialFilter}
+          onChange={(event) => setCommercialFilter(event.target.value as CommercialFilter)}
+        >
+          <option value="ACTIVE">Clientes ativos</option>
+          <option value="PROSPECT">Prospects</option>
+          <option value="INACTIVE">Inativos</option>
+          <option value="ALL">Todos</option>
+        </select>
+
         <label className="sr-only" htmlFor="customers-active-filter">
-          Filtrar por status
+          Filtrar por cadastro
         </label>
         <select
           id="customers-active-filter"
           value={activeFilter}
           onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
         >
-          <option value="all">Todos os status</option>
-          <option value="active">Ativos</option>
-          <option value="inactive">Inativos</option>
+          <option value="all">Todos os cadastros</option>
+          <option value="active">Cadastro ativo</option>
+          <option value="inactive">Cadastro inativo</option>
         </select>
       </div>
 
@@ -224,8 +268,9 @@ export function CustomersPage() {
               </th>
               <th className="col-flex">Cidade/UF</th>
               <th className="col-tight">Telefone</th>
+              <th className="col-tight">Situação comercial</th>
               <th className="col-tight">
-                Status
+                Cadastro
                 <DicaDaColuna id="cliente.situacao" />
               </th>
               <th aria-hidden="true" />
@@ -255,6 +300,18 @@ export function CustomersPage() {
                     : customer.city ?? customer.state ?? "—"}
                 </td>
                 <td className="col-tight">{formatBrPhone(customer.phone) ?? "—"}</td>
+                <td className="col-tight">
+                  {customer.commercial ? (
+                    <span
+                      className={commercialStatusBadgeClass(customer.commercial.status)}
+                      title={customer.commercial.reason}
+                    >
+                      {CUSTOMER_COMMERCIAL_STATUS_LABELS[customer.commercial.status]}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="col-tight">
                   <span
                     className={
@@ -289,7 +346,7 @@ export function CustomersPage() {
 
             {!loading && customers.length === 0 && (
               <tr>
-                <td colSpan={8} className="table__empty">
+                <td colSpan={9} className="table__empty">
                   {hasFilters ? (
                     <>
                       Nenhum cliente encontrado para os filtros atuais.{" "}
@@ -299,6 +356,18 @@ export function CustomersPage() {
                         onClick={clearFilters}
                       >
                         Limpar filtros
+                      </button>
+                    </>
+                  ) : commercialFilter !== "ALL" ? (
+                    <>
+                      Nenhum cliente com a situação comercial “
+                      {CUSTOMER_COMMERCIAL_STATUS_LABELS[commercialFilter]}”.{" "}
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => setCommercialFilter("ALL")}
+                      >
+                        Ver todos
                       </button>
                     </>
                   ) : (

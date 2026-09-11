@@ -5285,3 +5285,51 @@ decide o preço sozinho.**
 - **Escopo aprovado:** em projeto aprovado, produto fora do escopo não volta
   por duplicação — a mesma regra de adicionar linha.
 - **Transacional:** ou nasce a versão inteira, ou nada nasce.
+
+## §86 — Situação comercial do Cliente: derivada da história, nunca mantida à mão
+
+CUSTOMER-COMMERCIAL-STATUS-01, 2026-09-11, sobre a decisão de produto de
+2026-09-09 e os dois gates resolvidos pelo PO em 2026-09-11 (BACKLOG).
+
+**A situação comercial é uma LEITURA do Cliente — Prospect · Cliente ativo ·
+Inativo —, derivada dos fatos e das datas. Não é `Customer.active`**, que
+continua dizendo se o cadastro pode entrar em documento novo; os dois convivem,
+e nenhum decide o outro. Sem coluna, sem job, sem configuração.
+
+**Precedência, de cima para baixo:**
+
+1. **Converteu alguma vez → Cliente ativo, para sempre.** Converter é ter um
+   Projeto aprovado (`Project.approvedAt`, ou a aprovação no histórico de
+   status) OU um Pedido confirmado (`CustomerOrder.confirmedAt`, ou status além
+   do rascunho em registro sem data). Pedido confirmado e cancelado depois
+   continua provando; rascunho e Pedido cancelado antes da confirmação, não.
+   Não regride por falta de atividade.
+2. **Não converteu e tem Projeto aguardando ou em amostra → Prospect.**
+   `STAND_BY` e `CANCELLED` não são oportunidade aberta; `APPROVED` já é
+   conversão. Voltar de stand-by para aguardando ou amostra devolve Prospect
+   na hora, sem botão "Reativar".
+3. **Não converteu, sem Projeto aberto, até 15 dias civis desde a última
+   atividade comercial relevante → Prospect.**
+4. **Passados os 15 dias civis completos → Inativo** — do 16º dia em diante.
+
+**Atividade comercial relevante:** o cadastro do Cliente, a abertura de
+Projeto, cada mudança de status de Projeto (entrada em stand-by, cancelamento,
+reabertura) e a data de cancelamento. Edição de cadastro e login não contam.
+O dia é o **dia civil da Veridi** (`America/Sao_Paulo`, §72), nunca o do
+navegador nem o da máquina.
+
+**"Cliente desde"** é o dia da conversão MAIS ANTIGA — primeiro Projeto
+aprovado ou primeiro Pedido confirmado —, nunca o do último Pedido.
+
+**O status devolve o motivo** em português de tela ("Projeto X em andamento",
+"Pedido confirmado (PED-…)", "Sem atividade comercial há mais de 15 dias · …").
+
+**Listagem:** filtro Clientes ativos · Prospects · Inativos · Todos, com
+**Clientes ativos** como padrão da tela de Clientes. A API sem o filtro devolve
+todos — os seletores de Cliente das outras telas usam a mesma rota e não podem
+esconder Prospect. O filtro decide no banco (a paginação conta certo) e a
+situação de cada linha sai dos fatos carregados para a página inteira, sem
+consulta por Cliente.
+
+**Não é CRM:** sem funil, sem etapa, sem atividade agendada. E contrato não
+dirige a situação (COM-CONTRACT-01).

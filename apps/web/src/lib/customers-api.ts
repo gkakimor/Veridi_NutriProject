@@ -1,5 +1,6 @@
 import type {
   CreateCustomerInput,
+  CustomerCommercialStatus,
   CustomerDTO,
   CustomerListResponse,
   UpdateCustomerInput,
@@ -13,6 +14,8 @@ export interface ListCustomersParams {
   search?: string;
   state?: string;
   active?: boolean;
+  /** Situação comercial derivada (§86). Ausente: todas. */
+  commercialStatus?: CustomerCommercialStatus;
   page?: number;
   pageSize?: number;
 }
@@ -25,6 +28,7 @@ export async function listCustomers(
   if (params.search) query.set("search", params.search);
   if (params.state) query.set("state", params.state);
   if (params.active !== undefined) query.set("active", String(params.active));
+  if (params.commercialStatus) query.set("commercialStatus", params.commercialStatus);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 20));
 

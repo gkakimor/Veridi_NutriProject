@@ -7,6 +7,11 @@ import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { CustomerNotFoundError, DuplicateCnpjError } from "./customers.errors.js";
+import {
+  fatosComerciaisInclude,
+  filtroDaSituacaoComercial,
+  situacaoComercial,
+} from "./commercial-status.js";
 import type {
   CreateCustomerInput,
   ListCustomersQuery,
@@ -96,9 +101,20 @@ export async function listCustomers(
     ];
   }
 
+  /*
+   * Situação comercial (§86): o filtro decide no banco — a paginação conta o
+   * que a tela mostra — e a derivação de cada linha lê os fatos que o
+   * `include` trouxe para a página inteira, numa consulta por relação.
+   */
+  const agora = new Date();
+  if (query.commercialStatus) {
+    where["AND"] = [filtroDaSituacaoComercial(query.commercialStatus, agora)];
+  }
+
   const [customers, total] = await Promise.all([
     prisma.customer.findMany({
       where,
+      include: fatosComerciaisInclude,
       orderBy: { code: "asc" },
       ...pageArgs(pagination),
     }),
@@ -106,7 +122,10 @@ export async function listCustomers(
   ]);
 
   return {
-    customers: customers.map(toCustomerDTO),
+    customers: customers.map((customer) => ({
+      ...toCustomerDTO(customer),
+      commercial: situacaoComercial(customer, agora),
+    })),
     ...pageMeta(pagination, total),
   };
 }

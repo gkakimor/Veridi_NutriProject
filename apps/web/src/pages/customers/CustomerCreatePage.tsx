@@ -43,7 +43,11 @@ export function CustomerCreatePage() {
         return;
       }
       // Caminho normal: a lista é onde o registro recém-criado passa a viver.
-      navigate("/cadastros/clientes", { replace: true });
+      // Ele nasce Prospect e a lista abre em "Clientes ativos" (§86): a
+      // chegada é pelo contexto, que mostra o registro seja qual for a situação.
+      navigate(created ? `/cadastros/clientes?ids=${created.id}` : "/cadastros/clientes", {
+        replace: true,
+      });
     },
   });
 
