@@ -189,6 +189,12 @@ export interface SetProductProductionProfileInput {
   productionProfileVersionId: string | null;
 }
 
+/**
+ * O padrão do produto acompanha o perfil: ativar uma versão nova move, na
+ * mesma transação, os produtos que apontavam para a versão anterior DESTE
+ * perfil (§89). Produto de outro perfil, ou sem perfil, não é tocado.
+ */
+
 export interface ProductProductionProfileDTO {
   productId: string;
   productCode: string;
@@ -205,11 +211,6 @@ export interface ProductProductionProfileDTO {
     referenceQuantity: string;
     referenceUomCode: string;
   } | null;
-  /**
-   * Versão ativa do mesmo perfil quando o padrão aponta para outra. Avisada,
-   * nunca aplicada: trocar o padrão é decisão de quem planeja.
-   */
-  newerActiveVersion: { id: string; versionNumber: number } | null;
 }
 
 // ─────────────────────────────────────────────────────────────── cálculo

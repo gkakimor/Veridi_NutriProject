@@ -29,6 +29,7 @@ import { navGroups, navItems } from "./navigation";
 const SECOES: [id: string, titulo: string, telas: string[]][] = [
   ["commercial", "Comercial", ["Visão do Cliente", "Projetos", "Amostras", "Pedidos", "Expedições", "Faturamento"]],
   ["production", "Produção", ["Ordens de Produção", "Picking / Consumo", "Formulações"]],
+  ["planning", "Planejamento", ["Perfis de Produção"]],
   ["purchasing", "Compras", ["Ordens de Compra", "Recebimentos", "Item × Fornecedor"]],
   [
     "inventory",
@@ -145,7 +146,7 @@ beforeEach(() => {
 });
 
 describe("Navegação do ERP — arquitetura", () => {
-  it("Painel no topo e nove seções na ordem do fluxo, cada uma com as suas telas", async () => {
+  it("Painel no topo e dez seções na ordem do fluxo, cada uma com as suas telas", async () => {
     renderShell("/", { prefs: { openGroups: SECOES.map(([id]) => id) } });
     await carregar();
 

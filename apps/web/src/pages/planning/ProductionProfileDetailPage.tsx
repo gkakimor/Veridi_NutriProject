@@ -1102,7 +1102,7 @@ export function ProductionProfileDetailPage() {
         {(ativa || profile.defaultProducts.length > 0) && (
           <FormSection
             title="Produtos com este perfil como padrão"
-            subtitle="O produto aponta para uma versão ativa. Ativar uma versão nova não troca o padrão de nenhum produto: quem planeja decide."
+            subtitle="O produto aponta para a versão ativa, e ativar uma versão nova leva junto quem usava a anterior deste perfil. Produto de outro perfil, ou sem perfil, não é tocado."
           >
             {profile.defaultProducts.length === 0 ? (
               <p className="field__hint">Nenhum produto usa este perfil como padrão.</p>
@@ -1124,25 +1124,10 @@ export function ProductionProfileDetailPage() {
                         </td>
                         <td>
                           V{item.versionNumber} · {TEMPLATE_VERSION_STATUS_LABELS[item.versionStatus]}
-                          {ativa && item.versionId !== ativa.id && (
-                            <span className="cell-sub">Existe a {ativa.versionLabel} ativa</span>
-                          )}
                         </td>
                         <td>
                           {canEdit && (
                             <div className="line-actions">
-                              {ativa && item.versionId !== ativa.id && (
-                                <button
-                                  type="button"
-                                  className="btn btn--secondary btn--sm"
-                                  disabled={saving}
-                                  onClick={() =>
-                                    void run(() => setProductProductionProfile(item.productId, ativa.id))
-                                  }
-                                >
-                                  Usar {ativa.versionLabel}
-                                </button>
-                              )}
                               <button
                                 type="button"
                                 className="btn btn--ghost btn--sm"

@@ -485,6 +485,40 @@ describe("Prévia — a conta para uma quantidade, sem gravar nada", () => {
     expect(perfilDepois.updatedAt.getTime()).toBe(perfilAntes.updatedAt.getTime());
   });
 
+  it("o recurso fica ocupado também na preparação: 30 + 120 min com 2 recursos são 300 min-recurso", async () => {
+    const { ativa } = await perfilAtivo(
+      [
+        etapa("Envase", {
+          setupDurationMinutes: 30,
+          runDurationMinutes: 120,
+          resources: [{ industrialResourceId: operador.id, resourceQuantity: 2 }],
+        }),
+      ],
+      { referenceQuantity: "1000", referenceUomCode: "un" },
+    );
+
+    const plano = await previa(ativa.id, "1000");
+    expect(plano.steps[0]).toMatchObject({
+      setupMinutes: "30",
+      runMinutes: "120",
+      durationMinutes: "150",
+    });
+    // 2 × 150 min = 300 min-recurso (5 horas-recurso) — e a etapa continua em 150 min.
+    expect(plano.steps[0]!.resources[0]!.demandMinutes).toBe("300");
+    expect(plano.resources[0]!.demandMinutes).toBe("300");
+    expect(plano.totalDurationMinutes).toBe("150");
+  });
+
+  it("a quantidade de recursos não muda a duração da etapa", async () => {
+    const um = await perfilAtivo([etapa("Mistura", { resources: [{ industrialResourceId: operador.id, resourceQuantity: 1 }] })]);
+    const tres = await perfilAtivo([etapa("Mistura", { resources: [{ industrialResourceId: operador.id, resourceQuantity: 3 }] })]);
+
+    const planoUm = await previa(um.ativa.id, "2000");
+    const planoTres = await previa(tres.ativa.id, "2000");
+    expect(planoUm.steps[0]!.durationMinutes).toBe(planoTres.steps[0]!.durationMinutes);
+    expect(planoTres.resources[0]!.demandMinutes).toBe("720");
+  });
+
   it("quantidade zero ou ilegível na prévia é 400", async () => {
     for (const ruim of ["0", "abc", "-5"]) {
       const resposta = await app.inject(
@@ -505,7 +539,6 @@ describe("Produto → Perfil de Produção padrão", () => {
       productId: semPerfil.id,
       productUomCode: "un",
       version: null,
-      newerActiveVersion: null,
     });
     expect((await app.inject(`/products/${semPerfil.id}`)).statusCode).toBe(200);
   });
@@ -550,19 +583,101 @@ describe("Produto → Perfil de Produção padrão", () => {
     expect(intacto.version.id).toBe(ativa.id);
   });
 
-  it("ativar versão nova não move o padrão do produto sozinho — avisa que existe", async () => {
-    const { ativa: v1 } = await perfilAtivo([etapa("Mistura")]);
-    const alvo = await produto("un");
-    expect((await definirPadrao(alvo.id, v1.id)).statusCode).toBe(200);
+  it("ativar a V2 leva junto todos os produtos que usavam a V1 do mesmo perfil", async () => {
+    const { perfil, ativa: v1 } = await perfilAtivo([etapa("Mistura")]);
+    const primeiro = await produto("un");
+    const segundo = await produto("un");
+    expect((await definirPadrao(primeiro.id, v1.id)).statusCode).toBe(200);
+    expect((await definirPadrao(segundo.id, v1.id)).statusCode).toBe(200);
 
     const v2 = (
       await app.inject({ method: "POST", url: `/production-profile-versions/${v1.id}/new-version` })
     ).json() as ProductionProfileVersionDTO;
     await ativar(v2.id);
 
+    for (const alvo of [primeiro, segundo]) {
+      const depois = (await app.inject(`/products/${alvo.id}/production-profile`)).json() as ProductProductionProfileDTO;
+      expect(depois.version).toMatchObject({ id: v2.id, versionNumber: 2, status: "ACTIVE" });
+    }
+    const versoes = (await app.inject(`/production-profiles/${perfil.id}`)).json() as ProductionProfileDTO;
+    expect(versoes.versions.map((v) => [v.versionNumber, v.status])).toEqual([
+      [1, "ARCHIVED"],
+      [2, "ACTIVE"],
+    ]);
+    expect(versoes.defaultProducts.map((p) => p.versionNumber)).toEqual([2, 2]);
+  });
+
+  it("produto de outro perfil e produto sem perfil não são tocados pela ativação", async () => {
+    const { ativa: outraAtiva } = await perfilAtivo([etapa("Mistura")]);
+    const doOutroPerfil = await produto("un");
+    await definirPadrao(doOutroPerfil.id, outraAtiva.id);
+    const semPerfil = await produto("un");
+
+    const { ativa: v1 } = await perfilAtivo([etapa("Pesagem")]);
+    const doPerfil = await produto("un");
+    await definirPadrao(doPerfil.id, v1.id);
+
+    const v2 = (
+      await app.inject({ method: "POST", url: `/production-profile-versions/${v1.id}/new-version` })
+    ).json() as ProductionProfileVersionDTO;
+    await ativar(v2.id);
+
+    const outro = (await app.inject(`/products/${doOutroPerfil.id}/production-profile`)).json() as ProductProductionProfileDTO;
+    expect(outro.version?.id).toBe(outraAtiva.id);
+    const sem = (await app.inject(`/products/${semPerfil.id}/production-profile`)).json() as ProductProductionProfileDTO;
+    expect(sem.version).toBeNull();
+    const movido = (await app.inject(`/products/${doPerfil.id}/production-profile`)).json() as ProductProductionProfileDTO;
+    expect(movido.version?.id).toBe(v2.id);
+  });
+
+  it("ativação recusada não move nada: versão e ponteiro ficam como estavam", async () => {
+    const prisma = getPrisma();
+    const recurso = await prisma.industrialResource.create({
+      data: { code: `RIN-PPR-${proximo()}`, name: `Encapsuladora temporária ${marca}`, type: "EQUIPMENT", defaultUsageUom: "HOUR" },
+    });
+    fixtureResourceIds.push(recurso.id);
+
+    const { ativa: v1 } = await perfilAtivo([
+      etapa("Encapsulamento", { resources: [{ industrialResourceId: recurso.id, resourceQuantity: 1 }] }),
+    ]);
+    const alvo = await produto("un");
+    await definirPadrao(alvo.id, v1.id);
+
+    const v2 = (
+      await app.inject({ method: "POST", url: `/production-profile-versions/${v1.id}/new-version` })
+    ).json() as ProductionProfileVersionDTO;
+    // O cadastro mudou entre copiar e ativar: a ativação inteira é recusada.
+    await prisma.industrialResource.update({ where: { id: recurso.id }, data: { active: false } });
+
+    const recusada = await app.inject({
+      method: "POST",
+      url: `/production-profile-versions/${v2.id}/activate`,
+    });
+    expect(recusada.statusCode).toBe(400);
+    expect(recusada.json().error).toBe("resource_inactive");
+
+    expect((await versao(v1.id)).status).toBe("ACTIVE");
+    expect((await versao(v2.id)).status).toBe("DRAFT");
     const depois = (await app.inject(`/products/${alvo.id}/production-profile`)).json() as ProductProductionProfileDTO;
-    expect(depois.version).toMatchObject({ id: v1.id, versionNumber: 1, status: "ARCHIVED" });
-    expect(depois.newerActiveVersion).toEqual({ id: v2.id, versionNumber: 2 });
+    expect(depois.version?.id).toBe(v1.id);
+  });
+
+  it("duas ativações ao mesmo tempo: uma vence, e o ponteiro do produto não fica pela metade", async () => {
+    const { ativa: v1 } = await perfilAtivo([etapa("Mistura")]);
+    const alvo = await produto("un");
+    await definirPadrao(alvo.id, v1.id);
+    const v2 = (
+      await app.inject({ method: "POST", url: `/production-profile-versions/${v1.id}/new-version` })
+    ).json() as ProductionProfileVersionDTO;
+
+    const [uma, outra] = await Promise.all([
+      app.inject({ method: "POST", url: `/production-profile-versions/${v2.id}/activate` }),
+      app.inject({ method: "POST", url: `/production-profile-versions/${v2.id}/activate` }),
+    ]);
+    expect([uma.statusCode, outra.statusCode].sort()).toEqual([200, 409]);
+
+    const depois = (await app.inject(`/products/${alvo.id}/production-profile`)).json() as ProductProductionProfileDTO;
+    expect(depois.version).toMatchObject({ id: v2.id, versionNumber: 2, status: "ACTIVE" });
   });
 
   it("tirar o padrão devolve o produto a \"sem perfil\"", async () => {

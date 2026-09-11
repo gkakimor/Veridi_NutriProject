@@ -400,7 +400,7 @@ describe("Perfil de Produção — versão ativa", () => {
     for (const escrita of escritas()) expect(escrita).not.toHaveBeenCalled();
   });
 
-  it("produto preso a uma versão arquivada: a tela avisa, troca para a ativa ou tira o padrão", async () => {
+  it("o produto aparece na versão ativa que usa — sem ação de trocar versão à mão", async () => {
     const v1 = versao({ status: "ARCHIVED", steps: [passo()] });
     const v2 = versao({
       id: "ppv-2",
@@ -419,19 +419,19 @@ describe("Perfil de Produção — versão ativa", () => {
             productId: "prod-1",
             productCode: "PROD-000001",
             productName: "Vitamina C",
-            versionId: "ppv-1",
-            versionNumber: 1,
-            versionStatus: "ARCHIVED",
+            versionId: "ppv-2",
+            versionNumber: 2,
+            versionStatus: "ACTIVE",
           },
         ],
       }),
     );
 
-    expect(screen.getByText("Existe a V2 ativa")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Usar V2" }));
-    await waitFor(() => expect(setProductProductionProfile).toHaveBeenCalledWith("prod-1", "ppv-2"));
+    // Ativar a V2 já levou junto quem usava a V1: não há o que clicar para trocar.
+    const linha = screen.getByText("PROD-000001").closest("tr") as HTMLElement;
+    expect(within(linha).getByText("V2 · Ativa")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Usar V/ })).toBeNull();
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Tirar padrão" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Tirar padrão" }));
     await waitFor(() => expect(setProductProductionProfile).toHaveBeenCalledWith("prod-1", null));
   });

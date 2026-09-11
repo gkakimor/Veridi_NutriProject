@@ -1080,11 +1080,21 @@ tabelas, uma coluna anulável em `products`, CHECKs e dois índices parciais. O
 prefixo pula o 093016, que é da `user_preferences` da NAVIGATION-SIDEBAR-01,
 desenvolvida em paralelo. Custo, formulação, OP e estoque intocados.
 
-**Pendente após o rebase sobre a NAVIGATION-SIDEBAR-01:** a entrada de menu
-Planejamento → Perfis de Produção na navegação nova — a rota já funciona, e o
-menu antigo não recebeu entrada. **Próxima capability:** PLANNING-OP-SNAPSHOT-01,
-em que a OP recebe cópia integral da versão (contrato
-`ProductionProfileSnapshot` já definido), nunca vínculo vivo.
+**O padrão do produto acompanha o perfil.** Decisão do PO na segunda rodada:
+ativar uma versão nova move, na mesma transação, os produtos que apontavam
+para a versão anterior DESTE perfil — o padrão é a configuração que as
+próximas ordens devem usar. Produto de outro perfil ou sem perfil não é
+tocado, e ordem existente não muda (ela receberá cópia). A outra decisão da
+rodada: recurso anexado à etapa fica ocupado na etapa inteira, preparação
+inclusive (30 + 120 min com 2 recursos = 150 min de etapa e 300 min-recurso);
+não há fase por recurso.
+
+**Navegação:** a seção **Planejamento** entrou no menu novo (grupo `planning`,
+tela `production-profiles`), entre Produção e Compras, com busca, favoritos e
+preferência por usuário pelo mecanismo que a NAVIGATION-SIDEBAR-01 criou.
+**Próxima capability:** PLANNING-OP-SNAPSHOT-01, em que a OP recebe cópia
+integral da versão (contrato `ProductionProfileSnapshot` já definido), nunca
+vínculo vivo.
 
 ## Cliente e projeto no Orçamento em rascunho (PDF-DATA-PARITY-01, 2026-09-11)
 

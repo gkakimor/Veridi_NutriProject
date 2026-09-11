@@ -122,6 +122,25 @@ export const navGroups: NavGroup[] = [
       },
     ],
   },
+  /*
+   * Planejamento vem depois de Produção porque é o roteiro DELA: como cada
+   * produto costuma ser produzido. Não é a Formulação (o que entra) nem a
+   * Estrutura de Custos (quanto custa), e por isso não mora em Modelos.
+   */
+  {
+    id: "planning",
+    title: "Planejamento",
+    icon: "planning",
+    items: [
+      {
+        id: "production-profiles",
+        label: "Perfis de Produção",
+        path: "/planejamento/perfis-producao",
+        implemented: true,
+        aliases: ["perfil de produção", "roteiro", "etapas de produção", "planejamento"],
+      },
+    ],
+  },
   {
     id: "purchasing",
     title: "Compras",

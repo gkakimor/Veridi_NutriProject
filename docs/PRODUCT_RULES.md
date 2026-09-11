@@ -5474,8 +5474,12 @@ precificação, tarifa, formulação nem OP.
   etapa não dura 4 h. É outra pergunta que o `resourceCount` de custo (§87)
   responde, e nenhum dos dois depende do outro.
 - **Duração da etapa** = preparação + execução. **Demanda do recurso** =
-  quantidade de recursos × duração da etapa: o recurso fica ocupado também na
-  preparação. **Total** = soma das durações.
+  quantidade de recursos × duração da etapa: recurso anexado à etapa é
+  necessário durante a etapa INTEIRA, preparação inclusive — preparação de
+  30 min e execução de 120 min com 2 recursos são etapa de 150 min e 300
+  min-recurso (5 horas-recurso). Não existe fase por recurso (só preparação,
+  só execução) nem quantidade diferente por fase: se for preciso, é evolução
+  futura. **Total** = soma das durações.
 - **Recurso é pool do cadastro de Recursos Industriais:** mão de obra e
   equipamento, ativos, uma linha por recurso na etapa — nunca pessoa ou
   máquina individual. **Energia não é recurso de capacidade** e é recusada
@@ -5486,8 +5490,12 @@ precificação, tarifa, formulação nem OP.
   feriado, data sugerida nem capacidade diária.
 - **Produto → perfil padrão:** ponteiro opcional para uma VERSÃO ATIVA
   (`Product.defaultProductionProfileVersionId`). Produto sem perfil continua
-  válido. Ativar versão nova do perfil **não move** o ponteiro: a tela avisa
-  que existe uma mais nova, e trocar é decisão de quem planeja.
+  válido. **Ativar uma versão nova leva junto**, na MESMA transação da
+  ativação, os produtos que apontavam para a versão anterior DESTE perfil: o
+  padrão é a configuração que as PRÓXIMAS ordens devem usar. Produto sem
+  perfil, ou apontando para outro perfil, não é tocado — o sistema acompanha
+  um padrão já escolhido, nunca associa sozinho. Ordem de produção existente
+  não muda: ela recebe cópia.
 - **Regra futura já decidida (PLANNING-OP-SNAPSHOT-01):** a OP receberá CÓPIA
   integral da versão do perfil (contrato `ProductionProfileSnapshot`), nunca
   vínculo vivo. Alterar o perfil depois NÃO altera OP existente. Rascunho não é

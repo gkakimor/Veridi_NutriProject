@@ -171,6 +171,20 @@ describe("planProductionProfile — a conta do Perfil de Produção", () => {
     ]);
   });
 
+  it("o recurso fica ocupado na preparação: 30 + 120 min com 2 recursos são 300 min-recurso", () => {
+    const plano = planProductionProfile(
+      umaEtapa({
+        setupDurationMinutes: 30,
+        runDurationMinutes: 120,
+        resources: [{ ...operador, resourceQuantity: 2 }],
+      }),
+      "1000",
+    );
+    expect(plano.steps[0]!.durationMinutes).toBe("150");
+    expect(plano.steps[0]!.resources[0]!.demandMinutes).toBe("300");
+    expect(plano.resources[0]!.demandMinutes).toBe("300");
+  });
+
   it("Decimal do começo ao fim: 7 min por 1.000 un, para 1.234 un, são 8,638 min exatos", () => {
     const plano = planProductionProfile(umaEtapa({ runDurationMinutes: 7 }), "1234");
     expect(plano.steps[0]!.runMinutes).toBe("8.638");

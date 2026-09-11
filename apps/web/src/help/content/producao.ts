@@ -614,7 +614,7 @@ export const producaoTopics = {
     notes: [
       "Energia não entra em etapa: ela não ocupa capacidade e continua no custo, na Estrutura de Custos.",
       "Recurso aqui é o grupo, não a pessoa nem a máquina: “Mão de obra — Produção” com quantidade 2 são dois operadores quaisquer.",
-      "Ativar uma versão nova não muda o padrão de nenhum produto: o produto continua na versão escolhida, e a tela avisa quando existe uma mais nova.",
+      "Ativar uma versão nova leva junto os produtos que usavam a versão anterior deste mesmo perfil: eles passam a usar a nova. Produto sem perfil, ou com outro perfil, não é tocado — o sistema nunca escolhe um perfil por você.",
       "Quando a ordem de produção passar a usar o perfil, ela vai receber uma cópia. Mudar o perfil depois não muda ordem que já existe.",
       "Ainda não há calendário, turno nem data sugerida: os tempos são minutos de trabalho corridos, uma etapa depois da outra.",
       "Editar e ativar exigem perfil de Administração ou Produção. Os demais perfis leem.",

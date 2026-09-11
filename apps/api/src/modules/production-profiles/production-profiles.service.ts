@@ -428,14 +428,36 @@ export async function activateProductionProfileVersion(
   await getPrisma().$transaction(async (tx) => {
     await travarRascunho(tx, id);
     const agora = new Date();
-    await tx.productionProfileVersion.updateMany({
+
+    const anteriores = await tx.productionProfileVersion.findMany({
       where: { productionProfileId: current.productionProfileId, status: "ACTIVE", id: { not: id } },
+      select: { id: true },
+    });
+    const idsAnteriores = anteriores.map((versao) => versao.id);
+
+    await tx.productionProfileVersion.updateMany({
+      where: { id: { in: idsAnteriores } },
       data: { status: "ARCHIVED", archivedAt: agora, archivedBy: actor.name },
     });
     await tx.productionProfileVersion.update({
       where: { id },
       data: { status: "ACTIVE", activatedAt: agora, activatedBy: actor.name },
     });
+
+    /*
+     * O perfil padrão é a configuração que as PRÓXIMAS ordens devem usar:
+     * quem apontava para a versão recém-arquivada avança com ela, na MESMA
+     * transação. Produto de outro perfil, ou sem perfil, não é tocado — o
+     * sistema só acompanha um padrão que alguém já escolheu. Ordem existente
+     * não muda: ela receberá cópia (PLANNING-OP-SNAPSHOT-01).
+     */
+    if (idsAnteriores.length > 0) {
+      await tx.product.updateMany({
+        where: { defaultProductionProfileVersionId: { in: idsAnteriores } },
+        data: { defaultProductionProfileVersionId: id },
+      });
+    }
+
     await tx.productionProfile.update({
       where: { id: current.productionProfileId },
       data: { updatedAt: agora },
@@ -553,14 +575,6 @@ export async function getProductProductionProfile(
   if (!product) throw new ProductionProfileProductNotFoundError(productId);
 
   const version = product.defaultProductionProfileVersion;
-  let newerActiveVersion: ProductProductionProfileDTO["newerActiveVersion"] = null;
-  if (version && version.status !== "ACTIVE") {
-    const ativa = await prisma.productionProfileVersion.findFirst({
-      where: { productionProfileId: version.productionProfileId, status: "ACTIVE" },
-      select: { id: true, versionNumber: true },
-    });
-    newerActiveVersion = ativa ? { id: ativa.id, versionNumber: ativa.versionNumber } : null;
-  }
 
   return {
     productId: product.id,
@@ -579,7 +593,6 @@ export async function getProductProductionProfile(
           referenceUomCode: version.referenceUomCode,
         }
       : null,
-    newerActiveVersion,
   };
 }
 
@@ -588,7 +601,8 @@ export async function getProductProductionProfile(
  *
  * Só versão ATIVA, e só com a base na mesma dimensão da unidade do produto —
  * nada se converte entre dimensões. `null` tira o padrão: produto sem perfil
- * continua válido. Formulação, custo e OP não são tocados.
+ * continua válido. Formulação, custo e OP não são tocados. Depois disso o
+ * ponteiro acompanha sozinho as versões novas do MESMO perfil (§89, ativação).
  */
 export async function setProductProductionProfile(
   productId: string,
