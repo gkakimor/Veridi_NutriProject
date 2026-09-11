@@ -639,14 +639,24 @@ etapa("orcamento", async () => {
     else await clicar("Criar nova versão");
     await Promise.any([quantidade.waitFor({ timeout: 25000 }), editor.waitFor({ timeout: 25000 })]);
   }
+  const lerLinha = async () => {
+    const projeto = entidade(await ler(`/projects/${estado.ids.projeto.id}`), "project");
+    const versao = (projeto.quoteVersions ?? []).at(-1) ?? {};
+    return { versao, linha: (versao.lines ?? [])[0] ?? {} };
+  };
   if (!(await quantidade.count())) {
     const rotulo = await pagina.locator("#quote-add-product option", { hasText: codigo }).first().innerText();
     await editor.selectOption({ label: rotulo });
+    const releitura = esperarResposta("GET", /^\/projects\/[0-9a-f-]{36}$/);
     await clicar("Adicionar");
+    await releitura;
     await quantidade.waitFor({ timeout: 25000 });
-    await assentar(900);
+    await assentar(1200);
   }
-  const quantidadeInicial = numeroDe(await quantidade.inputValue());
+  // A quantidade vem do servidor, não do campo: logo depois de "Adicionar" o
+  // campo ainda pode estar vazio, e escrever a quantidade que já está gravada
+  // não manda nada (QUOTE-LINE-NOOP-BLUR-01).
+  const quantidadeInicial = decimalDe((await lerLinha()).linha.quotedQuantity);
   if (quantidadeInicial !== QTD_PEDIDO) {
     const linhaSalva = esperarResposta("PATCH", /^\/quote-lines\//);
     await quantidade.fill(String(QTD_PEDIDO));
@@ -656,12 +666,6 @@ etapa("orcamento", async () => {
   } else {
     console.log(`  a linha nasce com a quantidade da faixa ativa (${QTD_PEDIDO}) — nada a gravar`);
   }
-
-  const lerLinha = async () => {
-    const projeto = entidade(await ler(`/projects/${estado.ids.projeto.id}`), "project");
-    const versao = (projeto.quoteVersions ?? []).at(-1) ?? {};
-    return { versao, linha: (versao.lines ?? [])[0] ?? {} };
-  };
   // A linha nasce com o preço da faixa quando a quantidade bate. Só aplicar à
   // mão quando não nasceu: o botão continua visível, e aplicar o mesmo preço
   // de novo não manda nada.
