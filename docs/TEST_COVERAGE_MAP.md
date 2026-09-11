@@ -84,6 +84,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Consumo extra exige ampliação explícita, com motivo e autor | achado da auditoria: 1,333333 → 1,34 | `modules/production-orders/extra-consumption.test.ts` |
 | Apontamento gera 1 movimento e 1 lote acabado | — | `modules/production-orders/production-output.test.ts` |
 | Consumo confirmado é o que baixa estoque | — | `modules/production-orders/consumption.test.ts` |
+| Perfil de Produção (§89): versão ativa congelada; proporcional × por lote (ceil); preparação não escala; quantidade de recursos é capacidade (2 × 2 h = etapa de 2 h, 4 h-recurso); energia recusada; prévia não grava; produto aponta só para versão ativa de mesma dimensão | capacidade lida como custo (`resourceCount`), ou quantidade de recursos alongando a etapa | `packages/shared/src/production-profiles.test.ts`, `modules/production-profiles/production-profiles.test.ts`, `web pages/planning/production-profiles.test.tsx` |
 
 ## Comercial, expedição e faturamento
 

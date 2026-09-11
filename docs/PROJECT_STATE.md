@@ -1064,6 +1064,28 @@ Findings de dado registrados, sem correção nesta capability:
 Três suítes E2E passaram a ler o PDF (`scripts/e2e/lib/pdf.mjs`) e ainda não
 rodaram.
 
+## Perfis de Produção — primeira fundação do Planejamento (PLANNING-PRODUCTION-PROFILE-01, 2026-09-11)
+
+**Novo módulo Planejamento, tela Perfis de Produção**
+(`/planejamento/perfis-producao`). Regra durável: §89. Roteiro reutilizável de
+como um produto é produzido: etapas sequenciais, preparação × execução, modo
+de escala (Proporcional · Por lote) e recursos de CAPACIDADE — 2 operadores por
+2 h são etapa de 2 h e 4 horas-recurso. Versões com o ciclo das bibliotecas
+(rascunho → ativa congelada → arquivada); simulação ao vivo pelo motor único
+`planProductionProfile` (`@veridi/shared`), sem gravar; o produto aponta,
+opcionalmente, para uma versão ativa como padrão.
+
+Uma migration aditiva (`20260925093017_production_planning_profile`): quatro
+tabelas, uma coluna anulável em `products`, CHECKs e dois índices parciais. O
+prefixo pula o 093016, que é da `user_preferences` da NAVIGATION-SIDEBAR-01,
+desenvolvida em paralelo. Custo, formulação, OP e estoque intocados.
+
+**Pendente após o rebase sobre a NAVIGATION-SIDEBAR-01:** a entrada de menu
+Planejamento → Perfis de Produção na navegação nova — a rota já funciona, e o
+menu antigo não recebeu entrada. **Próxima capability:** PLANNING-OP-SNAPSHOT-01,
+em que a OP recebe cópia integral da versão (contrato
+`ProductionProfileSnapshot` já definido), nunca vínculo vivo.
+
 ## Cliente e projeto no Orçamento em rascunho (PDF-DATA-PARITY-01, 2026-09-11)
 
 O PDF do Orçamento em rascunho saía com Cliente, CNPJ e Projeto "—". Causa:
