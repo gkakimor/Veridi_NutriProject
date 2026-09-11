@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ItemDTO, PurchaseOrderDTO } from "@veridi/shared";
+import { diaComercialCompacto, hojeComercial, limitesDoDiaComercial } from "@veridi/shared";
 
 /**
  * Validação viva da quantidade no Recebimento.
@@ -410,6 +411,52 @@ describe("Recebimento — o erro responde à edição (F-06-2)", () => {
 
     const secaoA = screen.getByText(/^MP-000120 —/).closest("section") as HTMLElement;
     expect(within(secaoA).queryByText("Valor com precisão acima do suportado.")).toBeNull();
+  });
+});
+
+/**
+ * O dia escolhido é o dia do lote (§72, §81).
+ *
+ * "Data do recebimento" é data civil; o que vai ao servidor é um INSTANTE, e é
+ * o dia comercial desse instante que o código do lote (`LT-YYYYMMDD-…`), o
+ * movimento de estoque e a janela de custo leem. A tela mandava a meia-noite
+ * UTC do dia escolhido — 21h da véspera em São Paulo —, e todo lote recebido
+ * pela interface nascia com o dia anterior no código.
+ */
+describe("Recebimento — o dia escolhido é o dia do lote", () => {
+  async function confirmarRecebimento(usuario: ReturnType<typeof userEvent.setup>) {
+    await usuario.click(botaoConfirmar());
+    await usuario.click(await screen.findByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(createReceiptMock).toHaveBeenCalled());
+    return createReceiptMock.mock.calls[0]?.[1] as { receivedAt: string };
+  }
+
+  it("a data já vem com o dia comercial de hoje, e o instante enviado é de hoje", async () => {
+    createReceiptMock.mockResolvedValue({ id: "rec-1" } as Awaited<ReturnType<typeof createReceipt>>);
+    const usuario = userEvent.setup();
+    renderizar();
+
+    await usuario.type(await encontrarCampo("MP-000120"), "30");
+    const data = document.getElementById("receipt-date") as HTMLInputElement;
+    expect(data.value).toBe(hojeComercial());
+
+    const payload = await confirmarRecebimento(usuario);
+    expect(hojeComercial(new Date(payload.receivedAt))).toBe(hojeComercial());
+  });
+
+  it("uma data passada vai como o início daquele dia comercial — o lote leva aquele dia", async () => {
+    createReceiptMock.mockResolvedValue({ id: "rec-1" } as Awaited<ReturnType<typeof createReceipt>>);
+    const usuario = userEvent.setup();
+    renderizar();
+
+    await usuario.type(await encontrarCampo("MP-000120"), "30");
+    fireEvent.change(document.getElementById("receipt-date") as HTMLInputElement, {
+      target: { value: "2026-08-20" },
+    });
+
+    const payload = await confirmarRecebimento(usuario);
+    expect(payload.receivedAt).toBe(limitesDoDiaComercial("2026-08-20").inicio.toISOString());
+    expect(diaComercialCompacto(new Date(payload.receivedAt))).toBe("20260820");
   });
 });
 

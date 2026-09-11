@@ -4,6 +4,7 @@ import { Decimal, type PurchaseOrderDTO } from "@veridi/shared";
 import { getPurchaseOrder, listPurchaseOrders } from "../../lib/purchase-orders-api";
 import { getItem } from "../../lib/items-api";
 import { createReceipt } from "../../lib/receiving-api";
+import { diaDoRecebimentoPadrao, instanteDoRecebimento } from "../../lib/receipt-instant";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
 import { mensagemDecimalInvalido } from "../../lib/decimal-input";
 import { resolverQuantidadeContraLimite } from "../../lib/quantity-limit";
@@ -127,7 +128,7 @@ export function ReceivePurchaseOrderPage() {
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [loadingPo, setLoadingPo] = useState(!!preselectedId);
 
-  const [receivedAt, setReceivedAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [receivedAt, setReceivedAt] = useState(() => diaDoRecebimentoPadrao());
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [documentReference, setDocumentReference] = useState("");
   const [notes, setNotes] = useState("");
@@ -257,7 +258,7 @@ export function ReceivePurchaseOrderPage() {
       // item, e o recebimento não é criado. A quantidade já chega resolvida
       // pela mesma validação que a tela mostrou.
       const payload = {
-        receivedAt: new Date(receivedAt).toISOString(),
+        receivedAt: instanteDoRecebimento(receivedAt),
         ...(invoiceNumber.trim() ? { invoiceNumber: invoiceNumber.trim() } : {}),
         ...(documentReference.trim() ? { documentReference: documentReference.trim() } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),

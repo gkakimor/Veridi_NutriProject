@@ -3,6 +3,7 @@ import { SearchableEntitySelect } from "../../components/SearchableEntitySelect"
 import { useNavigate } from "react-router-dom";
 import type { CustomerDTO, ItemDTO } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
+import { diaDoRecebimentoPadrao, instanteDoRecebimento } from "../../lib/receipt-instant";
 import { listItems } from "../../lib/items-api";
 import { createCustomerSuppliedReceipt } from "../../lib/receiving-api";
 import { ApiValidationError, apiErrorMessage } from "../../lib/api-errors";
@@ -88,7 +89,7 @@ export function ReceiveCustomerMaterialPage() {
   const [items, setItems] = useState<ItemDTO[]>([]);
 
   const [customerId, setCustomerId] = useState("");
-  const [receivedAt, setReceivedAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [receivedAt, setReceivedAt] = useState(() => diaDoRecebimentoPadrao());
   const [documentReference, setDocumentReference] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [notes, setNotes] = useState("");
@@ -180,7 +181,7 @@ export function ReceiveCustomerMaterialPage() {
     try {
       const receipt = await createCustomerSuppliedReceipt({
         customerId,
-        receivedAt: new Date(`${receivedAt}T12:00:00`).toISOString(),
+        receivedAt: instanteDoRecebimento(receivedAt),
         ...(invoiceNumber.trim() ? { invoiceNumber: invoiceNumber.trim() } : {}),
         ...(documentReference.trim() ? { documentReference: documentReference.trim() } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
