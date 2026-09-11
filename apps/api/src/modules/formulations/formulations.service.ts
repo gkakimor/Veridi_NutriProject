@@ -245,7 +245,7 @@ async function requireVersion(id: string): Promise<VersionWithRelations> {
  * Componentes sao apagados e recriados a cada gravacao, entao `undefined` aqui
  * significa "use o padrao do banco", nunca "preserve o que estava la".
  */
-function modoEFlags(component: {
+export function modoEFlags(component: {
   // `| undefined` explicito por causa de `exactOptionalPropertyTypes`: os dois
   // chamadores sao diferentes — a copia de versao le linhas do banco, e a
   // gravacao le um payload validado onde o campo pode faltar.

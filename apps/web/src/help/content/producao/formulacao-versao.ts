@@ -48,11 +48,11 @@ export const formulacaoVersao = {
     },
     {
       you: 'Use "Adicionar componente": item, quantidade, unidade, base da linha e quem fornece.',
-      system: 'O sistema converte para a unidade de estoque do item e mostra "Equiv." e "Físico/un." ao lado.',
+      system: 'O sistema converte para a unidade de estoque do item e mostra "Equivalente estoque" e "Físico / unidade", cada um na sua coluna.',
     },
     {
-      you: 'Diga o que a quantidade significa em "O que a quantidade informada significa": física informada, ou calculada com os ajustes que você marcar.',
-      system: "O sistema recalcula o físico e mostra a conta no ⓘ da linha.",
+      you: 'Abra os ajustes da linha e diga o que a quantidade significa: física informada, ou calculada com os ajustes que você marcar. Clique em "Aplicar ajustes" para confirmar, ou em "Cancelar" para desistir.',
+      system: "Ao aplicar, o sistema recalcula o físico da linha e resume os ajustes nela; a conta fica no ⓘ do painel.",
     },
     {
       you: 'Clique em "Salvar rascunho" quantas vezes precisar.',

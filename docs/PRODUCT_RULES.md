@@ -5383,3 +5383,45 @@ máquina e não conversa com calendário.
 - **Leitura:** onde se lia "4 hora" passa a se ler "2 × 2 hora · Total: 4 hora"
   quando há mais de um recurso — estrutura, impresso, composição do cálculo,
   CMV e Modelo. Com um recurso, a leitura é a de antes.
+
+## §88 — Ajustes da quantidade: o Modelo guarda a mesma intenção, e o painel tem fim
+
+FORMULATION-ADJUSTMENTS-UX-01, 2026-09-11.
+
+**O Modelo de Formulação guarda a MESMA configuração do componente da
+Formulação real (§52):** o que a quantidade significa (física informada ou
+calculada), a pureza, o overage e quais ajustes entram na conta. Não bastam os
+percentuais: sem o modo, todo Modelo aplicado virava física informada, e a
+intenção "corrija pela pureza" se perdia na cópia.
+
+- **Uma normalização só.** Modelo e Formulação gravam modo e marcas pela mesma
+  regra (`modoEFlags`): marca ligada sob física informada não se grava. Em
+  física informada a quantidade digitada JÁ é a física — pureza e overage são
+  registro de auditoria; em calculada, só entra o ajuste marcado, pelo motor
+  canônico.
+- **Null não é zero.** Pureza ou overage em branco continuam `null`; zero
+  informado continua zero.
+- **Cópia, nunca vínculo.** Aplicar o Modelo copia a configuração como
+  snapshot; nova versão do Modelo e "salvar a Formulação como Modelo" levam
+  junto; o comparativo entre versões mostra interpretação e marcas. Mudar o
+  Modelo depois não muda a Formulação já criada.
+- **Modelo antigo não muda de resultado.** Sem modo gravado é física informada
+  sem ajuste — o que ele sempre significou. Nenhum componente passou a aplicar
+  pureza ou overage sozinho, e nenhuma migration foi necessária: as colunas já
+  existiam no banco.
+- **A tela do Modelo carrega a linha inteira.** Salvar pela tela recria os
+  componentes; base, pureza, overage e notas passaram a viajar junto — antes,
+  voltavam ao padrão do banco.
+
+**O painel de ajustes edita um rascunho da linha.** "Aplicar ajustes" confirma
+— a linha muda, a conta segue, o painel recolhe e a linha resume o estado
+("Calculada · Pureza 98% · Overage 2%", ou "Física informada · Pureza 98% · só
+registro"). "Cancelar" descarta só o que foi mexido desde que o painel abriu.
+Aplicar fica desabilitado sem alteração ou com valor inválido. Fechar o
+painel, salvar ou ativar com ajuste por aplicar é recusado com a linha
+nomeada: nada se perde em silêncio, e nada vai para a versão sem ser
+confirmado. É o mesmo painel na Formulação e no Modelo.
+
+**Equivalente estoque e Físico / unidade têm cada um a sua coluna**, alinhados
+à direita, com a unidade colada ao valor. Em tela estreita a linha vira cartão:
+cada valor técnico com o seu rótulo, sem rolagem lateral.

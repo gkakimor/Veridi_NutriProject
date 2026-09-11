@@ -314,6 +314,9 @@ export async function compareFormulationWithTemplate(
         ? component.purityPercentApplied.toString()
         : null,
       overagePercent: component.overagePercent ? component.overagePercent.toString() : null,
+      quantityMode: component.quantityMode,
+      applyPurityAdjustment: component.applyPurityAdjustment,
+      applyOverageAdjustment: component.applyOverageAdjustment,
     })),
   };
 
@@ -369,6 +372,11 @@ export async function createTemplateFromFormulation(
           ? component.purityPercentApplied.toString()
           : null,
         overagePercent: component.overagePercent ? component.overagePercent.toString() : null,
+        // Sem o modo, "salvar como Modelo" transformava componente calculado
+        // em físico direto — e aplicar o Modelo de volta mudava a receita.
+        quantityMode: component.quantityMode,
+        applyPurityAdjustment: component.applyPurityAdjustment,
+        applyOverageAdjustment: component.applyOverageAdjustment,
         notes: component.notes,
       })),
     });

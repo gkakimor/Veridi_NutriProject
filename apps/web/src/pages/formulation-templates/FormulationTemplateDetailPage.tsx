@@ -1,7 +1,8 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
+  FormulationComponentQuantityMode,
   FormulationTemplateComponentInput,
   FormulationTemplateDTO,
   FormulationTemplateDiffDTO,
@@ -33,12 +34,20 @@ import { SearchableEntitySelect } from "../../components/SearchableEntitySelect"
 import { TemplateDiff } from "./TemplateDiff";
 import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
-import { exigirDecimal } from "../../lib/decimal-field";
+import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { useAuth } from "../../app/AuthProvider";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import {
+  PainelDeAjustes,
+  errosDosAjustes,
+  normalizarAjustes,
+  resumoDosAjustes,
+  useAjustesEmEdicao,
+} from "../formulations/AjustesDaQuantidade";
+import type { AjustesDaQuantidade } from "../formulations/AjustesDaQuantidade";
 
 /**
  * Detalhe de um template da biblioteca.
@@ -56,6 +65,28 @@ function Dica({ id }: { id: HelpHintId }) {
 
 interface LinhaEditavel extends FormulationTemplateComponentInput {
   chave: string;
+}
+
+/**
+ * A configuração de ajustes de uma linha ou componente do Modelo, no formato
+ * do painel — o mesmo da Formulação real. Pureza e overage ausentes ficam
+ * vazios: nunca 0% nem 100%. Modelo antigo, sem modo gravado, é física
+ * informada sem ajuste, que é o que ele sempre significou.
+ */
+function ajustesDoModelo(componente: {
+  quantityMode?: FormulationComponentQuantityMode | undefined;
+  purityPercentApplied?: string | null | undefined;
+  overagePercent?: string | null | undefined;
+  applyPurityAdjustment?: boolean | undefined;
+  applyOverageAdjustment?: boolean | undefined;
+}): AjustesDaQuantidade {
+  return {
+    quantityMode: componente.quantityMode ?? "PHYSICAL_DIRECT",
+    purityPercentApplied: componente.purityPercentApplied ?? "",
+    overagePercent: componente.overagePercent ?? "",
+    applyPurityAdjustment: componente.applyPurityAdjustment ?? false,
+    applyOverageAdjustment: componente.applyOverageAdjustment ?? false,
+  };
 }
 
 /**
@@ -123,6 +154,8 @@ export function FormulationTemplateDetailPage() {
   const [diff, setDiff] = useState<FormulationTemplateDiffDTO | null>(null);
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
+  /** Painel de ajustes por linha, com rascunho local — o mesmo da Formulação. */
+  const ajustes = useAjustesEmEdicao();
 
   /**
    * O rascunho restaurado ganha do servidor — uma vez.
@@ -156,7 +189,20 @@ export function FormulationTemplateDetailPage() {
               itemId: component.itemId,
               quantity: component.quantity,
               unitCode: component.unitCode,
+              /*
+                A linha carrega TUDO o que o componente é. Salvar pela tela
+                recria os componentes, e o que não viesse aqui voltava ao
+                padrão do banco: base por dose virava base da fórmula, e
+                pureza, overage e notas sumiam.
+              */
+              basis: component.basis,
               supplyResponsibility: component.supplyResponsibility,
+              purityPercentApplied: component.purityPercentApplied,
+              overagePercent: component.overagePercent,
+              quantityMode: component.quantityMode,
+              applyPurityAdjustment: component.applyPurityAdjustment,
+              applyOverageAdjustment: component.applyOverageAdjustment,
+              notes: component.notes,
             })),
           );
         }
@@ -324,6 +370,34 @@ export function FormulationTemplateDetailPage() {
     return { item, opcoes, oferecida, erro };
   }
 
+  /**
+   * "Aplicar ajustes" no Modelo: o rascunho vira a linha, normalizado como na
+   * Formulação (§52), e o painel recolhe. Gravar continua sendo "Salvar
+   * rascunho" da versão.
+   */
+  function aplicarAjustesDoModelo(linha: LinhaEditavel) {
+    const rascunhoDeAjuste = ajustes.rascunhoDe(linha.chave);
+    if (!rascunhoDeAjuste) return;
+    const codigo = items.find((item) => item.id === linha.itemId)?.code ?? "Componente";
+    if (Object.keys(errosDosAjustes(rascunhoDeAjuste, codigo)).length > 0) return;
+    const aplicado = normalizarAjustes(rascunhoDeAjuste);
+    setLinhas((atual) =>
+      atual.map((l) =>
+        l.chave === linha.chave
+          ? {
+              ...l,
+              quantityMode: aplicado.quantityMode,
+              purityPercentApplied: aplicado.purityPercentApplied.trim() || null,
+              overagePercent: aplicado.overagePercent.trim() || null,
+              applyPurityAdjustment: aplicado.applyPurityAdjustment,
+              applyOverageAdjustment: aplicado.applyOverageAdjustment,
+            }
+          : l,
+      ),
+    );
+    ajustes.fechar(linha.chave);
+  }
+
   async function run(action: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
@@ -362,6 +436,7 @@ export function FormulationTemplateDetailPage() {
               Fornecimento padrão
               <Dica id="producao.template.fornecimentoPadrao" />
             </th>
+            <th>Ajustes da quantidade</th>
           </tr>
         </thead>
         <tbody>
@@ -373,11 +448,12 @@ export function FormulationTemplateDetailPage() {
               <td className="is-numeric">{formatQuantity(component.quantity)}</td>
               <td>{component.unitCode}</td>
               <td>{SUPPLY_RESPONSIBILITY_LABELS[component.supplyResponsibility]}</td>
+              <td>{resumoDosAjustes(ajustesDoModelo(component))}</td>
             </tr>
           ))}
           {version.components.length === 0 && (
             <tr>
-              <td colSpan={4} className="table__empty">
+              <td colSpan={5} className="table__empty">
                 Sem componentes.
               </td>
             </tr>
@@ -553,6 +629,7 @@ export function FormulationTemplateDetailPage() {
                     <th className="is-numeric">Quantidade</th>
                     <th>Unidade</th>
                     <th>Fornecimento padrão</th>
+                    <th>Ajustes da quantidade</th>
                     <th aria-hidden="true" />
                   </tr>
                 </thead>
@@ -560,8 +637,11 @@ export function FormulationTemplateDetailPage() {
                   {linhas.map((linha, index) => {
                     const daLinha = unidadeDaLinha(linha);
                     const erroDaUnidade = `template-unidade-erro-${linha.chave}`;
+                    const configuracao = ajustesDoModelo(linha);
+                    const abertoAjuste = ajustes.aberto(linha.chave);
                     return (
-                      <tr key={linha.chave}>
+                      <Fragment key={linha.chave}>
+                      <tr>
                         <td>
                           <SearchableEntitySelect
                             id={`template-item-${linha.chave}`}
@@ -661,25 +741,63 @@ export function FormulationTemplateDetailPage() {
                           </select>
                         </td>
                         <td>
+                          {/* Mesmo resumo e mesmo painel da Formulação real: a
+                              intenção física do componente, não só os números. */}
+                          <button
+                            type="button"
+                            className="ajuste-quantidade__botao"
+                            aria-expanded={abertoAjuste}
+                            aria-controls={`modelo-ajustes-${linha.chave}`}
+                            onClick={() => ajustes.alternar(linha.chave, configuracao)}
+                          >
+                            <span aria-hidden="true">{abertoAjuste ? "▾" : "▸"}</span>{" "}
+                            {resumoDosAjustes(configuracao)}
+                          </button>
+                        </td>
+                        <td>
                           {editavel && (
                             <button
                               type="button"
                               className="btn btn--ghost btn--sm"
                               aria-label="Remover componente"
-                              onClick={() =>
-                                setLinhas((atual) => atual.filter((_, i) => i !== index))
-                              }
+                              onClick={() => {
+                                ajustes.fechar(linha.chave);
+                                setLinhas((atual) => atual.filter((_, i) => i !== index));
+                              }}
                             >
                               ✕
                             </button>
                           )}
                         </td>
                       </tr>
+                      {abertoAjuste && (
+                        <tr className="ajuste-quantidade__linha">
+                          <td colSpan={6} id={`modelo-ajustes-${linha.chave}`}>
+                            {editavel ? (
+                              <PainelDeAjustes
+                                contexto="MODELO"
+                                idBase={`modelo-${linha.chave}`}
+                                idDoCampo={(campo) => `modelo-${linha.chave}-${campo}`}
+                                nomeDoItem={daLinha.item?.code ?? "Componente"}
+                                rascunho={ajustes.rascunhoDe(linha.chave) ?? configuracao}
+                                confirmado={configuracao}
+                                onChange={(proximo) => ajustes.mudar(linha.chave, proximo)}
+                                onAplicar={() => aplicarAjustesDoModelo(linha)}
+                                onCancelar={() => ajustes.fechar(linha.chave)}
+                                avisoDePendencia={ajustes.aviso(linha.chave)}
+                              />
+                            ) : (
+                              <p className="field__hint">{resumoDosAjustes(configuracao)}</p>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                   {linhas.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="table__empty">
+                      <td colSpan={6} className="table__empty">
                         Nenhum componente ainda.
                       </td>
                     </tr>
@@ -713,7 +831,19 @@ export function FormulationTemplateDetailPage() {
                   type="button"
                   className="btn btn--secondary btn--sm"
                   disabled={saving || temUnidadeInvalida}
-                  onClick={() =>
+                  onClick={() => {
+                    // Ajuste aberto e não aplicado não vai junto — e não se perde
+                    // em silêncio: a tela diz qual linha espera decisão.
+                    const pendente = linhas.find((linha) =>
+                      ajustes.alterado(linha.chave, ajustesDoModelo(linha)),
+                    );
+                    if (pendente) {
+                      const codigo =
+                        items.find((item) => item.id === pendente.itemId)?.code ?? "componente";
+                      setError(`Aplique ou cancele os ajustes de ${codigo} antes de salvar.`);
+                      ajustes.avisar(pendente.chave);
+                      return;
+                    }
                     void run(() =>
                       updateFormulationTemplateVersion(rascunho.id, {
                         basisQuantity: exigirDecimal(base, "Base da formulação"),
@@ -723,10 +853,19 @@ export function FormulationTemplateDetailPage() {
                           .map(({ chave: _chave, ...resto }) => ({
                             ...resto,
                             quantity: exigirDecimal(resto.quantity, "Quantidade"),
+                            // Vazio = não informado (null), nunca 0% nem 100%.
+                            purityPercentApplied: exigirDecimalOpcional(
+                              resto.purityPercentApplied ?? "",
+                              "Pureza %",
+                            ),
+                            overagePercent: exigirDecimalOpcional(
+                              resto.overagePercent ?? "",
+                              "Overage %",
+                            ),
                           })),
                       }),
-                    )
-                  }
+                    );
+                  }}
                 >
                   Salvar rascunho
                 </button>

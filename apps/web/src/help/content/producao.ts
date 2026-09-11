@@ -471,6 +471,10 @@ export const producaoTopics = {
         text: "A quantidade de produto acabado que a matriz produz. Tudo o que os componentes declaram se refere a essa quantidade.",
       },
       {
+        term: "Ajustes da quantidade",
+        text: "O Modelo guarda o mesmo que a Formulação: se a quantidade é física informada ou calculada, a pureza, o overage e quais ajustes entram na conta. Aplicar o Modelo copia tudo; mudar o Modelo depois não muda a Formulação já criada.",
+      },
+      {
         term: "Comparar versões",
         text: "Mostra, item a item, o que mudou de uma versão para a outra. É a alternativa a um “atualizar” que não existe: nada é aplicado automaticamente a quem já copiou.",
       },

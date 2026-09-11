@@ -1004,6 +1004,26 @@ equipamento, e o uso se lê "2 × 2 hora · Total: 4 hora" na estrutura, no
 impresso, na composição do cálculo, no CMV e no Modelo. Trocar a quantidade é
 refazer a linha: a linha de recurso continua sem edição (COST-RESOURCE-EDIT-01).
 
+## Ajustes da quantidade no Modelo e na Formulação (FORMULATION-ADJUSTMENTS-UX-01, 2026-09-11)
+
+**Regra durável: §88.** O componente do Modelo de Formulação já tinha no banco
+modo, marcas, pureza e overage, mas a API só recebia os percentuais, a nova
+versão do Modelo e "salvar como Modelo" perdiam o modo, e a tela nem mostrava os
+campos — todo Modelo aplicado virava física informada. Agora schema, DTO,
+gravação (com a mesma `modoEFlags` da Formulação), nova versão, comparativo e
+"salvar como Modelo" carregam a configuração inteira; aplicar já copiava.
+**Zero migration.** A tela do Modelo passou a levar base, pureza, overage e
+notas ao salvar — antes voltavam ao padrão do banco.
+
+Na Formulação, o painel "O que a quantidade informada significa" edita um
+rascunho: "Aplicar ajustes" confirma e resume a linha, "Cancelar" descarta, e
+fechar, salvar ou ativar com alteração aberta é recusado com a linha nomeada. O
+mesmo painel (`pages/formulations/AjustesDaQuantidade.tsx`) serve o Modelo.
+"Equivalente estoque" e "Físico / unidade" ganharam coluna própria; abaixo de
+720px a tabela vira cartão. O painel deixou de repetir quantidade informada e
+físico por unidade, que já estão na linha. Impressos e PDF não foram tocados
+(branch paralela).
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -1045,7 +1065,8 @@ do que a Veridi lançar pela interface — compra, oferta com vigência, referê
 manual —, e o sistema não faz escrita de massa.
 
 **COST-RESOURCE-MULTIPLIER-01 fechado em 2026-09-11** (§87, seção própria
-acima). Próximo da fila viva: SUPPLIER-ADDRESS-01.
+acima). **FORMULATION-ADJUSTMENTS-UX-01 fechado no mesmo dia** (§88), fora da
+fila, por handoff do PO. Próximo da fila viva: SUPPLIER-ADDRESS-01.
 
 **COST-VAR-02** (comparação de CMV e proteção de margem) segue BLOQUEADO
 aguardando as sete decisões do PO em

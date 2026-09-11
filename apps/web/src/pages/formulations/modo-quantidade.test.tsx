@@ -172,16 +172,20 @@ describe("Prévia da quantidade física", () => {
     expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });
 
-  it("desligar o ajuste muda o número na tela na hora", async () => {
+  it("desligar o ajuste e aplicar muda o número na tela, sem salvar", async () => {
     const user = userEvent.setup();
     await abrir();
     expect(celula("fisico")).toBe("0,22449 kg");
 
     await user.click(screen.getByText(/^Calculada/));
     await user.click(screen.getByRole("radio", { name: "Quantidade física informada" }));
+    // O painel edita um rascunho: a linha só muda ao aplicar.
+    expect(celula("fisico")).toBe("0,22449 kg");
+    await user.click(screen.getByRole("button", { name: "Aplicar ajustes" }));
 
     // Sem a correção, o físico é o digitado: 220 g = 0,22 kg.
     await waitFor(() => expect(celula("fisico")).toBe("0,22 kg"));
+    expect(vi.mocked(updateFormulationVersion)).not.toHaveBeenCalled();
   });
 
   it("premissa faltando não vira zero", async () => {
@@ -229,6 +233,7 @@ describe("O modo do componente chega ao servidor", () => {
 
     await user.click(screen.getByText(/^Calculada/));
     await user.click(screen.getByRole("radio", { name: "Quantidade física informada" }));
+    await user.click(screen.getByRole("button", { name: "Aplicar ajustes" }));
     await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
 
     await waitFor(() => expect(vi.mocked(updateFormulationVersion)).toHaveBeenCalled());
@@ -276,6 +281,7 @@ describe("O painel de ajustes não mente sobre o que está ligado", () => {
     expect(
       screen.getByText(/enquanto nada estiver marcado, a quantidade física continua igual/i),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Aplicar ajustes" }));
     expect(screen.getByRole("button", { name: /nenhum ajuste marcado/ })).toBeInTheDocument();
     // E o número não mudou: 220 g continuam 0,22 kg.
     expect(celula("fisico")).toBe("0,22 kg");
@@ -296,6 +302,10 @@ describe("O painel de ajustes não mente sobre o que está ligado", () => {
       screen.getByRole("radio", { name: "Calcular quantidade física" }),
     );
     await user.click(screen.getByRole("checkbox", { name: "Corrigir pela pureza" }));
+    // A frase do painel acompanha o rascunho na hora…
+    expect(screen.queryByText(/enquanto nada estiver marcado/i)).not.toBeInTheDocument();
+    // …e o número da linha acompanha ao aplicar.
+    await user.click(screen.getByRole("button", { name: "Aplicar ajustes" }));
 
     await waitFor(() => expect(celula("fisico")).toBe("0,22449 kg"));
     expect(

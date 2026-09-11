@@ -35,6 +35,7 @@ import {
   InvalidComponentItemTypeError,
   InvalidComponentQuantityError,
 } from "../formulations/formulations.errors.js";
+import { modoEFlags } from "../formulations/formulations.service.js";
 import {
   FormulationTemplateNotFoundError,
   FormulationTemplateVersionNotFoundError,
@@ -105,6 +106,9 @@ function toComponentDTO(component: ComponentWithItem): FormulationTemplateCompon
       ? component.purityPercentApplied.toString()
       : null,
     overagePercent: component.overagePercent ? component.overagePercent.toString() : null,
+    quantityMode: component.quantityMode,
+    applyPurityAdjustment: component.applyPurityAdjustment,
+    applyOverageAdjustment: component.applyOverageAdjustment,
     notes: component.notes,
     position: component.position,
   };
@@ -455,6 +459,9 @@ export async function updateFormulationTemplateVersion(
           ...(component.overagePercent
             ? { overagePercent: new Prisma.Decimal(component.overagePercent) }
             : {}),
+          // Modo e marcas com a MESMA normalização da Formulação real (§52):
+          // marca ligada sob física direta não se grava.
+          ...modoEFlags(component),
           ...(component.notes !== undefined ? { notes: component.notes } : {}),
           position: index,
         })),
@@ -573,6 +580,11 @@ export async function createTemplateVersionFrom(
             supplyResponsibility: component.supplyResponsibility,
             purityPercentApplied: component.purityPercentApplied,
             overagePercent: component.overagePercent,
+            // A intenção técnica viaja com os números: versão nova do Modelo
+            // que perdesse o modo aplicaria física direta sem ninguém pedir.
+            quantityMode: component.quantityMode,
+            applyPurityAdjustment: component.applyPurityAdjustment,
+            applyOverageAdjustment: component.applyOverageAdjustment,
             notes: component.notes,
             position: component.position,
           })),
@@ -610,6 +622,13 @@ const FORNECIMENTO_LABEL: Record<string, string> = {
   CUSTOMER: "Cliente",
 };
 
+const INTERPRETACAO_LABEL: Record<string, string> = {
+  PHYSICAL_DIRECT: "Quantidade física informada",
+  THEORETICAL_WITH_ADJUSTMENTS: "Calcular quantidade física",
+};
+
+const simOuNao = (valor: boolean) => (valor ? "Sim" : "Não");
+
 interface ComparavelComponente {
   itemCode: string;
   itemName: string;
@@ -619,6 +638,9 @@ interface ComparavelComponente {
   supplyResponsibility: string;
   purityPercentApplied: string | null;
   overagePercent: string | null;
+  quantityMode: string;
+  applyPurityAdjustment: boolean;
+  applyOverageAdjustment: boolean;
 }
 
 export interface ComparavelVersao {
@@ -712,8 +734,23 @@ export function compararComposicoes(
         FORNECIMENTO_LABEL[anterior.supplyResponsibility] ?? anterior.supplyResponsibility,
         FORNECIMENTO_LABEL[componente.supplyResponsibility] ?? componente.supplyResponsibility,
       ],
+      [
+        "Interpretação da quantidade",
+        INTERPRETACAO_LABEL[anterior.quantityMode] ?? anterior.quantityMode,
+        INTERPRETACAO_LABEL[componente.quantityMode] ?? componente.quantityMode,
+      ],
       ["Pureza", anterior.purityPercentApplied, componente.purityPercentApplied],
+      [
+        "Aplicar pureza",
+        simOuNao(anterior.applyPurityAdjustment),
+        simOuNao(componente.applyPurityAdjustment),
+      ],
       ["Overage", anterior.overagePercent, componente.overagePercent],
+      [
+        "Aplicar overage",
+        simOuNao(anterior.applyOverageAdjustment),
+        simOuNao(componente.applyOverageAdjustment),
+      ],
     ];
     for (const [campo, antes, depois] of campos) {
       if (antes !== depois) {
@@ -750,6 +787,9 @@ export function versaoComparavel(version: VersionWithRelations): ComparavelVersa
         ? component.purityPercentApplied.toString()
         : null,
       overagePercent: component.overagePercent ? component.overagePercent.toString() : null,
+      quantityMode: component.quantityMode,
+      applyPurityAdjustment: component.applyPurityAdjustment,
+      applyOverageAdjustment: component.applyOverageAdjustment,
     })),
   };
 }
