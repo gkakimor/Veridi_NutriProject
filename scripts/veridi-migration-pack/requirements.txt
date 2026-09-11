@@ -1,0 +1,2 @@
+# Ferramenta local do pacote de migração — não é dependência da aplicação.
+openpyxl==3.1.5
