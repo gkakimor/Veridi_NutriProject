@@ -79,7 +79,8 @@ export function LotTraceabilityPdf({
    * Lote Veridi é de produto acabado; fornecedor, lote do fornecedor e
    * recebimento, de insumo. O que não se aplica ao lote sai do papel; o que se
    * aplica e está vazio continua como "—" — ausência também é informação numa
-   * rastreabilidade.
+   * rastreabilidade. Os quatro vão crus, sem `orDash`: a grade escreve "—" no
+   * campo que se aplica, e "—" pronto faria o que não se aplica sair no papel.
    */
   const acabado = traceability.kind === "FINISHED_GOOD";
 
@@ -90,16 +91,16 @@ export function LotTraceabilityPdf({
           fields={[
             { label: "Item", value: `${lot.itemCode} — ${lot.itemName}`, span: 8 },
             { label: "Lote interno", value: lot.code, span: 4 },
-            { label: "Lote Veridi", value: orDash(lot.businessLotNumber), span: 4, optional: !acabado },
-            { label: "Lote do fornecedor", value: orDash(lot.supplierLot), span: 4, optional: acabado },
-            { label: "Fornecedor", value: orDash(lot.supplierName), span: 8, optional: acabado },
+            { label: "Lote Veridi", value: lot.businessLotNumber, span: 4, optional: !acabado },
+            { label: "Lote do fornecedor", value: lot.supplierLot, span: 4, optional: acabado },
+            { label: "Fornecedor", value: lot.supplierName, span: 8, optional: acabado },
             { label: "Validade", value: formatDate(lot.expiryDate), span: 4 },
             {
               label: "Qualidade",
               value: lot.isExpired ? "Vencido" : LOT_STATUS_LABELS[lot.status],
               span: 4,
             },
-            { label: "Recebimento", value: orDash(lot.receiptCode), span: 4, optional: acabado },
+            { label: "Recebimento", value: lot.receiptCode, span: 4, optional: acabado },
           ]}
         />
       </PdfSection>
