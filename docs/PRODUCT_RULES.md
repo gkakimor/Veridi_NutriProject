@@ -2473,6 +2473,16 @@ production — the one place where a wrong batch cannot be undone.
   refuses the rest by name, activation re-checks every component, and the API
   never picks a unit for the caller: changing the Item while keeping an
   incompatible unit is refused, not corrected.
+- **Applying a template preserves the base's physical quantity
+  (TEMPLATE-APPLY-BASE-UOM-01).** The formulation reads its base in the
+  finished Item's unit. Same unit: the number is copied. Same dimension: it is
+  converted through the catalog factors, in Decimal — 1 kg becomes 1000 g,
+  never 1 g. Different dimension: the application is refused and nothing is
+  created; mass never becomes count or volume without a rule (density, weight
+  per unit) the domain does not have. Per-base components are copied as they
+  are — they describe a proportion of the base. What counts per finished unit
+  (per-dose or per-unit components, doses per package) cannot cross a unit
+  change without changing physical size, so that application is refused too.
 - **Nothing commercial travels.** No customer, no project, no quote, no cost
   structure, no calculation, no pricing, no order. A matrix meant to be reused
   across customers cannot carry the name of one of them, so the template's name

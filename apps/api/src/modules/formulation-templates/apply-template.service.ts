@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { User } from "@prisma/client";
+import type { UnitOfMeasure, User } from "@prisma/client";
 import type {
   FormulationTemplateDiffDTO,
   FormulationTemplateDTO,
@@ -7,6 +7,8 @@ import type {
   FormulationVersionDTO,
 } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { CASAS_QUANTIDADE } from "../../lib/decimal-schema.js";
+import { convertUomDecimal, isUomCompatible } from "../items/uom.js";
 import {
   getFormulationVersionById,
   listFormulationVersionsByProduct,
@@ -18,6 +20,7 @@ import {
 } from "../formulations/formulations.errors.js";
 import {
   TemplateArchivedError,
+  TemplateBaseUnitError,
   TemplateVersionNotActiveError,
 } from "./formulation-templates.errors.js";
 import {
@@ -54,6 +57,63 @@ function podeSerPreenchida(version: {
 }
 
 /**
+ * A base do Modelo na unidade da Formulação que vai recebê-la —
+ * TEMPLATE-APPLY-BASE-UOM-01.
+ *
+ * A Formulação lê a base na unidade do Item acabado. Copiar só o número
+ * reinterpretava a receita: "1 kg" num Produto em `g` nascia "1 g", mil vezes
+ * menos produto para os mesmos componentes. A grandeza física atravessa:
+ *
+ * - mesma unidade: o número é o mesmo;
+ * - mesma dimensão: converte pelo fator do catálogo, em Decimal. Os
+ *   componentes por base não mudam — descrevem a proporção da base, e 100 g
+ *   por 1 kg são 100 g por 1000 g;
+ * - dimensão diferente: recusa. Massa não vira contagem nem volume sem uma
+ *   regra — densidade, peso por unidade — que o domínio não tem.
+ *
+ * O que conta por UNIDADE ACABADA — componente por dose ou por unidade, dose
+ * por embalagem — não atravessa a troca de unidade: "1 tampa por kg" num
+ * Produto em g seria uma tampa por grama. Converter esses números é outra
+ * decisão; até ela existir, recusa. E o que a base não guarda sem arredondar,
+ * acima de 12 casas, também não entra.
+ */
+function baseNaUnidadeDaFormulacao(
+  template: {
+    basisQuantity: Prisma.Decimal;
+    outputUnitCode: string;
+    calculationMode: string;
+    dosesPerPackage: number | null;
+    components: readonly { basis: string }[];
+  },
+  unidade: string,
+  units: readonly UnitOfMeasure[],
+): Prisma.Decimal {
+  const doModelo = template.outputUnitCode;
+  if (doModelo === unidade) return template.basisQuantity;
+  if (!isUomCompatible(doModelo, unidade, units)) {
+    throw new TemplateBaseUnitError(
+      `A unidade da base do Modelo (${doModelo}) não é compatível com a unidade do Produto (${unidade}).`,
+    );
+  }
+  const contaPorUnidadeAcabada =
+    template.calculationMode !== "FIXED_BASIS" ||
+    template.dosesPerPackage !== null ||
+    template.components.some((component) => component.basis !== "FIXED_BASIS");
+  if (contaPorUnidadeAcabada) {
+    throw new TemplateBaseUnitError(
+      `O Modelo conta por unidade acabada — por dose, por embalagem ou por unidade — em ${doModelo}, e o Produto é medido em ${unidade}: nessa troca, essas quantidades mudariam de tamanho físico. Use um Modelo com a base em ${unidade}.`,
+    );
+  }
+  const convertida = convertUomDecimal(template.basisQuantity, doModelo, unidade, units);
+  if (convertida.decimalPlaces() > CASAS_QUANTIDADE) {
+    throw new TemplateBaseUnitError(
+      `A base do Modelo (${template.basisQuantity.toFixed()} ${doModelo}) em ${unidade} passaria de ${CASAS_QUANTIDADE} casas decimais, e a Formulação não guarda esse número sem arredondar.`,
+    );
+  }
+  return convertida;
+}
+
+/**
  * Copia a versão do template para uma FormulationVersion do Produto.
  *
  * Preenche o rascunho vazio quando existe um — produto técnico nasce com a V1
@@ -83,6 +143,8 @@ export async function applyTemplateToProduct(
     throw new TemplateArchivedError(template.formulationTemplate.code);
   }
 
+  const units = await prisma.unitOfMeasure.findMany();
+
   const versionId = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM products WHERE id = ${productId} FOR UPDATE`;
 
@@ -92,8 +154,18 @@ export async function applyTemplateToProduct(
       orderBy: { versionNumber: "asc" },
     });
 
+    const rascunhoVazio = existentes.find((version) => podeSerPreenchida(version));
+    // A Formulação lê a base na unidade dela: a do rascunho que vai ser
+    // preenchido, ou a do Item acabado na versão que nasce. Recusa aqui
+    // desfaz a transação inteira — nada nasce pela metade.
+    const basisQuantity = baseNaUnidadeDaFormulacao(
+      template,
+      rascunhoVazio?.outputUnitCode ?? outputItem.unitCode,
+      units,
+    );
+
     const dadosDoTemplate = {
-      basisQuantity: template.basisQuantity,
+      basisQuantity,
       calculationMode: template.calculationMode,
       dosesPerPackage: template.dosesPerPackage,
       notes: template.notes,
@@ -128,7 +200,6 @@ export async function applyTemplateToProduct(
       position: index,
     }));
 
-    const rascunhoVazio = existentes.find((version) => podeSerPreenchida(version));
     if (rascunhoVazio) {
       await tx.formulationVersion.update({
         where: { id: rascunhoVazio.id },

@@ -19,6 +19,7 @@ import {
   FormulationTemplateNotFoundError,
   FormulationTemplateVersionNotFoundError,
   TemplateArchivedError,
+  TemplateBaseUnitError,
   TemplateDosesRequiredError,
   TemplateDraftAlreadyExistsError,
   TemplateVersionNotActiveError,
@@ -101,6 +102,9 @@ function mapDomainError(
   }
   if (error instanceof FormulationNotEmptyForTemplateError) {
     return { status: 409, body: { error: "formulation_not_empty", message: error.message } };
+  }
+  if (error instanceof TemplateBaseUnitError) {
+    return { status: 409, body: { error: "template_base_unit", message: error.message } };
   }
   if (error instanceof MissingFinishedItemError) {
     return { status: 409, body: { error: "missing_finished_item", message: error.message } };

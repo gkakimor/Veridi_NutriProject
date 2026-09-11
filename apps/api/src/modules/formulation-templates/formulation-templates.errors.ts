@@ -83,6 +83,19 @@ export class FormulationNotEmptyForTemplateError extends Error {
   }
 }
 
+/**
+ * A base do Modelo não chega à Formulação na mesma grandeza física —
+ * TEMPLATE-APPLY-BASE-UOM-01. A Formulação lê a base na unidade do Item
+ * acabado; copiar só o número reinterpretaria a receita ("1 kg" virando
+ * "1 un"). O motivo vem pronto em português, e nada é criado.
+ */
+export class TemplateBaseUnitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TemplateBaseUnitError";
+  }
+}
+
 /** Modo PER_DOSE exige doses por embalagem — sem isso a fórmula não fecha. */
 export class TemplateDosesRequiredError extends Error {
   constructor() {
