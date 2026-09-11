@@ -858,7 +858,59 @@ em Decimal (1 kg → 1000 g), e dimensão diferente é recusada sem criar nada. 
 componentes por base não mudam; o que conta por unidade acabada recusa a troca
 de unidade. Zero migration.
 
+## Reset, golden path e dois bloqueios (FAST-DEVELOPMENT-RESET-02, 2026-09-11)
+
+**Produção zerada de negócio, usuários preservados.** Backup lógico JSON (7.027
+linhas) com restauração provada linha a linha num banco local descartável — o
+snapshot manual do Railway foi recusado (`Not Authorized`) e o PITR está
+desligado (OPS-BACKUP-01). `prod-cleanup.mjs --apply --reset-sequences` apagou
+6.353 linhas de 63 tabelas numa transação e reiniciou as 23 sequences de
+negócio e o contador anual da OP. Ficaram os 6 usuários (mesmos IDs e
+e-mails), as sessões, as 6 unidades e `_prisma_migrations` — 61 linhas, as 60
+do repositório e o nome antigo da migration renumerada. Login e telas
+conferidos pelo smoke autenticado.
+
+**Instalação nova nasce sozinha.** O catálogo de unidades só existia onde
+alguém tinha rodado seed, e produção nunca roda seed. A migration
+`20260925093012_reference_units_of_measure` o cria com `ON CONFLICT DO NOTHING`;
+`seed-infra` passou a só conferir, e `validate:migrations:fresh` prova o
+catálogo num banco que nunca viu seed.
+
+**Golden path pela interface.** `scripts/e2e/private-label-golden-path.mjs`
+atravessa o negócio inteiro numa base zerada, com conta independente em cada
+número: materiais R$ 957,00 na base de 100 un (Σ quantidade × custo, e o
+componente sem custo nunca vira total), CMV R$ 1.994,00 para 200 un em dois
+lotes, faturamento R$ 2.848,58 − R$ 142,43 = R$ 2.706,15, exatamente o total
+acordado — e a cadeia de rastreabilidade do lote recebido ao lote expedido.
+
+**RECEIPT-BUSINESS-DAY-01 (P1, corrigido).** A tela do Recebimento mandava a
+data como meia-noite UTC — 21h da véspera em São Paulo —, e todo lote recebido
+pela interface nascia com o dia anterior no código, com o movimento de estoque
+na véspera. Regressão silenciosa desde o SYS-TZ-01. `lib/receipt-instant.ts`:
+hoje vira agora, outro dia vira o início do dia comercial (§81).
+
+**E2E.** Na base com corpus, 24 de 27 passaram. `projeto-aprovado-vende-de-novo`
+(#17) e `condicoes-do-orcamento-sobrevivem-a-linha` esperavam o que o produto
+deixou de fazer de propósito e foram corrigidas; `troca-de-cep-do-cliente`
+intermitia por abrir o cliente errado ao reabrir — nenhum dado perdido — e foi
+corrigida. `base-calculada-e-equivalente-por-mil` só reprova entre 0h e 4h de
+São Paulo em máquina fora do fuso (WEB-DATE-DEFAULT-TZ-01). Numa base zerada,
+dez suítes não se aplicam por dependerem de massa do corpus
+(E2E-CORPUS-MASS-01).
+
+**Reset final e prova do zero.** Depois das correções o DEV foi recriado de
+novo e o golden path passou do zero, sem nenhuma falha:
+`CLI-000001 · PROD-000001 · ORC-000001 → PED-000001 → OC-000001 + OC-000002 →
+OP-000001 (001/26) → LT-20260911-000007 → EXP-000001 → FAT-000001`, com os
+lotes de recebimento no dia comercial. Gates em `main`: 3.164 testes em 239
+arquivos, typecheck, build e `validate:migrations:fresh` (61 migrations).
+Produção fica na versão anterior até o próximo deploy da `main`, que aplica a
+migration do catálogo sem mudar nenhuma linha.
+
 ## Próxima prioridade
+
+A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
+mesma. Os achados da rodada estão no BACKLOG, sem posição na fila.
 
 **CUSTOMER-TAX-PROFILE-01** — primeiro da fila viva, decisão do PO em
 2026-09-10: o Perfil tributário do Cliente (Não informado, MEI, Simples
@@ -907,38 +959,33 @@ real do cliente (#7, #11). Roteiro em
 
 ## DEV
 
-Banco local `veridi_dev`. Reconstruído pelo caminho oficial em 2026-09-07 —
-`drop/create` + as 56 migrations + seed de infraestrutura — e recarregado com os
-dados mestres reais do corpus da Veridi, as referências de preço de mercado e o
-pacote sintético de exemplos. Sem massa operacional de rodada anterior.
+Banco local `veridi_dev`. Recriado pelo caminho oficial em 2026-09-11
+(FAST-DEVELOPMENT-RESET-02) — `drop/create` + as 61 migrations + seed de
+infraestrutura — **sem** o corpus da Veridi: as cargas grandes ficam para uma
+rodada própria, decidida pelo PO. Contém só a massa carimbada do último golden
+path.
 
-Caminho canônico, nesta ordem:
+Caminho canônico, nesta ordem (os passos 2 a 4 só quando o PO pedir a carga):
 
-1. `pnpm exec dotenv -e .env -- node scripts/local-db-reset.mjs --confirmar`
+1. `pnpm exec dotenv -e .env -- node scripts/local-db-reset.mjs --confirmar` —
+   no Git Bash. No PowerShell 5.1 o `--` é consumido, o `dotenv-cli` come o
+   `--confirmar` e o script cai em simulação sem alterar nada
 2. `pnpm veridi:import:validate` → `:plan` → `:apply -- --apply` → `:verify`
 3. `pnpm veridi:market-reference -- --apply`
 4. `pnpm veridi:examples -- --apply`
 
 Nunca `db push`, nunca edição manual de `_prisma_migrations`. Runbook do
-importador em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md).
-
-**Resíduos de laboratório declarados**, para a próxima reconstrução planejada —
-nenhum é apagado por SQL, e nenhum estorno foi inventado para removê-los:
-`OC-006794` e `OC-006795` recebidas pelo E2E do FIX-04, e a V2 em rascunho de
-`PROD-000158`.
-
-Os Pedidos que o E2E do FIX-05 deixava presos (`PED-003985`, `PED-003986`)
-**deixaram de ser resíduo no FIX-05b**: foram cancelados pela interface, pelo
-fluxo oficial, depois que a OP cancelada parou de prender. As suítes de E2E
-comerciais passaram a encerrar a própria massa — cancelam as OPs que geraram e
-depois o Pedido, nessa ordem.
+importador em [`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md). `pnpm test` escreve
+no mesmo banco: rodar a suíte depois do reset avança a numeração (OP, lote,
+expedição) antes de qualquer massa de rodada.
 
 ## Produção
 
-Railway, deploy automático da `main`. Carrega **dados mestres reais e
-estruturas de referência marcadas como sintéticas** — nenhuma operação
-fictícia: zero pedido, OP, recebimento, lote, movimento de estoque ou
-faturamento criado por carga. Implantação em [`DEPLOY.md`](DEPLOY.md).
+Railway, deploy automático da `main`. **Zerada de negócio em 2026-09-11**
+(FAST-DEVELOPMENT-RESET-02): só os 6 usuários, as sessões e o catálogo de
+unidades; a numeração de negócio recomeça em 000001 e a da OP em 001. Nenhum
+dado real subiu ainda. Implantação em [`DEPLOY.md`](DEPLOY.md); limpeza de
+produção e prova de backup em `scripts/maintenance/`.
 
 **Regra durável aprendida em 2026-09-07, e que custou uma recarga:**
 `Item.code` (`MP-000372`) sai de uma **sequence do Postgres, uma por banco** —
