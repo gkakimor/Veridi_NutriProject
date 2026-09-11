@@ -4,13 +4,18 @@ import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireRole } from "../../lib/current-user.js";
 import { ProductNotFoundError } from "../formulations/formulations.errors.js";
 import { IndustrialCostVersionNotFoundError } from "../industrial-costs/industrial-costs.errors.js";
-import { InvalidTierQuantityError, PricingVersionNotFoundError } from "../pricing/pricing.errors.js";
+import {
+  InvalidPricingPercentError,
+  InvalidTierQuantityError,
+  PricingVersionNotFoundError,
+} from "../pricing/pricing.errors.js";
 import {
   CostDraftInUseError,
   CostTemplateEmptyError,
   CostTemplateEnergyResourceRequiredError,
   CostTemplateNotFoundError,
   CostTemplateVersionNotFoundError,
+  PricingModelInvalidError,
   PricingPolicyCalculationRequiredError,
   PricingPolicyEmptyError,
   PricingPolicyNotFoundError,
@@ -62,6 +67,7 @@ import {
   createCostTemplateSchema,
   createPolicyFromPricingSchema,
   createPricingPolicySchema,
+  listPricingPoliciesQuerySchema,
   listTemplatesQuerySchema,
   previewPricingPolicySchema,
   updateCostTemplateVersionSchema,
@@ -138,6 +144,14 @@ function mapDomainError(
    */
   if (error instanceof InvalidTierQuantityError) {
     return { status: 400, body: { error: "invalid_quantity", message: error.message } };
+  }
+  // Modelo de Precificação inconsistente — §84. Recusa de negócio, nunca 500.
+  if (error instanceof PricingModelInvalidError) {
+    return { status: 400, body: { error: "invalid_pricing_model", message: error.message } };
+  }
+  // A faixa criada pela aplicação passa pelo mesmo divisor da criação manual.
+  if (error instanceof InvalidPricingPercentError) {
+    return { status: 400, body: { error: "invalid_percent", message: error.message } };
   }
   return null;
 }
@@ -331,7 +345,7 @@ export const costPricingTemplatesRoutes: FastifyPluginAsync = async (app) => {
   app.get("/pricing-policies", async (request, reply) =>
     guard(reply, async () => {
       requireRole(request, ...READ_ROLES);
-      const parsed = listTemplatesQuerySchema.safeParse(request.query);
+      const parsed = listPricingPoliciesQuerySchema.safeParse(request.query);
       if (!parsed.success) {
         return reply
           .status(400)

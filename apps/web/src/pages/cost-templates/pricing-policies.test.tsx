@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type {
+  PricingModelConfig,
   PricingPolicyDTO,
   PricingPolicyPreviewDTO,
   PricingPolicySummaryDTO,
   PricingPolicyVersionDTO,
   PricingVersionDTO,
 } from "@veridi/shared";
+import { DEFAULT_PRICING_MODEL } from "@veridi/shared";
 
 /**
  * Biblioteca de políticas de precificação — o que a tela precisa deixar claro.
@@ -80,6 +82,8 @@ function resumo(overrides: Partial<PricingPolicySummaryDTO> = {}): PricingPolicy
     activeVersionNumber: 1,
     tierCount: 3,
     tierQuantities: ["500", "1000", "3000"],
+    applicableTaxProfiles: [],
+    taxProfileFit: null,
     hasDraft: false,
     updatedAt: "2026-08-01T12:00:00.000Z",
     ...overrides,
@@ -118,6 +122,8 @@ function versao(overrides: Partial<PricingPolicyVersionDTO> = {}): PricingPolicy
         sortOrder: 1,
       },
     ],
+    pricingModel: { ...DEFAULT_PRICING_MODEL },
+    applicableTaxProfiles: [],
     createdAt: "2026-07-01T12:00:00.000Z",
     createdBy: "Admin",
     activatedAt: "2026-07-02T12:00:00.000Z",
@@ -167,6 +173,7 @@ function previa(overrides: Partial<PricingPolicyPreviewDTO> = {}): PricingPolicy
         commissionPercent: "5.0000",
         costPerUnit: "3.2000",
         suggestedUnitPrice: "5.3333",
+        estimatedTaxPercent: null,
         costQuality: "COMPLETE_REAL_REFERENCE",
         warning: null,
       },
@@ -177,10 +184,14 @@ function previa(overrides: Partial<PricingPolicyPreviewDTO> = {}): PricingPolicy
         commissionPercent: "5.0000",
         costPerUnit: "2.8000",
         suggestedUnitPrice: "4.1791",
+        estimatedTaxPercent: null,
         costQuality: "COMPLETE_REAL_REFERENCE",
         warning: null,
       },
     ],
+    pricingModel: { ...DEFAULT_PRICING_MODEL },
+    customerTaxProfile: null,
+    taxProfileFit: "UNRESTRICTED",
     ...overrides,
   };
 }
@@ -302,6 +313,7 @@ describe("Usar política num cálculo de custo", () => {
             commissionPercent: "5.0000",
             costPerUnit: null,
             suggestedUnitPrice: null,
+            estimatedTaxPercent: null,
             costQuality: "PARTIAL",
             warning: "Custo de energia não configurado",
           },
@@ -435,5 +447,227 @@ describe("CalcHint do preço sugerido", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Ajuda sobre Preço sugerido" })[0]!);
 
     expect(screen.getByRole("alert")).toHaveTextContent(/A conta acima não fecha/);
+  });
+});
+
+/**
+ * Modelo de Precificação flexível — PRICING-TEMPLATE-FLEX-01, §84.
+ *
+ * A tela do Modelo diz o que entra no custo que forma o preço: custo industrial
+ * e impostos com o modo explícito, gestão externa e perfis tributários. "Não
+ * considerar" desliga sem apagar, e o valor só vale no modo que o usa.
+ */
+describe("Modelo de Precificação flexível — tela do Modelo", () => {
+  function comRascunho(
+    pricingModel: Partial<PricingModelConfig> = {},
+    applicableTaxProfiles: PricingPolicyVersionDTO["applicableTaxProfiles"] = [],
+  ) {
+    const ativa = versao();
+    const rascunho = versao({
+      id: "tppv-2",
+      status: "DRAFT",
+      versionNumber: 2,
+      versionLabel: "V2",
+      activatedAt: null,
+      activatedBy: null,
+      sourceVersionId: "tppv-1",
+      sourceVersionNumber: 1,
+      usageCount: 0,
+      pricingModel: { ...DEFAULT_PRICING_MODEL, ...pricingModel },
+      applicableTaxProfiles,
+    });
+    getPricingPolicy.mockResolvedValue(policy({ draftVersion: rascunho, versions: [ativa, rascunho] }));
+  }
+
+  const grupo = (nome: string) => screen.getByRole("group", { name: nome });
+
+  it("mostra os modos de custo industrial e de impostos, a gestão externa e os perfis", async () => {
+    comRascunho();
+    renderizar(<PricingPolicyDetailPage />);
+    const industrial = await screen.findByRole("group", { name: "Custo industrial" });
+    for (const nome of [
+      "Conforme a Estrutura de Custos (cálculo do ERP)",
+      "Não considerar",
+      "% sobre custo de materiais",
+      "R$ por unidade",
+      "R$ total",
+    ]) {
+      expect(within(industrial).getByRole("radio", { name: nome })).toBeInTheDocument();
+    }
+    const impostos = grupo("Impostos estimados");
+    for (const nome of ["Não considerar", "% sobre preço de venda", "R$ por unidade", "R$ total"]) {
+      expect(within(impostos).getByRole("radio", { name: nome })).toBeInTheDocument();
+    }
+    // O Modelo que já existia continua no comportamento de antes.
+    expect(
+      within(industrial).getByRole("radio", { name: "Conforme a Estrutura de Custos (cálculo do ERP)" }),
+    ).toBeChecked();
+    expect(within(impostos).getByRole("radio", { name: "Não considerar" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Custos adicionais administrados externamente" }),
+    ).not.toBeChecked();
+
+    const perfis = grupo("Perfis tributários aplicáveis");
+    for (const nome of ["MEI", "Simples Nacional", "Lucro Presumido", "Lucro Real", "Outro"]) {
+      expect(within(perfis).getByRole("checkbox", { name: nome })).not.toBeChecked();
+    }
+    expect(within(perfis).queryByRole("checkbox", { name: "Não informado" })).toBeNull();
+    expect(screen.getByText(/Nenhum marcado: indicado para todos os perfis/)).toBeInTheDocument();
+  });
+
+  it("o valor habilita só no modo que o usa, e Não considerar desliga sem apagar", async () => {
+    comRascunho({ industrialCostMode: "PERCENT_MATERIAL_COST", industrialCostPercentOfMaterials: "12.5" });
+    renderizar(<PricingPolicyDetailPage />);
+    const industrial = await screen.findByRole("group", { name: "Custo industrial" });
+    const percentual = screen.getByLabelText("Custo industrial (% sobre custo de materiais)") as HTMLInputElement;
+    const porUnidade = screen.getByLabelText("Custo industrial (R$ por unidade)") as HTMLInputElement;
+    expect(percentual).toBeEnabled();
+    expect(percentual.value).toBe("12,5");
+    expect(porUnidade).toBeDisabled();
+
+    fireEvent.click(within(industrial).getByRole("radio", { name: "Não considerar" }));
+    expect(percentual).toBeDisabled();
+    expect(percentual.value).toBe("12,5");
+
+    fireEvent.click(within(industrial).getByRole("radio", { name: "R$ por unidade" }));
+    expect(porUnidade).toBeEnabled();
+    expect(percentual).toBeDisabled();
+
+    fireEvent.click(within(industrial).getByRole("radio", { name: "% sobre custo de materiais" }));
+    expect(percentual).toBeEnabled();
+    expect(percentual.value).toBe("12,5");
+  });
+
+  it("salvar leva o Modelo com o valor desligado preservado, a gestão externa e os perfis", async () => {
+    comRascunho({ industrialCostMode: "PERCENT_MATERIAL_COST", industrialCostPercentOfMaterials: "12" });
+    updatePricingPolicyVersion.mockResolvedValue(versao());
+    renderizar(<PricingPolicyDetailPage />);
+    const industrial = await screen.findByRole("group", { name: "Custo industrial" });
+
+    fireEvent.click(within(industrial).getByRole("radio", { name: "Não considerar" }));
+    fireEvent.click(within(grupo("Impostos estimados")).getByRole("radio", { name: "% sobre preço de venda" }));
+    fireEvent.change(screen.getByLabelText("Impostos estimados (% sobre preço de venda)"), {
+      target: { value: "6,5" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Custos adicionais administrados externamente" }));
+    fireEvent.click(
+      within(grupo("Perfis tributários aplicáveis")).getByRole("checkbox", { name: "Simples Nacional" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
+
+    await waitFor(() => expect(updatePricingPolicyVersion).toHaveBeenCalledTimes(1));
+    const [id, corpo] = updatePricingPolicyVersion.mock.calls[0]!;
+    expect(id).toBe("tppv-2");
+    expect(corpo.pricingModel).toEqual({
+      ...DEFAULT_PRICING_MODEL,
+      industrialCostMode: "IGNORE",
+      industrialCostPercentOfMaterials: "12",
+      estimatedTaxMode: "PERCENT_SALE_PRICE",
+      estimatedTaxPercentOfSalePrice: "6.5",
+      externalAdditionalCosts: true,
+    });
+    expect(corpo.applicableTaxProfiles).toEqual(["SIMPLES_NACIONAL"]);
+  });
+
+  it("modo sem valor é recusado antes de sair — nada vai ao servidor", async () => {
+    comRascunho();
+    renderizar(<PricingPolicyDetailPage />);
+    const industrial = await screen.findByRole("group", { name: "Custo industrial" });
+    fireEvent.click(within(industrial).getByRole("radio", { name: "R$ total" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Custo industrial \(R\$ total\): informe o valor/,
+    );
+    expect(updatePricingPolicyVersion).not.toHaveBeenCalled();
+  });
+
+  it("a versão ativa mostra o Modelo por extenso, sempre com a base", async () => {
+    const ativa = versao({
+      pricingModel: {
+        ...DEFAULT_PRICING_MODEL,
+        industrialCostMode: "PER_UNIT",
+        industrialCostAmountPerUnit: "0.8",
+        estimatedTaxMode: "PERCENT_SALE_PRICE",
+        estimatedTaxPercentOfSalePrice: "6",
+      },
+      applicableTaxProfiles: ["SIMPLES_NACIONAL", "MEI"],
+    });
+    getPricingPolicy.mockResolvedValue(policy({ activeVersion: ativa, versions: [ativa] }));
+    renderizar(<PricingPolicyDetailPage />);
+
+    expect(await screen.findByText("R$ 0,80 por unidade")).toBeInTheDocument();
+    expect(screen.getByText("6% sobre preço de venda")).toBeInTheDocument();
+    expect(screen.getByText("Simples Nacional, MEI")).toBeInTheDocument();
+  });
+});
+
+describe("Modelo de Precificação flexível — sugestão pelo perfil do cliente", () => {
+  const props = {
+    productId: "p-1",
+    calculationId: "calc-1",
+    calculationCode: "CALC-001640",
+    saving: false,
+  };
+
+  it("diz qual política é indicada para o perfil do cliente, sem esconder nenhuma", async () => {
+    listPricingPolicies.mockResolvedValue({
+      policies: [
+        resumo({
+          id: "a",
+          code: "TPP-000010",
+          name: "Simples",
+          applicableTaxProfiles: ["SIMPLES_NACIONAL"],
+          taxProfileFit: "NOT_RECOMMENDED",
+        }),
+        resumo({
+          id: "b",
+          code: "TPP-000011",
+          name: "Lucro Real",
+          applicableTaxProfiles: ["LUCRO_REAL"],
+          taxProfileFit: "COMPATIBLE",
+        }),
+        resumo({ id: "c", code: "TPP-000012", name: "Geral", taxProfileFit: "UNRESTRICTED" }),
+      ],
+      customerTaxProfile: "LUCRO_REAL",
+      page: 1,
+      pageSize: 20,
+      total: 3,
+    });
+    renderizar(<UsePricingPolicyDialog {...props} onCancel={vi.fn()} onApply={vi.fn()} />);
+
+    expect(await screen.findByText("TPP-000010")).toBeInTheDocument();
+    expect(screen.getByText("TPP-000011")).toBeInTheDocument();
+    expect(screen.getByText("TPP-000012")).toBeInTheDocument();
+    expect(screen.getByText("Não indicado para o perfil do cliente")).toBeInTheDocument();
+    expect(screen.getByText("Indicado para o perfil do cliente")).toBeInTheDocument();
+    expect(screen.getByText("Todos os perfis")).toBeInTheDocument();
+    expect(screen.getByText(/Perfil tributário do cliente:\s*Lucro Real/)).toBeInTheDocument();
+    expect(listPricingPolicies).toHaveBeenCalledWith(expect.objectContaining({ productId: "p-1" }));
+    // Sugestão, não trava: a política não indicada continua com prévia.
+    expect(screen.getAllByRole("button", { name: "Ver prévia" })).toHaveLength(3);
+  });
+
+  it("impostos sobre a venda entram no divisor, e a explicação confere", async () => {
+    // 3,20 ÷ (1 − 0,35 − 0,05 − 0,10) = 6,40.
+    const base = previa();
+    previewPricingPolicy.mockResolvedValue(
+      previa({
+        pricingModel: {
+          ...DEFAULT_PRICING_MODEL,
+          estimatedTaxMode: "PERCENT_SALE_PRICE",
+          estimatedTaxPercentOfSalePrice: "10",
+        },
+        tiers: [{ ...base.tiers[0]!, estimatedTaxPercent: "10.0000", suggestedUnitPrice: "6.40000000" }],
+      }),
+    );
+    renderizar(<UsePricingPolicyDialog {...props} onCancel={vi.fn()} onApply={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Ver prévia" }));
+
+    await screen.findByText("R$ 6,40");
+    expect(screen.getByText("10% sobre preço de venda")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ajuda sobre Preço sugerido" }));
+    expect(screen.getAllByText(/impostos sobre a venda/).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

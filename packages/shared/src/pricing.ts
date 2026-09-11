@@ -28,6 +28,7 @@
 export const PRICING_VERSION_CODE_PREFIX = "PREC";
 
 import type { IndustrialCostQuality, IndustrialCostWarningDTO } from "./industrial-cost-calculation.js";
+import type { PricingModelConfig } from "./pricing-model.js";
 
 export type PricingVersionStatus = "DRAFT" | "ACTIVE" | "INACTIVE";
 
@@ -54,7 +55,7 @@ export const PRICE_MODE_LABELS: Record<PriceMode, string> = {
 export const COMMISSION_BASE_DESCRIPTION = "Comissão calculada sobre o preço bruto de venda.";
 
 export const CONTRIBUTION_DEFINITION =
-  "Contribuição = preço − comissão − custo industrial. Não é lucro líquido: impostos, despesas financeiras e frete comercial não estão modelados.";
+  "Contribuição = preço − comissão − custo que forma o preço (e os impostos sobre a venda, quando o Modelo de Precificação os considera). Não é lucro líquido: despesas financeiras e frete comercial não estão modelados.";
 
 /**
  * O que muda ao refazer uma precificação sobre o custo vigente.
@@ -145,6 +146,16 @@ export interface PricingTierDTO {
   /** `null` quando o custo base é zero: markup infinito não existe. */
   markupPercent: string | null;
 
+  /**
+   * Custo que FORMA o preço, por unidade: materiais mais o que o Modelo de
+   * Precificação manda considerar (§84). No Modelo padrão é o próprio
+   * `industrialCostPerUnit`. Ausente em leitura anterior ao Modelo flexível —
+   * aí vale `industrialCostPerUnit`.
+   */
+  pricingCostPerUnit?: string | null;
+  /** Impostos em % sobre o preço de venda que entraram no divisor; `null` quando o Modelo não os considera. */
+  estimatedTaxPercent?: string | null;
+
   warnings: IndustrialCostWarningDTO[];
 }
 
@@ -174,6 +185,11 @@ export interface PricingVersionDTO {
   originPricingPolicyCode: string | null;
   originPricingPolicyVersionNumber: number | null;
   originPricingPolicyName: string | null;
+  /**
+   * O que entra no custo que forma o preço (§84) — copiado do Modelo na
+   * aplicação e independente dele depois. Ausente: Modelo padrão.
+   */
+  pricingModel?: PricingModelConfig;
   industrialCostVersionLabel: string;
   formulationVersionNumber: number;
   costReferenceDate: string;

@@ -926,22 +926,44 @@ Projeto, Orçamento, Pedido, Faturamento e Precificação não leem o campo, e n
 existe mapa perfil → alíquota. Quem vai consumi-lo é PRICING-TEMPLATE-FLEX-01,
 para sugerir o Modelo.
 
+## O Modelo de Precificação diz o que entra no custo (PRICING-TEMPLATE-FLEX-01, 2026-09-11)
+
+**Regra durável: §84.** A auditoria confirmou o ponto de partida: o Modelo de
+Precificação é a Política (TPP) e só guardava faixa, margem e comissão; o preço
+saía de `P = C ÷ (1 − m − c)` com C = custo total do cálculo do ERP. Agora a
+versão da política diz também o custo industrial (cálculo do ERP · não
+considerar · % sobre materiais · R$/un · R$ total), os impostos estimados (não
+considerar · % sobre a venda, no divisor · R$/un · R$ total), a gestão externa
+e os perfis tributários indicados. A configuração é copiada para a
+`PricingVersion` na aplicação e viaja com o plano comercial.
+
+**Compatibilidade provada, não suposta:** o default de toda coluna é o
+comportamento de antes (`CALCULATED`, `IGNORE`, `false`, `[]`), e o teste de
+regressão compara o preço do Modelo padrão com a conta antiga, dígito a dígito.
+Uma migration aditiva (`20260925093014_pricing_template_flex`), sem backfill.
+
+**O efeito que o PO pediu:** Modelo que não usa a conversão do ERP forma preço
+com energia sem tarifa e ativa sem "custo incompleto"; material sem custo
+continua bloqueando. O CMV do cálculo segue à parte na faixa, no Orçamento e
+nos relatórios; o custo que formou o preço congela em coluna própria. Na tela,
+o rascunho ganhou rádios simples com o valor ao lado (só o do modo escolhido
+habilita), a gestão externa e os perfis; a escolha da política num cálculo diz
+se ela é indicada para o perfil do cliente, sem esconder nem travar.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
 mesma. Os achados da rodada estão no BACKLOG, sem posição na fila.
 
-**PRICING-TEMPLATE-FLEX-01** — primeiro da fila viva: parâmetros opcionais no
-Modelo de Precificação, distinguindo "não considerar" de zero, sem motor
-fiscal. O Perfil tributário do Cliente, que ele vai usar para sugerir o
-Modelo, fechou em 2026-09-11. **Não iniciado.**
+**PRICING-TEMPLATE-FLEX-01 fechado em 2026-09-11** (§84). Três achados novos no
+BACKLOG, sem posição na fila: PRICING-MODEL-VIEW-01, PRICING-MODEL-DIFF-01 e
+PRICING-ACTIVATE-CONFIRM-01.
 
 **Nenhum módulo é ocultado** — decisão da Veridi em 2026-09-10: Precificação,
 Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha
 ocultação.
 
-**QUOTE-DUPLICATE-01** — segundo da fila viva, depois de
-PRICING-TEMPLATE-FLEX-01, e o **gate de preço foi resolvido**
+**QUOTE-DUPLICATE-01** — primeiro da fila viva, e o **gate de preço foi resolvido**
 pelo PO em 2026-09-10: sem herança silenciosa de `unitPrice`, com escolha
 explícita entre manter os preços da versão de origem e revisá-los, nenhuma
 opção pré-marcada. O que sobra de trabalho é escolher a versão de ORIGEM
@@ -977,8 +999,8 @@ real do cliente (#7, #11). Roteiro em
 Banco local `veridi_dev`. Recriado pelo caminho oficial em 2026-09-11
 (FAST-DEVELOPMENT-RESET-02) — `drop/create` + as 61 migrations + seed de
 infraestrutura — **sem** o corpus da Veridi: as cargas grandes ficam para uma
-rodada própria, decidida pelo PO. A 62ª migration (`customer_tax_profile`)
-entrou por `pnpm db:migrate`. Contém só massa carimbada — o último golden path
+rodada própria, decidida pelo PO. A 62ª migration (`customer_tax_profile`) e a
+63ª (`pricing_template_flex`) entraram por `pnpm db:migrate`. Contém só massa carimbada — o último golden path
 e as E2E focadas.
 
 Caminho canônico, nesta ordem (os passos 2 a 4 só quando o PO pedir a carga):

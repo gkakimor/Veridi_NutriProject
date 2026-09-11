@@ -7,6 +7,7 @@ import { ProjectOriginLink } from "../../components/ProjectOriginLink";
 import type {
   PriceMode,
   PricingRebasePreviewDTO,
+  PricingTierDTO,
   PricingTierPreviewDTO,
   PricingVersionDTO,
 } from "@veridi/shared";
@@ -18,6 +19,8 @@ import {
   PRICE_MODES,
   PRICING_VERSION_STATUS_LABELS,
   computePrice,
+  isDefaultPricingModel,
+  problemaDoDivisorDoPreco,
 } from "@veridi/shared";
 import { CostQualityBadge, formatUnitCost } from "../../components/CostBreakdown";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -44,11 +47,35 @@ import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal } from "../../lib/decimal-field";
 import { parseDecimalInput } from "../../lib/decimal-input";
 import { PricingPolicyOrigin } from "../cost-templates/PricingPolicyOrigin";
+import { PricingModelSummary } from "../cost-templates/PricingModelSummary";
 
 function statusBadgeClass(status: string): string {
   if (status === "ACTIVE") return "badge badge--active";
   if (status === "INACTIVE") return "badge badge--neutral";
   return "badge badge--warn";
+}
+
+/**
+ * O custo que FORMA o preço — `PRODUCT_RULES.md` §84. Ausente em resposta
+ * anterior ao Modelo flexível: ali o preço se formou sobre o custo do cálculo.
+ * `null` é base incompleta e nunca cai para o custo do cálculo.
+ */
+function custoQueFormaPreco(
+  tier: Pick<PricingTierDTO, "pricingCostPerUnit" | "industrialCostPerUnit">,
+): string | null {
+  return tier.pricingCostPerUnit !== undefined ? tier.pricingCostPerUnit : tier.industrialCostPerUnit;
+}
+
+/** O divisor que a conta usou — com os impostos sobre a venda quando o Modelo os considera. */
+function divisorDoPreco(margem: string | null, comissao: string, imposto: string | null | undefined) {
+  return {
+    valor: `(1 − ${formatPercent(margem)} − ${formatPercent(comissao)}${imposto ? ` − ${formatPercent(imposto)}` : ""})`,
+    papel: imposto
+      ? "margem de contribuição, comissão e impostos sobre a venda"
+      : "margem de contribuição e comissão",
+    operador: "÷" as const,
+    numero: 1 - Number(margem) / 100 - Number(comissao) / 100 - Number(imposto ?? "0") / 100,
+  };
 }
 
 /**
@@ -166,17 +193,25 @@ export function PricingPage() {
     if (margem !== null && (Number(margem) < 0 || Number(margem) >= 100)) {
       return { erro: "A margem desejada deve ficar entre 0% e 100%." };
     }
-    if (margem !== null && Number(margem) + Number(comissao) >= 100) {
-      return { erro: "Margem somada à comissão atinge 100% — não existe preço que satisfaça." };
+    // O divisor inteiro, pela mesma regra da API: com os impostos sobre a
+    // venda do Modelo quando eles entram (§84).
+    if (margem !== null) {
+      const problema = problemaDoDivisorDoPreco({
+        targetMarginPercent: margem,
+        commissionPercent: comissao,
+        estimatedTaxPercent: custoDaPrevia.estimatedTaxPercent ?? null,
+      });
+      if (problema) return { erro: problema };
     }
     return {
       resultado: computePrice({
         priceMode,
         quantity: custoDaPrevia.quantity,
-        costPerUnit: custoDaPrevia.industrialCostPerUnit,
+        costPerUnit: custoQueFormaPreco(custoDaPrevia),
         targetMarginPercent: margem,
         commissionPercent: comissao,
         manualUnitPrice: manual,
+        estimatedTaxPercent: custoDaPrevia.estimatedTaxPercent ?? null,
       }),
       margem,
       comissao,
@@ -226,6 +261,9 @@ export function PricingPage() {
   const incompleteCost = pricing.tiers.some(
     (tier) => tier.costQuality === "PARTIAL" || tier.costQuality === "NO_COST",
   );
+  // Modelo que não é o padrão: o custo que forma o preço aparece ao lado do custo do cálculo.
+  const modeloFlexivel =
+    pricing.pricingModel !== undefined && !isDefaultPricingModel(pricing.pricingModel);
 
   return (
     <>
@@ -378,6 +416,17 @@ export function PricingPage() {
           title="Faixas de quantidade"
           subtitle={`${CONTRIBUTION_DEFINITION} ${COMMISSION_BASE_DESCRIPTION}`}
         >
+          {modeloFlexivel && pricing.pricingModel && (
+            <div className="field">
+              <strong>Modelo de Precificação desta versão</strong>
+              <p className="field__hint">
+                O preço se forma sobre o custo que o Modelo manda considerar — a coluna “Custo p/
+                preço”. O custo do cálculo continua ao lado, como referência do CMV.
+              </p>
+              <PricingModelSummary model={pricing.pricingModel} />
+            </div>
+          )}
+
           <div className="table-container">
             <table className="table">
               <thead>
@@ -386,6 +435,7 @@ export function PricingPage() {
                   <th>Lotes</th>
                   <th className="is-numeric">Custo total</th>
                   <th className="is-numeric">Custo/un</th>
+                  {modeloFlexivel && <th className="is-numeric">Custo p/ preço (un)</th>}
                   <th>Qualidade</th>
                   <th>Modo</th>
                   <th className="is-numeric">Margem alvo</th>
@@ -413,6 +463,9 @@ export function PricingPage() {
                         : formatBRL(tier.industrialCostTotal)}
                     </td>
                     <td className="is-numeric">{formatUnitCost(tier.industrialCostPerUnit)}</td>
+                    {modeloFlexivel && (
+                      <td className="is-numeric">{formatUnitCost(custoQueFormaPreco(tier))}</td>
+                    )}
                     <td>{INDUSTRIAL_COST_QUALITY_LABELS[tier.costQuality]}</td>
                     <td>{PRICE_MODE_LABELS[tier.priceMode]}</td>
                     <td className="is-numeric">{formatPercent(tier.targetContributionMarginPercent)}</td>
@@ -424,25 +477,21 @@ export function PricingPage() {
                           base congelada do CALC. */}
                       {tier.priceMode === "TARGET_MARGIN" &&
                         tier.suggestedUnitPrice !== null &&
-                        tier.industrialCostPerUnit !== null &&
+                        custoQueFormaPreco(tier) !== null &&
                         tier.targetContributionMarginPercent !== null && (
                           <CalcHint
                             label="Preço sugerido"
                             operandos={[
                               {
-                                valor: formatUnitCost(tier.industrialCostPerUnit),
+                                valor: formatUnitCost(custoQueFormaPreco(tier)),
                                 papel: "custo por unidade",
-                                numero: Number(tier.industrialCostPerUnit),
+                                numero: Number(custoQueFormaPreco(tier)),
                               },
-                              {
-                                valor: `(1 − ${formatPercent(tier.targetContributionMarginPercent)} − ${formatPercent(tier.commissionPercent)})`,
-                                papel: "margem de contribuição e comissão",
-                                operador: "÷",
-                                numero:
-                                  1 -
-                                  Number(tier.targetContributionMarginPercent) / 100 -
-                                  Number(tier.commissionPercent) / 100,
-                              },
+                              divisorDoPreco(
+                                tier.targetContributionMarginPercent,
+                                tier.commissionPercent,
+                                tier.estimatedTaxPercent,
+                              ),
                             ]}
                             resultado={formatUnitCost(tier.suggestedUnitPrice)}
                             nota="A comissão incide sobre o preço bruto de venda e sai de dentro dele — por isso o custo é dividido, não multiplicado. Margem de contribuição não é lucro."
@@ -475,7 +524,10 @@ export function PricingPage() {
                 ))}
                 {pricing.tiers.length === 0 && (
                   <tr>
-                    <td colSpan={editable ? 16 : 15} className="table__empty">
+                    <td
+                      colSpan={(editable ? 16 : 15) + (modeloFlexivel ? 1 : 0)}
+                      className="table__empty"
+                    >
                       Nenhuma faixa de quantidade cadastrada.
                     </td>
                   </tr>
@@ -598,7 +650,7 @@ export function PricingPage() {
                     <dl className="definition-list tier-preview__dados">
                       <dt>Custo utilizado (por unidade)</dt>
                       <dd>
-                        {formatUnitCost(custoDaPrevia.industrialCostPerUnit)}
+                        {formatUnitCost(custoQueFormaPreco(custoDaPrevia))}
                         {custoDaPrevia.industrialCostTotal === null && (
                           <span className="field__hint"> — subtotal conhecido {formatBRL(custoDaPrevia.knownSubtotal)}</span>
                         )}
@@ -619,21 +671,20 @@ export function PricingPage() {
                         ) : (
                           <>
                             {formatUnitCost(previa.resultado.suggestedUnitPrice)}
-                            {previa.margem !== null && custoDaPrevia.industrialCostPerUnit !== null && (
+                            {previa.margem !== null && custoQueFormaPreco(custoDaPrevia) !== null && (
                               <CalcHint
                                 label="Preço sugerido (prévia)"
                                 operandos={[
                                   {
-                                    valor: formatUnitCost(custoDaPrevia.industrialCostPerUnit),
+                                    valor: formatUnitCost(custoQueFormaPreco(custoDaPrevia)),
                                     papel: "custo por unidade",
-                                    numero: Number(custoDaPrevia.industrialCostPerUnit),
+                                    numero: Number(custoQueFormaPreco(custoDaPrevia)),
                                   },
-                                  {
-                                    valor: `(1 − ${formatPercent(previa.margem)} − ${formatPercent(previa.comissao)})`,
-                                    papel: "margem de contribuição e comissão",
-                                    operador: "÷",
-                                    numero: 1 - Number(previa.margem) / 100 - Number(previa.comissao) / 100,
-                                  },
+                                  divisorDoPreco(
+                                    previa.margem,
+                                    previa.comissao,
+                                    custoDaPrevia.estimatedTaxPercent,
+                                  ),
                                 ]}
                                 resultado={formatUnitCost(previa.resultado.suggestedUnitPrice)}
                                 nota="A comissão incide sobre o preço bruto de venda e sai de dentro dele — por isso o custo é dividido, não multiplicado. Margem de contribuição não é lucro."

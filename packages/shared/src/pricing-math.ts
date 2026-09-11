@@ -32,6 +32,12 @@ export interface PriceComputationInput {
   targetMarginPercent: string | null;
   commissionPercent: string;
   manualUnitPrice: string | null;
+  /**
+   * Impostos estimados em % sobre o preço de venda — `PRODUCT_RULES.md` §84.
+   * Entram no divisor com margem e comissão. Ausente ou `null` é Modelo que não
+   * os considera, e a conta é exatamente a de antes.
+   */
+  estimatedTaxPercent?: string | null;
 }
 
 export interface PriceComputationResult {
@@ -39,6 +45,9 @@ export interface PriceComputationResult {
   selectedUnitPrice: string | null;
   commissionPerUnit: string | null;
   commissionTotal: string | null;
+  /** Impostos sobre a venda por unidade (`preço × %`); `null` quando o Modelo não os considera. */
+  estimatedTaxPerUnit: string | null;
+  estimatedTaxTotal: string | null;
   grossRevenue: string | null;
   contributionPerUnit: string | null;
   contributionTotal: string | null;
@@ -58,6 +67,8 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
   const targetMargin = input.targetMarginPercent === null ? null : new Decimal(input.targetMarginPercent);
   const commissionFraction = new Decimal(input.commissionPercent).dividedBy(HUNDRED);
   const manualUnitPrice = input.manualUnitPrice === null ? null : new Decimal(input.manualUnitPrice);
+  const taxFraction =
+    input.estimatedTaxPercent == null ? null : new Decimal(input.estimatedTaxPercent).dividedBy(HUNDRED);
 
   let suggestedUnitPrice: DecimalInstance | null = null;
   if (input.priceMode === "TARGET_MARGIN" && targetMargin) {
@@ -68,13 +79,18 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
           "Não é possível calcular preço pela margem porque o custo desta faixa está incompleto.",
       });
     } else {
-      // P = C / (1 − m − c). A validação de margem + comissão < 100% garante
-      // o denominador positivo; se chegar aqui inválido, é fail-closed.
-      const denominator = new Decimal(1).minus(targetMargin.dividedBy(HUNDRED)).minus(commissionFraction);
+      // P = C / (1 − m − c − t). A validação de margem + comissão + impostos
+      // sobre a venda < 100% garante o denominador positivo; se chegar aqui
+      // inválido, é fail-closed.
+      const semImposto = new Decimal(1).minus(targetMargin.dividedBy(HUNDRED)).minus(commissionFraction);
+      const denominator = taxFraction === null ? semImposto : semImposto.minus(taxFraction);
       if (denominator.lessThanOrEqualTo(0)) {
         warnings.push({
           code: "TARGET_PRICE_IMPOSSIBLE",
-          message: "Margem somada à comissão atinge 100% — não existe preço que satisfaça.",
+          message:
+            taxFraction === null
+              ? "Margem somada à comissão atinge 100% — não existe preço que satisfaça."
+              : "Margem somada à comissão e aos impostos sobre a venda atinge 100% — não existe preço que satisfaça.",
         });
       } else {
         suggestedUnitPrice = costPerUnit.dividedBy(denominator);
@@ -90,6 +106,8 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
       selectedUnitPrice: null,
       commissionPerUnit: null,
       commissionTotal: null,
+      estimatedTaxPerUnit: null,
+      estimatedTaxTotal: null,
       grossRevenue: null,
       contributionPerUnit: null,
       contributionTotal: null,
@@ -102,6 +120,8 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
   const commissionPerUnit = selectedUnitPrice.times(commissionFraction);
   const grossRevenue = selectedUnitPrice.times(quantity);
   const commissionTotal = grossRevenue.times(commissionFraction);
+  const estimatedTaxPerUnit = taxFraction === null ? null : selectedUnitPrice.times(taxFraction);
+  const estimatedTaxTotal = taxFraction === null ? null : grossRevenue.times(taxFraction);
 
   // Sem custo total conhecido não existe contribuição: usar o subtotal
   // conhecido daria uma margem otimista e falsa.
@@ -115,6 +135,8 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
       selectedUnitPrice: texto(selectedUnitPrice),
       commissionPerUnit: texto(commissionPerUnit),
       commissionTotal: texto(commissionTotal),
+      estimatedTaxPerUnit: texto(estimatedTaxPerUnit),
+      estimatedTaxTotal: texto(estimatedTaxTotal),
       grossRevenue: texto(grossRevenue),
       contributionPerUnit: null,
       contributionTotal: null,
@@ -124,7 +146,11 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
     };
   }
 
-  const contributionPerUnit = selectedUnitPrice.minus(commissionPerUnit).minus(costPerUnit);
+  // Imposto sobre a venda sai de dentro do preço, como a comissão.
+  const liquido = selectedUnitPrice.minus(commissionPerUnit);
+  const contributionPerUnit = (estimatedTaxPerUnit === null ? liquido : liquido.minus(estimatedTaxPerUnit)).minus(
+    costPerUnit,
+  );
   const contributionTotal = contributionPerUnit.times(quantity);
 
   // Contribuição negativa é informação comercial legítima — nunca zerada.
@@ -151,6 +177,8 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
     selectedUnitPrice: texto(selectedUnitPrice),
     commissionPerUnit: texto(commissionPerUnit),
     commissionTotal: texto(commissionTotal),
+    estimatedTaxPerUnit: texto(estimatedTaxPerUnit),
+    estimatedTaxTotal: texto(estimatedTaxTotal),
     grossRevenue: texto(grossRevenue),
     contributionPerUnit: texto(contributionPerUnit),
     contributionTotal: texto(contributionTotal),

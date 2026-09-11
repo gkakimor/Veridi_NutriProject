@@ -1342,6 +1342,30 @@ model ProductionOrderCostSnapshot {
 /// formulacao, referencias de material, tarifas e data de referencia. Sem
 /// essa proveniencia nao da para dizer "este preco foi construido sobre
 /// qual custo", e preco sem origem e chute com aparencia de numero.
+/// Custo industrial no Modelo de Precificacao — PRODUCT_RULES.md §84.
+///
+/// CALCULATED e o comportamento anterior ao Modelo flexivel (custo da
+/// Estrutura de Custos, pelo calculo do ERP) e o default: todo Modelo e toda
+/// precificacao existentes continuam com o mesmo preco. Cada modo com valor le
+/// a SUA coluna, que carrega a base no nome — nunca "10%" sem dizer de que.
+enum PricingIndustrialCostMode {
+  CALCULATED
+  IGNORE
+  PERCENT_MATERIAL_COST
+  PER_UNIT
+  TOTAL
+}
+
+/// Impostos estimados no Modelo de Precificacao — §84. Nao e motor fiscal: o
+/// percentual ou valor vem da Veridi. PERCENT_SALE_PRICE vai ao divisor do
+/// preco, junto com margem e comissao; PER_UNIT e TOTAL somam ao custo.
+enum PricingEstimatedTaxMode {
+  IGNORE
+  PERCENT_SALE_PRICE
+  PER_UNIT
+  TOTAL
+}
+
 model PricingVersion {
   id String @id @default(uuid())
 
@@ -1392,6 +1416,22 @@ model PricingVersion {
   originPricingPolicyVersion       PricingPolicyTemplateVersion? @relation(fields: [originPricingPolicyVersionId], references: [id], onDelete: SetNull)
   originPricingPolicyCode          String?
   originPricingPolicyVersionNumber Int?
+
+  /// MODELO DE PRECIFICACAO desta versao — §84. Copiado do Modelo na aplicacao
+  /// (ou da versao ativa anterior) e independente dele depois. Os defaults sao
+  /// o comportamento de antes: custo do calculo do ERP, sem impostos.
+  /// Desligar um modo nao apaga o valor da coluna dele.
+  industrialCostMode               PricingIndustrialCostMode @default(CALCULATED)
+  industrialCostPercentOfMaterials Decimal?                  @db.Decimal(7, 4)
+  industrialCostAmountPerUnit      Decimal?                  @db.Decimal(20, 8)
+  industrialCostAmountTotal        Decimal?                  @db.Decimal(14, 4)
+  estimatedTaxMode                 PricingEstimatedTaxMode   @default(IGNORE)
+  estimatedTaxPercentOfSalePrice   Decimal?                  @db.Decimal(7, 4)
+  estimatedTaxAmountPerUnit        Decimal?                  @db.Decimal(20, 8)
+  estimatedTaxAmountTotal          Decimal?                  @db.Decimal(14, 4)
+  /// Custos adicionais administrados externamente: custo industrial e impostos
+  /// fora da conta, valores intactos. Materiais continuam calculados.
+  externalAdditionalCosts          Boolean                   @default(false)
 
   tiers              PricingTier[]
   quoteLines         QuoteLine[]
@@ -1464,6 +1504,13 @@ model PricingTier {
   contributionTotalSnapshot   Decimal?               @db.Decimal(14, 4)
   contributionMarginSnapshot  Decimal?               @db.Decimal(7, 4)
   markupSnapshot              Decimal?               @db.Decimal(12, 4)
+  /// Custo que FORMOU o preco, por unidade — materiais + o que o Modelo manda
+  /// considerar (§84). TECHNICAL_RESULT em `DECIMAL(24,12)`. Nulo em faixa
+  /// ativada antes do Modelo flexivel: ali o preco se formou sobre
+  /// `costPerUnitSnapshot`.
+  pricingCostPerUnitSnapshot  Decimal?               @db.Decimal(24, 12)
+  /// Impostos em % sobre o preco de venda que entraram no divisor. Nulo: fora.
+  estimatedTaxPercentSnapshot Decimal?               @db.Decimal(7, 4)
   warningsSnapshot            Json?
 
   createdAt DateTime @default(now())
@@ -4229,6 +4276,23 @@ model PricingPolicyTemplateVersion {
   derivedVersions     PricingPolicyTemplateVersion[] @relation("PricingPolicyVersionSource")
 
   tiers PricingPolicyTemplateTier[]
+
+  /// O QUE ENTRA NO CUSTO que forma o preco — §84. Regra, nunca preco: vale
+  /// para qualquer produto e e copiada para a precificacao na aplicacao. Os
+  /// defaults sao o comportamento de antes, entao toda politica existente
+  /// continua produzindo o mesmo preco.
+  industrialCostMode               PricingIndustrialCostMode @default(CALCULATED)
+  industrialCostPercentOfMaterials Decimal?                  @db.Decimal(7, 4)
+  industrialCostAmountPerUnit      Decimal?                  @db.Decimal(20, 8)
+  industrialCostAmountTotal        Decimal?                  @db.Decimal(14, 4)
+  estimatedTaxMode                 PricingEstimatedTaxMode   @default(IGNORE)
+  estimatedTaxPercentOfSalePrice   Decimal?                  @db.Decimal(7, 4)
+  estimatedTaxAmountPerUnit        Decimal?                  @db.Decimal(20, 8)
+  estimatedTaxAmountTotal          Decimal?                  @db.Decimal(14, 4)
+  externalAdditionalCosts          Boolean                   @default(false)
+  /// Perfis tributarios para os quais o Modelo e indicado. Vazio = todos.
+  /// SUGESTAO de compatibilidade: nao calcula imposto e nao trava (§83, §84).
+  applicableTaxProfiles            CustomerTaxProfile[]      @default([])
 
   /// Precificacoes COPIADAS desta politica — proveniencia, nunca canal.
   derivedPricingVersions PricingVersion[]
