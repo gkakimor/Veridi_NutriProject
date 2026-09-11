@@ -1159,6 +1159,13 @@ unidades; a numeração de negócio recomeça em 000001 e a da OP em 001. Nenhum
 dado real subiu ainda. Implantação em [`DEPLOY.md`](DEPLOY.md); limpeza de
 produção e prova de backup em `scripts/maintenance/`.
 
+**Pacote de revisão da migração** (PROD-MASTER-MIGRATION-PACK-01,
+2026-09-11): `scripts/veridi-migration-pack/` gera, do legado real, oito
+planilhas para a Veridi revisar (fora do Git, em `handoff/`); nada foi
+carregado. Depois de SUPPLIER-ADDRESS-01, regeneração curta do arquivo de
+Fornecedores; a carga é PROD-MASTER-MIGRATION-APPLY-01. Runbook em
+[`VERIDI_MIGRATION.md`](VERIDI_MIGRATION.md).
+
 **Regra durável aprendida em 2026-09-07, e que custou uma recarga:**
 `Item.code` (`MP-000372`) sai de uma **sequence do Postgres, uma por banco** —
 o mesmo código nomeia itens DIFERENTES em DEV e em produção. Qualquer carga que
