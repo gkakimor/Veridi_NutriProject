@@ -5435,3 +5435,68 @@ confirmado. É o mesmo painel na Formulação e no Modelo.
 **Equivalente estoque e Físico / unidade têm cada um a sua coluna**, alinhados
 à direita, com a unidade colada ao valor. Em tela estreita a linha vira cartão:
 cada valor técnico com o seu rótulo, sem rolagem lateral.
+
+## §89 — Perfil de Produção: como o produto é normalmente produzido — capacidade, não custo
+
+PLANNING-PRODUCTION-PROFILE-01, 2026-09-11. Primeira fundação do módulo
+Planejamento.
+
+**Perfil de Produção é o roteiro reutilizável de COMO um produto é
+produzido:** etapas em ordem, tempo de preparação e de execução, modo de
+escala e os recursos que cada etapa ocupa ao mesmo tempo. Não é Formulação (o
+que entra), não é Estrutura de Custos (quanto custa), não é Ordem de Produção
+(o que foi mandado fazer). Planejar não muda estoque, custo, CMV,
+precificação, tarifa, formulação nem OP.
+
+- **Versionado como as bibliotecas** (`TemplateVersionStatus`): nasce com a V1
+  em rascunho; só o rascunho se edita; ativar congela; mudar exige versão
+  nova, copiada inteira da ativa, e a anterior fica ARQUIVADA, nunca apagada.
+  Um rascunho e uma ativa por perfil (serviço e índice parcial). Versão sem
+  etapa não ativa.
+- **Quantidade-base** (`referenceQuantity` + `referenceUomCode`, maior que
+  zero): os tempos de execução se referem a ela. Produto só adota o perfil com
+  a base na MESMA dimensão da unidade do item de produto acabado; produto sem
+  item não tem unidade para comparar e é recusado. Nada se converte entre
+  dimensões.
+- **Etapas sequenciais:** a posição na lista é a sequência (1, 2, 3…) e a
+  etapa N começa depois da N−1. Sem paralelismo, dependência arbitrária ou
+  sobreposição.
+- **Preparação ≠ execução**, em minutos inteiros ≥ 0, e a etapa precisa de um
+  dos dois maior que zero. **Preparação não escala:** 30 min para 1 lote ou
+  para 3.
+- **Proporcional:** execução × quantidade ÷ base — 2 h por 1.000 un viram 6 h
+  para 3.000 un. **Por lote:** execução × ceil(quantidade ÷ base) — 1.500 un
+  em lotes de 1.000 são 2 lotes e 4 h, nunca regra de três. Decimal do começo
+  ao fim.
+- **Capacidade, não custo:** `resourceQuantity` é quantos recursos iguais
+  trabalham AO MESMO TEMPO, inteiro ≥ 1 (CHECK no banco; zero, fração, texto e
+  nulo são 400). 2 operadores × 2 h são etapa de 2 h e **4 horas-recurso** — a
+  etapa não dura 4 h. É outra pergunta que o `resourceCount` de custo (§87)
+  responde, e nenhum dos dois depende do outro.
+- **Duração da etapa** = preparação + execução. **Demanda do recurso** =
+  quantidade de recursos × duração da etapa: recurso anexado à etapa é
+  necessário durante a etapa INTEIRA, preparação inclusive — preparação de
+  30 min e execução de 120 min com 2 recursos são etapa de 150 min e 300
+  min-recurso (5 horas-recurso). Não existe fase por recurso (só preparação,
+  só execução) nem quantidade diferente por fase: se for preciso, é evolução
+  futura. **Total** = soma das durações.
+- **Recurso é pool do cadastro de Recursos Industriais:** mão de obra e
+  equipamento, ativos, uma linha por recurso na etapa — nunca pessoa ou
+  máquina individual. **Energia não é recurso de capacidade** e é recusada
+  (400): ela continua no custo.
+- **Simulação não grava:** a prévia usa o motor canônico
+  (`planProductionProfile`, em `@veridi/shared`) na tela e no servidor
+  (`GET /production-profile-versions/:id/preview`). Sem calendário, turno,
+  feriado, data sugerida nem capacidade diária.
+- **Produto → perfil padrão:** ponteiro opcional para uma VERSÃO ATIVA
+  (`Product.defaultProductionProfileVersionId`). Produto sem perfil continua
+  válido. **Ativar uma versão nova leva junto**, na MESMA transação da
+  ativação, os produtos que apontavam para a versão anterior DESTE perfil: o
+  padrão é a configuração que as PRÓXIMAS ordens devem usar. Produto sem
+  perfil, ou apontando para outro perfil, não é tocado — o sistema acompanha
+  um padrão já escolhido, nunca associa sozinho. Ordem de produção existente
+  não muda: ela recebe cópia.
+- **Regra futura já decidida (PLANNING-OP-SNAPSHOT-01):** a OP receberá CÓPIA
+  integral da versão do perfil (contrato `ProductionProfileSnapshot`), nunca
+  vínculo vivo. Alterar o perfil depois NÃO altera OP existente. Rascunho não é
+  copiável.

@@ -77,6 +77,8 @@ import { CostTemplatesPage } from "./pages/cost-templates/CostTemplatesPage";
 import { CostTemplateDetailPage } from "./pages/cost-templates/CostTemplateDetailPage";
 import { PricingPoliciesPage } from "./pages/cost-templates/PricingPoliciesPage";
 import { PricingPolicyDetailPage } from "./pages/cost-templates/PricingPolicyDetailPage";
+import { ProductionProfilesPage } from "./pages/planning/ProductionProfilesPage";
+import { ProductionProfileDetailPage } from "./pages/planning/ProductionProfileDetailPage";
 import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPage";
 import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
 import { ProductionOrdersPage } from "./pages/production-orders/ProductionOrdersPage";
@@ -245,6 +247,13 @@ function AuthenticatedApp() {
           <Route path="/producao/ordens/:id" element={<ProductionOrderPage />} />
           <Route path="/producao/ordens/:id/receita" element={<RecipeSheetPage />} />
           <Route path="/producao/picking" element={<PickingConsumptionPage />} />
+          {/* Planejamento → Perfis de Produção. A entrada no menu chega com a
+              nova navegação (NAVIGATION-SIDEBAR-01); a rota já funciona. */}
+          <Route path="/planejamento/perfis-producao" element={<ProductionProfilesPage />} />
+          <Route
+            path="/planejamento/perfis-producao/:profileId"
+            element={<ProductionProfileDetailPage />}
+          />
           <Route path="/administracao/usuarios" element={<UsersPage />} />
           <Route
             path="/administracao/documentos"

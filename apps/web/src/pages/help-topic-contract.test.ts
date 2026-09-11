@@ -126,6 +126,10 @@ const PARES: [arquivo: string, topico: string][] = [
   ["pages/lots/LotDetailPage.tsx", "estoque.lotes"],
   ["pages/lots/LotScanPage.tsx", "estoque.escanear"],
 
+  // Planejamento — o roteiro de produção, que não é Formulação nem custo.
+  ["pages/planning/ProductionProfilesPage.tsx", "planejamento.perfisProducao"],
+  ["pages/planning/ProductionProfileDetailPage.tsx", "planejamento.perfisProducao"],
+
   // Cadastros — a tela de criação abre a MESMA ajuda da lista: é o fluxo
   // "cadastrar" dela que descreve o formulário.
   ["pages/items/ItemsPage.tsx", "item.comoFunciona"],

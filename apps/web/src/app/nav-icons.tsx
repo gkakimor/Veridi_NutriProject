@@ -4,6 +4,7 @@ export type NavIconName =
   | "dashboard"
   | "commercial"
   | "production"
+  | "planning"
   | "purchasing"
   | "inventory"
   | "quality"
@@ -44,6 +45,16 @@ const SHAPES: Record<NavIconName, ReactNode> = {
     <>
       <path d="M3 20.5h18" />
       <path d="M4.5 20.5V11l5 3v-3l5 3V7.5h5v13" />
+    </>
+  ),
+  planning: (
+    <>
+      <circle cx="6" cy="6.5" r="2" />
+      <circle cx="6" cy="17.5" r="2" />
+      <path d="M6 8.5v7" />
+      <path d="M11 6.5h9" />
+      <path d="M11 12h6" />
+      <path d="M11 17.5h9" />
     </>
   ),
   purchasing: (

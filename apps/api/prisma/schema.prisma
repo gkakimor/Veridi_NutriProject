@@ -1166,11 +1166,13 @@ model IndustrialResource {
   updatedByUser         User?    @relation("IndustrialResourceUpdatedBy", fields: [updatedByUserId], references: [id])
   updatedByNameSnapshot String?
 
-  rates                  IndustrialResourceRate[]
-  usages                 IndustrialCostResourceUsage[]
-  energyForVersions      IndustrialCostVersion[]               @relation("IndustrialCostEnergyResource")
-  templateUsages         IndustrialCostTemplateResourceUsage[] @relation("CostTemplateResourceUsage")
-  energyForCostTemplates IndustrialCostTemplateVersion[]       @relation("CostTemplateEnergyResource")
+  rates                          IndustrialResourceRate[]
+  usages                         IndustrialCostResourceUsage[]
+  energyForVersions              IndustrialCostVersion[]               @relation("IndustrialCostEnergyResource")
+  templateUsages                 IndustrialCostTemplateResourceUsage[] @relation("CostTemplateResourceUsage")
+  energyForCostTemplates         IndustrialCostTemplateVersion[]       @relation("CostTemplateEnergyResource")
+  /// Etapas de Perfil de Producao que ocupam este recurso (capacidade, §89).
+  productionProfileStepResources ProductionProfileStepResource[]
 
   @@index([type])
   @@index([active])
@@ -1976,6 +1978,7 @@ model UnitOfMeasure {
   costTemplateOutputs        IndustrialCostTemplateVersion[] @relation("CostTemplateOutputUom")
   pricingPolicyTiers         PricingPolicyTemplateTier[]     @relation("PricingPolicyTierUom")
   itemCostReferences         ItemCostReference[]             @relation("ItemCostReferenceUom")
+  productionProfileBases     ProductionProfileVersion[]      @relation("ProductionProfileReferenceUom")
 
   @@map("units_of_measure")
 }
@@ -2385,6 +2388,13 @@ model Product {
   projectProducts ProjectProduct[]
   quoteLines      QuoteLine[]
 
+  /// Perfil de Producao padrao (PLANNING-PRODUCTION-PROFILE-01, §89): uma
+  /// VERSAO ATIVA escolhida explicitamente. Opcional — produto sem perfil
+  /// continua valido. E ponteiro de planejamento: nao muda formulacao, custo
+  /// nem OP, e ativar versao nova do perfil nao o move sozinho.
+  defaultProductionProfileVersionId String?
+  defaultProductionProfileVersion   ProductionProfileVersion? @relation("ProductDefaultProductionProfileVersion", fields: [defaultProductionProfileVersionId], references: [id], onDelete: Restrict)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2404,6 +2414,7 @@ model Product {
   @@index([customerId])
   @@index([lifecycle])
   @@index([originProjectId])
+  @@index([defaultProductionProfileVersionId])
   @@map("products")
 }
 
@@ -4366,4 +4377,144 @@ model PricingPolicyTemplateTier {
   @@unique([pricingPolicyTemplateVersionId, quantity], map: "pricing_policy_template_tiers_versionId_quantity_key")
   @@index([pricingPolicyTemplateVersionId], map: "pricing_policy_template_tiers_versionId_idx")
   @@map("pricing_policy_template_tiers")
+}
+
+// ════════════════════════════════════════════════════════════ PLANEJAMENTO
+
+/// Como o tempo de EXECUCAO de uma etapa acompanha a quantidade produzida.
+/// A PREPARACAO nunca escala (PRODUCT_RULES §89).
+enum ProductionStepScalingMode {
+  PROPORTIONAL
+  BY_BATCH
+}
+
+/// PERFIL DE PRODUCAO (PLANNING-PRODUCTION-PROFILE-01, PRODUCT_RULES §89).
+///
+/// Responde "COMO este produto e normalmente produzido": etapas em ordem,
+/// tempo de preparacao e de execucao, e os recursos simultaneos de cada
+/// etapa. Nao e Formulacao, nao e Estrutura de Custos, nao e Ordem de
+/// Producao — e planejamento operacional reutilizavel entre produtos.
+///
+/// Mesmo ciclo das bibliotecas (`TemplateVersionStatus`): so o rascunho e
+/// editavel; a versao ativa e congelada, e mudar exige versao nova.
+model ProductionProfile {
+  id String @id @default(uuid())
+
+  /// PPR-000001 — identidade do perfil.
+  code String @unique
+
+  name        String
+  description String?
+
+  archivedAt DateTime?
+  archivedBy String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+  updatedAt DateTime @updatedAt
+
+  versions ProductionProfileVersion[]
+
+  @@index([name])
+  @@map("production_profiles")
+}
+
+model ProductionProfileVersion {
+  id String @id @default(uuid())
+
+  productionProfileId String
+  productionProfile   ProductionProfile @relation(fields: [productionProfileId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+  status        TemplateVersionStatus @default(DRAFT)
+
+  /// Quantidade-base a que os tempos de EXECUCAO se referem (em BY_BATCH, o
+  /// tamanho do lote). CHECK > 0 no banco. O produto que adotar o perfil tem
+  /// de estar numa unidade da MESMA dimensao — nada se converte entre
+  /// dimensoes.
+  referenceQuantity Decimal       @db.Decimal(24, 12)
+  referenceUomCode  String
+  referenceUom      UnitOfMeasure @relation("ProductionProfileReferenceUom", fields: [referenceUomCode], references: [code], onDelete: Restrict)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  activatedAt DateTime?
+  activatedBy String?
+  archivedAt  DateTime?
+  archivedBy  String?
+
+  sourceVersionId     String?
+  sourceVersion       ProductionProfileVersion?  @relation("ProductionProfileVersionSource", fields: [sourceVersionId], references: [id], onDelete: SetNull)
+  sourceVersionNumber Int?
+  derivedVersions     ProductionProfileVersion[] @relation("ProductionProfileVersionSource")
+
+  steps ProductionProfileStep[]
+
+  /// Produtos que escolheram ESTA versao como Perfil de Producao padrao.
+  defaultForProducts Product[] @relation("ProductDefaultProductionProfileVersion")
+
+  @@unique([productionProfileId, versionNumber], map: "production_profile_versions_profileId_versionNumber_key")
+  @@index([status])
+  @@map("production_profile_versions")
+}
+
+/// Etapa do roteiro. SEQUENCIAL nesta fase: a etapa N comeca depois da N-1 —
+/// sem paralelismo, dependencia arbitraria ou sobreposicao.
+model ProductionProfileStep {
+  id String @id @default(uuid())
+
+  productionProfileVersionId String
+  productionProfileVersion   ProductionProfileVersion @relation(fields: [productionProfileVersionId], references: [id], onDelete: Cascade)
+
+  /// 1, 2, 3… — unica por versao. CHECK >= 1.
+  sequence    Int
+  name        String
+  description String?
+
+  /// Preparacao, em minutos. NAO escala: 30 min para 1 lote ou para 3.
+  setupDurationMinutes Int                       @default(0)
+  /// Execucao da quantidade-base (BY_BATCH: de cada lote), em minutos.
+  runDurationMinutes   Int
+  scalingMode          ProductionStepScalingMode @default(PROPORTIONAL)
+
+  resources ProductionProfileStepResource[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productionProfileVersionId, sequence], map: "production_profile_steps_versionId_sequence_key")
+  @@map("production_profile_steps")
+}
+
+/// Recurso que a etapa OCUPA — semantica de CAPACIDADE, nao de custo.
+///
+/// `resourceQuantity` e quantos recursos trabalham AO MESMO TEMPO: 2
+/// operadores por 2 h sao etapa de 2 h e 4 horas-recurso. Nao e o
+/// `resourceCount` da Estrutura de Custos (§87) e nao depende dele. Recurso
+/// e pool (mao de obra da producao, encapsuladora generica), nunca pessoa ou
+/// maquina individual nesta fase. Energia nao entra: o servico recusa.
+model ProductionProfileStepResource {
+  id String @id @default(uuid())
+
+  productionProfileStepId String
+  productionProfileStep   ProductionProfileStep @relation(fields: [productionProfileStepId], references: [id], onDelete: Cascade, map: "production_profile_step_resources_stepId_fkey")
+
+  industrialResourceId String
+  industrialResource   IndustrialResource @relation(fields: [industrialResourceId], references: [id], onDelete: Restrict, map: "production_profile_step_resources_resourceId_fkey")
+
+  /// Inteiro >= 1 (CHECK no banco).
+  resourceQuantity Int @default(1)
+
+  notes     String?
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productionProfileStepId, industrialResourceId], map: "production_profile_step_resources_step_resource_key")
+  @@index([industrialResourceId], map: "production_profile_step_resources_resourceId_idx")
+  @@map("production_profile_step_resources")
 }
