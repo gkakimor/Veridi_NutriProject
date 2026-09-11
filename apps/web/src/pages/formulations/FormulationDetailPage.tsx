@@ -182,7 +182,7 @@ export function FormulationDetailPage() {
           ) : (
             <p className="field__hint">
               Este produto ainda não tem um item de produto acabado vinculado — vincule em
-              Cadastros / Produtos antes de criar uma formulação.
+              Cadastros / Produtos Acabados antes de criar uma formulação.
             </p>
           )}
         </FormSection>

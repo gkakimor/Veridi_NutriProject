@@ -321,6 +321,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Papel decide quem ajusta estoque, conta inventário, precifica | `modules/inventory/adjustment-audit.test.ts`, `modules/auth/auth.test.ts`, `modules/pricing/pricing.test.ts` |
 | Leitura escopada por Cliente recusa entidade de outro | `modules/customer-consultation/customer-consultation.test.ts` |
 | Menu, busca de telas e favoritos escondem só a tela cuja leitura a API já recusa ao perfil (Usuários: ADMIN; Precificação: Comercial, Compras, ADMIN); seção sem tela permitida some; preferência de navegação é sempre a do usuário da sessão | `web app/sidebar-navigation.test.tsx`, `api modules/user-preferences/user-preferences.test.ts` |
+| Documento controlado: registrar e ativar revisão só Qualidade e ADMIN (`CONTROLLED_DOCUMENT_WRITE_ROLES`); os demais perfis leem, a recusa não muda nada e a tela não oferece a ação a quem a API recusaria | `api modules/controlled-documents/controlled-documents.test.ts` (faixa serial), `web pages/admin/controlled-documents-page.test.tsx` |
 
 ## Como as fixtures escrevem data
 

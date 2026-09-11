@@ -446,7 +446,7 @@ describe("Cliente — página oficial de criação", () => {
 
     expect(screen.queryByText("Informações do cadastro")).toBeNull();
     expect(screen.queryByText("Status")).toBeNull();
-    expect(screen.queryByText("Consulta completa")).toBeNull();
+    expect(screen.queryByText("Visão do Cliente")).toBeNull();
   });
 });
 

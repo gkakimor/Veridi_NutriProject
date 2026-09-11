@@ -85,7 +85,7 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
     <FullWorkspaceModal
       open
       onClose={onClose}
-      crumb="Cadastros / Produtos"
+      crumb="Cadastros / Produtos Acabados"
       crumbActive={mode === "create" ? "Novo" : "Editar"}
       title={mode === "create" ? "Novo produto" : product?.name}
       {...(codeChip ? { codeChip } : {})}

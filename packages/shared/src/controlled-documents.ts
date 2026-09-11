@@ -4,6 +4,8 @@
  * digital, e o sistema nunca declara conformidade GMP/ANVISA.
  */
 
+import type { UserRole } from "./users.js";
+
 export type ControlledDocumentType = "PRODUCTION_ORDER" | "RECIPE_SHEET";
 
 export const CONTROLLED_DOCUMENT_TYPES: readonly ControlledDocumentType[] = [
@@ -21,6 +23,14 @@ export const CONTROLLED_DOCUMENT_CODES: Record<ControlledDocumentType, string> =
   PRODUCTION_ORDER: "R.PRO.002",
   RECIPE_SHEET: "R.COQ.003",
 };
+
+/**
+ * Quem registra e ativa revisão (QUALITY-DOC-WRITE-01): o controle documental
+ * é da Qualidade, e o Administrador continua podendo. A API aplica; a tela usa
+ * a mesma lista só para não oferecer ação que seria recusada. A leitura segue
+ * aberta a qualquer usuário autenticado — a impressão precisa do cabeçalho.
+ */
+export const CONTROLLED_DOCUMENT_WRITE_ROLES: readonly UserRole[] = ["QUALITY", "ADMIN"];
 
 export interface ControlledDocumentRevisionDTO {
   id: string;

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodError } from "zod";
+import { CONTROLLED_DOCUMENT_WRITE_ROLES } from "@veridi/shared";
 import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireRole } from "../../lib/current-user.js";
 import { RevisionAlreadyExistsError, RevisionNotFoundError } from "./controlled-documents.errors.js";
@@ -27,7 +28,8 @@ function mapDomainError(
 
 /**
  * `GET /controlled-documents` (qualquer usuário autenticado — a impressão
- * precisa do cabeçalho), criação/ativação de revisão só para ADMIN.
+ * precisa do cabeçalho); criar e ativar revisão, Qualidade e ADMIN
+ * (`CONTROLLED_DOCUMENT_WRITE_ROLES`, QUALITY-DOC-WRITE-01).
  */
 export const controlledDocumentsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/controlled-documents", async (_request, reply) => {
@@ -36,7 +38,7 @@ export const controlledDocumentsRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/controlled-documents", async (request, reply) => {
     try {
-      const actor = requireRole(request, "ADMIN");
+      const actor = requireRole(request, ...CONTROLLED_DOCUMENT_WRITE_ROLES);
 
       const parsed = createRevisionSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -57,7 +59,7 @@ export const controlledDocumentsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/controlled-documents/:id/activate", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      requireRole(request, "ADMIN");
+      requireRole(request, ...CONTROLLED_DOCUMENT_WRITE_ROLES);
       return reply.send(await activateRevision(id));
     } catch (error) {
       const mapped = mapDomainError(error);

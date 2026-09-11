@@ -182,6 +182,8 @@ describe("Acesso ao CMV pela lista de produtos", () => {
     );
 
     await screen.findByText("PROD-000003");
+    // O título da lista é o nome do menu: o cadastro mestre de Produtos Acabados.
+    expect(screen.getByRole("heading", { level: 1, name: "Produtos Acabados" })).toBeInTheDocument();
     // O menu de cada linha leva o código do produto no nome — sem isso a
     // tabela inteira anuncia o mesmo botão.
     fireEvent.click(screen.getByRole("button", { name: "Mais ações de PROD-000003" }));

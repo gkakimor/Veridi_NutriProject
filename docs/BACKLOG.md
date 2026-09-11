@@ -71,17 +71,21 @@ a base de cada componente ao salvar, mas não oferece seletor para mudá-la.
 **FORMULATION-TEMPLATE-PURITY-RANGE-01 (P3)** — a API do Modelo aceita pureza 0,
 a da Formulação exige 0 < x ≤ 100; o painel já aplica a regra da Formulação nos
 dois, falta alinhar o servidor do Modelo. Achados de NAVIGATION-SIDEBAR-01,
-idem: **NAV-PAGE-TITLES-01 (P3, UX)** — o menu diz Visão do Cliente, Modelos
-de Formulação, Modelos de Estrutura de Custo, Produtos Acabados e Lotes de
-Produto Acabado; os títulos das telas, a trilha da Consulta e textos de ajuda
-seguem com os nomes antigos ("Consulta de Cliente", "Templates de…",
-"Produtos", "Produto Acabado"). **QUALITY-DOC-WRITE-01 (P3, decisão do PO)** —
-Documentos controlados agora mora em Qualidade, mas registrar e ativar revisão
-continua só ADMIN na API: o perfil Qualidade vê a ação e recebe recusa. Decidir
-se Qualidade grava (mudança de autorização) ou se a tela esconde a ação de
-quem não pode. **NAV-TWO-SEARCHES-01 (P3, UX)** — convivem "Buscar ou
-escanear lote" no topo e "Buscar telas…" na coluna; unificar é assunto da
-busca global de registros, fora desta fase.
+idem: NAV-PAGE-TITLES-01 e QUALITY-DOC-WRITE-01 **fechados em 2026-09-11** —
+títulos, trilhas e ajuda com os nomes do menu; registrar e ativar revisão de
+documento controlado passou a ser da Qualidade e do ADMIN.
+**NAV-TWO-SEARCHES-01 (P3, UX)** — convivem "Buscar ou escanear lote" no topo
+e "Buscar telas…" na coluna; unificar é assunto da busca global de registros,
+fora desta fase. **NAV-TEMPLATE-WORDING-01 (P3, UX, decisão do PO)** — as
+telas se chamam Modelos de Formulação e Modelos de Estrutura de Custo, mas
+botões, campos e diálogos seguem dizendo "template" ("Novo template", "Usar
+template", "Nome do template"); a ajuda das estruturas faz a ponte ("modelo —
+o template —"). Trocar a palavra da entidade é outra rodada.
+**HELP-FORMULACAO-WORDCAP-01 (P3, teste vermelho na main)** — o painel da
+Formulação (`formulacao.comoFunciona`) tem 801 palavras contra o teto de 800
+da classe L desde a última mudança do painel (2a27b31); com "Tela: Produtos
+Acabados" foi a 802, e `help-editorial.test.ts` falha. Cortar duas palavras
+do painel é decisão de conteúdo da Formulação, fora da passada de nomes.
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma

@@ -41,7 +41,7 @@ export function CostCalculationPage() {
     <>
       <div className="doc-header">
         <div>
-          <PageBreadcrumbs items={[{ label: "Produtos", href: "/cadastros/produtos" }, { label: "Cálculo de custo" }]} />
+          <PageBreadcrumbs items={[{ label: "Produtos Acabados", href: "/cadastros/produtos" }, { label: "Cálculo de custo" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={calculation.productId} code={calculation.productCode} />{" "}

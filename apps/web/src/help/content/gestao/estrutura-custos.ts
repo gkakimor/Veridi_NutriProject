@@ -107,7 +107,7 @@ export const estruturaCustos = {
   learnMore: [
     { concept: "custo-desconhecido" },
     { concept: "versoes" },
-    { label: "Tela: Modelos de estrutura", href: "/gestao/templates-estrutura" },
+    { label: "Tela: Modelos de Estrutura de Custo", href: "/gestao/templates-estrutura" },
     { label: "Tela: Precificação", href: "/gestao/precificacao" },
   ],
 } satisfies HelpTopicV2;

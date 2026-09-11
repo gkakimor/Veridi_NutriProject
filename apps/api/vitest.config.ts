@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => ({
       "dist/**",
       "src/modules/dashboard/dashboard.test.ts",
       "src/modules/production-orders/gmp-execution.test.ts",
+      "src/modules/controlled-documents/controlled-documents.test.ts",
     ],
   },
 }));

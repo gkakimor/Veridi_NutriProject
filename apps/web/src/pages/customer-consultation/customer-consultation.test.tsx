@@ -389,6 +389,11 @@ describe("Consulta do Cliente — entrada", () => {
     const user = userEvent.setup();
     renderAt("/consultas/clientes");
 
+    // A tela se chama como o item do menu que leva a ela.
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Visão do Cliente" }),
+    ).toBeInTheDocument();
+
     await user.type(await screen.findByLabelText("Buscar clientes"), "Vida");
 
     // Mesmo endpoint do cadastro: nada de um segundo motor de busca.
@@ -408,6 +413,10 @@ describe("Consulta do Cliente — shell", () => {
     renderAt(`/consultas/clientes/${CUSTOMER_ID}/resumo`);
 
     await expectCustomerHeader();
+    expect(screen.getByRole("link", { name: "Visão do Cliente" })).toHaveAttribute(
+      "href",
+      "/consultas/clientes",
+    );
 
     // O nome fantasia aparece duas vezes na tela — no cabeçalho e como raiz
     // da trilha —, então a asserção é feita dentro do cabeçalho.

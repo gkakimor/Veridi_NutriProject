@@ -1107,11 +1107,15 @@ mestre é Cadastros › Produtos Acabados (`/cadastros/produtos`); a lista dos
 lotes que saíram de OP (`/producao/produto-acabado`) virou Estoque › Lotes de
 Produto Acabado. **Documentos controlados** (revisão de R.PRO.002 e R.COQ.003,
 elaborado e aprovado por) é controle documental GMP e foi para Qualidade;
-gravar segue só ADMIN. Rótulos: Visão do Cliente (agora no Comercial), Modelos
+registrar e ativar revisão é da Qualidade e do ADMIN (QUALITY-DOC-WRITE-01).
+Rótulos: Visão do Cliente (agora no Comercial), Modelos
 de Formulação, Modelos de Estrutura de Custo. A visibilidade por perfil
 espelha o gate de leitura que a API já tinha: Usuários só ADMIN; Precificação
-só Comercial, Compras e ADMIN. F-01-4 fechado. Achados no BACKLOG, sem posição
-na fila: NAV-PAGE-TITLES-01, QUALITY-DOC-WRITE-01 e NAV-TWO-SEARCHES-01.
+só Comercial, Compras e ADMIN. F-01-4 fechado. NAV-PAGE-TITLES-01 e
+QUALITY-DOC-WRITE-01 fecharam no mesmo dia, numa passada de acabamento:
+títulos, trilhas e ajuda com os nomes do menu, e a Qualidade registrando e
+ativando revisão. Seguem no BACKLOG, sem posição na fila: NAV-TWO-SEARCHES-01,
+NAV-TEMPLATE-WORDING-01 e HELP-FORMULACAO-WORDCAP-01.
 
 ## Próxima prioridade
 
@@ -1155,8 +1159,9 @@ manual —, e o sistema não faz escrita de massa.
 
 **COST-RESOURCE-MULTIPLIER-01 fechado em 2026-09-11** (§87, seção própria
 acima). **FORMULATION-ADJUSTMENTS-UX-01 fechado no mesmo dia** (§88), fora da
-fila, por handoff do PO, e **NAVIGATION-SIDEBAR-01** também (seção própria
-acima). Próximo da fila viva: SUPPLIER-ADDRESS-01.
+fila, por handoff do PO, e **NAVIGATION-SIDEBAR-01** também, com a passada de
+acabamento NAV-PAGE-TITLES-01 + QUALITY-DOC-WRITE-01 (seção própria acima).
+Próximo da fila viva: SUPPLIER-ADDRESS-01.
 
 **COST-VAR-02** (comparação de CMV e proteção de margem) segue BLOQUEADO
 aguardando as sete decisões do PO em

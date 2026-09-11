@@ -286,7 +286,7 @@ export function ProductCmvPage() {
     <>
       <div className="doc-header">
         <div>
-          <PageBreadcrumbs items={[{ label: "Produtos", href: "/cadastros/produtos" }, { label: "CMV" }]} />
+          <PageBreadcrumbs items={[{ label: "Produtos Acabados", href: "/cadastros/produtos" }, { label: "CMV" }]} />
           <div className="doc-title">
             <h1>
               CMV ·{" "}

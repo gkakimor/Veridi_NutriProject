@@ -330,7 +330,7 @@ export function IndustrialCostPage() {
     <>
       <div className="doc-header">
         <div>
-          <PageBreadcrumbs items={[{ label: "Produtos", href: "/cadastros/produtos" }, { label: "Custos industriais" }]} />
+          <PageBreadcrumbs items={[{ label: "Produtos Acabados", href: "/cadastros/produtos" }, { label: "Custos industriais" }]} />
           <div className="doc-title">
             <h1>
               <EntityLink kind="product" id={productId} code={data.productCode} /> ·{" "}

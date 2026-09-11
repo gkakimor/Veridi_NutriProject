@@ -104,7 +104,7 @@ export const formulacaoVersao = {
   learnMore: [
     { concept: "versoes" },
     { concept: "material-do-cliente" },
-    { label: "Tela: Produtos", href: "/cadastros/produtos" },
-    { label: "Tela: Modelos de formulação", href: "/producao/templates-formulacao" },
+    { label: "Tela: Produtos Acabados", href: "/cadastros/produtos" },
+    { label: "Tela: Modelos de Formulação", href: "/producao/templates-formulacao" },
   ],
 } satisfies HelpTopicV2;

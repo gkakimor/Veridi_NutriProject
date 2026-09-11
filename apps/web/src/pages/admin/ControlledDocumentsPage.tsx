@@ -4,7 +4,9 @@ import {
   CONTROLLED_DOCUMENT_CODES,
   CONTROLLED_DOCUMENT_TYPES,
   CONTROLLED_DOCUMENT_TYPE_LABELS,
+  CONTROLLED_DOCUMENT_WRITE_ROLES,
 } from "@veridi/shared";
+import { useAuth } from "../../app/AuthProvider";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { FormSection } from "../../components/FormSection";
 import { ApiValidationError } from "../../lib/api-errors";
@@ -24,13 +26,19 @@ function DicaDaColuna({ id }: { id: HelpHintId }) {
 }
 
 /**
- * Administração → Documentos controlados.
+ * Qualidade → Documentos controlados.
  *
  * Só o cabeçalho de revisão que os documentos impressos precisam: não é
  * GED, não há editor de template (o layout é código do sistema) e o
  * sistema não declara conformidade GMP/ANVISA em lugar nenhum.
+ *
+ * Registrar e ativar revisão é da Qualidade e do ADMIN — a mesma lista
+ * (`CONTROLLED_DOCUMENT_WRITE_ROLES`) que a API aplica. Os demais perfis
+ * leem: a tela não oferece a eles ação que seria recusada.
  */
 export function ControlledDocumentsPage() {
+  const { user } = useAuth();
+  const canManage = user !== null && CONTROLLED_DOCUMENT_WRITE_ROLES.includes(user.role);
   const [revisions, setRevisions] = useState<ControlledDocumentRevisionDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,9 +107,15 @@ export function ControlledDocumentsPage() {
             época — mudar a revisão ativa nunca reescreve documento já emitido.
           </p>
         </div>
-        <button type="button" className="btn btn--primary" onClick={() => setOpen(true)}>
-          Nova revisão
-        </button>
+        {canManage ? (
+          <button type="button" className="btn btn--primary" onClick={() => setOpen(true)}>
+            Nova revisão
+          </button>
+        ) : (
+          <p className="muted">
+            Consulta: registrar e ativar revisão é da Qualidade e do Administrador.
+          </p>
+        )}
       </div>
 
       {/* A tela é pequena e o alcance dela não é: é o cabeçalho de todo papel
@@ -146,7 +160,7 @@ export function ControlledDocumentsPage() {
                   </span>
                 </td>
                 <td>
-                  {!row.active && (
+                  {canManage && !row.active && (
                     <button
                       type="button"
                       className="btn btn--ghost btn--sm"
@@ -173,7 +187,7 @@ export function ControlledDocumentsPage() {
       {open && (
         <FullWorkspaceModal
           open
-          crumb="Administração"
+          crumb="Qualidade"
           crumbActive="Documentos controlados"
           title="Nova revisão"
           onClose={() => setOpen(false)}
