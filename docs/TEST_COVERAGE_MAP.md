@@ -85,6 +85,7 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Apontamento gera 1 movimento e 1 lote acabado | — | `modules/production-orders/production-output.test.ts` |
 | Consumo confirmado é o que baixa estoque | — | `modules/production-orders/consumption.test.ts` |
 | Perfil de Produção (§89): versão ativa congelada; proporcional × por lote (ceil); preparação não escala; quantidade de recursos é capacidade (2 × 2 h = etapa de 2 h, 4 h-recurso); energia recusada; prévia não grava; produto aponta só para versão ativa de mesma dimensão e avança junto quando uma versão nova é ativada, na mesma transação | capacidade lida como custo (`resourceCount`), ou quantidade de recursos alongando a etapa | `packages/shared/src/production-profiles.test.ts`, `modules/production-profiles/production-profiles.test.ts`, `web pages/planning/production-profiles.test.tsx` |
+| Planejamento previsto na OP (§89): a OP copia o perfil padrão na criação e é dona da cópia (ativar V2 depois não a alcança, nem em rascunho); OP nova recebe a versão atual; produto sem perfil não bloqueia nada; quantidade recalcula sem recopiar; proporcional, por lote e setup incluído na demanda; recurso renomeado/desativado não muda o histórico; aplicar/atualizar só em DRAFT; trocar de produto troca a cópia atomicamente | cópia virar vínculo vivo, ou perfil mudando sozinho uma OP existente | `modules/production-orders/planning-snapshot.test.ts`, `web pages/production-orders/planejamento-previsto.test.tsx` |
 
 ## Comercial, expedição e faturamento
 

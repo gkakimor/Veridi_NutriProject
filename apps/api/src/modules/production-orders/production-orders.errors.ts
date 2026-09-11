@@ -80,3 +80,17 @@ export class ReleaseValidationError extends Error {
  * tipo também. Reexportada daqui para quem já a importava deste módulo.
  */
 export { CustomerMismatchError } from "../../lib/product-customer-ownership.js";
+
+/**
+ * Pediram para aplicar o Perfil de Produção numa OP cujo Produto não tem
+ * perfil padrão ativo. Não é falha da ordem: produto sem perfil é situação
+ * legítima, e a OP continua válida sem planejamento previsto.
+ */
+export class NoDefaultProductionProfileError extends Error {
+  constructor(productCode: string) {
+    super(
+      `Produto ${productCode} não tem perfil de produção padrão ativo — defina um em Planejamento → Perfis de Produção.`,
+    );
+    this.name = "NoDefaultProductionProfileError";
+  }
+}

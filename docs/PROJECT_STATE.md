@@ -1092,9 +1092,49 @@ não há fase por recurso.
 **Navegação:** a seção **Planejamento** entrou no menu novo (grupo `planning`,
 tela `production-profiles`), entre Produção e Compras, com busca, favoritos e
 preferência por usuário pelo mecanismo que a NAVIGATION-SIDEBAR-01 criou.
-**Próxima capability:** PLANNING-OP-SNAPSHOT-01, em que a OP recebe cópia
-integral da versão (contrato `ProductionProfileSnapshot` já definido), nunca
-vínculo vivo.
+A cópia para a OP veio na capability seguinte (abaixo).
+
+## Planejamento previsto na OP — a cópia do Perfil (PLANNING-OP-SNAPSHOT-01, 2026-09-11)
+
+Criar uma Ordem de Produção passa a **copiar** o Perfil de Produção padrão do
+Produto para dentro dela. É cópia por valor, nunca vínculo vivo: se o padrão é
+a V2 naquele instante, a OP leva a V2, e ativar a V3 depois não alcança essa
+ordem — nem quando ela ainda está em rascunho. Vale para a OP manual e para a
+que nasce do Plano de Atendimento.
+
+Migration aditiva `20260925093018_production_order_planning_snapshot`: uma
+tabela 1:1 com `production_orders`, com a proveniência em colunas e as etapas
+em `steps` (JSON), no formato do contrato `ProductionProfileSnapshot` do
+`@veridi/shared`. Sem FK para perfil, versão ou recurso de propósito — os ids
+guardados servem à capacidade futura, e renomear ou desativar um recurso não
+reescreve o histórico da ordem. Nenhuma OP anterior é preenchida
+retroativamente.
+
+**A duração não é gravada.** Sai do motor canônico a cada leitura, pelo adapter
+`planProductionProfileSnapshot`, para a `plannedQuantity` do momento: base de
+1.000 un com 2 h de execução vira 6 h numa OP de 3.000 un. Mudar a quantidade
+em rascunho refaz a projeção e **não** recopia o perfil. A tela recalcula ao
+vivo com o mesmo motor enquanto a quantidade é digitada.
+
+**Produto sem perfil padrão continua válido:** a OP nasce sem cópia, mostra
+"Sem perfil de produção aplicado." e nada é bloqueado — nem a criação, nem o
+planejamento, nem a liberação. Para essa OP, e para a legada, o rascunho
+oferece **Aplicar perfil de produção** quando o Produto tem padrão ativo; com
+cópia antiga, um aviso discreto e **Atualizar perfil**, com confirmação. Trocar
+o Produto em rascunho substitui a cópia inteira, atomicamente, pelo padrão do
+produto novo — e a remove quando o novo não tem perfil. Fora de DRAFT a cópia é
+imutável: aplicar e atualizar são recusados (`order_locked`), e a tela nem
+recebe o padrão atual do produto.
+
+Seção **Planejamento previsto** no detalhe da OP: perfil e versão de origem,
+quantidade, tempo sequencial previsto, etapas com preparação/execução/duração e
+recursos, e o resumo de **Recursos necessários** em horas-recurso. Demanda de
+capacidade, nunca custo — Estrutura de Custos, CMV e Precificação seguem
+separados e intocados, e o PDF da OP não mudou.
+
+**Próximas capabilities:** PLANNING-CALENDAR-01 e PLANNING-CAPACITY-BOARD-01
+(datas, turno, disponibilidade e quadro de capacidade) — nada disso existe
+ainda.
 
 ## Cliente e projeto no Orçamento em rascunho (PDF-DATA-PARITY-01, 2026-09-11)
 

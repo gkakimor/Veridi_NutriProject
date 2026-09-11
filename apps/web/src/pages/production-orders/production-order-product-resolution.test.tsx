@@ -81,6 +81,7 @@ import { getProductionOrder } from "../../lib/production-orders-api";
 import { getProduct, listProducts } from "../../lib/products-api";
 import { NotFoundApiError } from "../../lib/api-errors";
 import { ProductionOrderPage } from "./ProductionOrderPage";
+import { PLANEJAMENTO_VAZIO } from "./planejamento-vazio";
 
 const getProductionOrderMock = vi.mocked(getProductionOrder);
 const listProductsMock = vi.mocked(listProducts);
@@ -148,6 +149,7 @@ function ordemRascunho(alvo: { posicao: number; comItemDeProdutoAcabado?: boolea
     plannedQuantity: "10",
     outputUnitCode: "un",
     productionFactor: null,
+    planning: PLANEJAMENTO_VAZIO,
     status: "DRAFT",
     origin: "MANUAL",
     materialsStatus: "NOT_EVALUATED",

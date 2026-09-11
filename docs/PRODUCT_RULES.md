@@ -5438,8 +5438,8 @@ cada valor técnico com o seu rótulo, sem rolagem lateral.
 
 ## §89 — Perfil de Produção: como o produto é normalmente produzido — capacidade, não custo
 
-PLANNING-PRODUCTION-PROFILE-01, 2026-09-11. Primeira fundação do módulo
-Planejamento.
+PLANNING-PRODUCTION-PROFILE-01 e PLANNING-OP-SNAPSHOT-01, 2026-09-11. Primeira
+fundação do módulo Planejamento, e a cópia do perfil para a Ordem de Produção.
 
 **Perfil de Produção é o roteiro reutilizável de COMO um produto é
 produzido:** etapas em ordem, tempo de preparação e de execução, modo de
@@ -5496,7 +5496,36 @@ precificação, tarifa, formulação nem OP.
   perfil, ou apontando para outro perfil, não é tocado — o sistema acompanha
   um padrão já escolhido, nunca associa sozinho. Ordem de produção existente
   não muda: ela recebe cópia.
-- **Regra futura já decidida (PLANNING-OP-SNAPSHOT-01):** a OP receberá CÓPIA
-  integral da versão do perfil (contrato `ProductionProfileSnapshot`), nunca
-  vínculo vivo. Alterar o perfil depois NÃO altera OP existente. Rascunho não é
-  copiável.
+- **A OP recebe CÓPIA, nunca vínculo vivo** (PLANNING-OP-SNAPSHOT-01,
+  2026-09-11). Criar a Ordem de Produção copia integralmente o perfil padrão do
+  Produto (contrato `ProductionProfileSnapshot`, gravado em
+  `production_order_planning_snapshots`): identificação e número da versão,
+  quantidade-base e unidade, etapas em ordem com preparação, execução, modo de
+  escala, e os recursos com quantidade simultânea, código, nome e tipo. Rascunho
+  não é copiável. Vale para a OP manual e para a do Plano de Atendimento.
+  - **O instante manda:** padrão em V2 na criação, a OP leva a V2; ativar a V3
+    depois não altera essa ordem, nem enquanto ela é rascunho.
+  - **A duração não é gravada:** é projetada a cada leitura pelo mesmo motor
+    (`planProductionProfileSnapshot`) para a `plannedQuantity` do momento — base
+    de 1.000 un com 2 h de execução são 6 h numa OP de 3.000 un. Mudar a
+    quantidade em rascunho recalcula duração, lotes e demanda usando a MESMA
+    cópia, sem recopiar o perfil.
+  - **Produto sem perfil padrão:** a OP nasce sem cópia e continua válida —
+    criação, planejamento e liberação seguem. A tela diz "Sem perfil de produção
+    aplicado.". OP anterior à migration fica sem cópia e não é preenchida
+    retroativamente.
+  - **Aplicar e atualizar são ações de RASCUNHO.** OP em DRAFT sem cópia aplica
+    o padrão atual do Produto quando existe um ativo; com cópia de versão
+    diferente da atual, mostra aviso discreto e permite atualizar, com
+    confirmação. As duas ações substituem a cópia inteira, atomicamente. Trocar
+    o Produto em rascunho troca a cópia pelo padrão do produto novo, e a remove
+    quando o novo não tem perfil — nunca fica a do anterior.
+  - **Fora de DRAFT a cópia é imutável:** aplicar, atualizar ou substituir são
+    recusados, mesmo existindo versão mais nova.
+  - **Recurso renomeado ou desativado não reescreve o histórico:** nome, código
+    e tipo viajaram por valor. Os ids guardados são proveniência para a
+    capacidade futura, nunca canal de leitura.
+  - Continua sem calendário, data por etapa, turno, disponibilidade, agenda,
+    capacidade diária ou Gantt: PLANNING-CALENDAR-01 e
+    PLANNING-CAPACITY-BOARD-01. E sem tocar custo: Estrutura de Custos, CMV,
+    Precificação e tarifas seguem separados.

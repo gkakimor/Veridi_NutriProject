@@ -434,6 +434,40 @@ export interface ProductionProfileSnapshot {
   }[];
 }
 
+/**
+ * A projeção do roteiro CONGELADO para uma quantidade — adapter mínimo em
+ * torno de `planProductionProfile`, e a única ponte entre a cópia e o motor.
+ *
+ * Existe para que servidor e tela leiam a MESMA cópia da mesma forma: mudar a
+ * quantidade da OP refaz esta conta, nunca a cópia. Nome e tipo do recurso
+ * saem do snapshot, não do cadastro — renomear ou desativar um recurso depois
+ * não muda o que a OP mostra.
+ */
+export function planProductionProfileSnapshot(
+  snapshot: ProductionProfileSnapshot,
+  quantity: string | number,
+): ProductionPlan {
+  return planProductionProfile(
+    {
+      referenceQuantity: snapshot.referenceQuantity,
+      steps: snapshot.steps.map((etapa) => ({
+        sequence: etapa.sequence,
+        name: etapa.name,
+        setupDurationMinutes: etapa.setupDurationMinutes,
+        runDurationMinutes: etapa.runDurationMinutes,
+        scalingMode: etapa.scalingMode,
+        resources: etapa.resources.map((recurso) => ({
+          industrialResourceId: recurso.industrialResourceId,
+          resourceName: recurso.resourceName,
+          resourceType: recurso.resourceType,
+          resourceQuantity: recurso.resourceQuantity,
+        })),
+      })),
+    },
+    quantity,
+  );
+}
+
 /** Rascunho ainda muda: copiar um seria congelar um roteiro que ninguém aprovou. */
 export class ProductionProfileDraftNotCopyableError extends Error {
   constructor(versionLabel: string) {
