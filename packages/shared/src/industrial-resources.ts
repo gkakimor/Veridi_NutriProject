@@ -55,6 +55,22 @@ export function usageUomForResourceType(type: IndustrialResourceType): Industria
   return type === "ENERGY" ? "KWH" : "HOUR";
 }
 
+/**
+ * Quem aceita quantidade de recursos (§87): o que se CONTA — pessoa e máquina.
+ *
+ * Energia fica de fora: o kWh informado já é o consumo total do lote, e
+ * "2 × 50 kWh" seria só outra forma de digitar 100 kWh. Para energia a
+ * quantidade é sempre 1, e o servidor recusa outra.
+ */
+export const RESOURCE_COUNT_RESOURCE_TYPES: readonly IndustrialResourceType[] = [
+  "LABOR",
+  "EQUIPMENT",
+];
+
+export function acceptsResourceCount(type: IndustrialResourceType): boolean {
+  return RESOURCE_COUNT_RESOURCE_TYPES.includes(type);
+}
+
 export type IndustrialResourceRateSource = "MANUAL" | "LEGACY_IMPORT";
 
 export const INDUSTRIAL_RATE_SOURCE_LABELS: Record<IndustrialResourceRateSource, string> = {
@@ -155,8 +171,13 @@ export interface IndustrialCostResourceUsageDTO {
   resourceType: IndustrialResourceType;
   resourceActive: boolean;
   usageBasis: IndustrialResourceUsageBasis;
+  /** Uso POR recurso quando `resourceCount` passa de 1 (§87). */
   usageQuantity: string;
   usageUom: IndustrialRateUom;
+  /** Quantidade de recursos equivalentes (§87) — 1 quando não se aplica. */
+  resourceCount: number;
+  /** Uso efetivo na base: `resourceCount × usageQuantity`, calculado no servidor. */
+  totalUsageQuantity: string;
   notes: string | null;
 
   /** Tarifa vigente hoje — referência enquanto a versão é rascunho. */
@@ -172,7 +193,10 @@ export interface IndustrialCostResourceUsageDTO {
   powerKwSnapshot: string | null;
   resourceNameSnapshot: string | null;
 
-  /** Consumo derivado (horas × kW) quando a energia vem dos equipamentos. */
+  /**
+   * Consumo derivado (quantidade de equipamentos × horas × kW) quando a
+   * energia vem dos equipamentos.
+   */
   derivedEnergyKwh: string | null;
 }
 
@@ -205,6 +229,8 @@ export interface CreateIndustrialCostResourceUsageInput {
   resourceId: string;
   usageQuantity: string;
   usageBasis?: IndustrialResourceUsageBasis;
+  /** Inteiro ≥ 1; ausente = 1. Só mão de obra e equipamento passam de 1 (§87). */
+  resourceCount?: number;
   notes?: string | null;
 }
 

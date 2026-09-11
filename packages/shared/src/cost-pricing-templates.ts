@@ -46,9 +46,13 @@ export interface CostTemplateResourceUsageDTO {
   resourceName: string;
   resourceType: IndustrialResourceType;
   usageBasis: IndustrialResourceUsageBasis;
-  /** Decimal como string — nunca float. */
+  /** Decimal como string — nunca float. Uso POR recurso quando `resourceCount` > 1. */
   usageQuantity: string;
   usageUom: IndustrialRateUom;
+  /** Quantidade de recursos equivalentes da linha (§87) — viaja com o Modelo. */
+  resourceCount: number;
+  /** `resourceCount × usageQuantity`, calculado no servidor. */
+  totalUsageQuantity: string;
   notes: string | null;
   sortOrder: number;
 }
@@ -120,6 +124,7 @@ export interface CostTemplateSummaryDTO {
   activeVersionNumber: number | null;
   referenceOutputQuantity: string | null;
   referenceOutputUomCode: string | null;
+  /** Quantas LINHAS de recurso a versão tem — não é a quantidade de recursos de uma linha (§87). */
   resourceCount: number;
   additionalCostCount: number;
   /** Nomes dos recursos da versão ativa — permite buscar por recurso. */
@@ -147,6 +152,8 @@ export interface CostTemplateResourceUsageInput {
   usageBasis?: IndustrialResourceUsageBasis;
   usageQuantity: string;
   usageUom: IndustrialRateUom;
+  /** Inteiro ≥ 1; ausente = 1. Só mão de obra e equipamento passam de 1 (§87). */
+  resourceCount?: number;
   notes?: string | null;
 }
 

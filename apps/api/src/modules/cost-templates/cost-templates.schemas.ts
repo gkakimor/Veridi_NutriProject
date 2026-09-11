@@ -6,6 +6,7 @@ import {
 } from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
 import { optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
+import { resourceCountSchema } from "../industrial-costs/industrial-costs.schemas.js";
 
 const decimalString = z
   .union([z.string(), z.number()])
@@ -45,6 +46,8 @@ const resourceUsageSchema = z.object({
     .optional(),
   usageQuantity: decimalString,
   usageUom: z.enum(["HOUR", "KWH"]),
+  // Mesma regra da estrutura (§87): inteiro ≥ 1, e energia recusa outro valor.
+  resourceCount: resourceCountSchema.optional(),
   notes: optionalNullableText(500),
 });
 

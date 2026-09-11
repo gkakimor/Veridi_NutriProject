@@ -18,7 +18,7 @@ export const estruturaCustos = {
   module: "gestao",
   size: "L",
   title: "Estrutura de custos: o que entra no custo de produzir este produto",
-  revisedAt: "2026-09-09",
+  revisedAt: "2026-09-11",
 
   oneLiner:
     "A estrutura declara o que entra no custo além do material: base de produção, recursos e premissas. O cálculo, no fim da tela, transforma a declaração em número, e salvar um cálculo congela esse número.",
@@ -43,8 +43,8 @@ export const estruturaCustos = {
       system: "O sistema sugere o lote mínimo como base e passa a ler os consumos em relação a ela.",
     },
     {
-      you: "Adicione os recursos: quanto a base consome de cada um e em que base de uso.",
-      system: "O sistema converte o consumo para a base de referência e avisa recurso inativo ou sem tarifa.",
+      you: "Adicione os recursos: quanto a base consome de cada um e em que base de uso. Em mão de obra e equipamento, informe a quantidade de recursos iguais e o tempo de cada um.",
+      system: "O sistema multiplica quantidade × tempo, converte para a base de referência e avisa recurso inativo ou sem tarifa.",
     },
     {
       you: "Declare a energia de um jeito só: não estruturada, informada direto, ou derivada dos equipamentos.",
@@ -82,6 +82,7 @@ export const estruturaCustos = {
     { term: "Rascunho × Ativa", text: "Só o rascunho se edita. Ativar congela a versão; a anterior fica legível porque cálculos antigos apontam para ela." },
     { term: "Base de referência", text: "A quantidade de produto sobre a qual os consumos são declarados. O lote mínimo é a sugestão." },
     { term: "Recursos industriais", text: "Mão de obra, equipamento e energia, com tarifa vigente. O consumo é declarado por lote, por unidade ou por mil." },
+    { term: "Quantidade de recursos", text: "Quantos operadores ou equipamentos iguais trabalham juntos: 2 operadores × 2 h são 4 h de mão de obra, e 3 equipamentos × 2 h geram a energia dos três. Energia informada não tem: o kWh já é o total." },
     { term: "Energia", text: "Ou informada direto, ou derivada da potência dos equipamentos — nunca as duas." },
     { term: "Premissas", text: "Custos adicionais que não são material nem recurso: embalagem secundária, serviços, gastos gerais." },
     { term: "Cálculo padrão", text: "O resultado que a tela mostra agora, com a data de referência escolhida. Muda quando o custo muda; não é documento." },
@@ -99,6 +100,7 @@ export const estruturaCustos = {
     "Formulação nova não reescreve a estrutura ativa: crie outra versão.",
     "Material do cliente fica fora do custo.",
     "Forçar uma referência manual vale só para aquele cálculo.",
+    "Um recurso é uma linha só: arranjos diferentes no mesmo lote (2 × 2 h e depois 1 × 1 h) entram somados, com quantidade 1 e 5 h.",
   ],
   example:
     "Encapsuladora por 4 h num lote de 500 potes, a R$ 90/h: R$ 360 por lote, ou R$ 0,72 por pote na base. Num lote de 300 potes o lote inteiro continua sendo pago, e o custo sobe para R$ 1,20 por pote.",

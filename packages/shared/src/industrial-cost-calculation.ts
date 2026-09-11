@@ -233,9 +233,19 @@ export interface IndustrialResourceCostLineDTO {
   resourceCode: string;
   resourceName: string;
   resourceType: IndustrialResourceType;
-  /** Consumo já escalado para a base de referência (horas ou kWh). */
+  /**
+   * Consumo EFETIVO já escalado (horas ou kWh): quantidade de recursos × uso
+   * por recurso × escala da base (§87).
+   */
   quantity: string;
   quantityUom: "HOUR" | "KWH";
+  /**
+   * Quantidade de recursos equivalentes. Ausente em cálculo salvo antes do
+   * campo existir — lê-se como 1, e o número salvo não muda.
+   */
+  resourceCount?: number;
+  /** Uso por recurso já escalado: `quantity = resourceCount × quantityPerResource`. */
+  quantityPerResource?: string;
   rateValue: string | null;
   /** Tarifa congelada da versão ativa ou referência atual do rascunho. */
   rateIsDraftReference: boolean;

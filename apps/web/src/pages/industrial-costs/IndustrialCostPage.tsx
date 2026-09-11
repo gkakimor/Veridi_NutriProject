@@ -24,6 +24,7 @@ import {
   INDUSTRIAL_RESOURCE_TYPE_LABELS,
   INDUSTRIAL_USAGE_BASIS_LABELS,
   FORMULATION_COMPONENT_BASIS_LABELS,
+  acceptsResourceCount,
 } from "@veridi/shared";
 import type { IndustrialCostBasis, IndustrialCostCategory } from "@veridi/shared";
 import { CostCalculationSection } from "./CostCalculationSection";
@@ -39,6 +40,11 @@ import { RowActions } from "../../components/RowActions";
 import { useAuth } from "../../app/AuthProvider";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
+import {
+  ResourceCountField,
+  ResourceUsageAmount,
+  exigirQuantidadeDeRecursos,
+} from "../../components/ResourceUsageAmount";
 import {
   activateIndustrialCostVersion,
   createIndustrialCostLine,
@@ -128,6 +134,8 @@ export function IndustrialCostPage() {
   const [usageResourceId, setUsageResourceId] = useState("");
   /** Cadastro de recurso aberto a partir do campo de busca. */
   const [usageQuantity, setUsageQuantity] = useState("");
+  /** Quantidade de recursos equivalentes (§87) — só mão de obra e equipamento. */
+  const [usageResourceCount, setUsageResourceCount] = useState("1");
 
   /*
    * Sair para cadastrar um recurso desmonta esta tela. O rascunho que
@@ -164,6 +172,7 @@ export function IndustrialCostPage() {
       rateValue,
       usageResourceId,
       usageQuantity,
+      usageResourceCount,
     }),
     restoreDraft: (rascunho) => {
       const texto = (chave: string) =>
@@ -178,6 +187,7 @@ export function IndustrialCostPage() {
       setRateValue(texto("rateValue"));
       setUsageResourceId(texto("usageResourceId"));
       setUsageQuantity(texto("usageQuantity"));
+      setUsageResourceCount(texto("usageResourceCount") || "1");
     },
     onCreated: (resultado) => {
       /*
@@ -313,6 +323,8 @@ export function IndustrialCostPage() {
       (resource.type !== "ENERGY" || version?.energyCalculationMode === "DIRECT"),
   );
   const selectedResource = resources.find((resource) => resource.id === usageResourceId) ?? null;
+  // Mão de obra e equipamento se contam; energia não — o kWh já é o total (§87).
+  const contaRecursos = selectedResource ? acceptsResourceCount(selectedResource.type) : false;
 
   return (
     <>
@@ -871,7 +883,12 @@ export function IndustrialCostPage() {
                         </td>
                         <td>{INDUSTRIAL_RESOURCE_TYPE_LABELS[usage.resourceType]}</td>
                         <td>
-                          {formatQuantity(usage.usageQuantity)} {INDUSTRIAL_RATE_UOM_LABELS[usage.usageUom]}
+                          <ResourceUsageAmount
+                            resourceCount={usage.resourceCount}
+                            usageQuantity={usage.usageQuantity}
+                            totalUsageQuantity={usage.totalUsageQuantity}
+                            usageUom={usage.usageUom}
+                          />
                         </td>
                         <td>{INDUSTRIAL_USAGE_BASIS_LABELS[usage.usageBasis]}</td>
                         <td>{describeRate(usage, version.status)}</td>
@@ -909,7 +926,7 @@ export function IndustrialCostPage() {
               {editable && (
                 <>
                   <div className="field-grid-2">
-                    <div className="field">
+                    <div className={contaRecursos ? "field field--full" : "field"}>
                       <label htmlFor="usage-resource">Recurso</label>
                       <SearchableEntitySelect
                         id="usage-resource"
@@ -940,9 +957,19 @@ options={selectableResources.map((resource) => ({
                       </span>
                     </div>
 
+                    <ResourceCountField
+                      id="usage-resource-count"
+                      resourceType={selectedResource?.type}
+                      value={usageResourceCount}
+                      onChange={setUsageResourceCount}
+                      disabled={saving}
+                    />
+
                     <div className="field">
                       <label htmlFor="usage-quantity">
-                        Consumo por lote de referência
+                        {contaRecursos
+                          ? "Tempo por recurso, por lote de referência"
+                          : "Consumo por lote de referência"}
                         {selectedResource
                           ? ` (${INDUSTRIAL_RATE_UOM_LABELS[selectedResource.defaultUsageUom]})`
                           : ""}
@@ -955,7 +982,9 @@ options={selectableResources.map((resource) => ({
                         onChange={(event) => setUsageQuantity(event.target.value)}
                       />
                       <span className="field__hint">
-                        Recurso que não é usado simplesmente não entra na estrutura.
+                        {contaRecursos
+                          ? "O tempo de CADA um. O uso total é a quantidade de recursos × este tempo."
+                          : "Recurso que não é usado simplesmente não entra na estrutura."}
                       </span>
                     </div>
                   </div>
@@ -971,11 +1000,16 @@ options={selectableResources.map((resource) => ({
                             resourceId: usageResourceId,
                             usageQuantity: exigirDecimal(
                               usageQuantity,
-                              "Consumo por lote de referência",
+                              contaRecursos ? "Tempo por recurso" : "Consumo por lote de referência",
                             ),
+                            // Energia não envia quantidade: para ela o domínio usa 1 (§87).
+                            ...(contaRecursos
+                              ? { resourceCount: exigirQuantidadeDeRecursos(usageResourceCount) }
+                              : {}),
                           });
                           setUsageResourceId("");
                           setUsageQuantity("");
+                          setUsageResourceCount("1");
                         })
                       }
                     >

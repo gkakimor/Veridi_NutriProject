@@ -12,6 +12,7 @@ import {
   batchCountFor,
   computeManualLine,
   money,
+  scaledUsagePerResource,
   scaledUsageQuantity,
   shippingBoxes,
 } from "../industrial-cost-calculation/calculation.service.js";
@@ -83,7 +84,10 @@ export interface CostBreakdown {
     resourceId: string;
     name: string;
     type: string;
+    /** Uso efetivo: quantidade de recursos × uso por recurso × escala (§87). */
     quantity: Prisma.Decimal;
+    resourceCount: number;
+    quantityPerResource: Prisma.Decimal;
     unitCode: string;
     rate: Prisma.Decimal | null;
     totalCost: Prisma.Decimal | null;
@@ -257,7 +261,16 @@ export async function costForOutputQuantity(
 
   for (const usage of costVersion.resourceUsages) {
     const type = usage.resourceTypeSnapshot ?? usage.industrialResource.type;
+    // Hora efetiva (§87): a quantidade de recursos entra aqui, e a energia
+    // derivada logo abaixo usa a mesma — nunca uma conta à parte.
     const scaled = scaledUsageQuantity(
+      usage,
+      quantityInReferenceUom,
+      costVersion.referenceOutputQuantity,
+      "BATCH_AWARE",
+    );
+    // Só leitura da composição ("2 × 4 hora"): o custo sai de `scaled`.
+    const perResource = scaledUsagePerResource(
       usage,
       quantityInReferenceUom,
       costVersion.referenceOutputQuantity,
@@ -273,6 +286,8 @@ export async function costForOutputQuantity(
           name: usage.resourceNameSnapshot ?? usage.industrialResource.name,
           type,
           quantity: scaled,
+          resourceCount: usage.resourceCount,
+          quantityPerResource: perResource,
           unitCode: usage.usageUom,
           rate,
           totalCost: amount,
@@ -285,6 +300,8 @@ export async function costForOutputQuantity(
           name: usage.resourceNameSnapshot ?? usage.industrialResource.name,
           type,
           quantity: scaled,
+          resourceCount: usage.resourceCount,
+          quantityPerResource: perResource,
           unitCode: usage.usageUom,
           rate: null,
           totalCost: null,

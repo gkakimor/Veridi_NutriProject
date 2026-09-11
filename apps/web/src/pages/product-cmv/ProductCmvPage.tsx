@@ -1,4 +1,5 @@
 import { formatQuantity } from "../../lib/quantity";
+import { ResourceUsageAmount } from "../../components/ResourceUsageAmount";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type {
@@ -827,7 +828,20 @@ export function ProductCmvPage() {
                                 component.name
                               )}
                             </td>
-                            <td className="is-numeric">{component.requiredQuantity ?? "—"}</td>
+                            <td className="is-numeric">
+                              {/* Recurso com mais de um equivalente mostra "2 × 4" e o total (§87). */}
+                              {component.requiredQuantity &&
+                              component.quantityPerResource &&
+                              (component.resourceCount ?? 1) > 1 ? (
+                                <ResourceUsageAmount
+                                  resourceCount={component.resourceCount}
+                                  usageQuantity={component.quantityPerResource}
+                                  totalUsageQuantity={component.requiredQuantity}
+                                />
+                              ) : (
+                                (component.requiredQuantity ?? "—")
+                              )}
+                            </td>
                             <td>{describeUnit(component)}</td>
                             <td>{describeOrigin(component)}</td>
                             <td className="is-numeric">

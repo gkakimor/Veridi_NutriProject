@@ -103,6 +103,8 @@ function componentesDoCusto(cost: Awaited<ReturnType<typeof costForOutputQuantit
         unitCost: money(resource.rate),
         totalCost: money(resource.totalCost),
         customerSupplied: false,
+        resourceCount: resource.resourceCount,
+        quantityPerResource: resource.quantityPerResource.toString(),
       });
     }
     const energy = cost.breakdown?.energy;

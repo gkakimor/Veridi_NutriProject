@@ -12,6 +12,20 @@ export class IndustrialCostProductNotFoundError extends Error {
   }
 }
 
+/**
+ * Quantidade de recursos só existe para o que se conta — pessoa e máquina
+ * (§87). Energia informada já é o total em kWh: aceitar "2 × 50 kWh" seria
+ * multiplicar um consumo que já é do lote inteiro.
+ */
+export class ResourceCountNotAllowedError extends Error {
+  constructor(resourceName: string) {
+    super(
+      `"${resourceName}" é energia: o consumo em kWh já é o total, e a quantidade de recursos vale só para mão de obra e equipamento.`,
+    );
+    this.name = "ResourceCountNotAllowedError";
+  }
+}
+
 /** Só o rascunho é editável — versão ativa/inativa é histórico. */
 export class IndustrialCostVersionLockedError extends Error {
   constructor(status: string) {

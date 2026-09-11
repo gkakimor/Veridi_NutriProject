@@ -9,7 +9,11 @@ import type {
   IndustrialCostVersionSummaryDTO,
   ProductIndustrialCostResponse,
 } from "@veridi/shared";
-import { MAX_INDUSTRIAL_COST_PERCENT, usageUomForResourceType } from "@veridi/shared";
+import {
+  MAX_INDUSTRIAL_COST_PERCENT,
+  acceptsResourceCount,
+  usageUomForResourceType,
+} from "@veridi/shared";
 import { INDUSTRIAL_COST_VERSION_CODE_PREFIX } from "@veridi/shared";
 import { pickCurrentRate, toRateDTO } from "../industrial-resources/industrial-resources.service.js";
 import { getPrisma } from "../../db/prisma.js";
@@ -17,6 +21,7 @@ import { marcadorDeHojeComercial } from "../../lib/business-day.js";
 import { missingFormulationContext } from "../../lib/formulation-math.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { convertUomDecimal, UomDimensionMismatchError, UomNotFoundError } from "../items/uom.js";
+import { plannedUsageQuantity } from "../industrial-cost-calculation/calculation.service.js";
 import {
   DirectEnergyNotAllowedError,
   InvalidEnergyResourceError,
@@ -35,6 +40,7 @@ import {
   InvalidCostRateError,
   InvalidReferenceOutputError,
   MissingFormulationVersionError,
+  ResourceCountNotAllowedError,
   ResourceNotFoundForUsageError,
   ResourceUsageNotFoundError,
 } from "./industrial-costs.errors.js";
@@ -125,7 +131,8 @@ function toMaterialDTO(
 type UsageWithResource = VersionWithRelations["resourceUsages"][number];
 
 /**
- * Consumo energético derivado de UM equipamento: horas planejadas × kW.
+ * Consumo energético derivado de UMA linha de equipamento: quantidade de
+ * equipamentos × horas por equipamento × kW (§87) — 3 × 2 h × 5 kW = 30 kWh.
  *
  * É quantidade de energia, não dinheiro. `null` quando a potência é
  * desconhecida — a energia não vira zero por omissão.
@@ -134,7 +141,7 @@ function derivedEnergyForUsage(usage: UsageWithResource): Prisma.Decimal | null 
   if (usage.industrialResource.type !== "EQUIPMENT") return null;
   const power = usage.powerKwSnapshot ?? usage.industrialResource.powerKw;
   if (!power) return null;
-  return usage.usageQuantity.times(power);
+  return plannedUsageQuantity(usage).times(power);
 }
 
 function toUsageDTO(usage: UsageWithResource, reference: Date): IndustrialCostResourceUsageDTO {
@@ -152,6 +159,8 @@ function toUsageDTO(usage: UsageWithResource, reference: Date): IndustrialCostRe
     usageBasis: usage.usageBasis,
     usageQuantity: usage.usageQuantity.toString(),
     usageUom: usage.usageUom,
+    resourceCount: usage.resourceCount,
+    totalUsageQuantity: plannedUsageQuantity(usage).toString(),
     notes: usage.notes,
 
     currentRate: current ? toRateDTO(current, reference) : null,
@@ -712,6 +721,8 @@ export async function createIndustrialCostVersion(
           usageBasis: usage.usageBasis,
           usageQuantity: usage.usageQuantity,
           usageUom: usage.usageUom,
+          // Plano, não resultado: a quantidade de recursos viaja (§87).
+          resourceCount: usage.resourceCount,
           notes: usage.notes,
           sortOrder: usage.sortOrder,
           // Snapshots econômicos ficam de fora: são da ativação, e esta
@@ -894,6 +905,13 @@ export async function createResourceUsage(
     throw new EnergyUsageRequiresDirectModeError();
   }
 
+  // Quantidade de recursos é de quem se conta — pessoa e máquina (§87). Para
+  // energia vale sempre 1: o kWh informado já é o total do lote.
+  const resourceCount = input.resourceCount ?? 1;
+  if (resourceCount !== 1 && !acceptsResourceCount(resource.type)) {
+    throw new ResourceCountNotAllowedError(resource.name);
+  }
+
   const existing = await prisma.industrialCostResourceUsage.findUnique({
     where: {
       industrialCostVersionId_industrialResourceId: {
@@ -916,6 +934,7 @@ export async function createResourceUsage(
       usageBasis: input.usageBasis ?? "FIXED_PER_REFERENCE_BATCH",
       usageQuantity: new Prisma.Decimal(input.usageQuantity),
       usageUom: usageUomForResourceType(resource.type),
+      resourceCount,
       ...(input.notes !== undefined ? { notes: input.notes } : {}),
       sortOrder: (last._max.sortOrder ?? 0) + 1,
     },

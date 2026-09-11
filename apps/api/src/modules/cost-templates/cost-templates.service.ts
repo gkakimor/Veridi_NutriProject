@@ -15,11 +15,13 @@ import type {
   TemplateDiffDTO,
   TemplateDiffEntryDTO,
 } from "@veridi/shared";
-import { INDUSTRIAL_COST_TEMPLATE_CODE_PREFIX } from "@veridi/shared";
+import { INDUSTRIAL_COST_TEMPLATE_CODE_PREFIX, acceptsResourceCount } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import type { Pagination } from "../../lib/pagination.js";
 import { pageArgs, pageMeta } from "../../lib/pagination.js";
+import { plannedUsageQuantity } from "../industrial-cost-calculation/calculation.service.js";
+import { ResourceCountNotAllowedError } from "../industrial-costs/industrial-costs.errors.js";
 import {
   CostTemplateEmptyError,
   CostTemplateEnergyResourceRequiredError,
@@ -103,6 +105,8 @@ export function toCostTemplateVersionDTO(version: VersionWithRelations): CostTem
       usageBasis: usage.usageBasis,
       usageQuantity: usage.usageQuantity.toString(),
       usageUom: usage.usageUom,
+      resourceCount: usage.resourceCount,
+      totalUsageQuantity: plannedUsageQuantity(usage).toString(),
       notes: usage.notes,
       sortOrder: usage.sortOrder,
     })),
@@ -306,6 +310,23 @@ export async function setCostTemplateArchived(
   return getCostTemplate(id);
 }
 
+/**
+ * Quantidade de recursos acima de 1 só para mão de obra e equipamento (§87)
+ * — a mesma recusa da estrutura, antes de gravar qualquer linha.
+ */
+async function exigirQuantidadeDeRecursosElegivel(
+  usos: { industrialResourceId: string; resourceCount?: number | undefined }[],
+): Promise<void> {
+  const contados = usos.filter((uso) => (uso.resourceCount ?? 1) !== 1);
+  if (contados.length === 0) return;
+  const recursos = await getPrisma().industrialResource.findMany({
+    where: { id: { in: contados.map((uso) => uso.industrialResourceId) } },
+    select: { name: true, type: true },
+  });
+  const inelegivel = recursos.find((recurso) => !acceptsResourceCount(recurso.type));
+  if (inelegivel) throw new ResourceCountNotAllowedError(inelegivel.name);
+}
+
 export async function updateCostTemplateVersion(
   id: string,
   input: UpdateCostTemplateVersionInput,
@@ -321,6 +342,7 @@ export async function updateCostTemplateVersion(
   if (modo === "FROM_EQUIPMENT" && !recursoEnergia) {
     throw new CostTemplateEnergyResourceRequiredError();
   }
+  if (input.resourceUsages) await exigirQuantidadeDeRecursosElegivel(input.resourceUsages);
 
   await getPrisma().$transaction(async (tx) => {
     await tx.industrialCostTemplateVersion.update({
@@ -356,6 +378,7 @@ export async function updateCostTemplateVersion(
           ...(usage.usageBasis ? { usageBasis: usage.usageBasis } : {}),
           usageQuantity: new Prisma.Decimal(usage.usageQuantity),
           usageUom: usage.usageUom,
+          ...(usage.resourceCount !== undefined ? { resourceCount: usage.resourceCount } : {}),
           ...(usage.notes !== undefined ? { notes: usage.notes } : {}),
           sortOrder: index,
         })),
@@ -461,6 +484,7 @@ export async function createCostTemplateVersionFrom(
             usageBasis: usage.usageBasis,
             usageQuantity: usage.usageQuantity,
             usageUom: usage.usageUom,
+            resourceCount: usage.resourceCount,
             notes: usage.notes,
             sortOrder: usage.sortOrder,
           })),
@@ -516,6 +540,8 @@ export interface ComparavelEstrutura {
     usageQuantity: string;
     usageUom: string;
     usageBasis: string;
+    /** Quantidade de recursos equivalentes (§87). */
+    resourceCount: number;
   }[];
   costs: {
     description: string;
@@ -523,6 +549,13 @@ export interface ComparavelEstrutura {
     calculationBasis: string;
     rateValue: string | null;
   }[];
+}
+
+/** "2 × 2 HOUR" com mais de um recurso equivalente; "4 HOUR", como antes, com um. */
+function usoDescrito(recurso: { usageQuantity: string; usageUom: string; resourceCount: number }): string {
+  return recurso.resourceCount > 1
+    ? `${recurso.resourceCount} × ${recurso.usageQuantity} ${recurso.usageUom}`
+    : `${recurso.usageQuantity} ${recurso.usageUom}`;
 }
 
 /**
@@ -572,7 +605,7 @@ export function compararEstruturas(
         label: recurso.name,
         field: null,
         from: null,
-        to: `${recurso.usageQuantity} ${recurso.usageUom}`,
+        to: usoDescrito(recurso),
       });
     }
   }
@@ -582,7 +615,7 @@ export function compararEstruturas(
         kind: "RESOURCE_REMOVED",
         label: recurso.name,
         field: null,
-        from: `${recurso.usageQuantity} ${recurso.usageUom}`,
+        from: usoDescrito(recurso),
         to: null,
       });
     }
@@ -590,13 +623,16 @@ export function compararEstruturas(
   for (const recurso of para.resources) {
     const anterior = deRecursos.get(recurso.name);
     if (!anterior) continue;
-    if (anterior.usageQuantity !== recurso.usageQuantity) {
+    if (
+      anterior.usageQuantity !== recurso.usageQuantity ||
+      anterior.resourceCount !== recurso.resourceCount
+    ) {
       entries.push({
         kind: "RESOURCE_CHANGED",
         label: recurso.name,
         field: "Uso",
-        from: `${anterior.usageQuantity} ${anterior.usageUom}`,
-        to: `${recurso.usageQuantity} ${recurso.usageUom}`,
+        from: usoDescrito(anterior),
+        to: usoDescrito(recurso),
       });
     }
     if (anterior.usageBasis !== recurso.usageBasis) {
@@ -672,6 +708,7 @@ export function estruturaComparavel(version: VersionWithRelations): ComparavelEs
       usageQuantity: usage.usageQuantity.toString(),
       usageUom: usage.usageUom,
       usageBasis: usage.usageBasis,
+      resourceCount: usage.resourceCount,
     })),
     costs: version.additionalCosts.map((cost) => ({
       description: cost.description,
