@@ -101,6 +101,12 @@ const summary: CustomerConsultationSummaryDTO = {
     productionOrders: 4,
     openProductionOrders: 1,
   },
+  commercial: {
+    status: "ACTIVE",
+    reason: "Projeto aprovado (PROJ-000001)",
+    customerSince: "2026-03-18",
+  },
+  projectSummary: { open: 1, standBy: 0, approved: 1, cancelled: 0 },
 };
 
 /*
@@ -450,6 +456,42 @@ describe("Consulta do Cliente — shell", () => {
 
     const rotulo = await screen.findByText("Perfil tributário");
     expect(rotulo.nextElementSibling?.textContent).toBe("Não informado");
+  });
+
+  /** O valor ao lado de um rótulo da lista de definição do Resumo. */
+  const valorDe = (rotulo: string) =>
+    screen.getAllByText(rotulo).find((elemento) => elemento.tagName === "DT")?.nextElementSibling
+      ?.textContent;
+
+  it("o resumo mostra a situação comercial, o motivo, o cliente desde e os projetos (§86)", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/resumo`);
+    await expectCustomerHeader();
+
+    expect(await screen.findByRole("heading", { name: "Situação comercial" })).toBeInTheDocument();
+    expect(valorDe("Situação")).toBe("Cliente ativo");
+    expect(valorDe("Motivo")).toBe("Projeto aprovado (PROJ-000001)");
+    expect(valorDe("Cliente desde")).toBe("18/03/2026");
+    expect(valorDe("Projetos")).toBe("Em andamento: 1 · Stand-by: 0 · Aprovados: 1 · Cancelados: 0");
+    // O cadastro ativo continua sendo outra pergunta, com outro rótulo.
+    expect(valorDe("Status do cadastro")).toBe("Ativo");
+  });
+
+  it("Prospect mostra o motivo e não inventa cliente desde", async () => {
+    vi.mocked(getConsultationSummary).mockResolvedValue({
+      ...summary,
+      commercial: {
+        status: "PROSPECT",
+        reason: "Projeto PROJ-000002 em andamento",
+        customerSince: null,
+      },
+    });
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/resumo`);
+    await expectCustomerHeader();
+
+    await screen.findByRole("heading", { name: "Situação comercial" });
+    expect(valorDe("Situação")).toBe("Prospect");
+    expect(valorDe("Motivo")).toBe("Projeto PROJ-000002 em andamento");
+    expect(screen.queryByText("Cliente desde")).toBeNull();
   });
 
   it("resumo mostra os contadores e cada um leva à sua aba", async () => {

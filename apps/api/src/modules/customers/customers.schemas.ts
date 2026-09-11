@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { BR_STATE_CODES, CUSTOMER_TAX_PROFILES } from "@veridi/shared";
+import {
+  BR_STATE_CODES,
+  CUSTOMER_COMMERCIAL_STATUSES,
+  CUSTOMER_TAX_PROFILES,
+} from "@veridi/shared";
 import { optionalCnpjSchema, optionalNullableText } from "../../lib/cnpj-schema.js";
 import { optionalBrPhoneSchema, optionalEmailSchema } from "../../lib/contact-schema.js";
 import { optionalZipCode } from "../../lib/industrial-schema.js";
@@ -81,6 +85,11 @@ export const listCustomersQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === "true")),
+  /**
+   * Situação comercial derivada (§86). Ausente: todas — os seletores de
+   * Cliente das outras telas usam esta mesma rota e não podem esconder Prospect.
+   */
+  commercialStatus: z.enum(CUSTOMER_COMMERCIAL_STATUSES).optional(),
   page: z.coerce.number().int().min(1).default(1),
   /* Seletor de tela carrega o catálogo inteiro num <select>; com teto de
    100 o cadastro 101 em diante ficava impossível de escolher. */

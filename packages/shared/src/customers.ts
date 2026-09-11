@@ -1,5 +1,7 @@
 /** Contratos do módulo de Clientes, consumidos por `apps/api` e `apps/web`. */
 
+import type { CustomerCommercialStatusDTO } from "./customer-commercial-status.js";
+
 export const CUSTOMER_CODE_PREFIX = "CLI";
 
 /**
@@ -88,6 +90,11 @@ export interface CustomerDTO {
   createdByName: string | null;
   updatedAt: string;
   updatedByName: string | null;
+  /**
+   * Situação comercial derivada (§86) — nunca `active`. Presente na listagem;
+   * ausente nas respostas de escrita, que não a calculam.
+   */
+  commercial?: CustomerCommercialStatusDTO;
 }
 
 export interface CustomerListResponse {

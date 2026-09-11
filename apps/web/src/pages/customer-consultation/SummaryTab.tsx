@@ -1,6 +1,11 @@
 import { Link } from "react-router-dom";
-import { CUSTOMER_TAX_PROFILE_LABELS, formatZipCode } from "@veridi/shared";
-import { formatDateTime } from "../../lib/dates";
+import {
+  CUSTOMER_COMMERCIAL_STATUS_LABELS,
+  CUSTOMER_TAX_PROFILE_LABELS,
+  formatZipCode,
+} from "@veridi/shared";
+import { formatDate, formatDateTime } from "../../lib/dates";
+import { commercialStatusBadgeClass } from "../customers/commercial-status-badge";
 import { ConsultationTrail, consultationPath, useConsultationContext } from "./ConsultationShell";
 
 /**
@@ -14,7 +19,7 @@ import { ConsultationTrail, consultationPath, useConsultationContext } from "./C
  */
 export function SummaryTab() {
   const { customerId, summary } = useConsultationContext();
-  const { customer, counts } = summary;
+  const { customer, counts, commercial, projectSummary } = summary;
 
   const cards: { label: string; value: number; segment: string }[] = [
     { label: "Projetos", value: counts.projects, segment: "projetos" },
@@ -65,6 +70,36 @@ export function SummaryTab() {
         ))}
       </div>
 
+      {/* Situação comercial (§86): derivada da história comercial, com o motivo
+          — nunca o cadastro ativo, que continua logo abaixo. */}
+      <section className="consult-section">
+        <h2>Situação comercial</h2>
+        <dl className="definition-list">
+          <dt>Situação</dt>
+          <dd>
+            <span className={commercialStatusBadgeClass(commercial.status)}>
+              {CUSTOMER_COMMERCIAL_STATUS_LABELS[commercial.status]}
+            </span>
+          </dd>
+          <dt>Motivo</dt>
+          <dd>{commercial.reason}</dd>
+          {commercial.status === "ACTIVE" && (
+            <>
+              <dt>Cliente desde</dt>
+              <dd>
+                {commercial.customerSince
+                  ? formatDate(commercial.customerSince)
+                  : "Data não registrada"}
+              </dd>
+            </>
+          )}
+          <dt>Projetos</dt>
+          <dd>
+            {`Em andamento: ${projectSummary.open} · Stand-by: ${projectSummary.standBy} · Aprovados: ${projectSummary.approved} · Cancelados: ${projectSummary.cancelled}`}
+          </dd>
+        </dl>
+      </section>
+
       <section className="consult-section">
         <h2>Cadastro</h2>
         <dl className="definition-list">
@@ -77,7 +112,7 @@ export function SummaryTab() {
           <dd>{CUSTOMER_TAX_PROFILE_LABELS[customer.taxProfile]}</dd>
           <dt>Endereço</dt>
           <dd>{address.length > 0 ? address : "—"}</dd>
-          <dt>Situação</dt>
+          <dt>Status do cadastro</dt>
           <dd>{customer.active ? "Ativo" : "Inativo"}</dd>
           <dt>Cadastrado em</dt>
           <dd>

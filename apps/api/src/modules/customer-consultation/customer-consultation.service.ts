@@ -23,6 +23,11 @@ import { getBillingById } from "../billings/billings.service.js";
 import { getCustomerOrderById } from "../customer-orders/customer-orders.service.js";
 import { getCustomerById } from "../customers/customers.service.js";
 import { CustomerNotFoundError } from "../customers/customers.errors.js";
+import {
+  fatosComerciaisInclude,
+  resumoDeProjetos,
+  situacaoComercial,
+} from "../customers/commercial-status.js";
 import { getProductById } from "../products/products.service.js";
 import { getProjectById } from "../projects/projects.service.js";
 import { OPEN_PRODUCTION_ORDER_STATUSES } from "../dashboard/dashboard.queries.js";
@@ -79,6 +84,7 @@ export async function getConsultationSummary(
     materialLots,
     productionOrders,
     openProductionOrders,
+    fatos,
   ] = await Promise.all([
     prisma.product.count({ where: { customerId } }),
     prisma.project.count({ where: { customerId } }),
@@ -92,6 +98,8 @@ export async function getConsultationSummary(
     prisma.productionOrder.count({
       where: { customerId, status: { in: [...OPEN_PRODUCTION_ORDER_STATUSES] } },
     }),
+    // Situação comercial (§86): os fatos num `include` só, derivados na leitura.
+    prisma.customer.findUniqueOrThrow({ where: { id: customerId }, include: fatosComerciaisInclude }),
   ]);
 
   return {
@@ -106,6 +114,8 @@ export async function getConsultationSummary(
       productionOrders,
       openProductionOrders,
     },
+    commercial: situacaoComercial(fatos),
+    projectSummary: resumoDeProjetos(fatos.projects),
   };
 }
 
