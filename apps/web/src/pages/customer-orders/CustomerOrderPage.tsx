@@ -729,6 +729,7 @@ export function CustomerOrderPage() {
         cnpj: customerOrder.customerCnpj,
         email: null,
         phone: null,
+        taxProfile: "NOT_INFORMED",
         // Opção sintética para o select: o Pedido confirmado já tem o
         // snapshot próprio, o endereço não é lido daqui.
         street: null,

@@ -907,26 +907,41 @@ arquivos, typecheck, build e `validate:migrations:fresh` (61 migrations).
 Produção fica na versão anterior até o próximo deploy da `main`, que aplica a
 migration do catálogo sem mudar nenhuma linha.
 
+## O Cliente tem Perfil tributário (CUSTOMER-TAX-PROFILE-01, 2026-09-11)
+
+**Classificação informada, não motor fiscal (§83).** `Customer.taxProfile`,
+enum `CustomerTaxProfile` — Não informado · MEI · Simples Nacional · Lucro
+Presumido · Lucro Real · Outro —, **não-nulo** com default `NOT_INFORMED`:
+"Não informado" é valor, nunca `NULL`, e retirar a classificação é escolhê-lo
+de novo. Uma migration (`20260925093013_customer_tax_profile`, enum + coluna):
+todo cliente que já existia virou "Não informado" na criação da coluna, e
+importador, fixtures e API que não mandam o campo recebem o mesmo. Valor fora
+do enum é 400 de validação antes do Prisma; PATCH sem o campo não mexe.
+
+Na tela, `<select>` nativo na Identificação, depois do CNPJ, com a dica "não
+calcula impostos automaticamente"; o Resumo da Consulta mostra o rótulo, e o
+formulário só envia o perfil quando ele muda. **Listagem, filtro e busca não
+mudaram** — a tabela já tem sete colunas de dado. **Zero efeito em runtime:**
+Projeto, Orçamento, Pedido, Faturamento e Precificação não leem o campo, e não
+existe mapa perfil → alíquota. Quem vai consumi-lo é PRICING-TEMPLATE-FLEX-01,
+para sugerir o Modelo.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
 mesma. Os achados da rodada estão no BACKLOG, sem posição na fila.
 
-**CUSTOMER-TAX-PROFILE-01** — primeiro da fila viva, decisão do PO em
-2026-09-10: o Perfil tributário do Cliente (Não informado, MEI, Simples
-Nacional, Lucro Presumido, Lucro Real, Outro) orienta a escolha do Modelo de
-Precificação, sem calcular imposto e sem bloquear nada. **Não iniciado.**
-
-**PRICING-TEMPLATE-FLEX-01** — segundo: parâmetros opcionais no Modelo de
-Precificação, distinguindo "não considerar" de zero, sem motor fiscal.
-**Não iniciado.**
+**PRICING-TEMPLATE-FLEX-01** — primeiro da fila viva: parâmetros opcionais no
+Modelo de Precificação, distinguindo "não considerar" de zero, sem motor
+fiscal. O Perfil tributário do Cliente, que ele vai usar para sugerir o
+Modelo, fechou em 2026-09-11. **Não iniciado.**
 
 **Nenhum módulo é ocultado** — decisão da Veridi em 2026-09-10: Precificação,
 Orçamento e Faturamento continuam disponíveis. Nenhum item do backlog propunha
 ocultação.
 
-**QUOTE-DUPLICATE-01** — terceiro da fila viva, depois dos dois itens de
-precificação, e o **gate de preço foi resolvido**
+**QUOTE-DUPLICATE-01** — segundo da fila viva, depois de
+PRICING-TEMPLATE-FLEX-01, e o **gate de preço foi resolvido**
 pelo PO em 2026-09-10: sem herança silenciosa de `unitPrice`, com escolha
 explícita entre manter os preços da versão de origem e revisá-los, nenhuma
 opção pré-marcada. O que sobra de trabalho é escolher a versão de ORIGEM
@@ -962,8 +977,9 @@ real do cliente (#7, #11). Roteiro em
 Banco local `veridi_dev`. Recriado pelo caminho oficial em 2026-09-11
 (FAST-DEVELOPMENT-RESET-02) — `drop/create` + as 61 migrations + seed de
 infraestrutura — **sem** o corpus da Veridi: as cargas grandes ficam para uma
-rodada própria, decidida pelo PO. Contém só a massa carimbada do último golden
-path.
+rodada própria, decidida pelo PO. A 62ª migration (`customer_tax_profile`)
+entrou por `pnpm db:migrate`. Contém só massa carimbada — o último golden path
+e as E2E focadas.
 
 Caminho canônico, nesta ordem (os passos 2 a 4 só quando o PO pedir a carga):
 

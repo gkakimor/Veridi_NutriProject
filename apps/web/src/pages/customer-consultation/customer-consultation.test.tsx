@@ -72,6 +72,7 @@ const customer: CustomerDTO = {
   cnpj: "11222333000181",
   email: "contato@vidasaudavel.com.br",
   phone: "11999998888",
+  taxProfile: "SIMPLES_NACIONAL",
   street: "Rua das Acácias",
   number: "158",
   complement: null,
@@ -428,6 +429,27 @@ describe("Consulta do Cliente — shell", () => {
       "aria-current",
       "page",
     );
+  });
+
+  it("o resumo mostra o perfil tributário pelo rótulo (§83)", async () => {
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/resumo`);
+    await expectCustomerHeader();
+
+    const rotulo = await screen.findByText("Perfil tributário");
+    expect(rotulo.tagName).toBe("DT");
+    expect(rotulo.nextElementSibling?.textContent).toBe("Simples Nacional");
+  });
+
+  it("cliente sem classificação aparece como Não informado — valor, não travessão", async () => {
+    vi.mocked(getConsultationSummary).mockResolvedValue({
+      ...summary,
+      customer: { ...customer, taxProfile: "NOT_INFORMED" },
+    });
+    renderAt(`/consultas/clientes/${CUSTOMER_ID}/resumo`);
+    await expectCustomerHeader();
+
+    const rotulo = await screen.findByText("Perfil tributário");
+    expect(rotulo.nextElementSibling?.textContent).toBe("Não informado");
   });
 
   it("resumo mostra os contadores e cada um leva à sua aba", async () => {

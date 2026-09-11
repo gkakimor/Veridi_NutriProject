@@ -40,6 +40,7 @@ function toCustomerDTO(customer: Customer): CustomerDTO {
     cnpj: customer.cnpj,
     email: customer.email,
     phone: customer.phone,
+    taxProfile: customer.taxProfile,
     street: customer.street,
     number: customer.number,
     complement: customer.complement,
@@ -133,6 +134,9 @@ export async function createCustomer(
         ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        // Ausente: o default do banco (NOT_INFORMED) decide, como para o
+        // importador legado e para toda linha anterior à coluna.
+        ...(input.taxProfile !== undefined ? { taxProfile: input.taxProfile } : {}),
         ...addressData(input),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.businessLotSuffix !== undefined
@@ -170,6 +174,7 @@ export async function updateCustomer(
         ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.taxProfile !== undefined ? { taxProfile: input.taxProfile } : {}),
         ...addressData(input),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.businessLotSuffix !== undefined

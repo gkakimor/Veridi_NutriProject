@@ -55,6 +55,7 @@ const CLIENTE: CustomerDTO = {
   cnpj: "11222333000181",
   email: null,
   phone: null,
+  taxProfile: "NOT_INFORMED",
   street: null,
   number: null,
   complement: null,

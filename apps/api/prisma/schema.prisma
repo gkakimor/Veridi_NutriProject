@@ -2143,6 +2143,20 @@ enum TargetAgeGroup {
   OTHER
 }
 
+/// Perfil tributario do Cliente (PRODUCT_RULES §83). Classificacao
+/// INFORMADA pelo usuario, que o Modelo de Precificacao podera usar para
+/// sugerir modelos compativeis. Nao e motor fiscal: nenhum valor implica
+/// aliquota, regra ou bloqueio, e nada e inferido do CNPJ. MEI e opcao
+/// independente — nao existe hierarquia MEI -> Simples Nacional.
+enum CustomerTaxProfile {
+  NOT_INFORMED
+  MEI
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+  OTHER
+}
+
 /// Cliente. Cadastro base: sem CRM, tabela de preco ou pedido neste momento.
 model Customer {
   id String @id @default(uuid())
@@ -2159,6 +2173,12 @@ model Customer {
   cnpj  String?
   email String?
   phone String?
+
+  /// Nao-nulo de proposito: "nao informado" e o estado explicito
+  /// NOT_INFORMED, nunca NULL. O default e o que os clientes que ja existiam
+  /// recebem quando a coluna nasce, e o que ganha quem cria sem informar —
+  /// importador legado inclusive.
+  taxProfile CustomerTaxProfile @default(NOT_INFORMED)
 
   /// Codigo do sistema legado (planilhas). Serve para importacao e
   /// reconciliacao — NUNCA substitui `code`, que continua sendo a
