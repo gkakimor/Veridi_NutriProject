@@ -27,8 +27,6 @@ import { obterRun } from "./lib/run-id.mjs";
  *   node scripts/e2e/projeto-aprovado-vende-de-novo.mjs
  */
 
-/** Cliente real do catálogo — a suíte não cria cliente, cria o projeto dele. */
-const CLIENTE = "CLI-000013";
 const QUANTIDADE = "100";
 const PRECO_CICLO_1 = "12,50";
 const PRECO_CICLO_2 = "13,90";
@@ -36,6 +34,13 @@ const VALIDADE_FUTURA = "2099-12-31";
 const VALIDADE_VENCIDA = "2020-01-31";
 
 const run = obterRun({ novo: true, dono: "com-core" });
+
+/**
+ * O cliente desta execução, criado pela interface. A suíte procurava
+ * `CLI-000013`, massa do corpus que uma base recriada do zero não tem — e
+ * cada suíte cria a própria massa (regra 1 do README).
+ */
+const CLIENTE = `Cliente Recompra E2E${run.runId}`;
 
 const falhas = [];
 function afirmar(descricao, condicao, detalhe = "") {
@@ -117,13 +122,22 @@ async function esperarTexto(texto, timeout = 20000) {
  * O botão de enviar lê o que está gravado, não o que está digitado — por isso
  * ele continua bloqueado até "Salvar condições". É o comportamento correto: a
  * validade é do documento, não do formulário.
+ *
+ * "Salvar condições" fica desabilitado quando não há nada a gravar — e é o
+ * que acontece no ciclo 2: a versão nova já nasce com a validade da condição
+ * vigente sugerida (§74), e digitar a mesma data não muda nada. Clicar mesmo
+ * assim esgotava 30 s num botão que está certo em não estar disponível
+ * (BACKLOG #17).
  */
 async function definirValidade(valor) {
   await pagina.locator("#quote-valid-until").fill(valor);
   await pagina.locator("#quote-valid-until").blur();
   await pagina.waitForTimeout(300);
-  await clicar("Salvar condições");
-  await pagina.waitForTimeout(900);
+  const salvar = pagina.getByRole("button", { name: "Salvar condições", exact: true }).first();
+  if (await salvar.isEnabled()) {
+    await salvar.click();
+    await pagina.waitForTimeout(900);
+  }
 }
 
 /** Envia a proposta aberta, passando pelo diálogo de confirmação. */
@@ -138,13 +152,26 @@ async function enviarProposta() {
 try {
   console.log(`\n== ciclo 1 — projeto novo (${run.runId})`);
 
+  // O cliente desta execução, pela tela de cadastro.
+  await pagina.goto(`${WEB}/cadastros/clientes/novo`, { waitUntil: "networkidle" });
+  await pagina.locator("#customer-legal-name").first().fill(CLIENTE);
+  const clienteCriado = pagina.waitForResponse(
+    (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/customers",
+    { timeout: 25000 },
+  );
+  await clicar("Criar cliente");
+  afirmar("cliente desta execução criado pela interface", (await clienteCriado).ok(), CLIENTE);
+
   await pagina.goto(`${WEB}/comercial/projetos`, { waitUntil: "networkidle" });
   await clicar("Novo projeto");
   await pagina.waitForSelector("#project-customer");
   await pagina.fill("#project-customer", CLIENTE);
-  await pagina.waitForTimeout(600);
-  await pagina.keyboard.press("ArrowDown");
-  await pagina.keyboard.press("Enter");
+  // A opção do cliente, nunca a de "criar": o nome carimbado é único.
+  const opcaoDoCliente = pagina.locator("li.entity-select__option:not(.entity-select__create)", {
+    hasText: CLIENTE,
+  });
+  await opcaoDoCliente.first().waitFor({ timeout: 25000 });
+  await opcaoDoCliente.first().click();
   await pagina.fill("#project-name", `Recompra ${run.runId}`);
   await clicar("Criar projeto", { exact: false });
   await pagina.waitForFunction(() => /\/comercial\/projetos\/[0-9a-f-]{10,}/.test(location.pathname), {
