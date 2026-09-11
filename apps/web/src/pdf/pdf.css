@@ -1,0 +1,45 @@
+/*
+ * Tela do documento PDF — só a moldura da pré-visualização.
+ *
+ * O documento é o arquivo: nada daqui chega ao PDF nem ao papel. Só tokens
+ * Veridi.
+ */
+
+.pdf-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--canvas);
+}
+
+.pdf-screen__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.pdf-screen__name {
+  flex: 1;
+  font-family: var(--font-code);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.pdf-screen__actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.pdf-screen__frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+}
+
+.pdf-screen__status {
+  margin: var(--sp-6) auto;
+  color: var(--ink-2);
+}

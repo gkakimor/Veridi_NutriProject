@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.9.0",
     "@veridi/shared": "workspace:*",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",

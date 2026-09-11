@@ -282,7 +282,7 @@ export function LotDetailPage() {
             className="btn btn--secondary"
             onClick={() => navigate(`/estoque/lotes/${lot.id}/rastreabilidade/imprimir`)}
           >
-            Imprimir rastreabilidade
+            Rastreabilidade (PDF)
           </button>
           <button type="button" className="btn btn--ghost" onClick={() => navigate("/estoque/lotes")}>
             ← Voltar

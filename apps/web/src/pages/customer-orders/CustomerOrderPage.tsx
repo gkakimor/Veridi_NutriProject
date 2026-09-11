@@ -1264,7 +1264,7 @@ export function CustomerOrderPage() {
               className="btn btn--secondary"
               onClick={() => navigate(`/comercial/pedidos/${customerOrder.id}/imprimir`)}
             >
-              Imprimir
+              PDF
             </button>
           )}
           <button type="button" className="btn btn--ghost" onClick={() => navigate("/comercial/pedidos")}>

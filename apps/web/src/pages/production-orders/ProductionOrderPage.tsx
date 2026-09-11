@@ -848,7 +848,7 @@ export function ProductionOrderPage() {
               className="btn btn--secondary"
               onClick={() => navigate(`/producao/ordens/${productionOrder.id}/imprimir`)}
             >
-              Imprimir
+              PDF
             </button>
           )}
           {productionOrder && (
@@ -1937,7 +1937,7 @@ export function ProductionOrderPage() {
                 className="btn btn--secondary btn--sm"
                 onClick={() => navigate(`/print/custo-producao/${industrialCost.productionOrderId}`)}
               >
-                Imprimir custo / Salvar PDF
+                Custo de produção (PDF)
               </button>
             </div>
           </FormSection>

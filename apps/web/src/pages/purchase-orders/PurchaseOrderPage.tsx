@@ -727,7 +727,7 @@ export function PurchaseOrderPage() {
               className="btn btn--secondary"
               onClick={() => navigate(`/compras/ordens/${purchaseOrder.id}/imprimir`)}
             >
-              Imprimir
+              PDF
             </button>
           )}
         </div>

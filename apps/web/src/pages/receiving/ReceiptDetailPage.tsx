@@ -121,7 +121,7 @@ export function ReceiptDetailPage() {
             className="btn btn--secondary"
             onClick={() => navigate(`/compras/recebimentos/${receipt.id}/imprimir`)}
           >
-            Imprimir
+            PDF
           </button>
         </div>
       </div>

@@ -98,7 +98,7 @@ export function InventoryOverviewPage() {
             navigate(`/print/posicao-estoque${search ? `?search=${encodeURIComponent(search)}` : ""}`)
           }
         >
-          Imprimir posição (FO-02)
+          Folha de posição (FO-02)
         </button>
         <ExportCsvButton path="/inventory/export.csv" filters={{ search, type: typeFilter === "all" ? undefined : typeFilter, onlyWithStock }} />
 </div>

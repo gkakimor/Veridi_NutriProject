@@ -288,7 +288,7 @@ export function PricingPage() {
             className="btn btn--secondary"
             onClick={() => navigate(`/print/precificacao/${pricing.id}`)}
           >
-            Imprimir / Salvar PDF
+            PDF
           </button>
           <ProjectOriginLink productId={pricing.productId} />
           <Link

@@ -107,7 +107,7 @@ export const ordemProducao = {
     "Consumir é limitado ao reservado da linha; além disso, só com Consumo extra e motivo.",
     "Liberar não tira material do estoque — a baixa é o consumo.",
     "O produto acabado produzido não entra sozinho no pedido: reserve-o na tela do Pedido.",
-    "Imprimir a ordem, a folha de separação ou o custo não altera nada.",
+    "Gerar o PDF da ordem, da folha de separação ou do custo — para baixar ou imprimir — não altera nada.",
   ],
   example:
     "Ordem de 500 potes com 15,46 g de ativo por embalagem: a liberação reserva 7,73 kg. Consumidos 7,9 kg, a diferença de 0,17 kg precisa de justificativa antes de concluir.",

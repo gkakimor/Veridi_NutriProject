@@ -21,6 +21,18 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
   },
+  /*
+   * O motor de PDF (`@react-pdf/renderer` → `yoga-layout`) usa top-level
+   * await: build e pré-empacotamento precisam mirar ES2022 (navegadores de
+   * 2021 em diante). O motor só carrega quando alguém gera um documento.
+   */
+  build: {
+    target: "es2022",
+  },
+  optimizeDeps: {
+    include: ["@react-pdf/renderer"],
+    esbuildOptions: { target: "es2022" },
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],

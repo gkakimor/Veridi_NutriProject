@@ -71,7 +71,7 @@ export function CostCalculationPage() {
             className="btn btn--secondary"
             onClick={() => navigate(`/print/calculo-custo/${calculation.id}`)}
           >
-            Imprimir / Salvar PDF
+            PDF
           </button>
           <Link
             className="btn btn--ghost"

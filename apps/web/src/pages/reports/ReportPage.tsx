@@ -72,11 +72,11 @@ export function ReportPage({
             <button
               type="button"
               className="btn btn--secondary btn--sm"
-              // Impressão nasce em rota dedicada: a tela operacional nunca
-              // vai para o papel.
+              // O PDF nasce em rota dedicada: a tela operacional nunca vai
+              // para o papel.
               onClick={() => navigate(`/print/relatorios/${reportCode}${printQuery}`)}
             >
-              Imprimir / Salvar PDF
+              PDF
             </button>
           )}
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => navigate("/relatorios")}>
