@@ -227,12 +227,26 @@ async function main() {
     afirmar("a linha recusada diz por quê", true, await pagina.locator(".form-alert").first().innerText());
     await conferirRascunho("depois da linha recusada");
 
-    // Devolver a quantidade válida — a linha precisa estar completa para o envio.
-    releitura = esperarReleitura();
+    // Devolver a quantidade gravada — a linha precisa estar completa para o
+    // envio. Desde QUOTE-LINE-NOOP-BLUR-01 voltar ao valor que o servidor já
+    // tem não é mudança: nenhuma atualização de linha sai, e por isso não há
+    // releitura a esperar — esperar por ela esgotava 25 s.
+    const atualizacoesDeLinha = [];
+    const contarAtualizacao = (req) => {
+      if (req.method() === "PATCH" && /^\/quote-lines\//.test(new URL(req.url()).pathname)) {
+        atualizacoesDeLinha.push(req.url());
+      }
+    };
+    pagina.on("request", contarAtualizacao);
     await pagina.getByLabel(`Quantidade de ${codigoA}`).fill("1000");
     await pagina.getByLabel(`Quantidade de ${codigoA}`).blur();
-    await releitura;
-    await assentar();
+    await pagina.waitForTimeout(1500);
+    pagina.off("request", contarAtualizacao);
+    afirmar(
+      "devolver a quantidade gravada não manda atualização de linha",
+      atualizacoesDeLinha.length === 0,
+      `${atualizacoesDeLinha.length} PATCH`,
+    );
     await conferirRascunho("depois de corrigir a linha");
 
     // ── 7. Nada foi gravado às escondidas ───────────────────────────────
