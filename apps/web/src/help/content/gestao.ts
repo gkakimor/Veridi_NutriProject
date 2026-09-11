@@ -262,8 +262,8 @@ export const gestaoTopics = {
         text: "Leva o recorte filtrado completo, gerado de novo no servidor — nunca as linhas que estavam na tela e nunca só a página atual.",
       },
       {
-        term: "Imprimir / Salvar PDF",
-        text: "Abre a versão de papel do mesmo recorte, com o nome do relatório, os filtros realmente aplicados e a data de geração no cabeçalho.",
+        term: "PDF",
+        text: "Gera o PDF do mesmo recorte, com o nome do relatório, os filtros realmente aplicados e a data de geração. Na tela do documento, Baixar PDF salva o arquivo e Imprimir manda o mesmo arquivo para a impressora.",
       },
     ],
     flow: [

@@ -451,7 +451,7 @@ export function IndustrialCostPage() {
               className="btn btn--secondary"
               onClick={() => navigate(`/print/estrutura-custos/${version.id}`)}
             >
-              Imprimir / Salvar PDF
+              PDF
             </button>
           )}
           <button

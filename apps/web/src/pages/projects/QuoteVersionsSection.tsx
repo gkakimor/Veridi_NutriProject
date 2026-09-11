@@ -1329,7 +1329,7 @@ export function QuoteVersionsSection({
               className="btn btn--secondary"
               onClick={() => window.open(`/comercial/orcamentos/${open.id}/imprimir`, "_blank")}
             >
-              Imprimir
+              PDF
             </button>
 
             {editable && (

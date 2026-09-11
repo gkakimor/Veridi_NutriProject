@@ -754,7 +754,7 @@ export function ShipmentPage() {
             className="btn btn--secondary"
             onClick={() => navigate(`/comercial/expedicoes/${shipment.id}/imprimir`)}
           >
-            Imprimir
+            PDF
           </button>
           <button
             type="button"

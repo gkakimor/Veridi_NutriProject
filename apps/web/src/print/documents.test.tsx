@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, sep } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type {
   BillingDTO,
@@ -9,11 +9,33 @@ import type {
   ProductionOrderMaterialCostDTO,
 } from "@veridi/shared";
 import { BILLING_NON_FISCAL_NOTICE, Decimal, splitDecimal } from "@veridi/shared";
-import {
-  BillingPrintDocument,
-  CustomerOrderPrintDocument,
-  ProductionOrderPrintDocument,
-} from "./documents";
+import { BillingPdf } from "../pdf/documents/BillingPdf";
+import { CustomerOrderPdf } from "../pdf/documents/CustomerOrderPdf";
+import { ProductionOrderPdf } from "../pdf/documents/ProductionOrderPdf";
+
+/*
+ * Os impressos transacionais são PDF (`src/pdf/documents/`). As primitivas do
+ * renderer são lidas como DOM: o teste lê o que o documento ESCREVE. O arquivo
+ * real — A4, paginação, rodapé em toda folha — é provado em
+ * `src/pdf/documents/transactional-documents.test.tsx`.
+ */
+vi.mock("@react-pdf/renderer", async () => ({ ...(await import("../pdf/testing/react-pdf-dom")) }));
+
+const GERADO_EM = new Date("2026-09-11T12:30:00.000Z");
+
+/** A linha do bloco de totais: o rótulo e o valor que ele anuncia. */
+function linhaDoTotal(rotulo: string): HTMLElement {
+  const noPapel = screen.getByText(rotulo);
+  expect(noPapel.closest('[data-pdf-role="totals"]'), `"${rotulo}" fora do bloco de totais`).not.toBeNull();
+  return noPapel.parentElement!;
+}
+
+/** O campo rotulado do documento — rótulo e valor juntos. */
+function campo(rotulo: string): HTMLElement {
+  const noPapel = screen.getByText(rotulo).closest<HTMLElement>('[data-pdf-role="field"]');
+  expect(noPapel, `campo "${rotulo}"`).not.toBeNull();
+  return noPapel!;
+}
 
 const billingBase: BillingDTO = {
   id: "bil-1",
@@ -76,18 +98,21 @@ const billingBase: BillingDTO = {
 
 describe("Faturamento impresso", () => {
   it("deixa inequívoco que não é Nota Fiscal", () => {
-    render(<BillingPrintDocument billing={billingBase} />);
-    expect(screen.getByText(BILLING_NON_FISCAL_NOTICE)).toBeInTheDocument();
+    const { container } = render(<BillingPdf billing={billingBase} generatedAt={GERADO_EM} />);
+    expect(screen.getByText(BILLING_NON_FISCAL_NOTICE)).toHaveAttribute("data-pdf-role", "notice");
     expect(BILLING_NON_FISCAL_NOTICE).toContain("não é Nota Fiscal");
+    // E o rodapé repete a natureza do documento em toda folha.
+    expect(container.textContent).toContain(`Veridi Nutrition · ${BILLING_NON_FISCAL_NOTICE}`);
   });
 
   it("imprime o snapshot do documento e o total quando a precificação está completa", () => {
-    render(<BillingPrintDocument billing={billingBase} />);
-    expect(screen.getByText("FAT-000123")).toBeInTheDocument();
+    render(<BillingPdf billing={billingBase} generatedAt={GERADO_EM} />);
+    // O código identifica a folha: cabeçalho e rodapé.
+    expect(screen.getAllByText("FAT-000123").length).toBeGreaterThanOrEqual(1);
     // Snapshot histórico do cliente manda sobre o cadastro atual.
     expect(screen.getByText("Cliente Snapshot Ltda")).toBeInTheDocument();
     expect(screen.getByText("LT-20260810-000001")).toBeInTheDocument();
-    expect(screen.getByText(/Valor total:/).closest("p")).toHaveTextContent("1.000,00");
+    expect(linhaDoTotal("Valor total")).toHaveTextContent("1.000,00");
   });
 
   /*
@@ -117,18 +142,18 @@ describe("Faturamento impresso", () => {
       totalQuantity: "123",
       totalAmount: "498.53",
     };
-    render(<BillingPrintDocument billing={quebrado} />);
+    render(<BillingPdf billing={quebrado} generatedAt={GERADO_EM} />);
 
     expect(screen.getByText(/4,0531/)).toBeInTheDocument();
-    // Aparece na linha e no rodape — as duas ocorrencias sao o ponto.
+    // Aparece na linha e no bloco de totais — as duas ocorrencias sao o ponto.
     expect(screen.getAllByText(/498,53/).length).toBeGreaterThanOrEqual(2);
     // A conta que o operador faz com o que está impresso.
     expect((4.0531 * 123).toFixed(2)).toBe("498.53");
   });
 
   it("total de linha continua em duas casas — não é preço", () => {
-    render(<BillingPrintDocument billing={billingBase} />);
-    expect(screen.getByText(/Valor total:/).closest("p")).toHaveTextContent("1.000,00");
+    render(<BillingPdf billing={billingBase} generatedAt={GERADO_EM} />);
+    expect(linhaDoTotal("Valor total")).toHaveTextContent("1.000,00");
     expect(screen.queryByText(/1\.000,0000/)).not.toBeInTheDocument();
   });
 
@@ -139,18 +164,16 @@ describe("Faturamento impresso", () => {
       totalAmount: null,
       lines: [{ ...billingBase.lines[0]!, unitPrice: null, lineTotal: null }],
     };
-    render(<BillingPrintDocument billing={incomplete} />);
-    expect(screen.getByText(/Valor total:/).closest("p")).toHaveTextContent(
-      "Precificação incompleta",
-    );
+    render(<BillingPdf billing={incomplete} generatedAt={GERADO_EM} />);
+    expect(linhaDoTotal("Valor total")).toHaveTextContent("Precificação incompleta");
     expect(screen.queryByText(/1\.000,00/)).toBeNull();
   });
 
   it("rascunho é rotulado como tal, nunca parece documento final", () => {
     const { container } = render(
-      <BillingPrintDocument billing={{ ...billingBase, status: "DRAFT", issuedAt: null }} />,
+      <BillingPdf billing={{ ...billingBase, status: "DRAFT", issuedAt: null }} generatedAt={GERADO_EM} />,
     );
-    expect(container.querySelector(".print-doc__draft")).toHaveTextContent("Rascunho");
+    expect(container.querySelector('[data-pdf-role="draft"]')).toHaveTextContent("Rascunho");
   });
 });
 
@@ -243,14 +266,14 @@ describe("Ordem de Produção impressa", () => {
       missingCostItems: ["MP-000001"],
     };
 
-    render(<ProductionOrderPrintDocument order={productionOrderBase} cost={partialCost} />);
+    render(<ProductionOrderPdf order={productionOrderBase} cost={partialCost} generatedAt={GERADO_EM} />);
 
-    expect(screen.getByText(/Qualidade do custo:/).closest("p")).toHaveTextContent("Parcial");
-    const total = screen.getByText(/Custo total de material:/).closest("p");
+    expect(campo("Qualidade do custo")).toHaveTextContent("Parcial");
+    const total = campo("Custo total de material");
     expect(total).toHaveTextContent("Indisponível");
     // O subtotal conhecido aparece rotulado como subtotal, nunca como total.
     expect(total).toHaveTextContent("subtotal conhecido");
-    expect(screen.getByText(/Custo por unidade produzida:/).closest("p")).toHaveTextContent("—");
+    expect(campo("Custo por unidade produzida")).toHaveTextContent("—");
   });
 });
 
@@ -313,18 +336,19 @@ describe("Pedido do Cliente impresso", () => {
    * balcão como se fosse confirmação de pedido.
    */
   it("declara que é documento interno", () => {
-    const { container } = render(<CustomerOrderPrintDocument order={customerOrderBase} />);
+    const { container } = render(<CustomerOrderPdf order={customerOrderBase} generatedAt={GERADO_EM} />);
 
-    const aviso = container.querySelector(".print-doc__notice");
+    const aviso = container.querySelector('[data-pdf-role="notice"]');
     expect(aviso).toBeTruthy();
     expect(aviso?.textContent).toMatch(/interno/i);
     expect(aviso?.textContent).toMatch(/não é documento fiscal/i);
   });
 
   it("continua trazendo as colunas internas que motivam o aviso", () => {
-    render(<CustomerOrderPrintDocument order={customerOrderBase} />);
-    expect(screen.getByText("Faturado")).toBeInTheDocument();
-    expect(screen.getByText("Falta expedir")).toBeInTheDocument();
+    render(<CustomerOrderPdf order={customerOrderBase} generatedAt={GERADO_EM} />);
+    for (const coluna of ["Faturado", "Falta expedir"]) {
+      expect(screen.getByText(coluna).closest('[data-pdf-role="header-row"]'), coluna).not.toBeNull();
+    }
   });
 });
 
@@ -380,17 +404,31 @@ function ordemFracionada(requiredQuantity: string, numberOfParts: number): Produ
   } as unknown as ProductionOrderDTO;
 }
 
+/**
+ * As células da linha da matéria-prima, na tabela "Matérias-primas" — a
+ * primeira do documento a listar o item.
+ */
+function celulasDaMateriaPrima(container: HTMLElement): Element[] {
+  const linha = [...container.querySelectorAll('[data-pdf-role="row"]')].find((row) =>
+    row.textContent?.includes("MP-000001"),
+  );
+  expect(linha, "linha da matéria-prima").toBeDefined();
+  // A 6ª coluna da tabela é mesmo "Por parte" — a prova não depende de sorte.
+  const cabecalho = linha!.parentElement!.querySelector('[data-pdf-role="header-row"]')!;
+  expect(cabecalho.children[5]?.textContent).toBe("Por parte");
+  return [...linha!.querySelectorAll('[data-pdf-role="cell"]')];
+}
+
 /** A célula "Por parte" da linha da matéria-prima. */
 function celulaPorParte(container: HTMLElement): string {
-  const linha = container.querySelector("tbody tr")!;
-  return linha.querySelectorAll("td")[5]!.textContent!;
+  return celulasDaMateriaPrima(container)[5]!.textContent!;
 }
 
 describe("Ordem de Produção impressa — rateio por parte (#21)", () => {
   it("não anuncia mais um valor que parte nenhuma seria pesada", () => {
     // 2 kg em 3 partes. O motor planeja 0,666666 / 0,666666 / 0,666668.
     const { container } = render(
-      <ProductionOrderPrintDocument order={ordemFracionada("2", 3)} cost={null} />,
+      <ProductionOrderPdf order={ordemFracionada("2", 3)} cost={null} generatedAt={GERADO_EM} />,
     );
 
     expect(celulaPorParte(container)).toBe("0,666666 × 2 + 0,666668");
@@ -401,7 +439,7 @@ describe("Ordem de Produção impressa — rateio por parte (#21)", () => {
 
   it("as parcelas impressas somam exatamente o total da ordem", () => {
     const { container } = render(
-      <ProductionOrderPrintDocument order={ordemFracionada("10", 3)} cost={null} />,
+      <ProductionOrderPdf order={ordemFracionada("10", 3)} cost={null} generatedAt={GERADO_EM} />,
     );
 
     const celula = celulaPorParte(container);
@@ -416,14 +454,14 @@ describe("Ordem de Produção impressa — rateio por parte (#21)", () => {
 
   it("divisão exata mantém a forma curta do documento antigo", () => {
     const { container } = render(
-      <ProductionOrderPrintDocument order={ordemFracionada("9", 3)} cost={null} />,
+      <ProductionOrderPdf order={ordemFracionada("9", 3)} cost={null} generatedAt={GERADO_EM} />,
     );
     expect(celulaPorParte(container)).toBe("3 × 3");
   });
 
   it("parte única continua sem rateio", () => {
     const { container } = render(
-      <ProductionOrderPrintDocument order={ordemFracionada("10", 1)} cost={null} />,
+      <ProductionOrderPdf order={ordemFracionada("10", 1)} cost={null} generatedAt={GERADO_EM} />,
     );
     expect(celulaPorParte(container)).toBe("—");
   });
@@ -431,9 +469,10 @@ describe("Ordem de Produção impressa — rateio por parte (#21)", () => {
   it("quantidade que não cabe num double sai íntegra no papel", () => {
     // `DECIMAL(24,12)`: 24 dígitos significativos contra os ~15 do float.
     const { container } = render(
-      <ProductionOrderPrintDocument
+      <ProductionOrderPdf
         order={ordemFracionada("999999999999.000000000003", 3)}
         cost={null}
+        generatedAt={GERADO_EM}
       />,
     );
     expect(celulaPorParte(container)).toBe("333333333333 × 2 + 333333333333");
@@ -442,7 +481,7 @@ describe("Ordem de Produção impressa — rateio por parte (#21)", () => {
 
   it("nenhum NaN, Infinity ou [object Object] no documento", () => {
     const { container } = render(
-      <ProductionOrderPrintDocument order={ordemFracionada("2", 3)} cost={null} />,
+      <ProductionOrderPdf order={ordemFracionada("2", 3)} cost={null} generatedAt={GERADO_EM} />,
     );
     for (const lixo of ["NaN", "Infinity", "[object Object]", "undefined", "null"]) {
       expect(container.textContent).not.toContain(lixo);
@@ -453,12 +492,30 @@ describe("Ordem de Produção impressa — rateio por parte (#21)", () => {
     // Dividir por uma CONTAGEM não muda a unidade: kg dividido em 3 partes
     // continua kg. A coluna "Unidade" da linha é a única que a declara.
     const { container } = render(
-      <ProductionOrderPrintDocument order={ordemFracionada("2", 3)} cost={null} />,
+      <ProductionOrderPdf order={ordemFracionada("2", 3)} cost={null} generatedAt={GERADO_EM} />,
     );
-    const colunas = container.querySelectorAll("tbody tr")[0]!.querySelectorAll("td");
+    const colunas = celulasDaMateriaPrima(container);
     expect(colunas[2]!.textContent).toBe("kg");
   });
 });
+
+/** Toda fonte de `src/pdf` que monta documento — teste e apoio de teste ficam fora. */
+function fontesDoPdf(): string[] {
+  const raiz = process.cwd();
+  const achadas: string[] = [];
+  const visitar = (pasta: string) => {
+    for (const entrada of readdirSync(pasta, { withFileTypes: true })) {
+      const caminho = join(pasta, entrada.name);
+      if (entrada.isDirectory()) {
+        if (entrada.name !== "testing") visitar(caminho);
+      } else if (/\.tsx?$/.test(entrada.name) && !/\.test\.tsx?$/.test(entrada.name)) {
+        achadas.push(relative(raiz, caminho).split(sep).join("/"));
+      }
+    }
+  };
+  visitar(join(raiz, "src/pdf"));
+  return achadas.sort();
+}
 
 describe("impressos não recalculam Decimal de domínio por Number", () => {
   it("a fonte de `src/print/` prova", () => {
@@ -466,26 +523,50 @@ describe("impressos não recalculam Decimal de domínio por Number", () => {
      * Gate de fonte: um teste de saída sozinho não pega a reintrodução de um
      * float que só erra em valor grande ou em divisão inexata. O documento não
      * decide regra e não inventa precisão — ele lê o resultado autoritativo.
+     *
+     * Os documentos saíram de `src/print/documents.tsx` para `src/pdf/`, e a
+     * varredura foi junto: toda fonte de `src/pdf` (menos teste e apoio de
+     * teste), o rateio por parte e o esqueleto de impressão HTML que ainda
+     * serve às páginas pendentes.
      */
+    const pdf = fontesDoPdf();
+    // A varredura acha o que precisa achar: caminho errado não passa em branco.
+    for (const esperado of [
+      "src/pdf/components.tsx",
+      "src/pdf/format.ts",
+      "src/pdf/documents/QuotePdf.tsx",
+      "src/pdf/documents/CustomerOrderPdf.tsx",
+      "src/pdf/documents/PurchaseOrderPdf.tsx",
+      "src/pdf/documents/ReceiptPdf.tsx",
+      "src/pdf/documents/ProductionOrderPdf.tsx",
+      "src/pdf/documents/RecipeSheetPdf.tsx",
+      "src/pdf/documents/ShipmentPdf.tsx",
+      "src/pdf/documents/BillingPdf.tsx",
+      "src/pdf/documents/LotTraceabilityPdf.tsx",
+    ]) {
+      expect(pdf).toContain(esperado);
+    }
+
+    const violacoes: string[] = [];
     for (const arquivo of [
-      "src/print/documents.tsx",
-      "src/print/PrintLayout.tsx",
-      "src/print/PrintSheet.tsx",
+      ...pdf,
       "src/lib/part-share.ts",
     ]) {
       const fonte = readFileSync(join(process.cwd(), arquivo), "utf8");
       const corpo = fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-      expect(corpo, `${arquivo} converte Decimal para Number`).not.toMatch(/Number\(/);
-      expect(corpo, `${arquivo} usa parseFloat`).not.toContain("parseFloat");
-      expect(corpo, `${arquivo} usa Math.round`).not.toContain("Math.round");
-      expect(corpo, `${arquivo} usa toFixed`).not.toContain("toFixed");
+      if (/Number\(/.test(corpo)) violacoes.push(`${arquivo} converte Decimal para Number`);
+      if (corpo.includes("parseFloat")) violacoes.push(`${arquivo} usa parseFloat`);
+      if (corpo.includes("Math.round")) violacoes.push(`${arquivo} usa Math.round`);
+      if (corpo.includes("toFixed")) violacoes.push(`${arquivo} usa toFixed`);
       /*
-       * `toLocaleString` NÃO entra no gate: em `PrintLayout` ele formata
+       * `toLocaleString` NÃO entra no gate: nos helpers de data ele formata
        * `Date`, que é o uso legítimo. O que o documento não pode fazer é
        * aritmética de Decimal — e nenhum valor decimal chega aqui como
        * `number`, então não há caminho para formatá-lo por locale sem antes
        * passar por um `Number(`, que o gate acima já barra.
        */
     }
+    // Todas de uma vez: o gate diz cada arquivo que precisa de conserto.
+    expect(violacoes).toEqual([]);
   });
 });

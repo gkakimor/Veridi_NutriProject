@@ -276,7 +276,7 @@ export const comercialTopics = {
       "Aprovar duas vezes não cria um segundo produto, e aprovar exige orçamento aceito — pelo estágio, não pela boa vontade da tela.",
       "Cancelar o projeto desativa apenas o produto em desenvolvimento que aquele projeto criou. Nada é apagado: formulação, custo, preço e propostas continuam auditáveis.",
       "Condições comerciais e plano de parcelas fazem parte da versão: mudam só no rascunho e viajam congelados com a proposta enviada. O total da proposta é a soma das linhas; desconto e juros aparecem nas condições e nas parcelas, não no preço unitário de cada linha.",
-      "Imprimir a proposta é leitura do que está gravado. Enviar ao cliente é o que congela; imprimir não muda situação nenhuma.",
+      "Gerar o PDF da proposta é leitura do que está gravado. Enviar ao cliente é o que congela; baixar ou imprimir o PDF não muda situação nenhuma.",
     ],
   },
 

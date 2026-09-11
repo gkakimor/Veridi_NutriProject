@@ -199,7 +199,7 @@ export function RecipeSheetPage() {
             className="btn btn--secondary"
             onClick={() => window.open(`/producao/ordens/${sheet.productionOrderId}/receita/imprimir`, "_blank")}
           >
-            Imprimir Folha de Receita
+            Folha de Receita (PDF)
           </button>
         </div>
       </div>

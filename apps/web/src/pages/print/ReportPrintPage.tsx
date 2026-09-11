@@ -1,18 +1,18 @@
-import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
+import { useOptionalAuth } from "../../app/AuthProvider";
 import { API_URL, apiFetch } from "../../lib/api";
-import { COLUNA_NUMERICA, PrintTable } from "../../print/PrintLayout";
-import { PrintSheet } from "../../print/PrintSheet";
+import { PdfScreen } from "../../pdf/PdfScreen";
 
 /**
- * Impressão dos relatórios R-01…R-20 em ROTA DEDICADA.
+ * Relatórios R-01…R-20 em PDF, em ROTA DEDICADA.
  *
- * Política oficial (capacidade 42): `window.print()` é só o mecanismo de
- * saída; a origem nunca é a tela operacional. Aqui o documento é montado do
- * zero, fora do AppShell, a partir do MESMO endpoint de exportação que a
- * tela usa — o que garante o resultado filtrado COMPLETO (`ALL_ROWS`) e as
- * mesmas colunas rotuladas, sem reimplementar 17 relatórios nem duplicar
- * definição de coluna.
+ * A origem nunca é a tela operacional: o documento é montado do zero, fora do
+ * AppShell, a partir do MESMO endpoint de exportação que a tela usa — o que
+ * garante o resultado filtrado COMPLETO (`ALL_ROWS`) e as mesmas colunas
+ * rotuladas, sem reimplementar 17 relatórios nem duplicar definição de
+ * coluna. O arquivo é PDF de verdade, gerado no navegador sobre o dado que
+ * esta página buscou com a sessão do usuário; o módulo do documento só
+ * carrega quando alguém gera o PDF.
  */
 
 /** Separador e BOM usados pelo `buildCsv` da API. */
@@ -41,12 +41,38 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Posição de Estoque",
     csvPath: "/reports/inventory/position/export.csv",
     screenPath: "/relatorios/estoque/posicao",
+    // 16 colunas não cabem numa linha da folha: lote do fornecedor, lote
+    // Veridi, proprietário, fornecedor, tipo e CoA descem para o detalhe.
+    primaryColumns: [
+      "Item",
+      "Descrição",
+      "Lote interno",
+      "Validade",
+      "Localização",
+      "On Hand",
+      "Reservado",
+      "Disponível",
+      "Unidade",
+      "Qualidade",
+    ],
   },
   "R-02": {
     code: "R-02",
     title: "Vencimentos",
     csvPath: "/reports/inventory/expiry/export.csv",
     screenPath: "/relatorios/estoque/vencimentos",
+    primaryColumns: [
+      "Item",
+      "Descrição",
+      "Lote interno",
+      "Validade",
+      "Dias até vencer",
+      "On Hand",
+      "Reservado",
+      "Disponível",
+      "Unidade",
+      "Qualidade",
+    ],
   },
   "R-03": {
     code: "R-03",
@@ -59,12 +85,38 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Necessidade / Falta para OP",
     csvPath: "/reports/production/requirements/export.csv",
     screenPath: "/relatorios/producao/necessidades",
+    primaryColumns: [
+      "OP",
+      "Produto",
+      "Item",
+      "Descrição",
+      "Necessário",
+      "Reservado",
+      "Disponível",
+      "Em compra",
+      "Falta",
+      "Unidade",
+    ],
   },
   "R-05": {
     code: "R-05",
     title: "Planejado x Realizado",
     csvPath: "/reports/production/planned-actual/export.csv",
     screenPath: "/relatorios/producao/planejado-realizado",
+    // O custo e a qualidade que o explica ficam lado a lado.
+    primaryColumns: [
+      "OP",
+      "Produto",
+      "Nome do produto",
+      "Planejado",
+      "Produzido",
+      "Variação",
+      "Rendimento (%)",
+      "Unidade",
+      "Status",
+      "Custo material unitário",
+      "Qualidade do custo",
+    ],
   },
   "R-07": {
     code: "R-07",
@@ -83,6 +135,19 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Recebimentos",
     csvPath: "/reports/purchasing/receipts/export.csv",
     screenPath: "/relatorios/compras/recebimentos",
+    primaryColumns: [
+      "Recebimento",
+      "Data",
+      "OC",
+      "Fornecedor",
+      "Item",
+      "Descrição",
+      "Lote interno",
+      "Quantidade",
+      "Unidade",
+      "Custo efetivo",
+      "Qualidade do custo",
+    ],
   },
   "R-10": {
     code: "R-10",
@@ -107,6 +172,17 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Atendimento dos Pedidos",
     csvPath: "/reports/commercial/fulfillment/export.csv",
     screenPath: "/relatorios/comercial/atendimento",
+    primaryColumns: [
+      "Pedido",
+      "Cliente",
+      "Produto",
+      "Nome do produto",
+      "Qtd. pedida",
+      "Expedido",
+      "Faturado",
+      "Falta expedir",
+      "Unidade",
+    ],
   },
   "R-15": {
     code: "R-15",
@@ -125,6 +201,18 @@ export const REPORT_PRINT_DEFINITIONS: Record<string, ReportPrintDefinition> = {
     title: "Pedido x Entregue x Faturado",
     csvPath: "/reports/billing/order-delivered-billed/export.csv",
     screenPath: "/relatorios/faturamento/pedido-entregue-faturado",
+    primaryColumns: [
+      "Pedido",
+      "Cliente",
+      "Produto",
+      "Nome do produto",
+      "Qtd. pedida",
+      "Expedido",
+      "Faturado",
+      "Expedido sem faturar",
+      "Falta entregar",
+      "Unidade",
+    ],
   },
   "R-18": {
     code: "R-18",
@@ -205,6 +293,18 @@ const FILTER_LABELS: Record<string, string> = {
   daysAhead: "Dias à frente",
 };
 
+/**
+ * Filtros da URL, rotulados, na ordem em que vieram.
+ *
+ * Paginação da tela (`page`, `pageSize`) não é filtro: o documento traz o
+ * recorte inteiro, e "pageSize 25" no papel sugeriria um corte que não existe.
+ */
+export function reportAppliedFilters(params: URLSearchParams): { label: string; value: string }[] {
+  return [...params.entries()]
+    .filter(([key, value]) => value !== "" && key !== "all" && key !== "page" && key !== "pageSize")
+    .map(([key, value]) => ({ label: FILTER_LABELS[key] ?? key, value }));
+}
+
 /** Parser do CSV gerado pela API (`;`, aspas duplas, BOM). */
 export function parseReportCsv(content: string): { header: string[]; rows: string[][] } {
   const text = content.replace(/^﻿/, "");
@@ -251,142 +351,58 @@ export function parseReportCsv(content: string): { header: string[]; rows: strin
   };
 }
 
+type ReportPrintData = {
+  definition: ReportPrintDefinition;
+  header: string[];
+  rows: string[][];
+  filters: { label: string; value: string }[];
+};
+
 export function ReportPrintPage() {
   const { reportCode } = useParams<{ reportCode: string }>();
   const [params] = useSearchParams();
+  // Quem gerou o documento — não substitui quem executou cada ato no sistema.
+  const generatedBy = useOptionalAuth()?.user?.name ?? null;
   const definition = reportCode ? REPORT_PRINT_DEFINITIONS[reportCode.toUpperCase()] : undefined;
-
-  const [data, setData] = useState<{ header: string[]; rows: string[][] } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const query = params.toString();
 
-  useEffect(() => {
-    if (!definition) return;
-    apiFetch(`${API_URL}${definition.csvPath}${query ? `?${query}` : ""}`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Falha ao carregar o relatório (${response.status})`);
-        setData(parseReportCsv(await response.text()));
-      })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar o relatório"),
-      );
-    // A carga depende só do relatório e dos filtros da URL.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [definition?.csvPath, query]);
-
-  if (!definition) {
-    return (
-      <div className="print-screen">
-        <article className="print-doc">
-          <p className="form-alert" role="alert">Relatório desconhecido: {reportCode}</p>
-        </article>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="print-screen">
-        <article className="print-doc">
-          <p className="form-alert" role="alert">{error}</p>
-        </article>
-      </div>
-    );
-  }
-
-  if (!data) return <div className="print-screen">Carregando…</div>;
-
-  const appliedFilters = [...params.entries()]
-    .filter(([key, value]) => value !== "" && key !== "all" && key !== "page")
-    .map(([key, value]) => ({ label: FILTER_LABELS[key] ?? key, value }));
-
-  // Relatório largo vira paisagem por decisão de layout, não do usuário.
-  const landscape = data.header.length > 7;
-
-  // Índices das colunas principais (na ordem declarada) e das demais, que
-  // descem para a linha de detalhe.
-  const primaryIndexes = (definition.primaryColumns ?? [])
-    .map((column) => data.header.indexOf(column))
-    .filter((index) => index >= 0);
-  const hierarchical = primaryIndexes.length > 0;
-  const detailIndexes = hierarchical
-    ? data.header.map((_, index) => index).filter((index) => !primaryIndexes.includes(index))
-    : [];
-  const columns = hierarchical ? primaryIndexes.map((index) => data.header[index]!) : data.header;
-
-  /**
-   * Alinhamento numérico da célula, pela mesma regra do cabeçalho.
-   *
-   * `PrintTable` classificava só o `th`: no papel a coluna "Total" tinha o
-   * título à direita e os valores à esquerda, exatamente nos relatórios que
-   * carregam custo e margem. Aqui a linha vem de CSV, então quem conhece o
-   * nome da coluna é esta página.
-   */
-  function numericCellProps(column: string): { className?: string } {
-    return COLUNA_NUMERICA.test(column.trim()) ? { className: "is-number" } : {};
-  }
-
   return (
-    <PrintSheet
-      sheetCode={definition.code}
-      title={definition.title}
-      backTo={definition.screenPath}
-      {...(landscape ? { landscape: true } : {})}
-      filters={[...appliedFilters, { label: "Registros", value: String(data.rows.length) }]}
-    >
-      {definition.internal && (
-        <p className="print-doc__notice">
-          Documento interno. Contém custo e margem — não é o orçamento entregue ao cliente.
-        </p>
-      )}
-
-      <PrintTable
-        columns={columns}
-        isEmpty={data.rows.length === 0}
-        emptyMessage="Nenhum registro para os filtros aplicados."
-      >
-        {data.rows.map((cells, index) => {
-          const key = `${index}-${cells[0] ?? ""}`;
-          if (!hierarchical) {
-            return (
-              <tr key={key}>
-                {data.header.map((column, position) => (
-                  // Valor desconhecido continua vindo como "—" do próprio
-                  // read model: o papel nunca inventa zero.
-                  <td key={column} {...numericCellProps(column)}>
-                    {cells[position]?.trim() || "—"}
-                  </td>
-                ))}
-              </tr>
-            );
-          }
-          return [
-            <tr key={`${key}-principal`} className="print-row--primary">
-              {primaryIndexes.map((position) => (
-                <td
-                  key={data.header[position]}
-                  {...numericCellProps(data.header[position] ?? "")}
-                >
-                  {cells[position]?.trim() || "—"}
-                </td>
-              ))}
-            </tr>,
-            <tr key={`${key}-detalhe`} className="print-row--detail">
-              <td colSpan={primaryIndexes.length}>
-                <dl className="print-detail">
-                  {detailIndexes.map((position) => (
-                    <div key={data.header[position]}>
-                      <dt>{data.header[position]}</dt>
-                      <dd>{cells[position]?.trim() || "—"}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </td>
-            </tr>,
-          ];
-        })}
-      </PrintTable>
-    </PrintSheet>
+    <PdfScreen<ReportPrintData>
+      // Outro relatório ou outro filtro na mesma rota é outro documento.
+      key={`${reportCode ?? ""}?${query}`}
+      load={async () => {
+        if (!definition) throw new Error(`Relatório desconhecido: ${reportCode ?? ""}`);
+        const response = await apiFetch(`${API_URL}${definition.csvPath}${query ? `?${query}` : ""}`);
+        if (!response.ok) throw new Error(`Falha ao carregar o relatório (${response.status})`);
+        return {
+          definition,
+          ...parseReportCsv(await response.text()),
+          filters: reportAppliedFilters(params),
+        };
+      }}
+      build={async ({ definition: relatorio, header, rows, filters }) => {
+        const { ReportPdf, reportPdfFileName } = await import("../../pdf/documents/ReportPdf");
+        const generatedAt = new Date();
+        return {
+          document: (
+            <ReportPdf
+              report={{
+                code: relatorio.code,
+                title: relatorio.title,
+                internal: relatorio.internal,
+                primaryColumns: relatorio.primaryColumns,
+                header,
+                rows,
+                filters,
+                generatedBy,
+              }}
+              generatedAt={generatedAt}
+            />
+          ),
+          fileName: reportPdfFileName(relatorio.code, generatedAt),
+        };
+      }}
+      backTo={definition?.screenPath ?? "/relatorios"}
+    />
   );
 }

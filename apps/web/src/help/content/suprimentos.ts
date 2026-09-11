@@ -104,7 +104,7 @@ export const suprimentosTopics = {
       "Fornecedor e item ficam congelados na ordem no momento em que a linha é escrita: renomear o item no cadastro depois não muda como a ordem já confirmada é lida.",
       "Não existe fechamento por saldo: uma ordem com sobra em aberto que nunca vai chegar continua parcialmente recebida.",
       "Material do cliente nunca entra em ordem de compra da Veridi. Falta de material do cliente se resolve com nova remessa dele.",
-      "Na ordem confirmada, “Salvar previsão e observações” é a única edição que sobra; “Receber materiais” leva ao recebimento; Imprimir é leitura.",
+      "Na ordem confirmada, “Salvar previsão e observações” é a única edição que sobra; “Receber materiais” leva ao recebimento; o PDF é leitura.",
     ],
   },
 
@@ -262,7 +262,7 @@ export const suprimentosTopics = {
       },
       {
         term: "Somente com estoque e FO-02",
-        text: "O filtro esconde itens zerados; a busca e o tipo recortam a lista. “Imprimir posição (FO-02)” leva o mesmo recorte para o papel, para conferência no depósito.",
+        text: "O filtro esconde itens zerados; a busca e o tipo recortam a lista. “Folha de posição (FO-02)” leva o mesmo recorte para o papel, para conferência no depósito.",
       },
       {
         term: "Em Compra",

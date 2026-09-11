@@ -10,7 +10,10 @@ import type {
 } from "@veridi/shared";
 import { QuoteVersionsSection } from "./QuoteVersionsSection";
 import { ProjectProductsSection } from "./ProjectProductsSection";
-import { QuotePrintDocument } from "../../print/documents";
+import { QuotePdf } from "../../pdf/documents/QuotePdf";
+
+// O documento do cliente é PDF: as primitivas do renderer são lidas como DOM.
+vi.mock("@react-pdf/renderer", async () => ({ ...(await import("../../pdf/testing/react-pdf-dom")) }));
 
 /**
  * Orçamento ↔ CMV.
@@ -400,7 +403,8 @@ describe("Documento do cliente", () => {
   it("não carrega CMV, custo, margem, comissão nem documento interno", () => {
     const { container } = render(
       <MemoryRouter>
-        <QuotePrintDocument
+        <QuotePdf
+          generatedAt={new Date("2026-09-11T12:30:00.000Z")}
           quote={quote({
             status: "SENT",
             total: "38900.0000",
@@ -463,7 +467,8 @@ describe("Documento do cliente", () => {
   it("imprime o acordo inteiro: desconto, entrada, parcelas, vencimentos e total a prazo", () => {
     const { container } = render(
       <MemoryRouter>
-        <QuotePrintDocument
+        <QuotePdf
+          generatedAt={new Date("2026-09-11T12:30:00.000Z")}
           quote={quote({
             status: "SENT",
             subtotal: "10000.00",

@@ -251,7 +251,7 @@ export function BillingPage() {
             className="btn btn--secondary"
             onClick={() => navigate(`/comercial/faturamento/${billing.id}/imprimir`)}
           >
-            Imprimir
+            PDF
           </button>
           <button type="button" className="btn btn--ghost" onClick={() => navigate("/comercial/faturamento")}>
             ← Voltar

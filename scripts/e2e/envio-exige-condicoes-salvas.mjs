@@ -1,4 +1,5 @@
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
+import { textoDoPdfDaTela } from "./lib/pdf.mjs";
 import { obterRun } from "./lib/run-id.mjs";
 
 /**
@@ -296,17 +297,14 @@ async function main() {
       await pagina.locator("#quote-valid-until").first().isDisabled(),
     );
 
+    // O impresso é o PDF da tela do documento: a suíte lê o próprio arquivo.
     const [impresso] = await Promise.all([
       contexto.waitForEvent("page", { timeout: 25000 }),
-      pagina.getByRole("button", { name: "Imprimir", exact: true }).first().click(),
+      pagina.getByRole("button", { name: "PDF", exact: true }).first().click(),
     ]);
     impresso.on("pageerror", (e) => erros.push(`pageerror (impresso): ${String(e).slice(0, 200)}`));
     impresso.on("console", (m) => m.type() === "error" && erros.push(`console.error (impresso): ${m.text().slice(0, 200)}`));
-    await impresso.waitForLoadState("networkidle");
-    await impresso.waitForFunction((alvo) => document.body.innerText.includes(alvo), VALIDADE_NOVA_BR, {
-      timeout: 25000,
-    }).catch(() => {});
-    const textoImpresso = await impresso.locator("body").innerText();
+    const textoImpresso = await textoDoPdfDaTela(impresso);
     await impresso.close();
     afirmar("o impresso traz a validade nova", textoImpresso.includes(VALIDADE_NOVA_BR));
     afirmar("o impresso não traz a validade anterior", !textoImpresso.includes(VALIDADE_SALVA_BR));

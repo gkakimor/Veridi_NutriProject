@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type {
   IndustrialCostCalculationSnapshotDTO,
@@ -23,11 +24,23 @@ import { PricingPrintPage } from "./PricingPrintPage";
  * Os números são os da prova do motor (`cost-basis-scale.test.ts`): base 300
  * custa R$ 201,00 e equivale a R$ 670,00 por 1.000, enquanto calcular 1.000
  * de verdade daria R$ 767,00.
+ *
+ * Os três saem em PDF (`@react-pdf/renderer`): a página monta o documento
+ * sobre a mesma carga de antes e o teste o lê como DOM pelo mock do renderer
+ * — o arquivo real é provado em `pdf/documents/cost-documents.test.tsx` e
+ * `pdf/documents/cost-structure-documents.test.tsx`.
  */
 
 vi.mock("../../lib/product-cmv-api", () => ({ getProductCmv: vi.fn() }));
 vi.mock("../../lib/cost-calculation-api", () => ({ getIndustrialCostCalculation: vi.fn() }));
 vi.mock("../../lib/pricing-api", () => ({ getPricingVersion: vi.fn() }));
+
+// Documento PDF lido como DOM: as primitivas do renderer viram div/span.
+vi.mock("@react-pdf/renderer", async () => ({ ...(await import("../../pdf/testing/react-pdf-dom")) }));
+
+// A página manda gerar o arquivo; o teste captura o documento que ela montou.
+const { renderPdfBlob } = vi.hoisted(() => ({ renderPdfBlob: vi.fn() }));
+vi.mock("../../pdf/render", () => ({ renderPdfBlob, downloadPdf: vi.fn() }));
 
 import { getProductCmv } from "../../lib/product-cmv-api";
 import { getIndustrialCostCalculation } from "../../lib/cost-calculation-api";
@@ -196,12 +209,27 @@ function precificacao(): PricingVersionDTO {
   } as unknown as PricingVersionDTO;
 }
 
-/** A linha da tabela impressa cujo rótulo bate — para conferir o valor ao lado. */
-function linhaDe(rotulo: RegExp): HTMLElement {
-  return screen.getByText(rotulo).closest("tr") as HTMLElement;
+/** O arquivo "sai" sem motor de PDF: a tela recebe um blob e mostra o nome. */
+function prepararPdf() {
+  renderPdfBlob.mockReset().mockResolvedValue(new Blob(["%PDF-1.3"], { type: "application/pdf" }));
+  URL.createObjectURL = vi.fn(() => "blob:veridi/pdf-1");
+  URL.revokeObjectURL = vi.fn();
+}
+
+/** O documento que a página montou e mandou gerar. */
+async function documentoGerado(): Promise<ReactElement> {
+  await waitFor(() => expect(renderPdfBlob).toHaveBeenCalledTimes(1));
+  return renderPdfBlob.mock.calls[0]![0] as ReactElement;
+}
+
+/** A linha da tabela do PDF cujo rótulo bate — para conferir o valor ao lado. */
+function linhaDoPdf(rotulo: RegExp): HTMLElement {
+  return screen.getByText(rotulo).closest('[data-pdf-role="row"]') as HTMLElement;
 }
 
 describe("CMV impresso — a base viaja com o total", () => {
+  beforeEach(prepararPdf);
+
   it("imprime quantidade calculada, total daquela quantidade, unitário e equivalência", async () => {
     vi.mocked(getProductCmv).mockResolvedValue(cmvDe300());
     render(
@@ -212,12 +240,17 @@ describe("CMV impresso — a base viaja com o total", () => {
       </MemoryRouter>,
     );
 
-    const quantidade = (await screen.findByText("Quantidade calculada")).closest("tr")!;
-    expect(quantidade.textContent).toContain("300 un");
-    expect(within(linhaDe(/CMV total para 300 un/i)).getByText(/201,00/)).toBeTruthy();
-    expect(within(linhaDe(/^CMV por unidade$/)).getByText(/0,67/)).toBeTruthy();
+    // A página gera o PDF sobre a mesma carga de antes; o arquivo leva
+    // produto, quantidade e data de referência.
+    render(await documentoGerado());
+    expect(getProductCmv).toHaveBeenCalledWith("prod-1", { quantity: "300", referenceDate: "2026-09-09" });
+    expect(await screen.findByTitle("Documento CMV-PROD-000003-300-un-2026-09-09.pdf")).toBeInTheDocument();
 
-    const equivalencia = linhaDe(new RegExp(COST_PER_1000_LABEL, "i"));
+    expect(linhaDoPdf(/^Quantidade calculada$/).textContent).toContain("300 un");
+    expect(within(linhaDoPdf(/CMV total para 300 un/i)).getByText(/201,00/)).toBeTruthy();
+    expect(within(linhaDoPdf(/^CMV por unidade$/)).getByText(/0,67/)).toBeTruthy();
+
+    const equivalencia = linhaDoPdf(new RegExp(COST_PER_1000_LABEL, "i"));
     expect(within(equivalencia).getByText(/670,00/)).toBeTruthy();
     // Sem ⓘ no papel, a ressalva vai impressa.
     expect(within(equivalencia).getByText(RESSALVA)).toBeTruthy();
@@ -226,6 +259,8 @@ describe("CMV impresso — a base viaja com o total", () => {
 });
 
 describe("Cálculo de custo impresso — a base viaja com o total", () => {
+  beforeEach(prepararPdf);
+
   it("imprime quantidade calculada, total daquela quantidade, unitário e equivalência", async () => {
     vi.mocked(getIndustrialCostCalculation).mockResolvedValue(calculoDe300());
     render(
@@ -236,14 +271,19 @@ describe("Cálculo de custo impresso — a base viaja com o total", () => {
       </MemoryRouter>,
     );
 
+    // A página gera o PDF sobre a mesma carga de antes; o arquivo leva o código do cálculo.
+    render(await documentoGerado());
+    expect(getIndustrialCostCalculation).toHaveBeenCalledWith("calc-1");
+    expect(await screen.findByTitle("Documento CALC-000001.pdf")).toBeInTheDocument();
+
     await screen.findByText(/Custo industrial total para 300 un/i);
-    expect(within(linhaDe(/Custo industrial total para 300 un/i)).getByText(/201,00/)).toBeTruthy();
-    expect(within(linhaDe(/^Custo por unidade$/)).getByText(/0,67/)).toBeTruthy();
+    expect(within(linhaDoPdf(/Custo industrial total para 300 un/i)).getByText(/201,00/)).toBeTruthy();
+    expect(within(linhaDoPdf(/^Custo por unidade$/)).getByText(/0,67/)).toBeTruthy();
     // A base aparece duas vezes de propósito: no cabeçalho do documento e na
     // linha do total. Quem lê o resumo financeiro não volta ao cabeçalho.
     expect(screen.getAllByText("Quantidade calculada").length).toBeGreaterThanOrEqual(2);
 
-    const equivalencia = linhaDe(new RegExp(COST_PER_1000_LABEL, "i"));
+    const equivalencia = linhaDoPdf(new RegExp(COST_PER_1000_LABEL, "i"));
     expect(within(equivalencia).getByText(/670,00/)).toBeTruthy();
     expect(within(equivalencia).getByText(RESSALVA)).toBeTruthy();
     expect(screen.queryByText("Custo por 1.000 unidades")).toBeNull();
@@ -251,6 +291,8 @@ describe("Cálculo de custo impresso — a base viaja com o total", () => {
 });
 
 describe("Precificação impressa — cada faixa é da sua quantidade", () => {
+  beforeEach(prepararPdf);
+
   it("nomeia a coluna como equivalência e imprime a ressalva sob a tabela", async () => {
     vi.mocked(getPricingVersion).mockResolvedValue(precificacao());
     render(
@@ -261,21 +303,30 @@ describe("Precificação impressa — cada faixa é da sua quantidade", () => {
       </MemoryRouter>,
     );
 
+    // A página gera o PDF sobre a mesma carga de antes; o arquivo leva código e versão.
+    render(await documentoGerado());
+    expect(getPricingVersion).toHaveBeenCalledWith("prc-1");
+    expect(await screen.findByTitle("Documento PRC-000001-V1.pdf")).toBeInTheDocument();
+
+    // É cabeçalho de coluna — no PDF, a faixa de cabeçalho da tabela.
     const cabecalho = await screen.findByText(COST_PER_1000_LABEL);
-    expect(cabecalho.tagName).toBe("TH");
+    const faixaDeCabecalho = cabecalho.closest('[data-pdf-role="header-row"]') as HTMLElement;
+    expect(faixaDeCabecalho).not.toBeNull();
     expect(screen.getByText("Custo total da faixa")).toBeTruthy();
     expect(screen.queryByText("Custo/1.000")).toBeNull();
-    expect(screen.getByText(RESSALVA)).toBeTruthy();
+    const ressalva = screen.getByText(RESSALVA);
 
     // A prova de que as duas coisas são diferentes está na própria tabela:
     // o equivalente por 1.000 da faixa de 300 é R$ 670,00, e o custo real
     // da faixa de 1.000 é R$ 767,00.
-    const tabelaDeCusto = cabecalho.closest("table") as HTMLElement;
-    const linhas = within(tabelaDeCusto).getAllByRole("row");
+    const tabelaDeCusto = faixaDeCabecalho.parentElement as HTMLElement;
+    const linhas = Array.from(tabelaDeCusto.querySelectorAll<HTMLElement>('[data-pdf-role="row"]'));
     // Quantidade não agrupa milhar nesta base: 1000 un, não 1.000 un.
     const faixa300 = linhas.find((linha) => linha.textContent?.startsWith("300 un"))!;
     const faixa1000 = linhas.find((linha) => linha.textContent?.startsWith("1000 un"))!;
     expect(faixa300.textContent).toContain("670,00");
     expect(faixa1000.textContent).toContain("767,00");
+    // A ressalva vem SOB a tabela de custo, não perdida em outra seção.
+    expect(tabelaDeCusto.compareDocumentPosition(ressalva) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

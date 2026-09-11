@@ -1,4 +1,5 @@
 import { abrirNavegador, WEB } from "./lib/browser.mjs";
+import { textoDoPdfDaTela } from "./lib/pdf.mjs";
 import { obterRun } from "./lib/run-id.mjs";
 
 /**
@@ -304,8 +305,9 @@ try {
   console.log("\n== impresso");
   const urlDoFaturamento = pagina.url();
   await pagina.goto(`${urlDoFaturamento}/imprimir`, { waitUntil: "networkidle" });
-  await pagina.waitForTimeout(900);
-  const impresso = await textoDaPagina();
+  // O impresso é o PDF da tela do documento: a suíte lê o próprio arquivo,
+  // com o mesmo espaço normalizado de `textoDaPagina`.
+  const impresso = (await textoDoPdfDaTela(pagina)).replace(/\s+/g, " ");
   afirmar("o impresso traz o subtotal bruto", impresso.includes(ESPERADO.bruto));
   afirmar("o impresso traz o desconto comercial", impresso.includes(ESPERADO.desconto));
   afirmar("o impresso fecha no total acordado", impresso.includes(ESPERADO.total));

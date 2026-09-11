@@ -227,7 +227,7 @@ export const producaoTopics = {
       "Embalagem não é pesada por parte: ela segue no Picking/Consumo, com a quantidade total da ordem.",
       "O lote pesado precisa ser um dos lotes que a ordem reservou para aquele material, dentro da validade, liberado pela qualidade e do dono certo — material de um cliente nunca abastece a ordem de outro.",
       "Ordem encerrada ou cancelada transforma a folha em documento de consulta: não se pesa nem se conclui parte numa produção que já terminou.",
-      "A coluna Proprietário das pesagens diz de quem era o lote pesado — Veridi ou cliente. “Imprimir Folha de Receita” e o atalho “Ver Consumo Real da OP” são leituras: nenhum dos dois altera a folha.",
+      "A coluna Proprietário das pesagens diz de quem era o lote pesado — Veridi ou cliente. “Folha de Receita (PDF)” e o atalho “Ver Consumo Real da OP” são leituras: nenhum dos dois altera a folha.",
     ],
   },
 

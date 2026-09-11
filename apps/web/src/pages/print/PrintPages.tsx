@@ -1,6 +1,4 @@
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import type {
   BillingDTO,
   CustomerOrderDTO,
@@ -24,90 +22,30 @@ import { getQuoteVersion } from "../../lib/projects-api";
 import { getShipment } from "../../lib/shipments-api";
 import { getBilling } from "../../lib/billings-api";
 import { getLot, getLotTraceability } from "../../lib/lots-api";
-import {
-  BillingPrintDocument,
-  CustomerOrderPrintDocument,
-  LotTraceabilityPrintDocument,
-  ProductionOrderPrintDocument,
-  QuotePrintDocument,
-  RecipeSheetPrintDocument,
-  PurchaseOrderPrintDocument,
-  ReceiptPrintDocument,
-  ShipmentPrintDocument,
-} from "../../print/documents";
-import { PrintActions } from "../../print/PrintLayout";
+import { PdfScreen } from "../../pdf/PdfScreen";
 
 /**
- * Páginas de impressão dos documentos transacionais.
+ * Documentos transacionais em PDF.
  *
- * Rodam FORA do `AppShell` (mesmo padrão da etiqueta de lote): sem topbar,
- * sidebar ou formulário — só o documento read-only. O PDF é gerado pelo
- * próprio navegador via `window.print()`; não existe motor de PDF no
- * backend.
+ * Rodam FORA do `AppShell` (mesmo padrão da etiqueta de lote): a tela carrega
+ * o dado pela API autenticada, gera o PDF no navegador e mostra o próprio
+ * arquivo. Cada documento entra por `import()` dentro de `build` — o motor de
+ * PDF só chega ao navegador de quem gera um documento. Orientação da folha
+ * (a Folha de Receita é paisagem) é decisão do documento, não da tela.
  */
-function PrintScreen<T>({
-  load,
-  render,
-  backTo,
-  landscape,
-}: {
-  load: () => Promise<T>;
-  render: (data: T) => ReactNode;
-  /** Função quando o destino só é conhecido depois de carregar o documento. */
-  backTo: string | ((data: T) => string);
-  /** Paisagem só onde a largura realmente exige (ver print.css). */
-  landscape?: boolean;
-}) {
-  const navigate = useNavigate();
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    load()
-      .then(setData)
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Falha ao carregar o documento"),
-      );
-    // A carga depende só do id da rota, resolvido pelo `load` do chamador.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (error) {
-    return (
-      <div className="print-doc">
-        <p className="form-alert" role="alert">Não foi possível carregar o documento: {error}</p>
-      </div>
-    );
-  }
-  if (!data) return <div className="print-doc">Carregando…</div>;
-
-  const actions = (
-    <PrintActions onBack={() => navigate(typeof backTo === "function" ? backTo(data) : backTo)} />
-  );
-
-  if (landscape) {
-    return (
-      <div className="print-screen print-screen--landscape">
-        {render(data)}
-        {actions}
-      </div>
-    );
-  }
-
-  return (
-    <>
-      {render(data)}
-      {actions}
-    </>
-  );
-}
 
 export function CustomerOrderPrintPage() {
   const { id } = useParams<{ id: string }>();
   return (
-    <PrintScreen<CustomerOrderDTO>
+    <PdfScreen<CustomerOrderDTO>
       load={() => getCustomerOrder(id!)}
-      render={(order) => <CustomerOrderPrintDocument order={order} />}
+      build={async (order) => {
+        const { CustomerOrderPdf, customerOrderPdfFileName } = await import("../../pdf/documents/CustomerOrderPdf");
+        return {
+          document: <CustomerOrderPdf order={order} generatedAt={new Date()} />,
+          fileName: customerOrderPdfFileName(order),
+        };
+      }}
       backTo={`/comercial/pedidos/${id}`}
     />
   );
@@ -116,9 +54,15 @@ export function CustomerOrderPrintPage() {
 export function PurchaseOrderPrintPage() {
   const { id } = useParams<{ id: string }>();
   return (
-    <PrintScreen<PurchaseOrderDTO>
+    <PdfScreen<PurchaseOrderDTO>
       load={() => getPurchaseOrder(id!)}
-      render={(order) => <PurchaseOrderPrintDocument order={order} />}
+      build={async (order) => {
+        const { PurchaseOrderPdf, purchaseOrderPdfFileName } = await import("../../pdf/documents/PurchaseOrderPdf");
+        return {
+          document: <PurchaseOrderPdf order={order} generatedAt={new Date()} />,
+          fileName: purchaseOrderPdfFileName(order),
+        };
+      }}
       backTo={`/compras/ordens/${id}`}
     />
   );
@@ -127,9 +71,15 @@ export function PurchaseOrderPrintPage() {
 export function ReceiptPrintPage() {
   const { id } = useParams<{ id: string }>();
   return (
-    <PrintScreen<ReceiptDTO>
+    <PdfScreen<ReceiptDTO>
       load={() => getReceipt(id!)}
-      render={(receipt) => <ReceiptPrintDocument receipt={receipt} />}
+      build={async (receipt) => {
+        const { ReceiptPdf, receiptPdfFileName } = await import("../../pdf/documents/ReceiptPdf");
+        return {
+          document: <ReceiptPdf receipt={receipt} generatedAt={new Date()} />,
+          fileName: receiptPdfFileName(receipt),
+        };
+      }}
       backTo={`/compras/recebimentos/${id}`}
     />
   );
@@ -138,7 +88,7 @@ export function ReceiptPrintPage() {
 export function ProductionOrderPrintPage() {
   const { id } = useParams<{ id: string }>();
   return (
-    <PrintScreen<{ order: ProductionOrderDTO; cost: ProductionOrderMaterialCostDTO | null }>
+    <PdfScreen<{ order: ProductionOrderDTO; cost: ProductionOrderMaterialCostDTO | null }>
       load={async () => {
         const order = await getProductionOrder(id!);
         // Custo é complementar: se não estiver disponível, o documento
@@ -146,7 +96,15 @@ export function ProductionOrderPrintPage() {
         const cost = await getProductionOrderMaterialCost(id!).catch(() => null);
         return { order, cost };
       }}
-      render={({ order, cost }) => <ProductionOrderPrintDocument order={order} cost={cost} />}
+      build={async ({ order, cost }) => {
+        const { ProductionOrderPdf, productionOrderPdfFileName } = await import(
+          "../../pdf/documents/ProductionOrderPdf"
+        );
+        return {
+          document: <ProductionOrderPdf order={order} cost={cost} generatedAt={new Date()} />,
+          fileName: productionOrderPdfFileName(order),
+        };
+      }}
       backTo={`/producao/ordens/${id}`}
     />
   );
@@ -155,13 +113,16 @@ export function ProductionOrderPrintPage() {
 export function RecipeSheetPrintPage() {
   const { id } = useParams<{ id: string }>();
   return (
-    <PrintScreen<RecipeSheetDTO>
+    <PdfScreen<RecipeSheetDTO>
       load={() => getRecipeSheet(id!)}
-      render={(sheet) => <RecipeSheetPrintDocument sheet={sheet} />}
+      build={async (sheet) => {
+        const { RecipeSheetPdf, recipeSheetPdfFileName } = await import("../../pdf/documents/RecipeSheetPdf");
+        return {
+          document: <RecipeSheetPdf sheet={sheet} generatedAt={new Date()} />,
+          fileName: recipeSheetPdfFileName(sheet),
+        };
+      }}
       backTo={`/producao/ordens/${id}/receita`}
-      // 11 colunas de pesagem não cabem em retrato: a coluna "Observação",
-      // que é onde a operação escreve, ficava fora da folha.
-      landscape
     />
   );
 }
@@ -169,9 +130,15 @@ export function RecipeSheetPrintPage() {
 export function QuotePrintPage() {
   const { id } = useParams<{ id: string }>();
   return (
-    <PrintScreen<QuoteVersionDTO>
+    <PdfScreen<QuoteVersionDTO>
       load={() => getQuoteVersion(id!)}
-      render={(quote) => <QuotePrintDocument quote={quote} />}
+      build={async (quote) => {
+        const { QuotePdf, quotePdfFileName } = await import("../../pdf/documents/QuotePdf");
+        return {
+          document: <QuotePdf quote={quote} generatedAt={new Date()} />,
+          fileName: quotePdfFileName(quote),
+        };
+      }}
       // O id da rota é o da versão do orçamento; o projeto vem do documento.
       backTo={(quote) => `/comercial/projetos/${quote.projectId}`}
     />
@@ -181,9 +148,15 @@ export function QuotePrintPage() {
 export function ShipmentPrintPage() {
   const { id } = useParams<{ id: string }>();
   return (
-    <PrintScreen<ShipmentDTO>
+    <PdfScreen<ShipmentDTO>
       load={() => getShipment(id!)}
-      render={(shipment) => <ShipmentPrintDocument shipment={shipment} />}
+      build={async (shipment) => {
+        const { ShipmentPdf, shipmentPdfFileName } = await import("../../pdf/documents/ShipmentPdf");
+        return {
+          document: <ShipmentPdf shipment={shipment} generatedAt={new Date()} />,
+          fileName: shipmentPdfFileName(shipment),
+        };
+      }}
       backTo={`/comercial/expedicoes/${id}`}
     />
   );
@@ -192,9 +165,15 @@ export function ShipmentPrintPage() {
 export function BillingPrintPage() {
   const { id } = useParams<{ id: string }>();
   return (
-    <PrintScreen<BillingDTO>
+    <PdfScreen<BillingDTO>
       load={() => getBilling(id!)}
-      render={(billing) => <BillingPrintDocument billing={billing} />}
+      build={async (billing) => {
+        const { BillingPdf, billingPdfFileName } = await import("../../pdf/documents/BillingPdf");
+        return {
+          document: <BillingPdf billing={billing} generatedAt={new Date()} />,
+          fileName: billingPdfFileName(billing),
+        };
+      }}
       backTo={`/comercial/faturamento/${id}`}
     />
   );
@@ -203,14 +182,20 @@ export function BillingPrintPage() {
 export function LotTraceabilityPrintPage() {
   const { id } = useParams<{ id: string }>();
   return (
-    <PrintScreen<{ lot: LotDTO; traceability: LotTraceabilityDTO }>
+    <PdfScreen<{ lot: LotDTO; traceability: LotTraceabilityDTO }>
       load={async () => {
         const [lot, traceability] = await Promise.all([getLot(id!), getLotTraceability(id!)]);
         return { lot, traceability };
       }}
-      render={({ lot, traceability }) => (
-        <LotTraceabilityPrintDocument lot={lot} traceability={traceability} />
-      )}
+      build={async ({ lot, traceability }) => {
+        const { LotTraceabilityPdf, lotTraceabilityPdfFileName } = await import(
+          "../../pdf/documents/LotTraceabilityPdf"
+        );
+        return {
+          document: <LotTraceabilityPdf lot={lot} traceability={traceability} generatedAt={new Date()} />,
+          fileName: lotTraceabilityPdfFileName(lot),
+        };
+      }}
       backTo={`/estoque/lotes/${id}`}
     />
   );
