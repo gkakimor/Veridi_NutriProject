@@ -3,6 +3,7 @@ import { ProductNotOperationalError } from "../../lib/product-lifecycle.js";
 import { requireCurrentUser } from "../../lib/current-user.js";
 import type { ZodError } from "zod";
 import {
+  applyProductionProfileToOrder,
   cancelProductionOrder,
   createProductionOrder,
   getProductionOrderById,
@@ -18,6 +19,7 @@ import {
   InactiveProductError,
   InvalidTransitionError,
   MissingFinishedItemError,
+  NoDefaultProductionProfileError,
   OrderLockedError,
   PlanValidationError,
   ProductNotFoundError,
@@ -69,6 +71,9 @@ function mapDomainError(
   if (error instanceof OrderLockedError) {
     return { status: 400, body: { error: "order_locked", message: error.message } };
   }
+  if (error instanceof NoDefaultProductionProfileError) {
+    return { status: 400, body: { error: "no_production_profile", message: error.message } };
+  }
   if (error instanceof PlanValidationError) {
     return { status: 400, body: { error: "plan_validation_failed", message: error.message } };
   }
@@ -93,7 +98,8 @@ function mapDomainError(
 
 /**
  * `GET /production-orders`, `GET /production-orders/:id`, `POST /production-orders`,
- * `PATCH /production-orders/:id`, `POST /production-orders/:id/plan`,
+ * `PATCH /production-orders/:id`, `POST /production-orders/:id/production-profile`,
+ * `POST /production-orders/:id/plan`,
  * `POST /production-orders/:id/release`, `POST /production-orders/:id/cancel`.
  *
  * Sem PATCH de status livre — so as transicoes DRAFT->PLANNED (via /plan),
@@ -148,7 +154,24 @@ export const productionOrdersRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const order = await updateProductionOrder(id, parsed.data);
+      const order = await updateProductionOrder(id, parsed.data, requireCurrentUser(request));
+      return reply.send(order);
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  /*
+   * Aplicar/atualizar o Perfil de Producao da OP — a MESMA operacao nos dois
+   * casos: substituir a copia inteira pelo padrao atual do Produto. So em
+   * DRAFT; fora dele o service recusa.
+   */
+  app.post("/production-orders/:id/production-profile", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const order = await applyProductionProfileToOrder(id, requireCurrentUser(request));
       return reply.send(order);
     } catch (error) {
       const mapped = mapDomainError(error);

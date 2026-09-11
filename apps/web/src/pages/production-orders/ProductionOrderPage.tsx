@@ -53,6 +53,7 @@ import {
   apiErrorMessage,
 } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
+import { ProductionPlanningSection } from "./ProductionPlanningSection";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import { formatUnitCost } from "../../components/CostBreakdown";
@@ -1098,6 +1099,14 @@ export function ProductionOrderPage() {
             </div>
           </div>
         </FormSection>
+
+        {productionOrder && (
+          <ProductionPlanningSection
+            order={productionOrder}
+            quantityDraft={plannedQuantity}
+            onApplied={setProductionOrder}
+          />
+        )}
 
         {productionOrder && (
           <FormSection

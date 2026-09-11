@@ -77,6 +77,7 @@ vi.mock("../../lib/cost-calculation-api", () => ({
 
 import { getProductionOrder } from "../../lib/production-orders-api";
 import { ProductionOrderPage } from "./ProductionOrderPage";
+import { PLANEJAMENTO_VAZIO } from "./planejamento-vazio";
 
 /** A Cafeína exatamente como a auditoria a encontrou depois da liberação. */
 function cafeina(): ProductionOrderRequirementDTO {
@@ -131,6 +132,7 @@ function ordemLiberada(): ProductionOrderDTO {
     plannedQuantity: "1000",
     outputUnitCode: "un",
     productionFactor: "1",
+    planning: PLANEJAMENTO_VAZIO,
     status: "RELEASED",
     origin: "MANUAL",
     materialsStatus: "MATERIALS_AVAILABLE",

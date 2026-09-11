@@ -76,6 +76,7 @@ import {
   getProductionOrder,
 } from "../../lib/production-orders-api";
 import { ProductionOrderPage } from "./ProductionOrderPage";
+import { PLANEJAMENTO_VAZIO } from "./planejamento-vazio";
 
 const getProductionOrderMock = vi.mocked(getProductionOrder);
 const completeProductionOrderMock = vi.mocked(completeProductionOrder);
@@ -138,6 +139,7 @@ function ordem(requirements: ProductionOrderRequirementDTO[]): ProductionOrderDT
     plannedQuantity: "10",
     outputUnitCode: "un",
     productionFactor: "1",
+    planning: PLANEJAMENTO_VAZIO,
     status: "IN_PRODUCTION",
     origin: "MANUAL",
     materialsStatus: "MATERIALS_AVAILABLE",

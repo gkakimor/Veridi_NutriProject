@@ -12,6 +12,7 @@ import type {
   Product,
   ProductionConsumption,
   ProductionOrder,
+  ProductionOrderPlanningSnapshot,
   ProductionOrderRequirement,
   ProductionOutput,
 } from "@prisma/client";
@@ -48,6 +49,8 @@ import { suggestBusinessLotNumber } from "../../lib/business-lot.js";
 import { toControlledDocumentRevisionDTO } from "../controlled-documents/controlled-documents.service.js";
 import { getActiveRevision } from "../controlled-documents/controlled-documents.service.js";
 import { computeFormulationRequirements } from "./requirement-calc.js";
+import { toPlanningDTO, writePlanningSnapshot } from "./planning-snapshot.js";
+import type { ProductDefaultProfileVersion } from "./planning-snapshot.js";
 import {
   CustomerMismatchError,
   FormulationVersionNotFoundError,
@@ -55,6 +58,7 @@ import {
   InactiveProductError,
   InvalidTransitionError,
   MissingFinishedItemError,
+  NoDefaultProductionProfileError,
   OrderLockedError,
   PlanValidationError,
   ProductNotFoundError,
@@ -71,7 +75,11 @@ import type {
 const SYSTEM_ACTOR = "Ambiente local";
 const CODE_SEQUENCE = "production_order_code_seq";
 
-type ProductWithRelations = Product & { customer: Customer | null; finishedProductItem: Item | null };
+type ProductWithRelations = Product & {
+  customer: Customer | null;
+  finishedProductItem: Item | null;
+  defaultProductionProfileVersion: ProductDefaultProfileVersion;
+};
 type RequirementWithItem = ProductionOrderRequirement & { item: Item };
 type ReservationLineWithRelations = MaterialReservationLine & { item: Item; lot: Lot | null };
 type ReservationWithLines = MaterialReservation & { lines: ReservationLineWithRelations[] };
@@ -81,6 +89,7 @@ type POWithRelations = ProductionOrder & {
   customer: Customer | null;
   productionOrderRevision: ControlledDocumentRevision | null;
   recipeSheetRevision: ControlledDocumentRevision | null;
+  planningSnapshot: ProductionOrderPlanningSnapshot | null;
   product: ProductWithRelations;
   formulationVersion: FormulationVersion | null;
   requirements: RequirementWithItem[];
@@ -95,7 +104,16 @@ const productionOrderInclude = {
   customer: true,
   productionOrderRevision: true,
   recipeSheetRevision: true,
-  product: { include: { customer: true, finishedProductItem: true } },
+  // Planejamento previsto: a cópia congelada do Perfil e o padrão que o
+  // Produto aponta HOJE (só para oferecer Aplicar/Atualizar em rascunho).
+  planningSnapshot: true,
+  product: {
+    include: {
+      customer: true,
+      finishedProductItem: true,
+      defaultProductionProfileVersion: { include: { productionProfile: true } },
+    },
+  },
   formulationVersion: true,
   requirements: { include: { item: true }, orderBy: { position: "asc" as const } },
   reservation: { include: { lines: { include: { item: true, lot: true } } } },
@@ -261,7 +279,11 @@ async function requireOrder(id: string): Promise<POWithRelations> {
 async function assertActiveProductWithFinishedItem(id: string): Promise<ProductWithRelations> {
   const product = await getPrisma().product.findUnique({
     where: { id },
-    include: { customer: true, finishedProductItem: true },
+    include: {
+      customer: true,
+      finishedProductItem: true,
+      defaultProductionProfileVersion: { include: { productionProfile: true } },
+    },
   });
   if (!product) throw new ProductNotFoundError(id);
   if (!product.active) throw new InactiveProductError(id);
@@ -647,6 +669,7 @@ async function toProductionOrderDTO(order: POWithRelations): Promise<ProductionO
       productBusinessLotCode: order.product.businessLotCode,
       customerBusinessLotSuffix: orderCustomer ? (order.customer?.businessLotSuffix ?? order.product.customer?.businessLotSuffix ?? null) : null,
     }),
+    planning: toPlanningDTO(order),
     productionOrderRevision: order.productionOrderRevision
       ? toControlledDocumentRevisionDTO(order.productionOrderRevision)
       : null,
@@ -757,6 +780,13 @@ export async function createProductionOrder(
     });
 
     await regenerateRequirements(tx, created.id, formulationVersion?.id ?? null, plannedQuantity);
+    /*
+     * Planejamento previsto: a OP copia o Perfil de Produção padrão do
+     * Produto NESTE instante. Se o padrão for a V2, é a V2 que a ordem leva —
+     * ativar a V3 depois não a alcança. Produto sem perfil segue válido, só
+     * fica sem cópia.
+     */
+    await writePlanningSnapshot(tx, created.id, product.id, actor?.name ?? SYSTEM_ACTOR);
     return created.id;
   });
 
@@ -802,12 +832,16 @@ export async function createDraftProductionOrderInTx(
     },
   });
   await regenerateRequirements(tx, created.id, params.formulationVersionId, params.plannedQuantity);
+  // Mesma regra da criação manual: a OP do Plano de Atendimento também nasce
+  // com a cópia do Perfil padrão do Produto.
+  await writePlanningSnapshot(tx, created.id, params.productId, params.createdBy ?? SYSTEM_ACTOR);
   return created.id;
 }
 
 export async function updateProductionOrder(
   id: string,
   input: UpdateProductionOrderInput,
+  actor?: { id: string; name: string },
 ): Promise<ProductionOrderDTO> {
   const current = await requireOrder(id);
 
@@ -886,6 +920,58 @@ export async function updateProductionOrder(
     if (regenerate) {
       await regenerateRequirements(tx, id, formulationVersion?.id ?? null, plannedQuantity);
     }
+
+    /*
+     * Trocar de produto troca o roteiro: a cópia é substituída, na mesma
+     * transação, pelo Perfil padrão do produto NOVO. Sem perfil padrão, a OP
+     * fica sem cópia — nunca com o roteiro do produto anterior.
+     *
+     * Mudar só a QUANTIDADE não passa por aqui de propósito: o perfil
+     * congelado continua o mesmo, e o que se refaz é a projeção, calculada na
+     * leitura.
+     */
+    if (productChanging) {
+      await writePlanningSnapshot(tx, id, effectiveProduct.id, actor?.name ?? SYSTEM_ACTOR);
+    }
+  });
+
+  return (await getProductionOrderById(id))!;
+}
+
+/**
+ * Aplica (ou atualiza) o Perfil de Produção padrão do Produto na OP — a ação
+ * manual de PLANNING-OP-SNAPSHOT-01 §12/§13.
+ *
+ * Serve à OP legada, que nasceu antes desta migration, e à que foi criada
+ * quando o Produto ainda não tinha perfil; e serve para trocar uma cópia
+ * antiga pela versão que o Produto aponta hoje. Nos dois casos é a MESMA
+ * operação: substituir a cópia inteira pelo padrão atual, por valor.
+ *
+ * SÓ EM RASCUNHO. Depois que a OP sai de DRAFT a cópia é imutável, mesmo
+ * existindo versão mais nova do perfil.
+ */
+export async function applyProductionProfileToOrder(
+  id: string,
+  actor?: { id: string; name: string },
+): Promise<ProductionOrderDTO> {
+  const current = await requireOrder(id);
+
+  if (current.status !== "DRAFT") {
+    throw new OrderLockedError(
+      "Depois de planejada, a ordem de produção não recebe outro perfil de produção.",
+    );
+  }
+
+  await getPrisma().$transaction(async (tx) => {
+    const aplicado = await writePlanningSnapshot(
+      tx,
+      id,
+      current.productId,
+      actor?.name ?? SYSTEM_ACTOR,
+    );
+    // Nada a copiar: recusa explícita, e a cópia que existia continua no
+    // lugar — a transação inteira volta atrás.
+    if (!aplicado) throw new NoDefaultProductionProfileError(current.product.code);
   });
 
   return (await getProductionOrderById(id))!;

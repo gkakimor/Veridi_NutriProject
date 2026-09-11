@@ -4,6 +4,7 @@ import type { ItemType } from "./items.js";
 import type { LotStatus } from "./lots.js";
 import type { InventoryOwnerType, SupplyResponsibility } from "./ownership.js";
 import type { ControlledDocumentRevisionDTO } from "./controlled-documents.js";
+import type { ProductionPlan, ProductionProfileSnapshot } from "./production-profiles.js";
 
 export const PRODUCTION_ORDER_CODE_PREFIX = "OP";
 
@@ -234,6 +235,42 @@ export interface MaterialReservationDTO {
   lines: MaterialReservationLineDTO[];
 }
 
+/** Perfil de Produção padrão do Produto HOJE — base de "Aplicar"/"Atualizar". */
+export interface ProductionOrderAvailableProfileDTO {
+  versionId: string;
+  profileId: string;
+  profileCode: string;
+  profileName: string;
+  versionNumber: number;
+}
+
+/**
+ * PLANEJAMENTO PREVISTO da OP — PLANNING-OP-SNAPSHOT-01, `PRODUCT_RULES.md` §89.
+ *
+ * `snapshot` é a CÓPIA congelada do Perfil de Produção, tirada na criação da
+ * OP. Não é vínculo vivo: ativar uma versão nova do perfil depois nunca muda
+ * uma OP que já recebeu a cópia, nem mesmo em rascunho.
+ *
+ * `plan` é derivado, nunca gravado: a mesma cópia projetada para a
+ * `plannedQuantity` atual. Mudar a quantidade em rascunho refaz a projeção e
+ * não recopia o perfil.
+ *
+ * OP sem perfil (produto sem padrão, ou OP anterior à migration) é situação
+ * legítima: `snapshot` nulo não bloqueia criação nem liberação.
+ */
+export interface ProductionOrderPlanningDTO {
+  snapshot: ProductionProfileSnapshot | null;
+  plan: ProductionPlan | null;
+  appliedAt: string | null;
+  appliedBy: string | null;
+  /** `null` fora de DRAFT: o que já saiu de rascunho não recebe perfil novo. */
+  availableProfile: ProductionOrderAvailableProfileDTO | null;
+  /** DRAFT, sem cópia, e o Produto tem perfil padrão ativo. */
+  canApply: boolean;
+  /** DRAFT, com cópia de uma versão diferente da que o Produto aponta hoje. */
+  canUpdate: boolean;
+}
+
 export interface ProductionOrderDTO {
   id: string;
   code: string;
@@ -288,6 +325,8 @@ export interface ProductionOrderDTO {
   shelfLifeMonths: number | null;
   /** Sugestão de lote comercial a partir da máscara configurada; `null` sem configuração. */
   suggestedBusinessLotNumber: string | null;
+  /** Cópia congelada do Perfil de Produção + projeção para a quantidade atual. */
+  planning: ProductionOrderPlanningDTO;
   /** Revisões dos documentos controlados congeladas nesta OP. */
   productionOrderRevision: ControlledDocumentRevisionDTO | null;
   recipeSheetRevision: ControlledDocumentRevisionDTO | null;

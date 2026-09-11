@@ -61,6 +61,18 @@ export async function updateProductionOrder(
   return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
 }
 
+/**
+ * Aplica o Perfil de Produção padrão do Produto na OP — cópia por valor.
+ * A mesma chamada atende "Aplicar" (OP sem perfil) e "Atualizar" (cópia
+ * antiga); só rascunho, e o servidor recusa fora dele.
+ */
+export async function applyProductionProfile(id: string): Promise<ProductionOrderDTO> {
+  const response = await apiFetch(`${API_URL}/production-orders/${id}/production-profile`, {
+    method: "POST",
+  });
+  return (await parseJsonOrThrow(response)) as ProductionOrderDTO;
+}
+
 export async function planProductionOrder(id: string): Promise<ProductionOrderDTO> {
   const response = await apiFetch(`${API_URL}/production-orders/${id}/plan`, { method: "POST" });
   return (await parseJsonOrThrow(response)) as ProductionOrderDTO;

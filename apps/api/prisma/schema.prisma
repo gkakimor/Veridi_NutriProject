@@ -3095,6 +3095,10 @@ model ProductionOrder {
   outputs      ProductionOutput[]
   costSnapshot ProductionOrderCostSnapshot?
 
+  /// Copia congelada do Perfil de Producao — no maximo uma por OP. Ausente e
+  /// situacao legitima: produto sem perfil, ou OP anterior a esta migration.
+  planningSnapshot ProductionOrderPlanningSnapshot?
+
   /// Lotes de produto acabado gerados por esta OP (origin=PRODUCTION).
   finishedLots Lot[]
 
@@ -4517,4 +4521,50 @@ model ProductionProfileStepResource {
   @@unique([productionProfileStepId, industrialResourceId], map: "production_profile_step_resources_step_resource_key")
   @@index([industrialResourceId], map: "production_profile_step_resources_resourceId_idx")
   @@map("production_profile_step_resources")
+}
+
+/// PLANEJAMENTO PREVISTO da OP — a COPIA do Perfil de Producao tirada na
+/// criacao da Ordem (PLANNING-OP-SNAPSHOT-01, PRODUCT_RULES §89).
+///
+/// Copia por valor, nunca vinculo vivo: ativar V3 do perfil depois NAO muda
+/// uma OP que ja recebeu V2, mesmo em rascunho. Os ids de origem
+/// (`sourceProfileId`, `sourceVersionId`, e os de recurso dentro de `steps`)
+/// sao PROVENIENCIA para capacidade futura — nunca canal de leitura: por isso
+/// nao ha FK, e renomear ou desativar um recurso nao reescreve o historico.
+///
+/// A duracao NAO mora aqui: e derivada a cada leitura pelo motor canonico
+/// (`planProductionProfileSnapshot`) para a `plannedQuantity` do momento.
+/// Mudar a quantidade em rascunho refaz a projecao e nunca recopia o perfil.
+///
+/// Nada disto e custo: Estrutura de Custos, CMV e Precificacao seguem
+/// separados e intocados.
+model ProductionOrderPlanningSnapshot {
+  id String @id @default(uuid())
+
+  productionOrderId String          @unique
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+
+  sourceProfileId     String
+  sourceProfileCode   String
+  sourceProfileName   String
+  sourceVersionId     String
+  sourceVersionNumber Int
+
+  /// Quantidade-base a que os tempos de EXECUCAO da copia se referem.
+  referenceQuantity Decimal @db.Decimal(24, 12)
+  referenceUomCode  String
+
+  /// Etapas em ordem, com preparacao, execucao, modo de escala e recursos —
+  /// nome/codigo/tipo do recurso congelados junto. Formato:
+  /// `ProductionProfileSnapshot["steps"]` do `@veridi/shared`.
+  steps Json
+
+  appliedAt DateTime @default(now())
+  appliedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sourceVersionId])
+  @@map("production_order_planning_snapshots")
 }

@@ -82,6 +82,7 @@ vi.mock("../../lib/cost-calculation-api", () => ({
 
 import { getProductionOrder, recordConsumption } from "../../lib/production-orders-api";
 import { ProductionOrderPage } from "./ProductionOrderPage";
+import { PLANEJAMENTO_VAZIO } from "./planejamento-vazio";
 
 const getProductionOrderMock = vi.mocked(getProductionOrder);
 const recordConsumptionMock = vi.mocked(recordConsumption);
@@ -172,6 +173,7 @@ function ordem(quantidade: string): ProductionOrderDTO {
     plannedQuantity: "1000",
     outputUnitCode: "un",
     productionFactor: "1000",
+    planning: PLANEJAMENTO_VAZIO,
     status: "IN_PRODUCTION",
     origin: "MANUAL",
     materialsStatus: "MATERIALS_AVAILABLE",
