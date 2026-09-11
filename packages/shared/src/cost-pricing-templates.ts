@@ -22,6 +22,8 @@ import type {
   IndustrialResourceUsageBasis,
 } from "./industrial-resources.js";
 import type { PriceMode } from "./pricing.js";
+import type { CustomerTaxProfile } from "./customers.js";
+import type { PricingModelConfig, TaxProfileFit } from "./pricing-model.js";
 
 export const INDUSTRIAL_COST_TEMPLATE_CODE_PREFIX = "TEC";
 export const PRICING_POLICY_TEMPLATE_CODE_PREFIX = "TPP";
@@ -189,6 +191,10 @@ export interface PricingPolicyVersionDTO {
   status: TemplateVersionStatus;
   notes: string | null;
   tiers: PricingPolicyTierDTO[];
+  /** O que entra no custo que forma o preço — custo industrial, impostos, gestão externa (§84). */
+  pricingModel: PricingModelConfig;
+  /** Perfis tributários para os quais o Modelo é indicado. Vazio: todos. Sugestão, nunca trava. */
+  applicableTaxProfiles: CustomerTaxProfile[];
   createdAt: string;
   createdBy: string | null;
   activatedAt: string | null;
@@ -226,12 +232,21 @@ export interface PricingPolicySummaryDTO {
   tierCount: number;
   /** Quantidades das faixas, para reconhecer a política na lista. */
   tierQuantities: string[];
+  /** Perfis tributários da versão ativa. Vazio: todos. */
+  applicableTaxProfiles: CustomerTaxProfile[];
+  /**
+   * Compatibilidade com o perfil do cliente do produto — só quando a lista é
+   * pedida para um produto (`productId`). Sugestão: nenhuma política é escondida.
+   */
+  taxProfileFit: TaxProfileFit | null;
   hasDraft: boolean;
   updatedAt: string;
 }
 
 export interface PricingPolicyListResponse {
   policies: PricingPolicySummaryDTO[];
+  /** Perfil tributário do cliente do produto pedido; `null` sem produto ou sem cliente. */
+  customerTaxProfile: CustomerTaxProfile | null;
   page: number;
   pageSize: number;
   total: number;
@@ -253,6 +268,9 @@ export interface PricingPolicyTierInput {
 export interface UpdatePricingPolicyVersionInput {
   notes?: string | null;
   tiers?: PricingPolicyTierInput[];
+  /** Campo ausente não muda; `null` limpa um valor. Modo desligado não apaga valor nenhum. */
+  pricingModel?: Partial<PricingModelConfig>;
+  applicableTaxProfiles?: CustomerTaxProfile[];
 }
 
 export interface UpdateTemplateIdentityInput {
@@ -285,9 +303,14 @@ export interface PricingPolicyPreviewTierDTO {
   uomCode: string;
   targetContributionMarginPercent: string | null;
   commissionPercent: string;
-  /** `null` quando o custo daquela faixa é incompleto. */
+  /**
+   * Custo que FORMA o preço, por unidade — materiais mais o que o Modelo manda
+   * considerar (§84). `null` quando essa base está incompleta.
+   */
   costPerUnit: string | null;
   suggestedUnitPrice: string | null;
+  /** Impostos em % sobre o preço de venda no divisor; `null` quando o Modelo não os considera. */
+  estimatedTaxPercent: string | null;
   costQuality: string | null;
   /** Motivo de o preço não sair, quando não sai. */
   warning: string | null;
@@ -303,6 +326,10 @@ export interface PricingPolicyPreviewDTO {
   costReferenceDate: string;
   costQuality: string;
   tiers: PricingPolicyPreviewTierDTO[];
+  pricingModel: PricingModelConfig;
+  /** Perfil do cliente do produto; `null` quando o produto não tem cliente. */
+  customerTaxProfile: CustomerTaxProfile | null;
+  taxProfileFit: TaxProfileFit;
 }
 
 // ───────────────────────────────────────────────────── comparação e origem

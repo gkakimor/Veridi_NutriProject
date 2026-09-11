@@ -1,5 +1,11 @@
 import { z } from "zod";
+import {
+  PRICING_ESTIMATED_TAX_MODES,
+  PRICING_INDUSTRIAL_COST_MODES,
+  PRICING_MODEL_TAX_PROFILES,
+} from "@veridi/shared";
 import { optionalNullableText } from "../../lib/cnpj-schema.js";
+import { optionalDecimalStringSchema } from "../../lib/decimal-schema.js";
 
 const decimalString = z
   .union([z.string(), z.number()])
@@ -97,9 +103,49 @@ const policyTierSchema = z.object({
   notes: optionalNullableText(500),
 });
 
+export const listPricingPoliciesQuerySchema = listTemplatesQuerySchema.extend({
+  /** Produto que vai receber a política — só para dizer a compatibilidade tributária. */
+  productId: z.string().trim().min(1).optional(),
+});
+
+/**
+ * O Modelo de Precificação — `PRODUCT_RULES.md` §84.
+ *
+ * Tudo opcional: campo ausente não muda, `null` limpa um valor, chave
+ * desconhecida é recusada. Valor passa pela mesma fronteira decimal do resto
+ * (vírgula aceita, `NaN`, `Infinity`, sinal e texto recusados, casas acima da
+ * coluna recusadas). A coerência do CONJUNTO — modo × valor, faixa, divisor —
+ * é conferida no serviço, sobre o Modelo inteiro depois do merge.
+ */
+const pricingModelSchema = z
+  .object({
+    industrialCostMode: z.enum(PRICING_INDUSTRIAL_COST_MODES).optional(),
+    industrialCostPercentOfMaterials: optionalDecimalStringSchema({ maxDecimals: 4 }),
+    industrialCostAmountPerUnit: optionalDecimalStringSchema({ maxDecimals: 8 }),
+    industrialCostAmountTotal: optionalDecimalStringSchema({ maxDecimals: 4 }),
+    estimatedTaxMode: z.enum(PRICING_ESTIMATED_TAX_MODES).optional(),
+    estimatedTaxPercentOfSalePrice: optionalDecimalStringSchema({ maxDecimals: 4 }),
+    estimatedTaxAmountPerUnit: optionalDecimalStringSchema({ maxDecimals: 8 }),
+    estimatedTaxAmountTotal: optionalDecimalStringSchema({ maxDecimals: 4 }),
+    externalAdditionalCosts: z.boolean().optional(),
+  })
+  .strict();
+
 export const updatePricingPolicyVersionSchema = z.object({
   notes: optionalNullableText(1000),
   tiers: z.array(policyTierSchema).optional(),
+  pricingModel: pricingModelSchema.optional(),
+  /** Vazio: o Modelo vale para todos os perfis. "Não informado" não é regime. */
+  applicableTaxProfiles: z
+    .array(
+      z.enum(PRICING_MODEL_TAX_PROFILES, {
+        errorMap: () => ({
+          message: 'Perfil tributário inválido para o Modelo — "Não informado" não é regime.',
+        }),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 export const applyPricingPolicySchema = z.object({
@@ -118,6 +164,7 @@ export const createPolicyFromPricingSchema = z.object({
 });
 
 export type ListTemplatesQuery = z.infer<typeof listTemplatesQuerySchema>;
+export type ListPricingPoliciesQuery = z.infer<typeof listPricingPoliciesQuerySchema>;
 export type UpdateTemplateIdentityInput = z.infer<typeof updateTemplateIdentitySchema>;
 export type CreateCostTemplateInput = z.infer<typeof createCostTemplateSchema>;
 export type UpdateCostTemplateVersionInput = z.infer<typeof updateCostTemplateVersionSchema>;

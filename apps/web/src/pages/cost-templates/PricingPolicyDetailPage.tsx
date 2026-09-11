@@ -27,6 +27,13 @@ import { formatDateTime } from "../../lib/dates";
 import { apiErrorMessage } from "../../lib/api-errors";
 import { exigirDecimal, exigirDecimalOpcional } from "../../lib/decimal-field";
 import { useAuth } from "../../app/AuthProvider";
+import {
+  PricingModelEditor,
+  modeloDoRascunho,
+  rascunhoDoModelo,
+  type PricingModelDraft,
+} from "./PricingModelEditor";
+import { PricingModelSummary } from "./PricingModelSummary";
 
 /**
  * Detalhe de uma política de precificação.
@@ -54,6 +61,7 @@ export function PricingPolicyDetailPage() {
   const [descricao, setDescricao] = useState("");
   const [linhas, setLinhas] = useState<LinhaFaixa[]>([]);
   const [diff, setDiff] = useState<TemplateDiffDTO | null>(null);
+  const [modelo, setModelo] = useState<PricingModelDraft | null>(null);
 
   const load = useCallback(() => {
     if (!policyId) return;
@@ -63,6 +71,9 @@ export function PricingPolicyDetailPage() {
         setNome(result.name);
         setDescricao(result.description ?? "");
         const rascunho = result.draftVersion;
+        setModelo(
+          rascunho ? rascunhoDoModelo(rascunho.pricingModel, rascunho.applicableTaxProfiles) : null,
+        );
         if (rascunho) {
           setLinhas(
             rascunho.tiers.map((tier, index) => ({
@@ -228,6 +239,7 @@ export function PricingPolicyDetailPage() {
             subtitle="Versão ativa é histórica: para alterar, crie uma nova versão. A política define margem e comissão; o preço de cada faixa é calculado sobre o custo do produto no momento da aplicação."
           >
             {faixasDaVersao(ativa)}
+            <PricingModelSummary model={ativa.pricingModel} profiles={ativa.applicableTaxProfiles} />
             {ativa.usageCount > 0 && (
               <p className="field__hint">
                 {ativa.usageCount === 1
@@ -349,6 +361,13 @@ export function PricingPolicyDetailPage() {
               um custo específico — não vira regra reutilizável.
             </p>
 
+            {modelo && (
+              <>
+                <h3>Custos e impostos do Modelo</h3>
+                <PricingModelEditor draft={modelo} disabled={!editavel} onChange={setModelo} />
+              </>
+            )}
+
             {editavel && (
               <div className="line-actions">
                 <button
@@ -375,6 +394,14 @@ export function PricingPolicyDetailPage() {
                   onClick={() =>
                     void run(() =>
                       updatePricingPolicyVersion(rascunho.id, {
+                        // O Modelo inteiro vai junto, valores de modos
+                        // desligados inclusive — desligar não apaga.
+                        ...(modelo
+                          ? {
+                              pricingModel: modeloDoRascunho(modelo),
+                              applicableTaxProfiles: modelo.applicableTaxProfiles,
+                            }
+                          : {}),
                         tiers: linhas
                           .filter(
                             (linha) => linha.quantity && linha.targetContributionMarginPercent,

@@ -5199,3 +5199,53 @@ Valores: Não informado · MEI · Simples Nacional · Lucro Presumido · Lucro R
   default: todo cliente que já existia virou "Não informado", e importador ou
   API que não mandam o campo recebem o mesmo. PATCH sem o campo não mexe no
   perfil gravado; valor fora do enum é 400 de validação.
+
+## §84 — Modelo de Precificação: o que entra no custo que forma o preço
+
+PRICING-TEMPLATE-FLEX-01, 2026-09-11, sobre a decisão do PO de 2026-09-10. No
+código e na tela, o Modelo de Precificação é a **Política de Precificação**
+(`PricingPolicyTemplate`, TPP): a regra vive na versão da política e é
+**copiada** para a precificação do produto (`PricingVersion`) na aplicação —
+independente dela depois, como toda matriz de biblioteca.
+
+**O Modelo decide o que entra no custo que forma o preço. Margem e comissão
+continuam exatamente como antes.**
+
+- **Custo industrial:** Conforme a Estrutura de Custos (cálculo do ERP) · Não
+  considerar · % sobre custo de materiais · R$ por unidade · R$ total. O
+  primeiro é o comportamento de antes e o default do banco: todo Modelo e toda
+  precificação existentes produzem o MESMO preço. Percentual é sempre sobre o
+  custo de materiais da quantidade; R$ por unidade multiplica pela quantidade;
+  R$ total entra uma vez no cálculo da faixa.
+- **Impostos estimados:** Não considerar · % sobre preço de venda · R$ por
+  unidade · R$ total. O percentual NÃO é custo: entra no divisor,
+  `P = C ÷ (1 − margem − comissão − impostos)`, e sai de dentro do preço como a
+  comissão. R$ por unidade e R$ total somam ao custo. Contribuição = preço −
+  comissão − impostos sobre a venda − custo que forma o preço.
+- **"Não considerar" não é zero.** O modo é guardado explicitamente; R$ 0,00
+  informado é valor. Modo que lê um valor exige o valor — zero vale, ausência
+  não.
+- **Cada modo tem a SUA coluna, com a base no nome**
+  (`industrialCostPercentOfMaterials`, `estimatedTaxPercentOfSalePrice`…) —
+  nunca "10%" sem dizer de quê. Trocar de modo não apaga o valor do outro, e
+  ele volta a valer quando o modo volta.
+- **Custos adicionais administrados externamente:** ligado, custo industrial e
+  impostos do Modelo ficam fora da conta com os valores intactos; o custo de
+  materiais continua calculado, e margem e comissão continuam no preço. Não
+  mexe em preço manual de Orçamento e não é integração financeira.
+- **A qualidade é a da base que forma o preço.** No modo do cálculo, a do
+  cálculo; nos outros, a dos materiais — energia sem tarifa não bloqueia o
+  preço de um Modelo que não depende dela. Material sem custo continua
+  bloqueando em qualquer modo. O custo do cálculo (CMV) segue exibido e
+  congelado à parte (`costPerUnitSnapshot`); o custo que formou o preço congela
+  em `pricingCostPerUnitSnapshot`.
+- **Divisor ≤ 0 é recusado em português** ao salvar e ao ativar o Modelo, na
+  faixa criada à mão e na prévia — nunca preço infinito, negativo ou `NaN`.
+- **Perfis tributários aplicáveis (§83):** vazio = todos; com seleção, o Modelo
+  é indicado só para esses perfis. É SUGESTÃO: a lista para um produto diz
+  indicado · não indicado · perfil do cliente não informado, e nenhuma política
+  some ou é bloqueada. "Não informado" não é perfil de Modelo. O perfil nunca
+  calcula imposto.
+- **Uma conta só:** `computePricingModelEffect` e `computePrice`, em
+  `@veridi/shared`, servem a API, a prévia da política e a prévia da faixa; a
+  validação (`validarModeloDePrecificacao`) também — a tela avisa, a API decide.

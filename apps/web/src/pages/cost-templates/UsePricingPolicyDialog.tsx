@@ -1,7 +1,17 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useEffect, useMemo, useState } from "react";
-import type { PricingPolicyPreviewDTO, PricingPolicySummaryDTO } from "@veridi/shared";
-import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
+import type {
+  CustomerTaxProfile,
+  PricingPolicyPreviewDTO,
+  PricingPolicySummaryDTO,
+  TaxProfileFit,
+} from "@veridi/shared";
+import {
+  CUSTOMER_TAX_PROFILE_LABELS,
+  INDUSTRIAL_COST_QUALITY_LABELS,
+  TAX_PROFILE_FIT_LABELS,
+} from "@veridi/shared";
+import { PricingModelSummary } from "./PricingModelSummary";
 import { listPricingPolicies, previewPricingPolicy } from "../../lib/cost-pricing-templates-api";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { formatBRL, formatUnitPriceBRL } from "../../lib/currency";
@@ -17,6 +27,13 @@ import { formatDate } from "../../lib/dates";
  * política em dois produtos dá preços diferentes, e quem aplica precisa ver
  * o número antes, não depois. Nada é gravado até confirmar.
  */
+
+/** Sugestão pelo perfil tributário do cliente — §84. Nunca esconde nem trava. */
+function classeDaIndicacao(fit: TaxProfileFit): string {
+  if (fit === "COMPATIBLE") return "badge badge--active";
+  if (fit === "NOT_RECOMMENDED") return "badge badge--warn";
+  return "badge badge--neutral";
+}
 
 interface Props {
   productId: string;
@@ -43,6 +60,7 @@ export function UsePricingPolicyDialog({
   const [escolhida, setEscolhida] = useState<PricingPolicySummaryDTO | null>(null);
   const [preview, setPreview] = useState<PricingPolicyPreviewDTO | null>(null);
   const [carregandoPreview, setCarregandoPreview] = useState(false);
+  const [perfilDoCliente, setPerfilDoCliente] = useState<CustomerTaxProfile | null>(null);
 
   useEffect(() => {
     const handle = setTimeout(() => setTermo(busca), 300);
@@ -51,13 +69,20 @@ export function UsePricingPolicyDialog({
 
   useEffect(() => {
     setCarregando(true);
-    listPricingPolicies(termo ? { search: termo, pageSize: 30 } : { pageSize: 30 })
-      .then((result) => setPolicies(result.policies))
+    // Pedida PARA este produto: cada política diz se é indicada para o perfil
+    // tributário do cliente dele.
+    listPricingPolicies(
+      termo ? { search: termo, pageSize: 30, productId } : { pageSize: 30, productId },
+    )
+      .then((result) => {
+        setPolicies(result.policies);
+        setPerfilDoCliente(result.customerTaxProfile ?? null);
+      })
       .catch((err: unknown) =>
         setErro(err instanceof Error ? err.message : "Falha ao carregar a biblioteca"),
       )
       .finally(() => setCarregando(false));
-  }, [termo]);
+  }, [termo, productId]);
 
   // Só política revisada precifica um produto.
   const disponiveis = useMemo(
@@ -140,6 +165,12 @@ export function UsePricingPolicyDialog({
               />
             </div>
 
+            <p className="field__hint">
+              Perfil tributário do cliente:{" "}
+              {perfilDoCliente ? CUSTOMER_TAX_PROFILE_LABELS[perfilDoCliente] : "não informado"}. A
+              indicação é sugestão — qualquer política ativa pode ser usada.
+            </p>
+
             <div className="table-container">
               <table className="table">
                 <thead>
@@ -148,6 +179,7 @@ export function UsePricingPolicyDialog({
                     <th>Nome</th>
                     <th>Versão</th>
                     <th>Faixas</th>
+                    <th>Perfil tributário</th>
                     <th aria-hidden="true" />
                   </tr>
                 </thead>
@@ -161,6 +193,15 @@ export function UsePricingPolicyDialog({
                       <td>V{policy.activeVersionNumber}</td>
                       <td>{policy.tierQuantities.join(" / ")}</td>
                       <td>
+                        {policy.taxProfileFit ? (
+                          <span className={classeDaIndicacao(policy.taxProfileFit)}>
+                            {TAX_PROFILE_FIT_LABELS[policy.taxProfileFit]}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>
                         <button
                           type="button"
                           className="btn btn--secondary btn--sm"
@@ -173,7 +214,7 @@ export function UsePricingPolicyDialog({
                   ))}
                   {!carregando && disponiveis.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="table__empty">
+                      <td colSpan={6} className="table__empty">
                         {termo
                           ? "Nenhuma política ativa encontrada para esta busca."
                           : "A biblioteca ainda não tem nenhuma política ativa."}
@@ -202,7 +243,17 @@ export function UsePricingPolicyDialog({
                   preview.costQuality as keyof typeof INDUSTRIAL_COST_QUALITY_LABELS
                 ] ?? preview.costQuality}
               </dd>
+              <dt>Perfil tributário</dt>
+              <dd>
+                {TAX_PROFILE_FIT_LABELS[preview.taxProfileFit]}
+                {preview.customerTaxProfile
+                  ? ` (${CUSTOMER_TAX_PROFILE_LABELS[preview.customerTaxProfile]})`
+                  : ""}
+              </dd>
             </dl>
+
+            {/* O que entra no custo que forma o preço — §84. */}
+            <PricingModelSummary model={preview.pricingModel} />
 
             <div className="table-container">
               <table className="table">
@@ -257,17 +308,26 @@ export function UsePricingPolicyDialog({
                                   numero: Number(tier.costPerUnit),
                                 },
                                 {
-                                  valor: `(1 − ${formatPercent(tier.targetContributionMarginPercent)} − ${formatPercent(tier.commissionPercent)})`,
-                                  papel: "margem de contribuição e comissão",
+                                  // Com impostos sobre a venda no Modelo, eles
+                                  // entram no divisor junto (§84).
+                                  valor: `(1 − ${formatPercent(tier.targetContributionMarginPercent)} − ${formatPercent(tier.commissionPercent)}${tier.estimatedTaxPercent ? ` − ${formatPercent(tier.estimatedTaxPercent)}` : ""})`,
+                                  papel: tier.estimatedTaxPercent
+                                    ? "margem de contribuição, comissão e impostos sobre a venda"
+                                    : "margem de contribuição e comissão",
                                   operador: "÷",
                                   numero:
                                     1 -
                                     Number(tier.targetContributionMarginPercent) / 100 -
-                                    Number(tier.commissionPercent) / 100,
+                                    Number(tier.commissionPercent) / 100 -
+                                    Number(tier.estimatedTaxPercent ?? "0") / 100,
                                 },
                               ]}
                               resultado={formatUnitPriceBRL(tier.suggestedUnitPrice)}
-                              nota="A comissão incide sobre o preço bruto de venda e sai de dentro dele — por isso o custo é dividido, não multiplicado. Margem de contribuição não é lucro: impostos, despesas financeiras e frete não estão nesta conta."
+                              nota={
+                                tier.estimatedTaxPercent
+                                  ? "Comissão e impostos sobre a venda incidem sobre o preço bruto e saem de dentro dele — por isso o custo é dividido, não multiplicado. Margem de contribuição não é lucro."
+                                  : "A comissão incide sobre o preço bruto de venda e sai de dentro dele — por isso o custo é dividido, não multiplicado. Margem de contribuição não é lucro: impostos, despesas financeiras e frete não estão nesta conta."
+                              }
                             />
                           </>
                         )}

@@ -16,8 +16,23 @@ import type {
   TemplateDiffEntryDTO,
   TemplateUpdateAvailableDTO,
 } from "@veridi/shared";
-import { PRICING_POLICY_TEMPLATE_CODE_PREFIX } from "@veridi/shared";
+import type { CustomerTaxProfile, PricingModelConfig } from "@veridi/shared";
+import {
+  PRICING_POLICY_TEMPLATE_CODE_PREFIX,
+  normalizarPerfisDoModelo,
+  percentualDeImpostoSobreVenda,
+  problemaDoDivisorDoPreco,
+  taxProfileFit,
+  validarModeloDePrecificacao,
+} from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
+import { ProductNotFoundError } from "../formulations/formulations.errors.js";
+import {
+  colunasDoModelo,
+  copiarColunasDoModelo,
+  efeitoDoModeloNaFaixa,
+  modeloDasColunas,
+} from "../pricing/pricing-model.js";
 import { nextSequenceCode } from "../../lib/sequence-code.js";
 import { precoUnitario, resultadoTecnico } from "../../lib/decimal-serialization.js";
 import type { Pagination } from "../../lib/pagination.js";
@@ -30,6 +45,7 @@ import {
   unidadeCanonicaDaFaixa,
 } from "../pricing/tier-quantity.js";
 import {
+  PricingModelInvalidError,
   PricingPolicyCalculationRequiredError,
   PricingPolicyEmptyError,
   PricingPolicyNotFoundError,
@@ -42,7 +58,7 @@ import {
 import type {
   CreatePolicyFromPricingInput,
   CreatePricingPolicyInput,
-  ListTemplatesQuery,
+  ListPricingPoliciesQuery,
   UpdatePricingPolicyVersionInput,
   UpdateTemplateIdentityInput,
 } from "./cost-templates.schemas.js";
@@ -101,6 +117,8 @@ export function toPolicyVersionDTO(version: VersionWithRelations): PricingPolicy
       notes: tier.notes,
       sortOrder: tier.sortOrder,
     })),
+    pricingModel: modeloDasColunas(version),
+    applicableTaxProfiles: normalizarPerfisDoModelo(version.applicableTaxProfiles),
     createdAt: version.createdAt.toISOString(),
     createdBy: version.createdBy,
     activatedAt: version.activatedAt ? version.activatedAt.toISOString() : null,
@@ -130,8 +148,16 @@ function toPolicyDTO(policy: PolicyWithVersions): PricingPolicyDTO {
   };
 }
 
-function toSummaryDTO(policy: PolicyWithVersions): PricingPolicySummaryDTO {
+/**
+ * `contexto` só existe quando a lista é pedida para um produto: aí cada
+ * política diz se é indicada para o cliente dele. Sugestão — nenhuma some.
+ */
+function toSummaryDTO(
+  policy: PolicyWithVersions,
+  contexto: { customerTaxProfile: CustomerTaxProfile | null } | null,
+): PricingPolicySummaryDTO {
   const ativa = policy.versions.find((version) => version.status === "ACTIVE") ?? null;
+  const perfis = ativa ? normalizarPerfisDoModelo(ativa.applicableTaxProfiles) : [];
   return {
     id: policy.id,
     code: policy.code,
@@ -142,6 +168,8 @@ function toSummaryDTO(policy: PolicyWithVersions): PricingPolicySummaryDTO {
     activeVersionNumber: ativa?.versionNumber ?? null,
     tierCount: ativa?.tiers.length ?? 0,
     tierQuantities: ativa ? ativa.tiers.map((tier) => tier.quantity.toString()) : [],
+    applicableTaxProfiles: perfis,
+    taxProfileFit: contexto ? taxProfileFit(perfis, contexto.customerTaxProfile) : null,
     hasDraft: policy.versions.some((version) => version.status === "DRAFT"),
     updatedAt: policy.updatedAt.toISOString(),
   };
@@ -173,12 +201,25 @@ export async function getPricingPolicyVersion(id: string): Promise<PricingPolicy
   return toPolicyVersionDTO(await requirePolicyVersion(id));
 }
 
+/** Perfil tributário do cliente do produto — `null` quando o produto não tem cliente. */
+async function perfilDoClienteDoProduto(productId: string): Promise<CustomerTaxProfile | null> {
+  const product = await getPrisma().product.findUnique({
+    where: { id: productId },
+    select: { customer: { select: { taxProfile: true } } },
+  });
+  if (!product) throw new ProductNotFoundError(productId);
+  return product.customer?.taxProfile ?? null;
+}
+
 export async function listPricingPolicies(
-  query: ListTemplatesQuery,
+  query: ListPricingPoliciesQuery,
   pagination: Pagination,
 ): Promise<PricingPolicyListResponse> {
   const prisma = getPrisma();
   const termo = query.search?.trim();
+  const contexto = query.productId
+    ? { customerTaxProfile: await perfilDoClienteDoProduto(query.productId) }
+    : null;
   const where: Prisma.PricingPolicyTemplateWhereInput = {
     ...(query.archived ? { archivedAt: { not: null } } : { archivedAt: null }),
     ...(termo
@@ -202,7 +243,11 @@ export async function listPricingPolicies(
     }),
   ]);
 
-  return { policies: policies.map(toSummaryDTO), ...pageMeta(pagination, total) };
+  return {
+    policies: policies.map((policy) => toSummaryDTO(policy, contexto)),
+    customerTaxProfile: contexto?.customerTaxProfile ?? null,
+    ...pageMeta(pagination, total),
+  };
 }
 
 export async function createPricingPolicy(
@@ -253,6 +298,53 @@ export async function setPricingPolicyArchived(
   return getPricingPolicy(id);
 }
 
+type FaixaDoDivisor = { quantity: string; margin: string | null; commission: string };
+
+function faixasDaVersao(version: VersionWithRelations): FaixaDoDivisor[] {
+  return version.tiers.map((tier) => ({
+    quantity: tier.quantity.toString(),
+    margin: tier.targetContributionMarginPercent
+      ? tier.targetContributionMarginPercent.toString()
+      : null,
+    commission: tier.commissionPercent.toString(),
+  }));
+}
+
+/** O pedido sobre o Modelo guardado: só o que veio muda. */
+function mesclarModelo(
+  atual: PricingModelConfig,
+  pedido: UpdatePricingPolicyVersionInput["pricingModel"],
+): PricingModelConfig {
+  if (!pedido) return atual;
+  const vieram = Object.fromEntries(
+    Object.entries(pedido).filter(([, valor]) => valor !== undefined),
+  ) as Partial<PricingModelConfig>;
+  return { ...atual, ...vieram };
+}
+
+/**
+ * O Modelo precisa produzir preço — §84: cada valor legível, cada modo com o
+ * seu valor e, em cada faixa, margem + comissão + impostos sobre a venda
+ * abaixo de 100%. Fail-closed ao SALVAR e ao ATIVAR: descobrir na aplicação a
+ * um produto seria tarde demais.
+ */
+function assertModeloCoerente(model: PricingModelConfig, faixas: FaixaDoDivisor[]): void {
+  const problema = validarModeloDePrecificacao(model);
+  if (problema) throw new PricingModelInvalidError(problema);
+  const imposto = percentualDeImpostoSobreVenda(model);
+  for (const faixa of faixas) {
+    const divisor = problemaDoDivisorDoPreco({
+      targetMarginPercent: faixa.margin,
+      commissionPercent: faixa.commission,
+      estimatedTaxPercent: imposto,
+    });
+    if (divisor) {
+      const quantidade = new Prisma.Decimal(faixa.quantity).toString().replace(".", ",");
+      throw new PricingModelInvalidError(`Faixa de ${quantidade}: ${divisor}`);
+    }
+  }
+}
+
 export async function updatePricingPolicyVersion(
   id: string,
   input: UpdatePricingPolicyVersionInput,
@@ -260,10 +352,33 @@ export async function updatePricingPolicyVersion(
   const current = await requirePolicyVersion(id);
   if (current.status !== "DRAFT") throw new TemplateNotDraftError(current.status);
 
+  /*
+   * O Modelo é conferido INTEIRO depois do merge (§84): o pedido pode trocar
+   * só o modo, e é o valor já guardado que precisa existir. Campo ausente não
+   * muda; valor de modo desligado continua onde está.
+   */
+  const model = mesclarModelo(modeloDasColunas(current), input.pricingModel);
+  assertModeloCoerente(
+    model,
+    input.tiers
+      ? input.tiers.map((tier) => ({
+          quantity: tier.quantity,
+          margin: tier.targetContributionMarginPercent,
+          commission: tier.commissionPercent ?? "0",
+        }))
+      : faixasDaVersao(current),
+  );
+
   await getPrisma().$transaction(async (tx) => {
     await tx.pricingPolicyTemplateVersion.update({
       where: { id },
-      data: { ...(input.notes !== undefined ? { notes: input.notes } : {}) },
+      data: {
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        ...(input.pricingModel !== undefined ? colunasDoModelo(model) : {}),
+        ...(input.applicableTaxProfiles !== undefined
+          ? { applicableTaxProfiles: normalizarPerfisDoModelo(input.applicableTaxProfiles) }
+          : {}),
+      },
     });
 
     if (input.tiers) {
@@ -305,6 +420,7 @@ export async function activatePricingPolicyVersion(
   const current = await requirePolicyVersion(id);
   if (current.status !== "DRAFT") throw new TemplateNotDraftError(current.status);
   if (current.tiers.length === 0) throw new PricingPolicyEmptyError();
+  assertModeloCoerente(modeloDasColunas(current), faixasDaVersao(current));
 
   await getPrisma().$transaction(async (tx) => {
     await tx.pricingPolicyTemplateVersion.updateMany({
@@ -353,6 +469,10 @@ export async function createPolicyVersionFrom(
         versionNumber: (maior._max.versionNumber ?? 0) + 1,
         status: "DRAFT",
         notes: source.notes,
+        // A versão nova parte do Modelo inteiro da anterior, valores de modos
+        // desligados inclusive (§84).
+        ...copiarColunasDoModelo(source),
+        applicableTaxProfiles: source.applicableTaxProfiles,
         createdBy: actor.name,
         sourceVersionId: source.id,
         sourceVersionNumber: source.versionNumber,
@@ -403,7 +523,7 @@ export async function previewPricingPolicy(
 
   const calculation = await prisma.industrialCostCalculation.findUnique({
     where: { id: calculationId },
-    include: { product: true },
+    include: { product: { include: { customer: { select: { taxProfile: true } } } } },
   });
   if (!calculation) throw new PricingPolicyCalculationRequiredError();
   if (calculation.productId !== productId) throw new PricingPolicyCalculationRequiredError();
@@ -422,6 +542,8 @@ export async function previewPricingPolicy(
     include: pricingVersionInclude,
   });
   const snapshot = await getIndustrialCostCalculation(calculation.id);
+  const modelo = modeloDasColunas(policy);
+  const perfilDoCliente = calculation.product.customer?.taxProfile ?? null;
 
   const tiers = [];
   for (const tier of policy.tiers) {
@@ -436,7 +558,14 @@ export async function previewPricingPolicy(
       }));
 
     const margem = tier.targetContributionMarginPercent;
-    const perUnit = custo?.perUnit ?? null;
+    // O custo que FORMA o preço, pelo Modelo desta política (§84).
+    const efeito = custo ? efeitoDoModeloNaFaixa(custo, modelo) : null;
+    const perUnit = efeito?.pricingCostPerUnit
+      ? new Prisma.Decimal(efeito.pricingCostPerUnit)
+      : null;
+    const imposto = efeito?.estimatedTaxPercent
+      ? new Prisma.Decimal(efeito.estimatedTaxPercent)
+      : null;
     const resultado = computePrice({
       priceMode: "TARGET_MARGIN",
       quantity: tier.quantity,
@@ -444,11 +573,15 @@ export async function previewPricingPolicy(
       targetMarginPercent: margem,
       commissionPercent: tier.commissionPercent,
       manualUnitPrice: null,
+      estimatedTaxPercent: imposto,
     });
     const sugerido = resultado.suggestedUnitPrice;
     // Custo incompleto continua bloqueando preço sugerido: a política não
     // contorna uma regra que existe para não inventar margem.
-    const aviso = sugerido === null ? (resultado.warnings[0]?.message ?? null) : null;
+    const aviso =
+      sugerido === null
+        ? ([...(efeito?.warnings ?? []), ...resultado.warnings][0]?.message ?? null)
+        : null;
 
     tiers.push({
       quantity: tier.quantity.toString(),
@@ -463,7 +596,8 @@ export async function previewPricingPolicy(
       // quando a política for aplicada. Cortar aqui mostraria um preço que a
       // aplicação não produz.
       suggestedUnitPrice: sugerido ? precoUnitario(sugerido) : null,
-      costQuality: calculation.quality,
+      estimatedTaxPercent: imposto ? imposto.toFixed(4) : null,
+      costQuality: efeito?.pricingCostQuality ?? calculation.quality,
       warning: aviso,
     });
   }
@@ -478,6 +612,14 @@ export async function previewPricingPolicy(
     costReferenceDate: calculation.costReferenceDate.toISOString(),
     costQuality: calculation.quality,
     tiers,
+    pricingModel: modelo,
+    customerTaxProfile: perfilDoCliente,
+    // Sugestão, nunca trava: a prévia diz se o Modelo é indicado para o
+    // cliente, e aplicar continua possível.
+    taxProfileFit: taxProfileFit(
+      normalizarPerfisDoModelo(policy.applicableTaxProfiles),
+      perfilDoCliente,
+    ),
   };
 }
 
@@ -519,6 +661,9 @@ export async function applyPricingPolicyToProduct(
       originPricingPolicyVersionId: policy.id,
       originPricingPolicyCode: policy.pricingPolicyTemplate.code,
       originPricingPolicyVersionNumber: policy.versionNumber,
+      // O Modelo viaja com a regra: a precificação passa a formar o preço como
+      // ele manda — e fica independente dele depois (§84).
+      ...copiarColunasDoModelo(policy),
     },
   });
 
@@ -751,6 +896,8 @@ export async function createPolicyFromPricingVersion(
   const rascunho = policy.draftVersion;
   if (rascunho) {
     await updatePricingPolicyVersion(rascunho.id, {
+      // O Modelo é regra, não preço: vai junto com as faixas (§84).
+      pricingModel: modeloDasColunas(version),
       tiers: comRegra.map((tier) => ({
         quantity: tier.quantity.toString(),
         uomCode: tier.uomCode,

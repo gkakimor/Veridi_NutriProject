@@ -99,6 +99,20 @@ export class CostTemplateEnergyResourceRequiredError extends Error {
   }
 }
 
+/**
+ * Modelo de Precificação inconsistente — `PRODUCT_RULES.md` §84.
+ *
+ * Modo que lê um valor sem o valor, valor fora da faixa, ou margem + comissão
+ * + impostos sobre a venda somando 100% numa faixa: nenhum preço existe, e a
+ * recusa acontece ao salvar, não na aplicação a um produto.
+ */
+export class PricingModelInvalidError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PricingModelInvalidError";
+  }
+}
+
 /** Aplicar política exige base de custo — o preço nasce dela. */
 export class PricingPolicyCalculationRequiredError extends Error {
   constructor() {

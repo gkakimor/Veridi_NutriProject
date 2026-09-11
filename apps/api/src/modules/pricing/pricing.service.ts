@@ -15,7 +15,13 @@ import type {
   PricingVersionSummaryDTO,
   ProductPricingResponse,
 } from "@veridi/shared";
-import { INDUSTRIAL_COST_QUALITY_LABELS } from "@veridi/shared";
+import type { PricingModelConfig, PricingModelEffect } from "@veridi/shared";
+import {
+  INDUSTRIAL_COST_QUALITY_LABELS,
+  isDefaultPricingModel,
+  percentualDeImpostoSobreVenda,
+  problemaDoDivisorDoPreco,
+} from "@veridi/shared";
 import { PRICING_VERSION_CODE_PREFIX } from "@veridi/shared";
 import { getPrisma } from "../../db/prisma.js";
 import { getIndustrialCostCalculation } from "../industrial-cost-calculation/snapshot.service.js";
@@ -50,6 +56,7 @@ import {
 import { costForOutputQuantity, pricingVersionInclude } from "./pricing-cost.js";
 import type { CostVersionForPricing, TierCostResult } from "./pricing-cost.js";
 import { computePrice } from "./pricing-math.js";
+import { copiarColunasDoModelo, efeitoDoModeloNaFaixa, modeloDasColunas } from "./pricing-model.js";
 import type {
   ActivatePricingVersionInput,
   CreatePricingTierInput,
@@ -142,6 +149,8 @@ function calculationResult(version: VersionWithRelations): IndustrialCostCalcula
 interface ComputedTier {
   tier: TierRow;
   cost: TierCostResult;
+  /** O que o Modelo de Precificação fez com o custo — §84. */
+  effect: PricingModelEffect;
   price: ReturnType<typeof computePrice>;
 }
 
@@ -171,16 +180,33 @@ async function loadCostVersion(
   })) as CostVersionForPricing | null;
 }
 
-/** Custo para a quantidade + preço pela regra canônica — o único caminho. */
+/**
+ * Custo para a quantidade, efeito do Modelo e preço pela regra canônica — o
+ * único caminho.
+ *
+ * O Modelo de Precificação decide o que entra no custo que forma o preço
+ * (§84). No Modelo padrão é o custo do cálculo, inteiro: o mesmo número de
+ * antes, e por isso o mesmo preço.
+ */
 async function computeTierEconomics(
   costVersion: CostVersionForPricing | null,
   calculation: IndustrialCostCalculationDTO,
   tier: TierEconomicInput,
-): Promise<{ cost: TierCostResult; price: ReturnType<typeof computePrice> }> {
+  model: PricingModelConfig,
+): Promise<{
+  cost: TierCostResult;
+  effect: PricingModelEffect;
+  price: ReturnType<typeof computePrice>;
+}> {
   const prisma = getPrisma();
-  if (!costVersion) {
-    return {
-      cost: {
+  const cost: TierCostResult = costVersion
+    ? await costForOutputQuantity(prisma, {
+        costVersion,
+        calculation,
+        quantity: tier.quantity,
+        quantityUomCode: tier.uomCode,
+      })
+    : {
         quantity: tier.quantity,
         batchCount: new Prisma.Decimal(1),
         total: null,
@@ -188,6 +214,8 @@ async function computeTierEconomics(
         per1000: null,
         knownSubtotal: new Prisma.Decimal(0),
         quality: "NO_COST",
+        materialsTotal: null,
+        materialsQuality: "NO_COST",
         warnings: [
           {
             code: "COST_STRUCTURE_UNAVAILABLE",
@@ -195,43 +223,32 @@ async function computeTierEconomics(
           },
         ],
         hasCustomerSuppliedMaterials: false,
-      },
-      price: computePrice({
-        priceMode: tier.priceMode,
-        quantity: tier.quantity,
-        costPerUnit: null,
-        targetMarginPercent: tier.targetContributionMarginPercent,
-        commissionPercent: tier.commissionPercent,
-        manualUnitPrice: tier.manualUnitPrice,
-      }),
-    };
-  }
+      };
 
-  const cost = await costForOutputQuantity(prisma, {
-    costVersion,
-    calculation,
-    quantity: tier.quantity,
-    quantityUomCode: tier.uomCode,
-  });
+  const effect = efeitoDoModeloNaFaixa(cost, model);
   const price = computePrice({
     priceMode: tier.priceMode,
     quantity: tier.quantity,
-    costPerUnit: cost.perUnit,
+    costPerUnit:
+      effect.pricingCostPerUnit === null ? null : new Prisma.Decimal(effect.pricingCostPerUnit),
     targetMarginPercent: tier.targetContributionMarginPercent,
     commissionPercent: tier.commissionPercent,
     manualUnitPrice: tier.manualUnitPrice,
+    estimatedTaxPercent:
+      effect.estimatedTaxPercent === null ? null : new Prisma.Decimal(effect.estimatedTaxPercent),
   });
-  return { cost, price };
+  return { cost, effect, price };
 }
 
 async function computeTiers(version: VersionWithRelations): Promise<ComputedTier[]> {
   const calculation = calculationResult(version);
   const costVersion = await loadCostVersion(calculation);
 
+  const model = modeloDasColunas(version);
   const computed: ComputedTier[] = [];
   for (const tier of version.tiers) {
-    const { cost, price } = await computeTierEconomics(costVersion, calculation, tier);
-    computed.push({ tier, cost, price });
+    const { cost, effect, price } = await computeTierEconomics(costVersion, calculation, tier, model);
+    computed.push({ tier, cost, effect, price });
   }
   return computed;
 }
@@ -242,8 +259,8 @@ async function computeTiers(version: VersionWithRelations): Promise<ComputedTier
  * Depois de ativa, uma compra nova, uma tarifa reajustada ou uma estrutura
  * nova não podem reescrever o preço que já foi negociado.
  */
-function toTierDTO(entry: ComputedTier, frozen: boolean): PricingTierDTO {
-  const { tier, cost, price } = entry;
+function toTierDTO(entry: ComputedTier, frozen: boolean, modeloPadrao: boolean): PricingTierDTO {
+  const { tier, cost, effect, price } = entry;
 
   if (frozen) {
     const warnings = (tier.warningsSnapshot as unknown as IndustrialCostWarningDTO[] | null) ?? [];
@@ -286,11 +303,29 @@ function toTierDTO(entry: ComputedTier, frozen: boolean): PricingTierDTO {
         ? percent(tier.contributionMarginSnapshot)
         : null,
       markupPercent: tier.markupSnapshot ? percent(tier.markupSnapshot) : null,
+      /*
+       * O custo que formou o preço, congelado. Faixa ativada antes do Modelo
+       * flexível não tem a coluna — e, no Modelo padrão, formou o preço sobre
+       * o custo do cálculo, que é o que ela mostra.
+       */
+      pricingCostPerUnit: tier.pricingCostPerUnitSnapshot
+        ? resultadoTecnicoDaFaixa(tier.pricingCostPerUnitSnapshot)
+        : modeloPadrao && tier.costPerUnitSnapshot
+          ? resultadoTecnicoDaFaixa(tier.costPerUnitSnapshot)
+          : null,
+      estimatedTaxPercent: tier.estimatedTaxPercentSnapshot
+        ? percent(tier.estimatedTaxPercentSnapshot)
+        : null,
       warnings,
     };
   }
 
-  return { id: tier.id, notes: tier.notes, sortOrder: tier.sortOrder, ...liveTierDTO(tier, cost, price) };
+  return {
+    id: tier.id,
+    notes: tier.notes,
+    sortOrder: tier.sortOrder,
+    ...liveTierDTO(tier, cost, effect, price),
+  };
 }
 
 /**
@@ -300,6 +335,7 @@ function toTierDTO(entry: ComputedTier, frozen: boolean): PricingTierDTO {
 function liveTierDTO(
   tier: TierEconomicInput,
   cost: TierCostResult,
+  effect: PricingModelEffect,
   price: ReturnType<typeof computePrice>,
 ): PricingTierPreviewDTO {
   return {
@@ -339,21 +375,32 @@ function liveTierDTO(
       ? percent(price.contributionMarginPercent)
       : null,
     markupPercent: price.markupPercent ? percent(price.markupPercent) : null,
-    warnings: [...cost.warnings, ...price.warnings],
+    // Mesma fronteira de doze casas que a ativação grava.
+    pricingCostPerUnit: effect.pricingCostPerUnit
+      ? resultadoTecnicoDaFaixa(
+          fecharResultadoTecnicoPersistido(new Prisma.Decimal(effect.pricingCostPerUnit)),
+        )
+      : null,
+    estimatedTaxPercent: effect.estimatedTaxPercent
+      ? percent(new Prisma.Decimal(effect.estimatedTaxPercent))
+      : null,
+    warnings: [...cost.warnings, ...effect.warnings, ...price.warnings],
   };
 }
 
 async function toVersionDTO(version: VersionWithRelations): Promise<PricingVersionDTO> {
   const frozen = version.status !== "DRAFT";
+  const model = modeloDasColunas(version);
   const computed = frozen
     ? version.tiers.map((tier) => ({
         tier,
         cost: null as unknown as TierCostResult,
+        effect: null as unknown as PricingModelEffect,
         price: null as unknown as ReturnType<typeof computePrice>,
       }))
     : await computeTiers(version);
 
-  const tiers = computed.map((entry) => toTierDTO(entry, frozen));
+  const tiers = computed.map((entry) => toTierDTO(entry, frozen, isDefaultPricingModel(model)));
   const calculation = calculationResult(version);
   const warnings: IndustrialCostWarningDTO[] = [];
 
@@ -412,6 +459,8 @@ async function toVersionDTO(version: VersionWithRelations): Promise<PricingVersi
     originPricingPolicyVersionNumber: version.originPricingPolicyVersionNumber,
     originPricingPolicyName:
       version.originPricingPolicyVersion?.pricingPolicyTemplate.name ?? null,
+    // O Modelo desta versão — cópia, independente da política depois (§84).
+    pricingModel: model,
   };
 }
 
@@ -535,6 +584,15 @@ export async function getPricingRebasePreview(id: string): Promise<PricingRebase
     getIndustrialCostCalculation(alvo.id),
   ]);
 
+  /*
+   * O custo comparado é o que FORMA o preço — o Modelo desta versão aplicado
+   * às duas bases (§84). No Modelo padrão, o custo do cálculo, como antes.
+   */
+  const model = modeloDasColunas(version);
+  const custoQueFormaPreco = (custo: TierCostResult | null): string | null => {
+    const porUnidade = custo ? efeitoDoModeloNaFaixa(custo, model).pricingCostPerUnit : null;
+    return porUnidade === null ? null : resultadoTecnico(new Prisma.Decimal(porUnidade));
+  };
   const tiers: PricingRebaseTierDTO[] = [];
   for (const tier of version.tiers) {
     const de =
@@ -559,8 +617,8 @@ export async function getPricingRebasePreview(id: string): Promise<PricingRebase
       // O custo comparado é RESULTADO TÉCNICO: doze casas, o scale de
       // `costPerUnitSnapshot`. Em quatro, um rebase que mexe na quinta casa
       // apareceria como "de X para X" — a comparação diria que nada mudou.
-      costPerUnitFrom: de && de.perUnit ? resultadoTecnico(de.perUnit) : null,
-      costPerUnitTo: para && para.perUnit ? resultadoTecnico(para.perUnit) : null,
+      costPerUnitFrom: custoQueFormaPreco(de),
+      costPerUnitTo: custoQueFormaPreco(para),
       // Prévia de REBASE: o preço aqui é técnico, não é o preço de um
       // documento. Servi-lo em quatro casas cortaria o valor da faixa antes
       // da fronteira comercial — §60 — e a comparação diria que dois preços
@@ -763,6 +821,9 @@ export async function createPricingVersion(
         formulationVersionNumberSnapshot: calculation.formulationVersionNumber,
         costReferenceDateSnapshot: calculation.costReferenceDate,
         costQualitySnapshot: calculation.quality,
+        // O Modelo faz parte do PLANO comercial e viaja com ele (§84); sem
+        // versão anterior, nasce o padrão do banco.
+        ...(previous ? copiarColunasDoModelo(previous) : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : { notes: previous?.notes ?? null }),
         createdByUserId: actor.id,
         createdByNameSnapshot: actor.name,
@@ -809,6 +870,8 @@ export async function updatePricingVersion(
 function assertPercents(
   targetMargin: Prisma.Decimal | null,
   commission: Prisma.Decimal,
+  /** Impostos sobre a venda do Modelo desta versão (§84); `null` quando fora da conta. */
+  estimatedTaxPercent: string | null,
 ): void {
   if (commission.lessThan(0) || commission.greaterThanOrEqualTo(HUNDRED)) {
     throw new InvalidPricingPercentError("A comissão deve ficar entre 0% e 100%.");
@@ -823,6 +886,13 @@ function assertPercents(
       "Margem somada à comissão atinge 100% — não existe preço que satisfaça.",
     );
   }
+  // O divisor inteiro: com impostos sobre a venda no Modelo, eles entram na soma.
+  const problema = problemaDoDivisorDoPreco({
+    targetMarginPercent: targetMargin.toString(),
+    commissionPercent: commission.toString(),
+    estimatedTaxPercent,
+  });
+  if (problema) throw new InvalidPricingPercentError(problema);
 }
 
 /**
@@ -867,7 +937,11 @@ async function resolveTierInput(
       ? new Prisma.Decimal(input.targetContributionMarginPercent)
       : null;
   const commission = new Prisma.Decimal(input.commissionPercent ?? "0");
-  assertPercents(input.priceMode === "TARGET_MARGIN" ? targetMargin : null, commission);
+  assertPercents(
+    input.priceMode === "TARGET_MARGIN" ? targetMargin : null,
+    commission,
+    percentualDeImpostoSobreVenda(modeloDasColunas(version)),
+  );
 
   return {
     /*
@@ -901,8 +975,13 @@ export async function previewPricingTier(
   const tier = await resolveTierInput(version, input);
   const calculation = calculationResult(version);
   const costVersion = await loadCostVersion(calculation);
-  const { cost, price } = await computeTierEconomics(costVersion, calculation, tier);
-  return liveTierDTO(tier, cost, price);
+  const { cost, effect, price } = await computeTierEconomics(
+    costVersion,
+    calculation,
+    tier,
+    modeloDasColunas(version),
+  );
+  return liveTierDTO(tier, cost, effect, price);
 }
 
 export async function createPricingTier(
@@ -979,7 +1058,11 @@ export async function updatePricingTier(
     input.commissionPercent !== undefined
       ? new Prisma.Decimal(input.commissionPercent)
       : tier.commissionPercent;
-  assertPercents(priceMode === "TARGET_MARGIN" ? targetMargin : null, commission);
+  assertPercents(
+    priceMode === "TARGET_MARGIN" ? targetMargin : null,
+    commission,
+    percentualDeImpostoSobreVenda(modeloDasColunas(version)),
+  );
 
   await prisma.pricingTier.update({
     where: { id: tierId },
@@ -1043,8 +1126,14 @@ export async function activatePricingVersion(
     throw new MissingTierPriceError(withoutPrice.map((entry) => entry.tier.quantity.toString()));
   }
 
+  /*
+   * Incompleto é o custo que FORMA o preço (§84): no Modelo padrão, o do
+   * cálculo; num Modelo que não usa a conversão do ERP, o dos materiais —
+   * energia sem tarifa não torna incompleto um preço que não depende dela.
+   */
   const incompleteCost = computed.filter(
-    (entry) => entry.cost.quality === "PARTIAL" || entry.cost.quality === "NO_COST",
+    (entry) =>
+      entry.effect.pricingCostQuality === "PARTIAL" || entry.effect.pricingCostQuality === "NO_COST",
   );
   if (incompleteCost.length > 0 && !input.confirmIncompleteCost) {
     throw new IncompleteCostActivationError(
@@ -1150,8 +1239,17 @@ export async function activatePricingVersion(
             : null,
           contributionMarginSnapshot: entry.price.contributionMarginPercent,
           markupSnapshot: entry.price.markupPercent,
+          // O custo que formou o preço e o imposto sobre a venda do Modelo,
+          // congelados com ele (§84) — resultado técnico em doze casas.
+          pricingCostPerUnitSnapshot: entry.effect.pricingCostPerUnit
+            ? fecharResultadoTecnicoPersistido(new Prisma.Decimal(entry.effect.pricingCostPerUnit))
+            : null,
+          estimatedTaxPercentSnapshot: entry.effect.estimatedTaxPercent
+            ? new Prisma.Decimal(entry.effect.estimatedTaxPercent)
+            : null,
           warningsSnapshot: [
             ...entry.cost.warnings,
+            ...entry.effect.warnings,
             ...entry.price.warnings,
           ] as unknown as Prisma.InputJsonValue,
         },

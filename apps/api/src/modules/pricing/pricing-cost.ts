@@ -46,6 +46,14 @@ export interface TierCostResult {
   per1000: Prisma.Decimal | null;
   knownSubtotal: Prisma.Decimal;
   quality: IndustrialCostQuality;
+  /**
+   * Custo de materiais Veridi da quantidade — Σ necessidade × custo congelado.
+   * `null` quando algum material está sem custo. É a base do Modelo de
+   * Precificação que não usa o cálculo inteiro (`PRODUCT_RULES.md` §84).
+   */
+  materialsTotal: Prisma.Decimal | null;
+  /** Qualidade só dos materiais — energia sem tarifa não a degrada. */
+  materialsQuality: IndustrialCostQuality;
   warnings: IndustrialCostWarningDTO[];
   hasCustomerSuppliedMaterials: boolean;
   /**
@@ -474,6 +482,13 @@ export async function costForOutputQuantity(
   else if (anyEstimate) quality = "COMPLETE_WITH_ESTIMATES";
   else quality = "COMPLETE_REAL_REFERENCE";
 
+  // Os mesmos critérios, só sobre os materiais: `anyEstimate` nasce no laço
+  // de materiais e em nenhum outro lugar.
+  let materialsQuality: IndustrialCostQuality;
+  if (materialMissing) materialsQuality = materialsKnown.greaterThan(0) ? "PARTIAL" : "NO_COST";
+  else if (anyEstimate) materialsQuality = "COMPLETE_WITH_ESTIMATES";
+  else materialsQuality = "COMPLETE_REAL_REFERENCE";
+
   return {
     quantity,
     batchCount,
@@ -482,6 +497,8 @@ export async function costForOutputQuantity(
     per1000: perUnit ? perUnit.times(THOUSAND) : null,
     knownSubtotal,
     quality,
+    materialsTotal: materialMissing ? null : materialsKnown,
+    materialsQuality,
     warnings,
     hasCustomerSuppliedMaterials,
     ...(breakdown ? { breakdown } : {}),

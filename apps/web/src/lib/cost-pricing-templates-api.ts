@@ -40,11 +40,14 @@ export interface ListParams {
   archived?: boolean;
   page?: number;
   pageSize?: number;
+  /** Só a lista de políticas: diz a compatibilidade com o perfil tributário do cliente do produto. */
+  productId?: string;
 }
 
 function query(params: ListParams): string {
   const q = new URLSearchParams();
   if (params.search) q.set("search", params.search);
+  if (params.productId) q.set("productId", params.productId);
   if (params.archived !== undefined) q.set("archived", String(params.archived));
   q.set("page", String(params.page ?? 1));
   q.set("pageSize", String(params.pageSize ?? 20));

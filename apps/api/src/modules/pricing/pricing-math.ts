@@ -20,6 +20,8 @@ export interface PriceComputationInput {
   targetMarginPercent: Prisma.Decimal | null;
   commissionPercent: Prisma.Decimal;
   manualUnitPrice: Prisma.Decimal | null;
+  /** Impostos em % sobre o preço de venda (§84); ausente ou `null` = fora da conta. */
+  estimatedTaxPercent?: Prisma.Decimal | null;
 }
 
 export interface PriceComputationResult {
@@ -27,6 +29,8 @@ export interface PriceComputationResult {
   selectedUnitPrice: Prisma.Decimal | null;
   commissionPerUnit: Prisma.Decimal | null;
   commissionTotal: Prisma.Decimal | null;
+  estimatedTaxPerUnit: Prisma.Decimal | null;
+  estimatedTaxTotal: Prisma.Decimal | null;
   grossRevenue: Prisma.Decimal | null;
   contributionPerUnit: Prisma.Decimal | null;
   contributionTotal: Prisma.Decimal | null;
@@ -46,12 +50,15 @@ export function computePrice(input: PriceComputationInput): PriceComputationResu
     targetMarginPercent: input.targetMarginPercent ? input.targetMarginPercent.toString() : null,
     commissionPercent: input.commissionPercent.toString(),
     manualUnitPrice: input.manualUnitPrice ? input.manualUnitPrice.toString() : null,
+    estimatedTaxPercent: input.estimatedTaxPercent ? input.estimatedTaxPercent.toString() : null,
   });
   return {
     suggestedUnitPrice: decimal(resultado.suggestedUnitPrice),
     selectedUnitPrice: decimal(resultado.selectedUnitPrice),
     commissionPerUnit: decimal(resultado.commissionPerUnit),
     commissionTotal: decimal(resultado.commissionTotal),
+    estimatedTaxPerUnit: decimal(resultado.estimatedTaxPerUnit),
+    estimatedTaxTotal: decimal(resultado.estimatedTaxTotal),
     grossRevenue: decimal(resultado.grossRevenue),
     contributionPerUnit: decimal(resultado.contributionPerUnit),
     contributionTotal: decimal(resultado.contributionTotal),

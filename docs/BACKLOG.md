@@ -39,19 +39,22 @@ por integridade comercial; QUOTE-INT-FIELDS-01, pela mesma razão, em P1;
 PROJECT-INT-FIELDS-01, o mesmo defeito no cadastro do Projeto, promovido a P0;
 FORM-UOM-01, a unidade controlada no Modelo de Formulação; e
 TEMPLATE-APPLY-BASE-UOM-01, promovido a P0 — integridade física da Formulação.
-Saiu em 2026-09-11: CUSTOMER-TAX-PROFILE-01, com a regra durável em
-[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83.
+Saíram em 2026-09-11: CUSTOMER-TAX-PROFILE-01 e PRICING-TEMPLATE-FLEX-01, com
+as regras duráveis em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83 e §84.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | PRICING-TEMPLATE-FLEX-01 | A · P1 | Decisão do PO, 2026-09-10: parâmetros opcionais no Modelo de Precificação, sem obrigar a Veridi a controlar no ERP custos que o financeiro externo gerencia. O Perfil tributário do Cliente, que ele vai usar para sugerir o Modelo, já existe (§83) |
-| **P1-2** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa. Depois de PRICING-TEMPLATE-FLEX-01, por decisão do PO |
-| **P1-3** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-4** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-5** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-6** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa. Primeiro da fila desde que PRICING-TEMPLATE-FLEX-01 fechou, por decisão do PO |
+| **P1-2** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-3** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-4** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-5** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
+
+Achados de PRICING-TEMPLATE-FLEX-01, sem posição na fila: PRICING-MODEL-VIEW-01,
+PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 (seção A, na entrada do
+item).
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma
@@ -698,9 +701,26 @@ status na anterior é legítima e separada desta ação.
 
 #### PRICING-TEMPLATE-FLEX-01 — Modelo de Precificação flexível e custos opcionais — P1-1 (decisão do PO, 2026-09-10)
 
-**Não iniciado — e o schema não se congela agora.** O Modelo de Precificação
-passa a aceitar parâmetros opcionais, sem obrigar a Veridi a controlar no ERP
-custos que hoje o financeiro externo gerencia. Componentes a auditar: custo de
+**Fechado em 2026-09-11 — regra durável em `PRODUCT_RULES.md` §84.** O Modelo
+(a Política TPP) diz custo industrial, impostos estimados, gestão externa e
+perfis tributários indicados; uma migration aditiva, defaults = comportamento
+anterior. A direção original fica abaixo como registro.
+
+**Achados da entrega (novos, sem posição na fila):**
+- **PRICING-MODEL-VIEW-01 — P2.** Orçamento, impresso da precificação e
+  relatórios mostram o custo do cálculo (CMV) ao lado da contribuição que o
+  Modelo formou. Com Modelo não padrão os dois não fecham na mesma conta na
+  tela; só a tela de Precificação mostra o "custo p/ preço".
+- **PRICING-MODEL-DIFF-01 — P3.** "Comparar versões" da política compara só as
+  faixas: mudar modo, valor, gestão externa ou perfis não aparece no diff.
+- **PRICING-ACTIVATE-CONFIRM-01 — P3.** A tela de Precificação ainda pede a
+  confirmação de "custo incompleto" pela qualidade do cálculo do ERP; o
+  servidor já decide pela qualidade da base que forma o preço (§84). Pergunta a
+  mais, nunca bloqueio.
+
+O Modelo de Precificação
+passava a aceitar parâmetros opcionais, sem obrigar a Veridi a controlar no ERP
+custos que hoje o financeiro externo gerencia. Componentes auditados: custo de
 materiais, custo industrial, impostos estimados, custos administrativos e
 financeiros, comissão e margem.
 
