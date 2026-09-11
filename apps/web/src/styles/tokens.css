@@ -98,6 +98,8 @@
   /* ---- Layout do shell ---- */
   --topbar-h: 52px;
   --sidebar-w: 236px;
+  /* Menu compacto: só o trilho de ícones, um por grupo. */
+  --sidebar-compact-w: 56px;
 
   /* ---- Foco acessivel ---- */
   --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--v-green-700);

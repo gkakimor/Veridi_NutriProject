@@ -383,7 +383,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessions UserSession[]
+  sessions   UserSession[]
+  preference UserPreference?
 
   preparedDocumentRevisions  ControlledDocumentRevision[]       @relation("DocumentPreparedBy")
   approvedDocumentRevisions  ControlledDocumentRevision[]       @relation("DocumentApprovedBy")
@@ -444,6 +445,23 @@ model UserSession {
 
   @@index([userId])
   @@map("user_sessions")
+}
+
+/// Preferencias de interface do usuario (NAVIGATION-SIDEBAR-01), 1:1 com User.
+/// JSON por secao — hoje so `navigation`: sidebar compacta, grupos abertos e
+/// favoritos, sempre por id estavel do menu. Preferencia visual nova entra
+/// como chave nova do JSON, nao como coluna nova em User. Leitura tolerante:
+/// valor torto vira o padrao e id desconhecido e ignorado pela tela.
+model UserPreference {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  ui Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_preferences")
 }
 
 /// Revisao de documento controlado (R.PRO.002, R.COQ.003). Nao e GED nem

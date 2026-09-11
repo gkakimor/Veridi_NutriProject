@@ -1086,6 +1086,33 @@ nunca buraco. Antes, opcional com "—" sumia calado. A Rastreabilidade de
 lote, único documento que escondia campo por "—", passa o dado cru — mesma
 saída.
 
+## Navegação moderna do ERP (NAVIGATION-SIDEBAR-01, 2026-09-11)
+
+Menu em Painel + nove seções na ordem do fluxo (Comercial, Produção, Compras,
+Estoque, Qualidade, Cadastros, Gestão, Modelos e Parâmetros, Administração),
+com id estável por tela e por seção em `app/navigation.ts`. Nenhuma rota mudou
+nem sumiu. Sidebar expandida ou compacta (trilho com um ícone por seção e
+dica; o clique abre o menu por cima), seções recolhíveis — a da tela atual
+abre sozinha, sem virar preferência —, ★ Favoritos acima das seções e "Buscar
+telas…" no topo (Ctrl/Cmd+K, só navegação). No celular, drawer sempre
+expandido.
+
+Preferência do usuário (compacto, seções abertas, favoritos) em
+`user_preferences`, 1:1 com `User`, JSON por seção (65ª migration), por
+`GET/PATCH /me/preferences` — sempre do usuário da sessão. Grava sem botão,
+com coalescência de 600 ms; falha de leitura ou gravação não trava o menu.
+
+Decisões: **Produtos × Produto Acabado** são funções distintas — o cadastro
+mestre é Cadastros › Produtos Acabados (`/cadastros/produtos`); a lista dos
+lotes que saíram de OP (`/producao/produto-acabado`) virou Estoque › Lotes de
+Produto Acabado. **Documentos controlados** (revisão de R.PRO.002 e R.COQ.003,
+elaborado e aprovado por) é controle documental GMP e foi para Qualidade;
+gravar segue só ADMIN. Rótulos: Visão do Cliente (agora no Comercial), Modelos
+de Formulação, Modelos de Estrutura de Custo. A visibilidade por perfil
+espelha o gate de leitura que a API já tinha: Usuários só ADMIN; Precificação
+só Comercial, Compras e ADMIN. F-01-4 fechado. Achados no BACKLOG, sem posição
+na fila: NAV-PAGE-TITLES-01, QUALITY-DOC-WRITE-01 e NAV-TWO-SEARCHES-01.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
@@ -1128,7 +1155,8 @@ manual —, e o sistema não faz escrita de massa.
 
 **COST-RESOURCE-MULTIPLIER-01 fechado em 2026-09-11** (§87, seção própria
 acima). **FORMULATION-ADJUSTMENTS-UX-01 fechado no mesmo dia** (§88), fora da
-fila, por handoff do PO. Próximo da fila viva: SUPPLIER-ADDRESS-01.
+fila, por handoff do PO, e **NAVIGATION-SIDEBAR-01** também (seção própria
+acima). Próximo da fila viva: SUPPLIER-ADDRESS-01.
 
 **COST-VAR-02** (comparação de CMV e proteção de margem) segue BLOQUEADO
 aguardando as sete decisões do PO em
@@ -1156,7 +1184,7 @@ Banco local `veridi_dev`. Recriado pelo caminho oficial em 2026-09-11
 infraestrutura — **sem** o corpus da Veridi: as cargas grandes ficam para uma
 rodada própria, decidida pelo PO. A 62ª migration (`customer_tax_profile`) e a
 63ª (`pricing_template_flex`) entraram por `pnpm db:migrate`, e a 64ª
-(`cost_resource_count`) também. Contém só massa carimbada — o último golden path
+(`cost_resource_count`) e a 65ª (`user_preferences`) também. Contém só massa carimbada — o último golden path
 e as E2E focadas.
 
 Caminho canônico, nesta ordem (os passos 2 a 4 só quando o PO pedir a carga):

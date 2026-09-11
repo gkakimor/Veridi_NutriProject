@@ -17,6 +17,7 @@ export * from "./items.js";
 export * from "./item-cost-reference.js";
 export * from "./ownership.js";
 export * from "./users.js";
+export * from "./user-preferences.js";
 export * from "./controlled-documents.js";
 export * from "./attachments.js";
 export * from "./projects.js";

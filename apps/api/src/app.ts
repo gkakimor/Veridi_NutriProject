@@ -23,6 +23,7 @@ import { productCmvRoutes } from "./modules/product-cmv/product-cmv.routes.js";
 import { formulationTemplatesRoutes } from "./modules/formulation-templates/formulation-templates.routes.js";
 import { costPricingTemplatesRoutes } from "./modules/cost-templates/cost-templates.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
+import { userPreferencesRoutes } from "./modules/user-preferences/user-preferences.routes.js";
 import { controlledDocumentsRoutes } from "./modules/controlled-documents/controlled-documents.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { itemsRoutes } from "./modules/items/items.routes.js";
@@ -85,6 +86,7 @@ export function buildApp() {
   app.register(healthRoutes);
   app.register(authRoutes);
   app.register(usersRoutes);
+  app.register(userPreferencesRoutes);
   app.register(controlledDocumentsRoutes);
   app.register(attachmentsRoutes);
   app.register(qualityRoutes);

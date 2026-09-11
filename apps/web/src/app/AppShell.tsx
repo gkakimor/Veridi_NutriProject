@@ -1,108 +1,37 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { BrandLogo } from "../components/BrandLogo";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { USER_ROLE_LABELS } from "@veridi/shared";
 import { lookupLot } from "../lib/lots-api";
 import { useAuth } from "./AuthProvider";
-import { navigation, navItems } from "./navigation";
+import { navItems } from "./navigation";
+import { Sidebar } from "./Sidebar";
+import { useMediaQuery } from "./use-media-query";
+import { useNavigationPreferences } from "./use-navigation-preferences";
 import "./shell.css";
 
 /**
- * NavLink sem `end` casa por prefixo (ex.: "/estoque" tambem "ativa" em
- * "/estoque/lotes"). Isso e o comportamento certo quando a subrota NAO tem
- * item de sidebar proprio (ex.: "/compras/ordens/:id" sob "Ordens de
- * Compra"), mas quebra quando dois itens de sidebar tem essa relacao de
- * prefixo entre si (ex.: "Visão Geral" = "/estoque" vs "Lotes" =
- * "/estoque/lotes"). Nesse segundo caso os dois ficariam marcados como
- * ativos ao mesmo tempo — exige match exato (`end`).
+ * Abaixo desta largura a sidebar é drawer sob demanda — nunca coluna, nem
+ * compacta: num celular ela espremeria o workspace.
  */
-function needsExactMatch(path: string): boolean {
-  if (path === "/") return true;
-  const semQuery = path.split("?")[0] ?? path;
-  return navItems.some((other) => {
-    const outro = other.path.split("?")[0] ?? other.path;
-    return other.path !== path && outro.startsWith(`${semQuery}/`);
-  });
-}
-
-/**
- * `isActive` do NavLink compara so o pathname.
- *
- * Dois itens podem apontar para a MESMA tela com filtros diferentes —
- * "Lotes" e, sob Qualidade, "Liberação de lotes"
- * (`/estoque/lotes?status=AWAITING_RELEASE`). Sem olhar a query, os dois
- * acendem juntos e o menu passa a indicar dois lugares para uma navegacao
- * so.
- *
- * Item COM query so fica ativo quando a query da URL bate. Item SEM query
- * cede a vez quando outro item aponta para o mesmo pathname com uma query
- * que casa — senao "Lotes" continuaria aceso enquanto o operador esta na
- * lista filtrada que veio da Qualidade.
- */
-function itemAtivo(path: string, isActive: boolean, search: string): boolean {
-  if (!isActive) return false;
-  const [pathname = path, query] = path.split("?");
-  if (query) return `?${query}` === search;
-  const outroCasaComQuery = navItems.some((other) => {
-    const [outroPath = other.path, outraQuery] = other.path.split("?");
-    return other.path !== path && outroPath === pathname && outraQuery && `?${outraQuery}` === search;
-  });
-  return !outroCasaComQuery;
-}
+const MOBILE_QUERY = "(max-width: 640px)";
 
 /**
  * Shell operacional Veridi.
  *
- * Estrutura fixa: topbar verde-escuro, navegacao a esquerda recolhivel,
- * workspace principal. Modais fullscreen de CRUD cobrem apenas o workspace
- * (ver `FullWorkspaceModal`) — topbar e sidebar continuam visiveis.
+ * Estrutura fixa: topbar verde-escuro, navegacao a esquerda (expandida ou
+ * compacta no desktop, drawer no celular), workspace principal. Modais
+ * fullscreen de CRUD cobrem apenas o workspace (ver `FullWorkspaceModal`) —
+ * topbar e sidebar continuam visiveis.
  */
-/** Em telas de celular a sidebar começa recolhida (vira overlay sob demanda). */
-function startsCollapsed(): boolean {
-  return typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches;
-}
-
 export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const navRef = useRef<HTMLDivElement>(null);
-
-  /*
-   * Entrar direto numa rota cujo item de menu esta abaixo da dobra deixava a
-   * navegacao mostrando um trecho do menu onde nada esta marcado como atual —
-   * a pessoa via uma tela de Gestao com o menu parado em Cadastros.
-   *
-   * `block: "nearest"` nao mexe em nada quando o item ja esta visivel, e rola
-   * apenas o proprio miolo da navegacao: a pagina principal fica onde estava.
-   */
-  useEffect(() => {
-    const nav = navRef.current;
-    const ativo = nav?.querySelector<HTMLElement>(".sidebar__link.is-active");
-    if (!nav || !ativo) return;
-
-    /*
-     * ROLAR SEM TOCAR NO FOCO.
-     *
-     * `scrollIntoView` parecia inofensivo e não era: ele move o "ponto de
-     * partida sequencial" do navegador para o elemento revelado. O primeiro
-     * Tab depois de carregar qualquer rota passava a pular tudo o que vem
-     * antes do item ativo — inclusive o skip-link, que existe justamente para
-     * quem navega por teclado não precisar atravessar trinta e dois links.
-     * Na última entrada do menu era pior: não havendo próximo, o Tab pulava a
-     * navegação inteira.
-     *
-     * Consertar a descoberta com o mouse não pode custar a descoberta com o
-     * teclado. Ajustar `scrollTop` à mão rola igual e não mexe em foco nenhum.
-     */
-    const caixaNav = nav.getBoundingClientRect();
-    const caixaItem = ativo.getBoundingClientRect();
-    if (caixaItem.top < caixaNav.top) {
-      nav.scrollTop -= caixaNav.top - caixaItem.top;
-    } else if (caixaItem.bottom > caixaNav.bottom) {
-      nav.scrollTop += caixaItem.bottom - caixaNav.bottom;
-    }
-  }, [location.pathname]);
+  const { user, signOut } = useAuth();
+  const isMobile = useMediaQuery(MOBILE_QUERY);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { prefs, update } = useNavigationPreferences(user?.id ?? null);
 
   /*
    * Titulo da aba por tela.
@@ -127,8 +56,11 @@ export function AppShell() {
       ? `${atual.label} · Veridi Nutrition`
       : "Veridi Nutrition";
   }, [location.pathname]);
-  const { user, signOut } = useAuth();
-  const [navCollapsed, setNavCollapsed] = useState(startsCollapsed);
+
+  // O drawer do celular fecha ao trocar de tela — e ao deixar de ser celular.
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname, location.search, isMobile]);
 
   const [searchValue, setSearchValue] = useState("");
   const [searching, setSearching] = useState(false);
@@ -172,34 +104,47 @@ export function AppShell() {
     }
   }
 
+  const shellClass = [
+    "shell",
+    prefs.compact && !isMobile ? "shell--compact" : null,
+    isMobile && mobileNavOpen ? "shell--nav-open" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={navCollapsed ? "shell shell--nav-collapsed" : "shell"}>
+    <div className={shellClass}>
       {/* Sem isso, chegar à primeira ação da tela pelo teclado exige passar
-          pelos ~20 links da navegação em todas as páginas. */}
+          pela navegação inteira em todas as páginas. */}
       <a className="skip-link" href="#conteudo">
         Pular para o conteúdo
       </a>
       <header className="masthead">
-        <button
-          type="button"
-          className="masthead__toggle"
-          aria-label={navCollapsed ? "Mostrar menu" : "Esconder menu"}
-          aria-expanded={!navCollapsed}
-          onClick={() => setNavCollapsed((collapsed) => !collapsed)}
-        >
-          <svg
-            width="17"
-            height="17"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden="true"
+        {/* No desktop o menu mora na coluna (expandida ou compacta) e se
+            recolhe pelo controle do rodapé dela; o hambúrguer é do celular. */}
+        {isMobile && (
+          <button
+            type="button"
+            className="masthead__toggle"
+            aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={mobileNavOpen}
+            aria-controls="sidebar"
+            onClick={() => setMobileNavOpen((open) => !open)}
           >
-            <path d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        )}
 
         <Link to="/" className="masthead__brand">
           <BrandLogo variant="symbol" className="masthead__mark" />
@@ -259,45 +204,20 @@ export function AppShell() {
         </div>
       </header>
 
-      <nav className="sidebar" aria-label="Navegação principal">
-        <div className="sidebar__header" />
-        <div className="sidebar__nav" ref={navRef}>
-        {navigation.map((group, index) => (
-          <div className="sidebar__group" key={group.title ?? `grupo-${index}`}>
-            {group.title !== null && (
-              <div className="sidebar__group-title">{group.title}</div>
-            )}
-            {group.items.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                end={needsExactMatch(item.path)}
-                className={({ isActive }) =>
-                  itemAtivo(item.path, isActive, location.search)
-                    ? "sidebar__link is-active"
-                    : "sidebar__link"
-                }
-                onClick={() => {
-                  if (window.matchMedia("(max-width: 640px)").matches) setNavCollapsed(true);
-                }}
-              >
-                <span>{item.label}</span>
-                {!item.implemented && (
-                  <span className="sidebar__tag">em breve</span>
-                )}
-              </NavLink>
-            ))}
-          </div>
-        ))}
-        </div>
-        <div className="sidebar__footer" />
-      </nav>
+      <Sidebar
+        role={user?.role ?? null}
+        prefs={prefs}
+        updatePrefs={update}
+        isMobile={isMobile}
+        mobileOpen={mobileNavOpen}
+        onMobileOpenChange={setMobileNavOpen}
+      />
 
-      {!navCollapsed && (
+      {isMobile && mobileNavOpen && (
         <div
           className="sidebar-backdrop"
           aria-hidden="true"
-          onClick={() => setNavCollapsed(true)}
+          onClick={() => setMobileNavOpen(false)}
         />
       )}
 

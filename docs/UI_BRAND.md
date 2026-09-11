@@ -173,7 +173,9 @@ The Veridi ERP default desktop shell is:
 
 Default:
 - dark-green top topbar (52px);
-- left sidebar (236px, collapsible via the topbar menu toggle);
+- left sidebar: 236px expanded, or a 56px compact icon rail (one icon per
+  section, with tooltip), toggled by the discreet "Recolher menu / Expandir
+  menu" control in the sidebar footer and saved per user;
 - main workspace;
 - no permanent global command toolbar;
 - no permanent bottom status bar.
@@ -181,9 +183,11 @@ Default:
 On mobile widths (≤640px) the sidebar is **not** a permanently visible
 pushed column — it starts hidden and becomes an off-canvas overlay
 (`position: fixed`, same z-index/backdrop idiom as the fullscreen modal)
-opened via the same topbar hamburger toggle, closing on backdrop tap or on
-navigating to a page. This keeps the workspace at full width on a phone
-screen instead of being squeezed by a fixed-width sidebar column.
+opened via the topbar hamburger (shown only on mobile), closing on backdrop
+tap or on navigating to a page. The drawer is always the expanded menu —
+search, favorites and collapsible sections; the compact rail is desktop-only.
+This keeps the workspace at full width on a phone screen instead of being
+squeezed by a fixed-width sidebar column.
 
 ## CRUD editing surface — fullscreen modal (default since v2)
 
@@ -706,6 +710,16 @@ está visível, não faz nada.
 **O título da aba diz qual tela é.** O nome do item de menu, que já é como a
 pessoa chama a tela. Quem trabalha com várias abas — aqui, o normal — não deve
 precisar clicar para descobrir qual é qual.
+
+**Seções recolhíveis, busca de telas e favoritos** (NAVIGATION-SIDEBAR-01). A
+estrutura mora em `app/navigation.ts`: Painel e nove seções, id estável por
+tela e por seção — a preferência grava o id, nunca o rótulo. As seções começam
+recolhidas; a da tela atual abre sozinha, sem virar preferência. "Buscar
+telas…" no topo da coluna (Ctrl/Cmd+K) procura só navegação, nunca registro.
+Favoritos ficam acima das seções sem tirar a tela da seção original. Compacto,
+seções abertas e favoritos são do usuário (`/me/preferences`) e gravam sem
+botão. Entrada que o perfil não pode abrir some do menu, da busca e dos
+favoritos — espelho do gate de leitura da API, nunca regra nova.
 
 ## Trilha, alvo e voz
 
