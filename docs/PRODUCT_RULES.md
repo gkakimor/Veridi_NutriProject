@@ -140,8 +140,12 @@ user to clear them to edit unrelated fields.
 - Quotes are **versioned**. Only the draft is editable, and there is at
   most one open draft per project. Sending freezes the customer and
   project snapshot, so printing it tomorrow never depends on the current
-  registration. A new negotiation is always a new version, and the
-  previously presented version becomes superseded.
+  registration. Before sending there is no snapshot: the draft shows — and
+  prints, marked as draft — the current customer and project registration,
+  exactly what sending will freeze. A version outside draft never falls
+  back to the registration, not even when it has no snapshot (legacy). A
+  new negotiation is always a new version, and the previously presented
+  version becomes superseded.
 - Quantity and price are Decimal; the total is derived, never stored. A
   `null` price means "not priced yet" and never becomes zero.
 - Accepting a quote is an operational record that the customer agreed to

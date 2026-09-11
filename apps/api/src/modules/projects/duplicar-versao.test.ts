@@ -240,9 +240,12 @@ describe("QUOTE-DUPLICATE-01 — duplicar como nova versão", () => {
     expect(v2.sentByName).toBeNull();
     expect(v2.acceptedAt).toBeNull();
     expect(v2.rejectedAt).toBeNull();
-    expect(v2.customerName).toBeNull();
-    expect(v2.projectCode).toBeNull();
     expect(v2.sourcedOrder).toBeNull();
+    // O snapshot do envio da origem não é copiado: a V2 congela o próprio no
+    // envio. Enquanto rascunho, o documento mostra o cadastro atual.
+    const v2Gravada = await getPrisma().quoteVersion.findUniqueOrThrow({ where: { id: v2.id } });
+    expect(v2Gravada.customerName).toBeNull();
+    expect(v2Gravada.projectCode).toBeNull();
 
     // A origem continua exatamente como estava.
     expect(await lerOrcamento(app, v1.id)).toEqual(v1);

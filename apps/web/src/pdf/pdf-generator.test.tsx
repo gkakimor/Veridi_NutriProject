@@ -142,6 +142,64 @@ async function gerar(quote: QuoteVersionDTO, amostra: string) {
   return lerPdf(bytes);
 }
 
+/** A linha do texto extraído que contém o trecho — valor e vizinho saem na mesma linha de base. */
+function linhaQueContem(pagina: string, trecho: string): string {
+  return pagina.split("\n").find((texto) => texto.includes(trecho)) ?? "";
+}
+
+describe("Orçamento — cliente e projeto no papel (PDF-DATA-PARITY-01)", () => {
+  it("rascunho com o cadastro que o servidor entrega: razão social, fantasia, CNPJ, endereço e projeto", async () => {
+    const pdf = await gerar(
+      orcamento([linha(1)], { status: "DRAFT", sentAt: null, sentByName: null }),
+      "ORC-000001-V1-rascunho-com-cliente.pdf",
+    );
+    const [pagina = ""] = pdf.paginas;
+
+    expect(linhaQueContem(pagina, "Nutri Distribuidora de Suplementos Ltda")).toContain(
+      "11.222.333/0001-81",
+    );
+    expect(pagina).toContain("NutriMais");
+    expect(pagina).toContain("Rua das Palmeiras, 1234, Sala 5, Centro");
+    expect(pagina).toContain("Campinas / SP");
+    expect(pagina).toContain("PRJ-000012 — Linha Whey Premium");
+    expect(pagina).toContain("Proteína para academia");
+    expect(pagina).toContain("Distribuidor");
+    for (const rastro of ["http", "localhost", "127.0.0.1", "about:blank"]) {
+      expect(pdf.bruto).not.toContain(rastro);
+    }
+  });
+
+  it("o que o cadastro não tem continua ausente: CNPJ sai —; fantasia, endereço, conceito e canal não aparecem", async () => {
+    const pdf = await gerar(
+      orcamento([linha(1)], {
+        status: "DRAFT",
+        sentAt: null,
+        sentByName: null,
+        customerCnpj: null,
+        customerTradeName: null,
+        customerZipCode: null,
+        customerStreet: null,
+        customerNumber: null,
+        customerComplement: null,
+        customerDistrict: null,
+        customerCity: null,
+        customerState: null,
+        projectConcept: null,
+        projectChannel: null,
+      }),
+      "ORC-000001-V1-rascunho-sem-opcionais.pdf",
+    );
+    const [pagina = ""] = pdf.paginas;
+
+    // CNPJ é campo fixo do cliente: ausente vira "—", nunca some nem é inventado.
+    expect(linhaQueContem(pagina, "Nutri Distribuidora de Suplementos Ltda").trim()).toMatch(/—$/);
+    for (const rotulo of ["NOME FANTASIA", "ENDEREÇO", "CIDADE / UF", "CONCEITO", "CANAL"]) {
+      expect(pagina, rotulo).not.toContain(rotulo);
+    }
+    expect(pagina).toContain("PRJ-000012 — Linha Whey Premium");
+  });
+});
+
 describe("gerador de PDF — Orçamento", () => {
   it("1 item: 1 folha A4, rodapé controlado e nenhum rastro de navegador", async () => {
     const pdf = await gerar(

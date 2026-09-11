@@ -29,9 +29,10 @@ import {
  *
  * Documento de negociação: o rodapé de toda página diz que não é documento
  * fiscal, e o rascunho sai marcado para nunca ser confundido com proposta
- * apresentada. Cliente e projeto são o snapshot congelado no envio, nunca o
- * cadastro atual. Nada de custo, margem, comissão ou código interno: é o
- * papel que vai ao cliente.
+ * apresentada. Cliente e projeto vêm prontos do servidor: o snapshot
+ * congelado no envio ou, no rascunho, o cadastro atual que o envio vai
+ * congelar — o documento não escolhe a fonte. Nada de custo, margem,
+ * comissão ou código interno: é o papel que vai ao cliente.
  */
 
 export const QUOTE_FOOTER_NOTE = "Documento comercial — não constitui documento fiscal.";

@@ -77,6 +77,31 @@ const projectInclude = {
     // DTO montar a proveniência. Sem isso o detalhe do projeto devolvia
     // `pricing: null` e a tela do orçamento não enxergava custo incompleto.
     include: {
+      // Também o cadastro de cliente e projeto: é o que o rascunho mostra
+      // enquanto o envio não congela o snapshot.
+      project: {
+        select: {
+          code: true,
+          name: true,
+          concept: true,
+          channel: true,
+          customer: {
+            select: {
+              code: true,
+              legalName: true,
+              tradeName: true,
+              cnpj: true,
+              zipCode: true,
+              street: true,
+              number: true,
+              complement: true,
+              district: true,
+              city: true,
+              state: true,
+            },
+          },
+        },
+      },
       sourcedCustomerOrder: {
         select: { id: true, code: true, status: true, createdAt: true },
       },
