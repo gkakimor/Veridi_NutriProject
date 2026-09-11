@@ -964,12 +964,20 @@ etapa("qualidade", async () => {
   const emb = todos.filter((l) => !["mpA", "mpB"].includes(l.chave));
   afirmar("embalagem, sem exigência de liberação, nasce utilizável", emb.length === 3 && emb.every((l) => l.status !== "AWAITING_RELEASE"), emb.map((l) => l.status).join(","));
 
-  const planoAntes = await ler(`/customer-orders/${estado.ids.pedido.id}/fulfillment-plan`);
-  const mpAAntes = (planoAntes.materialImpact ?? []).find((m) => m.itemId === estado.ids.mpA.id);
   afirmar(
-    "matéria-prima em quarentena está no físico e fora do disponível",
-    decimalDe(mpAAntes?.onHand) === 6 && decimalDe(mpAAntes?.available) === 0,
-    `físico ${mpAAntes?.onHand} · disponível ${mpAAntes?.available}`,
+    `lote interno com o dia comercial do recebimento — LT-${HOJE.replace(/-/g, "")}-… (RECEIPT-BUSINESS-DAY-01)`,
+    todos.every((l) => String(l.code ?? "").startsWith(`LT-${HOJE.replace(/-/g, "")}-`)),
+    todos.map((l) => l.code).join(", "),
+  );
+
+  // O Plano de Atendimento só responde com o Pedido confirmado; em atendimento, a posição é /inventory.
+  const mpAAntes = await ler(`/inventory/${estado.ids.mpA.id}`);
+  afirmar(
+    "matéria-prima em quarentena está no físico e fora do disponível, e o motivo é dito",
+    decimalDe(mpAAntes.onHand) === 6 &&
+      decimalDe(mpAAntes.available) === 0 &&
+      (mpAAntes.unavailable ?? []).some((u) => u.reason === "AWAITING_QUALITY_RELEASE"),
+    `físico ${mpAAntes.onHand} · disponível ${mpAAntes.available} · ${JSON.stringify(mpAAntes.unavailable)}`,
   );
 
   for (const l of mp) {
@@ -985,13 +993,12 @@ etapa("qualidade", async () => {
 });
 
 etapa("estoque", async () => {
-  const plano = await ler(`/customer-orders/${estado.ids.pedido.id}/fulfillment-plan`);
   for (const [chave, qtd] of Object.entries(NECESSIDADE)) {
-    const m = (plano.materialImpact ?? []).find((x) => x.itemId === estado.ids[chave].id);
+    const m = await ler(`/inventory/${estado.ids[chave].id}`);
     afirmar(
-      `estoque de ${estado.ids[chave].code}: ${qtd} ${itemPor(chave).unidade} físico e disponível, nada negativo`,
-      decimalDe(m?.onHand) === qtd && decimalDe(m?.available) >= 0,
-      `físico ${m?.onHand} · reservado ${m?.reserved} · disponível ${m?.available} · falta ${m?.shortage}`,
+      `estoque de ${estado.ids[chave].code}: ${qtd} ${itemPor(chave).unidade} físico e disponível, nada reservado`,
+      decimalDe(m.onHand) === qtd && decimalDe(m.available) === qtd && decimalDe(m.reserved) === 0,
+      `físico ${m.onHand} · reservado ${m.reserved} · disponível ${m.available}`,
     );
   }
   await pagina.goto(`${WEB}/estoque`);
@@ -999,6 +1006,316 @@ etapa("estoque", async () => {
   await assentar(1500);
   const tela = await pagina.locator("table").first().innerText().catch(() => "");
   afirmar("a Posição de Estoque mostra os cinco materiais da execução", Object.keys(NECESSIDADE).every((k) => tela.includes(estado.ids[k].code)));
+});
+
+/* ───────────────────────────── Produção ───────────────────────────── */
+
+/** Uma seção da tela pelo título (`FormSection` desenha o título num `h3`). */
+const secao = (titulo) =>
+  pagina.locator("section.form-section", { has: pagina.locator("h3", { hasText: titulo }) }).first();
+const lerOp = async () => entidade(await ler(`/production-orders/${estado.ids.op.id}`), "productionOrder");
+const resumoDasNecessidades = (op, campo) =>
+  (op.requirements ?? []).map((r) => `${r.itemCode} ${r[campo]}/${r.requiredQuantity}`).join(", ");
+
+async function abrirOp() {
+  await pagina.goto(`${WEB}/producao/ordens/${estado.ids.op.id}`);
+  await pagina.waitForFunction(() => /OP-\d{6}/.test(document.querySelector("h1")?.textContent ?? ""), null, { timeout: 25000 });
+  await assentar(1200);
+}
+
+etapa("op", async () => {
+  let op = await lerOp();
+  afirmar(
+    `${op.code} nasceu do Pedido ${op.customerOrderCode} em rascunho: ${QTD_PEDIDO} un, formulação ${op.formulationVersionLabel}, fator ${op.productionFactor}`,
+    op.status === "DRAFT" && op.origin === "CUSTOMER_ORDER" && decimalDe(op.plannedQuantity) === QTD_PEDIDO && op.productId === estado.ids.produto.id,
+    `${op.status} · ${op.origin}`,
+  );
+  await abrirOp();
+  await clicar("Planejar OP");
+  await pagina.getByText("Planejada", { exact: true }).first().waitFor({ timeout: 30000 });
+  op = await lerOp();
+  for (const [chave, qtd] of Object.entries(NECESSIDADE)) {
+    const r = (op.requirements ?? []).find((x) => x.itemId === estado.ids[chave].id);
+    afirmar(
+      `necessidade congelada na OP: ${estado.ids[chave].code} ${qtd} ${itemPor(chave).unidade} — ${r?.availabilityStatus ?? "?"}`,
+      decimalDe(r?.requiredQuantity) === qtd && r?.stockUnitCode === itemPor(chave).unidade,
+      `${r?.requiredQuantity} ${r?.stockUnitCode} · disponível ${r?.available}`,
+    );
+  }
+  await abrirOp();
+  await clicar("Liberar OP");
+  await confirmarDialogo("Liberar");
+  await pagina.getByText("Liberada", { exact: true }).first().waitFor({ timeout: 30000 });
+  op = await lerOp();
+  estado.ids.op.code = op.code;
+  estado.ids.op.numero = op.officialNumber;
+  afirmar(
+    `OP liberada com número oficial ${op.officialNumber}, material reservado por inteiro`,
+    op.status === "RELEASED" &&
+      /^\d{3}\/\d{2}$/.test(String(op.officialNumber ?? "")) &&
+      (op.requirements ?? []).every((r) => decimalDe(r.allocatedQuantity) === decimalDe(r.requiredQuantity)),
+    `${op.status} · ${resumoDasNecessidades(op, "allocatedQuantity")}`,
+  );
+});
+
+etapa("separacao", async () => {
+  await abrirOp();
+  const pendentes = () => pagina.getByRole("button", { name: "Escanear / Informar lote", exact: true });
+  const conferidos = () =>
+    pagina.evaluate(() => [...document.querySelectorAll(".badge")].filter((b) => b.textContent?.trim() === "Conferido").length);
+  const total = await pendentes().count();
+  exigir("a OP liberada tem linhas de separação por lote", total > 0, `${total} linha(s)`);
+  for (let i = 0; i < total + 2 && (await pendentes().count()) > 0; i += 1) {
+    const botao = pendentes().first();
+    const lote = (await botao.locator("xpath=ancestor::tr[1]").locator("td").nth(1).innerText()).trim();
+    const antes = await conferidos();
+    await botao.click();
+    // Conferir é digitar o lote da etiqueta — o mesmo campo do leitor de código.
+    await pagina.locator("#lot-scanner-manual").fill(lote);
+    await clicar("Buscar");
+    await pagina.waitForFunction(
+      (n) => [...document.querySelectorAll(".badge")].filter((b) => b.textContent?.trim() === "Conferido").length > n,
+      antes,
+      { timeout: 25000 },
+    );
+    console.log(`  separação: ${lote} conferido`);
+  }
+  afirmar(
+    "toda linha da reserva conferida pelo lote real",
+    (await pendentes().count()) === 0 && (await conferidos()) === total,
+    `${await conferidos()} de ${total}`,
+  );
+});
+
+etapa("consumo", async () => {
+  await abrirOp();
+  const tabela = secao("Consumo Real");
+  await tabela.locator("tbody tr").first().waitFor({ timeout: 25000 });
+  const lotes = await tabela
+    .locator("tbody tr")
+    .evaluateAll((trs) => trs.map((tr) => tr.children[1]?.textContent?.trim() ?? "").filter((t) => t && t !== "—"));
+  for (const lote of lotes) {
+    const linha = tabela.locator("tbody tr", { hasText: lote }).first();
+    const restante = numeroDe(await linha.locator("td").nth(4).innerText());
+    if (!restante) continue;
+    await linha.locator("input").fill(String(restante).replace(".", ","));
+    const consumido = esperarResposta("POST", /^\/production-orders\/[0-9a-f-]{36}\/consumptions$/);
+    await linha.getByRole("button", { name: "Confirmar consumo" }).click();
+    const resposta = await consumido;
+    exigir(`consumo real de ${lote}: ${restante}`, resposta.ok(), `${resposta.status()}`);
+    await assentar(1200);
+  }
+  const op = await lerOp();
+  afirmar(
+    "consumo real = necessidade da fórmula em todo material — nada a reconciliar",
+    op.status === "IN_PRODUCTION" &&
+      op.materialReconciliation?.pendingRequirements === 0 &&
+      (op.requirements ?? []).every((r) => decimalDe(r.consumedQuantity) === decimalDe(r.requiredQuantity)),
+    `${op.status} · ${JSON.stringify(op.materialReconciliation)} · ${resumoDasNecessidades(op, "consumedQuantity")}`,
+  );
+});
+
+etapa("producao", async () => {
+  await abrirOp();
+  await pagina.locator("#output-quantity").first().waitFor({ timeout: 25000 });
+  await preencher("output-quantity", String(QTD_PEDIDO));
+  await escolher("output-destination", "NEW_LOT");
+  await preencher("output-business-lot", `LV-${run.runId}`);
+  if (await pagina.locator("#output-expiry").count()) await preencher("output-expiry", diaComercial(730));
+  const registrado = esperarResposta("POST", /^\/production-orders\/[0-9a-f-]{36}\/outputs$/);
+  await clicar("Registrar produção");
+  const resposta = await registrado;
+  exigir("produção realizada registrada", resposta.ok(), `${resposta.status()}`);
+  await assentar(1500);
+  const op = await lerOp();
+  afirmar(
+    `produzido ${QTD_PEDIDO} de ${QTD_PEDIDO} un`,
+    decimalDe(op.producedQuantity) === QTD_PEDIDO && decimalDe(op.remainingQuantity) === 0,
+    `${op.producedQuantity} · resta ${op.remainingQuantity}`,
+  );
+});
+
+etapa("conclusao", async () => {
+  await abrirOp();
+  afirmar("a tela não acusa material por reconciliar", (await pagina.getByText(/Falta reconciliar/).count()) === 0);
+  await clicar("Concluir OP");
+  await pagina.locator(".confirm-dialog__actions").getByRole("button", { name: "Concluir OP", exact: true }).click();
+  await assentar(2000);
+  const op = await lerOp();
+  afirmar("OP concluída — produzido igual ao planejado, sem motivo de variação", op.status === "COMPLETED" && !op.completionReason, op.status);
+  for (const chave of Object.keys(NECESSIDADE)) {
+    const m = await ler(`/inventory/${estado.ids[chave].id}`);
+    afirmar(
+      `${estado.ids[chave].code} consumido por inteiro: físico 0, nada reservado, nada negativo`,
+      decimalDe(m.onHand) === 0 && decimalDe(m.reserved) === 0,
+      `físico ${m.onHand} · reservado ${m.reserved}`,
+    );
+  }
+});
+
+etapa("pa-estoque", async () => {
+  const resposta = await ler(`/lots?itemId=${estado.ids.produto.paItemId}&pageSize=50`);
+  const lista = resposta.lots ?? resposta.items ?? resposta.data ?? (Array.isArray(resposta) ? resposta : []);
+  const pa = lista[0] ?? {};
+  estado.ids.lotePA = { id: pa.id, code: pa.code };
+  afirmar(
+    `um lote de PA com o dia comercial da produção: ${pa.code}, ${QTD_PEDIDO} un, aguardando liberação`,
+    lista.length === 1 && pa.status === "AWAITING_RELEASE" && String(pa.code ?? "").startsWith(`LT-${HOJE.replace(/-/g, "")}-`),
+    `${pa.code} · lote Veridi ${pa.businessLotNumber ?? "?"} · validade ${String(pa.expiryDate ?? "—").slice(0, 10)} · ${pa.status}`,
+  );
+  const detalhe = entidade(await ler(`/lots/${pa.id}`), "lot");
+  afirmar("rastreabilidade: o lote de PA aponta para a OP que o produziu", detalhe.productionOrderCode === estado.ids.op.code, `${detalhe.productionOrderCode}`);
+
+  await pagina.goto(`${WEB}/estoque/lotes/${pa.id}`);
+  await pagina.getByRole("button", { name: "Liberar", exact: true }).first().waitFor({ timeout: 25000 });
+  await clicar("Liberar");
+  await confirmarDialogo("Liberar");
+  await assentar(1500);
+  const inv = await ler(`/inventory/${estado.ids.produto.paItemId}`);
+  afirmar(
+    `PA liberado pela Qualidade: ${QTD_PEDIDO} un físico e disponível`,
+    decimalDe(inv.onHand) === QTD_PEDIDO && decimalDe(inv.available) === QTD_PEDIDO,
+    `físico ${inv.onHand} · disponível ${inv.available}`,
+  );
+});
+
+/* ───────────────────────── Atendimento, expedição e faturamento ───────────────────────── */
+
+etapa("reserva", async () => {
+  await abrirPedido();
+  const bloco = secao("Reservar Produto Acabado");
+  await bloco.waitFor({ timeout: 25000 });
+  await bloco.getByLabel(`Reservar de ${estado.ids.produto.code}`, { exact: true }).fill(String(QTD_PEDIDO));
+  await bloco.getByRole("button", { name: "Reservar disponível", exact: true }).click();
+  await assentar(2000);
+  const inv = await ler(`/inventory/${estado.ids.produto.paItemId}`);
+  afirmar(
+    `${QTD_PEDIDO} un do PA produzido reservadas para o Pedido`,
+    decimalDe(inv.reserved) === QTD_PEDIDO && decimalDe(inv.available) === 0,
+    `reservado ${inv.reserved} · disponível ${inv.available}`,
+  );
+  await clicar("Preparar Expedição");
+  await pagina.waitForURL(/\/comercial\/expedicoes\/[0-9a-f-]{36}/, { timeout: 25000 });
+  estado.ids.expedicao = { id: pagina.url().match(/\/expedicoes\/([0-9a-f-]{36})/)[1] };
+});
+
+etapa("expedicao", async () => {
+  await pagina.goto(`${WEB}/comercial/expedicoes/${estado.ids.expedicao.id}`);
+  await pagina.waitForFunction(() => /EXP-\d{6}/.test(document.body.innerText), null, { timeout: 25000 });
+  // Conferência física: digitar o lote da etiqueta. O código não vem preenchido de propósito.
+  const campos = pagina.locator('input[aria-label^="Lote conferido da linha"]');
+  await campos.first().waitFor({ timeout: 25000 });
+  for (let i = 0; i < 10 && (await campos.count()) > 0; i += 1) {
+    const campo = campos.first();
+    const lote = ((await campo.getAttribute("aria-label")) ?? "").replace("Lote conferido da linha ", "").trim();
+    const antes = await campos.count();
+    await campo.fill(lote);
+    await pagina.getByRole("button", { name: "Conferir lote" }).first().click();
+    await pagina.waitForFunction(
+      (n) => document.querySelectorAll('input[aria-label^="Lote conferido da linha"]').length < n,
+      antes,
+      { timeout: 25000 },
+    );
+    console.log(`  expedição: ${lote} conferido`);
+  }
+  await clicar("Confirmar expedição");
+  await confirmarDialogo("Confirmar");
+  await esperarTexto("Confirmada");
+  const exp = entidade(await ler(`/shipments/${estado.ids.expedicao.id}`), "shipment");
+  estado.ids.expedicao.code = exp.code;
+  const linhas = exp.lines ?? [];
+  afirmar(
+    `${exp.code} confirmada — ${QTD_PEDIDO} un saindo do lote real ${estado.ids.lotePA.code}`,
+    exp.status === "CONFIRMED" &&
+      linhas.length > 0 &&
+      linhas.every((l) => l.lotId === estado.ids.lotePA.id) &&
+      linhas.reduce((s, l) => s + (decimalDe(l.quantity ?? l.shippedQuantity) ?? 0), 0) === QTD_PEDIDO,
+    JSON.stringify(linhas.map((l) => ({ lote: l.lotCode, q: l.quantity ?? l.shippedQuantity }))),
+  );
+  const inv = await ler(`/inventory/${estado.ids.produto.paItemId}`);
+  afirmar("saída de estoque: PA físico 0, reserva consumida", decimalDe(inv.onHand) === 0 && decimalDe(inv.reserved) === 0, `físico ${inv.onHand} · reservado ${inv.reserved}`);
+  const pedido = await ler(`/customer-orders/${estado.ids.pedido.id}`);
+  afirmar(
+    "o Pedido registra tudo expedido, nada em aberto",
+    decimalDe(pedido.lines?.[0]?.shippedQuantity) === QTD_PEDIDO && decimalDe(pedido.lines?.[0]?.outstandingQuantity) === 0,
+    `${pedido.status} · expedido ${pedido.lines?.[0]?.shippedQuantity} · em aberto ${pedido.lines?.[0]?.outstandingQuantity}`,
+  );
+});
+
+/** O primeiro campo que existir entre os nomes possíveis — o DTO nomeia valores monetários do seu jeito. */
+const campoDe = (objeto, ...nomes) => nomes.map((n) => objeto?.[n]).find((v) => v !== undefined && v !== null);
+
+etapa("faturamento", async () => {
+  await pagina.goto(`${WEB}/comercial/expedicoes/${estado.ids.expedicao.id}`);
+  await clicar("Preparar faturamento");
+  await pagina.waitForURL(/\/comercial\/faturamento\/[0-9a-f-]{36}/, { timeout: 25000 });
+  estado.ids.faturamento = { id: pagina.url().match(/\/faturamento\/([0-9a-f-]{36})/)[1] };
+  await pagina.waitForFunction(
+    () => /FAT-\d{6}/.test(document.body.innerText) && document.body.innerText.includes("Total faturado"),
+    null,
+    { timeout: 25000 },
+  );
+  const lerRodape = async () => {
+    const texto = (await pagina.locator("body").innerText()).replace(/\s+/g, " ");
+    return {
+      bruto: numeroDe(texto.match(/Subtotal bruto(?: \(prévia\))?: (R\$\s?[\d.,]+)/)?.[1]),
+      desconto: numeroDe(texto.match(/Desconto comercial: − (R\$\s?[\d.,]+)/)?.[1]),
+      ajuste: texto.match(/Ajuste de fechamento: ([−+]) ?(R\$\s?[\d.,]+)/)?.slice(1).join(" ") ?? null,
+      total: numeroDe(texto.match(/Total faturado(?: \(prévia\))?: (R\$\s?[\d.,]+)/)?.[1]),
+    };
+  };
+  const n = estado.numeros;
+  const previa = await lerRodape();
+  afirmar(
+    `prévia do faturamento: bruto ${reais(n.bruto)} · desconto − ${reais(n.desconto)} · total ${reais(n.total)}`,
+    bate(previa.bruto, n.bruto) && bate(previa.desconto, n.desconto) && bate(previa.total, n.total),
+    JSON.stringify(previa),
+  );
+  await clicar("Emitir faturamento");
+  await confirmarDialogo("Emitir");
+  await esperarTexto("Emitido");
+  const emitido = await lerRodape();
+  const fat = entidade(await ler(`/billings/${estado.ids.faturamento.id}`), "billing");
+  estado.ids.faturamento.code = fat.code;
+  const bruto = Number(campoDe(fat, "grossAmount", "subtotalAmount", "grossTotal"));
+  const desconto = Number(campoDe(fat, "discountAmount", "discountTotal") ?? 0);
+  const ajuste = Number(campoDe(fat, "commercialAdjustmentAmount", "adjustmentAmount") ?? 0);
+  const total = Number(campoDe(fat, "totalAmount", "total", "billedTotal"));
+  afirmar(
+    `${fat.code} emitido: gross ${bruto} · discount ${desconto} · commercialAdjustment ${ajuste} · total ${total}`,
+    fat.status === "ISSUED" && bate(bruto, n.bruto) && bate(desconto, n.desconto) && bate(ajuste, 0) && bate(total, n.total),
+    `${fat.status} · tela ${JSON.stringify(emitido)}`,
+  );
+  afirmar("sem fragmentação, não há ajuste de fechamento na tela", emitido.ajuste === null, String(emitido.ajuste));
+  const linha = (fat.lines ?? [])[0] ?? {};
+  afirmar(
+    "o preço unitário faturado é o acordado, sem desconto embutido na linha",
+    Math.abs(Number(campoDe(linha, "unitPrice", "agreedUnitPrice")) - n.precoUnitario) < 0.00005,
+    `linha ${JSON.stringify({ unitPrice: linha.unitPrice, agreed: linha.agreedUnitPrice, q: linha.quantity })}`,
+  );
+});
+
+etapa("conferencia-final", async () => {
+  const pedido = await ler(`/customer-orders/${estado.ids.pedido.id}`);
+  console.log(`  ${pedido.code}: ${pedido.status} · faturamento ${pedido.billingStatus}`);
+  afirmar(
+    "o Pedido termina expedido e faturado por inteiro",
+    (pedido.billings ?? []).length === 1 && /FULL|COMPLET|BILLED/i.test(String(pedido.billingStatus)),
+    `${pedido.status} · ${pedido.billingStatus}`,
+  );
+  const op = await lerOp();
+  const consumidos = new Set((op.consumptions ?? []).map((c) => c.lotCode ?? c.lot?.code).filter(Boolean));
+  const recebidos = (estado.ids.lotes ?? []).map((l) => l.code);
+  afirmar(
+    "rastreabilidade: cada lote recebido de MP e embalagem foi consumido na OP que gerou o lote de PA expedido",
+    recebidos.length === 6 && recebidos.every((c) => consumidos.has(c)),
+    `recebidos ${recebidos.join(", ")} · consumidos ${[...consumidos].join(", ")}`,
+  );
+  console.log(
+    `\n  cadeia: ${estado.ids.cliente.code} · ${estado.ids.produto.code} · ${estado.ids.orcamento.code ?? "ORC"} → ${estado.ids.pedido.code} → ` +
+      `${(estado.ids.ocs ?? []).map((o) => o.code).join("+")} → ${estado.ids.op.code} (${estado.ids.op.numero}) → ${estado.ids.lotePA.code} → ` +
+      `${estado.ids.expedicao.code} → ${estado.ids.faturamento.code}`,
+  );
 });
 
 /* ───────────────────────────── Execução ───────────────────────────── */
