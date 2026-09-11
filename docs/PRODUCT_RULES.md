@@ -5249,3 +5249,39 @@ continuam exatamente como antes.**
 - **Uma conta só:** `computePricingModelEffect` e `computePrice`, em
   `@veridi/shared`, servem a API, a prévia da política e a prévia da faixa; a
   validação (`validarModeloDePrecificacao`) também — a tela avisa, a API decide.
+
+## §85 — Duplicar como nova versão: a origem é a escolhida, e o preço é decisão explícita
+
+QUOTE-DUPLICATE-01, 2026-09-11, sobre o gate de preço resolvido pelo PO em
+2026-09-10 (BACKLOG).
+
+**Duplicar parte da versão que se está lendo — não da mais recente — e nunca
+decide o preço sozinho.**
+
+- **Fonte escolhida:** qualquer versão do projeto que não seja rascunho; com
+  V1..V3, partir da V1 cria a V4. A versão nova é sempre `DRAFT`, com o próximo
+  número do projeto.
+- **A origem não muda, e nenhuma outra muda:** duplicar não substitui a enviada
+  nem a aceita. O status das anteriores continua sendo decidido pelo aceite
+  (§70).
+- **Preço: escolha obrigatória, sem padrão.** "Manter os preços desta versão"
+  copia `unitPrice` exatamente — sem recalcular, rebasear, consultar a
+  precificação atual ou criar vínculo com faixa. "Revisar os preços" deixa a
+  linha sem preço (`unitPrice` nulo, o estado canônico de aguardando decisão).
+  Sem estratégia, ou com estratégia desconhecida, a API responde 400 e nada
+  nasce.
+- **Proveniência honesta:** preço mantido de proposta ACEITA é a condição
+  acordada (`INHERITED_AGREEMENT`, apontando para a linha real, como §74); de
+  qualquer outro estado é referência que alguém decidiu manter (`MANUAL`), com
+  o motivo gravado dizendo de qual versão veio — nunca "acordo".
+- **Copia o que é da negociação:** produtos, quantidades, unidades, ordem e as
+  condições comerciais (moeda, observações, condições de pagamento, prazo,
+  desconto, forma, entrada, parcelas, intervalo, juros). A validade vem só se
+  ainda estiver vigente — vencida, a versão nova nasce sem ela e o envio pede a
+  nova. **Nunca copia história:** envio, aceite, recusa e snapshots de cliente,
+  de projeto e de custo.
+- **Um rascunho por projeto:** com outro em edição a duplicação é recusada
+  (409, com o número do rascunho), nunca devolvida em silêncio.
+- **Escopo aprovado:** em projeto aprovado, produto fora do escopo não volta
+  por duplicação — a mesma regra de adicionar linha.
+- **Transacional:** ou nasce a versão inteira, ou nada nasce.

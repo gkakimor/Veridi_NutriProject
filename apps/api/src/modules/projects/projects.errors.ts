@@ -64,6 +64,22 @@ export class QuoteNotDraftError extends Error {
   }
 }
 
+/**
+ * Um rascunho por projeto — QUOTE-DUPLICATE-01.
+ *
+ * Duplicar criaria uma segunda proposta em edição ao mesmo tempo. Recusar em
+ * voz alta, em vez de devolver o rascunho que já existe, é o que impede a ação
+ * de parecer ignorada.
+ */
+export class QuoteDraftExistsError extends Error {
+  constructor(versionNumber: number) {
+    super(
+      `Já existe a V${versionNumber} em rascunho neste projeto — continue nela ou envie antes de duplicar outra versão.`,
+    );
+    this.name = "QuoteDraftExistsError";
+  }
+}
+
 export class QuoteNotSentError extends Error {
   constructor(status: string) {
     super(`Somente orçamento enviado pode ser aceito ou recusado (atual: ${status}).`);

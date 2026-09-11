@@ -39,22 +39,23 @@ por integridade comercial; QUOTE-INT-FIELDS-01, pela mesma razão, em P1;
 PROJECT-INT-FIELDS-01, o mesmo defeito no cadastro do Projeto, promovido a P0;
 FORM-UOM-01, a unidade controlada no Modelo de Formulação; e
 TEMPLATE-APPLY-BASE-UOM-01, promovido a P0 — integridade física da Formulação.
-Saíram em 2026-09-11: CUSTOMER-TAX-PROFILE-01 e PRICING-TEMPLATE-FLEX-01, com
-as regras duráveis em [`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83 e §84.
+Saíram em 2026-09-11: CUSTOMER-TAX-PROFILE-01, PRICING-TEMPLATE-FLEX-01 e
+QUOTE-DUPLICATE-01, com as regras duráveis em
+[`PRODUCT_RULES.md`](PRODUCT_RULES.md) §83, §84 e §85.
 
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
-| **P1-1** | QUOTE-DUPLICATE-01 | A · P1 | Gate de preço RESOLVIDO em 2026-09-10 — escolha explícita, sem herança silenciosa. Primeiro da fila desde que PRICING-TEMPLATE-FLEX-01 fechou, por decisão do PO |
-| **P1-2** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
-| **P1-3** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
-| **P1-4** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
-| **P1-5** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
+| **P1-1** | CUSTOMER-COMMERCIAL-STATUS-01 | A · P1 | Decisão de produto de 2026-09-09. Tem gate próprio: o que prova conversão |
+| **P1-2** | COST-BASELINE-01 | E · #16 | Destrava COST-VAR-02 |
+| **P1-3** | COST-RESOURCE-MULTIPLIER-01 | G | Discovery antes de build |
+| **P1-4** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
 | **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião |
 
 Achados de PRICING-TEMPLATE-FLEX-01, sem posição na fila: PRICING-MODEL-VIEW-01,
 PRICING-MODEL-DIFF-01 e PRICING-ACTIVATE-CONFIRM-01 (seção A, na entrada do
-item).
+item). Achados de QUOTE-DUPLICATE-01, idem: QUOTE-NEW-VERSION-PATHS-01 e
+QUOTE-DUPLICATE-ORIGIN-01.
 
 Discovery sem posição na fila: SUPPLIER-OFFER-OVERLAP-01 — que desde
 2026-09-09 carrega junto a sobreposição de `IndustrialResourceRate`, mesma
@@ -633,6 +634,21 @@ OP é apagada; a cancelada continua no histórico.
 momentos diferentes sem dizer qual é qual".
 
 #### QUOTE-DUPLICATE-01 — "duplicar como nova versão" — GATE DE PREÇO RESOLVIDO
+
+**Fechado em 2026-09-11 — regra durável em `PRODUCT_RULES.md` §85.** Cada
+versão que não é rascunho oferece "Duplicar como nova versão", com a escolha de
+preço obrigatória e sem padrão; zero migration. O registro abaixo fica como
+histórico.
+
+**Achados da entrega (novos, sem posição na fila):**
+- **QUOTE-NEW-VERSION-PATHS-01 — P2.** Dois caminhos criam versão com efeitos
+  diferentes: "Criar nova versão"/"Novo orçamento" parte da mais recente, herda
+  sozinho o preço do caso seguro de §74 e substitui a enviada; "Duplicar como
+  nova versão" parte da escolhida, pergunta o preço e não substitui nada. O PO
+  decide se os dois convergem.
+- **QUOTE-DUPLICATE-ORIGIN-01 — P3.** A versão nova não guarda de qual nasceu:
+  a linha com preço mantido diz no motivo; com "revisar", nada fica. Uma coluna
+  de origem exigiria migration, evitada nesta entrega.
 
 Vindo do walkthrough real (2026-09-09). A auditoria de código mostra que **a
 maior parte disto já existe**, e que um dos comportamentos pedidos foi

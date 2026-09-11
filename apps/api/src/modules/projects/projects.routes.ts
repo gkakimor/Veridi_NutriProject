@@ -55,6 +55,7 @@ import {
   QuoteExpiredError,
   QuoteWithoutValidUntilError,
   ProjectNotFoundError,
+  QuoteDraftExistsError,
   QuoteNotDraftError,
   QuoteNotFoundError,
   QuoteNotSentError,
@@ -75,6 +76,7 @@ import {
   createProjectSchema,
   listProjectsQuerySchema,
   rejectQuoteSchema,
+  duplicateQuoteVersionSchema,
   updateProjectSchema,
   addProjectProductSchema,
   addQuoteLineSchema,
@@ -96,6 +98,7 @@ import {
   acceptQuoteVersion,
   addQuoteLine,
   createQuoteVersion,
+  duplicateQuoteVersion,
   removeQuoteLine,
   updateQuoteLine,
   canSeePricingProvenance,
@@ -175,6 +178,10 @@ function mapDomainError(
   }
   if (error instanceof QuoteNotDraftError) {
     return { status: 409, body: { error: "quote_not_draft", message: error.message } };
+  }
+  // Um rascunho por projeto: duplicar com outro em edição é recusado em voz alta.
+  if (error instanceof QuoteDraftExistsError) {
+    return { status: 409, body: { error: "quote_draft_exists", message: error.message } };
   }
   // Recusa de regra comercial, não falha do servidor: 400 com a mensagem do
   // domínio, como o resto do módulo.
@@ -710,6 +717,29 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "validation_error", issues: formatZodError(parsed.error) });
       }
       return reply.send(await rejectQuoteVersion(id, parsed.data, actor));
+    } catch (error) {
+      const mapped = mapDomainError(error);
+      if (mapped) return reply.status(mapped.status).send(mapped.body);
+      throw error;
+    }
+  });
+
+  /*
+   * Duplicar a versão ESCOLHIDA como a próxima — QUOTE-DUPLICATE-01, §85. A
+   * estratégia de preço é obrigatória no corpo: ausente ou desconhecida é 400,
+   * e a tela não é a única trava.
+   */
+  app.post("/quote-versions/:id/duplicate", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const actor = requireRole(request, "COMMERCIAL", "ADMIN");
+      const parsed = duplicateQuoteVersionSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: "validation_error", issues: formatZodError(parsed.error) });
+      }
+      return reply.status(201).send(await duplicateQuoteVersion(id, parsed.data, actor));
     } catch (error) {
       const mapped = mapDomainError(error);
       if (mapped) return reply.status(mapped.status).send(mapped.body);
