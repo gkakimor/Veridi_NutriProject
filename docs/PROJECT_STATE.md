@@ -1080,6 +1080,12 @@ Findings sem correção: 9 versões ARCHIVED do legado sem snapshot nem linhas;
 o endereço do cliente existe no DTO do Pedido e nenhum documento o mostra;
 as observações do Recebimento e da Expedição, idem.
 
+Contrato da grade (`PdfDataGrid`): campo opcional some só sem dado (`null`,
+texto em branco); "—" já formatado sai no papel, e campo fixo vazio sai "—",
+nunca buraco. Antes, opcional com "—" sumia calado. A Rastreabilidade de
+lote, único documento que escondia campo por "—", passa o dado cru — mesma
+saída.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a

@@ -263,9 +263,14 @@ function safe(children: ReactNode): ReactNode {
   );
 }
 
+/**
+ * Ausência de dado: null, undefined, false ou texto em branco. "—" não entra:
+ * é como o documento escreve "sem dado" (`orDash`), e valor escrito sai no
+ * papel — campo opcional com "—" nunca some calado.
+ */
 function isBlank(value: ReactNode): boolean {
   if (value === null || value === undefined || value === false) return true;
-  return typeof value === "string" && (value.trim() === "" || value.trim() === "—");
+  return typeof value === "string" && value.trim() === "";
 }
 
 // ---------------------------------------------------------------- documento
@@ -456,7 +461,11 @@ export type PdfField = {
   value: ReactNode;
   /** Largura em colunas de 12. Padrão 4 (um terço da linha). */
   span?: number;
-  /** Opcional vazio sai do documento em vez de virar buraco. */
+  /**
+   * Opcional vazio sai do documento em vez de virar buraco. Vazio é dado
+   * ausente (`null`, texto em branco), não "—": valor já formatado sai no
+   * papel — quem quer que o campo suma passa o dado cru.
+   */
   optional?: boolean;
 };
 
@@ -483,6 +492,7 @@ const SPAN_WIDTH: Record<number, string> = {
 /**
  * Campos rotulados em grade de 12 colunas. Cada campo ocupa a largura do seu
  * significado (razão social larga, CEP estreito); a linha quebra sozinha.
+ * Campo vazio sai "—", nunca buraco; opcional vazio sai do papel.
  */
 export function PdfDataGrid({ fields }: { fields: (PdfField | false | null | undefined)[] }) {
   const visiveis = fields.filter(
@@ -498,10 +508,10 @@ export function PdfDataGrid({ fields }: { fields: (PdfField | false | null | und
           data-pdf-role="field"
         >
           <Text style={s.fieldLabel}>{pdfSafe(field.label)}</Text>
-          {typeof field.value === "string" || typeof field.value === "number" ? (
-            <Text style={s.fieldValue}>{pdfSafe(String(field.value))}</Text>
-          ) : isBlank(field.value) ? (
+          {isBlank(field.value) ? (
             <Text style={s.fieldValue}>—</Text>
+          ) : typeof field.value === "string" || typeof field.value === "number" ? (
+            <Text style={s.fieldValue}>{pdfSafe(String(field.value))}</Text>
           ) : (
             field.value
           )}
