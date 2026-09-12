@@ -169,3 +169,50 @@ describe("lembrança da sessão", () => {
     expect(valores()).toMatchObject({ search: "NF-1", status: "all" });
   });
 });
+
+/**
+ * FILTER-OPERATIONS-WAVE-02 — a sessão lembra ESCOLHA, não link.
+ *
+ * O smoke de Lotes mostrou o efeito: clicar em "Liberação de lotes"
+ * (`/estoque/lotes?status=AWAITING_RELEASE`) gravava aquele status na sessão,
+ * e a partir dali "Lotes" — o mesmo endereço sem query — abria na quarentena.
+ * Um link de contexto reescrevia a visão padrão de quem o clicou.
+ */
+describe("a sessão guarda escolha, não contexto de link", () => {
+  it("chegar por uma URL com filtro e não mexer em nada NÃO grava a sessão", () => {
+    const primeira = montar("/?status=ISSUED", ESCOPO);
+    expect(valores().status).toBe("ISSUED");
+    primeira.unmount();
+
+    montar("/", ESCOPO);
+    expect(valores()).toEqual(PADRAO);
+    expect(url()).toBe("");
+  });
+
+  it("mas mexer num filtro depois de chegar pelo link grava o conjunto", () => {
+    const primeira = montar("/?status=ISSUED", ESCOPO);
+    fireEvent.click(screen.getByRole("button", { name: "buscar abc" }));
+    primeira.unmount();
+
+    montar("/", ESCOPO);
+    expect(valores()).toMatchObject({ status: "ISSUED", search: "abc" });
+  });
+
+  it("filtrar, sair e voltar continua preservando o filtro — o caso que a sessão existe para servir", () => {
+    const primeira = montar("/", ESCOPO);
+    fireEvent.click(screen.getByRole("button", { name: "status emitido" }));
+    primeira.unmount();
+
+    montar("/", ESCOPO);
+    expect(valores().status).toBe("ISSUED");
+  });
+
+  it("`Limpar filtros` apaga a lembrança mesmo tendo chegado por link", () => {
+    const primeira = montar("/?status=ISSUED", ESCOPO);
+    fireEvent.click(screen.getByRole("button", { name: "limpar" }));
+    primeira.unmount();
+
+    montar("/", ESCOPO);
+    expect(valores()).toEqual(PADRAO);
+  });
+});

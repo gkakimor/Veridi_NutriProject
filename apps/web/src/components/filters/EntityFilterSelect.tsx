@@ -39,6 +39,7 @@ export function EntityFilterSelect({
   source,
   placeholder,
   label,
+  onResolve,
 }: {
   id: string;
   value: string;
@@ -47,6 +48,15 @@ export function EntityFilterSelect({
   placeholder: string;
   /** Rótulo acessível — a barra de filtros não mostra rótulo visível. */
   label: string;
+  /**
+   * O registro escolhido, quando o campo descobre quem ele é.
+   *
+   * Serve ao CHIP: a lista filtrada por um id vindo de um link pode voltar
+   * VAZIA, e é exatamente aí que a pessoa mais precisa ler de quê a tela
+   * está filtrada. Sem isto o chip só conseguiria o nome a partir das linhas
+   * do resultado — que nesse caso não existem.
+   */
+  onResolve?: (option: EntityOption | null) => void;
 }) {
   const [opcoes, setOpcoes] = useState<EntityOption[]>([]);
 
@@ -102,6 +112,18 @@ export function EntityFilterSelect({
     },
     [acumular],
   );
+
+  /*
+   * Avisa quem escolheu o filtro sobre QUEM está escolhido. Roda quando o
+   * valor muda ou quando o rótulo daquele id finalmente chega.
+   */
+  useEffect(() => {
+    if (!onResolve) return;
+    onResolve(value ? (opcoes.find((opcao) => opcao.id === value) ?? null) : null);
+    // `onResolve` fica fora: os chamadores passam função inline, e incluí-la
+    // faria o efeito rodar a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, opcoes]);
 
   return (
     <div className="toolbar__entity">

@@ -1,19 +1,25 @@
 import { formatQuantity } from "../../lib/quantity";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "../../components/ExportCsvButton";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { InventoryOwnerType, LotDTO, LotStatus } from "@veridi/shared";
 import { LOT_STATUSES, LOT_STATUS_LABELS, ownerLabel } from "@veridi/shared";
+import type { ListLotsParams } from "../../lib/lots-api";
 import { listLots } from "../../lib/lots-api";
 import { useAuth } from "../../app/AuthProvider";
-import { useInitialFilters } from "../../lib/filter-params";
-import { clearStoredFilters, usePersistentFilter } from "../../lib/stored-filters";
 import { EntityLink } from "../../components/EntityLink";
 import { RowActions } from "../../components/RowActions";
 import { formatDate } from "../../lib/dates";
 import { ContextHelp, InfoHint } from "../../components/help";
 import { helpHints, helpTopics } from "../../help/help-content";
 import type { HelpHintId } from "../../help/help-content";
+import { useListFilters } from "../../lib/list-filters";
+import { ActiveFilterChips } from "../../components/filters/ActiveFilterChips";
+import type { FilterChip } from "../../components/filters/ActiveFilterChips";
+import { ClearFilters } from "../../components/filters/ClearFilters";
+import { EntityFilterSelect } from "../../components/filters/EntityFilterSelect";
+import type { EntityOption } from "../../components/SearchableEntitySelect";
+import { itemFilterSource } from "../../lib/filter-sources";
 
 /** ⓘ de uma coluna, lido do registro central — o texto nunca mora no JSX. */
 function DicaDaColuna({ id }: { id: HelpHintId }) {
@@ -27,17 +33,44 @@ type OwnerFilter = InventoryOwnerType | "all";
 const PAGE_SIZE = 20;
 
 /**
- * Traduz o `?status=` da URL, recusando o que não for um status conhecido.
+ * Os filtros desta lista e o que cada um significa quando está limpo.
  *
- * `null` significa "sem contexto na URL", que é o que faz o filtro guardado da
- * sessão continuar valendo. Aceitar texto arbitrário aqui produziria uma tela
- * filtrada por um status que não existe, e portanto vazia sem explicação.
+ * `itemId` é FILTRO, não um contexto à parte. Ele vivia fora do conjunto —
+ * lido direto de `useSearchParams` — e por isso ficava fora do recarregamento,
+ * fora do CSV e fora do "Limpar filtros". Aqui ele é um filtro como os
+ * outros, com chip, × e endereço.
+ *
+ * `ownerType` também não estava na URL: o filtro funcionava e o endereço não
+ * o reproduzia, então "me manda o link do que você está vendo" mostrava
+ * outra lista.
  */
-function statusDaUrl(valor: string): StatusFilter | null {
-  if (valor === "") return null;
+const FILTROS_PADRAO = {
+  search: "",
+  status: "all",
+  ownerType: "all",
+  itemId: "",
+};
+
+/**
+ * Status conhecido, ou o default.
+ *
+ * A URL é texto de fora: `?status=QUALQUERCOISA` produziria uma consulta com
+ * um status que o domínio não tem — a API recusaria, e a tela mostraria erro
+ * em vez de lista. Cair no default é a leitura honesta de um endereço quebrado.
+ */
+function statusValido(valor: string): StatusFilter {
   if (valor === "all") return "all";
-  return (LOT_STATUSES as readonly string[]).includes(valor) ? (valor as LotStatus) : null;
+  return (LOT_STATUSES as readonly string[]).includes(valor) ? (valor as LotStatus) : "all";
 }
+
+function ownerValido(valor: string): OwnerFilter {
+  return valor === "VERIDI" || valor === "CUSTOMER" ? valor : "all";
+}
+
+const OWNER_LABELS: Record<InventoryOwnerType, string> = {
+  VERIDI: "Veridi",
+  CUSTOMER: "Cliente",
+};
 
 function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
   if (isExpired) return "badge badge--err";
@@ -57,6 +90,13 @@ function statusBadgeClass(status: LotStatus, isExpired: boolean): string {
 /**
  * Estoque → Lotes. `Recebido` e a quantidade ORIGINAL do recebimento — nao
  * e saldo. Sem On Hand ainda (isso vem com Inventory Movements).
+ *
+ * É TAMBÉM a tela de "Liberação de lotes", que é este mesmo endereço com
+ * `?status=AWAITING_RELEASE` (ver `app/navigation.ts`). Duas portas, uma
+ * lista — e é por isso que contexto residual doía tanto aqui: quem tinha
+ * deixado um filtro na sessão clicava em "Liberação de lotes" e recebia o
+ * cruzamento do status do link com a busca e o proprietário da visita
+ * anterior. Na foundation a URL é conjunto explícito, não merge por campo.
  */
 const FILTER_SCOPE = "lots";
 
@@ -66,82 +106,52 @@ export function LotsPage() {
 
   const [lots, setLots] = useState<LotDTO[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [itemEscolhido, setItemEscolhido] = useState<EntityOption | null>(null);
 
-  // Filtros lembrados na sessão: quem abre um lote e volta não perde o
-  // recorte. `Limpar filtros` devolve a lista completa em um clique.
-  const urlFilter = useInitialFilters();
-  const [search, setSearch] = usePersistentFilter(
-    user?.id ?? null,
-    FILTER_SCOPE,
-    "search",
-    "",
-    urlFilter("search"),
-  );
-  const [statusFilter, setStatusFilter] = usePersistentFilter<StatusFilter>(
-    user?.id ?? null,
-    FILTER_SCOPE,
-    "status",
-    "all",
-    /*
-     * O parâmetro da URL vence o filtro guardado da sessão — o campo de busca
-     * ao lado já fazia isso e este não fazia.
-     *
-     * O Dashboard aponta para `?status=AWAITING_RELEASE` no atalho de "Lotes
-     * aguardando liberação", e a tela abria em "Todos os status": a pessoa
-     * clicava no caminho mais visível para a tarefa mais sensível e recebia a
-     * lista inteira, com o lote que aguarda Qualidade perdido no meio. Link
-     * que carrega contexto e a tela ignora é pior que link nenhum, porque
-     * ensina a confiar num filtro que não foi aplicado.
-     */
-    statusDaUrl(urlFilter("status")),
-  );
-  const [ownerFilter, setOwnerFilter] = usePersistentFilter<OwnerFilter>(
-    user?.id ?? null,
-    FILTER_SCOPE,
-    "owner",
-    "all",
-  );
+  const { values, page, set, setPage, clear, isActive } = useListFilters({
+    defaults: FILTROS_PADRAO,
+    persistScope: FILTER_SCOPE,
+    userId: user?.id ?? null,
+  });
+  const { search, itemId } = values;
+  const statusFilter = statusValido(values.status);
+  const ownerFilter = ownerValido(values.ownerType);
+
+  /*
+   * UM conjunto de filtros para a consulta e para o CSV.
+   *
+   * `itemId` era lido de `useSearchParams` à parte e não entrava aqui: o CSV
+   * exportava a base inteira enquanto a tela mostrava os lotes de um item, e
+   * ninguém tinha como notar olhando o arquivo.
+   */
+  const filtrosDaConsulta = useMemo(() => {
+    const filtros: Omit<ListLotsParams, "page" | "pageSize"> = {};
+    if (search) filtros.search = search;
+    if (itemId) filtros.itemId = itemId;
+    if (statusFilter !== "all") filtros.status = statusFilter;
+    if (ownerFilter !== "all") filtros.ownerType = ownerFilter;
+    return filtros;
+  }, [search, itemId, statusFilter, ownerFilter]);
+
   const [searchInput, setSearchInput] = useState(search);
 
   useEffect(() => {
-    const handle = setTimeout(() => setSearch(searchInput), 300);
-    return () => clearTimeout(handle);
-    // `setSearch` é estável; incluí-lo só provocaria reexecução do debounce.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput]);
-
-  const hasFilters = search !== "" || statusFilter !== "all" || ownerFilter !== "all";
-
-  function handleClearFilters() {
-    setSearchInput("");
-    setSearch("");
-    setStatusFilter("all");
-    setOwnerFilter("all");
-    clearStoredFilters(user?.id ?? null, FILTER_SCOPE);
-  }
+    setSearchInput(search);
+  }, [search]);
 
   useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter, ownerFilter]);
-
-  // Link contextual traz identidade exata; nunca combina com filtro anterior.
-  const [urlParams] = useSearchParams();
-  const contextParam = urlParams.get("itemId") ?? "";
+    if (searchInput === search) return;
+    const handle = setTimeout(() => set({ search: searchInput }), 300);
+    return () => clearTimeout(handle);
+  }, [searchInput, search, set]);
 
   const reload = useCallback(() => {
     setLoading(true);
     setError(null);
 
-    const params: Parameters<typeof listLots>[0] = { page, pageSize: PAGE_SIZE };
-    if (contextParam) params.itemId = contextParam;
-    if (search) params.search = search;
-    if (statusFilter !== "all") params.status = statusFilter;
-    if (ownerFilter !== "all") params.ownerType = ownerFilter;
-
-    listLots(params)
+    listLots({ ...filtrosDaConsulta, page, pageSize: PAGE_SIZE })
       .then((result) => {
         setLots(result.lots);
         setTotal(result.total);
@@ -150,11 +160,49 @@ export function LotsPage() {
         setError(err instanceof Error ? err.message : "Falha ao carregar lotes");
       })
       .finally(() => setLoading(false));
-  }, [page, search, statusFilter, ownerFilter]);
+    /*
+     * `filtrosDaConsulta` inclui `itemId`. Antes as dependências eram
+     * `[page, search, statusFilter, ownerFilter]` e o item ficava de fora:
+     * trocar `?itemId=` sem desmontar a página — navegar de um item para
+     * outro pelo mesmo link — deixava na tela os lotes do item ANTERIOR, com
+     * a URL já apontando para o novo.
+     */
+  }, [filtrosDaConsulta, page]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const chips: FilterChip[] = [];
+  if (search) {
+    chips.push({ label: "Busca", value: search, onRemove: () => set({ search: "" }) });
+  }
+  if (statusFilter !== "all") {
+    chips.push({
+      label: "Status",
+      value: LOT_STATUS_LABELS[statusFilter],
+      onRemove: () => set({ status: "all" }),
+    });
+  }
+  if (ownerFilter !== "all") {
+    chips.push({
+      label: "Proprietário",
+      value: OWNER_LABELS[ownerFilter],
+      onRemove: () => set({ ownerType: "all" }),
+    });
+  }
+  if (itemId) {
+    /*
+     * O nome do item sai do próprio campo de filtro, não das linhas: chegar
+     * por um link e não encontrar lote nenhum é justamente quando a pessoa
+     * precisa ler de que item a tela está falando.
+     */
+    const nome =
+      itemEscolhido?.id === itemId
+        ? `${itemEscolhido.code} · ${itemEscolhido.name}`
+        : (lots.find((lot) => lot.itemId === itemId)?.itemCode ?? "selecionado");
+    chips.push({ label: "Item", value: nome, onRemove: () => set({ itemId: "" }) });
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -175,14 +223,7 @@ export function LotsPage() {
         >
           Escanear QR
         </button>
-        <ExportCsvButton
-          path="/lots/export.csv"
-          filters={{
-            search,
-            status: statusFilter === "all" ? undefined : statusFilter,
-            ownerType: ownerFilter === "all" ? undefined : ownerFilter,
-          }}
-        />
+        <ExportCsvButton path="/lots/export.csv" filters={filtrosDaConsulta} />
 </div>
 
       {/* "Lote" aqui é duas identidades ao mesmo tempo, e a coluna Status
@@ -210,7 +251,7 @@ export function LotsPage() {
         <select
           id="lots-owner-filter"
           value={ownerFilter}
-          onChange={(event) => setOwnerFilter(event.target.value as OwnerFilter)}
+          onChange={(event) => set({ ownerType: event.target.value })}
         >
           <option value="all">Todos os proprietários</option>
           <option value="VERIDI">Veridi</option>
@@ -223,7 +264,7 @@ export function LotsPage() {
         <select
           id="lots-status-filter"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          onChange={(event) => set({ status: event.target.value })}
         >
           <option value="all">Todos os status</option>
           {LOT_STATUSES.map((status) => (
@@ -233,27 +274,27 @@ export function LotsPage() {
           ))}
         </select>
 
-        {hasFilters && (
-          <button type="button" className="btn btn--ghost btn--sm" onClick={handleClearFilters}>
-            Limpar filtros
-          </button>
-        )}
+        {/* O item era só contexto de link: não havia como filtrar por ele a
+            partir da própria tela, embora a API sempre tenha respondido. O
+            catálogo de itens é grande — a busca é do servidor. */}
+        <EntityFilterSelect
+          id="lots-item-filter"
+          label="Filtrar por item"
+          placeholder="Todos os itens"
+          value={itemId}
+          onChange={(value) => set({ itemId: value })}
+          source={itemFilterSource}
+          onResolve={setItemEscolhido}
+        />
       </div>
 
-      {error && <p className="form-alert" role="alert">{error}</p>}
+      {/* Um "Limpar filtros" só, e ele limpa tudo — inclusive o item que veio
+          pelo link. Havia dois botões com o mesmo texto: o da barra zerava os
+          filtros da sessão e deixava o `?itemId=` de pé; o do aviso de
+          contexto trocava de endereço e deixava a sessão intacta. */}
+      <ActiveFilterChips chips={chips} onClear={clear} />
 
-      {contextParam && (
-        <p className="context-chip">
-          Mostrando apenas os lotes deste item — filtro veio de um link.{" "}
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={() => navigate("/estoque/lotes")}
-          >
-            Limpar filtros
-          </button>
-        </p>
-      )}
+      {error && <p className="form-alert" role="alert">{error}</p>}
 
       <div className="table-container">
         <table className="table table--clickable-rows table--sticky-actions">
@@ -352,7 +393,14 @@ export function LotsPage() {
             {!loading && lots.length === 0 && (
               <tr>
                 <td colSpan={10} className="table__empty">
-                  Nenhum lote encontrado.
+                  {isActive ? (
+                    <>
+                      Nenhum lote encontrado para os filtros atuais.{" "}
+                      <ClearFilters onClear={clear} />
+                    </>
+                  ) : (
+                    "Nenhum lote encontrado."
+                  )}
                 </td>
               </tr>
             )}
@@ -372,7 +420,7 @@ export function LotsPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page <= 1}
-            onClick={() => setPage((current) => current - 1)}
+            onClick={() => setPage(page - 1)}
           >
             Anterior
           </button>
@@ -380,7 +428,7 @@ export function LotsPage() {
             type="button"
             className="btn btn--secondary btn--sm"
             disabled={page >= totalPages}
-            onClick={() => setPage((current) => current + 1)}
+            onClick={() => setPage(page + 1)}
           >
             Próxima
           </button>

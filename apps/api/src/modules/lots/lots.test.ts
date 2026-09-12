@@ -476,3 +476,109 @@ describe("Lots — bloqueio tem volta", () => {
     await qualidade.close();
   });
 });
+
+/**
+ * FILTER-OPERATIONS-WAVE-02 — o CSV de Lotes respeita o contexto.
+ *
+ * O `itemId` sempre funcionou na API; o que não funcionava era a TELA, que
+ * lia o parâmetro à parte e não o enviava ao botão de exportação: a lista
+ * mostrava os lotes de um item e o arquivo trazia a base inteira. A metade
+ * de tela está provada em `web pages/lots/lotes-filtros-contexto.test.tsx`;
+ * o que se fixa aqui é a outra metade — o arquivo obedece ao recorte, e é o
+ * MESMO `listLotsQuerySchema` da listagem que o define.
+ */
+describe("Lots — exportação respeita o recorte", () => {
+  async function outroItemComLote(sufixo: string) {
+    const prisma = getPrisma();
+    const item = await prisma.item.create({
+      data: {
+        type: "RAW_MATERIAL",
+        code: `MP-LOT-${marker}-${sufixo}`,
+        name: `Item Lote Export ${marker}-${sufixo}`,
+        unitCode: "kg",
+        controlsLot: true,
+        controlsExpiry: false,
+        requiresQualityRelease: false,
+      },
+    });
+    fixtureItemIds.push(item.id);
+    const lot = await prisma.lot.create({
+      data: {
+        code: `LT-EXPORT-${marker}-${sufixo}`,
+        itemId: item.id,
+        supplierId,
+        initialReceivedQuantity: "7",
+        status: "AVAILABLE",
+      },
+    });
+    fixtureLotIds.push(lot.id);
+    return { item, lot };
+  }
+
+  it("`itemId` no CSV traz só os lotes daquele item", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const primeiro = await outroItemComLote("X");
+    const segundo = await outroItemComLote("Y");
+
+    const csv = await app.inject({
+      method: "GET",
+      url: `/lots/export.csv?itemId=${primeiro.item.id}`,
+    });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.body).toContain(primeiro.lot.code);
+    expect(csv.body).not.toContain(segundo.lot.code);
+
+    await app.close();
+  });
+
+  it("o arquivo e a tela veem o mesmo conjunto, com os mesmos filtros", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const filtros = `itemId=${itemId}&status=AVAILABLE`;
+
+    const tela = await app.inject({ method: "GET", url: `/lots?${filtros}&pageSize=100` });
+    expect(tela.statusCode).toBe(200);
+    const naTela = (tela.json().lots as { code: string }[]).map((lot) => lot.code);
+
+    const csv = await app.inject({ method: "GET", url: `/lots/export.csv?${filtros}` });
+    expect(csv.statusCode).toBe(200);
+
+    expect(naTela.length).toBeGreaterThan(0);
+    for (const code of naTela) expect(csv.body).toContain(code);
+    // E o que a tela exclui, o arquivo também exclui.
+    expect(csv.body).not.toContain(`LT-TESTE-${marker}-B`);
+
+    await app.close();
+  });
+
+  it("`status=AWAITING_RELEASE` — a porta da Liberação de lotes — exporta só a quarentena", async () => {
+    const app = buildTestApp();
+    await app.ready();
+
+    const prisma = getPrisma();
+    const emEspera = await prisma.lot.create({
+      data: {
+        code: `LT-ESPERA-${marker}`,
+        itemId,
+        supplierId,
+        initialReceivedQuantity: "3",
+        status: "AWAITING_RELEASE",
+      },
+    });
+    fixtureLotIds.push(emEspera.id);
+
+    const csv = await app.inject({
+      method: "GET",
+      url: `/lots/export.csv?itemId=${itemId}&status=AWAITING_RELEASE`,
+    });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.body).toContain(emEspera.code);
+    expect(csv.body).not.toContain(`LT-TESTE-${marker}-A`);
+    expect(csv.body).not.toContain(`LT-TESTE-${marker}-B`);
+
+    await app.close();
+  });
+});

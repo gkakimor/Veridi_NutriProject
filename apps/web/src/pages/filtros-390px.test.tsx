@@ -5,7 +5,8 @@ import { render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 /**
- * 390px — as quatro telas da FILTER-OPERATIONS-WAVE-01.
+ * 390px — as telas migradas para a foundation de filtros
+ * (FILTER-OPERATIONS-WAVE-01 e -02).
  *
  * jsdom não faz layout, então o que se prova é a REGRA e a estrutura: os
  * controles de filtro com largura mínima em pixel passam a ocupar a linha
@@ -27,6 +28,8 @@ vi.mock("../lib/attachments-api", () => ({
   rejectCoa: vi.fn(),
 }));
 vi.mock("../lib/suppliers-api", () => ({ listSuppliers: vi.fn().mockResolvedValue({ suppliers: [], page: 1, pageSize: 20, total: 0 }) }));
+vi.mock("../lib/lots-api", () => ({ listLots: vi.fn().mockResolvedValue({ lots: [], page: 1, pageSize: 20, total: 0 }) }));
+vi.mock("../lib/items-api", () => ({ listItems: vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0 }) }));
 vi.mock("../lib/products-api", () => ({ listProducts: vi.fn().mockResolvedValue({ products: [], page: 1, pageSize: 20, total: 0 }) }));
 vi.mock("../app/AuthProvider", () => ({
   useAuth: () => ({ user: { id: "u-1", role: "ADMIN" } }),
@@ -36,17 +39,21 @@ import { listReceipts } from "../lib/receiving-api";
 import { listFinishedGoods } from "../lib/finished-goods-api";
 import { listProductionOrders } from "../lib/production-orders-api";
 import { listQualityQueue } from "../lib/attachments-api";
+import { listLots } from "../lib/lots-api";
 import { clearStoredFilters } from "../lib/stored-filters";
 import { ReceiptsPage } from "./receiving/ReceiptsPage";
 import { FinishedGoodsPage } from "./finished-goods/FinishedGoodsPage";
 import { PickingConsumptionPage } from "./production-orders/PickingConsumptionPage";
 import { CoaQueuePage } from "./quality/CoaQueuePage";
+import { LotsPage } from "./lots/LotsPage";
 
 const TELAS = [
   { nome: "Recebimentos", Tela: ReceiptsPage, carregou: listReceipts, escopo: "receipts" },
   { nome: "Produto Acabado", Tela: FinishedGoodsPage, carregou: listFinishedGoods, escopo: "finished-goods" },
   { nome: "Picking / Consumo", Tela: PickingConsumptionPage, carregou: listProductionOrders, escopo: "picking" },
   { nome: "Documentos / CoA", Tela: CoaQueuePage, carregou: listQualityQueue, escopo: "coa-queue" },
+  // Lotes é também "Liberação de lotes" (`?status=AWAITING_RELEASE`).
+  { nome: "Lotes", Tela: LotsPage, carregou: listLots, escopo: "lots" },
 ];
 
 const css = () =>

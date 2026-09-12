@@ -1503,6 +1503,51 @@ Nenhuma migration. Lotes, Liberação de Lotes, Pedidos, Expedições, OP, OC,
 Relatórios e Dashboard não foram tocados — próximo é
 FILTER-OPERATIONS-WAVE-02.
 
+## Lotes: contexto de link deixou de ser adivinhação (FILTER-OPERATIONS-WAVE-02, 2026-09-12)
+
+Uma tela só, e duas portas: "Liberação de lotes" é `/estoque/lotes?status=
+AWAITING_RELEASE` (`app/navigation.ts`). É isso que tornava o contexto
+residual grave aqui — não era uma lista secundária errando, era a fila da
+Qualidade.
+
+**A causa dos resíduos: merge por CAMPO.** `usePersistentFilter` recebia o
+override da URL campo a campo. Chegando em `?status=AWAITING_RELEASE`, o
+status vinha do link e `search` e `owner` caíam na LEMBRANÇA DA SESSÃO — quem
+tinha filtrado qualquer coisa antes clicava em "Liberação de lotes" e recebia
+o cruzamento, sem nada na tela dizendo isso. Na foundation a URL é conjunto
+explícito: trouxe qualquer filtro da tela, ela responde por todos.
+
+**`itemId` era um filtro fora do conjunto.** Lido direto de
+`useSearchParams`, ficava fora de três lugares ao mesmo tempo: das
+dependências do `reload` (trocar `?itemId=` sem desmontar a página deixava na
+tela os lotes do item ANTERIOR, com a URL já no novo), do objeto que vai ao
+CSV (a tela mostrava um item e o arquivo trazia a base inteira) e do "Limpar
+filtros". Agora é filtro como os outros, com chip, × e endereço — e ganhou
+controle próprio, com busca no servidor (`EntityFilterSelect` +
+`itemFilterSource`): filtrar por item só era possível chegando por link,
+embora a API sempre tenha respondido.
+
+**Dois botões com o mesmo texto.** O "Limpar filtros" da barra zerava a
+sessão e deixava o `?itemId=` de pé; o do aviso de contexto trocava de
+endereço e deixava a sessão intacta. Sobrou um, e ele limpa tudo.
+
+**`ownerType` entrou na URL.** O filtro funcionava e o endereço não o
+reproduzia: "me manda o link do que você está vendo" mostrava outra lista.
+
+**Foundation — a sessão guarda ESCOLHA, não link.** O smoke pegou o efeito
+colateral: clicar em "Liberação de lotes" gravava aquele status na sessão, e
+daí em diante "Lotes" (o mesmo endereço, sem query) abria na quarentena — um
+link de contexto reescrevia em silêncio a visão padrão de quem o clicou, e o
+menu apontava para um item enquanto a tela mostrava o recorte do outro.
+`useListFilters` passou a persistir só depois de a pessoa mexer em algum
+filtro na tela. "Filtrei, abri um registro, voltei" continua preservado, que
+é para isso que a lembrança existe. Vale para as seis telas migradas.
+
+Nenhuma mudança de backend e nenhuma migration: a API de Lotes já respondia
+por `itemId`, `status`, `ownerType` e `search`, e já paginava. Regra de
+liberação, validade, CoA e status de lote não foram tocados — só consulta,
+filtro e contexto.
+
 ## Próxima prioridade
 
 A fila viva ficou congelada durante o FAST-DEVELOPMENT-RESET-02 e continua a
