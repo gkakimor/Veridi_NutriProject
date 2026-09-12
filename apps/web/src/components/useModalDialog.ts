@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { useInertBackground } from "./useInertBackground";
 
@@ -29,6 +29,22 @@ export function useModalDialog(
 ): void {
   useInertBackground(open, ref);
 
+  /**
+   * `onClose` é LIDO no Escape, não observado.
+   *
+   * Enquanto ele era dependência do efeito, um diálogo com campo digitável
+   * perdia o que era digitado: `onClose={() => setAberto(false)}` nasce de
+   * novo a cada renderização, a tecla re-renderizava a tela de trás, o efeito
+   * se desmontava e remontava, e a remontagem devolvia o foco ao primeiro
+   * botão. O motivo do cancelamento da OC não recebia uma letra sequer.
+   *
+   * A ref guarda sempre a última versão, então o Escape continua chamando o
+   * que a renderização atual quer, sem prender foco e trap à identidade da
+   * função.
+   */
+  const fechar = useRef(onClose);
+  fechar.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     const dialog = ref.current;
@@ -54,7 +70,7 @@ export function useModalDialog(
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        fechar.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -81,5 +97,5 @@ export function useModalDialog(
       // topo da página, longe de onde a pessoa estava.
       previouslyFocused?.focus?.();
     };
-  }, [open, ref, onClose]);
+  }, [open, ref]);
 }

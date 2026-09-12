@@ -1,6 +1,12 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useState , useRef } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import {
+  assinaturaDoDocumento,
+  decimalComparavel,
+  textoComparavel,
+} from "../../lib/dirty-fields";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { PageBreadcrumbs } from "../../components/PageBreadcrumbs";
@@ -235,12 +241,26 @@ export function PurchaseOrderPage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
 
+  /**
+   * A assinatura da OC de referência — o que sair daqui não se perde.
+   *
+   * `null` é "retome na próxima renderização": toda leitura do servidor passa
+   * por `syncFormFromServer`, então salvar, confirmar e cancelar zeram a
+   * pendência sem cada caminho ter que lembrar disso.
+   */
+  const baseline = useRef<string | null>(null);
+
+  /** Espelho de `lines` para decisões tomadas fora do render. */
+  const linhasAgora = useRef<LineRow[]>(lines);
+  linhasAgora.current = lines;
+
   const syncFormFromServer = useCallback((po: PurchaseOrderDTO) => {
     setSupplierId(po.supplierId);
     setOrderDate(toDateInputValue(po.orderDate));
     setExpectedDeliveryDate(toDateInputValue(po.expectedDeliveryDate));
     setNotes(po.notes ?? "");
     setLines(po.lines.map(lineFromDTO));
+    baseline.current = null;
   }, []);
 
   /**
@@ -415,6 +435,13 @@ export function PurchaseOrderPage() {
                 },
               ],
         );
+        /*
+         * O atalho PREENCHE, não edita: quem veio da falta de material e
+         * desiste antes de digitar qualquer coisa não tem o que perder. Só
+         * quando ele realmente preencheu — o rascunho que volta de um cadastro
+         * é edição de verdade e não pode virar referência.
+         */
+        if (linhasAgora.current.length === 0) baseline.current = null;
       })
       .catch(() => undefined);
   }, [isNew, shortageItemId, shortageQuantity]);
@@ -564,6 +591,43 @@ export function PurchaseOrderPage() {
   const previaDifereDoGravado =
     isDraftEditable && purchaseOrder !== null && previa.orderTotal !== totalGravado;
 
+  /**
+   * A OC como ela está na tela, em forma comparável.
+   *
+   * Só o que o salvamento envia. Código, nome, recebido e em aberto vêm do
+   * servidor e mudam sozinhos; a chave da linha é identidade de renderização.
+   * Qualquer um deles na assinatura faria a tela se declarar alterada por
+   * conta própria.
+   */
+  const assinaturaAtual = assinaturaDoDocumento({
+    supplierId: textoComparavel(supplierId),
+    orderDate: textoComparavel(orderDate),
+    expectedDeliveryDate: textoComparavel(expectedDeliveryDate),
+    notes: textoComparavel(notes),
+    lines: lines.map((line) => ({
+      itemId: textoComparavel(line.itemId),
+      orderedQuantity: decimalComparavel(line.orderedQuantity),
+      unitPrice: decimalComparavel(line.unitPrice),
+    })),
+  });
+
+  /*
+   * A referência da comparação. `null` significa "a próxima renderização é a
+   * nova referência" — é assim que carregar do servidor, salvar, confirmar e
+   * cancelar zeram a pendência sem ninguém precisar reescrever a projeção
+   * duas vezes e mantê-las iguais para sempre.
+   */
+  if (baseline.current === null) baseline.current = assinaturaAtual;
+  /*
+   * OC cancelada não edita nada; fora do rascunho ainda se altera previsão de
+   * entrega e observações, e isso também se perde ao sair.
+   */
+  const { liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: isForecastEditable && baseline.current !== assinaturaAtual,
+    substantivo: "ordem de compra",
+    genero: "a",
+  });
+
   async function handleSaveDraft() {
     if (!supplierId) {
       setError("Selecione um fornecedor.");
@@ -606,7 +670,14 @@ export function PurchaseOrderPage() {
 
       if (isNew) {
         const created = await createPurchaseOrder(payload);
-        navigate(`/compras/ordens/${created.id}`, { replace: true });
+        /*
+         * Gravou: o que está na tela virou documento. A troca de endereço
+         * acontece nesta mesma função, antes de qualquer renderização — sem
+         * isto a guarda leria a pendência de antes do salvamento e perguntaria
+         * se a pessoa quer descartar o que ela acabou de gravar.
+         */
+        baseline.current = assinaturaAtual;
+        liberarGuarda(() => navigate(`/compras/ordens/${created.id}`, { replace: true }));
       } else if (id) {
         const updated = await updatePurchaseOrder(id, payload);
         setPurchaseOrder(updated);
@@ -800,12 +871,16 @@ options={supplierOptions.map((supplier) => ({
                 }))}
                 canCreate
                 createLabel="Novo fornecedor"
+                /* Sair para cadastrar NÃO é descartar: o rascunho vai junto e
+                   volta aplicado. */
                 onCreateNew={() =>
-                  origem.goCreate({
-                    route: "/cadastros/fornecedores/novo",
-                    fieldKey: "supplierId",
-                    entityType: "supplier",
-                  })
+                  liberarGuarda(() =>
+                    origem.goCreate({
+                      route: "/cadastros/fornecedores/novo",
+                      fieldKey: "supplierId",
+                      entityType: "supplier",
+                    }),
+                  )
                 }
                 /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
                 {...(fieldErrors["supplierId"]
@@ -901,13 +976,15 @@ options={supplierOptions.map((supplier) => ({
                           canCreate
                           createLabel="Novo item de estoque"
                           onCreateNew={() =>
-                            origem.goCreate({
-                              route: "/cadastros/itens/novo",
-                              fieldKey: "itemId",
-                              entityType: "item",
-                              // Qual linha pediu — o item volta para ela.
-                              context: { rowKey: line.key },
-                            })
+                            liberarGuarda(() =>
+                              origem.goCreate({
+                                route: "/cadastros/itens/novo",
+                                fieldKey: "itemId",
+                                entityType: "item",
+                                // Qual linha pediu — o item volta para ela.
+                                context: { rowKey: line.key },
+                              }),
+                            )
                           }
                         />
                       ) : (

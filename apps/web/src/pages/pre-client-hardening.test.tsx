@@ -73,6 +73,7 @@ import { getCustomerOrder, getFulfillmentPlan, getPlanPurchaseSourcing } from ".
 import { CustomerOrderPage } from "./customer-orders/CustomerOrderPage";
 import { getProductionOrder } from "../lib/production-orders-api";
 import { ProductionOrderPage } from "./production-orders/ProductionOrderPage";
+import { PLANEJAMENTO_VAZIO } from "./production-orders/planning-fixture";
 
 function linhaDeFaturamento(overrides: Partial<BillingLineDTO> = {}): BillingLineDTO {
   return {
@@ -479,6 +480,7 @@ async function abrirOrdem(reservationLines: Record<string, unknown>[]) {
     id: "op-1",
     code: "OP-000002",
     officialNumber: "002/26",
+    planning: PLANEJAMENTO_VAZIO,
     productionOrderRevision: "1",
     status: "IN_PRODUCTION",
     productId: "prod-1",

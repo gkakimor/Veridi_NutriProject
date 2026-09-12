@@ -34,15 +34,18 @@ const pilha: object[] = [];
  * modal era o único caminho. Sair dali agora passa pela guarda de alterações
  * não salvas, que pergunta quando há o que perder.
  *
- * O masthead continua protegido por inteiro: a busca global do topo não é
- * saída de navegação, é outra ação, e disparar uma consulta de lote por baixo
- * de um cadastro aberto não ajuda ninguém.
- *
  * Os dois fundos acompanham a sidebar porque são o jeito de FECHAR o que ela
  * abriu — o drawer do celular e a espiada do trilho compacto. Inertes, o menu
  * abriria e não teria como sair dele a não ser navegando.
+ *
+ * O hambúrguer entra porque no celular a sidebar É um drawer, e ele é o único
+ * jeito de abri-la: com o masthead inteiro inerte, liberar a sidebar não
+ * chegava ao celular. Ele mora DENTRO do masthead, então a marcação desce no
+ * masthead em vez de marcá-lo — a busca global do topo, que é ação e não
+ * saída, continua fora de alcance com um cadastro aberto.
  */
-const SAIDAS_DE_NAVEGACAO = "#sidebar, .sidebar-backdrop, .sidebar-peek-backdrop";
+const SAIDAS_DE_NAVEGACAO =
+  "#sidebar, .sidebar-backdrop, .sidebar-peek-backdrop, .masthead__toggle";
 
 /**
  * Modal fullscreen dentro do workspace — padrao oficial de CRUD (Itens,
@@ -80,6 +83,18 @@ export function FullWorkspaceModal({
    */
   const tituloId = useId();
 
+  /**
+   * `onClose` é LIDO no Escape e no ✕, não observado.
+   *
+   * Como dependência do efeito, um `onClose` recriado a cada renderização —
+   * o que acontece sempre que ele fecha por uma função da tela — desmontava e
+   * remontava foco, trap e pilha a CADA tecla digitada dentro do modal, e a
+   * remontagem devolvia o foco ao diálogo: o campo ficava com a primeira
+   * letra e o resto sumia.
+   */
+  const fechar = useRef(onClose);
+  fechar.current = onClose;
+
   // `aria-modal` sozinho não esconde a tela de trás de quem navega por
   // elementos: o fundo precisa ficar inerte de verdade.
   useInertBackground(true, dialog, SAIDAS_DE_NAVEGACAO);
@@ -102,7 +117,7 @@ export function FullWorkspaceModal({
       if (event.key === "Escape") {
         // Só o modal do topo responde. Um Escape fecha uma camada.
         if (pilha[pilha.length - 1] !== identidade.current) return;
-        onClose();
+        fechar.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -147,7 +162,7 @@ export function FullWorkspaceModal({
       if (pilha.length === 0) document.body.style.overflow = "";
       opener?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

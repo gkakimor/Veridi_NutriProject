@@ -117,6 +117,7 @@ import { getProductPricing } from "../lib/pricing-api";
 import { FormulationDetailPage } from "./formulations/FormulationDetailPage";
 import { CustomerOrderPage } from "./customer-orders/CustomerOrderPage";
 import { ProductionOrderPage } from "./production-orders/ProductionOrderPage";
+import { PLANEJAMENTO_VAZIO } from "./production-orders/planning-fixture";
 import { BillingPage } from "./billings/BillingPage";
 import { ProductCmvPage } from "./product-cmv/ProductCmvPage";
 
@@ -358,6 +359,7 @@ describe("Ordem de Produção", () => {
       id: "op-1",
       code: "OP-000002",
       officialNumber: "002/26",
+      planning: PLANEJAMENTO_VAZIO,
       productionOrderRevision: "1",
       status: "IN_PRODUCTION",
       productId: "prod-1",
