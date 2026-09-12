@@ -88,6 +88,37 @@ function meiaNoiteComercial(diaISO: string): Date {
 }
 
 /**
+ * O instante de uma HORA CIVIL da fábrica: dia + minuto do dia.
+ *
+ * `08:00` não é instante — vira um quando se diz em que dia ele acontece e em
+ * que fuso a fábrica vive. As duas passadas são as mesmas de
+ * `meiaNoiteComercial`: chutar, medir o deslocamento ali, medir de novo no
+ * instante corrigido. É isso que mantém a conta certa se o horário de verão
+ * voltar — somar minutos à meia-noite erraria uma hora no dia da virada.
+ *
+ * PLANNING-CAPACITY-BOARD-01: é por aqui que a agenda de uma OP vira
+ * `timestamptz`, e por aqui que ela volta a ser hora de relógio na tela.
+ */
+export function instanteComercial(diaISO: string, minutoDoDia: number): Date {
+  const [ano, mes, dia] = diaISO.split("-").map(Number) as [number, number, number];
+  const palpite = Date.UTC(ano, mes - 1, dia, 0, minutoDoDia, 0, 0);
+  const primeiro = deslocamentoDoFuso(new Date(palpite), FUSO_COMERCIAL);
+  const segundo = deslocamentoDoFuso(new Date(palpite - primeiro), FUSO_COMERCIAL);
+  return new Date(palpite - segundo);
+}
+
+/** O minuto do dia que um instante marca no relógio da fábrica. */
+export function minutoDoDiaComercial(instante: Date): number {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: FUSO_COMERCIAL,
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(instante);
+  const valor = (tipo: string) => Number(partes.find((p) => p.type === tipo)?.value ?? "0");
+  return (valor("hour") % 24) * 60 + valor("minute");
+}
+/**
  * O instante em que um dia comercial começa — a fronteira `>=` de um filtro.
  */
 export function inicioDoDiaComercial(diaISO: string): Date {

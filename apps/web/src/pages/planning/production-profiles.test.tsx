@@ -84,6 +84,7 @@ function recursoDoCatalogo(
     description: null,
     defaultUsageUom: type === "ENERGY" ? "KWH" : "HOUR",
     powerKw: null,
+    capacityQuantity: null,
     notes: null,
     active: true,
     currentRate: null,

@@ -41,6 +41,9 @@ const CONFIGURADO: ProductionCalendarDTO = {
   startMinuteOfDay: 480,
   endMinuteOfDay: 1020,
   breakMinutes: 60,
+  breakStartMinuteOfDay: 720,
+  breakEndMinuteOfDay: 780,
+  breakPositionWarning: null,
   weekdays: {
     monday: true,
     tuesday: true,
@@ -117,7 +120,9 @@ describe("jornada padrão", () => {
     await screen.findByLabelText("Horário inicial");
     expect(screen.getByText("480 min (8 h)")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Intervalo (minutos)"), { target: { value: "30" } });
+    // Os minutos do intervalo são DERIVADOS do horário dele desde o
+    // PLANNING-CAPACITY-BOARD-01: encurtar a pausa é mexer no relógio.
+    fireEvent.change(screen.getByLabelText("Intervalo — fim"), { target: { value: "12:30" } });
     expect(await screen.findByText("510 min (8 h 30 min)")).toBeInTheDocument();
   });
 

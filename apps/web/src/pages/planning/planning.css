@@ -340,3 +340,63 @@
     grid-template-columns: 1fr;
   }
 }
+
+/*
+ * Planejamento → Planejamento de Produção (PLANNING-CAPACITY-BOARD-01).
+ *
+ * Tabela densa e nenhum desenho de Gantt: a pergunta do primeiro corte é
+ * "quando" e "onde aperta", e tabela responde isso melhor — e cabe em 390px.
+ */
+
+.board-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.board-period__label {
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+/* Avisos numa célula: etiquetas lado a lado, sem virar parágrafo. */
+.board-warnings {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.schedule-warnings {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-sm);
+}
+
+.schedule-warnings li + li {
+  margin-top: var(--sp-2);
+}
+
+.schedule-preview {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+.schedule-block {
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+
+/* 390px: o seletor de período empilha em vez de esticar a página. */
+@media (max-width: 720px) {
+  .board-period {
+    width: 100%;
+  }
+
+  .board-period__label {
+    order: -1;
+    width: 100%;
+  }
+}

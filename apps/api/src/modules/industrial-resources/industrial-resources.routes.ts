@@ -4,6 +4,7 @@ import { ForbiddenError } from "../auth/auth.errors.js";
 import { requireCurrentUser, requireRole } from "../../lib/current-user.js";
 import {
   IndustrialResourceNotFoundError,
+  InvalidResourceCapacityError,
   InvalidResourcePowerError,
   InvalidResourceRateError,
   InvalidResourceRateUomError,
@@ -37,6 +38,9 @@ function mapDomainError(
   }
   if (error instanceof InvalidResourcePowerError) {
     return { status: 400, body: { error: "invalid_power", message: error.message } };
+  }
+  if (error instanceof InvalidResourceCapacityError) {
+    return { status: 400, body: { error: "invalid_capacity", message: error.message } };
   }
   if (error instanceof InvalidResourceRateUomError) {
     return { status: 400, body: { error: "invalid_rate_uom", message: error.message } };

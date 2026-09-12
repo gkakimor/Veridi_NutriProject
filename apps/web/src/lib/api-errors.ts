@@ -71,6 +71,23 @@ export class IncompleteCostApiError extends Error {
  * a história errada: no login, "não consegui falar com o sistema" virava
  * "e-mail ou senha inválidos", e a pessoa passava a duvidar da própria senha.
  */
+/**
+ * Recusa 400 de início fora da jornada (PLANNING-CAPACITY-BOARD-01).
+ *
+ * Carrega a SUGESTÃO junto porque o servidor nunca desloca o horário sozinho:
+ * ele recusa, diz o motivo e oferece o próximo instante válido. Usar a
+ * sugestão é um clique explícito na tela.
+ */
+export class ScheduleStartNotOperationalError extends Error {
+  constructor(
+    message: string,
+    readonly suggestionAt: string | null,
+  ) {
+    super(message);
+    this.name = "ScheduleStartNotOperationalError";
+  }
+}
+
 export class ApiUnreachableError extends Error {
   constructor() {
     super("Não foi possível conectar ao sistema. Tente novamente em instantes.");
@@ -167,6 +184,16 @@ export async function parseJsonOrThrow(response: Response): Promise<unknown> {
       throw new ApiValidationError(
         (body as { issues: ApiValidationIssue[] }).issues,
       );
+    }
+
+    if (
+      response.status === 400 &&
+      body !== null &&
+      typeof body === "object" &&
+      (body as { error?: string }).error === "start_not_operational"
+    ) {
+      const typed = body as { message: string; suggestionAt?: string | null };
+      throw new ScheduleStartNotOperationalError(typed.message, typed.suggestionAt ?? null);
     }
 
     if (

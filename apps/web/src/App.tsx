@@ -86,6 +86,7 @@ import { PricingPoliciesPage } from "./pages/cost-templates/PricingPoliciesPage"
 import { PricingPolicyDetailPage } from "./pages/cost-templates/PricingPolicyDetailPage";
 import { ProductionProfilesPage } from "./pages/planning/ProductionProfilesPage";
 import { ProductionProfileDetailPage } from "./pages/planning/ProductionProfileDetailPage";
+import { ProductionBoardPage } from "./pages/planning/ProductionBoardPage";
 import { ProductionCalendarPage } from "./pages/planning/ProductionCalendarPage";
 import { FormulationDetailPage } from "./pages/formulations/FormulationDetailPage";
 import { FormulationVersionPage } from "./pages/formulations/FormulationVersionPage";
@@ -273,6 +274,9 @@ const router = createBrowserRouter(
         {/* Planejamento → Calendário de Produção (PLANNING-CALENDAR-01): a
             jornada da fábrica e os dias sem operação. Um calendário só. */}
         <Route path="/planejamento/calendario" element={<ProductionCalendarPage />} />
+        {/* Planejamento → Planejamento de Produção (PLANNING-CAPACITY-BOARD-01):
+            quando cada ordem está prevista e onde há conflito. */}
+        <Route path="/planejamento/quadro" element={<ProductionBoardPage />} />
         <Route path="/administracao/usuarios" element={<UsersPage />} />
         <Route
           path="/administracao/documentos"

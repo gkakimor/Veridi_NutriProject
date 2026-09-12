@@ -43,6 +43,10 @@ const JORNADA: ProductionCalendarConfigInput = {
   startMinuteOfDay: 480,
   endMinuteOfDay: 1020,
   breakMinutes: 60,
+  // Com HORÁRIO desde o PLANNING-CAPACITY-BOARD-01: sem ele a jornada não
+  // produz hora exata, e é isso que as funções de janela cobram.
+  breakStartMinuteOfDay: 720,
+  breakEndMinuteOfDay: 780,
   weekdays: SEG_A_SEX,
 };
 

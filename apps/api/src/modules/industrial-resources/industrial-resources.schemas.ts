@@ -6,12 +6,25 @@ import { optionalNullableDateSchema } from "../../lib/date-schema.js";
 export const industrialResourceTypeSchema = z.enum(["LABOR", "EQUIPMENT", "ENERGY"]);
 export const industrialRateUomSchema = z.enum(["HOUR", "KWH"]);
 
+/*
+ * Quantos deste recurso trabalham AO MESMO TEMPO. Ausente ou `null` mantém a
+ * capacidade NÃO CADASTRADA — que não é zero: zero descreveria uma fábrica
+ * sem o recurso, e para isso já existe `active`.
+ */
+const capacityQuantitySchema = z.coerce
+  .number()
+  .int("Informe um número inteiro")
+  .min(1, "A capacidade começa em 1")
+  .max(100000, "Capacidade acima do razoável para um recurso")
+  .nullish();
+
 export const createIndustrialResourceSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome do recurso").max(120),
   type: industrialResourceTypeSchema,
   description: optionalNullableText(500),
   // Ausente mantém a potência desconhecida — nunca zero.
   powerKw: decimalStringSchema().nullish(),
+  capacityQuantity: capacityQuantitySchema,
   notes: optionalNullableText(1000),
 });
 
@@ -19,6 +32,7 @@ export const updateIndustrialResourceSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   description: optionalNullableText(500),
   powerKw: decimalStringSchema().nullish(),
+  capacityQuantity: capacityQuantitySchema,
   notes: optionalNullableText(1000),
   active: z.boolean().optional(),
 });

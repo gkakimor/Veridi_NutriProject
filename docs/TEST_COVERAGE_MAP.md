@@ -335,6 +335,19 @@ canônica já prova custa vinte minutos de navegador para dizer o mesmo.
 | Entrega com expedição em rascunho não cancela nem reprograma; confirmada não bloqueia | alterar a promessa por baixo de uma separação em curso | `api customer-orders/delivery-schedule.test.ts` |
 | Confirmação recusa quando a promessa encolheu, e não realoca a linha | realocação silenciosa apagando a evidência do que se preparava | `api customer-orders/delivery-schedule.test.ts` |
 
+## Programação de produção e capacidade
+
+| Regra | Origem do risco | Proteção canônica |
+|---|---|---|
+| `capacityQuantity` NULL é "não cadastrada", nunca zero; só mão de obra e equipamento têm capacidade, e ela começa em 1 | PLANNING-CAPACITY-BOARD-01: ler ausência como zero acusaria sobrecarga sobre um número que ninguém informou | `api production-schedules/production-schedules.test.ts` ("Capacidade do recurso"), CHECK no banco |
+| Intervalo sem HORÁRIO recusa agenda exata em vez de chutar 12:00–13:00 — e o calendário continua válido para o resto | PLANNING-CAPACITY-BOARD-01: "60 min" diz quanto o dia rende, não em que momento a linha para | `shared production-schedule.test.ts`, `api production-schedules/production-schedules.test.ts` |
+| Etapa que atravessa intervalo, fim do dia, fim de semana ou exceção trabalha em SEGMENTOS — e o envelope não é ocupação | PLANNING-CAPACITY-BOARD-01: contar capacidade pelo envelope diria que a encapsuladora passou o domingo ligada | `shared production-schedule.test.ts` ("projeção das etapas", "capacidade e conflito") |
+| Início fora da jornada é recusado COM a sugestão do próximo horário, e nunca deslocado em silêncio | PLANNING-CAPACITY-BOARD-01: corrigir por baixo faz a pessoa programar um turno e descobrir outro | `shared production-schedule.test.ts`, `api production-schedules/production-schedules.test.ts` |
+| DRAFT e PLANNED movem a agenda; RELEASED só com confirmação explícita; em produção e concluída a agenda é histórico e continua legível | PLANNING-CAPACITY-BOARD-01 | `api production-schedules/production-schedules.test.ts` ("Ciclo de vida da ordem") |
+| Agenda gravada é SNAPSHOT: mudar a jornada ou excluir a exceção que a motivou não reescreve nada, e recalcular é explícito | PLANNING-CAPACITY-BOARD-01: recalcular sozinho moveria a produção de quem não pediu | `api production-schedules/production-schedules.test.ts` ("Agenda é snapshot") |
+| Sobrecarga é AVISO e não bloqueia; capacidade não cadastrada aparece com essas palavras, nunca como zero nem como sobrecarga | PLANNING-CAPACITY-BOARD-01 | `shared production-schedule.test.ts`, `web pages/planning/quadro-de-producao.test.tsx` |
+| O recorte do quadro (visão, dia, situação, produto, recurso) vive na URL e é compartilhável; 390px sem rolagem horizontal | PLANNING-CAPACITY-BOARD-01 · fundação de filtros | `web pages/planning/quadro-de-producao.test.tsx` |
+
 ## Roteiro de Produção — linguagem e leitura da tela
 
 | Regra | Origem do risco | Proteção canônica |

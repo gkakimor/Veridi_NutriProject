@@ -77,6 +77,7 @@ const ROTAS_ANTES_DA_MIGRACAO = [
   "/gestao/templates-estrutura/:templateId",
   // PLANNING-CALENDAR-01: rota nova, declarada aqui de propósito.
   "/planejamento/calendario",
+  "/planejamento/quadro",
   "/planejamento/perfis-producao",
   "/planejamento/perfis-producao/:profileId",
   "/print/calculo-custo/:id",

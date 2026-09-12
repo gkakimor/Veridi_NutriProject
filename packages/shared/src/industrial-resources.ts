@@ -142,6 +142,14 @@ export interface IndustrialResourceDTO {
   powerKw: string | null;
   notes: string | null;
   active: boolean;
+  /**
+   * Quantos deste recurso podem trabalhar AO MESMO TEMPO na produção
+   * (PLANNING-CAPACITY-BOARD-01). `null` = capacidade ainda não cadastrada, e
+   * isso NUNCA se lê como zero: sem o número o planejamento avisa a lacuna em
+   * vez de acusar sobrecarga. Só mão de obra e equipamento têm capacidade;
+   * energia não ocupa recurso e não participa.
+   */
+  capacityQuantity: number | null;
   /** Tarifa vigente na data de referência; `null` quando não há. */
   currentRate: IndustrialResourceRateDTO | null;
   rateCount: number;
@@ -206,6 +214,7 @@ export interface CreateIndustrialResourceInput {
   description?: string | null;
   powerKw?: string | null;
   notes?: string | null;
+  capacityQuantity?: number | null;
 }
 
 export interface UpdateIndustrialResourceInput {
@@ -214,6 +223,7 @@ export interface UpdateIndustrialResourceInput {
   powerKw?: string | null;
   notes?: string | null;
   active?: boolean;
+  capacityQuantity?: number | null;
 }
 
 export interface CreateIndustrialResourceRateInput {

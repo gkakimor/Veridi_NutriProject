@@ -105,7 +105,22 @@ export const PRODUCTION_CALENDAR_EXCEPTION_TYPE_LABELS: Record<
 export interface ProductionCalendarConfigInput {
   startMinuteOfDay: number;
   endMinuteOfDay: number;
+  /**
+   * Intervalo TOTAL do dia, em minutos. Continua sendo a soma que responde
+   * "quanto rende um dia" — e, quando o intervalo tem horário, é DERIVADO
+   * dele: `breakEndMinuteOfDay - breakStartMinuteOfDay`.
+   */
   breakMinutes: number;
+  /**
+   * ONDE o intervalo cai no dia. `null` nos dois = posição não configurada.
+   *
+   * Sem isto não existe horário exato de etapa: "60 min de intervalo" diz
+   * quanto o dia rende, não em que momento a linha para. Inferir 12:00–13:00
+   * seria inventar a jornada de uma fábrica que ninguém consultou — por isso
+   * `janelasDoDia` RECUSA em vez de chutar (PLANNING-CAPACITY-BOARD-01).
+   */
+  breakStartMinuteOfDay: number | null;
+  breakEndMinuteOfDay: number | null;
   weekdays: DiasOperantes;
 }
 
@@ -115,6 +130,12 @@ export interface ProductionCalendarDTO extends ProductionCalendarConfigInput {
    * que ele ainda não foi confirmado. Ler nunca cria o calendário.
    */
   configured: boolean;
+  /**
+   * A frase que falta quando há intervalo sem horário, e `null` quando não
+   * falta nada. Derivado: o calendário continua válido para tudo o mais, e é
+   * só a agenda com horário exato que depende disto.
+   */
+  breakPositionWarning: string | null;
   /** Derivado — janela menos intervalo. Nunca uma coluna. */
   workingMinutesPerDay: number;
   updatedAt: string | null;
@@ -152,6 +173,10 @@ export const CALENDARIO_PADRAO: ProductionCalendarConfigInput = {
   startMinuteOfDay: 8 * 60,
   endMinuteOfDay: 17 * 60,
   breakMinutes: 60,
+  // NÃO sugerimos 12:00–13:00: a posição do intervalo é decisão da fábrica, e
+  // um palpite gravado vira horário de produção errado sem ninguém perceber.
+  breakStartMinuteOfDay: null,
+  breakEndMinuteOfDay: null,
   weekdays: {
     monday: true,
     tuesday: true,
@@ -256,6 +281,67 @@ export function minutosUteisDoDia(
   return ehDiaOperacional(diaISO, calendario, excecoes) ? minutosUteisPorDia(calendario) : 0;
 }
 
+/** Um trecho contínuo de trabalho dentro de um dia, em minutos do dia. */
+export interface JanelaDeTrabalho {
+  inicioMinuto: number;
+  fimMinuto: number;
+}
+
+/** O intervalo tem horário, e não só duração? */
+export function intervaloPosicionado(calendario: ProductionCalendarConfigInput): boolean {
+  return (
+    calendario.breakStartMinuteOfDay !== null &&
+    calendario.breakStartMinuteOfDay !== undefined &&
+    calendario.breakEndMinuteOfDay !== null &&
+    calendario.breakEndMinuteOfDay !== undefined &&
+    calendario.breakEndMinuteOfDay > calendario.breakStartMinuteOfDay
+  );
+}
+
+/**
+ * A mensagem única de calendário sem posição de intervalo.
+ *
+ * Uma frase só, na tela e na API: o calendário continua válido para o resto —
+ * só a agenda com horário exato é que não sai daqui.
+ */
+export const AVISO_INTERVALO_SEM_HORARIO =
+  "Defina o horário do intervalo antes de calcular horários de produção.";
+
+/**
+ * As janelas em que a fábrica realmente trabalha num dia.
+ *
+ * Dia não operante — fim de semana, feriado, recesso — devolve LISTA VAZIA, e
+ * não uma janela de zero minuto: "não se trabalha" e "trabalha-se nada" são a
+ * mesma resposta para quem soma, e respostas diferentes para quem procura
+ * onde encaixar a próxima etapa.
+ *
+ * RECUSA quando há intervalo sem horário: com `breakMinutes > 0` e posição
+ * ausente, devolver a janela inteira contaria a hora do almoço como produção,
+ * e devolver janela nenhuma esconderia o dia. Fail-closed, com o motivo.
+ */
+export function janelasDoDia(
+  diaISO: string,
+  calendario: ProductionCalendarConfigInput,
+  excecoes: ReadonlySet<string> = new Set(),
+): JanelaDeTrabalho[] {
+  if (!ehDiaOperacional(diaISO, calendario, excecoes)) return [];
+
+  const { startMinuteOfDay: abre, endMinuteOfDay: fecha } = calendario;
+  if (calendario.breakMinutes <= 0) return [{ inicioMinuto: abre, fimMinuto: fecha }];
+
+  if (!intervaloPosicionado(calendario)) {
+    throw new ProductionCalendarInputError(AVISO_INTERVALO_SEM_HORARIO);
+  }
+
+  const pausaDe = calendario.breakStartMinuteOfDay as number;
+  const pausaAte = calendario.breakEndMinuteOfDay as number;
+  // Pausa colada na abertura ou no fechamento não vira janela de zero minuto.
+  return [
+    { inicioMinuto: abre, fimMinuto: Math.min(pausaDe, fecha) },
+    { inicioMinuto: Math.max(pausaAte, abre), fimMinuto: fecha },
+  ].filter((janela) => janela.fimMinuto > janela.inicioMinuto);
+}
+
 /**
  * Quantos dias à frente vale procurar por um dia operante.
  *
@@ -303,29 +389,31 @@ export interface MomentoDaJornada {
  * mesmo dia; está depois do fechamento, ou o dia não opera, e a resposta é a
  * abertura do próximo dia operante.
  *
- * O intervalo NÃO é descontado aqui: ele é uma soma do dia, não um horário —
- * nesta fase não existe pausa nomeada, e por isso não há como dizer que um
- * momento "cai dentro" dela.
+ * O intervalo É respeitado desde o PLANNING-CAPACITY-BOARD-01: um momento
+ * dentro da pausa devolve o fim dela, porque agora a pausa tem horário. Sem
+ * posição configurada a função RECUSA, como `janelasDoDia` — devolver a hora
+ * do almoço como início de etapa seria pior que não responder.
  *
- * É o único helper que já olha para dentro do dia, e existe porque
- * PLANNING-CAPACITY-BOARD-01 vai precisar dele. Ele não agenda nada: recebe
- * um ponto e devolve outro.
+ * Ele não agenda nada: recebe um ponto e devolve outro.
  */
 export function proximoInicioUtil(
   momento: MomentoDaJornada,
   calendario: ProductionCalendarConfigInput,
   excecoes: ReadonlySet<string> = new Set(),
 ): MomentoDaJornada | null {
-  if (ehDiaOperacional(momento.diaISO, calendario, excecoes)) {
-    if (momento.minutoDoDia <= calendario.startMinuteOfDay) {
-      return { diaISO: momento.diaISO, minutoDoDia: calendario.startMinuteOfDay };
+  const janelas = janelasDoDia(momento.diaISO, calendario, excecoes);
+  for (const janela of janelas) {
+    if (momento.minutoDoDia <= janela.inicioMinuto) {
+      return { diaISO: momento.diaISO, minutoDoDia: janela.inicioMinuto };
     }
-    if (momento.minutoDoDia < calendario.endMinuteOfDay) {
+    if (momento.minutoDoDia < janela.fimMinuto) {
       return { diaISO: momento.diaISO, minutoDoDia: momento.minutoDoDia };
     }
   }
   const proximo = proximoDiaOperacional(momento.diaISO, calendario, excecoes);
-  return proximo ? { diaISO: proximo, minutoDoDia: calendario.startMinuteOfDay } : null;
+  if (!proximo) return null;
+  const primeira = janelasDoDia(proximo, calendario, excecoes)[0];
+  return primeira ? { diaISO: proximo, minutoDoDia: primeira.inicioMinuto } : null;
 }
 
 /**
@@ -353,6 +441,24 @@ export function validarConfiguracaoDeCalendario(entrada: ProductionCalendarConfi
     problemas.push("O intervalo é um número inteiro de minutos, nunca negativo.");
   } else if (inicio < fim && intervalo >= fim - inicio) {
     problemas.push("O intervalo tem de caber dentro da jornada.");
+  }
+
+  /* `?? null`: chamador em JS puro — e fixture de teste — manda `undefined`
+     onde o tipo diz `null`, e `undefined !== null` entraria no ramo errado. */
+  const pausaDe = entrada.breakStartMinuteOfDay ?? null;
+  const pausaAte = entrada.breakEndMinuteOfDay ?? null;
+  if ((pausaDe === null) !== (pausaAte === null)) {
+    problemas.push("O intervalo precisa de início E fim, ou de nenhum dos dois.");
+  } else if (pausaDe !== null && pausaAte !== null) {
+    if (!inteiroDoDia(pausaDe) || !inteiroDoDia(pausaAte) || pausaDe >= pausaAte) {
+      problemas.push("O fim do intervalo tem de ser depois do início dele.");
+    } else if (pausaDe < inicio || pausaAte > fim) {
+      problemas.push("O intervalo tem de ficar dentro da jornada.");
+    } else if (pausaAte - pausaDe !== intervalo) {
+      // Os minutos do intervalo são DERIVADOS do horário: duas verdades sobre
+      // a mesma pausa viram jornada com rendimento inventado.
+      problemas.push("Os minutos do intervalo têm de bater com o horário informado.");
+    }
   }
 
   if (!DIAS_DA_SEMANA.some((dia) => entrada.weekdays[dia])) {
