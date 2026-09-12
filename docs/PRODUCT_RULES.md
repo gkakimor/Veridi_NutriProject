@@ -5525,7 +5525,70 @@ precificação, tarifa, formulação nem OP.
   - **Recurso renomeado ou desativado não reescreve o histórico:** nome, código
     e tipo viajaram por valor. Os ids guardados são proveniência para a
     capacidade futura, nunca canal de leitura.
-  - Continua sem calendário, data por etapa, turno, disponibilidade, agenda,
-    capacidade diária ou Gantt: PLANNING-CALENDAR-01 e
-    PLANNING-CAPACITY-BOARD-01. E sem tocar custo: Estrutura de Custos, CMV,
-    Precificação e tarifas seguem separados.
+  - A OP continua sem data por etapa, turno, disponibilidade, agenda,
+    capacidade diária ou Gantt: isso é PLANNING-CAPACITY-BOARD-01. O
+    calendário da fábrica já existe (§90), e ele não agenda ordem nenhuma —
+    diz só em que dias e em que horário se trabalha. E sem tocar custo:
+    Estrutura de Custos, CMV, Precificação e tarifas seguem separados.
+
+## §90 — Calendário de Produção: quando a fábrica trabalha, e em que dias não trabalha
+
+PLANNING-CALENDAR-01, 2026-09-12. **Absorve OPS-CALENDAR-01** (BACKLOG B · #9)
+por decisão do Product Ownership: é a mesma necessidade, e dois itens criariam
+duas tabelas para um conceito só.
+
+**O calendário de produção responde uma pergunta, e só ela: a fábrica opera
+neste dia, e por quantos minutos?** Não agenda Ordem de Produção, não guarda
+capacidade de recurso, não tem turno e não desenha quadro — isso é
+PLANNING-CAPACITY-BOARD-01.
+
+- **Um calendário, global, e o banco garante.** A chave primária é o próprio
+  conceito (`GLOBAL`, com CHECK): não existe lista de calendários, não existe
+  coluna `active` e não há como uma segunda linha nascer. Mão de obra e
+  equipamento continuam POOLS (§89) e herdam esta jornada. Calendário por
+  recurso, setor, turno ou cliente fica para necessidade real.
+- **Jornada = janela do dia − intervalo.** Horário inicial e final em MINUTO DO
+  DIA, inteiros de 0 a 1440, com `0 <= início < fim <= 1440` e
+  `0 <= intervalo < (fim − início)` — CHECK no banco, e a mesma regra em
+  `@veridi/shared` para a mensagem da tela. O intervalo é o TOTAL do dia, uma
+  soma e não um horário: não há pausa nomeada nem parada parcial por hora nesta
+  fase. **Minutos úteis são derivados a cada leitura**, nunca uma coluna.
+- **Hora do dia não é instante.** `08:00` não tem data, não tem fuso e não muda
+  no horário de verão; um `DateTime` fabricado para representá-la obrigaria a
+  inventar um dia e um deslocamento, e a jornada andaria uma hora cinco meses
+  por ano. A tela mostra `HH:mm`; o que viaja e o que se guarda é o minuto.
+- **Dias operantes são sete perguntas independentes**, com CHECK de "ao menos
+  um" — calendário sem nenhum dia é cadastro sem sentido, não fábrica parada.
+  **Sábado e domingo operantes são JORNADA, nunca exceção.** Calendário novo
+  nasce segunda a sexta, 08:00–17:00, 1 h de intervalo, e esse padrão vale só
+  no primeiro salvamento: **ler nunca cria**, e quem já salvou nunca é
+  sobrescrito por ele.
+- **Exceção é DIA CIVIL INTEIRO sem operação** — `FERIADO`, `RECESSO`,
+  `PARADA_OPERACIONAL` ou `OUTRO`, com motivo livre. **Uma exceção por data**,
+  garantida por unique: cadastrar de novo a mesma data é recusa explícita com o
+  motivo que já está lá (409), nunca sobrescrita silenciosa nem dois motivos
+  empilhados. Editar troca tipo e motivo; **a data não se move** — mudar de dia
+  é excluir esta e cadastrar a outra, para que um feriado nunca ande sem
+  registro. Feriado é declarado à mão: sem recorrência anual (`25/12/2026` é um
+  registro de data, não a regra "todo 25/12", e feriado móvel não tem algoritmo
+  cívico aqui) e sem API externa.
+- **Dia útil operacional = dia permitido pela semana E não cadastrado como
+  exceção.** As duas metades são independentes, e a conta vive em DIA CIVIL e
+  MINUTO DO DIA — `diaDaSemanaComercial`, `ehDiaOperacional`,
+  `minutosUteisDoDia`, `proximoDiaOperacional`, `proximoInicioUtil`. Aritmética
+  de calendário não é aritmética de relógio: somar 24 h a um instante atravessa
+  a meia-noite comercial na hora errada num dia de 23 ou 25 horas. Quem parte de
+  um INSTANTE converte uma vez, por `hojeComercial` (§81), no `FUSO_COMERCIAL` —
+  nunca por um `-03:00` escrito à mão.
+- **Nada passa a depender de dia útil por causa disto.** Tarifa industrial,
+  oferta de fornecedor, `ItemCostReference`, validade de lote, `referenceDate`,
+  faturamento e **a promessa de entrega ao cliente (§75)** seguem exatamente
+  como estavam: um feriado não vence uma oferta e não move uma entrega
+  prometida. Promessa caindo em dia não operante é assunto de alerta, quando
+  houver planejamento para alertar. `ProductionOrder` não foi tocada — sem
+  `plannedStartAt`, sem agenda, sem etapa com data, e `plannedAt` continua sendo
+  o carimbo do ATO de planejar, nunca a data planejada.
+- **Escrita para produção e administração**, leitura para todos: mesmo gate dos
+  Perfis de Produção. Excluir uma exceção é seguro enquanto nenhum planejamento
+  depende do calendário; a regra para data que já participou de planejamento
+  calculado nasce com PLANNING-CAPACITY-BOARD-01.
