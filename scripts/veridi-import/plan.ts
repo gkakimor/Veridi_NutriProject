@@ -190,9 +190,20 @@ export async function buildPlan(options: { quiet?: boolean } = {}): Promise<void
           console.log(`    ${workbook.name}: ${workbook.records} registros — ${contagem}`);
         }
         console.log(
+          `    Clientes: ${r.customers.approved} aprovados · ${r.customers.excluded} marcados NAO_IMPORTAR`,
+        );
+        console.log(
           `    Fornecedores: ${r.suppliers.approved} aprovados (${r.suppliers.created} a criar · ` +
             `${r.suppliers.updated} a atualizar · ${r.suppliers.unchanged} sem mudança) · ` +
             `${r.suppliers.excluded} marcados NAO_IMPORTAR · ${r.suppliers.withAddress} com endereço preenchido`,
+        );
+        console.log(
+          `    Itens (matérias-primas e embalagens): ${r.items.approved} aprovados · ` +
+            `${r.items.excluded} marcados NAO_IMPORTAR`,
+        );
+        console.log(
+          `    Produtos acabados: ${r.products.approved} aprovados · ${r.products.excluded} marcados NAO_IMPORTAR ` +
+            "(cada um com o seu item de produto acabado, 1:1)",
         );
         console.log(
           `    Item × Fornecedor: ${r.supplierItems.approved} aprovados · ` +

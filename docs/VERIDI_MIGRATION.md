@@ -307,24 +307,58 @@ não tenha sido aprovado com pacote (`readyForLoad`). Rodar o APPLY sem pacote
 carregaria o corpus bruto e descartaria a revisão humana em silêncio; por isso
 é erro, não aviso.
 
-O que o bridge já consome (BRIDGE-01):
+O que cada workbook alimenta hoje:
 
-- **02_FORNECEDORES** — razão social, nome fantasia, CNPJ, e-mail, telefone,
-  endereço completo, notas e ativo. A identidade durante a migração é a
-  `CHAVE_MIGRACAO`; `legalName` continua sendo o que reencontra o `Supplier`
-  entre execuções, e dois aprovados que colidem por nome (exato ou depois de
-  `normalizeSupplierName`) reprovam em vez de virar escolha arbitrária.
+| Arquivo | Situação |
+| --- | --- |
+| 01_CLIENTES | integrado |
+| 02_FORNECEDORES | integrado |
+| 03_MATERIAS_PRIMAS | integrado |
+| 04_EMBALAGENS_INSUMOS | integrado |
+| 05_PRODUTOS_ACABADOS | integrado |
+| 06_PRECOS_REFERENCIA_MERCADO | fluxo próprio (referência de mercado, nunca custo) |
+| 07_FORNECEDOR_ITENS_PRECOS | integrado |
+
+O 00 (mapa de chaves) é consulta: serve para identidade, correspondência e
+proveniência, e nunca é fonte de valor.
+
+Campos que cada um manda:
+
+- **01_CLIENTES** — razão social, nome fantasia, CNPJ, perfil tributário,
+  contato, endereço completo, notas e ativo. Identidade persistente segue sendo
+  `externalCode` (o código da planilha); a `CHAVE_MIGRACAO` é o que liga um
+  workbook ao outro.
+- **02_FORNECEDORES** — razão social, nome fantasia, CNPJ, contato, endereço
+  completo, notas e ativo. Sem `externalCode`, `legalName` é o que reencontra o
+  `Supplier` entre execuções, e dois aprovados que colidem por nome (exato ou
+  depois de `normalizeSupplierName`) reprovam em vez de virar escolha
+  arbitrária.
+- **03_MATERIAS_PRIMAS / 04_EMBALAGENS_INSUMOS** — nome, tipo, unidade, fonte,
+  nutriente declarado, família, pureza, subtipo de embalagem, os quatro
+  controles de rastreabilidade, código de barras e ativo. A unidade revisada é
+  conferida contra o catálogo real de UOM do banco: unidade que não existe
+  reprova, e nunca é criada a partir do texto do Excel. Pureza vai de 0–1 na
+  planilha para 0–100 no ERP, dentro do scale de `DECIMAL(9,6)`.
+- **05_PRODUTOS_ACABADOS** — nome, cliente (por `CHAVE_CLIENTE`), forma
+  farmacêutica, apresentação, dose e unidade da dose, cápsulas por dose, doses
+  por embalagem, unidades por caixa, público-alvo, vida útil, lote mínimo,
+  notas e ativo; e, no item de produto acabado do par, nome, unidade de estoque
+  e exigência de laudo. Produto e item são **uma decisão só**: a linha traz as
+  duas chaves e elas têm de corresponder, senão reprova.
 - **07_FORNECEDOR_ITENS_PRECOS** — homologação, preferência, código do item no
-  fornecedor, observações, preço, moeda, unidade do preço e pedido mínimo. O
-  fornecedor da oferta é resolvido pela `CHAVE_FORNECEDOR` do workbook, nunca
-  pela string do nome. Oferta que aponta para fornecedor `NAO_IMPORTAR` ou para
-  chave inexistente vira erro de PLAN, não associação silenciosa.
+  fornecedor, observações, preço, moeda, unidade do preço e pedido mínimo.
+  Fornecedor e item da oferta são resolvidos por `CHAVE_FORNECEDOR` e
+  `CHAVE_ITEM`, nunca pela string do nome.
 
-Ainda **não** consumido — os workbooks 01, 03, 04 e 05 continuam sendo montados
-a partir do corpus, e a revisão humana deles ainda é ignorada
-(MIGRATION-REVIEW-BRIDGE-02). O portão de status já vale para eles assim que
-entrarem no escopo: o bloqueio é genérico, a autoridade de campo é que é por
-domínio.
+O que o workbook **não** manda, e continua vindo do corpus: formulações,
+projetos, orçamentos, amostras e saldos de estoque — nenhum deles tem workbook
+de revisão. Colunas de conferência do pacote (custo de referência, preços do
+legado, "onde aparece no legado", código previsto) também não viram escrita:
+descrevem o registro para quem revisa, não são campo do ERP.
+
+Relação que aponta para registro excluído reprova em vez de procurar parecido:
+produto com cliente `NAO_IMPORTAR`, fórmula com item `NAO_IMPORTAR`, oferta com
+fornecedor ou item `NAO_IMPORTAR`, e projeto cujo cliente ficou de fora.
 
 Pontos que a carga a partir do Excel precisa decidir (achados na geração):
 
@@ -337,7 +371,10 @@ Pontos que a carga a partir do Excel precisa decidir (achados na geração):
   as 38 pendências `DUPLICIDADE` do arquivo 02 antecipam.
 - ~~O APPLY ainda não lê o pacote devolvido~~ — resolvido em
   MIGRATION-REVIEW-BRIDGE-01 para Fornecedor e Item × Fornecedor.
-- **Identidade do `Supplier` entre pacotes diferentes** continua em aberto. Sem
+- **Identidade do `Supplier` entre pacotes diferentes** é limitação operacional
+  aceita pelo PO: um APPLY real por pacote aprovado, e correção de razão social
+  depois da carga é edição no ERP, não nova migração. Um pacote diferente não
+  deve ser reaplicado como "segunda migração" sobre produção consolidada. Sem
   `externalCode`, o reencontro é por `legalName`. Dentro de um mesmo pacote
   aprovado isso é determinístico (a colisão reprova antes de escrever) e
   reaplicar não duplica. Mas se a razão social for corrigida entre duas revisões

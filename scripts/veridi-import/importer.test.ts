@@ -15,7 +15,7 @@ import { applyOpeningRow, validateOpeningRows } from "./opening-stock.js";
 import type { TemplateRow } from "./opening-stock.js";
 import type { Overrides } from "./overrides.js";
 import { readOverrides } from "./overrides.js";
-import { WORKBOOKS_DO_ESCOPO, runPipeline } from "./pipeline.js";
+import { WORKBOOKS_DO_ESCOPO, chaveDoItem, runPipeline } from "./pipeline.js";
 import { buildSourceManifest, diffManifests } from "./sources.js";
 
 /**
@@ -460,41 +460,47 @@ integration("Abertura de estoque — aplicação", () => {
   });
 });
 
-/* ─────────────── Ponte com o pacote revisado (BRIDGE-01) ─────────────── */
+
+/* ─────────────── Ponte com o pacote revisado (BRIDGE-01/02) ─────────────── */
+
+const pastasTemporarias: string[] = [];
+
+afterAll(() => {
+  for (const pasta of pastasTemporarias) fs.rmSync(pasta, { recursive: true, force: true });
+});
+
+interface LinhaDoPacote {
+  chave: string;
+  status: string;
+  campos: Record<string, string | number | null>;
+}
 
 /**
- * Pacote sintético sobre fornecedores REAIS do corpus.
+ * Pacote sintético sobre dado REAL, lido do corpus e do banco em tempo de
+ * execução — nunca escrito neste arquivo. O que a Veridi tem fica fora do Git,
+ * teste incluído. O pacote exercita o caminho de escrita: aprovar, excluir,
+ * aplicar valores revisados e reaplicar sem duplicar.
  *
- * Os nomes saem do corpus em tempo de execução, nunca escritos aqui: o dado
- * da Veridi fica fora do Git, teste incluído. O que o pacote exercita é o
- * caminho de escrita — aprovar, excluir, aplicar endereço e reaplicar sem
- * duplicar.
+ * Workbook ausente reprova a carga, então todos os seis do escopo aparecem —
+ * vazio quando o cenário não precisa dele.
  */
-function pacoteSobreCorpus(
-  aprovados: { nome: string; endereco?: Record<string, string> }[],
-  excluidos: string[] = [],
-): string {
-  const chave = (nome: string): string => `FOR-LEG-${normalizeSupplierName(nome).replace(/ /g, "-")}`;
-  const registro = (nome: string, status: string, endereco: Record<string, string> = {}) => ({
-    chave: chave(nome),
-    status,
-    campos: { NOME_PLANILHA: nome, RAZAO_SOCIAL_NOME: nome, ATIVO: "SIM", ...endereco },
-  });
-  const registros = [
-    ...aprovados.map((supplier) => registro(supplier.nome, "OK", supplier.endereco ?? {})),
-    ...excluidos.map((nome) => registro(nome, "NAO_IMPORTAR")),
-  ];
+function pacoteSintetico(workbooks: Record<string, LinhaDoPacote[]>): string {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), "veridi-bridge-"));
   pastasTemporarias.push(pasta);
   const destino = path.join(pasta, "pacote-revisao.json");
-  const workbook = (linhas: typeof registros, colunas: string[]) => ({
-    colunaStatus: "STATUS_REVISAO",
-    statusPermitidos: ["REVISAR", "OK", "PENDENTE", "NAO_IMPORTAR"],
-    colunas: ["CHAVE_MIGRACAO", ...colunas, "STATUS_REVISAO"],
-    obrigatorias: ["CHAVE_MIGRACAO", "RAZAO_SOCIAL_NOME", "STATUS_REVISAO"],
-    contagem: {},
-    registros: linhas,
-  });
+  const completo = Object.fromEntries(
+    WORKBOOKS_DO_ESCOPO.map((nome) => [
+      nome,
+      {
+        colunaStatus: "STATUS_REVISAO",
+        statusPermitidos: ["REVISAR", "OK", "PENDENTE", "NAO_IMPORTAR"],
+        colunas: ["CHAVE_MIGRACAO", "STATUS_REVISAO"],
+        obrigatorias: ["CHAVE_MIGRACAO", "STATUS_REVISAO"],
+        contagem: {},
+        registros: workbooks[nome] ?? [],
+      },
+    ]),
+  );
   fs.writeFileSync(
     destino,
     JSON.stringify({
@@ -504,99 +510,279 @@ function pacoteSobreCorpus(
         caminho: pasta,
         identidade: "a".repeat(64),
         referencia: null,
-        arquivos: [{ nome: "02_FORNECEDORES", sha256: "b".repeat(64), bytes: 1, modificadoEm: "", registros: registros.length }],
+        arquivos: WORKBOOKS_DO_ESCOPO.map((nome) => ({
+          nome,
+          sha256: "b".repeat(64),
+          bytes: 1,
+          modificadoEm: "",
+          registros: (workbooks[nome] ?? []).length,
+        })),
       },
       validacao: { devolucao: true, erros: 0 },
-      workbooks: {
-        "02_FORNECEDORES": workbook(registros, [
-          "NOME_PLANILHA", "RAZAO_SOCIAL_NOME", "CEP", "LOGRADOURO", "NUMERO",
-          "COMPLEMENTO", "BAIRRO", "CIDADE", "UF", "ATIVO",
-        ]),
-        "07_FORNECEDOR_ITENS_PRECOS": workbook([], ["CHAVE_ITEM", "CHAVE_FORNECEDOR", "PRECO"]),
-      },
+      workbooks: completo,
     }),
     "utf8",
   );
   return destino;
 }
 
-const pastasTemporarias: string[] = [];
+const chaveDoCliente = (externalCode: string): string => `CLI-LEG-${externalCode.padStart(4, "0")}`;
 
-afterAll(() => {
-  for (const pasta of pastasTemporarias) fs.rmSync(pasta, { recursive: true, force: true });
-});
+function linhaFornecedor(legalName: string, status: string): LinhaDoPacote {
+  return {
+    chave: `FOR-LEG-${normalizeSupplierName(legalName).replace(/ /g, "-")}`,
+    status,
+    campos: { NOME_PLANILHA: legalName, RAZAO_SOCIAL_NOME: legalName, ATIVO: "SIM" },
+  };
+}
+
+function linhaCliente(
+  origem: { externalCode: string; legalName: string },
+  status: string,
+  campos: Record<string, string | null> = {},
+): LinhaDoPacote {
+  return {
+    chave: chaveDoCliente(origem.externalCode),
+    status,
+    campos: {
+      CODIGO_PLANILHA: origem.externalCode,
+      RAZAO_SOCIAL_NOME: origem.legalName,
+      ATIVO: "SIM",
+      ...campos,
+    },
+  };
+}
+
+function linhaItem(
+  origem: { externalCode: string; name: string; type: string; unitCode: string },
+  status: string,
+): LinhaDoPacote {
+  return {
+    chave: chaveDoItem(origem.externalCode),
+    status,
+    campos: {
+      CODIGO_PLANILHA: origem.externalCode,
+      NOME: origem.name,
+      TIPO: origem.type === "PACKAGING" ? "EMBALAGEM" : "MATERIA_PRIMA",
+      UNIDADE: origem.unitCode,
+      ATIVO: "SIM",
+    },
+  };
+}
+
+function linhaProduto(
+  origem: { externalCode: string; name: string; customerExternalCode: string },
+  status: string,
+  campos: Record<string, string | null> = {},
+): LinhaDoPacote {
+  const codigo = normalizeSupplierName(origem.externalCode).replace(/ /g, "-");
+  return {
+    chave: `PROD-LEG-${codigo}`,
+    status,
+    campos: {
+      CHAVE_CLIENTE: chaveDoCliente(origem.customerExternalCode),
+      NOME_PRODUTO: origem.name,
+      REFERENCIA_EXTERNA: origem.externalCode,
+      CHAVE_ITEM_PA: `PA-LEG-${codigo}`,
+      UNIDADE_ESTOQUE: "un",
+      ATIVO: "SIM",
+      ...campos,
+    },
+  };
+}
 
 integration("Ponte com a revisão humana — corpus real", () => {
   it("o pacote real ainda em REVISAR bloqueia a carga", () => {
     const caminho = path.resolve(CORPUS_DIR, "..", "out", "pacote-revisao.json");
-    if (!fs.existsSync(caminho)) {
-      // O JSON sai do tooling do pacote e fica fora do Git, como os .xlsx.
-      return;
-    }
+    // O JSON sai do tooling do pacote e fica fora do Git, como os .xlsx.
+    if (!fs.existsSync(caminho)) return;
     const pacote = loadReviewPackage(caminho);
     const bloqueios = bloqueiosDaRevisao(pacote, WORKBOOKS_DO_ESCOPO);
-    expect(bloqueios.length, "pacote com registro em REVISAR tem de bloquear").toBeGreaterThan(0);
+    expect(bloqueios.length, "todo workbook do escopo tem de bloquear").toBe(
+      WORKBOOKS_DO_ESCOPO.length,
+    );
     expect(bloqueios.join(" ")).toMatch(/pendente\(s\) de revisão/);
   });
 
-  it("aplica os valores aprovados e não duplica na segunda execução", async () => {
+  it("aplica os valores aprovados dos quatro domínios e não duplica ao reaplicar", async () => {
     await garantirCorpusAplicado();
 
-    const doCorpus = mapSuppliers(new ImportFindingLog()).slice(0, 2);
-    expect(doCorpus.length, "corpus sem fornecedor para o teste").toBe(2);
-    const [aprovado, excluido] = doCorpus as [{ legalName: string }, { legalName: string }];
+    const [fornecedor] = mapSuppliers(new ImportFindingLog()).slice(0, 1) as [{ legalName: string }];
+    const produtoBase = await prisma.product.findFirst({
+      where: { externalCode: { not: null }, customerId: { not: null } },
+      include: { customer: true },
+      orderBy: { code: "asc" },
+    });
+    expect(produtoBase?.customer?.externalCode, "base sem produto com cliente").toBeTruthy();
+    const clienteDoProduto = produtoBase!.customer!;
+    const itens = await prisma.item.findMany({
+      where: { externalCode: { not: null }, type: { in: ["RAW_MATERIAL", "PACKAGING"] } },
+      orderBy: { code: "asc" },
+      take: 40,
+    });
+    const materias = itens.filter((item) => item.type === "RAW_MATERIAL").slice(0, 2);
+    const embalagens = itens.filter((item) => item.type === "PACKAGING").slice(0, 1);
 
-    const endereco = {
-      CEP: "13010-000",
-      LOGRADOURO: "Avenida Francisco Glicério",
-      NUMERO: "1200",
-      BAIRRO: "Centro",
-      CIDADE: "Campinas",
-      UF: "SP",
-    };
     const review = loadReviewPackage(
-      pacoteSobreCorpus([{ nome: aprovado.legalName, endereco }], [excluido.legalName]),
+      pacoteSintetico({
+        "02_FORNECEDORES": [linhaFornecedor(fornecedor.legalName, "OK")],
+        "01_CLIENTES": [
+          linhaCliente(
+            { externalCode: clienteDoProduto.externalCode!, legalName: clienteDoProduto.legalName },
+            "OK",
+            { CIDADE: "Campinas", UF: "SP", PERFIL_TRIBUTARIO: "SIMPLES_NACIONAL" },
+          ),
+        ],
+        "03_MATERIAS_PRIMAS": materias.map((item) =>
+          linhaItem(
+            {
+              externalCode: item.externalCode!,
+              name: item.name,
+              type: item.type,
+              unitCode: item.unitCode,
+            },
+            "OK",
+          ),
+        ),
+        "04_EMBALAGENS_INSUMOS": embalagens.map((item) =>
+          linhaItem(
+            {
+              externalCode: item.externalCode!,
+              name: item.name,
+              type: item.type,
+              unitCode: item.unitCode,
+            },
+            "OK",
+          ),
+        ),
+        "05_PRODUTOS_ACABADOS": [
+          linhaProduto(
+            {
+              externalCode: produtoBase!.externalCode!,
+              name: produtoBase!.name,
+              customerExternalCode: clienteDoProduto.externalCode!,
+            },
+            "OK",
+            { VIDA_UTIL_MESES: "24" },
+          ),
+        ],
+      }),
     );
 
-    const antes = await prisma.supplier.count();
+    const antes = {
+      customers: await prisma.customer.count(),
+      items: await prisma.item.count(),
+      products: await prisma.product.count(),
+      suppliers: await prisma.supplier.count(),
+    };
+
     const primeira = await runPipeline({ prisma, write: true, overrides: emptyOverrides(), review });
     const segunda = await runPipeline({ prisma, write: true, overrides: emptyOverrides(), review });
 
-    // Base já migrada: nenhuma execução pode criar fornecedor novo, e o
-    // segundo APPLY do MESMO pacote não pode mexer em nada.
-    expect(primeira.domains.suppliers.created).toBe(0);
-    expect(segunda.domains.suppliers.created).toBe(0);
-    expect(segunda.domains.suppliers.updated).toBe(0);
-    expect(await prisma.supplier.count()).toBe(antes);
+    // Base já migrada: nenhuma execução cria registro novo em nenhum domínio.
+    for (const resultado of [primeira, segunda]) {
+      for (const dominio of [
+        "customers",
+        "items",
+        "products",
+        "suppliers",
+        "finishedProductItems",
+      ] as const) {
+        expect(
+          resultado.domains[dominio].created,
+          `${dominio} criou registro numa base já migrada`,
+        ).toBe(0);
+      }
+    }
+    expect({
+      customers: await prisma.customer.count(),
+      items: await prisma.item.count(),
+      products: await prisma.product.count(),
+      suppliers: await prisma.supplier.count(),
+    }).toEqual(antes);
 
-    // Só o fornecedor aprovado foi tocado; o excluído nem aparece na conta.
-    expect(primeira.review?.suppliers.approved).toBe(1);
-    expect(primeira.review?.suppliers.excluded).toBe(1);
-    expect(primeira.review?.suppliers.withAddress).toBe(1);
-
-    const gravado = await prisma.supplier.findFirst({ where: { legalName: aprovado.legalName } });
-    expect(gravado?.zipCode).toBe("13010000");
-    expect(gravado?.street).toBe("Avenida Francisco Glicério");
-    expect(gravado?.city).toBe("Campinas");
-    expect(gravado?.state).toBe("SP");
-
-    // O endereço é fixture do teste, não dado da Veridi: sai daqui como entrou.
-    await prisma.supplier.update({
-      where: { id: gravado!.id },
-      data: { zipCode: null, street: null, number: null, district: null, city: null, state: null },
+    // Os valores revisados chegaram ao banco.
+    const cliente = await prisma.customer.findFirst({
+      where: { externalCode: clienteDoProduto.externalCode! },
     });
+    expect(cliente?.city).toBe("Campinas");
+    expect(cliente?.taxProfile).toBe("SIMPLES_NACIONAL");
+
+    const produto = await prisma.product.findFirst({
+      where: { externalCode: produtoBase!.externalCode! },
+      include: { finishedProductItem: true },
+    });
+    expect(produto?.shelfLifeMonths).toBe(24);
+    expect(produto?.customerId).toBe(cliente!.id);
+    // Produto e item de produto acabado continuam 1:1, e é o MESMO par.
+    expect(produto?.finishedProductItem?.type).toBe("FINISHED_PRODUCT");
+    expect(produto?.finishedProductItemId).toBe(produtoBase!.finishedProductItemId);
+
+    expect(primeira.review?.customers.approved).toBe(1);
+    expect(primeira.review?.items.approved).toBe(materias.length + embalagens.length);
+    expect(primeira.review?.products.approved).toBe(1);
+    expect(primeira.review?.blocked).toBe(false);
+
+    // Fixture do teste: o banco de desenvolvimento sai como entrou.
+    await prisma.customer.update({
+      where: { id: cliente!.id },
+      data: { city: null, state: null, taxProfile: "NOT_INFORMED" },
+    });
+    await prisma.product.update({ where: { id: produto!.id }, data: { shelfLifeMonths: null } });
   });
 
-  it("fornecedor marcado NAO_IMPORTAR não é criado nem atualizado", async () => {
+  it("produto aprovado cujo cliente foi excluído bloqueia em vez de virar produto sem dono", async () => {
     await garantirCorpusAplicado();
-    const nomeInexistente = "Fornecedor Que A Veridi Nao Quer Migrar";
-    const review = loadReviewPackage(pacoteSobreCorpus([], [nomeInexistente]));
+    const produtoBase = await prisma.product.findFirst({
+      where: { externalCode: { not: null }, customerId: { not: null } },
+      include: { customer: true },
+      orderBy: { code: "asc" },
+    });
+    const cliente = produtoBase!.customer!;
 
-    const antes = await prisma.supplier.count();
+    const review = loadReviewPackage(
+      pacoteSintetico({
+        "01_CLIENTES": [
+          linhaCliente(
+            { externalCode: cliente.externalCode!, legalName: cliente.legalName },
+            "NAO_IMPORTAR",
+          ),
+        ],
+        "05_PRODUTOS_ACABADOS": [
+          linhaProduto(
+            {
+              externalCode: produtoBase!.externalCode!,
+              name: produtoBase!.name,
+              customerExternalCode: cliente.externalCode!,
+            },
+            "OK",
+          ),
+        ],
+      }),
+    );
+
+    const antes = await prisma.product.count();
     const resultado = await runPipeline({ prisma, write: true, overrides: emptyOverrides(), review });
 
-    expect(await prisma.supplier.count()).toBe(antes);
-    expect(resultado.review?.suppliers.excluded).toBe(1);
-    expect(await prisma.supplier.findFirst({ where: { legalName: nomeInexistente } })).toBeNull();
+    expect(await prisma.product.count()).toBe(antes);
+    expect(resultado.findings.all().map((finding) => finding.code)).toContain(
+      "PRODUCT_REVIEW_CUSTOMER_NOT_IMPORTED",
+    );
+    expect(resultado.domains.products.created).toBe(0);
+  });
+
+  it("workbook do escopo ausente no pacote reprova a carga", () => {
+    const caminho = pacoteSintetico({});
+    // Todos presentes e vazios: nada bloqueia por status.
+    expect(bloqueiosDaRevisao(loadReviewPackage(caminho), WORKBOOKS_DO_ESCOPO)).toEqual([]);
+
+    const bruto = JSON.parse(fs.readFileSync(caminho, "utf8")) as {
+      workbooks: Record<string, unknown>;
+    };
+    delete bruto.workbooks["03_MATERIAS_PRIMAS"];
+    fs.writeFileSync(caminho, JSON.stringify(bruto), "utf8");
+    expect(bloqueiosDaRevisao(loadReviewPackage(caminho), WORKBOOKS_DO_ESCOPO)[0]).toContain(
+      "ausente",
+    );
   });
 });
