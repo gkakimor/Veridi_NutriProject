@@ -4,7 +4,16 @@ import path from "node:path";
 import { CORPUS_DIR, corpusAvailable } from "../veridi-data/corpus.js";
 import { assertImportEnvironment, hasApplyFlag } from "./environment.js";
 import { readOverrides } from "./overrides.js";
-import { runPipeline } from "./pipeline.js";
+import { WORKBOOKS_DO_ESCOPO, runPipeline } from "./pipeline.js";
+import {
+  ReviewPackageError,
+  bloqueiosDaRevisao,
+  carimboDoPacote,
+  devolucaoArgumento,
+  diferencasDoPacote,
+  loadReviewPackage,
+} from "./review-package.js";
+import type { CarimboDoPacote } from "./review-package.js";
 import { writeFindingsArtifacts, writeImportReport, writeOpeningInventoryTemplate } from "./report.js";
 import {
   OUT_DIR,
@@ -19,12 +28,16 @@ import type { SourceFileManifest } from "./sources.js";
 /**
  * `pnpm veridi:import:apply -- --apply` — a única etapa que escreve.
  *
- * Três guardas antes de qualquer INSERT:
+ * Guardas antes de qualquer INSERT:
  * 1. `--apply` explícito (dry-run é o padrão em todo o fluxo);
  * 2. plano existente e fonte com o MESMO hash — aplicar um plano sobre uma
  *    planilha diferente é a forma clássica de importar coisa errada com
  *    confiança total;
- * 3. alvo de produção exige opt-in por variável de ambiente e confirmação
+ * 3. pacote de revisão devolvido pela Veridi, informado explicitamente,
+ *    idêntico ao aprovado no PLAN e sem nenhum registro em REVISAR ou
+ *    PENDENTE. Carregar sem ele significa carregar o corpus bruto e jogar
+ *    fora a revisão humana — em silêncio, que é o pior jeito;
+ * 4. alvo de produção exige opt-in por variável de ambiente e confirmação
  *    do nome do banco.
  *
  * Nada aqui apaga: sem TRUNCATE, sem reset, sem deleteMany.
@@ -52,12 +65,66 @@ export async function applyImport(): Promise<void> {
   const plan = JSON.parse(fs.readFileSync(PLAN_FILE, "utf8")) as {
     generatedAt: string;
     sources: SourceFileManifest[];
+    reviewPackage?: CarimboDoPacote | null;
+    readyForLoad?: boolean;
   };
   const differences = diffManifests(plan.sources, buildSourceManifest());
   if (differences.length > 0) {
     console.error("ABORTADO: a fonte mudou depois do PLAN.");
     for (const difference of differences) console.error(`  - ${difference}`);
     console.error("\nRode de novo: pnpm veridi:import:validate && pnpm veridi:import:plan");
+    process.exit(1);
+  }
+
+  /* ── Pacote de revisão: o APPLY não roda sem ele ─────────── */
+  const caminhoDevolucao = devolucaoArgumento();
+  if (!caminhoDevolucao) {
+    console.error(
+      "ABORTADO: o APPLY exige o pacote de revisão devolvido pela Veridi.\n" +
+        "  Sem ele a carga usaria o corpus bruto e descartaria, em silêncio, toda a revisão humana.\n" +
+        "  pnpm veridi:import:apply -- --apply --devolucao=<pacote-revisao.json>",
+    );
+    process.exit(1);
+  }
+
+  let review;
+  try {
+    review = loadReviewPackage(caminhoDevolucao);
+  } catch (erro) {
+    console.error(erro instanceof ReviewPackageError ? erro.message : erro);
+    process.exit(1);
+  }
+
+  if (!review.devolucao) {
+    console.error(
+      "ABORTADO: este pacote não foi validado como devolução.\n" +
+        "  Reexporte com --devolucao: python scripts/veridi-migration-pack/validar_pacote.py " +
+        "<pasta> --devolucao --exportar <arquivo.json>",
+    );
+    process.exit(1);
+  }
+
+  const diferencasDaRevisao = diferencasDoPacote(plan.reviewPackage, carimboDoPacote(review));
+  if (diferencasDaRevisao.length > 0) {
+    console.error("ABORTADO: o pacote de revisão não é o mesmo que o PLAN aprovou.");
+    for (const diferenca of diferencasDaRevisao) console.error(`  - ${diferenca}`);
+    console.error("\nRode de novo: pnpm veridi:import:plan -- --devolucao=<pacote-revisao.json>");
+    process.exit(1);
+  }
+
+  const bloqueios = bloqueiosDaRevisao(review, WORKBOOKS_DO_ESCOPO);
+  if (bloqueios.length > 0) {
+    console.error("ABORTADO: o pacote ainda possui registros pendentes de revisão.");
+    for (const bloqueio of bloqueios) console.error(`  - ${bloqueio}`);
+    console.error("\n  Só entra na carga o registro marcado OK.");
+    process.exit(1);
+  }
+
+  if (plan.readyForLoad !== true) {
+    console.error(
+      "ABORTADO: o PLAN não foi aprovado para carga (readyForLoad diferente de true).\n" +
+        "  Gere um plano com o pacote de revisão e sem bloqueios antes de aplicar.",
+    );
     process.exit(1);
   }
 
@@ -70,9 +137,25 @@ export async function applyImport(): Promise<void> {
       `APLICANDO A MIGRAÇÃO — banco ${environment.database}@${environment.host}` +
         `${environment.isProductionTarget ? " (ALVO DE PRODUÇÃO, autorizado explicitamente)" : ""}`,
     );
-    console.log(`Plano de ${plan.generatedAt}, fonte conferida por SHA-256.\n`);
+    console.log(`Plano de ${plan.generatedAt}, fonte conferida por SHA-256.`);
+    console.log(
+      `Pacote de revisão ${review.pasta} · identidade ${review.identidade.slice(0, 16)}… ` +
+        `(a mesma aprovada no PLAN)\n`,
+    );
 
-    const result = await runPipeline({ prisma, write: true, overrides: readOverrides() });
+    const result = await runPipeline({ prisma, write: true, overrides: readOverrides(), review });
+
+    // A leitura do pacote só reprova durante o pipeline (CNPJ inválido,
+    // colisão de nome, relação órfã). Chegar aqui com BLOCKING significa que
+    // o pacote mudou entre o PLAN e agora de um jeito que os hashes não
+    // pegaram — para tudo antes de seguir para o verify.
+    if (result.review?.blocked) {
+      console.error(
+        "\nABORTADO DEPOIS DA ESCRITA: a leitura do pacote produziu erro BLOCKING nesta execução.",
+      );
+      result.findings.print(2);
+      process.exit(1);
+    }
 
     writeFindingsArtifacts(result.findings);
     writeOpeningInventoryTemplate(result);
@@ -90,6 +173,8 @@ export async function applyImport(): Promise<void> {
           formulationDetail: result.formulationDetail,
           golden: result.golden,
           stock: result.stock,
+          reviewPackage: carimboDoPacote(review),
+          review: result.review,
           findings: result.findings.countBySeverity(),
         },
         null,

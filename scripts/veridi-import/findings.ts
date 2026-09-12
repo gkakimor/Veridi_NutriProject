@@ -41,6 +41,18 @@ export const SEVERITY_BY_CODE: Record<string, FindingSeverity> = {
   // ── Fornecedores ──────────────────────────────────────────
   SUPPLIER_WITHOUT_NAME: "BLOCKING",
 
+  // ── Fornecedores vindos do pacote revisado ────────────────
+  // Aqui o dado passou por gente: valor inválido não é "legado feio", é
+  // engano na revisão. Reprova para ser corrigido no Excel, nunca no código.
+  SUPPLIER_REVIEW_WITHOUT_NAME: "BLOCKING",
+  SUPPLIER_REVIEW_CNPJ_INVALID: "BLOCKING",
+  SUPPLIER_REVIEW_ZIP_INVALID: "BLOCKING",
+  SUPPLIER_REVIEW_STATE_INVALID: "BLOCKING",
+  SUPPLIER_REVIEW_NAME_COLLISION: "BLOCKING",
+  SUPPLIER_REVIEW_NAME_COLLISION_NORMALIZED: "BLOCKING",
+  SUPPLIER_REVIEW_NOT_IMPORTED: "INFO",
+  SUPPLIER_REVIEW_EXISTING_UPDATED: "INFO",
+
   // ── Itens ─────────────────────────────────────────────────
   ITEM_WITHOUT_CODE: "BLOCKING",
   ITEM_WITHOUT_NAME: "BLOCKING",
@@ -81,6 +93,11 @@ export const SEVERITY_BY_CODE: Record<string, FindingSeverity> = {
   SUPPLIER_PRICE_WITHOUT_SUPPLIER: "BLOCKING",
   SUPPLIER_ITEM_ITEM_UNRESOLVED: "BLOCKING",
   SUPPLIER_ITEM_SUPPLIER_UNRESOLVED: "BLOCKING",
+  // Relação do 07 apontando para fornecedor que a Veridi tirou da carga, ou
+  // para chave que não existe no 02. Associar "o mais parecido" seria inventar.
+  SUPPLIER_ITEM_SUPPLIER_NOT_IMPORTED: "BLOCKING",
+  SUPPLIER_ITEM_SUPPLIER_KEY_UNKNOWN: "BLOCKING",
+  SUPPLIER_ITEM_OFFER_NOT_IN_REVIEW: "BLOCKING",
   SUPPLIER_ITEM_MAPPED_BY_OVERRIDE: "INFO",
   SUPPLIER_ITEM_OVERRIDE_TARGET_UNKNOWN: "BLOCKING",
   SUPPLIER_PRICE_INVALID: "BLOCKING",

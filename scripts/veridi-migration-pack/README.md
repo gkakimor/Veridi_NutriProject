@@ -44,6 +44,22 @@ python -m venv "$TEMP/veridi-pack"
 - `validar_pacote.py --referencia <pacote anterior>` compara duas revisões:
   chave que sumiu, chave nova, coluna que desapareceu e coluna obrigatória que
   virou opcional reprovam. Coluna nova opcional passa.
+- `validar_pacote.py --exportar <arquivo.json>` grava a leitura normalizada do
+  pacote (identidade, SHA-256 de cada workbook, registros por CHAVE_MIGRACAO) —
+  e só grava quando a validação passa sem erro. **É a única porta de entrada do
+  Excel no pipeline de migração**: o importador lê esse JSON e nunca abre .xlsx.
+
+```bash
+# devolução da Veridi, conferida contra o pacote enviado e exportada para a carga
+"$TEMP/veridi-pack/Scripts/python" scripts/veridi-migration-pack/validar_pacote.py   handoff/migracao-producao/revisao-02 --devolucao   --referencia handoff/migracao-producao/revisao-01   --exportar ../.local-data/veridi/out/pacote-revisao.json
+
+pnpm veridi:import:plan  -- --devolucao=../.local-data/veridi/out/pacote-revisao.json
+pnpm veridi:import:apply -- --apply --devolucao=../.local-data/veridi/out/pacote-revisao.json
+```
+
+O PLAN reprova enquanto houver registro em `REVISAR` ou `PENDENTE`, e o APPLY
+recusa rodar sem pacote ou com pacote diferente do aprovado no PLAN. Detalhes do
+fluxo: [`docs/VERIDI_MIGRATION.md`](../../docs/VERIDI_MIGRATION.md).
 - `test_devolucao.py` roda os cenários de devolução do 02 (endereço vazio,
   parcial e completo; CEP e UF inválidos; chave alterada; status inválido) numa
   **cópia temporária** do workbook — o handoff nunca é tocado. Sem pacote

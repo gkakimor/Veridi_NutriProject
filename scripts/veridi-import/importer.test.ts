@@ -1,13 +1,21 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { corpusAvailable } from "../veridi-data/corpus.js";
-import { parseMinimumOrder } from "../veridi-data/supplier-price-analysis.js";
+import { CORPUS_DIR, corpusAvailable } from "../veridi-data/corpus.js";
+import { mapSuppliers } from "../veridi-data/mapping.js";
+import {
+  normalizeSupplierName,
+  parseMinimumOrder,
+} from "../veridi-data/supplier-price-analysis.js";
+import { bloqueiosDaRevisao, loadReviewPackage } from "./review-package.js";
 import { ImportFindingLog, severityOf } from "./findings.js";
 import { applyOpeningRow, validateOpeningRows } from "./opening-stock.js";
 import type { TemplateRow } from "./opening-stock.js";
 import type { Overrides } from "./overrides.js";
 import { readOverrides } from "./overrides.js";
-import { runPipeline } from "./pipeline.js";
+import { WORKBOOKS_DO_ESCOPO, runPipeline } from "./pipeline.js";
 import { buildSourceManifest, diffManifests } from "./sources.js";
 
 /**
@@ -449,5 +457,146 @@ integration("Abertura de estoque — aplicação", () => {
       await prisma.lot.deleteMany({ where: { itemId: item.id } });
       await prisma.item.delete({ where: { id: item.id } });
     }
+  });
+});
+
+/* ─────────────── Ponte com o pacote revisado (BRIDGE-01) ─────────────── */
+
+/**
+ * Pacote sintético sobre fornecedores REAIS do corpus.
+ *
+ * Os nomes saem do corpus em tempo de execução, nunca escritos aqui: o dado
+ * da Veridi fica fora do Git, teste incluído. O que o pacote exercita é o
+ * caminho de escrita — aprovar, excluir, aplicar endereço e reaplicar sem
+ * duplicar.
+ */
+function pacoteSobreCorpus(
+  aprovados: { nome: string; endereco?: Record<string, string> }[],
+  excluidos: string[] = [],
+): string {
+  const chave = (nome: string): string => `FOR-LEG-${normalizeSupplierName(nome).replace(/ /g, "-")}`;
+  const registro = (nome: string, status: string, endereco: Record<string, string> = {}) => ({
+    chave: chave(nome),
+    status,
+    campos: { NOME_PLANILHA: nome, RAZAO_SOCIAL_NOME: nome, ATIVO: "SIM", ...endereco },
+  });
+  const registros = [
+    ...aprovados.map((supplier) => registro(supplier.nome, "OK", supplier.endereco ?? {})),
+    ...excluidos.map((nome) => registro(nome, "NAO_IMPORTAR")),
+  ];
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), "veridi-bridge-"));
+  pastasTemporarias.push(pasta);
+  const destino = path.join(pasta, "pacote-revisao.json");
+  const workbook = (linhas: typeof registros, colunas: string[]) => ({
+    colunaStatus: "STATUS_REVISAO",
+    statusPermitidos: ["REVISAR", "OK", "PENDENTE", "NAO_IMPORTAR"],
+    colunas: ["CHAVE_MIGRACAO", ...colunas, "STATUS_REVISAO"],
+    obrigatorias: ["CHAVE_MIGRACAO", "RAZAO_SOCIAL_NOME", "STATUS_REVISAO"],
+    contagem: {},
+    registros: linhas,
+  });
+  fs.writeFileSync(
+    destino,
+    JSON.stringify({
+      formato: 1,
+      geradoEm: new Date().toISOString(),
+      pacote: {
+        caminho: pasta,
+        identidade: "a".repeat(64),
+        referencia: null,
+        arquivos: [{ nome: "02_FORNECEDORES", sha256: "b".repeat(64), bytes: 1, modificadoEm: "", registros: registros.length }],
+      },
+      validacao: { devolucao: true, erros: 0 },
+      workbooks: {
+        "02_FORNECEDORES": workbook(registros, [
+          "NOME_PLANILHA", "RAZAO_SOCIAL_NOME", "CEP", "LOGRADOURO", "NUMERO",
+          "COMPLEMENTO", "BAIRRO", "CIDADE", "UF", "ATIVO",
+        ]),
+        "07_FORNECEDOR_ITENS_PRECOS": workbook([], ["CHAVE_ITEM", "CHAVE_FORNECEDOR", "PRECO"]),
+      },
+    }),
+    "utf8",
+  );
+  return destino;
+}
+
+const pastasTemporarias: string[] = [];
+
+afterAll(() => {
+  for (const pasta of pastasTemporarias) fs.rmSync(pasta, { recursive: true, force: true });
+});
+
+integration("Ponte com a revisão humana — corpus real", () => {
+  it("o pacote real ainda em REVISAR bloqueia a carga", () => {
+    const caminho = path.resolve(CORPUS_DIR, "..", "out", "pacote-revisao.json");
+    if (!fs.existsSync(caminho)) {
+      // O JSON sai do tooling do pacote e fica fora do Git, como os .xlsx.
+      return;
+    }
+    const pacote = loadReviewPackage(caminho);
+    const bloqueios = bloqueiosDaRevisao(pacote, WORKBOOKS_DO_ESCOPO);
+    expect(bloqueios.length, "pacote com registro em REVISAR tem de bloquear").toBeGreaterThan(0);
+    expect(bloqueios.join(" ")).toMatch(/pendente\(s\) de revisão/);
+  });
+
+  it("aplica os valores aprovados e não duplica na segunda execução", async () => {
+    await garantirCorpusAplicado();
+
+    const doCorpus = mapSuppliers(new ImportFindingLog()).slice(0, 2);
+    expect(doCorpus.length, "corpus sem fornecedor para o teste").toBe(2);
+    const [aprovado, excluido] = doCorpus as [{ legalName: string }, { legalName: string }];
+
+    const endereco = {
+      CEP: "13010-000",
+      LOGRADOURO: "Avenida Francisco Glicério",
+      NUMERO: "1200",
+      BAIRRO: "Centro",
+      CIDADE: "Campinas",
+      UF: "SP",
+    };
+    const review = loadReviewPackage(
+      pacoteSobreCorpus([{ nome: aprovado.legalName, endereco }], [excluido.legalName]),
+    );
+
+    const antes = await prisma.supplier.count();
+    const primeira = await runPipeline({ prisma, write: true, overrides: emptyOverrides(), review });
+    const segunda = await runPipeline({ prisma, write: true, overrides: emptyOverrides(), review });
+
+    // Base já migrada: nenhuma execução pode criar fornecedor novo, e o
+    // segundo APPLY do MESMO pacote não pode mexer em nada.
+    expect(primeira.domains.suppliers.created).toBe(0);
+    expect(segunda.domains.suppliers.created).toBe(0);
+    expect(segunda.domains.suppliers.updated).toBe(0);
+    expect(await prisma.supplier.count()).toBe(antes);
+
+    // Só o fornecedor aprovado foi tocado; o excluído nem aparece na conta.
+    expect(primeira.review?.suppliers.approved).toBe(1);
+    expect(primeira.review?.suppliers.excluded).toBe(1);
+    expect(primeira.review?.suppliers.withAddress).toBe(1);
+
+    const gravado = await prisma.supplier.findFirst({ where: { legalName: aprovado.legalName } });
+    expect(gravado?.zipCode).toBe("13010000");
+    expect(gravado?.street).toBe("Avenida Francisco Glicério");
+    expect(gravado?.city).toBe("Campinas");
+    expect(gravado?.state).toBe("SP");
+
+    // O endereço é fixture do teste, não dado da Veridi: sai daqui como entrou.
+    await prisma.supplier.update({
+      where: { id: gravado!.id },
+      data: { zipCode: null, street: null, number: null, district: null, city: null, state: null },
+    });
+  });
+
+  it("fornecedor marcado NAO_IMPORTAR não é criado nem atualizado", async () => {
+    await garantirCorpusAplicado();
+    const nomeInexistente = "Fornecedor Que A Veridi Nao Quer Migrar";
+    const review = loadReviewPackage(pacoteSobreCorpus([], [nomeInexistente]));
+
+    const antes = await prisma.supplier.count();
+    const resultado = await runPipeline({ prisma, write: true, overrides: emptyOverrides(), review });
+
+    expect(await prisma.supplier.count()).toBe(antes);
+    expect(resultado.review?.suppliers.excluded).toBe(1);
+    expect(await prisma.supplier.findFirst({ where: { legalName: nomeInexistente } })).toBeNull();
   });
 });
