@@ -1,7 +1,14 @@
 import { formatQuantity } from "../../lib/quantity";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import {
+  assinaturaDoDocumento,
+  decimalComparavel,
+  inteiroComparavel,
+  textoComparavel,
+} from "../../lib/dirty-fields";
 import type {
   ItemDTO,
   ProductDTO,
@@ -329,6 +336,15 @@ export function ProductionOrderPage() {
     }
   }
 
+  /**
+   * A assinatura da OP de referência — o que sair daqui não se perde.
+   *
+   * `null` é "retome na próxima renderização". Toda leitura do servidor passa
+   * por `syncFormFromServer` — salvar, planejar, liberar, cancelar —, então a
+   * pendência zera sem cada caminho ter que lembrar disso.
+   */
+  const baseline = useRef<string | null>(null);
+
   const syncFormFromServer = useCallback((order: ProductionOrderDTO) => {
     setProductId(order.productId);
     setFormulationVersionId(order.formulationVersionId ?? "");
@@ -336,6 +352,7 @@ export function ProductionOrderPage() {
     setNumberOfParts(String(order.numberOfParts));
     setLabelInstructions(order.labelInstructions ?? "");
     setNotes(order.notes ?? "");
+    baseline.current = null;
   }, []);
 
   useEffect(() => {
@@ -450,6 +467,38 @@ export function ProductionOrderPage() {
   const isReleasable = !isNew && status === "PLANNED";
   const hasShortage = (productionOrder?.shortageItemCount ?? 0) > 0;
 
+  /**
+   * A OP como ela está na tela, em forma comparável.
+   *
+   * São os seis campos que o salvamento envia — os que se editam em rascunho.
+   * O Planejamento previsto fica FORA de propósito: ele é cópia congelada do
+   * Perfil mais uma projeção derivada da quantidade, e o servidor a refaz a
+   * cada leitura. Ele já muda porque a quantidade mudou, e a quantidade já
+   * está aqui; incluí-lo contaria a mesma edição duas vezes e transformaria
+   * uma releitura do servidor em pendência do usuário.
+   *
+   * Registro de produção, consumo e apontamento também ficam fora: são ações
+   * com envio próprio, não rascunho de documento.
+   */
+  const assinaturaAtual = assinaturaDoDocumento({
+    productId: textoComparavel(productId),
+    formulationVersionId: textoComparavel(formulationVersionId),
+    plannedQuantity: decimalComparavel(plannedQuantity),
+    numberOfParts: inteiroComparavel(numberOfParts),
+    labelInstructions: textoComparavel(labelInstructions),
+    notes: textoComparavel(notes),
+  });
+
+  if (baseline.current === null) baseline.current = assinaturaAtual;
+  /* OP cancelada não tem o que salvar; fora do rascunho ainda se altera a
+     observação, e isso também se perde ao sair. */
+  const { liberarGuarda } = useUnsavedChangesGuard({
+    isDirty:
+      (isDraft || status !== "CANCELLED") && baseline.current !== assinaturaAtual,
+    substantivo: "ordem de produção",
+    genero: "a",
+  });
+
   const selectedProduct = resolverProdutoDoFormulario(productId, productionOrder, activeProducts);
   /*
    * O campo mostra o rótulo do valor escolhido a partir das opções. Sem o
@@ -552,7 +601,14 @@ export function ProductionOrderPage() {
     try {
       if (isNew) {
         const created = await createProductionOrder(payload);
-        navigate(`/producao/ordens/${created.id}`, { replace: true });
+        /*
+         * Gravou: o que está na tela virou documento. A troca de endereço
+         * acontece nesta mesma função, antes de qualquer renderização — sem
+         * isto a guarda leria a pendência de antes do salvamento e perguntaria
+         * se a pessoa quer descartar o que ela acabou de gravar.
+         */
+        baseline.current = assinaturaAtual;
+        liberarGuarda(() => navigate(`/producao/ordens/${created.id}`, { replace: true }));
       } else if (id) {
         const updated = await updateProductionOrder(id, payload);
         setProductionOrder(updated);

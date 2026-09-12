@@ -24,6 +24,12 @@ import type { RefObject } from "react";
  *   voltar fechando o modal. Quem passa o seletor assume que aquele controle é
  *   uma SAÍDA, e que sair dali é seguro ou passa pela guarda de alterações não
  *   salvas.
+ *
+ *   Uma saída CONTIDA num bloco protege o bloco pela metade: em vez de marcar
+ *   o ancestral inteiro, a marcação desce nele e protege só os irmãos da
+ *   saída. É o caso do celular — o hambúrguer que abre o menu mora dentro do
+ *   masthead, e sem descer a escolha seria entre trancar a única saída ou
+ *   liberar a busca global junto.
  */
 export function useInertBackground(
   open: boolean,
@@ -39,26 +45,43 @@ export function useInertBackground(
     // no contexto por cima do formulário), o de baixo não pode ser revelado
     // quando o de cima fecha.
     const marked: HTMLElement[] = [];
+
+    function proteger(elemento: HTMLElement) {
+      if (elemento.hasAttribute("inert")) return;
+      /*
+       * O fundo escurecido NÃO é fundo: ele pertence ao diálogo, é irmão dele
+       * no DOM, e é onde o clique de "fechar clicando fora" acontece.
+       *
+       * Marcá-lo `inert` tirava o overlay do teste de acerto do ponteiro, e o
+       * `onClick` dele nunca disparava — o painel de ajuda simplesmente não
+       * fechava ao clicar fora, embora o código dissesse que sim. Escondê-lo
+       * de leitor de tela também não faria sentido: não há nada para ler ali.
+       */
+      if (elemento.classList.contains("confirm-overlay")) return;
+
+      if (manterAtivo) {
+        // É a saída: fica alcançável.
+        if (elemento.matches(manterAtivo)) return;
+        // Contém a saída: protege os irmãos dela, não o bloco inteiro.
+        if (elemento.querySelector(manterAtivo)) {
+          for (const filho of Array.from(elemento.children)) {
+            if (filho instanceof HTMLElement) proteger(filho);
+          }
+          return;
+        }
+      }
+
+      elemento.setAttribute("inert", "");
+      elemento.setAttribute("aria-hidden", "true");
+      marked.push(elemento);
+    }
+
     let node: HTMLElement | null = dialog;
     while (node && node.parentElement) {
       for (const sibling of Array.from(node.parentElement.children)) {
         if (sibling === node) continue;
         if (!(sibling instanceof HTMLElement)) continue;
-        if (sibling.hasAttribute("inert")) continue;
-        /*
-         * O fundo escurecido NÃO é fundo: ele pertence ao diálogo, é irmão dele
-         * no DOM, e é onde o clique de "fechar clicando fora" acontece.
-         *
-         * Marcá-lo `inert` tirava o overlay do teste de acerto do ponteiro, e o
-         * `onClick` dele nunca disparava — o painel de ajuda simplesmente não
-         * fechava ao clicar fora, embora o código dissesse que sim. Escondê-lo
-         * de leitor de tela também não faria sentido: não há nada para ler ali.
-         */
-        if (sibling.classList.contains("confirm-overlay")) continue;
-        if (manterAtivo && sibling.matches(manterAtivo)) continue;
-        sibling.setAttribute("inert", "");
-        sibling.setAttribute("aria-hidden", "true");
-        marked.push(sibling);
+        proteger(sibling);
       }
       node = node.parentElement;
     }

@@ -1228,7 +1228,46 @@ UNSAVED-CHANGES-WAVE-01.
 
 Achado corrigido na rodada: `onClose` recriado a cada render remontava o
 efeito de foco/trap do `FullWorkspaceModal` a cada tecla e o campo ficava só
-com a primeira letra — `useCallback` obrigatório em quem passa `onClose`.
+com a primeira letra. Fechado na raiz na wave seguinte.
+
+## Primeiro bloco P1 e a saída no celular (UNSAVED-CHANGES-WAVE-01, 2026-09-11)
+
+A foundation chegou a Pedido, OP e OC — novo e editar, sem provider, blocker
+nem diálogo novos. Cada tela projeta o documento na forma que o salvamento
+envia, normalizada em `lib/dirty-fields.ts`: decimal em forma canônica,
+ausência e vazio como a mesma coisa, e fora tudo o que é do servidor (código,
+nome, unidade, recebido). A referência é a assinatura dessa projeção, e
+`syncFormFromServer` a invalida — então carregar, salvar, confirmar, cancelar,
+reservar e planejar zeram a pendência sem cada caminho lembrar disso. Criar
+navega (`/novo` → `/:id`) na mesma função que salvou, antes de qualquer
+renderização: ali a referência é atualizada à mão e a navegação passa por
+`liberarGuarda`.
+
+**O Planejamento previsto da OP fica fora da assinatura**: é cópia congelada
+do Perfil mais projeção derivada da quantidade, refeita pelo servidor a cada
+leitura. Contá-lo contaria a mesma edição duas vezes — a quantidade já está
+lá — e transformaria releitura do servidor em pendência do usuário.
+
+**Decisão do PO, celular:** o masthead continua protegido, menos o
+`.masthead__toggle`. No celular a sidebar É o drawer e o hambúrguer é o único
+jeito de abri-la; com o masthead inteiro inerte, a liberação da sidebar não
+chegava ao celular. `useInertBackground` passou a DESCER no bloco que contém
+uma saída em vez de marcá-lo — a busca global do topo continua fora de
+alcance, e no desktop, onde o hambúrguer não existe, nada mudou.
+
+**Bug de foco fechado na raiz.** O mesmo defeito do `FullWorkspaceModal`
+estava no `ModalDialog`: `onClose={() => setAberto(false)}` nasce a cada
+renderização, a tecla re-renderiza a tela de trás, o efeito de foco e trap se
+desmonta e remonta, e a remontagem devolve o foco ao primeiro botão. O motivo
+do cancelamento da OC não recebia uma letra sequer. `onClose` virou ref de
+leitura nos dois: vale para todos os diálogos do ERP, sem regra nova para quem
+escreve tela.
+
+Fixtures de OP: `planning` faltava em duas que montavam o DTO com
+`as unknown as ProductionOrderDTO`, e a tela quebrava ao desestruturá-lo.
+`PLANEJAMENTO_VAZIO` (`pages/production-orders/planning-fixture.ts`) é o
+estado neutro legítimo — OP sem perfil. De 7 testes vermelhos no pacote web
+sobraram 1: o teto de palavras da ajuda (HELP-FORMULACAO-WORDCAP-01).
 
 ## Próxima prioridade
 

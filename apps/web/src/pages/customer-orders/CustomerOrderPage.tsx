@@ -1,6 +1,12 @@
 import { formatQuantity } from "../../lib/quantity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import {
+  assinaturaDoDocumento,
+  decimalComparavel,
+  textoComparavel,
+} from "../../lib/dirty-fields";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import type {
   CustomerDTO,
@@ -357,11 +363,21 @@ export function CustomerOrderPage() {
   const [reallocatingLineId, setReallocatingLineId] = useState<string | null>(null);
   const [preparingShipment, setPreparingShipment] = useState(false);
 
+  /**
+   * A assinatura do pedido de referência — o que sair daqui não se perde.
+   *
+   * `null` é "retome na próxima renderização". Toda leitura do servidor passa
+   * por `syncFormFromServer` — salvar, confirmar, cancelar, reservar, aplicar
+   * plano —, então a pendência zera sem cada caminho ter que lembrar disso.
+   */
+  const baseline = useRef<string | null>(null);
+
   const syncFormFromServer = useCallback((order: CustomerOrderDTO) => {
     setCustomerId(order.customerId);
     setRequestedDeliveryDate(toDateInputValue(order.requestedDeliveryDate));
     setNotes(order.notes ?? "");
     setLines(order.lines.map(lineFromDTO));
+    baseline.current = null;
   }, []);
 
   /**
@@ -571,6 +587,32 @@ export function CustomerOrderPage() {
     !isNew && ["CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED", "SHIPPED", "CANCELLED"].includes(status);
   const deliveryScheduleEditable = ["CONFIRMED", "IN_FULFILLMENT", "PARTIALLY_SHIPPED"].includes(status);
   const showPurchaseSuggestion = !isNew && status === "IN_FULFILLMENT";
+
+  /**
+   * O pedido como ele está na tela, em forma comparável.
+   *
+   * Só o que o salvamento envia. Código, nome e unidade do produto vêm do
+   * servidor e chegam depois — na linha recém-criada a unidade fica vazia até
+   * o Produto Acabado existir —, e compará-los faria a tela se declarar
+   * alterada por conta própria.
+   */
+  const assinaturaAtual = assinaturaDoDocumento({
+    customerId: textoComparavel(customerId),
+    requestedDeliveryDate: textoComparavel(requestedDeliveryDate),
+    notes: textoComparavel(notes),
+    lines: lines.map((line) => ({
+      productId: textoComparavel(line.productId),
+      orderedQuantity: decimalComparavel(line.orderedQuantity),
+    })),
+  });
+
+  if (baseline.current === null) baseline.current = assinaturaAtual;
+  /* Pedido cancelado não tem o que salvar; fora do rascunho ainda se altera
+     prazo e observações, e isso também se perde ao sair. */
+  const { liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: temBotaoDeSalvar && baseline.current !== assinaturaAtual,
+    substantivo: "pedido",
+  });
 
   /* Falta por responsabilidade: material Veridi se resolve comprando,
      material do cliente nao. Separar aqui evita oferecer a acao errada. */
@@ -913,7 +955,14 @@ export function CustomerOrderPage() {
 
       if (isNew) {
         const created = await createCustomerOrder(payload);
-        navigate(`/comercial/pedidos/${created.id}`, { replace: true });
+        /*
+         * Gravou: o que está na tela virou documento. A troca de endereço
+         * acontece nesta mesma função, antes de qualquer renderização — sem
+         * isto a guarda leria a pendência de antes do salvamento e perguntaria
+         * se a pessoa quer descartar o que ela acabou de gravar.
+         */
+        baseline.current = assinaturaAtual;
+        liberarGuarda(() => navigate(`/comercial/pedidos/${created.id}`, { replace: true }));
       } else if (id) {
         const updated = await updateCustomerOrder(id, payload);
         setCustomerOrder(updated);
@@ -1333,12 +1382,16 @@ options={customerOptions.map((customer) => ({
                   }))}
                   canCreate
                   createLabel="Novo cliente"
+                  /* Sair para cadastrar NÃO é descartar: o rascunho vai junto
+                     e volta aplicado. */
                   onCreateNew={() =>
-                    origem.goCreate({
-                      route: "/cadastros/clientes/novo",
-                      fieldKey: "customerId",
-                      entityType: "customer",
-                    })
+                    liberarGuarda(() =>
+                      origem.goCreate({
+                        route: "/cadastros/clientes/novo",
+                        fieldKey: "customerId",
+                        entityType: "customer",
+                      }),
+                    )
                   }
                   /* Liga campo, `aria-invalid` e a mensagem, para leitor de tela também. */
                   {...(fieldErrors["customerId"]
@@ -1470,12 +1523,14 @@ options={customerOptions.map((customer) => ({
                           canCreate
                           createLabel="Novo produto"
                           onCreateNew={() =>
-                            origem.goCreate({
-                              route: "/cadastros/produtos/novo",
-                              fieldKey: "productId",
-                              entityType: "product",
-                              context: contextoDoProdutoNovo(line.key),
-                            })
+                            liberarGuarda(() =>
+                              origem.goCreate({
+                                route: "/cadastros/produtos/novo",
+                                fieldKey: "productId",
+                                entityType: "product",
+                                context: contextoDoProdutoNovo(line.key),
+                              }),
+                            )
                           }
                         />
                       ) : (

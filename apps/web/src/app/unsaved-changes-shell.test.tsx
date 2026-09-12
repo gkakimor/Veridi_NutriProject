@@ -137,13 +137,17 @@ beforeEach(() => {
 });
 
 describe("modal de workspace — a sidebar é saída, o masthead não", () => {
-  it("com o modal aberto, a sidebar continua alcançável e o masthead fica inerte", async () => {
+  it("com o modal aberto, a sidebar continua alcançável e a busca do topo não", async () => {
     montar(<TelaComModal />);
     await screen.findByText("Novo projeto");
 
     expect(sidebar()).not.toHaveAttribute("inert");
+    /*
+     * No desktop o masthead não guarda saída nenhuma — o hambúrguer só existe
+     * no celular —, então ele continua inerte inteiro, como sempre foi. A
+     * busca global do topo vai junto.
+     */
     expect(masthead()).toHaveAttribute("inert");
-    // A busca global do topo continua fora de alcance junto com ele.
     expect(screen.queryByRole("searchbox", { name: "Buscar ou escanear lote" })).toBeNull();
   });
 
@@ -155,6 +159,71 @@ describe("modal de workspace — a sidebar é saída, o masthead não", () => {
     await user.click(itemDoMenu("Pedidos"));
 
     expect(await screen.findByRole("heading", { name: "Tela de Pedidos" })).toBeInTheDocument();
+  });
+});
+
+describe("celular — modal de workspace aberto, saída pelo hambúrguer", () => {
+  /*
+   * No celular a sidebar É o drawer, e quem o abre é o hambúrguer do masthead.
+   * Com o masthead inteiro inerte, liberar a sidebar não chegava ao celular:
+   * o cadastro continuava sendo beco sem saída lá. A busca global do topo
+   * segue protegida — ela é ação, não saída.
+   */
+  const hamburguer = () => screen.getByRole("button", { name: "Abrir menu" });
+
+  async function abrirDrawer(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(hamburguer());
+    await waitFor(() => expect(shell()).toHaveClass("shell--nav-open"));
+  }
+
+  it("o hambúrguer continua ativo e a busca do topo continua inerte", async () => {
+    celular = true;
+    montar(<TelaComModal />);
+    await screen.findByText("Novo projeto");
+
+    expect(document.querySelector(".masthead__toggle")).not.toHaveAttribute("inert");
+    expect(hamburguer()).toBeInTheDocument();
+    expect(document.querySelector(".masthead__search-wrap")).toHaveAttribute("inert");
+    expect(screen.queryByRole("searchbox", { name: "Buscar ou escanear lote" })).toBeNull();
+  });
+
+  it("modal limpo: o drawer abre e a escolha navega direto", async () => {
+    const user = userEvent.setup();
+    celular = true;
+    montar(<TelaComModal />);
+    await screen.findByText("Novo projeto");
+
+    await abrirDrawer(user);
+    await user.click(itemDoMenu("Pedidos"));
+
+    expect(await screen.findByRole("heading", { name: "Tela de Pedidos" })).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("modal sujo: pergunta, Continuar mantém, Sair navega sem deixar overlay", async () => {
+    const user = userEvent.setup();
+    celular = true;
+    montar(<TelaComModal />);
+    await screen.findByText("Novo projeto");
+
+    await user.type(screen.getByLabelText("Nome do projeto"), "Whey");
+    await abrirDrawer(user);
+    await user.click(itemDoMenu("Pedidos"));
+
+    expect(await screen.findByText("Sair sem salvar?")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Continuar editando" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByLabelText("Nome do projeto")).toHaveValue("Whey");
+    expect(screen.getByText("Novo projeto")).toBeInTheDocument();
+
+    await user.click(itemDoMenu("Pedidos"));
+    await user.click(await screen.findByRole("button", { name: "Sair sem salvar" }));
+
+    expect(await screen.findByRole("heading", { name: "Tela de Pedidos" })).toBeInTheDocument();
+    await waitFor(() => expect(shell()).not.toHaveClass("shell--nav-open"));
+    expect(document.querySelector(".sidebar-backdrop")).toBeNull();
+    expect(document.querySelector(".modal-overlay")).toBeNull();
   });
 });
 
