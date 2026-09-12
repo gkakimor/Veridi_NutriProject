@@ -4582,3 +4582,95 @@ model ProductionOrderPlanningSnapshot {
   @@index([sourceVersionId])
   @@map("production_order_planning_snapshots")
 }
+
+/// Motivo de um dia NAO operacional no calendario de producao
+/// (PLANNING-CALENDAR-01). Lista fechada: o texto livre fica em `reason`.
+enum ProductionCalendarExceptionType {
+  FERIADO
+  RECESSO
+  PARADA_OPERACIONAL
+  OUTRO
+}
+
+/// CALENDARIO DE PRODUCAO (PLANNING-CALENDAR-01) — a jornada operacional da
+/// fabrica: em que dias da semana ela opera, de que hora a que hora, e quanto
+/// de intervalo cabe nessa janela.
+///
+/// **Singleton.** Existe UM calendario de producao, e o banco nao permite um
+/// segundo: a chave primaria e o proprio conceito (`GLOBAL`), com CHECK. Nao e
+/// cadastro de multiplos calendarios, e nao ha calendario por recurso, setor
+/// ou cliente nesta fase — mao de obra e equipamento continuam POOLS e herdam
+/// este calendario.
+///
+/// **Hora do dia e MINUTO DO DIA, nunca `DateTime`.** `08:00` nao e um
+/// instante: nao tem data, nao tem fuso e nao muda no horario de verao.
+/// Guardar um `DateTime` fabricado para representar hora obrigaria a inventar
+/// um dia e um deslocamento, e em outubro a jornada andaria sozinha. Inteiro
+/// de minutos desde a meia-noite CIVIL da fabrica, lido no
+/// `FUSO_COMERCIAL` (`America/Sao_Paulo`) quando alguem precisar de instante.
+///
+/// **Dominio exclusivo de planejamento produtivo.** Nao interfere em tarifa,
+/// oferta de fornecedor, `ItemCostReference`, validade de lote, faturamento
+/// nem promessa de entrega ao cliente (§75): nada disso passa a depender de
+/// dia util.
+model ProductionCalendar {
+  /// Sempre `GLOBAL` — CHECK no banco. Um calendario, sem ambiguidade.
+  id String @id
+
+  /// Minutos desde a meia-noite civil. 480 = 08:00, 1020 = 17:00.
+  /// CHECK: 0 <= inicio < fim <= 1440.
+  startMinuteOfDay Int @default(480)
+  endMinuteOfDay   Int @default(1020)
+
+  /// Intervalo TOTAL do dia, em minutos — uma soma, nao um horario: o
+  /// primeiro corte nao tem pausa nomeada nem parada parcial por hora.
+  /// CHECK: 0 <= intervalo < (fim - inicio).
+  breakMinutes Int @default(60)
+
+  /// Dias em que a fabrica opera. Sete colunas, e nao um array: cada dia e
+  /// uma pergunta independente, e "nenhum dia selecionado" vira CHECK de uma
+  /// linha. Default de calendario NOVO e segunda a sexta.
+  monday    Boolean @default(true)
+  tuesday   Boolean @default(true)
+  wednesday Boolean @default(true)
+  thursday  Boolean @default(true)
+  friday    Boolean @default(true)
+  saturday  Boolean @default(false)
+  sunday    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Nome de quem salvou, por valor — mesmo padrao de `ProductionProfile`.
+  updatedBy String?
+
+  @@map("production_calendars")
+}
+
+/// Dia CIVIL inteiro sem operacao — feriado, recesso ou parada.
+///
+/// **Uma excecao por data** (decisao do PO no primeiro corte): ha um motivo
+/// por dia, garantido por unique. Cadastrar de novo a mesma data e EDITAR o
+/// tipo e o motivo, nunca empilhar dois.
+///
+/// **Dia inteiro.** Parada parcial por hora nao existe nesta fase: o dia
+/// opera por inteiro ou nao opera.
+///
+/// `date` e DATA CIVIL guardada como a meia-noite UTC que marca o dia — o
+/// mesmo padrao de `CustomerOrderDelivery.scheduledDate` e de
+/// `QuoteVersion.validUntil`. Nao e instante e nao ganha hora.
+model ProductionCalendarException {
+  id String @id @default(uuid())
+
+  date DateTime @unique
+
+  type   ProductionCalendarExceptionType
+  reason String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("production_calendar_exceptions")
+}

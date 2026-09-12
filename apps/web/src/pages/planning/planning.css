@@ -182,3 +182,104 @@
     padding: var(--sp-3);
   }
 }
+
+/*
+ * Planejamento → Calendário de Produção.
+ *
+ * Duas seções e uma tabela: a jornada é um formulário curto, os dias da
+ * semana são sete cartões de seleção e as exceções cabem numa lista. Nada de
+ * grade mensal — o que se lê aqui é "quando a fábrica trabalha", e uma
+ * tabela responde isso melhor que um desenho.
+ */
+
+.calendar-section + .calendar-section {
+  margin-top: var(--sp-5);
+}
+
+.calendar-subtitle {
+  margin-top: var(--sp-5);
+}
+
+.calendar-journey {
+  align-items: start;
+}
+
+.calendar-derived__label {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.calendar-derived__value {
+  font-weight: var(--fw-semibold);
+  padding-top: var(--sp-1);
+}
+
+/* Sete dias: sete colunas em tela larga, duas em tela estreita. */
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.calendar-weekdays .toggle-card {
+  padding: var(--sp-3);
+  min-width: 0;
+}
+
+.calendar-weekdays .toggle-card b {
+  overflow-wrap: anywhere;
+}
+
+.calendar-problems {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-5);
+}
+
+.calendar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.calendar-exception-form {
+  display: grid;
+  grid-template-columns: minmax(0, 10rem) minmax(0, 12rem) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.calendar-exception-form .field {
+  margin: 0;
+  min-width: 0;
+}
+
+.calendar-exception-form input,
+.calendar-exception-form select {
+  width: 100%;
+}
+
+.calendar-exception-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.calendar-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* Tela estreita (390px): nada de rolagem lateral. */
+@media (max-width: 720px) {
+  .calendar-weekdays {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calendar-exception-form {
+    grid-template-columns: 1fr;
+  }
+}

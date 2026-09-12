@@ -51,7 +51,7 @@ quantidade de recursos equivalentes na linha de recurso (§87).
 | # | Item | Seção | Por que nesta posição |
 |---|---|---|---|
 | **P1-1** | SUPPLIER-ADDRESS-01 | G | Reusa a fundação de endereço do Cliente, já com o comportamento de §80 |
-| **P2-1** | OPS-CALENDAR-01 | B · #9 | Fundação de planejamento, pedida pelo PO em 2026-09-09. Precede a parte de PLAN-DATE-01 que contar dias úteis |
+| ~~P2-1~~ | ~~OPS-CALENDAR-01~~ | B · #9 | **ABSORVIDO** por PLANNING-CALENDAR-01, entregue em 2026-09-12. Saiu da fila |
 | depois | COST-VAR-02 · PLAN-DATE-01 · UX-HELP-03 · COM-CONTRACT-01 | — | Nenhum deles muda de prioridade por causa desta reunião. COST-VAR-02 continua esperando as sete decisões do PO e dado real em produção |
 
 Achados de PRICING-TEMPLATE-FLEX-01, sem posição na fila: PRICING-MODEL-VIEW-01,
@@ -1045,7 +1045,36 @@ do que está salvo.
 
 
 
-### 9. OPS-CALENDAR-01 — calendário operacional e dias não úteis — P2
+### 9. OPS-CALENDAR-01 — ABSORVIDO por PLANNING-CALENDAR-01 (2026-09-12)
+
+> **Fechado sem virar item próprio.** Decisão do PO em 2026-09-12:
+> PLANNING-CALENDAR-01 ABSORVE OPS-CALENDAR-01 — é a mesma necessidade escrita
+> duas vezes, e dois itens criariam a mesma tabela. O calendário global existe
+> em `Planejamento → Calendário de Produção`: dias da semana operantes, horário
+> inicial e final, intervalo, e exceções por data com tipo e motivo
+> (`FERIADO`/`RECESSO`/`PARADA_OPERACIONAL`/`OUTRO`). Ver `PROJECT_STATE.md`.
+>
+> **O que foi respondido do "auditar antes":** não havia nenhum `getDay()`,
+> nenhuma noção de dia útil e nenhum cálculo de prazo por contagem de dias no
+> runtime — confirmado, e o único `leadTimeDays` continua o campo informativo
+> de `QuoteVersion`, que ninguém soma a data nenhuma. Uma definição por data:
+> SIM, uma exceção por data, garantida por unique; repetir a data é recusa
+> explícita, e editar troca tipo e motivo. Excluir é permitido enquanto nenhum
+> planejamento depende do calendário — a decisão sobre data que já participou
+> de planejamento calculado passa a pertencer a PLANNING-CAPACITY-BOARD-01.
+>
+> **O que ficou de fora, como previsto:** recorrência anual, API externa de
+> feriados, calendário por funcionário/equipamento/recurso/setor/turno/cliente,
+> e parada parcial por hora. `CustomerOrderDelivery.scheduledDate` continua
+> PROMESSA (§75) e o calendário não a move.
+>
+> **O discovery separado continua aberto:** se o mesmo calendário global vale
+> para prazo de planejamento de COMPRA. Nada foi assumido sobre lead time de
+> fornecedor.
+>
+> O texto original fica abaixo, como registro da necessidade e das perguntas.
+
+### 9-a. Registro original — OPS-CALENDAR-01 — P2
 
 Necessidade trazida pelo PO em 2026-09-09. A Veridi precisa de uma tela onde o
 usuário **declare** feriados, recessos e outros dias sem operação, para que

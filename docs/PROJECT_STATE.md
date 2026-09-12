@@ -1132,9 +1132,10 @@ recursos, e o resumo de **Recursos necessários** em horas-recurso. Demanda de
 capacidade, nunca custo — Estrutura de Custos, CMV e Precificação seguem
 separados e intocados, e o PDF da OP não mudou.
 
-**Próximas capabilities:** PLANNING-CALENDAR-01 e PLANNING-CAPACITY-BOARD-01
-(datas, turno, disponibilidade e quadro de capacidade) — nada disso existe
-ainda.
+**Próximas capabilities:** PLANNING-CALENDAR-01 entregue em 2026-09-12 (a
+jornada da fábrica e os dias sem operação, seção própria abaixo); a OP continua
+sem data, turno, disponibilidade e quadro de capacidade — isso é
+PLANNING-CAPACITY-BOARD-01, e não existe ainda.
 
 ## Cliente e projeto no Orçamento em rascunho (PDF-DATA-PARITY-01, 2026-09-11)
 
@@ -1547,6 +1548,60 @@ Nenhuma mudança de backend e nenhuma migration: a API de Lotes já respondia
 por `itemId`, `status`, `ownerType` e `search`, e já paginava. Regra de
 liberação, validade, CoA e status de lote não foram tocados — só consulta,
 filtro e contexto.
+
+## Calendário de Produção (PLANNING-CALENDAR-01, 2026-09-12)
+
+A jornada operacional da fábrica, e os dias em que ela não opera. Em
+`Planejamento → Calendário de Produção` (`/planejamento/calendario`).
+**Absorve o OPS-CALENDAR-01 do BACKLOG (B · #9) por decisão do PO:** um
+conceito só, e a entrada do backlog foi fechada apontando para cá.
+
+**Um calendário, e o banco garante.** `production_calendars` tem chave
+primária fixa `GLOBAL` com CHECK — não existe lista, não existe coluna
+`active` e não há como uma segunda linha nascer. Mão de obra e equipamento
+continuam POOLS e herdam esta jornada; calendário por recurso, setor ou
+cliente fica para quando houver necessidade real.
+
+**Hora do dia é MINUTO DO DIA, nunca `DateTime`.** `08:00` não tem data, não
+tem fuso e não muda em outubro: guardar um instante fabricado para
+representá-la faria a jornada andar uma hora cinco meses por ano. São
+`startMinuteOfDay`/`endMinuteOfDay` inteiros (0…1440), com CHECK de janela
+(`0 <= início < fim <= 1440`) e de intervalo (`0 <= intervalo < janela`). A
+tela mostra `HH:mm` pelo controle nativo de hora.
+
+**Dias operantes são sete colunas booleanas**, com CHECK de "ao menos um": um
+array precisaria de regra de duplicata e de faixa, e "nenhum dia" vira uma
+linha de SQL. Calendário novo nasce segunda a sexta, 08:00–17:00, 1 h de
+intervalo — e esse padrão vale só no primeiro salvamento: **ler nunca cria**,
+e o GET devolve a sugestão com `configured: false` enquanto ninguém salvou.
+
+**Exceção é DIA CIVIL inteiro**, uma por data (decisão do PO), com tipo
+`FERIADO`/`RECESSO`/`PARADA_OPERACIONAL`/`OUTRO` e motivo livre. A data
+repetida é recusa explícita com o motivo que já está lá (409
+`exception_date_taken`) — nunca sobrescrita silenciosa; editar troca tipo e
+motivo, e a data não se move. Sem parada parcial por hora, sem turnos, sem
+recorrência anual e sem API externa de feriados.
+
+**Fuso reusado, não reinventado.** `FUSO_COMERCIAL`, `ehDiaCivil` e
+`diaCivilDeslocado` vêm do `business-timezone`; a data da exceção é o marcador
+de meia-noite UTC, igual a `scheduledDate` (§75) e a `validUntil`. Os helpers
+novos — `diaDaSemanaComercial`, `ehDiaOperacional`, `minutosUteisDoDia`,
+`proximoDiaOperacional`, `proximoInicioUtil` — vivem em dia civil e minuto do
+dia, e por isso o horário de verão não os alcança. O teste prova com um caso
+histórico: 02:30Z de 07/11/2018 é QUARTA em São Paulo, e um `-03:00` cravado
+diria terça.
+
+**Domínio exclusivo de planejamento produtivo.** Nada passa a depender de dia
+útil: tarifa industrial, oferta de fornecedor, `ItemCostReference`, validade
+de lote, faturamento e promessa de entrega ao cliente seguem exatamente como
+estavam. `ProductionOrder` não foi tocada — sem `plannedStartAt`, sem agenda,
+e `plannedAt` continua sendo o carimbo do ato de planejar.
+
+Migration aditiva `20260925093020_production_calendar`: duas tabelas e um
+enum, sem backfill. Escrita para ADMIN e PRODUCTION, leitura para todos — o
+mesmo gate dos Perfis de Produção. **Próximo:** PLANNING-CAPACITY-BOARD-01
+(capacidade de recurso, início/fim previstos da OP e quadro dia/semana), que
+é onde `IndustrialResource.capacityQuantity` e a agenda da OP entram.
 
 ## Próxima prioridade
 
