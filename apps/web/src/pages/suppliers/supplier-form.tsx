@@ -4,6 +4,9 @@ import type { SupplierDTO } from "@veridi/shared";
 import { formatBrPhone, maskPhoneInput } from "@veridi/shared";
 import { RelatedLinks } from "../../components/RelatedLinks";
 import { createSupplier, updateSupplier } from "../../lib/suppliers-api";
+import { useCallback, useRef } from "react";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { ApiValidationError } from "../../lib/api-errors";
 import { FormSection } from "../../components/FormSection";
 
@@ -27,6 +30,9 @@ import { FormSection } from "../../components/FormSection";
 
 /** O `<form>` que o botão de commit aciona pelo atributo `form`. */
 export const SUPPLIER_FORM_ID = "supplier-form";
+
+/** Nenhum campo do Fornecedor é número: CNPJ e telefone são texto com máscara. */
+const DECIMAIS: readonly string[] = [];
 
 interface FormState {
   legalName: string;
@@ -66,6 +72,44 @@ export function useSupplierForm({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  /**
+   * O cadastro como ele está na tela, em forma comparável.
+   *
+   * Os seis campos que o cadastro de Fornecedor tem hoje. Endereço não entra
+   * porque ainda não existe aqui — SUPPLIER-ADDRESS-01 é outra capability, e
+   * antecipá-la seria inventar campo que nenhuma tela mostra.
+   */
+  const assinaturaAtual = assinaturaDoFormulario(form, DECIMAIS);
+
+  /*
+   * A referência da comparação: o formulário como ele abriu. Criar parte dos
+   * defaults canônicos, editar parte do registro carregado — e ABRIR não é
+   * alterar em nenhum dos dois.
+   */
+  const baseline = useRef(assinaturaAtual);
+
+  const { confirmarDescarte, liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: baseline.current !== assinaturaAtual,
+    substantivo: "fornecedor",
+  });
+
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque vai para `onClose` do modal, e `onClose` novo a cada
+   * renderização é o defeito que a Wave 01 fechou.
+   */
+  const confirmarSaida = useCallback(
+    (acao: () => void) => confirmarDescarte(acao),
+    [confirmarDescarte],
+  );
+
+  /** Gravou: o que está na tela virou registro, e sair dele não perde nada. */
+  function concluir(acao: () => void) {
+    baseline.current = assinaturaAtual;
+    liberarGuarda(acao);
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
@@ -96,12 +140,12 @@ export function useSupplierForm({
     try {
       if (mode === "create") {
         const created = await createSupplier(payload);
-        onSaved(created);
+        concluir(() => onSaved(created));
       } else if (supplier) {
         await updateSupplier(supplier.id, payload);
-        onSaved();
+        concluir(() => onSaved());
       } else {
-        onSaved();
+        concluir(() => onSaved());
       }
     } catch (err) {
       if (err instanceof ApiValidationError) {
@@ -119,7 +163,18 @@ export function useSupplierForm({
     }
   }
 
-  return { form, setForm, saving, error, fieldErrors, handleSubmit, mode, supplier };
+  return {
+    form,
+    setForm,
+    saving,
+    error,
+    fieldErrors,
+    handleSubmit,
+    mode,
+    supplier,
+    confirmarSaida,
+    liberarGuarda,
+  };
 }
 
 export type SupplierFormController = ReturnType<typeof useSupplierForm>;

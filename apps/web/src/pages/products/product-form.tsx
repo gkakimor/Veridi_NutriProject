@@ -24,6 +24,9 @@ import { FormSection } from "../../components/FormSection";
 import { ToggleCard } from "../../components/ToggleCard";
 import type { EntityOption } from "../../components/SearchableEntitySelect";
 import { createProduct, updateProduct } from "../../lib/products-api";
+import { useRef } from "react";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import { assinaturaDoFormulario } from "../../lib/dirty-fields";
 import { listCustomers } from "../../lib/customers-api";
 import { listUnits } from "../../lib/units-api";
 import { ApiValidationError } from "../../lib/api-errors";
@@ -130,6 +133,16 @@ function numberField(value: number | string | null): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
+/** Os campos que são NÚMERO — comparados pelo valor, não pelo texto. */
+const DECIMAIS = [
+  "capsulesPerDose",
+  "doseAmount",
+  "dosesPerPackage",
+  "unitsPerShippingBox",
+  "shelfLifeMonths",
+  "minimumBatchQuantity",
+] as const;
+
 function initialState(product: ProductDTO | null): ProductFormState {
   if (product) {
     return {
@@ -205,6 +218,45 @@ export function useProductForm({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [units, setUnits] = useState<UnitOfMeasureDTO[]>([]);
+
+  /**
+   * O cadastro como ele está na tela, em forma comparável.
+   *
+   * Só o formulário do Produto. Formulação, CMV, custo industrial, estoque e o
+   * Perfil de Produção padrão ficam fora porque não se editam aqui: são
+   * documentos próprios, com tela e salvamento próprios, e o Produto apenas
+   * os mostra. O código nasce no servidor.
+   */
+  const assinaturaAtual = assinaturaDoFormulario(form, DECIMAIS);
+
+  /*
+   * A referência da comparação: o formulário como ele abriu. Criar parte dos
+   * defaults canônicos, editar parte do registro carregado — e ABRIR não é
+   * alterar em nenhum dos dois.
+   */
+  const baseline = useRef(assinaturaAtual);
+
+  const { confirmarDescarte, liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: baseline.current !== assinaturaAtual,
+    substantivo: "produto",
+  });
+
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque vai para `onClose` do modal, e `onClose` novo a cada
+   * renderização é o defeito que a Wave 01 fechou.
+   */
+  const confirmarSaida = useCallback(
+    (acao: () => void) => confirmarDescarte(acao),
+    [confirmarDescarte],
+  );
+
+  /** Gravou: o que está na tela virou registro, e sair dele não perde nada. */
+  function concluir(acao: () => void) {
+    baseline.current = assinaturaAtual;
+    liberarGuarda(acao);
+  }
   const [activeCustomers, setActiveCustomers] = useState<ProductCustomerOption[]>([]);
   /**
    * Clientes que não vieram da busca: o criado agora (no modal ou na volta da
@@ -380,10 +432,10 @@ export function useProductForm({
     try {
       if (mode === "create") {
         const created = await createProduct(payload);
-        onSaved(created);
+        concluir(() => onSaved(created));
       } else {
         if (product) await updateProduct(product.id, payload);
-        onSaved();
+        concluir(() => onSaved());
       }
     } catch (err) {
       if (err instanceof ApiValidationError) {
@@ -405,6 +457,8 @@ export function useProductForm({
     form,
     setForm,
     saving,
+    confirmarSaida,
+    liberarGuarda,
     error,
     fieldErrors,
     handleSubmit,

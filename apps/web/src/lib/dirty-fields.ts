@@ -53,3 +53,42 @@ export function inteiroComparavel(valor: string | number | null | undefined): st
 export function assinaturaDoDocumento(projecao: unknown): string {
   return JSON.stringify(projecao);
 }
+
+/** Valor de campo de formulário: texto, marca de sim/não, ou ausência. */
+export type ValorDeCampo = string | boolean | null | undefined;
+
+/**
+ * A assinatura de um formulário plano — os cadastros mestres.
+ *
+ * Item, Cliente, Fornecedor e Produto guardam o formulário como um objeto de
+ * campos simples, e todos comparam do mesmo jeito: texto normalizado, marca de
+ * sim/não como está, e os campos que são NÚMERO em forma canônica.
+ *
+ * A lista de decimais é explícita porque ela também documenta: quem lê a
+ * chamada vê quais campos daquele cadastro são número, e quem acrescenta um
+ * campo numérico sem pô-lo aqui ganha uma pergunta de descarte por ter
+ * redigitado `10` como `10,0`.
+ *
+ * As chaves são percorridas em ordem alfabética: a assinatura não pode mudar
+ * porque alguém reordenou a declaração do `FormState`.
+ */
+export function assinaturaDoFormulario(
+  campos: object,
+  decimais: readonly string[] = [],
+): string {
+  // `object` e não `Record`: os `FormState` dos cadastros são interfaces, e
+  // interface não tem índice de string — pedi-lo obrigaria a mexer nos quatro.
+  const bruto = campos as Record<string, ValorDeCampo>;
+  const comparavel: Record<string, string | boolean | null> = {};
+  for (const chave of Object.keys(bruto).sort()) {
+    const valor = bruto[chave];
+    if (typeof valor === "boolean") {
+      comparavel[chave] = valor;
+      continue;
+    }
+    comparavel[chave] = decimais.includes(chave)
+      ? decimalComparavel(valor)
+      : textoComparavel(valor);
+  }
+  return assinaturaDoDocumento(comparavel);
+}

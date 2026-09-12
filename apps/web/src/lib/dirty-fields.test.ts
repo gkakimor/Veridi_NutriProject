@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { assinaturaDoDocumento, decimalComparavel, inteiroComparavel, textoComparavel } from "./dirty-fields";
+import {
+  assinaturaDoDocumento,
+  assinaturaDoFormulario,
+  decimalComparavel,
+  inteiroComparavel,
+  textoComparavel,
+} from "./dirty-fields";
 
 /**
  * A normalização que separa alteração de reescrita.
@@ -84,5 +90,34 @@ describe("assinatura do documento", () => {
     const subir = assinaturaDoDocumento({ lines: [{ id: "a" }, { id: "b" }] });
     const descer = assinaturaDoDocumento({ lines: [{ id: "b" }, { id: "a" }] });
     expect(subir).not.toBe(descer);
+  });
+});
+
+describe("assinatura de formulário", () => {
+  it("marca de sim/não conta, e a ordem de declaração não", () => {
+    expect(assinaturaDoFormulario({ nome: "X", ativo: true })).toBe(
+      assinaturaDoFormulario({ ativo: true, nome: "X" }),
+    );
+    expect(assinaturaDoFormulario({ nome: "X", ativo: true })).not.toBe(
+      assinaturaDoFormulario({ nome: "X", ativo: false }),
+    );
+  });
+
+  it("o campo listado como decimal compara por valor; os outros, por texto", () => {
+    const decimais = ["pureza"];
+    expect(assinaturaDoFormulario({ pureza: "98" }, decimais)).toBe(
+      assinaturaDoFormulario({ pureza: "98,0" }, decimais),
+    );
+    // Sem a lista, o mesmo par vira alteração — é o que a lista existe para evitar.
+    expect(assinaturaDoFormulario({ pureza: "98" })).not.toBe(
+      assinaturaDoFormulario({ pureza: "98,0" }),
+    );
+  });
+
+  it("ausência, vazio e só espaço não diferenciam um cadastro do outro", () => {
+    const vazio = assinaturaDoFormulario({ notas: "" });
+    expect(assinaturaDoFormulario({ notas: null })).toBe(vazio);
+    expect(assinaturaDoFormulario({ notas: "   " })).toBe(vazio);
+    expect(assinaturaDoFormulario({ notas: "x" })).not.toBe(vazio);
   });
 });

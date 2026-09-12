@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import type { ItemDTO, UnitOfMeasureDTO } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { SupplierItemsSection } from "../../components/SupplierItemsSection";
@@ -26,6 +27,18 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
   const controller = useItemForm({ mode, item, units, onSaved });
   const { saving } = controller;
 
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque é dependência do efeito de foco e trap do modal: um
+   * `onClose` novo a cada renderização remontava o efeito a cada tecla, e o
+   * campo ficava com a primeira letra.
+   */
+  const fechar = useCallback(
+    () => controller.confirmarSaida(onClose),
+    [controller.confirmarSaida, onClose],
+  );
+
   const footer =
     mode === "create" ? (
       <>
@@ -33,7 +46,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
           O item será criado como <b>Ativo</b>.
         </span>
         <div className="modal-fullscreen__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
+          <button type="button" className="btn btn--ghost" onClick={fechar}>
             Cancelar
           </button>
           <button
@@ -52,7 +65,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
           Última alteração: {item ? formatDate(item.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
+          <button type="button" className="btn btn--ghost" onClick={fechar}>
             Cancelar
           </button>
           <button
@@ -72,7 +85,7 @@ export function ItemFormModal({ mode, item, units, onClose, onSaved }: ItemFormM
   return (
     <FullWorkspaceModal
       open
-      onClose={onClose}
+      onClose={fechar}
       crumb="Cadastros / Itens de estoque"
       crumbActive={mode === "create" ? "Novo" : "Editar"}
       title={mode === "create" ? "Novo item de estoque" : item?.name}

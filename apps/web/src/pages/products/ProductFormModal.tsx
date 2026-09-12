@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { ProductDTO } from "@veridi/shared";
 import { FullWorkspaceModal } from "../../components/FullWorkspaceModal";
 import { CustomerFormModal } from "../customers/CustomerFormModal";
@@ -38,6 +38,18 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
   });
   const { saving, selectCustomer } = controller;
 
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque é dependência do efeito de foco e trap do modal: um
+   * `onClose` novo a cada renderização remontava o efeito a cada tecla, e o
+   * campo ficava com a primeira letra.
+   */
+  const fechar = useCallback(
+    () => controller.confirmarSaida(onClose),
+    [controller.confirmarSaida, onClose],
+  );
+
   const codeChip = mode === "create" ? "Código gerado automaticamente ao salvar" : product?.code;
 
   const footer =
@@ -47,7 +59,7 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
           O produto será criado como <b>Ativo</b>.
         </span>
         <div className="modal-fullscreen__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
+          <button type="button" className="btn btn--ghost" onClick={fechar}>
             Cancelar
           </button>
           <button
@@ -66,7 +78,7 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
           Última alteração: {product ? formatDate(product.updatedAt) : "—"}
         </span>
         <div className="modal-fullscreen__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
+          <button type="button" className="btn btn--ghost" onClick={fechar}>
             Cancelar
           </button>
           <button
@@ -84,7 +96,7 @@ export function ProductFormModal({ mode, product, onClose, onSaved }: ProductFor
   return (
     <FullWorkspaceModal
       open
-      onClose={onClose}
+      onClose={fechar}
       crumb="Cadastros / Produtos Acabados"
       crumbActive={mode === "create" ? "Novo" : "Editar"}
       title={mode === "create" ? "Novo produto" : product?.name}
