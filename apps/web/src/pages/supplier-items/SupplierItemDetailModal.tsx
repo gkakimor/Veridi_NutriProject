@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import { decimalComparavel, textoComparavel } from "../../lib/dirty-fields";
 import type { SupplierItemDetailDTO, UnitOfMeasureDTO } from "@veridi/shared";
 import {
   DEFAULT_OFFER_CURRENCY,
@@ -109,11 +111,51 @@ export function SupplierItemDetailModal({
     }
   }
 
+  /*
+   * Três blocos independentes, cada um com o seu salvamento.
+   *
+   * "Salvar dados comerciais" grava código e observações; homologar, bloquear
+   * ou devolver a pendente gravam a nota da qualidade; "Registrar preço" grava
+   * a oferta. Salvar um NÃO limpa os outros, então a pendência é a soma do que
+   * continua por gravar — e cada parcela some sozinha quando o seu botão
+   * grava, porque a comparação é contra o registro que voltou do servidor.
+   */
+  const comercialPendente =
+    textoComparavel(supplierItemCode) !== textoComparavel(supplierItem?.supplierItemCode) ||
+    textoComparavel(commercialNotes) !== textoComparavel(supplierItem?.commercialNotes);
+  /* A nota da qualidade acompanha a ação e é apagada quando ela grava: o que
+     estiver escrito aqui ainda não foi a lugar nenhum. */
+  const qualificacaoPendente = textoComparavel(qualificationNote) !== null;
+  /*
+   * A oferta é registro NOVO a cada vez. Unidade e moeda nascem do item e da
+   * configuração, e "válida a partir de" volta ao dia de hoje depois de
+   * gravar: nenhum dos três é digitação pendente.
+   */
+  const ofertaPendente =
+    decimalComparavel(price) !== null ||
+    decimalComparavel(moq) !== null ||
+    textoComparavel(validUntil) !== null ||
+    textoComparavel(offerNotes) !== null;
+
+  const { confirmarDescarte } = useUnsavedChangesGuard({
+    isDirty: supplierItem !== null && (comercialPendente || qualificacaoPendente || ofertaPendente),
+    substantivo: "relação",
+    genero: "a",
+  });
+
+  /**
+   * Cancelar, ✕ e Esc: o router não vê nada disso — a guarda vê.
+   *
+   * Memorizado porque vai para `onClose` do `FullWorkspaceModal`: um
+   * `onClose` novo a cada renderização é o defeito que a Wave 01 fechou.
+   */
+  const fechar = useCallback(() => confirmarDescarte(onClose), [confirmarDescarte, onClose]);
+
   if (!supplierItem) {
     return (
       <FullWorkspaceModal
         open
-        onClose={onClose}
+        onClose={fechar}
         crumb="Compras / Item × Fornecedor"
         crumbActive="Detalhe"
         title="Carregando…"
@@ -127,7 +169,7 @@ export function SupplierItemDetailModal({
   return (
     <FullWorkspaceModal
       open
-      onClose={onClose}
+      onClose={fechar}
       crumb="Compras / Item × Fornecedor"
       crumbActive={supplierItem.itemCode}
       title={`${supplierItem.itemName} · ${supplierItem.supplierName}`}

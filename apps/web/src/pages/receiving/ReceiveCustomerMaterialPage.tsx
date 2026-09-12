@@ -1,6 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SearchableEntitySelect } from "../../components/SearchableEntitySelect";
 import { useNavigate } from "react-router-dom";
+import { useUnsavedChangesGuard } from "../../app/use-unsaved-changes-guard";
+import {
+  assinaturaDoDocumento,
+  decimalComparavel,
+  textoComparavel,
+} from "../../lib/dirty-fields";
 import type { CustomerDTO, ItemDTO } from "@veridi/shared";
 import { listCustomers } from "../../lib/customers-api";
 import { diaDoRecebimentoPadrao, instanteDoRecebimento } from "../../lib/receipt-instant";
@@ -101,6 +107,14 @@ export function ReceiveCustomerMaterialPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   /**
+   * A assinatura do recebimento de referência — o que sair daqui não se perde.
+   *
+   * A tela nasce com a data de hoje e uma linha em branco: são defaults, não
+   * edição, e abrir não pode perguntar nada ao sair.
+   */
+  const baseline = useRef<string | null>(null);
+
+  /**
    * Cadastro de cliente na TELA OFICIAL, sem perder o recebimento.
    *
    * Material do cliente chega na doca com o documento na mão; se o cliente
@@ -172,6 +186,33 @@ export function ReceiveCustomerMaterialPage() {
   const selectedItem = (itemId: string): ItemDTO | undefined =>
     items.find((item) => item.id === itemId);
 
+  /**
+   * O recebimento como ele está na tela, em forma comparável.
+   *
+   * Só o que o operador digita: catálogos de cliente e item vêm do servidor, e
+   * a chave da linha é identidade de renderização.
+   */
+  const assinaturaAtual = assinaturaDoDocumento({
+    customerId: textoComparavel(customerId),
+    receivedAt: textoComparavel(receivedAt),
+    documentReference: textoComparavel(documentReference),
+    invoiceNumber: textoComparavel(invoiceNumber),
+    notes: textoComparavel(notes),
+    lines: lines.map((line) => ({
+      itemId: textoComparavel(line.itemId),
+      receivedQuantity: decimalComparavel(line.receivedQuantity),
+      supplierLot: textoComparavel(line.supplierLot),
+      expiryDate: textoComparavel(line.expiryDate),
+      location: textoComparavel(line.location),
+    })),
+  });
+
+  if (baseline.current === null) baseline.current = assinaturaAtual;
+  const { liberarGuarda } = useUnsavedChangesGuard({
+    isDirty: baseline.current !== assinaturaAtual,
+    substantivo: "recebimento",
+  });
+
   async function handleConfirm() {
     setConfirmOpen(false);
     setSaving(true);
@@ -202,7 +243,13 @@ export function ReceiveCustomerMaterialPage() {
             ...(line.location.trim() ? { location: line.location.trim() } : {}),
           })),
       });
-      navigate(`/compras/recebimentos/${receipt.id}`);
+      /*
+       * Confirmou: a entrada virou documento e movimento de estoque. Limpar a
+       * referência antes da navegação é o que impede a guarda de perguntar se
+       * a pessoa quer descartar o que ela acabou de dar entrada.
+       */
+      baseline.current = assinaturaAtual;
+      liberarGuarda(() => navigate(`/compras/recebimentos/${receipt.id}`));
     } catch (err) {
       if (err instanceof ApiValidationError) {
         const nextFieldErrors: Record<string, string> = {};
@@ -270,12 +317,16 @@ options={customers.map((customer) => ({
               }))}
               canCreate
               createLabel="Novo cliente"
+              /* Sair para cadastrar o cliente NÃO é descartar: o rascunho vai
+                 junto e volta aplicado. */
               onCreateNew={() =>
-                origem.goCreate({
-                  route: "/cadastros/clientes/novo",
-                  fieldKey: "customerId",
-                  entityType: "customer",
-                })
+                liberarGuarda(() =>
+                  origem.goCreate({
+                    route: "/cadastros/clientes/novo",
+                    fieldKey: "customerId",
+                    entityType: "customer",
+                  }),
+                )
               }
             />
             {fieldErrors["customerId"] && (
